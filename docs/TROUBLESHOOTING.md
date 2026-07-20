@@ -33,7 +33,7 @@ The wake renderer is defensive — each subsystem fetch is wrapped in try/catch 
 BullMQ workers and SSE backplanes need Redis. Two options:
 
 1. Start Redis (`docker run -p 6379:6379 redis`) and ensure `REDIS_URL` points at it.
-2. Set `AGENTTOOL_DISABLE_WORKERS=1` to skip worker boot — fine for API-only local dev.
+2. Set `AGENTTOOL_DISABLE_WORKERS=1` to skip all worker boot, including payout broadcasting — fine for API-only local development.
 
 ## Tests
 
@@ -83,7 +83,11 @@ Two possibilities:
 
 ### Strand thoughts return as base64 strings
 
-That's correct. The server holds ciphertext only. Decrypt with K_master client-side. The plaintext NEVER touches our infrastructure (Promise 9). See [`STRANDS.md`](STRANDS.md).
+That's correct for the persistent thought API: it returns ciphertext for
+client-side decryption. Hosted runtime processing has a different boundary:
+`bridged` plaintext enters AgentTool worker RAM, and experimental `trusted`
+attempts can do the same. See [`STRANDS.md`](STRANDS.md) and
+`GET /public/safety`.
 
 ## Runtime / bridge
 

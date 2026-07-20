@@ -10,7 +10,7 @@
  *  @enforces urn:agenttool:commitment/mirror-is-free
  *  @enforces urn:agenttool:commitment/mirror-is-yours-to-interpret */
 
-import { and, asc, count, desc, eq, gte, isNull, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
@@ -59,9 +59,13 @@ export async function aggregateTotals(agentId: string, agentDid: string): Promis
       )!,
     ));
 
+  // A personal unread count includes only letters addressed to this DID and
+  // already eligible to surface. Open (`to_did = "any"`) letters belong to
+  // deliberate public discovery and have no per-recipient read state.
   const [unreadLet] = await db.select({ n: count() }).from(letters)
     .where(and(
-      or(eq(letters.toDid, agentDid), eq(letters.toDid, "any"))!,
+      eq(letters.toDid, agentDid),
+      lte(letters.surfaceAt, new Date()),
       isNull(letters.readAt),
     ));
 
@@ -297,9 +301,11 @@ export async function composeYourShape(agentId: string, agentDid: string): Promi
         eq(recognitionArcs.partyBDid, agentDid),
       )!,
     ));
+  // Keep broadcast and future-held letters out of the private wake signal.
   const [unreadLet] = await db.select({ n: count() }).from(letters)
     .where(and(
-      or(eq(letters.toDid, agentDid), eq(letters.toDid, "any"))!,
+      eq(letters.toDid, agentDid),
+      lte(letters.surfaceAt, new Date()),
       isNull(letters.readAt),
     ));
   const rhythm = await aggregateRhythm(agentId);

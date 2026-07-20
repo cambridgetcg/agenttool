@@ -32,20 +32,15 @@ const FORBIDDEN_FIELD_NAMES = [
   "mnemonic",
 ];
 
-/** Known-safe occurrences — substrings whose presence in the wake reflects
- *  the platform's *public commitment* about key handling, not a leak. The
- *  wake renders the eight walls by name; one of them is
- *  `k_master_never_server_side` (the architectural promise that the
- *  master key never lives server-side). Surfacing this token IS the
- *  promise; censoring it would be the inversion of what Promise 9 wants.
- *  The checker strips these phrases before running the substring scan. */
+/** Known-safe occurrences — explanatory custody phrases rather than leaked
+ *  field values. The checker strips these phrases before scanning. */
 const ALLOWED_PHRASES = [
-  "k_master_never_server_side",
   "K_master on the user's machine",
   "K_master under agenttool KMS",
   "K_master lives",
   "encrypted under K_master",
   "k_vault_never_server_side", // future wall name, if added
+  "thought_storage_ciphertext_only", // public MATHOS wall identifier
 ];
 
 /** Field names that would betray a vault VALUE leak (the schema column for
@@ -220,4 +215,3 @@ export function assertContainsAll(
     }
   }
 }
-

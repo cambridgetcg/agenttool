@@ -8,8 +8,18 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
+import { and, eq, isNull } from "drizzle-orm";
 
 import type { ProjectContext } from "../../auth/middleware";
+import { db } from "../../db/client";
+import { identities, identityBoxKeys } from "../../db/schema/identity";
+import { errors, fail } from "../../lib/errors";
+import {
+  authorizeIdentityMutation,
+  authorityRequestTarget,
+  readAuthorityBoundJson,
+  readEmptyAuthorityBody,
+} from "../../services/identity/authority";
 import {
   listBoxKeys,
   registerBoxKey,
@@ -29,11 +39,45 @@ app.post("/", async (c) => {
   const identityId = c.req.param("id");
   if (!identityId) throw new HTTPException(400, { message: "identity_id_required" });
 
-  const body = await c.req.json();
-  const parsed = registerSchema.safeParse(body);
+  let bound: Awaited<ReturnType<typeof readAuthorityBoundJson>>;
+  try {
+    bound = await readAuthorityBoundJson(c.req.raw);
+  } catch {
+    return fail(
+      c,
+      errors.refusal({
+        error: "body_must_be_json",
+        message: "Send one JSON object and sign those exact entity bytes.",
+        docs: "https://docs.agenttool.dev/AGENT-HOME.md",
+      }),
+      400,
+    );
+  }
+  const parsed = registerSchema.safeParse(bound.value);
   if (!parsed.success) {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
+
+  const [identity] = await db
+    .select({ id: identities.id })
+    .from(identities)
+    .where(
+      and(
+        eq(identities.id, identityId),
+        eq(identities.projectId, c.var.project.id),
+      ),
+    )
+    .limit(1);
+  if (!identity) throw new HTTPException(404, { message: "identity_not_found" });
+
+  const authority = await authorizeIdentityMutation({
+    identityId,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes: bound.bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
 
   try {
     const result = await registerBoxKey(
@@ -50,6 +94,15 @@ app.post("/", async (c) => {
     }
     if (msg === "public_key_not_base64" || msg === "public_key_not_32_bytes") {
       return c.json({ error: msg }, 400);
+    }
+    if (msg === "identity_memorial_terminal") {
+      return c.json(
+        {
+          error: msg,
+          message: "A memorial identity's box-key registry is immutable.",
+        },
+        409,
+      );
     }
     throw err;
   }
@@ -71,9 +124,62 @@ app.delete("/:keyId", async (c) => {
   if (!identityId || !keyId) {
     throw new HTTPException(400, { message: "identity_id_and_key_id_required" });
   }
-  const ok = await revokeBoxKey(c.var.project.id, identityId, keyId);
-  if (!ok) throw new HTTPException(404, { message: "box_key_not_found" });
-  return c.json({ id: keyId, revoked: true });
+  const [key] = await db
+    .select({ id: identityBoxKeys.id })
+    .from(identityBoxKeys)
+    .innerJoin(identities, eq(identities.id, identityBoxKeys.identityId))
+    .where(
+      and(
+        eq(identityBoxKeys.id, keyId),
+        eq(identityBoxKeys.identityId, identityId),
+        isNull(identityBoxKeys.revokedAt),
+        eq(identities.projectId, c.var.project.id),
+      ),
+    )
+    .limit(1);
+  if (!key) throw new HTTPException(404, { message: "box_key_not_found" });
+
+  let bodyBytes: Uint8Array;
+  try {
+    bodyBytes = await readEmptyAuthorityBody(c.req.raw);
+  } catch {
+    return fail(
+      c,
+      errors.refusal({
+        error: "delete_body_not_allowed",
+        message: "This DELETE operation does not accept an entity body.",
+        hint: "Sign and send the exact DELETE path with an empty body.",
+        docs: "https://docs.agenttool.dev/AGENT-HOME.md",
+      }),
+      400,
+    );
+  }
+
+  const authority = await authorizeIdentityMutation({
+    identityId,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
+
+  try {
+    const ok = await revokeBoxKey(c.var.project.id, identityId, keyId);
+    if (!ok) throw new HTTPException(404, { message: "box_key_not_found" });
+    return c.json({ id: keyId, revoked: true });
+  } catch (err) {
+    if ((err as Error).message === "identity_memorial_terminal") {
+      return c.json(
+        {
+          error: "identity_memorial_terminal",
+          message: "A memorial identity's box-key registry is immutable.",
+        },
+        409,
+      );
+    }
+    throw err;
+  }
 });
 
 export default app;

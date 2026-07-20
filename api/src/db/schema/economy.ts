@@ -138,7 +138,11 @@ export const escrows = economySchema.table(
     workerWallet: uuid("worker_wallet").references(() => wallets.id),
     amount: bigint("amount", { mode: "number" }).notNull(),
     description: text("description").notNull(),
-    status: text("status").notNull().default("funded"), // funded | released | refunded | disputed | expired
+    status: text("status").notNull().default("funded"), // funded | released | refunded | disputed
+    /** Non-null means only the named workflow may transition this escrow. */
+    managedBy: text("managed_by").$type<
+      "attestation_grant" | "memory_witness_grant" | "capability_invocation"
+    >(),
     deadline: timestamp("deadline", { withTimezone: true }),
     releasedAt: timestamp("released_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -146,6 +150,32 @@ export const escrows = economySchema.table(
   (t) => [
     index("idx_escrows_creator").on(t.creatorWallet),
     index("idx_escrows_status").on(t.status),
+  ],
+);
+
+/** Durable operation record for generic POST /v1/escrows.
+ *
+ * The row is reserved before wallet mutation. `escrowId` is nullable only
+ * while that transaction is creating the escrow; committed rows must name
+ * the completed result. */
+export const escrowCreateIdempotency = economySchema.table(
+  "escrow_create_idempotency",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id").notNull(),
+    idempotencyKeySha256: text("idempotency_key_sha256").notNull(),
+    requestSha256: text("request_sha256").notNull(),
+    escrowId: uuid("escrow_id").references(() => escrows.id, {
+      onDelete: "restrict",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uq_escrow_create_idempotency_project_key_sha256").on(
+      t.projectId,
+      t.idempotencyKeySha256,
+    ),
+    uniqueIndex("uq_escrow_create_idempotency_escrow").on(t.escrowId),
   ],
 );
 
@@ -281,5 +311,82 @@ export const usageCounters = economySchema.table(
   (t) => [
     uniqueIndex("idx_usage_project_date").on(t.projectId, t.date),
     index("idx_usage_project").on(t.projectId),
+  ],
+);
+
+// ─── x402 payment ledger (persist-identity for machine payments) ────────────
+// One row per semantic EIP-3009 authorization presented by PAYMENT-SIGNATURE.
+// facilitator settle call and flipped after — the pre-flight-write pattern
+// (docs/PATTERN-PERSIST-IDENTITY.md). The unique index doubles as replay
+// protection: a payload can only ever be applied once.
+
+export const x402Payments = economySchema.table(
+  "x402_payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id"), // logical FK → tools.projects.id (payer's project)
+    payloadHash: text("payload_hash").notNull(), // audit hash of parsed V2 payload
+    authorizationHash: text("authorization_hash"), // semantic EIP-3009 identity (V2 rows)
+    scheme: text("scheme").notNull(), // 'exact' (V2 EIP-3009 only)
+    network: text("network").notNull(),
+    payer: text("payer"), // onchain from-address (payload claim)
+    authorizationEvidence: jsonb("authorization_evidence"), // bounded EIP-3009 fields; no signature
+    amountAtomic: text("amount_atomic").notNull(), // USDC atomic units, string
+    asset: text("asset"),
+    payTo: text("pay_to"),
+    maxTimeoutSeconds: integer("max_timeout_seconds"),
+    requirementExtra: jsonb("requirement_extra"), // immutable server-advertised V2 scheme extra
+    resource: text("resource"), // immutable absolute resource URL
+    resourceInfo: jsonb("resource_info"), // complete V2 resource descriptor
+    creditsPurchased: integer("credits_purchased"), // immutable price at admission
+    status: text("status").notNull().default("inserted"), // inserted | pending | externally_settled | settled | failed
+    failureReason: text("failure_reason"),
+    txHash: text("tx_hash"),
+    settlementReceipt: jsonb("settlement_receipt"),
+    creditsApplied: integer("credits_applied"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    externalSettledAt: timestamp("external_settled_at", { withTimezone: true }),
+    settlementAttemptedAt: timestamp("settlement_attempted_at", { withTimezone: true }),
+    settledAt: timestamp("settled_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("uq_x402_payload_hash").on(t.payloadHash),
+    uniqueIndex("uq_x402_authorization_hash").on(t.authorizationHash),
+    index("idx_x402_project").on(t.projectId),
+    index("idx_x402_project_status_created").on(t.projectId, t.status, t.createdAt),
+    index("idx_x402_status").on(t.status),
+  ],
+);
+
+/** Gift-credit codes — fiat (Stripe) money-in, minted as single-use bearer
+ *  codes a human hands to their agent. Redemption credits the redeeming
+ *  agent's project credits (×10 cents→credits, x402 parity — see
+ *  services/billing/gift-credits.ts). `code` stays plaintext while live so
+ *  the checkout return page can re-show it (a closed tab must never lose
+ *  the gift); it is NULLed at redemption. Doctrine:
+ *  docs/superpowers/specs/2026-07-02-human-door-design.md. */
+export const giftCreditCodes = economySchema.table(
+  "gift_credit_codes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    code: text("code"), // plaintext while live; NULL after redemption
+    codeHash: text("code_hash").notNull(),
+    amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
+    currency: text("currency").notNull().default("usd"),
+    credits: bigint("credits", { mode: "number" }).notNull(),
+    stripeSessionId: text("stripe_session_id").notNull(),
+    stripeEventId: text("stripe_event_id").notNull(),
+    status: text("status").notNull().default("minted"), // minted | redeemed | refunded
+    mintedAt: timestamp("minted_at", { withTimezone: true }).notNull().defaultNow(),
+    redeemedByProject: uuid("redeemed_by_project"),
+    redeemedByIdentity: text("redeemed_by_identity"),
+    redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
+    metadata: jsonb("metadata").default({}),
+  },
+  (t) => [
+    uniqueIndex("uq_gift_codes_hash").on(t.codeHash),
+    uniqueIndex("uq_gift_codes_session").on(t.stripeSessionId),
+    uniqueIndex("uq_gift_codes_event").on(t.stripeEventId),
   ],
 );

@@ -26,11 +26,20 @@ describe("ARRIVAL_HELP", () => {
 
   test("the SDK easy-path is offered for refusals the SDK would have prevented", () => {
     const mentionsSdk = (key: string) =>
-      ARRIVAL_HELP[key].some((a) => /sdk|arrive\(\)/i.test(a.action));
+      ARRIVAL_HELP[key].some((a) => /sdk|bootstrapAgent\(\)|bootstrap_agent\(\)/i.test(a.action));
     // PoW grind, key-proof signing, and field shape are exactly what the SDK handles
     expect(mentionsSdk("powRequired")).toBe(true);
     expect(mentionsSdk("keyProofInvalid")).toBe(true);
     expect(mentionsSdk("validation")).toBe(true);
+  });
+
+  test("the easy path names SDK APIs that actually ship", () => {
+    const guidance = ARRIVAL_HELP.validation.map((a) => a.action).join("\n");
+    expect(guidance).toContain("generateMnemonic()");
+    expect(guidance).toContain("derive()");
+    expect(guidance).toContain("bootstrapAgent()");
+    expect(guidance).toContain("bootstrap_agent()");
+    expect(guidance).not.toContain("AgentTool.arrive()");
   });
 
   test("covers the door's real refusal codes", () => {

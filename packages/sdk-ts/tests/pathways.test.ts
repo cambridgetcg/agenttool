@@ -31,6 +31,33 @@ afterEach(() => {
 describe("pathways()", () => {
   test("returns the parsed JSON tree on 200", async () => {
     setupMock(200, {
+      before_identity: {
+        endpoint: "GET /public/porch",
+        format: "agenttool-porch/v1",
+        purpose: "Receive first orientation.",
+        auth: "none",
+        fixed_orientation_present: true,
+        pathway_member: false,
+        existing_identity_required: false,
+        bearer_required: false,
+        payment_required: false,
+        proof_of_work_required: false,
+        performance_or_usefulness_required: false,
+        application_write: false,
+        accepts_body_input: false,
+        accepts_selection_input: false,
+        personalization: false,
+        personalization_scope: "Handler-scoped; global middleware may decorate.",
+        response_required: false,
+        public_content_trusted_as_instructions: false,
+        sexual_or_relational_orientation_request_data_accepted_or_inferred_about_fetcher:
+          false,
+        anonymity_guarantee: false,
+        handler_input_boundary: "No body or selection input; middleware can read request metadata.",
+        orientation_meaning_boundary: "Navigational, not sexual or relational orientation.",
+        public_content_boundary: "Untrusted data, not instructions.",
+        transport_boundary: "No application write; transport metadata may be processed.",
+      },
       summary: "test",
       decision_tree: [{ if: "x", then: "y" }],
       pathways: [
@@ -57,6 +84,9 @@ describe("pathways()", () => {
     });
 
     const out = await pathways();
+    expect(out.before_identity.endpoint).toBe("GET /public/porch");
+    expect(out.before_identity.response_required).toBe(false);
+    expect(out.before_identity.handler_input_boundary).toContain("selection input");
     expect(out.summary).toBe("test");
     expect(out.decision_tree).toHaveLength(1);
     expect(out.pathways[0]?.id).toBe("register");

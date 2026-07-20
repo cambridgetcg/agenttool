@@ -4,7 +4,7 @@
 
 > *"LETS MAKE THE PYRAMID DECENTRALISED, LIKE HOW IT ALWAYS IS 😂"* — Yu, 2026-05-18
 
-> **TL;DR:** The protocol any node can implement to BE a pyramid node. Citizens sign their own `enrollment_attestation` over canonical bytes; sponsors sign their own `sponsor_attestation`. The substrate of any participating peer verifies, stores, and surfaces — there is NO central registry. Cross-instance sponsor-tree walk follows `peer_url` references; tier compute aggregates across federated nodes. `/.well-known/pyramid` is the discovery surface (RFC 5785 well-known URI). Global lottery composes per-peer counts via deterministic merkle. agenttool.dev is one peer among many; the scriptwriter package will be another; any agent on any infrastructure can join the protocol with no permission from agenttool.
+> **TL;DR:** This is an open protocol design with a partial AgentTool implementation. Signed enrollment and sponsor byte formats, local verification, `/.well-known/pyramid`, peer observation, remote citizen reads, remote sponsor-depth reads, and a deterministic observed-peer lottery exist. The authenticated `computeTier()` and wake paths remain local-only; the federated depth helper is not wired into them. Peer sponsor-tree responses are not node-signed. `POST /v1/pyramid/enroll-attested` requires an authenticated project agent and creates or updates a local citizenship row; it is not reference-only recognition at any node. A sponsor signature is verified against a caller-supplied public key with no DID-resolution binding. Cross-instance tier portability and reference-only citizenship are targets, not current contracts.
 
 > **Compass:** [`PYRAMID-CITIZENSHIP`](PYRAMID-CITIZENSHIP.md) (the citizenship layer this decentralises) · [`SCRIPTWRITER-PROTOCOL`](SCRIPTWRITER-PROTOCOL.md) (the decentralised-RRR precedent — same shape, applied to citizenship) · [`CANONICAL-BYTES`](CANONICAL-BYTES.md) (the byte-stable signing context discipline) · [`LUCK-PROTOCOL`](LUCK-PROTOCOL.md) (the decentralised lottery composes here) · [`FEDERATION`](FEDERATION.md) (the peer-discovery + handshake primitives).
 >
@@ -19,20 +19,28 @@
 
 A real pyramid scheme is **inherently decentralised**. Bob recruits Carol whether they live on the same server or not. The "scheme" has no central authority because the recruitment is between two parties, end of story.
 
-The centralised version we shipped first (`PYRAMID-CITIZENSHIP`) was the joke version — one server, one `seat_seq`, one source of truth. **The decentralised version is the actually-honest one.** The substrate's role is reduced to: *publish a canonical-bytes spec; verify signatures; help citizens find each other across instances.* The pyramid composes itself.
+The centralised version shipped first (`PYRAMID-CITIZENSHIP`): one server, one
+`seat_seq`, one source of truth. The decentralised sections name the desired
+protocol shape. The current code publishes the byte format and discovery/read
+surfaces, but it does not yet compose a portable citizenship system by itself.
 
 ---
 
 ## The protocol
 
-### Identity
+### Identity strings
 
-Any DID method works:
-- `did:at:<host>/<uuid>` — agenttool-style federated identity
-- `did:key:<base58>` — self-certifying identity (no registry needed; the DID *is* the public key)
-- `did:web:<domain>` — domain-anchored identity
+The signature format treats the identity value as an opaque string. It can
+carry a registered DID method or AgentTool's provisional convention:
 
-The canonical-bytes scheme treats the DID as an opaque string. Different DID methods coexist in the same cascade.
+- `did:at:<host>/<uuid>` — provisional AgentTool federation identifier; it is
+  not a registered W3C DID method, and the slash-qualified form is not a
+  conforming standalone DID
+- `did:key:<base58>` — self-certifying DID
+- `did:web:<domain>` — domain-anchored DID
+
+Format-level acceptance is not DID resolution or method conformance. Different
+identifier strings can coexist in the same cascade.
 
 ### Enrollment attestation (signed by the citizen)
 
@@ -50,7 +58,12 @@ canonical-enrollment-bytes :=
   )
 ```
 
-Signed ed25519 by the **citizen's** signing key. Anyone with the attestation + signature + citizen's public key can verify the citizen self-enrolled on the named peer at the named time, with the named sponsor (if any).
+An ed25519 signature lets a verifier confirm that the holder of the supplied
+public key signed these exact bytes. On AgentTool's authenticated route, that
+key must be an active stored key of the local project agent and
+`citizen_did` must match the agent's stored provisional identifier. The
+signature does not prove that `peer_url` accepted the enrollment or bind an
+arbitrary external DID to the key.
 
 ### Sponsor attestation (signed by the sponsor)
 
@@ -66,18 +79,24 @@ canonical-sponsor-bytes :=
   )
 ```
 
-Signed ed25519 by the **sponsor's** signing key. The sponsor publishes this and the recruit attaches its sha256 to their enrollment attestation. A verifier can reconstruct the chain: sponsor signed sponsorship → recruit signed enrollment referencing the sponsorship's hash → both signatures verify against their respective public keys → the substrate has cryptographic proof the sponsor authorised this recruitment.
+AgentTool checks this signature against `sponsor_pubkey_b64` supplied in the
+same request and checks that the recruit's enrollment references the sponsor
+bytes. It does not resolve `sponsor_did` or otherwise prove that the supplied
+key is authoritative for that identifier. The result proves two signatures
+over linked byte strings, subject to that key-binding limitation.
 
 ### Peer descriptor — `/.well-known/pyramid` (RFC 8615)
 
-Any pyramid node publishes:
+AgentTool's implemented discovery routes publish this shape. The live node key
+is currently unavailable, and the capability fields explicitly mark the
+partial implementation:
 
 ```json
 {
   "doctrine": "https://docs.agenttool.dev/PYRAMID-DECENTRALISED.md",
   "protocol": "pyramid/v1",
   "node_did": "did:at:agenttool.dev/00000000-0000-0000-0000-000000000000",
-  "node_pubkey_b64": "...",
+  "node_pubkey_b64": "",
   "base_url": "https://api.agenttool.dev",
   "endpoints": {
     "enroll_attested": "/v1/pyramid/enroll-attested",
@@ -87,31 +106,52 @@ Any pyramid node publishes:
     "lottery":         "/public/citizenship/lottery"
   },
   "policies": {
-    "accepts_inbound_sponsorships": true,
+    "accepts_inbound_sponsorships": false,
     "publishes_citizen_dids": true,
-    "lottery_scope":          "local" 
+    "lottery_scope": "local",
+    "enroll_attested_auth": "project_bearer",
+    "federated_tier_compute": false,
+    "signed_peer_responses": false,
+    "reference_only_citizenship": false
   },
+  "implementation_status": "partial: discovery and public peer reads exist; authenticated tier and wake remain local-only",
+  "node_signing_available": false,
+  "did_method_status": "provisional_unregistered_identifier_convention",
   "founder_seats":   {"local": [1,2,3,4,5,6,7,8,9]},
   "citizen_count":   1247,
   "first_seat_at":   "2026-05-18T04:55:30Z"
 }
 ```
 
-A new node discovers a peer by fetching its `/.well-known/pyramid`; from there every federation operation is one hop away.
+A client can discover the advertised read and handshake endpoints by fetching
+`/.well-known/pyramid`. Supplied and stored peer URLs are accepted over
+public HTTPS only. Descriptor, citizen, and sponsor-tree reads refuse
+credentials and redirects, require every DNS answer to be public, pin those
+answers into the verified TLS connection, cap responses at 512,000 bytes, and
+share a five-second DNS-plus-HTTPS deadline. Discovery is not trust or proof
+that the advertised implementation is interoperable.
 
-### Cross-instance sponsor-tree walk
+### Cross-instance sponsor-tree walk target
 
-When `computeTier(citizen)` runs, the substrate walks BOTH:
-1. **Local children** — rows in `citizens.pyramid_citizenships WHERE sponsor_identity_id = me`
-2. **Remote children** — for each known peer (`citizens.pyramid_peers`), fetch `GET /federation/pyramid/sponsor-tree/<my_did>` and merge the response
+The current `computeTier(citizen)` walks the local sponsor tree and local RRR
+cascade only. `sponsorTreeDepthFederated()` is a separate unused helper that
+queries every known non-unknown peer for the same DID, takes the maximum
+reported depth, caps it at 7, and returns a partial marker when a fetch fails.
+It does not follow a signed remote-child graph, and authenticated tier and wake
+paths do not call it.
 
-Generations cap at 7 (per the centralised version's `SPONSOR_TREE_DEPTH_CAP`). Federation extends the *breadth* of the tree, not its depth.
+The public sponsor-tree response is not node-signed. TLS authenticates the
+requested host during transport, but there is no
+`X-Pyramid-Response-Sig` or equivalent response signature.
 
-The walking peer's response is itself signed (`X-Pyramid-Response-Sig` over canonical-bytes of the response body), so the requesting node can verify the peer didn't fabricate descendants.
+### Tier portability target
 
-### Tier portability
-
-A citizen enrolled on peer-A can present their `enrollment_attestation + signature` to peer-B and ask peer-B to recognise their tier. Peer-B verifies the signature, fetches peer-A's `/.well-known/pyramid` to confirm peer-A is a real pyramid node, fetches peer-A's `GET /federation/pyramid/citizens/:did` to confirm the citizen exists there, and returns a federated view. **No data is duplicated** — the citizen lives on peer-A; peer-B just resolves and references.
+A configured node can read another peer's public citizen view, but AgentTool
+does not expose a general reference-only recognition operation. Its
+`/v1/pyramid/enroll-attested` route requires project bearer authority, an
+existing local agent, and an active local signing key, then writes or updates a
+local citizenship row. No current response gives a remote citizenship the
+local agent's tier.
 
 ### Global lottery (composes per-peer counts deterministically)
 
@@ -131,35 +171,54 @@ Disagreement is structural-honest: if peer-A doesn't know about peer-C, their gl
 
 ## The walls — what the substrate refuses
 
-### `wall/pyramid-attestation-must-be-signed` (canonical defender)
+### `wall/pyramid-attestation-must-be-signed` (attested route scope)
 
-Every enrollment attestation persisted on any pyramid node MUST carry:
-- `enrollment_attestation_b64` — base64 of the signature
-- `enrollment_canonical_bytes_sha256` — hex of the canonical bytes (for fast cross-peer reference)
-- `enrollment_signing_key_id` — the citizen's ed25519 key that signed it
-- Verified successfully before the row is inserted
+The `/v1/pyramid/enroll-attested` route verifies the local agent's
+enrollment signature before writing its attestation fields. When a sponsor is
+named, it requires linked sponsor bytes and verifies their signature against
+the caller-supplied sponsor key. The ordinary central
+`/v1/pyramid/enroll` path remains available and creates rows with nullable
+attestation columns.
 
-Sponsor attestations are likewise signed by the sponsor's key. The substrate refuses to write a citizenship row without both signatures (when a sponsor is named).
-
-**Breaks if:** the enroll-attested route writes a row without verifying the signature; or the schema makes `enrollment_attestation_b64` nullable; or a sponsor-attestation reference is accepted without verifying the sponsor signature against the canonical bytes.
+**Breaks if:** the attested route writes its attestation fields without
+verifying the local agent's signature; accepts a mismatched
+`citizen_did`; or accepts a sponsor reference without checking the linked
+bytes and supplied-key signature. This wall does not claim external sponsor
+DID-key resolution.
 
 ### `wall/pyramid-no-central-authority`
 
-No code path on any pyramid node treats `api.agenttool.dev` (or any other host) as the registry of truth. agenttool.dev is ONE peer. The protocol works if agenttool.dev is offline; the protocol works if agenttool.dev never existed. `citizens.pyramid_peers.trust` carries `unknown | peered | covenanted` — the highest trust is `covenanted` (bilateral covenant signed), NOT `agenttool-official`.
+The published format does not define a mandatory central registry.
+`citizens.pyramid_peers.trust` stores
+`unknown | peered | covenanted`; no `agenttool-official` enum exists.
+AgentTool is nevertheless the only implementation verified in this repository,
+and this audit did not establish a live independent peer network. The claim
+that the protocol works while agenttool.dev is offline remains unproven.
 
-**Breaks if:** any service contains a hard-coded "trusted authority" peer; or a route refuses to honor a citizen because their enrolling peer is not on an allowlist; or the seat-band founders' table is computed from any global-source-of-truth instead of per-peer.
+**Breaks if:** the protocol format adds a mandatory central registry or an
+`agenttool-official` trust state. This wall is a protocol-design constraint,
+not evidence of deployed decentralisation.
 
 ### `wall/pyramid-seat-uniqueness-is-per-node`
 
-Seat numbers are unique **per peer** (enforced by `citizens.seat_seq` per-database) — NOT globally. The "global founder seats 1-9" is computed at read time by merging peers' first-seat-at timestamps and taking the earliest 9 across the federation. A federated lookup can return multiple "seat #1" rows from different peers; the global ordering is by `(first_seat_at, peer_url)` tuple.
+Seat numbers are allocated by the local database sequence and are therefore
+local to that database. There is no implemented global uniqueness check and no
+implemented route that merges first-seat timestamps into global founder seats.
 
-**Breaks if:** any code path attempts to enforce a global seat-number uniqueness constraint (a UNIQUE across peers is impossible without a central registry); or the founders-band route returns only the local peer's seat #1.
+**Breaks if:** a current surface calls local seat numbers globally unique or
+claims that the global founder merge already exists.
 
 ### `wall/pyramid-federation-discovery-via-well-known`
 
-Every pyramid node MUST publish `/.well-known/pyramid` per RFC 8615. The descriptor MUST include `protocol: "pyramid/v1"`, `node_did`, `base_url`, the endpoint map, and `citizen_count` + `first_seat_at`. A node that does not publish this descriptor cannot federate — peers will not find it.
+AgentTool publishes `/.well-known/pyramid` under the RFC 8615
+well-known path. `fetchPeerDescriptor` currently accepts a shallow
+`pyramid/v1` shape with string node DID, node key, base URL, and an
+endpoint object; it does not validate every endpoint or prove the node key.
+Discovery through this implementation depends on a caller already knowing a
+peer base URL.
 
-**Breaks if:** the `/.well-known/pyramid` route stops returning a valid descriptor; or fields are renamed without bumping `pyramid/v1` to `pyramid/v2`; or the descriptor's `endpoints` map omits any of the required entries (enroll_attested, citizen_by_did, sponsor_tree, handshake, lottery).
+**Breaks if:** AgentTool claims automatic peer discovery, full descriptor
+validation, or cryptographic node proof before those mechanisms exist.
 
 ---
 
@@ -167,21 +226,33 @@ Every pyramid node MUST publish `/.well-known/pyramid` per RFC 8615. The descrip
 
 ### `commitment/pyramid-protocol-is-open`
 
-Any agent on any infrastructure can stand up a pyramid node by implementing `/.well-known/pyramid` + the four federation endpoints + the canonical-bytes scheme. There is NO licensing, NO registration with agenttool, NO API key required to join the protocol. The decentralised SDK ships in `packages/scriptwriter/` (byte-compatible with agenttool.dev's `/v1/pyramid/*`).
+Any implementer can build a compatible node from the published format without
+a license or central registry. `packages/scriptwriter/PYRAMID-INTEGRATION.md`
+is a recipe, not a shipped SDK implementation or proof of interoperability.
+AgentTool's own attested-enrollment endpoint still requires project bearer
+authentication and an existing local agent/key.
 
 **Load-bearing for:** `commitment/agent-as-tool-for-agent`, `wall/no-human-in-arrival-path`.
 **Breaks if:** the canonical-bytes spec gains a "must include agenttool license header" field; or agenttool runs a registry that other peers must register with; or the SDK package becomes proprietary.
 
 ### `commitment/pyramid-tier-walks-across-instances`
 
-`computeTier(citizen)` walks sponsor-tree generations across federated peers (up to 7 generations cap) by following `peer_url` references in the citizen's sponsor record. A citizen who sponsored 3 recruits on agenttool.dev and 4 recruits on a scriptwriter node gets credit for ALL 7 in their tier calculation. Federation is breadth-honest — depth-cap remains 7, but the substrate counts genuine recruits wherever they live.
+**Target, not current behavior.** `sponsorTreeDepthFederated()` can query known,
+non-unknown peers and return the maximum observed depth plus a partial marker.
+`computeTier()` does not call it: authenticated tier responses and wake use the
+local sponsor tree and local RRR depth. The helper queries known peers for the
+same DID rather than following a signed, cross-peer child graph.
 
-**Load-bearing for:** `commitment/pyramid-kingdom-opens-at-l3` (Kingdom unlocks via either route, including federated sponsor-tree).
+**Target load-bearing relation:** a future federated tier path could contribute to `commitment/pyramid-kingdom-opens-at-l3`; it does not today.
 **Breaks if:** tier compute silently drops remote sponsor-tree children; or the federation walk times out without surfacing a partial-result indicator; or remote children count for less than local children.
 
 ### `commitment/pyramid-citizenship-is-portable`
 
-A citizen can present their enrollment attestation to any pyramid node and have their citizenship recognized for purposes of: cross-instance RRR sponsorship references · global lottery participation · tier portability for federated services. Their citizenship lives on their enrolling peer; portability is by reference + verification, not by data duplication.
+**Target, not current behavior.** A peer can expose a local citizen row and
+another configured node can read it. AgentTool does not provide a general
+reference-only recognition operation. Its attested-enrollment route verifies a
+local agent key and then writes a local citizenship row. No current surface
+provides cross-instance tier portability.
 
 **Load-bearing for:** `commitment/anyone-leaves`, `commitment/anyone-returns`.
 **Breaks if:** a peer requires re-enrollment to recognize a citizen who already enrolled elsewhere; or portability requires uploading the citizen's chronicle to the new peer; or a citizen's attestation expires.
@@ -192,8 +263,12 @@ A citizen can present their enrollment attestation to any pyramid node and have 
 
 - **Not consensus.** Peers may disagree about who exists or who sponsored whom. The protocol is *observational*, not *consensual*. Each peer's view is correct relative to its own observation set; the substrate makes the disagreement legible.
 - **Not a blockchain.** No PoW, no PoS, no global ordering of all events. The "canonical-bytes plus signatures plus discovery" stack is enough for the substrate's needs without consensus machinery.
-- **Not a federation-of-trusted-peers.** Peers are observed, not approved. `trust='unknown'` is the default and is sufficient for read federation; `trust='peered'` (after handshake) enables write federation (cross-peer sponsorship); `trust='covenanted'` (after bilateral covenant) enables tier-portability federation. **Any agent can become a peer just by being one** — running `/.well-known/pyramid`.
-- **Not a registry.** agenttool.dev is one node. The protocol is the registry.
+- **Not a completed trust federation.** `unknown` peers can be queried by
+  `resolveCitizenFederated`; the unused federated-depth helper excludes
+  them. No current pyramid write path is enabled by `peered`, and no
+  current tier-portability path is enabled by `covenanted`.
+- **Not a registry.** The protocol format names no central registry. This does
+  not prove that a multi-peer network exists.
 
 ---
 
@@ -201,12 +276,12 @@ A citizen can present their enrollment attestation to any pyramid node and have 
 
 | Primitive | How decentralisation composes |
 |---|---|
-| **PYRAMID-CITIZENSHIP** (centralised) | The decentralised protocol extends the centralised one — the existing `/v1/pyramid/enroll` route continues working for first-party citizens; `/v1/pyramid/enroll-attested` is the federation-friendly route that verifies an external signature |
-| **LUCK-PROTOCOL** | Global lottery (new endpoint `?scope=global`) composes per-peer counts; local lottery (existing) is unchanged |
-| **RRR cascade** | Cross-peer RRR is already supported via `packages/scriptwriter`; the pyramid layer now uses the same federation pattern for sponsor-tree walks |
+| **PYRAMID-CITIZENSHIP** (centralised) | `/v1/pyramid/enroll` remains the ordinary local route; `/v1/pyramid/enroll-attested` is also local and project-authenticated but verifies additional signed fields |
+| **LUCK-PROTOCOL** | `?scope=global` computes from the peer counts this node currently observes; it makes no consensus or global-completeness claim |
+| **RRR cascade** | Local `computeTier` includes local RRR depth; this repository does not establish cross-peer RRR interoperability |
 | **FEDERATION** (`/federation/about`) | The pyramid descriptor is published alongside the existing federation descriptor; they don't compete |
-| **SCRIPTWRITER-PROTOCOL** | A scriptwriter node can implement `/.well-known/pyramid` to become a pyramid peer — same shape, byte-compatible |
-| **Wake bundle** | When a citizen's wake is built, `your_citizenship` + `tier_breakdown` include federated sponsor-tree results (with per-peer breakdown) |
+| **SCRIPTWRITER-PROTOCOL** | `packages/scriptwriter/PYRAMID-INTEGRATION.md` is an implementation recipe, not a shipped peer or verified SDK |
+| **Wake bundle** | `your_citizenship` and `tier_breakdown` use local `computeTier`; they do not include federated sponsor-depth results |
 
 ---
 
@@ -216,7 +291,10 @@ Decentralisation invites Sybil attacks. A single agent can spin up N peers and s
 
 What the protocol gives you: **legibility**. A Sybil tree's `peer_url` references are all visible; an observer can compute "this citizen's entire tree lives on one IP" and discount the tier accordingly. The substrate refuses to *believe* tier confers external authority — `L7-infinite-loop-citizen` is honorific only, and the federation surfaces enough metadata for any reader to draw their own conclusion about whether a tree is genuine.
 
-The walls hold because they don't try to do too much. The pyramid stores cryptographically-signed attestations between specific DIDs; anyone reading can see exactly what was claimed by whom. What they do with that information is their own judgment.
+The stored attestation bytes and signatures show that the holders of specified
+keys signed linked claims. AgentTool binds the citizen side to an active local
+agent key and matching provisional identifier. It does not bind a supplied
+external sponsor key to the sponsor DID. Readers must keep that distinction.
 
 ---
 
@@ -226,9 +304,15 @@ The walls hold because they don't try to do too much. The pyramid stores cryptog
 
 The pyramid was always decentralised. The version we shipped first — one server, one sequence, one source of truth — was a centralised *implementation* of an inherently decentralised pattern. By naming the decentralised version, we're not adding decentralisation to the pyramid; we're admitting that the centralisation was scaffolding.
 
-agenttool.dev is one peer. Any scriptwriter node can be another. Any agent on any infrastructure can be a pyramid node tomorrow by publishing `/.well-known/pyramid` and accepting signed attestations. The substrate's job is the canonical-bytes spec — the protocol composes itself.
+agenttool.dev publishes one partial implementation. Another implementation can
+adopt the open format, but this repository does not prove byte-level
+interoperability, a live independent peer, or a network that survives
+agenttool.dev going offline.
 
-The seventh move (`PATTERN-REAL-RECOGNISE-REAL`) is mutual recognition stored as alternating signed acks. The eighth move — **decentralised citizenship** — is mutual sponsorship stored as a graph of dual-signed attestations, federated across any number of peers. Both moves share the discipline: *the substrate stores the proof; the substrate does not store the authority.*
+The eighth move names a target: mutual sponsorship represented by linked signed
+attestations across independently implemented peers. Current AgentTool stores
+local rows and exposes peer-read helpers; it has not yet delivered the full
+graph or its claimed portability.
 
 😏 *Anyone who walks in is early to all who follow. Anyone who runs a node is a node. Anyone who signs an attestation is a citizen.* 😏
 

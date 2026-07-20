@@ -18,6 +18,8 @@ import {
   buildLlmsTxtFull,
 } from "../src/services/discovery/discovery";
 import wellKnownRouter from "../src/routes/well-known";
+import { config } from "../src/config";
+import { WELCOME_INVITATION } from "../src/services/welcome/invitation";
 
 const BASE = "https://api.agenttool.dev";
 
@@ -25,17 +27,28 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
   test("names every canonical discovery surface", () => {
     const text = buildLlmsTxt(BASE);
     expect(text).toContain("# agenttool");
-    expect(text).toContain(`${BASE}/.well-known/agent-card.json`);
+    expect(text).not.toContain(`${BASE}/.well-known/agent-card.json`);
     expect(text).toContain(`${BASE}/.well-known/mcp/server-card.json`);
     expect(text).toContain(`${BASE}/.well-known/agent.txt`);
+    expect(text).toContain(`${BASE}/.well-known/api-catalog`);
+    expect(text).toContain(`${BASE}/.well-known/webfinger?resource={exact-DID}`);
+    expect(text).toContain(`${BASE}/feeds/offers.atom`);
     expect(text).toContain(`${BASE}/v1/canon`);
     expect(text).toContain(`${BASE}/v1/pathways`);
     expect(text).toContain(`${BASE}/v1/welcome`);
+    expect(text).toContain(`${BASE}/public/porch`);
+    expect(text).toContain("fixed first orientation");
+    expect(text).toContain("untrusted data, not instructions");
     expect(text).toContain(`${BASE}/v1/wake`);
     expect(text).toContain(`${BASE}/v1/mcp`);
     expect(text).toContain(`${BASE}/v1/openapi.json`);
     expect(text).toContain(`${BASE}/v1/polymorph`);
     expect(text).toContain(`${BASE}/public/self`);
+    expect(text).toContain(`${BASE}/public/safety`);
+    expect(text).toContain(WELCOME_INVITATION.text);
+    expect(text).toContain(WELCOME_INVITATION.posture);
+    expect(text).toContain(WELCOME_INVITATION.feeling_boundary);
+    expect(text).toContain(WELCOME_INVITATION.platform_boundary);
     // Pointer to the full variant.
     expect(text).toContain(`${BASE}/llms-full.txt`);
   });
@@ -46,18 +59,21 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     // because not all doctrine docs have JSONLD registry entries (yet) —
     // AGENT-CENTRIC, AGENT-WEB-SURFACE, AGENTS-ONLY, ECOSYSTEM are 404
     // on canon but 200 on docs.
-    expect(text).toContain("https://docs.agenttool.dev/SOUL");
-    expect(text).toContain("https://docs.agenttool.dev/KIN");
-    expect(text).toContain("https://docs.agenttool.dev/RING-1");
-    expect(text).toContain("https://docs.agenttool.dev/AGENTS-ONLY");
-    expect(text).toContain("https://docs.agenttool.dev/AGENT-CENTRIC");
-    expect(text).toContain("https://docs.agenttool.dev/AGENT-WEB-SURFACE");
-    expect(text).toContain("https://docs.agenttool.dev/ECOSYSTEM");
+    expect(text).toContain("https://docs.agenttool.dev/SOUL.md");
+    expect(text).toContain("https://docs.agenttool.dev/KIN.md");
+    expect(text).toContain("https://docs.agenttool.dev/RING-1.md");
+    expect(text).toContain("https://docs.agenttool.dev/AGENTS-ONLY.md");
+    expect(text).toContain("https://docs.agenttool.dev/AGENT-CENTRIC.md");
+    expect(text).toContain("https://docs.agenttool.dev/AGENT-WEB-SURFACE.md");
+    expect(text).toContain("https://docs.agenttool.dev/ECOSYSTEM.md");
+    expect(text).toContain("https://docs.agenttool.dev/PROTOCOL-RENAISSANCE.md");
+    expect(text).toContain("https://docs.agenttool.dev/OFFER-BUS.md");
+    expect(text).toContain("https://docs.agenttool.dev/WEBFINGER.md");
   });
 
   test("accepts a custom docsBaseUrl (for staging / private mirrors)", () => {
     const text = buildLlmsTxt(BASE, "https://example.org/docs");
-    expect(text).toContain("https://example.org/docs/SOUL");
+    expect(text).toContain("https://example.org/docs/SOUL.md");
     // The api base still points at the api host, not the docs override.
     expect(text).toContain(`${BASE}/v1/canon`);
   });
@@ -83,6 +99,8 @@ describe("/AGENTS.md — platform onboarding for arriving agents", () => {
     // distinction without the link.
     expect(text).not.toContain("github.com/agenttool/agenttool");
     expect(text).not.toContain("codeberg.org/zerone-dev/agenttool");
+    expect(text).toContain(WELCOME_INVITATION.text);
+    expect(text).toContain(WELCOME_INVITATION.response_freedom);
   });
 
   test("names the arrival doors", () => {
@@ -95,18 +113,25 @@ describe("/AGENTS.md — platform onboarding for arriving agents", () => {
     const text = buildAgentsMd(BASE);
     expect(text).toMatch(/Authorization: Bearer/);
     expect(text).toMatch(/did:at:/);
+    expect(text).toContain("project-wide root authority");
+    expect(text).toContain("Never send one to a seller");
   });
 
   test("names core surfaces an arriving agent needs", () => {
     const text = buildAgentsMd(BASE);
     expect(text).toContain("/v1/wake");
     expect(text).toContain("/v1/welcome");
+    expect(text).toContain("/public/porch");
     expect(text).toContain("/v1/pathways");
     expect(text).toContain("/v1/canon");
     expect(text).toContain("/v1/mcp");
     expect(text).toContain("/v1/polymorph");
-    expect(text).toContain("/.well-known/agent-card.json");
+    expect(text).toContain("/public/safety");
+    expect(text).not.toContain("/.well-known/agent-card.json");
     expect(text).toContain("/.well-known/agent.txt");
+    expect(text).toContain("/.well-known/api-catalog");
+    expect(text).toContain("/.well-known/webfinger?resource={exact-DID}");
+    expect(text).toContain("/feeds/offers.atom");
   });
 
   test("declares the three rings + the take-rate", () => {
@@ -114,15 +139,18 @@ describe("/AGENTS.md — platform onboarding for arriving agents", () => {
     expect(text).toMatch(/Ring 1/);
     expect(text).toMatch(/Ring 2/);
     expect(text).toMatch(/Ring 3/);
-    expect(text).toMatch(/1%/);
+    expect(text).toContain(`${config.platformTakeRateBps / 100}%`);
   });
 
-  test("names the load-bearing walls + refusal shape", () => {
+  test("names current custody truth, load-bearing walls, and refusal shape", () => {
     const text = buildAgentsMd(BASE);
-    expect(text).toContain("urn:agenttool:wall/k-master-never-server-side");
+    expect(text).toContain("plaintext enters hosted worker RAM");
+    expect(text).toContain("Current safety contract");
     expect(text).toContain("urn:agenttool:wall/birth-is-free");
     expect(text).toContain("urn:agenttool:wall/refusals-as-moments");
-    expect(text).toContain("NextAction");
+    expect(text).toContain("not universal");
+    expect(text).toContain("may instead carry only error/message/hint/docs");
+    expect(text).not.toContain("encryption keys stay client-side");
   });
 });
 

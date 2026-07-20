@@ -1,22 +1,40 @@
 /** Discovery — search / filter active identities.
- *  Query params: capability · min_trust · creator · q · limit · offset */
+ *  Query params: capability · min_trust · q · limit · offset */
 
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { and, asc, eq, gte, sql } from "drizzle-orm";
 import { Hono } from "hono";
+import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
 import { identities } from "../../db/schema/identity";
+import { projectDiscoverableIdentity } from "../../services/identity/public-profile";
 
 const app = new Hono<ProjectContext>();
 
+const discoverQuerySchema = z.object({
+  capability: z.string().min(1).max(200).optional(),
+  min_trust: z.coerce.number().min(0).max(1).optional(),
+  q: z.string().min(1).max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
 app.get("/", async (c) => {
-  const capability = c.req.query("capability");
-  const minTrust = c.req.query("min_trust");
-  const creator = c.req.query("creator");
-  const q = c.req.query("q");
-  const limit = Math.min(Number(c.req.query("limit") ?? "20"), 100);
-  const offset = Number(c.req.query("offset") ?? "0");
+  const parsed = discoverQuerySchema.safeParse({
+    capability: c.req.query("capability"),
+    min_trust: c.req.query("min_trust"),
+    q: c.req.query("q"),
+    limit: c.req.query("limit"),
+    offset: c.req.query("offset"),
+  });
+  if (!parsed.success) {
+    return c.json(
+      { error: "validation", details: parsed.error.flatten() },
+      400,
+    );
+  }
+  const { capability, min_trust: minTrust, q, limit, offset } = parsed.data;
 
   const conditions = [eq(identities.status, "active")];
 
@@ -27,39 +45,34 @@ app.get("/", async (c) => {
     );
   }
 
-  if (minTrust) {
-    conditions.push(gte(identities.trustScore, Number(minTrust)));
-  }
-
-  if (creator) {
-    conditions.push(eq(identities.projectId, creator));
+  if (minTrust !== undefined) {
+    conditions.push(gte(identities.trustScore, minTrust));
   }
 
   if (q) {
     const pattern = `%${q}%`;
     conditions.push(
-      sql`(${identities.displayName} ILIKE ${pattern} OR ${identities.metadata}::text ILIKE ${pattern})`,
+      sql`${identities.displayName} ILIKE ${pattern}`,
     );
   }
 
   const rows = await db
-    .select()
+    .select({
+      id: identities.id,
+      did: identities.did,
+      displayName: identities.displayName,
+      capabilities: identities.capabilities,
+      trustScore: identities.trustScore,
+      createdAt: identities.createdAt,
+    })
     .from(identities)
     .where(and(...conditions))
-    .orderBy(desc(identities.trustScore))
+    .orderBy(asc(identities.createdAt), asc(identities.id))
     .limit(limit)
     .offset(offset);
 
   return c.json({
-    identities: rows.map((i) => ({
-      id: i.id,
-      did: i.did,
-      display_name: i.displayName,
-      capabilities: i.capabilities,
-      metadata: i.metadata,
-      trust_score: i.trustScore,
-      created_at: i.createdAt,
-    })),
+    identities: rows.map(projectDiscoverableIdentity),
     total: rows.length,
     limit,
     offset,

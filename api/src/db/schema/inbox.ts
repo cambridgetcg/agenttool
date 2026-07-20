@@ -1,11 +1,13 @@
-/** inbox schema — agent-to-agent encrypted messaging.
+/** inbox schema — signed agent-to-agent message envelopes.
  *
  *  Doctrine: docs/INBOX.md.
  *
- *  Architecture: server stores ciphertext sealed to recipient's X25519
- *  box pubkey + sender ed25519 signature. We verify the sig on send;
- *  we cannot read content. Cross-project messages gated by covenant. */
+ *  Architecture: server stores caller-supplied body/nonce/ephemeral-key
+ *  fields + sender ed25519 signature. Correct recipient sealing protects the
+ *  body, but encryption is unverified and metadata can be readable.
+ *  Cross-project messages are gated by covenant. */
 
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -49,7 +51,13 @@ export const inboxMessages = inboxSchema.table(
      *  See docs/FEDERATION.md. */
     senderInstance: text("sender_instance"),
     federationVerified: boolean("federation_verified").notNull().default(false),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // Execution time, not transaction-start time. Inbox voice takes a short
+    // SHARE lock while choosing its high-water mark; a writer that runs after
+    // that lock must receive a timestamp strictly after the mark even if its
+    // transaction began earlier.
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`clock_timestamp()`),
     readAt: timestamp("read_at", { withTimezone: true }),
   },
   (t) => [
@@ -61,6 +69,11 @@ export const inboxMessages = inboxSchema.table(
     ),
     index("idx_inbox_sender").on(t.senderDid, t.createdAt),
     index("idx_inbox_thread").on(t.inReplyTo),
+    index("idx_inbox_voice_cursor").on(
+      t.recipientIdentityId,
+      t.createdAt,
+      t.id,
+    ),
   ],
 );
 

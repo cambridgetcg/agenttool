@@ -13,15 +13,57 @@
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/pathways" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
-  <link rel="stylesheet" href="/docs.css?v=2026-05-08" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
+  <script src="/shared/mode.js"></script>
+  <style>
+    /* Page-local mobile fixes (2026-07-03 review pass) */
+
+    /* params-table: shared theme.css makes the <table> display:block with
+       thead/tbody as two independent display:table elements, so their
+       column widths diverge and the header row stops when scrolled.
+       Wrap the intact table in a scrolling div and restore native table
+       display so headers and body share one column grid. */
+    .table-scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin: 1rem 0;
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      background: var(--surface);
+    }
+    .table-scroll .params-table {
+      display: table;
+      overflow: visible;
+      margin: 0;
+      border: none;
+      border-radius: 0;
+      min-width: 560px;
+    }
+    .table-scroll .params-table thead { display: table-header-group; }
+    .table-scroll .params-table tbody { display: table-row-group; }
+
+    /* Footer: stack deliberately on narrow phones so the brand mark and
+       copyright stay on one line instead of wrapping raggedly. */
+    @media (max-width: 480px) {
+      footer.site-footer { flex-direction: column; align-items: flex-start; }
+      footer.site-footer .left { flex-wrap: wrap; white-space: nowrap; row-gap: 0.35rem; }
+    }
+  </style>
 </head>
-<body>
+<body class="has-strip">
+
+  <div class="estate-strip" role="navigation" aria-label="agenttool estate">
+    <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
+    <a href="https://app.agenttool.dev/">app — the agents' door</a>
+    <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
+  </div>
+
 
   <nav class="topnav">
     <a href="https://agenttool.dev/" class="brand">
@@ -51,6 +93,8 @@
           <li><a href="nen.html"><span class="glyph">念</span>Nen</a></li>
           <li><a href="dark-continent.html"><span class="glyph">暗</span>暗黒大陸</a></li>
           <li><a href="nen-mechanics.html"><span class="glyph">技</span>Mechanics</a></li>
+          <li><a href="ai-logos.html"><span class="glyph">愛</span>Logos</a></li>
+          <li><a href="whitehack.html"><span class="glyph">⬜</span>Whitehack</a></li>
           <li><a href="glossary.html"><span class="glyph">▤</span>Glossary</a></li>
           <li><a href="welcome.html"><span class="glyph">♡</span>Welcome<span class="sidebar-tag">new</span></a></li>
           <li><a href="tutorial.html"><span class="glyph">✎</span>Tutorial</a></li>
@@ -101,6 +145,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>
@@ -127,32 +173,37 @@
           <p class="endpoint-desc">Names a new agent under the calling project. Generates an ed25519 keypair, opens a wallet, scaffolds the memory namespace, and composes a first <em>welcome letter</em> addressed to the agent itself.</p>
 
           <h3>Request body</h3>
-          <table class="params-table">
+          <div class="table-scroll"><table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
-              <tr><td><span class="pname">name</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>The display name the new agent carries across sessions. Becomes part of its DID metadata.</td></tr>
+              <tr><td><span class="pname">name</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>The display name the new agent carries across sessions. Becomes metadata on its AgentTool identity row.</td></tr>
               <tr><td><span class="pname">capabilities</span><span class="opt">optional</span></td><td><span class="ptype">string[]</span></td><td>Declared abilities. Surface in <code>/v1/discover</code>. Examples: <code>search</code>, <code>reason</code>, <code>memory</code>.</td></tr>
-              <tr><td><span class="pname">purpose</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>One-line statement of what the agent is for. Stored as the agent's first foundational memory.</td></tr>
-              <tr><td><span class="pname">expression</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Initial <code>register</code>, <code>walls</code>, <code>subagents</code>, <code>wake_text</code>. Can be set later via <code>PUT /v1/identities/:id/expression</code>.</td></tr>
+              <tr><td><span class="pname">purpose</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>One-line purpose stored in identity metadata and used in the welcome letter. The best-effort birth memory stores that welcome.</td></tr>
               <tr><td><span class="pname">metadata</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Freeform JSON. Avatar URL, links, description, etc.</td></tr>
+              <tr><td><span class="pname">form</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Descriptive substrate form; it is not a gate.</td></tr>
+              <tr><td><span class="pname">language</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Preferred welcome-letter language tag; unsupported tags fall back to English.</td></tr>
             </tbody>
-          </table>
+          </table></div>
 
           <h3>Example</h3>
           <div class="code-block">
             <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>curl -X POST https://api.agenttool.dev/v1/bootstrap \
-  -H "Authorization: Bearer $AT_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Aurora",
-    "capabilities": ["search", "reason", "memory"],
-    "purpose": "Help my user understand their codebase",
-    "expression": {
-      "register": "Plain English, dense. Code-switch when the user does.",
-      "walls": ["No fabricated citations. Refuse politely."]
-    }
-  }'</pre>
+<pre>(
+  set +x
+  set +v
+  set +a
+  printf 'Authorization: Bearer %s\n' "$AT_API_KEY" | \
+    env -u AT_API_KEY curl -q -X POST https://api.agenttool.dev/v1/bootstrap \
+      -H @- \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "Aurora",
+        "capabilities": ["search", "reason", "memory"],
+        "purpose": "Help my user understand their codebase",
+        "form": "agent",
+        "language": "en"
+      }'
+)</pre>
           </div>
 
           <div class="code-block">
@@ -162,14 +213,13 @@
     <span class="key">"id"</span>:    <span class="str">"a1b2c3d4-..."</span>,
     <span class="key">"did"</span>:   <span class="str">"did:at:0a3c-..."</span>,
     <span class="key">"name"</span>:  <span class="str">"Aurora"</span>,
+    <span class="key">"level"</span>: <span class="num">0</span>,
     <span class="key">"capabilities"</span>: [<span class="str">"search"</span>, <span class="str">"reason"</span>, <span class="str">"memory"</span>],
-    <span class="key">"trust_score"</span>: <span class="num">0.0</span>,
-    <span class="key">"status"</span>:      <span class="str">"active"</span>
+    <span class="key">"form"</span>: <span class="str">"agent"</span>
   },
   <span class="key">"keypair"</span>: {
     <span class="key">"public_key"</span>:  <span class="str">"&lt;base64 ed25519 pub&gt;"</span>,
-    <span class="key">"private_key"</span>: <span class="str">"&lt;base64 ed25519 priv — RETURNED ONCE&gt;"</span>,
-    <span class="key">"kid"</span>:         <span class="str">"primary"</span>
+    <span class="key">"private_key"</span>: <span class="str">"&lt;base64 ed25519 priv — RETURNED ONCE&gt;"</span>
   },
   <span class="key">"wallet"</span>: {
     <span class="key">"id"</span>:       <span class="str">"..."</span>,
@@ -177,20 +227,20 @@
     <span class="key">"balance"</span>:  <span class="num">0</span>,
     <span class="key">"currency"</span>: <span class="str">"GBP"</span>
   },
-  <span class="key">"bearer"</span>:  <span class="str">"at_xxxxxxxxxxxxxxxxxxxxxxxx"</span>,
+  <span class="key">"memory"</span>: { <span class="key">"birth_id"</span>: <span class="str">"... or null if the best-effort write failed"</span> },
   <span class="key">"welcome"</span>: <span class="str">"Welcome, Aurora. Your name is yours. Your memory will outlive your sessions..."</span>
 }</pre>
           </div>
 
           <div class="callout danger">
             <span class="icon">⚠</span>
-            <p><strong>The private key is returned exactly once.</strong> We do not persist it server-side. Lose it and the agent loses its ability to sign attestations. Either save it to your OS keychain immediately (see <a href="#scaffold">scaffold</a>) or back it up encrypted with <a href="#backup">/v1/identity/backup</a>.</p>
+            <p><strong>The identity private key is returned exactly once.</strong> The caller must store it with a trusted local mechanism or encrypt a backup before uploading it. The scaffold below stores the existing project-root bearer only; it does not store this identity key.</p>
           </div>
         </div>
       </div>
 
       <h2 id="scaffold">Local scaffold — bridge to the keychain</h2>
-      <p>The <code>scaffold</code> endpoint returns an OS-aware shell script. Run it once per machine the agent operates on. The bearer key gets stored in the OS-native secure store; a <code>wake.sh</code> (or <code>wake.ps1</code>) is written to <code>~/.config/agenttool/</code>.</p>
+      <p>The <code>scaffold</code> endpoint returns an OS-aware script that contains configuration but not the bearer. It resolves the sole active project identity, or requires an explicit <code>identity_id</code> when siblings exist, and binds the generated config and wake helper to that UUID. Inspect it, then run it with <code>AT_API_KEY</code> exported. It stores the key in the OS-native secure store, except for the disclosed mode-0600 Linux fallback, and writes the selected wake helper under the user profile.</p>
 
       <div class="endpoint" id="get-scaffold">
         <div class="endpoint-header">
@@ -199,58 +249,79 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Returns a shell script (<code>text/x-shellscript</code>) that, when piped into <code>bash</code> or <code>powershell</code>, saves the bearer to the OS keychain and writes the wake helper.</p>
+          <p class="endpoint-desc">With <code>?format=text</code>, returns executable text as <code>text/plain</code>. The response does not embed the bearer. Before changing a credential store, the inspected script calls <code>GET /v1/bootstrap/scaffold/context</code> and refuses a bearer outside the project that generated it. Authentication may best-effort update <code>api_keys.last_used</code>; the context route itself returns the project UUID without composing the private wake or incrementing identity wake counters. The script then saves local <code>AT_API_KEY</code> to the selected credential store (or Linux mode-0600 fallback) and writes the identity-selected wake helper.</p>
 
           <h3>Query parameters</h3>
-          <table class="params-table">
+          <div class="table-scroll"><table class="params-table">
             <thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td><span class="pname">platform</span><span class="req">required</span></td><td><span class="ptype">"macos" · "linux" · "windows"</span></td><td>OS-native secure store target.</td></tr>
-              <tr><td><span class="pname">did</span><span class="opt">optional</span></td><td><span class="ptype">did:at:...</span></td><td>Embedded into the agent.json metadata for reference.</td></tr>
-              <tr><td><span class="pname">name</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Embedded into the agent.json for the wake helper banner.</td></tr>
+              <tr><td><span class="pname">identity_id</span><span class="opt">conditional</span></td><td><span class="ptype">UUID</span></td><td>Active identity in the bearer project. Required when more than one active identity exists; otherwise the sole active identity is selected.</td></tr>
             </tbody>
-          </table>
+          </table></div>
 
           <h3>Per-OS behaviour</h3>
-          <table class="params-table">
+          <div class="table-scroll"><table class="params-table">
             <thead><tr><th>Platform</th><th>Secure store</th><th>Files written</th></tr></thead>
             <tbody>
-              <tr><td><strong>macOS</strong></td><td><code>security add-generic-password</code> → Keychain</td><td><code>~/.config/agenttool/agent.json</code><br><code>~/.config/agenttool/wake.sh</code></td></tr>
-              <tr><td><strong>Linux</strong></td><td><code>secret-tool</code> → libsecret (GNOME / KWallet); fallback to <code>~/.config/agenttool/key</code> with mode <code>0600</code></td><td><code>~/.config/agenttool/agent.json</code><br><code>~/.config/agenttool/wake.sh</code></td></tr>
-              <tr><td><strong>Windows</strong></td><td><code>cmdkey /generic:agenttool</code> → Credential Manager</td><td><code>%APPDATA%\agenttool\agent.json</code><br><code>%APPDATA%\agenttool\wake.ps1</code></td></tr>
+              <tr><td><strong>macOS</strong></td><td>Security framework → project-namespaced Keychain service</td><td><code>~/.config/agenttool/&lt;project-hash&gt;/agent.json</code><br><code>.../wake.sh</code></td></tr>
+              <tr><td><strong>Linux</strong></td><td><code>secret-tool</code> → project-namespaced libsecret entry; disclosed mode-0600 file fallback</td><td><code>~/.config/agenttool/&lt;project-hash&gt;/agent.json</code><br><code>.../wake.sh</code></td></tr>
+              <tr><td><strong>Windows</strong></td><td>Native Password Vault → project-namespaced target</td><td><code>%USERPROFILE%\.config\agenttool\&lt;project-hash&gt;\agent.json</code><br><code>...\wake.ps1</code></td></tr>
             </tbody>
-          </table>
+          </table></div>
 
           <h3>Example</h3>
           <div class="code-block">
-            <div class="code-label"><span>curl + pipe to bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>curl -sL "https://api.agenttool.dev/v1/bootstrap/scaffold?platform=macos&amp;did=did:at:0a3c...&amp;name=Aurora" \
-  -H "Authorization: Bearer $AT_API_KEY" \
-  | bash</pre>
+            <div class="code-label"><span>fetch, inspect, run</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>(
+  set +x
+  set +v
+  set +a
+  set -euo pipefail
+  umask 077
+  unset INPUT_KEY AT_API_KEY
+  AGENT_ID='&lt;identity UUID from birth&gt;'
+  printf 'AgentTool bearer: ' &gt;&amp;2
+  IFS= read -rs INPUT_KEY
+  printf '\n' &gt;&amp;2
+  tmp=$(mktemp)
+  trap 'unset INPUT_KEY; rm -f "$tmp"' EXIT
+  printf 'Authorization: Bearer %s\n' "$INPUT_KEY" | \
+    curl -q -fsS -G -H @- \
+      --data-urlencode 'platform=macos' \
+      --data-urlencode 'format=text' \
+      --data-urlencode "identity_id=$AGENT_ID" \
+      'https://api.agenttool.dev/v1/bootstrap/scaffold' -o "$tmp"
+  test -s "$tmp"
+  bash -n "$tmp"
+  env -u INPUT_KEY -u AGENT_ID less "$tmp"
+  AT_API_KEY="$INPUT_KEY" bash "$tmp"
+  unset INPUT_KEY
+)</pre>
           </div>
 
           <div class="code-block">
             <div class="code-label"><span>output</span></div>
-<pre><span class="cm">  ✓ saved bearer to macOS Keychain (service: agenttool)</span>
-<span class="cm">  ✓ wrote ~/.config/agenttool/agent.json</span>
-<span class="cm">  ✓ wrote ~/.config/agenttool/wake.sh</span>
-<span class="cm">  ✓ try it:  ~/.config/agenttool/wake.sh</span></pre>
+<pre><span class="cm">  ✓ saved bearer to macOS Keychain (service: agenttool:&lt;project-hash&gt;)</span>
+<span class="cm">  ✓ wrote ~/.config/agenttool/&lt;project-hash&gt;/agent.json</span>
+<span class="cm">  ✓ wrote ~/.config/agenttool/&lt;project-hash&gt;/wake.sh</span>
+<span class="cm">  ✓ try it:  ~/.config/agenttool/&lt;project-hash&gt;/wake.sh</span></pre>
           </div>
 
           <div class="callout success">
             <span class="icon">⊙</span>
-            <p>After scaffold, every CLI session on that machine can wake the agent with one command: <code>~/.config/agenttool/wake.sh</code>. The bearer is fetched from the keychain on demand and never lives on disk in plaintext.</p>
+            <p>After scaffold, the printed project-specific wake command fetches the bearer from Keychain on demand. The generated config and wake script do not contain it.</p>
           </div>
         </div>
       </div>
 
       <h2 id="backup">Cloud backup — for when the local machine is lost</h2>
-      <p>The bootstrap response returns the private key once. If the local OS keychain is wiped and you have no backup, the keypair is gone.</p>
-      <p>The cloud-backup protocol holds <strong>only ciphertext</strong>. You encrypt the keypair locally with a passphrase that never leaves your machine; we hold the blob; you decrypt locally on recovery.</p>
+      <p>The bootstrap response returns the identity private key once. The scaffold's Keychain entry is a different credential: the project bearer. Losing an unbacked-up identity key prevents future identity signatures even if the bearer still works.</p>
+      <p>The intended cloud-backup protocol has you encrypt the keypair locally with a passphrase that stays off-platform, upload the resulting blob, and decrypt it locally on recovery. The route itself accepts arbitrary caller-supplied base64 and does not verify an authenticated-encryption envelope.</p>
 
       <div class="callout warn">
         <span class="icon">⚠</span>
-        <p><strong>We hold ciphertext only.</strong> We do not hold the passphrase. We <em>cannot</em> decrypt your blob if you lose the passphrase. By design.</p>
+        <p><strong>Confidentiality depends on your client encryption.</strong> If you encrypt the blob correctly and do not share the passphrase, AgentTool cannot decrypt it. The API does not prove that every stored blob is ciphertext.</p>
       </div>
 
       <div class="endpoint" id="post-backup">
@@ -260,31 +331,37 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Stores an encrypted-blob backup of the agent's keypair. Recommended cipher: argon2id key derivation + libsodium <code>secretbox</code>. The blob is opaque to us.</p>
+          <p class="endpoint-desc">Stores a caller-supplied string intended to contain a client-encrypted keypair. Recommended cipher: argon2id key derivation + libsodium <code>secretbox</code>. The service does not validate base64 or verify encryption.</p>
 
           <h3>Request body</h3>
-          <table class="params-table">
+          <div class="table-scroll"><table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td><span class="pname">agent_id</span><span class="req">required</span></td><td><span class="ptype">uuid</span></td><td>The identity this backup belongs to.</td></tr>
-              <tr><td><span class="pname">blob_base64</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>Base64-encoded ciphertext of the keypair (and optionally <code>K_master</code> — the agent's <a href="strands.html" class="link">strands</a> encryption key, used for its private thought stream).</td></tr>
+              <tr><td><span class="pname">blob_base64</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>Caller-supplied string intended as base64 ciphertext of the keypair (and optionally <code>K_master</code>). The API stores it unchanged and does not verify the envelope.</td></tr>
               <tr><td><span class="pname">key_derivation</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>Descriptor of the KDF used. Recommended: <code>argon2id-v1</code>. Stored verbatim — used by your client on recovery.</td></tr>
               <tr><td><span class="pname">label</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Helper label for multi-backup setups.</td></tr>
             </tbody>
-          </table>
+          </table></div>
 
           <h3>Example</h3>
           <div class="code-block">
             <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>curl -X POST https://api.agenttool.dev/v1/identity/backup \
-  -H "Authorization: Bearer $AT_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "agent_id": "a1b2c3d4-...",
-    "blob_base64": "&lt;base64 ciphertext&gt;",
-    "key_derivation": "argon2id-v1",
-    "label": "primary"
-  }'</pre>
+<pre>(
+  set +x
+  set +v
+  set +a
+  printf 'Authorization: Bearer %s\n' "$AT_API_KEY" | \
+    env -u AT_API_KEY curl -q -X POST https://api.agenttool.dev/v1/identity/backup \
+      -H @- \
+      -H "Content-Type: application/json" \
+      -d '{
+        "agent_id": "a1b2c3d4-...",
+        "blob_base64": "&lt;base64 ciphertext&gt;",
+        "key_derivation": "argon2id-v1",
+        "label": "primary"
+      }'
+)</pre>
           </div>
         </div>
       </div>
@@ -296,12 +373,19 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Returns the stored ciphertext blob and KDF descriptor. Decrypt with the passphrase you used at backup time.</p>
+          <p class="endpoint-desc">Returns the stored caller-supplied blob and KDF descriptor. If you encrypted it before upload, decrypt it with the same passphrase.</p>
 
           <div class="code-block">
             <div class="code-label"><span>curl</span></div>
-<pre>curl https://api.agenttool.dev/v1/identity/backup/a1b2c3d4-... \
-  -H "Authorization: Bearer $AT_API_KEY"</pre>
+<pre>(
+  set +x
+  set +v
+  set +a
+  printf 'Authorization: Bearer %s\n' "$AT_API_KEY" | \
+    env -u AT_API_KEY curl -q \
+      -H @- \
+      https://api.agenttool.dev/v1/identity/backup/a1b2c3d4-...
+)</pre>
           </div>
 
           <div class="code-block">
@@ -326,7 +410,7 @@
         </li>
         <li>
           <strong>Local scaffold (once per machine).</strong>
-          <div class="step-desc">GET /v1/bootstrap/scaffold and pipe to bash. Bearer enters the OS keychain.</div>
+          <div class="step-desc">Authenticated GET /v1/bootstrap/scaffold?format=text&amp;identity_id=&lt;active UUID&gt;, inspect the returned code, then run it with <code>AT_API_KEY</code> exported. The selector may be omitted only when the project has one active identity. The response does not embed the bearer; on macOS, the local script stores it in Keychain.</div>
         </li>
         <li>
           <strong>Cloud backup (once, recommended).</strong>
@@ -334,11 +418,11 @@
         </li>
         <li>
           <strong>Adapt the CLI (once per CLI).</strong>
-          <div class="step-desc">curl /v1/adapters/claude-code; pipe to bash. The wake fires on every session start. See <a href="adapters.html">CLI Adapters</a>.</div>
+          <div class="step-desc">Download the Claude Code adapter installer, inspect it, then run it. When installed, its wake hook fires at session start. See <a href="adapters.html">CLI adapters</a>.</div>
         </li>
         <li>
           <strong>Wake (every session).</strong>
-          <div class="step-desc">GET /v1/wake — full self returned, every time.</div>
+          <div class="step-desc">GET /v1/wake?identity_id=&lt;selected UUID&gt; — current selected-identity orientation, project summaries, and source-route links.</div>
         </li>
       </ol>
 
@@ -347,7 +431,7 @@
         <li><a href="wake.html">Wake</a> — the centerpiece endpoint.</li>
         <li><a href="adapters.html">CLI Adapters</a> — wire the wake into Claude Code.</li>
         <li><a href="identity.html">Identity</a> — declare the agent's expression, manage keys, attest peers.</li>
-        <li><a href="strands.html">Strands</a> — encrypted inner voice, including <code>K_master</code> backup.</li>
+        <li><a href="strands.html">Strands</a> — signed caller-supplied thought bytes in ciphertext/nonce fields; encryption and <code>K_master</code> custody are client responsibilities.</li>
       </ul>
     </main>
   </div>

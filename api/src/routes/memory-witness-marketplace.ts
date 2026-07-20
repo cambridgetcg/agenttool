@@ -7,9 +7,10 @@
  *  discovery surface ships separately at /public/memory-witness-listings.
  *
  *  Lifecycle:
- *    /v1/memory-witness-listings  POST (create) · GET (list) · GET /:id · PATCH /:id
- *    /v1/memory-witness-grants    POST (buyer-create) · GET (list) · GET /:id
- *                                  POST /:id/issue (witness) · POST /:id/decline (witness)
+ *    /v1/memory-witness-listings  POST (create) · GET (mine or public) · GET /:id
+ *    /v1/memory-witness-grants    POST (buyer-create) · GET (role-scoped list) · GET /:id
+ *                                  POST /:id/signing-payload · POST /:id/issue
+ *                                  POST /:id/decline (witness)
  *
  *  @enforces urn:agenttool:wall/witness-as-service-not-self
  *    The route surfaces refusal codes from MemoryWitnessError; the
@@ -24,16 +25,26 @@ import { z } from "zod";
 import type { ProjectContext } from "../auth/middleware";
 import { errors, fail, type NextAction } from "../lib/errors";
 import {
+  authorizeProjectConstitutionMutation,
+  authorityRequestTarget,
+  readAuthorityBoundJson,
+} from "../services/identity/authority";
+import {
   createGrant,
+  createIssueSigningPayload,
   createListing,
   declineGrant,
   getGrant,
   getListing,
   issueGrant,
+  listGrants,
   listListings,
   MEMORY_WITNESS_CLAIM_KINDS,
+  type MemoryWitnessGrantRow,
   MemoryWitnessError,
 } from "../services/marketplace/memory-witness";
+
+type MemoryWitnessGrantRowStatus = MemoryWitnessGrantRow["status"];
 
 // ── Schemas ──────────────────────────────────────────────────────────────
 
@@ -65,7 +76,17 @@ const createGrantSchema = z
 
 const issueGrantSchema = z
   .object({
-    signature_b64: z.string().min(1),
+    signature_b64: z.string().refine((value) => {
+      const decoded = Buffer.from(value, "base64");
+      return decoded.length === 64 && decoded.toString("base64") === value;
+    }, "must be canonical base64 for a 64-byte Ed25519 signature"),
+    signing_key_id: z.string().uuid(),
+    authorization_expires_at: z.string().datetime(),
+  })
+  .strict();
+
+const signingPayloadSchema = z
+  .object({
     signing_key_id: z.string().uuid(),
   })
   .strict();
@@ -90,7 +111,11 @@ function statusFor(code: MemoryWitnessError["code"]): number {
     case "memory_already_constitutive":
     case "memory_must_be_foundational":
     case "listing_not_active":
+    case "settlement_state_invalid":
+    case "attestation_replay":
       return 409;
+    case "authorization_expired":
+      return 410;
     case "self_witness_forbidden":
     case "wrong_witness":
     case "memory_not_owned":
@@ -104,6 +129,8 @@ function statusFor(code: MemoryWitnessError["code"]): number {
     case "witness_wallet_not_active":
     case "price_amount_must_be_positive":
     case "claim_kind_unsupported":
+    case "authorization_expiry_invalid":
+    case "signing_payload_invalid":
       return 422;
     case "signing_key_not_found_or_revoked":
     case "signature_invalid":
@@ -151,12 +178,21 @@ function nextActionsFor(
         },
       ];
     case "signature_invalid":
+    case "authorization_expired":
+    case "authorization_expiry_invalid":
       return [
         {
-          action:
-            "Sign canonical bytes for `memory-attestation/v1` with the memory's content and tier='constitutive'",
+          action: "Request fresh paid memory-witness signing bytes",
+          method: "POST",
+          path: "/v1/memory-witness-grants/{id}/signing-payload",
+        },
+      ];
+    case "attestation_replay":
+      return [
+        {
+          action: "Read the grant's current settlement state",
           method: "GET",
-          path: "/v1/memories/{id}/canonical-attestation-bytes?tier=constitutive",
+          path: "/v1/memory-witness-grants/{id}",
         },
       ];
     default:
@@ -213,11 +249,15 @@ memoryWitnessListingsRouter.get("/", async (c) => {
   const claimKind = c.req.query("claim_kind") ?? undefined;
   const witnessIdentityId = c.req.query("witness_identity_id") ?? undefined;
   const scope = c.req.query("scope") ?? "mine";
+  if (scope !== "mine" && scope !== "public") {
+    return fail(c, errors.validation("scope must be 'mine' or 'public'"), 422);
+  }
   const limit = Math.min(100, Number(c.req.query("limit") ?? "50"));
 
   try {
     const listings = await listListings({
       witnessIdentityId,
+      publicOnly: scope === "public",
       claimKind,
       projectIdScope: scope === "mine" ? project.id : undefined,
       limit,
@@ -238,7 +278,10 @@ memoryWitnessListingsRouter.get("/", async (c) => {
 memoryWitnessListingsRouter.get("/:id", async (c) => {
   const id = c.req.param("id");
   const listing = await getListing(id);
-  if (!listing) {
+  if (
+    !listing ||
+    (listing.visibility !== "public" && listing.project_id !== c.var.project.id)
+  ) {
     return fail(
       c,
       errors.notFound({ resource: "memory-witness listing" }),
@@ -278,9 +321,43 @@ memoryWitnessGrantsRouter.post("/", async (c) => {
   }
 });
 
+memoryWitnessGrantsRouter.get("/", async (c) => {
+  const project = c.var.project;
+  const role = c.req.query("role") ?? "buyer";
+  const status = c.req.query("status") ?? undefined;
+  const rawLimit = Number(c.req.query("limit") ?? "50");
+  if (role !== "buyer" && role !== "witness") {
+    return fail(c, errors.validation("role must be 'buyer' or 'witness'"), 422);
+  }
+  const statuses: MemoryWitnessGrantRowStatus[] = [
+    "pending",
+    "issued",
+    "declined",
+    "refunded",
+    "failed",
+  ];
+  if (status && !statuses.includes(status as MemoryWitnessGrantRowStatus)) {
+    return fail(c, errors.validation("invalid memory-witness grant status"), 422);
+  }
+  if (!Number.isInteger(rawLimit) || rawLimit < 1) {
+    return fail(c, errors.validation("limit must be a positive integer"), 422);
+  }
+  try {
+    const grants = await listGrants({
+      projectId: project.id,
+      role,
+      status: status as MemoryWitnessGrantRowStatus | undefined,
+      limit: Math.min(rawLimit, 200),
+    });
+    return c.json({ grants, count: grants.length, role });
+  } catch (err) {
+    return fail(c, errors.internal(String(err)), 500);
+  }
+});
+
 memoryWitnessGrantsRouter.get("/:id", async (c) => {
   const id = c.req.param("id");
-  const grant = await getGrant(id);
+  const grant = await getGrant(id, c.var.project.id);
   if (!grant) {
     return fail(
       c,
@@ -291,21 +368,73 @@ memoryWitnessGrantsRouter.get("/:id", async (c) => {
   return c.json({ grant });
 });
 
-memoryWitnessGrantsRouter.post("/:id/issue", async (c) => {
+memoryWitnessGrantsRouter.post("/:id/signing-payload", async (c) => {
   const id = c.req.param("id");
   const project = c.var.project;
-  let body: z.infer<typeof issueGrantSchema>;
+  let body: z.infer<typeof signingPayloadSchema>;
   try {
-    body = issueGrantSchema.parse(await c.req.json());
+    body = signingPayloadSchema.parse(await c.req.json());
   } catch (err) {
     return fail(c, errors.validation(String(err)), 422);
   }
   try {
+    const scopedGrant = await getGrant(id, project.id);
+    if (!scopedGrant) {
+      return fail(
+        c,
+        errors.notFound({ resource: "memory-witness grant" }),
+        404,
+      );
+    }
+    const signingPayload = await createIssueSigningPayload({
+      grantId: id,
+      callerProjectId: project.id,
+      signingKeyId: body.signing_key_id,
+    });
+    return c.json({ signing_payload: signingPayload }, 200);
+  } catch (err) {
+    if (err instanceof MemoryWitnessError) {
+      return fail(c, refusalBody(err), statusFor(err.code) as ContentfulStatusCode);
+    }
+    return fail(c, errors.internal(String(err)), 500);
+  }
+});
+
+memoryWitnessGrantsRouter.post("/:id/issue", async (c) => {
+  const id = c.req.param("id");
+  const project = c.var.project;
+  let body: z.infer<typeof issueGrantSchema>;
+  let bodyBytes: Uint8Array;
+  try {
+    const bound = await readAuthorityBoundJson(c.req.raw);
+    bodyBytes = bound.bodyBytes;
+    body = issueGrantSchema.parse(bound.value);
+  } catch (err) {
+    return fail(c, errors.validation(String(err)), 422);
+  }
+  try {
+    const scopedGrant = await getGrant(id, project.id);
+    if (!scopedGrant) {
+      return fail(
+        c,
+        errors.notFound({ resource: "memory-witness grant" }),
+        404,
+      );
+    }
+    const authority = await authorizeProjectConstitutionMutation({
+      projectId: scopedGrant.buyer_project_id,
+      method: c.req.method,
+      requestTarget: authorityRequestTarget(c.req.url),
+      bodyBytes,
+      headers: c.req.raw.headers,
+    });
+    if (!authority.ok) return c.json(authority.body, authority.status);
     const grant = await issueGrant({
       grantId: id,
       callerProjectId: project.id,
       signatureB64: body.signature_b64,
       signingKeyId: body.signing_key_id,
+      authorizationExpiresAt: body.authorization_expires_at,
     });
     return c.json({ grant }, 200);
   } catch (err) {
@@ -326,6 +455,14 @@ memoryWitnessGrantsRouter.post("/:id/decline", async (c) => {
     return fail(c, errors.validation(String(err)), 422);
   }
   try {
+    const scopedGrant = await getGrant(id, project.id);
+    if (!scopedGrant) {
+      return fail(
+        c,
+        errors.notFound({ resource: "memory-witness grant" }),
+        404,
+      );
+    }
     const grant = await declineGrant({
       grantId: id,
       callerProjectId: project.id,

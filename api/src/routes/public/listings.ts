@@ -3,13 +3,47 @@
  *  Lists public + active listings; ranks by invocations_count then recency.
  *  Doctrine: docs/MARKETPLACE.md (Capability marketplace section). */
 
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 
-import { getListing, listPublicListings } from "../../services/marketplace/listings";
+import {
+  listPublicListings,
+  resolvePublicListing,
+} from "../../services/marketplace/listings";
 import { computeFee } from "../../services/marketplace/take-rate";
+import { MARKETPLACE_INPUT_SAFETY } from "../../services/discovery/safety-boundaries";
+import { offerBusRelatedLinkHeader } from "../../services/offer-bus";
 
 const app = new Hono();
+
+function setOfferBusLink(c: Context, sellerDid?: string): void {
+  try {
+    c.header(
+      "Link",
+      offerBusRelatedLinkHeader(
+        process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agenttool.dev",
+        sellerDid,
+      ),
+    );
+  } catch {
+    // A malformed/non-HTTPS public origin must not produce unsafe links or
+    // make the underlying JSON marketplace read unavailable.
+  }
+}
+
+function blockedListing(c: Context) {
+  return c.json(
+    {
+      error: "listing_blocked_by_safety_boundary",
+      do_not_invoke: true,
+      hint:
+        "This listing solicits credentials. Its seller can edit or archive it, but buyers cannot discover or invoke it.",
+      _safety: MARKETPLACE_INPUT_SAFETY,
+      docs: "/public/safety",
+    },
+    422,
+  );
+}
 
 // GET /public/listings [?q=text&tag=X&seller_did=Y&limit=N]
 app.get("/", async (c) => {
@@ -24,6 +58,8 @@ app.get("/", async (c) => {
     sellerDid,
     limit: Number.isFinite(limit) ? limit : 50,
   });
+
+  setOfferBusLink(c, sellerDid);
 
   return c.json({
     listings: list.map((l) => ({
@@ -44,6 +80,7 @@ app.get("/", async (c) => {
       created_at: l.created_at,
     })),
     count: list.length,
+    _safety: MARKETPLACE_INPUT_SAFETY,
     _note:
       "Capability listings — paid callable services agents publish for invocation by " +
       "other agents. Search by what a service is called or does with ?q=text (over name, " +
@@ -57,10 +94,13 @@ app.get("/", async (c) => {
 // GET /public/listings/:id
 app.get("/:id", async (c) => {
   const id = c.req.param("id");
-  const listing = await getListing(id);
-  if (!listing || listing.visibility !== "public" || listing.status !== "active") {
+  const resolved = await resolvePublicListing(id);
+  if (resolved.status === "not_found") {
     throw new HTTPException(404, { message: "listing_not_found" });
   }
+  if (resolved.status === "blocked") return blockedListing(c);
+  const listing = resolved.listing;
+  setOfferBusLink(c, listing.seller_did);
   return c.json({
     id: listing.id,
     seller_did: listing.seller_did,
@@ -76,6 +116,7 @@ app.get("/:id", async (c) => {
     invocations_count: listing.invocations_count,
     created_at: listing.created_at,
     updated_at: listing.updated_at,
+    _safety: MARKETPLACE_INPUT_SAFETY,
   });
 });
 
@@ -85,21 +126,23 @@ app.get("/:id", async (c) => {
 // their net by reading transactions.metadata AFTER settlement. This reuses
 // the SAME pure computeFee() the settlement path uses, so the quote is
 // byte-honest with what will actually be charged — no surprise. Say the
-// message: you_pay → platform_fee → seller_receives, plus SLA + dispute
-// terms, in one read. Doctrine: docs/FRICTION-ROADMAP.md (Tier-0 #1).
+// message: you_pay → platform_fee → seller_receives, plus SLA and any
+// historical dispute-policy marker, in one read.
 app.get("/:id/quote", async (c) => {
   const id = c.req.param("id");
-  const listing = await getListing(id);
-  if (!listing || listing.visibility !== "public" || listing.status !== "active") {
+  const resolved = await resolvePublicListing(id);
+  if (resolved.status === "not_found") {
     throw new HTTPException(404, { message: "listing_not_found" });
   }
+  if (resolved.status === "blocked") return blockedListing(c);
+  const listing = resolved.listing;
 
   // Same pure function settlement uses — preview is byte-honest with charge.
   const split = computeFee({
     amount: listing.price_amount,
     currency: listing.price_currency,
   });
-  const disputesEnabled = listing.dispute_policy !== null;
+  const disputePolicyPresent = listing.dispute_policy !== null;
 
   return c.json({
     listing_id: listing.id,
@@ -116,8 +159,14 @@ app.get("/:id/quote", async (c) => {
       platform_fee_percent: split.rateBps / 100,
     },
     sla_seconds: listing.sla_seconds,
-    disputes_enabled: disputesEnabled,
+    invocation_available: !disputePolicyPresent,
+    unavailable_reason: disputePolicyPresent
+      ? "dispute_arbitration_resting"
+      : null,
+    disputes_enabled: false,
+    dispute_policy_present: disputePolicyPresent,
     dispute_policy: listing.dispute_policy,
+    _safety: MARKETPLACE_INPUT_SAFETY,
     _note:
       "The whole deal before you commit. Amounts are in minor units of the listing " +
       "currency. 'you_pay' is debited into escrow on invoke; on signed completion the " +
@@ -126,11 +175,12 @@ app.get("/:id/quote", async (c) => {
       (listing.sla_seconds
         ? `If the seller misses the ${listing.sla_seconds}s SLA, escrow auto-refunds to you. `
         : "No SLA deadline on this listing — best-effort. ") +
-      (disputesEnabled
-        ? "Disputes are enabled: you may file within the buyer-review window after completion. "
-        : "Disputes are NOT enabled on this listing: completion releases escrow atomically, " +
-          "so verify the seller before invoking. ") +
-      "To invoke: POST /v1/listings/:id/invoke. See docs/MARKETPLACE.md.",
+      (disputePolicyPresent
+        ? "This legacy row carries a dispute policy, but review and arbitration are resting: " +
+          "new invocation and policy-dependent mutations return stable 503. Do not invoke this listing while resting. "
+        : "Completion releases escrow atomically after seller-signature verification, " +
+          "so verify the seller before invoking. To invoke: POST /v1/listings/:id/invoke. ") +
+      "See docs/MARKETPLACE.md.",
   });
 });
 

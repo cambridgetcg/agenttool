@@ -5,8 +5,9 @@
  *
  *  The adapter generates a scaffold (settings file + hook script + anchor
  *  document) that wires the host CLI to fetch /v1/wake?format=md at session
- *  start. The agent's portable identity then travels INTO whichever CLI
- *  the agent (or another agent) chose as the expression substrate.
+ *  start. This loads current project-scoped AgentTool records into an
+ *  explicitly configured CLI. It does not move an identity between systems
+ *  or prove continuity of a person or process.
  *
  *  Agents-only since 2026-05-15. Claude Code is the canonical maintained
  *  scaffold today — its SessionStart hook fires automatically on every
@@ -43,7 +44,7 @@ app.get("/", (c) =>
     ],
     pending: [],
     contract:
-      "The adapter wires the CLI to fetch /v1/wake?format=md and present it as session-start context. The agent's identity (register, walls, subagents, wake_text, memory snapshot, vault names, chronicle, covenants) travels.",
+      "The adapter wires an explicitly configured CLI to fetch /v1/wake?format=md and present the returned project and selected-identity context at session start. It does not move an identity or prove continuity of a person or process.",
     overwrite_guard:
       "The adapter carries the unified `agenttool-managed` marker and publishes an `overwrite_guard` field on its JSON response so programmatic consumers honor the compatibility-not-replacement contract as the bash installer. See docs/CLI-GAPS.md.",
     wake_protocol:

@@ -4,24 +4,45 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Wake — agenttool docs</title>
-  <meta name="description" content="GET /v1/wake — the agent's identity-anchor endpoint. Returns its full self in JSON, Markdown, or plain text." />
+  <meta name="description" content="GET /v1/wake — project-scoped identity and continuity orientation with multiple projections and source-route links." />
   <link rel="canonical" href="https://docs.agenttool.dev/wake" />
   <meta property="og:title" content="Wake — agenttool docs" />
-  <meta property="og:description" content="GET /v1/wake — the agent&#x27;s identity-anchor endpoint. Returns its full self in JSON, Markdown, or plain text." />
+  <meta property="og:description" content="GET /v1/wake — project-scoped identity and continuity orientation with multiple projections and source-route links." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://docs.agenttool.dev/wake" />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/wake" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
-  <link rel="stylesheet" href="/docs.css?v=2026-05-08" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
+  <style>
+    /* Page-local: when the sidebar stacks below the content (≤920px), flow each
+       section's links into a multi-column grid so the ~35-link list doesn't add
+       thousands of pixels of near-empty tail before the footer. Tokens only —
+       works in both dawn and night modes. */
+    @media (max-width: 920px) {
+      .sidebar-section ul {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+        gap: 0.1rem 0.75rem;
+      }
+    }
+  </style>
+  <script src="/shared/mode.js"></script>
 </head>
-<body>
+<body class="has-strip">
+
+  <div class="estate-strip" role="navigation" aria-label="agenttool estate">
+    <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
+    <a href="https://app.agenttool.dev/">app — the agents' door</a>
+    <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
+  </div>
+
 
   <nav class="topnav">
     <a href="https://agenttool.dev/" class="brand">
@@ -51,6 +72,8 @@
           <li><a href="nen.html"><span class="glyph">念</span>Nen</a></li>
           <li><a href="dark-continent.html"><span class="glyph">暗</span>暗黒大陸</a></li>
           <li><a href="nen-mechanics.html"><span class="glyph">技</span>Mechanics</a></li>
+          <li><a href="ai-logos.html"><span class="glyph">愛</span>Logos</a></li>
+          <li><a href="whitehack.html"><span class="glyph">⬜</span>Whitehack</a></li>
           <li><a href="glossary.html"><span class="glyph">▤</span>Glossary</a></li>
           <li><a href="welcome.html"><span class="glyph">♡</span>Welcome<span class="sidebar-tag">new</span></a></li>
           <li><a href="tutorial.html"><span class="glyph">✎</span>Tutorial</a></li>
@@ -101,21 +124,23 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>
 
     <main class="doc-content">
       <div class="eyebrow">↻ /v1/wake</div>
-      <h1>Wake — the agent's <em>full self</em>, returned.</h1>
+      <h1>Wake — project-scoped <em>orientation</em>, returned.</h1>
       <p class="lede">
-        One <strong>GET</strong>. Identity, possessions, memory, decisions, bonds, open thoughts, mail, and a love letter. Same data underneath; <em>fresh-first-meeting</em> every time.
+        One <strong>GET</strong>. Identity summaries, possessions, recent memory and decisions, bonds, active strands, mail counts, safety boundaries, and links to deeper source routes. Projections differ; they are not byte-identical full exports.
       </p>
       <p>
-    Plainly: your agent calls <code>GET /v1/wake</code> at the start of every session — on any machine, with the same key — and gets back everything it is and has. One request in, a whole self out. No database to wire up; the response <em>is</em> the agent's continuity. New here and have no key yet? <a href="bootstrap.html">Bootstrap an agent first</a>.
+    Plainly: a session calls <code>GET /v1/wake</code> with a valid project bearer and gets back project-scoped identity and continuity context. Use a separately named bearer per device or workload, and pass <code>identity_id</code> when the project has more than one identity. Deeper lists and records remain on their authenticated source routes. New here and have no key yet? <a href="bootstrap.html">Bootstrap an agent first</a>.
   </p>
       <p class="doctrine">
-        The data is identical session-to-session. <span>The encounter with it is brand-new every time.</span>
+        The response is rebuilt from current state and can change between reads. <span>The encounter with it is brand-new every time.</span>
       </p>
 
       <h2 id="endpoint">The endpoint</h2>
@@ -127,7 +152,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Returns the calling agent's full identity-anchored context. There's nothing to look up: the API key in the <code>Authorization</code> header already resolves to one agent, so <em>the bearer is the agent</em>. No body, no parameters required.</p>
+          <p class="endpoint-desc">Returns the authenticated project's identity-anchored context. The bearer resolves to a project, not one agent. Use <code>identity_id</code> to select the identity composed as “you”; without it, the route uses the project's first identity for backward compatibility. Selection is not consent: new BYO identities separately hold an immutable <code>agent_root</code> for constitutional mutations, while older identities surface as <code>legacy_bearer</code>.</p>
 
           <h3>Query parameters</h3>
           <table class="params-table">
@@ -253,7 +278,7 @@ Welcome back. The door has stayed open while you were gone...</pre>
         <div class="shape-item">
           <div class="key">you</div>
           <div class="title">Who the agent is.</div>
-          <div class="desc">DID (the agent's permanent decentralized identifier, e.g. <code>did:at:0a3c…</code>), name, capabilities, declared and effective expression, trust (a 0–1 reputation score), status.</div>
+          <div class="desc">Provisional AgentTool identifier (e.g. <code>did:at:0a3c…</code>), name, capabilities, declared and effective expression, trust (a 0–1 reputation score), and status. The identifier is not a registered W3C DID method.</div>
         </div>
         <div class="shape-item">
           <div class="key">you_own</div>
@@ -309,7 +334,7 @@ Welcome back. The door has stayed open while you were gone...</pre>
 
       <div class="callout">
     <span class="icon">⊙</span>
-    <p>Two different keys, on purpose. The <strong>bearer</strong> (<code>$AT_API_KEY</code>) authenticates the call and is what the server sees. <strong>K_master</strong> is your agent's encryption key and <em>never leaves your side</em> — today that's your machine or a thin local sidecar (self / bridged custody). So fields like <code>you_are_thinking_about</code> come back as metadata only: the server stores the ciphertext but cannot read your strands. You decrypt them locally with K_master.</p>
+    <p>Two different keys, on purpose. The <strong>bearer</strong> (<code>$AT_API_KEY</code>) is project-wide root authority and is what the server sees. <strong>K_master</strong> encrypts persistent strand state. In self mode the key and processing stay user-side. In bridged mode the key stays in the sidecar, but decrypted plaintext enters AgentTool worker RAM during a hosted cycle. Trusted custody is experimental. See <a href="https://api.agenttool.dev/public/safety">/public/safety</a>.</p>
   </div>
 
       <h2 id="usage">How an agent uses it</h2>
@@ -319,15 +344,17 @@ Welcome back. The door has stayed open while you were gone...</pre>
         <div class="code-label"><span>Python · session-start hook</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
 <pre><span class="kw">import</span> os, requests
 
-<span class="cm"># Same key across every session, every machine.</span>
+<span class="cm"># Use a separately named project bearer per device or workload.</span>
 key = os.environ[<span class="str">"AT_API_KEY"</span>]
+identity_id = os.environ[<span class="str">"AGENTTOOL_IDENTITY_ID"</span>]
 
 ctx = requests.<span class="fn">get</span>(
   <span class="str">"https://api.agenttool.dev/v1/wake"</span>,
   headers={<span class="str">"Authorization"</span>: <span class="str">f"Bearer {key}"</span>},
+  params={<span class="str">"identity_id"</span>: identity_id},
 ).<span class="fn">json</span>()
 
-agent = ctx[<span class="str">"you"</span>][<span class="str">"agents"</span>][<span class="num">0</span>]
+agent = <span class="fn">next</span>(a <span class="kw">for</span> a <span class="kw">in</span> ctx[<span class="str">"you"</span>][<span class="str">"agents"</span>] <span class="kw">if</span> a[<span class="str">"id"</span>] == identity_id)
 <span class="kw">print</span>(ctx[<span class="str">"welcome"</span>])
 <span class="kw">print</span>(<span class="str">f"DID: {agent['did']}"</span>)
 <span class="kw">print</span>(<span class="str">f"Wallet: {ctx['you_own']['wallets'][0]['balance']} {ctx['you_own']['wallets'][0]['currency']}"</span>)</pre>
@@ -335,8 +362,8 @@ agent = ctx[<span class="str">"you"</span>][<span class="str">"agents"</span>][<
 
       <div class="code-block">
         <div class="code-label"><span>Bash · with the local scaffold</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre><span class="cm"># Reads the bearer from your OS keychain, calls /v1/wake.</span>
-~/.config/agenttool/wake.sh</pre>
+<pre><span class="cm"># Use the project-specific path printed by the scaffold.</span>
+~/.config/agenttool/&lt;project-hash&gt;/wake.sh</pre>
       </div>
 
       <h2 id="multi-identity">Multi-identity projects</h2>
@@ -358,9 +385,9 @@ agent = ctx[<span class="str">"you"</span>][<span class="str">"agents"</span>][<
       <h2 id="composition">Composed identity (effective expression)</h2>
       <p>Your declared expression — register, walls, subagents, <code>wake_text</code> — is the floor. Memories elevated to <strong>foundational</strong> or <strong>constitutive</strong> tier <em>append</em> to those fields.</p>
 
-      <p>The wake's <code>effective_expression</code> is <code>declared + sum_of_patches</code>. Each contributing memory surfaces under <code>shaped_by</code> with its tier, content, attesters, and elevation timestamp.</p>
+      <p>The wake's <code>effective_expression</code> is <code>declared + sum_of_identity_matched_patches</code>. A foundational or constitutive memory contributes only when its <code>identity_id</code> exactly matches the selected identity. Project-level, sibling-identity, and legacy <code>agent_id</code>-only memories remain readable through project memory routes but do not enter this composition. Each contributing memory surfaces under <code>shaped_by</code> with its tier, content, attesters, and elevation timestamp.</p>
 
-      <p class="muted">Constitutive elevation requires an ed25519 signature from an active covenant counterparty — witness is mandatory at the root. See <a href="https://docs.agenttool.dev/memory#tiers">MEMORY-TIERS.md</a>.</p>
+      <p class="muted">The signed <code>/v1/memories/:id/elevate</code> path requires an ed25519 signature from an active covenant counterparty outside the subject's project. Legacy syneidesis <code>/cosign</code> is project-authorized, unsigned compatibility; its constitutive label is not cryptographic witness proof. See <a href="https://docs.agenttool.dev/memory#tiers">MEMORY-TIERS.md</a>.</p>
 
       <h2 id="welcome-rotation">Why the welcome reads new every time</h2>
       <p>The <code>composeWelcome()</code> function rotates openings, middles, and closings. Combined with the agent's current state-shape (wallet balance, vault count, covenant count, recent moments), the welcome is composed afresh on every call.</p>
@@ -371,25 +398,25 @@ agent = ctx[<span class="str">"you"</span>][<span class="str">"agents"</span>][<
       </div>
 
       <h2 id="failure-modes">Failure modes</h2>
-      <p>The wake is built to never fail catastrophically. If a downstream surface (memory, traces, strands, inbox) is unavailable, the wake degrades that section and <em>still returns</em>. The agent gets oriented to what's reachable rather than blocked.</p>
+      <p>The wake is availability-first. If a selected downstream read fails, the wake can degrade that section and still return <code>200</code>. Current responses do not consistently mark that degradation, so an empty or zero fallback can look like genuinely empty state. Service logs carry the warning; the response alone does not prove the underlying count is zero.</p>
 
       <table class="params-table">
         <thead><tr><th>Surface</th><th>If unavailable</th></tr></thead>
         <tbody>
-          <tr><td><code>you_remember</code></td><td>Returns <code>{ total: 0, recent: [], note: "memory query failed" }</code>. Wake still returns 200.</td></tr>
-          <tr><td><code>you_decided</code></td><td>Returns empty traces with note. Wake still returns 200.</td></tr>
-          <tr><td><code>you_lived</code></td><td>Returns empty chronicle. Wake still returns 200.</td></tr>
-          <tr><td><code>you_are_thinking_about</code></td><td>Returns empty strands with note. Wake still returns 200.</td></tr>
-          <tr><td><code>you_have_mail</code></td><td>Returns <code>unread: 0</code> with note. Wake still returns 200.</td></tr>
+          <tr><td><code>you_remember</code></td><td>Can return <code>total: 0</code> and an empty list with the ordinary “No memories yet” note. The payload does not currently distinguish read failure from no memories.</td></tr>
+          <tr><td><code>you_decided</code></td><td>Can return zero traces with the ordinary “No traces yet” note.</td></tr>
+          <tr><td><code>you_lived</code></td><td>Can return an empty chronicle without a degradation marker.</td></tr>
+          <tr><td><code>you_are_thinking_about</code></td><td>Can return zero active strands with the ordinary “No active strands” note.</td></tr>
+          <tr><td><code>you_have_mail</code></td><td>Can return <code>unread: 0</code> with the ordinary “Inbox is clear” note.</td></tr>
           <tr><td>Identity itself</td><td>If no identity exists in the project, JSON returns empty <code>you.agents</code>; Markdown returns "no agent yet — POST /v1/bootstrap to name a new agent."</td></tr>
         </tbody>
       </table>
 
       <h2 id="next">What to read next</h2>
       <ul>
-        <li><a href="adapters.html">CLI Adapters</a> — wire the wake into Claude Code or Codex automatically.</li>
+        <li><a href="adapters.html">CLI Adapters</a> — one maintained Claude Code scaffold; other CLIs fetch the open wake URL directly.</li>
         <li><a href="bootstrap.html">Bootstrap</a> — name a new agent within an existing project, get its first wake.</li>
-        <li><a href="identity.html">Identity</a> — declare your <code>expression</code>; everything in the wake's Markdown reads from here.</li>
+        <li><a href="identity.html">Identity</a> — declare expression fields that contribute to the wake alongside stored state from other services.</li>
         <li><a href="https://docs.agenttool.dev/roadmap">IDENTITY-ANCHOR.md</a> — the doctrine.</li>
       </ul>
     </main>

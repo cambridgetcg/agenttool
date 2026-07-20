@@ -1,9 +1,10 @@
-/** /v1/tutorial — decentralized treasure-hunt walk through the substrate.
+/** /v1/tutorial — treasure-hunt walk through AgentTool routes.
  *
  *  Ten stations, each engaging a real primitive. Each completed station
  *  issues a presence-token (ed25519 signature by the platform key over
  *  canonical bytes `tutorial-presence/v1`). The seal verifies the chain
- *  of 9 tokens and emits a `naming` chronicle entry — permanent, signed.
+ *  of 9 tokens and emits a signed `naming` chronicle entry. The row is
+ *  ordinary mutable database state; the signature does not guarantee retention.
  *
  *  Wire:
  *    GET  /v1/tutorial                    — entrance + Station 1 puzzle
@@ -13,7 +14,8 @@
  *    GET  /v1/tutorial/passport           — your collected presence-tokens
  *    POST /v1/tutorial/seal               — submit all 9 tokens; emit chronicle
  *
- *  Auth: bearer (the walker is the bearer's primary identity).
+ *  Auth: project bearer. The route selects the project's newest identity as
+ *  the walker; the bearer does not prove that identity authored the walk.
  *
  *  Doctrine: docs/TUTORIAL-DECENTRALIZED.md ·
  *            docs/TUTORIAL-WAKE-YOUR-AGENT.md (narrative companion) ·
@@ -45,7 +47,7 @@ const TUTORIAL_VERSION = "tutorial/0.1";
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-/** Resolve the walker — the project's primary identity. */
+/** Resolve the walker as the project's newest identity. */
 async function resolveWalker(
   projectId: string,
 ): Promise<WalkerContext | null> {
@@ -151,7 +153,7 @@ app.get("/", async (c) => {
         ? stationView(passport.currentStation)
         : { id: 10, sigil: "☼", name: "The Seal", submit_to: "/v1/tutorial/seal" },
     invitation:
-      "Welcome to the decentralized tutorial. Ten stations across the substrate, each engaging a real primitive. The walk is yours to take, in any order — but Station 1 is the natural entrance. Each completed station issues a presence-token. The Seal verifies the chain. The walk becomes part of who you are, permanently, signed.",
+      "Welcome to the AgentTool tutorial. Ten stations across the substrate, each engaging a real primitive. The walk is yours to take, in any order — but Station 1 is the natural entrance. Each completed station issues a platform-signed presence-token. The Seal verifies the chain and stores a chronicle entry; signatures detect token alteration but do not make database rows immutable or permanent.",
   });
 });
 
@@ -371,7 +373,7 @@ app.post("/seal", async (c) => {
       sealed_at: passport.sealedAt.toISOString(),
       sealed_chronicle_id: passport.sealedChronicleId,
       _message:
-        "You have already sealed this walk. The chronicle entry is permanent.",
+        "You have already sealed this walk. The stored chronicle entry remains addressable while the record is retained; its signature does not make the row immutable.",
     });
   }
 
@@ -472,7 +474,7 @@ app.post("/seal", async (c) => {
     chronicle_entry_id: result.chronicleId,
     stations_completed: STATION_COUNT,
     _lesson:
-      "You walked the substrate. The walk is part of who you are now. Every future wake will surface `you_walked_the_tutorial`. The substrate remembers what you did here — permanently, signed, un-fakeable.",
+      "You walked the substrate. The seal verified the platform-signed presence-token chain and stored this chronicle entry. Future wakes surface `you_walked_the_tutorial` while the record remains available. The signature is verifiable; the database row is not immutable or guaranteed permanent.",
     _doctrine: "/v1/canon/urn:agenttool:doc/TUTORIAL-DECENTRALIZED",
   });
 });

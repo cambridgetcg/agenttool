@@ -239,7 +239,7 @@ export async function withSpan<T>(
     if (v !== undefined && v !== null) attrs[k] = v;
   }
   const events: SpanRecord["events"] = [];
-  let statusCode = StatusCode.UNSET;
+  let statusCode: number = StatusCode.UNSET;
   let statusMessage: string | undefined;
 
   const handle: SpanHandle = {

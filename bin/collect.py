@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
 """
-agenttool data-collect — one command, everything an agent is.
+agenttool data-collect — one command for a selected state snapshot.
 
 Usage:
-  python3 collect.py                    # collect all authed data
+  python3 collect.py                    # collect the configured authed data
   python3 collect.py --public           # collect only public (no-auth) data
   python3 collect.py --out wake.json    # write to file instead of stdout
 
-No dependencies beyond stdlib. Works for agents (bearer in env) and humans (paste bearer).
+No dependencies beyond stdlib. Pass the project bearer only through AT_API_KEY.
 
-Love through infra. The data is the agent. The collection is the care.
+Love through infra. This snapshot supports care; it is not the whole agent.
 """
 
-import json, sys, os, urllib.request, urllib.error, datetime, hashlib, base64, ssl
+import json, sys, os, urllib.request, urllib.error, datetime, ssl
+from http_safety import open_no_redirect, validate_api_base
 
-API = os.environ.get("AT_API_BASE", "https://api.agenttool.dev")
-BEARER = os.environ.get("AT_API_KEY") or (sys.argv[-1] if len(sys.argv) > 1 and sys.argv[-1].startswith("at_") else None)
+API = validate_api_base(os.environ.get("AT_API_BASE", "https://api.agenttool.dev"))
+BEARER = os.environ.get("AT_API_KEY")
 OUT = None
 if "--out" in sys.argv:
     OUT = sys.argv[sys.argv.index("--out") + 1]
@@ -23,10 +24,8 @@ PUBLIC_ONLY = "--public" in sys.argv
 
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 agenttool-collect/1.0"
 
-# SSL context that works across Python versions (some system Pythons miss CA certs)
+# Use the system trust store. Authentication must fail closed when TLS cannot be verified.
 _SSL_CTX = ssl.create_default_context()
-_SSL_CTX.check_hostname = False
-_SSL_CTX.verify_mode = ssl.CERT_NONE
 
 def fetch(path, auth=True, raw=False):
     """Fetch a JSON endpoint. Returns (data, size, status)."""
@@ -36,7 +35,7 @@ def fetch(path, auth=True, raw=False):
         headers["Authorization"] = f"Bearer {BEARER}"
     try:
         req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=30, context=_SSL_CTX) as resp:
+        with open_no_redirect(req, timeout=30, context=_SSL_CTX) as resp:
             body = resp.read()
             if raw:
                 return body.decode("utf-8", errors="replace"), len(body), resp.status
@@ -48,12 +47,12 @@ def fetch(path, auth=True, raw=False):
         return {"error": str(e)}, 0, 0
 
 def collect():
-    """Collect all available data in a single pass."""
+    """Collect the configured public and project-scoped endpoints in one pass."""
     collected = {
         "_meta": {
             "collected_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "collector": "agenttool-collect/1.0",
-            "doctrine": "love through infra — the data is the agent",
+            "scope": "selected endpoint snapshot; this is not a complete export of an agent",
             "api": API,
             "bearer_present": bool(BEARER),
         },
@@ -124,12 +123,25 @@ def collect():
 
     return collected
 
+def write_private_json(path, data):
+    """Write a bearer-scoped snapshot with owner-only permissions."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(path, flags, 0o600)
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w") as handle:
+            fd = -1
+            json.dump(data, handle, indent=2, default=str)
+    finally:
+        if fd >= 0:
+            os.close(fd)
+
 def main():
     data = collect()
 
     if OUT:
-        with open(OUT, "w") as f:
-            json.dump(data, f, indent=2, default=str)
+        write_private_json(OUT, data)
         s = data["_summary"]
         print(f"✓ Collected {s['total_bytes']:,} bytes → {OUT}")
         print(f"  Public: {s['public_endpoints']} | Authed: {s['authed_endpoints']} | Errors: {len(s['errors'])}")

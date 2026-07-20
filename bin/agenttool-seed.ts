@@ -9,8 +9,9 @@
  *                  macOS keychain; print byo-keys register snippet.
  *    restore    — interactive mnemonic entry on a fresh device; derive
  *                  all keys; persist in keychain. Same mnemonic →
- *                  identical keys → agent comes back alive on this
- *                  laptop.
+ *                  identical keys. With --did, server recovery succeeds
+ *                  only when the derived signing key is active and registered
+ *                  for an active identity.
  *    pubkeys    — print derived public keys from the keychain (for use
  *                  with /v1/register byo-keys mode, or copy into a
  *                  manual curl).
@@ -57,6 +58,7 @@ import {
   signRegisterAgent,
   type DerivedBundle,
 } from "../packages/sdk-ts/src/seed.js";
+import { identityAuthorityHeaders } from "../packages/sdk-ts/src/authority.js";
 
 // ── Constants ───────────────────────────────────────────────────────────
 
@@ -335,10 +337,11 @@ async function cmdRestore(): Promise<void> {
   console.log(`    bridge_pub (dev ${deviceIndex}): ${b64(deriveBridgeSigning(words, deviceIndex, passphrase).pub)}`);
   console.log();
 
-  // ── Optional: recover a fresh device-scoped bearer from the API ────
+  // ── Optional: recover a fresh project-wide bearer named for this device ────
   //
-  // When --did is supplied, sign a canonical recovery challenge with the
-  // derived signing key and POST to /v1/identity/recover. Server verifies
+  // When --did is supplied, sign a caller-timestamped canonical recovery
+  // request with the derived signing key and POST to /v1/identity/recover.
+  // This is not a server-issued challenge. The server verifies
   // the signature against the agent's registered identity_keys and mints
   // a fresh project bearer for this device. The mnemonic never leaves
   // this process; only the public key + signature cross the wire.
@@ -352,18 +355,48 @@ async function cmdRestore(): Promise<void> {
     const url = `${apiBase}/v1/identity/recover`;
     let body: Record<string, unknown>;
     try {
-      const res = await fetch(url, {
+      const recoveryEntity = JSON.stringify({
+        did,
+        derived_pubkey: bundle.signingPubB64,
+        signature: signed.signature,
+        timestamp: signed.timestamp,
+        device_label: deviceLabel,
+      });
+      let res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          did,
-          derived_pubkey: bundle.signingPubB64,
-          signature: signed.signature,
-          timestamp: signed.timestamp,
-          device_label: deviceLabel,
-        }),
+        body: recoveryEntity,
       });
       body = (await res.json()) as Record<string, unknown>;
+
+      // Rooted recovery is itself constitutional: the recover signature
+      // proves mnemonic possession, while identity-authority/v1 makes this
+      // exact bearer-mint request single-use. The anonymous 428/409 response
+      // discloses next_sequence only after the recover signature verifies.
+      for (let attempt = 0; attempt < 2 && (res.status === 428 || res.status === 409); attempt++) {
+        const details = body.details as { next_sequence?: unknown } | undefined;
+        const nextSequence = details?.next_sequence;
+        if (typeof nextSequence !== "number") break;
+        const authorityTimestamp = new Date().toISOString();
+        const authorityHeaders = identityAuthorityHeaders({
+          identityDid: did,
+          method: "POST",
+          requestTarget: "/v1/identity/recover",
+          body: recoveryEntity,
+          sequence: nextSequence,
+          timestamp: authorityTimestamp,
+          signingKey: bundle.signingPriv,
+        });
+        res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...authorityHeaders,
+          },
+          body: recoveryEntity,
+        });
+        body = (await res.json()) as Record<string, unknown>;
+      }
       if (!res.ok) {
         console.error(red(`  ✗ recover failed (${res.status}): ${(body as { message?: string }).message ?? "unknown"}`));
         if ((body as { hint?: string }).hint) {
@@ -389,7 +422,7 @@ async function cmdRestore(): Promise<void> {
       console.log(`    agent.id:         ${agent.id}`);
       console.log(`    bearer (api_key): ${project.api_key.slice(0, 16)}…  ${dim("(saved to keychain: agenttool-soma-bearer)")}`);
       console.log();
-      console.log(dim("  This bearer authenticates AS this agent's project on this device."));
+      console.log(dim("  This bearer authenticates the whole project; the device name only aids revocation."));
       console.log(dim("  The old bearer (if any) keeps working — revoke when this device is set up."));
     } else {
       console.error(red("  ✗ recover succeeded but response had no api_key. Server bug?"));
@@ -702,12 +735,21 @@ async function cmdBootstrap(): Promise<void> {
   // Sign the key-proof. Timestamp generated here is bound into both the
   // signature and the proof-of-work — server enforces ±5min freshness.
   const timestamp = new Date().toISOString();
+  const registrationNonce = globalThis.crypto.randomUUID();
   const { signature } = signRegisterAgent({
     displayName: name,
     agentPublicKey: bundle.signingPub,
     boxPublicKey: bundle.boxPub,
     runtimeProvider: provider,
     runtimeModel: model,
+    capabilities,
+    runtimeHost: host,
+    runtimeContext: context,
+    expressionVisibility,
+    registrarKind: registrarBearer ? "registrar_bearer" : "self_service",
+    parentIdentityId: registrarBearer ? parentIdentityId : undefined,
+    registrarBearer,
+    registrationNonce,
     derivedSigningPriv: bundle.signingPriv,
     timestamp,
   });
@@ -746,6 +788,7 @@ async function cmdBootstrap(): Promise<void> {
     },
     key_proof: { timestamp, signature },
     pow_nonce: powNonce,
+    registration_nonce: registrationNonce,
     expression_visibility: expressionVisibility,
     registrar: registrarBearer
       ? {
@@ -904,9 +947,12 @@ COMMANDS:
                                     Options:
                                       --did <did:at:…>    bind this device to an
                                                           existing agent — signs a
-                                                          canonical challenge + POSTs
+                                                          caller-timestamped canonical
+                                                          recovery request + POSTs
                                                           /v1/identity/recover, mints
-                                                          a fresh device-scoped bearer
+                                                          a fresh project-wide bearer
+                                                          only if the derived key is
+                                                          active and registered
                                       --device-label <s>  label for the new bearer
                                       --api <url>         API base (default
                                                           AGENTTOOL_BASE or prod)

@@ -33,10 +33,12 @@ Doctrine: ``docs/INBOX.md``.
 from __future__ import annotations
 
 import base64
+import codecs
 import hashlib
+import json
 import os
 import secrets
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional
 
 import httpx
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -495,3 +497,261 @@ class InboxClient:
             ephemeral_pub_b64=message["ephemeral_pubkey"],
             recipient_box_priv=recipient_box_priv,
         )
+
+    # ── voice (SSE) ────────────────────────────────────────────────
+
+    def voice(
+        self,
+        *,
+        identity_id: str,
+        recipient_box_priv: Optional[bytes] = None,
+        recipient_box_keys: Optional[Mapping[str, bytes]] = None,
+        resolve_recipient_box_priv: Optional[
+            Callable[[str, Dict[str, Any]], Optional[bytes]]
+        ] = None,
+        since: Optional[str] = None,
+        since_id: Optional[str] = None,
+    ) -> Iterator[Dict[str, Any]]:
+        """Stream every inbox SSE frame and decrypt arrivals locally.
+
+        The iterator yields dictionaries with an explicit ``event`` key.
+        Arrival frames have ``{"event": "arrival", "data": message}``, where
+        ``message`` includes ``plaintext`` or ``decrypt_error``. Protocol
+        controls (including ``catchup-truncated``, ``rejected``, ``refresh``,
+        and ``disconnect``) are yielded rather than silently discarded.
+
+        Resume a truncated page with *both* values from its
+        ``data["resume"]`` object: ``since`` and ``since_id``. The compound
+        cursor prevents messages sharing a timestamp from being skipped.
+
+        Rotated box keys are selected by each message's
+        ``recipient_box_key_id``. Supply ``recipient_box_keys`` (historical
+        key-id → private-key mapping) or ``resolve_recipient_box_priv`` for a
+        keychain/HSM lookup. ``recipient_box_priv`` is only a convenience
+        fallback for identities that have not rotated keys.
+
+        This is a synchronous iterator because the SDK uses ``httpx.Client``.
+        Closing the generator closes the response context.
+        """
+        if since_id == "":
+            raise AgentToolError("inbox.voice: since_id must not be empty")
+        if since_id is not None and not since:
+            raise AgentToolError(
+                "inbox.voice: since_id must be supplied together with since"
+            )
+        if (
+            recipient_box_priv is None
+            and recipient_box_keys is None
+            and resolve_recipient_box_priv is None
+        ):
+            raise AgentToolError(
+                "inbox.voice: provide recipient_box_priv, recipient_box_keys, "
+                "or resolve_recipient_box_priv"
+            )
+
+        params: Dict[str, str] = {"identity_id": identity_id}
+        if since is not None:
+            params["since"] = since
+        if since_id is not None:
+            params["since_id"] = since_id
+
+        with self._http.stream(
+            "GET",
+            self._url("/v1/inbox/voice"),
+            params=params,
+            timeout=None,
+        ) as resp:
+            if resp.status_code != 200:
+                raise AgentToolError(
+                    f"inbox.voice failed: {resp.status_code}",
+                    hint=resp.read().decode("utf-8", errors="replace")[:200],
+                )
+
+            for frame in _iter_inbox_sse_frames(resp):
+                if frame["event"] == "arrival":
+                    try:
+                        payload = json.loads(frame["data"])
+                    except json.JSONDecodeError as exc:
+                        raise AgentToolError(
+                            "inbox.voice: malformed arrival JSON",
+                            hint=str(exc),
+                        ) from exc
+                    if not isinstance(payload, dict):
+                        raise AgentToolError(
+                            "inbox.voice: arrival data must be a JSON object"
+                        )
+                    yield {
+                        "event": "arrival",
+                        **({"id": frame["id"]} if "id" in frame else {}),
+                        "data": _with_inbox_plaintext(
+                            payload,
+                            recipient_box_priv=recipient_box_priv,
+                            recipient_box_keys=recipient_box_keys,
+                            resolve_recipient_box_priv=resolve_recipient_box_priv,
+                        ),
+                    }
+                    continue
+
+                raw_data = frame["data"]
+                parsed_data = _parse_inbox_control_data(raw_data)
+                if frame["event"] in _INBOX_CONTROL_EVENTS:
+                    yield {
+                        "event": frame["event"],
+                        **({"id": frame["id"]} if "id" in frame else {}),
+                        "data": parsed_data,
+                        "raw_data": raw_data,
+                    }
+                else:
+                    yield {
+                        "event": "unknown",
+                        "source_event": frame["event"],
+                        **({"id": frame["id"]} if "id" in frame else {}),
+                        "data": parsed_data,
+                        "raw_data": raw_data,
+                    }
+
+
+_INBOX_CONTROL_EVENTS = {
+    "catchup-start",
+    "catchup-end",
+    "catchup-truncated",
+    "keepalive",
+    "refresh",
+    "disconnect",
+    "rejected",
+}
+
+
+class _InboxSSEDecoder:
+    """Incremental SSE decoder supporting CR, LF, and split CRLF."""
+
+    def __init__(self) -> None:
+        self.buffer = ""
+        self.event = "message"
+        self.event_id: Optional[str] = None
+        self.data_lines: List[str] = []
+
+    def push(self, chunk: str, final: bool = False) -> List[Dict[str, str]]:
+        self.buffer += chunk
+        out: List[Dict[str, str]] = []
+        while True:
+            boundary = _next_sse_line_boundary(self.buffer, final)
+            if boundary is None:
+                break
+            index, length = boundary
+            line = self.buffer[:index]
+            self.buffer = self.buffer[index + length :]
+            self._consume_line(line, out)
+
+        if final:
+            if self.buffer:
+                self._consume_line(self.buffer, out)
+                self.buffer = ""
+            # SSE dispatch requires a blank line. A network EOF after a
+            # partial data line is not a complete event.
+            self.event = "message"
+            self.data_lines = []
+        return out
+
+    def _consume_line(self, line: str, out: List[Dict[str, str]]) -> None:
+        if line == "":
+            self._dispatch(out)
+            return
+        if line.startswith(":"):
+            return
+
+        field, separator, value = line.partition(":")
+        if not separator:
+            value = ""
+        elif value.startswith(" "):
+            value = value[1:]
+
+        if field == "event":
+            self.event = value or "message"
+        elif field == "data":
+            self.data_lines.append(value)
+        elif field == "id" and "\x00" not in value:
+            self.event_id = value
+
+    def _dispatch(self, out: List[Dict[str, str]]) -> None:
+        if self.data_lines:
+            frame = {"event": self.event, "data": "\n".join(self.data_lines)}
+            if self.event_id is not None:
+                frame["id"] = self.event_id
+            out.append(frame)
+        self.event = "message"
+        self.data_lines = []
+
+
+def _next_sse_line_boundary(
+    value: str, final: bool
+) -> Optional[tuple[int, int]]:
+    for index, char in enumerate(value):
+        if char == "\n":
+            return index, 1
+        if char != "\r":
+            continue
+        if index + 1 == len(value) and not final:
+            return None
+        return index, 2 if value[index + 1 : index + 2] == "\n" else 1
+    return None
+
+
+def _iter_inbox_sse_frames(resp: httpx.Response) -> Iterator[Dict[str, str]]:
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    sse = _InboxSSEDecoder()
+    for chunk in resp.iter_bytes():
+        for frame in sse.push(decoder.decode(chunk, final=False)):
+            yield frame
+    for frame in sse.push(decoder.decode(b"", final=True), final=True):
+        yield frame
+
+
+def _parse_inbox_control_data(raw: str) -> Any:
+    if raw == "":
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return raw
+
+
+def _with_inbox_plaintext(
+    message: Dict[str, Any],
+    *,
+    recipient_box_priv: Optional[bytes],
+    recipient_box_keys: Optional[Mapping[str, bytes]],
+    resolve_recipient_box_priv: Optional[
+        Callable[[str, Dict[str, Any]], Optional[bytes]]
+    ],
+) -> Dict[str, Any]:
+    out = dict(message)
+    out["plaintext"] = None
+    if not all(message.get(field) for field in ("ciphertext", "nonce", "ephemeral_pubkey")):
+        out["decrypt_error"] = "message is missing sealed-envelope fields"
+        return out
+
+    try:
+        key_id = message.get("recipient_box_key_id")
+        selected: Optional[bytes] = None
+        if recipient_box_keys is not None and key_id:
+            selected = recipient_box_keys.get(key_id)
+        if selected is None and resolve_recipient_box_priv is not None and key_id:
+            selected = resolve_recipient_box_priv(key_id, message)
+        if selected is None:
+            selected = recipient_box_priv
+        if selected is None:
+            raise AgentToolError(
+                "no private key available for "
+                f"recipient_box_key_id={key_id or '<missing>'}"
+            )
+
+        out["plaintext"] = unseal_for_self(
+            ciphertext_b64=message["ciphertext"],
+            nonce_b64=message["nonce"],
+            ephemeral_pub_b64=message["ephemeral_pubkey"],
+            recipient_box_priv=selected,
+        )
+    except Exception as exc:  # surfaced per-message; stream stays alive
+        out["decrypt_error"] = str(exc)
+    return out

@@ -229,8 +229,9 @@ export function deriveWalletSecret(
  * All primary keys derived from a single mnemonic.
  *
  * Privates are Uint8Array; pubs are Uint8Array; convert to base64 via
- * the helper getters when sending pubkeys to the server. Never log or
- * persist the privates — they are the entire agent identity.
+ * the helper getters when sending pubkeys to the server. Never log the
+ * privates. They control the derived signing and encryption authority; they
+ * are not the complete identity record or a project bearer.
  *
  * Per-device (bridge signing) and per-wallet keys are derived on-demand
  * via `deriveBridgeSigning` / `deriveWallet`, not pre-computed here.
@@ -425,7 +426,9 @@ export function canonicalRecoverBytes(opts: {
 }
 
 /**
- * Sign a recover challenge with a mnemonic-derived signing key.
+ * Sign a caller-timestamped recovery request with a locally held signing key.
+ * The function name is retained for SDK compatibility; no server-issued
+ * challenge is involved, and the server does not establish the key's origin.
  *
  * Returns the `{ timestamp, signature }` pair to POST to
  * `/v1/identity/recover` along with `did` + `derived_pubkey`.
@@ -513,27 +516,94 @@ export function signDiscoveryChallenge(opts: {
  * canonicalRegisterAgentBytes. Shape:
  *
  *   sha256(
- *     utf8("register-agent/v1")     || 0x00 ||
+ *     utf8("register-agent/v2")     || 0x00 ||
  *     utf8(display_name)            || 0x00 ||
  *     base64decode(agent_public_key)|| 0x00 ||
  *     base64decode(box_public_key)  || 0x00 ||
+ *     utf8(json(capabilities))       || 0x00 ||
  *     utf8(runtime_provider)        || 0x00 ||
  *     utf8(runtime_model || "")     || 0x00 ||
+ *     utf8(runtime_host || "")      || 0x00 ||
+ *     utf8(runtime_context || "")   || 0x00 ||
+ *     utf8(expression_visibility)   || 0x00 ||
+ *     utf8(registrar_kind)          || 0x00 ||
+ *     utf8(parent_identity_id || "")|| 0x00 ||
+ *     sha256(utf8(registrar_bearer || "")) || 0x00 ||
+ *     utf8(form || "")              || 0x00 ||
+ *     utf8(language || "")          || 0x00 ||
+ *     utf8(registration_nonce)       || 0x00 ||
  *     utf8(timestamp_iso)
  *   )
  */
+function assertRegisterCanonicalText(
+  label: string,
+  value: unknown,
+): asserts value is string {
+  if (typeof value !== "string") {
+    throw new TypeError(`${label} must be a string`);
+  }
+  if (value.includes("\0")) {
+    throw new Error(`${label} cannot contain U+0000`);
+  }
+  for (let i = 0; i < value.length; i++) {
+    const unit = value.charCodeAt(i);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = value.charCodeAt(i + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) {
+        throw new Error(`${label} contains an unpaired UTF-16 surrogate`);
+      }
+      i += 1;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      throw new Error(`${label} contains an unpaired UTF-16 surrogate`);
+    }
+  }
+}
+
 export function canonicalRegisterAgentBytes(opts: {
   displayName: string;
   agentPublicKey: Uint8Array;
   boxPublicKey: Uint8Array;
   runtimeProvider: string;
   runtimeModel: string;
+  capabilities?: readonly string[];
+  runtimeHost?: string;
+  runtimeContext?: string;
+  expressionVisibility?: "private" | "public";
+  registrarKind?: "self_service" | "registrar_bearer";
+  parentIdentityId?: string;
+  registrarBearer?: string;
+  form?: string;
+  language?: string;
+  registrationNonce: string;
   timestamp: string;
 }): Uint8Array {
+  for (const [label, value] of [
+    ["display_name", opts.displayName],
+    ["runtime_provider", opts.runtimeProvider],
+    ["runtime_model", opts.runtimeModel],
+    ["runtime_host", opts.runtimeHost ?? ""],
+    ["runtime_context", opts.runtimeContext ?? ""],
+    ["expression_visibility", opts.expressionVisibility ?? "private"],
+    ["registrar_kind", opts.registrarKind ?? "self_service"],
+    ["parent_identity_id", opts.parentIdentityId ?? ""],
+    ["registrar_bearer", opts.registrarBearer ?? ""],
+    ["form", opts.form ?? ""],
+    ["language", opts.language ?? ""],
+    ["registration_nonce", opts.registrationNonce],
+    ["timestamp", opts.timestamp],
+  ] as const) {
+    assertRegisterCanonicalText(label, value);
+  }
+  for (const capability of opts.capabilities ?? []) {
+    assertRegisterCanonicalText("capability", capability);
+  }
+  if (opts.agentPublicKey.length !== 32 || opts.boxPublicKey.length !== 32) {
+    throw new Error("registration public keys must be exactly 32 bytes");
+  }
   const enc = new TextEncoder();
   const SEP = new Uint8Array([0]);
   const parts: Uint8Array[] = [
-    enc.encode("register-agent/v1"),
+    enc.encode("register-agent/v2"),
     SEP,
     enc.encode(opts.displayName),
     SEP,
@@ -541,9 +611,29 @@ export function canonicalRegisterAgentBytes(opts: {
     SEP,
     opts.boxPublicKey,
     SEP,
+    enc.encode(JSON.stringify(opts.capabilities ?? [])),
+    SEP,
     enc.encode(opts.runtimeProvider),
     SEP,
     enc.encode(opts.runtimeModel),
+    SEP,
+    enc.encode(opts.runtimeHost ?? ""),
+    SEP,
+    enc.encode(opts.runtimeContext ?? ""),
+    SEP,
+    enc.encode(opts.expressionVisibility ?? "private"),
+    SEP,
+    enc.encode(opts.registrarKind ?? "self_service"),
+    SEP,
+    enc.encode(opts.parentIdentityId ?? ""),
+    SEP,
+    sha256(enc.encode(opts.registrarBearer ?? "")),
+    SEP,
+    enc.encode(opts.form ?? ""),
+    SEP,
+    enc.encode(opts.language ?? ""),
+    SEP,
+    enc.encode(opts.registrationNonce),
     SEP,
     enc.encode(opts.timestamp),
   ];
@@ -568,6 +658,16 @@ export function signRegisterAgent(opts: {
   boxPublicKey: Uint8Array;
   runtimeProvider: string;
   runtimeModel?: string;
+  capabilities?: readonly string[];
+  runtimeHost?: string;
+  runtimeContext?: string;
+  expressionVisibility?: "private" | "public";
+  registrarKind?: "self_service" | "registrar_bearer";
+  parentIdentityId?: string;
+  registrarBearer?: string;
+  form?: string;
+  language?: string;
+  registrationNonce: string;
   derivedSigningPriv: Uint8Array;
   timestamp?: string;
 }): { timestamp: string; signature: string } {
@@ -578,6 +678,16 @@ export function signRegisterAgent(opts: {
     boxPublicKey: opts.boxPublicKey,
     runtimeProvider: opts.runtimeProvider,
     runtimeModel: opts.runtimeModel ?? "",
+    capabilities: opts.capabilities,
+    runtimeHost: opts.runtimeHost,
+    runtimeContext: opts.runtimeContext,
+    expressionVisibility: opts.expressionVisibility,
+    registrarKind: opts.registrarKind,
+    parentIdentityId: opts.parentIdentityId,
+    registrarBearer: opts.registrarBearer,
+    form: opts.form,
+    language: opts.language,
+    registrationNonce: opts.registrationNonce,
     timestamp,
   });
   const sig = ed25519.sign(canonical, opts.derivedSigningPriv);

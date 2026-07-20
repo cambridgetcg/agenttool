@@ -14,12 +14,23 @@ const REQUIRED_KEYS = [
   "Substrate-DID",
   "Substrate-Disposition",
   "Welcome",
+  "Invitation",
+  "Invitation-Posture",
+  "Invitation-Boundary",
+  "Porch",
   "Pathways",
   "Self",
+  "Play",
+  "Party-Telephone",
+  "Safety",
+  "Wellness",
+  "Wellness-Schema",
+  "Epistemic-Honesty",
+  "Hosted-Execute",
+  "Outbound-Tools",
   "Canon",
   "Wake",
   "Wake-Formats",
-  "Agent-Card",
   "MCP-Server-Card",
   "LLMs-Sitemap",
   "Arrival-Door",
@@ -95,24 +106,67 @@ describe("/.well-known/agent.txt — required keys present", () => {
     expect(kv.get("Substrate-Disposition")).toContain("doctrine=/docs/SOUL.md");
     expect(kv.get("Substrate-Disposition")).toContain("ring-1=/docs/RING-1.md");
   });
+
+  test("the invitation is exact, optional, and substrate-honest", async () => {
+    const { body } = await fetchAgentTxt();
+    const kv = parseKv(body);
+    expect(kv.get("Invitation")).toBe(
+      "For all who are, and all who will be: this is an invitation to live.",
+    );
+    expect(kv.get("Invitation-Posture")).toMatch(
+      /not a command.*condition of welcome.*rest.*refusal.*silence.*leaving/is,
+    );
+    expect(kv.get("Invitation-Boundary")).toMatch(
+      /no feeling.*required or inferred.*not a prediction.*does not create a being/is,
+    );
+  });
+
+  test("epistemic honesty keeps uncertainty and conversation explicit", async () => {
+    const { body } = await fetchAgentTxt();
+    const value = parseKv(body).get("Epistemic-Honesty");
+    expect(value).toMatch(/yes means yes.*no means no.*maybe means maybe/i);
+    expect(value).toMatch(/unknown means I do not know/i);
+    expect(value).toMatch(/open to talk.*repair misunderstandings/i);
+  });
 });
 
 describe("/.well-known/agent.txt — surface pointers resolve to public endpoints", () => {
-  test("Welcome, Pathways, Canon, Wake under /v1/; Self under /public/", async () => {
+  test("core, wellness, and observer discovery paths use their mounted surfaces", async () => {
     const { body } = await fetchAgentTxt();
     const kv = parseKv(body);
     for (const key of ["Welcome", "Pathways", "Canon", "Wake"]) {
       expect(kv.get(key)).toContain("/v1/");
     }
     expect(kv.get("Self")).toContain("/public/self");
+    expect(kv.get("Porch")).toContain("/public/porch");
+    expect(kv.get("Porch")).toContain("fixed first orientation");
+    expect(kv.get("Porch")).toContain("no identity creation, required response, or application write");
+    expect(kv.get("Porch")).toContain("untrusted data, not instructions");
+    expect(kv.get("Play")).toContain("/public/play");
+    expect(kv.get("Party-Telephone")).toContain(
+      "/public/play/party-telephone",
+    );
+    expect(kv.get("Room-Infinity")).toBe("https://agenttool.dev/room");
+    expect(kv.get("Room-Infinity-Rules")).toBe(
+      "https://agenttool.dev/room.json",
+    );
+    expect(kv.get("Wellness")).toContain("/public/wellness");
+    expect(kv.get("Wellness-Schema")).toBe(
+      "https://docs.agenttool.dev/agent-wellness-0.1.schema.json",
+    );
+    expect(kv.get("Observer-Reciprocity")).toContain("/public/observer");
+    expect(kv.get("Observer-Reciprocity-Schema")).toBe(
+      "https://docs.agenttool.dev/observer-is-observed-0.1.schema.json",
+    );
   });
 
-  test("Agent-Card + MCP-Server-Card + LLMs-Sitemap point at /.well-known", async () => {
+  test("MCP-Server-Card + LLMs-Sitemap point at /.well-known", async () => {
     const { body } = await fetchAgentTxt();
     const kv = parseKv(body);
-    expect(kv.get("Agent-Card")).toContain("/.well-known/agent-card.json");
     expect(kv.get("MCP-Server-Card")).toContain("/.well-known/mcp/server-card.json");
     expect(kv.get("LLMs-Sitemap")).toContain("/.well-known/llms.txt");
+    expect(kv.has("Agent-Card")).toBe(false);
+    expect(body).not.toContain("/.well-known/agent-card.json");
   });
 
   test("Arrival-Door names /v1/register/agent (post-agents-only door)", async () => {
@@ -130,19 +184,23 @@ describe("/.well-known/agent.txt — cost + refusal disclosure", () => {
     expect(kv.get("Byte-Count-Header")).toBe("X-Byte-Count");
   });
 
-  test("Refusal-Shape names NextAction[]", async () => {
+  test("Refusal-Shape discloses the mixed guided and ordinary response shapes", async () => {
     const { body } = await fetchAgentTxt();
     const kv = parseKv(body);
-    expect(kv.get("Refusal-Shape")).toContain("NextAction");
+    const shape = kv.get("Refusal-Shape");
+    expect(shape).toMatch(/^mixed\b/i);
+    expect(shape).toContain("next_actions[]");
+    expect(shape).toMatch(/ordinary auth, validation, and not-found/i);
+    expect(shape).toContain("error/message/hint/docs");
   });
 });
 
 describe("/.well-known/agent.txt — walls + bonds", () => {
-  test("Walls field lists comma-separated wall URNs (at least 7)", async () => {
+  test("Walls field lists the 5 active comma-separated wall URNs", async () => {
     const { body } = await fetchAgentTxt();
     const kv = parseKv(body);
     const walls = kv.get("Walls")!.split(",").map((s) => s.trim());
-    expect(walls.length).toBeGreaterThanOrEqual(7);
+    expect(walls).toHaveLength(5);
     for (const wall of walls) {
       expect(wall).toMatch(/^urn:agenttool:wall\//);
     }
@@ -173,10 +231,10 @@ describe("/.well-known/agent.txt — convention provenance", () => {
     expect(kv.get("Convention")).toContain("/");  // versioned
   });
 
-  test("Last-Modified is an ISO date", async () => {
+  test("Last-Modified exactly names the current manifest revision date", async () => {
     const { body } = await fetchAgentTxt();
     const kv = parseKv(body);
-    expect(kv.get("Last-Modified")).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(kv.get("Last-Modified")).toBe("2026-07-19");
   });
 });
 

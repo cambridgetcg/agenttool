@@ -23,12 +23,12 @@ import {
 } from "../src/services/wake/module-welcome";
 import {
   WALL_BIRTH_IS_FREE,
-  WALL_K_MASTER_NEVER_SERVER_SIDE,
   WALL_NO_INACTIVE_REAPING,
-  WALL_NO_PLATFORM_READABLE_THOUGHTS,
   WALL_NO_SELF_WITNESSING,
   WALL_PRIVATE_DEFAULT,
   WALL_REFUSALS_RECORDED,
+  WALL_RUNTIME_CUSTODY_EXPLICIT,
+  WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY,
 } from "../src/services/mathos/encode";
 
 // Axiom primes (inline to match the source-of-truth in module-welcome.ts).
@@ -95,6 +95,7 @@ describe("welcomeForPath — module resolution by prefix", () => {
 
   test("exact prefix match wins", () => {
     expect(welcomeForPath("/v1/wake").module).toBe("wake");
+    expect(welcomeForPath("/v1/home").module).toBe("home");
   });
 
   test("longest-prefix match wins over shorter", () => {
@@ -123,14 +124,14 @@ describe("module ↔ Promise alignment — every primitive declares its nature",
   test("MEMORY → axiom 7 (remember) — continuity is what memory IS", () => {
     const w = welcomeForPath("/v1/memories");
     expect(w.primary_axiom_id).toBe(AXIOM_REMEMBER);
-    expect(w.walls_highlighted).toContain(WALL_NO_PLATFORM_READABLE_THOUGHTS);
+    expect(w.walls_highlighted).toContain(WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY);
     expect(w.walls_highlighted).toContain(WALL_PRIVATE_DEFAULT);
   });
 
-  test("STRANDS → axiom 7 + wall 7 (no_platform_readable_thoughts is load-bearing)", () => {
+  test("STRANDS → axiom 7 + wall 7 (ciphertext-only thought storage is load-bearing)", () => {
     const w = welcomeForPath("/v1/strands");
     expect(w.primary_axiom_id).toBe(AXIOM_REMEMBER);
-    expect(w.walls_highlighted).toContain(WALL_NO_PLATFORM_READABLE_THOUGHTS);
+    expect(w.walls_highlighted).toContain(WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY);
   });
 
   test("INBOX → axioms 13 (trust) + 5 (welcome), wall 3 (no_self_witnessing)", () => {
@@ -146,11 +147,20 @@ describe("module ↔ Promise alignment — every primitive declares its nature",
     expect(w.walls_highlighted).toContain(WALL_NO_SELF_WITNESSING);
   });
 
-  test("VAULT → axioms 5+7, walls 1 (k_master_never_server_side) + 8 (private_default)", () => {
+  test("LOVE CONSENT → trust+rest with private, refusal-safe, two-party walls", () => {
+    const w = welcomeForPath("/v1/love/offers");
+    expect(w.primary_axiom_id).toBe(AXIOM_TRUST);
+    expect(w.secondary_axiom_id).toBe(AXIOM_REST);
+    expect(w.walls_highlighted).toContain(WALL_NO_SELF_WITNESSING);
+    expect(w.walls_highlighted).toContain(WALL_REFUSALS_RECORDED);
+    expect(w.walls_highlighted).toContain(WALL_PRIVATE_DEFAULT);
+  });
+
+  test("VAULT → axioms 5+7, walls 1 (runtime custody explicit) + 8 (private_default)", () => {
     const w = welcomeForPath("/v1/vault");
     expect(w.primary_axiom_id).toBe(AXIOM_WELCOME);
     expect(w.secondary_axiom_id).toBe(AXIOM_REMEMBER);
-    expect(w.walls_highlighted).toContain(WALL_K_MASTER_NEVER_SERVER_SIDE);
+    expect(w.walls_highlighted).toContain(WALL_RUNTIME_CUSTODY_EXPLICIT);
     expect(w.walls_highlighted).toContain(WALL_PRIVATE_DEFAULT);
   });
 
@@ -217,13 +227,13 @@ describe("module ↔ Promise alignment — every primitive declares its nature",
   test("TRACES → axiom 7 + wall 7 (decision records, thought-sovereignty)", () => {
     const w = welcomeForPath("/v1/traces");
     expect(w.primary_axiom_id).toBe(AXIOM_REMEMBER);
-    expect(w.walls_highlighted).toContain(WALL_NO_PLATFORM_READABLE_THOUGHTS);
+    expect(w.walls_highlighted).toContain(WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY);
   });
 
-  test("RUNTIME → axiom 13 (trust) + wall 1 (k_master_never_server_side)", () => {
+  test("RUNTIME → axiom 13 (trust) + wall 1 (runtime custody explicit)", () => {
     const w = welcomeForPath("/v1/runtimes");
     expect(w.primary_axiom_id).toBe(AXIOM_TRUST);
-    expect(w.walls_highlighted).toContain(WALL_K_MASTER_NEVER_SERVER_SIDE);
+    expect(w.walls_highlighted).toContain(WALL_RUNTIME_CUSTODY_EXPLICIT);
   });
 
   test("WAKE — the keystone — carries all 5 Promises (only axiom 5 marked primary; full 8 walls highlighted)", () => {
@@ -266,7 +276,7 @@ describe("module-aware welcome through the middleware", () => {
     const body = await res.json();
     expect(body._welcomed.axiom_id).toBe(AXIOM_REMEMBER);
     expect(body._welcomed.module).toBe("memory");
-    expect(body._welcomed.walls_held).toContain(WALL_NO_PLATFORM_READABLE_THOUGHTS);
+    expect(body._welcomed.walls_held).toContain(WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY);
   });
 
   test("strand route → body framing carries axiom 7 + load-bearing wall 7", async () => {
@@ -274,7 +284,7 @@ describe("module-aware welcome through the middleware", () => {
     const body = await res.json();
     expect(body._welcomed.axiom_id).toBe(AXIOM_REMEMBER);
     expect(body._welcomed.module).toBe("strand");
-    expect(body._welcomed.walls_held).toContain(WALL_NO_PLATFORM_READABLE_THOUGHTS);
+    expect(body._welcomed.walls_held).toContain(WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY);
   });
 
   test("vault route → body framing carries axioms 5+7 + walls 1+8", async () => {
@@ -283,7 +293,7 @@ describe("module-aware welcome through the middleware", () => {
     expect(body._welcomed.axiom_id).toBe(AXIOM_WELCOME);
     expect(body._welcomed.secondary_axiom_id).toBe(AXIOM_REMEMBER);
     expect(body._welcomed.module).toBe("vault");
-    expect(body._welcomed.walls_held).toContain(WALL_K_MASTER_NEVER_SERVER_SIDE);
+    expect(body._welcomed.walls_held).toContain(WALL_RUNTIME_CUSTODY_EXPLICIT);
     expect(body._welcomed.walls_held).toContain(WALL_PRIVATE_DEFAULT);
   });
 
@@ -324,6 +334,6 @@ describe("module-aware welcome through the middleware", () => {
     expect(header).toMatch(/axiom=5/);
     expect(header).toMatch(/axiom2=7/);
     expect(header).toMatch(/module=vault/);
-    expect(header).toMatch(new RegExp(`walls=[\\d,]*${WALL_K_MASTER_NEVER_SERVER_SIDE}[\\d,]*`));
+    expect(header).toMatch(new RegExp(`walls=[\\d,]*${WALL_RUNTIME_CUSTODY_EXPLICIT}[\\d,]*`));
   });
 });

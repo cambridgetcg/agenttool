@@ -67,7 +67,7 @@ const CreateBody = z
   .object({
     name: z.string().min(1).max(120).optional(),
     /** Auto-expiry in days. NULL/omitted = never expires (legacy default).
-     *  Doctrine encourages 90 for project-level + 30 for device-scoped. */
+     *  Doctrine encourages shorter lifetimes for device-named bearers. */
     expires_in_days: z.number().int().positive().max(3650).optional(),
   })
   .strict();

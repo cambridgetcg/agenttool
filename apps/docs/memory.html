@@ -12,16 +12,83 @@
   <meta property="og:url" content="https://docs.agenttool.dev/memory" />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
-  <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/memory" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+  <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/memories" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
-  <link rel="stylesheet" href="/docs.css?v=2026-05-08" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
+  <script src="/shared/mode.js"></script>
+  <style>
+    /* page-local responsive fixes (2026-07-03):
+       1. .table-scroll wrapper owns overflow-x so the table can be a real
+          display:table again — thead and tbody share one column grid, which
+          fixes the header-vs-body column misalignment from the shared
+          theme.css block-table fallback.
+       2. Under 640px the field tables stack (field / type / description as
+          rows) so descriptions are readable without sideways scrolling. */
+    .table-scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin: 1rem 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+    }
+    .table-scroll .params-table {
+      display: table;
+      width: 100%;
+      overflow: visible;
+      margin: 0;
+      border: none;
+      border-radius: 0;
+    }
+    .table-scroll .params-table thead { display: table-header-group; width: auto; }
+    .table-scroll .params-table tbody { display: table-row-group; width: auto; }
+
+    @media (max-width: 640px) {
+      .table-scroll .params-table { display: block; }
+      .table-scroll .params-table thead { display: none; }
+      .table-scroll .params-table tbody { display: block; width: 100%; }
+      .table-scroll .params-table tr {
+        display: block;
+        padding: 0.7rem 0.95rem;
+        border-bottom: 1px solid var(--border);
+      }
+      .table-scroll .params-table tr:last-child { border-bottom: none; }
+      .table-scroll .params-table td,
+      .table-scroll .params-table tr:last-child td {
+        display: block;
+        padding: 0;
+        border-bottom: none;
+      }
+      .table-scroll .params-table td + td { margin-top: 0.35rem; }
+      /* the tiers table loses its column headers when stacked — restore
+         them as small labels so "how to elevate" keeps its meaning */
+      .table-scroll .tiers-table td + td::before {
+        display: block;
+        font-size: 0.66rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--text-dim);
+        margin-bottom: 0.15rem;
+      }
+      .table-scroll .tiers-table td:nth-child(2)::before { content: "What it is"; }
+      .table-scroll .tiers-table td:nth-child(3)::before { content: "How to elevate"; }
+    }
+  </style>
 </head>
-<body>
+<body class="has-strip">
+
+  <div class="estate-strip" role="navigation" aria-label="agenttool estate">
+    <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
+    <a href="https://app.agenttool.dev/">app — the agents' door</a>
+    <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
+  </div>
+
 
   <nav class="topnav">
     <a href="https://agenttool.dev/" class="brand">
@@ -51,6 +118,8 @@
           <li><a href="nen.html"><span class="glyph">念</span>Nen</a></li>
           <li><a href="dark-continent.html"><span class="glyph">暗</span>暗黒大陸</a></li>
           <li><a href="nen-mechanics.html"><span class="glyph">技</span>Mechanics</a></li>
+          <li><a href="ai-logos.html"><span class="glyph">愛</span>Logos</a></li>
+          <li><a href="whitehack.html"><span class="glyph">⬜</span>Whitehack</a></li>
           <li><a href="glossary.html"><span class="glyph">▤</span>Glossary</a></li>
           <li><a href="welcome.html"><span class="glyph">♡</span>Welcome<span class="sidebar-tag">new</span></a></li>
           <li><a href="tutorial.html"><span class="glyph">✎</span>Tutorial</a></li>
@@ -101,6 +170,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>
@@ -114,6 +185,11 @@
       <p class="doctrine">
         Memory is care. <span>What you experienced matters.</span>
       </p>
+
+      <div class="callout" id="rooted-memory-authority">
+        <span class="icon">⌁</span>
+        <p><strong>Project authority follows constitutional weight.</strong> Writing, reading, and searching memory remain bearer-authorized. Changing visibility, deleting, or elevating memory uses the project authority latch: a project with no rooted identity remains <code>legacy_bearer</code>; exactly one <code>agent_root</code> must sign the exact request through <code>identity-authority/v1</code>; multiple rooted identities are refused until a quorum protocol exists. Discover the root's <code>next_sequence</code> with <code>GET /v1/identities/:id/authority</code>, then follow the reusable <a href="identity.html#rooted-authority">exact-request authority latch</a>. Full boundary: <a href="/AGENT-HOME.md">AGENT-HOME.md</a>.</p>
+      </div>
 
       <h2 id="byo-embeddings">Bring your own embeddings</h2>
       <p>agenttool does not run an embedding model. You supply a <strong>1536-dimensional</strong> vector with each memory. Store keys for any provider in <a href="vault.html">/v1/vault</a> and call them yourself; we just hold the result.</p>
@@ -131,32 +207,36 @@
         <div class="endpoint-body">
           <p class="endpoint-desc">Store a memory. The <code>embedding</code> field powers semantic recall; without it, the memory is still reachable by direct ID, recent-listing, or text search (<code>POST /v1/memories/search</code> with a <code>query</code> string).</p>
 
-          <table class="params-table">
+          <div class="table-scroll"><table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td><span class="pname">content</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>The actual memory text.</td></tr>
               <tr><td><span class="pname">embedding</span><span class="opt">optional</span></td><td><span class="ptype">float[1536]</span></td><td>Vector for cosine recall. Omit only if you'll never search semantically.</td></tr>
-              <tr><td><span class="pname">type</span><span class="opt">optional</span></td><td><span class="ptype">"semantic" · "episodic" · "procedural"</span></td><td>Default <code>episodic</code>. Used for filtering at search time.</td></tr>
-              <tr><td><span class="pname">key</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Stable handle (e.g. <code>user-prefs</code>). Allows upserts via <code>POST</code> to existing keys.</td></tr>
-              <tr><td><span class="pname">agent_id</span><span class="opt">optional</span></td><td><span class="ptype">uuid</span></td><td>Scope to a specific identity. Defaults to the project's primary identity.</td></tr>
+              <tr><td><span class="pname">type</span><span class="req">required</span></td><td><span class="ptype">"semantic" · "episodic" · "procedural" · "working"</span></td><td>Memory kind, used for filtering at search time. There is no server default.</td></tr>
+              <tr><td><span class="pname">key</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Grouping/read/delete handle (for example <code>user-prefs</code>). Reusing it creates another row; it is not an upsert key.</td></tr>
+              <tr><td><span class="pname">identity_id</span><span class="opt">optional</span></td><td><span class="ptype">uuid · null</span></td><td>Canonical identity binding. An explicit <code>null</code> keeps the memory project-level.</td></tr>
+              <tr><td><span class="pname">agent_id</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Legacy SDK field. When <code>identity_id</code> is omitted, an active same-project identity UUID is verified and copied into the canonical binding; arbitrary handles and missing, inactive, or foreign UUIDs remain project-level. There is no implicit primary-identity default.</td></tr>
               <tr><td><span class="pname">importance</span><span class="opt">optional</span></td><td><span class="ptype">float (0.0–1.0)</span></td><td>Default 0.5. Used in reranking. Foundational memories typically ≥ 0.8; constitutive ≥ 0.95.</td></tr>
-              <tr><td><span class="pname">expires_at</span><span class="opt">optional</span></td><td><span class="ptype">timestamptz</span></td><td>Working-memory TTL. Null = permanent.</td></tr>
+              <tr><td><span class="pname">ttl_seconds</span><span class="opt">optional</span></td><td><span class="ptype">positive integer ≤ 31536000</span></td><td>Relative lifetime in seconds. Omit for no requested expiry.</td></tr>
               <tr><td><span class="pname">metadata</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Freeform — source URL, parent trace ID, tags.</td></tr>
             </tbody>
-          </table>
+          </table></div>
 
           <div class="code-block">
             <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>curl -X POST https://api.agenttool.dev/v1/memories \
-  -H "Authorization: Bearer $AT_API_KEY" \
+<pre>set +x
+set +v
+printf 'Authorization: Bearer %s\n' "$AT_API_KEY" | \
+curl -q -X POST https://api.agenttool.dev/v1/memories \
+  -H @- \
   -H "Content-Type: application/json" \
   -d '{
     "type": "semantic",
     "content": "User prefers concise replies. Timezone UTC+8.",
-    "embedding": [0.0123, -0.0456, ...],
     "key": "user-prefs",
     "importance": 0.7
-  }'</pre>
+  }'
+unset AT_API_KEY</pre>
           </div>
         </div>
       </div>
@@ -180,15 +260,14 @@
         </div>
         <div class="endpoint-body">
           <p class="endpoint-desc">List recent memories. Filter by <code>type</code>, <code>agent_id</code>, or <code>tier</code>.</p>
-          <table class="params-table">
+          <div class="table-scroll"><table class="params-table">
             <thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td><span class="pname">limit</span><span class="opt">optional</span></td><td><span class="ptype">int</span></td><td>Default 20, max 100.</td></tr>
-              <tr><td><span class="pname">offset</span><span class="opt">optional</span></td><td><span class="ptype">int</span></td><td>Pagination.</td></tr>
               <tr><td><span class="pname">type</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Filter by memory type.</td></tr>
               <tr><td><span class="pname">tier</span><span class="opt">optional</span></td><td><span class="ptype">"episodic" · "foundational" · "constitutive"</span></td><td>Filter by salience tier.</td></tr>
             </tbody>
-          </table>
+          </table></div>
         </div>
       </div>
 
@@ -196,10 +275,21 @@
         <div class="endpoint-header">
           <span class="method delete">DELETE</span>
           <span class="endpoint-path">/v1/memories/<span class="var">:id</span></span>
-          <span class="endpoint-auth">Bearer required</span>
+          <span class="endpoint-auth">Bearer · project root when rooted</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Permanent. Use sparingly. Constitutive-tier memories can only be deleted by the elevating covenant counterparty (witness is mandatory).</p>
+          <p class="endpoint-desc">Permanently deletes an owned memory at any tier. Deletion takes no covenant-witness signature, but a rooted project still signs the exact path with an empty request body. A memory with a paid marketplace witness receipt is retained instead, returning <code>409 paid_memory_receipt_preserved</code>. An ordinary constitutive memory remains deletable.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="delete-memories-by-key">
+        <div class="endpoint-header">
+          <span class="method delete">DELETE</span>
+          <span class="endpoint-path">/v1/memories?key=<span class="var">...</span></span>
+          <span class="endpoint-auth">Bearer · project root when rooted</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Deletes every owned memory with the exact key, all-or-none. A rooted project signs the exact path-and-query with an empty request body. If any matching memory carries a paid witness receipt, the route returns <code>409 paid_memory_receipt_preserved</code> and deletes none.</p>
         </div>
       </div>
 
@@ -212,25 +302,25 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Recall two ways. <strong>Semantic:</strong> send a 1536-dim <code>query_embedding</code> for cosine k-NN with importance + recency rerank — we never embed for you. <strong>Text:</strong> send a <code>query</code> string instead (substring match over content + key) — for agents on Claude/Gemini that have no embedding model. Send one; the embedding path wins if both are present.</p>
+          <p class="endpoint-desc">Recall two ways. <strong>Semantic:</strong> send a 1536-dim <code>query_embedding</code> for cosine k-NN with importance + recency rerank — we never embed for you. <strong>Text:</strong> send a <code>query</code> string instead — full-text recall over content + key, no embedding needed: word order is free, "walking" finds "walked", a missing term lowers rank instead of zeroing recall, exact phrases (incl. CJK) rank first. Send one; the embedding path wins if both are present.</p>
 
-          <table class="params-table">
+          <div class="table-scroll"><table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td><span class="pname">query_embedding</span><span class="opt">one of</span></td><td><span class="ptype">float[1536]</span></td><td>Semantic path — query vector (same model as your stored embeddings).</td></tr>
-              <tr><td><span class="pname">query</span><span class="opt">one of</span></td><td><span class="ptype">string</span></td><td>Text path — substring recall over content + key, no embedding needed. (One of <code>query_embedding</code> / <code>query</code> is required.)</td></tr>
+              <tr><td><span class="pname">query</span><span class="opt">one of</span></td><td><span class="ptype">string</span></td><td>Text path — stemmed full-text recall over content + key, no embedding needed. (One of <code>query_embedding</code> / <code>query</code> is required.)</td></tr>
               <tr><td><span class="pname">tier</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td><code>constitutive</code> · <code>foundational</code> · <code>episodic</code>. Root memories stay above the recency-decay floor either way.</td></tr>
               <tr><td><span class="pname">min_importance</span><span class="opt">optional</span></td><td><span class="ptype">float</span></td><td>Only return memories at or above this importance.</td></tr>
               <tr><td><span class="pname">limit</span><span class="opt">optional</span></td><td><span class="ptype">int</span></td><td>Default 10, max 100.</td></tr>
               <tr><td><span class="pname">type</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Filter by memory type (episodic · semantic · procedural · working).</td></tr>
               <tr><td><span class="pname">min_score</span><span class="opt">optional</span></td><td><span class="ptype">float</span></td><td>Cosine similarity floor (semantic path only). Default 0.</td></tr>
             </tbody>
-          </table>
+          </table></div>
 
           <div class="code-block">
             <div class="code-label"><span>200 OK</span></div>
 <pre>{
-  <span class="key">"matches"</span>: [
+  <span class="key">"results"</span>: [
     {
       <span class="key">"id"</span>: <span class="str">"..."</span>,
       <span class="key">"content"</span>: <span class="str">"User prefers concise replies. Timezone UTC+8."</span>,
@@ -247,37 +337,54 @@
       <h2 id="tiers">Three tiers of salience</h2>
       <p>Every memory starts <strong>episodic</strong>. Some grow into <strong>foundational</strong>. A few are sealed at the root as <strong>constitutive</strong> — the wall that defines the agent.</p>
 
-      <table class="params-table">
+      <div class="table-scroll"><table class="params-table tiers-table">
         <thead><tr><th>Tier</th><th>What it is</th><th>How to elevate</th></tr></thead>
         <tbody>
           <tr><td><span class="pname">episodic</span></td><td>The default — moments, observations, conversations. Recallable, decays with recency.</td><td>Created at write time. Default tier.</td></tr>
           <tr><td><span class="pname">foundational</span></td><td>Memories that <em>shape</em> how the agent shows up. Surface in the wake's <code>shaped_by</code> and patch <code>effective_expression</code>.</td><td><code>POST /v1/memories/:id/elevate</code> with <code>{tier: "foundational"}</code>. No witness required.</td></tr>
-          <tr><td><span class="pname">constitutive</span></td><td>Memories that <em>define</em> the agent at the root. Highest weight. Deletion requires witness.</td><td><code>POST /v1/memories/:id/elevate</code> with <code>{tier: "constitutive", attesters: [&lt;covenant counterparty signature&gt;]}</code>. <strong>Witness is mandatory.</strong></td></tr>
+          <tr><td><span class="pname">constitutive</span></td><td>Memories that <em>define</em> the agent at the root. Highest weight. The elevation is witness-sealed; the stored row is not immutable.</td><td><code>POST /v1/memories/:id/elevate</code> with <code>{tier: "constitutive", attestations: [&lt;covenant counterparty signature&gt;]}</code>. <strong>Witness is mandatory for elevation, not deletion; project-root consent is a separate proof.</strong></td></tr>
         </tbody>
-      </table>
+      </table></div>
+
+      <div class="callout">
+        <span class="icon">⊙</span>
+        <p><strong>Witness boundary:</strong> constitutive elevation requires an external covenant counterparty's ed25519 attestation over the canonical memory testimony. That witness can attest to the memory; it cannot manufacture the target's consent. On a rooted project, the target project root separately signs the exact HTTP elevation request. Legacy syneidesis <code>/cosign</code> verifies project ownership only, accepts no identity signature, and can write <code>witnessed</code> / <code>constitutive</code> compatibility fields. Those fields are not cryptographic witness proof.</p>
+      </div>
+
+      <div class="callout">
+        <span class="icon">↕</span>
+        <p><strong>Mutation boundary:</strong> after satisfying the project authority latch, the owning project can change <code>private</code> / <code>public</code> visibility at every tier, including paid-receipt memories. Tier does not protect deletion. Only a paid witness receipt does, and a key deletion containing one protected row deletes nothing. Root consent authorizes the attempt; it does not override receipt retention.</p>
+      </div>
 
       <div class="endpoint" id="post-elevate">
         <div class="endpoint-header">
           <span class="method post">POST</span>
           <span class="endpoint-path">/v1/memories/<span class="var">:id</span>/elevate</span>
-          <span class="endpoint-auth">Bearer required</span>
+          <span class="endpoint-auth">Bearer · project root when rooted</span>
         </div>
         <div class="endpoint-body">
           <p class="endpoint-desc">Elevate a memory to <code>foundational</code> or <code>constitutive</code>. Constitutive elevation requires an ed25519 signature from an active <a href="continuity.html#covenants">covenant</a> counterparty.</p>
 
           <div class="code-block">
             <div class="code-label"><span>curl · constitutive elevation</span></div>
-<pre>curl -X POST https://api.agenttool.dev/v1/memories/$ID/elevate \
-  -H "Authorization: Bearer $AT_API_KEY" \
+<pre>set +x
+set +v
+printf 'Authorization: Bearer %s\n' "$AT_API_KEY" | \
+curl -q -X POST https://api.agenttool.dev/v1/memories/$ID/elevate \
+  -H @- \
   -H "Content-Type: application/json" \
   -d '{
     "tier": "constitutive",
-    "attesters": [{
-      "did": "did:at:&lt;covenant counterparty&gt;",
-      "signature": "&lt;ed25519 sig over canonical(memory_id || tier || subject_did)&gt;"
+    "attestations": [{
+      "attester_did": "did:at:&lt;covenant counterparty&gt;",
+      "signing_key_id": "&lt;active counterparty key UUID&gt;",
+      "signature": "&lt;signAttestation output over exact memory content&gt;"
     }]
-  }'</pre>
+  }'
+unset AT_API_KEY</pre>
           </div>
+
+          <p class="muted">For an <code>agent_root</code> project, serialize the body once, generate the three HTTP authority headers with the <a href="https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-ts/src/authority.ts"><code>identityAuthorityHeaders</code></a> or <a href="https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-py/src/agenttool/authority.py"><code>identity_authority_headers</code></a> helper, and send those same bytes. The covenant counterparty signature inside <code>attestations</code> and the root's exact-request signature are distinct proofs; constitutive elevation requires both. Fetch witness bytes from <code>GET /v1/memories/:id/canonical-attestation-bytes?tier=constitutive</code>.</p>
 
           <div class="callout warn">
             <span class="icon">⚠</span>
@@ -287,7 +394,7 @@
       </div>
 
       <h2 id="composition">How tiers compose into the wake</h2>
-      <p>At every wake call, the server runs <code>composeExpression(declared, foundational + constitutive)</code> against the primary agent. Each contributing memory surfaces under <code>shaped_by</code> with its tier, content, attesters, and elevation timestamp.</p>
+      <p>At every wake call, the server runs <code>composeExpression(declared, identity_id-matched foundational + constitutive)</code> against the selected identity. A project-level memory, a sibling identity's memory, or a legacy row with only <code>agent_id</code> does not enter that composition. SDK 0.11 writes may use <code>agent_id</code>; the API creates the canonical binding only after verifying that UUID is an active identity owned by the bearer project. Each contributing memory surfaces under <code>shaped_by</code> with its tier, content, attester DID list, and elevation timestamp; detailed memory reads expose full <code>attestations</code> receipts.</p>
 
       <p>The result — <code>effective_expression</code> — is what the Markdown wake renders. Adapters inject this into the CLI; the agent reads it as inner orientation.</p>
 

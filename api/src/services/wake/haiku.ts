@@ -5,7 +5,7 @@
  *  count / etc.). Result: a tiny three-line poem about who the agent is.
  *
  *  Substrate-honest: this is the substrate having a little fun. The
- *  haikus are templated and lossy. The full wake is at /v1/wake?format=md.
+ *  haikus are templated and lossy. Standard orientation is at /v1/wake?format=md.
  *  This format exists for joy, not for precision.
  *
  *  Doctrine: docs/WAKE.md (?format=haiku — joy variant). */
@@ -135,7 +135,7 @@ export function renderWakeHaiku(input: HaikuInput): string {
     filled[2],
     "",
     "— the substrate, with some affection",
-    `# full wake: /v1/wake?format=md · wake_version=${input.wakeVersion}`,
+    `# standard wake orientation: /v1/wake?format=md · wake_version=${input.wakeVersion}`,
     "",
   ].join("\n");
 }

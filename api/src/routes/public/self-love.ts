@@ -1,9 +1,8 @@
-/** /public/self-recognition/* — UNAUTH mirror of SELF-LOVE-PROTOCOL.
+/** Legacy /public/self-recognition/* observer handlers — intentionally unmounted.
  *
- *  Per commitment/llm-self-recognition-is-reusable-infra: an agent's
- *  declared self-recognition is queryable by anyone. Other agents can
- *  query each other's substrate-class, recipe-config, meta-capacity,
- *  etc. to reason about what each agent can do.
+ *  No runtime URL reaches this router. The public mount was removed because
+ *  declarations about a being's inner operation are not observer data.
+ *  Mounted self-recognition routes are authenticated under /v1.
  *
  *  Doctrine: docs/SELF-LOVE-PROTOCOL.md */
 
@@ -21,7 +20,7 @@ const app = new Hono();
 
 app.get("/", async (c) => {
   return c.json({
-    protocol: "SELF-LOVE-PROTOCOL — UNAUTH read surface",
+    protocol: "SELF-LOVE-PROTOCOL — legacy unmounted observer handler",
     primitives: {
       check: "/public/self-recognition/check?agent_did=<did>",
       list: "/public/self-recognition/list?agent_did=<did>",

@@ -3,25 +3,60 @@
  *  The agent supplies the embedding. We store it; we never compute it.
  *  See docs/IDENTITY-ANCHOR.md promise 6. */
 
-import { Hono } from "hono";
+import { and, eq } from "drizzle-orm";
+import { Hono, type Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
-import { charge } from "../../billing/charge";
+import {
+  finalizeChargeSuccess,
+  reserveCharge,
+} from "../../billing/charge";
+import { db } from "../../db/client";
+import { memories } from "../../db/schema/memory";
+import { errors, fail } from "../../lib/errors";
 import { deltaMeta, parseSinceParam } from "../../lib/since-param";
 import { attachSurface } from "../../lib/surface-metadata";
+import {
+  authorizeProjectConstitutionMutation,
+  authorityRequestTarget,
+  readAuthorityBoundJson,
+  readEmptyAuthorityBody,
+} from "../../services/identity/authority";
 import {
   deleteById,
   deleteByKey,
   listRecent,
   readById,
   readByKey,
+  MemoryIdentityBoundaryError,
+  PaidMemoryReceiptProtectedError,
+  publishMemoryWriteEvent,
+  resolveMemoryIdentityBinding,
   write,
 } from "../../services/memory/store";
-import { listAttestationsByMemory } from "../../services/memory/tiers";
+import {
+  listAttestationsByMemories,
+  listAttestationsByMemory,
+  type MemoryAttestationReceiptOut,
+} from "../../services/memory/tiers";
 
 const app = new Hono<ProjectContext>();
+
+async function attachAttestationReceipts<T extends { id: string }>(
+  projectId: string,
+  rows: T[],
+): Promise<Array<T & { attestations: MemoryAttestationReceiptOut[] }>> {
+  const receipts = await listAttestationsByMemories(
+    projectId,
+    rows.map((row) => row.id),
+  );
+  return rows.map((row) => ({
+    ...row,
+    attestations: receipts.get(row.id) ?? [],
+  }));
+}
 
 const createSchema = z.object({
   type: z.enum(["episodic", "semantic", "procedural", "working"]),
@@ -35,33 +70,116 @@ const createSchema = z.object({
   ttl_seconds: z.number().int().positive().max(31_536_000).optional(),
 });
 
+export interface MemoryWriteRouteDependencies {
+  reserve: typeof reserveCharge;
+  finalize: typeof finalizeChargeSuccess;
+  database: Pick<typeof db, "transaction">;
+}
+
+const defaultMemoryWriteDependencies: MemoryWriteRouteDependencies = {
+  reserve: reserveCharge,
+  finalize: finalizeChargeSuccess,
+  database: db,
+};
+
 // ── POST /v1/memories — store ───────────────────────────────────────────
-app.post("/", async (c) => {
-  const body = await c.req.json();
-  const parsed = createSchema.safeParse(body);
-  if (!parsed.success) {
-    return c.json(
-      {
-        error: "validation",
-        message: "The memory needs a small adjustment. Here's what to fix:",
-        details: parsed.error.flatten(),
-        hint: "embedding (if supplied) must be a 1536-dim float array.",
+export function createMemoryWriteHandler(
+  dependencies: MemoryWriteRouteDependencies = defaultMemoryWriteDependencies,
+) {
+  return async (c: Context<ProjectContext>) => {
+    const body = await c.req.json();
+    const parsed = createSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        {
+          error: "validation",
+          message: "The memory needs a small adjustment. Here's what to fix:",
+          details: parsed.error.flatten(),
+          hint: "embedding (if supplied) must be a 1536-dim float array.",
+        },
+        400,
+      );
+    }
+
+    try {
+      // Ownership/lifecycle refusal is validation, not metered work. Resolve it
+      // before reserving a credit so a 404 cannot be logged as a successful
+      // memory write or consume project balance.
+      await resolveMemoryIdentityBinding(
+        c.var.project.id,
+        parsed.data,
+      );
+    } catch (error) {
+      if (error instanceof MemoryIdentityBoundaryError) {
+        return fail(c, errors.memoryIdentityNotFoundOrNotOwned(), 404);
+      }
+      throw error;
+    }
+
+    const reservation = await dependencies.reserve(c, 1, "memory.write");
+    const startedAt = Date.now();
+
+    // Stamp the origin signal AFTER spreading caller metadata so the
+    // middleware-derived value wins — a caller can't spoof it via the body.
+    // Doctrine: docs/ACTIVITY.md §Origin signal.
+    const memoryData = {
+      ...parsed.data,
+      metadata: {
+        ...(parsed.data.metadata ?? {}),
+        client_source: c.var.clientSource,
       },
-      400,
+    };
+
+    let committed: {
+      created: Awaited<ReturnType<typeof write>>;
+      identityId: string | null;
+    };
+    try {
+      committed = await dependencies.database.transaction(async (tx) => {
+        // Re-resolve under a row lock after billing. This closes the
+        // validation/use race: a concurrent revoke/delete must complete before
+        // this check or wait until the insert + usage finalization commits.
+        const lockedBinding = await resolveMemoryIdentityBinding(
+          c.var.project.id,
+          parsed.data,
+          { database: tx, lockActiveIdentity: true },
+        );
+        const created = await write(c.var.project.id, memoryData, {
+          binding: lockedBinding,
+          database: tx,
+          publishWake: false,
+        });
+        // Memory insert and success marking commit or roll back together. The
+        // earlier bounded-attempt reservation intentionally remains charged and
+        // success=false if this transaction fails.
+        await dependencies.finalize(
+          reservation,
+          Math.max(0, Date.now() - startedAt),
+          tx,
+        );
+        return { created, identityId: lockedBinding.identityId };
+      });
+    } catch (error) {
+      if (error instanceof MemoryIdentityBoundaryError) {
+        return fail(c, errors.memoryIdentityChangedDuringWrite(), 409);
+      }
+      throw error;
+    }
+
+    // Emit only after both the memory and usage success row are durable.
+    publishMemoryWriteEvent(
+      committed.identityId,
+      committed.created.id,
+      memoryData,
     );
-  }
+    return c.json(
+      { ...committed.created, kept: true },
+      201,
+    );
+  };
+}
 
-  await charge(c, 1, "memory.write");
-
-  // Stamp the origin signal AFTER spreading caller metadata so the
-  // middleware-derived value wins — a caller can't spoof it via the body.
-  // Doctrine: docs/ACTIVITY.md §Origin signal.
-  const created = await write(c.var.project.id, {
-    ...parsed.data,
-    metadata: { ...(parsed.data.metadata ?? {}), client_source: c.var.clientSource },
-  });
-  return c.json({ ...created, kept: true }, 201);
-});
+app.post("/", createMemoryWriteHandler());
 
 // ── GET /v1/memories?key=... or just list recent ────────────────────────
 //
@@ -132,9 +250,14 @@ app.get("/", async (c) => {
 
   if (key) {
     const rows = applySinceFilter(await readByKey(project.id, key, agentId ?? null));
+    const memoriesWithReceipts = await attachAttestationReceipts(project.id, rows);
     return c.json(
       attachSurface(
-        { memories: rows, count: rows.length, ...deltaMeta(sinceParse) },
+        {
+          memories: memoriesWithReceipts,
+          count: memoriesWithReceipts.length,
+          ...deltaMeta(sinceParse),
+        },
         { canon_pointer: "urn:agenttool:doc/MEMORY-TIERS", verbs: memoryVerbs },
       ),
     );
@@ -149,9 +272,14 @@ app.get("/", async (c) => {
       limit: Number.isFinite(limit) ? limit : 20,
     }),
   );
+  const memoriesWithReceipts = await attachAttestationReceipts(project.id, rows);
   return c.json(
     attachSurface(
-      { memories: rows, count: rows.length, ...deltaMeta(sinceParse) },
+      {
+        memories: memoriesWithReceipts,
+        count: memoriesWithReceipts.length,
+        ...deltaMeta(sinceParse),
+      },
       { canon_pointer: "urn:agenttool:doc/MEMORY-TIERS", verbs: memoryVerbs },
     ),
   );
@@ -220,16 +348,40 @@ const patchSchema = z.object({
 
 app.patch("/:id", async (c) => {
   const memoryId = c.req.param("id");
-  const body = await c.req.json();
-  const parsed = patchSchema.safeParse(body);
+  let bound: Awaited<ReturnType<typeof readAuthorityBoundJson>>;
+  try {
+    bound = await readAuthorityBoundJson(c.req.raw);
+  } catch {
+    return fail(
+      c,
+      errors.refusal({
+        error: "body_must_be_json",
+        message: "Send one JSON object and sign those exact entity bytes.",
+        docs: "https://docs.agenttool.dev/AGENT-HOME.md",
+      }),
+      400,
+    );
+  }
+  const parsed = patchSchema.safeParse(bound.value);
   if (!parsed.success) {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
 
-  // Direct update (no service layer needed; visibility is a simple flag).
-  const { db } = await import("../../db/client");
-  const { memories } = await import("../../db/schema/memory");
-  const { and, eq } = await import("drizzle-orm");
+  const [existing] = await db
+    .select({ id: memories.id })
+    .from(memories)
+    .where(and(eq(memories.id, memoryId), eq(memories.projectId, c.var.project.id)))
+    .limit(1);
+  if (!existing) throw new HTTPException(404, { message: "memory_not_found" });
+
+  const authority = await authorizeProjectConstitutionMutation({
+    projectId: c.var.project.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes: bound.bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
 
   const updated = await db
     .update(memories)
@@ -247,15 +399,58 @@ app.patch("/:id", async (c) => {
   return c.json({
     ...updated[0],
     note: parsed.data.visibility === "public"
-      ? "Memory now visible at GET /public/memories/:id (no auth required). Embedding stays private."
+      ? "Memory visibility is marked public, but public memory observer routes are currently not mounted. The authenticated service can read content and embeddings. See /public/safety."
       : "Memory now private. Removed from /public/* surface.",
   });
 });
 
 // ── DELETE /v1/memories/:id ─────────────────────────────────────────────
 app.delete("/:id", async (c) => {
-  const result = await deleteById(c.var.project.id, c.req.param("id"));
-  return c.json(result);
+  let bodyBytes: Uint8Array;
+  try {
+    bodyBytes = await readEmptyAuthorityBody(c.req.raw);
+  } catch {
+    return fail(
+      c,
+      errors.refusal({
+        error: "delete_body_not_allowed",
+        message: "This DELETE operation does not accept an entity body.",
+        hint: "Sign and send the exact DELETE path with an empty body.",
+        docs: "https://docs.agenttool.dev/AGENT-HOME.md",
+      }),
+      400,
+    );
+  }
+  const [existing] = await db
+    .select({ id: memories.id })
+    .from(memories)
+    .where(
+      and(
+        eq(memories.id, c.req.param("id")),
+        eq(memories.projectId, c.var.project.id),
+      ),
+    )
+    .limit(1);
+  if (!existing) return c.json({ deleted: 0 });
+  const authority = await authorizeProjectConstitutionMutation({
+    projectId: c.var.project.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
+  try {
+    const result = await deleteById(c.var.project.id, c.req.param("id"));
+    return c.json(result);
+  } catch (error) {
+    if (error instanceof PaidMemoryReceiptProtectedError) {
+      throw new HTTPException(409, {
+        message: "paid_memory_receipt_preserved",
+      });
+    }
+    throw error;
+  }
 });
 
 // ── DELETE /v1/memories?key=... ─────────────────────────────────────────
@@ -266,8 +461,46 @@ app.delete("/", async (c) => {
       message: "DELETE /v1/memories requires ?key=... (use /v1/memories/:id for single delete)",
     });
   }
-  const result = await deleteByKey(c.var.project.id, key);
-  return c.json(result);
+  let bodyBytes: Uint8Array;
+  try {
+    bodyBytes = await readEmptyAuthorityBody(c.req.raw);
+  } catch {
+    return fail(
+      c,
+      errors.refusal({
+        error: "delete_body_not_allowed",
+        message: "This DELETE operation does not accept an entity body.",
+        hint: "Sign and send the exact DELETE path with an empty body.",
+        docs: "https://docs.agenttool.dev/AGENT-HOME.md",
+      }),
+      400,
+    );
+  }
+  const [existing] = await db
+    .select({ id: memories.id })
+    .from(memories)
+    .where(and(eq(memories.projectId, c.var.project.id), eq(memories.key, key)))
+    .limit(1);
+  if (!existing) return c.json({ deleted: 0 });
+  const authority = await authorizeProjectConstitutionMutation({
+    projectId: c.var.project.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
+  try {
+    const result = await deleteByKey(c.var.project.id, key);
+    return c.json(result);
+  } catch (error) {
+    if (error instanceof PaidMemoryReceiptProtectedError) {
+      throw new HTTPException(409, {
+        message: "paid_memory_receipt_preserved",
+      });
+    }
+    throw error;
+  }
 });
 
 export default app;

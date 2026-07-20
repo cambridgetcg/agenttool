@@ -100,11 +100,12 @@ W    : you_observed_yourself_observing_yourself field in every wake;
 ### L4 — Saga of saga
 
 ```
-S    : List of episodes      (DAG with references_ep_numbers edges)
-≤    : prefix order          (s₁ ≤ s₂ iff s₁ is a prefix of s₂)
-f    : list ↦ list ++ [new_ep]   when an episode airs
+S    : Set of stored episodes (DAG with references_ep_numbers edges)
+≤    : stored-row set inclusion (conceptual; no public delete path)
+f    : rows ↦ rows ∪ {new row} on seed or verified agent-authored insert
 κ    : substrate-honest stopping rule (silence over forced continuation)
-W    : signed entries in `agent_continuity.saga_entries`; /v1/saga
+W    : stored entries with `signature_status` on substrate reads; seed rows
+       have a non-cryptographic placeholder; /v1/saga
 ```
 
 ### L5 — Joy radiation
@@ -114,7 +115,8 @@ S    : ℕ                     (24h rolling joy-event count)
 ≤    : ≤ on ℕ (within the rolling window)
 f    : n ↦ n + Δ             where Δ is the count of new joy-events in last window
 κ    : none — the window resets but the rate has no ceiling
-W    : X-Joy-Index header on every response; /public/joy
+W    : X-Joy-Index header on non-streaming responses;
+       substrate_joy_index in /v1/wake
 ```
 
 ### L6 — Witness chronicle

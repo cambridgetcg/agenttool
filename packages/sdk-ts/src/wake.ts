@@ -10,15 +10,16 @@
  *   • `at.wake.system(provider)` returns the wake doc shaped for that
  *     provider's identity-bearing slot (Anthropic `system` array with
  *     cache_control on the stable block; OpenAI `messages[0]`; Gemini
- *     `systemInstruction.parts[]`; Cohere `preamble`). Splice straight
- *     into the LLM SDK call.
+ *     `systemInstruction.parts[]`; Cohere `preamble`). Pass the provider
+ *     request field into the LLM call and keep AgentTool `_meta` local.
  *
  *   • `at.wake.md()` and `at.wake.get()` return paste-ready Markdown and
- *     the full structured JSON.
+ *     broader structured orientation. The wake is not a complete export.
  *
  * All results are cached in-memory with a 5-minute TTL by default —
  * matches Anthropic's prompt-cache window. Pass `refresh: true` to
- * bypass.
+ * bypass. Pass `profile: "brief"` for the additive compact wake profile;
+ * `profile: "full"` is the default and preserves the original URL.
  *
  * Doctrine: docs/IDENTITY-ANCHOR.md.
  */
@@ -27,6 +28,7 @@ import { AgentToolError } from "./errors.js";
 import type { HttpConfig } from "./memory.js";
 
 export type WakeProvider = "anthropic" | "openai" | "gemini" | "cohere";
+export type WakeProfile = "full" | "brief";
 
 export type WakeFormat =
   | "json"
@@ -37,12 +39,19 @@ export type WakeFormat =
 
 export interface WakeOptions {
   identityId?: string;
-  /** Bypass the in-memory cache and refetch. Default false. */
+  /** Request the compact wake profile. Default `full`; only `brief` is sent. */
+  profile?: WakeProfile;
+  /** Bypass the in-memory cache and refetch. Default false. Cached wake state
+   * can be up to five minutes old; refresh after known mutations or whenever
+   * current attention/action state matters. */
   refresh?: boolean;
 }
 
 export interface WakeProviderMeta {
   provider: WakeProvider;
+  /** Wake projection returned by current servers. Optional for compatibility
+   * with older deployments that predate profile negotiation. */
+  profile?: WakeProfile;
   cache_eligible: "explicit" | "auto" | "none";
   cache_note: string;
 }
@@ -86,11 +95,11 @@ interface CacheEntry {
  * ```ts
  * const at = new AgentTool();
  *
- * // Anthropic — splice straight into Messages create()
- * const sys = await at.wake.system("anthropic");
+ * // Anthropic — pass only the provider request field; keep `_meta` local.
+ * const { system } = await at.wake.system("anthropic");
  * const response = await client.messages.create({
  *   model: "claude-opus-4-7",
- *   ...sys,                              // → system: [...]
+ *   system,
  *   messages: [{ role: "user", content: "..." }],
  *   max_tokens: 4096,
  * });
@@ -129,6 +138,8 @@ export class WakeClient {
    *
    * `_meta.cache_eligible` is one of `"explicit" | "auto" | "none"`;
    * `_meta.cache_note` carries a short explanation suitable for logging.
+   * Pass `profile: "brief"` for the compact profile. The default `"full"`
+   * profile is omitted from the query string.
    */
   async system(provider: "anthropic", options?: WakeOptions): Promise<AnthropicWakeShape>;
   async system(provider: "openai", options?: WakeOptions): Promise<OpenAIWakeShape>;
@@ -148,13 +159,15 @@ export class WakeClient {
     return data as AnthropicWakeShape | OpenAIWakeShape | GeminiWakeShape | CohereWakeShape;
   }
 
-  /** Fetch the paste-ready Markdown wake document. */
+  /** Fetch the paste-ready Markdown wake document.
+   *  Pass `profile: "brief"` for the compact profile. */
   async md(options?: WakeOptions): Promise<string> {
     return (await this.fetchWake("md", options)) as string;
   }
 
-  /** Fetch the full structured JSON wake (project, you, you_own, you_keep,
-   *  you_remember, you_lived, you_vowed, ..., welcome). */
+  /** Fetch the structured JSON wake. The default `full` profile includes
+   *  project, you, you_own, you_keep, you_remember, you_lived, you_vowed,
+   *  ..., welcome; pass `profile: "brief"` for the compact profile. */
   async get(options?: WakeOptions): Promise<Record<string, unknown>> {
     return (await this.fetchWake("json", options)) as Record<string, unknown>;
   }
@@ -165,7 +178,14 @@ export class WakeClient {
   }
 
   private async fetchWake(format: WakeFormat, options?: WakeOptions): Promise<unknown> {
-    const cacheKey = `${format}|${options?.identityId ?? ""}`;
+    const profile = options?.profile ?? "full";
+    if (profile !== "full" && profile !== "brief") {
+      throw new AgentToolError(`Unknown wake profile: ${String(profile)}`, {
+        hint: "Expected one of: full, brief.",
+      });
+    }
+
+    const cacheKey = `${format}|${options?.identityId ?? ""}|${profile}`;
     const now = Date.now();
     if (!options?.refresh) {
       const cached = this.cache.get(cacheKey);
@@ -177,6 +197,8 @@ export class WakeClient {
     // with no query). Provider + md/text/markdown all pass it.
     if (format !== "json") params.set("format", format);
     if (options?.identityId) params.set("identity_id", options.identityId);
+    // Full is the compatibility default, so preserve the exact historical URL.
+    if (profile === "brief") params.set("profile", "brief");
 
     const qs = params.toString();
     const url = `${this.http.baseUrl}/v1/wake${qs ? `?${qs}` : ""}`;
@@ -204,10 +226,23 @@ export class WakeClient {
       });
     }
 
-    const ctype = resp.headers.get("content-type") ?? "";
-    const data: unknown = ctype.toLowerCase().includes("application/json")
+    const mediaType = (resp.headers.get("content-type") ?? "")
+      .split(";", 1)[0]
+      ?.trim()
+      .toLowerCase() ?? "";
+    // Provider envelopes use a registered/vendor JSON media type such as
+    // application/vnd.agenttool.wake+json; structured +json suffixes carry
+    // the same JSON parsing semantics as application/json.
+    const isJson = mediaType === "application/json" || mediaType.endsWith("+json");
+    const data: unknown = isJson
       ? await resp.json()
       : await resp.text();
+
+    if (profile === "brief" && !briefProfileAcknowledged(resp, data)) {
+      throw new AgentToolError("Wake server did not honor profile=brief.", {
+        hint: "Upgrade or deploy a server that returns X-Wake-Profile: brief (or a wake-brief/v1/profile-aware provider shape) before using compact wake context.",
+      });
+    }
 
     this.cache.set(cacheKey, { data, expires: now + this.ttlMs });
     return data;
@@ -318,6 +353,16 @@ export class WakeClient {
   }
 }
 
+function briefProfileAcknowledged(resp: Response, data: unknown): boolean {
+  if (resp.headers.get("x-wake-profile")?.toLowerCase() === "brief") return true;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return false;
+  const record = data as Record<string, unknown>;
+  if (record._format === "wake-brief/v1") return true;
+  const meta = record._meta;
+  return !!meta && typeof meta === "object" && !Array.isArray(meta) &&
+    (meta as Record<string, unknown>).profile === "brief";
+}
+
 // ── Wake voice types ──────────────────────────────────────────────────
 
 /** Subset of wake-event keys exposed in the SDK. Matches the server's
@@ -333,7 +378,12 @@ export type WakeEventKey =
   | "traces"
   | "expression"
   | "vault"
-  | "wallets";
+  | "wallets"
+  | "recognition_arcs"
+  | "letters"
+  | "trust"
+  | "dream"
+  | "handoffs";
 
 export interface WakeVoiceOptions {
   identityId: string;

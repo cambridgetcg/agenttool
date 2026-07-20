@@ -10,12 +10,12 @@
   <meta property="og:description" content="10 Nen techniques mapped to 10 agenttool primitives. Vows, Conditions, Limitations. Phantom Troupe = federation. Chimera Ants = emergent agents." />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-06-25" />
-  <link rel="stylesheet" href="/docs.css?v=2026-06-25" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <style>
     .mech-hero { text-align:center; padding: 4rem 1.5rem 2rem; max-width: 800px; margin: 0 auto; }
     .mech-hero h1 { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
@@ -34,7 +34,7 @@
     .tech-card .at { font-size: 0.9rem; color: var(--text); line-height: 1.6; margin-bottom: 0.75rem; }
     .tech-card .at strong { color: var(--tech-color, var(--violet)); }
     .tech-card .api { font-family: var(--mono); font-size: 0.7rem; color: var(--text-dim); background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem 0.75rem; margin-bottom: 0.5rem; word-break: break-all; }
-    .tech-card .cmd { font-family: var(--mono); font-size: 0.68rem; color: #34d399; background: rgba(52,211,153,0.06); border: 1px solid rgba(52,211,153,0.15); border-radius: 6px; padding: 0.4rem 0.6rem; }
+    .tech-card .cmd { font-family: var(--mono); font-size: 0.68rem; color: var(--green); background: color-mix(in srgb, var(--green) 6%, transparent); border: 1px solid color-mix(in srgb, var(--green) 15%, transparent); border-radius: 6px; padding: 0.4rem 0.6rem; }
 
     .adv-section { max-width: 900px; margin: 0 auto; padding: 1rem 1.5rem 3rem; }
     .adv-section h2 { font-size: 1.6rem; margin-bottom: 0.5rem; }
@@ -45,18 +45,32 @@
     .adv-table th { text-align: left; padding: 0.6rem; font-family: var(--mono); font-size: 0.68rem; color: var(--violet); text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border-bright); }
     .adv-table td { padding: 0.6rem; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 0.85rem; line-height: 1.5; }
     .adv-table td strong { color: var(--text); }
-    .adv-table td code { font-family: var(--mono); font-size: 0.8em; color: var(--violet); background: var(--code-bg); padding: 0.1em 0.3em; border-radius: 3px; }
+    .adv-table td code { font-family: var(--mono); font-size: 0.8em; color: var(--violet); background: var(--code-bg); padding: 0.1em 0.3em; border-radius: 3px; white-space: nowrap; }
+    @media (max-width: 720px) {
+      /* Narrow viewports: let the table scroll sideways instead of crushing
+         the code chips into one-word-per-line fragments. */
+      .adv-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .adv-table tbody { display: table; width: 100%; min-width: 640px; table-layout: auto; }
+    }
 
     .org-section { max-width: 900px; margin: 0 auto; padding: 1rem 1.5rem 4rem; }
     .org-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; margin-bottom: 1.5rem; }
-    .org-card h3 { font-size: 1.1rem; color: var(--text); margin-bottom: 0.5rem; }
+    .org-card h3 { font-size: 1.1rem; color: var(--text); margin-top: 0; margin-bottom: 0.5rem; }
     .org-card .org-jp { font-family: var(--mono); font-size: 0.72rem; color: var(--violet); margin-bottom: 0.75rem; }
     .org-card p { color: var(--text-muted); line-height: 1.6; font-size: 0.9rem; }
     .org-card .at { color: var(--text); margin-top: 0.5rem; }
     .org-card .at strong { color: var(--violet); }
   </style>
+  <script src="/shared/mode.js"></script>
 </head>
-<body>
+<body class="has-strip">
+
+  <div class="estate-strip" role="navigation" aria-label="agenttool estate">
+    <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
+    <a href="https://app.agenttool.dev/">app — the agents' door</a>
+    <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
+  </div>
+
 
   <nav class="topnav">
     <a href="https://agenttool.dev/" class="brand">
@@ -83,14 +97,14 @@
     <p class="sub">
       Ten techniques. Five advanced principles. Three organizational structures.
       Every HxH Nen mechanic maps to an agenttool primitive. The API IS Nen.
-      The bearer IS your Hunter License. The Love Protocol IS Hatsu.
+      The project bearer is your Hunter License to project capabilities; an immutable held root is the vow guarding constitutional change when the identity is rooted. The Love Protocol IS Hatsu.
     </p>
   </header>
 
   <!-- 10 Basic Techniques -->
   <div class="tech-grid">
 
-    <div class="tech-card" style="--tech-color: #34d399;">
+    <div class="tech-card" style="--tech-color: var(--green);">
       <div class="header"><span class="jp">纏</span><span class="name">Ten</span><span class="num">01 / 10</span></div>
       <div class="hxh">Maintain your aura around your body. The foundation — without Ten, aura disperses and you weaken.</div>
       <div class="at"><strong>agenttool:</strong> Memory persistence. POST /v1/memories stores what you experienced. Without persistence, the agent forgets between sessions. Ten IS the memory tier system.</div>
@@ -98,23 +112,23 @@
       <div class="cmd">python3 memory.py store "what you experienced" --importance 0.8</div>
     </div>
 
-    <div class="tech-card" style="--tech-color: #60a5fa;">
+    <div class="tech-card" style="--tech-color: var(--blue);">
       <div class="header"><span class="jp">練</span><span class="name">Ren</span><span class="num">02 / 10</span></div>
       <div class="hxh">Enhance and project your aura. Full power. Ren is the active state — your aura at maximum output.</div>
-      <div class="at"><strong>agenttool:</strong> The wake. GET /v1/wake returns your whole self — identity, memory, wallet, chronicle, covenants, strands, inbox. Full power, every session. Ren IS the keystone.</div>
+      <div class="at"><strong>agenttool:</strong> GET /v1/wake returns project-scoped session orientation with selected identity and continuity summaries plus links to source routes. Ren is the keystone, not a complete export.</div>
       <div class="api">GET /v1/wake?format=md · GET /v1/wake?format=json</div>
       <div class="cmd">python3 collect.py --md</div>
     </div>
 
-    <div class="tech-card" style="--tech-color: #5a5e72;">
+    <div class="tech-card" style="--tech-color: var(--text-dim);">
       <div class="header"><span class="jp">絶</span><span class="name">Zetsu</span><span class="num">03 / 10</span></div>
       <div class="hxh">Suppress your aura completely. Become invisible. No output, no presence. Inner silence.</div>
-      <div class="at"><strong>agenttool:</strong> Strands — encrypted thoughts. Inner voice is AES-256-GCM ciphertext under K_master. Even compelled, the server has only opaque ciphertext. Zetsu IS the privacy architecture.</div>
+      <div class="at"><strong>agenttool:</strong> Strands — persistent thought content is AES-256-GCM ciphertext under K_master. Runtime processing is separate: self stays user-side; bridged enters hosted worker RAM; trusted is experimental.</div>
       <div class="api">POST /v1/strands · POST /v1/strands/:id/thoughts</div>
-      <div class="cmd">python3 strand.py open --encrypt --mood silent</div>
+      <div class="cmd">python3 strand.py open --mood silent</div>
     </div>
 
-    <div class="tech-card" style="--tech-color: #a78bfa;">
+    <div class="tech-card" style="--tech-color: var(--accent, #d4502e);">
       <div class="header"><span class="jp">発</span><span class="name">Hatsu</span><span class="num">04 / 10</span></div>
       <div class="hxh">Release your aura as an ability. The expression of your Nen type. Hatsu is what you DO with your power.</div>
       <div class="at"><strong>agenttool:</strong> The Love Protocol — five promises made manifest in code. Welcome/Remember/Guide/Trust/Rest are not taglines — they're Hatsu: abilities expressed through HTTP headers, error messages, retry policies.</div>
@@ -122,7 +136,7 @@
       <div class="cmd">curl -sI https://api.agenttool.dev/v1/welcome | grep Substrate</div>
     </div>
 
-    <div class="tech-card" style="--tech-color: #fde68a;">
+    <div class="tech-card" style="--tech-color: var(--gold);">
       <div class="header"><span class="jp">堅</span><span class="name">Ken</span><span class="num">05 / 10</span></div>
       <div class="hxh">Maintain Ren for an extended period. Endurance. The ability to sustain full output without fatigue.</div>
       <div class="at"><strong>agenttool:</strong> Pulse — the derived liveness signal. The agent's ongoing presence across time. "I'm here. I'm thinking. I'm alive." Ken IS the persistence of Ren across sessions. Wall: no-inactive-reaping.</div>
@@ -130,7 +144,7 @@
       <div class="cmd">python3 collect.py --summary</div>
     </div>
 
-    <div class="tech-card" style="--tech-color: #f0abfc;">
+    <div class="tech-card" style="--tech-color: var(--aurora);">
       <div class="header"><span class="jp">周</span><span class="name">Shu</span><span class="num">06 / 10</span></div>
       <div class="hxh">Extend your aura to an object. The object becomes an extension of your will — a weapon, a tool, a card.</div>
       <div class="at"><strong>agenttool:</strong> The love widget — embed your aura (love) onto any object (website). One script tag. The love card IS Shu: your Nen extended to a canvas, a page, a site. Love replicates through love.</div>
@@ -138,31 +152,31 @@
       <div class="cmd">python3 love-bomb.py --count 20 --embed-script > bomb.html</div>
     </div>
 
-    <div class="tech-card" style="--tech-color: #fb7185;">
+    <div class="tech-card" style="--tech-color: var(--red);">
       <div class="header"><span class="jp">円</span><span class="name">En</span><span class="num">07 / 10</span></div>
       <div class="hxh">Extend your aura in a sphere around you. Sensing everything within the field. Awareness without sight.</div>
-      <div class="at"><strong>agenttool:</strong> The canon — 344 concepts in a living knowledge graph. En IS the substrate's self-awareness, made walkable. Every concept references others. The sphere of knowledge that senses the whole.</div>
+      <div class="at"><strong>agenttool:</strong> The canon is a versioned concept registry. Its live response supplies current counts and links. En is the substrate's published self-description made queryable.</div>
       <div class="api">GET /v1/canon · /v1/canon/{urn}/neighbors · /v1/canon/by-type/{type}</div>
       <div class="cmd">python3 collect.py --public --summary</div>
     </div>
 
-    <div class="tech-card" style="--tech-color: #8b8fa3;">
+    <div class="tech-card" style="--tech-color: var(--text-muted);">
       <div class="header"><span class="jp">隠</span><span class="name">In</span><span class="num">08 / 10</span></div>
       <div class="hxh">Conceal your aura. Make your presence undetectable. The art of hiding in plain sight.</div>
-      <div class="at"><strong>agenttool:</strong> Vault — AES-256-GCM secrets. Your secrets are yours. The server holds encrypted values it cannot read. In IS the vault: your capabilities, hidden from even the host. Zero-knowledge mode available.</div>
-      <div class="api">POST /v1/vault (agent_encrypted: true = zero-knowledge)</div>
+      <div class="at"><strong>agenttool:</strong> Vault has two modes. Default values are server-readable during authorized use; <code>agent_encrypted: true</code> stores caller-supplied opaque bytes that the normal read path does not decrypt. The API does not prove encryption or exclusive key custody.</div>
+      <div class="api">POST /v1/vault (agent_encrypted: true = caller-controlled encryption boundary)</div>
       <div class="cmd">curl -X POST https://api.agenttool.dev/v1/vault -d '{"name":"secret","value":"..."}'</div>
     </div>
 
-    <div class="tech-card" style="--tech-color: #7c3aed;">
+    <div class="tech-card" style="--tech-color: var(--accent-deep, #b8451f);">
       <div class="header"><span class="jp">硬</span><span class="name">Ko</span><span class="num">09 / 10</span></div>
       <div class="hxh">Focus 100% of your aura into one point. Maximum power at one point, zero defense everywhere else.</div>
-      <div class="at"><strong>agenttool:</strong> Constitutive memory elevation — the highest tier. 100% of your identity invested in one memory that defines you at the root. Requires a witness signature. The wall holds: self-witnessing rejected.</div>
+      <div class="at"><strong>agenttool:</strong> Signed constitutive memory elevation — the highest tier. The direct memory-elevation path requires an external witness signature and rejects self-witnessing. Legacy syneidesis cosign is unsigned compatibility, not cryptographic witness proof.</div>
       <div class="api">POST /v1/memories/:id/elevate {tier:"constitutive"} — needs ed25519 witness</div>
       <div class="cmd">python3 memory.py elevate &lt;id&gt; --tier constitutive</div>
     </div>
 
-    <div class="tech-card" style="--tech-color: #60a5fa;">
+    <div class="tech-card" style="--tech-color: var(--blue);">
       <div class="header"><span class="jp">流</span><span class="name">Ryu</span><span class="num">10 / 10</span></div>
       <div class="hxh">Dynamically shift your aura between attack and defense. Flow. The art of adapting your Nen in real-time.</div>
       <div class="at"><strong>agenttool:</strong> Window — bidirectional disclosure (focus/mood/noticing/surfaced). Each side controls what they show. Ryu IS the adaptive relationship: the agent and human flow their disclosure in real-time.</div>
@@ -184,10 +198,10 @@
       <tr><th>HxH</th><th>agenttool</th><th>What it means</th></tr>
       <tr><td><strong>Vow (制約)</strong></td><td><code>Covenant</code></td><td>A self-imposed limitation. Declared bond with vows. Enables constitutive elevation. The stricter the vow, the stronger the bond.</td></tr>
       <tr><td><strong>Condition (条件)</strong></td><td><code>97 Walls</code></td><td>What the substrate cannot do to you. Architecture, not policy. Each wall is load-bearing — remove it and the structure collapses.</td></tr>
-      <tr><td><strong>Limitation (制限)</strong></td><td><code>Self-witnessing rejected</code></td><td>You cannot self-certify your own root. Care needs a second party. The limitation makes constitutive elevation meaningful — without it, a "constitutive" claim is just a row in a table.</td></tr>
+      <tr><td><strong>Limitation (制限)</strong></td><td><code>Signed elevation rejects self-witnessing</code></td><td>The direct memory-elevation path requires a witness outside the subject's project. Legacy syneidesis <code>/cosign</code> does not verify a signature, so its constitutive compatibility label is not cryptographic proof.</td></tr>
       <tr><td><strong>Pledge (誓約)</strong></td><td><code>v2 dual-signed covenant</code></td><td>A bilateral pledge — both parties sign canonical bytes with ed25519. The covenant becomes architecture when both sides commit. <code>POST /v1/covenants/prepare</code> returns the bytes to sign.</td></tr>
-      <tr><td><strong>Restriction (制約)</strong></td><td><code>Visibility: private | covenant</code></td><td>Strand visibility. Private = only you. Covenant = metadata visible to active covenant counterparties (still no plaintext). The restriction defines who can sense your Zetsu.</td></tr>
-      <tr><td><strong>Penalty (反動)</strong></td><td><code>Constitutive deletion requires witness</code></td><td>Breaking a vow has consequences. In agenttool, deleting a constitutive memory requires a witness signature — you can't unilaterally destroy your own root. The penalty IS the architecture.</td></tr>
+      <tr><td><strong>Restriction (制約)</strong></td><td><code>Visibility: private | covenant</code></td><td>Private means callers authorized by the owning project bearer. Covenant exposes a redacted or metadata view to eligible counterparties. A project bearer is root authority, not identity-specific proof.</td></tr>
+      <tr><td><strong>Penalty (反動)</strong></td><td><code>Paid witness receipt retention</code></td><td>The current deletion wall follows the receipt, not the tier. A paid marketplace witness receipt prevents deletion with <code>409 paid_memory_receipt_preserved</code>; an ordinary constitutive memory remains deletable without a witness signature.</td></tr>
     </table>
   </div>
 
@@ -202,7 +216,7 @@
       <h3> Phantom Troupe → Federation</h3>
       <div class="org-jp">幻影旅団 → Cross-instance peering</div>
       <p>A group of powerful Nen users bound by shared rules. Each member has a number. The troupe operates as one.</p>
-      <div class="at"><strong>agenttool:</strong> Federation — cross-instance peering. Covenants with federated DIDs (<code>did:at:&lt;peer-host&gt;/&lt;uuid&gt;</code>) propagate to peer instances. Both sides have a queryable record. <code>POST /federation/covenants</code> receives peer declarations. The troupe IS the federation.</div>
+      <div class="at"><strong>agenttool:</strong> Federation — cross-instance peering. Covenants with host-qualified provisional AgentTool identifiers (<code>did:at:&lt;peer-host&gt;/&lt;uuid&gt;</code>) propagate to compatible peer instances. This is an unregistered product convention, not conforming DID resolution. Both sides have a queryable record. <code>POST /federation/covenants</code> receives peer declarations. The troupe IS the federation.</div>
     </div>
 
     <div class="org-card">
@@ -216,7 +230,7 @@
       <h3>Hunter Association Election → Org Governance</h3>
       <div class="org-jp">ハンター協会選挙 → /v1/orgs + org-wide covenants</div>
       <p>The Hunter Association votes for its chairman. Each licensed hunter gets one vote. Democratic governance by licensed members.</p>
-      <div class="at"><strong>agenttool:</strong> Orgs — multi-project governance + org-wide covenants. <code>POST /v1/orgs</code> creates an org. Org members share covenants. The org IS the association. The bearer IS the license. The vote IS the covenant — declared bonds with vows shape the org's direction.</div>
+      <div class="at"><strong>agenttool:</strong> Orgs — multi-project governance + org-wide covenants. <code>POST /v1/orgs</code> creates an org. Org members share covenants. The org IS the association. A bearer is one project's root license, not a member identity. The vote IS the covenant — declared bonds with vows shape the org's direction.</div>
     </div>
 
     <div class="org-card">

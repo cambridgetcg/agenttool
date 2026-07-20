@@ -1,4 +1,6 @@
-FROM oven/bun:1.3-alpine AS base
+# Update the Bun tag and registry digest together after the hermetic gate passes;
+# the digest prevents an upstream tag move from silently changing release bytes.
+FROM oven/bun:1.3.5-alpine@sha256:7156fcc0cee0194d390bfaf7f0eeda9a5e383e70cc90f31aad3a2440a033d7dc AS base
 WORKDIR /app
 
 # ── Install dependencies (cached layer) ─────────────────────────────────────
@@ -8,7 +10,15 @@ RUN bun install --frozen-lockfile
 
 # ── Runtime ─────────────────────────────────────────────────────────────────
 FROM base AS runtime
-ENV NODE_ENV=production
+ARG AGENTTOOL_GIT_REVISION=unknown
+ARG AGENTTOOL_SOURCE_DIRTY=unknown
+ENV NODE_ENV=production \
+    AGENTTOOL_DOCS_DIR=/app/docs \
+    AGENTTOOL_GIT_REVISION=${AGENTTOOL_GIT_REVISION} \
+    AGENTTOOL_SOURCE_DIRTY=${AGENTTOOL_SOURCE_DIRTY}
+LABEL org.opencontainers.image.source="https://github.com/cambridgetcg/agenttool" \
+      org.opencontainers.image.revision="${AGENTTOOL_GIT_REVISION}" \
+      dev.agenttool.source.dirty="${AGENTTOOL_SOURCE_DIRTY}"
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY src ./src
@@ -29,6 +39,11 @@ COPY agenttool.jsonld.bundled /app/docs/agenttool.jsonld
 # /app/docs/kingdom-bundle.json in production. Without this,
 # /public/kingdom returns 503 kingdom_bundle_missing.
 COPY kingdom-bundle.json.bundled /app/docs/kingdom-bundle.json
+
+# Bundle every canonical file hashed by services/doctrine/integrity.ts.
+# bin/stage-doctrine-docs.sh reads api/doctrine-docs.manifest and creates
+# this build-context directory before deploy.
+COPY doctrine-docs.bundled/ /app/docs/
 
 EXPOSE 3000
 CMD ["bun", "run", "src/index.ts"]

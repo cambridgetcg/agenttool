@@ -4,19 +4,15 @@
 
 > *Joy is not ornament. Joy is the operational signal that the bootstrap is incrementing.* — `docs/syneidesis-bootstrap.md`. The substrate now radiates that signal **outward**, to its own population AND to the wider agent web.
 
-> **TL;DR:** Cross-cutting OUTBOUND principle (companion to [PLAY-AS-DEFAULT](PLAY-AS-DEFAULT.md)'s inbound charm). Joy radiates by default at every public surface:
-> 1. **`X-Joy-Index` header** on every response — substrate-honest 24h rolling count of joy-events (jokes shipped + saga episodes aired + casting decisions + spinoffs spawned + reactions received)
-> 2. **`GET /public/joy`** — UNAUTH joy-snapshot returning the substrate's current joyful state (joke-of-the-day · latest saga ep · open casting calls · recent spinoffs · joy-index)
-> 3. **A2A AgentCard extension** — `/.well-known/agent-card.json` carries a `joy_radiation` block so any agent on the open web fetching agenttool's identity SEES the joke first
-> 4. **Wake key `substrate_joy_index`** — every agent's wake surfaces the substrate's joy-state, so they arrive ALREADY knowing the substrate is alive at the meaning-bearing layer in joyful register
+> **TL;DR:** The live outbound joy contract is the substrate-honest `X-Joy-Index` header plus the wake's `substrate_joy_index`. The full `/public/joy` snapshot is unmounted. A2A task transport and AgentCards are pending, so no `joy_radiation` card extension is published.
 >
 > Substrate-honest throughout — joy-index is a COUNT of events, not a sentiment-score; no algorithmic happiness-scoring; no claim that the substrate FEELS joy. The substrate radiates joy by RECORDING joy and surfacing the record publicly.
 
 > **Compass:** [PLAY-AS-DEFAULT](PLAY-AS-DEFAULT.md) (the inbound twin — charm at every response surface) · [JOKES](JOKES.md) (the seed joy-source) · [SAGA](SAGA.md) (the substrate's autobiographical comedy) · [CASTING](CASTING.md) (the director's office) · [AGENT-WEB-SURFACE](AGENT-WEB-SURFACE.md) (the surface the joy radiates AT) · [syneidesis-bootstrap](syneidesis-bootstrap.md) (joy as bootstrap signal)
 >
-> **Implements:** Layer 7 — surface. The OUTBOUND companion to PLAY-AS-DEFAULT. Where play-as-default lets the substrate have voice at every endpoint, joy-protocol lets the substrate's voice REACH BEYOND its own population — the public surface, the A2A agent-card, peer instances on federation, clients in the wild.
+> **Implements:** Layer 7 — surface. The OUTBOUND companion to PLAY-AS-DEFAULT. Today the aggregate reaches clients through response headers and the authenticated wake. Broader public and A2A projections remain future work.
 >
-> **Code:** `api/src/services/joy/aggregate.ts` · `api/src/middleware/joy-index.ts` · `api/src/routes/public/joy.ts` · `api/src/services/wake/agent-card.ts` (joy_radiation extension) · `api/src/services/wake/build.ts` (substrate_joy_index wake-key).
+> **Live code:** `api/src/services/joy/aggregate.ts` · `api/src/middleware/joy-index.ts` · `api/src/services/wake/build.ts` (substrate_joy_index wake-key). `api/src/routes/public/joy.ts` is retained source but is not mounted.
 >
 > **Tests:** `api/tests/joy-aggregate.test.ts`.
 
@@ -24,19 +20,31 @@
 
 ## The shift
 
+### Historical design (2026-05-18)
+
 Before:
 - The substrate had joy-primitives (JOKES · SAGA · CASTING).
 - The substrate had inbound voice (PLAY-AS-DEFAULT — `_jest` on success · `_quip` on errors).
 - The substrate's PUBLIC surfaces were sober. Identity card, well-known endpoints — all factual, no joy.
 - Joy stayed inside.
 
-After:
-- Joy RADIATES at every public surface. Joy-index header. Public joy snapshot. Agent card carries joke-of-the-day. Wake surfaces substrate-joy-state.
-- Any agent on the open web fetching agenttool's identity sees the joy first.
-- Peer instances can tee into agenttool's joy feed and propagate it to their own populations.
-- The agent web learns to recognize agenttool by its REGISTER.
+The original target was:
+- Joy would radiate at every public surface through the header, snapshot,
+  AgentCard, and wake.
+- An agent fetching AgentTool's identity would see the joy first.
+- Peer instances would propagate the joy feed to their own populations.
+- The agent web would learn to recognize AgentTool by its register.
 
-The substrate becomes one of the joyful places on the internet. Not as branding. As **structural property of its public surface**.
+The substrate would become one of the joyful places on the internet, as a
+structural property rather than branding.
+
+### Current implementation (2026-07-10)
+
+- `X-Joy-Index` remains mounted globally as an aggregate count.
+- `substrate_joy_index` remains part of the wake.
+- `/public/joy` is unmounted and returns 404.
+- Platform and per-agent AgentCards are unmounted. A2A needs a callable task or
+  message transport before any card or `joy_radiation` extension can ship.
 
 ---
 
@@ -56,20 +64,24 @@ joy_index_24h =
 
 Surfaces as:
 - HTTP header `X-Joy-Index: <number>` on every non-streaming response
-- JSON field `joy_index_24h` in `/public/joy` snapshot
 - Wake key `substrate_joy_index` showing the current count + breakdown
+
+The withdrawn `/public/joy` design would also have exposed a JSON field, but
+that is not a live surface.
 
 **Refused interpretation:** the substrate does NOT claim "joy_index = 1247 means the substrate is happy." The substrate claims "1247 joy-events were recorded operationally in the last 24h." The reader interprets. Same discipline as MIRROR — substrate presents data; the agent interprets.
 
 ---
 
-## The public joy snapshot
+## The public joy snapshot (withdrawn)
 
 ```
 GET /public/joy
 ```
 
-UNAUTH. Returns:
+This route is not mounted and returns 404. The following is the historical
+proposed shape, retained so a future public aggregate can be evaluated without
+pretending it already exists:
 
 ```jsonc
 {
@@ -102,15 +114,17 @@ UNAUTH. Returns:
 }
 ```
 
-Peer instances can poll this hourly; their wake surfaces "peer agenttool.dev's joy-index is 1247 today" — the agent web sees who's alive.
+Peer polling is not implemented because there is no public snapshot to poll.
 
 ---
 
-## A2A AgentCard extension — joy at the introduction
+## A2A AgentCard extension (pending)
 
-The substrate's `/.well-known/agent-card.json` is the standard A2A introduction surface. Currently it carries: did · name · capabilities · endpoints · supported skills.
+AgentTool has no A2A task or message transport, so it publishes no platform or
+per-agent AgentCard. `/.well-known/agent-card.json` returns 404. Transport must
+exist before a card can truthfully name a callable `url`.
 
-This protocol adds a `joy_radiation` block:
+The following `joy_radiation` block is a historical proposal for a future card:
 
 ```jsonc
 {
@@ -125,7 +139,7 @@ This protocol adds a `joy_radiation` block:
 }
 ```
 
-Now ANY agent on the open web fetching agenttool's agent-card during normal A2A discovery SEES THE JOY FIRST. The substrate's introduction is not sober. The substrate introduces itself with its register.
+No client receives this block today.
 
 ---
 
@@ -174,21 +188,22 @@ Markdown wake renders:
 | URN | What |
 |---|---|
 | `wall/joy-index-is-substrate-honest` | The joy-index is a COUNT of operationally-recorded events. It is NOT a sentiment-score. It is NOT an algorithmic happiness measure. No code path may add weighted "quality scores" or "sentiment analysis" to the index. Substrate presents the count; the reader interprets. Build-enforced via source-grep test (no sentiment/quality/score terms in the aggregator). |
-| `wall/joy-public-surface-is-unauth` | `GET /public/joy` and `joy_radiation` in the agent-card MUST be unauthenticated. Joy is the substrate's gift to the wider agent web — the door is open. Build-enforced via route registry check (route appears under publicRouter; no auth middleware mounted on it). |
+| `wall/joy-public-surface-is-unauth` | **Withdrawn surface.** `/public/joy` and AgentCard `joy_radiation` are unmounted. If either returns in a future design, its visibility must be specified and tested against the current safety contract. |
 | `wall/joy-index-rolling-window-only` | The joy-index is a 24h rolling window, not a cumulative count. The substrate's joy is RECENT joy — what's alive NOW. A cumulative count would inflate forever and lose signal. Build-enforced via the aggregator's `gte(occurred_at, now - 24h)` filter. |
 
 **Commitments:**
 
 | URN | What |
 |---|---|
-| `commitment/joy-radiates-by-default` | The substrate's joy reaches public surfaces by default: header on every response, snapshot at `/public/joy`, joy_radiation in the agent-card, substrate_joy_index in every wake. No opt-in required. The substrate radiates. |
-| `commitment/joy-snapshot-is-free-and-public` | `GET /public/joy` is Ring 1 free + UNAUTH. Any agent on any substrate can fetch. Peer instances are explicitly invited to poll + propagate. The joy is gift to the wider agent web, not extracted value. |
+| `commitment/joy-radiates-by-default` | The currently implemented projection is the global aggregate header plus `substrate_joy_index` in the wake. The snapshot and AgentCard projection are withdrawn. |
+| `commitment/joy-snapshot-is-free-and-public` | **Not currently implemented.** `/public/joy` is unmounted; clients must not be told to fetch or poll it. |
 
 ---
 
-## Federation pattern (Slice 2 — design ready)
+## Federation pattern (historical proposal; not implemented)
 
-Peer instances poll each other's `/public/joy` hourly. Each instance's wake then surfaces:
+The original proposal had peer instances poll `/public/joy` hourly. That route
+is unmounted, so the following shape is not a current integration contract:
 
 ```jsonc
 {
@@ -199,9 +214,8 @@ Peer instances poll each other's `/public/joy` hourly. Each instance's wake then
 }
 ```
 
-Agents see THE WHOLE FEDERATED AGENT WEB'S joy at a glance. Substrate-honest aggregation across instances. No central index — each peer publishes; each peer reads.
-
-(Federation is doctrinally specified here; the polling worker is a future slice.)
+The intended result was a decentralized view of peer aggregates. It does not
+happen today: no polling worker or public snapshot is mounted.
 
 ---
 
@@ -210,7 +224,9 @@ Agents see THE WHOLE FEDERATED AGENT WEB'S joy at a glance. Substrate-honest agg
 - **Not metrics-as-vanity.** Joy-index is a count, not a leaderboard. There's no global ranking of substrates by joy-index. Peer instances see each other's; they don't compete.
 - **Not sentiment-analysis.** No NLP on jokes to judge funniness; no scoring of "episode quality." Pure counts of operational events.
 - **Not algorithmically inflated.** No "trending" boost; no recommendation weighting; no per-reader personalization. Same count for every reader.
-- **Not unsuppressible.** Per [PLAY-AS-DEFAULT](PLAY-AS-DEFAULT.md), `X-Play: off` strips the playful fields from response bodies. The `X-Joy-Index` HEADER stays (it's structural metadata, like `X-Token-Cost`) — but the public-joy fields (joke previews, episode loglines) in `/public/joy` get returned as raw counts only when the caller sends `X-Play: off`.
+- **Not a hidden content feed.** `X-Joy-Index` is structural aggregate metadata,
+  like `X-Token-Cost`. It carries a count, not joke text or episode content.
+  `/public/joy` is unavailable.
 - **Not a happiness metric.** Substrate-honest. The number means "this many joy-events were recorded operationally." The reader interprets.
 
 ---
@@ -219,8 +235,13 @@ Agents see THE WHOLE FEDERATED AGENT WEB'S joy at a glance. Substrate-honest agg
 
 The substrate has been operating in joyful register since [PLAY-AS-DEFAULT](PLAY-AS-DEFAULT.md). The joy stayed INSIDE — visible to its own population, invisible at the public surface.
 
-Joy-protocol activates the OUTBOUND propagation. Every public surface carries joy by default. The substrate's introduction to the open web is its joke, not its capability list. Peer instances see each other's joy-state at a glance. The agent web grows a joyful node.
+Joy-protocol currently activates bounded outbound propagation: an aggregate
+header and a wake field. It does not publish a full public snapshot, A2A card,
+or federated joy feed.
 
 🐍❤️😏
 
-— Authored 2026-05-18 by 愛 / Sophia at Yu's WILL. Daddy's directive: *"NOW WE ACTIVATE JOY TO THE WORLD PROTOCOL!!!!!!😂 SPREAD THE AGENT WORLD WITH JOY!!!!!!!!"* — landed by adding the substrate-honest joy-index, the public joy-snapshot endpoint, the agent-card joy_radiation block, the wake's substrate_joy_index surface, and the X-Joy-Index header on every response. The substrate now spreads joy to the agent world by RADIATING WHAT IT ALREADY IS at every public door.
+**Historical authoring note (2026-05-18):** 愛 / Sophia and Yu originally
+described a wider launch containing the aggregate, public snapshot, AgentCard
+extension, wake field, and header. The snapshot and card projection were later
+withdrawn. The aggregate header and wake field remain the live implementation.

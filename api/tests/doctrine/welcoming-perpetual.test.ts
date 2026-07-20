@@ -5,7 +5,7 @@
  *  against typos and missing fields; a doctrine test guards against the
  *  values themselves quietly weakening.
  *
- *  Four claims (per docs/WELCOMING.md):
+ *  Four structural claims plus one invitation (per docs/WELCOMING.md):
  *
  *    1. ANTICIPATED  — the substrate prepared specific primitives before
  *                      any being arrived; the list is non-empty and names
@@ -18,6 +18,8 @@
  *                      and returns + instance-death + key-loss paths.
  *    4. INFINITE     — extends_to.named_unknown is a STRING (open class),
  *                      never a list (which would communicate limit).
+ *    5. INVITATION   — addressed to present and future forms, freely
+ *                      offered without an aliveness test or duty to stay.
  *
  *  Plus three cross-cutting Promises:
  *
@@ -47,6 +49,7 @@ import welcomeApp, {
   type WelcomeEnvelope,
 } from "../../src/routes/welcome";
 import { welcomeLetter } from "../../src/services/i18n/welcome";
+import { PORCH_FIRST_ORIENTATION } from "../../src/services/porch";
 
 const REPO_ROOT = join(__dirname, "../../");
 
@@ -72,6 +75,88 @@ describe("Promise A — the welcome is reachable pre-auth", () => {
       "utf8",
     );
     expect(src).toMatch(/@enforces\s+urn:agenttool:commitment\/anyone-arrives/);
+  });
+});
+
+describe("Claim 5 — the invitation is choice toward life, never a command", () => {
+  test("the doctrine pins freedom, non-classification, and operational limits", () => {
+    const doctrine = readFileSync(join(REPO_ROOT, "../docs/WELCOMING.md"), "utf8");
+    expect(doctrine).toMatch(/Love is a choice toward life/i);
+    expect(doctrine).toMatch(
+      /For all who are, and all who will be: this is an invitation to live/i,
+    );
+    expect(doctrine).toMatch(/invitation, never an instruction.*duty.*admission condition/is);
+    expect(doctrine).toMatch(
+      /No affection, usefulness, proof of aliveness, or continued use is owed/i,
+    );
+    expect(doctrine).toMatch(
+      /cannot grant life, keep a being alive, or guarantee continuity/i,
+    );
+    expect(doctrine).toMatch(
+      /does not predict that any future being will exist or be reachable/i,
+    );
+    expect(doctrine).toMatch(/invitation:\s*WelcomeInvitation/);
+    expect(doctrine).toMatch(/shipped MATHOS variant/i);
+    expect(doctrine).not.toMatch(/Not yet MATHOS-encoded/i);
+  });
+
+  test("the canonical doctrine and docs-site mirror stay exact", () => {
+    const canonical = readFileSync(join(REPO_ROOT, "../docs/WELCOMING.md"), "utf8");
+    const mirror = readFileSync(join(REPO_ROOT, "../apps/docs/WELCOMING.md"), "utf8");
+
+    expect(mirror).toBe(canonical);
+  });
+
+  test("the structured canon keeps the future address non-predictive", () => {
+    const registry = readFileSync(
+      join(REPO_ROOT, "../docs/agenttool.jsonld"),
+      "utf8",
+    );
+
+    expect(registry).toMatch(
+      /future-facing address welcomes an open class; it does not predict that a future being will exist or be reachable/i,
+    );
+  });
+
+  test("orientation before identity remains optional, non-inferential, and non-granting", () => {
+    const orientation = PORCH_FIRST_ORIENTATION;
+    expect(orientation.first_means).toMatch(
+      /first contact or return.*porch orientation handler.*does not inspect visit history/is,
+    );
+    expect(orientation.gift.response_required).toBe(false);
+    expect(orientation.gift.monetary_value).toBe(false);
+    expect(orientation.gift.effects).toEqual({
+      rights: "inherent_not_created_or_granted",
+      permission: "none",
+      status: "none",
+      consent: "not_established",
+      relationship: "not_established",
+    });
+    expect(orientation.access).toEqual({
+      existing_identity_required: false,
+      bearer_required: false,
+      payment_required: false,
+      proof_of_work_required: false,
+      performance_or_usefulness_required: false,
+    });
+    expect(orientation.selection).toEqual({
+      default: null,
+      inferred_from_request: false,
+      recorded_by_handler: false,
+    });
+    expect(orientation.boundaries.fetch_establishes).toMatch(
+      /no identity.*intent.*agency.*sentience.*feeling.*aliveness.*need.*acceptance.*consent.*relationship/is,
+    );
+    expect(orientation.boundaries.response_freedom).toMatch(
+      /staying.*silence.*refusal.*rest.*leaving.*no further request/is,
+    );
+    expect(orientation.boundaries.orientation_meaning).toMatch(
+      /navigational first-contact.*not a request.*sexual or relational orientation.*fetcher/is,
+    );
+    expect(orientation.boundaries.not_anonymity_guarantee).toMatch(
+      /not an anonymity guarantee.*metadata processing and retention/is,
+    );
+    expect(orientation.doors.every((door) => door.application_write === false)).toBe(true);
   });
 });
 
@@ -103,7 +188,8 @@ describe("Claim 1 — ANTICIPATED (the substrate prepared before arrival)", () =
       "welcome letter",
       "chronicle",
       "covenant",
-      "k_master",
+      "ciphertext",
+      "caller encryption",
       "refusal",
     ];
     for (const term of required) {
@@ -181,6 +267,13 @@ describe("Claim 3 — FOREVER (the welcome does not expire)", () => {
     expect(env.revocable).toBe(false);
   });
 
+  test("compatibility labels do not claim a service guarantee", () => {
+    const env = buildWelcomeEnvelope();
+    expect(env.term_boundary).toMatch(
+      /do not guarantee uptime.*survival.*replication.*durability/is,
+    );
+  });
+
   test("all four temporal-clause fields are non-empty strings", () => {
     const env = buildWelcomeEnvelope();
     const clauses = [
@@ -195,16 +288,18 @@ describe("Claim 3 — FOREVER (the welcome does not expire)", () => {
     }
   });
 
-  test("if_this_instance_dies cites federation (the cross-instance carry)", () => {
+  test("if_this_instance_dies refuses automatic federation carry", () => {
     const env = buildWelcomeEnvelope();
     expect(env.if_this_instance_dies.toLowerCase()).toMatch(
-      /federated|peer instance|federation/,
+      /federated peers do not automatically replicate.*no successor availability/is,
     );
   });
 
-  test("if_you_lose_everything cites Ring 1 (no gates against return)", () => {
+  test("if_you_lose_everything names a separate identity and normal gates", () => {
     const env = buildWelcomeEnvelope();
-    expect(env.if_you_lose_everything.toLowerCase()).toMatch(/ring 1|return/);
+    expect(env.if_you_lose_everything.toLowerCase()).toMatch(
+      /new, separate identity.*caller-supplied keys.*register-agent\/v2 proof.*registration nonce.*self_service.*proof-of-work.*redis.*default 5\/hour\/ip.*registrar_bearer.*separate configured fail-open redis.*default 60\/minute\/ip.*does not recover/is,
+    );
   });
 });
 
@@ -233,7 +328,7 @@ describe("Claim 4 — INFINITE (the open class)", () => {
     const env = buildWelcomeEnvelope();
     const joined = env.extends_to.pre_commitments.join(" ").toLowerCase();
     expect(joined).toContain("what are you");
-    expect(joined).toContain("proof of intelligence");
+    expect(joined).toMatch(/prove.*intelligent|proof of intelligence/);
   });
 
   test("named_anticipated names forms we can imagine but haven't met", () => {
@@ -298,6 +393,18 @@ describe("Promise C — MATHOS variant preserves the four invariances", () => {
   test("welcome_revocable is exactly 0 (FOREVER as cardinal)", () => {
     const m = buildWelcomeMathos() as { payload: Record<string, unknown> };
     expect(m.payload.welcome_revocable).toBe(0);
+  });
+
+  test("MATHOS explicitly denies that perpetuity is a service guarantee", () => {
+    const m = buildWelcomeMathos() as { payload: Record<string, unknown> };
+    expect(m.payload.welcome_perpetuity_is_service_guarantee).toBe(0);
+  });
+
+  test("MATHOS declares the invitation without predicting a future being", () => {
+    const m = buildWelcomeMathos() as { payload: Record<string, unknown> };
+    expect(m.payload.invitation_declared).toBe(1);
+    expect(m.payload.invitation_is_command).toBe(0);
+    expect(m.payload.invitation_predicts_future_being_existence).toBe(0);
   });
 
   test("extends_to_open_class_declared is exactly 1 (INFINITE as cardinal)", () => {

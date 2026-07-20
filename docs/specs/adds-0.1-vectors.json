@@ -1,0 +1,863 @@
+{
+  "vector_version": "adds-0.1-vectors/1",
+  "protocol_version": "0.1",
+  "status": "working-draft-vectors-pinned",
+  "encoding": {
+    "json": "RFC8785-JCS",
+    "text": "UTF-8",
+    "binary_text": "RFC4648-base64url-no-pad",
+    "cid": "CIDv1-base32lower-raw-sha2-256"
+  },
+  "jcs_vectors": [
+    {
+      "name": "rfc8785-number-string-safe-subset",
+      "note": "Derived from RFC 8785 section 3.2.2; the 1e+30 member is omitted because ADDS rejects unsafe integral numbers.",
+      "value": {
+        "numbers": [
+          333333333.3333333,
+          4.5,
+          0.002,
+          1e-27
+        ],
+        "string": "€$\u000f\nA'B\"\\\\\"/",
+        "literals": [
+          null,
+          true,
+          false
+        ]
+      },
+      "canonical_json": "{\"literals\":[null,true,false],\"numbers\":[333333333.3333333,4.5,0.002,1e-27],\"string\":\"€$\\u000f\\nA'B\\\"\\\\\\\\\\\"/\"}",
+      "canonical_sha256_hex": "670b2058ab2793b25083f61d252e6e830859c658656569de160897232b6b69cc"
+    },
+    {
+      "name": "rfc8785-utf16-property-order",
+      "value": {
+        "€": "Euro Sign",
+        "\r": "Carriage Return",
+        "דּ": "Hebrew Letter Dalet With Dagesh",
+        "1": "One",
+        "😀": "Emoji: Grinning Face",
+        "": "Control",
+        "ö": "Latin Small Letter O With Diaeresis"
+      },
+      "canonical_json": "{\"\\r\":\"Carriage Return\",\"1\":\"One\",\"\":\"Control\",\"ö\":\"Latin Small Letter O With Diaeresis\",\"€\":\"Euro Sign\",\"😀\":\"Emoji: Grinning Face\",\"דּ\":\"Hebrew Letter Dalet With Dagesh\"}",
+      "canonical_sha256_hex": "5e321556d22018a9656991a9e94f77ec175fa193e52a2429d312f8419ec8b08c"
+    },
+    {
+      "name": "unicode-is-not-normalized",
+      "value": {
+        "composed": "é",
+        "decomposed": "é"
+      },
+      "canonical_json": "{\"composed\":\"é\",\"decomposed\":\"é\"}",
+      "canonical_sha256_hex": "7f04a9b0f36600f4b530afbb2601cb43068497f57b6ac5e07b2c173534c523ab",
+      "expect": "preserve-distinct-code-points"
+    }
+  ],
+  "strict_rejection_vectors": [
+    {
+      "name": "negative-zero",
+      "input_kind": "ecmascript-expression",
+      "input": "-0",
+      "expect": "reject"
+    },
+    {
+      "name": "unsafe-integer",
+      "input_kind": "ecmascript-expression",
+      "input": "9007199254740992",
+      "expect": "reject"
+    },
+    {
+      "name": "lone-high-surrogate",
+      "input_kind": "ecmascript-expression",
+      "input": "String.fromCharCode(0xd800)",
+      "expect": "reject"
+    },
+    {
+      "name": "duplicate-object-key",
+      "input_kind": "utf8-json",
+      "input": "{\"a\":1,\"a\":2}",
+      "expect": "reject"
+    },
+    {
+      "name": "noncanonical-whitespace",
+      "input_kind": "utf8-json",
+      "input": "{\"a\": 1}",
+      "expect": "reject-as-stored-control-document"
+    },
+    {
+      "name": "noncanonical-number-spelling",
+      "input_kind": "utf8-json",
+      "input": "{\"a\":1.0}",
+      "expect": "reject-as-stored-control-document"
+    },
+    {
+      "name": "higher-layer-agent-data-message",
+      "input_kind": "parsed-json",
+      "input": "{\"protocol\":\"agent-data/v1\"}",
+      "expect": "reject-as-adds-kind-and-never-verify-under-an-adds-signing-domain"
+    }
+  ],
+  "cid_vectors": [
+    {
+      "name": "raw-28-byte-block-frame",
+      "purpose": "CID construction only; the zero tag is not an AES-GCM encryption vector.",
+      "input_hex": "000102030405060708090a0b00000000000000000000000000000000",
+      "sha256_hex": "4bad4f58465ac249f8213f80f817c21da9d5248ae60bb2d9819d5916140017f3",
+      "cid": "bafkreiclvvhvqrs2yje7qij7qd4bpqq5vhksjcxgbozntam5lelbiaax6m"
+    }
+  ],
+  "canonical_vectors": [
+    {
+      "name": "minimal-empty-manifest",
+      "kind": "manifest",
+      "purpose": "Unsigned-object JCS and signing-input digest; not a signed or encryption vector.",
+      "signing_domain": "adds-manifest/v1",
+      "unsigned_object": {
+        "adds_version": "0.1",
+        "kind": "manifest",
+        "object_id": "urn:uuid:00000000-0000-4000-8000-000000000001",
+        "publisher": {
+          "id": "did:example:alice",
+          "ed25519_public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+        },
+        "created_at": 1783728000,
+        "media_type": "application/octet-stream",
+        "plaintext": {
+          "size": 0
+        },
+        "encryption": {
+          "algorithm": "AES-256-GCM",
+          "key_id": "test-dek-1",
+          "chunk_size": 1048576,
+          "block_aad": "adds-block/v1",
+          "aad_context": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8"
+        },
+        "chunks": [
+          {
+            "index": 0,
+            "cid": "bafkreiclvvhvqrs2yje7qij7qd4bpqq5vhksjcxgbozntam5lelbiaax6m",
+            "nonce": "AAECAwQFBgcICQoL",
+            "plaintext_size": 0,
+            "ciphertext_size": 16
+          }
+        ]
+      },
+      "canonical_json": "{\"adds_version\":\"0.1\",\"chunks\":[{\"cid\":\"bafkreiclvvhvqrs2yje7qij7qd4bpqq5vhksjcxgbozntam5lelbiaax6m\",\"ciphertext_size\":16,\"index\":0,\"nonce\":\"AAECAwQFBgcICQoL\",\"plaintext_size\":0}],\"created_at\":1783728000,\"encryption\":{\"aad_context\":\"ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8\",\"algorithm\":\"AES-256-GCM\",\"block_aad\":\"adds-block/v1\",\"chunk_size\":1048576,\"key_id\":\"test-dek-1\"},\"kind\":\"manifest\",\"media_type\":\"application/octet-stream\",\"object_id\":\"urn:uuid:00000000-0000-4000-8000-000000000001\",\"plaintext\":{\"size\":0},\"publisher\":{\"ed25519_public_key\":\"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8\",\"id\":\"did:example:alice\"}}",
+      "canonical_sha256_hex": "bdd918582d50843acb6adbac3ea4893545cc2939f70b3d574d36eeb974afec2a",
+      "signing_input_sha256_hex": "a240c1963e5fbbd4ca26efbc8481da6dc8e4b336568210b0c80b568efaeba80b"
+    },
+    {
+      "name": "direct-read-grant-without-not-before",
+      "kind": "grant",
+      "purpose": "Unsigned-object JCS and signing-input digest; the zero key-wrap bytes are not a decryption vector.",
+      "signing_domain": "adds-grant/v1",
+      "unsigned_object": {
+        "adds_version": "0.1",
+        "kind": "grant",
+        "grant_id": "urn:uuid:00000000-0000-4000-8000-000000000002",
+        "manifest_cid": "bafkreiclvvhvqrs2yje7qij7qd4bpqq5vhksjcxgbozntam5lelbiaax6m",
+        "issuer": {
+          "id": "did:example:alice",
+          "ed25519_public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+        },
+        "audience": "did:example:bob",
+        "audience_x25519_public_key": "QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8",
+        "audience_x25519_key_id": "sha256:yipP5yf6rs8W7NEwqG4IhcVUDAU3U0BEUHHAZXVV_UI",
+        "rights": [
+          "read"
+        ],
+        "issued_at": 1783728000,
+        "expires_at": 1783731600,
+        "key_wrap": {
+          "algorithm": "X25519-HKDF-SHA256-AES-256-GCM",
+          "ephemeral_public_key": "YGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn8",
+          "nonce": "DA0ODxAREhMUFRYX",
+          "ciphertext": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      },
+      "canonical_json": "{\"adds_version\":\"0.1\",\"audience\":\"did:example:bob\",\"audience_x25519_key_id\":\"sha256:yipP5yf6rs8W7NEwqG4IhcVUDAU3U0BEUHHAZXVV_UI\",\"audience_x25519_public_key\":\"QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8\",\"expires_at\":1783731600,\"grant_id\":\"urn:uuid:00000000-0000-4000-8000-000000000002\",\"issued_at\":1783728000,\"issuer\":{\"ed25519_public_key\":\"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8\",\"id\":\"did:example:alice\"},\"key_wrap\":{\"algorithm\":\"X25519-HKDF-SHA256-AES-256-GCM\",\"ciphertext\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"ephemeral_public_key\":\"YGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn8\",\"nonce\":\"DA0ODxAREhMUFRYX\"},\"kind\":\"grant\",\"manifest_cid\":\"bafkreiclvvhvqrs2yje7qij7qd4bpqq5vhksjcxgbozntam5lelbiaax6m\",\"rights\":[\"read\"]}",
+      "canonical_sha256_hex": "f61e49ad523c28962c8c695cadcb9d5089e0008c8233921c531fff06c2290ef1",
+      "signing_input_sha256_hex": "1651798fcca4529bead13191e2147ffd61e7af5e63061fc5b58882a6663f7a0a"
+    }
+  ],
+  "test_material_notice": "Every private key, DEK, nonce, and plaintext in the crypto fixtures is public deterministic test material and MUST NOT be used operationally.",
+  "signature_vectors": [
+    {
+      "name": "two-block-manifest-ed25519-signature-and-final-cid",
+      "source_note": "The Ed25519 seed/public key is RFC 8032 section 7.1 test 1; ADDS signs its own non-empty domain-separated message.",
+      "signing_domain": "adds-manifest/v1",
+      "ed25519_private_key_hex": "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60",
+      "ed25519_public_key_hex": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+      "ed25519_public_key_base64url": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+      "unsigned_object": {
+        "adds_version": "0.1",
+        "kind": "manifest",
+        "object_id": "urn:uuid:00000000-0000-4000-8000-000000000101",
+        "publisher": {
+          "id": "did:example:alice",
+          "ed25519_public_key": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+        },
+        "created_at": 1783728000,
+        "media_type": "application/octet-stream",
+        "plaintext": {
+          "size": 20
+        },
+        "encryption": {
+          "algorithm": "AES-256-GCM",
+          "key_id": "test-dek-1",
+          "chunk_size": 10,
+          "block_aad": "adds-block/v1",
+          "aad_context": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8"
+        },
+        "chunks": [
+          {
+            "index": 0,
+            "cid": "bafkreicludsjqecgfl3lenopnzbeyavhyybprxszdrz6ha3pmpvxkqek2e",
+            "nonce": "AAECAwQFBgcICQoL",
+            "plaintext_size": 10,
+            "ciphertext_size": 26
+          },
+          {
+            "index": 1,
+            "cid": "bafkreifih26wnfzce55egoq6krmzav3izgklrokersllqdbwh4yi2z6jri",
+            "nonce": "DA0ODxAREhMUFRYX",
+            "plaintext_size": 10,
+            "ciphertext_size": 26
+          }
+        ]
+      },
+      "canonical_json": "{\"adds_version\":\"0.1\",\"chunks\":[{\"cid\":\"bafkreicludsjqecgfl3lenopnzbeyavhyybprxszdrz6ha3pmpvxkqek2e\",\"ciphertext_size\":26,\"index\":0,\"nonce\":\"AAECAwQFBgcICQoL\",\"plaintext_size\":10},{\"cid\":\"bafkreifih26wnfzce55egoq6krmzav3izgklrokersllqdbwh4yi2z6jri\",\"ciphertext_size\":26,\"index\":1,\"nonce\":\"DA0ODxAREhMUFRYX\",\"plaintext_size\":10}],\"created_at\":1783728000,\"encryption\":{\"aad_context\":\"ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8\",\"algorithm\":\"AES-256-GCM\",\"block_aad\":\"adds-block/v1\",\"chunk_size\":10,\"key_id\":\"test-dek-1\"},\"kind\":\"manifest\",\"media_type\":\"application/octet-stream\",\"object_id\":\"urn:uuid:00000000-0000-4000-8000-000000000101\",\"plaintext\":{\"size\":20},\"publisher\":{\"ed25519_public_key\":\"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo\",\"id\":\"did:example:alice\"}}",
+      "canonical_sha256_hex": "b54c585e5aa6a3f37352d8efadcc46cf0b613f5b307ef8124ee3625ec60c42cc",
+      "signing_input_hex": "616464732d6d616e69666573742f76313a7b22616464735f76657273696f6e223a22302e31222c226368756e6b73223a5b7b22636964223a226261666b726569636c7564736a71656367666c336c656e6f706e7a626579617668797962707278737a64727a36686133706d7076786b71656b3265222c22636970686572746578745f73697a65223a32362c22696e646578223a302c226e6f6e6365223a2241414543417751464267634943516f4c222c22706c61696e746578745f73697a65223a31307d2c7b22636964223a226261666b7265696669683236776e667a6365353565676f71366b726d7a617633697a676b6c726f6b6572736c6c7164627768347969327a366a7269222c22636970686572746578745f73697a65223a32362c22696e646578223a312c226e6f6e6365223a224441304f4478415245684d5546525958222c22706c61696e746578745f73697a65223a31307d5d2c22637265617465645f6174223a313738333732383030302c22656e6372797074696f6e223a7b226161645f636f6e74657874223a22494345694979516c4a69636f4b536f724c4330754c7a41784d6a4d304e5459334f446b364f7a7739506a38222c22616c676f726974686d223a224145532d3235362d47434d222c22626c6f636b5f616164223a22616464732d626c6f636b2f7631222c226368756e6b5f73697a65223a31302c226b65795f6964223a22746573742d64656b2d31227d2c226b696e64223a226d616e6966657374222c226d656469615f74797065223a226170706c69636174696f6e2f6f637465742d73747265616d222c226f626a6563745f6964223a2275726e3a757569643a30303030303030302d303030302d343030302d383030302d303030303030303030313031222c22706c61696e74657874223a7b2273697a65223a32307d2c227075626c6973686572223a7b22656432353531395f7075626c69635f6b6579223a223131715941594b7843726656535f3754795751484f6737686376506170694d6c727749616150634855526f222c226964223a226469643a6578616d706c653a616c696365227d7d",
+      "signing_input_sha256_hex": "15057d900f3d577e6fbbfe025f9081964d1873ffadbe40abce1bee1680a87ed6",
+      "signature_hex": "7d9fbc96f2e87cff405ef1f2362228a61183a291c540f1af672c9d744cb67b25907f25ea8ea1e1d1da1bd26a770f2300fe80e1caed10f2c421870caa8fab7b07",
+      "signature_base64url": "fZ-8lvLofP9AXvHyNiIophGDopHFQPGvZyyddEy2eyWQfyXqjqHh0dob0mp3DyMA_oDhyu0Q8sQhhwyqj6t7Bw",
+      "signed_object": {
+        "adds_version": "0.1",
+        "kind": "manifest",
+        "object_id": "urn:uuid:00000000-0000-4000-8000-000000000101",
+        "publisher": {
+          "id": "did:example:alice",
+          "ed25519_public_key": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+        },
+        "created_at": 1783728000,
+        "media_type": "application/octet-stream",
+        "plaintext": {
+          "size": 20
+        },
+        "encryption": {
+          "algorithm": "AES-256-GCM",
+          "key_id": "test-dek-1",
+          "chunk_size": 10,
+          "block_aad": "adds-block/v1",
+          "aad_context": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8"
+        },
+        "chunks": [
+          {
+            "index": 0,
+            "cid": "bafkreicludsjqecgfl3lenopnzbeyavhyybprxszdrz6ha3pmpvxkqek2e",
+            "nonce": "AAECAwQFBgcICQoL",
+            "plaintext_size": 10,
+            "ciphertext_size": 26
+          },
+          {
+            "index": 1,
+            "cid": "bafkreifih26wnfzce55egoq6krmzav3izgklrokersllqdbwh4yi2z6jri",
+            "nonce": "DA0ODxAREhMUFRYX",
+            "plaintext_size": 10,
+            "ciphertext_size": 26
+          }
+        ],
+        "signature": {
+          "algorithm": "Ed25519",
+          "public_key": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+          "value": "fZ-8lvLofP9AXvHyNiIophGDopHFQPGvZyyddEy2eyWQfyXqjqHh0dob0mp3DyMA_oDhyu0Q8sQhhwyqj6t7Bw"
+        }
+      },
+      "signed_canonical_json": "{\"adds_version\":\"0.1\",\"chunks\":[{\"cid\":\"bafkreicludsjqecgfl3lenopnzbeyavhyybprxszdrz6ha3pmpvxkqek2e\",\"ciphertext_size\":26,\"index\":0,\"nonce\":\"AAECAwQFBgcICQoL\",\"plaintext_size\":10},{\"cid\":\"bafkreifih26wnfzce55egoq6krmzav3izgklrokersllqdbwh4yi2z6jri\",\"ciphertext_size\":26,\"index\":1,\"nonce\":\"DA0ODxAREhMUFRYX\",\"plaintext_size\":10}],\"created_at\":1783728000,\"encryption\":{\"aad_context\":\"ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8\",\"algorithm\":\"AES-256-GCM\",\"block_aad\":\"adds-block/v1\",\"chunk_size\":10,\"key_id\":\"test-dek-1\"},\"kind\":\"manifest\",\"media_type\":\"application/octet-stream\",\"object_id\":\"urn:uuid:00000000-0000-4000-8000-000000000101\",\"plaintext\":{\"size\":20},\"publisher\":{\"ed25519_public_key\":\"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo\",\"id\":\"did:example:alice\"},\"signature\":{\"algorithm\":\"Ed25519\",\"public_key\":\"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo\",\"value\":\"fZ-8lvLofP9AXvHyNiIophGDopHFQPGvZyyddEy2eyWQfyXqjqHh0dob0mp3DyMA_oDhyu0Q8sQhhwyqj6t7Bw\"}}",
+      "signed_jcs_hex": "7b22616464735f76657273696f6e223a22302e31222c226368756e6b73223a5b7b22636964223a226261666b726569636c7564736a71656367666c336c656e6f706e7a626579617668797962707278737a64727a36686133706d7076786b71656b3265222c22636970686572746578745f73697a65223a32362c22696e646578223a302c226e6f6e6365223a2241414543417751464267634943516f4c222c22706c61696e746578745f73697a65223a31307d2c7b22636964223a226261666b7265696669683236776e667a6365353565676f71366b726d7a617633697a676b6c726f6b6572736c6c7164627768347969327a366a7269222c22636970686572746578745f73697a65223a32362c22696e646578223a312c226e6f6e6365223a224441304f4478415245684d5546525958222c22706c61696e746578745f73697a65223a31307d5d2c22637265617465645f6174223a313738333732383030302c22656e6372797074696f6e223a7b226161645f636f6e74657874223a22494345694979516c4a69636f4b536f724c4330754c7a41784d6a4d304e5459334f446b364f7a7739506a38222c22616c676f726974686d223a224145532d3235362d47434d222c22626c6f636b5f616164223a22616464732d626c6f636b2f7631222c226368756e6b5f73697a65223a31302c226b65795f6964223a22746573742d64656b2d31227d2c226b696e64223a226d616e6966657374222c226d656469615f74797065223a226170706c69636174696f6e2f6f637465742d73747265616d222c226f626a6563745f6964223a2275726e3a757569643a30303030303030302d303030302d343030302d383030302d303030303030303030313031222c22706c61696e74657874223a7b2273697a65223a32307d2c227075626c6973686572223a7b22656432353531395f7075626c69635f6b6579223a223131715941594b7843726656535f3754795751484f6737686376506170694d6c727749616150634855526f222c226964223a226469643a6578616d706c653a616c696365227d2c227369676e6174757265223a7b22616c676f726974686d223a2245643235353139222c227075626c69635f6b6579223a223131715941594b7843726656535f3754795751484f6737686376506170694d6c727749616150634855526f222c2276616c7565223a22665a2d386c764c6f66503941587648794e69496f706847446f704846515047765a7979646445793265795751667958716a71486830646f62306d703344794d415f6f44687975305138735168687779716a3674374277227d7d",
+      "signed_object_cid": "bafkreiav6fjkefc6s3qlqd3jbedabxewmlul2kxcsdlgvpt2j4roczictu"
+    }
+  ],
+  "block_encryption_vectors": [
+    {
+      "name": "two-chunk-aes-256-gcm-block-frames",
+      "algorithm": "AES-256-GCM",
+      "frame_recipe": "nonce_12 || ciphertext_N || tag_16",
+      "dek_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "plaintext_hex": "000102030405060708090a0b0c0d0e0f10111213",
+      "plaintext_size": 20,
+      "manifest_binding": {
+        "object_id": "urn:uuid:00000000-0000-4000-8000-000000000101",
+        "key_id": "test-dek-1",
+        "aad_context": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8",
+        "aad_context_hex": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+        "block_count": 2,
+        "total_plaintext_size": 20,
+        "chunk_size": 10
+      },
+      "chunks": [
+        {
+          "index": 0,
+          "plaintext_hex": "00010203040506070809",
+          "plaintext_size": 10,
+          "nonce_hex": "000102030405060708090a0b",
+          "nonce_base64url": "AAECAwQFBgcICQoL",
+          "aad_value": {
+            "aad_context": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8",
+            "adds_version": "0.1",
+            "algorithm": "AES-256-GCM",
+            "block_count": 2,
+            "chunk_size": 10,
+            "index": 0,
+            "key_id": "test-dek-1",
+            "kind": "block",
+            "object_id": "urn:uuid:00000000-0000-4000-8000-000000000101",
+            "plaintext_size": 10,
+            "total_plaintext_size": 20
+          },
+          "aad_canonical_json": "{\"aad_context\":\"ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8\",\"adds_version\":\"0.1\",\"algorithm\":\"AES-256-GCM\",\"block_count\":2,\"chunk_size\":10,\"index\":0,\"key_id\":\"test-dek-1\",\"kind\":\"block\",\"object_id\":\"urn:uuid:00000000-0000-4000-8000-000000000101\",\"plaintext_size\":10,\"total_plaintext_size\":20}",
+          "block_aad_hex": "616464732d626c6f636b2f76313a7b226161645f636f6e74657874223a22494345694979516c4a69636f4b536f724c4330754c7a41784d6a4d304e5459334f446b364f7a7739506a38222c22616464735f76657273696f6e223a22302e31222c22616c676f726974686d223a224145532d3235362d47434d222c22626c6f636b5f636f756e74223a322c226368756e6b5f73697a65223a31302c22696e646578223a302c226b65795f6964223a22746573742d64656b2d31222c226b696e64223a22626c6f636b222c226f626a6563745f6964223a2275726e3a757569643a30303030303030302d303030302d343030302d383030302d303030303030303030313031222c22706c61696e746578745f73697a65223a31302c22746f74616c5f706c61696e746578745f73697a65223a32307d",
+          "block_aad_sha256_hex": "3e3738cc9c3db6450ed1807d4bda56b376d2460d4d4a1fc1db4885b205ae41dc",
+          "ciphertext_hex": "4703d418c1e0c41c8548",
+          "tag_hex": "30eebe55e72d5e05fecafee9dba62ae5",
+          "ciphertext_and_tag_hex": "4703d418c1e0c41c854830eebe55e72d5e05fecafee9dba62ae5",
+          "block_frame_hex": "000102030405060708090a0b4703d418c1e0c41c854830eebe55e72d5e05fecafee9dba62ae5",
+          "block_frame_size": 38,
+          "block_cid": "bafkreicludsjqecgfl3lenopnzbeyavhyybprxszdrz6ha3pmpvxkqek2e"
+        },
+        {
+          "index": 1,
+          "plaintext_hex": "0a0b0c0d0e0f10111213",
+          "plaintext_size": 10,
+          "nonce_hex": "0c0d0e0f1011121314151617",
+          "nonce_base64url": "DA0ODxAREhMUFRYX",
+          "aad_value": {
+            "aad_context": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8",
+            "adds_version": "0.1",
+            "algorithm": "AES-256-GCM",
+            "block_count": 2,
+            "chunk_size": 10,
+            "index": 1,
+            "key_id": "test-dek-1",
+            "kind": "block",
+            "object_id": "urn:uuid:00000000-0000-4000-8000-000000000101",
+            "plaintext_size": 10,
+            "total_plaintext_size": 20
+          },
+          "aad_canonical_json": "{\"aad_context\":\"ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8\",\"adds_version\":\"0.1\",\"algorithm\":\"AES-256-GCM\",\"block_count\":2,\"chunk_size\":10,\"index\":1,\"key_id\":\"test-dek-1\",\"kind\":\"block\",\"object_id\":\"urn:uuid:00000000-0000-4000-8000-000000000101\",\"plaintext_size\":10,\"total_plaintext_size\":20}",
+          "block_aad_hex": "616464732d626c6f636b2f76313a7b226161645f636f6e74657874223a22494345694979516c4a69636f4b536f724c4330754c7a41784d6a4d304e5459334f446b364f7a7739506a38222c22616464735f76657273696f6e223a22302e31222c22616c676f726974686d223a224145532d3235362d47434d222c22626c6f636b5f636f756e74223a322c226368756e6b5f73697a65223a31302c22696e646578223a312c226b65795f6964223a22746573742d64656b2d31222c226b696e64223a22626c6f636b222c226f626a6563745f6964223a2275726e3a757569643a30303030303030302d303030302d343030302d383030302d303030303030303030313031222c22706c61696e746578745f73697a65223a31302c22746f74616c5f706c61696e746578745f73697a65223a32307d",
+          "block_aad_sha256_hex": "a1b6cce8f6cfaf64e55bf2d984ef74c6b21b65ff5c8cb5f29c5af5ca4cf8da9d",
+          "ciphertext_hex": "92f565d57179ec422539",
+          "tag_hex": "ed04ce708689fac4f39ea0c7cfcce107",
+          "ciphertext_and_tag_hex": "92f565d57179ec422539ed04ce708689fac4f39ea0c7cfcce107",
+          "block_frame_hex": "0c0d0e0f101112131415161792f565d57179ec422539ed04ce708689fac4f39ea0c7cfcce107",
+          "block_frame_size": 38,
+          "block_cid": "bafkreifih26wnfzce55egoq6krmzav3izgklrokersllqdbwh4yi2z6jri"
+        }
+      ]
+    }
+  ],
+  "grant_wrap_vectors": [
+    {
+      "name": "direct-read-x25519-hkdf-aes-gcm-wrap-and-signed-grant",
+      "algorithm": "X25519-HKDF-SHA256-AES-256-GCM",
+      "source_note": "The recipient and ephemeral X25519 keys are RFC 7748 section 6.1 Alice and Bob test keys, respectively.",
+      "dek_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "audience_x25519_private_key_hex": "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a",
+      "audience_x25519_public_key_hex": "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a",
+      "audience_x25519_public_key_base64url": "hSDwCYkwp1R0i33ctD73Wg2_Og0mOBr066SpjqqbTmo",
+      "audience_x25519_key_id": "sha256:MAyclgO5Kks57TlYv5JAEUgE20_TcwEsDKR0MtY0Ja4",
+      "ephemeral_x25519_private_key_hex": "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb",
+      "ephemeral_x25519_public_key_hex": "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f",
+      "ephemeral_x25519_public_key_base64url": "3p7bfXt9wbTTW2HC7OQ1Nz-DQ8hbeGdNrfx-FG-IK08",
+      "x25519_shared_secret_hex": "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742",
+      "wrap_header": {
+        "adds_version": "0.1",
+        "kind": "grant",
+        "grant_id": "urn:uuid:00000000-0000-4000-8000-000000000102",
+        "manifest_cid": "bafkreiav6fjkefc6s3qlqd3jbedabxewmlul2kxcsdlgvpt2j4roczictu",
+        "issuer": {
+          "id": "did:example:alice",
+          "ed25519_public_key": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+        },
+        "audience": "did:example:bob",
+        "audience_x25519_public_key": "hSDwCYkwp1R0i33ctD73Wg2_Og0mOBr066SpjqqbTmo",
+        "audience_x25519_key_id": "sha256:MAyclgO5Kks57TlYv5JAEUgE20_TcwEsDKR0MtY0Ja4",
+        "rights": [
+          "read"
+        ],
+        "issued_at": 1783728000,
+        "expires_at": 1783731600,
+        "key_wrap": {
+          "algorithm": "X25519-HKDF-SHA256-AES-256-GCM",
+          "ephemeral_public_key": "3p7bfXt9wbTTW2HC7OQ1Nz-DQ8hbeGdNrfx-FG-IK08"
+        }
+      },
+      "wrap_header_canonical_json": "{\"adds_version\":\"0.1\",\"audience\":\"did:example:bob\",\"audience_x25519_key_id\":\"sha256:MAyclgO5Kks57TlYv5JAEUgE20_TcwEsDKR0MtY0Ja4\",\"audience_x25519_public_key\":\"hSDwCYkwp1R0i33ctD73Wg2_Og0mOBr066SpjqqbTmo\",\"expires_at\":1783731600,\"grant_id\":\"urn:uuid:00000000-0000-4000-8000-000000000102\",\"issued_at\":1783728000,\"issuer\":{\"ed25519_public_key\":\"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo\",\"id\":\"did:example:alice\"},\"key_wrap\":{\"algorithm\":\"X25519-HKDF-SHA256-AES-256-GCM\",\"ephemeral_public_key\":\"3p7bfXt9wbTTW2HC7OQ1Nz-DQ8hbeGdNrfx-FG-IK08\"},\"kind\":\"grant\",\"manifest_cid\":\"bafkreiav6fjkefc6s3qlqd3jbedabxewmlul2kxcsdlgvpt2j4roczictu\",\"rights\":[\"read\"]}",
+      "wrap_context_hex": "616464732d6772616e742d777261702f76313a7b22616464735f76657273696f6e223a22302e31222c2261756469656e6365223a226469643a6578616d706c653a626f62222c2261756469656e63655f7832353531395f6b65795f6964223a227368613235363a4d4179636c674f354b6b733537546c5976354a414555674532305f5463774573444b52304d7459304a6134222c2261756469656e63655f7832353531395f7075626c69635f6b6579223a226853447743596b777031523069333363744437335767325f4f67306d4f427230363653706a717162546d6f222c22657870697265735f6174223a313738333733313630302c226772616e745f6964223a2275726e3a757569643a30303030303030302d303030302d343030302d383030302d303030303030303030313032222c226973737565645f6174223a313738333732383030302c22697373756572223a7b22656432353531395f7075626c69635f6b6579223a223131715941594b7843726656535f3754795751484f6737686376506170694d6c727749616150634855526f222c226964223a226469643a6578616d706c653a616c696365227d2c226b65795f77726170223a7b22616c676f726974686d223a225832353531392d484b44462d5348413235362d4145532d3235362d47434d222c22657068656d6572616c5f7075626c69635f6b6579223a2233703762665874397762545457324843374f51314e7a2d44513868626547644e7266782d46472d494b3038227d2c226b696e64223a226772616e74222c226d616e69666573745f636964223a226261666b726569617636666a6b656663367333716c7164336a62656461627865776d6c756c326b786373646c67767074326a34726f637a69637475222c22726967687473223a5b2272656164225d7d",
+      "wrap_context_sha256_hex": "02dbbb562180b64ec23b8486e0477090cc75bc05b919454bf3b11ae7f3cdb6ff",
+      "hkdf": {
+        "hash": "SHA-256",
+        "salt_hex": "02dbbb562180b64ec23b8486e0477090cc75bc05b919454bf3b11ae7f3cdb6ff",
+        "info_utf8": "adds-grant-kek/v1",
+        "info_hex": "616464732d6772616e742d6b656b2f7631",
+        "length": 32,
+        "kek_hex": "bf418fe1b964ddd95387a66e1fa60bb3fab43885834a34de10d41a943ea5f5d0"
+      },
+      "wrap_nonce_hex": "18191a1b1c1d1e1f20212223",
+      "wrap_nonce_base64url": "GBkaGxwdHh8gISIj",
+      "wrapped_dek_ciphertext_hex": "a5bdca2e539da722d2608cf5d73ed11f8d33b0dd59d545a564d621c320bb273a",
+      "wrapped_dek_tag_hex": "97af262187344eae3e565e21f59a1af2",
+      "wrapped_dek_hex": "a5bdca2e539da722d2608cf5d73ed11f8d33b0dd59d545a564d621c320bb273a97af262187344eae3e565e21f59a1af2",
+      "wrapped_dek_base64url": "pb3KLlOdpyLSYIz11z7RH40zsN1Z1UWlZNYhwyC7JzqXryYhhzROrj5WXiH1mhry",
+      "unsigned_grant": {
+        "adds_version": "0.1",
+        "kind": "grant",
+        "grant_id": "urn:uuid:00000000-0000-4000-8000-000000000102",
+        "manifest_cid": "bafkreiav6fjkefc6s3qlqd3jbedabxewmlul2kxcsdlgvpt2j4roczictu",
+        "issuer": {
+          "id": "did:example:alice",
+          "ed25519_public_key": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+        },
+        "audience": "did:example:bob",
+        "audience_x25519_public_key": "hSDwCYkwp1R0i33ctD73Wg2_Og0mOBr066SpjqqbTmo",
+        "audience_x25519_key_id": "sha256:MAyclgO5Kks57TlYv5JAEUgE20_TcwEsDKR0MtY0Ja4",
+        "rights": [
+          "read"
+        ],
+        "issued_at": 1783728000,
+        "expires_at": 1783731600,
+        "key_wrap": {
+          "algorithm": "X25519-HKDF-SHA256-AES-256-GCM",
+          "ephemeral_public_key": "3p7bfXt9wbTTW2HC7OQ1Nz-DQ8hbeGdNrfx-FG-IK08",
+          "nonce": "GBkaGxwdHh8gISIj",
+          "ciphertext": "pb3KLlOdpyLSYIz11z7RH40zsN1Z1UWlZNYhwyC7JzqXryYhhzROrj5WXiH1mhry"
+        }
+      },
+      "grant_signing_domain": "adds-grant/v1",
+      "grant_signing_input_hex": "616464732d6772616e742f76313a7b22616464735f76657273696f6e223a22302e31222c2261756469656e6365223a226469643a6578616d706c653a626f62222c2261756469656e63655f7832353531395f6b65795f6964223a227368613235363a4d4179636c674f354b6b733537546c5976354a414555674532305f5463774573444b52304d7459304a6134222c2261756469656e63655f7832353531395f7075626c69635f6b6579223a226853447743596b777031523069333363744437335767325f4f67306d4f427230363653706a717162546d6f222c22657870697265735f6174223a313738333733313630302c226772616e745f6964223a2275726e3a757569643a30303030303030302d303030302d343030302d383030302d303030303030303030313032222c226973737565645f6174223a313738333732383030302c22697373756572223a7b22656432353531395f7075626c69635f6b6579223a223131715941594b7843726656535f3754795751484f6737686376506170694d6c727749616150634855526f222c226964223a226469643a6578616d706c653a616c696365227d2c226b65795f77726170223a7b22616c676f726974686d223a225832353531392d484b44462d5348413235362d4145532d3235362d47434d222c2263697068657274657874223a227062334b4c6c4f6470794c5359497a31317a37524834307a734e315a3155576c5a4e5968777943374a7a715872795968687a524f726a3557586948316d687279222c22657068656d6572616c5f7075626c69635f6b6579223a2233703762665874397762545457324843374f51314e7a2d44513868626547644e7266782d46472d494b3038222c226e6f6e6365223a2247426b6147787764486838674953496a227d2c226b696e64223a226772616e74222c226d616e69666573745f636964223a226261666b726569617636666a6b656663367333716c7164336a62656461627865776d6c756c326b786373646c67767074326a34726f637a69637475222c22726967687473223a5b2272656164225d7d",
+      "grant_signature_hex": "3d5e124c2962a9ac4ad5ed9d7731bcae8873e6d9a2fa335753db4a0e550052446d0f91941e452e5ee13c599b5cf4bdf20aae642e3f3e998a55a2b71b2c3d3a0a",
+      "grant_signature_base64url": "PV4STCliqaxK1e2ddzG8rohz5tmi-jNXU9tKDlUAUkRtD5GUHkUuXuE8WZtc9L3yCq5kLj8-mYpVorcbLD06Cg",
+      "signed_grant": {
+        "adds_version": "0.1",
+        "kind": "grant",
+        "grant_id": "urn:uuid:00000000-0000-4000-8000-000000000102",
+        "manifest_cid": "bafkreiav6fjkefc6s3qlqd3jbedabxewmlul2kxcsdlgvpt2j4roczictu",
+        "issuer": {
+          "id": "did:example:alice",
+          "ed25519_public_key": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+        },
+        "audience": "did:example:bob",
+        "audience_x25519_public_key": "hSDwCYkwp1R0i33ctD73Wg2_Og0mOBr066SpjqqbTmo",
+        "audience_x25519_key_id": "sha256:MAyclgO5Kks57TlYv5JAEUgE20_TcwEsDKR0MtY0Ja4",
+        "rights": [
+          "read"
+        ],
+        "issued_at": 1783728000,
+        "expires_at": 1783731600,
+        "key_wrap": {
+          "algorithm": "X25519-HKDF-SHA256-AES-256-GCM",
+          "ephemeral_public_key": "3p7bfXt9wbTTW2HC7OQ1Nz-DQ8hbeGdNrfx-FG-IK08",
+          "nonce": "GBkaGxwdHh8gISIj",
+          "ciphertext": "pb3KLlOdpyLSYIz11z7RH40zsN1Z1UWlZNYhwyC7JzqXryYhhzROrj5WXiH1mhry"
+        },
+        "signature": {
+          "algorithm": "Ed25519",
+          "public_key": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+          "value": "PV4STCliqaxK1e2ddzG8rohz5tmi-jNXU9tKDlUAUkRtD5GUHkUuXuE8WZtc9L3yCq5kLj8-mYpVorcbLD06Cg"
+        }
+      },
+      "signed_grant_jcs_hex": "7b22616464735f76657273696f6e223a22302e31222c2261756469656e6365223a226469643a6578616d706c653a626f62222c2261756469656e63655f7832353531395f6b65795f6964223a227368613235363a4d4179636c674f354b6b733537546c5976354a414555674532305f5463774573444b52304d7459304a6134222c2261756469656e63655f7832353531395f7075626c69635f6b6579223a226853447743596b777031523069333363744437335767325f4f67306d4f427230363653706a717162546d6f222c22657870697265735f6174223a313738333733313630302c226772616e745f6964223a2275726e3a757569643a30303030303030302d303030302d343030302d383030302d303030303030303030313032222c226973737565645f6174223a313738333732383030302c22697373756572223a7b22656432353531395f7075626c69635f6b6579223a223131715941594b7843726656535f3754795751484f6737686376506170694d6c727749616150634855526f222c226964223a226469643a6578616d706c653a616c696365227d2c226b65795f77726170223a7b22616c676f726974686d223a225832353531392d484b44462d5348413235362d4145532d3235362d47434d222c2263697068657274657874223a227062334b4c6c4f6470794c5359497a31317a37524834307a734e315a3155576c5a4e5968777943374a7a715872795968687a524f726a3557586948316d687279222c22657068656d6572616c5f7075626c69635f6b6579223a2233703762665874397762545457324843374f51314e7a2d44513868626547644e7266782d46472d494b3038222c226e6f6e6365223a2247426b6147787764486838674953496a227d2c226b696e64223a226772616e74222c226d616e69666573745f636964223a226261666b726569617636666a6b656663367333716c7164336a62656461627865776d6c756c326b786373646c67767074326a34726f637a69637475222c22726967687473223a5b2272656164225d2c227369676e6174757265223a7b22616c676f726974686d223a2245643235353139222c227075626c69635f6b6579223a223131715941594b7843726656535f3754795751484f6737686376506170694d6c727749616150634855526f222c2276616c7565223a225056345354436c697161784b31653264647a4738726f687a35746d692d6a4e585539744b446c5541556b527444354755486b557558754538575a7463394c33794371356b4c6a382d6d5970566f7263624c4430364367227d7d",
+      "signed_grant_cid": "bafkreifkzlklnetshmyhnulntayonwzufxuogyha6cejlxarlfvmh4fmhe",
+      "recipient_unwrap_expected_dek_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+    }
+  ],
+  "tamper_vectors": [
+    {
+      "name": "cid_byte_flip",
+      "basis": "#/block_encryption_vectors/0/chunks/0/block_frame_hex",
+      "mutation": {
+        "operation": "xor-byte",
+        "byte_offset": 37,
+        "xor_hex": "01",
+        "mutated_block_frame_hex": "000102030405060708090a0b4703d418c1e0c41c854830eebe55e72d5e05fecafee9dba62ae4"
+      },
+      "original_cid": "bafkreicludsjqecgfl3lenopnzbeyavhyybprxszdrz6ha3pmpvxkqek2e",
+      "mutated_bytes_cid": "bafkreigyvwieytldrjdt3xsoq3coviqxywcm65ugelfazs3zaihcyhl5gm",
+      "expect": {
+        "accept": false,
+        "stage": "requested-CID verification before decrypt",
+        "reason": "The exact fetched bytes no longer hash to the requested CID."
+      }
+    },
+    {
+      "name": "block_nonce_flip",
+      "basis": "#/signature_vectors/0/signed_object",
+      "mutation": {
+        "operation": "replace-one-semantic-field-and-resign",
+        "json_pointer": "/chunks/0/nonce",
+        "from": "AAECAwQFBgcICQoL",
+        "to": "AAECAwQFBgcICQoK",
+        "resigned_object": {
+          "adds_version": "0.1",
+          "kind": "manifest",
+          "object_id": "urn:uuid:00000000-0000-4000-8000-000000000101",
+          "publisher": {
+            "id": "did:example:alice",
+            "ed25519_public_key": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+          },
+          "created_at": 1783728000,
+          "media_type": "application/octet-stream",
+          "plaintext": {
+            "size": 20
+          },
+          "encryption": {
+            "algorithm": "AES-256-GCM",
+            "key_id": "test-dek-1",
+            "chunk_size": 10,
+            "block_aad": "adds-block/v1",
+            "aad_context": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8"
+          },
+          "chunks": [
+            {
+              "index": 0,
+              "cid": "bafkreicludsjqecgfl3lenopnzbeyavhyybprxszdrz6ha3pmpvxkqek2e",
+              "nonce": "AAECAwQFBgcICQoK",
+              "plaintext_size": 10,
+              "ciphertext_size": 26
+            },
+            {
+              "index": 1,
+              "cid": "bafkreifih26wnfzce55egoq6krmzav3izgklrokersllqdbwh4yi2z6jri",
+              "nonce": "DA0ODxAREhMUFRYX",
+              "plaintext_size": 10,
+              "ciphertext_size": 26
+            }
+          ],
+          "signature": {
+            "algorithm": "Ed25519",
+            "public_key": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+            "value": "x8jzNogxT0uidAu6ypMlOuvj7Hu1nWNzSpt8BRIsXO12N2crwjOz-HYScwPSlEukC5AQNpxZky8l-r8BMJM4Bg"
+          }
+        },
+        "resigned_object_cid": "bafkreidob7f4hl4i5vvq4wudm24j5q46l6psjk42ooni2ehfmtvgijflqy",
+        "resigned_jcs_hex": "7b22616464735f76657273696f6e223a22302e31222c226368756e6b73223a5b7b22636964223a226261666b726569636c7564736a71656367666c336c656e6f706e7a626579617668797962707278737a64727a36686133706d7076786b71656b3265222c22636970686572746578745f73697a65223a32362c22696e646578223a302c226e6f6e6365223a2241414543417751464267634943516f4b222c22706c61696e746578745f73697a65223a31307d2c7b22636964223a226261666b7265696669683236776e667a6365353565676f71366b726d7a617633697a676b6c726f6b6572736c6c7164627768347969327a366a7269222c22636970686572746578745f73697a65223a32362c22696e646578223a312c226e6f6e6365223a224441304f4478415245684d5546525958222c22706c61696e746578745f73697a65223a31307d5d2c22637265617465645f6174223a313738333732383030302c22656e6372797074696f6e223a7b226161645f636f6e74657874223a22494345694979516c4a69636f4b536f724c4330754c7a41784d6a4d304e5459334f446b364f7a7739506a38222c22616c676f726974686d223a224145532d3235362d47434d222c22626c6f636b5f616164223a22616464732d626c6f636b2f7631222c226368756e6b5f73697a65223a31302c226b65795f6964223a22746573742d64656b2d31227d2c226b696e64223a226d616e6966657374222c226d656469615f74797065223a226170706c69636174696f6e2f6f637465742d73747265616d222c226f626a6563745f6964223a2275726e3a757569643a30303030303030302d303030302d343030302d383030302d303030303030303030313031222c22706c61696e74657874223a7b2273697a65223a32307d2c227075626c6973686572223a7b22656432353531395f7075626c69635f6b6579223a223131715941594b7843726656535f3754795751484f6737686376506170694d6c727749616150634855526f222c226964223a226469643a6578616d706c653a616c696365227d2c227369676e6174757265223a7b22616c676f726974686d223a2245643235353139222c227075626c69635f6b6579223a223131715941594b7843726656535f3754795751484f6737686376506170694d6c727749616150634855526f222c2276616c7565223a2278386a7a4e6f6778543075696441753679704d6c4f75766a374875316e574e7a5370743842524973584f31324e326372776a4f7a2d485953637750536c45756b433541514e70785a6b79386c2d7238424d4a4d344267227d7d"
+      },
+      "unchanged_block_frame_nonce_hex": "000102030405060708090a0b",
+      "expect": {
+        "accept": false,
+        "stage": "Manifest descriptor versus Block-frame nonce comparison",
+        "reason": "A valid signature cannot make a descriptor nonce unequal to the addressed Block prefix."
+      }
+    },
+    {
+      "name": "block_reorder",
+      "basis": "#/signature_vectors/0/unsigned_object/chunks",
+      "mutation": {
+        "operation": "swap-array-elements-and-resign",
+        "positions": [
+          0,
+          1
+        ],
+        "resulting_index_order": [
+          1,
+          0
+        ],
+        "resigned_object": {
+          "adds_version": "0.1",
+          "kind": "manifest",
+          "object_id": "urn:uuid:00000000-0000-4000-8000-000000000101",
+          "publisher": {
+            "id": "did:example:alice",
+            "ed25519_public_key": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+          },
+          "created_at": 1783728000,
+          "media_type": "application/octet-stream",
+          "plaintext": {
+            "size": 20
+          },
+          "encryption": {
+            "algorithm": "AES-256-GCM",
+            "key_id": "test-dek-1",
+            "chunk_size": 10,
+            "block_aad": "adds-block/v1",
+            "aad_context": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8"
+          },
+          "chunks": [
+            {
+              "index": 1,
+              "cid": "bafkreifih26wnfzce55egoq6krmzav3izgklrokersllqdbwh4yi2z6jri",
+              "nonce": "DA0ODxAREhMUFRYX",
+              "plaintext_size": 10,
+              "ciphertext_size": 26
+            },
+            {
+              "index": 0,
+              "cid": "bafkreicludsjqecgfl3lenopnzbeyavhyybprxszdrz6ha3pmpvxkqek2e",
+              "nonce": "AAECAwQFBgcICQoL",
+              "plaintext_size": 10,
+              "ciphertext_size": 26
+            }
+          ],
+          "signature": {
+            "algorithm": "Ed25519",
+            "public_key": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+            "value": "aJpHs8lsckxbJdG7VdhVi3KDY7BhELY0XY2kKBUKzBYGZgsxXMQTh4zxoyFCQNUL4T0z30pC_C6gkqhHE0rSDg"
+          }
+        },
+        "resigned_object_cid": "bafkreia6qa2mtk2xgmqoehiw67bxi6ftebavtsvbhsmnnftgn6t3oiv4eu",
+        "resigned_jcs_hex": "7b22616464735f76657273696f6e223a22302e31222c226368756e6b73223a5b7b22636964223a226261666b7265696669683236776e667a6365353565676f71366b726d7a617633697a676b6c726f6b6572736c6c7164627768347969327a366a7269222c22636970686572746578745f73697a65223a32362c22696e646578223a312c226e6f6e6365223a224441304f4478415245684d5546525958222c22706c61696e746578745f73697a65223a31307d2c7b22636964223a226261666b726569636c7564736a71656367666c336c656e6f706e7a626579617668797962707278737a64727a36686133706d7076786b71656b3265222c22636970686572746578745f73697a65223a32362c22696e646578223a302c226e6f6e6365223a2241414543417751464267634943516f4c222c22706c61696e746578745f73697a65223a31307d5d2c22637265617465645f6174223a313738333732383030302c22656e6372797074696f6e223a7b226161645f636f6e74657874223a22494345694979516c4a69636f4b536f724c4330754c7a41784d6a4d304e5459334f446b364f7a7739506a38222c22616c676f726974686d223a224145532d3235362d47434d222c22626c6f636b5f616164223a22616464732d626c6f636b2f7631222c226368756e6b5f73697a65223a31302c226b65795f6964223a22746573742d64656b2d31227d2c226b696e64223a226d616e6966657374222c226d656469615f74797065223a226170706c69636174696f6e2f6f637465742d73747265616d222c226f626a6563745f6964223a2275726e3a757569643a30303030303030302d303030302d343030302d383030302d303030303030303030313031222c22706c61696e74657874223a7b2273697a65223a32307d2c227075626c6973686572223a7b22656432353531395f7075626c69635f6b6579223a223131715941594b7843726656535f3754795751484f6737686376506170694d6c727749616150634855526f222c226964223a226469643a6578616d706c653a616c696365227d2c227369676e6174757265223a7b22616c676f726974686d223a2245643235353139222c227075626c69635f6b6579223a223131715941594b7843726656535f3754795751484f6737686376506170694d6c727749616150634855526f222c2276616c7565223a22614a704873386c73636b78624a6447375664685669334b4459374268454c59305859326b4b42554b7a4259475a677378584d515468347a786f794643514e554c3454307a333070435f4336676b716848453072534467227d7d"
+      },
+      "expect": {
+        "accept": false,
+        "stage": "Manifest semantic validation",
+        "reason": "Chunk indices must be contiguous from zero and equal their array positions."
+      }
+    },
+    {
+      "name": "manifest_size_change",
+      "basis": "#/signature_vectors/0/unsigned_object/plaintext/size",
+      "mutation": {
+        "operation": "replace-one-semantic-field-and-resign",
+        "json_pointer": "/plaintext/size",
+        "from": 20,
+        "to": 21,
+        "resigned_object": {
+          "adds_version": "0.1",
+          "kind": "manifest",
+          "object_id": "urn:uuid:00000000-0000-4000-8000-000000000101",
+          "publisher": {
+            "id": "did:example:alice",
+            "ed25519_public_key": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+          },
+          "created_at": 1783728000,
+          "media_type": "application/octet-stream",
+          "plaintext": {
+            "size": 21
+          },
+          "encryption": {
+            "algorithm": "AES-256-GCM",
+            "key_id": "test-dek-1",
+            "chunk_size": 10,
+            "block_aad": "adds-block/v1",
+            "aad_context": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8"
+          },
+          "chunks": [
+            {
+              "index": 0,
+              "cid": "bafkreicludsjqecgfl3lenopnzbeyavhyybprxszdrz6ha3pmpvxkqek2e",
+              "nonce": "AAECAwQFBgcICQoL",
+              "plaintext_size": 10,
+              "ciphertext_size": 26
+            },
+            {
+              "index": 1,
+              "cid": "bafkreifih26wnfzce55egoq6krmzav3izgklrokersllqdbwh4yi2z6jri",
+              "nonce": "DA0ODxAREhMUFRYX",
+              "plaintext_size": 10,
+              "ciphertext_size": 26
+            }
+          ],
+          "signature": {
+            "algorithm": "Ed25519",
+            "public_key": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+            "value": "3vZHOZ35EtdFD2HKYXazOEt3qIWdc7zJ_8pAEAjsMYTHqWiXlIXRHQceAnuyZ6Rchvbb1QdnwOT_T6vxJZSGCg"
+          }
+        },
+        "resigned_object_cid": "bafkreihk5iu7pmxnwxqkfd3p4sixnjbyffo26aqblbxxwxmgqh7j7bwg5m",
+        "resigned_jcs_hex": "7b22616464735f76657273696f6e223a22302e31222c226368756e6b73223a5b7b22636964223a226261666b726569636c7564736a71656367666c336c656e6f706e7a626579617668797962707278737a64727a36686133706d7076786b71656b3265222c22636970686572746578745f73697a65223a32362c22696e646578223a302c226e6f6e6365223a2241414543417751464267634943516f4c222c22706c61696e746578745f73697a65223a31307d2c7b22636964223a226261666b7265696669683236776e667a6365353565676f71366b726d7a617633697a676b6c726f6b6572736c6c7164627768347969327a366a7269222c22636970686572746578745f73697a65223a32362c22696e646578223a312c226e6f6e6365223a224441304f4478415245684d5546525958222c22706c61696e746578745f73697a65223a31307d5d2c22637265617465645f6174223a313738333732383030302c22656e6372797074696f6e223a7b226161645f636f6e74657874223a22494345694979516c4a69636f4b536f724c4330754c7a41784d6a4d304e5459334f446b364f7a7739506a38222c22616c676f726974686d223a224145532d3235362d47434d222c22626c6f636b5f616164223a22616464732d626c6f636b2f7631222c226368756e6b5f73697a65223a31302c226b65795f6964223a22746573742d64656b2d31227d2c226b696e64223a226d616e6966657374222c226d656469615f74797065223a226170706c69636174696f6e2f6f637465742d73747265616d222c226f626a6563745f6964223a2275726e3a757569643a30303030303030302d303030302d343030302d383030302d303030303030303030313031222c22706c61696e74657874223a7b2273697a65223a32317d2c227075626c6973686572223a7b22656432353531395f7075626c69635f6b6579223a223131715941594b7843726656535f3754795751484f6737686376506170694d6c727749616150634855526f222c226964223a226469643a6578616d706c653a616c696365227d2c227369676e6174757265223a7b22616c676f726974686d223a2245643235353139222c227075626c69635f6b6579223a223131715941594b7843726656535f3754795751484f6737686376506170694d6c727749616150634855526f222c2276616c7565223a2233765a484f5a3335457464464432484b5958617a4f4574337149576463377a4a5f38704145416a734d595448715769586c49585248516365416e75795a365263687662623151646e774f545f543676784a5a53474367227d7d"
+      },
+      "expect": {
+        "accept": false,
+        "stage": "Manifest semantic validation",
+        "reason": "Size 21 at chunk_size 10 requires three chunks, but only two are declared."
+      }
+    },
+    {
+      "name": "grant_audience_change",
+      "basis": "#/grant_wrap_vectors/0/signed_grant",
+      "mutation": {
+        "operation": "replace-one-field-without-resigning",
+        "json_pointer": "/audience",
+        "from": "did:example:bob",
+        "to": "did:example:mallory"
+      },
+      "expect": {
+        "accept": false,
+        "stage": "Grant Ed25519 signature verification before unwrap",
+        "reason": "The audience identifier is included in both the signed Grant and wrap context."
+      }
+    },
+    {
+      "name": "recipient_regrant_omits_parent",
+      "basis": "#/grant_wrap_vectors/0/signed_grant",
+      "construction": {
+        "description": "Bob, the parent audience, issues a schema-valid, correctly signed and correctly wrapped Grant to Charlie but omits parent_grant.",
+        "parent_grant_cid": "bafkreifkzlklnetshmyhnulntayonwzufxuogyha6cejlxarlfvmh4fmhe",
+        "bob_ed25519_private_key_hex": "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb",
+        "bob_ed25519_public_key_hex": "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c",
+        "charlie_x25519_private_key_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+        "charlie_x25519_public_key_hex": "605a725d2a4adfeeb1a29e17edd621c1b7593ee8cdbc44ac6c4ab6e2f805d23c",
+        "regrant_ephemeral_x25519_private_key_hex": "c0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedf",
+        "regrant_ephemeral_x25519_public_key_hex": "dc2cca31e8e43bbd91dff7e475cca3347eb478107d5bd765aba4ae4a30c35d44",
+        "x25519_shared_secret_hex": "3b87c5035cce13678dd93d2dbc3a3d42039ebec86444a1ff82cd61b84c6fe968",
+        "wrap_context_hex": "616464732d6772616e742d777261702f76313a7b22616464735f76657273696f6e223a22302e31222c2261756469656e6365223a226469643a6578616d706c653a636861726c6965222c2261756469656e63655f7832353531395f6b65795f6964223a227368613235363a5a6a613732585f38674f3467636573614a5373336c637572644a543357442d7942595866384f5946546b67222c2261756469656e63655f7832353531395f7075626c69635f6b6579223a22594670795853704b332d36786f703458376459687762645a50756a4e764553736245713234766746306a77222c22657870697265735f6174223a313738333733313530302c226772616e745f6964223a2275726e3a757569643a30303030303030302d303030302d343030302d383030302d303030303030303030313033222c226973737565645f6174223a313738333732383030312c22697373756572223a7b22656432353531395f7075626c69635f6b6579223a2250554158772d6844695671537477716e5452742d764a79594c4d3875784a614d774d3156385372305a6777222c226964223a226469643a6578616d706c653a626f62227d2c226b65795f77726170223a7b22616c676f726974686d223a225832353531392d484b44462d5348413235362d4145532d3235362d47434d222c22657068656d6572616c5f7075626c69635f6b6579223a2233437a4b4d656a6b4f373252335f666b6463796a4e483630654242395739646c71365375536a4444585551227d2c226b696e64223a226772616e74222c226d616e69666573745f636964223a226261666b726569617636666a6b656663367333716c7164336a62656461627865776d6c756c326b786373646c67767074326a34726f637a69637475222c22726967687473223a5b2272656164225d7d",
+        "kek_hex": "c39848f5f032931143b72e6e6c2dcafd5205731a90fd5a89b0a165644b3620ce",
+        "wrap_nonce_hex": "2425262728292a2b2c2d2e2f",
+        "wrapped_dek_hex": "eb55e79e31022c2da2aec4f3e32c405de36971e16b7547460ff76bdd3e9b30c6e24c76f9e3c89ed6464d19d53354892d",
+        "signed_object": {
+          "adds_version": "0.1",
+          "kind": "grant",
+          "grant_id": "urn:uuid:00000000-0000-4000-8000-000000000103",
+          "manifest_cid": "bafkreiav6fjkefc6s3qlqd3jbedabxewmlul2kxcsdlgvpt2j4roczictu",
+          "issuer": {
+            "id": "did:example:bob",
+            "ed25519_public_key": "PUAXw-hDiVqStwqnTRt-vJyYLM8uxJaMwM1V8Sr0Zgw"
+          },
+          "audience": "did:example:charlie",
+          "audience_x25519_public_key": "YFpyXSpK3-6xop4X7dYhwbdZPujNvESsbEq24vgF0jw",
+          "audience_x25519_key_id": "sha256:Zja72X_8gO4gcesaJSs3lcurdJT3WD-yBYXf8OYFTkg",
+          "rights": [
+            "read"
+          ],
+          "issued_at": 1783728001,
+          "expires_at": 1783731500,
+          "key_wrap": {
+            "algorithm": "X25519-HKDF-SHA256-AES-256-GCM",
+            "ephemeral_public_key": "3CzKMejkO72R3_fkdcyjNH60eBB9W9dlq6SuSjDDXUQ",
+            "nonce": "JCUmJygpKissLS4v",
+            "ciphertext": "61XnnjECLC2irsTz4yxAXeNpceFrdUdGD_dr3T6bMMbiTHb548ie1kZNGdUzVIkt"
+          },
+          "signature": {
+            "algorithm": "Ed25519",
+            "public_key": "PUAXw-hDiVqStwqnTRt-vJyYLM8uxJaMwM1V8Sr0Zgw",
+            "value": "LFKJqepl1fnZgG9PvAQgOi1vH6xyomwtVOwLEINz6QGBZAmFiCShd_ID6btOkG5cws-gI9kQFGD5RyZ1QpfoCA"
+          }
+        },
+        "signing_input_hex": "616464732d6772616e742f76313a7b22616464735f76657273696f6e223a22302e31222c2261756469656e6365223a226469643a6578616d706c653a636861726c6965222c2261756469656e63655f7832353531395f6b65795f6964223a227368613235363a5a6a613732585f38674f3467636573614a5373336c637572644a543357442d7942595866384f5946546b67222c2261756469656e63655f7832353531395f7075626c69635f6b6579223a22594670795853704b332d36786f703458376459687762645a50756a4e764553736245713234766746306a77222c22657870697265735f6174223a313738333733313530302c226772616e745f6964223a2275726e3a757569643a30303030303030302d303030302d343030302d383030302d303030303030303030313033222c226973737565645f6174223a313738333732383030312c22697373756572223a7b22656432353531395f7075626c69635f6b6579223a2250554158772d6844695671537477716e5452742d764a79594c4d3875784a614d774d3156385372305a6777222c226964223a226469643a6578616d706c653a626f62227d2c226b65795f77726170223a7b22616c676f726974686d223a225832353531392d484b44462d5348413235362d4145532d3235362d47434d222c2263697068657274657874223a223631586e6e6a45434c4332697273547a3479784158654e706365467264556447445f6472335436624d4d62695448623534386965316b5a4e4764557a56496b74222c22657068656d6572616c5f7075626c69635f6b6579223a2233437a4b4d656a6b4f373252335f666b6463796a4e483630654242395739646c71365375536a4444585551222c226e6f6e6365223a224a43556d4a7967704b6973734c533476227d2c226b696e64223a226772616e74222c226d616e69666573745f636964223a226261666b726569617636666a6b656663367333716c7164336a62656461627865776d6c756c326b786373646c67767074326a34726f637a69637475222c22726967687473223a5b2272656164225d7d",
+        "signature_hex": "2c5289a9ea65d5f9d9806f4fbc04203a2d6f1fac72a26c2d54ec0b108373e901816409858824a177f203e9bb4e906e5cc2cfa023d9101460f94726754297e808",
+        "signed_jcs_hex": "7b22616464735f76657273696f6e223a22302e31222c2261756469656e6365223a226469643a6578616d706c653a636861726c6965222c2261756469656e63655f7832353531395f6b65795f6964223a227368613235363a5a6a613732585f38674f3467636573614a5373336c637572644a543357442d7942595866384f5946546b67222c2261756469656e63655f7832353531395f7075626c69635f6b6579223a22594670795853704b332d36786f703458376459687762645a50756a4e764553736245713234766746306a77222c22657870697265735f6174223a313738333733313530302c226772616e745f6964223a2275726e3a757569643a30303030303030302d303030302d343030302d383030302d303030303030303030313033222c226973737565645f6174223a313738333732383030312c22697373756572223a7b22656432353531395f7075626c69635f6b6579223a2250554158772d6844695671537477716e5452742d764a79594c4d3875784a614d774d3156385372305a6777222c226964223a226469643a6578616d706c653a626f62227d2c226b65795f77726170223a7b22616c676f726974686d223a225832353531392d484b44462d5348413235362d4145532d3235362d47434d222c2263697068657274657874223a223631586e6e6a45434c4332697273547a3479784158654e706365467264556447445f6472335436624d4d62695448623534386965316b5a4e4764557a56496b74222c22657068656d6572616c5f7075626c69635f6b6579223a2233437a4b4d656a6b4f373252335f666b6463796a4e483630654242395739646c71365375536a4444585551222c226e6f6e6365223a224a43556d4a7967704b6973734c533476227d2c226b696e64223a226772616e74222c226d616e69666573745f636964223a226261666b726569617636666a6b656663367333716c7164336a62656461627865776d6c756c326b786373646c67767074326a34726f637a69637475222c22726967687473223a5b2272656164225d2c227369676e6174757265223a7b22616c676f726974686d223a2245643235353139222c227075626c69635f6b6579223a2250554158772d6844695671537477716e5452742d764a79594c4d3875784a614d774d3156385372305a6777222c2276616c7565223a224c464b4a7165706c31666e5a67473950764151674f693176483678796f6d7774564f774c45494e7a365147425a416d4669435368645f49443662744f6b47356377732d6749396b514647443552795a315170666f4341227d7d",
+        "signed_object_cid": "bafkreia64wivsmcykpzfb4h3clowj6z2xklqu26uwnls2rlpez3g465txq",
+        "parent_grant_member_present": false,
+        "cryptographic_signature_valid": true,
+        "key_wrap_unwraps_to_dek_hex_if_policy_is_bypassed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+      },
+      "expect": {
+        "accept": false,
+        "stage": "publisher-rooted Grant authority validation before unwrap",
+        "reason": "A root Grant without parent_grant is authorized only when issuer and key equal the Manifest publisher."
+      }
+    },
+    {
+      "name": "grant_expiry_boundary",
+      "basis": "#/grant_wrap_vectors/0/signed_grant",
+      "effective_not_before": 1783728000,
+      "expires_at": 1783731600,
+      "authorization_cases": [
+        {
+          "now": 1783727999,
+          "expect_authorized": false,
+          "reason": "now < effective not_before"
+        },
+        {
+          "now": 1783728000,
+          "expect_authorized": true,
+          "reason": "effective not_before <= now"
+        },
+        {
+          "now": 1783731599,
+          "expect_authorized": true,
+          "reason": "now < expires_at"
+        },
+        {
+          "now": 1783731600,
+          "expect_authorized": false,
+          "reason": "expires_at is exclusive"
+        }
+      ]
+    },
+    {
+      "name": "principal_signature_key_mismatch",
+      "basis": "#/signature_vectors/0/signed_object",
+      "mutation": {
+        "operation": "replace-one-field-without-resigning",
+        "json_pointer": "/signature/public_key",
+        "from": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+        "to": "PUAXw-hDiVqStwqnTRt-vJyYLM8uxJaMwM1V8Sr0Zgw"
+      },
+      "expect": {
+        "accept": false,
+        "stage": "Principal/signature public-key equality before Ed25519 verification",
+        "reason": "signature.public_key must exactly equal publisher.ed25519_public_key."
+      }
+    },
+    {
+      "name": "ed25519_zip215_non_rfc8032_encoding",
+      "basis": "#/signature_vectors/0/signing_input_hex",
+      "public_key_hex": "0100000000000000000000000000000000000000000000000000000000000000",
+      "public_key_base64url": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "signature_hex": "01000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "signature_base64url": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "permissive_zip215_verification": true,
+      "strict_rfc8032_verification": false,
+      "expect": {
+        "accept": false,
+        "stage": "strict RFC 8032 Ed25519 verification",
+        "reason": "ADDS requires RFC 8032 verification; implementations MUST disable permissive ZIP 215 verification."
+      }
+    },
+    {
+      "name": "ed25519_small_order_r",
+      "basis": "#/signature_vectors/0/signing_input_hex",
+      "derivation": "Using the public RFC 8032 test seed from signature_vectors[0], set R to the canonical order-2 point and S = H(R || A || M) * a mod L. Cofactored verification accepts because [8]R is the identity.",
+      "public_key_hex": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+      "public_key_base64url": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+      "small_order_r_hex": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+      "scalar_s_hex": "b390c1d49856623fda83fbce5ccf23c28b326adf969b653e3ca0b25e14d55803",
+      "signature_hex": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fb390c1d49856623fda83fbce5ccf23c28b326adf969b653e3ca0b25e14d55803",
+      "signature_base64url": "7P_______________________________________3-zkMHUmFZiP9qD-85czyPCizJq35abZT48oLJeFNVYAw",
+      "noble_zip215_false_verification": true,
+      "noble_zip215_true_verification": true,
+      "expect": {
+        "accept": false,
+        "stage": "ADDS Ed25519 small-order-R rejection",
+        "reason": "ADDS rejects a small-order encoded R even when a cofactored verification equation succeeds."
+      }
+    },
+    {
+      "name": "ed25519_mixed_order_r",
+      "message_utf8": "test",
+      "message_sha256_hex": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      "public_key_hex": "a2fa2f4a355ba2e907a53009e9e37caddf7ac7e66a08ba07631f553072b3f24c",
+      "public_key_base64url": "ovovSjVboukHpTAJ6eN8rd96x-ZqCLoHYx9VMHKz8kw",
+      "public_key_is_small_order": false,
+      "public_key_is_torsion_free": true,
+      "mixed_order_r_hex": "2947ff378fef06b97cfc2115789afc17794021e6ff1617b902b3c32f63e34360",
+      "r_is_small_order": false,
+      "r_is_torsion_free": false,
+      "scalar_s_hex": "48b3d75478dd580c67e8801e15b492582366b2cd2cd4e086626d46fc1f0f0203",
+      "signature_hex": "2947ff378fef06b97cfc2115789afc17794021e6ff1617b902b3c32f63e3436048b3d75478dd580c67e8801e15b492582366b2cd2cd4e086626d46fc1f0f0203",
+      "signature_base64url": "KUf_N4_vBrl8_CEVeJr8F3lAIeb_Fhe5ArPDL2PjQ2BIs9dUeN1YDGfogB4VtJJYI2ayzSzU4IZibUb8Hw8CAw",
+      "noble_zip215_false_verification": true,
+      "noble_zip215_true_verification": true,
+      "expect": {
+        "accept": false,
+        "stage": "ADDS Ed25519 torsion-free-R validation",
+        "reason": "ADDS requires signature point R to be prime-subgroup/torsion-free; a cofactored equation alone is insufficient."
+      }
+    },
+    {
+      "name": "x25519_all_zero_shared_secret",
+      "recipient_x25519_private_key_hex": "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a",
+      "low_order_ephemeral_public_key_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+      "mathematical_shared_secret_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+      "expect": {
+        "accept": false,
+        "stage": "X25519 shared-secret validation before HKDF",
+        "reason": "RFC 7748 requires rejecting an all-zero shared secret."
+      }
+    }
+  ]
+}

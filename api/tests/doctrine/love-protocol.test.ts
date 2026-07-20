@@ -172,16 +172,17 @@ describe("Love Protocol — summarizeBearers names every actionable next step", 
     expect(sentence).toMatch(/2 bearers older than 90 days/);
   });
 
-  test("five+ active bearers: warns about copies-of-you-on-devices", () => {
+  test("five+ active bearers: warns that every project-wide credential needs review", () => {
     const rows = shapedRows(
       Array.from({ length: 6 }, (_, i) =>
         row({ id: `k${i}`, createdDaysAgo: 1, lastUsedDaysAgo: 0 }),
       ),
     );
     const s = summarizeBearers(rows);
-    const warning = s.advisories.find((a) => a.includes("copy of you on a device"));
+    const warning = s.advisories.find((a) => a.includes("active project-wide bearers"));
     expect(warning).toBeDefined();
-    expect(warning).toContain("6 active bearers");
+    expect(warning).toContain("6 active project-wide bearers");
+    expect(warning).toContain("not agent-root consent");
   });
 
   test("expiring_soon: pluralization for 1 vs N", () => {

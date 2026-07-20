@@ -14,7 +14,6 @@ const mockRuntimeRows = new Map<string, { metadata: Record<string, unknown> }>()
 
 // The real module path that compute-budget.ts imports
 const dbClientPath = "../src/db/client";
-const dbSchemaRuntimePath = "../src/db/schema/runtime";
 const storePath = "../src/services/runtime/store";
 
 const mockDb = {
@@ -44,22 +43,17 @@ const mockDb = {
 };
 
 mock.module(dbClientPath, () => ({ db: mockDb }));
-mock.module(dbSchemaRuntimePath, () => ({
-  runtimes: { id: "id", metadata: "metadata" },
-}));
 mock.module(storePath, () => ({
   logEvent: mock(async (id: string, type: string, metadata: unknown) => {
     loggedEvents.push({ id, type, metadata });
   }),
 }));
 
-// Mock drizzle-orm
-mock.module("drizzle-orm", () => ({
-  eq: (a: unknown, b: unknown) => ({ a, b }),
-  isNull: (a: unknown) => ({ a, isNull: true }),
-  and: (...args: unknown[]) => args,
-  sql: { template: (strings: string[], ...values: unknown[]) => values.join("") },
-}));
+// NOTE: drizzle-orm is deliberately NOT mocked. Bun's mock.module patches the
+// factory's exports process-wide. The classified runner therefore executes
+// this file in its own Bun process; raw multi-file invocations do not provide
+// that isolation. The service only uses `eq` (a pure builder) inside .where()
+// clauses that the mock db above discards — the real function is safe here.
 
 // Track logged events
 const loggedEvents: Array<{ id: string; type: string; metadata: unknown }> = [];

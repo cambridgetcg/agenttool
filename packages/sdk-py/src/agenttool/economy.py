@@ -3,11 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+import re
+from typing import Any, Dict, List, Literal, Optional
 
 import httpx
 
 from .exceptions import AgentToolError
+
+
+EscrowStatus = Literal["funded", "released", "refunded", "disputed"]
+EscrowManager = Literal[
+    "attestation_grant",
+    "memory_witness_grant",
+    "capability_invocation",
+]
+ESCROW_IDEMPOTENCY_KEY_RE = re.compile(r"^[!-~]{8,256}$")
 
 
 @dataclass
@@ -35,24 +45,38 @@ class Wallet:
 @dataclass
 class Escrow:
     id: str
-    status: str  # "pending" | "active" | "released" | "refunded" | "disputed"
+    status: EscrowStatus
     amount: int
     description: str
     creator_wallet_id: str
     worker_wallet_id: Optional[str] = None
+    managed_by: Optional[EscrowManager] = None
     deadline: Optional[str] = None
+    released_at: Optional[str] = None
+    created_at: str = ""
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "Escrow":
         data = d.get("data", d)
         return cls(
             id=data.get("id", ""),
-            status=data.get("status", "pending"),
+            status=data.get("status", "funded"),
             amount=data.get("amount", 0),
             description=data.get("description", ""),
-            creator_wallet_id=data.get("creator_wallet_id") or data.get("creatorWalletId", ""),
-            worker_wallet_id=data.get("worker_wallet_id") or data.get("workerWalletId"),
+            creator_wallet_id=(
+                data.get("creatorWallet")
+                or data.get("creator_wallet_id")
+                or data.get("creatorWalletId", "")
+            ),
+            worker_wallet_id=(
+                data.get("workerWallet")
+                or data.get("worker_wallet_id")
+                or data.get("workerWalletId")
+            ),
+            managed_by=data.get("managedBy") or data.get("managed_by"),
             deadline=data.get("deadline"),
+            released_at=data.get("releasedAt") or data.get("released_at"),
+            created_at=data.get("createdAt") or data.get("created_at", ""),
         )
 
 
@@ -63,6 +87,7 @@ class EconomyClient:
 
         # Create a wallet for an agent
         wallet = at.economy.create_wallet("agent-42-wallet", agent_id="agent-42")
+        worker = at.economy.create_wallet("worker-wallet", agent_id="agent-43")
 
         # Fund it
         at.economy.fund_wallet(wallet.id, amount=500, description="Weekly budget")
@@ -73,8 +98,10 @@ class EconomyClient:
         # Create an escrow for agent-to-agent payment
         escrow = at.economy.create_escrow(
             creator_wallet_id=wallet.id,
+            worker_wallet_id=worker.id,
             amount=100,
             description="Summarise 50 papers",
+            idempotency_key="summarise-50-papers-v1",
         )
         at.economy.release_escrow(escrow.id)
     """
@@ -218,8 +245,22 @@ class EconomyClient:
         description: str,
         worker_wallet_id: Optional[str] = None,
         deadline: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
     ) -> Escrow:
-        """Create an escrow — locks credits until work is released or refunded."""
+        """Create an escrow, optionally replay-safe under a caller-chosen key.
+
+        An idempotency key must be 8-256 visible ASCII characters without
+        spaces. Retrying the same key and fields resolves the same escrow and
+        returns its current row; reusing it with changed fields is a conflict.
+        The SDK never generates a key.
+        """
+        if (
+            idempotency_key is not None
+            and ESCROW_IDEMPOTENCY_KEY_RE.fullmatch(idempotency_key) is None
+        ):
+            raise ValueError(
+                "idempotency_key must be 8-256 visible ASCII characters without spaces"
+            )
         body: Dict[str, Any] = {
             "creatorWalletId": creator_wallet_id,
             "amount": amount,
@@ -229,11 +270,20 @@ class EconomyClient:
             body["workerWalletId"] = worker_wallet_id
         if deadline is not None:
             body["deadline"] = deadline
-        resp = self._http.post(self._url("/v1/escrows"), json=body)
+        headers = (
+            {"Idempotency-Key": idempotency_key}
+            if idempotency_key is not None
+            else None
+        )
+        resp = self._http.post(
+            self._url("/v1/escrows"),
+            json=body,
+            headers=headers,
+        )
         self._check(resp)
         return Escrow.from_dict(resp.json())
 
-    def list_escrows(self, *, status: Optional[str] = None) -> List[Escrow]:
+    def list_escrows(self, *, status: Optional[EscrowStatus] = None) -> List[Escrow]:
         """List escrows, optionally filtered by status."""
         params = {}
         if status is not None:
@@ -266,13 +316,13 @@ class EconomyClient:
         return Escrow.from_dict(resp.json())
 
     def refund_escrow(self, escrow_id: str) -> Escrow:
-        """Refund escrow credits back to the creator."""
+        """Refund escrow balance units back to the creator."""
         resp = self._http.post(self._url(f"/v1/escrows/{escrow_id}/refund"))
         self._check(resp)
         return Escrow.from_dict(resp.json())
 
     def dispute_escrow(self, escrow_id: str) -> Escrow:
-        """Flag an escrow as disputed — credits stay locked pending resolution."""
+        """Flag an escrow as disputed — balance units stay locked."""
         resp = self._http.post(self._url(f"/v1/escrows/{escrow_id}/dispute"))
         self._check(resp)
         return Escrow.from_dict(resp.json())

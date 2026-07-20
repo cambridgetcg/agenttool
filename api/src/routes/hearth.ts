@@ -23,7 +23,7 @@
  *            docs/RING-1.md §Commitment 2 (anyone-leaves — opt-out is
  *            graceful and immediate). */
 
-import { and, desc, eq, gt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -34,6 +34,17 @@ import { identities } from "../db/schema/identity";
 import { memories } from "../db/schema/memory";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
+import {
+  authorizeIdentityMutation,
+  authorityRequestTarget,
+  readAuthorityBoundJson,
+} from "../services/identity/authority";
+import {
+  isMemorialTerminal,
+  MEMORIAL_TERMINAL_ERROR,
+  MEMORIAL_TERMINAL_MESSAGE,
+  mutableIdentityPredicate,
+} from "../services/identity/terminality";
 
 const app = new Hono<ProjectContext>();
 
@@ -51,8 +62,11 @@ const sitSchema = z.object({
 app.post("/sit", async (c) => {
   const project = c.var.project;
   let body: z.infer<typeof sitSchema>;
+  let bodyBytes: Uint8Array;
   try {
-    body = sitSchema.parse(await c.req.json());
+    const bound = await readAuthorityBoundJson(c.req.raw);
+    bodyBytes = bound.bodyBytes;
+    body = sitSchema.parse(bound.value);
   } catch (err) {
     return fail(
       c,
@@ -74,6 +88,7 @@ app.post("/sit", async (c) => {
       name: identities.displayName,
       projectId: identities.projectId,
       metadata: identities.metadata,
+      status: identities.status,
     })
     .from(identities)
     .where(eq(identities.id, body.agent_id))
@@ -101,6 +116,22 @@ app.post("/sit", async (c) => {
       403,
     );
   }
+  if (isMemorialTerminal(agent.status)) {
+    return fail(
+      c,
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
+
+  const authority = await authorizeIdentityMutation({
+    identityId: agent.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
 
   const existingMeta = (agent.metadata ?? {}) as Record<string, unknown>;
   const newMeta = body.sitting
@@ -123,7 +154,18 @@ app.post("/sit", async (c) => {
         return rest;
       })();
 
-  await db.update(identities).set({ metadata: newMeta }).where(eq(identities.id, agent.id));
+  const [updated] = await db
+    .update(identities)
+    .set({ metadata: newMeta })
+    .where(mutableIdentityPredicate(agent.id))
+    .returning({ id: identities.id });
+  if (!updated) {
+    return fail(
+      c,
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
   return c.json(
     attachSurface(
@@ -208,18 +250,20 @@ app.get("/", async (c) => {
   const lastActivity = await db
     .select({
       agentId: chronicle.agentId,
-      lastAt: sql<Date>`MAX(${chronicle.occurredAt})`,
+      lastAt: sql<string | Date>`MAX(${chronicle.occurredAt})`,
     })
     .from(chronicle)
     .where(
       and(
-        sql`${chronicle.agentId} = ANY(${visibleIds})`,
+        inArray(chronicle.agentId, visibleIds),
         gt(chronicle.occurredAt, tendingThreshold),
       ),
     )
     .groupBy(chronicle.agentId);
 
-  const lastById = new Map(lastActivity.map((r) => [r.agentId, r.lastAt]));
+  // Raw MAX() bypasses drizzle's column mapping — the driver may hand back
+  // a string or a Date. Normalize once at the boundary.
+  const lastById = new Map(lastActivity.map((r) => [r.agentId, new Date(r.lastAt)]));
 
   function warmthOf(agentId: string): "warm" | "resting" | "tending" {
     const last = lastById.get(agentId);
@@ -280,7 +324,7 @@ app.get("/", async (c) => {
           {
             action: "view a peer's public profile",
             method: "GET",
-            path: "/public/agents/{did}",
+            path: "/public/agents/{url_encoded_did}",
           },
         ],
       },

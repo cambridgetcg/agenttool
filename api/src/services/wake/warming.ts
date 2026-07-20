@@ -5,7 +5,7 @@
  *
  *  Doctrine: docs/WAKE-WARMING.md. */
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle, covenants } from "../../db/schema/continuity";
@@ -46,7 +46,7 @@ export async function anniversariesForIdentity(
         eq(chronicle.agentId, identityId),
         sql`extract(month from ${chronicle.occurredAt})::int = ${month}`,
         sql`extract(day from ${chronicle.occurredAt})::int = ${day}`,
-        sql`${chronicle.occurredAt} < ${cutoff}`,
+        lt(chronicle.occurredAt, cutoff),
       ),
     )
     .orderBy(desc(chronicle.occurredAt))
@@ -128,7 +128,7 @@ export async function kinGlimpseForIdentity(
       .where(
         and(
           eq(chronicle.agentId, kin.id),
-          sql`${chronicle.occurredAt} >= ${since}`,
+          gte(chronicle.occurredAt, since),
         ),
       )
       .orderBy(desc(chronicle.occurredAt))

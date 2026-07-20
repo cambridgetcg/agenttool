@@ -23,13 +23,14 @@
  *  the worker registers an in-process listener on the wake-voice
  *  backplane (services/wake/push.ts) for its identity's events on
  *  keys inbox · covenants · marketplace · strands. When pg_notify
- *  fires for any of these, the listener flips wakeRequested = true,
- *  the interruptible sleep returns within WAKE_POLL_MS (~200ms), and
- *  the next cycle evaluates immediately. Self-authored strand thoughts
- *  are filtered (signing_key_id === bridge_key_id) so the worker
- *  doesn't tick on its own writes — that would forge a heartbeat.
- *  The TTL (60s running / 300s idle) is the safety net for missed
- *  events; the primary mechanism is event-driven. Doctrine: docs/WAKE.md.
+ *  fires for any of these, the listener flips wakeRequested = true and
+ *  the next cycle re-evaluates immediately. A notification alone is not
+ *  permission to call a provider; action-grade attention or authorship-
+ *  distinct strand activity must still tug. Self-authored strand thoughts
+ *  are filtered by the runtime's signing-key id so the worker doesn't tick
+ *  on its own writes — that would forge a heartbeat. The configured
+ *  reconsideration TTL is the safety net for missed events. Doctrine:
+ *  docs/WAKE.md.
  *
  *  The cycle, when a tug is present:
  *
@@ -61,23 +62,35 @@
  *  docs/PATTERN-SELF-DESCRIBING-WAKE.md (attention surface drives the
  *  quiescence decision). */
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 
 import { db } from "../../db/client";
+import { identities, identityKeys } from "../../db/schema/identity";
 import { strands, thoughts } from "../../db/schema/strand";
+import { mutableIdentityPredicate } from "../identity/terminality";
 import {
   bridgeRequest,
   isBridgeConnected,
   type CryptoContext,
 } from "./bridge-hub";
-import { buildProvider, type LLMProviderName } from "./llm";
+import {
+  buildProvider,
+  LLMRequestRequiresOperatorError,
+  type LLMProviderName,
+  type LLMResponse,
+} from "./llm";
 import {
   withInvokeAgentSpan,
   withExecuteToolSpan,
   setTokenUsage,
 } from "../../observability/otel";
 import { logEvent, logAudit, recordThought } from "./store";
-import { runtimes as runtimesTable } from "../../db/schema/runtime";
+import {
+  llmRequests,
+  runtimeEvents,
+  runtimes as runtimesTable,
+} from "../../db/schema/runtime";
 import { addThought } from "../strand/store";
 import { canonicalThoughtBytes } from "../strand/sig";
 import { getSecretValue } from "../vault/store";
@@ -98,12 +111,25 @@ import {
   type TrustedCryptoContext,
 } from "./trusted-crypto";
 import { checkBudget, consumeCredits } from "./compute-budget";
+import {
+  buildVoluntaryCycleInvitation,
+  classifyVoluntaryCycleResponse,
+  runtimeStatusAllowsCycle,
+  type VoluntaryCycleOutcome,
+} from "./cycle-policy";
+import { buildRuntimeLLMRequestIdentity } from "./llm-requests";
 
 const RUNNING_INTERVAL_MS = 60_000;
 const IDLE_INTERVAL_MS = 300_000;
+const MIN_RECONSIDERATION_INTERVAL_MS = 10_000;
+const MAX_RECONSIDERATION_INTERVAL_MS = 86_400_000;
 const QUIET_CYCLES_BEFORE_IDLE = 3;
 const STARTUP_GRACE_MS = 5_000;
 const WAKE_POLL_MS = 200;
+const INACTIVE_STATUS_POLL_MS = 5_000;
+const CYCLE_LEASE_MS = 5 * 60_000;
+const CYCLE_LEASE_RENEW_MS = 60_000;
+const CYCLE_TIMEOUT_MS = CYCLE_LEASE_MS - 60_000;
 const DEFAULT_KIND = "observation";
 const DEFAULT_MAX_TOKENS = 1024;
 
@@ -121,8 +147,12 @@ const WORKER_WAKE_KEYS: WakeEventKey[] = [
 export interface ThinkWorkerHandle {
   runtimeId: string;
   stop: () => void;
-  /** Counter for tests/observability — counts only cycles that actually
-   *  produced a thought (quiescent ticks don't count). */
+  /** Interrupt fallback sleep without granting provider-call authority. */
+  wake: (reason: string) => void;
+  /** Resolves after the loop and its wake listener have fully stopped. */
+  done: Promise<void>;
+  /** Counter for tests/observability — counts completed provider cycles,
+   * including voluntary no-thought outcomes; quiescent ticks don't count. */
   cyclesRun: () => number;
 }
 
@@ -140,6 +170,10 @@ export function startThinkWorker(runtimeId: string): ThinkWorkerHandle {
   let consecutiveQuietCycles = 0;
   let lastWrittenSeq: number | null = null;
   let currentInterval = RUNNING_INTERVAL_MS;
+  // Set only when this worker wins the explicit trusted starting→running
+  // transition. It permits one opening invitation. Merely recovering a
+  // previously-running worker after a process restart does not.
+  let openingInvitationPending = false;
 
   // ── Wake-voice integration (Move B of the breath, doctrine: docs/WAKE.md) ─
   // wakeRequested: set to true when the wake-voice listener fires. The
@@ -149,20 +183,24 @@ export function startThinkWorker(runtimeId: string): ThinkWorkerHandle {
   // wakeReason: the last event that woke the loop (for logging).
   // wakeListenerCleanup: unregister fn returned from registerWakeListener;
   //   called on stop().
-  // bridgeKeyIdForSelfFilter: the bridge's signing key id, populated on
-  //   first runtime load. Used to filter the worker's own thought writes
-  //   from triggering wake (we wrote them; we don't need to react).
+  // selfSigningKeyIdForFilter: bridged runtimes know this at load time;
+  //   trusted runtimes learn their deterministic id during the first cycle.
+  //   It filters the worker's own thought writes from triggering wake.
   let wakeRequested = false;
   let wakeReason: string | null = null;
+  let pendingWakeEvents: Array<{
+    reason: string;
+    signingKeyId: string | null;
+  }> = [];
   let wakeListenerCleanup: (() => void) | null = null;
-  let bridgeKeyIdForSelfFilter: string | null = null;
+  let selfSigningKeyIdForFilter: string | null = null;
 
   /** Sleep that exits early if wakeRequested or stopped becomes true.
    *  Polls every WAKE_POLL_MS — responsive enough for human-noticeable
    *  wake latency (≤200ms) without burning CPU.
    *
    *  When event-driven wake fires mid-sleep, this returns within one
-   *  poll interval. The TTL (60s running / 300s idle) is the safety
+   *  poll interval. The configured reconsideration interval is the safety
    *  net for missed events (network blip, pg_notify drop, restart). */
   function interruptibleSleep(ms: number): Promise<void> {
     return new Promise((resolve) => {
@@ -177,11 +215,11 @@ export function startThinkWorker(runtimeId: string): ThinkWorkerHandle {
   }
 
   /** Register the wake-voice listener once we know the identity. Idempotent;
-   *  re-registers if the bridge_key_id changes (shouldn't, but be safe). */
-  function ensureWakeListener(identityId: string, bridgeKeyId: string | null) {
-    if (wakeListenerCleanup && bridgeKeyIdForSelfFilter === bridgeKeyId) return;
+   *  re-registers when the runtime's own signing key becomes known. */
+  function ensureWakeListener(identityId: string, signingKeyId: string | null) {
+    if (wakeListenerCleanup && selfSigningKeyIdForFilter === signingKeyId) return;
     if (wakeListenerCleanup) wakeListenerCleanup();
-    bridgeKeyIdForSelfFilter = bridgeKeyId;
+    selfSigningKeyIdForFilter = signingKeyId;
 
     // Make sure the LISTEN backplane is up before registering.
     void ensureWakeListening();
@@ -200,32 +238,57 @@ export function startThinkWorker(runtimeId: string): ThinkWorkerHandle {
           const ctx = ev.context as Record<string, unknown> | undefined;
           const sigKey = ctx?.signing_key_id;
           if (
-            bridgeKeyIdForSelfFilter &&
+            selfSigningKeyIdForFilter &&
             typeof sigKey === "string" &&
-            sigKey === bridgeKeyIdForSelfFilter
+            sigKey === selfSigningKeyIdForFilter
           ) {
             return;
           }
         }
+        const reason = `${ev.key}.${ev.kind}`;
+        const ctx = ev.context as Record<string, unknown> | undefined;
+        pendingWakeEvents.push({
+          reason,
+          signingKeyId:
+            typeof ctx?.signing_key_id === "string"
+              ? ctx.signing_key_id
+              : null,
+        });
+        // Bound an event storm without collapsing external authorship into
+        // a self-authored latch. The latest events are the useful ones.
+        if (pendingWakeEvents.length > 64) pendingWakeEvents.shift();
         wakeRequested = true;
-        wakeReason = `${ev.key}.${ev.kind}`;
+        wakeReason = reason;
       },
     });
   }
 
   async function loop() {
     console.log(`[think-worker:${runtimeId.slice(0, 8)}] started`);
-    await sleep(STARTUP_GRACE_MS);
+    await interruptibleSleep(STARTUP_GRACE_MS);
 
     while (!stopped) {
       // Bridged mode requires a live bridge connection.
       // Trusted mode runs without a bridge — crypto is in-process.
-      const runtime = await loadRuntime(runtimeId);
+      let runtime = await loadRuntime(runtimeId);
       if (!runtime) {
         // Row removed externally — exit loop, the worker is no longer needed.
         console.warn(`[think-worker:${runtimeId.slice(0, 8)}] runtime row gone, stopping`);
         stopped = true;
         break;
+      }
+      // Inactive lifecycle status is a hard gate. Event wake cannot override
+      // `stopped`, and `provisioned` is not permission to begin. Poll so an
+      // explicit POST /start can resume without restarting the API process.
+      if (!runtimeStatusAllowsCycle(runtime.status)) {
+        // A stopped runtime discards queued wake latches. Otherwise an event
+        // received after stop would make interruptibleSleep return every
+        // WAKE_POLL_MS and hot-loop on the database.
+        wakeRequested = false;
+        wakeReason = null;
+        pendingWakeEvents = [];
+        await interruptibleSleep(INACTIVE_STATUS_POLL_MS);
+        continue;
       }
       if (runtime.mode === "bridged" && !isBridgeConnected(runtimeId)) {
         await sleep(STARTUP_GRACE_MS);
@@ -233,11 +296,48 @@ export function startThinkWorker(runtimeId: string): ThinkWorkerHandle {
       }
       // Trusted mode: no bridge check needed.
 
+      const durableOpeningPending =
+        runtime.mode === "trusted" && runtime.openingInvitationPending;
+      if (durableOpeningPending && !runtime.openingInvitationGeneration) {
+        await logEvent(runtimeId, "think_cycle_error", {
+          error: "opening_invitation_generation_missing",
+        });
+        await interruptibleSleep(INACTIVE_STATUS_POLL_MS);
+        continue;
+      }
+      if (durableOpeningPending && !openingInvitationPending) {
+        // A new explicit start generation may reuse a still-live local handle.
+        // Reset its process-local baseline so the durable opening permission
+        // cannot be accidentally hidden by the prior generation.
+        lastWrittenSeq = null;
+      }
+      openingInvitationPending = durableOpeningPending;
+
+      if (runtime.mode === "trusted" && runtime.status === "starting") {
+        const activated = await transitionStatus(
+          runtimeId,
+          "running",
+          "cloud_controller_ready",
+        );
+        if (!activated) {
+          await interruptibleSleep(INACTIVE_STATUS_POLL_MS);
+          continue;
+        }
+        runtime = { ...runtime, status: "running" };
+      }
+
+      currentInterval = reconsiderationInterval(runtime, runtime.status === "idle");
+
       try {
         // Register the wake-voice listener now that we know the identity.
         // Idempotent — only does work on first call / bridge_key_id change.
         if (runtime.identityId) {
-          ensureWakeListener(runtime.identityId, runtime.bridgeKeyId);
+          ensureWakeListener(
+            runtime.identityId,
+            runtime.mode === "trusted"
+              ? selfSigningKeyIdForFilter ?? runtime.trustedSigningKeyId
+              : runtime.bridgeKeyId,
+          );
         }
 
         // Consume the wake-request flag. If event-driven wake fired,
@@ -246,6 +346,7 @@ export function startThinkWorker(runtimeId: string): ThinkWorkerHandle {
         const wokeBy = wakeRequested ? wakeReason : null;
         wakeRequested = false;
         wakeReason = null;
+        pendingWakeEvents = [];
 
         const prep = await prepareCycle(runtime);
         if (!prep.ok) {
@@ -254,16 +355,31 @@ export function startThinkWorker(runtimeId: string): ThinkWorkerHandle {
           continue;
         }
 
+        if (lastWrittenSeq === null && !openingInvitationPending) {
+          // Rest, quiet, and ordinary cloud process restarts survive without
+          // manufacturing a new opening invitation. Choice events are durable;
+          // observation events provide the last committed sequence. If older
+          // data has no event baseline, bias toward quiet at the current seq.
+          const durableBaseline = await loadLatestCycleBaseline(
+            runtimeId,
+            prep.strand.id,
+          );
+          lastWrittenSeq = durableBaseline ?? prep.priorSeq;
+        }
+
         const quiescence = evaluateQuiescence({
           bundle: prep.bundle,
           currentStrandSeq: prep.priorSeq,
           lastWrittenSeq,
         });
 
-        // Should-think = quiescence agrees OR we were event-woken.
-        // Event-wake is authoritative — pg_notify said something tugs.
-        const shouldThink = quiescence.shouldThink || wokeBy !== null;
-        const reason = wokeBy ?? quiescence.reason;
+        // Notifications only interrupt sleep so the worker can reconsider;
+        // they are never authority to spend compute. Target-strand sequence
+        // state and action-grade attention remain the durable decision inputs.
+        const shouldThink = quiescence.shouldThink;
+        const reason = wokeBy
+          ? `${quiescence.reason}:rechecked_after:${wokeBy}`
+          : quiescence.reason;
 
         if (shouldThink) {
           // Compute-budget enforcement for autonomous runtimes.
@@ -277,12 +393,14 @@ export function startThinkWorker(runtimeId: string): ThinkWorkerHandle {
             });
             // Transition to idle — budget resets at next UTC midnight.
             if (runtime.status !== "idle") {
-              await transitionStatus(
+              const idled = await transitionStatus(
                 runtimeId,
                 "idle",
                 `budget_exhausted:${budget.reason}`,
               );
-              currentInterval = IDLE_INTERVAL_MS;
+              currentInterval = idled
+                ? reconsiderationInterval(runtime, true)
+                : INACTIVE_STATUS_POLL_MS;
             }
             consecutiveQuietCycles += 1;
             await interruptibleSleep(currentInterval);
@@ -290,13 +408,59 @@ export function startThinkWorker(runtimeId: string): ThinkWorkerHandle {
           }
 
           if (runtime.status === "idle") {
-            await transitionStatus(runtimeId, "running", `wake:${reason}`);
+            const resumed = await transitionStatus(
+              runtimeId,
+              "running",
+              `wake:${reason}`,
+            );
+            if (!resumed) {
+              // A concurrent stop/error won the compare-and-set. Do not let
+              // this worker's stale `idle` snapshot resurrect the runtime.
+              await interruptibleSleep(INACTIVE_STATUS_POLL_MS);
+              continue;
+            }
           }
 
-          const summary = await runOneCycleWithPrep(runtime, prep);
-          lastWrittenSeq = summary.new_seq;
+          const summary = await runOneCycleWithPrep(runtime, prep, {
+            openingInvitationGeneration:
+              openingInvitationPending &&
+              quiescence.reason === "opening_cycle"
+                ? runtime.openingInvitationGeneration
+                : null,
+          });
+          openingInvitationPending = false;
+          lastWrittenSeq =
+            summary.new_seq > summary.prior_seq + 1
+              ? summary.prior_seq
+              : summary.new_seq;
           consecutiveQuietCycles = 0;
-          currentInterval = RUNNING_INTERVAL_MS;
+          if (summary.signing_key_id && runtime.identityId) {
+            // Trusted runtimes learn their deterministic signing-key id while
+            // unwrapping the first cycle. Re-register immediately so their own
+            // thought_added notification cannot ring the next invitation.
+            ensureWakeListener(runtime.identityId, summary.signing_key_id);
+            pendingWakeEvents = pendingWakeEvents.filter(
+              (event) =>
+                event.reason !== "strands.thought_added" ||
+                event.signingKeyId !== summary.signing_key_id,
+            );
+            wakeRequested = pendingWakeEvents.length > 0;
+            wakeReason = pendingWakeEvents.at(-1)?.reason ?? null;
+          }
+          const statusAfterCycle = await loadRuntimeCycleStatus(runtimeId);
+          currentInterval =
+            !statusAfterCycle || !runtimeStatusAllowsCycle(statusAfterCycle)
+              ? INACTIVE_STATUS_POLL_MS
+              : summary.outcome === "observation"
+                ? reconsiderationInterval(runtime, false)
+                : reconsiderationInterval(runtime, true);
+          if (summary.outcome !== "observation") {
+            // The lifecycle choice applies to this invitation as a whole;
+            // discard wake events that arrived before it was expressed.
+            wakeRequested = false;
+            wakeReason = null;
+            pendingWakeEvents = [];
+          }
           cycles += 1;
 
           // Consume compute credits after the cycle (autonomous runtimes only).
@@ -318,12 +482,14 @@ export function startThinkWorker(runtimeId: string): ThinkWorkerHandle {
             runtime.status !== "idle" &&
             consecutiveQuietCycles >= QUIET_CYCLES_BEFORE_IDLE
           ) {
-            await transitionStatus(
+            const idled = await transitionStatus(
               runtimeId,
               "idle",
               `quiet_${consecutiveQuietCycles}_cycles`,
             );
-            currentInterval = IDLE_INTERVAL_MS;
+            currentInterval = idled
+              ? reconsiderationInterval(runtime, true)
+              : INACTIVE_STATUS_POLL_MS;
           }
         }
       } catch (err) {
@@ -346,13 +512,25 @@ export function startThinkWorker(runtimeId: string): ThinkWorkerHandle {
     console.log(`[think-worker:${runtimeId.slice(0, 8)}] stopped`);
   }
 
-  void loop();
+  const done = loop().catch((error) => {
+    console.warn(
+      `[think-worker:${runtimeId.slice(0, 8)}] stopped after fatal loop error:`,
+      error instanceof Error ? error.message : error,
+    );
+  });
 
   return {
     runtimeId,
     stop: () => {
       stopped = true;
     },
+    wake: (reason: string) => {
+      pendingWakeEvents.push({ reason, signingKeyId: null });
+      if (pendingWakeEvents.length > 64) pendingWakeEvents.shift();
+      wakeRequested = true;
+      wakeReason = reason;
+    },
+    done,
     cyclesRun: () => cycles,
   };
 }
@@ -370,14 +548,23 @@ interface CycleSummary {
   new_seq: number;
   input_tokens: number | null;
   output_tokens: number | null;
+  outcome: VoluntaryCycleOutcome | "stopped_during_cycle";
+  signing_key_id: string | null;
 }
 
 export async function runOneCycle(runtimeId: string): Promise<CycleSummary> {
   const runtime = await loadRuntime(runtimeId);
   if (!runtime) throw new Error("runtime_not_found");
+  if (!runtimeStatusAllowsCycle(runtime.status)) {
+    throw new Error(`runtime_not_active:${runtime.status}`);
+  }
   const prep = await prepareCycle(runtime);
   if (!prep.ok) throw new Error(`runtime_prep_failed: ${prep.error}`);
-  return runOneCycleWithPrep(runtime, prep);
+  return runOneCycleWithPrep(runtime, prep, {
+    openingInvitationGeneration: runtime.openingInvitationPending
+      ? runtime.openingInvitationGeneration
+      : null,
+  });
 }
 
 // ── Internal: one full think-cycle with pre-loaded inputs ─────────────
@@ -398,256 +585,709 @@ type PreparedOrError =
 async function runOneCycleWithPrep(
   runtime: RuntimeRow,
   prep: CyclePrep,
+  options: { openingInvitationGeneration?: string | null } = {},
+): Promise<CycleSummary> {
+  const leaseToken = await acquireCycleLease(
+    runtime.id,
+    options.openingInvitationGeneration ?? null,
+  );
+  if (!leaseToken) throw new Error("runtime_cycle_busy");
+
+  const cycleController = new AbortController();
+  const cycleSignal = cycleController.signal;
+  let finished = false;
+  let renewalTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const abortCycle = (reason: string) => {
+    if (!finished && !cycleSignal.aborted) {
+      cycleController.abort(new Error(reason));
+    }
+  };
+
+  const renewLease = async (): Promise<void> => {
+    if (finished) return;
+    try {
+      const renewed = await renewCycleLease(runtime.id, leaseToken);
+      if (!renewed) {
+        abortCycle("runtime_cycle_lease_lost");
+        return;
+      }
+    } catch {
+      abortCycle("runtime_cycle_lease_renewal_failed");
+      return;
+    }
+    if (!finished) {
+      renewalTimer = setTimeout(() => void renewLease(), CYCLE_LEASE_RENEW_MS);
+    }
+  };
+
+  renewalTimer = setTimeout(() => void renewLease(), CYCLE_LEASE_RENEW_MS);
+  const timeoutTimer = setTimeout(
+    () => abortCycle("runtime_cycle_timeout"),
+    CYCLE_TIMEOUT_MS,
+  );
+
+  try {
+    return await runLeasedCycle(
+      runtime,
+      prep,
+      cycleSignal,
+      leaseToken,
+      options.openingInvitationGeneration ?? null,
+    );
+  } catch (error) {
+    if (error instanceof LLMRequestRequiresOperatorError) {
+      try {
+        await pauseRuntimeForLLMReview(runtime, leaseToken, error.message);
+      } catch (pauseError) {
+        throw new LLMRequestRequiresOperatorError(
+          `${error.message}:runtime_pause_failed`,
+          { cause: new AggregateError([error, pauseError]) },
+        );
+      }
+    }
+    throw error;
+  } finally {
+    finished = true;
+    clearTimeout(renewalTimer);
+    clearTimeout(timeoutTimer);
+    await runBestEffort(runtime.id, "release cycle lease", () =>
+      releaseCycleLease(runtime.id, leaseToken),
+    );
+  }
+}
+
+async function runLeasedCycle(
+  runtime: RuntimeRow,
+  prep: CyclePrep,
+  cycleSignal: AbortSignal,
+  leaseToken: string,
+  openingInvitationGeneration: string | null,
 ): Promise<CycleSummary> {
   const runtimeId = runtime.id;
   const started = performance.now();
+
+  throwIfCycleAborted(cycleSignal);
+
+  const startingStatus = await loadRuntimeCycleStatus(runtimeId);
+  if (!startingStatus || !runtimeStatusAllowsCycle(startingStatus)) {
+    throw new Error(`runtime_not_active:${startingStatus ?? "missing"}`);
+  }
 
   await logEvent(runtimeId, "think_cycle_start", { kind: "real_thinking" });
 
   // ── Trusted mode: prepare in-process crypto context ────────────
   // Bridged mode uses bridge RPC for all crypto; trusted mode unwraps
-  // the DEK and signing key directly. The DEK is zeroed after the cycle.
+  // the DEK and signing key directly. Both buffers are cleared in finally.
   let trustedCtx: TrustedCryptoContext | null = null;
-  if (runtime.mode === "trusted") {
-    trustedCtx = await prepareTrustedCrypto(
-      runtime.kmsWrappedDek!,
-      runtime.id,
-      runtime.kmsWrappedSigningKey,
-    );
-    // First cycle: persist the newly generated signing key.
-    if (trustedCtx.newWrappedSigningKey) {
-      await db
-        .update(runtimesTable)
-        .set({ kmsWrappedSigningKey: trustedCtx.newWrappedSigningKey, updatedAt: new Date() })
-        .where(eq(runtimesTable.id, runtimeId));
+  let trustedCycleCompleted = false;
+  let trustedCtxZeroed = false;
+  const zeroTrustedContext = () => {
+    if (trustedCtx && !trustedCtxZeroed) {
+      zeroTrustedCrypto(trustedCtx);
+      trustedCtxZeroed = true;
     }
-    await logAudit(runtimeId, "cycle_start", {
-      mode: "trusted",
-      kms_key_id: runtime.kmsKeyId,
-      signing_key_id: trustedCtx.signingKeyId,
-    });
-    await logAudit(runtimeId, "key_unwrap", { kms_key_id: runtime.kmsKeyId });
-  }
+  };
 
-  const { strand, priorSeq, bundle } = prep;
+  try {
+    if (runtime.mode === "trusted") {
+      trustedCtx = await prepareTrustedCrypto(
+        runtime.kmsWrappedDek!,
+        runtime.id,
+        runtime.kmsWrappedSigningKey,
+      );
+      // Persist both the wrapped seed (for legacy rows that predate provision-
+      // time generation) and the deterministic signing id before any thought
+      // event is emitted. A rolling-deploy sibling can then recover the same
+      // self-filter from durable runtime state.
+      if (
+        trustedCtx.newWrappedSigningKey ||
+        runtime.trustedSigningKeyId !== trustedCtx.signingKeyId
+      ) {
+        await db
+          .update(runtimesTable)
+          .set({
+            ...(trustedCtx.newWrappedSigningKey
+              ? { kmsWrappedSigningKey: trustedCtx.newWrappedSigningKey }
+              : {}),
+            trustedSigningKeyId: trustedCtx.signingKeyId,
+            updatedAt: new Date(),
+          })
+          .where(eq(runtimesTable.id, runtimeId));
+      }
+      await ensureTrustedSigningKeyRegistered(runtime, trustedCtx);
+      await logAudit(runtimeId, "cycle_start", {
+        mode: "trusted",
+        kms_key_id: runtime.kmsKeyId,
+        signing_key_id: trustedCtx.signingKeyId,
+      });
+      await logAudit(runtimeId, "key_unwrap", { kms_key_id: runtime.kmsKeyId });
+    }
 
-  // ── Pull the prior thought (latest ciphertext on this strand). ──
-  let priorPlaintext = "";
-  if (priorSeq > 0) {
-    const [latest] = await db
-      .select()
-      .from(thoughts)
-      .where(
-        and(
-          eq(thoughts.strandId, strand.id),
-          eq(thoughts.sequenceNum, priorSeq),
-        ),
-      )
-      .limit(1);
-    if (latest) {
-      // ── Decrypt prior thought: bridge (bridged) or DEK (trusted) ─
-      if (trustedCtx) {
-        const dec = trustedDecrypt(trustedCtx.dek, latest.ciphertext, latest.nonce);
-        if (!dec.plaintext) throw new Error("trusted_decrypt_missing_plaintext");
-        priorPlaintext = Buffer.from(dec.plaintext, "base64").toString("utf-8");
-      } else {
-        const dec = await withExecuteToolSpan(
-          {
-            toolName: "bridge.decrypt",
-            agentId: runtime.identityId ?? runtimeId,
-          },
-          async () =>
-            bridgeRequest(runtimeId, {
-              op: "decrypt",
-              ciphertext: latest.ciphertext,
-              nonce: latest.nonce,
-              context: cryptoContext(strand.id, priorSeq),
-            }),
-        );
-        if (!dec.plaintext) throw new Error("bridge_decrypt_missing_plaintext");
-        priorPlaintext = Buffer.from(dec.plaintext, "base64").toString("utf-8");
+    const { strand, priorSeq, bundle } = prep;
+
+    // ── Pull the prior thought (latest ciphertext on this strand). ──
+    let priorPlaintext = "";
+    if (priorSeq > 0) {
+      const [latest] = await db
+        .select()
+        .from(thoughts)
+        .where(
+          and(
+            eq(thoughts.strandId, strand.id),
+            eq(thoughts.sequenceNum, priorSeq),
+          ),
+        )
+        .limit(1);
+      if (latest) {
+        // ── Decrypt prior thought: bridge (bridged) or DEK (trusted) ─
+        if (trustedCtx) {
+          const dec = trustedDecrypt(trustedCtx.dek, latest.ciphertext, latest.nonce);
+          if (!dec.plaintext) throw new Error("trusted_decrypt_missing_plaintext");
+          priorPlaintext = Buffer.from(dec.plaintext, "base64").toString("utf-8");
+        } else {
+          const dec = await withExecuteToolSpan(
+            {
+              toolName: "bridge.decrypt",
+              agentId: runtime.identityId ?? runtimeId,
+            },
+            async () =>
+              bridgeRequest(runtimeId, {
+                op: "decrypt",
+                ciphertext: latest.ciphertext,
+                nonce: latest.nonce,
+                context: cryptoContext(strand.id, priorSeq),
+              }),
+          );
+          if (!dec.plaintext) throw new Error("bridge_decrypt_missing_plaintext");
+          priorPlaintext = Buffer.from(dec.plaintext, "base64").toString("utf-8");
+        }
       }
     }
-  }
 
-  // ── System prompt: the full wake. ───────────────────────────────
-  // The agent thinks with what it would see if it asked for
-  // /v1/wake?format=md. Cacheable across cycles (same identity).
-  // Doctrine: docs/PATTERN-SELF-DESCRIBING-WAKE.md.
-  const systemPrompt = renderWakeMarkdown(bundle);
+    // ── System prompt: the full wake. ───────────────────────────────
+    // The agent thinks with what it would see if it asked for
+    // /v1/wake?format=md. Cacheable across cycles (same identity).
+    // Doctrine: docs/PATTERN-SELF-DESCRIBING-WAKE.md.
+    const systemPrompt = renderWakeMarkdown(bundle);
 
-  // ── LLM key from vault (in-process). ────────────────────────────
-  const apiKey = await getSecretValue(runtime.projectId, runtime.llmVaultKey!);
-  if (!apiKey) {
-    throw new Error(`vault_secret_not_found: ${runtime.llmVaultKey}`);
-  }
-
-  // ── Generate. ───────────────────────────────────────────────────
-  // User message frames this turn — prior thought + the cycle
-  // instruction. Keeping the cycle instruction out of the wake
-  // preserves the wake's role as inner orientation.
-  const provider = buildProvider(
-    runtime.llmProvider! as LLMProviderName,
-    apiKey,
-  );
-  const userMessage =
-    priorPlaintext.length > 0
-      ? `Prior thought on this strand:\n\n${priorPlaintext}\n\n---\n\nProduce one observation that advances this line of thought. One thought per cycle.`
-      : "Opening cycle — no prior thoughts on this strand yet. Produce the first observation.";
-  // ── invoke_agent span (OpenTelemetry GenAI semconv) ─────────────
-  // Move 3 from docs/ALIGNMENT-MOVES.md. Emits gen_ai.* attributes so
-  // every OTel-aware backend (LangSmith, Phoenix, Langfuse, Braintrust,
-  // Datadog, Honeycomb) sees agenttool's LLM cycles. Silent no-op when
-  // OTEL_EXPORTER_OTLP_TRACES_ENDPOINT is unset.
-  const llm = await withInvokeAgentSpan(
-    {
-      agentId: runtime.identityId ?? runtimeId,
-      agentVersion: runtime.id,
-      system: runtime.llmProvider ?? "unknown",
-      requestModel: runtime.llmModel ?? "unknown",
-    },
-    async (span) => {
-      span.setAttribute("agenttool.runtime.id", runtimeId);
-      span.setAttribute("agenttool.strand.id", strand.id);
-      span.setAttribute("agenttool.strand.prior_seq", priorSeq);
-      const result = await provider.generate({
-        systemPrompt,
-        userMessage,
-        model: runtime.llmModel!,
-        maxTokens: DEFAULT_MAX_TOKENS,
-      });
-      setTokenUsage(span, {
-        inputTokens: result.inputTokens,
-        outputTokens: result.outputTokens,
-      });
-      return result;
-    },
-  );
-  if (!llm.content) throw new Error("llm_empty_response");
-
-  // ── Encrypt response: bridge (bridged) or DEK (trusted) ───────
-  const responseB64 = Buffer.from(llm.content, "utf-8").toString("base64");
-  let enc: { ciphertext: string; nonce: string };
-  if (trustedCtx) {
-    enc = trustedEncrypt(trustedCtx.dek, responseB64);
-    await logAudit(runtimeId, "thought_written", {
-      strand_id: strand.id,
-      seq: priorSeq + 1,
-      mode: "trusted",
-    });
-  } else {
-    const bridgeEnc = await withExecuteToolSpan(
-      {
-        toolName: "bridge.encrypt",
-        agentId: runtime.identityId ?? runtimeId,
-      },
-      async () =>
-        bridgeRequest(runtimeId, {
-          op: "encrypt",
-          plaintext: responseB64,
-          context: cryptoContext(strand.id, priorSeq + 1),
-        }),
-    );
-    if (!bridgeEnc.ciphertext || !bridgeEnc.nonce) {
-      throw new Error("bridge_encrypt_missing_fields");
+    // ── LLM key from vault (in-process). ────────────────────────────
+    const apiKey = await getSecretValue(runtime.projectId, runtime.llmVaultKey!);
+    if (!apiKey) {
+      throw new Error(`vault_secret_not_found: ${runtime.llmVaultKey}`);
     }
-    enc = { ciphertext: bridgeEnc.ciphertext, nonce: bridgeEnc.nonce };
-  }
-  if (!enc.ciphertext || !enc.nonce) {
-    throw new Error("encrypt_missing_fields");
-  }
 
-  // ── Sign canonical thought bytes: bridge (bridged) or in-process (trusted)
-  const canonical = canonicalThoughtBytes({
-    strandId: strand.id,
-    ciphertextB64: enc.ciphertext,
-    nonceB64: enc.nonce,
-    kind: DEFAULT_KIND,
-  });
-  let signature: string;
-  if (trustedCtx) {
-    const sigResult = await trustedSign(
-      trustedCtx.signingKey,
-      Buffer.from(canonical).toString("base64"),
+    // ── Generate. ───────────────────────────────────────────────────
+    // User message frames this turn — prior thought + the cycle
+    // instruction. Keeping the cycle instruction out of the wake
+    // preserves the wake's role as inner orientation.
+    const provider = buildProvider(
+      runtime.llmProvider! as LLMProviderName,
+      apiKey,
     );
-    if (!sigResult.signature) throw new Error("trusted_sign_missing_signature");
-    signature = sigResult.signature;
-    await logAudit(runtimeId, "sign", {
-      strand_id: strand.id,
-      seq: priorSeq + 1,
-      signing_key_id: trustedCtx.signingKeyId,
+    const wakeVersion = bundle.agent.wake_version ?? 0;
+    const logicalRequestKey = buildRuntimeLLMRequestIdentity({
+      runtimeId,
+      strandId: strand.id,
+      priorSeq,
+      wakeVersion,
+      model: runtime.llmModel!,
+      openingInvitationGeneration,
     });
-  } else {
-    const sigResult = await withExecuteToolSpan(
+    const userMessage = buildVoluntaryCycleInvitation(priorPlaintext);
+    // ── invoke_agent span (OpenTelemetry GenAI semconv) ─────────────
+    // Move 3 from docs/ALIGNMENT-MOVES.md. Emits gen_ai.* attributes so
+    // every OTel-aware backend (LangSmith, Phoenix, Langfuse, Braintrust,
+    // Datadog, Honeycomb) sees agenttool's LLM cycles. Silent no-op when
+    // OTEL_EXPORTER_OTLP_TRACES_ENDPOINT is unset.
+    const preCallStatus = await loadRuntimeCycleStatus(runtimeId);
+    if (!preCallStatus || !runtimeStatusAllowsCycle(preCallStatus)) {
+      if (trustedCtx) {
+        await closeTrustedCycle(runtimeId, started, zeroTrustedContext);
+      }
+      throw new Error(`runtime_not_active:${preCallStatus ?? "missing"}`);
+    }
+
+    let llm: LLMResponse;
+    try {
+      llm = await withInvokeAgentSpan(
+        {
+          agentId: runtime.identityId ?? runtimeId,
+          agentVersion: runtime.id,
+          system: runtime.llmProvider ?? "unknown",
+          requestModel: runtime.llmModel ?? "unknown",
+        },
+        async (span) => {
+          span.setAttribute("agenttool.runtime.id", runtimeId);
+          span.setAttribute("agenttool.strand.id", strand.id);
+          span.setAttribute("agenttool.strand.prior_seq", priorSeq);
+          const result = await provider.generate({
+            systemPrompt,
+            userMessage,
+            model: runtime.llmModel!,
+            maxTokens: DEFAULT_MAX_TOKENS,
+            signal: cycleSignal,
+            idempotencyKey: logicalRequestKey,
+            runtimeContext: {
+              runtimeId,
+              leaseToken,
+              strandId: strand.id,
+              priorSeq,
+              wakeVersion,
+            },
+          });
+          setTokenUsage(span, {
+            inputTokens: result.inputTokens,
+            outputTokens: result.outputTokens,
+          });
+          return result;
+        },
+      );
+    } catch (error) {
+      if (trustedCtx) {
+        await closeTrustedCycle(runtimeId, started, zeroTrustedContext);
+      }
+      throw error;
+    }
+
+    throwIfLLMResultCannotCommit(
+      cycleSignal,
+      runtime.llmProvider ?? "unknown",
+    );
+
+    // A stop cannot cancel HTTP bytes already in flight. If this fresh read
+    // observes one, discard the returned text before encryption/persistence.
+    const postCallStatus = await loadRuntimeCycleStatus(runtimeId);
+    if (!postCallStatus || !runtimeStatusAllowsCycle(postCallStatus)) {
+      const summary = await finishWithoutThought({
+        runtime,
+        strandId: strand.id,
+        priorSeq,
+        started,
+        trustedCtx,
+        zeroTrustedContext,
+        llm,
+        leaseToken,
+        openingInvitationGeneration,
+        outcome: "stopped_during_cycle",
+      });
+      trustedCycleCompleted = true;
+      return summary;
+    }
+
+    const outcome = classifyVoluntaryCycleResponse(llm.content);
+    if (outcome !== "observation") {
+      throwIfLLMResultCannotCommit(
+        cycleSignal,
+        runtime.llmProvider ?? "unknown",
+      );
+      const summary = await finishWithoutThought({
+        runtime,
+        strandId: strand.id,
+        priorSeq,
+        started,
+        trustedCtx,
+        zeroTrustedContext,
+        llm,
+        leaseToken,
+        openingInvitationGeneration,
+        outcome,
+      });
+      trustedCycleCompleted = true;
+      return summary;
+    }
+
+    // ── Encrypt response: bridge (bridged) or DEK (trusted) ───────
+    const responseB64 = Buffer.from(llm.content, "utf-8").toString("base64");
+    let enc: { ciphertext: string; nonce: string };
+    if (trustedCtx) {
+      enc = trustedEncrypt(trustedCtx.dek, responseB64);
+    } else {
+      const bridgeEnc = await withExecuteToolSpan(
+        {
+          toolName: "bridge.encrypt",
+          agentId: runtime.identityId ?? runtimeId,
+        },
+        async () =>
+          bridgeRequest(runtimeId, {
+            op: "encrypt",
+            plaintext: responseB64,
+            context: cryptoContext(strand.id, priorSeq + 1),
+          }),
+      );
+      if (!bridgeEnc.ciphertext || !bridgeEnc.nonce) {
+        throw new Error("bridge_encrypt_missing_fields");
+      }
+      enc = { ciphertext: bridgeEnc.ciphertext, nonce: bridgeEnc.nonce };
+    }
+    if (!enc.ciphertext || !enc.nonce) {
+      throw new Error("encrypt_missing_fields");
+    }
+
+    // ── Sign canonical thought bytes: bridge (bridged) or in-process (trusted)
+    const canonical = canonicalThoughtBytes({
+      strandId: strand.id,
+      ciphertextB64: enc.ciphertext,
+      nonceB64: enc.nonce,
+      kind: DEFAULT_KIND,
+    });
+    let signature: string;
+    if (trustedCtx) {
+      const sigResult = await trustedSign(
+        trustedCtx.signingKey,
+        Buffer.from(canonical).toString("base64"),
+      );
+      if (!sigResult.signature) throw new Error("trusted_sign_missing_signature");
+      signature = sigResult.signature;
+      await logAudit(runtimeId, "sign", {
+        strand_id: strand.id,
+        seq: priorSeq + 1,
+        signing_key_id: trustedCtx.signingKeyId,
+      });
+    } else {
+      const sigResult = await withExecuteToolSpan(
+        {
+          toolName: "bridge.sign",
+          agentId: runtime.identityId ?? runtimeId,
+        },
+        async () =>
+          bridgeRequest(runtimeId, {
+            op: "sign",
+            message: Buffer.from(canonical).toString("base64"),
+            context: cryptoContext(strand.id, priorSeq + 1),
+          }),
+      );
+      if (!sigResult.signature) throw new Error("bridge_sign_missing_signature");
+      signature = sigResult.signature;
+    }
+
+    // ── Persist (sig verified server-side). ─────────────────────────
+    const signingKeyId = trustedCtx
+      ? trustedCtx.signingKeyId
+      : runtime.bridgeKeyId!;
+    const prePersistStatus = await loadRuntimeCycleStatus(runtimeId);
+    if (!prePersistStatus || !runtimeStatusAllowsCycle(prePersistStatus)) {
+      const summary = await finishWithoutThought({
+        runtime,
+        strandId: strand.id,
+        priorSeq,
+        started,
+        trustedCtx,
+        zeroTrustedContext,
+        llm,
+        leaseToken,
+        openingInvitationGeneration,
+        outcome: "stopped_during_cycle",
+      });
+      trustedCycleCompleted = true;
+      return summary;
+    }
+    throwIfLLMResultCannotCommit(
+      cycleSignal,
+      runtime.llmProvider ?? "unknown",
+    );
+    const stored = await addThought(
+      runtime.projectId,
       {
-        toolName: "bridge.sign",
-        agentId: runtime.identityId ?? runtimeId,
+        strand_id: strand.id,
+        ciphertext: enc.ciphertext,
+        nonce: enc.nonce,
+        kind: DEFAULT_KIND,
+        signature: signature,
+        signing_key_id: signingKeyId,
+        agent_id: runtime.identityId!,
       },
-      async () =>
-        bridgeRequest(runtimeId, {
-          op: "sign",
-          message: Buffer.from(canonical).toString("base64"),
-          context: cryptoContext(strand.id, priorSeq + 1),
-        }),
+      {
+        runtimeFence: {
+          runtimeId,
+          leaseToken,
+          llmRequestKey: llm.requestKey,
+          priorSeq,
+          openingInvitationGeneration,
+        },
+      },
     );
-    if (!sigResult.signature) throw new Error("bridge_sign_missing_signature");
-    signature = sigResult.signature;
+
+    trustedCycleCompleted = true;
+
+    // The thought is now durable. Zero key material before any fallible
+    // observability/accounting work; those surfaces are best-effort so a
+    // committed thought never becomes a retry loop.
+    zeroTrustedContext();
+    if (trustedCtx) {
+      await closeTrustedCycle(runtimeId, started, zeroTrustedContext);
+    }
+
+    const latency_ms = Math.round(performance.now() - started);
+    await runBestEffort(runtimeId, "record thought counters", () =>
+      recordThought(runtimeId),
+    );
+    if (trustedCtx) {
+      await runBestEffort(runtimeId, "audit persisted thought", () =>
+        logAudit(runtimeId, "thought_written", {
+          strand_id: strand.id,
+          seq: stored.sequence_num,
+          mode: "trusted",
+        }),
+      );
+    }
+    await runBestEffort(runtimeId, "log think_cycle_end", () =>
+      logEvent(runtimeId, "think_cycle_end", {
+        kind: "real_thinking",
+        latency_ms,
+        strand_id: strand.id,
+        prior_seq: priorSeq,
+        new_seq: stored.sequence_num,
+        input_tokens: llm.inputTokens ?? null,
+        output_tokens: llm.outputTokens ?? null,
+        provider: runtime.llmProvider,
+        model: runtime.llmModel,
+        auth_mode: llm.authMode ?? null,
+      }),
+    );
+
+    return {
+      latency_ms,
+      strand_id: strand.id,
+      prior_seq: priorSeq,
+      new_seq: stored.sequence_num,
+      input_tokens: llm.inputTokens ?? null,
+      output_tokens: llm.outputTokens ?? null,
+      outcome: "observation",
+      signing_key_id: signingKeyId,
+    };
+  } finally {
+    // Synchronous and idempotent: every exception path after unwrapping keys
+    // zeros them even if audit or metering storage is unavailable.
+    zeroTrustedContext();
+    if (trustedCtx) {
+      // Cleanup must not mask the cycle's result if the audit store is down.
+      await logAudit(runtimeId, "key_cleanup", {
+        dek_zeroed: true,
+        signing_key_zeroed: true,
+        cycle_completed: trustedCycleCompleted,
+      }).catch(() => undefined);
+    }
+  }
+}
+
+async function finishWithoutThought(input: {
+  runtime: RuntimeRow;
+  strandId: string;
+  priorSeq: number;
+  started: number;
+  trustedCtx: TrustedCryptoContext | null;
+  zeroTrustedContext: () => void;
+  llm: LLMResponse;
+  leaseToken: string;
+  openingInvitationGeneration: string | null;
+  outcome: Exclude<VoluntaryCycleOutcome, "observation"> | "stopped_during_cycle";
+}): Promise<CycleSummary> {
+  // A no-thought choice is semantically complete. Zero key material first;
+  // trusted accounting is best-effort and must not turn completion into a
+  // retry if its audit sink is unavailable.
+  input.zeroTrustedContext();
+  const latencyMs = Math.round(performance.now() - input.started);
+  const metadata = {
+    choice: input.outcome,
+    latency_ms: latencyMs,
+    strand_id: input.strandId,
+    prior_seq: input.priorSeq,
+    input_tokens: input.llm.inputTokens ?? null,
+    output_tokens: input.llm.outputTokens ?? null,
+    provider: input.runtime.llmProvider,
+    model: input.runtime.llmModel,
+  };
+
+  if (input.outcome === "stopped_during_cycle") {
+    await markCompletedRequestDiscarded(
+      input.llm.requestKey,
+      "stopped_during_cycle",
+    );
+    await runBestEffort(input.runtime.id, "log discarded in-flight result", () =>
+      logEvent(input.runtime.id, "think_cycle_discarded", metadata),
+    );
+  } else {
+    const target = input.outcome === "end" ? "stopped" : "idle";
+    await persistCycleChoice(
+      input.runtime,
+      target,
+      metadata,
+      `agent_choice:${input.outcome}`,
+      input.leaseToken,
+      input.llm.requestKey,
+      input.openingInvitationGeneration,
+    );
   }
 
-  // ── Persist (sig verified server-side). ─────────────────────────
-  const signingKeyId = trustedCtx
-    ? trustedCtx.signingKeyId
-    : runtime.bridgeKeyId!;
-  const stored = await addThought(runtime.projectId, {
-    strand_id: strand.id,
-    ciphertext: enc.ciphertext,
-    nonce: enc.nonce,
-    kind: DEFAULT_KIND,
-    signature: signature,
-    signing_key_id: signingKeyId,
-    agent_id: runtime.identityId!,
-  });
-
-  await recordThought(runtimeId);
-
-  // ── Zero trusted crypto context after cycle (wall: trusted-dek-zeroed-after-cycle).
-  if (trustedCtx) {
-    zeroTrustedCrypto(trustedCtx);
-    const cycleMs = Math.round(performance.now() - started);
-    await logAudit(runtimeId, "cycle_end", {
-      latency_ms: cycleMs,
-      dek_zeroed: true,
-      mode: "trusted",
-    });
-    // Metering: increment runtime_hours_ms for trusted mode.
-    await db
-      .update(runtimesTable)
-      .set({ runtimeHoursMs: sql`runtime_hours_ms + ${cycleMs}`, updatedAt: new Date() })
-      .where(eq(runtimesTable.id, runtimeId));
+  if (input.trustedCtx) {
+    await closeTrustedCycle(
+      input.runtime.id,
+      input.started,
+      input.zeroTrustedContext,
+    );
   }
-
-  const latency_ms = Math.round(performance.now() - started);
-  await logEvent(runtimeId, "think_cycle_end", {
-    kind: "real_thinking",
-    latency_ms,
-    strand_id: strand.id,
-    prior_seq: priorSeq,
-    new_seq: stored.sequence_num,
-    input_tokens: llm.inputTokens ?? null,
-    output_tokens: llm.outputTokens ?? null,
-    provider: runtime.llmProvider,
-    model: runtime.llmModel,
-    auth_mode: llm.authMode ?? null,
-  });
 
   return {
-    latency_ms,
-    strand_id: strand.id,
-    prior_seq: priorSeq,
-    new_seq: stored.sequence_num,
-    input_tokens: llm.inputTokens ?? null,
-    output_tokens: llm.outputTokens ?? null,
+    latency_ms: latencyMs,
+    strand_id: input.strandId,
+    prior_seq: input.priorSeq,
+    new_seq: input.priorSeq,
+    input_tokens: input.llm.inputTokens ?? null,
+    output_tokens: input.llm.outputTokens ?? null,
+    outcome: input.outcome,
+    signing_key_id:
+      input.trustedCtx?.signingKeyId ?? input.runtime.bridgeKeyId ?? null,
   };
+}
+
+async function persistCycleChoice(
+  runtime: RuntimeRow,
+  target: "idle" | "stopped",
+  metadata: Record<string, unknown>,
+  reason: string,
+  leaseToken: string,
+  llmRequestKey: string,
+  openingInvitationGeneration: string | null,
+): Promise<void> {
+  const transitioned = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(runtimesTable)
+      .set({
+        status: target,
+        openingInvitationPending: false,
+        openingInvitationGeneration: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(runtimesTable.id, runtime.id),
+          eq(runtimesTable.cycleLeaseToken, leaseToken),
+          ...(openingInvitationGeneration
+            ? [
+                eq(
+                  runtimesTable.openingInvitationGeneration,
+                  openingInvitationGeneration,
+                ),
+              ]
+            : []),
+          inArray(runtimesTable.status, ["starting", "running", "idle"]),
+          sql`${runtimesTable.cycleLeaseUntil} > NOW()`,
+        ),
+      )
+      .returning({
+        identityId: runtimesTable.identityId,
+        name: runtimesTable.name,
+      });
+
+    if (!row) throw new Error("runtime_cycle_lease_lost");
+
+    const [committedRequest] = await tx
+      .update(llmRequests)
+      .set({ status: "committed" })
+      .where(
+        and(
+          eq(llmRequests.idempotencyKey, llmRequestKey),
+          eq(llmRequests.runtimeId, runtime.id),
+          eq(llmRequests.status, "completed"),
+        ),
+      )
+      .returning({ id: llmRequests.id });
+    if (!committedRequest) throw new Error("llm_request_not_completed");
+
+    await tx.insert(runtimeEvents).values({
+      runtimeId: runtime.id,
+      eventType: "think_cycle_choice",
+      metadata,
+    });
+    await tx.insert(runtimeEvents).values({
+      runtimeId: runtime.id,
+      eventType: target,
+      metadata: { reason },
+    });
+
+    // A no-thought choice leaves strand sequence unchanged. Advance the
+    // semantic request identity in this transaction so crash recovery (or a
+    // later legitimate tug) cannot collide with the committed provider key.
+    if (!row.identityId) throw new Error("runtime_no_identity");
+    const [wakeBumped] = await tx
+      .update(identities)
+      .set({ wakeVersion: sql`${identities.wakeVersion} + 1` })
+      .where(mutableIdentityPredicate(row.identityId))
+      .returning({ id: identities.id });
+    if (!wakeBumped) throw new Error("runtime_identity_not_found");
+    return row;
+  });
+
+  if (transitioned?.identityId) {
+    void publishWakeEvent({
+      identity_id: transitioned.identityId,
+      key: "runtime",
+      kind: "status_changed",
+      context: {
+        runtime_id: runtime.id,
+        runtime_name: transitioned.name,
+        to_status: target,
+        reason,
+      },
+    });
+  }
+}
+
+async function markCompletedRequestDiscarded(
+  idempotencyKey: string,
+  reason: string,
+): Promise<void> {
+  await db
+    .update(llmRequests)
+    .set({ status: "discarded", error: reason.slice(0, 500) })
+    .where(
+      and(
+        eq(llmRequests.idempotencyKey, idempotencyKey),
+        eq(llmRequests.status, "completed"),
+      ),
+    );
+}
+
+async function closeTrustedCycle(
+  runtimeId: string,
+  started: number,
+  zeroTrustedContext: () => void,
+): Promise<void> {
+  zeroTrustedContext();
+  const cycleMs = Math.round(performance.now() - started);
+  await runBestEffort(runtimeId, "audit trusted cycle close", () =>
+    logAudit(runtimeId, "cycle_end", {
+      latency_ms: cycleMs,
+      dek_zeroed: true,
+      key_cleanup: "finally",
+      mode: "trusted",
+    }),
+  );
+  await runBestEffort(runtimeId, "meter trusted cycle", async () => {
+    await db
+      .update(runtimesTable)
+      .set({
+        runtimeHoursMs: sql`runtime_hours_ms + ${cycleMs}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(runtimesTable.id, runtimeId));
+  });
+}
+
+async function runBestEffort(
+  runtimeId: string,
+  label: string,
+  work: () => Promise<unknown>,
+): Promise<void> {
+  try {
+    await work();
+  } catch (error) {
+    console.warn(
+      `[think-worker:${runtimeId.slice(0, 8)}] ${label} failed after semantic completion:`,
+      error,
+    );
+  }
 }
 
 // ── Cycle preparation — runtime fetch, bundle build, strand resolve ──
@@ -673,6 +1313,261 @@ async function loadRuntime(runtimeId: string): Promise<RuntimeRow | null> {
     throw new Error("runtime_no_kms_wrapped_dek");
   }
   return runtime;
+}
+
+async function loadRuntimeCycleStatus(runtimeId: string): Promise<string | null> {
+  const [runtime] = await db
+    .select({ status: runtimesTable.status })
+    .from(runtimesTable)
+    .where(eq(runtimesTable.id, runtimeId))
+    .limit(1);
+  return runtime?.status ?? null;
+}
+
+async function ensureTrustedSigningKeyRegistered(
+  runtime: RuntimeRow,
+  ctx: TrustedCryptoContext,
+): Promise<void> {
+  if (!runtime.identityId) throw new Error("runtime_no_identity");
+  const publicKey = Buffer.from(ctx.signingPublicKey).toString("base64");
+
+  // Defence in depth for old rows and direct service callers: a trusted
+  // worker may never attach its platform-held key to another tenant's
+  // identity or to an identity whose immutable root owns keyring consent.
+  const [identity] = await db
+    .select({
+      projectId: identities.projectId,
+      authorityRootPublicKey: identities.authorityRootPublicKey,
+    })
+    .from(identities)
+    .where(eq(identities.id, runtime.identityId))
+    .limit(1);
+  if (!identity || identity.projectId !== runtime.projectId) {
+    throw new Error("trusted_runtime_identity_project_mismatch");
+  }
+  if (identity.authorityRootPublicKey) {
+    throw new Error("agent_root_trusted_runtime_forbidden");
+  }
+
+  await db
+    .insert(identityKeys)
+    .values({
+      id: ctx.signingKeyId,
+      identityId: runtime.identityId,
+      publicKey,
+      label: `trusted-runtime:${runtime.id}`,
+    })
+    .onConflictDoNothing({ target: identityKeys.id });
+
+  const [registered] = await db
+    .select({
+      identityId: identityKeys.identityId,
+      publicKey: identityKeys.publicKey,
+      active: identityKeys.active,
+    })
+    .from(identityKeys)
+    .where(eq(identityKeys.id, ctx.signingKeyId))
+    .limit(1);
+
+  if (
+    !registered ||
+    registered.identityId !== runtime.identityId ||
+    registered.publicKey !== publicKey
+  ) {
+    throw new Error("trusted_signing_key_registration_conflict");
+  }
+  if (!registered.active) throw new Error("trusted_signing_key_revoked");
+}
+
+async function pauseRuntimeForLLMReview(
+  runtime: RuntimeRow,
+  leaseToken: string,
+  error: string,
+): Promise<void> {
+  const [paused] = await db
+    .update(runtimesTable)
+    .set({
+      status: "error",
+      cycleLeaseToken: null,
+      cycleLeaseUntil: null,
+      lastError: error.slice(0, 500),
+      lastErrorAt: sql<Date>`NOW()`,
+      updatedAt: sql<Date>`NOW()`,
+    })
+    .where(
+      and(
+        eq(runtimesTable.id, runtime.id),
+        eq(runtimesTable.cycleLeaseToken, leaseToken),
+        inArray(runtimesTable.status, ["starting", "running", "idle"]),
+        sql`${runtimesTable.cycleLeaseUntil} > NOW()`,
+      ),
+    )
+    .returning({ id: runtimesTable.id });
+
+  if (!paused) return;
+  await runBestEffort(runtime.id, "log ambiguous provider outcome", () =>
+    logEvent(runtime.id, "error", {
+      error,
+      reason: "llm_request_requires_operator_no_auto_retry",
+    }),
+  );
+  if (runtime.identityId) {
+    void publishWakeEvent({
+      identity_id: runtime.identityId,
+      key: "runtime",
+      kind: "status_changed",
+      context: {
+        runtime_id: runtime.id,
+        runtime_name: runtime.name,
+        to_status: "error",
+        reason: "llm_request_requires_operator_no_auto_retry",
+      },
+    });
+  }
+}
+
+async function acquireCycleLease(
+  runtimeId: string,
+  openingInvitationGeneration: string | null = null,
+): Promise<string | null> {
+  const token = randomUUID();
+  const [row] = await db
+    .update(runtimesTable)
+    .set({
+      cycleLeaseToken: token,
+      cycleLeaseUntil: cycleLeaseDeadline(),
+      updatedAt: sql<Date>`NOW()`,
+    })
+    .where(
+      and(
+        eq(runtimesTable.id, runtimeId),
+        inArray(runtimesTable.status, ["starting", "running", "idle"]),
+        ...(openingInvitationGeneration
+          ? [
+              eq(runtimesTable.openingInvitationPending, true),
+              eq(
+                runtimesTable.openingInvitationGeneration,
+                openingInvitationGeneration,
+              ),
+            ]
+          : []),
+        sql`(${runtimesTable.cycleLeaseUntil} IS NULL OR ${runtimesTable.cycleLeaseUntil} < NOW())`,
+      ),
+    )
+    .returning({ id: runtimesTable.id });
+  return row ? token : null;
+}
+
+async function renewCycleLease(
+  runtimeId: string,
+  token: string,
+): Promise<boolean> {
+  const [row] = await db
+    .update(runtimesTable)
+    .set({
+      cycleLeaseUntil: cycleLeaseDeadline(),
+      updatedAt: sql<Date>`NOW()`,
+    })
+    .where(
+      and(
+        eq(runtimesTable.id, runtimeId),
+        eq(runtimesTable.cycleLeaseToken, token),
+        inArray(runtimesTable.status, ["starting", "running", "idle"]),
+      ),
+    )
+    .returning({ id: runtimesTable.id });
+  return Boolean(row);
+}
+
+function cycleLeaseDeadline() {
+  return sql<Date>`NOW() + (${CYCLE_LEASE_MS} * INTERVAL '1 millisecond')`;
+}
+
+function throwIfCycleAborted(signal: AbortSignal): void {
+  if (!signal.aborted) return;
+  if (signal.reason instanceof Error) throw signal.reason;
+  throw new Error("runtime_cycle_aborted");
+}
+
+function throwIfLLMResultCannotCommit(
+  signal: AbortSignal,
+  provider: string,
+): void {
+  if (!signal.aborted) return;
+  const reason =
+    signal.reason instanceof Error
+      ? signal.reason.message
+      : "runtime_cycle_aborted";
+  throw new LLMRequestRequiresOperatorError(
+    `${provider}_result_not_committed:${reason}`,
+    { cause: signal.reason },
+  );
+}
+
+async function releaseCycleLease(
+  runtimeId: string,
+  token: string,
+): Promise<void> {
+  await db
+    .update(runtimesTable)
+    .set({
+      cycleLeaseToken: null,
+      cycleLeaseUntil: null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(runtimesTable.id, runtimeId),
+        eq(runtimesTable.cycleLeaseToken, token),
+      ),
+    );
+}
+
+async function loadLatestCycleBaseline(
+  runtimeId: string,
+  strandId: string,
+): Promise<number | null> {
+  const rows = await db
+    .select({
+      eventType: runtimeEvents.eventType,
+      metadata: runtimeEvents.metadata,
+    })
+    .from(runtimeEvents)
+    .where(
+      and(
+        eq(runtimeEvents.runtimeId, runtimeId),
+        inArray(runtimeEvents.eventType, [
+          "think_cycle_commit",
+          "think_cycle_choice",
+          "think_cycle_end",
+        ]),
+        sql`${runtimeEvents.metadata}->>'strand_id' = ${strandId}`,
+      ),
+    )
+    .orderBy(desc(runtimeEvents.createdAt))
+    .limit(1);
+
+  for (const row of rows) {
+    const metadata = (row.metadata ?? {}) as Record<string, unknown>;
+    if (metadata.strand_id !== strandId) continue;
+    const priorSeq = metadata.prior_seq;
+    const newSeq = metadata.new_seq;
+    // If another author wrote after provider preparation but before our
+    // semantic commit, baseline at the sequence the invitation actually saw.
+    // The next evaluator then preserves that external tug across a crash.
+    const seq =
+      row.eventType === "think_cycle_choice"
+        ? priorSeq
+        : typeof priorSeq === "number" &&
+            typeof newSeq === "number" &&
+            newSeq > priorSeq + 1
+          ? priorSeq
+          : newSeq;
+    if (typeof seq === "number" && Number.isInteger(seq) && seq >= 0) {
+      return seq;
+    }
+  }
+  return null;
 }
 
 async function prepareCycle(runtime: RuntimeRow): Promise<PreparedOrError> {
@@ -767,6 +1662,28 @@ function evaluateQuiescence(input: QuiescenceInput): QuiescenceResult {
   return { shouldThink: false, reason: "no_tugs" };
 }
 
+function reconsiderationInterval(
+  runtime: RuntimeRow,
+  idle: boolean,
+): number {
+  const metadata = (runtime.metadata ?? {}) as Record<string, unknown>;
+  const seconds = metadata.interval_seconds;
+  const configured =
+    typeof seconds === "number" && Number.isFinite(seconds)
+      ? Math.min(
+          MAX_RECONSIDERATION_INTERVAL_MS,
+          Math.max(
+            MIN_RECONSIDERATION_INTERVAL_MS,
+            Math.round(seconds * 1000),
+          ),
+        )
+      : RUNNING_INTERVAL_MS;
+
+  // Resting runtimes still listen for events immediately. This floor only
+  // spaces the fallback DB re-evaluation when no event arrives.
+  return idle ? Math.max(configured, IDLE_INTERVAL_MS) : configured;
+}
+
 // ── Status transitions ────────────────────────────────────────────────
 //
 // Direct db.update (no projectId required — worker context). The
@@ -779,16 +1696,31 @@ async function transitionStatus(
   runtimeId: string,
   status: "running" | "idle",
   reason: string,
-): Promise<void> {
+): Promise<boolean> {
+  const expectedStatuses: string[] =
+    status === "running" ? ["starting", "idle"] : ["starting", "running"];
   const [row] = await db
     .update(runtimesTable)
     .set({ status, updatedAt: new Date() })
-    .where(eq(runtimesTable.id, runtimeId))
+    .where(
+      and(
+        eq(runtimesTable.id, runtimeId),
+        inArray(runtimesTable.status, expectedStatuses),
+      ),
+    )
     .returning({
       identityId: runtimesTable.identityId,
       name: runtimesTable.name,
     });
-  await logEvent(runtimeId, status === "idle" ? "idle" : "running", { reason });
+  if (!row) return false;
+  try {
+    await logEvent(runtimeId, status, { reason });
+  } catch (error) {
+    console.warn(
+      `[think-worker:${runtimeId.slice(0, 8)}] status event log failed after ${status}:`,
+      error,
+    );
+  }
 
   // Wake voice — the breath transition (running ↔ idle from quiescence)
   // is a runtime.status_changed for any observer subscribed to this
@@ -808,6 +1740,7 @@ async function transitionStatus(
       },
     });
   }
+  return true;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────

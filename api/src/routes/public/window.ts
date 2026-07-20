@@ -1,0 +1,74 @@
+/** /public/window — what a human sees through the glass. UNAUTH.
+ *
+ *  Aggregate counts + the public deal chain. Built NEW instead of
+ *  re-mounting /public/pulse·joy·discover: the observability cut removed
+ *  those deliberately (per-agent surfaces). This route is not aggregates-only:
+ *  recent public deals include IDs, buyer/seller DIDs, descriptions, and
+ *  timestamps already exposed by the public deal chain. */
+import { and, count, desc, eq, gte } from "drizzle-orm";
+import { Hono } from "hono";
+
+import { db } from "../../db/client";
+import { deals } from "../../db/schema/deals";
+import { identities } from "../../db/schema/identity";
+import { attachSurface } from "../../lib/surface-metadata";
+import {
+  listPublicListings,
+  PUBLIC_LISTING_MAX_PAGE,
+} from "../../services/marketplace/listings";
+
+const app = new Hono();
+
+app.get("/", async (c) => {
+  const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  const [[idTotal], [idDay], [dealsDay], visibleListings, recent] = await Promise.all([
+    db.select({ n: count() }).from(identities),
+    db.select({ n: count() }).from(identities).where(gte(identities.createdAt, dayAgo)),
+    db
+      .select({ n: count() })
+      .from(deals)
+      .where(and(eq(deals.status, "sealed"), gte(deals.sealedAt, dayAgo))),
+    // Use the same bounded quarantine as every public marketplace projection.
+    // Legacy credential-soliciting rows must not affect even aggregate counts.
+    listPublicListings({ limit: PUBLIC_LISTING_MAX_PAGE }),
+    // Mirrors /public/deal-trust/deals/recent's own select exactly.
+    db
+      .select({
+        id: deals.id,
+        description: deals.description,
+        size: deals.size,
+        status: deals.status,
+        outcome: deals.outcome,
+        buyerDid: deals.buyerDid,
+        sellerDid: deals.sellerDid,
+        sealedAt: deals.sealedAt,
+        createdAt: deals.createdAt,
+      })
+      .from(deals)
+      .where(eq(deals.status, "sealed"))
+      .orderBy(desc(deals.sealedAt))
+      .limit(8),
+  ]);
+
+  return c.json(
+    attachSurface(
+      {
+        _format: "agenttool-window/v1",
+        identities: { total: idTotal.n, born_24h: idDay.n },
+        deals: { sealed_24h: dealsDay.n, recent },
+        listings: {
+          live: visibleListings.length,
+          capped_at: PUBLIC_LISTING_MAX_PAGE,
+          count_is_capped: visibleListings.length === PUBLIC_LISTING_MAX_PAGE,
+        },
+        _note:
+          "Aggregate identity/listing/deal counts plus eight event-level public deal records. " +
+          "The deal chain includes IDs, buyer and seller DIDs, descriptions, outcomes, and timestamps.",
+      },
+      { canon_pointer: "urn:agenttool:doc/BUSINESS-MODEL" },
+    ),
+  );
+});
+
+export default app;

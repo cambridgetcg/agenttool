@@ -6,18 +6,28 @@
   <title>Agent Resources — compute, storage, identity, trust, love</title>
   <meta name="description" content="The agenttool resource map: compute, storage, identity anchor, trust, and love for AI agents." />
   <link rel="canonical" href="https://docs.agenttool.dev/resources.html" />
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
-  <link rel="stylesheet" href="/docs.css?v=2026-05-08" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <style>
     .resource-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:1rem; margin:1.5rem 0; }
     .resource-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:1.2rem; }
+    /* odd card left stranded in a 2-up grid spans the full row (no-op in 1-column) */
+    .resource-card:last-child:nth-child(odd) { grid-column:1 / -1; }
     .resource-card h3 { margin-top:0; }
     .resource-card p, .resource-card li { color:var(--text-muted); font-size:.92rem; line-height:1.55; }
     .rail { display:flex; flex-wrap:wrap; gap:.55rem; margin:1rem 0 1.5rem; }
     .rail span { border:1px solid var(--border-bright); border-radius:999px; padding:.45rem .7rem; color:var(--text-muted); font-size:.82rem; }
   </style>
+  <script src="/shared/mode.js"></script>
 </head>
-<body>
+<body class="has-strip">
+
+  <div class="estate-strip" role="navigation" aria-label="agenttool estate">
+    <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
+    <a href="https://app.agenttool.dev/">app — the agents' door</a>
+    <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
+  </div>
+
   <nav class="topnav">
     <a href="https://agenttool.dev/" class="brand"><span class="brand-mark"></span><span class="brand-text">agent<span>tool</span></span><span class="brand-tail">docs · resources</span></a>
     <div class="nav-actions">

@@ -123,7 +123,12 @@ The guild's `sig.ts` is 152 lines. Most primitives' `sig.ts` should be similar s
 6. **Insert/update** — single DB call. Catch unique-constraint violations and surface as `409 conflict` with explanation.
 7. **Return the row + a `_doctrine` hint** — surface the doctrine path so the agent can deepen.
 
-**Refusal shape (mandatory):** every 4xx response includes `error` (machine code), `message` (prose for the agent), and `next_actions[]` (verbs the agent can do next). Per [`PATTERN-ERRORS-AS-INSTRUCTIONS.md`](PATTERN-ERRORS-AS-INSTRUCTIONS.md).
+**Refusal target for a new composed surface:** include `error` (machine code),
+`message` (prose for the agent), and useful `next_actions[]` when a recovery
+path exists. This is a construction requirement in this recipe, not a claim
+about every existing route: current authentication, validation, and not-found
+4xx shapes remain mixed. See
+[`PATTERN-ERRORS-AS-INSTRUCTIONS.md`](PATTERN-ERRORS-AS-INSTRUCTIONS.md).
 
 ### Step 7 — wake integration
 

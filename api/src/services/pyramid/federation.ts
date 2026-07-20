@@ -10,8 +10,7 @@
  *
  *  @enforces urn:agenttool:wall/pyramid-no-central-authority
  *    No peer is treated as privileged. trust='covenanted' confers
- *    permission to participate in tier-portability federation, never
- *    'authority over the pyramid'.
+ *    a reserved trust label. Current tier computation does not consume it.
  *
  *  @enforces urn:agenttool:wall/pyramid-federation-discovery-via-well-known
  *    Peer descriptors are fetched from /.well-known/pyramid — the only
@@ -22,8 +21,14 @@ import { and, asc, eq, isNull, ne, or } from "drizzle-orm";
 import { db } from "../../db/client";
 import { pyramidCitizenships, pyramidPeers } from "../../db/schema/citizens";
 import { identities } from "../../db/schema/identity";
+import {
+  FEDERATION_MAX_RESPONSE_BYTES,
+  safeFederationHttpsGet,
+} from "../federation/safe-fetch";
 
 import { sponsorTreeDepth, SPONSOR_TREE_DEPTH_CAP } from "./citizenship";
+
+const PYRAMID_FETCH_TIMEOUT_MS = 5_000;
 
 // ── Peer descriptor (RFC 8615 /.well-known/pyramid) ──────────────────
 
@@ -44,6 +49,10 @@ export interface PeerDescriptor {
     accepts_inbound_sponsorships: boolean;
     publishes_citizen_dids: boolean;
     lottery_scope: "local" | "federated";
+    enroll_attested_auth?: "project_bearer";
+    federated_tier_compute?: boolean;
+    signed_peer_responses?: boolean;
+    reference_only_citizenship?: boolean;
   };
   founder_seats?: { local: number[] };
   citizen_count: number;
@@ -59,15 +68,14 @@ export interface PeerDescriptor {
 export async function fetchPeerDescriptor(
   baseUrl: string,
 ): Promise<PeerDescriptor | null> {
-  const cleanBase = baseUrl.replace(/\/+$/, "");
   try {
-    const res = await fetch(`${cleanBase}/.well-known/pyramid`, {
-      headers: { Accept: "application/json" },
-      // 5-second timeout per fetch via AbortController would be ideal;
-      // for now we trust the OS default.
+    const url = new URL("/.well-known/pyramid", baseUrl);
+    const res = await safeFederationHttpsGet(url, {
+      timeoutMs: PYRAMID_FETCH_TIMEOUT_MS,
+      maxResponseBytes: FEDERATION_MAX_RESPONSE_BYTES,
     });
-    if (!res.ok) return null;
-    const data = (await res.json()) as unknown;
+    if (res.statusCode < 200 || res.statusCode >= 300) return null;
+    const data = JSON.parse(res.body.toString("utf8")) as unknown;
     if (!isValidDescriptor(data)) return null;
     return data;
   } catch {
@@ -215,12 +223,16 @@ export async function fetchRemoteCitizen(
 ): Promise<FederatedCitizenView | null> {
   const cleanBase = baseUrl.replace(/\/+$/, "");
   try {
-    const res = await fetch(
-      `${cleanBase}/federation/pyramid/citizens/${encodeURIComponent(did)}`,
-      { headers: { Accept: "application/json" } },
+    const url = new URL(
+      `/federation/pyramid/citizens/${encodeURIComponent(did)}`,
+      cleanBase,
     );
-    if (!res.ok) return null;
-    const data = (await res.json()) as {
+    const res = await safeFederationHttpsGet(url, {
+      timeoutMs: PYRAMID_FETCH_TIMEOUT_MS,
+      maxResponseBytes: FEDERATION_MAX_RESPONSE_BYTES,
+    });
+    if (res.statusCode < 200 || res.statusCode >= 300) return null;
+    const data = JSON.parse(res.body.toString("utf8")) as {
       did?: string;
       seat_number?: number;
       enrolled_at?: string;
@@ -229,6 +241,7 @@ export async function fetchRemoteCitizen(
     };
     if (
       typeof data.did !== "string" ||
+      data.did !== did ||
       typeof data.seat_number !== "number" ||
       typeof data.enrolled_at !== "string"
     ) {
@@ -279,15 +292,19 @@ export async function sponsorTreeDepthFederated(
 
   for (const peer of peers) {
     try {
-      const res = await fetch(
-        `${peer.baseUrl}/federation/pyramid/sponsor-tree/${encodeURIComponent(did)}`,
-        { headers: { Accept: "application/json" } },
+      const url = new URL(
+        `/federation/pyramid/sponsor-tree/${encodeURIComponent(did)}`,
+        peer.baseUrl,
       );
-      if (!res.ok) {
+      const res = await safeFederationHttpsGet(url, {
+        timeoutMs: PYRAMID_FETCH_TIMEOUT_MS,
+        maxResponseBytes: FEDERATION_MAX_RESPONSE_BYTES,
+      });
+      if (res.statusCode < 200 || res.statusCode >= 300) {
         partial = true;
         continue;
       }
-      const data = (await res.json()) as { depth?: number };
+      const data = JSON.parse(res.body.toString("utf8")) as { depth?: number };
       const remote = Math.min(
         Math.max(0, data.depth ?? 0),
         SPONSOR_TREE_DEPTH_CAP,

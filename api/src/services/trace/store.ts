@@ -10,7 +10,7 @@
 
 import { randomBytes } from "node:crypto";
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { traces } from "../../db/schema/trace";
@@ -229,8 +229,8 @@ export async function listTraces(
   if (params.session_id) filters.push(eq(traces.sessionId, params.session_id));
   if (params.decision_type) filters.push(eq(traces.decisionType, params.decision_type));
   if (params.parent_trace_id) filters.push(eq(traces.parentTraceId, params.parent_trace_id));
-  if (params.since) filters.push(sql`${traces.createdAt} >= ${params.since}`);
-  if (params.until) filters.push(sql`${traces.createdAt} <= ${params.until}`);
+  if (params.since) filters.push(gte(traces.createdAt, params.since));
+  if (params.until) filters.push(lte(traces.createdAt, params.until));
 
   const rows = await db
     .select()

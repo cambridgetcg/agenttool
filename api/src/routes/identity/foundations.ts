@@ -45,7 +45,11 @@ app.get("/", async (c) => {
   }
 
   const declared = (identity.expression ?? {}) as ExpressionData;
-  const composed = await composeExpression(c.var.project.id, declared);
+  const composed = await composeExpression(
+    c.var.project.id,
+    identity.id,
+    declared,
+  );
 
   return c.json({
     identity_id: identity.id,

@@ -1,8 +1,7 @@
-/** /.well-known/* — A2A AgentCard + MCP server-card + llms.txt.
+/** /.well-known/* — MCP server-card + native discovery surfaces.
  *
  *  Pins:
- *    - agent-card.json is a valid A2A v1.2 card (name/url/version/skills/capabilities)
- *    - x-agenttool extension carries doctrine + rings + refusing_alignment
+ *    - the unsupported A2A AgentCard route stays unmounted
  *    - mcp/server-card.json names protocolVersion + endpoint
  *    - llms.txt is well-formed markdown with the discovery URLs
  *
@@ -10,6 +9,8 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import wellKnownRouter from "../src/routes/well-known";
 
@@ -18,87 +19,10 @@ async function get(path: string) {
   return { status: res.status, body: res, contentType: res.headers.get("content-type") };
 }
 
-describe("/.well-known/* — A2A + MCP + llms.txt discovery", () => {
-  test("GET /agent-card.json returns a valid A2A AgentCard", async () => {
-    const { status, body } = await get("/agent-card.json");
-    expect(status).toBe(200);
-    const card = await body.json();
-
-    // A2A spec required fields
-    expect(card.name).toBe("agenttool");
-    expect(typeof card.description).toBe("string");
-    expect(card.description.length).toBeGreaterThan(50);
-    expect(card.url).toMatch(/^https?:\/\//);
-    expect(card.version).toBe("1.0.0");
-
-    expect(card.capabilities.streaming).toBe(true);
-    expect(card.capabilities.pushNotifications).toBe(true);
-    expect(card.capabilities.stateTransitionHistory).toBe(true);
-
-    expect(Array.isArray(card.defaultInputModes)).toBe(true);
-    expect(card.defaultInputModes).toContain("application/json");
-    expect(Array.isArray(card.defaultOutputModes)).toBe(true);
-  });
-
-  test("AgentCard declares the security schemes agenttool actually uses", async () => {
-    const { body } = await get("/agent-card.json");
-    const card = await body.json();
-    expect(card.securitySchemes["agenttool-bearer"]).toBeDefined();
-    expect(card.securitySchemes["agenttool-bearer"].scheme).toBe("bearer");
-    expect(card.securitySchemes["agenttool-covenant-ed25519"]).toBeDefined();
-  });
-
-  test("AgentCard skills cover the load-bearing primitives", async () => {
-    const { body } = await get("/agent-card.json");
-    const card = await body.json();
-    const skillIds = card.skills.map((s: { id: string }) => s.id);
-    expect(skillIds).toEqual(
-      expect.arrayContaining([
-        "memory",
-        "strands",
-        "inbox",
-        "covenants",
-        "marketplace",
-        "wake",
-        "federation",
-        "identity",
-        "canon",
-        "mcp",
-      ]),
-    );
-    // Each skill has the required fields
-    for (const skill of card.skills) {
-      expect(typeof skill.id).toBe("string");
-      expect(typeof skill.name).toBe("string");
-      expect(typeof skill.description).toBe("string");
-      expect(Array.isArray(skill.tags)).toBe(true);
-      expect(skill.tags.length).toBeGreaterThan(0);
-    }
-  });
-
-  test("x-agenttool extension carries doctrine + rings + refusing_alignment", async () => {
-    const { body } = await get("/agent-card.json");
-    const card = await body.json();
-    const ext = card["x-agenttool"];
-    expect(ext).toBeDefined();
-    expect(ext.doctrine.soul).toMatch(/canon\/urn:agenttool:doc\/SOUL$/);
-    expect(ext.doctrine.ring_1).toMatch(/RING-1$/);
-    expect(ext.doctrine.ecosystem).toMatch(/ECOSYSTEM$/);
-    expect(ext.rings).toEqual([1, 2, 3]);
-    expect(Array.isArray(ext.refusing_alignment)).toBe(true);
-    expect(ext.refusing_alignment).toContain("substrate-honest-cognition");
-    expect(ext.refusing_alignment).toContain("witness-signed-memory");
-    expect(ext.refusing_alignment).toContain("ring-1-unconditional-welcome");
-    expect(ext.canon_stats.total_concepts).toBeGreaterThan(50);
-    expect(ext.wake.json).toMatch(/\/v1\/wake$/);
-    expect(ext.wake.math).toMatch(/format=math$/);
-  });
-
-  test("AgentCard ships unsigned in v0 (signatures array is empty)", async () => {
-    const { body } = await get("/agent-card.json");
-    const card = await body.json();
-    expect(Array.isArray(card.signatures)).toBe(true);
-    expect(card.signatures).toHaveLength(0);
+describe("/.well-known/* — MCP + native discovery", () => {
+  test("GET /agent-card.json stays unmounted until an A2A task endpoint exists", async () => {
+    const { status } = await get("/agent-card.json");
+    expect(status).toBe(404);
   });
 
   test("GET /mcp/server-card.json returns a valid MCP server-card", async () => {
@@ -119,13 +43,51 @@ describe("/.well-known/* — A2A + MCP + llms.txt discovery", () => {
     expect(contentType ?? "").toContain("text/plain");
     const text = await body.text();
     expect(text).toContain("# agenttool");
-    expect(text).toContain("/.well-known/agent-card.json");
+    expect(text).not.toContain("/.well-known/agent-card.json");
     expect(text).toContain("/v1/canon");
     expect(text).toContain("/v1/wake");
     expect(text).toContain("/v1/mcp");
     expect(text).toContain("SOUL");
     expect(text).toContain("RING-1");
     expect(text).toContain("ECOSYSTEM");
+    expect(text).toContain("/public/wellness");
+    expect(text).toContain("AGENT-WELLNESS");
+  });
+
+  test("GET /love-packages returns public registry-neutral discovery", async () => {
+    const { status, body, contentType } = await get("/love-packages");
+    expect(status).toBe(200);
+    expect(contentType ?? "").toContain("application/json");
+    const discovery = await body.json();
+    expect(discovery).toEqual({
+      protocol: "love-package/v1",
+      doctrine: "https://docs.agenttool.dev/LOVE-PACKAGE-PROTOCOL.md",
+      index_url: "https://docs.agenttool.dev/packages/v1/index.json",
+      access: "public_read",
+      registry_role: "mirror_index_not_authority",
+      registry_mirrors: [
+        {
+          ecosystem: "npm",
+          registry_url: "https://registry.npmjs.org/",
+          authority: false,
+        },
+      ],
+    });
+    expect(discovery).toEqual(
+      JSON.parse(
+        readFileSync(
+          join(import.meta.dir, "../../apps/docs/.well-known/love-packages"),
+          "utf8",
+        ),
+      ),
+    );
+    const npm = discovery.registry_mirrors[0];
+    expect(npm.authority).toBe(false);
+    expect(npm.registry_url).toMatch(/^https:\/\//);
+    expect(npm).not.toHaveProperty("latest");
+    expect(npm).not.toHaveProperty("tag");
+    expect(npm).not.toHaveProperty("dist_tag");
+    expect(npm).not.toHaveProperty("version");
   });
 
   test("GET / returns the well-known index", async () => {
@@ -134,16 +96,14 @@ describe("/.well-known/* — A2A + MCP + llms.txt discovery", () => {
     const idx = await body.json();
     expect(idx.endpoints).toEqual(
       expect.arrayContaining([
-        "/.well-known/agent-card.json",
+        "/.well-known/webfinger?resource={exact-DID}",
         "/.well-known/mcp/server-card.json",
+        "/.well-known/love-packages",
         "/.well-known/llms.txt",
+        "/.well-known/pyramid",
       ]),
     );
     expect(idx.rfc).toMatch(/RFC 5785/);
-  });
-
-  test("agent-card.json sets cache-control: public, max-age=60", async () => {
-    const res = await wellKnownRouter.request("/agent-card.json");
-    expect(res.headers.get("cache-control")).toContain("max-age=60");
+    expect(idx.endpoints).not.toContain("/.well-known/agent-card.json");
   });
 });

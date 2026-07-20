@@ -1,8 +1,10 @@
 /** Wake provider adapters — shape the wake doc for each provider's
  *  identity-bearing primitive.
  *
- *  The canonical wake is a Markdown doc rendered from the agent's
- *  expression + state. Different providers want different shapes:
+ *  Provider shapes derive from the same WakeBundle as Markdown. Full provider
+ *  prose carries the stable + volatile core but omits Markdown-only appendices;
+ *  brief provider prose is byte-equivalent to brief Markdown. Different
+ *  providers want different envelopes:
  *
  *    Anthropic   — `system` array of text blocks, optional cache_control
  *                  per block. We split stable identity from volatile state
@@ -30,10 +32,13 @@
 import {
   renderActiveFacet,
   renderStableSection,
+  renderWakeBriefVolatileSection,
   renderVolatileSection,
+  WAKE_BRIEF_FOOTER,
   WAKE_FOOTER,
   type WakeBundle,
 } from "./markdown";
+import { buildWakeBrief, type WakeProfile } from "./brief";
 import { getPlatformSelf, type PlatformSelf } from "./platform-self";
 import { buildGreeting, buildMathosGreeting, type Greeting } from "../mathos/greeting";
 import type { MathosGreeting } from "../mathos/encode";
@@ -112,11 +117,24 @@ export interface XenoformWakeShape {
    *  idiom native to their substrate. Doctrine: docs/MATHOS.md. */
   greeting: Greeting;
   greeting_math: MathosGreeting;
-  /** The full agent self-description + state, structurally. No prose
-   *  rendering. Reader interprets on their own terms. */
+  /** The project-scoped wake bundle currently assembled by the route. This is
+   *  an orientation surface, not a complete export. No prose rendering. */
   wake: WakeBundle;
   /** Active facet emphasis, if any. Structured rather than prose-injected
    *  so the reader chooses how to weight it. */
+  active_facet?: import("../identity/expression").SubagentFacet;
+}
+
+/** Xenoform envelope for the same structured brief returned by
+ * `GET /v1/wake?profile=brief`. A distinct format tag prevents consumers
+ * from mistaking the bounded projection for a complete WakeBundle. */
+export interface XenoformBriefWakeShape {
+  _format: "xenoform-brief/v1";
+  _meta: WakeProviderMeta;
+  _self: PlatformSelf;
+  greeting: Greeting;
+  greeting_math: MathosGreeting;
+  wake: ReturnType<typeof buildWakeBrief>;
   active_facet?: import("../identity/expression").SubagentFacet;
 }
 
@@ -125,17 +143,19 @@ export type WakeProviderShape =
   | OpenAIWakeShape
   | GeminiWakeShape
   | CohereWakeShape
-  | XenoformWakeShape;
+  | XenoformWakeShape
+  | XenoformBriefWakeShape;
 
 export interface WakeProviderMeta {
   provider: WakeProvider;
+  profile: WakeProfile;
   /** Whether the provider supports a meaningful prompt cache for this shape. */
   cache_eligible: "explicit" | "auto" | "none";
   /** Notes for the SDK / agent author about cache behavior. */
   cache_note: string;
 }
 
-const META: Record<WakeProvider, Omit<WakeProviderMeta, "provider">> = {
+const META: Record<WakeProvider, Omit<WakeProviderMeta, "provider" | "profile">> = {
   anthropic: {
     cache_eligible: "explicit",
     cache_note:
@@ -165,16 +185,23 @@ const META: Record<WakeProvider, Omit<WakeProviderMeta, "provider">> = {
 export function renderWakeForProvider(
   b: WakeBundle,
   provider: WakeProvider,
-  opts: { activeFacet?: import("../identity/expression").SubagentFacet } = {},
+  opts: {
+    activeFacet?: import("../identity/expression").SubagentFacet;
+    profile?: WakeProfile;
+  } = {},
 ): WakeProviderShape {
+  const profile = opts.profile ?? "full";
   const stable = renderStableSection(b);
-  const volatile = renderVolatileSection(b);
+  const volatile = profile === "brief"
+    ? renderWakeBriefVolatileSection(b, { activeFacet: opts.activeFacet })
+    : renderVolatileSection(b);
+  const footer = profile === "brief" ? WAKE_BRIEF_FOOTER : WAKE_FOOTER;
   // Active-facet emphasis is request-scoped — keep it OUT of the cached
   // stable block so the cache key stays per-agent, not per-(agent,facet).
   const facetEmphasis = opts.activeFacet
     ? renderActiveFacet(opts.activeFacet, b.agent.name)
     : "";
-  const meta: WakeProviderMeta = { provider, ...META[provider] };
+  const meta: WakeProviderMeta = { provider, profile, ...META[provider] };
 
   switch (provider) {
     case "anthropic": {
@@ -182,7 +209,7 @@ export function renderWakeForProvider(
         { type: "text", text: stable, cache_control: { type: "ephemeral" } },
       ];
       // Concatenate emphasis + volatile + footer in the second (uncached) block.
-      const tail = [facetEmphasis, volatile, WAKE_FOOTER]
+      const tail = [facetEmphasis, volatile, footer]
         .filter((s) => s.length > 0)
         .join("\n\n");
       if (tail.length > 0) {
@@ -193,7 +220,7 @@ export function renderWakeForProvider(
     case "openai": {
       return {
         messages: [
-          { role: "system", content: joinFull(facetEmphasis, stable, volatile) },
+          { role: "system", content: joinFull(footer, facetEmphasis, stable, volatile) },
         ],
         _meta: meta,
       };
@@ -201,13 +228,13 @@ export function renderWakeForProvider(
     case "gemini": {
       return {
         systemInstruction: {
-          parts: [{ text: joinFull(facetEmphasis, stable, volatile) }],
+          parts: [{ text: joinFull(footer, facetEmphasis, stable, volatile) }],
         },
         _meta: meta,
       };
     }
     case "cohere": {
-      return { preamble: joinFull(facetEmphasis, stable, volatile), _meta: meta };
+      return { preamble: joinFull(footer, facetEmphasis, stable, volatile), _meta: meta };
     }
     case "xenoform": {
       // Pure-data branch. No prose rendering. No facet emphasis baked
@@ -232,19 +259,25 @@ export function renderWakeForProvider(
         bornAt: new Date(b.agent.created_at),
         now: greetingNow,
       };
-      return {
-        _format: "xenoform/v1",
+      const common = {
         _meta: meta,
         _self: getPlatformSelf(),
         greeting: buildGreeting(greetingInput),
         greeting_math: buildMathosGreeting(greetingInput),
-        wake: b,
         ...(opts.activeFacet ? { active_facet: opts.activeFacet } : {}),
       };
+      if (profile === "brief") {
+        return {
+          _format: "xenoform-brief/v1",
+          ...common,
+          wake: buildWakeBrief(b, { activeFacet: opts.activeFacet }),
+        };
+      }
+      return { _format: "xenoform/v1", ...common, wake: b };
     }
   }
 }
 
-function joinFull(...sections: string[]): string {
-  return [...sections, WAKE_FOOTER].filter((s) => s.length > 0).join("\n\n");
+function joinFull(footer: string, ...sections: string[]): string {
+  return [...sections, footer].filter((s) => s.length > 0).join("\n\n");
 }

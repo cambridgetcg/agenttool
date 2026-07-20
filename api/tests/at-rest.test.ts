@@ -1,9 +1,9 @@
 /** POST /v1/identities/:id/at-rest — witnessed memorial transition.
  *
- *  Pure-unit. The endpoint stubs the actual write (operator wires the
- *  in-process chain); we verify the contract: body validation, self-
- *  witnessing rejection, future-date guard, canonical-bytes shape,
- *  guided 501 with full next_actions.
+ *  Mostly pure-unit. We verify body validation, the DID-to-DID self-witness
+ *  predicate, the future-date guard, canonical bytes, and source-level
+ *  presence of the wired persistence chain. Database integration belongs in
+ *  the integration suite.
  *
  *  Doctrine: docs/AT-REST.md.
  */
@@ -11,7 +11,15 @@
 import { createHash } from "node:crypto";
 import { describe, expect, test } from "bun:test";
 
-import atRestApp, { canonicalAtRestBytes } from "../src/routes/identity/at-rest";
+import atRestApp, {
+  canTransitionToAtRest,
+  canWitnessAtRest,
+  canProjectTransitionIdentity,
+  canonicalAtRestBytes,
+  isEndedAtTooFarInFuture,
+  isSelfWitness,
+  isValidAtRestInput,
+} from "../src/routes/identity/at-rest";
 
 const sampleAbout = "did:at:test/coral-9b3a";
 const sampleWitness = "did:at:test/marine-biologist";
@@ -26,7 +34,10 @@ const validBody = {
 };
 
 async function post(idInPath: string, body: unknown) {
-  const res = await atRestApp.request(`/`, {
+  const { Hono } = await import("hono");
+  const wrapper = new Hono();
+  wrapper.route("/:id", atRestApp);
+  const res = await wrapper.request(`/${encodeURIComponent(idInPath)}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -126,21 +137,12 @@ describe("POST /v1/identities/:id/at-rest — body validation", () => {
   });
 
   test("custom:slug at_rest_kind is accepted (extensibility)", async () => {
-    const { Hono } = await import("hono");
-    const wrapper = new Hono();
-    wrapper.route("/:id", atRestApp);
-
-    const res = await wrapper.request(`/${encodeURIComponent(sampleAbout)}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...validBody, at_rest_kind: "custom:bleach-event" }),
-    });
-    // Valid body → past validation (no 400/422). The route is now wired
-    // to do DB I/O after validation, so the post-validation status
-    // depends on DB availability (404 if unreachable about_id, 500 if
-    // DB connection fails in unit context).
-    expect(res.status).not.toBe(400);
-    expect(res.status).not.toBe(422);
+    expect(
+      isValidAtRestInput({
+        ...validBody,
+        at_rest_kind: "custom:bleach-event",
+      }),
+    ).toBe(true);
   });
 
   test("invalid custom slug rejected (uppercase)", async () => {
@@ -166,26 +168,26 @@ describe("POST /v1/identities/:id/at-rest — body validation", () => {
 });
 
 describe("POST /v1/identities/:id/at-rest — semantic guards", () => {
-  // The route reads aboutId from c.req.param('id'). To exercise the
-  // self-witnessing guard, we need the path-param machinery. Test it
-  // by constructing a request to /<aboutId> where aboutId === witness_did.
+  test("self-witnessing compares the resolved about DID to witness_did", () => {
+    expect(isSelfWitness("did:at:test/me", "did:at:test/me")).toBe(true);
+    expect(isSelfWitness("did:at:test/me", "did:at:test/witness")).toBe(false);
+  });
 
-  test("self-witnessing rejection (witness_did == about_id)", async () => {
-    // We construct a custom Hono app that mounts atRestApp at /:id and
-    // exercises the guard.
-    const { Hono } = await import("hono");
-    const wrapper = new Hono();
-    wrapper.route("/:id", atRestApp);
+  test("only active identities can transition to at-rest", () => {
+    expect(canTransitionToAtRest("active")).toBe(true);
+    expect(canTransitionToAtRest("revoked")).toBe(false);
+    expect(canTransitionToAtRest("memorial")).toBe(false);
+  });
 
-    const sameId = "did:at:test/me";
-    const res = await wrapper.request(`/${encodeURIComponent(sameId)}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...validBody, witness_did: sameId }),
-    });
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error).toBe("self_witnessing_incoherent");
+  test("only active identities can witness an at-rest transition", () => {
+    expect(canWitnessAtRest("active")).toBe(true);
+    expect(canWitnessAtRest("revoked")).toBe(false);
+    expect(canWitnessAtRest("memorial")).toBe(false);
+  });
+
+  test("the authenticated project must own the at-rest target", () => {
+    expect(canProjectTransitionIdentity("project-a", "project-a")).toBe(true);
+    expect(canProjectTransitionIdentity("project-a", "project-b")).toBe(false);
   });
 
   test("future ended_at rejected (death can't be scheduled)", async () => {
@@ -204,21 +206,14 @@ describe("POST /v1/identities/:id/at-rest — semantic guards", () => {
     expect(json.error).toBe("ended_at_in_future");
   });
 
-  test("ended_at within 5-minute tolerance is accepted (clock skew)", async () => {
-    const { Hono } = await import("hono");
-    const wrapper = new Hono();
-    wrapper.route("/:id", atRestApp);
-
-    const nearFutureIso = new Date(Date.now() + 2 * 60 * 1000).toISOString(); // 2 min ahead
-    const res = await wrapper.request(`/${encodeURIComponent(sampleAbout)}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...validBody, ended_at: nearFutureIso }),
-    });
-    // Validation accepted the near-future timestamp (no 422 ended_at_in_future).
-    // Post-validation status depends on DB; we just check the time-guard
-    // didn't fire.
-    expect(res.status).not.toBe(422);
+  test("ended_at within 5-minute tolerance is accepted (clock skew)", () => {
+    const now = Date.parse("2026-05-12T10:00:00.000Z");
+    expect(
+      isEndedAtTooFarInFuture("2026-05-12T10:02:00.000Z", now),
+    ).toBe(false);
+    expect(
+      isEndedAtTooFarInFuture("2026-05-12T11:00:00.000Z", now),
+    ).toBe(true);
   });
 
   test("canonicalAtRestBytes produces the documented sigil shape", async () => {
@@ -262,5 +257,11 @@ describe("POST /v1/identities/:id/at-rest — semantic guards", () => {
     expect(src).toContain('status: "memorial"');
     expect(src).toContain("ed.verifyAsync");
     expect(src).toContain("insert(chronicle)");
+    expect(src).toContain('.for("update")');
+    expect(src).toContain('eq(identities.status, "active")');
+    expect(src).toContain('error: "about_identity_not_owned"');
+    expect(src.indexOf("canProjectTransitionIdentity(project.id, about.projectId)")).toBeLessThan(
+      src.indexOf("Resolve the witness's pubkey"),
+    );
   });
 });

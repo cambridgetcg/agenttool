@@ -73,7 +73,11 @@ export async function getTransactions(
     .select()
     .from(transactions)
     .where(eq(transactions.walletId, walletId))
-    .orderBy(desc(transactions.createdAt))
+    // id tiebreaker makes the ordering total: rows sharing a createdAt
+    // (batch settles in one tick) would otherwise be free to swap sides of
+    // an offset-page boundary between requests, and an external ledger
+    // observer paging by offset could permanently miss the swapped row.
+    .orderBy(desc(transactions.createdAt), desc(transactions.id))
     .limit(limit)
     .offset(offset);
 }
@@ -354,4 +358,18 @@ export async function getPolicy(db: DB, walletId: string) {
     .from(policies)
     .where(eq(policies.walletId, walletId));
   return policy ?? null;
+}
+
+export const REINVEST_RESTING_MESSAGE =
+  "Wallet reinvestment is resting: no wallet balance can currently be converted into project credits.";
+
+/** Reinvestment is fail-closed until debit provenance and refund debt are
+ * represented in the accounting model. Keep this before all database use. */
+export async function reinvestFromWallet(
+  _db: DB,
+  _walletId: string,
+  _amount: number,
+  _metadata: Record<string, unknown> = {},
+): Promise<never> {
+  throw new HTTPException(503, { message: REINVEST_RESTING_MESSAGE });
 }

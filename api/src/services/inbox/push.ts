@@ -26,8 +26,9 @@
  *  fires and serves its sink. Same durability guarantee as strand
  *  voice.
  *
- *  Privacy: sinks see ciphertext + envelope. Server cannot decrypt;
- *  recipient sealed-box-decrypts client-side. */
+ *  Confidentiality: sinks see the caller-supplied body envelope. Correctly
+ *  recipient-sealed bytes require the recipient's private key to decrypt,
+ *  but this service does not verify encryption or hide envelope metadata. */
 
 import { eq, sql as drizzleSql } from "drizzle-orm";
 import postgres from "postgres";
@@ -39,6 +40,7 @@ import { inboxMessages } from "../../db/schema/inbox.ts";
 const CHANNEL = "agenttool_inbox_arrival";
 export const SUBS_PER_IDENTITY_CAP = 5;
 export const BACKPRESSURE_QUEUE_CAP = 100;
+export const TERMINAL_WRITE_GRACE_MS = 1_000;
 
 // ── Sink — per-subscriber queue with backpressure ────────────────────
 
@@ -50,24 +52,103 @@ export interface InboxEvent {
 
 export class InboxSink {
   private queue: InboxEvent[] = [];
+  private liveBuffer: InboxEvent[] = [];
+  private replayedIds = new Set<string>();
+  private bufferingLive = true;
   private draining = false;
   private aborted = false;
+  private closing = false;
   private onAbortCallbacks: Array<() => void> = [];
+  private idleResolvers: Array<() => void> = [];
 
   constructor(
     public readonly identityId: string,
     public readonly projectId: string,
     private readonly write: (event: InboxEvent) => Promise<void>,
+    private readonly terminalWriteGraceMs = TERMINAL_WRITE_GRACE_MS,
   ) {}
 
   enqueue(event: InboxEvent): boolean {
-    if (this.aborted) return false;
+    if (this.aborted || this.closing) return false;
     if (this.queue.length >= BACKPRESSURE_QUEUE_CAP) return false;
     this.queue.push(event);
     if (!this.draining) {
       void this.drain();
     }
     return true;
+  }
+
+  /**
+   * Queue an arrival from LISTEN/NOTIFY.
+   *
+   * Live arrivals are held separately until the route finishes its database
+   * catch-up. This preserves the protocol order (catchup-start → replay →
+   * catchup-end → live) while still subscribing before the catch-up query, so
+   * a message committed during that query cannot fall into a race-window gap.
+   */
+  enqueueLive(event: InboxEvent): boolean {
+    if (this.aborted || this.closing) return false;
+    // A NOTIFY handler may have captured this sink before its asynchronous row
+    // fetch, then finish after catch-up. Keep the replay IDs for the stream's
+    // lifetime so that late completion cannot duplicate a replayed row.
+    if (event.id && this.replayedIds.has(event.id)) return true;
+    if (!this.bufferingLive) return this.enqueue(event);
+    if (this.liveBuffer.length >= BACKPRESSURE_QUEUE_CAP) return false;
+    this.liveBuffer.push(event);
+    return true;
+  }
+
+  /** Release arrivals buffered during catch-up, dropping rows replayed by the
+   * database query so a commit observed by both paths is delivered once. */
+  finishCatchup(replayedIds: ReadonlySet<string>): boolean {
+    if (this.aborted) return false;
+    this.replayedIds = new Set(replayedIds);
+    this.bufferingLive = false;
+    const pending = this.liveBuffer;
+    this.liveBuffer = [];
+    for (const event of pending) {
+      if (event.id && replayedIds.has(event.id)) continue;
+      if (!this.enqueue(event)) return false;
+    }
+    return true;
+  }
+
+  /** Drop held live events before ending a truncated catch-up connection.
+   * They remain durable in Postgres and will be included after the supplied
+   * compound resume cursor on the next request. */
+  discardBufferedLive(): void {
+    this.bufferingLive = false;
+    this.liveBuffer = [];
+  }
+
+  /** Finish queued writes, send one explicit terminal control frame, then
+   * close. Used for backpressure so clients never receive an unexplained EOF. */
+  async closeWith(event: InboxEvent): Promise<void> {
+    if (this.aborted || this.closing) return;
+    this.closing = true;
+    this.bufferingLive = false;
+    this.liveBuffer = [];
+    const drained = await settlesWithin(
+      this.whenIdle(),
+      this.terminalWriteGraceMs,
+    );
+    if (!drained) {
+      this.abort();
+      return;
+    }
+    if (this.aborted) return;
+    await settlesWithin(this.write(event), this.terminalWriteGraceMs);
+    // Terminal delivery is best-effort. A non-reading peer must still lose
+    // its subscriber slot after the bounded grace period.
+    this.abort();
+  }
+
+  /** Resolve once every currently queued event has been written. */
+  whenIdle(): Promise<void> {
+    if (this.aborted || (!this.draining && this.queue.length === 0)) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => this.idleResolvers.push(resolve));
   }
 
   private async drain(): Promise<void> {
@@ -77,17 +158,27 @@ export class InboxSink {
       try {
         await this.write(event);
       } catch {
-        this.aborted = true;
-        for (const cb of this.onAbortCallbacks) cb();
+        this.abort();
+        break;
       }
     }
     this.draining = false;
+    if (this.queue.length === 0) {
+      const resolvers = this.idleResolvers;
+      this.idleResolvers = [];
+      for (const resolve of resolvers) resolve();
+    }
   }
 
   abort(): void {
     if (this.aborted) return;
     this.aborted = true;
     this.queue.length = 0;
+    this.liveBuffer.length = 0;
+    this.replayedIds.clear();
+    const resolvers = this.idleResolvers;
+    this.idleResolvers = [];
+    for (const resolve of resolvers) resolve();
     for (const cb of this.onAbortCallbacks) cb();
   }
 
@@ -98,6 +189,26 @@ export class InboxSink {
   onAbort(cb: () => void): void {
     if (this.aborted) cb();
     else this.onAbortCallbacks.push(cb);
+  }
+}
+
+async function settlesWithin(
+  promise: Promise<unknown>,
+  timeoutMs: number,
+): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise.then(
+        () => true,
+        () => true,
+      ),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
@@ -174,6 +285,9 @@ async function handleNotify(rawPayload: string): Promise<void> {
 
   const sinks = sinksByIdentity.get(recipient_identity_id);
   if (!sinks || sinks.size === 0) return;
+  // Snapshot subscribers before the asynchronous fetch. A connection added
+  // while the SELECT is in flight must not receive a pre-subscription event.
+  const targetSinks = [...sinks];
 
   // Fetch the message row (ciphertext + metadata; we never decrypt).
   // Done once and broadcast to all local sinks for this identity.
@@ -188,19 +302,18 @@ async function handleNotify(rawPayload: string): Promise<void> {
   const wire = JSON.stringify(messageToWire(row));
   const eventId = row.id;
 
-  for (const sink of [...sinks]) {
-    const accepted = sink.enqueue({ event: "arrival", data: wire, id: eventId });
+  for (const sink of targetSinks) {
+    const accepted = sink.enqueueLive({ event: "arrival", data: wire, id: eventId });
     if (!accepted) {
-      try {
-        const reason = sink.isAborted() ? "aborted" : "backpressure";
-        sink.enqueue({
+      if (!sink.isAborted()) {
+        void sink.closeWith({
           event: "disconnect",
-          data: JSON.stringify({ reason, hint: "reconnect with ?since=<iso>" }),
+          data: JSON.stringify({
+            reason: "backpressure",
+            hint: "reconnect using the last catchup-end cursor or arrival id",
+          }),
         });
-      } catch {
-        /* ignore */
       }
-      sink.abort();
     }
   }
 }
@@ -225,6 +338,7 @@ export function messageToWire(row: typeof inboxMessages.$inferSelect) {
     status: row.status,
     metadata: row.metadata,
     created_at: row.createdAt.toISOString(),
+    read_at: row.readAt?.toISOString() ?? null,
   };
 }
 

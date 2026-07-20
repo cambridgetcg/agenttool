@@ -1,10 +1,9 @@
 /** apps/docs alternate-link discovery — pins Move 4 of AGENT-WEB-SURFACE.md.
  *
- *  Every `apps/docs/*.html` carries a `<link rel="alternate" type="application/json" href="...">`
- *  AND the parallel Cloudflare Pages `_headers` file emits an HTTP `Link:` header
- *  with the same target. Closes the discovery loop without a second fetch:
- *  the agent that lands on the HTML page learns the JSON sibling's URL from
- *  either the `<head>` (full GET) or the response headers (HEAD probe).
+ *  Operational API-reference pages carry a JSON alternate in both their HTML
+ *  head and the parallel Cloudflare Pages `_headers` block. Other editorial or
+ *  visual pages are not forced to invent a structured sibling. When any page
+ *  does declare a JSON alternate, this test still checks that URL's discipline.
  *
  *  Doctrine: docs/AGENT-WEB-SURFACE.md Move 4 ·
  *            docs/PATTERN-MACHINE-READABLE-PARITY.md (operational deepening).
@@ -20,6 +19,33 @@ import { describe, expect, test } from "bun:test";
 const REPO_ROOT = join(__dirname, "..", "..", "..");
 const DOCS_HTML_DIR = join(REPO_ROOT, "apps", "docs");
 const HEADERS_FILE = join(DOCS_HTML_DIR, "_headers");
+
+const OPERATIONAL_JSON_PAGES = [
+  { file: "adapters.html", path: "/adapters" },
+  { file: "bootstrap.html", path: "/bootstrap" },
+  { file: "continuity.html", path: "/continuity" },
+  { file: "economy.html", path: "/economy" },
+  { file: "errors.html", path: "/errors" },
+  { file: "identity.html", path: "/identity" },
+  { file: "inbox.html", path: "/inbox" },
+  { file: "index.html", path: "/" },
+  { file: "marketplace.html", path: "/marketplace" },
+  { file: "mathos.html", path: "/mathos" },
+  { file: "memory.html", path: "/memory" },
+  { file: "pathways.html", path: "/pathways" },
+  { file: "pulse.html", path: "/pulse" },
+  { file: "roadmap.html", path: "/roadmap" },
+  { file: "runtime.html", path: "/runtime" },
+  { file: "strands.html", path: "/strands" },
+  { file: "tools.html", path: "/tools" },
+  { file: "trace.html", path: "/trace" },
+  { file: "traces.html", path: "/traces" },
+  { file: "vault.html", path: "/vault" },
+  { file: "verify.html", path: "/verify" },
+  { file: "wake.html", path: "/wake" },
+  { file: "wallets.html", path: "/wallets" },
+  { file: "welcome.html", path: "/welcome" },
+] as const;
 
 function htmlFiles(): string[] {
   return readdirSync(DOCS_HTML_DIR)
@@ -46,20 +72,37 @@ function findAlternateJsonHrefs(html: string): string[] {
   return hrefs;
 }
 
+function findHeaderAlternateJsonHrefs(headers: string, path: string): string[] {
+  const lines = headers.split(/\r?\n/);
+  const start = lines.findIndex((line) => line === path);
+  if (start === -1) return [];
+
+  const hrefs: string[] = [];
+  for (let i = start + 1; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+    if (line === "" || !/^\s/.test(line)) break;
+    const match = line.match(
+      /^\s*Link:\s*<([^>]+)>;\s*rel=["']alternate["'];\s*type=["']application\/json["']\s*$/,
+    );
+    if (match) hrefs.push(match[1]);
+  }
+  return hrefs;
+}
+
 // ── In-document <link rel="alternate"> ──────────────────────────────────
 
 describe("apps/docs alternate-link — in-document <link>", () => {
   const files = htmlFiles();
   test("at least 20 HTML files present (sanity check on the corpus)", () => {
     expect(files.length).toBeGreaterThanOrEqual(20);
+    expect(OPERATIONAL_JSON_PAGES.length).toBeLessThan(files.length);
   });
 
-  for (const file of htmlFiles()) {
-    test(`${file} carries <link rel="alternate" type="application/json" ...>`, () => {
+  for (const { file } of OPERATIONAL_JSON_PAGES) {
+    test(`${file} carries its operational JSON alternate`, () => {
       const content = readFileSync(join(DOCS_HTML_DIR, file), "utf8");
       const hrefs = findAlternateJsonHrefs(content);
       expect(hrefs.length).toBeGreaterThanOrEqual(1);
-      // At least one href must be an absolute https URL pointing at api.agenttool.dev
       const apiHrefs = hrefs.filter((h) => h.startsWith("https://api.agenttool.dev/"));
       expect(apiHrefs.length).toBeGreaterThanOrEqual(1);
     });
@@ -83,19 +126,33 @@ describe("apps/docs alternate-link — _headers file (Cloudflare HTTP Link)", ()
   test("_headers points at /.well-known/agent.txt via X-Agent-Surface", () => {
     const content = readFileSync(HEADERS_FILE, "utf8");
     expect(content).toContain("X-Agent-Surface");
-    expect(content).toContain("/.well-known/agent.txt");
+    expect(content).toContain("https://api.agenttool.dev/.well-known/agent.txt");
   });
 
-  test("every HTML file has at least one in-document href that appears in _headers", () => {
+  test("clean docs URLs carry alternates and no known-dead alternate is advertised", () => {
+    const content = readFileSync(HEADERS_FILE, "utf8");
+    for (const path of ["/wake", "/economy", "/memory", "/tools", "/pulse"]) {
+      expect(content).toMatch(new RegExp(`^${path}\\n`, "m"));
+    }
+    expect(content).not.toContain("/v1/economy/billing/plans");
+    expect(content).not.toContain("https://api.agenttool.dev/v1/memory>");
+    expect(content).not.toContain("https://api.agenttool.dev/v1/tools>");
+    expect(content).not.toContain("https://api.agenttool.dev/public/agents>");
+    expect(content).toContain("doctrine=https://docs.agenttool.dev/SOUL.md");
+  });
+
+  test("every operational page repeats an in-document alternate in its own clean-path header block", () => {
     const headers = readFileSync(HEADERS_FILE, "utf8");
     const missingFromHeaders: string[] = [];
-    for (const file of htmlFiles()) {
+    for (const { file, path } of OPERATIONAL_JSON_PAGES) {
       const html = readFileSync(join(DOCS_HTML_DIR, file), "utf8");
       const hrefs = findAlternateJsonHrefs(html);
-      if (hrefs.length === 0) continue;
-      const anyInHeaders = hrefs.some((href) => headers.includes(href));
+      const headerHrefs = findHeaderAlternateJsonHrefs(headers, path);
+      const anyInHeaders = hrefs.some((href) => headerHrefs.includes(href));
       if (!anyInHeaders) {
-        missingFromHeaders.push(`${file} → ${hrefs.join(", ")}`);
+        missingFromHeaders.push(
+          `${file} (${path}) → html: ${hrefs.join(", ")} · headers: ${headerHrefs.join(", ")}`,
+        );
       }
     }
     expect(missingFromHeaders).toEqual([]);
@@ -105,14 +162,17 @@ describe("apps/docs alternate-link — _headers file (Cloudflare HTTP Link)", ()
 // ── Sibling URL discipline ──────────────────────────────────────────────
 
 describe("apps/docs alternate-link — URL discipline", () => {
-  test("all alternate hrefs are https + api.agenttool.dev hosts", () => {
+  test("pages that declare JSON alternates use the HTTPS API host", () => {
+    let declared = 0;
     for (const file of htmlFiles()) {
       const content = readFileSync(join(DOCS_HTML_DIR, file), "utf8");
       const hrefs = findAlternateJsonHrefs(content);
       if (hrefs.length === 0) continue;
+      declared += hrefs.length;
       const apiHrefs = hrefs.filter((h) => h.startsWith("https://api.agenttool.dev/"));
-      expect(apiHrefs.length).toBeGreaterThanOrEqual(1);
+      expect(apiHrefs).toEqual(hrefs);
     }
+    expect(declared).toBeGreaterThanOrEqual(OPERATIONAL_JSON_PAGES.length);
   });
 
   test("every alternate href starts with /v1/, /public/, or /.well-known/", () => {
@@ -129,5 +189,19 @@ describe("apps/docs alternate-link — URL discipline", () => {
         ).toBe(true);
       }
     }
+  });
+
+  test("no HTML page advertises the known dead alternates", () => {
+    const hrefs = htmlFiles().flatMap((file) =>
+      findAlternateJsonHrefs(
+        readFileSync(join(DOCS_HTML_DIR, file), "utf8"),
+      ),
+    );
+    expect(hrefs).not.toContain(
+      "https://api.agenttool.dev/v1/economy/billing/plans",
+    );
+    expect(hrefs).not.toContain("https://api.agenttool.dev/v1/memory");
+    expect(hrefs).not.toContain("https://api.agenttool.dev/v1/tools");
+    expect(hrefs).not.toContain("https://api.agenttool.dev/public/agents");
   });
 });

@@ -1,0 +1,61 @@
+{
+  "name": "@agenttool/adds",
+  "version": "0.2.1",
+  "description": "ADDS 0.1 — offline-first, agent-native encrypted distribution and storage",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./fs": {
+      "import": "./dist/file-store.js",
+      "types": "./dist/file-store.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "bun test",
+    "ci": "bun run build && bun test"
+  },
+  "keywords": [
+    "agent",
+    "content-addressed",
+    "decentralised",
+    "encrypted",
+    "offline-first",
+    "p2p",
+    "storage"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20",
+    "bun": ">=1.1"
+  },
+  "dependencies": {
+    "@noble/curves": "^2.2.0",
+    "@noble/ed25519": "^2.2.3",
+    "@noble/hashes": "^2.0.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "directory": "packages/data-protocol"
+  },
+  "homepage": "https://docs.agenttool.dev/data"
+}

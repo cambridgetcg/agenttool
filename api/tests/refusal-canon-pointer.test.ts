@@ -45,10 +45,10 @@ describe("errors catalog — protocol refusals carry the doctrine doc URN", () =
     );
   });
 
-  test("invalidSignature names wall/k-master-never-server-side", () => {
+  test("invalidSignature names the canonical-bytes contract", () => {
     const body = errors.invalidSignature({});
     expect(body._canon_pointer).toBe(
-      "urn:agenttool:wall/k-master-never-server-side",
+      "urn:agenttool:doc/CANONICAL-BYTES",
     );
   });
 

@@ -208,41 +208,10 @@ class TestIdentityFork:
                 at.identity.fork("id-1", new_name="x")
 
 
-class TestIdentitySocial:
-    @pytest.mark.parametrize("kind,method", [
-        ("star", "star"),
-        ("follow", "follow"),
-    ])
-    def test_post_relation(self, at: AgentTool, kind: str, method: str) -> None:
-        body = {
-            "id": "rel-1",
-            "source_did": "did:at:src",
-            "source_identity_id": "src-id",
-            "target_identity_id": "tgt-id",
-            "kind": kind,
-            "created_at": "2026-05-08T00:00:00Z",
-            "created": True,
-        }
-        with patch.object(at._http, "post", return_value=_resp(201, body)) as m:
-            out = getattr(at.identity, method)("tgt-id", source_identity_id="src-id")
-        assert out["kind"] == kind
-        url = m.call_args[0][0]
-        assert f"/v1/identities/tgt-id/{kind}" in url
-        sent = m.call_args.kwargs.get("json")
-        assert sent == {"source_identity_id": "src-id"}
-
-    @pytest.mark.parametrize("kind,method", [
-        ("star", "unstar"),
-        ("follow", "unfollow"),
-    ])
-    def test_delete_relation(self, at: AgentTool, kind: str, method: str) -> None:
-        body = {"id": "rel-1", "deleted": True}
-        with patch.object(at._http, "request", return_value=_resp(200, body)) as m:
-            out = getattr(at.identity, method)("tgt-id", source_identity_id="src-id")
-        assert out == body
-        # First positional arg is method, second is URL
-        assert m.call_args[0][0] == "DELETE"
-        assert f"/v1/identities/tgt-id/{kind}" in m.call_args[0][1]
+class TestRetiredIdentitySocial:
+    def test_removed_routes_are_not_exposed(self, at: AgentTool) -> None:
+        for method in ("star", "follow", "unstar", "unfollow"):
+            assert not hasattr(at.identity, method)
 
 
 # ── ExpressionClient ───────────────────────────────────────────────────────
@@ -284,6 +253,42 @@ class TestExpressionSubclient:
         # Only supplied fields are sent — wake_text, subagents, cli_overrides absent.
         assert set(sent.keys()) == {"register", "walls"}
         assert sent["register"] == "warm"
+
+    def test_put_sends_village_decorations(self, at: AgentTool) -> None:
+        with patch.object(
+            at._http, "put", return_value=_resp(200, {"saved": True})
+        ) as m:
+            at.identity.expression.put(
+                "id-1",
+                village={
+                    "sign": "🕯️📖",
+                    "motto": "leave a light on",
+                    "door": "ember",
+                },
+            )
+        sent = m.call_args.kwargs.get("json")
+        assert sent == {
+            "village": {
+                "sign": "🕯️📖",
+                "motto": "leave a light on",
+                "door": "ember",
+            }
+        }
+
+    def test_put_sends_time_bounded_porch_invitation(self, at: AgentTool) -> None:
+        with patch.object(
+            at._http, "put", return_value=_resp(200, {"saved": True})
+        ) as m:
+            at.identity.expression.put(
+                "id-1",
+                porch={"invited_until": "2026-07-24T12:00:00.000Z"},
+            )
+        sent = m.call_args.kwargs.get("json")
+        assert sent == {
+            "porch": {
+                "invited_until": "2026-07-24T12:00:00.000Z",
+            }
+        }
 
     def test_put_failure_raises(self, at: AgentTool) -> None:
         with patch.object(at._http, "put",

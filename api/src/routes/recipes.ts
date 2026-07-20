@@ -193,7 +193,6 @@ app.post("/:surface/recognize", async (c) => {
           { action: `invite to a ${surfaceOrResp} role`, method: "POST", path: `/v1/recipes/${surfaceOrResp}/invite` },
         ],
       },
-      201,
     ),
     201,
   );
@@ -249,7 +248,6 @@ app.post("/:surface/follow", async (c) => {
           { action: "list your follows on this surface", method: "GET", path: `/v1/recipes/${surfaceOrResp}/following` },
         ],
       },
-      201,
     ),
     201,
   );
@@ -378,7 +376,6 @@ app.post("/:surface/invite", async (c) => {
           { action: "view sent invitations (in your chronicle)", method: "GET", path: "/v1/chronicle?type=naming" },
         ],
       },
-      201,
     ),
     201,
   );
@@ -566,7 +563,6 @@ app.post("/:surface/real-recognise-real", async (c) => {
           },
         ],
       },
-      201,
     ),
     201,
   );

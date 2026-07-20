@@ -1,4 +1,4 @@
-/** at_think — write a signed, K_master-encrypted thought into a strand.
+/** at_think — write signed, caller-encrypted thought bytes into a strand.
  *
  *  Phase 3 surface. Spawns api/scripts/think.ts; that script reads the
  *  agent's signing key from the keychain and the K_master, encrypts the
@@ -25,7 +25,7 @@ const THOUGHT_KINDS = [
 export const definition = {
   name: "at_think",
   description:
-    "Write a thought into a strand. Content is AES-256-GCM-encrypted under K_master client-side; ed25519 signature wraps the ciphertext bytes; the server stores both and never decrypts. Output is one-line: OK thought seq=<n> · <short-id> on /<strand>.",
+    "Write a thought into a strand. Persistent storage receives caller-supplied ciphertext/nonce fields plus an ed25519 signature; it has no plaintext thought column or decrypt path, but does not prove AES-GCM encryption. Self processing stays user-side; bridged hosted runtimes process plaintext in AgentTool worker memory. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and plaintext can enter AgentTool worker memory and the chosen model provider. Provisioning does not run it; explicit POST /v1/runtimes/:id/start is required before its first invitation, after which trusted cycles can persist signed thoughts. Output is one-line: OK thought seq=<n> · <short-id> on /<strand>.",
   inputSchema: {
     type: "object" as const,
     properties: {

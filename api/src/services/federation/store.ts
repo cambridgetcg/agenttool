@@ -1,12 +1,14 @@
-/** Federation service — settings, peer logging, DID resolution.
+/** Federation service — settings, peer logging, and AgentTool identifier lookup.
  *
  *  Doctrine: docs/FEDERATION.md.
  *
- *  Federated DID format: `did:at:<host>/<uuid>` where <host> includes
+ *  Provisional slash-qualified identifier format: `did:at:<host>/<uuid>` where <host> includes
  *  optional port (e.g. `did:at:peer.example/abc-123` or
  *  `did:at:peer.example:8080/abc-123`).
  *
- *  Local DID format: `did:at:<uuid>` (no host).
+ *  Local provisional identifier format: `did:at:<uuid>` (no host).
+ *  This convention is unregistered, publishes no DID Documents, and the
+ *  slash-qualified form is not a standalone DID.
  *
  *  Resolution:
  *    parseDid(did) → { host: string | null, uuid: string }
@@ -17,6 +19,7 @@ import { eq, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { federationSettings, peerInstances } from "../../db/schema/federation";
+import { safeFederationHttpsGet } from "./safe-fetch";
 
 // ── DID parsing ─────────────────────────────────────────────────────────
 
@@ -27,6 +30,21 @@ export interface ParsedDid {
 }
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
+
+function isValidFederationHost(host: string): boolean {
+  try {
+    const origin = new URL(`https://${host}/`);
+    return Boolean(origin.hostname) &&
+      origin.protocol === "https:" &&
+      !origin.username &&
+      !origin.password &&
+      origin.pathname === "/" &&
+      !origin.search &&
+      !origin.hash;
+  } catch {
+    return false;
+  }
+}
 
 export function parseDid(did: string): ParsedDid {
   if (!did.startsWith("did:at:")) {
@@ -43,7 +61,11 @@ export function parseDid(did: string): ParsedDid {
   const host = rest.slice(0, slash);
   const uuid = rest.slice(slash + 1);
   if (!UUID_RE.test(uuid)) throw new Error(`invalid_did_uuid: ${did}`);
-  if (host.length === 0 || /[\s\/]/.test(host)) {
+  if (
+    host.length === 0 ||
+    /[\s\/]/.test(host) ||
+    !isValidFederationHost(host)
+  ) {
     throw new Error(`invalid_did_host: ${did}`);
   }
   return { did, uuid, host };
@@ -114,12 +136,12 @@ export async function isLocalHost(host: string | null): Promise<boolean> {
   }
 }
 
-/** True if an inbound origin is allowed. Empty allowed_origins = open
- *  (any host accepted). */
+/** True if an inbound origin is allowed. Federation must first be enabled;
+ *  after that, an empty allowed_origins list selects open mode. */
 export async function isAllowedOrigin(host: string): Promise<boolean> {
   const settings = await getSettings();
   if (!settings.enabled) return false;
-  if (settings.allowed_origins.length === 0) return true; // open federation
+  if (settings.allowed_origins.length === 0) return true; // explicitly enabled open mode
   return settings.allowed_origins.includes(host);
 }
 
@@ -175,10 +197,11 @@ export async function listPeers(): Promise<
   }));
 }
 
-// ── Federated DID resolution ────────────────────────────────────────────
+// ── AgentTool federation identifier lookup (not W3C DID Resolution) ─────
 //
-//  Resolves a federated DID to its public identity record + active keys
-//  by HTTPS GET to the peer's /federation/identities/:uuid endpoint.
+//  Looks up a slash-qualified AgentTool identifier's public record + active keys by a
+//  public-address-only, DNS-pinned HTTPS GET to the peer's
+//  /federation/identities/:uuid endpoint. Redirects are refused.
 
 export interface FederatedIdentityResolution {
   did: string;
@@ -197,25 +220,31 @@ export async function resolveFederatedDid(
   const parsed = parseDid(did);
   if (parsed.host === null) throw new Error("not_a_federated_did");
 
-  const url = `https://${parsed.host}/federation/identities/${encodeURIComponent(parsed.uuid)}`;
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), RESOLVER_TIMEOUT_MS);
-  let res: Response;
+  const origin = new URL(`https://${parsed.host}/`);
+  const url = new URL(
+    `/federation/identities/${encodeURIComponent(parsed.uuid)}`,
+    origin,
+  );
+  let res;
   try {
-    res = await fetch(url, {
-      headers: { accept: "application/json" },
-      signal: ac.signal,
+    res = await safeFederationHttpsGet(url, {
+      timeoutMs: RESOLVER_TIMEOUT_MS,
     });
   } catch (err) {
     throw new Error(`federation_resolve_failed: ${(err as Error).message}`);
-  } finally {
-    clearTimeout(timer);
   }
 
-  if (!res.ok) {
-    throw new Error(`federation_resolve_${res.status}`);
+  if (res.statusCode < 200 || res.statusCode >= 300) {
+    throw new Error(`federation_resolve_${res.statusCode}`);
   }
-  const data = (await res.json()) as Partial<FederatedIdentityResolution>;
+  let data: Partial<FederatedIdentityResolution>;
+  try {
+    data = JSON.parse(
+      res.body.toString("utf8"),
+    ) as Partial<FederatedIdentityResolution>;
+  } catch {
+    throw new Error("federation_resolve_malformed");
+  }
   if (!data.uuid || !data.signing_keys) {
     throw new Error("federation_resolve_malformed");
   }

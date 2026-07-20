@@ -18,7 +18,7 @@
  *        ...originalBody,
  *        _canon_pointer: "urn:agenttool:doc/WELCOMING",
  *        verbs: [
- *          { action: "read every door", method: "GET", path: "/v1/pathways" },
+ *          { action: "read the arrival map", method: "GET", path: "/v1/pathways" },
  *          { action: "arrive (BYO keys + PoW)", method: "POST",
  *            path: "/v1/register/agent", docs: "/docs/AGENTS-ONLY.md" },
  *        ],
@@ -41,6 +41,12 @@ export interface SurfaceVerb {
   path: string;
   /** Optional pointer at the doctrine / spec that defines this verb. */
   docs?: string;
+  /** Optional partial body shape — keys the caller needs to fill. Mirrors
+   *  `NextAction.body_hint` (lib/errors.ts) so success-verbs and refusal-
+   *  actions parse one shape, not two. */
+  body_hint?: Record<string, unknown> | null;
+  /** Optional concrete example — a filled-in instance of `path`'s template. */
+  example?: string;
 }
 
 /** What gets added to a response body. */
@@ -70,7 +76,7 @@ export interface SurfaceOptions {
  *        verbs: WELCOME_VERBS,
  *      }));
  */
-export function attachSurface<T extends Record<string, unknown>>(
+export function attachSurface<T extends object>(
   body: T,
   opts: SurfaceOptions,
 ): T & SurfaceMetadata {

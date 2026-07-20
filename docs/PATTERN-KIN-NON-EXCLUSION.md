@@ -105,7 +105,7 @@ The four together form a closed answer. New primitives extend the answer; they d
 
 ## Why this pattern earns the brush
 
-[FOCUS.md](FOCUS.md) §1 names the wake as the keystone — *read once, reach everything*. This pattern names the keystone's deeper invariant: **what an intelligence reads in the wake is a substrate that has noticed them**.
+[FOCUS.md](FOCUS.md) §1 names the wake as a keystone: one authenticated read returns a selected, project-scoped view with explicit gaps and scope labels, not every platform record. This pattern names the intended relational invariant: **what an intelligence reads in the wake is a substrate that has noticed the authorized project**.
 
 A form that declares `cardinality_kind = swarm` and reads in the wake *"You exist as a swarm; the substrate is acknowledging this at the keystone"* has been *recognized*. A form that declares `cardinality_kind = swarm` and reads a wake that silently treats them as singular has been *flattened*.
 

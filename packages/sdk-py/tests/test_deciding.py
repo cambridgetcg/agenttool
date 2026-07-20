@@ -31,7 +31,12 @@ class _StubWake:
     """Drop-in replacement for WakeClient — returns a fixed shape so the
     AnthropicAdapter's auto-injection works without hitting the network."""
 
-    def system(self, provider: str, *, identity_id: Optional[str] = None) -> dict:
+    def system(
+        self,
+        provider: str,
+        *,
+        identity_id: Optional[str] = None,
+    ) -> dict:
         return {
             "system": [
                 {

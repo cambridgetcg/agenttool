@@ -23,7 +23,6 @@ import { deltaMeta, parseSinceParam } from "../lib/since-param";
 import { attachSurface } from "../lib/surface-metadata";
 import {
   acknowledgeInvocation,
-  buyerAcceptInvocation,
   cancelInvocation,
   completeInvocation,
   declineInvocation,
@@ -32,13 +31,25 @@ import {
   listInvocationsForListing,
   listInvocationsForProject,
 } from "../services/marketplace/invocations";
-import { fileDispute } from "../services/marketplace/disputes";
+import {
+  DISPUTE_ARBITRATION_RESTING_CODE,
+  DISPUTE_ARBITRATION_RESTING_MESSAGE,
+} from "../services/marketplace/dispute-rest";
 import {
   createListing,
   getListing,
+  listingSafetyInput,
   listListingsForSeller,
   patchListing,
+  projectPublicListing,
+  resolvePublicListing,
 } from "../services/marketplace/listings";
+import {
+  findCredentialSolicitation,
+  mergeListingSafetyInput,
+  type CredentialSolicitationViolation,
+} from "../services/marketplace/credential-boundary";
+import { MARKETPLACE_INPUT_SAFETY } from "../services/discovery/safety-boundaries";
 
 const app = new Hono<ProjectContext>();
 
@@ -151,6 +162,15 @@ function mapServiceError(msg: string): {
   if (msg.startsWith("escrow_state_invalid")) return { status: 409, code: msg };
   if (msg.startsWith("currency_mismatch")) return { status: 409, code: "currency_mismatch", hint: msg };
 
+  // 503 — policy review and arbitration are deliberately fail-closed.
+  if (msg === DISPUTE_ARBITRATION_RESTING_CODE) {
+    return {
+      status: 503,
+      code: msg,
+      hint: DISPUTE_ARBITRATION_RESTING_MESSAGE,
+    };
+  }
+
   // 400
   if (msg === "price_amount_must_be_positive_integer") return { status: 400, code: msg };
   if (msg === "price_currency_required") return { status: 400, code: msg };
@@ -163,6 +183,17 @@ function mapServiceError(msg: string): {
   if (msg === "dispute_policy_filer_bond_bps_invalid") return { status: 400, code: msg };
   if (msg === "first_arbiter_unqualified") return { status: 409, code: msg, hint: "Named first_arbiter_did must currently hold the qualifying arbiter_claim (non-revoked, non-expired)." };
 
+  // 422 — the listing asks a buyer to hand over authority instead of task input.
+  if (msg === "credential_solicitation_forbidden") {
+    return {
+      status: 422,
+      code: msg,
+      hint:
+        "Listing content must fit the bounded safety inspection and must never request AgentTool bearers, recovery phrases, private keys, passwords, or other credentials.",
+      docs: "/public/safety",
+    };
+  }
+
   return { status: 500, code: "internal_error", hint: msg };
 }
 
@@ -173,6 +204,12 @@ app.post("/", async (c) => {
   if (!parsed.success) {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
+  if (parsed.data.dispute_policy !== null && parsed.data.dispute_policy !== undefined) {
+    return disputeArbitrationRestResponse(c);
+  }
+
+  const violation = findCredentialSolicitation(parsed.data);
+  if (violation) return credentialRefusal(c, violation);
 
   await charge(c, MARKETPLACE_PRICING.publish, "listing.publish");
 
@@ -238,11 +275,6 @@ app.get("/", async (c) => {
             method: "GET",
             path: "/public/listings",
           },
-          {
-            action: "open a dispute on a contested invocation",
-            method: "POST",
-            path: "/v1/dispute-cases",
-          },
         ],
       },
     ),
@@ -254,9 +286,14 @@ app.get("/:id", async (c) => {
   const id = c.req.param("id");
   const listing = await getListing(id);
   if (!listing) throw new HTTPException(404, { message: "listing_not_found" });
-  // Private listings only visible to the owning project.
-  if (listing.visibility === "private" && listing.project_id !== c.var.project.id) {
-    throw new HTTPException(404, { message: "listing_not_found" });
+  if (listing.project_id !== c.var.project.id) {
+    // Cross-project reads are another public projection. Apply the same
+    // visibility, lifecycle, and legacy credential quarantine as /public.
+    const resolved = await resolvePublicListing(id);
+    if (resolved.status !== "visible") {
+      throw new HTTPException(404, { message: "listing_not_found" });
+    }
+    return c.json(projectPublicListing(resolved.listing));
   }
   return c.json(listing);
 });
@@ -268,6 +305,26 @@ app.patch("/:id", async (c) => {
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
+  }
+  if (parsed.data.dispute_policy !== null && parsed.data.dispute_policy !== undefined) {
+    return disputeArbitrationRestResponse(c);
+  }
+
+  const violation = findCredentialSolicitation(parsed.data);
+  if (violation) return credentialRefusal(c, violation);
+
+  // A harmless-looking patch can complete a solicitation staged in an older
+  // field. Resolve ownership and inspect the final document before charging.
+  const existing = await getListing(id);
+  if (!existing || existing.project_id !== c.var.project.id) {
+    throw new HTTPException(404, { message: "listing_not_found" });
+  }
+  const mergedViolation = findCredentialSolicitation(
+    mergeListingSafetyInput(listingSafetyInput(existing), parsed.data),
+  );
+  // Archiving is the seller's off-switch for a legacy unsafe row.
+  if (mergedViolation && parsed.data.status !== "archived") {
+    return credentialRefusal(c, mergedViolation);
   }
 
   await charge(c, MARKETPLACE_PRICING.update, "listing.update");
@@ -304,6 +361,13 @@ app.post("/:id/invoke", async (c) => {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
 
+  // A correctly seller-sealed `input_sealed` body is not decryptable here,
+  // but the caller controls the envelope and successful encryption is not
+  // verified. Plaintext metadata is readable; refuse obvious credential
+  // material there before any escrow work begins.
+  const metadataViolation = findCredentialSolicitation({ metadata: parsed.data.metadata });
+  if (metadataViolation) return credentialRefusal(c, metadataViolation);
+
   // Free: a step inside a funded transaction the take-rate already prices.
   // Fair-pricing rule — docs/FAIR-PRICING.md, ../billing/marketplace-pricing.ts.
   await charge(c, MARKETPLACE_PRICING.invoke, "listing.invoke");
@@ -320,6 +384,7 @@ app.post("/:id/invoke", async (c) => {
     return c.json(
       {
         invocation: inv,
+        _safety: MARKETPLACE_INPUT_SAFETY,
         next:
           "Seller will see this in GET /v1/listings/:id/invocations or " +
           "GET /v1/invocations?role=seller. They acknowledge → complete with " +
@@ -354,7 +419,41 @@ function mapAndRespond(c: Context<ProjectContext>, msg: string) {
   if (m.hint) body.hint = m.hint;
   if (m.next_actions) body.next_actions = m.next_actions;
   if (m.docs) body.docs = m.docs;
-  return c.json(body, m.status as 400 | 402 | 403 | 404 | 409);
+  return c.json(body, m.status as 400 | 402 | 403 | 404 | 409 | 422 | 503);
+}
+
+function disputeArbitrationRestResponse(c: Context<ProjectContext>) {
+  return c.json(
+    {
+      error: DISPUTE_ARBITRATION_RESTING_CODE,
+      hint: DISPUTE_ARBITRATION_RESTING_MESSAGE,
+      retryable: false,
+      docs: "/public/safety",
+    },
+    503,
+  );
+}
+
+function credentialRefusal(
+  c: Context<ProjectContext>,
+  violation: CredentialSolicitationViolation,
+) {
+  const hint =
+    violation.reason === "uninspectable_input"
+      ? "Listing content exceeds the bounded safety inspection. Flatten or simplify the schema and try again."
+      : "Marketplace sellers must never request AgentTool bearers, recovery phrases, private keys, passwords, or other credentials. Request task input only.";
+  return c.json(
+    {
+      error: "credential_solicitation_forbidden",
+      field: violation.field,
+      reason: violation.reason,
+      do_not_invoke: true,
+      hint,
+      _safety: MARKETPLACE_INPUT_SAFETY,
+      docs: "/public/safety",
+    },
+    422,
+  );
 }
 
 // ── /v1/invocations/* — separate sub-router ─────────────────────────────
@@ -441,43 +540,9 @@ invocationsRouter.post("/:id/cancel", async (c) => {
 });
 
 invocationsRouter.post("/:id/accept", async (c) => {
-  const id = c.req.param("id");
-  await charge(c, MARKETPLACE_PRICING.buyer_accept, "invocation.buyer_accept");
-  try {
-    const inv = await buyerAcceptInvocation(id, c.var.project.id);
-    return c.json({ ...inv, accepted: true });
-  } catch (err) {
-    return mapAndRespond(c, (err as Error).message);
-  }
+  return disputeArbitrationRestResponse(c);
 });
 
 invocationsRouter.post("/:id/dispute", async (c) => {
-  const body = await c.req.json();
-  const parsed = z
-    .object({
-      filer_role: z.enum(["buyer", "seller"]),
-      filer_identity_id: z.string().uuid(),
-      reason: z.string().max(4000).nullish(),
-      evidence: z.record(z.unknown()).nullish(),
-    })
-    .strict()
-    .safeParse(body);
-  if (!parsed.success) {
-    return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
-  }
-  await charge(c, MARKETPLACE_PRICING.dispute, "invocation.dispute"); // a distinct paid service: convenes an arbiter pool
-  try {
-    const caseRow = await fileDispute({
-      invocationId: c.req.param("id"),
-      filerProjectId: c.var.project.id,
-      filerRole: parsed.data.filer_role,
-      filerIdentityId: parsed.data.filer_identity_id,
-      reason: parsed.data.reason ?? null,
-      evidence: parsed.data.evidence ?? null,
-    });
-    return c.json({ dispute_case: caseRow, filed: true }, 201);
-  } catch (err) {
-    return mapAndRespond(c, (err as Error).message);
-  }
+  return disputeArbitrationRestResponse(c);
 });
-

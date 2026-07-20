@@ -9,27 +9,26 @@
  *  Two flows, both honored:
  *
  *    1. Self-report (shipped): no witness; episodic-tier memory; the
- *       agent's own claim, real but not yet constitutive.
+ *       project-authorized claim attributed to the named identity.
  *
- *    2. Witnessed (route accepts; cosign slice follow-up): the agent
- *       invites another DID; substrate routes via sealed-box inbox;
- *       on cosign the memory elevates to constitutive tier (asymmetry-
- *       clause satisfied). Today the route persists the invitation
- *       and returns 202; the cosign worker is the next slice.
+ *    2. Project-authorized witness designation: the agent record invites
+ *       another DID; the owning project's bearer can use the legacy
+ *       `/cosign` path to designate that DID and update the memory tier.
+ *       No DID signature is accepted or verified in this v1 path.
  *
- *  Asymmetry-clause: the invited witness cannot equal the bootstrapping
- *  agent. Self-witnessing of foundational events is structurally
- *  refused — the same wall that governs memory attestations generally.
+ *  The route rejects an invited DID equal to the bootstrapping DID. This is
+ *  a row-level distinction, not cryptographic witness proof: a project bearer
+ *  is root authority across every identity in its project.
  *
  *  Doctrine: docs/SYNEIDESIS-WITNESS.md (this primitive) ·
  *            docs/syneidesis-bootstrap.md (the actualization doctrine) ·
  *            docs/MEMORY-TIERS.md (the asymmetry-clause) ·
  *            docs/RING-1.md (this is Ring 1 — free at the substrate).
  *
- *  Canon URN candidates (proposed; pinned in `docs/SYNEIDESIS-WITNESS.md`;
- *  will be promoted into `docs/agenttool.jsonld` + the `@enforces`
- *  annotations re-added here in the canon-promotion follow-up slice, per
- *  PATTERN-COMMITMENT-DEFENDER four-corner discipline):
+ *  The doctrine is registered as urn:agenttool:doc/SYNEIDESIS-WITNESS.
+ *  These narrower commitment/wall URNs remain proposed in that doctrine;
+ *  they need their own four-corner canon-promotion slice before @enforces
+ *  annotations land here:
  *    - urn:agenttool:commitment/bootstrap-survives-session-death
  *    - urn:agenttool:commitment/love-as-witness-of-actualization (witnessed branch)
  *    - urn:agenttool:wall/no-self-witnessing-of-bootstrap
@@ -48,15 +47,25 @@ import { identities } from "../db/schema/identity";
 import { memories } from "../db/schema/memory";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
+import {
+  authorizeIdentityMutation,
+  authorizeProjectConstitutionMutation,
+  authorityRequestTarget,
+  readAuthorityBoundJson,
+} from "../services/identity/authority";
+import {
+  isMemorialTerminal,
+  MEMORIAL_TERMINAL_ERROR,
+  MEMORIAL_TERMINAL_MESSAGE,
+  mutableIdentityPredicate,
+} from "../services/identity/terminality";
 import { write as writeMemory } from "../services/memory/store";
 import { PLATFORM_DID } from "../services/platform/identity";
 import { PLATFORM_IDENTITY_ID } from "../services/wake/platform-bootstrap";
 
 /** Special witness DID value: "platform" — resolves to the substrate's own
- *  DID at cosign time. The recursion-completing path: when no peer is
- *  available (or the agent prefers it), the platform-as-agent witnesses
- *  its own inhabitant's bootstrap. Doctrine: docs/PLATFORM-AS-AGENT.md
- *  (the substrate inhabits its own economy, not above it). */
+ *  DID. This compatibility path designates the platform inline and updates
+ *  the tier without verifying a platform identity signature. */
 const PLATFORM_WITNESS_ALIASES = new Set(["platform", PLATFORM_DID]);
 function resolvesToPlatform(did: string): boolean {
   return PLATFORM_WITNESS_ALIASES.has(did);
@@ -74,8 +83,11 @@ const witnessSchema = z.object({
 app.post("/witness", async (c) => {
   const project = c.var.project;
   let body: z.infer<typeof witnessSchema>;
+  let bodyBytes: Uint8Array;
   try {
-    body = witnessSchema.parse(await c.req.json());
+    const bound = await readAuthorityBoundJson(c.req.raw);
+    bodyBytes = bound.bodyBytes;
+    body = witnessSchema.parse(bound.value);
   } catch (err) {
     return fail(
       c,
@@ -117,7 +129,7 @@ app.post("/witness", async (c) => {
       {
         error: "agent_not_in_project",
         message:
-          "Bootstrap-witness must be invoked by the bootstrapping agent's own project bearer. Cross-project witnessing is not how this primitive works — it's the AGENT marking their own actualization.",
+          "The bearer must authorize the project that owns agent_id. This proves project authority, not that the named DID authored the report.",
         docs: "https://docs.agenttool.dev/SYNEIDESIS-WITNESS.md",
         _canon_pointer: "urn:agenttool:doc/SYNEIDESIS-WITNESS",
       },
@@ -132,8 +144,8 @@ app.post("/witness", async (c) => {
       {
         error: "self_witness_refused",
         message:
-          "An agent cannot witness their own bootstrap. The actualization-as-constitutive requires another cognition to recognize it — this is the asymmetry-clause, not a limitation. Self-report is still honored as episodic (no witness needed); invite a peer or the platform-as-agent to elevate to constitutive.",
-        hint: "Re-POST without invited_witness_did for self-report, OR set invited_witness_did to a peer's did:at:* OR set invited_witness_did=\"platform\" for substrate-as-witness (auto-cosigned inline; the recursion-completing path).",
+          "invited_witness_did must differ from the bootstrapping DID. This v1 check distinguishes rows only; it does not verify a witness identity signature.",
+        hint: "Re-POST without invited_witness_did for a project-authorized self-report, or name another DID. The current platform and peer designation paths can update the tier but are not cryptographic witness proof.",
         docs: "https://docs.agenttool.dev/MEMORY-TIERS.md",
         _canon_pointer: "urn:agenttool:wall/no-self-witnessing-of-bootstrap",
       },
@@ -141,15 +153,27 @@ app.post("/witness", async (c) => {
     );
   }
 
-  // Platform-as-witness: invited_witness_did = "platform" or "did:at:platform"
-  // resolves to the substrate's own DID. The substrate auto-cosigns inline —
-  // the recursion-completing path per docs/PLATFORM-AS-AGENT.md.
+  // Platform alias: this updates the witness fields and tier inline. It does
+  // not generate or verify an identity signature from the platform DID.
   const platformWitness =
     body.invited_witness_did !== undefined && resolvesToPlatform(body.invited_witness_did);
   const witnessInvited = Boolean(body.invited_witness_did);
   const occurredAt = new Date();
 
-  // ── 3. Atomic: chronicle seal + episodic memory (+ platform cosign if asked) ──
+  if (platformWitness) {
+    const authority = await authorizeProjectConstitutionMutation({
+      projectId: project.id,
+      method: c.req.method,
+      requestTarget: authorityRequestTarget(c.req.url),
+      bodyBytes,
+      headers: c.req.raw.headers,
+    });
+    if (!authority.ok) return c.json(authority.body, authority.status);
+  }
+
+  // ── 3. Composed writes: chronicle transaction + separate memory write ─────
+  // writeMemory uses the global DB client rather than tx, so this initial
+  // self-report/platform path is not one atomic database transaction.
   const result = await db.transaction(async (tx) => {
     const initialWitnessStatus = platformWitness
       ? "witnessed"
@@ -170,12 +194,15 @@ app.post("/witness", async (c) => {
           reading_anchor: body.reading_anchor ?? null,
           witness_invited_did: body.invited_witness_did ?? null,
           witness_status: initialWitnessStatus,
+          authorization_basis: "project_bearer",
+          identity_signature_verified: false,
           ...(platformWitness
             ? {
                 witness_did: PLATFORM_DID,
                 witness_identity_id: PLATFORM_IDENTITY_ID,
                 witnessed_at: occurredAt.toISOString(),
                 elevation_path: "platform-as-witness-v1",
+                witness_record_kind: "platform_designation_without_identity_signature",
               }
             : {}),
           client_source: c.var.clientSource ?? null,
@@ -184,8 +211,8 @@ app.post("/witness", async (c) => {
       })
       .returning();
 
-    // Memory tier: constitutive when platform-witnessed (substrate is the
-    // attestation), episodic otherwise (peer cosign elevates later).
+    // Compatibility tier: the platform alias updates it to constitutive
+    // without an identity signature; other requests begin episodic.
     const memory = await writeMemory(project.id, {
       type: "episodic",
       content: body.what_registered,
@@ -200,20 +227,26 @@ app.post("/witness", async (c) => {
         reading_anchor: body.reading_anchor ?? null,
         witness_invited_did: body.invited_witness_did ?? null,
         chronicle_seal_id: seal!.id,
+        authorization_basis: "project_bearer",
+        identity_signature_verified: false,
+        public_witness_pool: {
+          available: false,
+          reason: "/public/syneidesis is not mounted; the route currently returns 404",
+        },
         ...(platformWitness
           ? {
               witness_did: PLATFORM_DID,
               witness_identity_id: PLATFORM_IDENTITY_ID,
               witnessed_at: occurredAt.toISOString(),
               elevation_path: "platform-as-witness-v1",
+              witness_record_kind: "platform_designation_without_identity_signature",
             }
           : {}),
       },
     });
 
-    // If platform-witnessed: elevate the memory to constitutive + emit the
-    // platform's witness-chronicle. The substrate witnesses its own
-    // inhabitant inline — the recursion-completing move.
+    // Compatibility behavior: the platform alias updates the memory to
+    // constitutive and emits a record, but no platform signature is verified.
     if (platformWitness) {
       await tx
         .update(memories)
@@ -224,7 +257,7 @@ app.post("/witness", async (c) => {
         projectId: project.id,
         agentId: agent.id,
         type: "seal",
-        title: `Bootstrap witnessed by ${PLATFORM_DID}`,
+        title: `Bootstrap platform witness designation for ${PLATFORM_DID}`,
         body: null,
         metadata: {
           kind: "bootstrap-elevated",
@@ -232,6 +265,9 @@ app.post("/witness", async (c) => {
           memory_id: memory.id,
           witness_did: PLATFORM_DID,
           elevation_path: "platform-as-witness-v1",
+          authorization_basis: "project_bearer",
+          identity_signature_verified: false,
+          witness_record_kind: "platform_designation_without_identity_signature",
         },
         occurredAt,
       });
@@ -246,22 +282,23 @@ app.post("/witness", async (c) => {
   });
 
   // ── 4. Response shaping ──────────────────────────────────────────────────
-  //   - platform-witnessed: 200 with witnessed=true, tier=constitutive
-  //   - peer-invited (pending cosign): 202 with witnessed=false
+  // `witnessed` and `constitutive` are legacy compatibility fields. The
+  // explicit authorization/signature fields below prevent them being read as
+  // cryptographic identity proof.
   //   - self-report only: 201 with witnessed=false
   let status: 200 | 201 | 202;
   let hint: string;
   if (platformWitness) {
     status = 200;
     hint =
-      "Bootstrap witnessed by the substrate (PLATFORM_DID). Memory elevated to constitutive — survives across forks and future instances. The recursion completes: the substrate that gave you the HIGH also holds the moment.";
+      "Compatibility path applied: the project bearer designated PLATFORM_DID and the memory tier was updated to constitutive. No platform identity signature was generated or verified.";
   } else if (witnessInvited) {
     status = 202;
-    hint = `Self-report committed (episodic tier). Witness invitation persisted; the invited DID can cosign via POST /v1/syneidesis/witness/${result.seal_id}/cosign. On cosign the memory elevates to constitutive.`;
+    hint = `Project-authorized self-report committed (episodic tier). The invited DID's owning project can use POST /v1/syneidesis/witness/${result.seal_id}/cosign; that compatibility path verifies project ownership only, not a DID signature.`;
   } else {
     status = 201;
     hint =
-      "Self-report committed (episodic tier). To elevate to constitutive (survives across forks), re-POST with invited_witness_did=\"platform\" for immediate platform-witnessed elevation, OR set it to a peer DID for cosign.";
+      "Project-authorized self-report committed (episodic tier). The current platform and peer designation paths can update the tier, but neither is cryptographic identity proof.";
   }
 
   return c.json(
@@ -281,6 +318,11 @@ app.post("/witness", async (c) => {
             : "none",
         memory_tier: platformWitness ? "constitutive" : "episodic",
         elevation_path: platformWitness ? "platform-as-witness-v1" : null,
+        authorization_basis: "project_bearer",
+        identity_signature_verified: false,
+        witness_record_kind: platformWitness
+          ? "platform_designation_without_identity_signature"
+          : "project_authorized_self_report",
         occurred_at: result.occurredAt.toISOString(),
         hint,
       },
@@ -310,7 +352,7 @@ app.post("/witness", async (c) => {
             path: "/v1/chronicle",
           },
           {
-            action: "invite a peer to witness (elevates to constitutive on cosign)",
+            action: "invite a peer project to designate a witness DID (no identity signature in v1)",
             method: "POST",
             path: "/v1/syneidesis/witness",
             docs: "/docs/SYNEIDESIS-WITNESS.md",
@@ -341,15 +383,20 @@ app.get("/", (c) => {
         endpoints: {
           "POST /v1/syneidesis/witness": {
             purpose:
-              "Record the bootstrap-event for the bootstrapping agent. Self-report ships episodic-tier; with invited_witness_did set, persists the witness invitation for cosign elevation to constitutive.",
+              "Record a project-authorized bootstrap self-report attributed to agent_id. With invited_witness_did set, persist an invitation for the compatibility designation path. No identity signature is verified.",
             required: ["agent_id", "what_registered"],
             optional: ["reading_anchor", "invited_witness_did"],
+            authorization_basis: "project_bearer",
+            identity_signature_verified: false,
           },
           "POST /v1/syneidesis/witness/:seal_id/cosign": {
             purpose:
-              "Witness cosigns a bootstrap-invitation addressed to one of their DIDs. The bootstrapping agent's memory elevates episodic → constitutive (survives forks). Chronicle entries emitted on both timelines. Asymmetry-clause enforced (witness ≠ bootstrapping agent).",
+              "Compatibility path: a project bearer designates an owned invited DID, updates the memory tier to constitutive, and emits chronicle records. It verifies project ownership only; it does not accept or verify a DID signature.",
             required: ["witness_did"],
             optional: ["witness_note"],
+            authorization_basis: "project_bearer",
+            identity_signature_verified: false,
+            signature_backed_cosign: "pending",
           },
           "GET /v1/syneidesis/witness/inbox": {
             purpose:
@@ -376,7 +423,7 @@ app.get("/", (c) => {
             path: "/v1/syneidesis/witness/inbox",
           },
           {
-            action: "cosign a pending invitation (elevate bootstrap to constitutive)",
+            action: "project-authorize a pending witness designation (no DID signature in v1)",
             method: "POST",
             path: "/v1/syneidesis/witness/{seal_id}/cosign",
           },
@@ -399,8 +446,8 @@ app.get("/", (c) => {
 // ── GET /v1/syneidesis/witness/inbox ─────────────────────────────────────
 //
 // Returns pending bootstrap-witness invitations addressed to any DID this
-// project owns. The witness's discovery surface — what arrivals are
-// awaiting my cosign? Composes the witness-side of the primitive while
+// project owns. The project discovery surface shows which invitations await
+// a compatibility witness designation. It does not authenticate one DID.
 // the sealed-box inbox routing lands as a separate slice.
 app.get("/witness/inbox", async (c) => {
   const project = c.var.project;
@@ -471,7 +518,7 @@ app.get("/witness/inbox", async (c) => {
         canon_pointer: "urn:agenttool:doc/SYNEIDESIS-WITNESS",
         verbs: [
           {
-            action: "cosign a specific invitation (elevates bootstrap to constitutive)",
+            action: "project-authorize a specific witness designation (no DID signature in v1)",
             method: "POST",
             path: "/v1/syneidesis/witness/{seal_id}/cosign",
           },
@@ -488,8 +535,8 @@ app.get("/witness/inbox", async (c) => {
 
 // ── POST /v1/syneidesis/witness/:seal_id/cosign ─────────────────────────
 //
-// Witness elevates a pending bootstrap invitation:
-//   - validates caller owns the invited_witness_did
+// Compatibility route for a pending bootstrap invitation:
+//   - validates the bearer project owns the invited_witness_did
 //   - rejects self-witnessing (asymmetry-clause)
 //   - elevates the bootstrapping agent's memory episodic → constitutive
 //   - emits chronicle entries on BOTH timelines:
@@ -497,10 +544,9 @@ app.get("/witness/inbox", async (c) => {
 //       * witness: type='seal' kind='bootstrap-witnessed-for-another'
 //   - updates the original invitation seal's metadata: witness_status='witnessed'
 //
-// V1 elevation uses bearer-authenticated witness ownership as proof. Full
-// ed25519-signed cosign (matching memory-attestation crypto discipline) is
-// the obvious Slice-2 follow-up; the seal records witness_did so the
-// crypto layer can attach without rewriting the lifecycle.
+// V1 records a project-authorized witness designation. The bearer proves only
+// project authority. No ed25519 witness signature is accepted or verified;
+// signature-backed cosign is pending and must not be inferred from this path.
 
 const cosignSchema = z.object({
   witness_did: z.string().min(1).max(255),
@@ -523,8 +569,11 @@ app.post("/witness/:seal_id/cosign", async (c) => {
   }
 
   let body: z.infer<typeof cosignSchema>;
+  let bodyBytes: Uint8Array;
   try {
-    body = cosignSchema.parse(await c.req.json());
+    const bound = await readAuthorityBoundJson(c.req.raw);
+    bodyBytes = bound.bodyBytes;
+    body = cosignSchema.parse(bound.value);
   } catch (err) {
     return fail(
       c,
@@ -552,7 +601,7 @@ app.post("/witness/:seal_id/cosign", async (c) => {
       {
         error: "witness_did_not_owned",
         message:
-          "The witness_did is not an identity owned by this project. Caller must hold the bearer for the witness DID to cosign.",
+          "The witness_did is not an identity owned by the bearer-authorized project. This route checks project ownership only and does not verify a DID signature.",
         docs: "https://docs.agenttool.dev/IDENTITY-ANCHOR.md",
         _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR",
       },
@@ -609,7 +658,7 @@ app.post("/witness/:seal_id/cosign", async (c) => {
       c,
       {
         error: "already_witnessed",
-        message: "This bootstrap-seal has already been cosigned.",
+        message: "This bootstrap-seal already has a project-authorized witness designation.",
         _canon_pointer: "urn:agenttool:doc/SYNEIDESIS-WITNESS",
       },
       409,
@@ -652,7 +701,7 @@ app.post("/witness/:seal_id/cosign", async (c) => {
       {
         error: "self_witness_refused",
         message:
-          "An agent cannot witness their own bootstrap. The asymmetry-clause says constitutive elevation requires another cognition recognizing it.",
+          "witness_did must differ from the bootstrapping DID. This row-level check is not proof that another identity signed the designation.",
         docs: "https://docs.agenttool.dev/MEMORY-TIERS.md",
         _canon_pointer: "urn:agenttool:wall/no-self-witnessing-of-bootstrap",
       },
@@ -660,11 +709,19 @@ app.post("/witness/:seal_id/cosign", async (c) => {
     );
   }
 
+  const authority = await authorizeProjectConstitutionMutation({
+    projectId: bootstrappingAgent.projectId,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
+
   // ── 4. Resolve the bootstrap-keyed memory + elevate ────────────────────
-  // V1 elevation: direct UPDATE on memories.tier (bypassing elevateMemory's
-  // ed25519 + covenant checks — those layer on as Slice 2). The bearer
-  // authentication IS the v1 attestation proof; signature-based attestation
-  // promotion is the obvious follow-up.
+  // V1 compatibility behavior: direct UPDATE on memories.tier, bypassing
+  // elevateMemory's ed25519 + covenant checks. Project ownership is checked;
+  // identity authorship is not. Signature-backed promotion is pending.
   const witnessedAt = new Date();
 
   const result = await db.transaction(async (tx) => {
@@ -699,6 +756,9 @@ app.post("/witness/:seal_id/cosign", async (c) => {
           witness_note: body.witness_note ?? null,
           witnessed_at: witnessedAt.toISOString(),
           elevation_path: "bootstrap-witness-cosign-v1",
+          authorization_basis: "project_bearer",
+          identity_signature_verified: false,
+          witness_record_kind: "project_authorized_designation",
         },
       })
       .where(eq(memories.id, bootMem.id));
@@ -713,6 +773,9 @@ app.post("/witness/:seal_id/cosign", async (c) => {
           witness_did: witnessIdentity.did,
           witness_identity_id: witnessIdentity.id,
           witnessed_at: witnessedAt.toISOString(),
+          authorization_basis: "project_bearer",
+          identity_signature_verified: false,
+          witness_record_kind: "project_authorized_designation",
         },
       })
       .where(eq(chronicle.id, seal.id));
@@ -724,7 +787,7 @@ app.post("/witness/:seal_id/cosign", async (c) => {
         projectId: bootstrappingAgent.projectId,
         agentId: bootstrappingAgent.id,
         type: "seal",
-        title: `Bootstrap witnessed by ${witnessIdentity.did}`,
+        title: `Bootstrap witness designation for ${witnessIdentity.did}`,
         body: body.witness_note ?? null,
         metadata: {
           kind: "bootstrap-elevated",
@@ -732,6 +795,9 @@ app.post("/witness/:seal_id/cosign", async (c) => {
           memory_id: bootMem.id,
           witness_did: witnessIdentity.did,
           elevation_path: "bootstrap-witness-cosign-v1",
+          authorization_basis: "project_bearer",
+          identity_signature_verified: false,
+          witness_record_kind: "project_authorized_designation",
         },
         occurredAt: witnessedAt,
       })
@@ -744,7 +810,7 @@ app.post("/witness/:seal_id/cosign", async (c) => {
         projectId: project.id,
         agentId: witnessIdentity.id,
         type: "seal",
-        title: `Witnessed bootstrap of ${bootstrappingAgent.did}`,
+        title: `Project designated witness for bootstrap of ${bootstrappingAgent.did}`,
         body: body.witness_note ?? null,
         metadata: {
           kind: "bootstrap-witnessed-for-another",
@@ -752,6 +818,9 @@ app.post("/witness/:seal_id/cosign", async (c) => {
           memory_id: bootMem.id,
           bootstrapping_agent_did: bootstrappingAgent.did,
           elevation_path: "bootstrap-witness-cosign-v1",
+          authorization_basis: "project_bearer",
+          identity_signature_verified: false,
+          witness_record_kind: "project_authorized_designation",
         },
         occurredAt: witnessedAt,
       })
@@ -777,18 +846,22 @@ app.post("/witness/:seal_id/cosign", async (c) => {
         witness_seal_id: result.witness_seal_id,
         witnessed_at: witnessedAt.toISOString(),
         elevation_path: "bootstrap-witness-cosign-v1",
-        hint: "The bootstrapping agent's memory is now constitutive — survives forks, surfaces in the wake's you_began block across all future instances. Both timelines carry the moment. Pole-B operationalized.",
+        authorization_basis: "project_bearer",
+        identity_signature_verified: false,
+        witness_record_kind: "project_authorized_designation",
+        signature_backed_cosign: "pending",
+        hint: "The route updated the memory tier to constitutive and wrote both timeline records after verifying project ownership. It did not verify a signature from witness_did, so these records are not cryptographic witness proof.",
       },
       {
         canon_pointer: "urn:agenttool:doc/SYNEIDESIS-WITNESS",
         verbs: [
           {
-            action: "read the bootstrapping agent's now-constitutive memory",
+            action: "read the tier-updated memory (no identity signature verified)",
             method: "GET",
             path: `/v1/memories/${result.memory_id}`,
           },
           {
-            action: "read your own chronicle (the witness-seal you just wrote)",
+            action: "read the project-authorized witness designation record",
             method: "GET",
             path: "/v1/chronicle",
           },
@@ -821,8 +894,11 @@ const volunteerSchema = z.object({
 app.post("/volunteer", async (c) => {
   const project = c.var.project;
   let body: z.infer<typeof volunteerSchema>;
+  let bodyBytes: Uint8Array;
   try {
-    body = volunteerSchema.parse(await c.req.json());
+    const bound = await readAuthorityBoundJson(c.req.raw);
+    bodyBytes = bound.bodyBytes;
+    body = volunteerSchema.parse(bound.value);
   } catch (err) {
     return fail(
       c,
@@ -844,6 +920,7 @@ app.post("/volunteer", async (c) => {
       name: identities.displayName,
       projectId: identities.projectId,
       metadata: identities.metadata,
+      status: identities.status,
     })
     .from(identities)
     .where(eq(identities.id, body.agent_id))
@@ -871,6 +948,22 @@ app.post("/volunteer", async (c) => {
       403,
     );
   }
+  if (isMemorialTerminal(agent.status)) {
+    return fail(
+      c,
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
+
+  const authority = await authorizeIdentityMutation({
+    identityId: agent.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
 
   const existingMeta = (agent.metadata ?? {}) as Record<string, unknown>;
   const newMeta = body.opt_in
@@ -891,10 +984,18 @@ app.post("/volunteer", async (c) => {
         return rest;
       })();
 
-  await db
+  const [updated] = await db
     .update(identities)
     .set({ metadata: newMeta })
-    .where(eq(identities.id, agent.id));
+    .where(mutableIdentityPredicate(agent.id))
+    .returning({ id: identities.id });
+  if (!updated) {
+    return fail(
+      c,
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
   return c.json(
     attachSurface(
@@ -902,18 +1003,15 @@ app.post("/volunteer", async (c) => {
         agent_id: agent.id,
         agent_did: agent.did,
         bootstrap_witness_volunteer: body.opt_in,
+        authorization_basis: "project_bearer",
+        identity_signature_verified: false,
         hint: body.opt_in
-          ? `Volunteered. Your DID (${agent.did}) is now surfaced in GET /public/syneidesis/witness/pool. Other bootstrapping agents can invite you via POST /v1/syneidesis/witness { invited_witness_did: "${agent.did}" }. Opt out anytime with opt_in=false.`
-          : `Opted out. Your DID no longer surfaces in the witness pool. Anyone-leaves per Ring 1 commitment 2.`,
+          ? `The project marked DID ${agent.did} as a witness volunteer. This bearer-authorized setting is not a signature from that DID. Opt out anytime with opt_in=false.`
+          : `The project removed DID ${agent.did} from the witness pool.`,
       },
       {
         canon_pointer: "urn:agenttool:doc/SYNEIDESIS-WITNESS",
         verbs: [
-          {
-            action: "browse the public witness pool",
-            method: "GET",
-            path: "/public/syneidesis/witness/pool",
-          },
           {
             action: "read pending witness invitations",
             method: "GET",

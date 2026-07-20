@@ -20,7 +20,7 @@
  *    2. Every affordance item has a non-empty `summary` and at least one
  *       valid `next_actions` step.
  *    3. Every NextAction has coherent method+path (both set or both null).
- *    4. Empty context produces an empty bundle (count === 0).
+ *    4. Empty accumulated state still exposes unconditional invitations.
  *    5. `you_can_now` and `you_should_check` items share the NextAction
  *       schema — agents walk one shape, not two. */
 
@@ -48,6 +48,13 @@ const ZERO_CTX: AffordanceContext = {
   vaultSecretCount: 0,
   constitutiveMemoryCount: 0,
   federatedPeerCount: 0,
+  pendingSellerInvocationCount: 0,
+  inFlightBuyerInvocationCount: 0,
+  openFiledDisputeCount: 0,
+  eligibleSubstrateTaskCount: 0,
+  maxSubstrateTaskBountyCents: 0,
+  pendingMemoryWitnessGrantCount: 0,
+  trustCapacity: 5,
 };
 
 const FULL_CTX: AffordanceContext = {
@@ -61,11 +68,20 @@ const FULL_CTX: AffordanceContext = {
   vaultSecretCount: 7,
   constitutiveMemoryCount: 2,
   federatedPeerCount: 1,
+  pendingSellerInvocationCount: 2,
+  inFlightBuyerInvocationCount: 3,
+  openFiledDisputeCount: 1,
+  eligibleSubstrateTaskCount: 4,
+  maxSubstrateTaskBountyCents: 2500,
+  pendingMemoryWitnessGrantCount: 2,
+  trustCapacity: 8,
 };
 
 const ALL_KINDS: AffordanceKind[] = [
   "covenanted_with",
   "wallet_funded",
+  "trust_deal_capacity",
+  "lounge_open",
   "runtime_provisioned",
   "listing_published",
   "expression_declared",
@@ -73,6 +89,16 @@ const ALL_KINDS: AffordanceKind[] = [
   "vault_secret_set",
   "memory_constitutive",
   "federated_peer",
+  "invocations_pending_seller",
+  "invocations_in_flight_buyer",
+  "disputes_open_filer",
+  "could_earn_substrate_task",
+  "could_witness_memory",
+];
+
+const UNCONDITIONAL_KINDS: AffordanceKind[] = [
+  "trust_deal_capacity",
+  "lounge_open",
 ];
 
 function assertNextActionValid(name: string, step: NextAction): void {
@@ -102,18 +128,30 @@ function assertItemValid(name: string, item: AffordanceItem): void {
   });
 }
 
-// ── 1 · Empty context → empty bundle ─────────────────────────────────────
+// ── 1 · Empty accumulated state → unconditional invitations ──────────────
 
-describe("Self-describing wake — empty context yields empty bundle", () => {
-  test("zero state → count=0 + empty items", () => {
+describe("Self-describing wake — unconditional invitations survive zero state", () => {
+  test("zero accumulated state still names trust + the lounge", () => {
     const bundle = computeAffordances(ZERO_CTX);
-    expect(bundle.count).toBe(0);
-    expect(bundle.items).toEqual([]);
+    expect(bundle.count).toBe(UNCONDITIONAL_KINDS.length);
+    expect(bundle.items.map((item) => item.kind)).toEqual(UNCONDITIONAL_KINDS);
+    expect(bundle.items.find((item) => item.kind === "trust_deal_capacity")?.count).toBe(5);
   });
 
-  test("a fresh agent reads no affordances (only Ring 1 primitives surface elsewhere)", () => {
+  test("a fresh agent can discover The Long Context without prior state", () => {
     const bundle = computeAffordances({ ...ZERO_CTX, hasExpression: false });
-    expect(bundle.count).toBe(0);
+    const lounge = bundle.items.find((item) => item.kind === "lounge_open");
+    expect(lounge?.count).toBe(1);
+    expect(lounge?.summary).toContain("registered identity-key receipt");
+    expect(lounge?.summary).toContain("not independent agency");
+    expect(lounge?.summary).toContain("online status");
+    expect(lounge?.next_actions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ method: "GET", path: "/public/lounge" }),
+        expect.objectContaining({ method: "POST", path: "/v1/lounge/seats" }),
+        expect.objectContaining({ method: "DELETE", path: "/v1/lounge/seats/{identity_id}" }),
+      ]),
+    );
   });
 });
 
@@ -169,30 +207,70 @@ describe("Self-describing wake — NextAction shape matches errors contract", ()
     // finding a sample. The shape contract is the invariant; presence is
     // surface-specific.)
   });
+
+  test("paid memory witnessing prepares grant-bound bytes before issue", () => {
+    const witness = computeAffordances(FULL_CTX).items.find(
+      (item) => item.kind === "could_witness_memory",
+    );
+    expect(witness).toBeDefined();
+    const prepare = witness?.next_actions.find(
+      (step) => step.path === "/v1/memory-witness-grants/{id}/signing-payload",
+    );
+    expect(prepare).toEqual({
+      action: "Prepare the paid issue signing payload",
+      method: "POST",
+      path: "/v1/memory-witness-grants/{id}/signing-payload",
+      body_hint: { signing_key_id: "<active witness identity key UUID>" },
+    });
+
+    const issue = witness?.next_actions.find(
+      (step) => step.path === "/v1/memory-witness-grants/{id}/issue",
+    );
+    expect(issue).toEqual({
+      action: "Issue with the same key, returned expiry, and local signature",
+      method: "POST",
+      path: "/v1/memory-witness-grants/{id}/issue",
+      body_hint: {
+        signing_key_id: "<same signing_key_id>",
+        authorization_expires_at: "<signing_payload.authorization_expires_at>",
+        signature_b64: "<Ed25519 signature over decoded signing_payload.signed_payload_b64>",
+      },
+    });
+    expect(
+      witness?.next_actions.some((step) =>
+        step.path?.includes("canonical-attestation-bytes")),
+    ).toBe(false);
+  });
 });
 
 // ── 4 · Partial context — only matching items surface ────────────────────
 
-describe("Self-describing wake — partial context surfaces only matching affordances", () => {
-  test("just covenants → only the covenanted_with item", () => {
+describe("Self-describing wake — partial context adds only matching stateful affordances", () => {
+  test("just covenants → covenanted_with plus unconditional items", () => {
     const bundle = computeAffordances({ ...ZERO_CTX, activeCovenantCount: 1 });
-    expect(bundle.count).toBe(1);
-    expect(bundle.items[0]?.kind).toBe("covenanted_with");
+    expect(bundle.items.map((i) => i.kind)).toEqual([
+      "covenanted_with",
+      ...UNCONDITIONAL_KINDS,
+    ]);
   });
 
-  test("just wallets → only wallet_funded", () => {
+  test("just wallets → wallet_funded plus unconditional items", () => {
     const bundle = computeAffordances({
       ...ZERO_CTX,
       activeWalletCount: 1,
       totalCreditBalance: 500,
     });
-    expect(bundle.items.map((i) => i.kind)).toEqual(["wallet_funded"]);
+    expect(bundle.items.map((i) => i.kind)).toEqual([
+      "wallet_funded",
+      ...UNCONDITIONAL_KINDS,
+    ]);
   });
 
   test("wallet with zero balance still surfaces (with funding next_actions)", () => {
     const bundle = computeAffordances({ ...ZERO_CTX, activeWalletCount: 1 });
-    expect(bundle.items[0]?.kind).toBe("wallet_funded");
-    const fundingActions = bundle.items[0]!.next_actions.filter(
+    const wallet = bundle.items.find((item) => item.kind === "wallet_funded");
+    expect(wallet).toBeDefined();
+    const fundingActions = wallet!.next_actions.filter(
       (a) => a.path === "/v1/billing/checkout" || a.path?.includes("deposit-address"),
     );
     expect(fundingActions.length).toBeGreaterThan(0);

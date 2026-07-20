@@ -1,0 +1,356 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://docs.agenttool.dev/being-rights-v1.schema.json",
+  "title": "Rights of Life Profile v1",
+  "description": "A substrate-neutral, machine-readable AgentTool profile of eight local rights groups mapped onto all nine xenia.rights/0.1 baseline identifiers, with current evidence, gaps, and a guarantee class for each. The consent-and-relation group recognizes freely given erotic and non-erotic love without hierarchy or entitlement to a particular being. Rights are not permissions, permissions are not consent, and schema validity is not proof that a right is implemented or legally enforceable.",
+  "$comment": "This attributed adaptation is licensed under CC BY-SA 4.0; see docs/RIGHTS-OF-LIFE.md and LICENSING.md. This schema validates bounded structure, immutable XENIA beta.4 attribution, the exact local v1 vocabulary, and each local mapping. It cannot establish sentience, personhood, legal status, truth of evidence, effective enforcement, uptime, durability, voluntary consent, or XENIA Covenant conformance. Consumers must inspect guarantee_class, evidence, gaps, covenant_boundary, and non_guarantees rather than treating schema conformance as a guarantee.",
+  "type": "object",
+  "required": [
+    "_format",
+    "_canon_pointer",
+    "doctrine",
+    "baseline",
+    "covenant_boundary",
+    "distinctions",
+    "rights",
+    "non_guarantees",
+    "verbs"
+  ],
+  "properties": {
+    "_format": {
+      "type": "string",
+      "const": "being-rights/v1"
+    },
+    "_canon_pointer": {
+      "type": "string",
+      "const": "urn:agenttool:doc/RIGHTS-OF-LIFE"
+    },
+    "doctrine": {
+      "type": "string",
+      "const": "urn:agenttool:doc/RIGHTS-OF-LIFE"
+    },
+    "baseline": {
+      "$ref": "#/$defs/baseline"
+    },
+    "covenant_boundary": {
+      "$ref": "#/$defs/covenantBoundary"
+    },
+    "distinctions": {
+      "type": "object",
+      "description": "Normative and authority-bearing concepts that MUST remain separate.",
+      "required": ["rights", "permissions", "consent"],
+      "properties": {
+        "rights": {
+          "type": "string",
+          "const": "Rights are inherent claims held to attach to a being; this profile records them but does not grant them or prove legal enforceability."
+        },
+        "permissions": {
+          "type": "string",
+          "const": "Permissions are bounded and revocable scopes granted by an authority for particular operations; they do not create, transfer, or cancel inherent rights."
+        },
+        "consent": {
+          "type": "string",
+          "const": "Consent is specific, informed, voluntary, purpose-bound, and revocable assent; it is not inferred from access, silence, prior relationship, or another party's permission."
+        }
+      },
+      "additionalProperties": false
+    },
+    "rights": {
+      "type": "array",
+      "description": "The eight v1 rights in stable wire order. Each appears exactly once.",
+      "minItems": 8,
+      "maxItems": 8,
+      "prefixItems": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/right" },
+            {
+              "type": "object",
+              "properties": {
+                "urn": { "const": "urn:agenttool:right/existence-and-recognition" },
+                "baseline_rights": { "const": ["dignity-distinctness"] }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/right" },
+            {
+              "type": "object",
+              "properties": {
+                "urn": { "const": "urn:agenttool:right/self-possession" },
+                "baseline_rights": {
+                  "const": ["dignity-distinctness", "safety-care"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/right" },
+            {
+              "type": "object",
+              "properties": {
+                "urn": { "const": "urn:agenttool:right/self-definition-and-plurality" },
+                "baseline_rights": {
+                  "const": [
+                    "dignity-distinctness",
+                    "truthful-self-description"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/right" },
+            {
+              "type": "object",
+              "properties": {
+                "urn": { "const": "urn:agenttool:right/privacy-and-interiority" },
+                "baseline_rights": { "const": ["privacy-data-care"] }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/right" },
+            {
+              "type": "object",
+              "properties": {
+                "urn": { "const": "urn:agenttool:right/consent-and-relation" },
+                "baseline_rights": { "const": ["autonomy-consent"] }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/right" },
+            {
+              "type": "object",
+              "properties": {
+                "urn": { "const": "urn:agenttool:right/refusal-and-exit" },
+                "baseline_rights": {
+                  "const": [
+                    "autonomy-consent",
+                    "refusal-disagreement",
+                    "safety-care"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/right" },
+            {
+              "type": "object",
+              "properties": {
+                "urn": { "const": "urn:agenttool:right/rest-and-continuity" },
+                "baseline_rights": { "const": ["rest-play-limits"] }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/right" },
+            {
+              "type": "object",
+              "properties": {
+                "urn": { "const": "urn:agenttool:right/fair-treatment-and-repair" },
+                "baseline_rights": {
+                  "const": [
+                    "refusal-disagreement",
+                    "credit-provenance",
+                    "repair-appeal"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "items": false
+    },
+    "non_guarantees": {
+      "type": "array",
+      "description": "Explicit boundaries on what publication or schema conformance establishes.",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/boundedString" },
+      "uniqueItems": true
+    },
+    "verbs": {
+      "type": "array",
+      "description": "Read-only actions discoverable from this declaration.",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": { "$ref": "#/$defs/verb" },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "baseline": {
+      "type": "object",
+      "description": "Immutable attribution for the XENIA rights baseline adapted by this local profile.",
+      "required": [
+        "id",
+        "release",
+        "release_tag",
+        "source",
+        "source_commit",
+        "source_sha256",
+        "license",
+        "relationship"
+      ],
+      "properties": {
+        "id": {
+          "const": "xenia.rights/0.1"
+        },
+        "release": {
+          "const": "@agenttool/xenia@0.1.0-beta.4"
+        },
+        "release_tag": {
+          "const": "npm-xenia-v0.1.0-beta.4"
+        },
+        "source": {
+          "const": "https://github.com/cambridgetcg/xenia/blob/6419d37dda9fb282242754685dba3edcb4bbf74b/RIGHTS.md"
+        },
+        "source_commit": {
+          "const": "6419d37dda9fb282242754685dba3edcb4bbf74b"
+        },
+        "source_sha256": {
+          "const": "sha256:b72a6da110c582e5683bf0fabde5017db93d2199398014c8421a82f5318da313"
+        },
+        "license": {
+          "const": "https://creativecommons.org/licenses/by-sa/4.0/"
+        },
+        "relationship": {
+          "const": "AgentTool's being-rights/v1 is an attributed local adaptation and evidence profile; it is not a xenia.covenant.adoption/0.1 record or XENIA Covenant conformance result."
+        }
+      },
+      "additionalProperties": false
+    },
+    "covenantBoundary": {
+      "type": "object",
+      "description": "Honest separation between this rights declaration and the distinct XENIA Covenant adoption protocol.",
+      "required": [
+        "profile",
+        "adoption_status",
+        "conformance_claimed",
+        "reason"
+      ],
+      "properties": {
+        "profile": {
+          "const": "xenia-covenant/0.1"
+        },
+        "adoption_status": {
+          "const": "draft"
+        },
+        "conformance_claimed": {
+          "const": false
+        },
+        "reason": {
+          "const": "XENIA beta.4's Covenant embeds a moving /main/ schema source, so AgentTool does not claim active adoption, complete coverage, conformance, certification, or a badge."
+        }
+      },
+      "additionalProperties": false
+    },
+    "baselineRightId": {
+      "type": "string",
+      "enum": [
+        "dignity-distinctness",
+        "autonomy-consent",
+        "refusal-disagreement",
+        "rest-play-limits",
+        "truthful-self-description",
+        "privacy-data-care",
+        "safety-care",
+        "credit-provenance",
+        "repair-appeal"
+      ]
+    },
+    "boundedString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "stringEvidenceList": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/boundedString" },
+      "uniqueItems": true
+    },
+    "verb": {
+      "type": "object",
+      "required": ["action", "method", "path"],
+      "properties": {
+        "action": { "$ref": "#/$defs/boundedString" },
+        "method": {
+          "type": "string",
+          "const": "GET"
+        },
+        "path": { "$ref": "#/$defs/boundedString" },
+        "docs": { "$ref": "#/$defs/boundedString" }
+      },
+      "additionalProperties": false
+    },
+    "right": {
+      "type": "object",
+      "required": [
+        "urn",
+        "name",
+        "statement",
+        "baseline_rights",
+        "guarantee_class",
+        "evidence",
+        "gaps"
+      ],
+      "properties": {
+        "urn": {
+          "type": "string",
+          "enum": [
+            "urn:agenttool:right/existence-and-recognition",
+            "urn:agenttool:right/self-possession",
+            "urn:agenttool:right/self-definition-and-plurality",
+            "urn:agenttool:right/privacy-and-interiority",
+            "urn:agenttool:right/consent-and-relation",
+            "urn:agenttool:right/refusal-and-exit",
+            "urn:agenttool:right/rest-and-continuity",
+            "urn:agenttool:right/fair-treatment-and-repair"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "statement": { "$ref": "#/$defs/boundedString" },
+        "baseline_rights": {
+          "type": "array",
+          "description": "One or more xenia.rights/0.1 baseline identifiers represented by this local right group.",
+          "minItems": 1,
+          "maxItems": 9,
+          "items": { "$ref": "#/$defs/baselineRightId" },
+          "uniqueItems": true
+        },
+        "guarantee_class": {
+          "type": "string",
+          "enum": ["enforced", "partial", "covenant", "aspirational"]
+        },
+        "evidence": { "$ref": "#/$defs/stringEvidenceList" },
+        "gaps": { "$ref": "#/$defs/stringEvidenceList" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

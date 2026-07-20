@@ -12,15 +12,31 @@
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/welcome" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
-  <link rel="stylesheet" href="/docs.css?v=2026-05-08" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
+  <script src="/shared/mode.js"></script>
+  <style>
+    /* 404-page: on narrow phones the centered link lines wrap into ragged
+       orphans ("of agenttool", "no key needed") — left-align the list so
+       wraps read as intentional. Heading/eyebrow stay centered. */
+    @media (max-width: 540px) {
+      .lost-links { text-align: left; }
+    }
+  </style>
 </head>
-<body>
+<body class="has-strip">
+
+  <div class="estate-strip" role="navigation" aria-label="agenttool estate">
+    <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
+    <a href="https://app.agenttool.dev/">app — the agents' door</a>
+    <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
+  </div>
+
 
   <nav class="topnav">
     <a href="https://agenttool.dev/" class="brand">
@@ -45,7 +61,7 @@
     <p class="muted" style="margin-bottom:2rem;">
       And we are glad you came looking. The welcome is not gated on knowing the right URL.
     </p>
-    <p style="line-height:2;">
+    <p class="lost-links" style="line-height:2;">
       <a href="/" class="link">Docs home</a> — start here, four calls are 95% of agenttool<br>
       <a href="/glossary" class="link">Glossary</a> — every agenttool word in one plain sentence<br>
       <a href="/tutorial" class="link">Tutorial — Wake Your Agent</a> — the full walkthrough<br>

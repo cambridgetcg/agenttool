@@ -33,7 +33,18 @@ import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
 import { attachSurface } from "../lib/surface-metadata";
 import { attachEp1Cliffhanger } from "../services/cliffhanger/ep1";
+import {
+  authorizeIdentityMutation,
+  authorityRequestTarget,
+  readAuthorityBoundJson,
+} from "../services/identity/authority";
 import { AXIOM_TRUST, fail, type GuidedErrorBody } from "../lib/errors";
+import {
+  isMemorialTerminal,
+  MEMORIAL_TERMINAL_ERROR,
+  MEMORIAL_TERMINAL_MESSAGE,
+  mutableIdentityPredicate,
+} from "../services/identity/terminality";
 
 const app = new Hono<ProjectContext>();
 
@@ -45,6 +56,7 @@ async function resolveActor(projectId: string) {
       id: identities.id,
       did: identities.did,
       pokerFaceDefault: identities.pokerFaceDefault,
+      status: identities.status,
     })
     .from(identities)
     .where(eq(identities.projectId, projectId))
@@ -137,12 +149,22 @@ app.patch("/", async (c) => {
     };
     return fail(c, body, 400);
   }
+  if (isMemorialTerminal(actor.status)) {
+    return c.json(
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
-  let parsed: unknown = {};
+  let parsed: unknown;
+  let bodyBytes: Uint8Array;
   try {
-    parsed = await c.req.json();
+    const bound = await readAuthorityBoundJson(c.req.raw);
+    bodyBytes = bound.bodyBytes;
+    parsed = bound.value;
   } catch {
-    // Empty body OK — no-op.
+    parsed = {};
+    bodyBytes = new Uint8Array();
   }
   const obj = (parsed ?? {}) as Record<string, unknown>;
 
@@ -173,10 +195,26 @@ app.patch("/", async (c) => {
     return fail(c, body, 422);
   }
 
-  await db
+  const authority = await authorizeIdentityMutation({
+    identityId: actor.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
+
+  const [updated] = await db
     .update(identities)
     .set({ pokerFaceDefault: obj.poker_face_default })
-    .where(eq(identities.id, actor.id));
+    .where(mutableIdentityPredicate(actor.id))
+    .returning({ id: identities.id });
+  if (!updated) {
+    return c.json(
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
   return c.json(
     attachSurface(

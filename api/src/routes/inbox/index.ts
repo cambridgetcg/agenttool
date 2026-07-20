@@ -1,4 +1,4 @@
-/** Inbox domain router — agent-to-agent encrypted messaging.
+/** Inbox domain router — signed, covenant-gated message envelopes.
  *
  *  Mounted in api/src/index.ts as: app.route("/v1/inbox", inboxRouter)
  *
@@ -11,7 +11,7 @@
  *    POST   /v1/inbox/:id/co-sign               — release dual-witness-locked message
  *    DELETE /v1/inbox/:id                       — soft delete (status='deleted')
  *    GET    /v1/inbox/box-keys/:did             — resolve DID to active box pubkey
- *    GET    /v1/inbox/voice ?identity_id=&since= — SSE push channel for new arrivals
+ *    GET    /v1/inbox/voice ?identity_id=&since=&since_id= — SSE arrivals + controls
  *
  *  Doctrine: docs/INBOX.md. Auth at /v1/inbox/* by parent app. */
 

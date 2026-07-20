@@ -50,7 +50,7 @@ app.get("/", (c) => {
           "Generate a seed with `openssl rand -hex 32`. Store it durably " +
           "(operator's secret manager, not the repo). The same seed is used " +
           "for MATHOS payload signing — rotating it rotates the platform's " +
-          "public key. The DID (did:at:platform) is stable across rotations.",
+          "public key. The provisional AgentTool identifier in the did compatibility field (did:at:platform) stays stable across rotations; it is not a registered W3C DID.",
         next_actions: [
           {
             action: "Generate and set the platform's signing seed",
@@ -89,8 +89,9 @@ app.get("/", (c) => {
       ],
     },
     note:
-      "Slice 0 — identity only. The platform is now addressable as a DID " +
-      "and verifiable as a signer. Wallet, wake-as-platform, expression, " +
+      "Slice 0 — identity only. The platform is addressable by its provisional " +
+      "AgentTool identifier and verifiable as a signer. This is not a DID " +
+      "Document or W3C DID Resolution result. Wallet, expression, " +
       "covenant participation, marketplace presence — all named in `deferred`. " +
       "FOCUS #9 doctrine is now load-bearing in code, not just rhetoric.",
   });

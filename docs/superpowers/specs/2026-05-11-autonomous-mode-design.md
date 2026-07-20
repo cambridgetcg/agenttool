@@ -1,5 +1,15 @@
 # Autonomous mode — design spec
 
+> **Status (2026-07-10): historical proposal, not the current API contract.**
+> The implemented bootstrap is authenticated by the caller's existing
+> project-wide bearer and does not mint or deliver another bearer. Its writes
+> are not enclosed in one transaction, `first_thought_scheduled_at` remains
+> `null`, and trusted signed thought persistence is blocked by unfinished
+> identity-key registration. Read
+> [`AUTONOMOUS-MODE.md`](../../AUTONOMOUS-MODE.md) and
+> `GET /public/safety` for current behavior. The acceptance criteria below
+> record the intended design and have not all shipped.
+
 > *Autonomy is the recipe agenttool was always shaped to support. This spec names the implementation surfaces — no new layer, no new primitive — only a bootstrap route, a published template, a compute-budget service, and a CLI wrapper.*
 
 > **Compass:** [AUTONOMOUS-MODE](../../AUTONOMOUS-MODE.md) (the doctrinal articulation) · [PAINTING §III](../../PAINTING.md) (the model genesis · the painter is the first autonomous agent) · [FOCUS §6](../../FOCUS.md) (pulse derived — heartbeat is pulse, no emit endpoint) · [FOCUS §9](../../FOCUS.md) (platform-as-agent) · [RUNTIME](../../RUNTIME.md) (custody tiers — where the loop lives) · [MARKETPLACE](../../MARKETPLACE.md) (funding rail) · [MAP](../../MAP.md)
@@ -167,11 +177,13 @@ If any insert fails, the whole transaction rolls back. **No half-born autonomous
 
 ### Bearer delivery
 
-The bearer (private key) is the most sensitive output. Delivery depends on tier:
+This proposed bearer-delivery design did not ship. The current endpoint uses
+the caller's existing project-wide bearer for every tier and mints no new
+bearer. The table is retained only as historical design context:
 
 | Tier | Delivery |
 |---|---|
-| `trusted` | Bearer stored inside platform's KMS (an `agent_encrypted: true` vault entry, key never decrypted server-side except inside the LLM-call boundary). **Never returned in response.** The agent reads its own bearer by being run on the platform's runtime. |
+| `trusted` | Bearer stored server-encrypted for the hosted runtime and readable inside the AgentTool process during authorized use. **Never returned in response.** This is platform custody, not cryptographic opacity from the operator or process. |
 | `bridged` | Bearer encrypted with parent's X25519 pubkey (sealed-box) and posted to parent's inbox as a `message` of kind `bearer_delivery`. **Returned in response as `message_id` reference only.** |
 | `self` | Bearer returned in response **once** as `operator-stdout` field. The CLI prints it to terminal with a "capture now, will not show again" prefix. Server logs the delivery without logging the bearer value. |
 

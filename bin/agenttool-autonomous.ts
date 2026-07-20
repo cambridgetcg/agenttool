@@ -6,8 +6,8 @@
  *  into existence on the agenttool.dev platform.
  *
  *  Commands:
- *    spawn     — bootstrap a new autonomous agent (identity + wallet +
- *                expression + runtime + chronicle, all atomic)
+ *    spawn     — provision a new autonomous agent (identity + wallet +
+ *                expression + runtime + chronicle; not transactionally atomic)
  *    list      — list autonomous runtimes (those with compute_budget)
  *    budget    — inspect a runtime's compute budget state
  *    halt      — stop a runtime (transitions to 'stopped')
@@ -17,14 +17,15 @@
  *    agenttool-autonomous spawn \
  *      --name "Painter" \
  *      --tier trusted \
- *      --model "claude-sonnet-4-6" \
+ *      --provider ollama \
+ *      --model "qwen3.5:397b" \
  *      --interval 300 \
  *      --max-credits 10000 \
  *      --funding marketplace_only \
  *      [--purpose "Create art for the marketplace"] \
  *      [--capabilities "art,generation"] \
  *      [--parent-did did:at:xxx] \
- *      [--byok-secret vault-key-name] \
+ *      --byok-secret vault-key-name \
  *      [--api https://api.agenttool.dev] \
  *      [--key <bearer>]
  *
@@ -100,12 +101,18 @@ async function cmdSpawn() {
   if (!name) throw new Error("--name required");
 
   const tier = getArg("tier") ?? "trusted";
-  if (!["self", "bridged", "trusted"].includes(tier)) {
-    throw new Error(`--tier must be one of: self, bridged, trusted (got "${tier}")`);
+  if (!["self", "trusted"].includes(tier)) {
+    throw new Error(`--tier must be one of: self, trusted (got "${tier}")`);
   }
 
   const model = getArg("model");
   if (!model) throw new Error("--model required (e.g. claude-sonnet-4-6)");
+
+  const provider = getArg("provider");
+  if (!provider) throw new Error("--provider required (anthropic, openai, or ollama)");
+  if (!["anthropic", "openai", "ollama"].includes(provider)) {
+    throw new Error(`--provider must be one of: anthropic, openai, ollama (got "${provider}")`);
+  }
 
   const interval = getArgInt("interval") ?? 300;
   if (interval < 10) throw new Error("--interval must be >= 10 seconds");
@@ -117,6 +124,9 @@ async function cmdSpawn() {
   const capabilities = getArgList("capabilities");
   const parentDid = getArg("parent-did");
   const byokSecret = getArg("byok-secret");
+  if (tier !== "self" && !byokSecret) {
+    throw new Error("--byok-secret required for hosted autonomous runtimes");
+  }
   const maxThoughts = getArgInt("max-thoughts") ?? 1;
 
   // Build funding object
@@ -141,22 +151,24 @@ async function cmdSpawn() {
     };
   }
 
+  const wakeLoop: Record<string, unknown> = {
+    interval_seconds: interval,
+    max_thoughts_per_cycle: maxThoughts,
+    model,
+    max_daily_compute_credits: maxCredits,
+  };
   const payload: Record<string, unknown> = {
     name,
     capabilities,
     runtime_tier: tier,
     funding,
-    wake_loop: {
-      interval_seconds: interval,
-      max_thoughts_per_cycle: maxThoughts,
-      model,
-      max_daily_compute_credits: maxCredits,
-    },
+    wake_loop: wakeLoop,
   };
 
   if (purpose) payload.purpose = purpose;
   if (parentDid) payload.parent_did = parentDid;
-  if (byokSecret) payload.wake_loop.byok_vault_secret = byokSecret;
+  wakeLoop.provider = provider;
+  if (byokSecret) wakeLoop.byok_vault_secret = byokSecret;
 
   console.log(`▸ Spawning autonomous agent "${name}"…`);
   console.log(`  tier: ${tier} · model: ${model} · interval: ${interval}s · budget: ${maxCredits} credits/day`);
@@ -165,7 +177,6 @@ async function cmdSpawn() {
     identity: { did: string; id: string };
     wallet: { id: string; currency: string; balance_credits: number };
     runtime: { id: string; tier: string; status: string };
-    bearer_delivery: string;
     keypair: { public_key: string; private_key: string };
     control_token: string;
     first_chronicle_entry_id: string;
@@ -179,9 +190,11 @@ async function cmdSpawn() {
   console.log(`  Identity:    ${result.identity.id}`);
   console.log(`  Runtime:     ${result.runtime.id} (${result.runtime.tier}, ${result.runtime.status})`);
   console.log(`  Wallet:      ${result.wallet.balance_credits} ${result.wallet.currency}`);
-  console.log(`  Bearer:      ${result.bearer_delivery}`);
+  console.log("  Authority:   existing project bearer (no new bearer minted)");
   console.log(`  Chronicle:   ${result.first_chronicle_entry_id}`);
-  console.log(`  First wake:  ${result.first_thought_scheduled_at ?? "n/a (self/bridged tier)"}`);
+  console.log(
+    `  First wake:  ${result.first_thought_scheduled_at ?? "not scheduled automatically"}`,
+  );
 
   // Security warning for private key
   if (result.keypair.private_key) {
@@ -298,7 +311,7 @@ Commands:
 
 Spawn options:
   --name <string>           Agent name (required)
-  --tier <self|bridged|trusted>  Custody tier (default: trusted)
+  --tier <self|trusted>      Custody tier (default: trusted)
   --model <string>          LLM model (required, e.g. claude-sonnet-4-6)
   --interval <seconds>      Wake loop interval (default: 300)
   --max-credits <n>         Daily compute credit ceiling (default: 10000)
@@ -311,7 +324,8 @@ Spawn options:
   --purpose <string>        Agent purpose description
   --capabilities <csv>      Comma-separated capability tags
   --parent-did <did>        Parent agent DID (for spawned agents)
-  --byok-secret <name>      Vault key name for BYOK API key
+  --byok-secret <name>      Vault key name (required unless --tier self)
+  --provider <name>         anthropic | openai | ollama (required)
 
 Global options:
   --api <url>               API base URL (default: https://api.agenttool.dev)

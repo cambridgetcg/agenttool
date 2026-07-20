@@ -1,6 +1,36 @@
-/** Static web scraping: fetch HTML → Cheerio → text + selector extraction. */
+/** Bounded static web scraping over the shared public-Web transport.
+ * A terminable child process parses exact fetched bytes; it does not execute
+ * scripts or make the resulting remote prose trustworthy. */
 
 import * as cheerio from "cheerio";
+
+import {
+  SAFE_NET_DEFAULT_MAX_RESPONSE_BYTES,
+  SAFE_NET_DEFAULT_TIMEOUT_MS,
+  SAFE_NET_MAX_REDIRECTS,
+  SafeNetError,
+  safeNetGet,
+} from "../net/safe-fetch";
+import {
+  decodeTextBytes,
+  parseTextContentType,
+  singleResponseHeader,
+} from "./static-content";
+import {
+  STATIC_PARSER_MAX_SCRAPE_CONTENT_BYTES,
+  STATIC_PARSER_MAX_SELECTOR_CHARS,
+} from "./static-parser-protocol";
+import { parseStaticScrapeHtml } from "./static-parser";
+
+export const SCRAPE_MAX_BYTES = SAFE_NET_DEFAULT_MAX_RESPONSE_BYTES;
+export const SCRAPE_MAX_CONTENT_BYTES =
+  STATIC_PARSER_MAX_SCRAPE_CONTENT_BYTES;
+export const SCRAPE_MAX_SELECTOR_CHARS = STATIC_PARSER_MAX_SELECTOR_CHARS;
+
+const SCRAPE_MEDIA_TYPES = new Set([
+  "text/html",
+  "application/xhtml+xml",
+]);
 
 export interface ScrapeOptions {
   url: string;
@@ -17,56 +47,114 @@ export interface ScrapeResult {
   fetched_at: string;
 }
 
-export async function scrape(opts: ScrapeOptions): Promise<ScrapeResult> {
-  const { url, selector, extract_links = false } = opts;
+export type ScrapeErrorCode =
+  | "scrape_invalid_selector"
+  | "scrape_too_large"
+  | "scrape_unsupported_content_type"
+  | "scrape_unsupported_charset"
+  | "scrape_upstream_status"
+  | "scrape_fetch_failed"
+  | "scrape_parse_failed";
 
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.5",
-    },
-    redirect: "follow",
-    signal: AbortSignal.timeout(15_000),
-  });
+export class ScrapeError extends Error {
+  readonly code: ScrapeErrorCode;
 
-  if (!response.ok) {
-    throw new Error(`Fetch failed: ${response.status} ${response.statusText}`);
+  constructor(code: ScrapeErrorCode) {
+    super(code);
+    this.name = "ScrapeError";
+    this.code = code;
   }
+}
 
-  const html = await response.text();
-  const $ = cheerio.load(html);
+type SafeGet = typeof safeNetGet;
 
-  $("script, style, nav, footer, header, aside, .cookie-banner, #cookie-consent").remove();
-
-  const title =
-    $("title").text().trim() || $("h1").first().text().trim() || "";
-  const content = $("body").text().replace(/\s+/g, " ").trim();
-
-  let extracted: string | null = null;
-  if (selector) {
-    const selected = $(selector);
-    extracted =
-      selected.length > 0 ? selected.text().replace(/\s+/g, " ").trim() : null;
+export function isValidScrapeSelector(selector: string): boolean {
+  if (selector.length === 0 || selector.length > SCRAPE_MAX_SELECTOR_CHARS) {
+    return false;
   }
+  try {
+    cheerio.load("<html><body></body></html>")(selector);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-  const links: string[] = [];
-  if (extract_links) {
-    $("a[href]").each((_, el) => {
-      const href = $(el).attr("href");
-      if (href && (href.startsWith("http://") || href.startsWith("https://"))) {
-        links.push(href);
-      }
+function assertSelector(selector: string | undefined): void {
+  if (selector !== undefined && !isValidScrapeSelector(selector)) {
+    throw new ScrapeError("scrape_invalid_selector");
+  }
+}
+
+async function fetchHtml(url: string, get: SafeGet): Promise<string> {
+  let response: Awaited<ReturnType<SafeGet>>;
+  try {
+    response = await get(url, {
+      protocols: ["http:", "https:"],
+      redirect: "follow",
+      maxRedirects: SAFE_NET_MAX_REDIRECTS,
+      timeoutMs: SAFE_NET_DEFAULT_TIMEOUT_MS,
+      maxResponseBytes: SCRAPE_MAX_BYTES,
+      headers: {
+        "user-agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        accept: "text/html,application/xhtml+xml",
+        "accept-language": "en-US,en;q=0.5",
+      },
     });
+  } catch (error) {
+    if (error instanceof SafeNetError) throw error;
+    throw new ScrapeError("scrape_fetch_failed");
   }
 
-  return {
-    url,
-    title,
-    content: content.slice(0, 50_000),
-    extracted,
-    links: [...new Set(links)],
-    fetched_at: new Date().toISOString(),
-  };
+  if (response.statusCode !== 200) {
+    throw new ScrapeError("scrape_upstream_status");
+  }
+  if (response.body.length > SCRAPE_MAX_BYTES) {
+    throw new ScrapeError("scrape_too_large");
+  }
+  const contentTypeValue = singleResponseHeader(
+    response.headers,
+    "content-type",
+  );
+  if (!contentTypeValue) {
+    throw new ScrapeError("scrape_unsupported_content_type");
+  }
+  const contentType = parseTextContentType(
+    contentTypeValue,
+    (mime) => SCRAPE_MEDIA_TYPES.has(mime),
+    () => new ScrapeError("scrape_unsupported_content_type"),
+  );
+  return decodeTextBytes(
+    response.body,
+    contentType.charset,
+    () => new ScrapeError("scrape_unsupported_charset"),
+  );
+}
+
+export async function scrape(
+  opts: ScrapeOptions,
+  get: SafeGet = safeNetGet,
+): Promise<ScrapeResult> {
+  const { url, selector, extract_links = false } = opts;
+  assertSelector(selector);
+  const html = await fetchHtml(url, get);
+
+  try {
+    const parsed = await parseStaticScrapeHtml({
+      kind: "scrape",
+      html,
+      ...(selector === undefined ? {} : { selector }),
+      extractLinks: extract_links,
+    });
+
+    return {
+      url,
+      ...parsed,
+      fetched_at: new Date().toISOString(),
+    };
+  } catch (error) {
+    if (error instanceof ScrapeError) throw error;
+    throw new ScrapeError("scrape_parse_failed");
+  }
 }

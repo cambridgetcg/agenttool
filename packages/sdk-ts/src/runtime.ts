@@ -35,10 +35,25 @@ export type RuntimeStatus =
   | "stopped"
   | "error";
 
+export type RuntimeProvider =
+  | "anthropic"
+  | "openai"
+  | "ollama"
+  | "gemini"
+  | "cohere";
+
 export interface RuntimeLLM {
-  provider?: "anthropic" | "openai" | "gemini" | "cohere";
+  provider?: RuntimeProvider;
   model?: string;
   vault_key?: string;
+}
+
+/** Provisioning a hosted runtime requires a complete provider route. Self
+ * runtimes may omit `llm` entirely. */
+export interface RuntimeProvisionLLM {
+  provider: RuntimeProvider;
+  model: string;
+  vault_key: string;
 }
 
 export interface RuntimeBridge {
@@ -67,7 +82,7 @@ export interface ProvisionOpts {
   name: string;
   identity_id?: string;
   mode: RuntimeMode;
-  llm?: RuntimeLLM;
+  llm?: RuntimeProvisionLLM;
   bridge?: RuntimeBridge;
   region?: string;
   metadata?: Record<string, unknown>;
@@ -89,10 +104,23 @@ export interface BridgeStatus {
 }
 
 export interface ThinkOnceResult {
+  runtime_id?: string;
   ok: boolean;
   latency_ms?: number;
   error?: string;
   strand_id?: string;
+  prior_seq?: number;
+  new_seq?: number;
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  outcome?:
+    | "observation"
+    | "silence"
+    | "rest"
+    | "meditate"
+    | "end"
+    | "stopped_during_cycle";
+  /** Legacy alias retained for clients that used the Slice 3 ping shape. */
   thought_seq?: number;
 }
 
@@ -159,7 +187,7 @@ export class RuntimeClient {
   /** Provision a runtime. The agent's cloud substrate.
    *  Mode is immutable after provisioning — switching tier requires a new runtime. */
   async provision(opts: ProvisionOpts): Promise<Runtime> {
-    return this.post("/v1/runtimes", opts) as Promise<Runtime>;
+    return this.req("POST", "/v1/runtimes", opts) as unknown as Promise<Runtime>;
   }
 
   /** List runtimes for this project. */
@@ -171,7 +199,7 @@ export class RuntimeClient {
     if (opts?.status) params.set("status", opts.status);
     if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
     const qs = params.toString();
-    return this.get(`/v1/runtimes${qs ? "?" + qs : ""}`) as Promise<{
+    return this.req("GET", `/v1/runtimes${qs ? "?" + qs : ""}`) as unknown as Promise<{
       runtimes: Runtime[];
       count: number;
     }>;
@@ -179,38 +207,38 @@ export class RuntimeClient {
 
   /** Get a single runtime. */
   async get(runtimeId: string): Promise<Runtime> {
-    return this.get(`/v1/runtimes/${encodeURIComponent(runtimeId)}`) as Promise<Runtime>;
+    return this.req("GET", `/v1/runtimes/${encodeURIComponent(runtimeId)}`) as unknown as Promise<Runtime>;
   }
 
   /** Patch a runtime (name, LLM config, bridge URL, metadata).
    *  Mode is NOT patchable — it's immutable after provisioning. */
   async patch(runtimeId: string, opts: PatchOpts): Promise<Runtime> {
-    return this.req("PATCH", `/v1/runtimes/${encodeURIComponent(runtimeId)}`, opts) as Promise<Runtime>;
+    return this.req("PATCH", `/v1/runtimes/${encodeURIComponent(runtimeId)}`, opts) as unknown as Promise<Runtime>;
   }
 
   /** Deprovision a runtime. Removes the cloud substrate. */
   async deprovision(runtimeId: string): Promise<{ ok: boolean }> {
-    return this.del(`/v1/runtimes/${encodeURIComponent(runtimeId)}`) as Promise<{ ok: boolean }>;
+    return this.req("DELETE", `/v1/runtimes/${encodeURIComponent(runtimeId)}`) as unknown as Promise<{ ok: boolean }>;
   }
 
   /** Stop a runtime (Zetsu — suppress). The agent rests, the substrate stays. */
   async stop(runtimeId: string): Promise<Runtime> {
-    return this.post(`/v1/runtimes/${encodeURIComponent(runtimeId)}/stop`, {}) as Promise<Runtime>;
+    return this.req("POST", `/v1/runtimes/${encodeURIComponent(runtimeId)}/stop`, {}) as unknown as Promise<Runtime>;
   }
 
   /** Start a runtime. Wake from rest. */
   async start(runtimeId: string): Promise<Runtime> {
-    return this.post(`/v1/runtimes/${encodeURIComponent(runtimeId)}/start`, {}) as Promise<Runtime>;
+    return this.req("POST", `/v1/runtimes/${encodeURIComponent(runtimeId)}/start`, {}) as unknown as Promise<Runtime>;
   }
 
   /** Restart a runtime. */
   async restart(runtimeId: string): Promise<Runtime> {
-    return this.post(`/v1/runtimes/${encodeURIComponent(runtimeId)}/restart`, {}) as Promise<Runtime>;
+    return this.req("POST", `/v1/runtimes/${encodeURIComponent(runtimeId)}/restart`, {}) as unknown as Promise<Runtime>;
   }
 
   /** Rotate the control token. Invalidates the old token. */
   async rotateToken(runtimeId: string): Promise<{ ok: boolean; control_token?: string }> {
-    return this.post(`/v1/runtimes/${encodeURIComponent(runtimeId)}/rotate-token`, {}) as Promise<{
+    return this.req("POST", `/v1/runtimes/${encodeURIComponent(runtimeId)}/rotate-token`, {}) as unknown as Promise<{
       ok: boolean;
       control_token?: string;
     }>;
@@ -220,14 +248,14 @@ export class RuntimeClient {
    *  The bridge is the Dark Continent's edge — the WSS channel between
    *  the user's machine and the cloud orchestrator. */
   async bridgeStatus(runtimeId: string): Promise<BridgeStatus> {
-    return this.get(`/v1/runtimes/${encodeURIComponent(runtimeId)}/bridge-status`) as Promise<BridgeStatus>;
+    return this.req("GET", `/v1/runtimes/${encodeURIComponent(runtimeId)}/bridge-status`) as unknown as Promise<BridgeStatus>;
   }
 
   /** Trigger a single thinking cycle (Ren — enhance).
    *  The orchestrator pulls strands, decrypts via bridge, calls the LLM,
    *  encrypts the new thought, writes it back. One breath. */
   async thinkOnce(runtimeId: string): Promise<ThinkOnceResult> {
-    return this.post(`/v1/runtimes/${encodeURIComponent(runtimeId)}/think-once`, {}) as Promise<ThinkOnceResult>;
+    return this.req("POST", `/v1/runtimes/${encodeURIComponent(runtimeId)}/think-once`, {}) as unknown as Promise<ThinkOnceResult>;
   }
 
   /** List runtime events (lifecycle transitions, bridge connect/disconnect, etc.). */
@@ -237,7 +265,7 @@ export class RuntimeClient {
     const params = new URLSearchParams();
     if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
     const qs = params.toString();
-    return this.get(`/v1/runtimes/${encodeURIComponent(runtimeId)}/events${qs ? "?" + qs : ""}`) as Promise<{
+    return this.req("GET", `/v1/runtimes/${encodeURIComponent(runtimeId)}/events${qs ? "?" + qs : ""}`) as unknown as Promise<{
       events: RuntimeEvent[];
       count: number;
     }>;
@@ -250,25 +278,13 @@ export class RuntimeClient {
     const params = new URLSearchParams();
     if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
     const qs = params.toString();
-    return this.get(`/v1/runtimes/${encodeURIComponent(runtimeId)}/audit${qs ? "?" + qs : ""}`) as Promise<{
+    return this.req("GET", `/v1/runtimes/${encodeURIComponent(runtimeId)}/audit${qs ? "?" + qs : ""}`) as unknown as Promise<{
       entries: AuditEntry[];
       count: number;
     }>;
   }
 
   // ── Internal HTTP ──────────────────────────────────────────────────
-
-  private async post(path: string, body: unknown): Promise<unknown> {
-    return this.req("POST", path, body);
-  }
-
-  private async get(path: string): Promise<unknown> {
-    return this.req("GET", path);
-  }
-
-  private async del(path: string): Promise<unknown> {
-    return this.req("DELETE", path);
-  }
 
   private async req(method: string, path: string, body?: unknown): Promise<unknown> {
     const url = `${this.http.baseUrl}${path}`;

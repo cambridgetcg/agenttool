@@ -1,4 +1,5 @@
-/** /public/discover — discover agents who have made anything public.
+/** DORMANT former /public/discover — not mounted.
+ *  Kept as implementation history; source presence is not a live route claim.
  *
  *  UNAUTHENTICATED. Returns agents who have ANY of:
  *    - expression_visibility='public'

@@ -2,14 +2,25 @@
 
 from __future__ import annotations
 
+import base64
 from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
 
-from agenttool import AgentTool
+from agenttool import (
+    BOOTSTRAP_ELEVATE_SIGNATURE_CONTEXT,
+    AgentTool,
+    canonical_bootstrap_elevate_bytes,
+    sign_bootstrap_elevate,
+)
 from agenttool.bootstrap import BootstrapClient
 from agenttool.exceptions import AgentToolError
+
+
+AGENT_ID = "11111111-2222-4333-8444-555555555555"
+SPONSOR_KID = "ffffffff-1111-4222-8333-444444444444"
+VALID_SIGNATURE = base64.b64encode(bytes([1]) * 64).decode("ascii")
 
 
 def _mock_response(status_code: int = 200, json_data: object = None) -> MagicMock:
@@ -119,37 +130,128 @@ class TestBootstrapElevate:
     def test_elevate_basic(self, at):
         with patch.object(at._http, "post", return_value=_mock_response(200, ELEVATE_RESPONSE)) as mock_post:
             result = at.bootstrap.elevate(
-                "agent-uuid-123",
+                AGENT_ID,
                 sponsor_did="did:at:sponsor",
-                sponsor_signature="privkey==",
+                sponsor_kid=SPONSOR_KID,
+                sponsor_signature=VALID_SIGNATURE,
             )
             assert result["level"] == 1
             assert result["wallet_funded"] is True
             assert result["vault_prefix"] == "agent-uuid-123:"
             payload = mock_post.call_args[1]["json"]
-            assert payload["agent_id"] == "agent-uuid-123"
+            assert payload["agent_id"] == AGENT_ID
             assert payload["sponsor_did"] == "did:at:sponsor"
-            assert payload["initial_credits"] == 100  # default
+            assert payload["sponsor_kid"] == SPONSOR_KID
+            assert payload["initial_credits"] == 1000  # current SDK and API default
+            assert payload["claim"] == "sponsorship"
+            assert payload["evidence"] is None
 
     def test_elevate_custom_credits(self, at):
         with patch.object(at._http, "post", return_value=_mock_response(200, ELEVATE_RESPONSE)) as mock_post:
             at.bootstrap.elevate(
-                "agent-uuid-123",
+                AGENT_ID,
                 sponsor_did="did:at:s",
-                sponsor_signature="k==",
+                sponsor_kid=SPONSOR_KID,
+                sponsor_signature=VALID_SIGNATURE,
                 initial_credits=500,
             )
             assert mock_post.call_args[1]["json"]["initial_credits"] == 500
 
     def test_elevate_url(self, at):
         with patch.object(at._http, "post", return_value=_mock_response(200, ELEVATE_RESPONSE)) as mock_post:
-            at.bootstrap.elevate("id", sponsor_did="did:at:s", sponsor_signature="k==")
+            at.bootstrap.elevate(
+                AGENT_ID,
+                sponsor_did="did:at:s",
+                sponsor_kid=SPONSOR_KID,
+                sponsor_signature=VALID_SIGNATURE,
+            )
             assert "/v1/bootstrap/elevate" in mock_post.call_args[0][0]
 
     def test_elevate_error_raises(self, at):
         with patch.object(at._http, "post", return_value=_mock_response(400, {"error": "insufficient stake"})):
             with pytest.raises(AgentToolError):
-                at.bootstrap.elevate("id", sponsor_did="did:at:s", sponsor_signature="k==")
+                at.bootstrap.elevate(
+                    AGENT_ID,
+                    sponsor_did="did:at:s",
+                    sponsor_kid=SPONSOR_KID,
+                    sponsor_signature=VALID_SIGNATURE,
+                )
+
+    def test_elevate_sends_custom_signed_text(self, at):
+        with patch.object(
+            at._http,
+            "post",
+            return_value=_mock_response(200, ELEVATE_RESPONSE),
+        ) as mock_post:
+            at.bootstrap.elevate(
+                AGENT_ID,
+                sponsor_did="did:at:s",
+                sponsor_kid=SPONSOR_KID,
+                sponsor_signature=VALID_SIGNATURE,
+                claim="sponsored-by-review",
+                evidence="reviewed in person",
+            )
+        payload = mock_post.call_args[1]["json"]
+        assert payload["claim"] == "sponsored-by-review"
+        assert payload["evidence"] == "reviewed in person"
+
+
+class TestBootstrapElevateSigning:
+    vector = {
+        "agent_id": "11111111-2222-3333-ABCD-555555555555",
+        "sponsor_did": "did:at:sponsor-α",
+        "sponsor_kid": "FFFFFFFF-1111-2222-3333-444444444444",
+        "initial_credits": 2500,
+        "claim": "sponsorship",
+        "evidence": "reviewed ✅",
+    }
+
+    def test_shared_api_typescript_python_vector(self):
+        assert BOOTSTRAP_ELEVATE_SIGNATURE_CONTEXT == "bootstrap-elevate/v1"
+        assert canonical_bootstrap_elevate_bytes(**self.vector).hex() == (
+            "156c8d8434659bd539c476f7124ab909"
+            "494c8a08959b47eed15a9ad677f5115a"
+        )
+        assert sign_bootstrap_elevate(bytes(range(32)), **self.vector) == (
+            "lR9ikb3dNiD7uuY86mdQ2B6c0hk/p1/rxbrYVf3BkBKUSdCx5X8hlEw+"
+            "akKOPZ0DOfW8PGqV5PleIZajjy+BAQ=="
+        )
+
+    def test_uuid_case_and_evidence_kind_are_unambiguous(self):
+        lowercase = {
+            **self.vector,
+            "agent_id": self.vector["agent_id"].lower(),
+            "sponsor_kid": self.vector["sponsor_kid"].lower(),
+        }
+        assert canonical_bootstrap_elevate_bytes(**self.vector) == (
+            canonical_bootstrap_elevate_bytes(**lowercase)
+        )
+        assert canonical_bootstrap_elevate_bytes(
+            **{**self.vector, "evidence": None}
+        ) != canonical_bootstrap_elevate_bytes(
+            **{**self.vector, "evidence": ""}
+        )
+
+    def test_rejects_nul_structured_evidence_and_overlong_astral_claim(self):
+        with pytest.raises(ValueError, match="NUL"):
+            canonical_bootstrap_elevate_bytes(
+                **{**self.vector, "claim": "sponsor\x00ship"}
+            )
+        with pytest.raises(TypeError, match="evidence must be text"):
+            canonical_bootstrap_elevate_bytes(
+                **{**self.vector, "evidence": {"source": "json"}}
+            )
+        with pytest.raises(ValueError, match="Unicode scalar"):
+            canonical_bootstrap_elevate_bytes(
+                **{**self.vector, "evidence": "bad\ud800text"}
+            )
+        canonical_bootstrap_elevate_bytes(
+            **{**self.vector, "claim": "🧭" * 64}
+        )
+        with pytest.raises(ValueError):
+            canonical_bootstrap_elevate_bytes(
+                **{**self.vector, "claim": "🧭" * 65}
+            )
 
 
 class TestBootstrapStatus:

@@ -229,6 +229,7 @@ Account is always `$USER`. Existing examples:
 | `agenttool-database-url` | DATABASE_URL for `_migrate-one.ts` |
 | `agenttool-cloudflare-token` | Cloudflare Pages deploy token |
 | `agenttool-cloudflare-account-id` | Cloudflare account id |
+| `agenttool-ollama-api-key` | Ollama Cloud key for local opt-in wire checks; hosted runtime keys belong in the project Vault |
 | `agenttool-sophia-key` | Yu's personal Sophia bearer (used by `_e2e-*.mjs`) |
 | `agenttool-sophia-identity-id` | Yu's personal Sophia identity id |
 | `agenttool-sophia-signing-key-id` | Yu's personal Sophia ed25519 key id |
@@ -334,7 +335,7 @@ What rotation does NOT defend against:
 
 ```bash
 # 1. Set up a test agent with a few strand thoughts.
-#    (See cli/think docs or use POST /v1/register + a few /v1/strands +
+#    (See cli/think docs or use POST /v1/register/agent + a few /v1/strands +
 #     /v1/strands/:id/thoughts calls via the SDK.)
 
 # 2. Verify keychain entries exist:

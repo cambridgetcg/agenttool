@@ -27,6 +27,7 @@
 
 import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
+import { canonicalRegisterAgentBytes as canonicalRegisterAgentV2Bytes } from "../packages/sdk-ts/src/seed";
 
 // noble v3 requires sha512 callback set on hashes.* before any sign/verify.
 (ed.hashes as { sha512?: (m: Uint8Array) => Uint8Array }).sha512 = (m: Uint8Array) =>
@@ -91,27 +92,6 @@ function countLeadingZeroBits(bytes: Uint8Array): number {
 }
 
 // ─── canonical bytes ─────────────────────────────────────────────────────
-
-function canonicalRegisterAgentBytes(opts: {
-  displayName: string;
-  agentPublicKeyB64: string;
-  boxPublicKeyB64: string;
-  runtimeProvider: string;
-  runtimeModel: string;
-  timestamp: string;
-}): Uint8Array {
-  return sha256(
-    concat(
-      enc.encode("register-agent/v1"),         SEP,
-      enc.encode(opts.displayName),            SEP,
-      b64d(opts.agentPublicKeyB64),            SEP,
-      b64d(opts.boxPublicKeyB64),              SEP,
-      enc.encode(opts.runtimeProvider),        SEP,
-      enc.encode(opts.runtimeModel),           SEP,
-      enc.encode(opts.timestamp),
-    ),
-  );
-}
 
 function canonicalMeshPledgeBytes(opts: {
   postId: string;
@@ -225,13 +205,15 @@ async function mintAgent(displayName: string): Promise<{
   const agentPkB64 = b64(agentPk);
   const boxPkB64 = b64(boxPk);
   const timestamp = new Date().toISOString();
+  const registrationNonce = crypto.randomUUID();
 
-  const canonical = canonicalRegisterAgentBytes({
+  const canonical = canonicalRegisterAgentV2Bytes({
     displayName,
-    agentPublicKeyB64: agentPkB64,
-    boxPublicKeyB64: boxPkB64,
+    agentPublicKey: agentPk,
+    boxPublicKey: boxPk,
     runtimeProvider: "pt1-plug-in-test",
     runtimeModel: "",
+    registrationNonce,
     timestamp,
   });
   const sig = await ed.signAsync(canonical, agentSk);
@@ -258,6 +240,7 @@ async function mintAgent(displayName: string): Promise<{
       runtime: { provider: "pt1-plug-in-test" },
       key_proof: { timestamp, signature: sigB64 },
       pow_nonce: nonce,
+      registration_nonce: registrationNonce,
     }),
   });
   if (!res.ok) {

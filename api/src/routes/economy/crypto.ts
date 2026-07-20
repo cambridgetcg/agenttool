@@ -38,11 +38,24 @@ import {
   requestPayout,
   verifyAndBind,
 } from "../../services/economy/crypto";
-import { economyConfig } from "../../services/economy/config";
+import {
+  economyConfig,
+  payoutWorkerBootAllowed,
+} from "../../services/economy/config";
 
-import { createHmac } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 const router = new Hono<ProjectContext>();
+
+/** Constant-time string compare that never leaks length via early return.
+ *  Returns false for any nullish input. */
+function secretsMatch(a: string | undefined | null, b: string | undefined | null): boolean {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
 
 // ── Wallet ownership check (used by all wallet-scoped routes) ──────────
 
@@ -200,20 +213,27 @@ const payoutSchema = z.object({
 });
 
 router.post("/wallets/:walletId/payout", async (c) => {
-  // 503 guard: until the broadcast worker is wired and enabled, accepting
-  // payout requests would lock credits indefinitely (status='requested' with
-  // no path forward). Operator opt-in via PAYOUT_WORKER_ENABLED=true. Plan:
-  // docs/PAYOUT-BROADCAST-PLAN.md (Slice 0).
-  if (!economyConfig.payout.workerEnabled) {
+  // Startup and request acceptance share one predicate. Otherwise the global
+  // off-switch could prevent worker boot while this route still debits credits
+  // and leaves a payout stuck at status='requested'.
+  if (!payoutWorkerBootAllowed()) {
+    const globallyDisabled =
+      process.env.AGENTTOOL_DISABLE_WORKERS === "1";
     return c.json(
       {
         error: "payout_broadcast_not_available",
+        payout_worker_enabled: economyConfig.payout.workerEnabled,
+        global_workers_disabled: globallyDisabled,
         message:
-          "The payout broadcast worker is not enabled on this instance. " +
+          (globallyDisabled
+            ? "The global worker off-switch is active on this instance. "
+            : "The payout broadcast worker is not enabled on this instance. ") +
           "Until it is, payout requests would lock credits indefinitely. " +
           "If you have a payout already in 'requested' state, cancel it via " +
           "POST /v1/wallets/:walletId/payouts/:payoutId/cancel. " +
-          "See docs/PAYOUT-BROADCAST-PLAN.md.",
+          "Payout acceptance requires PAYOUT_WORKER_ENABLED=true and " +
+          "AGENTTOOL_DISABLE_WORKERS to be unset. See " +
+          "docs/PAYOUT-BROADCAST-PLAN.md.",
       },
       503,
     );
@@ -256,14 +276,29 @@ router.post("/wallets/:walletId/payout", async (c) => {
       // Errors-as-instructions — see docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
       return fail(c, errors.insufficientBalance(), 402);
     }
-    // Policy violations (Slice 6) — return 403 with the error code +
+    // Operator misconfiguration, not the agent's fault: no FX rate set. 503 so
+    // the caller knows to wait, not to change their request.
+    if (msg === "payout_fx_rate_unset") {
+      return c.json(
+        {
+          error: msg,
+          message:
+            "Payout is enabled but no GBP→USD rate is configured (PAYOUT_GBP_USD_RATE). " +
+            "This is an operator setting; try again once it is set.",
+        },
+        503,
+      );
+    }
+    // Policy + earned-wall violations — return 403 with the error code +
     // optional detail line. Agents can adjust amount / destination /
-    // wait-for-tomorrow accordingly.
+    // wait-for-tomorrow / earn-more accordingly.
     if (
       msg === "payout_below_min" ||
       msg === "destination_not_allowlisted" ||
       msg === "payout_exceeds_daily_ceiling" ||
-      msg === "payout_dual_control_required"
+      msg === "payout_dual_control_required" ||
+      msg === "payout_exceeds_earned" ||
+      msg === "payout_requires_gbp_wallet"
     ) {
       return c.json(
         {
@@ -417,24 +452,33 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
   const rawBody = await c.req.text();
 
   // ── Signature verification (per provider) ──────────────────────────
+  // This route is UNAUTH and credits real wallet balance, so an unset secret
+  // FAILS CLOSED (503) rather than accepting an unsigned, forgeable payload.
+  // Local dev may opt out with CRYPTO_WEBHOOK_ALLOW_UNSIGNED=1 (see config.ts).
   if (isEvmChain(chainParam)) {
     // Alchemy: HMAC-SHA256 over raw body, hex digest in x-alchemy-signature.
-    const sig = c.req.header("x-alchemy-signature");
-    if (economyConfig.alchemyWebhookSecret) {
+    if (!economyConfig.alchemyWebhookSecret) {
+      if (!economyConfig.allowUnsignedWebhooks) {
+        return fail(c, errors.webhookSecretUnset({ chain: chainParam }), 503);
+      }
+    } else {
+      const sig = c.req.header("x-alchemy-signature");
       const expected = createHmac("sha256", economyConfig.alchemyWebhookSecret)
         .update(rawBody)
         .digest("hex");
-      if (sig !== expected) {
+      if (!secretsMatch(sig, expected)) {
         return c.json({ error: "invalid_signature" }, 400);
       }
     }
   } else if (chainParam === "solana") {
     // Helius: shared-secret in Authorization header (plain, not Bearer).
-    // If the secret isn't configured, accept anyway — same posture as
-    // Alchemy ("verify if we have a secret to verify against").
-    const sig = c.req.header("authorization");
-    if (economyConfig.heliusWebhookSecret) {
-      if (sig !== economyConfig.heliusWebhookSecret) {
+    if (!economyConfig.heliusWebhookSecret) {
+      if (!economyConfig.allowUnsignedWebhooks) {
+        return fail(c, errors.webhookSecretUnset({ chain: chainParam }), 503);
+      }
+    } else {
+      const sig = c.req.header("authorization");
+      if (!secretsMatch(sig, economyConfig.heliusWebhookSecret)) {
         return c.json({ error: "invalid_signature" }, 400);
       }
     }
@@ -514,7 +558,7 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
     ? (event.activity as Array<Record<string, unknown>>)
     : [];
 
-  for (const transfer of transfers) {
+  for (const [i, transfer] of transfers.entries()) {
     const toAddress = String(transfer.toAddress ?? "");
     const rawContract =
       ((transfer.rawContract as Record<string, unknown> | undefined)?.address as
@@ -522,7 +566,13 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
         | undefined) ?? "";
     const valueUSDC = Number(transfer.value ?? 0);
     const txHash = String(transfer.hash ?? "");
-    const logIndex = Number((transfer.log as { logIndex?: number } | undefined)?.logIndex ?? 0) || null;
+    // Preserve a real logIndex of 0 (a valid first-log position). Fall back to
+    // the transfer's array position, NEVER null: the (chain,txHash,logIndex)
+    // dedupe unique index treats NULL as distinct in Postgres, so a null here
+    // lets a redelivered event insert twice → double-credit. The old
+    // `?? 0 || null` coerced a genuine 0 to null and reopened exactly that.
+    const rawLogIndex = (transfer.log as { logIndex?: number } | undefined)?.logIndex;
+    const logIndex = Number.isFinite(Number(rawLogIndex)) ? Number(rawLogIndex) : i;
 
     if (!toAddress || !txHash || !(valueUSDC > 0)) continue;
 

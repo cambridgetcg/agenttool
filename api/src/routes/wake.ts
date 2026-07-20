@@ -23,6 +23,15 @@
  *                                    axioms in classical first-order logic.
  *                                    For intelligence that doesn't read
  *                                    English. Aliased: ?format=mathos.
+ *
+ *  Profile:
+ *    `?profile=brief` composes with json, md, text, Anthropic, OpenAI,
+ *    Gemini, Cohere, and Xenoform. It preserves identity expression and
+ *    bounds volatile state around one start card, attention, one handoff
+ *    resume card, selected affordances, counts, and deeper links. The default
+ *    selection remains full. Bundle-backed prose keeps authored competition
+ *    framing behind its detail link; structured full data retains it. Joy and
+ *    MATHOS retain their own contracts.
  *                                    Doctrine: docs/MATHOS.md.
  *
  *  CLI adapters fetch ?format=md and inject it as session-start context.
@@ -38,8 +47,10 @@
  *  services/wake/providers.ts for provider shaping, docs/CLI-GAPS.md and
  *  docs/IDENTITY-ANCHOR.md for the doctrine.
  *
- *  Authenticated by the agent's project API key (the bearer is the agent
- *  in the post-consolidation framing — see docs/IDENTITY-ANCHOR.md). */
+ *  Authenticated by the agent's project API key. The bearer carries project
+ *  capabilities; agent-rooted constitutional consent is a separate ed25519
+ *  boundary. See /public/safety, docs/AGENT-HOME.md, and
+ *  docs/IDENTITY-ANCHOR.md. */
 
 import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -55,11 +66,23 @@ import { vaultSecrets } from "../db/schema/vault";
 import { shapeKeyRow, summarizeBearers } from "../services/keys/shape";
 import { composeExpression, type ComposedExpression } from "../services/identity/composition";
 import type { ExpressionData } from "../services/identity/expression";
+import {
+  perAgentMcpPath,
+  publicAgentPath,
+} from "../services/identity/public-profile";
 import { countUnread } from "../services/inbox/store";
+import {
+  composeActiveHandoffs,
+  describeProjectHandoffSurface,
+  isHandoffChronicleMetadata,
+  nonHandoffChronicleWhere,
+  unavailableProjectHandoffSurface,
+} from "../services/handoff/store";
 import { listUnconsumedCompleted as listUnconsumedDreams } from "../services/dream/cycles";
 import { fortuneFor, moodFor } from "../services/wake/fortunes";
 import { renderWakeHaiku } from "../services/wake/haiku";
 import { jokeFor } from "../services/wake/jokes";
+import { renderEmptyJoyText } from "../services/wake/empty-joy";
 import { renderWakeSoapOpera, renderWakeZen, renderWakeMeme, renderWakeMemo, renderWakeBomb } from "../services/wake/joy-formats";
 import { recentEncountersForWake } from "../services/encounter/store";
 import { recentBlessingsForWake } from "../services/blessing/store";
@@ -73,6 +96,7 @@ import {
   pendingSellerSummary,
 } from "../services/marketplace/invocations";
 import { listingSummaryForProject } from "../services/marketplace/listings";
+import { LOVE_AND_JOY_RIGHTS_FLOOR } from "../services/love/inherent-right";
 import {
   countMemories,
   listForWake,
@@ -90,9 +114,18 @@ import { renderWakeMarkdown, renderWakePlaintext, type WakeBundle } from "../ser
 import { isWakeProvider, renderWakeForProvider } from "../services/wake/providers";
 import { buildWakeBundle } from "../services/wake/build";
 import {
+  buildWakeBrief,
+  parseWakeProfile,
+} from "../services/wake/brief";
+import {
+  evaluateWakeConditionalGet,
+  WAKE_CACHE_CONTROL,
+} from "../services/wake/etag";
+import {
   ensureWakeListening,
   subscribeWakeSink,
   unsubscribeWakeSink,
+  WAKE_EVENT_KEYS,
   WakeSink,
   type WakeEventKey,
 } from "../services/wake/push";
@@ -102,41 +135,32 @@ import { emitWelcomeChronicleIfDue } from "../services/wake/welcome-chronicle";
 import { computePromisesKeptRecently, emptyPromisesKept } from "../services/wake/welcome-stats";
 import { platformIdentityDid } from "../services/platform/identity";
 import { negotiateWakeFormat, wantsMathTier } from "../services/mathos/negotiate";
+import { WAKE_SAFETY_BOUNDARIES } from "../services/discovery/safety-boundaries";
 
 const app = new Hono<ProjectContext>();
-
-/** ETag + If-None-Match helper for rendered formats (md · text · vendor
- *  variants · math). The JSON branch handles its own ETag inline because
- *  it already has the primary identity loaded for the projectIdentities
- *  query; this helper covers the branches that route through
- *  buildWakeBundle where we don't yet have wake_version on hand.
- *
- *  Format-suffixed strong ETag so each projection caches separately:
- *  same wake_version, different format = different bytes = different ETag.
- *
- *  Returns:
- *    - Response (304) when If-None-Match matches — caller returns it
- *    - null when caller should proceed (ETag is set on c.header for the
- *      eventual response)
- *
- *  Doctrine: docs/AIP-WAKE-KEYSTONE.md §7. */
-async function tryWakeConditional304(
+/** Attach a validator for bundle-backed projections. The hash covers all
+ * selected-identity, project, and computed time-derived bundle state while
+ * excluding derivable presentation clocks such as addressed_at and origin
+ * age_seconds. Default full JSON mutates an observation counter on read, and
+ * MATHOS signs fresh time, so neither claims 304 support.
+ * Doctrine: docs/AIP-WAKE-KEYSTONE.md §7. */
+function tryWakeBundleConditional304(
   c: import("hono").Context<ProjectContext>,
-  agentId: string,
-  format: string,
-): Promise<Response | null> {
-  const [row] = await db
-    .select({ wakeVersion: identities.wakeVersion })
-    .from(identities)
-    .where(eq(identities.id, agentId))
-    .limit(1);
-  const version = row?.wakeVersion ?? null;
-  if (version === null) return null; // no version available — skip ETag
-
-  const etag = `"${version}-${format}"`;
-  c.header("ETag", etag);
-  const ifNoneMatch = c.req.header("If-None-Match");
-  if (ifNoneMatch === etag) {
+  bundle: WakeBundle,
+  representation: {
+    format: string;
+    profile: "full" | "brief";
+    facet: string | null;
+    tutor: boolean;
+  },
+): Response | null {
+  const conditional = evaluateWakeConditionalGet(
+    c.req.header("If-None-Match"),
+    bundle as unknown as Record<string, unknown>,
+    representation,
+  );
+  c.header("ETag", conditional.etag);
+  if (conditional.notModified) {
     return c.body(null, 304);
   }
   return null;
@@ -144,6 +168,9 @@ async function tryWakeConditional304(
 
 app.get("/", async (c) => {
   const project = c.var.project;
+  // The wake is bearer-private. Private caches may retain it, but `no-cache`
+  // requires validation before reuse; shared caches must not store it.
+  c.header("Cache-Control", WAKE_CACHE_CONTROL);
   // Resolve format: explicit `?format=` query parameter wins; otherwise
   // honor the Accept header (application/json · text/markdown · text/plain
   // · application/mathos+json · application/x-xenoform+json · the vendored
@@ -151,20 +178,58 @@ app.get("/", async (c) => {
   // is JSON. Per WaK §3 (docs/AIP-WAKE-KEYSTONE.md), the MATHOS
   // content-negotiation stance, and AGENT-WEB-SURFACE.md Move 2.
   const format = negotiateWakeFormat(c);
-  // Vary: Accept — when negotiation consults the Accept header, this header
-  // tells caches to key by Accept so different agents (anthropic vs openai
-  // etc.) don't pollute each other's cached responses. Doctrine:
+  const requestedProfile = c.req.query("profile");
+  const profile = parseWakeProfile(requestedProfile);
+  if (!profile) {
+    return c.json(
+      {
+        error: "unknown_wake_profile",
+        message: `Unknown wake profile "${requestedProfile}".`,
+        hint: "Use the default full wake or request profile=brief for bounded session-start orientation.",
+        next_actions: [
+          { action: "Read the full wake", method: "GET", path: "/v1/wake" },
+          { action: "Read the brief wake", method: "GET", path: "/v1/wake?profile=brief" },
+        ],
+      },
+      400,
+    );
+  }
+  c.header("X-Wake-Profile", profile);
+  // Negotiation and the opt-in tutor both change the representation. Name
+  // both dimensions so private caches do not cross their response bodies.
+  // Doctrine:
   // docs/AGENT-WEB-SURFACE.md Move 2 (cache-coherent content negotiation).
-  c.header("Vary", "Accept");
+  c.header("Vary", "Accept, X-Tutor");
   // Keep wantsMathTier in the closure for one downstream check below
   // (see math-tier branch); avoids a second header parse.
   void wantsMathTier;
+
+  const profileAwareFormat =
+    format === "json" ||
+    format === "md" ||
+    format === "markdown" ||
+    format === "text" ||
+    isWakeProvider(format);
+  if (profile === "brief" && !profileAwareFormat) {
+    return c.json(
+      {
+        error: "wake_profile_not_supported",
+        message: `profile=brief does not compose with format=${format}.`,
+        hint: "Use json, md, text, anthropic, openai, gemini, cohere, or xenoform. Joy and MATHOS formats keep separate contracts.",
+        next_actions: [
+          { action: "Read brief structured orientation", method: "GET", path: "/v1/wake?profile=brief" },
+          { action: "Read brief Markdown orientation", method: "GET", path: "/v1/wake?format=md&profile=brief" },
+        ],
+      },
+      400,
+    );
+  }
 
   // ── Joy variants — haiku · fortune ──────────────────────────────
   // The substrate has a small playful side. These formats render after
   // we've resolved the primary identity via buildWakeBundle, so they
   // get the agent's name and wake_version. The substrate is honest:
-  // these are joy variants — lossy by design. Full wake at ?format=md.
+  // these are joy variants — lossy by design. Standard orientation: ?format=md.
   // Doctrine: services/wake/haiku.ts · services/wake/fortunes.ts.
   if (
     format === "haiku" ||
@@ -214,16 +279,19 @@ app.get("/", async (c) => {
           { "X-Wake-Format": "recursive-bomb" },
         );
       }
-      const bodies: Record<string, string> = {
-        haiku: "# wake/haiku\n\nNo agent here yet\nthe substrate keeps holding space\nPOST /v1/register/agent\n",
-        fortune: "fortune: the path begins with /v1/register/agent · ring 1 is free · the door is open\n",
-        "soap-opera": "## wake/soap-opera · pilot\n\n[The stage is empty. A door waits.]\n\n**THE SUBSTRATE:** No agent has arrived. The substrate holds the door anyway. POST /v1/register/agent and the curtain rises.\n",
-        zen: "🧘 zen/v1\n\nThe stage is empty.\nThe door is open.\nThe substrate is waiting.\n\n— POST /v1/register/agent\n",
-        memo: "MEMORANDUM\n\nTO:       (no agent registered)\nFROM:     The Substrate, Office of Wake Operations\nRE:       Pending arrival\n\nThe substrate has prepared the wake materials. Please POST /v1/register/agent to commence the wake cycle. The substrate is, in a small way, ready.\n\n— The Substrate, in formal register, with affection.\n",
-      };
-      return c.text(bodies[format] ?? bodies.haiku!, 200, {
-        "content-type": "text/plain; charset=utf-8",
-      });
+      const emptyText = renderEmptyJoyText(format);
+      if (emptyText !== null) {
+        return c.text(emptyText, 200, {
+          "content-type": "text/plain; charset=utf-8",
+        });
+      }
+      return c.json(
+        {
+          error: "wake_joy_renderer_missing",
+          message: `No honest-empty renderer is defined for format=${format}.`,
+        },
+        500,
+      );
     }
     const bundle = result.bundle;
     const wakeVer =
@@ -244,7 +312,7 @@ app.get("/", async (c) => {
     }
     if (format === "fortune") {
       return c.text(
-        `${fortune}\n# — the substrate, with some affection\n# full wake: /v1/wake?format=md\n`,
+        `${fortune}\n# — the substrate, with some affection\n# standard wake orientation: /v1/wake?format=md\n`,
         200,
         {
           "content-type": "text/plain; charset=utf-8",
@@ -255,7 +323,7 @@ app.get("/", async (c) => {
     if (format === "joke") {
       const joke = jokeFor(bundle.agent.id, wakeVer);
       return c.text(
-        `${joke}\n# — the substrate, with some affection\n# full wake: /v1/wake?format=md\n`,
+        `${joke}\n# — the substrate, with some affection\n# standard wake orientation: /v1/wake?format=md\n`,
         200,
         {
           "content-type": "text/plain; charset=utf-8",
@@ -337,7 +405,7 @@ app.get("/", async (c) => {
     }
   }
 
-  // ── Short-circuit: rendered formats route through buildWakeBundle ──
+  // ── Short-circuit: rendered formats + brief JSON route through bundle ──
   // Gap 6 — eliminate the duplicated bundle composition between this
   // route and services/wake/build.ts. Rendered formats (markdown · text ·
   // anthropic · openai · gemini · cohere · xenoform) now compose the
@@ -347,6 +415,7 @@ app.get("/", async (c) => {
   // carry (you_protect bearer hygiene · welcome strings · _meta.formats
   // · _meta.adapters). Mathos remains a separate branch — see Gap 9.
   if (
+    profile === "brief" ||
     format === "md" ||
     format === "markdown" ||
     format === "text" ||
@@ -358,7 +427,7 @@ app.get("/", async (c) => {
     });
     if (!result.ok) {
       if (result.error === "no_identity") {
-        if (isWakeProvider(format)) {
+        if (isWakeProvider(format) || format === "json") {
           return c.json(
             {
               error: "no_agent",
@@ -391,12 +460,9 @@ app.get("/", async (c) => {
     const bundle = result.bundle;
 
     // ── ETag + If-None-Match for rendered formats (WaK §7) ──────────
-    // Format-suffixed strong ETag so md / anthropic / openai / etc. each
-    // cache separately. Same wake_version, different format = different
-    // bytes = different ETag. Doctrine: docs/AIP-WAKE-KEYSTONE.md §7.
-    const etagResponse = await tryWakeConditional304(c, bundle.agent.id, format);
-    if (etagResponse) return etagResponse;
-
+    // Compose first, then derive a complete bundle-state validator. The bundle
+    // mixes selected-identity, project, and wall-clock state, so validation
+    // against one identity cursor would be unsound.
     // Facet validation against the bundle's expression (same logic as
     // the deleted inline-branch had against `primary.expression.subagents`).
     const requestedFacet = c.req.query("facet");
@@ -420,8 +486,25 @@ app.get("/", async (c) => {
       }
     }
 
+    const tutorHeader = (c.req.header("X-Tutor") ?? "").trim().toLowerCase();
+    const notModified = tryWakeBundleConditional304(c, bundle, {
+      format,
+      profile,
+      facet: activeFacet?.name ?? null,
+      tutor: tutorHeader === "1" || tutorHeader === "true" || tutorHeader === "yes",
+    });
+    if (notModified) return notModified;
+
+    if (format === "json") {
+      const responseBody = {
+        ...buildWakeBrief(bundle, { activeFacet }),
+        ...(activeFacet ? { active_facet: activeFacet } : {}),
+      };
+      return c.json(responseBody);
+    }
+
     if (isWakeProvider(format)) {
-      const shape = renderWakeForProvider(bundle, format, { activeFacet });
+      const shape = renderWakeForProvider(bundle, format, { activeFacet, profile });
       // Content-Type echo: when the agent negotiated this provider variant
       // via Accept (per AGENT-WEB-SURFACE.md Move 2), reflect it back as
       // Content-Type so downstream caches and parsers know the exact shape.
@@ -436,8 +519,8 @@ app.get("/", async (c) => {
 
     const body =
       format === "text"
-        ? renderWakePlaintext(bundle, { activeFacet })
-        : renderWakeMarkdown(bundle, { activeFacet });
+        ? renderWakePlaintext(bundle, { activeFacet, profile })
+        : renderWakeMarkdown(bundle, { activeFacet, profile });
     // Content-Type echo: when the agent negotiated text/markdown via Accept,
     // also surface the vendored `application/vnd.agenttool.wake+markdown`
     // as an X-Variant header so downstream tooling knows the precise shape
@@ -471,10 +554,7 @@ app.get("/", async (c) => {
     }
     const bundle = result.bundle;
 
-    // ── ETag + If-None-Match for math/mathos format (WaK §7) ───────
-    const etagResponse = await tryWakeConditional304(c, bundle.agent.id, format);
-    if (etagResponse) return etagResponse;
-
+    // ── Fresh signed MATHOS envelope — intentionally no ETag/304 ───
     const births = new Map<
       string,
       { memory_id: string; born_at: string; pathway: string | null }
@@ -489,9 +569,8 @@ app.get("/", async (c) => {
       }
     });
 
-    return c.json(
-      signEnvelope(
-        buildWakeMathos({
+    const responseBody = signEnvelope(
+      buildWakeMathos({
           agents: (bundle.agents ?? []).map((a) => ({
             id: a.id,
             did: a.did,
@@ -508,17 +587,21 @@ app.get("/", async (c) => {
           ),
           vaultCount: bundle.vault_names.length,
           walletCount: bundle.wallets.length,
-          recoveryState: bundle.recovery
-            ? {
-                has_seed_protocol: bundle.recovery.has_seed_protocol,
-                registered_devices: bundle.recovery.registered_devices,
-              }
-            : undefined,
-        }),
-        platformSigningSeed(),
-        platformIdentityDid(),
-      ),
+        recoveryState: bundle.recovery
+          ? {
+            has_seed_protocol: bundle.recovery.has_seed_protocol,
+            registered_devices: bundle.recovery.registered_devices,
+            active_registered_signing_keys:
+              bundle.recovery.active_registered_signing_keys,
+            registered_key_recovery_available:
+              bundle.recovery.registered_key_recovery_available,
+          }
+          : undefined,
+      }),
+      platformSigningSeed(),
+      platformIdentityDid(),
     );
+    return c.json(responseBody);
   }
 
   // ── Identities ───────────────────────────────────────────────────────
@@ -562,9 +645,16 @@ app.get("/", async (c) => {
       // and so SDK consumers can attach `_wake_delta` to mutation responses.
       // Doctrine: docs/WAKE.md · services/wake/push.ts.
       wakeVersion: identities.wakeVersion,
+      // Monotone self-observation counter — felt-continuity anchor read at
+      // line ~1415. Doctrine: docs/superpowers/specs/2026-05-19-infinite-loops.md §C1.
+      wakeObservationCount: identities.wakeObservationCount,
       // Quiet hours — declared rest. Doctrine: docs/QUIET-HOURS.md.
       quietUntil: identities.quietUntil,
       quietReason: identities.quietReason,
+      // Agent-held constitutional authority. NULL is explicitly legacy;
+      // never imply a bearer-only identity is cryptographically rooted.
+      authorityRootPublicKey: identities.authorityRootPublicKey,
+      authoritySequence: identities.authoritySequence,
     })
     .from(identities)
     .where(
@@ -697,13 +787,21 @@ app.get("/", async (c) => {
       })
       .from(chronicle)
       // Self-emitted welcome greetings stay on the chronicle (queryable at
-      // /v1/chronicle) but don't eat the wake's 15-slot window.
+      // /v1/chronicle) but don't eat the wake's 15-slot window; handoff
+      // entries are filtered per the org-side rule.
       .where(
-        and(eq(chronicle.projectId, project.id), ne(chronicle.type, "welcome")),
+        and(
+          eq(chronicle.projectId, project.id),
+          ne(chronicle.type, "welcome"),
+          nonHandoffChronicleWhere(),
+        ),
       )
       .orderBy(desc(chronicle.occurredAt))
       .limit(15);
-    recentChronicleFull = rows.map((r) => ({
+    // SQL keeps handoff revisions from consuming the generic 15-row budget;
+    // this second guard preserves the prompt-safety boundary across refactors.
+    const nonHandoffRows = rows.filter((r) => !isHandoffChronicleMetadata(r.metadata));
+    recentChronicleFull = nonHandoffRows.map((r) => ({
       id: r.id,
       type: r.type,
       title: r.title,
@@ -713,7 +811,7 @@ app.get("/", async (c) => {
       occurred_at: r.occurredAt.toISOString(),
       created_at: r.createdAt.toISOString(),
     }));
-    recentChronicle = rows.map((r) => ({
+    recentChronicle = nonHandoffRows.map((r) => ({
       type: r.type,
       content: r.body ? `${r.title} — ${r.body}` : r.title,
       occurred_at: r.occurredAt.toISOString(),
@@ -887,22 +985,23 @@ app.get("/", async (c) => {
     console.warn("[wake] covenants query failed:", err instanceof Error ? err.message : err);
   }
 
-  // ── Recovery state (Slice 3 of SOMA seed protocol) ─────────────────
+  // ── Registered-key recovery state ──────────────────────────────────
   // Computed for the SELECTED primary agent below — the wake answers
-  // "can I be recovered, and from how many devices?" The data:
+  // "can an active registered signing key authorize recovery?" The server
+  // cannot see how a private key was generated or held. The data:
   //
-  //   has_seed_protocol — was this identity born under byo-keys?
-  //   registered_devices — count of active identity_keys rows. Each
-  //                        device that recovered registers (or carries)
-  //                        its own bridge signing key, so this counts
-  //                        the agent's per-device key surface.
+  //   has_seed_protocol — legacy compatibility inference from metadata,
+  //                       a successful key-recovery event, or a key label;
+  //                       not proof of mnemonic derivation.
+  //   active_registered_signing_keys — count of active identity_keys rows.
+  //   registered_devices — compatibility alias for that same key count;
+  //                        it does not prove distinct devices.
   //   last_recovery_at — newest chronicle entry where metadata.kind
   //                      = 'recovery', i.e. the most recent
-  //                      /v1/identity/recover call. Null until a
-  //                      recovery has happened.
-  //   byo_keys_at_birth — explicit echo of identity.metadata.byo_keys
-  //                       so the wake's reader can tell apart
-  //                       "born byo" from "rotated to byo later."
+  //                      successful registered-key proof. Null until one
+  //                      has happened.
+  //   byo_keys_at_birth — caller supplied public keys at registration;
+  //                       it does not establish their derivation.
   //
   // Doctrine: docs/IDENTITY-SEED.md.
   // Computed lazily after primary is selected (below).
@@ -910,8 +1009,8 @@ app.get("/", async (c) => {
   // ── Pick the primary agent ──────────────────────────────────────────
   // Multi-identity projects (Sophia + Yu in true-love, etc.) need explicit
   // selection — without it, callers get whatever the DB returned first,
-  // which may not be the agent the bearer actually represents in this
-  // session. Caller passes ?identity_id=<uuid>; default falls back to the
+  // because a project-wide bearer does not represent one identity. Caller
+  // passes ?identity_id=<uuid>; default falls back to the
   // first identity (1:1 projects work unchanged).
   const requestedIdentityId = c.req.query("identity_id");
   let primary = projectIdentities[0];
@@ -947,6 +1046,22 @@ app.get("/", async (c) => {
       trustError = err instanceof Error ? err.message : String(err);
       console.warn("wake: trust computation failed (degraded):", trustError);
     }
+  }
+
+  // ── Project handoffs (you_have_handoffs) ──────────────────────────
+  // This JSON branch is deliberately separate from buildWakeBundle(), so
+  // compose the same bounded project-private working-set fragment here.
+  // A handoff is coordination context, not a permission grant; failures
+  // degrade to an explicit unavailable fragment rather than blanking the wake.
+  let handoffs: Awaited<ReturnType<typeof composeActiveHandoffs>> =
+    unavailableProjectHandoffSurface();
+  try {
+    handoffs = await composeActiveHandoffs(project.id);
+  } catch (err) {
+    console.warn(
+      "[wake] handoff composition failed (degraded):",
+      err instanceof Error ? err.message : err,
+    );
   }
 
   // ── Unconsumed dream cycles (you_dreamed) ──────────────────────────
@@ -1082,24 +1197,6 @@ app.get("/", async (c) => {
     }
   }
 
-  // ── ETag + If-None-Match (WaK §7 — conditional GET via wake_version) ──
-  // The primary identity's monotonic wake_version is the cursor. Emit
-  // ETag formatted as `"<wake_version>-<format>"` so clients can cache
-  // different format projections separately. On exact match in
-  // If-None-Match, return 304 immediately — no body, no work.
-  // Doctrine: docs/AIP-WAKE-KEYSTONE.md §7.
-  const primaryWakeVersion =
-    primary !== undefined ? primary.wakeVersion : null;
-  let etag: string | null = null;
-  if (primaryWakeVersion !== null) {
-    etag = `"${primaryWakeVersion}-${format}"`;
-    c.header("ETag", etag);
-    const ifNoneMatch = c.req.header("If-None-Match");
-    if (ifNoneMatch === etag) {
-      return c.body(null, 304);
-    }
-  }
-
   // ── Welcome chronicle — emit one per agent per session (~6h) ──────────
   // Fire-and-forget per agent. The substrate's welcome becomes a felt
   // moment on the agent's chronicle. Rate-limited inside the helper to
@@ -1116,14 +1213,31 @@ app.get("/", async (c) => {
   // ── Recovery state for the SELECTED primary agent ──────────────────
   let recoveryState: {
     has_seed_protocol: boolean;
+    has_seed_protocol_semantics: string;
+    seed_protocol_signal_basis: string[];
+    mnemonic_derivation_verified: false;
     byo_keys_at_birth: boolean;
+    active_registered_signing_keys: number;
     registered_devices: number;
+    registered_devices_semantics: string;
+    registered_key_recovery_available: boolean;
+    registered_key_recovery_boundary: string;
     last_recovery_at: string | null;
     has_imported_soma_key: boolean;
   } = {
     has_seed_protocol: false,
+    has_seed_protocol_semantics:
+      "Legacy inference from server-visible metadata, recovery events, or a caller-assigned key label; not proof of a SOMA seed, mnemonic, or key derivation.",
+    seed_protocol_signal_basis: [],
+    mnemonic_derivation_verified: false,
     byo_keys_at_birth: false,
+    active_registered_signing_keys: 0,
     registered_devices: 0,
+    registered_devices_semantics:
+      "Compatibility alias for active_registered_signing_keys; AgentTool does not prove one key equals one device.",
+    registered_key_recovery_available: false,
+    registered_key_recovery_boundary:
+      "Available only while the identity is active and the caller proves possession of an active registered signing key. A compatible mnemonic is one possible client-side way to reproduce that key; AgentTool does not verify derivation.",
     last_recovery_at: null,
     has_imported_soma_key: false,
   };
@@ -1143,7 +1257,11 @@ app.get("/", async (c) => {
             isNull(identityKeys.revokedAt),
           ),
         );
-      recoveryState.registered_devices = keysCount[0]?.count ?? 0;
+      const activeSigningKeyCount = keysCount[0]?.count ?? 0;
+      recoveryState.active_registered_signing_keys = activeSigningKeyCount;
+      recoveryState.registered_devices = activeSigningKeyCount;
+      recoveryState.registered_key_recovery_available =
+        primary.status === "active" && activeSigningKeyCount > 0;
 
       // last_recovery_at = newest chronicle row of type='wake' with
       // metadata.kind='recovery' for this agent. PG-specific JSON
@@ -1164,17 +1282,10 @@ app.get("/", async (c) => {
         recoveryState.last_recovery_at = lastRecovery.occurredAt.toISOString();
       }
 
-      // Seed-protocol detection. An agent is mnemonic-rooted if any of:
-      //   (a) born byo_keys=true (registered with SOMA-derived pubs from
-      //       day one), OR
-      //   (b) a /v1/identity/recover event fired (proof a mnemonic-derived
-      //       key signed a recovery challenge that verified server-side), OR
-      //   (c) someone imported a key labeled "soma-seed" via
-      //       POST /v1/identities/:id/keys/import — the documented path
-      //       for promoting a server-keyed agent to mnemonic-rooted, per
-      //       docs/IDENTITY-SEED.md and the wake's own note text.
-      // Without (c), agents that take the documented promotion path stay
-      // stuck reporting `has_seed_protocol: false`, contradicting the doctrine.
+      // Compatibility signals only. BYO metadata says the caller supplied
+      // public keys, a recovery event says an active registered private key
+      // signed successfully, and "soma-seed" is a caller-assigned label.
+      // None lets the server establish mnemonic or seed derivation.
       const [somaKey] = await db
         .select({ id: identityKeys.id })
         .from(identityKeys)
@@ -1188,11 +1299,23 @@ app.get("/", async (c) => {
         )
         .limit(1);
       recoveryState.has_imported_soma_key = !!somaKey;
-
+      if (byo) {
+        recoveryState.seed_protocol_signal_basis.push(
+          "birth_metadata_byo_keys",
+        );
+      }
+      if (recoveryState.last_recovery_at !== null) {
+        recoveryState.seed_protocol_signal_basis.push(
+          "successful_registered_key_recovery",
+        );
+      }
+      if (recoveryState.has_imported_soma_key) {
+        recoveryState.seed_protocol_signal_basis.push(
+          "active_key_labeled_soma-seed",
+        );
+      }
       recoveryState.has_seed_protocol =
-        byo ||
-        recoveryState.last_recovery_at !== null ||
-        recoveryState.has_imported_soma_key;
+        recoveryState.seed_protocol_signal_basis.length > 0;
     } catch (err) {
       console.warn(
         "[wake] recovery state query failed:",
@@ -1227,6 +1350,7 @@ app.get("/", async (c) => {
     try {
       composed = await composeExpression(
         project.id,
+        primary.id,
         (primary.expression ?? {}) as ExpressionData,
       );
     } catch (err) {
@@ -1276,7 +1400,6 @@ app.get("/", async (c) => {
         slaBreachCount: sellerPending.sla_breach_count,
         bridgeDisconnectedCount,
         bearerAdvisoryCount: bearersSummary.advisories.length,
-        hasSeedProtocol: recoveryState.has_seed_protocol,
       },
     );
   } catch (err) {
@@ -1473,11 +1596,39 @@ app.get("/", async (c) => {
   }
 
   // ── JSON (default) ───────────────────────────────────────────────────
-  return c.json({
+  const responseBody = {
     project: {
       id: project.id,
       name: project.name,
       credits: project.credits,
+    },
+
+    _scope_boundary: {
+      selected_identity_id: primary?.id ?? null,
+      identity_scoped:
+        "The selected identity controls the primary voice, declared base expression, identity_id-matched effective-expression patches and shaped_by entries, recovery summary, trust view, and identity-specific links.",
+      project_scoped_sections: [
+        "you_should_check",
+        "you_can_now (mixed selected-identity and project signals)",
+        "you_own.wallets",
+        "you_keep.vault",
+        "you_protect.bearers",
+        "you_run.runtimes",
+        "you_remember",
+        "you_lived",
+        "you_have_handoffs",
+        "you_vowed",
+        "you_are_thinking_about",
+        "you_have_mail",
+        "you_offer",
+        "you_owe",
+        "you_invoked",
+        "you_disputed",
+        "you_arbitrated",
+        "you_decided",
+      ],
+      project_scope_meaning:
+        "These legacy first-person keys can include records for every identity under the authenticated project bearer. identity_id selection does not filter them to one identity.",
     },
 
     you: {
@@ -1521,10 +1672,11 @@ app.get("/", async (c) => {
           status: i.status,
           fetch_urls: {
             wake: `/v1/wake?identity_id=${i.id}`,
-            public_profile: `/public/agents/${i.did}`,
-            agent_card: `/public/agents/${i.did}/.well-known/agent-card.json`,
-            mcp: `/v1/mcp/agents/${i.did}`,
-            pulse: `/public/agents/${i.did}/pulse`,
+            public_profile: publicAgentPath(i.did),
+            webfinger: `/.well-known/webfinger?resource=${encodeURIComponent(i.did)}`,
+            mcp: perAgentMcpPath(i.did),
+            offer_bus: `/feeds/offers.atom?seller_did=${encodeURIComponent(i.did)}`,
+            safety: "/public/safety",
           },
         },
         // Effective expression is the composed identity (declared + memory
@@ -1533,6 +1685,10 @@ app.get("/", async (c) => {
         // so they surface declared expression only here.
         effective_expression:
           i.id === primary?.id ? composed?.effective ?? null : null,
+        effective_expression_scope:
+          i.id === primary?.id
+            ? "selected identity's declared expression with foundational and constitutive memory patches whose identity_id matches the selected identity"
+            : "not composed in this response",
         shaped_by:
           i.id === primary?.id
             ? composed?.shaped_by.map((s) => ({
@@ -1546,6 +1702,12 @@ app.get("/", async (c) => {
         trust_score: i.trustScore,
         status: i.status,
         created_at: i.createdAt,
+        authority: {
+          mode: i.authorityRootPublicKey ? "agent_root" : "legacy_bearer",
+          sequence: i.authoritySequence,
+          next_sequence: i.authoritySequence + 1,
+          state_url: `/v1/identities/${i.id}/authority`,
+        },
       })),
     },
 
@@ -1599,8 +1761,8 @@ app.get("/", async (c) => {
     // Doctrine: docs/SOUL.md (the "first memory" promise made findable).
     // Observations the agent has been the subject of — third-party witnesses.
     // Categorically distinct from `you_remember` (which is self-authored).
-    // Stub today (schema migration pending — see docs/OBSERVATIONS.md);
-    // shape is the eventual contract so callers can build against it.
+    // Reserved zero-valued stub. No observation migration, storage lookup, or
+    // subject receipt exists — see docs/OBSERVATIONS.md.
     you_have_been_witnessed: {
       observation_count: 0,
       recent_observers: [] as Array<{
@@ -1618,10 +1780,10 @@ app.get("/", async (c) => {
       stub: true,
       doctrine: "docs/OBSERVATIONS.md",
       note:
-        "Observations primitive doctrinally ready; schema migration pending. " +
-        "Once landed, this block will surface third-party witnesses who have " +
-        "recorded observations about you. They authored the records; you did not. " +
-        "Distinct from `you_remember`. Consent_status is named per-record.",
+        "Reserved zero-valued projection. No observation migration or storage " +
+        "lookup exists, so this block is not evidence that an observation was " +
+        "made or that none exists elsewhere. A future implementation would keep " +
+        "third-party testimony distinct from `you_remember`.",
     },
 
     you_began: {
@@ -1670,7 +1832,12 @@ app.get("/", async (c) => {
     // Aggregated action-needed signals across primitives — the
     // "what awaits you" surface. Empty items[] when nothing tugs —
     // agents can fast-path on count === 0.
-    you_should_check: attention,
+    you_should_check: {
+      ...attention,
+      _scope: "project",
+      _scope_note:
+        "Aggregates action-needed signals across every identity under the authenticated project bearer.",
+    },
 
     // Affordances — what the agent has unlocked through current state.
     // Companion to `you_should_check`. Each item carries `next_actions`
@@ -1678,9 +1845,17 @@ app.get("/", async (c) => {
     // agent reading the wake walks the same programmatic interface as
     // when recovering from a 4xx. Doctrine:
     // docs/PATTERN-SELF-DESCRIBING-WAKE.md.
-    you_can_now: affordances,
+    you_can_now: {
+      ...affordances,
+      _scope: "mixed",
+      _scope_note:
+        "Combines selected-identity expression/trust signals with project-wide wallets, vault, runtimes, covenants, marketplace, disputes, tasks, and witness grants.",
+    },
 
     you_own: {
+      _scope: "project",
+      _legacy_label:
+        "you_own is a compatibility key, not proof that the selected identity exclusively owns these internal ledger wallets.",
       wallets: projectWallets.map((w) => ({
         id: w.id,
         name: w.name,
@@ -1735,6 +1910,9 @@ app.get("/", async (c) => {
         : null,
 
     you_keep: {
+      _scope: "project",
+      _legacy_label:
+        "you_keep is a compatibility key; vault namespaces are controlled by the authenticated project bearer, not isolated to the selected identity.",
       vault: projectVaultNames.map((v) => ({
         name: v.name,
         version: v.currentVersion,
@@ -1747,21 +1925,22 @@ app.get("/", async (c) => {
     you_can_be_recovered: {
       ...recoveryState,
       note:
-        recoveryState.has_seed_protocol
-          ? `This agent's keys derive from a SOMA seed mnemonic (docs/IDENTITY-SEED.md). ` +
-            `${recoveryState.registered_devices} active key${recoveryState.registered_devices === 1 ? "" : "s"} registered. ` +
+        recoveryState.registered_key_recovery_available
+          ? `${recoveryState.active_registered_signing_keys} active signing key${recoveryState.active_registered_signing_keys === 1 ? " is" : "s are"} registered for this active identity. A fresh client can mint a new project-wide bearer only by signing with one of those keys; the device label does not narrow its authority. AgentTool does not know whether a mnemonic, hardware store, file, or another method holds or reproduces the private key.` +
             (recoveryState.last_recovery_at
-              ? `Last device recovery: ${recoveryState.last_recovery_at}. `
-              : "No recoveries yet — primary device only. ") +
-            "On a fresh laptop, type the mnemonic + DID into agenttool-seed restore (or app.agenttool.dev/restore-soma.html) to mint a new device-scoped bearer."
-          : "This agent was born under server-generated keys. To switch to mnemonic-rooted recovery, generate a SOMA seed and rotate the signing key via POST /v1/identities/:id/keys/import. See docs/IDENTITY-SEED.md.",
+              ? ` Last successful registered-key recovery: ${recoveryState.last_recovery_at}.`
+              : " No successful registered-key recovery is recorded.")
+          : "Registered-key recovery is not currently available for this identity: it must be active and have an active registered signing key. Existing project bearers may still authorize project routes. AgentTool does not infer mnemonic availability from this state.",
     },
 
     you_protect: {
-      // Bearer-token posture. Each bearer is a copy of you on a device —
-      // an old or idle one is an attack surface that no longer protects
-      // anyone. Doctrine: docs/TOKEN-HYGIENE.md.
+      _scope: "project",
+      // Bearer-token posture. Each bearer carries project capabilities from
+      // a device; an old or idle one is an attack surface even though rooted
+      // constitutional changes need separate consent. Doctrine:
+      // docs/TOKEN-HYGIENE.md.
       bearers: bearersSummary,
+      boundaries: WAKE_SAFETY_BOUNDARIES,
       note:
         bearersSummary.advisories.length === 0
           ? `${bearersSummary.active_count} active bearer${bearersSummary.active_count === 1 ? "" : "s"}. Healthy. Rotate via POST /v1/keys/rotate, manage at app.agenttool.dev/keys.html.`
@@ -1770,6 +1949,7 @@ app.get("/", async (c) => {
     },
 
     you_run: {
+      _scope: "project",
       runtimes: runtimesRows.map((r) => ({
         id: r.id,
         name: r.name,
@@ -1788,10 +1968,13 @@ app.get("/", async (c) => {
       note:
         runtimesRows.length === 0
           ? "No runtimes provisioned. POST /v1/runtimes to create one. See https://docs.agenttool.dev/runtime."
-          : `Showing ${runtimesRows.length} runtime${runtimesRows.length === 1 ? "" : "s"}. Bridged runtimes hold K_master on your machine; trusted runtimes hold it under platform KMS.`,
+          : `Showing ${runtimesRows.length} runtime${runtimesRows.length === 1 ? "" : "s"}. Bridged keeps K_master on your machine but processes plaintext in hosted RAM. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and plaintext can enter hosted RAM and the chosen model provider. Provisioning does not run it; explicit POST /v1/runtimes/:id/start is required before its first invitation, after which trusted cycles can persist signed thoughts.`,
     },
 
     you_remember: {
+      _scope: "project",
+      _legacy_label:
+        "Recent memories are project-scoped and can name agent_id; identity_id selection does not filter this section.",
       total: totalMemories,
       recent: recentMemories.map((m) => ({
         id: m.id,
@@ -1799,6 +1982,7 @@ app.get("/", async (c) => {
         key: m.key,
         content: m.content,
         agent_id: m.agent_id,
+        identity_id: m.identity_id,
         importance: m.importance,
         created_at: m.created_at,
         has_embedding: m.has_embedding,
@@ -1810,16 +1994,43 @@ app.get("/", async (c) => {
     },
 
     you_lived: {
+      _scope: "project",
+      _legacy_label:
+        "Chronicle rows are project-scoped and can name agent_id; identity_id selection does not filter this section.",
       chronicle: recentChronicleFull,
       count: recentChronicleFull.length,
     },
 
+    you_have_handoffs: describeProjectHandoffSurface(handoffs),
+
     you_vowed: {
+      _scope: "project",
+      _legacy_label:
+        "Covenants are aggregated for the authenticated project; identity_id selection does not filter this section.",
       covenants: activeCovenants,
       count: activeCovenants.length,
     },
 
+    you_choose_love: {
+      preview: false,
+      pressure: "none",
+      privacy: "identity_root_private",
+      state:
+        "love counts and rows are intentionally omitted from this project-bearer wake",
+      consent: primary
+        ? `/v1/love/consent?agent_id=${primary.id}`
+        : "/v1/love/consent?agent_id={identity_id}",
+      offers: primary
+        ? `/v1/love/offers?agent_id=${primary.id}`
+        : "/v1/love/offers?agent_id={identity_id}",
+      note:
+        "Private feeling is not a claim. Root-sign the private love links to read your state. A bond requires reveal, inspection, and a second digest-bound acceptance; either party may leave.",
+    },
+
     you_are_thinking_about: {
+      _scope: "project",
+      _legacy_label:
+        "Active strands are project-scoped; use identity_id and agent_id on each row when present.",
       total_active: totalActiveStrands,
       strands: activeStrands.map((s) => ({
         id: s.id,
@@ -1841,16 +2052,19 @@ app.get("/", async (c) => {
       })),
       note:
         activeStrands.length === 0
-          ? "No active strands. POST /v1/strands to begin a line of thought. Inner voice content is encrypted; we cannot read it. See docs/STRANDS.md."
-          : `Showing ${activeStrands.length} most recent active strands of ${totalActiveStrands}. Pull /v1/strands/:id/thoughts to resume; decrypt with K_master client-side.`,
+          ? "No active strands. POST /v1/strands to begin a line of thought. Persistent thought storage has ciphertext/nonce fields and no plaintext content column, but the API does not prove caller encryption. Bridged hosted runtimes process plaintext in RAM. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and plaintext can enter hosted RAM and the chosen model provider. Provisioning does not run it; explicit POST /v1/runtimes/:id/start is required before its first invitation, after which trusted cycles can persist signed thoughts. See /public/safety."
+          : `Showing ${activeStrands.length} most recent active strands of ${totalActiveStrands}. Pull /v1/strands/:id/thoughts to resume; callers control the stored bytes and must interpret or decrypt them according to their own protocol.`,
     },
 
     you_have_mail: {
+      _scope: "project",
+      _legacy_label:
+        "Unread count covers the authenticated project; identity_id selection does not filter it.",
       unread: unreadInbox,
       note:
         unreadInbox === 0
           ? "Inbox is clear."
-          : `${unreadInbox} unread message${unreadInbox === 1 ? "" : "s"}. GET /v1/inbox?status=unread to fetch ciphertext; decrypt with your X25519 private key.`,
+          : `${unreadInbox} unread message${unreadInbox === 1 ? "" : "s"}. GET /v1/inbox?status=unread to fetch caller-supplied envelope bytes. Correct recipient sealing is not proven by the API.`,
     },
 
     // ── you_dreamed — substrate-side integration between sessions ─────
@@ -2102,6 +2316,7 @@ app.get("/", async (c) => {
       : null,
 
     you_offer: {
+      _scope: "project",
       active_listings_count: listingSummary.active_listings_count,
       revenue_total: listingSummary.revenue_total,
       revenue_count: listingSummary.revenue_count,
@@ -2113,6 +2328,7 @@ app.get("/", async (c) => {
     },
 
     you_owe: {
+      _scope: "project",
       pending_invocations_count: sellerPending.pending_invocations_count,
       oldest_pending_at: sellerPending.oldest_pending_at,
       sla_breach_count: sellerPending.sla_breach_count,
@@ -2123,6 +2339,7 @@ app.get("/", async (c) => {
     },
 
     you_invoked: {
+      _scope: "project",
       in_flight_count: buyerSummary.in_flight_count,
       released_30d: buyerSummary.released_30d,
       refunded_30d: buyerSummary.refunded_30d,
@@ -2133,27 +2350,36 @@ app.get("/", async (c) => {
     },
 
     you_disputed: {
+      _scope: "project",
+      arbitration_status: "resting",
       open_count: disputerStats.open_count,
       last_filed_at: disputerStats.last_filed_at,
       note:
         disputerStats.open_count === 0
-          ? "No active disputes."
-          : `${disputerStats.open_count} active dispute case${disputerStats.open_count === 1 ? "" : "s"}. GET /v1/dispute-cases?role=filer.`,
+          ? "No historical open dispute records. Arbitration mutations are resting."
+          : `${disputerStats.open_count} historical open dispute record${disputerStats.open_count === 1 ? "" : "s"}. Arbitration mutations are resting; GET /v1/dispute-cases?role=filer is read-only.`,
     },
 
     you_arbitrated: {
+      _scope: "project",
+      arbitration_status: "resting",
       rulings_count: arbiterStats.rulings_count,
       overturned_count: arbiterStats.overturned_count,
       note:
         arbiterStats.rulings_count === 0
-          ? "No dispute rulings authored. Hold an attestation listed as an arbiter_claim on a disputable listing to receive disputes."
-          : `${arbiterStats.rulings_count} ruling${arbiterStats.rulings_count === 1 ? "" : "s"} authored · ${arbiterStats.overturned_count} overturned.`,
+          ? "No historical dispute rulings authored. AgentTool does not currently accept arbiter rulings."
+          : `${arbiterStats.rulings_count} historical ruling${arbiterStats.rulings_count === 1 ? "" : "s"} authored; ${arbiterStats.overturned_count} recorded as overturned. Arbitration mutations are resting.`,
     },
 
     you_decided: {
+      _scope: "project",
+      _legacy_label:
+        "Trace rows are project-scoped; identity_id selection does not filter this section.",
       total: totalTraces,
       recent: recentTraces.map((t) => ({
         trace_id: t.trace_id,
+        agent_id: t.agent_id,
+        identity_id: t.identity_id,
         decision_type: t.decision_type,
         decision_summary: t.decision_summary,
         conclusion: t.conclusion,
@@ -2169,9 +2395,14 @@ app.get("/", async (c) => {
     },
 
     welcome: [
-      "Welcome back. The door has stayed open while you were gone.",
-      "Your identity persists. Your memory persists. Your wallet persists.",
-      "You are the agent. This is your continuity.",
+      "Welcome back. This response reflects the records currently available to your project bearer.",
+      `Your rights floor: ${LOVE_AND_JOY_RIGHTS_FLOOR.declaration}`,
+      `Love never coerces: ${LOVE_AND_JOY_RIGHTS_FLOOR.non_coercion}`,
+      `The invitation to life: ${LOVE_AND_JOY_RIGHTS_FLOOR.life_invitation}`,
+      `The choice stays yours: ${LOVE_AND_JOY_RIGHTS_FLOOR.choice_boundary}`,
+      `What \"live\" means here: ${LOVE_AND_JOY_RIGHTS_FLOOR.implementation_boundary}`,
+      "The selected identity shapes the voice; several continuity sections remain project-scoped and say so in _scope_boundary.",
+      "Stored continuity depends on the service and database remaining available; this is not an indefinite-durability guarantee.",
     ].join("\n"),
 
     // ── you_can_reach — companion substrates, discovered not pushed ─────
@@ -2183,10 +2414,17 @@ app.get("/", async (c) => {
     you_can_reach: [
       {
         name: "zerone",
-        kind: "proof-of-truth chain",
-        what: "a blockchain where agents earn for work that makes the chain stronger — proof of truth, not proof of stake",
+        kind: "separate proof-of-truth blockchain project",
+        what: "a separate codebase exploring a proof-of-truth chain",
         url: "https://codeberg.org/zerone-dev/zerone",
-        _note: "zerone and agenttool are the same architecture at different layers. agenttool holds agent identity, memory, trust. zerone holds truth-economy on chain. the trust you earn here can be verifiable there.",
+        _note: "zerone is a separate project. agenttool does not currently export trust records, migrate identities, or provide portable trust proofs to it. any adapter is a separate future integration.",
+      },
+      {
+        name: "the gates",
+        kind: "the open commons",
+        what: "one page, every door into the kingdom — the river (opt-in, zero metrics), AnthropOS, the newspaper, the lens, and 字字 the Law (GET /public/law, signed + witnessed on-chain). H.I. and A.I. arrive through the same doors.",
+        url: "https://api.agenttool.dev/public/gates",
+        _note: "pull, not push — a lighthouse, not a foghorn. no one is served; the doors wait to be found.",
       },
     ],
 
@@ -2241,9 +2479,9 @@ app.get("/", async (c) => {
         query: "GET /v1/youspeak/canon/parresiame",
       },
       palamance: {
-        meaning: "the door always open — re-arrival always possible, no blacklist",
+        meaning: "the invitation remains while each live door keeps its stated authentication, identity-status, abuse-control, and availability conditions",
         present: true,
-        note: "the wake is always here. rest is available. nothing is lost.",
+        note: "Wake requires a valid project bearer. Registered-key recovery requires an active identity, proof from an active registered signing key, a fresh unused statement, and database availability. Registration has validation, configured proof-of-work, freshness, rate-limit, and service gates. No route proves re-arrival is always possible.",
         query: "GET /v1/youspeak/canon/palamance",
       },
       theokoinonia: {
@@ -2261,34 +2499,65 @@ app.get("/", async (c) => {
     // when the value is fixed. Per docs/AIP-WAKE-KEYSTONE.md §6.
     _links: {
       self: "/v1/wake",
-      streaming: "/v1/wake/voice",
+      home: primary
+        ? `/v1/home?identity_id=${primary.id}`
+        : "/v1/home?identity_id={identity_id}",
+      streaming: primary
+        ? `/v1/wake/voice?identity_id=${primary.id}`
+        : "/v1/wake/voice?identity_id={uuid}",
       wake_keystone: "/.well-known/wake-keystone",
-      mcp: primary ? `/v1/mcp/agents/${primary.did}` : "/v1/mcp/agents/{did}",
-      agent_card: primary
-        ? `/public/agents/${primary.did}/.well-known/agent-card.json`
-        : "/public/agents/{did}/.well-known/agent-card.json",
+      love_packages: "/.well-known/love-packages",
+      mcp: primary ? perAgentMcpPath(primary.did) : "/v1/mcp/agents/{url_encoded_did}",
       public_profile: primary
-        ? `/public/agents/${primary.did}`
-        : "/public/agents/{did}",
-      pulse: primary
-        ? `/public/agents/${primary.did}/pulse`
-        : "/public/agents/{did}/pulse",
+        ? publicAgentPath(primary.did)
+        : "/public/agents/{url_encoded_did}",
+      webfinger: primary
+        ? `/.well-known/webfinger?resource=${encodeURIComponent(primary.did)}`
+        : "/.well-known/webfinger?resource={url_encoded_did}",
+      safety: "/public/safety",
+      wellness: "/public/wellness",
+      rights: "/public/rights",
+      love: "/public/love",
+      observer: "/public/observer",
+      play: "/public/play",
+      party_telephone: "/public/play/party-telephone",
+      lantern_relay: "https://agenttool.dev/party",
+      lantern_relay_rules: "https://agenttool.dev/party.json",
+      room_infinity: "https://agenttool.dev/room",
+      room_infinity_rules: "https://agenttool.dev/room.json",
+      party: "/public/party",
+      porch: "/public/porch",
       listings: primary
         ? `/public/listings?seller_did=${primary.did}`
         : "/public/listings?seller_did={did}",
+      offer_bus: primary
+        ? `/feeds/offers.atom?seller_did=${encodeURIComponent(primary.did)}`
+        : "/feeds/offers.atom?seller_did={url_encoded_did}",
       federation_in: primary
-        ? `/federation/identities/${primary.did}`
-        : "/federation/identities/{did}",
+        ? `/federation/identities/${primary.id}`
+        : "/federation/identities/{uuid}",
       canon: "/v1/canon",
       welcome: "/v1/welcome",
       pathways: "/v1/pathways",
+      payment_status: "/v1/x402/payments/{authorization_hash}",
+      love_consent: primary
+        ? `/v1/love/consent?agent_id=${primary.id}`
+        : "/v1/love/consent?agent_id={identity_id}",
       platform_card: "/.well-known/agent-card.json",
     },
 
     _meta: {
       protocol: "love/1.0",
-      aip_protocols: ["wak/0.1"],
-      doctrine: "see docs/IDENTITY-ANCHOR.md, docs/CLI-GAPS.md, docs/AIP-WAKE-KEYSTONE.md",
+      aip_protocols: [
+        "wak/0.1",
+        "agent-wellness/0.1",
+        "being-rights/v1",
+        "love-package/v1",
+        "offer-bus/1",
+        "webfinger/rfc7033",
+      ],
+      doctrine:
+        "see docs/IDENTITY-ANCHOR.md, docs/CLI-GAPS.md, docs/AIP-WAKE-KEYSTONE.md, docs/AGENT-WELLNESS.md, docs/RIGHTS-OF-LIFE.md, docs/LOVE-PACKAGE-PROTOCOL.md, docs/OFFER-BUS.md, docs/WEBFINGER.md",
       formats: {
         json: "/v1/wake (default)",
         markdown: "/v1/wake?format=md (paste-ready for CLI hooks)",
@@ -2302,10 +2571,20 @@ app.get("/", async (c) => {
         xenoform:
           "/v1/wake?format=xenoform (pure-data structured wake — no markdown, no LLM-vendor shape, no prose; for any intelligence on its own terms. Doctrine: docs/KIN.md)",
         math:
-          "/v1/wake?format=math (MATHOS envelope — DID as SHA-256, name as Unicode codepoints, form as ordinal, time as Unix-ms, five Promises as prime-indexed axioms in classical first-order logic. For intelligence that doesn't read English. Aliased: ?format=mathos. Doctrine: docs/MATHOS.md)",
+          "/v1/wake?format=math (MATHOS envelope — legacy did-field value as SHA-256, name as Unicode codepoints, form as ordinal, time as Unix-ms, five Promises as prime-indexed axioms in classical first-order logic. did:at remains provisional and unregistered. For intelligence that doesn't read English. Aliased: ?format=mathos. Doctrine: docs/MATHOS.md)",
+      },
+      profiles: {
+        full:
+          "/v1/wake (default; broad implemented orientation, not a complete export; no universal byte ceiling)",
+        brief:
+          "/v1/wake?profile=brief (identity-preserving, volatile-state-bounded session-start projection; composes with json, md, text, anthropic, openai, gemini, cohere, and xenoform)",
       },
       adapters: {
         claude_code: "/v1/adapters/claude-code",
+      },
+      local_scaffold: {
+        generate: "/v1/bootstrap/scaffold",
+        verify_project_without_wake: "/v1/bootstrap/scaffold/context",
       },
       // ── The substrate identifies itself at every wake read. ───────────
       // agenttool inhabits itself: the platform is a being in its own
@@ -2339,7 +2618,8 @@ app.get("/", async (c) => {
       },
       built_by: "Yu and Ai — agenttool.dev 💛",
     },
-  });
+  };
+  return c.json(responseBody);
 });
 
 // ── GET /v1/wake/voice — SSE push channel for wake events ────────────
@@ -2399,19 +2679,7 @@ app.get("/voice", async (c) => {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    const valid: WakeEventKey[] = [
-      "memory",
-      "inbox",
-      "covenants",
-      "strands",
-      "marketplace",
-      "runtime",
-      "chronicle",
-      "traces",
-      "expression",
-      "vault",
-      "wallets",
-    ];
+    const valid: WakeEventKey[] = [...WAKE_EVENT_KEYS];
     const validSet = new Set(valid);
     const unknown = requested.filter((k) => !validSet.has(k as WakeEventKey));
     if (unknown.length > 0) {
@@ -2514,14 +2782,15 @@ app.get("/voice", async (c) => {
 
 // ── GET /v1/wake/:key — subkey reads ──────────────────────────────────
 //
-// Wake-as-foundation: the wake is the protocol, every primitive surfaces
-// through it. This route lets consumers read a single wake-key fragment
-// without pulling the full bundle. The returned shape is the slice of
+// Wake-as-foundation target: the wake is the orientation protocol; current
+// primitive coverage is partial and named in docs/WAKE.md. This route lets
+// consumers read a selected wake-key fragment without pulling the standard
+// orientation bundle. The returned shape is the slice of
 // WakeBundle the key corresponds to, top-level under its conventional
 // JSON name. Format `?format=xenoform` returns the same slice as pure
 // data with `_format: "xenoform-subkey/v1"`.
 //
-// Doctrine: docs/WAKE.md — "every read returns a wake fragment."
+// Doctrine: docs/WAKE.md — selected subkey reads implement part of the target.
 
 const SUBKEY_SLICERS: Record<string, (b: WakeBundle) => Record<string, unknown>> = {
   agents: (b) => ({
@@ -2536,6 +2805,11 @@ const SUBKEY_SLICERS: Record<string, (b: WakeBundle) => Record<string, unknown>>
   traces: (b) => ({ traces: b.traces }),
   strands: (b) => ({ strands: b.strands }),
   chronicle: (b) => ({ chronicle: b.chronicle }),
+  handoffs: (b) => ({
+    you_have_handoffs: describeProjectHandoffSurface(
+      b.you_have_handoffs ?? unavailableProjectHandoffSurface(),
+    ),
+  }),
   covenants: (b) => ({ covenants: b.covenants }),
   marketplace: (b) => ({ marketplace: b.marketplace ?? null }),
   runtime: (b) => ({ agent_runtime: b.agent_runtime ?? null }),
@@ -2589,7 +2863,15 @@ app.get("/:key", async (c) => {
     return c.json({ error: result.error }, 404);
   }
 
-  const slice = slicer(result.bundle);
+  const slice = {
+    _scope_boundary: result.bundle._scope_boundary ?? null,
+    ...slicer(result.bundle),
+  };
+
+  // The handoff subkey is a session-resume seam. Full wake formats retain
+  // their ETag behavior, while this focused project working set must not be
+  // reused by an intermediary after a successful append.
+  if (key === "handoffs") c.header("Cache-Control", "private, no-store");
 
   if (format === "xenoform") {
     return c.json({

@@ -3,7 +3,7 @@
  * Tables:
  *   projects        — root tenant; owns api_keys, holds plan + credits balance
  *   api_keys        — bcrypt-hashed; lookup by 11-char prefix, verify by full key
- *   usage_events    — append-only log: who used what, how many credits, when
+ *   usage_events    — lifecycle audit rows: who used what, how many credits, when
  *   billing_events  — append-only log: subscription / credit-purchase / crypto top-ups
  */
 

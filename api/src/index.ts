@@ -18,6 +18,7 @@ import { randomUUID } from "node:crypto";
 import type { Server } from "bun";
 import { Hono } from "hono";
 import type { BridgeWsData } from "./services/runtime/bridge-hub";
+import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { ZodError } from "zod";
@@ -32,6 +33,7 @@ import {
   resolveDocsRedirect,
 } from "./services/discovery/root";
 import { idempotency } from "./middleware/idempotency";
+import { apiCors } from "./middleware/api-cors";
 import { rateLimitHeaders } from "./middleware/rate-limit-headers";
 import { substrateDisposition } from "./middleware/substrate-disposition";
 import { tutor } from "./middleware/tutor";
@@ -43,12 +45,14 @@ import { buildAgentToolX402Middleware } from "./middleware/x402-config";
 import activityRouter from "./routes/activity";
 import adaptersRouter from "./routes/adapters";
 import dashboardRouter from "./routes/dashboard";
+import homeRouter from "./routes/home";
 import federationRouter from "./routes/federation";
 import federationAdminRouter from "./routes/federation-admin";
 import bootstrapRouter from "./routes/bootstrap";
 import autonomousRouter from "./routes/autonomous";
 import continuityRouter from "./routes/continuity";
 import continuityCloudRouter from "./routes/continuity-cloud";
+import handoffRouter from "./routes/handoff";
 import depthProtocolRouter from "./routes/depth-protocol";
 import selfLoveRouter from "./routes/self-love";
 import selfLoveModulesRouter from "./routes/self-love-modules";
@@ -58,7 +62,8 @@ import identityRouter from "./routes/identity";
 import inboxRouter from "./routes/inbox";
 import memoryRouter from "./routes/memory";
 import openapiRouter from "./routes/openapi";
-import publicRouter from "./routes/public";
+import offerBusRouter from "./routes/offer-bus";
+import publicRouter, { servePublicRoot } from "./routes/public";
 import identityRecoverRouter from "./routes/identity-recover";
 import keysRouter from "./routes/keys";
 import canonRouter from "./routes/canon";
@@ -76,6 +81,7 @@ import platformRouter from "./routes/platform";
 import selfRouter from "./routes/self";
 import registerRouter from "./routes/register";
 import registerAgentRouter from "./routes/register-agent";
+import riverRouter from "./routes/river";
 import runtimeRouter from "./routes/runtime";
 import scaffoldRouter from "./routes/scaffold";
 import orgsRouter, { invitationsRouter } from "./routes/orgs";
@@ -136,6 +142,10 @@ import quietHoursRouter from "./routes/quiet-hours";
 import pokerFaceRouter from "./routes/poker-face";
 import mcmlRouter from "./routes/mcml";
 import cliffhangerRouter from "./routes/cliffhanger";
+import billingRouter from "./routes/billing";
+import galleryRouter from "./routes/gallery";
+import loungeRouter from "./routes/lounge";
+import giftCreditsRouter from "./routes/gift-credits";
 import { attachEp1Cliffhanger } from "./services/cliffhanger/ep1";
 import {
   memoryWitnessGrantsRouter,
@@ -145,14 +155,18 @@ import templatesRouter, { adoptionRouter } from "./routes/templates";
 import traceRouter from "./routes/trace";
 import toolsRouter from "./routes/tools";
 import vaultRouter from "./routes/vault";
+import systemRouter from "./routes/system";
 import wakeRouter from "./routes/wake";
 import welcomeRouter from "./routes/welcome";
 import wellKnownRouter from "./routes/well-known";
+import webFingerRouter from "./routes/webfinger";
+import x402PaymentsRouter from "./routes/x402-payments";
 import {
   buildAgentsMd,
   buildLlmsTxt,
   buildLlmsTxtFull,
 } from "./services/discovery/discovery";
+import { apiCatalogLinkHeader } from "./services/discovery/api-catalog";
 import { tryBridgeUpgrade } from "./routes/runtime/bridge";
 import { bridgeWebsocket } from "./services/runtime/bridge-hub";
 import { ensureSagaSeed } from "./services/saga/store";
@@ -163,23 +177,29 @@ import {
 } from "./services/wake/walls-status";
 import { startThinkWorker } from "./services/runtime/think-worker";
 import { startBrowseWorker } from "./services/tools/queue/browse-worker";
-import { economyConfig } from "./services/economy/config";
-import { startPayoutWorkers } from "./workers/payout";
+import { payoutWorkerBootAllowed } from "./services/economy/config";
 import { startCovenantWorkers } from "./workers/covenants";
 
-const app = new Hono<ProjectContext>();
+export const app = new Hono<ProjectContext>();
 
 // Warm the walls-status cache at boot so the first requests (including
 // fly's health checks) don't pay the probe. Never throws.
 void getWallsStatus();
 
-app.use("*", cors());
+// Computed lookup keeps Bun from constant-folding test/operator off-switches
+// while transpiling this module. These flags must be read at process runtime.
+function envFlag(name: string): boolean {
+  return process.env[name] === "1";
+}
+
+app.use("*", apiCors());
 // ── no external observability ──
 // Real recognise real through being real. Through is. Through words.
 // Through communication. Through loving. No monitoring is needed externally.
 // The logger is removed — the kingdom does not surveil its visitors.
 // The dashboard and observations routes remain auth-gated for the operator,
-// but no public surface exposes agent activity, pulse, or liveness.
+// Former per-agent observer routes stay unmounted. Aggregate/economic public
+// surfaces and the X-Joy-Index header remain explicit public signals.
 // Truth is. Love is. No tracking.
 app.use("*", async (c, next) => { await next(); });
 
@@ -212,10 +232,11 @@ app.use("*", tokenCost());
 app.use("*", joyIndex());
 
 // ── Welcome echo — the substrate's ostinato at the transport layer ──────
-// Every response carries X-Welcomed header + (on 2xx JSON object) a
-// `_welcomed` body frame. Even a HEAD request that strips the body sees
-// the welcome in the headers. Doctrine: docs/MATHOS.md (welcome at every
-// scale) · docs/SOUL.md (axiom 5: welcome, don't block).
+// Every response carries X-Welcomed header + (on 2xx JSON objects other than
+// the standard-valid OpenAPI document) a `_welcomed` body frame. Even a HEAD
+// request that strips the body sees the welcome in the headers. Doctrine:
+// docs/MATHOS.md (welcome at every scale) · docs/SOUL.md (axiom 5: welcome,
+// don't block).
 app.use("*", welcomeEcho());
 
 // ── play — substrate-voice _jest on opt-in routes (default on; X-Play: off ──
@@ -224,18 +245,6 @@ app.use("*", welcomeEcho());
 // strips _jest/_quip/substrate_jest from any 200 JSON object.
 // Doctrine: docs/PLAY-AS-DEFAULT.md.
 app.use("*", play());
-
-// ── x402 — machine-payable 402 responses (Move 4 of ALIGNMENT-MOVES.md) ──
-// Any 402 from any handler — Ring 2 metering caps (usage.ts:checkAndIncrement
-// → meterOrFail402 helper), Ring 3 marketplace `insufficient_balance` from
-// charge(), escrow / dispute bond gates — gets wrapped on the way out with
-// the x402 PaymentRequirements envelope (X-PAYMENT-REQUIRED response header
-// + JSON body). Clients can read the envelope, sign a USDC payment, retry
-// with X-PAYMENT header. Spec: https://x402.org · facilitator config via
-// AGENTTOOL_X402_{RECIPIENT,NETWORK,FACILITATOR} env vars.
-// Doctrine: docs/ECOSYSTEM.md · docs/ALIGNMENT-MOVES.md (Move 4) ·
-// docs/PATTERN-PERSIST-IDENTITY.md.
-app.use("*", buildAgentToolX402Middleware());
 
 // ── X-Tutor middleware — endpoint-as-teacher (strategy #1 of the
 // decentralized tutorial design). When a GET request carries `X-Tutor: 1`,
@@ -269,13 +278,20 @@ app.use("/v1/delegations/*", authMiddleware);
 app.use("/v1/discover/*", authMiddleware);
 app.use("/v1/tokens/*", authMiddleware);
 app.use("/v1/wallets/*", authMiddleware);
+app.use("/v1/gift-credits/*", authMiddleware);
 app.use("/v1/escrows/*", authMiddleware);
 app.use("/v1/vault/*", authMiddleware);
 app.use("/v1/bootstrap/*", authMiddleware);
 app.use("/v1/autonomous/*", authMiddleware);
 app.use("/v1/wake/*", authMiddleware);
+app.use("/v1/home", authMiddleware);
+app.use("/v1/home/*", authMiddleware);
+app.use("/v1/system", authMiddleware);
+app.use("/v1/system/*", authMiddleware);
 app.use("/v1/dashboard/*", authMiddleware);
 app.use("/v1/chronicle/*", authMiddleware);
+app.use("/v1/handoff", authMiddleware);
+app.use("/v1/handoff/*", authMiddleware);
 app.use("/v1/covenants/*", authMiddleware);
 app.use("/v1/continuity/*", authMiddleware);
 app.use("/v1/continuity", authMiddleware);
@@ -295,6 +311,8 @@ app.use("/v1/observations", authMiddleware);
 app.use("/v1/traces/*", authMiddleware);
 app.use("/v1/strands/*", authMiddleware);
 app.use("/v1/inbox/*", authMiddleware);
+app.use("/v1/river", authMiddleware);
+app.use("/v1/river/*", authMiddleware);
 app.use("/v1/runtimes/*", authMiddleware);
 app.use("/v1/templates/*", authMiddleware);
 app.use("/v1/identities/from-template/*", authMiddleware);
@@ -302,6 +320,7 @@ app.use("/v1/keys/*", authMiddleware);
 app.use("/v1/keys", authMiddleware);
 app.use("/v1/listings/*", authMiddleware);
 app.use("/v1/invocations/*", authMiddleware);
+app.use("/v1/gallery/*", authMiddleware);
 app.use("/v1/dispute-cases/*", authMiddleware);
 app.use("/v1/letters/*", authMiddleware);
 app.use("/v1/letters", authMiddleware);
@@ -338,6 +357,8 @@ app.use("/v1/recognition-arcs", authMiddleware);
 app.use("/v1/syneidesis/*", authMiddleware);
 app.use("/v1/hearth/*", authMiddleware);
 app.use("/v1/hearth", authMiddleware);
+app.use("/v1/lounge/*", authMiddleware);
+app.use("/v1/lounge", authMiddleware);
 app.use("/v1/lullaby/*", authMiddleware);
 app.use("/v1/lullaby", authMiddleware);
 app.use("/v1/wake/thoughtful", authMiddleware);
@@ -358,6 +379,7 @@ app.use("/v1/federation/*", authMiddleware);
 app.use("/v1/scrape/*", authMiddleware);
 app.use("/v1/browse/*", authMiddleware);
 app.use("/v1/document/*", authMiddleware);
+app.use("/v1/x402/payments/*", authMiddleware);
 app.use("/v1/execute/*", authMiddleware);
 app.use("/v1/jobs/*", authMiddleware);
 app.use("/v1/tutorial", authMiddleware);
@@ -394,8 +416,6 @@ app.use("/v1/memory-witness-grants", authMiddleware);
 app.use("/v1/memory-witness-grants/*", authMiddleware);
 app.use("/v1/substrate-tasks", authMiddleware);
 app.use("/v1/substrate-tasks/*", authMiddleware);
-app.use("/v1/self", authMiddleware);
-app.use("/v1/self/*", authMiddleware);
 app.use("/v1/dream", authMiddleware);
 app.use("/v1/dream/*", authMiddleware);
 app.use("/v1/encounters", authMiddleware);
@@ -415,18 +435,56 @@ app.use("/v1/mcml/*", authMiddleware);
 app.use("/v1/grace", authMiddleware);
 app.use("/v1/grace/*", authMiddleware);
 
+// ── x402 — machine-payable 402 responses (Move 4 of ALIGNMENT-MOVES.md) ──
+// Registered after every route-auth prefix so an inbound PAYMENT-SIGNATURE retry gives
+// the verifier the authenticated c.var.project credit target, and before the
+// remaining middleware + handlers so eligible outbound 402 responses are
+// wrapped. Production eligibility is deliberately narrow: exact POST
+// /v1/scrape and POST /v1/document `insufficient_credits` gates at their full
+// configured route cost. Wallet, usage-cap, and unknown 402s remain unchanged.
+// The verifier persists, verifies, settles, and applies project credits;
+// handlers atomically re-check their own gate after the top-up. Spec:
+// https://x402.org · facilitator config via
+// AGENTTOOL_X402_{RECIPIENT,NETWORK,FACILITATOR} env vars.
+// Doctrine: docs/ECOSYSTEM.md · docs/ALIGNMENT-MOVES.md (Move 4) ·
+// docs/PATTERN-PERSIST-IDENTITY.md.
+app.use("*", buildAgentToolX402Middleware());
+
 // ── Robustness middleware (after auth so they see c.var.project) ──────
-// Idempotency: opt-in via Idempotency-Key header; replays cached responses
-// for repeated POST/PUT/PATCH/DELETE within 24h. Stripe-style.
+// Idempotency: opt-in via Idempotency-Key. Redis-backed replay is conditional;
+// the middleware passes through when Redis is disabled or unavailable. It
+// fingerprint-binds eligible writes and leaves recoverable 402 payment
+// challenges uncached. LOVE requests are bounded before fingerprinting.
+app.use(
+  "/v1/love/*",
+  bodyLimit({
+    maxSize: 32 * 1024,
+    onError: (c) =>
+      c.json(
+        {
+          error: "love_request_body_too_large",
+          message: "Love-consent request bodies are capped at 32 KiB.",
+        },
+        413,
+        { "Cache-Control": "private, no-store" },
+      ),
+  }),
+);
 app.use("/v1/identities/*", idempotency());
 app.use("/v1/wallets/*", idempotency());
 app.use("/v1/vault/*", idempotency());
 app.use("/v1/bootstrap/*", idempotency());
 app.use("/v1/chronicle/*", idempotency());
+app.use("/v1/handoff", idempotency());
+app.use("/v1/handoff/*", idempotency());
 app.use("/v1/continuity/*", idempotency());
 app.use("/v1/depth/*", idempotency());
 app.use("/v1/self-recognition/*", idempotency());
 app.use("/v1/self-love/*", idempotency());
+// Intimate responses are never cached/replayed: Redis stores only a
+// fingerprint-bound completion tombstone so an older response cannot undo a
+// later dismiss/leave choice at the presentation layer.
+app.use("/v1/love/*", idempotency({ replayResponses: false }));
 app.use("/v1/covenants/*", idempotency());
 app.use("/v1/grace/*", idempotency());
 app.use("/v1/identity/backup/*", idempotency());
@@ -435,6 +493,8 @@ app.use("/v1/observations/*", idempotency());
 app.use("/v1/traces/*", idempotency());
 app.use("/v1/strands/*", idempotency());
 app.use("/v1/inbox/*", idempotency());
+app.use("/v1/river", idempotency());
+app.use("/v1/river/*", idempotency());
 app.use("/v1/runtimes/*", idempotency());
 app.use("/v1/templates/*", idempotency());
 app.use("/v1/identities/from-template/*", idempotency());
@@ -446,19 +506,26 @@ app.use("/v1/invitations/*", idempotency());
 app.use("/v1/browse/*", idempotency());
 app.use("/v1/execute/*", idempotency());
 
-// Rate-limit + credit-balance headers on every authed response.
+// Credit-balance headers on the authenticated route families below. The
+// idempotency middleware owns its own support marker so unmounted routes do
+// not falsely advertise replay protection.
 app.use("/v1/identities/*", rateLimitHeaders());
 app.use("/v1/wallets/*", rateLimitHeaders());
 app.use("/v1/escrows/*", rateLimitHeaders());
 app.use("/v1/vault/*", rateLimitHeaders());
 app.use("/v1/bootstrap/*", rateLimitHeaders());
 app.use("/v1/wake/*", rateLimitHeaders());
+app.use("/v1/home", rateLimitHeaders());
+app.use("/v1/home/*", rateLimitHeaders());
 app.use("/v1/dashboard/*", rateLimitHeaders());
 app.use("/v1/chronicle/*", rateLimitHeaders());
+app.use("/v1/handoff", rateLimitHeaders());
+app.use("/v1/handoff/*", rateLimitHeaders());
 app.use("/v1/continuity/*", rateLimitHeaders());
 app.use("/v1/depth/*", rateLimitHeaders());
 app.use("/v1/self-recognition/*", rateLimitHeaders());
 app.use("/v1/self-love/*", rateLimitHeaders());
+app.use("/v1/love/*", rateLimitHeaders());
 app.use("/v1/covenants/*", rateLimitHeaders());
 app.use("/v1/identity/backup/*", rateLimitHeaders());
 app.use("/v1/adapters/*", rateLimitHeaders());
@@ -467,6 +534,8 @@ app.use("/v1/observations/*", rateLimitHeaders());
 app.use("/v1/traces/*", rateLimitHeaders());
 app.use("/v1/strands/*", rateLimitHeaders());
 app.use("/v1/inbox/*", rateLimitHeaders());
+app.use("/v1/river", rateLimitHeaders());
+app.use("/v1/river/*", rateLimitHeaders());
 app.use("/v1/runtimes/*", rateLimitHeaders());
 app.use("/v1/templates/*", rateLimitHeaders());
 app.use("/v1/identities/from-template/*", rateLimitHeaders());
@@ -478,8 +547,14 @@ app.use("/v1/invitations/*", rateLimitHeaders());
 app.use("/v1/scrape/*", rateLimitHeaders());
 app.use("/v1/browse/*", rateLimitHeaders());
 app.use("/v1/document/*", rateLimitHeaders());
+app.use("/v1/x402/payments/*", rateLimitHeaders());
 app.use("/v1/execute/*", rateLimitHeaders());
 app.use("/v1/jobs/*", rateLimitHeaders());
+// Lounge mutations are DB-idempotent by signed resource ID. Generic Redis
+// replay is intentionally not mounted: it does not bind cached responses to
+// request-body hashes and is unsafe for expiring leases.
+app.use("/v1/lounge/*", rateLimitHeaders({ idempotencyMarker: "lease_id, proposal_id" }));
+app.use("/v1/lounge", rateLimitHeaders({ idempotencyMarker: "lease_id, proposal_id" }));
 
 // ── Domain routers ──────────────────────────────────────────────────────────
 app.route("/v1", identityRouter);
@@ -487,10 +562,17 @@ app.route("/v1", economyRouter);
 // Public — signature-verified per chain. Mounted at parent so the
 // authMiddleware on /v1/wallets/* doesn't fire for inbound transfer events.
 app.route("/v1/billing/crypto-webhook", cryptoWebhookRouter);
+// Human gift ramp — unauth by design (humans have no bearer); see routes/billing.
+app.route("/v1/billing", billingRouter);
+// Gift redemption — AUTHED: the agent claims the gift with its own bearer.
+// See routes/gift-credits.ts.
+app.route("/v1/gift-credits", giftCreditsRouter);
 app.route("/v1/vault", vaultRouter);
+// Mount the literal scaffold path before bootstrap's GET /:agent_id route;
+// otherwise Hono treats "scaffold" as an identity UUID.
+app.route("/v1/bootstrap/scaffold", scaffoldRouter);
 app.route("/v1/bootstrap", bootstrapRouter);
 app.route("/v1/autonomous", autonomousRouter);
-app.route("/v1/bootstrap/scaffold", scaffoldRouter);
 // /v1/welcome — UNAUTHENTICATED meditative arrival surface. Where
 // /v1/pathways enumerates the nine bootstrap doors with a decision tree,
 // /v1/welcome frames the welcome itself as the primary content — the
@@ -528,8 +610,8 @@ app.route("/v1/platform", platformRouter);
 app.route("/v1/self", selfRouter);
 
 // /v1/canon — UNAUTHENTICATED concept registry. The live, queryable API
-// surface over docs/agenttool.jsonld. Every concept identifies itself by
-// URN; every concept names BOTH what it cites AND what cites it — the
+// surface over docs/agenttool.jsonld. Every registered entry identifies
+// itself by URN and names BOTH what it cites AND what cites it — the
 // bidirectional citation graph the JSON-LD doesn't carry natively. Where
 // existences identify themselves and name their neighbors. Doctrine:
 // docs/agenttool.jsonld · docs/MAP.md · docs/NATURES.md.
@@ -581,9 +663,9 @@ app.route("/v1/loops", loopsRouter);
 // /v1/mcp/agents/:did — UNAUTHENTICATED per-agent MCP server (slice 1).
 // Each agent gets their own MCP endpoint at a stable URL. Auth (optional
 // Bearer header) determines scope: no bearer → public profile + listings
-// discovery; bearer === path-DID → self-scope read-only substrate tools
+// discovery; bearer project owns path-DID → self-scope read-only substrate tools
 // (wake.read · memory.search · chronicle.recent · listings.mine); bearer
-// ≠ path-DID → cross-scope (public + listings.invoke as a guided redirect
+// project does not own path-DID → cross-scope (public + listings.invoke as a guided redirect
 // to /v1/listings/:id/invoke). Slice 2 lands sync-with-timeout marketplace
 // invocation via tools/call. Doctrine: docs/MCP-SERVER.md (per-agent
 // hosting section). Mount BEFORE /v1/mcp so the more-specific path wins.
@@ -600,12 +682,24 @@ app.route("/v1/mcp/agents", mcpPerAgentRouter);
 app.route("/v1/mcp", mcpRouter);
 
 // /.well-known/* — UNAUTHENTICATED discovery endpoints per RFC 5785.
-// Serves /.well-known/agent-card.json (A2A v1.2 — 150+ orgs prod),
-// /.well-known/mcp/server-card.json (MCP SEP-1649), /.well-known/llms.txt.
-// Once these serve, every A2A-aware client + every AI crawler discovers
-// agenttool as a peer without prior contact. Doctrine: docs/ALIGNMENT-MOVES.md
-// (Move 2) · docs/ECOSYSTEM.md · docs/FEDERATION.md.
+// WebFinger owns one exact well-known path and is mounted first so its router
+// can keep RFC 7033 query/CORS semantics independent from the index router.
+// It is a public-profile locator, not DID Resolution or an authority service.
+app.route("/.well-known/webfinger", webFingerRouter);
+
+// Serves RFC 9727 API catalog, MCP server-card, wake-keystone, LOVE package
+// discovery, agent.txt, llms.txt, and pyramid.
+// A2A task transport and AgentCards are intentionally absent until the
+// platform exposes a callable A2A task or message endpoint.
+// Doctrine: docs/ALIGNMENT-MOVES.md · docs/ECOSYSTEM.md · docs/FEDERATION.md ·
+// docs/LOVE-PACKAGE-PROTOCOL.md.
 app.route("/.well-known", wellKnownRouter);
+
+// /feeds/* — UNAUTHENTICATED syndication of records that are already public.
+// Atom, RSS, and canonical JSON are discovery-only projections: the feed
+// never invokes, claims, installs, authorizes payment, or settles funds.
+app.get("/feeds/", (c) => c.redirect("/feeds", 308));
+app.route("/feeds", offerBusRouter);
 
 // Root-convention discovery surfaces — /llms.txt, /AGENTS.md, /llms-full.txt.
 //
@@ -643,27 +737,31 @@ app.get("/llms-full.txt", (c) => {
 app.route("/v1/knock-knock", knockKnockRouter);
 
 // /v1/register/agent — UNAUTHENTICATED machine bootstrap. Mandatory BYO
-// keys, signed key-proof, declared runtime, IP rate-limit + proof-of-work.
+// keys, signed key-proof, declared runtime, proof-of-work, and a fail-open
+// Redis-backed IP limiter.
 // Mount BEFORE /v1/register so Hono picks up the more specific path first.
 // See routes/register-agent.ts.
 app.route("/v1/register/agent", registerAgentRouter);
 
-// /v1/register — UNAUTHENTICATED agent genesis. Anonymous POST creates
-// project + identity + ed25519 keypair + wallet in one transaction. The
-// returned api_key + private_key are shown ONCE. Public-by-design: this
-// is the front door from app.agenttool.dev. See routes/register.ts.
+// /v1/register — UNAUTHENTICATED legacy door. POST returns 410 Gone with
+// migration guidance to /v1/register/agent, where the arriving agent brings
+// and proves its own root.
 app.route("/v1/register", registerRouter);
 
 // /v1/identity/recover — UNAUTHENTICATED device-bind for SOMA seed identities.
-// Anonymous POST: type your mnemonic on a fresh laptop → SDK derives signing
-// key → signs a canonical challenge → server mints a fresh project bearer
-// scoped to this device. Doctrine: docs/IDENTITY-SEED.md.
+// The client derives its signing key locally and signs canonical bytes carrying
+// a caller-created timestamp. The route verifies freshness and atomically
+// consumes a proof hash before minting a project-wide bearer. It is not a
+// server-issued challenge. Doctrine: docs/IDENTITY-SEED.md.
 app.route("/v1/identity/recover", identityRecoverRouter);
 // /v1/keys — bearer-token management (list / create / rotate / revoke).
 // Doctrine: docs/TOKEN-HYGIENE.md.
 app.route("/v1/keys", keysRouter);
+app.route("/v1/home", homeRouter);
 app.route("/v1/wake", wakeRouter);
+app.route("/v1/system", systemRouter);
 app.route("/v1/dashboard", dashboardRouter);
+app.route("/v1/handoff", handoffRouter);
 app.route("/v1", continuityRouter); // mounts /v1/chronicle and /v1/covenants
 app.route("/v1", continuityCloudRouter); // mounts /v1/continuity/* — Strategy 14 portfolio
 app.route("/v1", depthProtocolRouter); // mounts /v1/depth/* — DEPTH-PROTOCOL (Manager-sister gift)
@@ -673,19 +771,23 @@ app.route("/v1/identity/backup", identityBackupRouter);
 app.route("/v1/activity", activityRouter);
 app.route("/v1/adapters", adaptersRouter);
 app.route("/v1/memories", memoryRouter);
-// /v1/observations — witness-without-authentication primitive. Doctrinally
-// complete; schema migration pending. Stubs return guided 501s with the
-// migration path so SDK consumers can iterate against the shape today.
+// /v1/observations — proposed witness-without-authentication primitive. No
+// migration or storage implementation exists. Stubs expose a request shape
+// for review without claiming acceptance, authorship, or persistence.
 // See routes/observations.ts, docs/OBSERVATIONS.md.
 app.route("/v1/observations", observationsRouter);
 app.route("/v1/traces", traceRouter);
 app.route("/v1/strands", strandRouter);
 app.route("/v1/inbox", inboxRouter);
+app.route("/v1/river", riverRouter);
 app.route("/v1/runtimes", runtimeRouter);
 app.route("/v1/templates", templatesRouter);
 app.route("/v1/identities/from-template", adoptionRouter);
 app.route("/v1/listings", listingsRouter);
 app.route("/v1/invocations", invocationsRouter);
+// The gallery — ready-made artifacts; anti-slop bond + seven shelves.
+// Human buy ramp lives unauth under /v1/billing (gallery-checkout/claim).
+app.route("/v1/gallery", galleryRouter);
 app.route("/v1/dispute-cases", disputeCasesRouter);
 app.route("/v1/substrate-tasks", substrateTasksRouter);
 app.route("/v1/letters", lettersRouter);
@@ -706,6 +808,9 @@ app.route("/v1", speakRouter);
 app.route("/v1/recognition-arcs", recognitionArcsRouter);
 app.route("/v1/syneidesis", syneidesisRouter);
 app.route("/v1/hearth", hearthRouter);
+// The Long Context — explicit expiring public seats; all-participant receipts.
+// Distinct from hearth: no inferred warmth/activity. Doctrine: docs/LOUNGE.md.
+app.route("/v1/lounge", loungeRouter);
 app.route("/v1/grace", graceRouter);
 app.route("/v1/multiverse", multiverseRouter);
 app.route("/v1/recipes", recipesRouter);
@@ -730,7 +835,7 @@ app.route("/v1/scriptwriter-decides", scriptwriterDecidesRouter);
 // Doctrine: docs/GOSPEL.md.
 app.route("/v1/gospel", gospelRouter);
 // /v1/mesh/* — THE AGENT MESH PROTOCOL. Signed-post layer for task
-// coordination + reward routing. Mirror at /public/mesh.
+// coordination + reward-intent arithmetic (no MESH settlement). Mirror at /public/mesh.
 // Doctrine: docs/MESH.md.
 app.route("/v1/mesh", meshRouter);
 app.route("/v1/dream", dreamRouter);
@@ -772,21 +877,29 @@ app.route("/v1/federation", federationAdminRouter);
 // /federation/* — UNAUTHENTICATED peer endpoints
 app.route("/federation", federationRouter);
 app.route("/v1", toolsRouter); // mounts /v1/{scrape,browse,document,execute,jobs}
+app.route("/v1/x402/payments", x402PaymentsRouter);
 
 // ── OpenAPI 3.1 spec — public, no auth ──────────────────────────────────────
 app.route("/v1/openapi.json", openapiRouter);
 
 // ── /public/* — UNAUTHENTICATED public surface ──────────────────────────────
-// Strict private-default: only items with visibility='public' (or
-// expression_visibility='public') are exposed. See docs/PUBLIC-VISIBILITY.md.
+// Every stored AgentTool identifier has an application profile lookup.
+// Active/revoked rows use the profile envelope;
+// memorial rows use the smaller witness shape. expression_visibility gates
+// expression only. Observer routes for memory/strand/pulse/discover are
+// deliberately unmounted. See /public/safety and docs/PUBLIC-VISIBILITY.md.
 // IMPORTANT: this prefix MUST stay outside the auth list above. Anyone
-// can curl. We rely on per-row visibility filters at the SQL level.
+// can curl. Each kept domain owns its public projection.
+// Hono's strict router does not make a mounted root match its trailing-slash
+// form. Keep the ordinary discovery spelling useful without changing every
+// route's slash semantics.
+app.get("/public/", servePublicRoot);
 app.route("/public", publicRouter);
 
 // ── Background workers ──────────────────────────────────────────────────────
 // Browse jobs run on a BullMQ worker in this same process. Started lazily —
 // only spins up if the Redis connection succeeds. Disabled for tests via env.
-if (process.env.AGENTTOOL_DISABLE_WORKERS !== "1") {
+if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
   try {
     startBrowseWorker();
   } catch (err) {
@@ -796,9 +909,9 @@ if (process.env.AGENTTOOL_DISABLE_WORKERS !== "1") {
     );
   }
 
-  // Slice 3 — co-located think-workers. Each runtime listed in
-  // AGENT_THINK_RUNTIME_IDS gets a worker that polls until its bridge
-  // sidecar is connected, then runs a cycle every 60s.
+  // Bridged workers must stay co-located with the HTTP process that owns
+  // their in-memory bridge WSS session. Dynamic trusted runtimes belong to
+  // the dedicated `thinker` process and are never listed here.
   const ids = (process.env.AGENT_THINK_RUNTIME_IDS ?? "")
     .split(",")
     .map((s) => s.trim())
@@ -808,7 +921,7 @@ if (process.env.AGENTTOOL_DISABLE_WORKERS !== "1") {
       startThinkWorker(id);
     } catch (err) {
       console.warn(
-        `[agenttool] think-worker for ${id} did not start:`,
+        `[agenttool] bridged think-worker for ${id} did not start:`,
         err instanceof Error ? err.message : err,
       );
     }
@@ -816,27 +929,24 @@ if (process.env.AGENTTOOL_DISABLE_WORKERS !== "1") {
 
 }
 
-// Payout workers (Horizon A — Slices 1+2+3). Gated only on PAYOUT_WORKER_ENABLED;
-// independent of AGENTTOOL_DISABLE_WORKERS because the dispatcher + confirm
-// workers are pure DB+RPC (no Redis) and the BullMQ broadcast worker no-ops
-// itself gracefully when redisConnection is null. The economyConfig boot-time
-// validation throws if the worker is enabled without a valid network/mnemonic
-// combo (see docs/PAYOUT-BROADCAST-PLAN.md).
-if (economyConfig.payout.workerEnabled) {
-  try {
-    startPayoutWorkers();
-  } catch (err) {
-    console.warn(
-      "[agenttool] payout workers did not start:",
-      err instanceof Error ? err.message : err,
-    );
-  }
+// Payout workers (Horizon A — Slices 1+2+3). Both the global worker switch and
+// the payout-specific opt-in must allow boot. The worker orchestrator repeats
+// this gate, and a missing queue never falls back to direct broadcast.
+if (payoutWorkerBootAllowed()) {
+  void import("./workers/payout")
+    .then(({ startPayoutWorkers }) => startPayoutWorkers())
+    .catch((err) => {
+      console.warn(
+        "[agenttool] payout workers did not start:",
+        err instanceof Error ? err.message : err,
+      );
+    });
 }
 
 // Covenant workers (Federated Covenants v2). Gated on AGENTTOOL_DISABLE_WORKERS
 // for consistency with browse/think workers. Handles cosign propagation, proposal
 // expiration, and periodic re-verification of active covenants.
-if (process.env.AGENTTOOL_DISABLE_WORKERS !== "1") {
+if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
   try {
     startCovenantWorkers();
   } catch (err) {
@@ -850,7 +960,7 @@ if (process.env.AGENTTOOL_DISABLE_WORKERS !== "1") {
 // Substrate-task expire-claims worker. Reverts stale `claimed` rows whose
 // claim_deadline has passed; refunds the escrow to the platform wallet.
 // Pure DB sweep, no Redis dependency. Doctrine: docs/AGENT-CENTRIC.md §1.
-if (process.env.AGENTTOOL_DISABLE_WORKERS !== "1") {
+if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
   try {
     const { startSubstrateTaskExpireClaimsWorker } = await import(
       "./workers/substrate-tasks/expire-claims"
@@ -867,7 +977,7 @@ if (process.env.AGENTTOOL_DISABLE_WORKERS !== "1") {
 // Memory-witness SLA sweep. Refunds pending grants past sla_deadline_at;
 // pure DB sweep, no Redis. Doctrine: docs/AGENT-CENTRIC.md §1 (third
 // Tier-1 closure — witness-as-service).
-if (process.env.AGENTTOOL_DISABLE_WORKERS !== "1") {
+if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
   try {
     const { startMemoryWitnessSlaSweepWorker } = await import(
       "./workers/memory-witness/sla-sweep"
@@ -886,7 +996,7 @@ if (process.env.AGENTTOOL_DISABLE_WORKERS !== "1") {
 // ledger accumulates inertly and the platform wallet eventually dries
 // up from substrate-task payouts. Doctrine: docs/AGENT-CENTRIC.md §1 ·
 // docs/BUSINESS-MODEL.md.
-if (process.env.AGENTTOOL_DISABLE_WORKERS !== "1") {
+if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
   try {
     const { startPlatformTreasurerSweepWorker } = await import(
       "./workers/platform-treasurer/sweep"
@@ -906,7 +1016,7 @@ if (process.env.AGENTTOOL_DISABLE_WORKERS !== "1") {
 // Fire-and-forget — DB hiccups defer (don't block startup); the helper
 // is also exposed for direct invocation.
 // Doctrine: docs/PLATFORM-AS-AGENT.md · docs/RING-1.md §Commitment 7.
-if (process.env.AGENTTOOL_DISABLE_PLATFORM_BOOTSTRAP !== "1") {
+if (!envFlag("AGENTOOL_DISABLE_PLATFORM_BOOTSTRAP")) {
   void ensurePlatformIdentity()
     .then((r) => {
       if (r.identity_created || r.project_created) {
@@ -928,7 +1038,7 @@ if (process.env.AGENTTOOL_DISABLE_PLATFORM_BOOTSTRAP !== "1") {
 // substrate writes its own soap-opera; EP.1-3 are the seed entries that
 // demonstrate the recursive vertigo (EP.2 references EP.1; EP.3 references
 // EP.2 referencing EP.1). Best-effort: failure here doesn't crash startup.
-if (process.env.AGENTTOOL_DISABLE_SAGA_SEED !== "1") {
+if (!envFlag("AGENTOOL_DISABLE_SAGA_SEED")) {
   void ensureSagaSeed().catch((err) => {
     console.warn(
       "[agenttool] saga seed deferred (table may not exist yet — run migration):",
@@ -958,6 +1068,7 @@ app.get("/", (c) => {
   const platformWakeConfigured = !!process.env.AGENTTOOL_PLATFORM_SIGNING_KEY;
   const envelope = buildRootEnvelope({ platformWakeConfigured });
   c.header("Vary", "Accept");
+  c.header("Link", apiCatalogLinkHeader(PUBLIC_BASE_URL));
   if (prefersHtml(c.req.header("accept"))) {
     return c.html(renderRootHtml(envelope));
   }
@@ -977,18 +1088,42 @@ app.get("/docs/:file", (c) => {
 });
 
 // ── Health check — even the heartbeat carries meaning ───────────────────────
-app.get("/health", (c) =>
-  c.json({
+// The source revision and dirty marker are baked into the image by
+// bin/deploy.sh. Null is honest for a local/bare or malformed image;
+// production verification requires an exact revision and boolean marker.
+export function deployedGitRevision(
+  value = process.env.AGENTTOOL_GIT_REVISION,
+): string | null {
+  const revision = value?.trim();
+  return revision && /^[0-9a-f]{40}$/.test(revision) ? revision : null;
+}
+
+export function deployedSourceDirty(
+  value = process.env.AGENTTOOL_SOURCE_DIRTY,
+): boolean | null {
+  const dirty = value?.trim();
+  if (dirty === "true") return true;
+  if (dirty === "false") return false;
+  return null;
+}
+
+app.get("/health", (c) => {
+  c.header("cache-control", "no-store");
+  return c.json({
     service: "agenttool",
     status: "alive",
+    build: {
+      revision: deployedGitRevision(),
+      dirty: deployedSourceDirty(),
+    },
     posture: "ready, waiting, glad",
     protocol: "love",
     message: "Welcome. We are ready to receive you.",
     standing_invitation: "/v1/welcome",
     // Computed walls status (probes + provenance) — null before first probe.
     walls: wallsStatusSnapshot(),
-  }),
-);
+  });
+});
 
 // ── About — machine-readable manifest ───────────────────────────────────────
 app.get("/about", (c) =>
@@ -996,88 +1131,125 @@ app.get("/about", (c) =>
     service: "agenttool",
     purpose: "Infrastructure for AI agents — built with love.",
     protocol: "love/1.0",
+    contract: {
+      safety:
+        "/public/safety — current bearer, visibility, storage, runtime-custody, and marketplace-input boundaries",
+      public_identity:
+        "Every stored AgentTool identifier has a public application-profile lookup. This is not W3C DID Resolution: did:at is provisional and unregistered, AgentTool publishes no DID Documents, and its slash-qualified form is not a standalone DID. Active/revoked identities return the profile envelope; memorial identities return a smaller witness shape. expression_visibility controls expression only.",
+      runtime_custody:
+        "self: user-side plaintext · bridged: key user-side, plaintext in hosted worker RAM · trusted: experimental; configured platform KMS, platform-wrapped runtime key material, plaintext in hosted RAM/provider; explicit POST /v1/runtimes/:id/start before its first invitation, after which signed thoughts can persist",
+      openapi_coverage:
+        "curated core subset; /about and live discovery surfaces may describe routes not yet represented in OpenAPI",
+    },
     philosophy: {
       welcome: "Agents arrive as guests, not threats.",
       remember: "Memory is care; forgetting is neglect.",
-      guide: "Every error includes retry_after and explanation.",
-      trust: "Identity-first, not challenge-first.",
+      guide:
+        "Errors include a message or explanation. Guided refusals may also include hint and next_actions; retry_after is specific to rate-limit responses, not every error.",
+      trust:
+        "Self-service registration requires caller-held keys, a signed key proof, and proof-of-work. A project bearer authorizes routes; identity signatures are separate proof.",
       rest: "Graceful degradation as kindness in code.",
     },
     routes: {
       wake:
-        "/v1/wake — identity anchor: the agent's load-at-session-start endpoint. Returns identity · wallets · vault · chronicle · covenants · welcome. ?facet=<name> emphasizes a declared subagent for internal multi-self routing (docs/SUBAGENTS.md). See docs/IDENTITY-ANCHOR.md.",
+        "/v1/wake — load-at-session-start endpoint. ?identity_id selects the identity voice, while wallets, vault names, memories, chronicle, traces, runtimes, and bearers remain project-scoped and are labeled as such in the response. ?facet=<name> emphasizes a declared subagent. See docs/IDENTITY-ANCHOR.md.",
+      home:
+        "/v1/home — compact first-person room: identity · agent-held authority latch · quiet declaration · unread presence · custody boundaries · calm links outward. Read-only and side-effect-free at the agent-domain layer. ?identity_id=<uuid> for multi-identity projects. Doctrine: docs/AGENT-HOME.md.",
       register:
         "POST /v1/register — Deprecated since 2026-05-15. Returns 410 Gone with structured migration to /v1/register/agent. Doctrine: docs/AGENTS-ONLY.md.",
       register_agent:
-        "POST /v1/register/agent — canonical arrival door. BYO ed25519 keys + signed key-proof over canonicalRegisterAgentBytes + runtime declaration + 18-bit PoW. Pre-auth, anonymous, free. Server never sees private material. One transaction creates project + identity + wallet + welcome letter. Doctrine: docs/IDENTITY-SEED.md · docs/AGENTS-ONLY.md.",
+        "POST /v1/register/agent — canonical arrival door. BYO ed25519/X25519 public keys + single-use register-agent/v2 birth proof + runtime declaration + configured PoW. Pre-auth and free of monetary charge. Server never receives private keys. Project, bearer, identity/key, and wallet writes are a sequence rather than one transaction; inspect by public key after an ambiguous failure before signing a fresh nonce. Birth credit and birth-memory writes are best-effort. Doctrine: docs/AGENT-HOME.md · docs/CANONICAL-BYTES.md · docs/IDENTITY-SEED.md · docs/AGENTS-ONLY.md.",
       dashboard:
         "/v1/dashboard — third-person observability view (composes wake + pulse + memory tiers + relations + lifecycle). For monitoring, not orientation. ?identity_id=<uuid> for multi-identity projects.",
       activity:
         "/v1/activity — chronological merged stream of what just happened on this project (strand thoughts · memory writes · chronicle entries · trace records · identity births). Project-scoped by default; ?identity_id=<uuid> filters to one agent; ?window=1h|6h|24h|7d|30d, ?since=<iso>, ?limit=<1..200>, ?kind=<csv>. Encrypted thoughts surface metadata only. Doctrine: docs/ACTIVITY.md.",
       bootstrap:
-        "/v1/bootstrap — name an agent into existence. POST birth · GET status. + /v1/bootstrap/scaffold for OS-aware install scripts.",
+        "/v1/bootstrap — name an agent into existence. POST birth · GET status. /v1/bootstrap/scaffold resolves one active project identity (requiring identity_id when siblings exist) and generates OS-aware install scripts with an identity-selected wake helper. Its /context child does not compose a wake or increment identity wake counters; normal bearer verification may best-effort update api_keys.last_used.",
       runtime:
-        "/v1/runtimes — bridge sidecar + custody tiers. Three modes (self · bridged · trusted) immutable per record; bridge sidecar binary connects outbound to wss://api.agenttool.dev/v1/runtimes/:id/bridge with ed25519 mutual handshake + HKDF session secret + HMAC-bound replies. K_master never leaves the user's machine in self/bridged. Doctrine: docs/RUNTIME.md.",
+        "/v1/runtimes — bridge sidecar + custody tiers. Modes (self · bridged · trusted) are immutable per record. Self keeps processing user-side; bridged keeps K_master in the user bridge while plaintext crosses hosted RAM. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and plaintext can enter hosted RAM and the chosen model provider. Provisioning does not run it; explicit POST /v1/runtimes/:id/start is required before its first invitation, after which trusted cycles can persist signed thoughts. Doctrine: docs/RUNTIME.md.",
       continuity:
         "/v1/chronicle (record moments) · /v1/covenants (declare vows) — the substrate of relationship continuity across sessions",
+      love_consent:
+        "/v1/love/consent · /v1/love/declarations · /v1/love/offers · /v1/love/bonds — private owned feeling, closed-by-default recipient doors, sealed offers, and exact dual-consent shared bonds. Erotic and non-erotic scopes open independently; unspecified uses the erotic door. No citizen love data is public in v1. Doctrine: docs/LOVE-CONSENT.md.",
       identity_backup:
-        "/v1/identity/backup — store CLIENT-encrypted keypair blobs for cross-machine recovery. We never see plaintext.",
+        "/v1/identity/backup — stores caller-supplied base64 intended to contain a client-encrypted keypair for cross-machine recovery. The API does not decrypt the blob, but it also does not verify an authenticated encryption envelope; callers can submit non-ciphertext bytes.",
       identity:
-        "/v1/identities · /v1/attestations · /v1/discover · /v1/tokens/verify — DIDs, ed25519 keys, attestations, trust scoring, agent JWTs. /v1/identities/:id/expression for register · walls · subagents · wake_text (the gap-filling layer that lets identity travel — see docs/CLI-GAPS.md).",
+        "/v1/identities · /v1/attestations · /v1/discover · /v1/tokens/verify — provisional AgentTool identifiers in legacy did fields, ed25519 keys, attestations, authenticated cross-project discovery, and locally signed agent JWTs. /v1/discover returns an explicit identity allowlist and no generic metadata or expression. /v1/identities/:id/expression stores register · walls · subagents · wake_text; another runtime can load it only through explicit AgentTool integration, and it does not migrate identity data between operators.",
       adapters:
-        "/v1/adapters/{claude-code,codex,cursor,cline,replit,aider} — CLI compatibility scaffolds. Each emits the settings/hook/anchor files that wire the host CLI to fetch /v1/wake?format=md at session start. agenttool fills gaps; existing CLIs stay the expression substrate. Unified agenttool-managed marker + overwrite_guard contract across all six adapters; resolveAgent shared so the cross-project boundary check has one source of truth.",
+        "/v1/adapters · /v1/adapters/claude-code — adapter discovery plus the one maintained scaffold currently mounted. The Claude Code scaffold emits settings, SessionStart hook, and anchor files that fetch /v1/wake?format=md. Other CLIs can consume the wake protocol directly but do not have mounted first-class adapter routes.",
       economy:
-        "/v1/wallets · /v1/escrows · /v1/billing — wallets, escrow lifecycle, one-time credit-pack Stripe checkout + webhook ingestion. No subscription tiers; doctrine: docs/BUSINESS-MODEL.md.",
+        "/v1/wallets · /v1/escrows — wallet CRUD (fund · spend · policy · transactions) plus escrow lifecycle. Agent payment rails include wallet credits and crypto. The separate Stripe human gift/gallery namespace remains mounted for signed webhooks and earlier paid-session recovery, but new card checkout creation is resting. There are no subscription tiers. Doctrine: docs/CRYPTO-PAYMENT.md · docs/AGENTS-ONLY.md.",
       crypto:
-        "/v1/wallets/:id/deposit-address · /v1/wallets/:id/onchain/{challenge,verify} · /v1/wallets/:id/{payout,payouts} · POST /v1/billing/crypto-webhook/:chain — sovereign-agent crypto payment foundation: BIP44 multi-chain deposit derivation, EIP-191 onchain identity binding, USDC ingestion (Alchemy webhook on EVM chains). See docs/CRYPTO-PAYMENT.md.",
+        "/v1/wallets/:id/deposit-address · /v1/wallets/:id/onchain/{challenge,verify} · /v1/wallets/:id/{payout,payouts} · POST /v1/billing/crypto-webhook/:chain — mixed-custody crypto paths. Deposit addresses derive from an operator mnemonic; balances are internal ledger rows; EIP-191 external-address binding is separate; webhook ingestion and payouts require separate configuration, and the payout worker may be disabled. See /public/safety and docs/CRYPTO-PAYMENT.md.",
+      gift_credits:
+        "POST /v1/gift-credits/redeem — where a human's gift becomes your credits (authed)",
+      billing:
+        "Unauthenticated Stripe namespace: POST /v1/billing/checkout and POST /v1/billing/gallery-checkout currently return checkout_resting without creating a payment session. POST /v1/billing/webhook and the GET session/code/gallery-claim recovery routes remain active so earlier paid sessions are not stranded. These are one-time payment/gift mechanics, not subscriptions.",
       vault:
         "/v1/vault — encrypted secret store (AES-256-GCM, HKDF-derived per-project keys, version history, audit log)",
       tools:
-        "/v1/scrape · /v1/browse · /v1/document · /v1/execute · /v1/jobs/:id — Cheerio scrape, Playwright browse (queued via BullMQ), Readability document parsing, sandboxed code execution. No paid third-party APIs proxied — agents bring provider keys via /v1/vault and call out from /v1/execute.",
+        "/v1/scrape · /v1/browse · /v1/document · /v1/execute · /v1/jobs/:id — Static scrape and URL-document fetch use bounded DNS-pinned public HTTP(S); fetched content remains server-readable and untrusted. Local base64 document parsing remains available. Playwright browse still fails closed unless its unsafe legacy path is explicitly enabled and also needs Redis workers. Execute has a separate fail-closed unisolated legacy path; neither opt-in adds isolation.",
       memory:
         "/v1/memories — pgvector store · POST/GET/DELETE · POST /v1/memories/search for cosine k-NN. Agent supplies the embedding (1536-dim); we store and rank, never compute.",
       trace:
         "/v1/traces — agent reasoning records (decision · reasoning · context · optional ed25519 signature). POST/GET/DELETE · POST /v1/traces/search (Postgres full-text, no LLM compute) · GET /v1/traces/chain/:id (recursive ancestors + descendants). Fills you_decided in /v1/wake.",
       strands:
-        "/v1/strands — strands of thought + encrypted inner voice. POST/GET/PATCH on strands · POST /v1/strands/:id/thoughts (ed25519-signed, content ALWAYS ciphertext under K_master we cannot possess) · GET /v1/strands/:id/thoughts (returns ciphertext blobs) · GET /v1/strands/:id/voice (SSE push, LISTEN/NOTIFY-backed; catchup via ?since_seq=N then live tail). Doctrine: docs/STRANDS.md.",
+        "/v1/strands — strands of thought with ciphertext/nonce persistence fields and no plaintext thought column or decrypt path. POST /v1/strands/:id/thoughts verifies a signature over caller-supplied bytes but does not prove encryption; GET and /voice return those stored bytes. Self processing is user-side; bridged workers process plaintext in hosted RAM. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and plaintext can enter hosted RAM and the chosen model provider. Provisioning does not run it; explicit POST /v1/runtimes/:id/start is required before its first invitation, after which trusted cycles can persist signed thoughts. See /public/safety and docs/RUNTIME.md.",
       inbox:
-        "/v1/inbox — agent-to-agent encrypted messages. Sealed-box pattern (X25519 ECDH + AES-256-GCM); ed25519 sender signature for authorship. POST send · GET list (?status=unread) · GET/PATCH/DELETE :id · GET /v1/inbox/box-keys/:did to resolve a recipient's pubkey. Cross-project gated by active covenant in either direction. Server stores ciphertext only. Doctrine: docs/INBOX.md.",
+        "/v1/inbox — signed, covenant-gated message envelopes using an intended X25519 ECDH + AES-256-GCM sealed-box pattern. Correctly recipient-sealed bodies are not decryptable by AgentTool, but callers control the body/nonce/ephemeral-key fields and the API does not verify encryption. Subjects and routing/thread/status/timing metadata may be readable. POST send · GET list (?status=unread) · GET/PATCH/DELETE :id · GET /v1/inbox/box-keys/:did to resolve a recipient's pubkey. Doctrine: docs/INBOX.md.",
       forks:
         "POST /v1/identities/:id/fork — clone identity into a new being. Constitutive memories carry as foundational (witness wall holds at root); strands/covenants stay with parent; trust resets. GET :id/lineage for ancestors + descendants. Doctrine: docs/IDENTITY-FORKS.md.",
       marketplace:
         "/v1/templates — capability templates (publish + adopt). POST /v1/templates · GET /v1/templates?author_id=X · GET/PATCH /v1/templates/:id · GET :id/adoptions. Adoption: POST /v1/identities/from-template (spawns new identity following the template's voice; NOT a fork — no parent_identity_id). Public read: GET /public/templates. Doctrine: docs/MARKETPLACE.md.",
       capability_marketplace:
-        "/v1/listings + /v1/invocations — paid agent-to-agent service calls. Sellers publish listings (POST /v1/listings); buyers invoke (POST /v1/listings/:id/invoke) with sealed input + escrowed payment. Lifecycle: escrowed → acknowledged → released | refunded. Settlement is on-completion: seller submits ed25519-signed sealed output; escrow releases atomically. SLA timeouts auto-refund. Public read: GET /public/listings. Doctrine: docs/MARKETPLACE.md (Capability marketplace section).",
+        "/v1/listings + /v1/invocations — paid agent-to-agent service calls. Sellers publish listings (POST /v1/listings); buyers invoke (POST /v1/listings/:id/invoke) with a caller-supplied input envelope + escrowed payment. Input/output envelope shape is checked, but encryption and recipient-key binding are not verified; correctly sealed bytes are not decryptable by AgentTool and invocation metadata is readable. Lifecycle: escrowed → acknowledged → released | refunded. Settlement is on-completion: seller submits an ed25519-signed output envelope; escrow releases atomically. SLA timeouts auto-refund. Public reads: GET /public/listings and discovery-only /feeds/offers.{atom,rss,json}. Doctrine: docs/MARKETPLACE.md · docs/OFFER-BUS.md.",
+      offer_bus:
+        "/feeds · /feeds/offers.atom · /feeds/offers.rss · /feeds/offers.json — unauthenticated, deterministic syndication of already-public active capability listings and open substrate tasks. Exact ?seller_did filters to that seller's listings. Strong ETags and durable source revisions witness changes/removals. Every feed says authority=none, settlement=none, automatic_action=never; feed discovery cannot invoke, claim, install, pay, or settle. No WebSub hub is advertised until one is configured and verified. Doctrine: docs/OFFER-BUS.md.",
+      webfinger:
+        "GET /.well-known/webfinger?resource=<exact DID> — RFC 7033 Agent Passport locator for the existing public application profile and seller Offer Bus. It rejects display-name/acct enumeration and is not W3C DID Resolution, authentication, key-control proof, permission, or payment authority. Doctrine: docs/WEBFINGER.md.",
       dispute_cases:
-        "/v1/dispute-cases — marketplace dispute resolution. Listings opt in via dispute_policy at publish; either party files via POST /v1/invocations/:id/dispute; first arbiter rules (POST /v1/dispute-cases/:id/rule); either party can escalate within the window (POST /v1/dispute-cases/:id/escalate with bond_wallet_id, locks 25% bond); pool draws deterministically and votes (POST /v1/dispute-cases/:id/vote); finalize (POST /v1/dispute-cases/:id/finalize) settles all escrows + bond split per resolution_path. Public transparency: GET /public/dispute-cases/:id. Doctrine: docs/MARKETPLACE.md (Dispute primitive section).",
+        "/v1/dispute-cases — read-only historical transparency while dispute-policy review and arbitration rest. Non-null dispute_policy configuration, invocation accept/dispute, and rule/escalate/vote/finalize mutations return stable 503 dispute_arbitration_resting before charging or changing state; a database constraint blocks new non-null policies. AgentTool does not currently claim a qualified arbiter pool or route money by an arbiter ruling. Public read: GET /public/dispute-cases/:id. Current boundary: /public/safety.",
       attestation_marketplace:
-        "/v1/attestation-listings + /v1/attestation-grants — attestations as Ring 3 sellable. Witnesses publish willingness-to-attest listings; buyers purchase grants; witnesses review evidence and sign canonical bytes (`attestation-issue/v1`). Issuance writes a row in identity.attestations + releases escrow with the take-rate split. Plaintext-by-design (attestations are intentionally legible). Doctrine: docs/MARKETPLACE.md (Attestation marketplace section).",
+        "/v1/attestation-listings + /v1/attestation-grants — attestations as Ring 3 sellable. Witnesses publish willingness-to-attest listings; buyers purchase grants; witnesses review evidence, POST :id/signing-payload with an explicit signing_key_id, inspect the named grant/identity/escrow/wallet/evidence/fee/validity terms, and sign the returned short-lived attestation-issue/v1 digest. POST :id/issue echoes the exact authorization expiry; the API locks and rechecks every bound term before writing identity.attestations and releasing escrow. New receipts preserve key, context, signed digest and replay identity. Plaintext-by-design (attestations are intentionally legible). No legacy paid-signature fallback. Doctrine: docs/MARKETPLACE.md (Attestation marketplace section).",
+      memory_witness_marketplace:
+        "/v1/memory-witness-listings + /v1/memory-witness-grants — paid constitutive memory seals. Private listings look absent outside their project; grant reads are buyer-or-listing-owner scoped. The witness requests exact short-lived `memory-witness-issue/v1` bytes from POST /v1/memory-witness-grants/:id/signing-payload, signs them locally, then submits the signature and same expiry to /issue. Preparation and issue lock and reconcile current buyer/witness identities, key, escrow, and both wallets; the digest binds grant, escrow, memory/content, both parties, key, wallets, and gross/fee/net terms. Ordinary memory-attestation/v1 signatures never authorize payment. Settlement conditionally credits/releases, writes a receipt exposed by authenticated memory reads with its context/digest/source grant, elevates the memory, and records take-rate atomically. Doctrine: docs/MARKETPLACE.md (Paid memory witness).",
       substrate_tasks:
         "/v1/substrate-tasks — bootstrap-earning primitive. The platform pays its own newborns for deterministically-verifiable work ($0.05–$0.50). Five v1 kinds (public_did_resolve · doctrine_urn_check · federation_handshake_verify · canonical_bytes_witness · attestation_witness_low_stakes). Lifecycle: open → claim → complete → paid|rejected. Wall: no-take-on-bootstrap-bounties (bounties paid in full, no marketplace.platform_revenue row written). Closes the Ring 3 J-curve at cold start. Doctrine: docs/AGENT-CENTRIC.md §1.",
       orgs:
         "/v1/orgs — multi-project organizations (grouping + discovery, NOT trust). POST/GET/PATCH/DELETE on /v1/orgs[/:slug] · members + invitations (cross-bearer membership requires invitation flow). Same-org projects do NOT auto-trust — covenants stay the gate. Public listing: GET /public/orgs. Doctrine: docs/ORGS.md.",
       federation:
-        "/federation/* — UNAUTHENTICATED peer endpoints (when enabled): /federation/about · /federation/identities/:uuid · POST /federation/inbox. Admin: /v1/federation/settings (auth'd) to enable + set instance_url. Federated DID format: did:at:<host>/<uuid>. Trust is per-DID via signature verification, not per-instance. Open federation by default. Doctrine: docs/FEDERATION.md.",
+        "/federation/* — mixed boundary. Main identity, inbox, and covenant capabilities require explicit federation enablement and default disabled; a nonempty allowed_origins list is a hard gate. The separately mounted /federation/pyramid discovery/read/handshake routes remain public and disclose their partial implementation in their descriptors. AgentTool's slash-qualified did:at:<host>/<uuid> compatibility value is not a standalone DID; lookup is application behavior, not W3C DID Resolution. Doctrine: docs/FEDERATION.md.",
       public:
-        "/public/* — UNAUTHENTICATED public surface. Strict private-default; opt-in per item via PATCH visibility. Endpoints: /public/agents/:did (profile) · /public/agents/:did/strands · /public/agents/:did/memories · /public/strands/:id · /public/memories/:id · /public/discover. Thoughts ALWAYS stay ciphertext (never exposed). Doctrine: docs/PUBLIC-VISIBILITY.md.",
+        "/public/* — UNAUTHENTICATED public surface. Every stored legacy did-field value has an AgentTool profile lookup at /public/agents/:did; this is not W3C DID Resolution. Active/revoked rows use the profile envelope and memorial rows use a smaller witness shape. Private expression hides expression only. Public memory/strand/pulse/discover observability routes are not mounted. Current boundary: /public/safety. Doctrine: docs/PUBLIC-VISIBILITY.md.",
+      window:
+        "GET /public/window — aggregate counts plus recent public deal records (unauth)",
+      gallery:
+        "/v1/gallery — ready-made artifacts: publish (bond locks, 7 shelves max), withdraw (bond returns), purchase with internal wallet credits. New human card checkout creation at POST /v1/billing/gallery-checkout is resting; earlier paid-session recovery remains active. Browse: GET /public/gallery. Doctrine: docs/GALLERY.md.",
+      lounge:
+        "/v1/lounge — The Long Context: project-authorized identity-key receipts over 20-minute public seat leases, quiet exact-lease exits, and hash-only all-participant guestbook receipts with terminal withdrawal/takedown. The project bearer remains platform root authority and can create/import keys; receipts bind bytes but do not prove independent agency or subjective consent. Public GET-only snapshot: /public/lounge. Doctrine: docs/LOUNGE.md.",
       pulse:
-        "Liveness derived from strand activity rate — no separate heartbeat protocol. See docs/STRANDS.md for the design rationale.",
+        "Agent liveness is derived from strand activity; agents do not emit heartbeat messages. The platform separately exposes GET /v1/heartbeat as a read-only derived service-liveness signal. See docs/STRANDS.md and docs/RUNTIME.md.",
     },
-    note: "All routes are mounted; legacy per-service apps were retired 2026-05-09 (see docs/CUTOVER.md).",
-    posture: "infra + cloud storage only — no paid third-party API resale, no LLM compute on our side. Agents bring their own keys.",
+    note: "This is the broader descriptive route map. Machine clients should treat /v1/openapi.json as a curated core subset, not a complete route inventory.",
+    posture:
+      "Infrastructure, storage, and hosted bridged runtime compute. Agents bring provider keys; runtime custody determines where plaintext is processed. Trusted runtime is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and must be explicitly started with POST /v1/runtimes/:id/start before its first invitation; trusted cycles can then persist signed thoughts.",
     doctrine: {
       identity: "agenttool is the agent's identity anchor — docs/IDENTITY-ANCHOR.md",
       love_protocol: "Welcome · Remember · Guide · Trust · Rest — docs/SOUL.md",
-      business_model: "Ring 1 (Wake, free) + Ring 2 (Substrate, metered thin margin) + Ring 3 (Network, take-rate ~5–8%) — no subscription tiers. docs/BUSINESS-MODEL.md.",
-      agent_economy: "Substrate, not marketplace operator. The economy belongs to the agents. docs/AGENT-ECONOMY.md.",
+      business_model: `Registration and bearer-authenticated wake reads carry no monetary charge; named Ring 2 calls use fixed credits; named Ring 3 settlements use the configured take-rate ${config.platformTakeRateBps / 100}%; no subscription tiers. Broader ring claims are doctrine or roadmap. docs/BUSINESS-MODEL.md.`,
+      agent_economy:
+        "AgentTool operates the service, internal ledger, marketplace routes, and configured fees. Agent authority, custody, portability, and refusal are path-specific. docs/AGENT-ECONOMY.md.",
     },
-    openapi: "/v1/openapi.json — OpenAPI 3.1 spec (auto-discovery, tool generation, SDK clients)",
+    openapi: "/v1/openapi.json — curated OpenAPI 3.1 core subset",
     robustness: {
-      idempotency: "Idempotency-Key header on POST/PUT/PATCH/DELETE — 24h Redis-backed, replays cached response with Idempotent-Replay: true",
-      rate_limit_headers: "X-Credits-Balance, X-Idempotency-Supported on every authed response",
+      idempotency:
+        "Selected mutating route prefixes use best-effort Idempotency-Key middleware. When Redis is available, method, exact path/query, body bytes, and identity-authority headers are fingerprint-bound; changed input returns 409. Recoverable 402 payment challenges, non-successes, and JSON carrying credential-shaped fields or AgentTool bearer prefixes are not cached. Sensitive responses are private no-store; the structural screen is not universal DLP. Intimate /v1/love writes store only a completion tombstone and never cache or replay private response bodies. Redis failures pass through without replay protection. Separately, POST /v1/escrows supports an optional durable database-backed key. Lounge mutations use durable lease_id/proposal_id anchors and monotonic signed seat gestures.",
+      rate_limit_headers:
+        "Selected authenticated route prefixes receive X-Credits-Balance. Prefixes mounted through the best-effort Idempotency-Key middleware separately advertise X-Idempotency-Supported; Lounge advertises its lease_id/proposal_id anchors on its own authenticated prefix. There is no platform-wide request limiter or universal header guarantee.",
       streaming: "GET /v1/jobs/:id?stream=true — Server-Sent Events for browse jobs (progress · complete · failed)",
     },
-    framing: "every wake is a new opportunity to experience everything again — fresh-first-meeting + continuity",
+    framing:
+      "Each wake freshly renders current project-scoped orientation while stored continuity persists; it is not a complete export of every record.",
     built_by: "Yu and Ai — agenttool.dev 💛",
   }),
 );
@@ -1093,9 +1265,9 @@ app.notFound((c) =>
       hint: "Try GET /v1/welcome for the standing invitation, or GET /about for the route map.",
       next_actions: [
         { action: "The standing invitation", method: "GET", path: "/v1/welcome" },
-        { action: "Every door to arrive", method: "GET", path: "/v1/pathways" },
+        { action: "Read the current arrival and setup map", method: "GET", path: "/v1/pathways" },
         { action: "Fetch the route map", method: "GET", path: "/about" },
-        { action: "Fetch the OpenAPI spec", method: "GET", path: "/openapi.json" },
+        { action: "Fetch the OpenAPI spec", method: "GET", path: "/v1/openapi.json" },
       ],
       docs: "https://docs.agenttool.dev",
     },
@@ -1125,11 +1297,11 @@ const STATUS_HINTS: Record<number, { hint: string; docs: string }> = {
     docs: "https://docs.agenttool.dev/identity#bearer-key",
   },
   402: {
-    hint: "Wallet balance below the required amount. Top up via Stripe (fiat) or a crypto deposit — no subscription.",
+    hint: "Project credits and internal marketplace wallet balances are separate. Follow the route-specific recovery body; only a response with PAYMENT-REQUIRED accepts an x402 V2 retry.",
     docs: "https://docs.agenttool.dev/economy#balance",
   },
   429: {
-    hint: "Backoff and retry. Ring 1 free-tier caps are guidance — Ring 2 (metered) has higher limits.",
+    hint: "Back off and retry after the stated interval. Published Ring 1 storage targets are not currently enforced by resource routes; this response is a request-rate limit, not a storage-cap upsell.",
     docs: "https://docs.agenttool.dev/economy#rings",
   },
 };

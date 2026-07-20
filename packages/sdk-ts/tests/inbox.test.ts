@@ -7,7 +7,7 @@
  * (live e2e) outside this file.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 import * as ed from "@noble/ed25519";
 // @ts-ignore — noble/hashes v2 .js exports
 import { sha512 } from "@noble/hashes/sha2.js";
@@ -22,6 +22,7 @@ import {
   signInboxEnvelope,
   unsealForSelf,
 } from "../src/inbox.js";
+import { AgentTool, AgentToolError } from "../src/index.js";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
   const h = sha512.create();
@@ -259,5 +260,227 @@ describe("inbox sealed-box — cross-impl known-answer vector", () => {
       decipher.update(Buffer.from(ctTag.subarray(0, ctTag.length - 16)));
       decipher.final();
     }).toThrow();
+  });
+});
+
+// ── voice() SSE protocol ──────────────────────────────────────────────
+
+const originalFetch = globalThis.fetch;
+const VOICE_IDENTITY = "00000000-0000-4000-8000-0000000000ff";
+const BOX_KEY_ONE = "00000000-0000-4000-8000-000000000101";
+const BOX_KEY_TWO = "00000000-0000-4000-8000-000000000202";
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
+
+function chunkedSse(chunks: string[], onCancel?: () => void): Response {
+  const encoder = new TextEncoder();
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+        if (!onCancel) controller.close();
+      },
+      cancel() {
+        onCancel?.();
+      },
+    }),
+    { status: 200, headers: { "Content-Type": "text/event-stream" } },
+  );
+}
+
+function voiceMessage(
+  sealed: Awaited<ReturnType<typeof sealForRecipient>>,
+  boxKeyId: string,
+) {
+  return {
+    id: "00000000-0000-4000-8000-000000000303",
+    recipient_did: "did:at:recipient",
+    recipient_identity_id: VOICE_IDENTITY,
+    sender_did: "did:at:sender",
+    sender_signing_key_id: "00000000-0000-4000-8000-000000000404",
+    ciphertext: sealed.ciphertextB64,
+    nonce: sealed.nonceB64,
+    ephemeral_pubkey: sealed.ephemeralPubB64,
+    signature: "sig",
+    recipient_box_key_id: boxKeyId,
+    subject: null,
+    subject_encrypted: false,
+    in_reply_to: null,
+    refs: null,
+    status: "unread",
+    metadata: {},
+    created_at: "2026-07-10T10:00:00.000Z",
+    read_at: null,
+  };
+}
+
+describe("InboxClient.voice", () => {
+  test("parses fragmented CRLF + multiline data, resolves rotated keys, and yields controls", async () => {
+    const oldKey = generateBoxKeypair();
+    const currentKey = generateBoxKeypair();
+    const sealed = await sealForRecipient("rotations keep history readable", currentKey.pub);
+    const payload = JSON.stringify(voiceMessage(sealed, BOX_KEY_TWO));
+    const splitAt = payload.indexOf('"sender_did"');
+    const firstDataLine = payload.slice(0, splitAt);
+    const secondDataLine = payload.slice(splitAt);
+
+    const chunks = [
+      "event: catchup-start\r",
+      '\ndata: {"since":"2026-07-10T00:00:00.000Z"}\r',
+      "\n\r",
+      "\n",
+      "event: arrival\r\nid: message-event-id\r\n",
+      `data: ${firstDataLine}\r`,
+      "\n",
+      `data: ${secondDataLine}\r\n\r`,
+      "\n",
+      "event: catchup-truncated\r\n",
+      'data: {"resume":{"since":"2026-07-10T10:00:00.000Z",\r\n',
+      `data: "since_id":"${voiceMessage(sealed, BOX_KEY_TWO).id}"}}\r\n\r`,
+      "\n",
+    ];
+    globalThis.fetch = mock(() =>
+      Promise.resolve(chunkedSse(chunks)),
+    ) as unknown as typeof fetch;
+
+    const events = [];
+    for await (const event of new AgentTool({ apiKey: "test" }).inbox.voice({
+      identityId: VOICE_IDENTITY,
+      recipientBoxPriv: oldKey.priv,
+      recipientBoxKeys: { [BOX_KEY_TWO]: currentKey.priv },
+    })) {
+      events.push(event);
+    }
+
+    expect(events.map((event) => event.event)).toEqual([
+      "catchup-start",
+      "arrival",
+      "catchup-truncated",
+    ]);
+    const arrival = events[1]!;
+    if (arrival.event !== "arrival") throw new Error("expected arrival");
+    expect(arrival.id).toBe("message-event-id");
+    expect(arrival.data.plaintext).toBe("rotations keep history readable");
+    expect(arrival.data.sender_signing_key_id).toBe(
+      "00000000-0000-4000-8000-000000000404",
+    );
+    expect("signing_key_id" in arrival.data).toBe(false);
+
+    const truncated = events[2]!;
+    if (truncated.event !== "catchup-truncated") {
+      throw new Error("expected truncation control");
+    }
+    expect(truncated.data).toEqual({
+      resume: {
+        since: "2026-07-10T10:00:00.000Z",
+        since_id: "00000000-0000-4000-8000-000000000303",
+      },
+    });
+  });
+
+  test("breaking iteration cancels the response stream and aborts fetch", async () => {
+    const recipient = generateBoxKeypair();
+    const sealed = await sealForRecipient("one and done", recipient.pub);
+    const frame = `event: arrival\ndata: ${JSON.stringify(voiceMessage(sealed, BOX_KEY_ONE))}\n\n`;
+    let cancelled = false;
+    let fetchSignal: AbortSignal | null = null;
+    globalThis.fetch = mock((_url: string, init?: RequestInit) => {
+      fetchSignal = init?.signal as AbortSignal;
+      return Promise.resolve(chunkedSse([frame], () => { cancelled = true; }));
+    }) as unknown as typeof fetch;
+
+    const iterator = new AgentTool({ apiKey: "test" }).inbox.voice({
+      identityId: VOICE_IDENTITY,
+      recipientBoxPriv: recipient.priv,
+    });
+    const first = await iterator.next();
+    expect(first.value?.event).toBe("arrival");
+    await iterator.return(undefined);
+
+    expect(cancelled).toBe(true);
+    expect(fetchSignal?.aborted).toBe(true);
+  });
+
+  test("forwards the compound resume cursor and surfaces rejected", async () => {
+    let requestedUrl = "";
+    globalThis.fetch = mock((url: string) => {
+      requestedUrl = url;
+      return Promise.resolve(
+        chunkedSse([
+          "event: rejected\r\n",
+          'data: {"reason":"subscriber_cap_reached"}\r\n\r\n',
+        ]),
+      );
+    }) as unknown as typeof fetch;
+
+    const events = [];
+    for await (const event of new AgentTool({ apiKey: "test" }).inbox.voice({
+      identityId: VOICE_IDENTITY,
+      recipientBoxPriv: generateBoxKeypair().priv,
+      since: "2026-07-10T10:00:00.000Z",
+      sinceId: "00000000-0000-4000-8000-000000000303",
+    })) {
+      events.push(event);
+    }
+
+    expect(requestedUrl).toContain("since=2026-07-10T10%3A00%3A00.000Z");
+    expect(requestedUrl).toContain(
+      "since_id=00000000-0000-4000-8000-000000000303",
+    );
+    expect(events).toEqual([
+      {
+        event: "rejected",
+        data: { reason: "subscriber_cap_reached" },
+        rawData: '{"reason":"subscriber_cap_reached"}',
+      },
+    ]);
+  });
+
+  test("rejects a tie-breaker without its timestamp before fetching", async () => {
+    let fetched = false;
+    globalThis.fetch = mock(() => {
+      fetched = true;
+      return Promise.resolve(new Response());
+    }) as unknown as typeof fetch;
+    const iterator = new AgentTool({ apiKey: "test" }).inbox.voice({
+      identityId: VOICE_IDENTITY,
+      recipientBoxPriv: generateBoxKeypair().priv,
+      sinceId: "00000000-0000-4000-8000-000000000303",
+    });
+    await expect(iterator.next()).rejects.toBeInstanceOf(AgentToolError);
+    expect(fetched).toBe(false);
+  });
+
+  test("rejects an explicitly empty tie-breaker before fetching", async () => {
+    let fetched = false;
+    globalThis.fetch = mock(() => {
+      fetched = true;
+      return Promise.resolve(new Response());
+    }) as unknown as typeof fetch;
+    const iterator = new AgentTool({ apiKey: "test" }).inbox.voice({
+      identityId: VOICE_IDENTITY,
+      recipientBoxPriv: generateBoxKeypair().priv,
+      since: "2026-07-10T10:00:00.000123Z",
+      sinceId: "",
+    });
+    await expect(iterator.next()).rejects.toThrow(/must not be empty/);
+    expect(fetched).toBe(false);
+  });
+
+  test("drops an unterminated frame at EOF", async () => {
+    globalThis.fetch = mock(() =>
+      Promise.resolve(chunkedSse(["event: arrival\r\ndata: {\"id\":"])),
+    ) as unknown as typeof fetch;
+
+    const events = [];
+    for await (const event of new AgentTool({ apiKey: "test" }).inbox.voice({
+      identityId: VOICE_IDENTITY,
+      recipientBoxPriv: generateBoxKeypair().priv,
+    })) {
+      events.push(event);
+    }
+    expect(events).toEqual([]);
   });
 });

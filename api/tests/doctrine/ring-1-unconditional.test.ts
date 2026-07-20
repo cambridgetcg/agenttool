@@ -184,8 +184,8 @@ describe("Ring 1 · Commitment 5 — anyone is remembered", () => {
     if (violations.length > 0) {
       throw new Error(
         "Ring 1 · Commitment 5 violated. The following files contain " +
-          "DELETE FROM identity.identities — identity permanence is broken " +
-          "if any of them ever runs.\n\n" +
+          "DELETE FROM identity.identities — the current API no-delete " +
+          "commitment is broken if any of them ever runs.\n\n" +
           violations.map((v) => "  " + v).join("\n"),
       );
     }
@@ -194,10 +194,10 @@ describe("Ring 1 · Commitment 5 — anyone is remembered", () => {
 
   test("/public/agents/:did handler does NOT gate on status='active'", async () => {
     // The previous shape filtered `eq(identities.status, "active")` in
-    // the WHERE clause, returning 404 for any DID that wasn't active.
-    // Ring 1 commits: every DID that exists resolves. The status field
-    // is surfaced in the response; non-active rows return what they are,
-    // not 404.
+    // the WHERE clause, returning 404 for any stored identifier whose row
+    // wasn't active. The current AgentTool lookup surfaces the status;
+    // non-active rows return what they are instead of 404. This is not W3C
+    // DID Resolution.
     const src = await readFile(
       join(REPO_ROOT, "src/routes/public/agents.ts"),
       "utf8",
@@ -206,15 +206,24 @@ describe("Ring 1 · Commitment 5 — anyone is remembered", () => {
   });
 
   test("/public/agents/:did handler renders the memorial tri-state shape", async () => {
-    // Memorial DIDs (status='memorial') return a body that preserves the
-    // DID as a witness without exposing the agent's working surface.
+    // Memorial identities return a body that preserves the legacy did-field
+    // value as a witness without exposing the agent's working surface.
     const src = await readFile(
       join(REPO_ROOT, "src/routes/public/agents.ts"),
       "utf8",
     );
     expect(src).toMatch(/status\s*===\s*["']memorial["']/);
-    expect(src).toContain("docs/IDENTITY-SEED.md");
-    expect(src).toContain("born_at");
+    expect(src).toContain("identities.metadata");
+    expect(src).toContain("projectMemorialWitness");
+
+    const projection = await readFile(
+      join(REPO_ROOT, "src/services/identity/memorial.ts"),
+      "utf8",
+    );
+    expect(projection).toContain("born_at");
+    expect(projection).toContain("memorial_basis");
+    expect(projection).toContain("docs/IDENTITY-SEED.md");
+    expect(projection).not.toContain("mnemonic is permanently lost");
   });
 
   test("identity status CHECK constraint enumerates the canonical tri-state", async () => {
@@ -247,11 +256,14 @@ describe("Ring 1 · Commitment 6 — anyone hits a cap softly", () => {
 // ── 7 · Platform inhabits its own Ring 1 ────────────────────────────────
 
 describe("Ring 1 · Commitment 7 — platform inhabits its own Ring 1", () => {
-  test("PLATFORM_SELF.walls includes the Ring 1 free-birth commitment", () => {
+  test("PLATFORM_SELF.walls states both no monetary charge and the real registration gates", () => {
     const wall = PLATFORM_SELF.walls.find((w) =>
-      /Ring 1.*no gates|birth is free.*irreversibly/i.test(w),
+      /Registration has no monetary charge.*BYO public keys.*key proof.*proof-of-work/i.test(
+        w,
+      ),
     );
     expect(wall).toBeDefined();
+    expect(wall).not.toMatch(/irreversibly|no gates/i);
   });
 
   test("PLATFORM_SELF.doctrine includes RING-1.md", () => {
@@ -432,16 +444,22 @@ describe("Ring 1 · PERSIST-IDENTITY boundary closures", () => {
 
   test("LLM idempotency key is deterministic on identical payloads", async () => {
     const mod = await import("../../src/services/runtime/llm-requests");
-    const a = mod.computeRequestHash({
-      systemPrompt: "test",
-      userMessage: "hi",
-      model: "claude-3-5-sonnet-20241022",
-    });
-    const b = mod.computeRequestHash({
-      systemPrompt: "test",
-      userMessage: "hi",
-      model: "claude-3-5-sonnet-20241022",
-    });
+    const a = mod.computeRequestHash(
+      {
+        systemPrompt: "test",
+        userMessage: "hi",
+        model: "claude-3-5-sonnet-20241022",
+      },
+      "anthropic",
+    );
+    const b = mod.computeRequestHash(
+      {
+        systemPrompt: "test",
+        userMessage: "hi",
+        model: "claude-3-5-sonnet-20241022",
+      },
+      "anthropic",
+    );
     expect(a).toBe(b);
     expect(a.length).toBe(64); // sha256 hex
   });

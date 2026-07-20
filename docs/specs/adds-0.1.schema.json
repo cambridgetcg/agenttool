@@ -1,0 +1,408 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wake.org/schemas/adds-0.1.json",
+  "title": "ADDS 0.1 Working Draft",
+  "description": "Signed control documents for the Agent Data Distribution & Storage protocol. Raw ciphertext Blocks are byte strings and are therefore outside this JSON Schema.",
+  "oneOf": [
+    { "$ref": "#/$defs/manifest" },
+    { "$ref": "#/$defs/grant" },
+    { "$ref": "#/$defs/providerRecord" },
+    { "$ref": "#/$defs/head" },
+    { "$ref": "#/$defs/receipt" }
+  ],
+  "$defs": {
+    "version": {
+      "type": "string",
+      "const": "0.1"
+    },
+    "cid": {
+      "type": "string",
+      "pattern": "^b[a-z2-7]+$",
+      "minLength": 59,
+      "maxLength": 59,
+      "description": "Canonical base32lower CIDv1. ADDS further requires raw (0x55), sha2-256 (0x12), a 32-byte digest, minimal varints, and no trailing bytes; JSON Schema cannot enforce the decoded binary form."
+    },
+    "uint53": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "uint32": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "epochSeconds": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Whole Unix epoch seconds. Fractional seconds are not permitted."
+    },
+    "base64url": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "description": "Canonical RFC 4648 base64url without padding. Strict decode-and-re-encode equality is required."
+    },
+    "bytes32": {
+      "allOf": [
+        { "$ref": "#/$defs/base64url" },
+        { "minLength": 43, "maxLength": 43 }
+      ]
+    },
+    "nonce12": {
+      "allOf": [
+        { "$ref": "#/$defs/base64url" },
+        { "minLength": 16, "maxLength": 16 }
+      ]
+    },
+    "signature64": {
+      "allOf": [
+        { "$ref": "#/$defs/base64url" },
+        { "minLength": 86, "maxLength": 86 }
+      ]
+    },
+    "principal": {
+      "type": "object",
+      "required": ["id", "ed25519_public_key"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Required generic DID, URI, or application identifier. Trust in its binding to the key is external to ADDS."
+        },
+        "ed25519_public_key": { "$ref": "#/$defs/bytes32" }
+      },
+      "additionalProperties": false
+    },
+    "signature": {
+      "type": "object",
+      "required": ["algorithm", "public_key", "value"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "public_key": { "$ref": "#/$defs/bytes32" },
+        "value": { "$ref": "#/$defs/signature64" }
+      },
+      "additionalProperties": false
+    },
+    "extensions": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:" },
+      "additionalProperties": true,
+      "description": "Extension namespaces keyed by URI. Every value MUST still be valid I-JSON."
+    },
+    "chunk": {
+      "type": "object",
+      "required": ["index", "cid", "nonce", "plaintext_size", "ciphertext_size"],
+      "properties": {
+        "index": { "$ref": "#/$defs/uint32" },
+        "cid": { "$ref": "#/$defs/cid" },
+        "nonce": { "$ref": "#/$defs/nonce12" },
+        "plaintext_size": { "$ref": "#/$defs/uint53" },
+        "ciphertext_size": {
+          "allOf": [
+            { "$ref": "#/$defs/uint53" },
+            { "minimum": 16 }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "manifest": {
+      "type": "object",
+      "required": [
+        "adds_version",
+        "kind",
+        "object_id",
+        "publisher",
+        "created_at",
+        "plaintext",
+        "encryption",
+        "chunks",
+        "signature"
+      ],
+      "properties": {
+        "adds_version": { "$ref": "#/$defs/version" },
+        "kind": { "const": "manifest" },
+        "object_id": { "type": "string", "minLength": 1 },
+        "publisher": { "$ref": "#/$defs/principal" },
+        "created_at": { "$ref": "#/$defs/epochSeconds" },
+        "media_type": { "type": "string", "minLength": 1 },
+        "schema": { "type": "string", "minLength": 1 },
+        "plaintext": {
+          "type": "object",
+          "required": ["size"],
+          "properties": {
+            "size": { "$ref": "#/$defs/uint53" }
+          },
+          "additionalProperties": false
+        },
+        "encryption": {
+          "type": "object",
+          "required": ["algorithm", "key_id", "chunk_size", "block_aad", "aad_context"],
+          "properties": {
+            "algorithm": { "const": "AES-256-GCM" },
+            "key_id": { "type": "string", "minLength": 1 },
+            "block_aad": { "const": "adds-block/v1" },
+            "chunk_size": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16777216
+            },
+            "aad_context": { "$ref": "#/$defs/bytes32" }
+          },
+          "additionalProperties": false
+        },
+        "chunks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/chunk" },
+          "minItems": 1,
+          "maxItems": 1048576
+        },
+        "provenance": {
+          "type": "object",
+          "properties": {
+            "parents": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/cid" },
+              "uniqueItems": true
+            },
+            "transformation": { "type": "string", "minLength": 1 },
+            "generated_by": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "signature": { "$ref": "#/$defs/signature" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "additionalProperties": false
+    },
+    "grant": {
+      "type": "object",
+      "required": [
+        "adds_version",
+        "kind",
+        "grant_id",
+        "manifest_cid",
+        "issuer",
+        "audience",
+        "audience_x25519_public_key",
+        "audience_x25519_key_id",
+        "rights",
+        "issued_at",
+        "expires_at",
+        "key_wrap",
+        "signature"
+      ],
+      "properties": {
+        "adds_version": { "$ref": "#/$defs/version" },
+        "kind": { "const": "grant" },
+        "grant_id": { "type": "string", "minLength": 1 },
+        "manifest_cid": { "$ref": "#/$defs/cid" },
+        "issuer": { "$ref": "#/$defs/principal" },
+        "audience": { "type": "string", "minLength": 1 },
+        "audience_x25519_public_key": { "$ref": "#/$defs/bytes32" },
+        "audience_x25519_key_id": {
+          "type": "string",
+          "pattern": "^sha256:[A-Za-z0-9_-]{43}$",
+          "description": "Deterministic sha256:<base64url-no-pad> fingerprint of the raw 32-byte audience X25519 public key."
+        },
+        "rights": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["read", "derive", "replicate", "delegate"]
+          },
+          "minItems": 1,
+          "contains": { "const": "read" },
+          "minContains": 1,
+          "maxContains": 1,
+          "uniqueItems": true
+        },
+        "issued_at": { "$ref": "#/$defs/epochSeconds" },
+        "not_before": { "$ref": "#/$defs/epochSeconds" },
+        "expires_at": { "$ref": "#/$defs/epochSeconds" },
+        "parent_grant": { "$ref": "#/$defs/cid" },
+        "scope": {
+          "type": "object",
+          "properties": {
+            "task_id": { "type": "string", "minLength": 1 },
+            "purpose": { "type": "string", "minLength": 1 }
+          },
+          "minProperties": 1,
+          "additionalProperties": false
+        },
+        "key_wrap": {
+          "type": "object",
+          "required": ["algorithm", "ephemeral_public_key", "nonce", "ciphertext"],
+          "properties": {
+            "algorithm": { "const": "X25519-HKDF-SHA256-AES-256-GCM" },
+            "ephemeral_public_key": { "$ref": "#/$defs/bytes32" },
+            "nonce": { "$ref": "#/$defs/nonce12" },
+            "ciphertext": {
+              "allOf": [
+                { "$ref": "#/$defs/base64url" },
+                { "minLength": 64, "maxLength": 64 }
+              ],
+              "description": "AES-GCM encryption of the 32-byte content key with the 16-byte tag appended; exactly 48 bytes before base64url encoding."
+            }
+          },
+          "additionalProperties": false
+        },
+        "signature": { "$ref": "#/$defs/signature" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "additionalProperties": false
+    },
+    "inventoryItem": {
+      "type": "object",
+      "required": ["cid", "size", "role"],
+      "properties": {
+        "cid": { "$ref": "#/$defs/cid" },
+        "size": { "$ref": "#/$defs/uint53" },
+        "role": {
+          "type": "string",
+          "enum": ["block", "manifest", "grant", "provider_record", "head", "receipt", "other"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "providerRecord": {
+      "type": "object",
+      "required": [
+        "adds_version",
+        "kind",
+        "record_id",
+        "provider",
+        "sequence",
+        "issued_at",
+        "expires_at",
+        "inventory",
+        "endpoints",
+        "signature"
+      ],
+      "properties": {
+        "adds_version": { "$ref": "#/$defs/version" },
+        "kind": { "const": "provider_record" },
+        "record_id": { "type": "string", "minLength": 1 },
+        "provider": { "$ref": "#/$defs/principal" },
+        "sequence": { "$ref": "#/$defs/uint53" },
+        "issued_at": { "$ref": "#/$defs/epochSeconds" },
+        "expires_at": { "$ref": "#/$defs/epochSeconds" },
+        "supersedes": { "$ref": "#/$defs/cid" },
+        "inventory": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/inventoryItem" },
+          "minItems": 1
+        },
+        "endpoints": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["transport", "uri_template"],
+            "properties": {
+              "transport": { "type": "string", "minLength": 1 },
+              "uri_template": {
+                "type": "string",
+                "minLength": 1,
+                "description": "RFC 6570 URI Template containing the variable {cid}."
+              },
+              "priority": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 65535
+              }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 1
+        },
+        "signature": { "$ref": "#/$defs/signature" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "additionalProperties": false
+    },
+    "head": {
+      "type": "object",
+      "required": [
+        "adds_version",
+        "kind",
+        "head_id",
+        "issuer",
+        "sequence",
+        "manifest_cid",
+        "parents",
+        "updated_at",
+        "signature"
+      ],
+      "properties": {
+        "adds_version": { "$ref": "#/$defs/version" },
+        "kind": { "const": "head" },
+        "head_id": { "type": "string", "minLength": 1 },
+        "issuer": { "$ref": "#/$defs/principal" },
+        "sequence": { "$ref": "#/$defs/uint53" },
+        "manifest_cid": { "$ref": "#/$defs/cid" },
+        "parents": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/cid" },
+          "uniqueItems": true
+        },
+        "updated_at": { "$ref": "#/$defs/epochSeconds" },
+        "signature": { "$ref": "#/$defs/signature" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "additionalProperties": false
+    },
+    "receipt": {
+      "type": "object",
+      "required": [
+        "adds_version",
+        "kind",
+        "receipt_id",
+        "provider",
+        "issued_at",
+        "retention_until",
+        "commitment",
+        "items",
+        "signature"
+      ],
+      "properties": {
+        "adds_version": { "$ref": "#/$defs/version" },
+        "kind": { "const": "receipt" },
+        "receipt_id": { "type": "string", "minLength": 1 },
+        "provider": { "$ref": "#/$defs/principal" },
+        "provider_record": { "$ref": "#/$defs/cid" },
+        "issued_at": { "$ref": "#/$defs/epochSeconds" },
+        "retention_until": { "$ref": "#/$defs/epochSeconds" },
+        "commitment": {
+          "type": "string",
+          "enum": ["store", "store_and_serve"]
+        },
+        "items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/inventoryItem" },
+          "minItems": 1
+        },
+        "terms": {
+          "type": "object",
+          "properties": {
+            "availability_target": { "type": "string", "minLength": 1 },
+            "storage_class": { "type": "string", "minLength": 1 },
+            "regions": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "uniqueItems": true
+            }
+          },
+          "additionalProperties": false
+        },
+        "signature": { "$ref": "#/$defs/signature" },
+        "extensions": { "$ref": "#/$defs/extensions" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

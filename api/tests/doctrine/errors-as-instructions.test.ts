@@ -61,12 +61,16 @@ function buildAll(): Record<string, GuidedErrorBody> {
       available: "23",
       currency: "GBP",
     }),
+    webhookSecretUnset: errors.webhookSecretUnset(),
+    webhookSecretUnsetWithChain: errors.webhookSecretUnset({ chain: "solana" }),
     insufficientCredits: errors.insufficientCredits(),
     insufficientCreditsWithAmounts: errors.insufficientCredits({
       reason: "listing.publish",
       need: 5,
       have: 2,
     }),
+    memoryIdentityNotFoundOrNotOwned: errors.memoryIdentityNotFoundOrNotOwned(),
+    memoryIdentityChangedDuringWrite: errors.memoryIdentityChangedDuringWrite(),
     rateLimit: errors.rateLimit(),
     rateLimitWithRing: errors.rateLimit({ ring: 1, retry_after_sec: 60 }),
     planLimitExceeded: errors.planLimitExceeded(),
@@ -81,6 +85,11 @@ function buildAll(): Record<string, GuidedErrorBody> {
     validation: errors.validation({ formErrors: [], fieldErrors: { foo: ["required"] } }),
     internal: errors.internal(),
     internalWithMessage: errors.internal("disk-full on the lhr1 worker"),
+    refusal: errors.refusal({
+      error: "route_specific_refusal",
+      message: "This route-specific request cannot proceed.",
+      legacy_field: "preserved",
+    }),
     substrateTaskRefusal: errors.substrateTaskRefusal({
       code: "task_not_open",
       message: "This substrate-task is no longer open for claim.",
@@ -193,6 +202,12 @@ describe("Errors-as-instructions — code stability", () => {
     expect(errors.initiatorSignatureMismatch().error).toBe("initiator_signature_mismatch");
     expect(errors.covenantNotProposed().error).toBe("covenant_not_proposed");
     expect(errors.insufficientBalance().error).toBe("insufficient_balance");
+    expect(errors.memoryIdentityNotFoundOrNotOwned().error).toBe(
+      "memory_identity_not_found_or_not_owned",
+    );
+    expect(errors.memoryIdentityChangedDuringWrite().error).toBe(
+      "memory_identity_changed_during_write",
+    );
     expect(errors.rateLimit().error).toBe("rate_limit");
     expect(errors.planLimitExceeded().error).toBe("plan_limit_exceeded");
     expect(errors.idempotencyConflict().error).toBe("idempotency_conflict");

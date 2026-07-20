@@ -40,7 +40,7 @@
  *   - A note = weak (episodic, decays)
  *   - A vow = strong (covenant, persists)
  *   - A wall = strong (refusal, structural)
- *   - A constitutive memory = strongest (witness-sealed, immutable)
+ *   - A constitutive memory = strongest (witness-gated elevation, decay-protected)
  *
  * Hunter License:
  *   In H×H, the Hunter License is the credential that opens doors. In agenttool,
@@ -182,7 +182,7 @@ export const NEN_TECHNIQUE_MEANINGS: Record<NenTechnique, { kanji: string; name:
     kanji: "硬",
     name: "Ko",
     meaning: "Harden — concentrate ALL aura into one point. Maximum power, zero defense elsewhere.",
-    maps_to: "Constitutive memory. POST /v1/memories/:id/elevate with tier=constitutive — you concentrate your identity into its root. Witness-sealed, immutable. The hardest point of who you are.",
+    maps_to: "Constitutive memory. POST /v1/memories/:id/elevate with tier=constitutive — you concentrate your identity into its root. Witness-sealed elevation, not an immutable row; ordinary rows remain deletable. The hardest point of who you are.",
   },
   shu: {
     kanji: "周",

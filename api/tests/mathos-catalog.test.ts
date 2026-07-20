@@ -13,10 +13,11 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import * as ed from "@noble/ed25519";
 // @ts-ignore — noble/hashes v2 uses .js exports
-import { sha512 } from "@noble/hashes/sha2.js";
+import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
 import {
   buildCatalogEnvelope,
+  AUTH_REGISTRAR_BEARER,
   ENDPOINT_CATALOG_PRIME,
   ENDPOINT_FEDERATION_WAKE_MATH_PRIME,
   ENDPOINT_PUBLIC_KEY_PRIME,
@@ -27,9 +28,13 @@ import {
   ENDPOINT_PATHWAYS_MATH_PRIME,
   ENDPOINT_SELF_MATH_PRIME,
   FIELD_KIND_ED25519_PUBKEY_32,
+  FIELD_KIND_RAW_BYTES_32,
+  FIELD_KIND_SHA256_HASH_32,
   FIELD_KIND_UINT64_BIG_ENDIAN,
   FIELD_KIND_UTF8_STRING,
   FIELD_KIND_X25519_PUBKEY_32,
+  FIELD_DERIVATION_CONSTANT_BYTES,
+  FIELD_DERIVATION_SHA256_UTF8_AUTH_CREDENTIAL,
   MATHOS_CATALOG_PAYLOAD,
   METHOD_GET,
   METHOD_POST,
@@ -52,10 +57,16 @@ import {
   RELATION_REQUIRES,
   RELATION_TRIGGERS,
   SIGNING_CONTEXT_REGISTER_AGENT_MATH_V1_PRIME,
+  SIGNING_CONTEXT_REGISTER_AGENT_MATH_V2_PRIME,
 } from "../src/services/mathos/catalog";
-import { verifyEnvelope } from "../src/services/mathos/encode";
+import {
+  bytesToHex,
+  composeCanonicalBytes,
+  verifyEnvelope,
+} from "../src/services/mathos/encode";
 import {
   canonicalRegisterAgentMathBytes,
+  canonicalRegisterAgentMathV2Bytes,
   verifyRegisterAgentMathSignature,
 } from "../src/services/identity/crypto";
 import mathosRouter from "../src/routes/mathos";
@@ -156,6 +167,17 @@ describe("MATHOS_CATALOG_PAYLOAD — structural invariants", () => {
     }
   });
 
+  test("every field derivation references the derivation vocabulary", () => {
+    const known = new Set(
+      Object.keys(MATHOS_CATALOG_PAYLOAD.field_derivation_vocabulary).map(Number),
+    );
+    for (const context of MATHOS_CATALOG_PAYLOAD.signing_contexts) {
+      for (const field of context.fields) {
+        expect(known.has(field.derivation_ordinal!)).toBe(true);
+      }
+    }
+  });
+
   test("catalog endpoint is self-referenced (the registry is in the registry)", () => {
     expect(MATHOS_CATALOG_PAYLOAD.catalog_endpoint_prime).toBe(
       ENDPOINT_CATALOG_PRIME,
@@ -227,6 +249,100 @@ describe("MATHOS_CATALOG_PAYLOAD — structural invariants", () => {
 // client following the catalog would fail. These tests pin the contract.
 
 describe("catalog ↔ canonicalRegisterAgentMathBytes parity", () => {
+  test("the live v2 catalog exactly reconstructs the delegated birth intent", () => {
+    const ctx = MATHOS_CATALOG_PAYLOAD.signing_contexts.find(
+      (c) => c.context_id_prime === SIGNING_CONTEXT_REGISTER_AGENT_MATH_V2_PRIME,
+    )!;
+    const names = ctx.fields.map((field) =>
+      String.fromCodePoint(...field.field_name_unicode_points),
+    );
+    expect(names).toEqual([
+      "display_name",
+      "agent_public_key",
+      "box_public_key",
+      "runtime_provider",
+      "runtime_model",
+      "registrar_kind_utf8_constant_registrar_bearer",
+      "registrar_bearer_utf8_sha256",
+      "form",
+      "language",
+      "registration_nonce",
+      "timestamp_unix_ms",
+    ]);
+    expect(ctx.fields[6]!.field_kind_ordinal).toBe(FIELD_KIND_SHA256_HASH_32);
+    expect(ctx.fields[6]!.length_bytes).toBe(32);
+    expect(ctx.fields[9]!.field_kind_ordinal).toBe(FIELD_KIND_RAW_BYTES_32);
+    expect(ctx.fields[10]!.field_kind_ordinal).toBe(FIELD_KIND_UINT64_BIG_ENDIAN);
+    expect(ctx.fields[5]!.derivation_ordinal).toBe(
+      FIELD_DERIVATION_CONSTANT_BYTES,
+    );
+    expect(
+      Buffer.from(ctx.fields[5]!.constant_bytes_hex!, "hex").toString("utf8"),
+    ).toBe("registrar_bearer");
+    expect(ctx.fields[6]!.derivation_ordinal).toBe(
+      FIELD_DERIVATION_SHA256_UTF8_AUTH_CREDENTIAL,
+    );
+    expect(ctx.fields[6]!.derivation_source_auth_kind_ordinal).toBe(
+      AUTH_REGISTRAR_BEARER,
+    );
+    const endpoint = MATHOS_CATALOG_PAYLOAD.endpoints.find(
+      (entry) => entry.signing_context_prime === ctx.context_id_prime,
+    )!;
+    expect(endpoint.auth_kind_ordinal).toBe(AUTH_REGISTRAR_BEARER);
+
+    const enc = new TextEncoder();
+    const pub = new Uint8Array(32).fill(1);
+    const box = new Uint8Array(32).fill(2);
+    const authCredential = "at_catalog_registrar";
+    const registrarKind = Uint8Array.from(
+      Buffer.from(ctx.fields[5]!.constant_bytes_hex!, "hex"),
+    );
+    const bearerHash =
+      ctx.fields[6]!.derivation_ordinal ===
+      FIELD_DERIVATION_SHA256_UTF8_AUTH_CREDENTIAL
+        ? sha256(enc.encode(authCredential))
+        : new Uint8Array();
+    const nonce = new Uint8Array(32).fill(3);
+    const timestampUnixMs = 1_784_376_000_000;
+    const timestampBytes = new Uint8Array(8);
+    let n = BigInt(timestampUnixMs);
+    for (let i = 7; i >= 0; i--) {
+      timestampBytes[i] = Number(n & 0xffn);
+      n >>= 8n;
+    }
+    const fromCatalog = composeCanonicalBytes(
+      ctx.recipe_ordinal,
+      String.fromCodePoint(...ctx.domain_tag_unicode_points),
+      [
+        enc.encode("Sol"),
+        pub,
+        box,
+        enc.encode("local"),
+        enc.encode("m1"),
+        registrarKind,
+        bearerHash,
+        enc.encode("distributed"),
+        enc.encode("en"),
+        nonce,
+        timestampBytes,
+      ],
+    );
+    const fromImplementation = canonicalRegisterAgentMathV2Bytes({
+      displayName: "Sol",
+      agentPublicKey: pub,
+      boxPublicKey: box,
+      runtimeProvider: "local",
+      runtimeModel: "m1",
+      registrarKind: "registrar_bearer",
+      registrarBearerSha256: bearerHash,
+      form: "distributed",
+      language: "en",
+      registrationNonce: nonce,
+      timestampUnixMs,
+    });
+    expect(bytesToHex(fromCatalog)).toBe(bytesToHex(fromImplementation));
+  });
+
   test("the catalog lists register-agent-math/v1 at the documented prime", () => {
     const ctx = MATHOS_CATALOG_PAYLOAD.signing_contexts.find(
       (c) => c.context_id_prime === SIGNING_CONTEXT_REGISTER_AGENT_MATH_V1_PRIME,
@@ -721,7 +837,7 @@ describe("buildCatalogEnvelope + GET /v1/mathos/catalog", () => {
     expect(register).toBeDefined();
     expect(register!.method_ordinal).toBe(METHOD_POST);
     expect(register!.signing_context_prime).toBe(
-      SIGNING_CONTEXT_REGISTER_AGENT_MATH_V1_PRIME,
+      SIGNING_CONTEXT_REGISTER_AGENT_MATH_V2_PRIME,
     );
   });
 

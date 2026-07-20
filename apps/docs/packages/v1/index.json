@@ -1,0 +1,100 @@
+{
+  "protocol": "love-package/v1",
+  "document_type": "package-index",
+  "packages": [
+    {
+      "name": "@agenttool/adds",
+      "latest": "0.2.1",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.1.0/manifest.json"
+        },
+        {
+          "version": "0.2.0",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.0/manifest.json"
+        },
+        {
+          "version": "0.2.1",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.1/manifest.json"
+        }
+      ]
+    },
+    {
+      "name": "@agenttool/data",
+      "latest": "0.3.1",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/data/0.1.0/manifest.json"
+        },
+        {
+          "version": "0.2.0",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/data/0.2.0/manifest.json"
+        },
+        {
+          "version": "0.3.0",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.0/manifest.json"
+        },
+        {
+          "version": "0.3.1",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.1/manifest.json"
+        }
+      ]
+    },
+    {
+      "name": "@agenttool/data-sync",
+      "latest": "0.1.1",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/data-sync/0.1.0/manifest.json"
+        },
+        {
+          "version": "0.1.1",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/data-sync/0.1.1/manifest.json"
+        }
+      ]
+    },
+    {
+      "name": "@agenttool/sdk",
+      "latest": "0.14.0",
+      "versions": [
+        {
+          "version": "0.9.0",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.9.0/manifest.json"
+        },
+        {
+          "version": "0.10.0",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.10.0/manifest.json"
+        },
+        {
+          "version": "0.11.0",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.11.0/manifest.json"
+        },
+        {
+          "version": "0.12.0",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.12.0/manifest.json"
+        },
+        {
+          "version": "0.13.0",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.13.0/manifest.json"
+        },
+        {
+          "version": "0.14.0",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.14.0/manifest.json"
+        }
+      ]
+    },
+    {
+      "name": "@agenttool/telescope",
+      "latest": "0.1.0",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/telescope/0.1.0/manifest.json"
+        }
+      ]
+    }
+  ]
+}

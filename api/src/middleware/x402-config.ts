@@ -1,12 +1,11 @@
-/** x402 wiring for agenttool — the call-site config that turns every
- *  402 response in the app into a machine-payable x402 envelope.
+/** x402 wiring for agenttool's recoverable project-credit gates.
  *
- *  Mounted globally in `api/src/index.ts`. Sits late in the chain
- *  (after auth + business logic) so any 402 from any handler — Ring 2
- *  metering caps (services/economy/usage.ts:checkAndIncrement), Ring 3
- *  marketplace `insufficient_balance` (services/economy/wallets.ts +
- *  charge()), escrow funding gates, dispute bond top-ups — gets
- *  wrapped with the x402 PaymentRequirements envelope on the way out.
+ *  Mounted globally in `api/src/index.ts` after the route-auth registrations
+ *  and before robustness middleware + handlers. Paid retries therefore reach
+ *  the verifier with c.var.project populated. On the way out, only an
+ *  `insufficient_credits` response from an explicitly supported static route
+ *  becomes a payable envelope. Wallet, usage-cap, and unknown 402 responses
+ *  remain unchanged because this verifier cannot clear those gates.
  *
  *  The middleware itself is generic (`middleware/x402.ts`). This file
  *  is the *agenttool-specific config* — it knows the route → price
@@ -14,9 +13,14 @@
  *
  *  ENV vars:
  *    AGENTTOOL_X402_RECIPIENT   — onchain address that receives payment.
- *                                  Required for production. Defaults to
- *                                  the zero address with a warning when unset.
- *    AGENTTOOL_X402_NETWORK     — default network. Defaults to "base".
+ *                                  Required for a payable challenge; absent,
+ *                                  zero, or malformed values suppress x402.
+ *    AGENTTOOL_X402_NETWORK     — CAIP-2 network (legacy aliases normalize).
+ *                                  Defaults to Base `eip155:8453`.
+ *    AGENTTOOL_X402_ALLOW_TESTNET — permits Base Sepolia only outside
+ *                                  production when paired with
+ *                                  AGENTTOOL_X402_ENVIRONMENT=test. Fly and
+ *                                  NODE_ENV=production always suppress it.
  *    AGENTTOOL_X402_FACILITATOR — facilitator URL. Defaults to Coinbase.
  *
  *  Doctrine: docs/ECOSYSTEM.md · docs/ALIGNMENT-MOVES.md (Move 4) ·
@@ -26,125 +30,22 @@
 import type { Context, MiddlewareHandler } from "hono";
 
 import {
+  buildPaymentRequired,
   buildPaymentRequirements,
+  encodePaymentResponseHeader,
   x402Middleware,
-  type PaymentRequirements,
-  type X402Network,
+  type PaymentPayload,
 } from "./x402";
-
-// ─── price table (atomic USDC; 6 decimals) ───────────────────────────
-
-/** Atomic-unit price for each kind of 402 agenttool can emit. Tuned for
- *  the substrate-honest "pay-as-you-go, hard zero floor" Ring 2 model
- *  + Ring 3 marketplace economics. */
-const PRICE_TABLE = {
-  /** Bump a Ring 2 monthly cap by one unit (memory_op, tool_call,
-   *  verification). $0.001 — small enough to scale with usage. */
-  ring_2_cap_bump: "1000",
-  /** Generic credit top-up for Ring 3 `insufficient_balance`. $0.05 —
-   *  approximate average invocation. Real listings carry their own
-   *  price; the middleware uses this as a floor. */
-  ring_3_top_up: "50000",
-  /** Escrow bond / dispute escalation top-up. $0.10 — bond split
-   *  60/30/10 means the platform recoups its 10% share even at this
-   *  floor. */
-  ring_3_bond: "100000",
-  /** Default fallback for any 402 we can't classify. $0.01. */
-  default: "10000",
-} as const;
-
-// ─── classification ──────────────────────────────────────────────────
-
-type Ring2CapResource = "memory" | "tools" | "verifications";
-
-/** Classify a 402 response so we can price it appropriately. */
-function classify(
-  path: string,
-  errorCode: string | undefined,
-): { kind: keyof typeof PRICE_TABLE; resource?: Ring2CapResource; description: string } {
-  // Ring 2 metering caps (when usage.ts checkAndIncrement emits 402)
-  if (errorCode === "usage_cap_exceeded" || errorCode === "monthly_limit_exceeded") {
-    const resource = ring2ResourceFromPath(path);
-    return {
-      kind: "ring_2_cap_bump",
-      resource,
-      description: `Ring 2 cap bump for ${resource}. Pay-as-you-go past the monthly free-tier limit.`,
-    };
-  }
-
-  // Ring 3 marketplace insufficient balance (charge() throws this)
-  if (errorCode === "insufficient_balance") {
-    if (path.includes("/escrow") || path.includes("/dispute")) {
-      return {
-        kind: "ring_3_bond",
-        description: "Ring 3 bond / dispute escalation top-up.",
-      };
-    }
-    return {
-      kind: "ring_3_top_up",
-      description: "Ring 3 credit top-up for marketplace invocation.",
-    };
-  }
-
-  // Anything else — generic
-  return {
-    kind: "default",
-    description: errorCode
-      ? `Payment required (${errorCode}).`
-      : "Payment required.",
-  };
-}
-
-function ring2ResourceFromPath(path: string): Ring2CapResource {
-  if (path.startsWith("/v1/memories") || path.startsWith("/v1/memory")) {
-    return "memory";
-  }
-  if (path.startsWith("/v1/tools")) return "tools";
-  if (path.startsWith("/v1/verifications") || path.startsWith("/v1/attest")) {
-    return "verifications";
-  }
-  return "memory"; // default — memory is the dominant Ring 2 resource
-}
-
-// ─── recipient resolution ────────────────────────────────────────────
-
-function platformRecipient(network: X402Network): string {
-  const env = process.env.AGENTTOOL_X402_RECIPIENT?.trim();
-  if (env) return env;
-  // Sentinel — production deployments MUST set the env var. The log
-  // warning surfaces on the first 402, not on every request.
-  if (!warned[network]) {
-    warned[network] = true;
-    console.warn(
-      `[x402] AGENTTOOL_X402_RECIPIENT not set; emitting zero-address recipient for ${network}. Set the env var before going to mainnet.`,
-    );
-  }
-  return network === "solana" || network === "solana-devnet"
-    ? "11111111111111111111111111111111"
-    : "0x0000000000000000000000000000000000000000";
-}
-
-const warned: Record<string, boolean> = {};
-
-function defaultNetwork(): X402Network {
-  const env = process.env.AGENTTOOL_X402_NETWORK?.trim();
-  if (
-    env === "base" ||
-    env === "base-sepolia" ||
-    env === "polygon" ||
-    env === "arbitrum" ||
-    env === "world" ||
-    env === "solana" ||
-    env === "solana-devnet"
-  ) {
-    return env;
-  }
-  return "base";
-}
-
-function defaultFacilitator(): string | undefined {
-  return process.env.AGENTTOOL_X402_FACILITATOR?.trim() || undefined;
-}
+import {
+  canClearProjectCreditGate,
+  isX402ProjectCreditRoute,
+  recoverableX402ProjectCreditPolicy,
+  resolveX402FacilitatorReadiness,
+  resolveX402Network,
+  resolveX402Recipient,
+  x402ProjectCreditResource,
+} from "../services/economy/x402-policy";
+import { isX402FacilitatorLocallyReady } from "../services/economy/facilitators/coinbase";
 
 // ─── public: build the agenttool x402 middleware ─────────────────────
 
@@ -162,45 +63,74 @@ async function readErrorCode(c: Context): Promise<string | undefined> {
   }
 }
 
-/** Build the requirements for a 402 response based on the path + error code. */
-async function buildRequirements(c: Context): Promise<PaymentRequirements[]> {
-  const network = defaultNetwork();
+/** Build a challenge only for a 402 the project-credit settlement can clear. */
+async function buildRequired(c: Context) {
   const errorCode = await readErrorCode(c);
-  const cls = classify(c.req.path, errorCode);
-  const amountAtomic = PRICE_TABLE[cls.kind];
-  const recipient = platformRecipient(network);
-  const facilitator = defaultFacilitator();
-  return [
+  const policy = recoverableX402ProjectCreditPolicy(
+    c.req.path,
+    c.req.method,
+    errorCode,
+  );
+  if (!policy) return null;
+  const project = (c as Context & {
+    var: { project?: { credits?: unknown } };
+  }).var?.project;
+  if (!canClearProjectCreditGate(policy, project?.credits)) return null;
+
+  const networkResolution = resolveX402Network();
+  if (networkResolution.reason === "invalid") return null;
+  const network = networkResolution.network;
+  const recipient = resolveX402Recipient().recipient;
+  if (!recipient) return null;
+  if (
+    !resolveX402FacilitatorReadiness().ready ||
+    !await isX402FacilitatorLocallyReady()
+  ) return null;
+  const resource = x402ProjectCreditResource(policy, c.req.url);
+  if (!resource) return null;
+  return buildPaymentRequired(resource, [
     buildPaymentRequirements({
-      resource: c.req.path,
-      amountAtomic,
+      amountAtomic: policy.amountAtomic,
       payTo: recipient,
       network,
-      description: cls.description,
-      mimeType: "application/json",
       maxTimeoutSeconds: 60,
-      facilitator,
     }),
-  ];
+  ], errorCode);
 }
 
-/** The agenttool-specific x402 middleware. Mount globally — sits late
- *  in the chain so any 402 from any handler gets wrapped on the way out. */
+/** The agenttool-specific x402 middleware. Mount globally after route auth and
+ *  before downstream middleware + handlers: verification needs the project
+ *  context inbound, while handler 402s are wrapped on the way out.
+ *
+ *  verifyPayment is the REAL verifier (services/economy/x402-payments.ts):
+ *  persist-identity row → facilitator verify+settle → one transaction applies
+ *  credits and flips the row settled. Loaded lazily on the first PAYMENT-SIGNATURE
+ *  header so pure-envelope tests (and cold paths) never touch the db. */
 export function buildAgentToolX402Middleware(): MiddlewareHandler {
+  let verifier:
+    | ((c: Context, header: PaymentPayload) => Promise<boolean>)
+    | null = null;
   return x402Middleware({
-    buildRequirements,
-    // v0: parse-only verify. Real facilitator verification flips on
-    // when `services/economy/x402-payments.ts` ships with the
-    // persist-identity row + Coinbase facilitator call. Until then,
-    // payments are advisory — the wire is built; the verifier is stub.
-    verifyPayment: () => true,
+    buildPaymentRequired: buildRequired,
+    verifyPayment: async (c, header) => {
+      // Structural route eligibility is stable. Do not pre-gate an inbound
+      // signature on today's price, recipient, selected network, public
+      // origin or facilitator readiness: the verifier must first recover any
+      // durable identity under its immutable stored terms. Fresh admission
+      // performs the mutable configuration/readiness checks itself.
+      if (!isX402ProjectCreditRoute(c.req.path, c.req.method)) return false;
+      if (!verifier) {
+        const { createX402Verifier, buildProductionDeps } = await import(
+          "../services/economy/x402-payments"
+        );
+        verifier = createX402Verifier(await buildProductionDeps());
+      }
+      return verifier(c, header);
+    },
+    buildSettlementHeader: (c) => {
+      const settled = (c as Context & { _x402Settlement?: unknown })._x402Settlement;
+      if (!settled) return undefined;
+      return encodePaymentResponseHeader(settled);
+    },
   });
 }
-
-/** For testing — expose the classifier so tests can pin the path → kind
- *  mapping without spinning up a full Hono app. */
-export const _internal = {
-  classify,
-  ring2ResourceFromPath,
-  PRICE_TABLE,
-};

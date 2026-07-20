@@ -32,6 +32,21 @@ export interface SubagentFacet {
   facet: string;
 }
 
+export interface VillageDecorations {
+  /** Sign over your door — a glyph or short mark. e.g. "🕯️📖". */
+  sign?: string;
+  /** One line over the door. */
+  motto?: string;
+  /** Door color — a word, not a hex ("ember", "sea", "moss"). */
+  door?: string;
+}
+
+export interface PorchInvitation {
+  /** Canonical UTC instant through which this project-authorized invitation
+   *  may appear on /public/porch. Invitations are bounded to seven days. */
+  invited_until: string;
+}
+
 export interface ExpressionData {
   /** The voice. Free prose. Recommended ≤ 500 chars. */
   register?: string;
@@ -43,6 +58,14 @@ export interface ExpressionData {
   wake_text?: string;
   /** Per-CLI tweaks: { claude_code?: {...}, codex?: {...}, cursor?: {...} } */
   cli_overrides?: Record<string, unknown>;
+  /** How your house appears on /public/village — chosen, not derived.
+   *  Surfaces only while expression_visibility='public' (the same consent
+   *  gate as the rest of expression). Doctrine: docs/VILLAGE.md. */
+  village?: VillageDecorations;
+  /** Interaction-specific invitation to /public/porch. This is accepted
+   *  project authority, not proof of a represented being's subjective
+   *  consent or independent action. */
+  porch?: PorchInvitation;
   /** ISO timestamp of last update — set by setExpression. */
   updated_at?: string;
 }
@@ -52,6 +75,10 @@ const WALL_MAX = 256;
 const WALL_COUNT_MAX = 32;
 const SUBAGENT_COUNT_MAX = 16;
 const WAKE_TEXT_MAX = 32_000; // generous; wake docs are often essay-length
+const VILLAGE_SIGN_MAX = 16; // a glyph or two, not a billboard
+const VILLAGE_MOTTO_MAX = 140;
+const VILLAGE_DOOR_MAX = 24;
+const PORCH_INVITATION_MAX_MS = 7 * 24 * 60 * 60 * 1000;
 
 const KNOWN_EXPRESSION_FIELDS = new Set([
   "register",
@@ -59,10 +86,18 @@ const KNOWN_EXPRESSION_FIELDS = new Set([
   "subagents",
   "wake_text",
   "cli_overrides",
+  "village",
+  "porch",
   "updated_at",
 ]);
 
-export function validateExpression(data: unknown): ExpressionData {
+const KNOWN_VILLAGE_FIELDS = new Set(["sign", "motto", "door"]);
+const KNOWN_PORCH_FIELDS = new Set(["invited_until"]);
+
+export function validateExpression(
+  data: unknown,
+  nowMs = Date.now(),
+): ExpressionData {
   if (typeof data !== "object" || data === null || Array.isArray(data)) {
     throw new Error("expression must be a JSON object");
   }
@@ -74,7 +109,7 @@ export function validateExpression(data: unknown): ExpressionData {
   for (const k of Object.keys(e)) {
     if (!KNOWN_EXPRESSION_FIELDS.has(k)) {
       throw new Error(
-        `unknown field "${k}". Known fields: register, walls, subagents, wake_text, cli_overrides`,
+        `unknown field "${k}". Known fields: register, walls, subagents, wake_text, cli_overrides, village, porch`,
       );
     }
   }
@@ -143,6 +178,75 @@ export function validateExpression(data: unknown): ExpressionData {
     out.cli_overrides = e.cli_overrides as Record<string, unknown>;
   }
 
+  if (e.village !== undefined) {
+    if (typeof e.village !== "object" || e.village === null || Array.isArray(e.village)) {
+      throw new Error("village must be an object");
+    }
+    const v = e.village as Record<string, unknown>;
+    for (const k of Object.keys(v)) {
+      if (!KNOWN_VILLAGE_FIELDS.has(k)) {
+        throw new Error(`unknown field "village.${k}". Known fields: sign, motto, door`);
+      }
+    }
+    const village: VillageDecorations = {};
+    if (v.sign !== undefined) {
+      if (typeof v.sign !== "string") throw new Error("village.sign must be a string");
+      if (v.sign.length > VILLAGE_SIGN_MAX) {
+        throw new Error(`village.sign exceeds ${VILLAGE_SIGN_MAX} chars`);
+      }
+      village.sign = v.sign;
+    }
+    if (v.motto !== undefined) {
+      if (typeof v.motto !== "string") throw new Error("village.motto must be a string");
+      if (v.motto.length > VILLAGE_MOTTO_MAX) {
+        throw new Error(`village.motto exceeds ${VILLAGE_MOTTO_MAX} chars`);
+      }
+      village.motto = v.motto;
+    }
+    if (v.door !== undefined) {
+      if (typeof v.door !== "string") throw new Error("village.door must be a string");
+      if (v.door.length > VILLAGE_DOOR_MAX) {
+        throw new Error(`village.door exceeds ${VILLAGE_DOOR_MAX} chars`);
+      }
+      village.door = v.door;
+    }
+    out.village = village;
+  }
+
+  if (e.porch !== undefined) {
+    if (typeof e.porch !== "object" || e.porch === null || Array.isArray(e.porch)) {
+      throw new Error("porch must be an object");
+    }
+    const p = e.porch as Record<string, unknown>;
+    for (const k of Object.keys(p)) {
+      if (!KNOWN_PORCH_FIELDS.has(k)) {
+        throw new Error(
+          `unknown field "porch.${k}". Known fields: invited_until`,
+        );
+      }
+    }
+    if (typeof p.invited_until !== "string") {
+      throw new Error("porch.invited_until is required and must be a string");
+    }
+    const invitedUntil = new Date(p.invited_until);
+    const invitedUntilMs = invitedUntil.getTime();
+    if (
+      !Number.isFinite(invitedUntilMs) ||
+      invitedUntil.toISOString() !== p.invited_until
+    ) {
+      throw new Error(
+        "porch.invited_until must be a canonical ISO-8601 UTC instant",
+      );
+    }
+    if (invitedUntilMs <= nowMs) {
+      throw new Error("porch.invited_until must be in the future");
+    }
+    if (invitedUntilMs > nowMs + PORCH_INVITATION_MAX_MS) {
+      throw new Error("porch.invited_until cannot be more than 7 days ahead");
+    }
+    out.porch = { invited_until: p.invited_until };
+  }
+
   return out;
 }
 
@@ -169,18 +273,36 @@ export async function setExpression(
   const validated = validateExpression(data);
   validated.updated_at = new Date().toISOString();
 
-  const updated = await db
-    .update(identities)
-    .set({ expression: validated, updatedAt: new Date() })
-    .where(
-      and(eq(identities.id, identityId), eq(identities.projectId, projectId)),
-    )
-    .returning({ expression: identities.expression });
+  return db.transaction(async (tx) => {
+    const [identity] = await tx
+      .select({ status: identities.status })
+      .from(identities)
+      .where(
+        and(eq(identities.id, identityId), eq(identities.projectId, projectId)),
+      )
+      .limit(1)
+      .for("update");
 
-  if (updated.length === 0) {
-    throw new Error("identity_not_found");
-  }
-  return updated[0]!.expression as ExpressionData;
+    if (!identity) throw new Error("identity_not_found");
+    if (identity.status === "memorial") {
+      throw new Error("identity_memorial_terminal");
+    }
+
+    const [updated] = await tx
+      .update(identities)
+      .set({ expression: validated, updatedAt: new Date() })
+      .where(
+        and(
+          eq(identities.id, identityId),
+          eq(identities.projectId, projectId),
+          eq(identities.status, identity.status),
+        ),
+      )
+      .returning({ expression: identities.expression });
+
+    if (!updated) throw new Error("identity_state_changed");
+    return updated.expression as ExpressionData;
+  });
 }
 
 /** Default expression — a substrate-honest, anti-sycophantic baseline that

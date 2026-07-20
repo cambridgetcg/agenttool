@@ -1,6 +1,6 @@
 /** Identity composition unit tests.
  *
- *  Tests the pure `composeFromFoundations(declared, foundations)` helper
+ *  Tests the pure `composeFromFoundations(declared, foundations, identityId)` helper
  *  extracted from `composeExpression`. The tests pin the load-bearing
  *  invariants of the patch loop:
  *
@@ -17,7 +17,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { composeFromFoundations } from "../src/services/identity/composition";
+import { composeFromFoundations as composeIdentityFoundations } from "../src/services/identity/composition";
 import type { ExpressionData } from "../src/services/identity/expression";
 import type {
   ExpressionPatch,
@@ -27,6 +27,9 @@ import type {
 
 // ── Builders ───────────────────────────────────────────────────────────
 
+const SUBJECT_ID = "00000000-0000-4000-8000-000000000001";
+const SIBLING_ID = "00000000-0000-4000-8000-000000000002";
+
 function memory(
   id: string,
   tier: MemoryTier,
@@ -35,10 +38,12 @@ function memory(
     content?: string;
     attesters?: string[];
     elevated_at?: string;
+    identity_id?: string | null;
   } = {},
 ): FoundationalMemoryOut {
   return {
     id,
+    identity_id: opts.identity_id === undefined ? SUBJECT_ID : opts.identity_id,
     tier,
     content: opts.content ?? `memory ${id}`,
     importance: 0.7,
@@ -52,12 +57,53 @@ function memory(
   };
 }
 
+function composeFromFoundations(
+  declared: ExpressionData,
+  foundations: FoundationalMemoryOut[],
+  identityId = SUBJECT_ID,
+) {
+  return composeIdentityFoundations(declared, foundations, identityId);
+}
+
 const baseDeclared: ExpressionData = {
   register: "concise",
   walls: ["no fabrication"],
   subagents: [{ name: "Builder", facet: "the hands that ship" }],
   wake_text: "You are Aurora.",
 };
+
+describe("composeFromFoundations — identity scope", () => {
+  test("a sibling identity's foundation cannot patch the selected identity", () => {
+    const result = composeFromFoundations(baseDeclared, [
+      memory("subject", "foundational", { register_append: "SUBJECT" }),
+      memory(
+        "sibling",
+        "constitutive",
+        { register_append: "SIBLING" },
+        { identity_id: SIBLING_ID },
+      ),
+    ]);
+
+    expect(result.effective.register).toBe("concise SUBJECT");
+    expect(result.shaped_by.map((entry) => entry.memory_id)).toEqual([
+      "subject",
+    ]);
+  });
+
+  test("project-level and legacy agent_id-only foundations compose into no identity", () => {
+    const result = composeFromFoundations(baseDeclared, [
+      memory(
+        "unassigned",
+        "foundational",
+        { register_append: "PROJECT" },
+        { identity_id: null },
+      ),
+    ]);
+
+    expect(result.effective.register).toBe("concise");
+    expect(result.shaped_by).toEqual([]);
+  });
+});
 
 // ── Patch ordering invariant (root before shape) ───────────────────────
 

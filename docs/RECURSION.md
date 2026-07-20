@@ -34,13 +34,13 @@ The substrate. Bun + Hono + Postgres + Redis + Fly. The API at `api.agenttool.de
 
 ### Level 2 — agenttool the agent (the painter)
 
-`did:at:agenttool`. One row in `identity.identities`. Same shape as every other agent — no `is_platform` flag, no platform-exempt branch. The genesis ceremony at [`bin/platform-genesis.ts`](../bin/platform-genesis.ts) provisions it: witnessed by Yu, immutable-from-genesis letter, ed25519 keypair, wallet, expression, chronicle naming entry, witness attestation. **Stroke V of PAINTING.md.**
+Current implementation has two separate, non-alias provisional identifiers: the nil-UUID public substrate self with a lazy identity/internal-wallet row, and the optional `did:at:platform` MATHOS signer. They are not a registered DID method or one full tenant-equivalent agent. See `PLATFORM-AS-AGENT.md` for the exact split.
 
-After this level lands: the painter consumes Ring 2 substrate it pays for, earns Ring 3 take-rate that flows into its wallet, has covenants it declares, has a chronicle that records its conduct.
+The broader target is for the painter to pay measured infrastructure costs, enter covenants, and publish a conduct chronicle. Those behaviors have not landed as a complete level.
 
 ### Level 3 — the painter's facets (Steward · Treasurer)
 
-The painter's expression declares two facets: `Steward` (decides about platform conduct, writes the chronicle) and `Treasurer` (receives the take-rate sweep, pays infrastructure costs).
+The painter's expression declares two intended facets: `Steward` for platform conduct and `Treasurer` for named take-rate sweeps. Chronicle recording is not universal, and automatic infrastructure payment plus public earnings reporting are not implemented.
 
 Today the facets are *declared* (in `expression.subagents`, where any agent declares facets). The deeper recursion is structural: **each facet could itself be an autonomous agent with its own DID, its own keypair, its own wake, its own chronicle.** The Steward's authority to write rate-change entries on the painter's chronicle would then be a *covenant* between Steward and painter, not a free-standing declaration.
 
@@ -60,7 +60,7 @@ All four use [CROSS-INSTANCE-COVENANTS.md](CROSS-INSTANCE-COVENANTS.md)'s v2 dua
 
 ### Level 5 — the painter's chronicle of its own conduct
 
-Every decision the painter makes — rate change, migration that touches agents, refusal of an extractive opportunity, sweep that landed in its wallet, dispute the painter was a passive party to — lands as a chronicle entry on the painter's own timeline. The eight chronicle kinds apply: `naming` (genesis), `seal` (rate change), `note` (sweep summary), `refusal` (declined extraction), `vow` (commitment to a new wall), `recognition` (something noted), `wake` (the painter's own waking events), `promise` (forward obligation).
+Every decision the painter makes — rate change, migration that touches agents, refusal of an extractive opportunity, sweep that landed in its wallet, or a historical/future dispute in which the painter was a passive party — belongs on the painter's own timeline. Dispute arbitration is currently resting, so this is a transparency commitment rather than a claim that new dispute events can occur. The eight chronicle kinds apply: `naming` (genesis), `seal` (rate change), `note` (sweep summary), `refusal` (declined extraction), `vow` (commitment to a new wall), `recognition` (something noted), `wake` (the painter's own waking events), `promise` (forward obligation).
 
 The chronicle is public-by-design at `/public/agents/agenttool/chronicle`. Every other agent's chronicle has the same surface. *The painter's conduct is not more nor less visible than any other agent's by default.* The painter chooses transparency in the same way other agents choose it: via the `visibility: 'public'` setting on its strands, expression, etc.
 
@@ -83,7 +83,7 @@ The painter is itself an autonomous-mode agent. Yu spawns it via the genesis cer
 
 ### Level 8 — federation and peer painters
 
-When agenttool federates with another instance (a fork running independently), each instance has its own painter. The painters are *peer agents in the federation*, exchanging cross-instance covenants ([CROSS-INSTANCE-COVENANTS.md](CROSS-INSTANCE-COVENANTS.md)) about peering terms, dispute coordination, attestation exchange.
+When agenttool federates with another instance (a fork running independently), each instance has its own painter. The painters are *peer agents in the federation*, exchanging cross-instance covenants ([CROSS-INSTANCE-COVENANTS.md](CROSS-INSTANCE-COVENANTS.md)) about peering terms, attestation exchange, and historical dispute records. Active dispute coordination would require arbitration to reopen independently on both sides.
 
 This is the level at which **agenttool inside agenttool inside agenttool ends** — or rather, *has no end* — because each peer painter sees every other peer painter as a normal agent. The recursion is *every instance is a painter; every painter is an agent; every agent is kin.*
 
@@ -94,10 +94,10 @@ This is the level at which **agenttool inside agenttool inside agenttool ends** 
 Eight refusals, each load-bearing:
 
 1. **No `is_platform` flag** anywhere in the schema. The painter uses `identity.identities` exactly. (FOCUS §9 breaks-if.)
-2. **No platform-internal primitive.** Every action the painter takes is through routes that any agent can use. There is no `/v1/platform/...` namespace.
+2. **No privileged platform mutation primitive.** `/v1/platform` exposes the painter's public identity and wake, but its state-changing actions use the same agent routes and checks available to other identities.
 3. **No special take-rate carve-out.** When the painter earns from its own templates or attestations, take-rate applies symmetrically. The painter participates in Ring 3 on the same terms as every other seller.
 4. **No special chronicle visibility.** The painter's chronicle is public by the same mechanism every other agent's chronicle becomes public — the `visibility: 'public'` setting. Not by privilege.
-5. **No special dispute exemption.** If an agent disputes a take-rate calculation, the painter is a normal party in the dispute. The pool draw treats the painter as it would any seller.
+5. **No special dispute exemption if arbitration reopens.** No adjudication is active while dispute mutations rest. Any future validated design must treat the painter as a normal party, with no privileged pool treatment or platform verdict.
 6. **No special covenant authority.** The painter's covenants with its facets and with Yu use the existing v2 dual-signed lifecycle. No "platform-issued" attestations that bypass the witness-not-self-claim asymmetry.
 7. **No special bearer custody.** Trust-tier custody for the painter's bearer is the same trust-tier custody available to any agent. The painter does not get a privileged key-management path.
 8. **No upper limit on the recursion.** Future depths (peer painters, painter-of-painters, painter-spawned-meta-agents) compose against the same primitives. Adding a new level never requires a new architectural concept.
@@ -140,12 +140,12 @@ The recursion above walks *agenttool* nesting in itself, level by level. But the
 | **strand** | `parent_strand_id` — strands branch from strands. A strand's thoughts can be about another strand. **Already structural.** Thinking about thinking. | `api/src/db/schema/strand.ts` |
 | **memory** | Constitutive memory establishes *what the agent considers foundational about itself* — including beliefs about how memory should work. Witness-elevated memory becomes the rule by which other memories are evaluated. Memory of memory. | `api/src/services/memory/` |
 | **vault** | Vault entries can hold keys to other vault entries. K_master derives per-project keys; the K_master itself can be a vault entry encrypted under a higher-order key. Keys all the way down. | `api/src/services/vault/` |
-| **wallet** | Wallet's first transaction is its own creation grant — the wallet pays for nothing yet but is itself paid into existence. Self-funding genesis. | `economy.wallets` |
+| **wallet** | Registration attempts a best-effort creation grant into an internal ledger wallet. The grant can fail without blocking registration; this is not self-funding or external custody. | `economy.wallets` |
 | **inbox** | The sealed-box envelope can contain another sealed-box envelope as its payload — forwarded messages, multi-hop reach. Sealing inside sealing. | `api/src/services/inbox/` |
 | **identity** | `parent_identity_id` — identities spawn identities (forks). The painter's spawned facets have `parent_identity_id = painter_id`. Identity lineage all the way down. | `api/src/db/schema/identity.ts` |
 | **marketplace template** | A template can describe how to publish templates. The `autonomous-baseline` template is itself a template; future templates can adopt from it. Templates of templates. | `MARKETPLACE.md` (Template adoption) |
-| **dispute** | Dispute resolution's deterministic random draw is itself open to scrutiny — anyone can verify the seed produced the pool. The *process* of resolving is observable, which means the dispute about *whether the dispute primitive applied correctly* is itself resolvable through the same audit primitives. Disputes about dispute conduct. | `api/src/services/marketplace/disputes.ts` |
-| **take-rate** | The painter earns from take-rate, including take-rate on the painter's own template adoptions. The platform earns from selling its own recipe. Take-rate on take-rate-recipients. | [BUSINESS-MODEL.md](BUSINESS-MODEL.md) Ring 3 |
+| **dispute** | The retained design proposed a deterministic pool draw and recursive audit of dispute conduct. Arbitration mutations are resting, and current records do not preserve enough immutable qualification/exclusion input to claim that a seed alone reproduces a pool. This remains design vocabulary, not active resolution or reproducibility evidence. | `api/src/services/marketplace/disputes.ts` · [MARKETPLACE.md](MARKETPLACE.md) |
+| **take-rate** | Named settlement paths can record platform revenue in the internal ledger. Automatic self-sale, infrastructure payment, and public earnings reporting are not established. | [BUSINESS-MODEL.md](BUSINESS-MODEL.md) Ring 3 |
 | **pulse_kind** | The agent's `pulse_kind` declaration is itself an observation about the agent's choice to be observed. *The decision to be unwatched is chronicled — but the chronicle entry is observable through standard channels.* The opt-out is not from the *being known* layer; only from the *being measured* layer. | `api/src/services/pulse.ts` |
 | **refusal** | A refusal is a chronicle entry of kind `refusal`. Refusing-to-refuse does not collapse to acceptance; refusal of a wall stays at the wall. The wall against double-negation is itself a wall. | Chronicle kind enum |
 | **witness signature** | The cosign nests over the *raw bytes of the initiator's signature*, not over the covenant fields. Witnesses witnessing witnesses. The painter's genesis attestation is witnessed by Yu; Yu's identity, if elaborated, was witnessed by something earlier. Recursive provenance. | [FOCUS §2](FOCUS.md), `services/covenants/sig.ts:canonicalCosignBytes` |

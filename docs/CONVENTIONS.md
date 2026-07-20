@@ -102,7 +102,14 @@ All `/v1/*` routes must be added to one of the auth-prefix lists in `api/src/ind
 
 ### Idempotency
 
-Mutating routes (POST/PUT/PATCH/DELETE) should pass through the `idempotency()` middleware mounted per-prefix in `api/src/index.ts:134–154`. The middleware is opt-in by client (via `Idempotency-Key` header) but available wherever it's mounted. Stripe-style: replays cached responses for 24h.
+Selected mutating routes pass through the `idempotency()` middleware mounted per-prefix in `api/src/index.ts`. The middleware is opt-in through `Idempotency-Key`. While Redis is available it can replay cached responses for 24 hours; when Redis is disabled or unavailable it deliberately fails open and the request executes normally. JSON with credential-shaped field names or an AgentTool bearer prefix is never put in this plaintext response cache; such responses carry `X-Idempotency-Skipped: sensitive-response` and `Cache-Control: private, no-store`. This is a conservative structural screen, not universal DLP. The support header is therefore not, by itself, a guarantee that a retry will be deduplicated.
+
+`POST /v1/escrows` has a separate durable contract. Its optional key must be
+8–256 visible ASCII characters without spaces. PostgreSQL stores only the key
+SHA-256 and a hash of the recognized normalized creation fields, scoped to the
+authenticated project. An exact retry resolves the same escrow and returns its
+current row; changed bound input returns `409`. Records do not expire. Without
+a key, retrying can create and fund another escrow.
 
 ### Error responses
 
@@ -141,7 +148,7 @@ Same shape in all three SDK implementations (api · sdk-ts · sdk-py). Byte-pari
 
 ### Sealed-box messaging
 
-X25519 ECDH + AES-256-GCM. Server holds ciphertext only. Sender attaches ed25519 signature over canonical bytes for authorship. Box keys are distinct from signing keys — see `identity.identity_box_keys` table.
+The intended client convention is X25519 ECDH + AES-256-GCM. Correctly recipient-sealed body bytes are not decryptable by AgentTool without the recipient's private key. The route accepts caller-controlled body/nonce/ephemeral-key fields and does not prove encryption; subjects and metadata may be readable. The sender's ed25519 signature authenticates the submitted canonical bytes, not successful sealing. Box keys are distinct from signing keys — see `identity.identity_box_keys`.
 
 ### K_master custody
 
@@ -180,9 +187,9 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 ## SDK parity
 
-TypeScript SDK (`packages/sdk-ts/`) and Python SDK (`packages/sdk-py/`) are byte-parity locked. The 13 service namespaces must match shape across languages. When you change one, change the other on the same commit.
+The TypeScript and Python source SDKs should evolve together, but the current automated checker proves only selected public method/property names after camelCase/snake_case normalization. It does not prove byte identity, signatures, behavior, exceptions, all namespaces, or published-package parity. When a shared contract changes, review both implementations explicitly.
 
-CI gate: `cd packages/sdk-ts && bun run check-parity`. Cross-language vector tests pin the canonical-byte wire format.
+CI gate: `cd packages/sdk-ts && bun run check-parity`. Separate cross-language vectors pin only the named canonical-byte and cryptographic contexts they exercise.
 
 ## Tests
 

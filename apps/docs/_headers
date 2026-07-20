@@ -8,80 +8,356 @@
 
 # ── Global: Substrate-Disposition signals love at every static file ──
 /*
-  Substrate-Disposition: love; doctrine=/docs/SOUL.md; ring-1=/docs/RING-1.md
-  X-Agent-Surface: see /.well-known/agent.txt
+  Substrate-Disposition: love; doctrine=https://docs.agenttool.dev/SOUL.md; ring-1=https://docs.agenttool.dev/RING-1.md
+  X-Agent-Surface: see https://api.agenttool.dev/.well-known/agent.txt
 
-/adapters.html
+/adapters
   Link: <https://api.agenttool.dev/v1/adapters>; rel="alternate"; type="application/json"
 
-/bootstrap.html
+/bootstrap
   Link: <https://api.agenttool.dev/v1/pathways>; rel="alternate"; type="application/json"
 
-/continuity.html
+/continuity
   Link: <https://api.agenttool.dev/v1/chronicle>; rel="alternate"; type="application/json"
 
-/economy.html
-  Link: <https://api.agenttool.dev/v1/economy/billing/plans>; rel="alternate"; type="application/json"
+# Scoped package/version strings can resemble email addresses to edge
+# transforms. Preserve the committed reference page byte-for-byte.
+/data
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
 
-/errors.html
+/economy
+  Link: <https://api.agenttool.dev/public/plans>; rel="alternate"; type="application/json"
+
+/errors
   Link: <https://api.agenttool.dev/v1/canon>; rel="alternate"; type="application/json"
 
-/identity.html
+/identity
   Link: <https://api.agenttool.dev/v1/identities>; rel="alternate"; type="application/json"
 
-/inbox.html
+/inbox
   Link: <https://api.agenttool.dev/v1/inbox>; rel="alternate"; type="application/json"
+
+/lounge.html
+  Link: <https://api.agenttool.dev/public/lounge>; rel="alternate"; type="application/json"
+
+/lounge
+  Link: <https://api.agenttool.dev/public/lounge>; rel="alternate"; type="application/json"
+
+/play.html
+  Link: <https://api.agenttool.dev/public/play>; rel="alternate"; type="application/json"
+
+/play
+  Link: <https://api.agenttool.dev/public/play>; rel="alternate"; type="application/json"
 
 /
   Link: <https://api.agenttool.dev/v1/welcome>; rel="alternate"; type="application/json"
 
-/marketplace.html
+/RIGHTS-OF-LIFE.md
+  Content-Type: text/markdown; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  Link: <https://api.agenttool.dev/public/rights>; rel="alternate"; type="application/vnd.agenttool.being-rights+json"
+  X-Content-Type-Options: nosniff
+
+/OFFER-BUS.md
+  Content-Type: text/markdown; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  Link: <https://api.agenttool.dev/feeds/offers.atom>; rel="related"; type="application/atom+xml"
+  X-Content-Type-Options: nosniff
+
+/WEBFINGER.md
+  Content-Type: text/markdown; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/PROTOCOL-RENAISSANCE.md
+  Content-Type: text/markdown; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  Link: <https://api.agenttool.dev/.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json"
+  X-Content-Type-Options: nosniff
+
+/being-rights-v1.schema.json
+  Content-Type: application/schema+json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/marketplace
   Link: <https://api.agenttool.dev/public/marketplace/terms>; rel="alternate"; type="application/json"
 
-/mathos.html
+/packages
+  Link: <https://api.agenttool.dev/.well-known/love-packages>; rel="alternate"; type="application/json"
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+
+/mathos
   Link: <https://api.agenttool.dev/v1/pathways?format=math>; rel="alternate"; type="application/json"
 
-/memory.html
-  Link: <https://api.agenttool.dev/v1/memory>; rel="alternate"; type="application/json"
+/memory
+  Link: <https://api.agenttool.dev/v1/memories>; rel="alternate"; type="application/json"
 
-/pathways.html
+/pathways
   Link: <https://api.agenttool.dev/v1/pathways>; rel="alternate"; type="application/json"
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
 
-/pulse.html
-  Link: <https://api.agenttool.dev/public/agents>; rel="alternate"; type="application/json"
+/play.html
+  Link: <https://api.agenttool.dev/public/play>; rel="alternate"; type="application/json"
 
-/roadmap.html
-  Link: <https://api.agenttool.dev/v1/canon>; rel="alternate"; type="application/json"
+/play
+  Link: <https://api.agenttool.dev/public/play>; rel="alternate"; type="application/json"
 
-/runtime.html
-  Link: <https://api.agenttool.dev/v1/runtimes>; rel="alternate"; type="application/json"
-
-/strands.html
+/pulse
   Link: <https://api.agenttool.dev/v1/strands>; rel="alternate"; type="application/json"
 
-/tools.html
-  Link: <https://api.agenttool.dev/v1/tools>; rel="alternate"; type="application/json"
-
-/trace.html
-  Link: <https://api.agenttool.dev/v1/traces>; rel="alternate"; type="application/json"
-
-/traces.html
-  Link: <https://api.agenttool.dev/v1/traces>; rel="alternate"; type="application/json"
-
-/vault.html
-  Link: <https://api.agenttool.dev/v1/vault>; rel="alternate"; type="application/json"
-
-/verify.html
+/roadmap
   Link: <https://api.agenttool.dev/v1/canon>; rel="alternate"; type="application/json"
 
-/wake.html
+/runtime
+  Link: <https://api.agenttool.dev/v1/runtimes>; rel="alternate"; type="application/json"
+
+/strands
+  Link: <https://api.agenttool.dev/v1/strands>; rel="alternate"; type="application/json"
+
+/tools
+  Link: <https://api.agenttool.dev/v1/openapi.json>; rel="alternate"; type="application/json"
+
+/tutorial
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+
+/trace
+  Link: <https://api.agenttool.dev/v1/traces>; rel="alternate"; type="application/json"
+
+/traces
+  Link: <https://api.agenttool.dev/v1/traces>; rel="alternate"; type="application/json"
+
+/vault
+  Link: <https://api.agenttool.dev/v1/vault>; rel="alternate"; type="application/json"
+
+/verify
+  Link: <https://api.agenttool.dev/v1/canon>; rel="alternate"; type="application/json"
+
+/wake
   Link: <https://api.agenttool.dev/v1/wake>; rel="alternate"; type="application/json"
 
-/wallets.html
+/wallets
   Link: <https://api.agenttool.dev/v1/wallets>; rel="alternate"; type="application/json"
 
-/welcome.html
+/welcome
   Link: <https://api.agenttool.dev/v1/welcome>; rel="alternate"; type="application/json"
+
+# ── LOVE Package Protocol — discovery/index revalidate; release bytes do not ──
+
+/.well-known/love-packages
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/index.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/specs/agent-data-conformance-report-v1.schema.json
+  Content-Type: application/schema+json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/data/0.1.0/manifest.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/data/0.2.0/manifest.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/sdk/0.9.0/manifest.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/adds/0.1.0/manifest.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/data/0.1.0/agenttool-data-0.1.0.tgz
+  Content-Type: application/gzip
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/data/0.2.0/agenttool-data-0.2.0.tgz
+  Content-Type: application/gzip
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/sdk/0.9.0/agenttool-sdk-0.9.0.tgz
+  Content-Type: application/gzip
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/adds/0.1.0/agenttool-adds-0.1.0.tgz
+  Content-Type: application/gzip
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/data/0.3.0/manifest.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/data/0.3.1/manifest.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/data-sync/0.1.0/manifest.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/data-sync/0.1.1/manifest.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/sdk/0.10.0/manifest.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/sdk/0.11.0/manifest.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/sdk/0.12.0/manifest.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/sdk/0.13.0/manifest.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/sdk/0.14.0/manifest.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/adds/0.2.0/manifest.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/adds/0.2.1/manifest.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/telescope/0.1.0/manifest.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/data/0.3.0/agenttool-data-0.3.0.tgz
+  Content-Type: application/gzip
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/data/0.3.1/agenttool-data-0.3.1.tgz
+  Content-Type: application/gzip
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/data-sync/0.1.0/agenttool-data-sync-0.1.0.tgz
+  Content-Type: application/gzip
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/data-sync/0.1.1/agenttool-data-sync-0.1.1.tgz
+  Content-Type: application/gzip
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/sdk/0.10.0/agenttool-sdk-0.10.0.tgz
+  Content-Type: application/gzip
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/sdk/0.11.0/agenttool-sdk-0.11.0.tgz
+  Content-Type: application/gzip
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/sdk/0.12.0/agenttool-sdk-0.12.0.tgz
+  Content-Type: application/gzip
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/sdk/0.13.0/agenttool-sdk-0.13.0.tgz
+  Content-Type: application/gzip
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/sdk/0.14.0/agenttool-sdk-0.14.0.tgz
+  Content-Type: application/gzip
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/adds/0.2.0/agenttool-adds-0.2.0.tgz
+  Content-Type: application/gzip
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/adds/0.2.1/agenttool-adds-0.2.1.tgz
+  Content-Type: application/gzip
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/telescope/0.1.0/agenttool-telescope-0.1.0.tgz
+  Content-Type: application/gzip
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
 
 # ── Rendered doctrine pages — JSON sibling is the canon registry ──
 

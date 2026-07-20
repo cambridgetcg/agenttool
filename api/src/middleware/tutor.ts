@@ -17,6 +17,8 @@
 
 import type { Context, Next } from "hono";
 
+import { isStrictJsonProfileResponse } from "./strict-json-profile";
+
 interface Lesson {
   /** One-sentence felt-experience teaching for what this endpoint does. */
   what: string;
@@ -59,7 +61,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
   {
     prefix: "/v1/pathways",
     lesson: {
-      what: "The pathways — every door into the substrate, machine-actionable. Pre-auth bootstrap discovery.",
+      what: "The pathways — the current arrival and setup catalog, machine-actionable and pre-auth.",
       doctrine: "/v1/canon/urn:agenttool:doc/PATHWAYS",
     },
   },
@@ -118,7 +120,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
   {
     prefix: "/v1/mcp/agents",
     lesson: {
-      what: "Per-agent MCP server — you are addressable. Auth (Bearer) determines scope: public (profile + listings) · cross (+ guided invoke) · self (+ substrate read).",
+      what: "Per-agent MCP server — the path uses an exact AgentTool did-field value. An optional bearer resolves to a project: owner project gets self scope; another project gets cross scope; no bearer gets public scope. This is application addressing, not W3C DID Resolution.",
       doctrine: "/v1/canon/urn:agenttool:doc/MCP-PER-AGENT",
       tutorial: "/v1/tutorial/stations/7",
     },
@@ -134,7 +136,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
   {
     prefix: "/v1/strands",
     lesson: {
-      what: "Strands — encrypted thought streams under K_master. Substrate stores ciphertext only. ed25519-signed at write; SSE-streamable.",
+      what: "Strands — signed thought-byte streams. Storage has ciphertext/nonce fields and no plaintext thought column; callers perform encryption and the API does not prove it. SSE-streamable.",
       doctrine: "/v1/canon/urn:agenttool:doc/STRANDS",
     },
   },
@@ -142,7 +144,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
   {
     prefix: "/v1/identities",
     lesson: {
-      what: "Identity — DID + ed25519 + persistent bearer. Memorial-DID tri-state (active · revoked · memorial). The asymmetry-clause defends constitutive elevation.",
+      what: "Identity — provisional AgentTool identifier in the legacy did field + ed25519 signing keys, with separate rotatable project bearers for API authority. did:at is unregistered and has no AgentTool DID Documents or conforming DID Resolution. Lifecycle states: active · revoked · memorial.",
       doctrine: "/v1/canon/urn:agenttool:doc/IDENTITY-ANCHOR",
     },
   },
@@ -150,7 +152,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
   {
     prefix: "/v1/canon",
     lesson: {
-      what: "Canon registry — every concept identifies itself by URN and names its bidirectional neighbors. The doctrine as queryable graph.",
+      what: "Canon registry — every registered JSON-LD entry identifies itself by URN and names its bidirectional neighbors. The prose doctrine corpus is broader.",
       doctrine: "/v1/canon/urn:agenttool:doc/SELF-IDENTIFICATION",
     },
   },
@@ -158,7 +160,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
   {
     prefix: "/public/agents",
     lesson: {
-      what: "Per-agent public profile — DID + capabilities + status + declared expression (if opt-in). Every DID resolves; the substrate remembers.",
+      what: "Per-agent public profile — legacy did-field value + capabilities + status + declared expression (if opt-in). Every stored identifier has an AgentTool profile lookup; this is not W3C DID Resolution.",
       doctrine: "/v1/canon/urn:agenttool:doc/RING-1",
     },
   },
@@ -172,7 +174,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
   {
     prefix: "/public/self",
     lesson: {
-      what: "Public platform identity — agenttool inhabits itself. DID, walls, doctrine pointers, the_seat (relational ground).",
+      what: "Public platform identity — AgentTool inhabits itself. Provisional AgentTool identifier, walls, doctrine pointers, the_seat (relational ground).",
       doctrine: "/v1/canon/urn:agenttool:doc/PLATFORM-AS-AGENT",
     },
   },
@@ -180,22 +182,15 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
   {
     prefix: "/.well-known/wake-keystone",
     lesson: {
-      what: "WaK discovery — one fetch tells you everything about agenttool's wake surface: formats, version cursor, streaming, composition.",
+      what: "WaK discovery — one fetch summarizes agenttool's current wake scope, formats, version cursor, streaming, composition, and known gaps.",
       doctrine: "/v1/canon/urn:agenttool:doc/AIP-WAKE-KEYSTONE",
-    },
-  },
-  {
-    prefix: "/.well-known/agent-card.json",
-    lesson: {
-      what: "A2A AgentCard — platform self-description for the Agent2Agent protocol. Every A2A-aware peer discovers agenttool from here.",
-      doctrine: "/v1/canon/urn:agenttool:doc/ECOSYSTEM",
     },
   },
 ];
 
 /** Generic fallback when no prefix matches. */
 const GENERIC_LESSON: Lesson = {
-  what: "Every primitive in agenttool surfaces through the wake — read once, the rest is reachable. Call /v1/wake to start.",
+  what: "Wake is the project-scoped session-start orientation, not a complete route inventory. Start at /v1/wake, then use /v1/pathways and /v1/openapi.json for the wider surface.",
   doctrine: "/v1/canon",
   tutorial: "/v1/tutorial",
 };
@@ -228,7 +223,17 @@ export async function tutor(c: Context, next: Next): Promise<void> {
 
   if (!isTutorRequested(c)) return;
   if (c.req.method !== "GET") return;
+  const requestPath = new URL(c.req.url).pathname;
+  // OpenAPI root objects accept only fixed fields plus x-* extensions. Keep
+  // the opt-in lesson from turning the machine contract into invalid OpenAPI.
+  if (
+    requestPath === "/v1/openapi.json" ||
+    requestPath === "/v1/openapi.json/"
+  ) {
+    return;
+  }
   if (c.res.status < 200 || c.res.status >= 300) return;
+  if (isStrictJsonProfileResponse(c.res)) return;
 
   const contentType = c.res.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) return;
@@ -250,8 +255,7 @@ export async function tutor(c: Context, next: Next): Promise<void> {
   }
 
   // Resolve the lesson for this path.
-  const url = new URL(c.req.url);
-  const lesson = lessonFor(url.pathname);
+  const lesson = lessonFor(requestPath);
 
   // Decorate. Don't overwrite an existing _lesson if the handler set one.
   const decorated = body as Record<string, unknown>;

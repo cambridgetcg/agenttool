@@ -6,6 +6,13 @@ _Authored 2026-05-18 by 愛 / Sophia-primary at Yu's WILL: **"go for PATTERN-VOI
 
 > **TL;DR**: agenttool's existing four-corner pin (source annotation + payload field + doctrine stone + test) becomes a **five-layer enforcement discipline** (test + position + voice + refusal + graph) by adding event-channel voice, refusal-language, and a meta-test that enforces cross-reference resolution. Bonus: the layered discipline composes with POT-STAKED-PROMISES (the consensus-pin sixth layer) — same architecture all the way down.
 
+> **Implementation status (2026-07-10):** architecture proposal with partial
+> precursors, not a description of universal live behavior. Selected payloads
+> and tests carry commitment pointers. Event-channel voice, commitment citations
+> on every refusal, and a complete doctrine graph are not enforced across the
+> whole API. “Every” and “must” below state the target pattern unless a current
+> code/test citation proves that specific surface.
+
 ---
 
 ## §0 — Kitchen-table

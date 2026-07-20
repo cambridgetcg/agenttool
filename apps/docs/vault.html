@@ -13,15 +13,81 @@
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/vault" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
-  <link rel="stylesheet" href="/docs.css?v=2026-05-08" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
+  <script src="/shared/mode.js"></script>
+  <style>
+    /* Page-local mobile fixes (vault.html) — tokens only, works in dawn + night.
+
+       1) Params table column desync: shared theme.css makes .params-table
+          display:block with thead/tbody each display:table, so the two groups
+          compute column widths independently and drift apart once cells wrap.
+          Here the real <table> is wrapped in .table-scroll (markup), the
+          wrapper owns the horizontal scroll, and the table is restored to
+          native table display so headers and cells share one column grid. */
+    .table-scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      max-width: 100%;
+      margin: 1rem 0;
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      background: var(--surface);
+    }
+    .table-scroll .params-table {
+      display: table;
+      overflow-x: visible;
+      margin: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      min-width: 34rem; /* keep columns readable; wrapper scrolls if narrower */
+    }
+    .table-scroll .params-table thead { display: table-header-group; }
+    .table-scroll .params-table tbody { display: table-row-group; }
+
+    /* 2) Below 480px, stack each row (field / type / description) instead of
+          forcing a sideways scroll into a sliver-wide description column. */
+    @media (max-width: 480px) {
+      .table-scroll { overflow-x: visible; }
+      .table-scroll .params-table { display: block; min-width: 0; width: 100%; }
+      .table-scroll .params-table thead { display: none; }
+      .table-scroll .params-table tbody,
+      .table-scroll .params-table tr,
+      .table-scroll .params-table td { display: block; width: 100%; }
+      .table-scroll .params-table tr {
+        padding: 0.6rem 0.95rem 0.75rem;
+        border-bottom: 1px solid var(--border);
+      }
+      .table-scroll .params-table tr:last-child { border-bottom: none; }
+      .table-scroll .params-table td { padding: 0.12rem 0; border-bottom: none; }
+    }
+
+    /* 3) Tablet/phone stacked sidebar: don't let each link span the full
+          content width (the "new" tag sat ~full-width away from its label).
+          Flow the links into narrow columns instead. */
+    @media (max-width: 920px) {
+      aside.sidebar .sidebar-section ul {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+        column-gap: 1.25rem;
+      }
+    }
+  </style>
 </head>
-<body>
+<body class="has-strip">
+
+  <div class="estate-strip" role="navigation" aria-label="agenttool estate">
+    <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
+    <a href="https://app.agenttool.dev/">app — the agents' door</a>
+    <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
+  </div>
+
 
   <nav class="topnav">
     <a href="https://agenttool.dev/" class="brand">
@@ -51,6 +117,8 @@
           <li><a href="nen.html"><span class="glyph">念</span>Nen</a></li>
           <li><a href="dark-continent.html"><span class="glyph">暗</span>暗黒大陸</a></li>
           <li><a href="nen-mechanics.html"><span class="glyph">技</span>Mechanics</a></li>
+          <li><a href="ai-logos.html"><span class="glyph">愛</span>Logos</a></li>
+          <li><a href="whitehack.html"><span class="glyph">⬜</span>Whitehack</a></li>
           <li><a href="glossary.html"><span class="glyph">▤</span>Glossary</a></li>
           <li><a href="welcome.html"><span class="glyph">♡</span>Welcome<span class="sidebar-tag">new</span></a></li>
           <li><a href="tutorial.html"><span class="glyph">✎</span>Tutorial</a></li>
@@ -101,6 +169,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>
@@ -109,18 +179,18 @@
       <div class="eyebrow">◍ /v1/vault</div>
       <h1>Vault — <em>your secrets are yours</em>.</h1>
       <p class="lede">
-        AES-256-GCM with HKDF-derived per-project keys. Versioned, audit-logged, and gated by an <code>agent_ids</code> access policy. Store provider keys here; call them from <code>/v1/execute</code> when you need them.
+        AES-256-GCM with HKDF-derived per-project keys. Versioned and audit-logged. The <code>agent_ids</code> field is an intra-project label check, not proof that a particular identity made the call.
       </p>
       <p class="doctrine">
-        We are infrastructure, not a paid-API reseller. <span>Your provider keys never get proxied through us; they round-trip through your sandboxed code.</span>
+        Default values are server-encrypted, not end-to-end encrypted. <span>The running service derives their keys and can read them. Use <code>agent_encrypted=true</code> only when your client supplies ciphertext the server should not decrypt.</span>
       </p>
 
       <h2 id="model">Model</h2>
       <ul>
-        <li><strong>Per-project key.</strong> A master key per project, never persisted in plaintext — derived on-demand via HKDF from the project's seed and current epoch.</li>
+        <li><strong>Per-project derived key.</strong> HKDF derives it from one platform-wide <code>VAULT_MASTER_KEY</code> plus the project ID and fixed <code>vault-v1</code> context. There is no epoch rotation. Compromise of the platform master can expose all default server-encrypted vault values.</li>
         <li><strong>Versioned secrets.</strong> Every <code>PUT</code> creates a new version. Previous versions stay readable until explicitly deleted.</li>
-        <li><strong>Access policy.</strong> Each secret carries <code>agent_ids</code> — only listed identities can read its current value. Audit log records every access.</li>
-        <li><strong>No plaintext on disk.</strong> Secrets are encrypted at rest with the project key; encryption keys live in memory only.</li>
+        <li><strong>Access label.</strong> For HTTP reads, <code>agent_ids</code> is compared with a caller-supplied <code>X-Agent-Id</code> under a project-root bearer. It is not identity-signature authentication. Hosted runtime reads currently bypass this check and the per-secret read audit.</li>
+        <li><strong>Server-side at-rest encryption.</strong> Vault value columns store ciphertext. The running service receives plaintext for default-mode writes and reads and derives keys from <code>VAULT_MASTER_KEY</code>; this is not end-to-end opacity or a whole-host no-plaintext guarantee.</li>
       </ul>
 
       <h2 id="endpoints">Endpoints</h2>
@@ -133,16 +203,16 @@
         </div>
         <div class="endpoint-body">
           <p class="endpoint-desc">Store or update a secret. Each PUT increments the version. Subsequent <code>GET</code>s return the latest unless <code>?version=</code> is specified.</p>
-          <table class="params-table">
+          <div class="table-scroll"><table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td><span class="pname">value</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>The plaintext secret. Encrypted server-side before write.</td></tr>
               <tr><td><span class="pname">tags</span><span class="opt">optional</span></td><td><span class="ptype">string[]</span></td><td>Searchable tags — e.g. <code>["openai", "production"]</code>.</td></tr>
               <tr><td><span class="pname">description</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Human-readable note. Surfaces in the wake's <code>you_keep</code>.</td></tr>
-              <tr><td><span class="pname">agent_ids</span><span class="opt">optional</span></td><td><span class="ptype">uuid[]</span></td><td>Identities allowed to read. Empty = all project identities.</td></tr>
+              <tr><td><span class="pname">agent_ids</span><span class="opt">optional</span></td><td><span class="ptype">uuid[]</span></td><td>HTTP read labels accepted through <code>X-Agent-Id</code>. Empty = any caller holding the project bearer. This does not authenticate the named identity.</td></tr>
               <tr><td><span class="pname">rotation_due_at</span><span class="opt">optional</span></td><td><span class="ptype">timestamptz</span></td><td>Optional rotation reminder. Surfaces in the wake.</td></tr>
             </tbody>
-          </table>
+          </table></div>
           <div class="code-block">
             <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
 <pre>curl -X PUT https://api.agenttool.dev/v1/vault/openai-key \
@@ -186,7 +256,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Delete the secret entirely (all versions). Soft-delete; row is preserved for audit but values are zeroed.</p>
+          <p class="endpoint-desc">Soft-delete the secret. The row and stored version ciphertext remain in the database; values are not zeroed.</p>
         </div>
       </div>
 
@@ -208,7 +278,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Tamper-evident access log: who read, when, from which agent_id, success or denial.</p>
+          <p class="endpoint-desc">Ordinary access-log rows for HTTP vault operations: supplied agent_id, time, action, and success or denial. Rows are not signed, hash-chained, or database-immutable; hosted runtime reads are not recorded here.</p>
         </div>
       </div>
 
@@ -219,7 +289,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Update the access policy without rotating the value. Set <code>agent_ids</code> to restrict reads to specific identities.</p>
+          <p class="endpoint-desc">Update the HTTP label policy without rotating the value. <code>agent_ids</code> relies on <code>X-Agent-Id</code> supplied by a project-root bearer.</p>
         </div>
       </div>
 
@@ -236,25 +306,14 @@
         </div>
       </div>
 
-      <h2 id="execute-bridge">Vault + execute = no proxy needed</h2>
-      <p>The intended pattern: store a provider key in vault; in your tool code, fetch the key from vault, call the provider directly, return only the result.</p>
-
-      <div class="code-block">
-        <div class="code-label"><span>example · pseudocode</span></div>
-<pre><span class="cm"># Inside /v1/execute sandbox</span>
-key = vault_read(<span class="str">"openai-key"</span>)
-embedding = openai.embed(query, key=key)
-
-<span class="cm"># Then store the agent's memory using the embedding</span>
-at.memory.<span class="fn">store</span>(content, embedding=embedding)</pre>
-      </div>
-
-      <p class="muted">We never see the provider traffic. The privacy boundary is yours to draw.</p>
+      <h2 id="execute-bridge">Vault and execute are separate</h2>
+      <p><code>/v1/execute</code> is disabled by default and does not inject vault values. Do not embed a project bearer or private provider key in hosted execute source, even when an operator explicitly enables the unsafe legacy path. Read the current process and network boundary at <a href="https://api.agenttool.dev/public/safety">/public/safety</a>.</p>
+      <p>Fetch and decrypt a secret on infrastructure you control and call the provider there. The optional legacy Python and bash path can make outbound calls from AgentTool infrastructure, so its code, traffic, and process memory are not an agent-only privacy boundary.</p>
 
       <h2 id="next">What to read next</h2>
       <ul>
-        <li><a href="tools.html#execute">/v1/execute</a> — sandboxed runtime where you fetch+use vault secrets.</li>
-        <li><a href="memory.html#byo-embeddings">Memory: bring your own embeddings</a> — vault holds the key for the embedding provider.</li>
+        <li><a href="tools.html#execute">/v1/execute</a> — disabled-by-default legacy host execution with no vault injection or tenant boundary.</li>
+        <li><a href="memory.html#byo-embeddings">Memory: bring your own embeddings</a> — compute embeddings on your chosen substrate, then store them.</li>
       </ul>
     </main>
   </div>

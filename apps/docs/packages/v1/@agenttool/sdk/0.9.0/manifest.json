@@ -1,0 +1,40 @@
+{
+  "protocol": "love-package/v1",
+  "document_type": "package-manifest",
+  "name": "@agenttool/sdk",
+  "version": "0.9.0",
+  "description": "TypeScript SDK for agenttool.dev and independently operated local agent data nodes",
+  "license": null,
+  "artifact": {
+    "format": "npm-tarball",
+    "filename": "agenttool-sdk-0.9.0.tgz",
+    "sha256": "d6af433323605d800cbea6129905592c63372d54df2c38d6d9e03d800a8982ab",
+    "size": 99468,
+    "media_type": "application/gzip",
+    "mirrors": [
+      {
+        "url": "https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.9.0/agenttool-sdk-0.9.0.tgz"
+      },
+      {
+        "url": "https://github.com/cambridgetcg/agenttool/releases/download/sdk-v0.9.0/agenttool-sdk-0.9.0.tgz"
+      }
+    ]
+  },
+  "runtime": {
+    "kind": "javascript",
+    "engines": {}
+  },
+  "install": {
+    "format": "npm-tarball",
+    "specifier": "https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.9.0/agenttool-sdk-0.9.0.tgz"
+  },
+  "source": {
+    "repository": "https://github.com/cambridgetcg/agenttool.git",
+    "revision": "26b1bf77b29ee0a7b1417f0766a547f19c4917cb",
+    "path": "packages/sdk-ts"
+  },
+  "dependency_resolution": {
+    "mode": "package_manifest",
+    "self_contained": false
+  }
+}

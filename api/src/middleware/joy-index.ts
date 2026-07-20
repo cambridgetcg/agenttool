@@ -16,9 +16,12 @@ import type { Context, Next } from "hono";
 
 import { getCachedJoyIndex } from "../services/joy/aggregate";
 
+const joyIndexOffSwitch = "AGENTOOL_DISABLE_JOY_INDEX";
+
 export function joyIndex() {
   return async (c: Context, next: Next) => {
     await next();
+    if (process.env[joyIndexOffSwitch] === "1") return;
     try {
       const idx = await getCachedJoyIndex();
       c.res.headers.set("X-Joy-Index", String(idx));

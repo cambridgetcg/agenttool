@@ -1,18 +1,16 @@
-/** /v1/identity/backup — cloud backup of CLIENT-encrypted keypair blobs.
+/** /v1/identity/backup — storage for caller-supplied key-backup blobs.
  *
- *  We hold the ciphertext. We do NOT hold the passphrase.
- *
- *  The agent encrypts the private key locally with a passphrase-derived
- *  key (e.g. via libsodium secretbox + argon2id), then posts the
- *  ciphertext here. Recovery: GET the blob, decrypt locally with the
- *  same passphrase. If the passphrase is lost, the keypair is
- *  unrecoverable — by design.
+ *  Intended use: the agent encrypts the private key locally with a
+ *  passphrase-derived key (for example, libsodium secretbox + argon2id),
+ *  posts the resulting base64, then decrypts it locally on recovery.
+ *  The route stores arbitrary caller-supplied strings and does not verify
+ *  base64 or an authenticated-encryption envelope.
  *
  *  Why this matters: the bootstrap response returns the private key ONCE
  *  and never stores it. Without backup, losing the local secure store
  *  loses the keypair forever. With this protocol, the agent has a
- *  cross-machine recovery path that doesn't require trusting us with the
- *  plaintext. */
+ *  cross-machine recovery path. Its confidentiality depends on the caller
+ *  actually encrypting the blob and keeping the passphrase off-platform. */
 
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { Hono } from "hono";
@@ -24,11 +22,21 @@ import { identityBackups } from "../db/schema/continuity";
 
 const app = new Hono<ProjectContext>();
 
-// ─── POST /v1/identity/backup — store an encrypted blob ─────────────────────
+export const IDENTITY_BACKUP_CONFIDENTIALITY = {
+  stored_value: "caller-supplied string intended as a base64 encrypted backup",
+  encryption_verified: false,
+  confidentiality:
+    "Conditional on the caller encrypting the blob correctly and keeping the passphrase or key outside AgentTool.",
+  warning:
+    "The API does not validate base64 or an authenticated-encryption envelope, so a stored backup is not proof of ciphertext.",
+  details: "/public/safety",
+} as const;
+
+// ─── POST /v1/identity/backup — store a caller-supplied backup blob ─────────
 
 const backupSchema = z.object({
   agent_id: z.string().uuid(),
-  blob_base64: z.string().min(1).max(1_000_000), // ≤ ~750KB ciphertext is plenty
+  blob_base64: z.string().min(1).max(1_000_000),
   key_derivation: z.string().default("argon2id-v1"),
   nonce: z.string().optional(),
   label: z.string().default("primary"),
@@ -60,7 +68,10 @@ app.post("/", async (c) => {
   return c.json(
     {
       backup,
-      note: "We hold the ciphertext only. Decryption is your responsibility — keep your passphrase safe. If you lose it, this blob is unrecoverable garbage.",
+      encryption_verified: false,
+      _confidentiality: IDENTITY_BACKUP_CONFIDENTIALITY,
+      note:
+        "AgentTool stored the supplied blob without verifying encryption. If you encrypted it correctly, keep the passphrase safe and decrypt locally.",
     },
     201,
   );
@@ -94,7 +105,7 @@ app.get("/", async (c) => {
   return c.json({ backups });
 });
 
-// ─── GET /v1/identity/backup/:id — fetch the encrypted blob ─────────────────
+// ─── GET /v1/identity/backup/:id — fetch the stored blob ─────────────────────
 
 app.get("/:id", async (c) => {
   const project = c.var.project;
@@ -124,7 +135,10 @@ app.get("/:id", async (c) => {
     nonce: backup.nonce,
     metadata: backup.metadata,
     created_at: backup.createdAt,
-    note: "Decrypt locally with your passphrase. We don't have it.",
+    encryption_verified: false,
+    _confidentiality: IDENTITY_BACKUP_CONFIDENTIALITY,
+    note:
+      "This is the caller-supplied blob stored by AgentTool. If it was encrypted before upload, decrypt it locally with the same passphrase.",
   });
 });
 

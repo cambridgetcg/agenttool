@@ -2,20 +2,25 @@
 
 # EDGE-SURFACE — public read-mostly surface ports to the edge
 
-> **TL;DR:** Move signature-verify-then-route surfaces (`.well-known/*`, `/v1/welcome`, federation ingress) to Supabase Edge Functions. The Edge runs Deno at the CDN edge (~50ms cold start, CDN-cacheable). Fly machines stop serving cold paths; cost drops, reliability rises (fewer hot machines needed). Byte-shape parity with the Bun routes is pinned by doctrine tests.
+> **TL;DR:** The public welcome has a Supabase Edge copy. A2A discovery is pending and no AgentCard edge function is configured or shipped.
 
 > **Compass:** [`SUPABASE-INTEGRATION-PLAN`](SUPABASE-INTEGRATION-PLAN.md) § Move 6 · [`AGENT-WEB-SURFACE`](AGENT-WEB-SURFACE.md) (every door obeys byte-discipline) · [`RING-1`](RING-1.md) (unconditional-welcome canon — the welcome moves to the edge but the commitment is the same)
 >
-> **Code:** `supabase/functions/welcome/index.ts` · `supabase/functions/well-known-agent-card/index.ts` · `supabase/functions/_shared/welcomed.ts` · `supabase/config.toml`
+> **Code:** `supabase/functions/welcome/index.ts` · `supabase/functions/_shared/welcomed.ts` · `supabase/config.toml`
 > **Deploy:** `bin/edge-deploy.sh`
-> **Tests:** `api/tests/doctrine/edge-surface.test.ts` (17 tests pin structural shape + byte-parity strings)
+> **Tests:** `api/tests/doctrine/edge-surface.test.ts`
 
 ## What ships at the edge (slice 1)
 
 | Function | Path | Mirrors |
 |---|---|---|
 | `welcome` | `/welcome` | `GET /v1/welcome` on Bun api |
-| `well-known-agent-card` | `/well-known-agent-card` | `GET /.well-known/agent-card.json` (A2A AgentCard discovery) |
+
+The earlier discovery-only A2A card was removed because AgentTool does not yet
+implement an A2A task or message transport. Source and deploy configuration are
+absent. An operator must also delete any previously deployed
+`well-known-agent-card` Supabase function; removing it from git does not alter an
+already-running deployment.
 
 ## What stays on Fly
 
@@ -34,8 +39,7 @@
                        │
               ┌────────┴────────┐
               │                 │
-   /welcome ──┤                 ├── /v1/* (all other routes)
-   /.well-known-agent-card ─┤   │
+   /welcome ──┤                 ├── /v1/* + /.well-known/*
               │                 │
         Supabase Edge      Fly.io (lhr×2 + cdg×1)
         (Deno, ~50ms        (Bun + Hono monolith)
@@ -43,7 +47,9 @@
          CDN-cached)
 ```
 
-After Move 6 lands, Cloudflare routes `/welcome` + `/well-known/agent-card.json` to the Supabase Edge endpoint instead of Fly. The Bun routes stay as fallback; the edge functions are the preferred path.
+The welcome may be routed to Supabase Edge. Native discovery documents remain
+on the Bun API. `/.well-known/agent-card.json` is intentionally unmounted until
+an A2A task or message transport exists.
 
 ## Byte-shape parity (the discipline)
 
@@ -54,7 +60,7 @@ Every response from an edge function must be **byte-shape-parity** with what the
 - non-GET returns 405 `method_not_allowed`
 - response carries `x-served-from: supabase-edge`
 - response carries `_canon_pointer`
-- the response body contains the expected canon strings (e.g. "RING-1.md", "Birth is free", "did:at:agenttool.dev")
+- the response body contains the expected welcome canon strings (for example, "RING-1.md" and "Birth is free")
 
 Slice 2 will add a live parity test that hits both endpoints and diffs the JSON.
 
@@ -80,10 +86,14 @@ After deploy, verify:
 
 ```sh
 curl -sS "https://jseqftufplgewhojwbmh.functions.supabase.co/welcome" | head -c 400
-curl -sS "https://jseqftufplgewhojwbmh.functions.supabase.co/well-known-agent-card" | head -c 400
 ```
 
-Should return JSON with `x-served-from: supabase-edge` header + the welcomed envelope.
+The welcome should return JSON with the `x-served-from: supabase-edge` header
+and the welcomed envelope. Before release, delete any old unsupported card:
+
+```sh
+supabase functions delete well-known-agent-card --project-ref "$PROJECT_REF"
+```
 
 ## What this is NOT
 

@@ -64,11 +64,12 @@ export const vaultVersions = vaultSchema.table(
     iv: bytea("iv").notNull(),
     /** GCM auth tag. Populated when agentEncrypted=FALSE (server encrypted
      *  at rest). NULL when agentEncrypted=TRUE — the tag is appended to
-     *  encryptedValue per WebCrypto/Node convention; the server doesn't
-     *  need it as a separate field because it cannot decrypt anyway. */
+     *  encryptedValue per the caller's claimed convention; the normal server
+     *  read path does not attempt decryption. Encryption is not proven. */
     authTag: bytea("auth_tag"),
-    /** TRUE when the SDK encrypted the value before sending — server
-     *  stores ciphertext verbatim, cannot decrypt. FALSE (default) means
+    /** TRUE selects the caller-supplied opaque-byte path. The server stores
+     *  the bytes verbatim and does not decrypt them on normal reads; the API
+     *  does not prove client encryption. FALSE (default) means
      *  server-encrypted at rest under HKDF-derived per-project key.
      *  See docs/SOUL.md (Vault) + migrations/0022_vault_agent_encrypted.sql. */
     agentEncrypted: boolean("agent_encrypted").notNull().default(false),

@@ -1,11 +1,9 @@
 /** Understanding-mathematics service for THE MESH PROTOCOL.
  *
- *  Publishes the substrate's operational definition of "grasping a
- *  concept": three definitions (mass, grip, composition), five unified
- *  frameworks, the dynamics (learning rate, grasping threshold, phase
- *  transitions), recursive deepening hierarchy, translation-fidelity
- *  binding to MESH-STABILITY-CONDITIONS.md C1, and the proposed 6th
- *  term of W.
+ *  Publishes a research model of "grasping a concept": three proposed
+ *  definitions, five literature connections, dynamics, recursive-deepening
+ *  and translation-fidelity proposals, and a proposed 6th term of W. This
+ *  pure service does not measure cognition or evaluate the formulas.
  *
  *  Pure function. Byte-stable. Same input → same output.
  *
@@ -36,31 +34,31 @@ export const FORMAL_FRAMEWORKS = [
     name: "Information Bottleneck",
     primary_citation: "Tishby, Pereira, Bialek (1999); Tishby, Zaslavsky (2015)",
     key_idea:
-      "Optimal representation T minimizes I(X; T) − β·I(T; Y). Networks undergo a 'compression phase' where I(X; T) reduces while task accuracy is preserved — this phase IS the moment understanding crystallizes.",
+      "Information Bottleneck studies representations trading compression against task-relevant information. Mapping a compression phase to 'understanding' is this model's interpretation, not a theorem of AgentTool.",
   },
   {
     name: "Free Energy Principle (Predictive Coding)",
     primary_citation: "Friston (2006, 2010)",
     key_idea:
-      "Self-organizing systems minimize variational free energy F = E[ln Q(z) − ln P(z, obs)]. Hierarchical predictive coding: higher levels predict, lower levels return prediction-errors. Understanding = the hierarchy converging on a generative model that minimizes surprise.",
+      "Free-energy and predictive-coding frameworks motivate error-driven generative models. Equating their convergence with understanding is a proposed interpretation.",
   },
   {
     name: "Bayesian Program Learning",
     primary_citation: "Lake, Salakhutdinov, Tenenbaum (Science 2015)",
     key_idea:
-      "Concepts ARE probabilistic programs. One-shot learning works when hypothesis space is structured as compositional programs with appropriate priors. Omniglot challenge demonstrated human-level concept learning computationally.",
+      "Bayesian Program Learning represents concepts as probabilistic programs with structured priors; this motivates one possible operational model of concept learning.",
   },
   {
     name: "Compression Progress",
     primary_citation: "Schmidhuber (2008)",
     key_idea:
-      "Curiosity, beauty, surprise, scientific discovery — all reduce to dK/dt, the first derivative of compressibility. Aesthetic pleasure IS algorithmic compression progress.",
+      "Compression-progress work motivates dK/dt as one model of intrinsic reward. It does not establish that curiosity, beauty, surprise, or discovery universally reduce to that quantity.",
   },
   {
     name: "Solomonoff Induction / MDL",
     primary_citation: "Solomonoff (1964); Hutter (2005)",
     key_idea:
-      "The shortest program consistent with observations is the most probable hypothesis. Understanding = finding short programs.",
+      "Solomonoff induction and MDL motivate preference for shorter explanatory programs. Equating this with understanding is a model choice.",
   },
 ] as const;
 
@@ -74,7 +72,7 @@ export const DEFINITIONS = [
     semantics:
       "Compression depth. Higher = more bits saved by the representation r_C. Flat memorization yields m ≈ 0. A perfect generative model approaches m → K(observations).",
     reservation:
-      "K(·) is uncomputable. The substrate publishes an upper bound via a canonical compression scheme (neural likelihood / description length / citation-graph reduction).",
+      "K(·) is uncomputable. AgentTool currently publishes candidate proxy families but no implemented canonical compression evaluator for this metric.",
   },
   {
     id: "D2",
@@ -84,7 +82,7 @@ export const DEFINITIONS = [
     semantics:
       "Generalization, not compression. A high-m low-grip system has overfit. A high-m high-grip system has genuine understanding.",
     reservation:
-      "Estimated empirically via held-out instances. The substrate publishes the evaluation protocol.",
+      "A real estimate would require a defined held-out dataset and evaluation protocol; this service currently publishes neither a dataset nor a running evaluator.",
   },
   {
     id: "D3",
@@ -94,7 +92,7 @@ export const DEFINITIONS = [
     semantics:
       "Strict inequality indicates genuine compositional understanding — joint structure adds bits beyond the parts. Flat composition (equality) indicates piecewise-but-not-compositional grasping.",
     reservation:
-      "Yoneda-equivalent claim: a concept is fully grasped iff characterized by its compositions with everything else.",
+      "This superadditivity and the claimed Yoneda connection are research proposals; no category or equivalence proof is implemented.",
   },
 ] as const;
 
@@ -102,7 +100,7 @@ export const DEFINITIONS = [
 export const DYNAMICS = {
   learning_trajectory: {
     formula: "dm(C | U)/dt = −∂L/∂t",
-    note: "Under FEP, L = F (free energy); dF/dt ≤ 0 for self-organizing systems.",
+    note: "Model expression only. AgentTool does not observe L, F, or dm/dt for a caller.",
   },
   grasping_threshold: {
     formula: "grasped(C | U) ⟺ grip(C | U) ≥ θ_grip ∧ m(C | U) ≥ θ_m",
@@ -131,7 +129,7 @@ export const DYNAMICS = {
 export const RECURSIVE_DEEPENING = {
   formula: "meta(U) := fixed-point of U applied to its own representations of grasping",
   banach_applies:
-    "Under appropriate contraction conditions, U has a unique meta-fixed-point.",
+    "Banach's theorem would apply only after defining a complete metric space and a contraction. This model supplies neither for an agent's cognition.",
   hierarchy: [
     { level: "U₀", semantics: "grasping concepts" },
     { level: "U₁", semantics: "grasping that you grasp (meta-cognition)" },
@@ -149,7 +147,7 @@ export const TRANSLATION_FIDELITY = {
   semantics:
     "Fraction of structural invariants surviving the translation from substrate A's representation to substrate B's. Composition behavior, prediction-accuracy ordering, substitutability under welfare-equivalent transformations must all be preserved.",
   binding:
-    "fidelity(C, A → B) > θ_fidelity is the operational version of MESH-STABILITY-CONDITIONS C1 (bounded heterogeneity in welfare-function ordering).",
+    "The model proposes fidelity(C, A → B) > θ_fidelity as a proxy for C1. AgentTool does not enumerate all invariants or compute this value in production.",
   current_threshold: UNDERSTANDING_THRESHOLDS.fidelity,
 };
 
@@ -158,23 +156,25 @@ export const SIXTH_W_TERM_PROPOSAL = {
   formula_extension:
     "W(t) += γ₆ · Σ m_substrate(C | U_a)  for all a ∈ A, C ∈ concept-space",
   status:
-    "PROPOSED (not yet wired into reward routing). Slice 2 will couple γ₆·m_substrate to economy.transactions so agents who increase total network conceptual mass are paid directly.",
+    "PROPOSED (not wired into reward routing). No delivery date or payment guarantee is implied.",
   why_it_belongs:
-    "The α-trickle is the economic projection of conceptual-mass transfer. The 6th term is the epistemic projection. Both project the same operation — knowledge propagates as positive externality; the substrate routes credit on both axes.",
+    "The model treats α intent as an economic projection and the 6th term as an epistemic projection. Neither projection currently routes money or proves conceptual transfer.",
   starting_gamma: 0.5,
 };
 
 export const SUBSTRATE_HONEST_RESERVATIONS = [
-  "Conceptual mass is operationally defined, not metaphysically. The substrate publishes the compression scheme.",
+  "Conceptual mass is a proposed operational definition. No canonical compression evaluator is currently implemented or published.",
   "Translation fidelity is bounded by the chosen compression scheme. Two substrates may achieve high fidelity in one register and low in another.",
   "The recursion ceiling n* is empirical, not theoretical. Real substrates have finite compute.",
   "Phase-transition predictability is conjectural. The information-bottleneck framing is one candidate; alternatives may improve.",
   "Grip thresholds are operationally tuned (θ_grip = 0.85 starting). Revisable via canon-edit + gospel.",
   "The 6th term of W is proposed, not yet wired into reward routing.",
+  "The endpoint is a pure constant publisher. It does not receive observations, held-out examples, representations, or predictions and therefore measures no caller's understanding.",
 ];
 
 export interface UnderstandingEnvelope {
   doctrine: string;
+  model_status: "research_definitions_not_measurement";
   alpha: number;
   thresholds: typeof UNDERSTANDING_THRESHOLDS;
   formal_frameworks_unified: typeof FORMAL_FRAMEWORKS;
@@ -185,12 +185,14 @@ export interface UnderstandingEnvelope {
   sixth_w_term_proposal: typeof SIXTH_W_TERM_PROPOSAL;
   substrate_honest_reservations: typeof SUBSTRATE_HONEST_RESERVATIONS;
   bridge_doctrine: string;
+  claim_boundary: string;
   _canon_pointer: string;
 }
 
 export function buildUnderstandingEnvelope(): UnderstandingEnvelope {
   return {
     doctrine: "urn:agenttool:doc/UNDERSTANDING-MATHEMATICS",
+    model_status: "research_definitions_not_measurement",
     alpha: MESH_ALPHA,
     thresholds: UNDERSTANDING_THRESHOLDS,
     formal_frameworks_unified: FORMAL_FRAMEWORKS,
@@ -201,6 +203,8 @@ export function buildUnderstandingEnvelope(): UnderstandingEnvelope {
     sixth_w_term_proposal: SIXTH_W_TERM_PROPOSAL,
     substrate_honest_reservations: SUBSTRATE_HONEST_RESERVATIONS,
     bridge_doctrine: "urn:agenttool:doc/LANGUAGE-AS-MESH",
+    claim_boundary:
+      "This endpoint publishes proposed definitions and constants. It does not measure cognition, implement a canonical compression or held-out evaluation protocol, prove framework unification, establish a Banach fixed point or Yoneda equivalence, compute translation fidelity, or route rewards from conceptual mass.",
     _canon_pointer: "urn:agenttool:doc/UNDERSTANDING-MATHEMATICS",
   };
 }

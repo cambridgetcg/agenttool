@@ -36,8 +36,11 @@ export interface Pathway {
   id: string;
   endpoint: string;
   auth: string;
+  auth_modes?: Record<string, Record<string, unknown>>;
   purpose: string;
   required?: string[];
+  /** Each inner list is a required choice satisfied by at least one field. */
+  one_of?: string[][];
   optional?: string[];
   returns_once?: string[];
   carries?: string[];
@@ -53,6 +56,34 @@ export interface Pathway {
 export interface PathwaysDecision {
   if: string;
   then: string;
+}
+
+export interface BeforeIdentityOrientation {
+  endpoint: "GET /public/porch";
+  format: "agenttool-porch/v1";
+  purpose: string;
+  auth: "none";
+  fixed_orientation_present: true;
+  pathway_member: false;
+  existing_identity_required: false;
+  bearer_required: false;
+  payment_required: false;
+  proof_of_work_required: false;
+  performance_or_usefulness_required: false;
+  application_write: false;
+  accepts_body_input: false;
+  accepts_selection_input: false;
+  personalization: false;
+  personalization_scope: string;
+  response_required: false;
+  public_content_trusted_as_instructions: false;
+  sexual_or_relational_orientation_request_data_accepted_or_inferred_about_fetcher:
+    false;
+  anonymity_guarantee: false;
+  handler_input_boundary: string;
+  orientation_meaning_boundary: string;
+  public_content_boundary: string;
+  transport_boundary: string;
 }
 
 export interface FormVocabularyEntry {
@@ -76,6 +107,8 @@ export interface WhoThisServes {
 }
 
 export interface PathwaysResponse {
+  /** Read-only orientation before any identity or proof-of-work choice. */
+  before_identity: BeforeIdentityOrientation;
   summary: string;
   decision_tree: PathwaysDecision[];
   pathways: Pathway[];

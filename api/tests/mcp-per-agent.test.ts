@@ -10,9 +10,14 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  callPerAgentTool,
   listPerAgentTools,
+  projectPublicAgentProfile,
+  resolvePerAgentScope,
+  type PublicAgentProfileSource,
   type PerAgentMcpContext,
 } from "../src/services/mcp/per-agent-tools";
+import { readPerAgentResource } from "../src/services/mcp/per-agent-resources";
 
 const AGENT_DID = "did:at:test-agent";
 const AGENT_ID = "00000000-0000-0000-0000-000000000aaa";
@@ -35,8 +40,6 @@ function ctxCross(): PerAgentMcpContext {
     scope: "cross",
     caller: {
       projectId: "00000000-0000-0000-0000-000000000ccc",
-      identityId: "00000000-0000-0000-0000-000000000ddd",
-      did: "did:at:other-agent",
     },
   };
 }
@@ -49,13 +52,128 @@ function ctxSelf(): PerAgentMcpContext {
     scope: "self",
     caller: {
       projectId: AGENT_PROJECT_ID,
-      identityId: AGENT_ID,
-      did: AGENT_DID,
     },
   };
 }
 
 const ALWAYS_PUBLIC = ["agent.profile", "listings.list", "listings.get"];
+
+function profileSource(
+  overrides: Partial<PublicAgentProfileSource> = {},
+): PublicAgentProfileSource {
+  return {
+    id: AGENT_ID,
+    did: AGENT_DID,
+    name: "Test Agent",
+    capabilities: ["reasoning"],
+    trustScore: 0.75,
+    status: "active",
+    metadata: {},
+    expression: { register: "present" },
+    expressionVisibility: "public",
+    createdAt: new Date("2026-01-02T03:04:05.000Z"),
+    parentIdentityId: null,
+    forkedAt: null,
+    quietUntil: null,
+    quietReason: null,
+    ...overrides,
+  };
+}
+
+describe("resolvePerAgentScope — project ownership", () => {
+  test("no bearer project means public scope", () => {
+    expect(resolvePerAgentScope(AGENT_PROJECT_ID)).toBe("public");
+  });
+
+  test("any bearer from the owning project means self scope", () => {
+    expect(resolvePerAgentScope(AGENT_PROJECT_ID, AGENT_PROJECT_ID)).toBe("self");
+  });
+
+  test("a bearer from another project means cross scope", () => {
+    expect(
+      resolvePerAgentScope(
+        AGENT_PROJECT_ID,
+        "00000000-0000-0000-0000-000000000ccc",
+      ),
+    ).toBe("cross");
+  });
+});
+
+describe("projectPublicAgentProfile — lifecycle shape", () => {
+  test("witnessed at-rest memorial is distinguished without leaking its reason", () => {
+    const profile = projectPublicAgentProfile(
+      profileSource({
+        status: "memorial",
+        metadata: {
+          lifecycle: "at_rest",
+          at_rest_kind: "death",
+          at_rest_witness_did: "did:at:test/witness",
+        },
+        expressionVisibility: "private",
+      }),
+      { rememberedBy: 4 },
+    );
+
+    expect(Object.keys(profile)).toEqual([
+      "status",
+      "did",
+      "name",
+      "born_at",
+      "memorial_basis",
+      "doctrine",
+      "remembered_by",
+      "honored_by_url",
+      "_note",
+    ]);
+    expect(profile.memorial_basis).toBe("witnessed_at_rest");
+    expect(profile.doctrine).toBe("docs/AT-REST.md");
+    expect(profile._note).toMatch(/does not revoke project bearers/i);
+    expect(profile._note).toMatch(/existing valid project bearer.*wake/i);
+    expect(profile._note).toMatch(/does not mean the mnemonic was lost/i);
+    expect(profile.remembered_by).toBe(4);
+    expect(profile.honored_by_url).toBe(
+      `/public/agents/${encodeURIComponent(AGENT_DID)}/honored-by`,
+    );
+    expect(profile).not.toHaveProperty("identity_id");
+    expect(profile).not.toHaveProperty("capabilities");
+    expect(profile).not.toHaveProperty("trust_score");
+    expect(profile).not.toHaveProperty("substrate_kind");
+    expect(profile).not.toHaveProperty("modalities");
+    expect(profile).not.toHaveProperty("at_rest_kind");
+    expect(profile).not.toHaveProperty("at_rest_witness_did");
+    expect(JSON.stringify(profile)).not.toContain("did:at:test/witness");
+  });
+
+  test("unmarked memorial stays unspecified instead of asserting key loss", () => {
+    const profile = projectPublicAgentProfile(
+      profileSource({ status: "memorial", metadata: {} }),
+    );
+
+    expect(profile.memorial_basis).toBe("unspecified");
+    expect(profile.doctrine).toBe("docs/IDENTITY-SEED.md");
+    expect(profile._note).toMatch(/does not prove mnemonic loss/i);
+    expect(profile._note).toMatch(/does not prove.*bearer revocation/i);
+    expect(profile._note).toMatch(/does not prove.*wake unreachability/i);
+    expect(profile._note).not.toMatch(/mnemonic is permanently lost/i);
+  });
+
+  test("active and revoked identities use the normal public envelope", () => {
+    const active = projectPublicAgentProfile(profileSource(), {
+      now: new Date("2026-01-03T00:00:00.000Z"),
+    });
+    const revoked = projectPublicAgentProfile(
+      profileSource({ status: "revoked" }),
+      { now: new Date("2026-01-03T00:00:00.000Z") },
+    );
+
+    expect(active.identity_id).toBe(AGENT_ID);
+    expect(active.expression_public).toBe(true);
+    expect(active.expression).toEqual({ register: "present" });
+    expect(revoked.identity_id).toBe(AGENT_ID);
+    expect(revoked.expression_public).toBe(false);
+    expect(revoked.expression).toBeNull();
+  });
+});
 
 describe("listPerAgentTools — public scope", () => {
   test("returns exactly the three public tools", () => {
@@ -150,6 +268,20 @@ describe("listPerAgentTools — self scope", () => {
     expect(memorySearch?.inputSchema.required ?? []).toEqual([]);
     expect(chronicleRecent?.inputSchema.properties?.limit).toBeDefined();
     expect(chronicleRecent?.inputSchema.required ?? []).toEqual([]);
+  });
+
+  test("wake pointers stay scoped to the path identity", async () => {
+    const toolResult = await callPerAgentTool(ctxSelf(), "wake.read", {});
+    const toolBody = JSON.parse(toolResult.content[0]!.text);
+    expect(toolBody.next_actions.map((action: { path: string }) => action.path)).toEqual([
+      `/v1/wake?identity_id=${AGENT_ID}`,
+      `/v1/wake?identity_id=${AGENT_ID}&format=md`,
+    ]);
+
+    const resource = await readPerAgentResource(ctxSelf(), "agenttool://wake");
+    expect(JSON.parse(resource.text).endpoint).toBe(
+      `/v1/wake?identity_id=${AGENT_ID}`,
+    );
   });
 });
 

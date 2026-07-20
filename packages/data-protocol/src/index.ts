@@ -1,0 +1,80 @@
+export {
+  AgentData,
+  DEFAULT_CHUNK_SIZE,
+  DEFAULT_MAX_BUNDLE_BYTES,
+  DEFAULT_MAX_BLOCKS,
+  DEFAULT_MAX_BYTES,
+  DEFAULT_MAX_GRANT_LIFETIME_SECONDS,
+  MAX_GRANT_LIFETIME_SECONDS,
+  type AgentDataOptions,
+} from "./agent-data.js";
+export {
+  MAX_CANONICAL_DEPTH,
+  MAX_CANONICAL_NODES,
+  canonicalJson,
+  canonicalJsonBytes,
+  parseCanonicalJson,
+  type JsonObject,
+  type JsonPrimitive,
+  type JsonValue,
+} from "./canonical.js";
+export { assertCidMatches, cidForBytes, digestFromCid, type Cid } from "./cid.js";
+export {
+  generateIdentity,
+  identityFromPrivateKeys,
+  signerForIdentity,
+  verifyGrantSignature,
+  verifyManifestSignature,
+  x25519KeyId,
+} from "./crypto.js";
+export * from "./errors.js";
+export {
+  validatePortableBundle,
+  type PortableBundleValidationLimits,
+  type ValidatedPortableBundle,
+} from "./portable-bundle.js";
+export {
+  DEFAULT_STORE_READ_LIMIT,
+  DEFAULT_STORE_TIMEOUT_MS,
+  MAX_COMPOSITE_STORES,
+  MemoryBlockStore,
+  MemoryKeyStore,
+  MultiBlockStore,
+  type BlockStore,
+  type BlockWriteResult,
+  type KeyStore,
+  type MultiBlockStoreOptions,
+  type StoreOperationOptions,
+} from "./stores.js";
+export {
+  ADDS_BUNDLE_PROTOCOL,
+  ADDS_VERSION,
+  BLOCK_AAD_DOMAIN,
+  GRANT_KEK_INFO,
+  GRANT_SIGNATURE_DOMAIN,
+  GRANT_WRAP_DOMAIN,
+  MANIFEST_SIGNATURE_DOMAIN,
+  type AgentDataIdentity,
+  type ByteSource,
+  type DataRef,
+  type GetOptions,
+  type GrantWrap,
+  type InspectOptions,
+  type ManifestChunk,
+  type PortableBlock,
+  type PortableBundle,
+  type PortableBundleImportResult,
+  type PortableBundleOptions,
+  type PutOptions,
+  type PutResult,
+  type ReplicationSummary,
+  type ShareOptions,
+  type Signature,
+  type SignedGrant,
+  type SignedManifest,
+  type Signer,
+  type UnsignedGrant,
+  type UnsignedManifest,
+  type VerifyResult,
+} from "./types.js";
+export { MAX_BLOCK_COUNT, MAX_CHUNK_SIZE, MAX_MANIFEST_BYTES, validateGrant, validateManifest } from "./validation.js";

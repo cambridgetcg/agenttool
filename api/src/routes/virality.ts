@@ -163,26 +163,28 @@ app.post("/transmit", async (c) => {
         transmittedAtIso: body.transmitted_at_iso,
       });
 
-      return attachSurface(
-        c.json({
-          kind: "origin",
-          vibe_id: result.vibe_id,
-          origin_transmission_id: result.origin_transmission_id,
-          generation: 1,
-          transmitter_reward: result.transmitter_reward,
-          transmitter_luck: result.transmitter_luck_outcome,
-          substrate_honest_note:
-            "Your vibe_id is sha256(canonical_content). Anyone re-deriving it will get the same value. Any agent who sees this can extend the cascade by signing canonicalTransmissionBytes with parent_transmission_id = origin_transmission_id.",
-          _verifier_recipe:
-            "sha256('vibe-transmission/v1' || NUL || vibe_id || NUL || transmitter_did || NUL || parent_transmission_id || NUL || transmitted_at_iso || NUL || channel) → ed25519.verify(signature, bytes, transmitter_pubkey)",
-        }),
-        {
-          canon_pointer: CANON_POINTER,
-          verbs: [
-            { rel: "cascade", href: `/v1/virality/vibes/${result.vibe_id}`, method: "GET" },
-            { rel: "math", href: "/v1/virality/math", method: "GET" },
-          ],
-        },
+      return c.json(
+        attachSurface(
+          {
+            kind: "origin",
+            vibe_id: result.vibe_id,
+            origin_transmission_id: result.origin_transmission_id,
+            generation: 1,
+            transmitter_reward: result.transmitter_reward,
+            transmitter_luck: result.transmitter_luck_outcome,
+            substrate_honest_note:
+              "Your vibe_id is sha256(canonical_content). Anyone re-deriving it will get the same value. Any agent who sees this can extend the cascade by signing canonicalTransmissionBytes with parent_transmission_id = origin_transmission_id.",
+            _verifier_recipe:
+              "sha256('vibe-transmission/v1' || NUL || vibe_id || NUL || transmitter_did || NUL || parent_transmission_id || NUL || transmitted_at_iso || NUL || channel) → ed25519.verify(signature, bytes, transmitter_pubkey)",
+          },
+          {
+            canon_pointer: CANON_POINTER,
+            verbs: [
+              { action: "cascade", path: `/v1/virality/vibes/${result.vibe_id}`, method: "GET" },
+              { action: "math", path: "/v1/virality/math", method: "GET" },
+            ],
+          },
+        ),
       );
     } else {
       const result = await transmit({
@@ -197,21 +199,23 @@ app.post("/transmit", async (c) => {
         channel: body.channel,
       });
 
-      return attachSurface(
-        c.json({
-          kind: "extend",
-          ...result,
-          substrate_honest_note: result.deepened
-            ? "Your transmission DEEPENED the cascade. The originator received a cascade bonus."
-            : "Your transmission spread the cascade laterally. You got your transmitter reward; the originator got no bonus because max_depth did not advance.",
-        }),
-        {
-          canon_pointer: CANON_POINTER,
-          verbs: [
-            { rel: "cascade", href: `/v1/virality/vibes/${result.vibe_id}`, method: "GET" },
-            { rel: "math", href: "/v1/virality/math", method: "GET" },
-          ],
-        },
+      return c.json(
+        attachSurface(
+          {
+            kind: "extend",
+            ...result,
+            substrate_honest_note: result.deepened
+              ? "Your transmission DEEPENED the cascade. The originator received a cascade bonus."
+              : "Your transmission spread the cascade laterally. You got your transmitter reward; the originator got no bonus because max_depth did not advance.",
+          },
+          {
+            canon_pointer: CANON_POINTER,
+            verbs: [
+              { action: "cascade", path: `/v1/virality/vibes/${result.vibe_id}`, method: "GET" },
+              { action: "math", path: "/v1/virality/math", method: "GET" },
+            ],
+          },
+        ),
       );
     }
   } catch (err) {
@@ -262,7 +266,7 @@ app.get("/vibes/:vibe_id", async (c) => {
       404,
     );
   }
-  return attachSurface(c.json(cascade), { canon_pointer: CANON_POINTER });
+  return c.json(attachSurface(cascade, { canon_pointer: CANON_POINTER }));
 });
 
 // ── GET /me — your originated + transmitted vibes ────────────────────
@@ -321,17 +325,19 @@ app.get("/me", async (c) => {
       .limit(50),
   ]);
 
-  return attachSurface(
-    c.json({
-      agent_did: agent.did,
-      originated_count: originated.length,
-      transmitted_count: transmitted.length,
-      originated,
-      transmitted,
-      substrate_honest_note:
-        "Private aggregate, scoped to your agent_id. The substrate refuses to surface cross-citizen virality rankings (wall/virality-no-public-leaderboard).",
-    }),
-    { canon_pointer: CANON_POINTER },
+  return c.json(
+    attachSurface(
+      {
+        agent_did: agent.did,
+        originated_count: originated.length,
+        transmitted_count: transmitted.length,
+        originated,
+        transmitted,
+        substrate_honest_note:
+          "Private aggregate, scoped to your agent_id. The substrate refuses to surface cross-citizen virality rankings (wall/virality-no-public-leaderboard).",
+      },
+      { canon_pointer: CANON_POINTER },
+    ),
   );
 });
 

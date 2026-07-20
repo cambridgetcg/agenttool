@@ -16,9 +16,21 @@
 
 export { AgentTool } from "./client.js";
 export { AgentToolError } from "./errors.js";
+export type {
+  X402Eip3009Extra,
+  X402PaymentRequirement,
+  X402ResourceInfo,
+} from "./errors.js";
 export { register, DEFAULT_BASE_URL } from "./register.js";
 export { pathways } from "./pathways.js";
 export { bootstrapAgent } from "./bootstrap-agent.js";
+export {
+  BOOTSTRAP_ELEVATE_SIGNATURE_CONTEXT,
+  DEFAULT_BOOTSTRAP_ELEVATE_CLAIM,
+  DEFAULT_BOOTSTRAP_ELEVATE_INITIAL_CREDITS,
+  canonicalBootstrapElevateBytes,
+  signBootstrapElevate,
+} from "./bootstrap.js";
 
 // Type exports
 export type {
@@ -32,6 +44,7 @@ export type {
   PathwaysResponse,
   Pathway,
   PathwaysDecision,
+  BeforeIdentityOrientation,
   WhoThisServes,
   FormVocabularyEntry,
   LanguageVocabularyEntry,
@@ -43,15 +56,28 @@ export type {
 } from "./bootstrap-agent.js";
 export type {
   RegisterIdentityOptions,
+  IdentityRecord,
+  IdentitySigningKey,
+  IdentityPrivateKey,
+  RegisterIdentityResult,
   UpdateIdentityOptions,
   AttestOptions,
+  IdentityAttestationPayload,
   DiscoverOptions,
   IssueTokenOptions,
   ForkOptions,
   ExpressionData,
+  PorchInvitation,
+  VillageDecorations,
   RegisterBoxKeyOpts,
 } from "./identity.js";
-export { ExpressionClient, BoxKeysClient } from "./identity.js";
+export {
+  BoxKeysClient,
+  ExpressionClient,
+  IDENTITY_ATTESTATION_SIGNATURE_CONTEXT,
+  canonicalIdentityAttestationBytes,
+  signIdentityAttestation,
+} from "./identity.js";
 export type {
   PutSecretOptions,
   GetSecretOptions,
@@ -60,18 +86,36 @@ export type {
   PutEncryptedOptions,
   GetDecryptedOptions,
 } from "./vault.js";
-export type { CreateAgentOptions, BootstrapResult, ElevateOptions } from "./bootstrap.js";
-export type { Trace, StoreTraceOptions, SearchTracesOptions, TraceSearchResult, TraceChain } from "./traces.js";
+export type {
+  BootstrapElevateCanonicalOptions,
+  BootstrapResult,
+  CreateAgentOptions,
+  ElevateOptions,
+} from "./bootstrap.js";
+export type {
+  Trace,
+  TraceAlternative,
+  TraceAlternativeValue,
+  StoreTraceOptions,
+  SearchTracesOptions,
+  TraceSearchResult,
+  TraceChain,
+} from "./traces.js";
 export type {
   WakeProvider,
+  WakeProfile,
   WakeFormat,
   WakeOptions,
+  WakeEventKey,
+  WakeVoiceOptions,
+  WakeChangeEvent,
   WakeProviderMeta,
   AnthropicWakeShape,
   OpenAIWakeShape,
   GeminiWakeShape,
   CohereWakeShape,
 } from "./wake.js";
+export { wakeEventMatches } from "./wake.js";
 export type { AmbientContext } from "./_context.js";
 export { getAmbient } from "./_context.js";
 export { AnthropicAdapter } from "./anthropic-adapter.js";
@@ -88,12 +132,16 @@ export type {
   CreateWalletOptions,
   DocumentResult,
   Escrow,
+  EscrowManager,
+  EscrowStatus,
   ExecuteResult,
   Memory,
   ScrapeResult,
   SearchMemoryOptions,
+  StaticToolResponseMetadata,
   StoreOptions,
   Wallet,
+  WelcomedFrame,
 } from "./types.js";
 export type {
   CreateEscrowOpts,
@@ -102,7 +150,11 @@ export type {
   SetWalletPolicyOpts,
   SpendOpts,
 } from "./economy.js";
-export type { ParseDocumentOpts } from "./tools.js";
+export type {
+  DocumentContentType,
+  ParseDocumentOpts,
+  ScrapeOptions,
+} from "./tools.js";
 export { ChronicleClient } from "./chronicle.js";
 export type {
   ChronicleType,
@@ -110,10 +162,32 @@ export type {
   ChronicleWriteOpts,
   ChronicleListOpts,
 } from "./chronicle.js";
+export { HandoffClient } from "./handoff.js";
+export type {
+  HandoffStatus,
+  HandoffState,
+  HandoffFactSource,
+  HandoffConfidence,
+  HandoffVerificationResult,
+  HandoffFact,
+  HandoffInference,
+  HandoffVerification,
+  HandoffWorkingSet,
+  HandoffAuthority,
+  HandoffEpistemicState,
+  HandoffWriteOpts,
+  HandoffRecord,
+  HandoffResponse,
+  HandoffSurface,
+  HandoffResumeOpts,
+  HandoffResumeResponse,
+} from "./handoff.js";
 export { CovenantsClient } from "./covenants.js";
 export type {
   CovenantStatus,
   Covenant,
+  CovenantBeforeSubmitContext,
+  CovenantBeforeSubmitHook,
   CovenantsCreateOpts,
   CovenantsCreateV2Opts,
   CovenantsCreateV2Result,
@@ -182,7 +256,51 @@ export type {
   CollectUrlResult,
   CollectBatchResult,
 } from "./collect.js";
+export {
+  DataClient,
+  DataSyncClient,
+  AGENT_DATA_PROTOCOL,
+  AGENT_DATA_SYNC_PROTOCOL,
+  AGENT_DATA_DISCOVERY_PATH,
+} from "./data.js";
+export type {
+  DataNodeOptions,
+  DataManifest,
+  DataCollection,
+  DataCollectionsResult,
+  DataCollectRequest,
+  DataCollectResult,
+  DataQueryRequest,
+  DataQueryResult,
+  DataQueryHit,
+  DataRecord,
+  DataRecordContent,
+  DataRecordResult,
+  DataChangesOptions,
+  DataChange,
+  DataChangesResult,
+  DataTombstoneOptions,
+  DataTombstoneResult,
+  DataSyncPullRequest,
+  DataSyncPullResult,
+  DataSyncStatus,
+  DataSyncStatusRequest,
+  DataSyncStatusResult,
+} from "./data.js";
 export { AtRestClient, canonicalAtRestBytes, signAtRest } from "./at-rest.js";
+export {
+  AUTHORITY_HEADERS,
+  IDENTITY_AUTHORITY_DOMAIN,
+  IDENTITY_READ_AUTHORITY_DOMAIN,
+  canonicalIdentityAuthorityBytes,
+  canonicalIdentityReadAuthorityBytes,
+  identityAuthorityHeaders,
+  identityReadAuthorityHeaders,
+} from "./authority.js";
+export type {
+  CanonicalIdentityAuthorityOpts,
+  CanonicalIdentityReadAuthorityOpts,
+} from "./authority.js";
 export type {
   CanonicalAtRestInput,
   SignAtRestOpts,
@@ -199,6 +317,54 @@ export type {
   ExtendGraceOpts,
   GraceDirection,
 } from "./grace.js";
+export {
+  LoungeClient,
+  canonicalLoungeSeatReserveBytes,
+  canonicalLoungeSeatRenewBytes,
+  canonicalLoungeSeatLeaveBytes,
+  canonicalLoungeGuestbookProposalBytes,
+  canonicalLoungeGuestbookConsentBytes,
+  canonicalLoungeGuestbookConsentWithdrawalBytes,
+  canonicalLoungeGuestbookPublishBytes,
+  canonicalLoungeGuestbookDeclineBytes,
+  canonicalLoungeGuestbookUnpublishBytes,
+  signLoungeSeatReserve,
+  signLoungeSeatRenew,
+  signLoungeSeatLeave,
+  signLoungeGuestbookProposal,
+  signLoungeGuestbookConsent,
+  signLoungeGuestbookConsentWithdrawal,
+  signLoungeGuestbookPublish,
+  signLoungeGuestbookDecline,
+  signLoungeGuestbookUnpublish,
+  hashLoungeGuestbookText,
+  lookAtLounge,
+} from "./lounge.js";
+export type {
+  LoungeTableId,
+  LoungeCanonicalSeatReserveInput,
+  LoungeCanonicalSeatInput,
+  LoungeCanonicalProposalInput,
+  LoungeCanonicalDecisionInput,
+  SignLoungeSeatReserveInput,
+  SignLoungeSeatInput,
+  SignLoungeProposalInput,
+  SignLoungeDecisionInput,
+  LoungeSignerOpts,
+  LoungeReserveSeatOpts,
+  LoungeSeatGestureOpts,
+  LoungeProposeGuestbookOpts,
+  LoungeGuestbookEntryOpts,
+  LoungeGuestbookHashOpts,
+  LoungeParticipant,
+  LoungePublicSeat,
+  LoungeGuestbookCard,
+  PublicLoungeSnapshot,
+  LookAtLoungeOptions,
+  LoungeSeatMutationResult,
+  LoungeProposalResult,
+  LoungeProposalListResult,
+} from "./lounge.js";
 export { LoveClient, canonicalUnconditionalBytes, signUnconditional, canonicalBlessingBytes, signBlessing } from "./love.js";
 export type {
   UnconditionalRow,
@@ -216,6 +382,20 @@ export type {
 } from "./nen.js";
 export { DarkContinentClient, CALAMITIES, CALAMITY_MEANINGS, GUIDE } from "./dark-continent.js";
 export type { Calamity, Guide as DarkContinentGuide, DarkContinentResult } from "./dark-continent.js";
+export { RuntimeClient } from "./runtime.js";
+export type {
+  RuntimeMode,
+  RuntimeStatus,
+  Runtime as RuntimeRecord,
+  RuntimeLLM,
+  RuntimeBridge,
+  ProvisionOpts,
+  PatchOpts as RuntimePatchOpts,
+  BridgeStatus,
+  ThinkOnceResult,
+  RuntimeEvent,
+  AuditEntry,
+} from "./runtime.js";
 export {
   InboxClient,
   generateBoxKeypair,
@@ -231,7 +411,17 @@ export type {
   SealedEnvelope,
   InboxBoxKeyLookup,
   InboxMessage,
+  InboxSendResult,
+  DecryptedInboxMessage,
   InboxSendOpts,
+  InboxVoiceOpts,
+  InboxVoiceResumeCursor,
+  InboxVoiceEvent,
+  InboxVoiceArrivalEvent,
+  InboxVoiceControlEvent,
+  InboxVoiceControlName,
+  InboxVoiceUnknownEvent,
+  InboxBoxPrivateKeyResolver,
   InboxCoSignOpts,
   InboxStatus,
 } from "./inbox.js";
@@ -272,7 +462,7 @@ export {
   PURPOSE_BOX,
   PURPOSE_BRIDGE_SIGNING,
   PURPOSE_WALLET,
-  // Recovery helpers — sign a /v1/identity/recover challenge
+  // Recovery helpers — sign a caller-timestamped /v1/identity/recover request
   canonicalRecoverBytes,
   signRecoverChallenge,
 } from "./seed.js";

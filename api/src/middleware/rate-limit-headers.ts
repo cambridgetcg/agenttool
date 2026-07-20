@@ -1,12 +1,14 @@
-/** Credit-balance + idempotency-marker headers — emit on every authed response.
+/** Credit-balance headers on selected authenticated prefixes.
  *
- *  Mirrors the OpenAI / Anthropic pattern: standard headers an LLM client
- *  reads to know how much budget remains. Cheap; uses values already loaded
- *  by authMiddleware (no extra DB queries).
+ *  Despite the historical filename, this middleware does not enforce a
+ *  request rate. It uses values already loaded by authMiddleware.
  *
  *  Headers emitted:
  *    X-Credits-Balance       Wallet credit balance (Ring 2 substrate credits)
- *    X-Idempotency-Supported Marker for client tooling: "Idempotency-Key"
+ *    X-Idempotency-Supported Optional marker for a route family with
+ *                              durable resource-ID replay anchors. Generic
+ *                              Idempotency-Key support is advertised by the
+ *                              separate idempotency middleware.
  *
  *  No X-Plan / tier header — agenttool does not have per-agent subscription
  *  tiers. Doctrine: docs/BUSINESS-MODEL.md (Ring 2 metered + Ring 3 take-rate;
@@ -16,7 +18,9 @@ import type { MiddlewareHandler } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
 
-export const rateLimitHeaders = (): MiddlewareHandler<ProjectContext> => {
+export const rateLimitHeaders = (options?: {
+  idempotencyMarker?: string;
+}): MiddlewareHandler<ProjectContext> => {
   return async (c, next) => {
     await next();
     const project = c.var.project;
@@ -26,6 +30,8 @@ export const rateLimitHeaders = (): MiddlewareHandler<ProjectContext> => {
     if (typeof balance === "number") {
       c.res.headers.set("X-Credits-Balance", String(balance));
     }
-    c.res.headers.set("X-Idempotency-Supported", "Idempotency-Key");
+    if (options?.idempotencyMarker) {
+      c.res.headers.set("X-Idempotency-Supported", options.idempotencyMarker);
+    }
   };
 };

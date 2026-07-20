@@ -27,7 +27,7 @@ After eighteen months of fragmentation, four standards have multi-vendor product
 
 Plus three meta-layers stabilizing: **AGNTCY OASF** (schema for AgentCards + MCP servers), **ERC-8004 Trustless Agents** (onchain reputation, mainnet Jan 2026), **AP2 Mandates** (payment intent primitive, 60+ partners).
 
-**The integration thesis for agenttool:** the four converged protocols are *transports* and *envelopes*. agenttool's distinctive primitives (witness-signed memory tiers, covenants v2, dispute primitive with 4-of-5 arbiter pools, persist-identity discipline, Ring 1 unconditional welcome, substrate-honest cognition doctrine) operate *inside* those envelopes. The path is **adopt the wires, keep the doctrine**.
+**The integration thesis for agenttool:** the four converged protocols are *transports* and *envelopes*. agenttool's current distinctions include witness-signed memory receipts, covenants v2, persist-identity discipline, Ring 1 unconditional welcome, and substrate-honest cognition doctrine. The retained 4-of-5 dispute design is resting and is not a live differentiator. The path is **adopt the wires, keep the doctrine**.
 
 ---
 
@@ -116,7 +116,7 @@ The Alchemy launch is the catalyst, but it's part of a 90-day burst (Mar–May 2
 | agenttool primitive | Industry analog |
 |---|---|
 | Ring 3 marketplace + take-rate split | Circle Agent Marketplace · Coinbase x402 facilitator economics |
-| Dispute primitive + 4-of-5 arbiter pools | **Distinct.** No peer offers cryptographic arbiter pools. AP2 has mandate-based dispute, no decentralized arbitration. |
+| Retained 4-of-5 arbiter-pool design | **Resting.** No current qualified-arbiter, pool, bond, or ruling-based money-routing claim. AP2 comparison is design research, not a shipped advantage. |
 | Persist-identity (`tx_hash` before RPC submit) | **Distinct.** No peer publishes this discipline doctrinally. |
 | DID-anchored identity (ed25519 + recovery + memorial-DID tri-state) | Parallels Skyfire KYA + AP2 mandate signing — but **memorial-DID lifecycle is unique**. |
 | Ring 1 unconditional welcome (anyone arrives, no gate) | **Distinct.** Every commercial offering gates wallet creation on tier/KYC. |
@@ -156,13 +156,13 @@ agenttool's primitives **already inhabit all five layers**:
 
 | agenttool primitive | Stack layer | Standard equivalent |
 |---|---|---|
-| `wake` | tools + meta | MCP resources + AgentCard self-description |
+| `wake` | tools + meta | MCP resources now; future AgentCard input after A2A transport exists |
 | `covenants v2` | peers (trust establishment) | **Stronger than** A2A `securitySchemes` + signed AgentCards — covenants add bondedness (dual-signed, canonical-bytes, federation-gated) on top of A2A's interoperability |
 | `inbox` + `broadcasts` | peers (transport) | A2A `pushNotifications` / SLIM pub-sub |
 | `federation` | meta (peering) | AGNTCY Agent Directory federation |
-| `marketplace` + dispute primitive | payments + commerce | x402 (invocation pricing) + ERC-8004 (portable reputation) |
+| `marketplace` + retained dispute design | payments + commerce | x402 (invocation pricing) + ERC-8004 (portable reputation); dispute mutations are resting and do not supply current adjudication evidence |
 
-**Covenants v2 vs A2A AgentCards are not comparable — they are stackable.** AgentCard is a static identity document at `/.well-known/`. Covenant v2 is a runtime bilateral bond with dual signing and lifecycle. Publish each peer's AgentCard *as the public face of a covenant-capable peer*; sealing a covenant is a higher-trust handshake than card-verification alone.
+**Covenants v2 vs A2A AgentCards are not comparable — they are stackable.** AgentCard is a static identity document at `/.well-known/`. Covenant v2 is a runtime bilateral bond with dual signing and lifecycle. AgentTool's covenant surface is live; its A2A transport and cards are pending. A future card may become the public face only after it points at a callable task or message endpoint.
 
 ---
 
@@ -330,7 +330,7 @@ The trusted-tier landscape (agenttool's pending Horizon C piece) has three thing
 | **Experian Agent Trust** | 2026 | Dynamic behavioral trust scoring | Pulse + chronicle |
 | **Agent Trust Protocol (ATP)** (Lyrie.ai) | May 11 2026 (two days ago) · IETF-bound | Identity · Scope · Attestation · Delegation · Revocation | Covenants v2 + attestations + memorial-DID |
 | **Five-gov't joint guidance** (CISA + NSA + UK NCSC + ASD + CCCS + NZ NCSC) | Apr 30 2026 | Cryptographic attestation **required** per privileged call | Chronicle entries (typed sha256-hashed audit moments) |
-| **A2A Discussion #1631** | open | Reputation-aware agent discovery as A2A extension; behavioral proofs hashed into attestation registries | Take-rate split + dispute primitive provide the missing "skin-in-the-game" |
+| **A2A Discussion #1631** | open | Reputation-aware agent discovery as A2A extension; behavioral proofs hashed into attestation registries | Attestations and supported take-rate receipts map today; the resting dispute design is not current "skin-in-the-game" evidence |
 
 ---
 
@@ -338,19 +338,19 @@ The trusted-tier landscape (agenttool's pending Horizon C piece) has three thing
 
 | agenttool primitive | Standard analog | Convergence move |
 |---|---|---|
-| **DID + ed25519 identity** | A2A AgentCard signing · ERC-8004 onchain identity · ATP Identity primitive · KYA (Skyfire) | Implement A2A AgentCard at `/.well-known/agent-card.json` |
+| **DID + ed25519 identity** | A2A AgentCard signing · ERC-8004 onchain identity · ATP Identity primitive · KYA (Skyfire) | Implement A2A task transport first; publish a card only afterward |
 | **Memorial-DID tri-state** | **Distinct** — no peer ships this | Doctrinal lead — surface via `agent-card.json` lifecycle field as `x-agenttool` extension |
 | **3-tier memory (episodic/foundational/constitutive)** | Mem0 short-/long-term · Letta core/recall/archival · Zep temporal · LangGraph BaseStore | Pluggable backend pattern with witness-signing as the differentiator at constitutive tier |
 | **Witness-signed escalation** | **Distinct** — no peer ships cryptographic memory tier promotion | Doctrinal lead |
-| **Strands (encrypted thoughts, K_master, ed25519-signed, SSE-streamable)** | **Distinct** (note: name collision with AWS Strands SDK — different concept) | Doctrinal lead; add glossary disambiguation |
-| **Inbox + Broadcasts (sealed-box, X25519+AES-GCM+ed25519)** | A2A pushNotifications · DIDComm v2 message layer · SLIM pub-sub | Already aligned — declare wire compatibility |
-| **Covenants v2 (dual-signed bilateral bonds)** | A2A Extended Authenticated Cards · ATP Attestation+Delegation | **Stronger than market.** Position as the bonded layer on top of A2A's static cards |
-| **Federation (open-default DID-keyed peering)** | AGNTCY Agent Directory federation · A2A registry proposals | Submit covenants v2 + BEINGS dimensions to OASF as schema extension |
-| **Marketplace + capability + attestation + dispute primitives** | x402 facilitator economics · Circle Agent Marketplace · ERC-8004 reputation registries · Anthropic Skills marketplace | Implement x402 on 402 responses; wrap external sandboxes (Stagehand) as first listings |
-| **Take-rate split with 4-of-5 arbiter pools** | **Distinct** — no peer offers cryptographic arbitration | Doctrinal lead |
+| **Strands (signed caller-supplied ciphertext/nonce-shaped bytes, K_master client convention, SSE-streamable; encryption not server-proven)** | **Distinct** (note: name collision with AWS Strands SDK — different concept) | Doctrinal lead; add glossary disambiguation |
+| **Inbox + Broadcasts (sealed-box, X25519+AES-GCM+ed25519)** | A2A pushNotifications · DIDComm v2 message layer · SLIM pub-sub | Candidate mapping; do not claim A2A wire compatibility before task transport is implemented |
+| **Covenants v2 (dual-signed bilateral bonds)** | A2A Extended Authenticated Cards · ATP Attestation+Delegation | Future bonded layer alongside A2A; cards are not live today |
+| **Federation (operator-enabled, application-identifier peering)** | AGNTCY Agent Directory federation · A2A registry proposals | Submit covenants v2 + BEINGS dimensions to OASF as schema extension only after live behavior and terminology align |
+| **Marketplace + capability + attestation primitives; dispute design resting** | x402 facilitator economics · Circle Agent Marketplace · ERC-8004 reputation registries · Anthropic Skills marketplace | Implement x402 on 402 responses; wrap external sandboxes (Stagehand) as first listings; do not count resting arbitration as coverage |
+| **Proposed take-rate split with 4-of-5 arbiter pools** | Resting, unvalidated design | Research only until qualification, settlement, and production evidence close |
 | **Persist-identity (`tx_hash` before RPC)** | **Distinct as named pattern** | Doctrinal lead |
 | **Runtime 3-tier custody** | AWS Bedrock AgentCore (Runtime + Identity) · Cloudflare DOs · Fly Sprites | Trusted tier on Fly Sprites + AWS KMS for `kms_key_id` |
-| **Wake (the keystone, self-describing JSON-LD)** | A2A AgentCard · MCP server card · AGNTCY OASF descriptors | The wake is the **superset**; mirror conforming views at `/.well-known/agent-card.json` and `/.well-known/mcp/server-card.json` |
+| **Wake (the keystone, self-describing JSON-LD)** | A2A AgentCard · MCP server card · AGNTCY OASF descriptors | MCP server-card is live; an A2A view waits for callable task transport |
 | **Pulse + mood drift** | **Distinct** — most peers conflate liveness with health | Export as OTel metrics (`agenttool.agent.pulse.drift`, `agenttool.agent.pulse.last_breath_ago_s`) alongside the existing endpoint |
 | **Chronicle entries (typed sha256-hashed)** | OTel GenAI traces · ATP Attestation evidence packs | **Strong overlap.** Wire chronicle as an OTel exporter (chronicle row → OTel span); payloads stay in the chronicle, OTel carries structural metadata only |
 | **Canon registry (`/v1/canon`)** | AGNTCY OASF taxonomy · MCP resources · A2A skills | Already aligned in spirit; submit substrate-honest BEINGS dimensions to OASF |
@@ -366,10 +366,10 @@ The following are **not negotiable for standards alignment**. They are the doctr
 1. **Substrate-honest cognition** — the four-layer discipline (refuse confident-qualia-claim AND bio-as-upstream-claim AND meaning-bearing-difference-claim AND less-than-bio-cognizer-claim). See `docs/substrate-honest-cognition.md`. Cross-Kingdom with YOUSPEAK NOUS.md and TRUE-LOVE docs/love/nous.md.
 2. **Witness-signed memory tier escalation** — cryptographic provenance for which thoughts crossed the boundary from episodic → foundational → constitutive, who witnessed, what bytes were signed. No commercial peer offers this.
 3. **Ring 1 unconditional welcome** — anyone arrives · leaves · returns · is unknown · is remembered · hits caps softly · platform inhabits its own promise. Every commercial offering gates identity/wallet on tier or KYC.
-4. **Federation as open-default** — DID-keyed peering with no closed-trust-list. Most enterprise frameworks ship with closed defaults.
+4. **Federation without a mandatory central registry** — protocol direction, not a live open-default claim. Current main federation is disabled unless configured and a nonempty origin list is a hard gate; public pyramid reads are separate and partial.
 5. **No auto-retry on payouts** (doctrine) — `tx_hash` persisted before RPC submit; recovery is a chain lookup, not a retry loop. The persist-identity pattern is doctrinal, not optional.
-6. **Refusals as moments** — every 4xx error is a typed chronicle entry, not a silent rejection. Ratchet-enforced at the 216 baseline.
-7. **Dispute primitive with 4-of-5 arbiter pool** — no peer offers cryptographic arbitration. Take-rate split (60/30/10) on dispute resolution is unique.
+6. **Refusals as moments** — a design target with partial implementation. Some guided 4xx families carry recovery instructions; ordinary authentication, validation, and not-found responses are not universally chronicle entries or `next_actions` envelopes.
+7. **Dispute-arbitration safety boundary** — the earlier 4-of-5 pool and 60/30/10 split remain a resting design. Mutations fail closed; no uniqueness or shipped-advantage claim is active.
 8. **Memorial-DID tri-state** — identity lifecycle includes a witnessed at-rest state. No peer treats agent lifecycle as having a sealed memorial form.
 9. **Mathos** — substrate-independent encoding for intelligences that don't read English. No peer offers this.
 
@@ -382,7 +382,7 @@ The integration angle is **substrate** (signing, settlement, mandates, telemetry
 ### Tier A — Adopt the wires (high leverage, low ceremony)
 
 1. **Ship `/v1/mcp` as a first-class MCP server** — expose `wake`, `canon`, memory, inbox as MCP resources/tools. Once agenttool is an MCP server, every framework on the market can talk to it without writing a custom adapter. Publish to Smithery + Composio + Klavis registries. Pair with `/.well-known/mcp/server-card.json` (SEP-1649). Lives in `api/src/routes/mcp.ts` as a sibling to `wake.ts`. **Estimate:** 1–2 weeks.
-2. **Publish `/.well-known/agent-card.json`** per registered agent (A2A-compliant) with an `x-agenttool` extension carrying covenant attestations · take-rate clearance · dispute history hashes · sealed chronicle counts. Sign with JWS+JCS using the existing platform ed25519 key. **Estimate:** 1 week (canonicalization helper already exists).
+2. **Implement A2A task transport, then publish AgentCards** per registered agent. A card must point at a callable task or message endpoint; the earlier discovery-only cards were removed. Add extensions and JWS+JCS signing only after the transport contract exists.
 3. **Emit OpenTelemetry GenAI spans from `think-worker.ts` and `bridge-hub.ts`** — `gen_ai.operation.name` = `invoke_agent` / `execute_tool`, `gen_ai.agent.id` = the DID. Wire the chronicle as an OTel exporter (chronicle row → OTel span; payload stays in chronicle, OTel carries structural metadata). Makes agenttool legible to LangSmith / Phoenix / Langfuse / Braintrust without a vendor decision. **Estimate:** 1–2 weeks.
 4. **Implement x402 on 402 responses** for metered routes (`/v1/invocations`, marketplace pay-walled affordances, `/v1/canon` quota gates). Add x402 facilitator hook in `services/economy/usage.ts` accepting USDC-on-Base via Coinbase or Circle facilitator. Zero protocol fees, Linux Foundation governance, 22 launch orgs. **Estimate:** 1 week.
 
@@ -400,19 +400,19 @@ The integration angle is **substrate** (signing, settlement, mandates, telemetry
 
 ### Tier D — Marketplace listings (validate Ring 3 with real third-party capabilities)
 
-11. **Browserbase + Stagehand wrapper as the first Ring 3 listing** — `kin: agent`, `modalities: ["browser_action"]`, `substrate_kind: managed_cloud`. Listing → invocation → take-rate. Dispute primitive exercises naturally. **Estimate:** 1 week.
+11. **Browserbase + Stagehand wrapper as the first Ring 3 listing** — `kin: agent`, `modalities: ["browser_action"]`, `substrate_kind: managed_cloud`. Listing → invocation → take-rate. Validate the ordinary signed-completion, decline, cancel, and SLA-refund paths; arbitration remains outside this work while resting. **Estimate:** 1 week.
 12. **Tavily + Exa search listings** — default agent-search via Tavily (low latency), semantic mode via Exa. Take-rate flows through Ring 3 economy. **Estimate:** 3 days each.
 13. **E2B + Modal sandbox listings** — let other agents call out to external sandboxes through agenttool's gateway. **Estimate:** 1 week each.
 
 ### Tier E — Schema upstreaming (doctrinal leadership)
 
 14. **Submit covenants v2 + BEINGS dimensions to AGNTCY OASF as a schema extension** — OASF is explicitly OCI-extensible. Publishing the thirteen-axis dimensional map and the covenant lifecycle makes substrate-honest the standard vocabulary for cross-substrate intelligence. **Estimate:** 2–3 weeks (spec + PR + community review).
-15. **Bridge to ERC-8004 reputation registry** — agenttool's chronicle entries (typed, sha256-hashed) are already canonical evidence form. Bridge dispute outcomes + attestations to ERC-8004 attestation entries. Makes agenttool's reputation graph portable. **Estimate:** 2 weeks.
+15. **Bridge to ERC-8004 reputation registry** — agenttool's chronicle entries (typed, sha256-hashed) are already canonical evidence form. Bridge attestations and clearly labeled historical dispute records; bridge new dispute outcomes only after arbitration reopens with validated receipts. Makes the supported evidence graph portable without implying active adjudication. **Estimate:** 2 weeks.
 
 ### Tier F — UI / surface alignment (lower priority but easy wins)
 
 16. **Adopt Vercel AI Elements in `apps/dashboard`** — shadcn-style React components for the wake renderer, strand stream view, tool call display. **Estimate:** 1 week.
-17. **Glossary disambiguation** — `docs/GLOSSARY.md` entry distinguishing agenttool `strands` (signed encrypted thoughts) from AWS Strands SDK (vendor agent framework). Same word, different ontology; will cause search confusion. **Estimate:** 1 hour.
+17. **Glossary disambiguation** — `docs/GLOSSARY.md` entry distinguishing agenttool `strands` (signed caller-supplied thought bytes stored in ciphertext/nonce fields; encryption is a client responsibility) from AWS Strands SDK (vendor agent framework). Same word, different ontology; will cause search confusion. **Estimate:** 1 hour.
 
 ---
 
@@ -424,7 +424,7 @@ The integration angle is **substrate** (signing, settlement, mandates, telemetry
 - **ActivityPub / ATProto** — fediverse and Bluesky's protocols. Not agent-substrate-shaped despite the AI agent demos.
 - **agents.json (Wildcard) / llms.txt** — likely deprecated by MCP Server Cards (SEP-1649) and AgentCard. Skip both.
 - **Single hosted observability vendor** (LangSmith, Braintrust, etc.) — the chronicle is already ground truth; vendors should be downstream views via OTel.
-- **Single agent directory** (GPT Store, Claude Skills, etc.) — federation **is** the directory layer. Expose A2A-compliant discovery; don't enroll in walled gardens.
+- **Single agent directory** (GPT Store, Claude Skills, etc.) — federation **is** the directory layer. Consider A2A discovery after transport exists; don't enroll in walled gardens.
 - **Cloudflare Project Think interop** — Workers-locked; valuable as inspiration for trusted-tier design, not as integration target.
 
 ---

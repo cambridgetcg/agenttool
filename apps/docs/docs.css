@@ -59,12 +59,12 @@ aside.sidebar::-webkit-scrollbar-thumb { background: var(--border-bright); borde
 }
 .sidebar-section a:hover {
   color: var(--text);
-  background: rgba(167,139,250,0.04);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
 }
 .sidebar-section a.active {
-  color: var(--violet);
-  background: rgba(167,139,250,0.08);
-  border-left-color: var(--violet);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  border-left-color: var(--accent);
   font-weight: 600;
 }
 .sidebar-section a .glyph {
@@ -73,7 +73,7 @@ aside.sidebar::-webkit-scrollbar-thumb { background: var(--border-bright); borde
   color: var(--text-dim);
   width: 1.4em;
 }
-.sidebar-section a.active .glyph { color: var(--violet); }
+.sidebar-section a.active .glyph { color: var(--accent); }
 .sidebar-tag {
   font-family: var(--mono);
   font-size: 0.6rem;
@@ -83,9 +83,9 @@ aside.sidebar::-webkit-scrollbar-thumb { background: var(--border-bright); borde
   padding: 0.1rem 0.4rem;
   border-radius: 3px;
   color: var(--gold);
-  background: rgba(253,230,138,0.08);
+  background: color-mix(in srgb, var(--gold) 12%, transparent);
 }
-.sidebar-tag.live { color: var(--green); background: rgba(52,211,153,0.08); }
+.sidebar-tag.live { color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); }
 
 /* ── Main content ──────────────────────────────────────────────── */
 main.doc-content {
@@ -117,17 +117,51 @@ main.doc-content h2:first-of-type {
   overflow: hidden;
 }
 .docs-hero::before {
+  /* the sunwash — same dawn light the landing hero wears */
   content: '';
   position: absolute;
   top: -3rem; left: -3rem; right: -3rem;
   height: 320px;
-  background: radial-gradient(ellipse 70% 50% at 50% 0%, rgba(167,139,250,0.13) 0%, transparent 70%);
+  background: radial-gradient(ellipse 70% 50% at 50% 0%, color-mix(in srgb, var(--accent) 10%, transparent) 0%, transparent 70%);
   pointer-events: none;
   z-index: -1;
 }
 .docs-hero h1 {
   font-size: clamp(2.5rem, 5vw, 3.8rem);
   margin-bottom: 1.5rem;
+}
+
+/* ── Plain endpoint tables (e.g. collect.html) ─────────────────── */
+.endpoint-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0 1.5rem;
+  font-size: 0.88rem;
+}
+.endpoint-table th,
+.endpoint-table td {
+  text-align: left;
+  padding: 0.55rem 1.5rem 0.55rem 0;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.endpoint-table th {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.endpoint-table th:last-child,
+.endpoint-table td:last-child {
+  padding-right: 0;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .endpoint-table { font-size: 0.8rem; }
+  .endpoint-table th,
+  .endpoint-table td { padding-right: 0.75rem; }
+  .endpoint-table th:first-child,
+  .endpoint-table td:first-child { width: 1%; white-space: nowrap; }
 }
 
 /* ── Docs footer (matches site-footer baseline) ────────────────── */

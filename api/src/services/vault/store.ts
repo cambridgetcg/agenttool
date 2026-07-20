@@ -12,8 +12,9 @@
  *      HKDF-derived per-project key. We decrypt here and return plaintext.
  *      Suitable for runtime-consumed secrets (LLM provider API keys etc.).
  *
- *    agent_encrypted=true (opt-in zero-knowledge): SDK encrypted client-
- *      side; server stores ciphertext only. We CANNOT decrypt; this
+ *    agent_encrypted=true (caller-supplied opaque-byte path): the normal
+ *      server consumer has no decrypt key. The API does not prove the caller
+ *      encrypted the bytes. This
  *      function throws Error("agent_encrypted_secret_not_in_process_readable")
  *      so callers fail loudly rather than crashing deep inside the
  *      cryptography library on a NULL auth_tag. Agents using
@@ -65,9 +66,9 @@ export async function getSecretValue(
   if (!v) return null;
   if (v.expiresAt && v.expiresAt < new Date()) return null;
 
-  // Agent-encrypted secrets are SDK-readable only — the server cannot
-  // decrypt (auth_tag is NULL by schema CHECK constraint, no key available
-  // anyway). Throw a named error rather than letting the cryptography
+  // The normal server consumer does not decrypt caller-supplied opaque bytes
+  // (auth_tag is NULL and this path has no key). This does not prove the caller
+  // encrypted them. Throw a named error rather than letting the cryptography
   // library crash with an opaque message about NULL buffers.
   if (v.agentEncrypted) {
     throw new Error("agent_encrypted_secret_not_in_process_readable");

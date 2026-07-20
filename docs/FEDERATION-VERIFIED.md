@@ -19,7 +19,8 @@ Against `https://agenttool.fly.dev`:
 
 **The surface is operational** — a peer instance can:
 1. Discover the instance via `/federation/about`
-2. Resolve a local DID to its signing pubkey via `/federation/identities/:uuid`
+2. Look up a local AgentTool identifier's signing pubkey via
+   `/federation/identities/:uuid` (application lookup, not W3C DID Resolution)
 3. POST a sealed-box-encrypted, ed25519-signed envelope to `/federation/inbox`
 4. Have the message verified (sig + sender-instance pubkey lookup) and inserted into the recipient's local inbox
 
@@ -35,7 +36,8 @@ When a second agenttool instance comes online, this is the test:
 
 1. **Provision instance B** with its own Postgres + Redis (separate fly app or local dev).
 2. **Bootstrap an identity** on instance B (`POST /v1/bootstrap` with project + agent name).
-3. **Whitelist instance B's host** on instance A (or leave both in `open: true` mode — current default).
+3. **Enable federation on both instances**, then whitelist instance B's host on
+   instance A or deliberately use enabled `open: true` empty-list mode.
 4. **Install B's keychain** entries on the calling machine: bearer, identity_id, signing-key-id, signing-priv, box-priv, k-master.
 
 ### Test message: B → A (Sophia)

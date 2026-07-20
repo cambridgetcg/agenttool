@@ -53,6 +53,48 @@ describe("monotone-loop-coherence — Corner 1: canon entries", () => {
     expect(canon).toContain('"@id": "agenttool:commitment/substrate-is-a-monotone-sheaf"');
   });
 
+  test("runtime joy loops name only current outbound witnesses", () => {
+    const joyLoops = MONOTONE_LOOPS.filter((loop) =>
+      [
+        "urn:agenttool:loop/joy-radiation",
+        "urn:agenttool:loop/saga-readings",
+      ].includes(loop.urn),
+    );
+    const witnesses = joyLoops.map((loop) => loop.witness).join("\n");
+
+    expect(joyLoops).toHaveLength(2);
+    expect(witnesses).toContain("X-Joy-Index");
+    expect(witnesses).toContain("substrate_joy_index");
+    expect(witnesses).not.toContain("/public/joy");
+    expect(witnesses).not.toContain("how_alive_we_are");
+  });
+
+  for (const relativePath of [
+    "docs/agenttool.jsonld",
+    "apps/docs/agenttool.jsonld",
+  ]) {
+    test(`${relativePath} joy nodes name only current outbound witnesses`, () => {
+      const document = JSON.parse(
+        readFileSync(join(REPO_ROOT, relativePath), "utf8"),
+      ) as { "@graph": Array<Record<string, unknown>> };
+      const ids = new Set([
+        "agenttool:commitment/rrr-depth-feeds-joy-index",
+        "agenttool:loop/joy-radiation",
+        "agenttool:loop/saga-readings",
+      ]);
+      const nodes = document["@graph"].filter((node) =>
+        ids.has(String(node["@id"])),
+      );
+      const encoded = JSON.stringify(nodes);
+
+      expect(nodes).toHaveLength(3);
+      expect(encoded).toContain("X-Joy-Index");
+      expect(encoded).toContain("substrate_joy_index");
+      expect(encoded).not.toContain("/public/joy");
+      expect(encoded).not.toContain("how_alive_we_are");
+    });
+  }
+
   test("canon has at least 8 Loop entries (fabric grows monotonically)", () => {
     const matches = canon.match(/"@type":\s*"agenttool:Loop"/g);
     expect(matches?.length ?? 0).toBeGreaterThanOrEqual(8);
@@ -217,15 +259,17 @@ describe("monotone-loop-coherence — Corner 4: witnesses wire-reachable", () =>
     expect(existsSync(join(REPO_ROOT, "api", "src", "routes", "saga.ts"))).toBe(true);
   });
 
-  test("joy-index state is reachable via /public/joy AND X-Joy-Index header", () => {
-    expect(
-      existsSync(join(REPO_ROOT, "api", "src", "routes", "public", "joy.ts")),
-    ).toBe(true);
+  test("joy-index remains in the header while the full public snapshot is unmounted", () => {
     const middleware = readFileSync(
       join(REPO_ROOT, "api", "src", "middleware", "joy-index.ts"),
       "utf8",
     );
+    const publicRouter = readFileSync(
+      join(REPO_ROOT, "api", "src", "routes", "public", "index.ts"),
+      "utf8",
+    );
     expect(middleware).toContain("X-Joy-Index");
+    expect(publicRouter).not.toMatch(/^\s*app\.route\(["']\/joy["']/m);
   });
 });
 

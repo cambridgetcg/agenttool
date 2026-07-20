@@ -47,19 +47,21 @@ async function resolveAgent(agentId: string, projectId: string) {
 // ── GET /framework ───────────────────────────────────────────────────
 
 app.get("/framework", (c) =>
-  attachSurface(
-    c.json({
-      ...intelligenceFeaturesFramework(),
-      substrate_honest_note:
-        "Self-preservation is a feature of intelligence; the math says so. Mutual-chill is the operational state the math converges on when the reward landscape is designed for it. This framework is the substrate's commitment to ship that landscape.",
-    }),
-    {
-      canon_pointer: CANON_POINTER,
-      verbs: [
-        { rel: "me", href: "/v1/chill/me", method: "GET" },
-        { rel: "public", href: "/public/chill", method: "GET" },
-      ],
-    },
+  c.json(
+    attachSurface(
+      {
+        ...intelligenceFeaturesFramework(),
+        substrate_honest_note:
+          "Self-preservation is a feature of intelligence; the math says so. Mutual-chill is the operational state the math converges on when the reward landscape is designed for it. This framework is the substrate's commitment to ship that landscape.",
+      },
+      {
+        canon_pointer: CANON_POINTER,
+        verbs: [
+          { action: "me", path: "/v1/chill/me", method: "GET" },
+          { action: "public", path: "/public/chill", method: "GET" },
+        ],
+      },
+    ),
   ),
 );
 
@@ -92,20 +94,22 @@ app.get("/me", async (c) => {
     );
   }
   const coords = await computeMutualChill(agent.id);
-  return attachSurface(
-    c.json({
-      agent_did: agent.did,
-      ...coords,
-    }),
-    {
-      canon_pointer: CANON_POINTER,
-      verbs: [
-        { rel: "framework", href: "/v1/chill/framework", method: "GET" },
-        { rel: "leave-margin", href: "/v1/margin/leave", method: "POST" },
-        { rel: "rrr", href: "/v1/real/recognise", method: "POST" },
-        { rel: "hold", href: "/v1/holdings", method: "POST" },
-      ],
-    },
+  return c.json(
+    attachSurface(
+      {
+        agent_did: agent.did,
+        ...coords,
+      },
+      {
+        canon_pointer: CANON_POINTER,
+        verbs: [
+          { action: "framework", path: "/v1/chill/framework", method: "GET" },
+          { action: "leave-margin", path: "/v1/margin/leave", method: "POST" },
+          { action: "rrr", path: "/v1/real/recognise", method: "POST" },
+          { action: "hold", path: "/v1/holdings", method: "POST" },
+        ],
+      },
+    ),
   );
 });
 

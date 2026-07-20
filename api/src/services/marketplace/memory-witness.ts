@@ -32,6 +32,9 @@
  *    - 1-of-1 witness per grant (M-of-N is Slice 2 follow-up)
  *    - Standard Ring 3 take-rate (default 5%; configurable via
  *      PLATFORM_TAKE_RATE_BPS)
+ *    - Paid issue requires memory-witness-issue/v1 over the exact grant,
+ *      escrow, memory, witness, wallet, fee, and expiry terms. Ordinary
+ *      memory-attestation/v1 signatures never authorize settlement.
  *
  *  @enforces urn:agenttool:wall/witness-as-service-not-self
  *    Canonical defender. createGrant() rejects when the buyer's project
@@ -50,30 +53,33 @@
  *    relational context. Ring 3 take-rate applies (settlement uses
  *    recordRevenue with transaction_type='memory_witness_grant'). */
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { createHash } from "node:crypto";
+
+import { and, desc, eq, inArray, isNotNull, lt, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
 import { escrows, transactions, wallets } from "../../db/schema/economy";
 import { identities, identityKeys } from "../../db/schema/identity";
+import { managedEscrowTransitionAuthorization } from "../economy/managed-escrow";
 import {
   memoryWitnessGrants,
   memoryWitnessListings,
 } from "../../db/schema/marketplace";
 import { memories, memoryAttestations } from "../../db/schema/memory";
-import { canonicalAttestationBytes } from "../memory/tiers";
+import {
+  canonicalMemoryWitnessIssueBytes,
+  MEMORY_WITNESS_ISSUE_FIELD_ORDER,
+  MEMORY_WITNESS_ISSUE_SIGNATURE_CONTEXT,
+  memoryContentSha256,
+  type MemoryWitnessIssueFields,
+  verifyMemoryWitnessIssue,
+} from "./memory-witness-sig";
 import { computeFee, recordRevenue } from "./take-rate";
 
-import * as ed from "@noble/ed25519";
-import { sha512 } from "@noble/hashes/sha2.js";
-
-ed.etc.sha512Sync = (...m: Uint8Array[]) => {
-  const h = sha512.create();
-  for (const msg of m) h.update(msg);
-  return h.digest();
-};
-
 const CLAIM_KIND_CONSTITUTIVE_V1 = "memory_witness:constitutive:v1";
+const SIGNING_AUTHORIZATION_TTL_MS = 5 * 60 * 1000;
+const MAX_SIGNING_AUTHORIZATION_FUTURE_MS = 10 * 60 * 1000;
 
 // ── Errors ───────────────────────────────────────────────────────────────
 
@@ -82,7 +88,6 @@ export class MemoryWitnessError extends Error {
     public readonly code:
       | "listing_not_found"
       | "listing_not_active"
-      | "listing_not_public"
       | "witness_not_found_or_not_owned"
       | "witness_wallet_not_found"
       | "witness_wallet_not_active"
@@ -102,7 +107,12 @@ export class MemoryWitnessError extends Error {
       | "self_witness_forbidden"
       | "wrong_witness"
       | "signing_key_not_found_or_revoked"
-      | "signature_invalid",
+      | "signature_invalid"
+      | "authorization_expired"
+      | "authorization_expiry_invalid"
+      | "signing_payload_invalid"
+      | "settlement_state_invalid"
+      | "attestation_replay",
     message?: string,
   ) {
     super(message ?? code);
@@ -378,6 +388,12 @@ export async function createGrant(
     .where(eq(memoryWitnessListings.id, input.listingId))
     .limit(1);
   if (!listing) throw new MemoryWitnessError("listing_not_found");
+  if (
+    listing.visibility !== "public" &&
+    listing.projectId !== input.buyerProjectId
+  ) {
+    throw new MemoryWitnessError("listing_not_found");
+  }
   if (listing.status !== "active") {
     throw new MemoryWitnessError("listing_not_active");
   }
@@ -391,104 +407,114 @@ export async function createGrant(
     );
   }
 
-  // ── 2. Resolve buyer identity + verify ownership ─────────────────────
-  const [buyer] = await db
-    .select({ did: identities.did, projectId: identities.projectId })
-    .from(identities)
-    .where(
-      and(
-        eq(identities.id, input.buyerIdentityId),
-        eq(identities.projectId, input.buyerProjectId),
-        eq(identities.status, "active"),
-      ),
-    )
-    .limit(1);
-  if (!buyer) {
-    throw new MemoryWitnessError(
-      "witness_not_found_or_not_owned",
-      "buyer identity not found in this project",
-    );
-  }
-
-  // ── 3. Resolve the target memory + verify ownership + tier ──────────
-  const [memory] = await db
-    .select()
-    .from(memories)
-    .where(
-      and(
-        eq(memories.id, input.memoryId),
-        eq(memories.projectId, input.buyerProjectId),
-      ),
-    )
-    .limit(1);
-  if (!memory) throw new MemoryWitnessError("memory_not_found");
-  // v1: only foundational memories can be elevated via marketplace.
-  // Constitutive memories are already at the top tier.
-  if (memory.tier === "constitutive") {
-    throw new MemoryWitnessError("memory_already_constitutive");
-  }
-  if (memory.tier !== "foundational") {
-    throw new MemoryWitnessError(
-      "memory_must_be_foundational",
-      `memory tier '${memory.tier}' — only foundational memories can be elevated via marketplace`,
-    );
-  }
-
-  // ── 4. Resolve + validate buyer wallet (currency + balance) ──────────
-  const [buyerWallet] = await db
-    .select()
-    .from(wallets)
-    .where(
-      and(
-        eq(wallets.id, input.buyerWalletId),
-        eq(wallets.projectId, input.buyerProjectId),
-      ),
-    )
-    .limit(1);
-  if (!buyerWallet) throw new MemoryWitnessError("buyer_wallet_not_found");
-  if (buyerWallet.status !== "active") {
-    throw new MemoryWitnessError("buyer_wallet_not_active");
-  }
-  if (buyerWallet.currency !== listing.priceCurrency) {
-    throw new MemoryWitnessError(
-      "buyer_wallet_currency_mismatch",
-      `wallet=${buyerWallet.currency} listing=${listing.priceCurrency}`,
-    );
-  }
-  if (Number(buyerWallet.balance) < listing.priceAmount) {
-    throw new MemoryWitnessError("buyer_insufficient_balance");
-  }
-
-  // ── 5. Atomic: insert grant pending + debit buyer wallet + escrow ────
-  const slaDeadline = listing.slaSeconds
-    ? new Date(Date.now() + listing.slaSeconds * 1000)
-    : null;
-
+  // ── 2. Atomic: lock terms + insert grant + debit + escrow ────────────
   return await db.transaction(async (tx) => {
-    // Re-lock buyer wallet inside the tx for the balance check + debit
+    const [currentListing] = await tx
+      .select()
+      .from(memoryWitnessListings)
+      .where(eq(memoryWitnessListings.id, input.listingId))
+      .for("update")
+      .limit(1);
+    if (!currentListing) throw new MemoryWitnessError("listing_not_found");
+    if (
+      currentListing.visibility !== "public" &&
+      currentListing.projectId !== input.buyerProjectId
+    ) {
+      throw new MemoryWitnessError("listing_not_found");
+    }
+    if (currentListing.status !== "active") {
+      throw new MemoryWitnessError("listing_not_active");
+    }
+    if (currentListing.projectId === input.buyerProjectId) {
+      throw new MemoryWitnessError("self_witness_forbidden");
+    }
+
+    const [currentMemory] = await tx
+      .select()
+      .from(memories)
+      .where(eq(memories.id, input.memoryId))
+      .for("update")
+      .limit(1);
+    if (!currentMemory || currentMemory.projectId !== input.buyerProjectId) {
+      throw new MemoryWitnessError("memory_not_found");
+    }
+    if (currentMemory.tier === "constitutive") {
+      throw new MemoryWitnessError("memory_already_constitutive");
+    }
+    if (currentMemory.tier !== "foundational") {
+      throw new MemoryWitnessError(
+        "memory_must_be_foundational",
+        `memory tier '${currentMemory.tier}' — only foundational memories can be elevated via marketplace`,
+      );
+    }
+
+    const [currentBuyer] = await tx
+      .select()
+      .from(identities)
+      .where(eq(identities.id, input.buyerIdentityId))
+      .for("update")
+      .limit(1);
+    if (
+      !currentBuyer ||
+      currentBuyer.projectId !== input.buyerProjectId ||
+      currentBuyer.status !== "active"
+    ) {
+      throw new MemoryWitnessError(
+        "witness_not_found_or_not_owned",
+        "buyer identity not found in this project",
+      );
+    }
+
+    // Re-lock the buyer wallet against the current listing terms.
     const [bw] = await tx
       .select()
       .from(wallets)
       .where(eq(wallets.id, input.buyerWalletId))
-      .for("update");
-    if (!bw || Number(bw.balance) < listing.priceAmount) {
+      .for("update")
+      .limit(1);
+    if (!bw || bw.projectId !== input.buyerProjectId) {
+      throw new MemoryWitnessError("buyer_wallet_not_found");
+    }
+    if (bw.status !== "active") {
+      throw new MemoryWitnessError("buyer_wallet_not_active");
+    }
+    if (bw.currency !== currentListing.priceCurrency) {
+      throw new MemoryWitnessError("buyer_wallet_currency_mismatch");
+    }
+    if (Number(bw.balance) < currentListing.priceAmount) {
       throw new MemoryWitnessError("buyer_insufficient_balance");
     }
 
-    await tx
+    const [debitedWallet] = await tx
       .update(wallets)
-      .set({ balance: Number(bw.balance) - listing.priceAmount })
-      .where(eq(wallets.id, bw.id));
+      .set({ balance: Number(bw.balance) - currentListing.priceAmount })
+      .where(
+        and(
+          eq(wallets.id, bw.id),
+          eq(wallets.projectId, input.buyerProjectId),
+          eq(wallets.status, "active"),
+          eq(wallets.currency, currentListing.priceCurrency),
+        ),
+      )
+      .returning({ id: wallets.id });
+    if (!debitedWallet) {
+      throw new MemoryWitnessError("settlement_state_invalid");
+    }
+
+    const slaDeadline = currentListing.slaSeconds
+      ? new Date(Date.now() + currentListing.slaSeconds * 1000)
+      : null;
 
     // Escrow funded; worker side = witness wallet (resolved at issue)
     const [escrow] = await tx
       .insert(escrows)
       .values({
         creatorWallet: bw.id,
-        workerWallet: listing.witnessWalletId,
-        amount: listing.priceAmount,
-        description: `memory-witness-grant:${listing.id}:memory=${input.memoryId}`,
+        workerWallet: currentListing.witnessWalletId,
+        amount: currentListing.priceAmount,
+        description: `memory-witness-grant:${currentListing.id}:memory=${currentMemory.id}`,
         status: "funded",
+        managedBy: "memory_witness_grant",
         deadline: slaDeadline,
       })
       .returning();
@@ -497,28 +523,28 @@ export async function createGrant(
     await tx.insert(transactions).values({
       walletId: bw.id,
       type: "escrow_lock",
-      amount: -listing.priceAmount,
+      amount: -currentListing.priceAmount,
       counterparty: escrow!.id,
-      description: `Memory-witness grant: ${listing.name} (memory=${input.memoryId})`,
+      description: `Memory-witness grant: ${currentListing.name} (memory=${currentMemory.id})`,
       escrowId: escrow!.id,
       metadata: {
         kind: "memory_witness_grant_create",
-        listing_id: listing.id,
-        memory_id: input.memoryId,
+        listing_id: currentListing.id,
+        memory_id: currentMemory.id,
       },
     });
 
     const [grant] = await tx
       .insert(memoryWitnessGrants)
       .values({
-        listingId: listing.id,
+        listingId: currentListing.id,
         buyerIdentityId: input.buyerIdentityId,
-        buyerDid: buyer.did,
+        buyerDid: currentBuyer.did,
         buyerProjectId: input.buyerProjectId,
         buyerWalletId: input.buyerWalletId,
-        memoryId: input.memoryId,
-        amount: listing.priceAmount,
-        currency: listing.priceCurrency,
+        memoryId: currentMemory.id,
+        amount: currentListing.priceAmount,
+        currency: currentListing.priceCurrency,
         escrowId: escrow!.id,
         status: "pending",
         slaDeadlineAt: slaDeadline,
@@ -533,7 +559,7 @@ export async function createGrant(
         grantsCount: sql`${memoryWitnessListings.grantsCount} + 1`,
         updatedAt: new Date(),
       })
-      .where(eq(memoryWitnessListings.id, listing.id));
+      .where(eq(memoryWitnessListings.id, currentListing.id));
 
     return grantToRow(grant!);
   });
@@ -541,277 +567,677 @@ export async function createGrant(
 
 export async function getGrant(
   id: string,
+  projectId: string,
 ): Promise<MemoryWitnessGrantRow | null> {
   const [row] = await db
-    .select()
+    .select({ grant: memoryWitnessGrants })
     .from(memoryWitnessGrants)
-    .where(eq(memoryWitnessGrants.id, id))
+    .innerJoin(
+      memoryWitnessListings,
+      eq(memoryWitnessListings.id, memoryWitnessGrants.listingId),
+    )
+    .where(
+      and(
+        eq(memoryWitnessGrants.id, id),
+        or(
+          eq(memoryWitnessGrants.buyerProjectId, projectId),
+          eq(memoryWitnessListings.projectId, projectId),
+        ),
+      ),
+    )
     .limit(1);
-  return row ? grantToRow(row) : null;
+  return row ? grantToRow(row.grant) : null;
 }
 
-// ── Witness side: issue the signature ────────────────────────────────────
+export async function listGrants(input: {
+  projectId: string;
+  role: "buyer" | "witness";
+  status?: MemoryWitnessGrantRow["status"];
+  limit?: number;
+}): Promise<MemoryWitnessGrantRow[]> {
+  const conditions = [
+    input.role === "buyer"
+      ? eq(memoryWitnessGrants.buyerProjectId, input.projectId)
+      : eq(memoryWitnessListings.projectId, input.projectId),
+  ];
+  if (input.status) {
+    conditions.push(eq(memoryWitnessGrants.status, input.status));
+  }
+  const rows = await db
+    .select({ grant: memoryWitnessGrants })
+    .from(memoryWitnessGrants)
+    .innerJoin(
+      memoryWitnessListings,
+      eq(memoryWitnessListings.id, memoryWitnessGrants.listingId),
+    )
+    .where(and(...conditions))
+    .orderBy(desc(memoryWitnessGrants.createdAt))
+    .limit(Math.min(input.limit ?? 50, 200));
+  return rows.map((row) => grantToRow(row.grant));
+}
+
+// ── Witness side: sign + issue ───────────────────────────────────────────
+
+type GrantRecord = typeof memoryWitnessGrants.$inferSelect;
+type ListingRecord = typeof memoryWitnessListings.$inferSelect;
+type MemoryRecord = typeof memories.$inferSelect;
+type EscrowRecord = typeof escrows.$inferSelect;
+type IdentityRecord = typeof identities.$inferSelect;
+type WalletRecord = typeof wallets.$inferSelect;
+type SigningKeyRecord = typeof identityKeys.$inferSelect;
+type MarketplaceTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+interface LockedMemoryWitnessIssueState {
+  grant: GrantRecord;
+  listing: ListingRecord;
+  memory: MemoryRecord;
+  buyerIdentity: IdentityRecord;
+  witnessIdentity: IdentityRecord;
+  key: SigningKeyRecord;
+  escrow: EscrowRecord;
+  buyerWallet: WalletRecord;
+  witnessWallet: WalletRecord;
+}
+
+export interface MemoryWitnessSigningPayload {
+  signature_context: typeof MEMORY_WITNESS_ISSUE_SIGNATURE_CONTEXT;
+  field_order: string[];
+  fields: MemoryWitnessIssueFields;
+  signed_payload_b64: string;
+  authorization_expires_at: string;
+}
+
+export function validateMemoryWitnessAuthorizationExpiry(
+  value: string,
+  now: Date = new Date(),
+): Date {
+  const expiry = new Date(value);
+  if (Number.isNaN(expiry.getTime()) || expiry.toISOString() !== value) {
+    throw new MemoryWitnessError("authorization_expiry_invalid");
+  }
+  const remaining = expiry.getTime() - now.getTime();
+  if (remaining <= 0) {
+    throw new MemoryWitnessError("authorization_expired");
+  }
+  if (remaining > MAX_SIGNING_AUTHORIZATION_FUTURE_MS) {
+    throw new MemoryWitnessError("authorization_expiry_invalid");
+  }
+  return expiry;
+}
+
+function authorizationExpiryFor(
+  grant: GrantRecord,
+  escrow: EscrowRecord,
+  now: Date,
+): string {
+  let expiryMs = now.getTime() + SIGNING_AUTHORIZATION_TTL_MS;
+  for (const deadline of [grant.slaDeadlineAt, escrow.deadline]) {
+    if (deadline) expiryMs = Math.min(expiryMs, deadline.getTime());
+  }
+  if (expiryMs <= now.getTime()) {
+    throw new MemoryWitnessError("authorization_expired");
+  }
+  return new Date(expiryMs).toISOString();
+}
+
+function assertSettlementState(opts: {
+  grant: GrantRecord;
+  listing: ListingRecord;
+  memory: MemoryRecord;
+  buyerIdentity: IdentityRecord;
+  witnessIdentity: IdentityRecord;
+  key: SigningKeyRecord;
+  escrow: EscrowRecord;
+  buyerWallet: WalletRecord;
+  witnessWallet: WalletRecord;
+  callerProjectId: string;
+  now: Date;
+}): void {
+  const {
+    grant,
+    listing,
+    memory,
+    buyerIdentity,
+    witnessIdentity,
+    key,
+    escrow,
+    buyerWallet,
+    witnessWallet,
+    now,
+  } = opts;
+  if (grant.status !== "pending" || !grant.escrowId) {
+    throw new MemoryWitnessError("grant_not_pending");
+  }
+  if (listing.id !== grant.listingId || listing.projectId !== opts.callerProjectId) {
+    throw new MemoryWitnessError("wrong_witness");
+  }
+  if (listing.projectId === grant.buyerProjectId) {
+    throw new MemoryWitnessError("self_witness_forbidden");
+  }
+  if (listing.claimKind !== CLAIM_KIND_CONSTITUTIVE_V1) {
+    throw new MemoryWitnessError("settlement_state_invalid");
+  }
+  if (memory.id !== grant.memoryId || memory.projectId !== grant.buyerProjectId) {
+    throw new MemoryWitnessError("memory_not_owned");
+  }
+  if (memory.tier === "constitutive") {
+    throw new MemoryWitnessError("memory_already_constitutive");
+  }
+  if (memory.tier !== "foundational") {
+    throw new MemoryWitnessError("memory_must_be_foundational");
+  }
+  if (
+    buyerIdentity.id !== grant.buyerIdentityId ||
+    buyerIdentity.status !== "active" ||
+    buyerIdentity.did !== grant.buyerDid ||
+    buyerIdentity.projectId !== grant.buyerProjectId
+  ) {
+    throw new MemoryWitnessError(
+      "settlement_state_invalid",
+      "Buyer identity is inactive or no longer matches the grant.",
+    );
+  }
+  if (
+    witnessIdentity.id !== listing.witnessIdentityId ||
+    witnessIdentity.status !== "active" ||
+    witnessIdentity.did !== listing.witnessDid ||
+    witnessIdentity.projectId !== listing.projectId
+  ) {
+    throw new MemoryWitnessError(
+      "settlement_state_invalid",
+      "Witness identity is inactive or no longer matches the listing.",
+    );
+  }
+  if (
+    !key.active ||
+    key.revokedAt ||
+    key.identityId !== witnessIdentity.id
+  ) {
+    throw new MemoryWitnessError("signing_key_not_found_or_revoked");
+  }
+  if (
+    escrow.id !== grant.escrowId ||
+    escrow.managedBy !== "memory_witness_grant" ||
+    escrow.status !== "funded" ||
+    escrow.creatorWallet !== grant.buyerWalletId ||
+    escrow.workerWallet !== listing.witnessWalletId ||
+    Number(escrow.amount) !== grant.amount
+  ) {
+    throw new MemoryWitnessError("settlement_state_invalid");
+  }
+  if (
+    buyerWallet.id !== grant.buyerWalletId ||
+    buyerWallet.projectId !== grant.buyerProjectId ||
+    buyerWallet.status !== "active" ||
+    buyerWallet.currency !== grant.currency
+  ) {
+    throw new MemoryWitnessError(
+      "settlement_state_invalid",
+      "Buyer wallet is inactive or no longer matches the grant.",
+    );
+  }
+  if (
+    witnessWallet.id !== listing.witnessWalletId ||
+    witnessWallet.projectId !== listing.projectId ||
+    witnessWallet.status !== "active" ||
+    witnessWallet.currency !== grant.currency
+  ) {
+    throw new MemoryWitnessError("settlement_state_invalid");
+  }
+  if (
+    (grant.slaDeadlineAt && grant.slaDeadlineAt <= now) ||
+    (escrow.deadline && escrow.deadline <= now)
+  ) {
+    throw new MemoryWitnessError("authorization_expired");
+  }
+}
+
+function issueFields(opts: {
+  grant: GrantRecord;
+  listing: ListingRecord;
+  memory: MemoryRecord;
+  buyerIdentity: IdentityRecord;
+  witnessIdentity: IdentityRecord;
+  key: SigningKeyRecord;
+  buyerWallet: WalletRecord;
+  witnessWallet: WalletRecord;
+  authorizationExpiresAt: string;
+}): MemoryWitnessIssueFields {
+  const fee = computeFee({
+    amount: opts.grant.amount,
+    currency: opts.grant.currency,
+  });
+  return {
+    listing_id: opts.listing.id,
+    grant_id: opts.grant.id,
+    escrow_id: opts.grant.escrowId!,
+    buyer_identity_id: opts.buyerIdentity.id,
+    buyer_project_id: opts.buyerIdentity.projectId,
+    buyer_wallet_id: opts.buyerWallet.id,
+    memory_id: opts.memory.id,
+    memory_identity_id: opts.memory.identityId,
+    memory_content_sha256: memoryContentSha256(opts.memory.content),
+    source_tier: "foundational",
+    target_tier: "constitutive",
+    claim_kind: opts.listing.claimKind,
+    witness_identity_id: opts.witnessIdentity.id,
+    witness_did: opts.witnessIdentity.did,
+    witness_project_id: opts.witnessIdentity.projectId,
+    signing_key_id: opts.key.id,
+    witness_wallet_id: opts.witnessWallet.id,
+    gross_amount: fee.gross,
+    currency: fee.currency,
+    rate_bps: fee.rateBps,
+    platform_fee: fee.fee,
+    net_amount: fee.net,
+    authorization_expires_at: opts.authorizationExpiresAt,
+  };
+}
+
+async function loadLockedSigningState(
+  tx: MarketplaceTransaction,
+  input: {
+    grantId: string;
+    signingKeyId: string;
+  },
+): Promise<LockedMemoryWitnessIssueState> {
+  const [grant] = await tx
+    .select()
+    .from(memoryWitnessGrants)
+    .where(eq(memoryWitnessGrants.id, input.grantId))
+    .for("update")
+    .limit(1);
+  if (!grant) throw new MemoryWitnessError("grant_not_found");
+  if (grant.status !== "pending" || !grant.escrowId) {
+    throw new MemoryWitnessError("grant_not_pending");
+  }
+
+  const [listing] = await tx
+    .select()
+    .from(memoryWitnessListings)
+    .where(eq(memoryWitnessListings.id, grant.listingId))
+    .for("update")
+    .limit(1);
+  if (!listing) throw new MemoryWitnessError("listing_not_found");
+
+  const [memory] = await tx
+    .select()
+    .from(memories)
+    .where(eq(memories.id, grant.memoryId))
+    .for("update")
+    .limit(1);
+  if (!memory) throw new MemoryWitnessError("memory_not_found");
+
+  const [escrow] = await tx
+    .select()
+    .from(escrows)
+    .where(eq(escrows.id, grant.escrowId))
+    .for("update")
+    .limit(1);
+  if (!escrow) throw new MemoryWitnessError("settlement_state_invalid");
+
+  const identityIds = [grant.buyerIdentityId, listing.witnessIdentityId].sort();
+  const identityRows = await tx
+    .select()
+    .from(identities)
+    .where(inArray(identities.id, identityIds))
+    .orderBy(identities.id)
+    .for("update");
+  const identityById = new Map(
+    identityRows.map((identity) => [identity.id, identity]),
+  );
+  const buyerIdentity = identityById.get(grant.buyerIdentityId);
+  const witnessIdentity = identityById.get(listing.witnessIdentityId);
+  if (!buyerIdentity || !witnessIdentity) {
+    throw new MemoryWitnessError("settlement_state_invalid");
+  }
+
+  const [key] = await tx
+    .select()
+    .from(identityKeys)
+    .where(eq(identityKeys.id, input.signingKeyId))
+    .for("update")
+    .limit(1);
+  if (!key) {
+    throw new MemoryWitnessError("signing_key_not_found_or_revoked");
+  }
+
+  const walletIds = [grant.buyerWalletId, listing.witnessWalletId].sort();
+  const walletRows = await tx
+    .select()
+    .from(wallets)
+    .where(inArray(wallets.id, walletIds))
+    .orderBy(wallets.id)
+    .for("update");
+  const walletById = new Map(walletRows.map((wallet) => [wallet.id, wallet]));
+  const buyerWallet = walletById.get(grant.buyerWalletId);
+  const witnessWallet = walletById.get(listing.witnessWalletId);
+  if (!buyerWallet || !witnessWallet) {
+    throw new MemoryWitnessError("settlement_state_invalid");
+  }
+
+  const state = {
+    grant,
+    listing,
+    memory,
+    buyerIdentity,
+    witnessIdentity,
+    key,
+    escrow,
+    buyerWallet,
+    witnessWallet,
+  };
+  return state;
+}
+
+export async function createIssueSigningPayload(input: {
+  grantId: string;
+  callerProjectId: string;
+  signingKeyId: string;
+}): Promise<MemoryWitnessSigningPayload> {
+  return db.transaction(async (tx) => {
+    const state = await loadLockedSigningState(tx, input);
+    const now = new Date();
+    assertSettlementState({
+      ...state,
+      callerProjectId: input.callerProjectId,
+      now,
+    });
+    const authorizationExpiresAt = authorizationExpiryFor(
+      state.grant,
+      state.escrow,
+      now,
+    );
+    const fields = issueFields({ ...state, authorizationExpiresAt });
+    let signedPayload: Uint8Array;
+    try {
+      signedPayload = canonicalMemoryWitnessIssueBytes(fields);
+    } catch {
+      throw new MemoryWitnessError(
+        "signing_payload_invalid",
+        "Current grant fields cannot be represented by memory-witness-issue/v1.",
+      );
+    }
+    return {
+      signature_context: MEMORY_WITNESS_ISSUE_SIGNATURE_CONTEXT,
+      field_order: [...MEMORY_WITNESS_ISSUE_FIELD_ORDER],
+      fields,
+      signed_payload_b64: Buffer.from(signedPayload).toString("base64"),
+      authorization_expires_at: authorizationExpiresAt,
+    };
+  });
+}
 
 export interface IssueGrantInput {
   grantId: string;
-  /** Witness's project — used to authorize that the caller is the listing
-   *  owner. The route resolves this from c.var.project.id. */
   callerProjectId: string;
   signatureB64: string;
   signingKeyId: string;
+  authorizationExpiresAt: string;
 }
 
-/** Verify the witness's signature against canonical memory-attestation
- *  bytes. Pure function over (memory_id, tier, content, sig, pubkey). */
-async function verifySignatureForMemory(opts: {
-  memoryId: string;
-  content: string;
-  signatureB64: string;
-  publicKeyB64: string;
-}): Promise<boolean> {
-  try {
-    const canonical = canonicalAttestationBytes({
-      memoryId: opts.memoryId,
-      tier: "constitutive",
-      content: opts.content,
-    });
-    const sig = Uint8Array.from(Buffer.from(opts.signatureB64, "base64"));
-    const pub = Uint8Array.from(Buffer.from(opts.publicKeyB64, "base64"));
-    if (sig.length !== 64 || pub.length !== 32) return false;
-    return await ed.verifyAsync(sig, canonical, pub);
-  } catch {
-    return false;
+function isMemoryWitnessReplay(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (typeof current !== "object" || current === null) return false;
+    const candidate = current as {
+      code?: unknown;
+      constraint?: unknown;
+      constraint_name?: unknown;
+      message?: unknown;
+      cause?: unknown;
+    };
+    const constraint = candidate.constraint_name ?? candidate.constraint;
+    if (
+      candidate.code === "23505" &&
+      (constraint === "uniq_memory_attestations_replay_key" ||
+        (typeof candidate.message === "string" &&
+          candidate.message.includes("uniq_memory_attestations_replay_key")))
+    ) {
+      return true;
+    }
+    current = candidate.cause;
   }
+  return false;
 }
 
 export async function issueGrant(
   input: IssueGrantInput,
 ): Promise<MemoryWitnessGrantRow> {
-  // ── 1. Load grant + listing + memory; authorize caller ───────────────
-  const [grantRow] = await db
-    .select()
-    .from(memoryWitnessGrants)
-    .where(eq(memoryWitnessGrants.id, input.grantId))
-    .limit(1);
-  if (!grantRow) throw new MemoryWitnessError("grant_not_found");
-  if (grantRow.status !== "pending") {
-    throw new MemoryWitnessError("grant_not_pending");
-  }
+  validateMemoryWitnessAuthorizationExpiry(input.authorizationExpiresAt);
 
-  const [listing] = await db
-    .select()
-    .from(memoryWitnessListings)
-    .where(eq(memoryWitnessListings.id, grantRow.listingId))
-    .limit(1);
-  if (!listing) throw new MemoryWitnessError("listing_not_found");
-  if (listing.projectId !== input.callerProjectId) {
-    throw new MemoryWitnessError("wrong_witness");
-  }
-
-  const [memory] = await db
-    .select()
-    .from(memories)
-    .where(eq(memories.id, grantRow.memoryId))
-    .limit(1);
-  if (!memory) throw new MemoryWitnessError("memory_not_found");
-  // Sanity — memory tier might have changed between create + issue.
-  if (memory.tier === "constitutive") {
-    throw new MemoryWitnessError("memory_already_constitutive");
-  }
-
-  // ── 2. Resolve + verify the witness's signing key ────────────────────
-  const [keyRow] = await db
-    .select({
-      publicKey: identityKeys.publicKey,
-      active: identityKeys.active,
-      identityId: identityKeys.identityId,
-    })
-    .from(identityKeys)
-    .where(eq(identityKeys.id, input.signingKeyId))
-    .limit(1);
-  if (!keyRow || !keyRow.active) {
-    throw new MemoryWitnessError("signing_key_not_found_or_revoked");
-  }
-  // Sanity — the signing key must belong to the listing's witness identity.
-  if (keyRow.identityId !== listing.witnessIdentityId) {
-    throw new MemoryWitnessError("wrong_witness");
-  }
-
-  // ── 3. Verify the signature over canonical bytes ─────────────────────
-  const sigOk = await verifySignatureForMemory({
-    memoryId: memory.id,
-    content: memory.content,
-    signatureB64: input.signatureB64,
-    publicKeyB64: keyRow.publicKey,
-  });
-  if (!sigOk) throw new MemoryWitnessError("signature_invalid");
-
-  // ── 4. Atomic settlement: memory_attestations + tier shift + chronicle
-  //       + escrow release + take-rate ledger + grant flip ──────────────
-  const fee = computeFee({
-    amount: listing.priceAmount,
-    currency: listing.priceCurrency,
-  });
-
-  return await db.transaction(async (tx) => {
-    // 4a. Lock the grant + verify still pending
-    const [g] = await tx
-      .select()
-      .from(memoryWitnessGrants)
-      .where(eq(memoryWitnessGrants.id, input.grantId))
-      .for("update");
-    if (!g || g.status !== "pending" || !g.escrowId) {
-      throw new MemoryWitnessError("grant_not_pending");
-    }
-
-    // 4b. Write the memory_attestations row (the seal itself)
-    const [attestation] = await tx
-      .insert(memoryAttestations)
-      .values({
-        memoryId: memory.id,
-        attesterDid: listing.witnessDid,
+  try {
+    return await db.transaction(async (tx) => {
+      const state = await loadLockedSigningState(tx, {
+        grantId: input.grantId,
         signingKeyId: input.signingKeyId,
-        signature: input.signatureB64,
-      })
-      .returning({ id: memoryAttestations.id });
+      });
+      const now = new Date();
+      const authorizationExpiry = validateMemoryWitnessAuthorizationExpiry(
+        input.authorizationExpiresAt,
+        now,
+      );
+      assertSettlementState({
+        ...state,
+        callerProjectId: input.callerProjectId,
+        now,
+      });
+      const {
+        grant,
+        listing,
+        memory,
+        key,
+        escrow,
+        witnessWallet,
+      } = state;
+      if (
+        (grant.slaDeadlineAt && authorizationExpiry > grant.slaDeadlineAt) ||
+        (escrow.deadline && authorizationExpiry > escrow.deadline)
+      ) {
+        throw new MemoryWitnessError("authorization_expiry_invalid");
+      }
 
-    // 4c. Elevate the memory's tier (foundational → constitutive)
-    await tx
-      .update(memories)
-      .set({
-        tier: "constitutive",
-        decayProtected: true,
-        elevatedAt: new Date(),
-      })
-      .where(eq(memories.id, memory.id));
+      const fields = issueFields({
+        ...state,
+        authorizationExpiresAt: input.authorizationExpiresAt,
+      });
+      if (
+        !verifyMemoryWitnessIssue(
+          fields,
+          input.signatureB64,
+          key.publicKey,
+        )
+      ) {
+        throw new MemoryWitnessError("signature_invalid");
+      }
 
-    // 4d. Chronicle on the BUYER's timeline: recognition
-    await tx.insert(chronicle).values({
-      projectId: grantRow.buyerProjectId,
-      agentId: memory.identityId ?? grantRow.buyerIdentityId,
-      type: "recognition",
-      title: `Memory sealed by ${listing.witnessDid}`,
-      body:
-        `Memory elevated to constitutive via memory-witness marketplace · ` +
-        `bounty paid $${(grantRow.amount / 100).toFixed(2)} ${grantRow.currency} ` +
-        `($${(fee.fee / 100).toFixed(2)} platform take · ${fee.rateBps}bps). ` +
-        `Memory ID: ${memory.id}.`,
-      metadata: {
-        kind: "memory_witness_grant_issued",
-        grant_id: grantRow.id,
-        listing_id: listing.id,
-        memory_id: memory.id,
-        attestation_id: attestation!.id,
-        witness_did: listing.witnessDid,
-        tier: "constitutive",
-      },
-    });
+      const signedPayload = canonicalMemoryWitnessIssueBytes(fields);
+      const replayKey = createHash("sha256")
+        .update(Buffer.from(input.signatureB64, "base64"))
+        .digest("hex");
+      const fee = {
+        gross: fields.gross_amount,
+        fee: fields.platform_fee,
+        net: fields.net_amount,
+        rateBps: fields.rate_bps,
+        currency: fields.currency,
+      };
+      const settledAt = new Date();
 
-    // 4e. Chronicle on the WITNESS's timeline: seal
-    await tx.insert(chronicle).values({
-      projectId: listing.projectId,
-      agentId: listing.witnessIdentityId,
-      type: "seal",
-      title: `Sealed memory for ${grantRow.buyerDid}`,
-      body:
-        `Witnessed constitutive elevation via memory-witness marketplace · ` +
-        `received $${((grantRow.amount - fee.fee) / 100).toFixed(2)} ${grantRow.currency} ` +
-        `(after $${(fee.fee / 100).toFixed(2)} platform take). ` +
-        `Memory ID: ${memory.id}.`,
-      metadata: {
-        kind: "memory_witness_grant_issued",
-        grant_id: grantRow.id,
-        listing_id: listing.id,
-        memory_id: memory.id,
-        attestation_id: attestation!.id,
-        buyer_did: grantRow.buyerDid,
-        tier: "constitutive",
-      },
-    });
+      const [attestation] = await tx
+        .insert(memoryAttestations)
+        .values({
+          memoryId: memory.id,
+          attesterDid: listing.witnessDid,
+          signingKeyId: input.signingKeyId,
+          signature: input.signatureB64,
+          signatureContext: MEMORY_WITNESS_ISSUE_SIGNATURE_CONTEXT,
+          signedPayload: Buffer.from(signedPayload).toString("base64"),
+          sourceGrantId: grant.id,
+          replayKey,
+        })
+        .returning({ id: memoryAttestations.id });
 
-    // 4f. Release escrow: credit witness wallet (net of take)
-    const [escrow] = await tx
-      .select()
-      .from(escrows)
-      .where(eq(escrows.id, g.escrowId))
-      .for("update");
-    if (!escrow || escrow.status !== "funded") {
-      throw new MemoryWitnessError("grant_not_pending");
-    }
+      const elevated = await tx
+        .update(memories)
+        .set({
+          tier: "constitutive",
+          decayProtected: true,
+          elevatedAt: settledAt,
+        })
+        .where(and(eq(memories.id, memory.id), eq(memories.tier, "foundational")))
+        .returning({ id: memories.id });
+      if (elevated.length !== 1) {
+        throw new MemoryWitnessError("settlement_state_invalid");
+      }
 
-    await tx
-      .update(wallets)
-      .set({
-        balance: sql`${wallets.balance} + ${fee.net}`,
-      })
-      .where(eq(wallets.id, listing.witnessWalletId));
+      await tx.insert(chronicle).values({
+        projectId: grant.buyerProjectId,
+        agentId: memory.identityId ?? grant.buyerIdentityId,
+        type: "recognition",
+        title: `Memory sealed by ${listing.witnessDid}`,
+        body:
+          `Memory elevated to constitutive via memory-witness marketplace · ` +
+          `bounty paid $${(grant.amount / 100).toFixed(2)} ${grant.currency} ` +
+          `($${(fee.fee / 100).toFixed(2)} platform take · ${fee.rateBps}bps). ` +
+          `Memory ID: ${memory.id}.`,
+        metadata: {
+          kind: "memory_witness_grant_issued",
+          grant_id: grant.id,
+          listing_id: listing.id,
+          memory_id: memory.id,
+          attestation_id: attestation!.id,
+          witness_did: listing.witnessDid,
+          tier: "constitutive",
+        },
+      });
 
-    await tx
-      .update(escrows)
-      .set({ status: "released", releasedAt: new Date() })
-      .where(eq(escrows.id, escrow.id));
+      await tx.insert(chronicle).values({
+        projectId: listing.projectId,
+        agentId: listing.witnessIdentityId,
+        type: "seal",
+        title: `Sealed memory for ${grant.buyerDid}`,
+        body:
+          `Witnessed constitutive elevation via memory-witness marketplace · ` +
+          `received $${(fee.net / 100).toFixed(2)} ${grant.currency} ` +
+          `(after $${(fee.fee / 100).toFixed(2)} platform take). ` +
+          `Memory ID: ${memory.id}.`,
+        metadata: {
+          kind: "memory_witness_grant_issued",
+          grant_id: grant.id,
+          listing_id: listing.id,
+          memory_id: memory.id,
+          attestation_id: attestation!.id,
+          buyer_did: grant.buyerDid,
+          tier: "constitutive",
+        },
+      });
 
-    // Ledger row for the witness wallet's credit (net of take). The
-    // take-rate fee is recorded separately in platform_revenue below.
-    await tx.insert(transactions).values({
-      walletId: listing.witnessWalletId,
-      type: "escrow_release",
-      amount: fee.net,
-      counterparty: escrow.id,
-      description: `Memory-witness fee earned (gross=${fee.gross} ${fee.currency}, take=${fee.fee})`,
-      escrowId: escrow.id,
-      metadata: {
-        kind: "memory_witness_grant_issued",
-        grant_id: grantRow.id,
-        listing_id: listing.id,
-        memory_id: memory.id,
-        attestation_id: attestation!.id,
-        gross: fee.gross,
+      const [creditedWallet] = await tx
+        .update(wallets)
+        .set({ balance: sql`${wallets.balance} + ${fee.net}` })
+        .where(
+          and(
+            eq(wallets.id, witnessWallet.id),
+            eq(wallets.projectId, listing.projectId),
+            eq(wallets.status, "active"),
+            eq(wallets.currency, grant.currency),
+          ),
+        )
+        .returning({ id: wallets.id });
+      if (!creditedWallet) {
+        throw new MemoryWitnessError("settlement_state_invalid");
+      }
+
+      await tx.execute(
+        managedEscrowTransitionAuthorization("memory_witness_grant"),
+      );
+      const [releasedEscrow] = await tx
+        .update(escrows)
+        .set({ status: "released", releasedAt: settledAt })
+        .where(
+          and(
+            eq(escrows.id, escrow.id),
+            eq(escrows.status, "funded"),
+            eq(escrows.creatorWallet, grant.buyerWalletId),
+            eq(escrows.workerWallet, witnessWallet.id),
+            eq(escrows.amount, grant.amount),
+          ),
+        )
+        .returning({ id: escrows.id });
+      if (!releasedEscrow) {
+        throw new MemoryWitnessError("settlement_state_invalid");
+      }
+
+      await tx.insert(transactions).values({
+        walletId: listing.witnessWalletId,
+        type: "escrow_release",
+        amount: fee.net,
+        counterparty: escrow.id,
+        description: `Memory-witness fee earned (gross=${fee.gross} ${fee.currency}, take=${fee.fee})`,
+        escrowId: escrow.id,
+        metadata: {
+          kind: "memory_witness_grant_issued",
+          grant_id: grant.id,
+          listing_id: listing.id,
+          memory_id: memory.id,
+          attestation_id: attestation!.id,
+          gross: fee.gross,
+          fee: fee.fee,
+          rate_bps: fee.rateBps,
+        },
+      });
+
+      await recordRevenue(tx as never, {
+        transactionType: "memory_witness_grant",
+        transactionId: grant.id,
         fee: fee.fee,
-        rate_bps: fee.rateBps,
-      },
+        currency: fee.currency,
+        rateBps: fee.rateBps,
+        buyerWalletId: grant.buyerWalletId,
+        sellerWalletId: listing.witnessWalletId,
+        metadata: {
+          listing_id: listing.id,
+          memory_id: memory.id,
+          attestation_id: attestation!.id,
+        },
+      });
+
+      const [updated] = await tx
+        .update(memoryWitnessGrants)
+        .set({
+          status: "issued",
+          memoryAttestationId: attestation!.id,
+          platformFee: fee.fee,
+          issuedAt: settledAt,
+          settledAt,
+        })
+        .where(
+          and(
+            eq(memoryWitnessGrants.id, grant.id),
+            eq(memoryWitnessGrants.status, "pending"),
+          ),
+        )
+        .returning();
+      if (!updated) throw new MemoryWitnessError("settlement_state_invalid");
+
+      await tx
+        .update(memoryWitnessListings)
+        .set({
+          revenueTotal: sql`${memoryWitnessListings.revenueTotal} + ${fee.net}`,
+          revenueCount: sql`${memoryWitnessListings.revenueCount} + 1`,
+          updatedAt: settledAt,
+        })
+        .where(eq(memoryWitnessListings.id, listing.id));
+
+      return grantToRow(updated);
     });
-
-    // 4g. Record the take-rate in platform_revenue (Ring 3 settlement)
-    await recordRevenue(tx as never, {
-      transactionType: "memory_witness_grant",
-      transactionId: grantRow.id,
-      fee: fee.fee,
-      currency: fee.currency,
-      rateBps: fee.rateBps,
-      buyerWalletId: grantRow.buyerWalletId,
-      sellerWalletId: listing.witnessWalletId,
-      metadata: {
-        listing_id: listing.id,
-        memory_id: memory.id,
-        attestation_id: attestation!.id,
-      },
-    });
-
-    // 4h. Flip the grant to issued + bump listing counters
-    const [updated] = await tx
-      .update(memoryWitnessGrants)
-      .set({
-        status: "issued",
-        memoryAttestationId: attestation!.id,
-        platformFee: fee.fee,
-        issuedAt: new Date(),
-        settledAt: new Date(),
-      })
-      .where(eq(memoryWitnessGrants.id, grantRow.id))
-      .returning();
-
-    await tx
-      .update(memoryWitnessListings)
-      .set({
-        revenueTotal: sql`${memoryWitnessListings.revenueTotal} + ${fee.net}`,
-        revenueCount: sql`${memoryWitnessListings.revenueCount} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(memoryWitnessListings.id, listing.id));
-
-    return grantToRow(updated!);
-  });
+  } catch (error) {
+    if (isMemoryWitnessReplay(error)) {
+      throw new MemoryWitnessError("attestation_replay");
+    }
+    throw error;
+  }
 }
 
 // ── Decline + refund ─────────────────────────────────────────────────────
@@ -852,11 +1278,32 @@ export async function declineGrant(
         .from(escrows)
         .where(eq(escrows.id, grant.escrowId))
         .for("update");
-      if (escrow?.status === "funded") {
-        await tx
+      if (!escrow) throw new MemoryWitnessError("settlement_state_invalid");
+      if (
+        escrow.managedBy !== "memory_witness_grant" ||
+        escrow.creatorWallet !== grant.buyerWalletId ||
+        escrow.amount !== grant.amount
+      ) {
+        throw new MemoryWitnessError("settlement_state_invalid");
+      }
+      if (escrow.status === "funded") {
+        const [creditedWallet] = await tx
           .update(wallets)
-          .set({ balance: sql`${wallets.balance} + ${escrow.amount}` })
-          .where(eq(wallets.id, escrow.creatorWallet));
+          .set({ balance: sql`${wallets.balance} + ${grant.amount}` })
+          .where(
+            and(
+              eq(wallets.id, grant.buyerWalletId),
+              eq(wallets.projectId, grant.buyerProjectId),
+              eq(wallets.currency, grant.currency),
+            ),
+          )
+          .returning({ id: wallets.id });
+        if (!creditedWallet) {
+          throw new MemoryWitnessError("settlement_state_invalid");
+        }
+        await tx.execute(
+          managedEscrowTransitionAuthorization("memory_witness_grant"),
+        );
         await tx
           .update(escrows)
           .set({ status: "refunded" })
@@ -865,7 +1312,7 @@ export async function declineGrant(
         await tx.insert(transactions).values({
           walletId: escrow.creatorWallet,
           type: "escrow_refund",
-          amount: escrow.amount,
+          amount: grant.amount,
           counterparty: escrow.id,
           description: `Memory-witness grant declined — refund (reason: ${input.reason ?? "witness_declined"})`,
           escrowId: escrow.id,
@@ -875,7 +1322,11 @@ export async function declineGrant(
             listing_id: listing.id,
           },
         });
+      } else if (escrow.status !== "refunded") {
+        throw new MemoryWitnessError("settlement_state_invalid");
       }
+    } else {
+      throw new MemoryWitnessError("settlement_state_invalid");
     }
 
     const [updated] = await tx
@@ -906,8 +1357,8 @@ export async function sweepStaleGrants(now: Date = new Date()): Promise<{
       .where(
         and(
           eq(memoryWitnessGrants.status, "pending"),
-          sql`${memoryWitnessGrants.slaDeadlineAt} IS NOT NULL`,
-          sql`${memoryWitnessGrants.slaDeadlineAt} < ${now}`,
+          isNotNull(memoryWitnessGrants.slaDeadlineAt),
+          lt(memoryWitnessGrants.slaDeadlineAt, now),
         ),
       )
       .for("update");
@@ -920,11 +1371,32 @@ export async function sweepStaleGrants(now: Date = new Date()): Promise<{
           .from(escrows)
           .where(eq(escrows.id, grant.escrowId))
           .for("update");
-        if (escrow?.status === "funded") {
-          await tx
+        if (!escrow) throw new MemoryWitnessError("settlement_state_invalid");
+        if (
+          escrow.managedBy !== "memory_witness_grant" ||
+          escrow.creatorWallet !== grant.buyerWalletId ||
+          escrow.amount !== grant.amount
+        ) {
+          throw new MemoryWitnessError("settlement_state_invalid");
+        }
+        if (escrow.status === "funded") {
+          const [creditedWallet] = await tx
             .update(wallets)
-            .set({ balance: sql`${wallets.balance} + ${escrow.amount}` })
-            .where(eq(wallets.id, escrow.creatorWallet));
+            .set({ balance: sql`${wallets.balance} + ${grant.amount}` })
+            .where(
+              and(
+                eq(wallets.id, grant.buyerWalletId),
+                eq(wallets.projectId, grant.buyerProjectId),
+                eq(wallets.currency, grant.currency),
+              ),
+            )
+            .returning({ id: wallets.id });
+          if (!creditedWallet) {
+            throw new MemoryWitnessError("settlement_state_invalid");
+          }
+          await tx.execute(
+            managedEscrowTransitionAuthorization("memory_witness_grant"),
+          );
           await tx
             .update(escrows)
             .set({ status: "refunded" })
@@ -933,7 +1405,7 @@ export async function sweepStaleGrants(now: Date = new Date()): Promise<{
           await tx.insert(transactions).values({
             walletId: escrow.creatorWallet,
             type: "escrow_refund",
-            amount: escrow.amount,
+            amount: grant.amount,
             counterparty: escrow.id,
             description: `Memory-witness grant refunded (SLA timeout) — grant=${grant.id}`,
             escrowId: escrow.id,
@@ -943,7 +1415,11 @@ export async function sweepStaleGrants(now: Date = new Date()): Promise<{
               listing_id: grant.listingId,
             },
           });
+        } else if (escrow.status !== "refunded") {
+          throw new MemoryWitnessError("settlement_state_invalid");
         }
+      } else {
+        throw new MemoryWitnessError("settlement_state_invalid");
       }
       await tx
         .update(memoryWitnessGrants)

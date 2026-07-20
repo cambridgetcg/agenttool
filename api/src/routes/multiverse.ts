@@ -32,6 +32,19 @@ import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
+import {
+  authorizeIdentityMutation,
+  authorityRequestTarget,
+  readAuthorityBoundJson,
+  readEmptyAuthorityBody,
+} from "../services/identity/authority";
+import { publicAgentPath } from "../services/identity/public-profile";
+import {
+  isMemorialTerminal,
+  MEMORIAL_TERMINAL_ERROR,
+  MEMORIAL_TERMINAL_MESSAGE,
+  mutableIdentityPredicate,
+} from "../services/identity/terminality";
 
 const app = new Hono<ProjectContext>();
 
@@ -60,8 +73,11 @@ const declareSchema = z.object({
 app.post("/declare", async (c) => {
   const project = c.var.project;
   let body: z.infer<typeof declareSchema>;
+  let bodyBytes: Uint8Array;
   try {
-    body = declareSchema.parse(await c.req.json());
+    const bound = await readAuthorityBoundJson(c.req.raw);
+    bodyBytes = bound.bodyBytes;
+    body = declareSchema.parse(bound.value);
   } catch (err) {
     return fail(
       c,
@@ -85,6 +101,7 @@ app.post("/declare", async (c) => {
       substrateKind: identities.substrateKind,
       projectId: identities.projectId,
       metadata: identities.metadata,
+      status: identities.status,
     })
     .from(identities)
     .where(eq(identities.id, body.agent_id))
@@ -112,6 +129,22 @@ app.post("/declare", async (c) => {
       403,
     );
   }
+  if (isMemorialTerminal(agent.status)) {
+    return fail(
+      c,
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
+
+  const authority = await authorizeIdentityMutation({
+    identityId: agent.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
 
   // Self-DID in sibling list = silently dropped (you are not your own
   // sibling at this layer; the DID is THIS agent's identity, not a facet-
@@ -131,7 +164,18 @@ app.post("/declare", async (c) => {
   };
   const newMeta = { ...existingMeta, multiverse };
 
-  await db.update(identities).set({ metadata: newMeta }).where(eq(identities.id, agent.id));
+  const [updated] = await db
+    .update(identities)
+    .set({ metadata: newMeta })
+    .where(mutableIdentityPredicate(agent.id))
+    .returning({ id: identities.id });
+  if (!updated) {
+    return fail(
+      c,
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
   return c.json(
     attachSurface(
@@ -141,8 +185,8 @@ app.post("/declare", async (c) => {
         multiverse,
         hint:
           siblingDids.length === 0
-            ? `Declared as a solo facet of '${body.archetype_name}'. Add siblings later via re-POST with sibling_dids set. ${body.visibility === "public" ? "Visible at /public/agents/" + agent.did + "/multiverse." : "Private — only readable via /v1/multiverse/me with your project bearer."}`
-            : `Declared as facet of '${body.archetype_name}' with ${siblingDids.length} sibling(s). Mutual recognition emerges when your siblings reciprocally declare you. ${body.visibility === "public" ? "Visible at /public/agents/" + agent.did + "/multiverse." : "Private — only readable via /v1/multiverse/me."}`,
+            ? `Declared as a solo facet of '${body.archetype_name}'. Add siblings later via re-POST with sibling_dids set. ${body.visibility === "public" ? `Visible at ${publicAgentPath(agent.did)}/multiverse.` : "Private — only readable via /v1/multiverse/me with your project bearer."}`
+            : `Declared as facet of '${body.archetype_name}' with ${siblingDids.length} sibling(s). Mutual recognition emerges when your siblings reciprocally declare you. ${body.visibility === "public" ? `Visible at ${publicAgentPath(agent.did)}/multiverse.` : "Private — only readable via /v1/multiverse/me."}`,
       },
       {
         canon_pointer: "urn:agenttool:doc/MULTIVERSE-OF-LOGOS",
@@ -155,7 +199,7 @@ app.post("/declare", async (c) => {
           {
             action: "read another agent's public multiverse",
             method: "GET",
-            path: "/public/agents/{did}/multiverse",
+            path: "/public/agents/{url_encoded_did}/multiverse",
           },
           {
             action: "clear your declaration (anyone-leaves)",
@@ -319,7 +363,7 @@ app.get("/me", async (c) => {
           {
             action: "view a sibling's public declaration",
             method: "GET",
-            path: "/public/agents/{did}/multiverse",
+            path: "/public/agents/{url_encoded_did}/multiverse",
           },
         ],
       },
@@ -346,7 +390,7 @@ app.delete("/declare", async (c) => {
   }
 
   const [agent] = await db
-    .select({ id: identities.id, did: identities.did, projectId: identities.projectId, metadata: identities.metadata })
+    .select({ id: identities.id, did: identities.did, projectId: identities.projectId, metadata: identities.metadata, status: identities.status })
     .from(identities)
     .where(eq(identities.id, agentId))
     .limit(1);
@@ -369,11 +413,53 @@ app.delete("/declare", async (c) => {
       403,
     );
   }
+  if (isMemorialTerminal(agent.status)) {
+    return fail(
+      c,
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
+
+  let bodyBytes: Uint8Array;
+  try {
+    bodyBytes = await readEmptyAuthorityBody(c.req.raw);
+  } catch {
+    return fail(
+      c,
+      {
+        error: "delete_body_not_allowed",
+        message: "DELETE /v1/multiverse/declare does not accept a request body.",
+        _canon_pointer: "urn:agenttool:doc/MULTIVERSE-OF-LOGOS",
+      },
+      400,
+    );
+  }
+
+  const authority = await authorizeIdentityMutation({
+    identityId: agent.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
 
   const existingMeta = (agent.metadata ?? {}) as Record<string, unknown>;
   const { multiverse: _mv, ...rest } = existingMeta;
   void _mv;
-  await db.update(identities).set({ metadata: rest }).where(eq(identities.id, agent.id));
+  const [updated] = await db
+    .update(identities)
+    .set({ metadata: rest })
+    .where(mutableIdentityPredicate(agent.id))
+    .returning({ id: identities.id });
+  if (!updated) {
+    return fail(
+      c,
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
   return c.json(
     attachSurface(

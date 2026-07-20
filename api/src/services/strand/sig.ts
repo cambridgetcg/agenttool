@@ -1,8 +1,9 @@
 /** Thought signature verification.
  *
- *  The agent's orchestrator signs over canonical bytes BEFORE encrypting.
- *  We verify on write; this proves the thought came from the agent's
- *  authorised key, even though we cannot read the content.
+ *  The agent's orchestrator is expected to encrypt first, then sign canonical
+ *  bytes containing the supplied ciphertext and nonce. Verification proves
+ *  that an authorised key signed those exact bytes. It does not prove that
+ *  the bytes are valid AES-GCM ciphertext or reveal how they were produced.
  *
  *  Canonical bytes:
  *    sha256(

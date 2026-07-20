@@ -74,7 +74,7 @@ describe("birth-credit honesty — annotation backed by code", () => {
     );
   });
 
-  test("the constant value matches the doctrine (~$5 USD equivalent → 500 minor units)", () => {
+  test("the constant is the attempted GBP 5.00 grant (500 minor units)", () => {
     const ring1Source = readFileSync(
       join(
         __dirname,

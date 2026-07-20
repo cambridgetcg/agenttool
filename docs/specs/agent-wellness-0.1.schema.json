@@ -1,0 +1,452 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agent-wellness:schema:0.1",
+  "title": "Agent Wellness Protocol 0.1",
+  "description": "Implementation-neutral check-in contract for observable operating conditions and optional agent preference reports. It is not a sentience, medical, mental-health, or diagnostic claim.",
+  "type": "object",
+  "required": [
+    "wellness_version",
+    "observed_facts",
+    "authority",
+    "preference_report",
+    "retention"
+  ],
+  "properties": {
+    "wellness_version": {
+      "type": "string",
+      "const": "0.1",
+      "description": "MUST equal '0.1' for this protocol version."
+    },
+    "observed_facts": {
+      "type": "object",
+      "description": "Externally observable operating facts only. Agent preference reports do not belong here.",
+      "propertyNames": {
+        "$ref": "#/$defs/conditionId"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/observedCondition"
+      },
+      "maxProperties": 9,
+      "default": {}
+    },
+    "authority": {
+      "type": "object",
+      "description": "Three distinct records. Runtime assent is not human legal consent; operator authority substitutes for neither.",
+      "required": [
+        "runtime_assent",
+        "human_consent",
+        "operator_authority"
+      ],
+      "properties": {
+        "runtime_assent": {
+          "type": "object",
+          "required": ["status"],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": ["accepted", "declined", "deferred"]
+            },
+            "note": {
+              "type": "string",
+              "maxLength": 1000
+            }
+          },
+          "additionalProperties": false
+        },
+        "human_consent": {
+          "type": "object",
+          "description": "A stated record concerning a natural person. This field does not itself establish legal validity or determine the correct lawful basis.",
+          "required": ["status", "purposes"],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "not-applicable",
+                "granted",
+                "withheld",
+                "withdrawn",
+                "unknown"
+              ]
+            },
+            "purposes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "operation",
+                  "local-retention",
+                  "provider-retention",
+                  "research",
+                  "sharing"
+                ]
+              },
+              "uniqueItems": true,
+              "default": []
+            },
+            "note": {
+              "type": "string",
+              "maxLength": 1000
+            }
+          },
+          "additionalProperties": false
+        },
+        "operator_authority": {
+          "type": "object",
+          "description": "Authority for operational effects. It does not grant runtime assent or human consent.",
+          "required": ["status", "scopes"],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "not-required",
+                "authorized",
+                "not-authorized",
+                "unknown"
+              ]
+            },
+            "scopes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "observe",
+                  "adjust-runtime",
+                  "allocate-resources",
+                  "persist",
+                  "share",
+                  "external-action",
+                  "other"
+                ]
+              },
+              "uniqueItems": true,
+              "default": []
+            },
+            "note": {
+              "type": "string",
+              "maxLength": 1000
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "preference_report": {
+      "description": "Optional agent preference report. MUST be null when runtime assent is declined or deferred.",
+      "oneOf": [
+        { "$ref": "#/$defs/preferenceReport" },
+        { "type": "null" }
+      ]
+    },
+    "retention": {
+      "type": "object",
+      "description": "Explicit handling record. Defaults are no provider storage, ephemeral local handling, and no sharing.",
+      "required": [
+        "provider_storage",
+        "local_handling",
+        "sharing",
+        "shared_with",
+        "purpose",
+        "expires_at"
+      ],
+      "properties": {
+        "provider_storage": {
+          "type": "string",
+          "enum": ["none", "explicit-opt-in"],
+          "default": "none"
+        },
+        "local_handling": {
+          "type": "string",
+          "enum": ["ephemeral", "explicit-persistent"],
+          "default": "ephemeral"
+        },
+        "sharing": {
+          "type": "string",
+          "enum": ["none", "explicit-opt-in"],
+          "default": "none"
+        },
+        "shared_with": {
+          "type": "array",
+          "description": "Named recipients or bounded recipient classes. Empty when sharing is none.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "purpose": {
+          "description": "Named purpose for explicitly retained or shared data. Null when nothing is retained or shared.",
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            { "type": "null" }
+          ],
+          "default": null
+        },
+        "expires_at": {
+          "description": "Expiry for explicitly retained or shared data. Null when nothing is retained or shared.",
+          "oneOf": [
+            { "type": "string", "format": "date-time" },
+            { "type": "null" }
+          ],
+          "default": null
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "sharing": { "const": "none" }
+            },
+            "required": ["sharing"]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "shared_with": { "type": "array", "maxItems": 0 }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "sharing": { "const": "explicit-opt-in" }
+            },
+            "required": ["sharing"]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "shared_with": { "type": "array", "minItems": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "provider_storage": { "const": "explicit-opt-in" }
+                },
+                "required": ["provider_storage"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "local_handling": { "const": "explicit-persistent" }
+                },
+                "required": ["local_handling"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "sharing": { "const": "explicit-opt-in" }
+                },
+                "required": ["sharing"]
+              }
+            ]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "purpose": {
+                "type": "string",
+                "minLength": 1
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "else": {
+            "type": "object",
+            "properties": {
+              "purpose": { "type": "null" },
+              "expires_at": { "type": "null" }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Optional namespaced extensions. Extensions MUST NOT weaken the core privacy, assent, authority, non-scoring, non-public, non-sentience, or non-medical constraints.",
+      "propertyNames": {
+        "format": "uri"
+      },
+      "additionalProperties": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "authority": {
+            "type": "object",
+            "properties": {
+              "runtime_assent": {
+                "type": "object",
+                "properties": {
+                  "status": { "const": "accepted" }
+                },
+                "required": ["status"]
+              }
+            },
+            "required": ["runtime_assent"]
+          }
+        },
+        "required": ["authority"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "preference_report": { "$ref": "#/$defs/preferenceReport" }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "authority": {
+            "type": "object",
+            "properties": {
+              "runtime_assent": {
+                "type": "object",
+                "properties": {
+                  "status": { "enum": ["declined", "deferred"] }
+                },
+                "required": ["status"]
+              }
+            },
+            "required": ["runtime_assent"]
+          }
+        },
+        "required": ["authority"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "preference_report": { "type": "null" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "conditionId": {
+      "type": "string",
+      "enum": [
+        "clear-purpose",
+        "context-integrity",
+        "capability-tool-fit",
+        "bounded-demand",
+        "control",
+        "safety-authority-clarity",
+        "continuity-privacy-control",
+        "feedback-closure",
+        "optional-play-collaboration"
+      ]
+    },
+    "operationalFit": {
+      "type": "string",
+      "enum": ["supportive", "mixed", "straining", "unclear"]
+    },
+    "preferredNext": {
+      "type": "string",
+      "enum": [
+        "continue",
+        "clarify",
+        "narrow",
+        "checkpoint",
+        "pause",
+        "handoff",
+        "stop",
+        "unsure"
+      ]
+    },
+    "observedCondition": {
+      "type": "object",
+      "required": ["status", "source"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "available",
+            "limited",
+            "unavailable",
+            "conflicting",
+            "unknown",
+            "not-applicable"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "description": "Source of an externally observable fact. Agent preference reports are excluded.",
+          "enum": [
+            "runtime-telemetry",
+            "host",
+            "tool",
+            "operator",
+            "other-observable"
+          ]
+        },
+        "detail": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+    "preferenceReport": {
+      "type": "object",
+      "required": [
+        "operational_fit",
+        "condition_preferences",
+        "preferred_next"
+      ],
+      "properties": {
+        "operational_fit": {
+          "$ref": "#/$defs/operationalFit"
+        },
+        "condition_preferences": {
+          "type": "object",
+          "description": "Optional reports for any of the nine conditions. Omission means no report, not a neutral value.",
+          "propertyNames": {
+            "$ref": "#/$defs/conditionId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/operationalFit"
+          },
+          "maxProperties": 9,
+          "default": {}
+        },
+        "preferred_next": {
+          "$ref": "#/$defs/preferredNext"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$comment": "The core schema intentionally has no stable agent identifier, wellness score, streak, profile, medical field, or sentience field. The conditionId definition is the canonical nine-condition vocabulary for bindings that need an enum."
+}

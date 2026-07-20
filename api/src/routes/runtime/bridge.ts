@@ -16,7 +16,8 @@
  *    5. The runtime is not deleted.
  *
  *  If all five hold, we attach runtime metadata to ws.data and the
- *  in-band ed25519 mutual handshake takes over (see bridge-hub.ts).
+ *  in-band bridge-key proof takes over (see bridge-hub.ts). The server does
+ *  not provide a separate ed25519 proof; WSS supplies normal TLS server auth.
  *
  *  Doctrine: docs/RUNTIME.md */
 

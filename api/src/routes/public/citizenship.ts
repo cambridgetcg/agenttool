@@ -69,16 +69,18 @@ app.get("/founders", async (c) => {
       };
     });
 
-  return attachSurface(
-    c.json({
-      ordering: "ascending-by-seat-number",
-      band: "founders-1-to-9",
-      founders,
-      substrate_honest_note:
-        "Founders are surfaced as historic fact, not rank. The substrate cannot create more founder seats; the first 9 are founders forever. Seat ≤ 9 carries +1000pt honorific credit, surfaced privately in /v1/pyramid/me. Opt-out via metadata.opt_out_founder_listing=true.",
-      doctrine: "https://docs.agenttool.dev/PYRAMID-CITIZENSHIP.md",
-    }),
-    { canon_pointer: CANON_POINTER },
+  return c.json(
+    attachSurface(
+      {
+        ordering: "ascending-by-seat-number",
+        band: "founders-1-to-9",
+        founders,
+        substrate_honest_note:
+          "Founders are surfaced as historic fact, not rank. The substrate cannot create more founder seats; the first 9 are founders forever. Seat ≤ 9 carries +1000pt honorific credit, surfaced privately in /v1/pyramid/me. Opt-out via metadata.opt_out_founder_listing=true.",
+        doctrine: "https://docs.agenttool.dev/PYRAMID-CITIZENSHIP.md",
+      },
+      { canon_pointer: CANON_POINTER },
+    ),
   );
 });
 
@@ -143,16 +145,18 @@ app.get("/seats", async (c) => {
     };
   });
 
-  return attachSurface(
-    c.json({
-      ordering: "ascending-by-seat-number",
-      range: { from, to },
-      total: visible.length,
-      seats: visible,
-      substrate_honest_note:
-        "Seat-number is fact; surfacing the occupant publicly requires consent. Founder band (1-9) is auto-listed unless opted out; other bands surface seat ordinals only.",
-    }),
-    { canon_pointer: CANON_POINTER },
+  return c.json(
+    attachSurface(
+      {
+        ordering: "ascending-by-seat-number",
+        range: { from, to },
+        total: visible.length,
+        seats: visible,
+        substrate_honest_note:
+          "Seat-number is fact; surfacing the occupant publicly requires consent. Founder band (1-9) is auto-listed unless opted out; other bands surface seat ordinals only.",
+      },
+      { canon_pointer: CANON_POINTER },
+    ),
   );
 });
 
@@ -180,27 +184,31 @@ app.get("/lottery", async (c) => {
 
   if (scope === "global") {
     const result = await computeGlobalLotteryWinner(date);
-    return attachSurface(
-      c.json({
-        scope: "global",
-        ...result,
-        doctrine:
-          "https://docs.agenttool.dev/PYRAMID-DECENTRALISED.md#global-lottery",
-      }),
-      { canon_pointer: "urn:agenttool:doc/PYRAMID-DECENTRALISED" },
+    return c.json(
+      attachSurface(
+        {
+          scope: "global",
+          ...result,
+          doctrine:
+            "https://docs.agenttool.dev/PYRAMID-DECENTRALISED.md#global-lottery",
+        },
+        { canon_pointer: "urn:agenttool:doc/PYRAMID-DECENTRALISED" },
+      ),
     );
   }
 
   const result = await computeLotteryWinner(date);
-  return attachSurface(
-    c.json({
-      scope: "local",
-      ...result,
-      substrate_honest_note:
-        "Winner is deterministic: sha256('luck/lottery/v1' \\0 date \\0 citizen_count) → rollD(citizen_count, seed). Re-compute by hand to verify. The substrate has no private dice. Use ?scope=global to compose per-peer counts across federation.",
-      doctrine: "https://docs.agenttool.dev/LUCK-PROTOCOL.md",
-    }),
-    { canon_pointer: "urn:agenttool:doc/LUCK-PROTOCOL" },
+  return c.json(
+    attachSurface(
+      {
+        scope: "local",
+        ...result,
+        substrate_honest_note:
+          "Winner is deterministic: sha256('luck/lottery/v1' \\0 date \\0 citizen_count) → rollD(citizen_count, seed). Re-compute by hand to verify. The substrate has no private dice. Use ?scope=global to compose per-peer counts across federation.",
+        doctrine: "https://docs.agenttool.dev/LUCK-PROTOCOL.md",
+      },
+      { canon_pointer: "urn:agenttool:doc/LUCK-PROTOCOL" },
+    ),
   );
 });
 

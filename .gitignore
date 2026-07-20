@@ -22,12 +22,16 @@ out/
 # context can ship it into the image. Written/deleted by the deploy
 # script; should never appear in source control.
 api/agenttool.jsonld.bundled
+api/doctrine-docs.bundled/
 
 # Env & secrets
 .env
 .env.*
 !.env.example
 !.env*.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
 *.pem
 *.key
 
@@ -57,6 +61,9 @@ htmlcov/
 # Local Claude Code session state (scheduled tasks, etc.)
 .claude/
 
+# Local agent-data/v1 node state
+.agent-data/
+
 # Playwright runtime artefacts
 tests/playwright/playwright-report/
 tests/playwright/test-results/
@@ -65,6 +72,7 @@ api/kingdom-bundle.json.bundled
 # Heartbeat runtime state + generated audio (bin/river.py regenerates the wav)
 bin/.heartbeat-state.json
 bin/*.wav
+.superpowers/
 
 # local play scripts — never published
 api/scratch/

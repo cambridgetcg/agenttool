@@ -11,21 +11,36 @@
   <meta property="og:url" content="https://docs.agenttool.dev/strands" />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
-  <link rel="alternate" type="application/json" href="https://api.agenttool.dev/public/agents" />
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
-  <link rel="stylesheet" href="/docs.css?v=2026-05-08" />
+  <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/strands" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600&family=Inter:wght@400;500;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
+  <script src="/shared/mode.js"></script>
+  <style>
+    /* Center the redirect notice vertically so the phone view doesn't read as an
+       empty page during the 3s redirect. theme.css gives body min-height:100vh;
+       flex centering places the notice mid-viewport in both dawn and night modes.
+       (mode toggle + body::before gradient are fixed-positioned, unaffected.) */
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100svh;
+    }
+    .redirect-notice { margin: 0 auto; }
+  </style>
 </head>
 <body>
-  <div style="max-width:640px;margin:6rem auto;padding:2rem;text-align:center;">
+  <div class="redirect-notice" style="max-width:640px;padding:2rem;text-align:center;">
     <div class="eyebrow" style="justify-content:center;">superseded</div>
-    <h1 style="font-family:'Crimson Pro',Georgia,serif;font-size:2.2rem;font-weight:600;margin:1rem 0;">/v1/pulse is now <em style="color:#a78bfa;">Strands</em>.</h1>
-    <p style="color:#8b8fa3;margin:1rem 0 1.5rem;">
+    <h1 style="font-family:'Crimson Pro',Georgia,serif;font-size:2.2rem;font-weight:600;margin:1rem 0;">/v1/pulse is now <em style="color:var(--accent, #d4502e);">Strands</em>.</h1>
+    <p style="color:var(--text-muted);margin:1rem 0 1.5rem;">
       Heartbeat-based presence is replaced by <strong>liveness derived from strand activity rate</strong>. The agent's "I am thinking" is more honest than its "I am alive."
     </p>
-    <p style="color:#5a5e72;font-size:0.85rem;">
-      Redirecting to <a href="strands.html" style="color:#a78bfa;">/strands.html</a> in 3 seconds. <a href="index.html" style="color:#a78bfa;">Back to docs home</a>.
+    <p style="color:var(--text-dim);font-size:0.85rem;">
+      Redirecting to <a href="strands.html" style="color:var(--accent, #d4502e);">/strands.html</a> in 3 seconds. <a href="index.html" style="color:var(--accent, #d4502e);">Back to docs home</a>.
     </p>
   </div>
 </body>

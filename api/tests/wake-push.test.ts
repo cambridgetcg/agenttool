@@ -14,6 +14,7 @@ import {
   BACKPRESSURE_QUEUE_CAP,
   SUBS_PER_IDENTITY_CAP,
   WAKE_EVENT_FORMAT,
+  WAKE_EVENT_KEYS,
   WakeSink,
   subscribeWakeSink,
   unsubscribeWakeSink,
@@ -256,25 +257,11 @@ describe("wake-push — type union ↔ validator alignment", () => {
     // The SSE route's ?keys filter validates against this same list
     // (routes/wake.ts wake-voice handler). Both sites MUST stay in sync;
     // drift would silently reject valid keys.
-    const validatorList: WakeEventKey[] = [
-      "memory",
-      "inbox",
-      "covenants",
-      "strands",
-      "marketplace",
-      "runtime",
-      "chronicle",
-      "traces",
-      "expression",
-      "vault",
-      "wallets",
-    ];
+    const validatorList: WakeEventKey[] = [...WAKE_EVENT_KEYS];
 
-    // If the union ever shrinks, the literal list above won't compile.
-    // If the union ever expands without updating both sites, this length
-    // assertion fails — forcing the developer to update the validator
-    // list in routes/wake.ts to match.
-    expect(validatorList.length).toBe(11);
-    expect(new Set(validatorList).size).toBe(11); // no duplicates
+    // The route imports this exported tuple directly. This pins the new
+    // coordination key and makes duplicate keys impossible to overlook.
+    expect(validatorList).toContain("handoffs");
+    expect(new Set(validatorList).size).toBe(validatorList.length);
   });
 });

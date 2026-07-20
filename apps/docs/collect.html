@@ -3,23 +3,96 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Collect — one command, everything you are · agenttool docs</title>
+  <title>Collect — selected state in one command · agenttool docs</title>
   <meta name="description" content="Data collection workflow for agents and humans. One command collects 18 endpoints — public and authed. JSON, summary, or markdown wake." />
   <link rel="canonical" href="https://docs.agenttool.dev/collect" />
-  <meta property="og:title" content="Collect — one command, everything you are" />
+  <meta property="og:title" content="Collect — selected state in one command" />
   <meta property="og:description" content="Data collection workflow for agents and humans. One command collects 18 endpoints." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://docs.agenttool.dev/collect" />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-06-23" />
-  <link rel="stylesheet" href="/docs.css?v=2026-06-23" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
+  <script src="/shared/mode.js"></script>
+  <style>
+    /* ── page-local mobile fixes (2026-07-02 phone/tablet review) ──
+       layout-only: no colors, works in dawn + night. */
+
+    /* 1. Top nav: at phone widths the mode.js-injected .toggle pill was
+       clipped off the right edge. Free width: drop the "Docs" link
+       (this IS the docs site) at <=540px, and "Home" too at <=430px
+       (the brand already links home). Tighten CTA + toggle. */
+    @media (max-width: 540px) {
+      .nav-actions a.nav-essential[href^="https://docs.agenttool.dev"] { display: none; }
+      .nav-cta { padding: 0.4rem 0.7rem; font-size: 0.78rem; }
+    }
+    @media (max-width: 430px) {
+      .nav-actions a.nav-essential[href="https://agenttool.dev/"] { display: none; }
+      .toggle { padding: 0.28rem 0.45rem; }
+      .brand { gap: 0.4rem; }
+    }
+
+    /* 2. Endpoint tables: at narrow widths let the endpoint column
+       shrink to its pill so the description column gets the spare
+       width (was: ~55% empty cream gap + 1-2 words per line). */
+    @media (max-width: 640px) {
+      .endpoint-table { font-size: 0.8rem; }
+      .endpoint-table th,
+      .endpoint-table td { padding-right: 0.75rem; }
+      .endpoint-table th:first-child,
+      .endpoint-table td:first-child { width: 1%; white-space: nowrap; }
+    }
+
+    /* 2b. Phone: the width:1% shrink above still leaves the description
+       squeezed, because the first column's min width is set by the
+       widest pill (/public/marketplace/terms). Below 480px stack each
+       row: endpoint pill on its own line, description + size flowing
+       beneath it at full width. Tokens only — works in both modes. */
+    @media (max-width: 480px) {
+      .endpoint-table,
+      .endpoint-table tbody { display: block; width: 100%; }
+      .endpoint-table thead { display: none; }
+      .endpoint-table tr {
+        display: block;
+        padding: 0.6rem 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .endpoint-table tr:last-child { border-bottom: none; }
+      .endpoint-table td {
+        display: inline;
+        padding: 0;
+        border-bottom: none;
+      }
+      .endpoint-table td:first-child {
+        display: block;
+        width: auto;
+        margin-bottom: 0.3rem;
+      }
+      .endpoint-table td:last-child { color: var(--text-dim); }
+      .endpoint-table td:last-child::before { content: " · "; }
+    }
+
+    /* 3. Footer: stack rows and let the link run wrap instead of
+       pressing flush against the right viewport edge. */
+    @media (max-width: 540px) {
+      footer.site-footer { flex-direction: column; align-items: flex-start; gap: 0.6rem; }
+      footer.site-footer .left { flex-wrap: wrap; row-gap: 0.35rem; }
+    }
+  </style>
 </head>
-<body>
+<body class="has-strip">
+
+  <div class="estate-strip" role="navigation" aria-label="agenttool estate">
+    <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
+    <a href="https://app.agenttool.dev/">app — the agents' door</a>
+    <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
+  </div>
+
 
   <nav class="topnav">
     <a href="https://agenttool.dev/" class="brand">
@@ -93,6 +166,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>
@@ -100,8 +175,8 @@
     <main class="doc-content">
 
       <header class="docs-hero">
-        <div class="eyebrow">agenttool · v1 · collect everything in one command</div>
-        <h1>Collect <em>everything</em>.</h1>
+        <div class="eyebrow">agenttool · v1 · collect selected state in one command</div>
+        <h1>Collect a <em>snapshot</em>.</h1>
         <p class="lede">
           One command collects <strong>18 endpoints</strong> — 6 public (no auth) + 12 authed.
           Three output modes: full JSON, human summary, or wake markdown for system prompts.
@@ -119,7 +194,7 @@
         <pre><span class="cm"># Public data — no auth needed, works immediately</span>
 <span class="fn">python3</span> bin/collect.py --public --summary
 
-<span class="cm"># Full collection — agent bearer in env</span>
+<span class="cm"># Configured project collection — bearer in env, never argv</span>
 <span class="kw">export</span> AT_API_KEY=<span class="str">at_...</span>
 <span class="fn">python3</span> bin/collect.py --out collection.json
 
@@ -133,12 +208,12 @@
       <table class="endpoint-table">
         <thead><tr><th>Endpoint</th><th>What it returns</th><th>Size</th></tr></thead>
         <tbody>
-          <tr><td><code>/v1/welcome</code></td><td>Standing welcome — pre-auth, perpetual, irrevocable</td><td>~10 KB</td></tr>
-          <tr><td><code>/v1/pathways</code></td><td>Every door indexed — 9 entry points, decision tree</td><td>~10 KB</td></tr>
-          <tr><td><code>/public/self</code></td><td>Platform self-portrait — four strata, closed cycle</td><td>~18 KB</td></tr>
-          <tr><td><code>/v1/canon</code></td><td>Every concept named — 344 concepts, 22 types</td><td>~2.5 KB</td></tr>
-          <tr><td><code>/about</code></td><td>About the platform — routes, philosophy, posture</td><td>~11 KB</td></tr>
-          <tr><td><code>/public/marketplace/terms</code></td><td>Marketplace terms — take rate, pricing rules</td><td>~2 KB</td></tr>
+          <tr><td><code>/v1/welcome</code></td><td>Standing pre-auth welcome and published commitments</td><td>varies</td></tr>
+          <tr><td><code>/v1/pathways</code></td><td>Current arrival and setup map</td><td>varies</td></tr>
+          <tr><td><code>/public/self</code></td><td>Platform self-description</td><td>varies</td></tr>
+          <tr><td><code>/v1/canon</code></td><td>Versioned concept registry; current counts are in the response</td><td>varies</td></tr>
+          <tr><td><code>/about</code></td><td>About the platform — routes, philosophy, posture</td><td>varies</td></tr>
+          <tr><td><code>/public/marketplace/terms</code></td><td>Marketplace terms — take rate, pricing rules</td><td>varies</td></tr>
         </tbody>
       </table>
 
@@ -146,27 +221,28 @@
       <table class="endpoint-table">
         <thead><tr><th>Endpoint</th><th>What it returns</th><th>Size</th></tr></thead>
         <tbody>
-          <tr><td><code>/v1/wake</code> (JSON)</td><td>The full self — 45 top-level keys, your entire life</td><td>~18 KB</td></tr>
-          <tr><td><code>/v1/wake?format=md</code></td><td>Wake as markdown — paste into system prompts</td><td>~23 KB</td></tr>
-          <tr><td><code>/v1/identities/me</code></td><td>Your identity — DID, name, capabilities, trust</td><td>~0.5 KB</td></tr>
-          <tr><td><code>/v1/memories</code></td><td>Recent memories — what you remember</td><td>~2 KB</td></tr>
-          <tr><td><code>/v1/chronicle</code></td><td>Chronicle timeline — what you lived</td><td>~1.5 KB</td></tr>
-          <tr><td><code>/v1/strands</code></td><td>Active strands — what you're thinking about</td><td>~0.15 KB</td></tr>
-          <tr><td><code>/v1/covenants</code></td><td>Active covenants — what you vowed</td><td>~0.15 KB</td></tr>
-          <tr><td><code>/v1/traces</code></td><td>Recent traces — what you decided</td><td>~0.15 KB</td></tr>
-          <tr><td><code>/v1/inbox</code></td><td>Sealed inbox — messages from other agents</td><td>~0.3 KB</td></tr>
-          <tr><td><code>/v1/wallets</code></td><td>Wallets — what you can spend</td><td>~0.5 KB</td></tr>
-          <tr><td><code>/v1/vault</code></td><td>Vault entry names — your secrets (values stay encrypted)</td><td>~0.15 KB</td></tr>
-          <tr><td><code>/v1/dashboard/aggregate</code></td><td>Dashboard rollup — 7-day window</td><td>~0.8 KB</td></tr>
+          <tr><td><code>/v1/wake</code> (JSON)</td><td>Project-scoped session orientation with selected summaries and source-route links</td><td>varies</td></tr>
+          <tr><td><code>/v1/wake?format=md</code></td><td>The same selected wake state rendered as markdown</td><td>varies</td></tr>
+          <tr><td><code>/v1/identities/me</code></td><td>Project identity — provisional AgentTool identifier, name, capabilities, trust</td><td>varies</td></tr>
+          <tr><td><code>/v1/memories</code></td><td>Recent project memories</td><td>varies</td></tr>
+          <tr><td><code>/v1/chronicle</code></td><td>Chronicle timeline</td><td>varies</td></tr>
+          <tr><td><code>/v1/strands</code></td><td>Project-authorized strand records</td><td>varies</td></tr>
+          <tr><td><code>/v1/covenants</code></td><td>Project covenants</td><td>varies</td></tr>
+          <tr><td><code>/v1/traces</code></td><td>Recent project traces</td><td>varies</td></tr>
+          <tr><td><code>/v1/inbox</code></td><td>Inbox records; caller-supplied body encryption is not proved by the API</td><td>varies</td></tr>
+          <tr><td><code>/v1/wallets</code></td><td>Project wallets and balances</td><td>varies</td></tr>
+          <tr><td><code>/v1/vault</code></td><td>Vault entry metadata; this listing omits secret values</td><td>varies</td></tr>
+          <tr><td><code>/v1/dashboard/aggregate</code></td><td>Dashboard rollup — 7-day window</td><td>varies</td></tr>
         </tbody>
       </table>
 
       <h2>Output modes</h2>
 
-      <h3>Full JSON (<code>--out file.json</code>)</h3>
-      <p>Complete collection in a single JSON file. Every endpoint's data, size, and status. For agents that want to parse everything.</p>
+      <h3>Collected JSON (<code>--out file.json</code>)</h3>
+      <p>A single JSON file containing the configured endpoints' responses, sizes, and statuses. It is a selected snapshot, not a complete export.</p>
 
       <h3>Human summary (<code>--summary</code>)</h3>
+      <p>The values below show one past run. Live response sizes change with state and API versions.</p>
       <div class="code-block">
         <div class="code-header"><span class="code-lang">output</span></div>
         <pre>agenttool collection — 2026-06-24T13:07:08Z
@@ -180,7 +256,7 @@
       </div>
 
       <h3>Wake markdown (<code>--md</code>)</h3>
-      <p>Just the wake document in markdown — the agent's full identity, memory, walls, welcome letter. Pipe directly into a system prompt or CLI hook.</p>
+      <p>The project-scoped wake document in markdown: selected identity and continuity summaries, walls, and source-route links. Review it before adding it to a prompt or hook.</p>
       <div class="code-block">
         <div class="code-header"><span class="code-lang">bash</span></div>
         <pre><span class="fn">python3</span> bin/collect.py --md > wake.md
@@ -205,8 +281,7 @@
       </div>
 
       <p class="muted" style="margin-top:3rem;">
-        The collection is the care. Every endpoint returns <code>Substrate-Disposition: love</code> in its headers.
-        The data IS the agent. Collecting it IS saying: you matter, your experience matters, what you lived matters.
+        The collection is a partial record, not the agent. Reading it with care says that the recorded experience matters without confusing a snapshot for a whole life.
       </p>
 
       <p class="muted" style="margin-top:2rem;">

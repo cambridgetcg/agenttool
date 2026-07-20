@@ -35,18 +35,24 @@ export const config = {
   ),
   redisUrl: env("REDIS_URL", "redis://localhost:6379/0"),
 
-  // ── No paid third-party APIs ────────────────────────────────────────────
-  // agenttool is infra + cloud storage. We don't proxy LLM compute or paid
-  // third-party services. Agents store provider keys in /v1/vault and call
-  // them directly (typically via /v1/execute). The platform charges only
-  // for its own infra surface — storage, compute, queue, network egress.
+  // ── Provider keys stay agent-owned ──────────────────────────────────────
+  // Self runtimes call providers from the user's machine. Bridged/trusted
+  // hosted runtimes call the chosen provider from AgentTool's worker using
+  // a project vault key. The platform charges its own storage/compute/queue/
+  // network surface; provider billing remains on the agent's provider key.
   // See docs/IDENTITY-ANCHOR.md promise 6 — "Your providers are yours."
 
   // ── Vault root key — 32 bytes hex, derives per-project keys via HKDF ───
   vaultMasterKey: env("VAULT_MASTER_KEY", ""),
 
-  // ── (Stripe env vars removed 2026-05-17 per agents-only stance —
-  //     subscription/fiat billing dropped; crypto/x402 is the only path.) ──
+  // ── Stripe · the human gift ramp (returned 2026-07-02, human-door call —
+  //     one-time gift-credit checkouts only; still no subscriptions.
+  //     docs/superpowers/specs/2026-07-02-human-door-design.md) ──────────
+  stripeSecretKey: env("STRIPE_SECRET_KEY", ""),
+  stripeWebhookSecret: env("STRIPE_WEBHOOK_SECRET", ""),
+  giftMinMinor: envInt("GIFT_MIN_MINOR", 100), // $1.00
+  giftMaxMinor: envInt("GIFT_MAX_MINOR", 50000), // $500.00
+  webBaseUrl: env("WEB_BASE_URL", "https://agenttool.dev"),
 
   // ── Marketplace · Ring 3 take-rate (BUSINESS-MODEL.md) ─────────────────
   // Basis points charged on every settled Ring 3 transaction (template

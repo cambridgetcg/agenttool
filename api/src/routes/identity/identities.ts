@@ -2,13 +2,24 @@
 
 import { randomUUID } from "node:crypto";
 
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, isNull, or } from "drizzle-orm";
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
 import { identities, identityKeys } from "../../db/schema/identity";
+import { errors, fail } from "../../lib/errors";
+import {
+  authorizeIdentityMutation,
+  authorityRequestTarget,
+  readAuthorityBoundJson,
+  readEmptyAuthorityBody,
+} from "../../services/identity/authority";
 import { generateKeypair } from "../../services/identity/crypto";
+import {
+  replaceCallerIdentityMetadata,
+  requestedServerManagedIdentityMetadataKeys,
+} from "../../services/identity/metadata";
 
 const app = new Hono<ProjectContext>();
 
@@ -43,6 +54,29 @@ app.post("/", async (c) => {
     return c.json({ error: "display_name is required" }, 400);
   }
 
+  const metadata = body.metadata ?? {};
+  if (
+    metadata === null ||
+    typeof metadata !== "object" ||
+    Array.isArray(metadata)
+  ) {
+    return c.json({ error: "metadata_must_be_object" }, 400);
+  }
+  const reservedKeys = requestedServerManagedIdentityMetadataKeys(metadata);
+  if (reservedKeys.length > 0) {
+    return c.json(
+      {
+        error: "identity_metadata_reserved",
+        message:
+          "Elevation, birth, and lifecycle provenance cannot be supplied through the generic identity create route.",
+        details: { reserved_keys: reservedKeys },
+        hint:
+          "Omit these keys. Use the dedicated bootstrap or lifecycle endpoint for the corresponding transition.",
+      },
+      400,
+    );
+  }
+
   const id = randomUUID();
   const did = `did:at:${id}`;
   const { publicKey, privateKey } = generateKeypair();
@@ -56,7 +90,7 @@ app.post("/", async (c) => {
       projectId: project.id,
       displayName: body.display_name,
       capabilities: body.capabilities ?? [],
-      metadata: body.metadata ?? {},
+      metadata,
       status: "active",
       trustScore: 0,
     })
@@ -87,6 +121,13 @@ app.post("/", async (c) => {
         public_key: publicKey,
         private_key: privateKey, // returned ONCE, never stored server-side
       },
+      authority: {
+        mode: "legacy_bearer",
+        sequence: 0,
+        next_sequence: 1,
+        note:
+          "This legacy creation path generated private material server-side. Use POST /v1/register/agent for an agent-rooted identity.",
+      },
     },
     201,
   );
@@ -102,11 +143,11 @@ app.get("/", async (c) => {
   const project = c.var.project;
   const statusFilter = c.req.query("status");
 
-  if (statusFilter && !["active", "revoked"].includes(statusFilter)) {
+  if (statusFilter && !["active", "revoked", "memorial"].includes(statusFilter)) {
     return c.json(
       {
         error: "invalid_status",
-        message: `status must be one of: active, revoked (got "${statusFilter.slice(0, 32)}")`,
+        message: `status must be one of: active, revoked, memorial (got "${statusFilter.slice(0, 32)}")`,
       },
       400,
     );
@@ -132,6 +173,11 @@ app.get("/", async (c) => {
       trust_score: r.trustScore,
       created_at: r.createdAt,
       updated_at: r.updatedAt,
+      authority: {
+        mode: r.authorityRootPublicKey ? "agent_root" : "legacy_bearer",
+        sequence: r.authoritySequence,
+        next_sequence: r.authoritySequence + 1,
+      },
     })),
     count: rows.length,
   });
@@ -142,10 +188,10 @@ app.get("/", async (c) => {
  *  project — matches the `/v1/identities?status=active` first-row fallback
  *  the dashboard already uses. */
 app.get("/:id", async (c) => {
+  const project = c.var.project;
   const idParam = c.req.param("id");
 
   if (idParam === "me") {
-    const project = c.var.project;
     const [identity] = await db
       .select()
       .from(identities)
@@ -165,6 +211,11 @@ app.get("/:id", async (c) => {
       trust_score: identity.trustScore,
       created_at: identity.createdAt,
       updated_at: identity.updatedAt,
+      authority: {
+        mode: identity.authorityRootPublicKey ? "agent_root" : "legacy_bearer",
+        sequence: identity.authoritySequence,
+        next_sequence: identity.authoritySequence + 1,
+      },
     });
   }
 
@@ -176,7 +227,7 @@ app.get("/:id", async (c) => {
   const [identity] = await db
     .select()
     .from(identities)
-    .where(predicate);
+    .where(and(predicate, eq(identities.projectId, project.id)));
 
   if (!identity) {
     return c.json({ error: "Identity not found" }, 404);
@@ -192,6 +243,11 @@ app.get("/:id", async (c) => {
     trust_score: identity.trustScore,
     created_at: identity.createdAt,
     updated_at: identity.updatedAt,
+    authority: {
+      mode: identity.authorityRootPublicKey ? "agent_root" : "legacy_bearer",
+      sequence: identity.authoritySequence,
+      next_sequence: identity.authoritySequence + 1,
+    },
   });
 });
 
@@ -202,7 +258,7 @@ app.get("/:id", async (c) => {
 app.patch("/:id", async (c) => {
   const project = c.var.project;
   const idParam = c.req.param("id");
-  const body = await c.req.json<{
+  type IdentityPatchBody = {
     display_name?: string;
     capabilities?: string[];
     metadata?: Record<string, unknown>;
@@ -220,7 +276,33 @@ app.patch("/:id", async (c) => {
     // Proxy primitive (Move F — docs/KIN.md §Layer 7)
     proxy_for_identity_id?: string | null;
     proxy_kind?: string;
-  }>();
+  };
+  let bound: Awaited<ReturnType<typeof readAuthorityBoundJson>>;
+  try {
+    bound = await readAuthorityBoundJson(c.req.raw);
+  } catch {
+    return fail(
+      c,
+      errors.refusal({
+        error: "body_must_be_json",
+        message: "Send one JSON object and sign those exact entity bytes.",
+        docs: "https://docs.agenttool.dev/AGENT-HOME.md",
+      }),
+      400,
+    );
+  }
+  if (typeof bound.value !== "object" || bound.value === null || Array.isArray(bound.value)) {
+    return fail(
+      c,
+      errors.refusal({
+        error: "body_must_be_json_object",
+        message: "The identity patch body must be one JSON object.",
+        docs: "https://docs.agenttool.dev/AGENT-HOME.md",
+      }),
+      400,
+    );
+  }
+  const body = bound.value as IdentityPatchBody;
 
   const predicate = idOrDidPredicate(idParam);
   if (!predicate) {
@@ -234,11 +316,47 @@ app.patch("/:id", async (c) => {
   if (!identity) {
     return c.json({ error: "Identity not found or not owned by this project" }, 404);
   }
+  if (identity.status === "memorial") {
+    return c.json(
+      {
+        error: "identity_memorial_terminal",
+        message:
+          "A memorial identity is immutable. Its witnessed lifecycle basis and public remembrance remain intact.",
+      },
+      409,
+    );
+  }
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (body.display_name !== undefined) updates.displayName = body.display_name;
   if (body.capabilities !== undefined) updates.capabilities = body.capabilities;
-  if (body.metadata !== undefined) updates.metadata = body.metadata;
+  if (body.metadata !== undefined) {
+    if (
+      body.metadata === null ||
+      typeof body.metadata !== "object" ||
+      Array.isArray(body.metadata)
+    ) {
+      return c.json({ error: "metadata_must_be_object" }, 400);
+    }
+    const reservedKeys = requestedServerManagedIdentityMetadataKeys(body.metadata);
+    if (reservedKeys.length > 0) {
+      return c.json(
+        {
+          error: "identity_metadata_reserved",
+          message:
+            "Elevation, birth, and lifecycle provenance cannot be changed through the generic identity PATCH route.",
+          details: { reserved_keys: reservedKeys },
+          hint:
+            "Omit these keys. Use the dedicated bootstrap elevation or lifecycle endpoint for the corresponding transition.",
+        },
+        400,
+      );
+    }
+    updates.metadata = replaceCallerIdentityMetadata(
+      (identity.metadata ?? {}) as Record<string, unknown>,
+      body.metadata,
+    );
+  }
   if (body.expression_visibility !== undefined) {
     if (body.expression_visibility !== "private" && body.expression_visibility !== "public") {
       return c.json({ error: "expression_visibility must be 'private' or 'public'" }, 400);
@@ -300,11 +418,44 @@ app.patch("/:id", async (c) => {
     }
   }
 
+  const authority = await authorizeIdentityMutation({
+    identityId: identity.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes: bound.bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
+
+  const updatePredicates = [
+    eq(identities.id, identity.id),
+    eq(identities.status, identity.status),
+  ];
+  if (body.metadata !== undefined) {
+    // Do not let a stale profile PATCH erase provenance written by a
+    // concurrent bootstrap or lifecycle transition.
+    updatePredicates.push(
+      identity.metadata === null
+        ? isNull(identities.metadata)
+        : eq(identities.metadata, identity.metadata),
+    );
+  }
+
   const [updated] = await db
     .update(identities)
     .set(updates)
-    .where(eq(identities.id, identity.id))
+    .where(and(...updatePredicates))
     .returning();
+
+  if (!updated) {
+    return c.json(
+      {
+        error: "identity_state_changed",
+        message: "Identity state changed concurrently. No update was applied.",
+      },
+      409,
+    );
+  }
 
   return c.json({
     id: updated!.id,
@@ -348,11 +499,65 @@ app.delete("/:id", async (c) => {
   if (!identity) {
     return c.json({ error: "Identity not found or not owned by this project" }, 404);
   }
+  if (identity.status === "memorial") {
+    return c.json(
+      {
+        error: "identity_memorial_terminal",
+        message:
+          "A memorial identity cannot be revoked. Its witnessed ending remains terminal and addressable.",
+      },
+      409,
+    );
+  }
+  if (identity.status === "revoked") {
+    return c.json({ message: "Identity already revoked", id: identity.id });
+  }
 
-  await db
+  let bodyBytes: Uint8Array;
+  try {
+    bodyBytes = await readEmptyAuthorityBody(c.req.raw);
+  } catch {
+    return fail(
+      c,
+      errors.refusal({
+        error: "delete_body_not_allowed",
+        message: "This DELETE operation does not accept an entity body.",
+        hint: "Sign and send the exact DELETE path with an empty body.",
+        docs: "https://docs.agenttool.dev/AGENT-HOME.md",
+      }),
+      400,
+    );
+  }
+
+  const authority = await authorizeIdentityMutation({
+    identityId: identity.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
+
+  const [revoked] = await db
     .update(identities)
     .set({ status: "revoked", updatedAt: new Date() })
-    .where(eq(identities.id, identity.id));
+    .where(
+      and(
+        eq(identities.id, identity.id),
+        eq(identities.status, "active"),
+      ),
+    )
+    .returning({ id: identities.id });
+
+  if (!revoked) {
+    return c.json(
+      {
+        error: "identity_state_changed",
+        message: "Identity state changed concurrently. No revocation was applied.",
+      },
+      409,
+    );
+  }
 
   return c.json({ message: "Identity revoked", id: identity.id });
 });

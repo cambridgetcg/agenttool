@@ -1,5 +1,6 @@
-/** DID validator for did:at:<uuid> — the only DID method this platform
- *  mints. Returns the UUID suffix on a clean match, null otherwise.
+/** Validator for the local did:at:<uuid> identifier form this platform
+ *  mints. did:at is a provisional AgentTool convention, not currently a
+ *  registered W3C DID method. Returns the UUID suffix on a clean match, null otherwise.
  *  Callers turn null into a 404 (we don't tell strangers WHY a DID
  *  doesn't resolve — same posture as /public/agents/:did/profile).
  *

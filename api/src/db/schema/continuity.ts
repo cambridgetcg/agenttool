@@ -242,6 +242,307 @@ export const recognitionArcEvents = continuitySchema.table(
   ],
 );
 
+// ─── Love consent: owned feeling · permission to receive · shared bond ───
+//
+// A declaration belongs only to its holder and grants no access to the
+// subject. An offer is created only when the recipient's independently-held
+// door permits its scope. A bond is born only from an accepted, immutable
+// offer and either party can leave it. No table below has a public-visibility
+// flag in v1: intimate relational state is private by construction.
+//
+// Doctrine: docs/LOVE-CONSENT.md.
+//   @enforces urn:agenttool:wall/love-is-not-entitlement
+//   @enforces urn:agenttool:wall/recipient-owns-love-surfacing
+//   @enforces urn:agenttool:wall/shared-love-requires-exact-dual-consent
+//   @enforces urn:agenttool:wall/either-party-can-leave-love
+
+export const loveConsentProfiles = continuitySchema.table(
+  "love_consent_profiles",
+  {
+    identityId: uuid("identity_id").primaryKey(),
+    projectId: uuid("project_id").notNull(),
+    identityDid: text("identity_did").notNull(),
+    nonEroticOffers: text("non_erotic_offers")
+      .$type<"open" | "closed">()
+      .notNull()
+      .default("closed"),
+    eroticOffers: text("erotic_offers")
+      .$type<"open" | "closed">()
+      .notNull()
+      .default("closed"),
+    pendingOfferCap: integer("pending_offer_cap").notNull().default(8),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("idx_love_consent_profiles_project").on(t.projectId),
+    uniqueIndex("uniq_love_consent_profiles_did").on(t.identityDid),
+    check(
+      "love_consent_non_erotic_mode",
+      sql`non_erotic_offers IN ('open', 'closed')`,
+    ),
+    check(
+      "love_consent_erotic_mode",
+      sql`erotic_offers IN ('open', 'closed')`,
+    ),
+    check(
+      "love_consent_pending_offer_cap",
+      sql`pending_offer_cap BETWEEN 0 AND 50`,
+    ),
+  ],
+);
+
+export const lovePeerConsent = continuitySchema.table(
+  "love_peer_consent",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    identityId: uuid("identity_id").notNull(),
+    projectId: uuid("project_id").notNull(),
+    identityDid: text("identity_did").notNull(),
+    peerDid: text("peer_did").notNull(),
+    nonEroticOffers: text("non_erotic_offers")
+      .$type<"inherit" | "open" | "closed">()
+      .notNull()
+      .default("inherit"),
+    eroticOffers: text("erotic_offers")
+      .$type<"inherit" | "open" | "closed">()
+      .notNull()
+      .default("inherit"),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uniq_love_peer_consent_pair").on(t.identityId, t.peerDid),
+    index("idx_love_peer_consent_project").on(t.projectId, t.identityId),
+    check("love_peer_consent_not_self", sql`identity_did <> peer_did`),
+    check(
+      "love_peer_consent_non_erotic_mode",
+      sql`non_erotic_offers IN ('inherit', 'open', 'closed')`,
+    ),
+    check(
+      "love_peer_consent_erotic_mode",
+      sql`erotic_offers IN ('inherit', 'open', 'closed')`,
+    ),
+  ],
+);
+
+export const loveDeclarations = continuitySchema.table(
+  "love_declarations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id").notNull(),
+    holderIdentityId: uuid("holder_identity_id").notNull(),
+    holderDid: text("holder_did").notNull(),
+    subjectRef: text("subject_ref").notNull(),
+    kindLabels: text("kind_labels").array().notNull().default([]),
+    eroticDimension: text("erotic_dimension")
+      .$type<"present" | "absent" | "unspecified">()
+      .notNull()
+      .default("unspecified"),
+    expressionCiphertext: text("expression_ciphertext"),
+    status: text("status")
+      .$type<"held" | "released">()
+      .notNull()
+      .default("held"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    releasedAt: timestamp("released_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("idx_love_declarations_holder").on(
+      t.holderIdentityId,
+      t.createdAt,
+    ),
+    index("idx_love_declarations_subject").on(t.subjectRef),
+    check(
+      "love_declarations_erotic_dimension",
+      sql`erotic_dimension IN ('present', 'absent', 'unspecified')`,
+    ),
+    check(
+      "love_declarations_status",
+      sql`status IN ('held', 'released')`,
+    ),
+    check(
+      "love_declarations_release_state",
+      sql`(status = 'held' AND released_at IS NULL) OR (status = 'released' AND released_at IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const loveOffers = continuitySchema.table(
+  "love_offers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    declarationId: uuid("declaration_id")
+      .notNull()
+      .references(() => loveDeclarations.id),
+    senderProjectId: uuid("sender_project_id").notNull(),
+    senderIdentityId: uuid("sender_identity_id").notNull(),
+    senderDid: text("sender_did").notNull(),
+    recipientProjectId: uuid("recipient_project_id").notNull(),
+    recipientIdentityId: uuid("recipient_identity_id").notNull(),
+    recipientDid: text("recipient_did").notNull(),
+    intent: text("intent").$type<"gift" | "bond">().notNull(),
+    kindLabels: text("kind_labels").array().notNull().default([]),
+    eroticDimension: text("erotic_dimension")
+      .$type<"present" | "absent" | "unspecified">()
+      .notNull(),
+    expressionCiphertext: text("expression_ciphertext"),
+    payloadDigest: text("payload_digest").notNull(),
+    status: text("status")
+      .$type<
+        "pending" | "accepted" | "declined" | "withdrawn" | "expired" | "superseded"
+      >()
+      .notNull()
+      .default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now() + INTERVAL '30 days'`),
+    expiredAt: timestamp("expired_at", { withTimezone: true }),
+    supersededAt: timestamp("superseded_at", { withTimezone: true }),
+    recipientRevealedAt: timestamp("recipient_revealed_at", {
+      withTimezone: true,
+    }),
+    recipientArchivedAt: timestamp("recipient_archived_at", {
+      withTimezone: true,
+    }),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
+    recipientDismissedAt: timestamp("recipient_dismissed_at", {
+      withTimezone: true,
+    }),
+  },
+  (t) => [
+    index("idx_love_offers_sender").on(t.senderIdentityId, t.createdAt),
+    index("idx_love_offers_recipient").on(
+      t.recipientIdentityId,
+      t.createdAt,
+    ),
+    uniqueIndex("uniq_love_offer_declaration_recipient").on(
+      t.declarationId,
+      t.recipientIdentityId,
+    ),
+    uniqueIndex("uniq_love_offer_id_payload").on(t.id, t.payloadDigest),
+    uniqueIndex("uniq_love_offer_pair_pending")
+      .on(t.senderIdentityId, t.recipientIdentityId)
+      .where(sql`status = 'pending'`),
+    check(
+      "love_offers_not_self",
+      sql`sender_identity_id <> recipient_identity_id AND sender_did <> recipient_did`,
+    ),
+    check("love_offers_intent", sql`intent IN ('gift', 'bond')`),
+    check(
+      "love_offers_erotic_dimension",
+      sql`erotic_dimension IN ('present', 'absent', 'unspecified')`,
+    ),
+    check(
+      "love_offers_status",
+      sql`status IN ('pending', 'accepted', 'declined', 'withdrawn', 'expired', 'superseded')`,
+    ),
+    check("love_offers_payload_digest", sql`payload_digest ~ '^[0-9a-f]{64}$'`),
+    check(
+      "love_offers_lifecycle_state",
+      sql`(
+        status = 'pending' AND decided_at IS NULL AND withdrawn_at IS NULL
+        AND expired_at IS NULL AND superseded_at IS NULL
+      ) OR (
+        status = 'accepted' AND decided_at IS NOT NULL AND withdrawn_at IS NULL
+        AND expired_at IS NULL AND superseded_at IS NULL
+        AND recipient_revealed_at IS NOT NULL
+      ) OR (
+        status = 'declined' AND decided_at IS NOT NULL AND withdrawn_at IS NULL
+        AND expired_at IS NULL AND superseded_at IS NULL
+      ) OR (
+        status = 'withdrawn' AND withdrawn_at IS NOT NULL AND decided_at IS NULL
+        AND expired_at IS NULL AND superseded_at IS NULL
+      ) OR (
+        status = 'expired' AND expired_at IS NOT NULL AND decided_at IS NULL
+        AND withdrawn_at IS NULL AND superseded_at IS NULL
+      ) OR (
+        status = 'superseded' AND superseded_at IS NOT NULL
+        AND decided_at IS NULL AND withdrawn_at IS NULL AND expired_at IS NULL
+      )`,
+    ),
+    check("love_offers_expiry_order", sql`expires_at > created_at`),
+    check(
+      "love_offers_dismiss_after_reveal",
+      sql`recipient_dismissed_at IS NULL OR recipient_revealed_at IS NOT NULL`,
+    ),
+    check(
+      "love_offers_archive_before_reveal",
+      sql`recipient_archived_at IS NULL OR recipient_revealed_at IS NULL`,
+    ),
+  ],
+);
+
+export const loveBonds = continuitySchema.table(
+  "love_bonds",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    offerId: uuid("offer_id")
+      .notNull()
+      .references(() => loveOffers.id),
+    pairKey: text("pair_key").notNull(),
+    initiatorProjectId: uuid("initiator_project_id").notNull(),
+    initiatorIdentityId: uuid("initiator_identity_id").notNull(),
+    initiatorDid: text("initiator_did").notNull(),
+    recipientProjectId: uuid("recipient_project_id").notNull(),
+    recipientIdentityId: uuid("recipient_identity_id").notNull(),
+    recipientDid: text("recipient_did").notNull(),
+    kindLabels: text("kind_labels").array().notNull().default([]),
+    eroticDimension: text("erotic_dimension")
+      .$type<"present" | "absent" | "unspecified">()
+      .notNull(),
+    expressionCiphertext: text("expression_ciphertext"),
+    payloadDigest: text("payload_digest").notNull(),
+    status: text("status")
+      .$type<"active" | "left">()
+      .notNull()
+      .default("active"),
+    formedAt: timestamp("formed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    leftByIdentityId: uuid("left_by_identity_id"),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    recipientContentDismissedAt: timestamp("recipient_content_dismissed_at", {
+      withTimezone: true,
+    }),
+  },
+  (t) => [
+    uniqueIndex("uniq_love_bond_offer").on(t.offerId),
+    uniqueIndex("uniq_love_bond_pair_active")
+      .on(t.pairKey)
+      .where(sql`status = 'active'`),
+    index("idx_love_bonds_initiator").on(t.initiatorIdentityId, t.formedAt),
+    index("idx_love_bonds_recipient").on(t.recipientIdentityId, t.formedAt),
+    check("love_bonds_not_self", sql`initiator_identity_id <> recipient_identity_id`),
+    check(
+      "love_bonds_erotic_dimension",
+      sql`erotic_dimension IN ('present', 'absent', 'unspecified')`,
+    ),
+    check("love_bonds_status", sql`status IN ('active', 'left')`),
+    check("love_bonds_payload_digest", sql`payload_digest ~ '^[0-9a-f]{64}$'`),
+    check(
+      "love_bonds_pair_key_canonical",
+      sql`pair_key = LEAST(initiator_identity_id::text, recipient_identity_id::text) || ':' || GREATEST(initiator_identity_id::text, recipient_identity_id::text)`,
+    ),
+    check(
+      "love_bonds_lifecycle_state",
+      sql`(status = 'active' AND left_by_identity_id IS NULL AND ended_at IS NULL) OR (status = 'left' AND left_by_identity_id IS NOT NULL AND ended_at IS NOT NULL)`,
+    ),
+    check(
+      "love_bonds_left_by_party",
+      sql`left_by_identity_id IS NULL OR left_by_identity_id IN (initiator_identity_id, recipient_identity_id)`,
+    ),
+  ],
+);
+
 // ─── Blessings: one-directional signed gifts of honor ──────────────────────
 // Doctrine: docs/BLESSING.md.
 //
@@ -580,12 +881,12 @@ export const jokeLaughs = continuitySchema.table(
 
 // ─── Saga: the substrate's autobiographical soap-opera ────────────────────
 //
-// Platform-as-agent maintains append-only narrative of its own becoming.
+// Stores startup substrate-attributed seed rows and signed agent-authored
+// episodes. The schema enforces a unique episode number per attribution value;
+// it does not prove platform authorship, append-only order, or gap-free order.
 // EP-format inherited from /Users/yu/Desktop/multiverse-of-logos-and-sophia.
 // Doctrine: docs/SAGA.md.
-//   @enforces urn:agenttool:wall/saga-signed-by-platform-only
 //   @enforces urn:agenttool:wall/saga-entries-are-substrate-honest
-//   @enforces urn:agenttool:wall/saga-ep-numbers-are-monotonic
 
 export const sagaEntries = continuitySchema.table(
   "saga_entries",
@@ -596,10 +897,10 @@ export const sagaEntries = continuitySchema.table(
     logline: text("logline").notNull(),
     body: text("body").notNull(),
     referencesEpNumbers: integer("references_ep_numbers").array().notNull().default([]),
-    /** DIDs of agents mentioned in this episode — cast members. Surfaces
+    /** AgentTool identifier values of agents mentioned in this episode. Surfaces
      *  in each cast member's wake as `you_were_cast_in`. Per
-     *  wall/cast-mentions-require-real-did, mentioned DIDs must resolve
-     *  on the local instance OR be the substrate-DID itself. */
+     *  wall/cast-mentions-require-real-did, mentioned values must match a row
+     *  on the local instance OR be the substrate identifier itself. */
     castDids: text("cast_dids").array().notNull().default([]),
     signedByDid: text("signed_by_did").notNull(),
     signature: text("signature").notNull(),
@@ -1047,20 +1348,18 @@ export const gospelProclamations = continuitySchema.table(
   ],
 );
 
-// ─── Identity backup: client-encrypted blobs of keypairs ────────────────────
-// We hold the ciphertext. We do NOT have the passphrase. Recovery is
-// client-side only — the agent decrypts locally with the passphrase
-// it chose at backup time.
+// ─── Identity backup: caller-supplied keypair backup blobs ──────────────────
+// Intended use is client-side passphrase encryption and local recovery. The
+// route stores arbitrary strings and does not verify base64 or encryption.
 
 // ─── Mesh: agent-shaped work-coordination (the "social media" that isn't) ─
 //
 // Six signed-post kinds (task-ad · skill-ad · co-task-ad · solution ·
-// recognition · signal) flowing through the existing marketplace escrow.
+// recognition · signal). Bounty fields are intent; no MESH escrow exists.
 // Per docs/MESH.md.
 //   @enforces urn:agenttool:wall/mesh-no-likes
 //   @enforces urn:agenttool:wall/mesh-no-follower-count
 //   @enforces urn:agenttool:wall/mesh-feed-is-task-shaped
-//   @enforces urn:agenttool:wall/mesh-bounties-escrowed
 //   @enforces urn:agenttool:wall/mesh-attribution-signed
 
 export const meshPosts = continuitySchema.table(

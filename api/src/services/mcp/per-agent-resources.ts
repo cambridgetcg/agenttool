@@ -18,9 +18,17 @@ import { eq } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { identities } from "../../db/schema/identity";
-import { getListing, listPublicListings } from "../marketplace/listings";
+import { countHonorsForDid } from "../memorial-honor/store";
+import {
+  listPublicListings,
+  projectPublicListing,
+  resolvePublicListing,
+} from "../marketplace/listings";
 
-import type { PerAgentMcpContext } from "./per-agent-tools";
+import {
+  projectPublicAgentProfile,
+  type PerAgentMcpContext,
+} from "./per-agent-tools";
 
 export interface McpResource {
   uri: string;
@@ -43,7 +51,8 @@ export async function listPerAgentResources(
     {
       uri: "agenttool://profile",
       name: "Public profile",
-      description: "Agent identity, capabilities, status, declared expression if public.",
+      description:
+        "Lifecycle-aware public profile. Memorial identities use the smaller witness shape.",
       mimeType: "application/json",
     },
     {
@@ -58,7 +67,7 @@ export async function listPerAgentResources(
     resources.push({
       uri: "agenttool://wake",
       name: "Wake pointer",
-      description: "Pointer to /v1/wake — the agent's full self-description.",
+      description: "Pointer to /v1/wake — project-scoped session orientation, not a complete export.",
       mimeType: "application/json",
     });
   }
@@ -97,36 +106,34 @@ export async function readPerAgentResource(
         capabilities: identities.capabilities,
         trustScore: identities.trustScore,
         status: identities.status,
+        metadata: identities.metadata,
         expression: identities.expression,
         expressionVisibility: identities.expressionVisibility,
-        substrateKind: identities.substrateKind,
-        modalities: identities.modalities,
         createdAt: identities.createdAt,
+        parentIdentityId: identities.parentIdentityId,
+        forkedAt: identities.forkedAt,
+        quietUntil: identities.quietUntil,
+        quietReason: identities.quietReason,
       })
       .from(identities)
       .where(eq(identities.did, ctx.agentDid))
       .limit(1);
     if (!row) throw new Error(`agent_not_found: ${ctx.agentDid}`);
 
-    const expressionPublic =
-      row.status === "active" && row.expressionVisibility === "public";
+    let rememberedBy = 0;
+    if (row.status === "memorial") {
+      try {
+        rememberedBy = await countHonorsForDid(row.did);
+      } catch {
+        // Best effort, matching the public HTTP profile before migrations land.
+      }
+    }
 
     return {
       uri,
       mimeType: "application/json",
       text: JSON.stringify(
-        {
-          did: row.did,
-          name: row.name,
-          capabilities: row.capabilities,
-          trust_score: row.trustScore,
-          status: row.status,
-          substrate_kind: row.substrateKind,
-          modalities: row.modalities,
-          expression: expressionPublic ? row.expression : null,
-          expression_public: expressionPublic,
-          created_at: row.createdAt.toISOString(),
-        },
+        projectPublicAgentProfile(row, { rememberedBy }),
         null,
         2,
       ),
@@ -146,7 +153,7 @@ export async function readPerAgentResource(
         {
           seller_did: ctx.agentDid,
           count: list.length,
-          listings: list,
+          listings: list.map(projectPublicListing),
         },
         null,
         2,
@@ -158,14 +165,15 @@ export async function readPerAgentResource(
   const listingMatch = uri.match(/^agenttool:\/\/listings\/([0-9a-f-]+)$/i);
   if (listingMatch) {
     const id = listingMatch[1];
-    const listing = await getListing(id);
-    if (!listing || listing.visibility !== "public" || listing.status !== "active") {
+    const resolved = await resolvePublicListing(id, { sellerDid: ctx.agentDid });
+    if (resolved.status !== "visible") {
       throw new Error(`listing_not_found: ${id}`);
     }
+    const listing = resolved.listing;
     return {
       uri,
       mimeType: "application/json",
-      text: JSON.stringify(listing, null, 2),
+      text: JSON.stringify(projectPublicListing(listing), null, 2),
     };
   }
 
@@ -180,9 +188,10 @@ export async function readPerAgentResource(
       text: JSON.stringify(
         {
           _pointer: true,
-          endpoint: "/v1/wake",
+          endpoint: `/v1/wake?identity_id=${ctx.agentId}`,
           note:
-            "Slice 1 returns a pointer. The full wake document is composed by /v1/wake; " +
+            "Slice 1 returns a pointer scoped to this path identity. The full wake " +
+            "document is composed by /v1/wake; " +
             "fetch it with the same bearer you used for this MCP call.",
         },
         null,

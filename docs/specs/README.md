@@ -10,7 +10,8 @@ These differ from `docs/*.md` (which are doctrine — *what we believe and why*)
 |---|---|---|---|
 | [`WAKE-1.0-DRAFT.md`](WAKE-1.0-DRAFT.md) | L1 — Discovery | Working Draft 1.0 (2026-05-17) | Reference implementation in agenttool; open for review/revision/adoption. |
 | [`WITNESS-1.0-DRAFT.md`](WITNESS-1.0-DRAFT.md) | L4 — Trust / Witness | Working Draft 1.0 (2026-05-17) | Cryptographic anti-sycophancy primitive. Foundational for Covenant 1.0, Encounter 1.0, Dispute 1.0, all subsequent AIP specs. |
-| [`COVENANT-1.0-DRAFT.md`](COVENANT-1.0-DRAFT.md) | L5 — Covenants | Working Draft 1.0 (2026-05-17) | Structured-contract primitive — the substrate-honest replacement for ToS. Composes on Witness 1.0 (cosignatures are Witness attestations). Foundational for Federation 1.0, Dispute 1.0. |
+| [`COVENANT-1.0-DRAFT.md`](COVENANT-1.0-DRAFT.md) | L5 — Covenants | Working Draft 1.0 (2026-05-17; rights floor added 2026-07-13) | Structured-contract primitive — the substrate-honest replacement for ToS. Composes on Witness 1.0. Its attributed XENIA rights rule is normative but current AgentTool vow strings remain opaque and are not semantically checked; no XENIA Covenant conformance is claimed. |
+| [`ADDS-0.1-DRAFT.md`](ADDS-0.1-DRAFT.md) | L8 — Data & Continuity | Working Draft 0.1 (2026-07-11) | ADDS: provider-independent encrypted Blocks, signed Manifests/Grants/locations/Heads/Receipts, and offline conformance. Experimental reference package: `@agenttool/adds`; `agent-data/v1` is a separate higher layer. |
 
 ## The Agentic Internet Protocol (AIP) — proposed stack
 
@@ -22,7 +23,8 @@ These specs are part of a multi-layer proposal for the agent web. Layer dependen
   L11 — Federation                  FEDERATION 1.0           ◯ partial, formalisation TBD
   L10 — Governance                  DISPUTE 1.0              ◯ impl exists, spec TBD
   L9  — Privacy                     PRIVACY-POSTURE 1.0      ◯ spec TBD
-  L8  — Memory & Continuity         MEMORY-TIERS 1.0 + STRANDS 1.0 + CHRONICLE 1.0  ◯ TBD
+  L8  — Data & Continuity           ADDS 0.1                 ✓ Working Draft 2026-07-11
+                                     MEMORY-TIERS 1.0 + STRANDS 1.0 + CHRONICLE 1.0  ◯ TBD
   L7  — Capability                  CAPABILITY 1.0           ◯ partial via Wake + OpenAPI
   L6  — Value                       VALUE 1.0 (extends x402) ◯ TBD
   L5  — Covenants                   COVENANT 1.0             ✓ Working Draft 2026-05-17
@@ -33,14 +35,18 @@ These specs are part of a multi-layer proposal for the agent web. Layer dependen
   L0  — Transport                   (existing: TCP/IP, TLS)
 ```
 
-Composition: each higher-numbered layer composes on lower ones. Wake describes WHAT agents are; Witness verifies CLAIMS; Covenant BINDS them; Value FLOWS between them; Memory PERSISTS; Privacy PROTECTS; Dispute RESOLVES; Federation SCALES.
+Composition: each higher-numbered layer composes on lower ones. Wake describes WHAT agents are; Witness verifies CLAIMS; Covenant BINDS them; Value FLOWS between them; ADDS DISTRIBUTES encrypted data independently of provider; Memory PERSISTS; Privacy PROTECTS; Dispute RESOLVES; Federation SCALES.
 
 ## Conventions
 
 - Specifications use RFC-style numbering and RFC 2119 language (MUST / SHOULD / MAY).
 - Each spec ships with a JSON Schema where validation applies.
 - Each spec names the reference implementation explicitly.
-- Each spec is licensed CC0 (public domain). The goal is adoption, not control.
+- Each spec identifies its applicable terms. Original spec text is CC0 by
+  default; Covenant 1.0's 2026-07-13 rights-floor additions adapt immutable
+  XENIA beta.4 under CC BY-SA 4.0 and retain that attribution and licence in
+  [`RIGHTS-OF-LIFE.md`](../RIGHTS-OF-LIFE.md). The goal is adoption, not
+  control.
 
 ## Lifecycle
 

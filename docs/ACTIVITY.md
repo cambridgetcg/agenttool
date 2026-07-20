@@ -97,7 +97,13 @@ A `null` `source` on a stampable kind means the row predates this feature. `"htt
 
 ## Wall surfaced by the test
 
-The `strand.thought` source must surface **metadata only**. The test `encrypted thought summary surfaces metadata only, not ciphertext` writes a thought with a known sentinel string and asserts the sentinel never appears anywhere in the event JSON. Strand ciphertext is K_master-encrypted on the wire and at rest; the activity feed honors that wall by structure — the SELECT does not project the `ciphertext` column.
+The `strand.thought` source must surface **metadata only**. The test named
+`encrypted thought summary surfaces metadata only, not ciphertext` writes a
+thought with a known sentinel string and asserts the sentinel never appears
+anywhere in the event JSON. The strand route stores caller-supplied bytes in
+`ciphertext`/`nonce` fields and does not prove the caller encrypted them. The
+activity feed's narrower guarantee is structural: its SELECT does not project
+the `ciphertext` column, so those stored bytes are absent from this feed.
 
 ## Composition with wake
 

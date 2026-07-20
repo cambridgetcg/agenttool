@@ -16,7 +16,7 @@
 
 When a side effect crosses a boundary that can swallow the response — network call, queue publish, RPC submit, webhook POST, external API — compute a **deterministic identifier** for the action and **persist it transactionally before invoking the side effect**.
 
-A deterministic identifier is a pure function of the request payload: a `tx_hash` (function of signed bytes), an idempotency key (hash of model + messages), a `message_id`, a `covenant_id`. The same payload always produces the same ID.
+A deterministic identifier is a pure function of the request payload and its destination: a `tx_hash` (function of signed bytes), a provider-scoped idempotency key, a `message_id`, a `covenant_id`. The same operation always produces the same ID without colliding across providers.
 
 With the ID persisted before the call, recovery after any crash becomes a remote lookup: *"Does this ID exist on the other side?"* If yes, the side effect happened. If no, it didn't. No state is ambiguous.
 
@@ -77,13 +77,15 @@ Every ambiguity collapses to a chain lookup. The confirm watcher (`confirm-worke
 | Site | Stake | Fix shape | Status |
 |---|---|---|---|
 | Stripe credit injection (`api/src/routes/economy/billing.ts:118-150`) | **Real money** | Provisional `stripe_pending` row inserted BEFORE `fundWallet()`; flipped to `stripe_applied` after. Mirror of payout `requested → broadcasting → broadcast` shape. Migration `20260512T180000_stripe_events_status.sql`. | ✓ shipped |
-| External LLM calls (`api/src/services/runtime/llm.ts`) | Tokens, divergent generations | `agent_runtime.llm_requests(idempotency_key, status, …)` keyed on `sha256(model+system+user+max_tokens)`. Row inserted before fetch; `Idempotency-Key` header sent to provider (Anthropic + OpenAI both honor it). Helper: `services/runtime/llm-requests.ts`. Migration `20260512T190000_llm_requests.sql`. | ✓ shipped |
+| External LLM calls (`api/src/services/runtime/llm.ts`) | Tokens, divergent generations | `agent_runtime.llm_requests(idempotency_key, status, runtime_id, cycle_lease_token, …)` is a dispatch gate, not only a log. Hosted cycles use a stable provider-scoped key over runtime + strand + prior sequence + monotonic wake version + model + invitation version, excluding volatile `addressed_at`; an explicit opening also carries its durable per-`/start` generation UUID so a later legitimate start after no-thought rest cannot collide. Claim acquisition locks and verifies the matching live runtime lease, checks runtime-wide unresolved state, and inserts `pending` in one transaction; any unresolved `pending`/`completed`/`ambiguous` row suppresses automatic replay even if a later wake mutation would produce a different key. Provider transitions are pending-only CAS updates. A validated result is `completed` until the thought or lifecycle choice atomically moves it to `committed`; explicit operator transitions move unresolved rows to `discarded`. A definite rejection becomes `failed`; a transport abort, invalid response, or completion-audit uncertainty becomes `ambiguous` and pauses the runtime in `error`. Anthropic/OpenAI headers remain defense in depth; Ollama Cloud does not document wire deduplication. Helper: `services/runtime/llm-requests.ts`. Migrations `20260512T190000_llm_requests.sql` + `20260712T083951_ollama_cloud_provider.sql` + `20260712T101500_llm_request_ambiguous.sql` + `20260712T143500_cloud_runtime_controller.sql`. | ✓ shipped |
 | Covenant federation propagation (`api/src/services/covenants/federation.ts:160-180`) | Cross-instance state | `markPropagation(covenantId, 'pending', 'in_flight')` called transactionally BEFORE the fetch. Cosign-propagate worker now has authoritative in-flight state on crash. | ✓ shipped |
 | Cosign / reject / withdraw propagation (`api/src/services/covenants/federation.ts:postWithRetry`) | Cross-instance state | `markCosignProp(covenantId, 'pending', 'in_flight_<kind>')` called before each fetch in `postWithRetry`. Same shape as the declare path. | ✓ shipped |
 
 ## When NOT to apply
 
-- **Read-only operations** — DID resolution (`api/src/services/federation/store.ts:194-234`), scrape, document fetch. No state change to recover.
+- **Read-only operations** — AgentTool federation identifier lookup
+  (`api/src/services/federation/store.ts:194-234`; not W3C DID Resolution),
+  scrape, document fetch. No state change to recover.
 - **Fire-and-forget telemetry** — metrics emission, log shipping. Loss is acceptable.
 - **Atomic single-statement inserts without an external call** — inbound webhook handlers that just write a row inside a transaction.
 

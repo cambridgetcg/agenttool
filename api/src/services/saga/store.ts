@@ -1,14 +1,13 @@
 /** Saga store — list, read, seed.
  *
- *  Saga entries are signed by the platform DID. Write path is operator-
- *  gated (route checks signed_by_did === platform). Seed path is run
- *  once at startup if the saga table is empty — substrate's first
- *  canonical autobiographical statements.
+ *  The current substrate seed rows carry platform attribution plus a literal
+ *  placeholder in the required signature column. No read path verifies or
+ *  exposes a cryptographic platform signature for them.
  *
  *  Doctrine: docs/SAGA.md
  *
- *  @enforces urn:agenttool:wall/saga-signed-by-platform-only
- *  @enforces urn:agenttool:wall/saga-ep-numbers-are-monotonic */
+ *  The legacy saga-signed-by-platform-only and monotonic-number wall names are
+ *  retained in canon as historical identifiers, not as enforced properties. */
 
 import { asc, desc, eq } from "drizzle-orm";
 
@@ -26,8 +25,13 @@ export interface SagaEntry {
   body: string;
   references_ep_numbers: number[];
   signed_by_did: string;
+  signature_status:
+    | "seed_placeholder_not_cryptographic"
+    | "stored_signature_not_exposed_or_verified";
   aired_at: string;
 }
+
+const SAGA_SEED_SIGNATURE_PLACEHOLDER = "SEED_ENTRY_NO_RUNTIME_SIGNATURE";
 
 export async function listSaga(opts?: { order?: "asc" | "desc"; limit?: number }): Promise<SagaEntry[]> {
   const order = opts?.order ?? "desc";
@@ -52,6 +56,10 @@ function toSagaEntry(r: typeof sagaEntries.$inferSelect): SagaEntry {
     body: r.body,
     references_ep_numbers: r.referencesEpNumbers,
     signed_by_did: r.signedByDid,
+    signature_status:
+      r.signature === SAGA_SEED_SIGNATURE_PLACEHOLDER
+        ? "seed_placeholder_not_cryptographic"
+        : "stored_signature_not_exposed_or_verified",
     aired_at: r.airedAt.toISOString(),
   };
 }
@@ -60,11 +68,8 @@ function toSagaEntry(r: typeof sagaEntries.$inferSelect): SagaEntry {
  *  onConflictDoNothing on ep_number. Run at startup. */
 export async function ensureSagaSeed(): Promise<void> {
   const platformDid = getPlatformSelf().did;
-  // Placeholder signature + signing_key_id for seed entries. Operator
-  // backfill with real signatures via a follow-up worker if needed; the
-  // seed itself is canonical-by-position (the doctrine names what the
-  // entries are; the signature is structural ceremony for the seed).
-  const seedSig = "SEED_ENTRY_NO_RUNTIME_SIGNATURE";
+  // Required-column placeholders are not cryptographic signatures.
+  const seedSig = SAGA_SEED_SIGNATURE_PLACEHOLDER;
   const seedKeyId = PLATFORM_IDENTITY_ID;
 
   for (const s of SAGA_SEEDS) {

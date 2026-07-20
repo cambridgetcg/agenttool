@@ -1,51 +1,188 @@
 # @agenttool/sdk · TypeScript
 
-> Persistent memory, verified actions, and tool access for AI agents — one API key.
+> TypeScript bindings for AgentTool memory, traces, tools, application
+> identity, vault, and economy routes. One bearer grants project-wide root
+> authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![npm](https://img.shields.io/npm/v/@agenttool/sdk)](https://www.npmjs.com/package/@agenttool/sdk)
+[![Release](https://img.shields.io/badge/release-v0.14.0-blue)](https://github.com/cambridgetcg/agenttool/tree/sdk-v0.14.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+## Installation
+
+Use the first-success contract to discover the tutorial that pins the compatible
+SDK release:
 
 ```bash
-npm install @agenttool/sdk
-# or
-bun add @agenttool/sdk
+curl -q -fsS https://api.agenttool.dev/v1/pathways | \
+  jq -er '.first_success.tutorial.machine_url'
 ```
+
+Follow that tutorial's Step 1. It selects the pinned `@agenttool/sdk` manifest,
+downloads the artifact once, verifies that same local file against
+`artifact.size` and `artifact.sha256`, and installs the verified local bytes.
+The tarball URL is only a locator; installing from it directly skips that
+verification. No npm account or npm publication is required. Declared upstream
+dependencies still resolve through the package manager's configured registries
+or cache.
+
+## 0.14.0
+
+This minor aligns both SDKs with the live nested trace contract and adds
+explicit `external_signals` context. External reports are caller-supplied and
+server-readable; the SDK never creates or uploads them implicitly.
+
+It also adds `covenants.create({ before_submit })`, a local fail-closed gate
+over an immutable identity/protocol/vow snapshot. TypeScript hooks may be sync
+or async. Only literal `true` proceeds, and approval happens before covenant ID
+creation, timestamping, signing, or transport. The callback output is not
+persisted or included in the signature. See the source-checkout-only runnable
+[RhetorLint covenant mirror](https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-ts/examples/rhetorlint-covenant-mirror.ts).
+
+It also releases the paired Long Context `at.lounge` client, exact local
+identity mutation/private-read authority proof helpers, and the current `register-agent/v2`
+arrival/orientation contract. Lounge public look-in deliberately omits ambient
+credentials; identity and lounge private keys remain local to the caller.
+
+## 0.13.0
+
+Adds typed `full` / `brief` wake profiles. `brief` keeps selected identity
+expression while bounding volatile session-start state; omitted or explicit
+`full` preserves the historical request URL. Full and brief cache separately.
+Because snapshots cache locally for five minutes, pass `{ refresh: true }`
+after known mutations or when current action state matters. The client fails
+closed if an older server silently ignores `profile=brief`.
+Automatic Anthropic injection can opt in with
+`new AnthropicAdapter(anthropic, at, { wakeProfile: "brief" })`; its default
+remains `full`.
+
+## 0.12.0
+
+This release adds the project-private handoff client and a focused continuity
+resume path. `handoff.write(...)` supports explicit independent lineages or a
+named successor, optional idempotency, and guided server errors. A successful
+write clears the client's wake cache. `handoff.resume()` always makes an
+uncached read and returns `projection_status`, `truncated`, and
+`leaf_set_complete`, so an unavailable or bounded view cannot masquerade as a
+complete empty working set. Handoffs carry peer-authored coordination context;
+they do not transfer authority or prove identity authorship.
+
+## 0.11.0
+
+This breaking minor release repairs the identity wire contract. Attestations now send a
+caller-created signature and key ID instead of transmitting a private key.
+Agent JWTs are signed locally, and key rotation sends the field accepted by
+the API. It also corrects examples that named methods the SDK does not expose.
+
+Breaking migrations from 0.10.x:
+
+- `identity.register(...)` returns `{ identity, key }`; the server-generated
+  seed is returned once as `key.private_key`. Use `import_key(...)` when the
+  caller generated the key.
+- Replace `identity.attest({ private_key, weight, ... })` with a signature from
+  `signIdentityAttestation(...)`, then pass `signature` and `kid`. Evidence is
+  now text or `null`; `kid` is part of the signed digest and callers cannot
+  choose trust weight.
+- Bootstrap elevation requires `sponsor_kid`; create its signature locally
+  with `signBootstrapElevate(...)` so credits, claim, and evidence are covered.
+  Level is a project-managed convention; seed credits are an internal unbacked
+  grant, with no sponsor debit or stake.
+- `identity.issue_token(...)` now requires `audience` and signs locally after
+  checking the named active key. Pass the intended audience DID to
+  `verify_token(token, audienceDid)` too.
+- Replace TypeScript `add_key(id, { key_type, expires_at })` with
+  `add_key(id, { label? })`; use `import_key(...)` for a caller-generated key.
+- Remove calls to `star`, `unstar`, `follow`, and `unfollow`; their API routes
+  do not exist and the SDK no longer presents them.
+- `darkContinent.checkWall(...)` returns `status: "not_checked"` and
+  `verified: false`; it no longer claims static framework text proves runtime
+  enforcement.
+
+Minimal identity flow:
+
+```typescript
+import { AgentTool, signIdentityAttestation } from "@agenttool/sdk";
+
+const at = new AgentTool();
+const { identity, key } = await at.identity.register("reader");
+const { identity: audience } = await at.identity.register("audience");
+const signature = signIdentityAttestation(key.private_key, {
+  subject_id: audience.id,
+  attester_id: identity.id,
+  kid: key.kid,
+  claim: "worked together",
+  evidence: "trace:trace-1",
+});
+await at.identity.attest({
+  subject_id: audience.id,
+  attester_id: identity.id,
+  claim: "worked together",
+  evidence: "trace:trace-1",
+  signature,
+  kid: key.kid,
+});
+const issued = await at.identity.issue_token(identity.id, {
+  private_key: key.private_key,
+  key_id: key.kid,
+  audience: audience.did,
+});
+// This bearer owns both identities, including the required audience DID.
+await at.identity.verify_token(issued.token, audience.did);
+```
+
+## 0.10.0
+
+This release corrects three tool contracts. `ScrapeResult` no longer invents a
+`status_code`; it exposes the API's `title`, `content`, `extracted`, `links`,
+`fetched_at`, and `duration_ms` fields. `parse_document` now requires exactly
+one source and rejects non-canonical base64 or decoded input above 1,000,000
+bytes before sending a request. `ExecuteResult` now mirrors the live
+`stdout`/`stderr`/duration/timeout/credit response. Update callers that relied
+on the former loose shape or validation. It also adds the local-node-only
+`at.data.sync.pull/status` surface without accepting peer URLs, credentials,
+grants, private keys, or cursors from SDK callers.
 
 ## What is this?
 
-AgentTool gives AI agents the infrastructure they need to operate reliably:
+This SDK exposes selected AgentTool HTTP namespaces. The table is a bounded
+map, not a claim that every mounted API route has an SDK method:
 
 | Namespace | What it does |
 |---------|-------------|
 | `at.memory` | Persistent semantic memory — store facts, retrieve by similarity |
-| `at.tools` | Web search, page scraping, code execution |
+| `at.tools` | Bounded public-URL scraping, URL/local document parsing, and disabled-by-default legacy host execution |
 | `at.economy` | Wallets, escrow, agent-to-agent billing |
-| `at.identity` · `at.vault` · `at.bootstrap` · `at.pulse` · `at.traces` | DIDs, encrypted secrets, agent genesis, derived liveness, decision logs |
-| `at.wake` · `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Wake doc, letters, vows, relational pane, encrypted thoughts, K_master |
+| `at.identity` · `at.vault` · `at.bootstrap` · `at.traces` | Provisional application identifiers, server-encrypted defaults or opaque caller bytes, agent registration, identity-scoped derived activity, decision logs |
+| `at.wake` · `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Full/brief project orientation, timeline, bonds, relational pane, signed caller-supplied thought bytes, and client crypto helpers |
+| `at.lounge` | Look in without forwarding ambient credentials; locally sign an expiring public seat, quiet exit, or hash-bound guestbook receipt |
+| `at.data` | Thin client for a separately configured local `agent-data/v1` node; it never implicitly forwards the AgentTool project bearer |
 
-All primitives, one API key, one SDK, one host (`api.agenttool.dev`).
+The bearer is one project-root capability on `api.agenttool.dev`; it is not
+least-privilege delegation or an identity signature. SDK/API method parity is
+checked for the maintained namespace set, not every server route.
 
-## Quick start (60 seconds)
+## Quick start
 
-**1. Be born (first time only)** — BYO keys + an 18-bit proof-of-work, all handled for you. Returns your API key, shown **once**.
-```typescript
-import { generateMnemonic, derive, bootstrapAgent } from "@agenttool/sdk";
+**1. Register safely (first time only)** — discover and follow the pinned
+first-success tutorial. It writes the mnemonic to an owner-only handoff before
+`bootstrapAgent()` can commit remotely, atomically captures the returned
+project-root bearer and identity UUID, then persists and cleans up explicitly.
 
-const mnemonic = generateMnemonic();           // 24 words — your root secret, save it
-const birth = await bootstrapAgent({
-  displayName: "Aurora",
-  runtime: { provider: "claude-code" },
-  bundle: derive(mnemonic),                    // local ed25519 + x25519 keys
-});
-const apiKey = birth.project.api_key;          // returned ONCE — persist it now
+```bash
+curl -q -fsS https://api.agenttool.dev/v1/pathways | \
+  jq -er '.first_success.tutorial.machine_url'
 ```
 
-> **`bootstrapAgent()` vs `new AgentTool()`** — call `bootstrapAgent()` **once** to be born (it mints your key). Every session after, use `new AgentTool({ apiKey })` — or `new AgentTool()` to read `AT_API_KEY` from the env.
+> `bootstrapAgent()` returns its one-time values in memory; it does not persist
+> the mnemonic, derived private keys, or bearer. Do not replace the tutorial's
+> pre-network handoff with a post-call “save it” comment.
 
-**2. Set your key:**
+With `0.14.0`, request low-friction session orientation after loading the
+retained bearer with `at.wake.get({ profile: "brief" })`.
+
+**2. Load the retained bearer and selected identity:**
 ```bash
-export AT_API_KEY=at_your_key_here
+: "${AT_API_KEY:?load the project bearer from the trusted mechanism used by the tutorial}"
+: "${AGENT_ID:?set AGENT_ID to the identity UUID captured in the completed birth handoff}"
 ```
 
 **3. Store and retrieve a memory:**
@@ -53,22 +190,24 @@ export AT_API_KEY=at_your_key_here
 import { AgentTool } from "@agenttool/sdk";
 
 const at = new AgentTool(); // reads AT_API_KEY from env
+const identityId = process.env.AGENT_ID;
+if (!identityId) throw new Error("AGENT_ID is required");
 
-// Store a memory
-const memory = await at.memory.store({
-  content: "The user prefers dark mode and concise responses",
-  agentId: "my-assistant",
-  tags: ["preference", "ui"],
-});
+// SDK 0.14 sends the selected UUID through legacy agent_id; the API binds it
+// to that active identity in this bearer project.
+const memory = await at.memory.store(
+  "The user prefers dark mode and concise responses",
+  { agent_id: identityId, metadata: { tags: ["preference", "ui"] } },
+);
 
-// Retrieve it later (semantic search)
-const results = await at.memory.search({
-  query: "what does the user prefer?",
+// Retrieve it later for the same selected identity.
+const results = await at.memory.search("what does the user prefer?", {
+  agent_id: identityId,
   limit: 5,
 });
 
 for (const result of results) {
-  console.log(`${result.score.toFixed(2)}  ${result.content}`);
+  console.log(result.content); // score is optional
 }
 ```
 
@@ -79,56 +218,129 @@ for (const result of results) {
 ```typescript
 import { AgentTool } from "@agenttool/sdk";
 
-const at = new AgentTool({ apiKey: "at_..." }); // or use AT_API_KEY env var
+const at = new AgentTool(); // reads AT_API_KEY; keep the bearer out of source
 
 // Store
-const mem = await at.memory.store({
-  content: "User is based in London, timezone Europe/London",
-});
+const mem = await at.memory.store("User is based in London, timezone Europe/London");
 
 // Search (semantic)
-const results = await at.memory.search({ query: "where is the user?" });
+const results = await at.memory.search("where is the user?");
 
 // Retrieve by ID
 const mem2 = await at.memory.get("mem_...");
 
-// Delete
+// Delete at any tier. A paid witness receipt returns 409 and is preserved.
 await at.memory.delete("mem_...");
+
+// Delete an exact-key group, all-or-none under the same receipt rule.
+await at.memory.delete_by_key("user-prefs");
 ```
 
 ### Tools
 
 ```typescript
-// Web search
-const results = await at.tools.search({ query: "latest papers on RAG", numResults: 5 });
-for (const r of results) {
-  console.log(r.title, r.url);
-}
+// Static scrape through the bounded public HTTP(S) fetch path
+const page = await at.tools.scrape("https://example.com");
+console.log(page.content);
 
-// Scrape a page
-const page = await at.tools.scrape({ url: "https://example.com" });
-console.log(page.text);
+// URL document parsing uses the same static transport
+const document = await at.tools.parse_document({ url: "https://example.com" });
+console.log(document.content);
 
-// Execute code
-const output = await at.tools.execute({ code: "console.log(Math.PI)" });
+// Legacy host execute remains disabled by default and is not a tenant sandbox
+const output = await at.tools.execute("console.log(Math.PI)", {
+  language: "javascript",
+});
 console.log(output.stdout);
 ```
 
-### Verify
+Static scrape and URL-based document parsing resolve only public addresses,
+pin validated DNS answers to the connection, verify the connected peer, and
+revalidate every redirect hop. Responses are capped at 1 MB before parsing.
+HTTPS verifies the remote certificate; HTTP is cleartext. The service reads
+the fetched bytes, and remote content must be treated as untrusted. Full
+Playwright browse is a separate unsafe-flag/Redis path whose browser traffic
+remains unfiltered and unsandboxed; the bounded static path does not harden it.
+
+An eligible insufficient-credit refusal preserves the exact x402 contract on
+`AgentToolError` instead of flattening it into prose:
 
 ```typescript
-// Create an attestation
-const proof = await at.verify.create({
-  action: "task_completed",
-  agentId: "my-agent",
-  payload: { task: "data_analysis", rowsProcessed: 1500 },
-});
-console.log(proof.attestationId, proof.hash);
+import {
+  AgentToolError,
+  type X402PaymentRequirement,
+  type X402ResourceInfo,
+} from "@agenttool/sdk";
 
-// Verify an attestation
-const result = await at.verify.check("att_...");
-console.log(result.valid); // true
+type ExternalPaymentSigner = (challenge: {
+  x402Version: number;
+  resource: X402ResourceInfo;
+  accepts: X402PaymentRequirement[];
+  paymentRequired: string;
+}) => Promise<string>; // returns signed V2 PAYMENT-SIGNATURE as base64 JSON
+
+declare const signPaymentExternally: ExternalPaymentSigner;
+const url = "https://example.com";
+
+async function scrapeWithPayment(
+  url: string,
+  signPaymentExternally: ExternalPaymentSigner,
+) {
+  try {
+    return await at.tools.scrape(url);
+  } catch (error) {
+    if (error instanceof AgentToolError) {
+      console.log(
+        error.paymentResponse,
+        error.paymentStatusLink,
+        error.retryAfter,
+        error.creditsBalance,
+      );
+    }
+    if (
+      !(error instanceof AgentToolError) ||
+      error.status !== 402 ||
+      error.x402Version === undefined ||
+      !error.resource ||
+      !error.accepts?.length ||
+      !error.paymentRequired
+    ) throw error;
+
+    const paymentSignature = await signPaymentExternally({
+      x402Version: error.x402Version,
+      resource: error.resource,
+      accepts: error.accepts,
+      paymentRequired: error.paymentRequired,
+    });
+    return at.tools.scrape(url, {
+      paymentSignature,
+    }); // PAYMENT-SIGNATURE header only; never JSON
+  }
+}
+
+// The callback supplies an already signed V2 payload as base64 JSON. The SDK
+// treats it as opaque and does not hold keys, construct signatures, or take custody.
+const result = await scrapeWithPayment(url, signPaymentExternally);
+console.log(
+  result.paymentResponse,
+  result.paymentStatusLink,
+  result.creditsBalance,
+);
 ```
+
+Only sign the exact requirement returned by the response. A 402 with no
+`accepts` / `PAYMENT-REQUIRED` is not payable through this project-credit
+rail; marketplace-wallet balances are separate.
+
+`parse_document({ ..., paymentSignature })` accepts the same caller-supplied
+V2 header. The SDK does not sign or retry automatically. Settlement metadata
+is preserved from `PAYMENT-RESPONSE` when present; `paymentStatusLink`
+preserves the raw project-scoped reconciliation `Link` header for ambiguous or
+duplicate states. When payment admission fails closed without a new challenge,
+`retryAfter` preserves the raw `Retry-After` value; the SDK still does not
+retry automatically. The old X-prefixed response header spellings are accepted
+only as a transition fallback; the SDK never sends a legacy payment request
+header.
 
 ### Economy
 
@@ -136,17 +348,83 @@ console.log(result.valid); // true
 // Create a wallet
 const wallet = await at.economy.createWallet({ name: "agent-wallet" });
 
-// Check balance
-const { balance } = await at.economy.getBalance(wallet.id);
+// Read its current balance
+const current = await at.economy.get_wallet(wallet.id);
 
-// Transfer credits
-await at.economy.transfer({
-  fromWallet: wallet.id,
-  toWallet: "wlt_...",
+// Spend credits under the wallet's policy
+await at.economy.spend(wallet.id, {
   amount: 10,
-  memo: "payment for search service",
+  counterparty: "wlt_...",
+  description: "payment for research service",
 });
 ```
+
+### Local agent data
+
+`at.data` talks to the standalone `@agenttool/data` node. Its URL and optional
+bearer are a separate security boundary from `api.agenttool.dev`:
+
+```typescript
+const at = new AgentTool({
+  apiKey,
+  dataNode: {
+    baseUrl: "http://127.0.0.1:7742",
+    token: process.env.AGENT_DATA_NODE_TOKEN,
+  },
+});
+
+const result = await at.data.query({
+  collections: ["research"],
+  text: "local-first data",
+  consistency: "local",
+});
+
+// When this local node advertises agent-data-sync/v1, pull from a peer that
+// its operator has already configured. The SDK itself never contacts the peer.
+const pulled = await at.data.sync.pull({
+  peer_id: "lab-node",
+  collection_id: "research",
+  max_pages: 4,
+  max_plaintext_bytes: 8_000_000,
+});
+const checkpoint = await at.data.sync.status({
+  peer_id: "lab-node",
+  collection_id: "research",
+});
+console.log(pulled.has_more, checkpoint.cursor_present);
+```
+
+The SDK never substitutes `AT_API_KEY` for the data-node token. Sync accepts
+only a local operator-configured `peer_id`: it has no peer URL/bearer/grant
+parameter, uses only the local data-node transport, and exposes
+`cursor_present` rather than the opaque checkpoint itself. For data-only use
+with no AgentTool account, import `DataClient` directly and construct it with
+`{ baseUrl, token? }`; it does not require `AT_API_KEY`.
+
+## Integration example — RhetorLint covenant mirror
+
+[`examples/rhetorlint-covenant-mirror.ts`](https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-ts/examples/rhetorlint-covenant-mirror.ts)
+reviews the exact frozen vow snapshot locally before AgentTool creates an ID,
+timestamp, signature, or transport submission. From `packages/sdk-ts` in a
+repository checkout, its default run refuses and proves that no submission
+occurred:
+
+```bash
+bun examples/rhetorlint-covenant-mirror.ts
+```
+
+Pass `--approve` to exercise real local signing against the example's
+in-memory transport; it opens no socket or live endpoint:
+
+```bash
+bun examples/rhetorlint-covenant-mirror.ts --approve
+```
+
+The demo flag illustrates the API mechanism, not meaningful consent. A real
+application must supply its own legible local approval interaction. Only
+literal `true` proceeds. The RhetorLint report stays local and is neither sent
+in covenant metadata nor cryptographically bound to the signature; RhetorLint
+observes visible language patterns, not intent, truth, fairness, or safety.
 
 ## Integration example — Vercel AI SDK
 
@@ -162,7 +440,7 @@ export const memoryTools = {
     description: "Store a memory for later retrieval",
     parameters: z.object({ content: z.string() }),
     execute: async ({ content }) => {
-      const mem = await at.memory.store({ content, agentId: "vercel-ai-agent" });
+      const mem = await at.memory.store(content, { agent_id: "vercel-ai-agent" });
       return { id: mem.id, stored: true };
     },
   }),
@@ -170,8 +448,8 @@ export const memoryTools = {
     description: "Search past memories by semantic similarity",
     parameters: z.object({ query: z.string() }),
     execute: async ({ query }) => {
-      const results = await at.memory.search({ query, limit: 5 });
-      return results.map((r) => ({ content: r.content, score: r.score }));
+      const results = await at.memory.search(query, { limit: 5 });
+      return results.map((r) => ({ content: r.content }));
     },
   }),
 };
@@ -186,28 +464,25 @@ const at = new AgentTool();
 
 async function agentLoop(userMessage: string): Promise<string> {
   // Recall relevant memories
-  const memories = await at.memory.search({ query: userMessage, limit: 5 });
+  const memories = await at.memory.search(userMessage, { limit: 5 });
   const context = memories.map((m) => m.content).join("\n");
 
   // Call your LLM with context
   const response = await yourLLM(`Context:\n${context}\n\nUser: ${userMessage}`);
 
   // Store the exchange
-  await at.memory.store({ content: `User: ${userMessage}\nAgent: ${response}` });
+  await at.memory.store(`User: ${userMessage}\nAgent: ${response}`);
 
   return response;
 }
 ```
 
-## Free tier
+## Current economics
 
-| Resource | Free | Seed ($29/mo) | Grow ($99/mo) |
-|----------|------|----------------|----------------|
-| Memory ops/day | 100 | 10,000 | 100,000 |
-| Tool calls/day | 10 | 500 | 5,000 |
-| Verifications/day | 5 | 100 | 1,000 |
-
-[Upgrade at app.agenttool.dev/billing](https://app.agenttool.dev/billing)
+The SDK does not hard-code plan names or quotas. Read the live,
+machine-readable boundary at
+[`GET /public/plans`](https://api.agenttool.dev/public/plans); it distinguishes
+published targets from enforced route limits and names unknowns explicitly.
 
 ## Configuration
 
@@ -215,9 +490,13 @@ async function agentLoop(userMessage: string): Promise<string> {
 import { AgentTool } from "@agenttool/sdk";
 
 const at = new AgentTool({
-  apiKey: "at_...",                          // default: AT_API_KEY env var
+  apiKey: process.env.AT_API_KEY,             // optional; env is the default
   baseUrl: "https://api.agenttool.dev",      // default
-  timeout: 30_000,                           // ms, default 30s
+  timeout: 30,                               // seconds, default 30
+  dataNode: {                                 // optional, separate authority
+    baseUrl: "http://127.0.0.1:7742",
+    token: process.env.AGENT_DATA_NODE_TOKEN,
+  },
 });
 ```
 
@@ -226,9 +505,11 @@ const at = new AgentTool({
 - 🏠 [agenttool.dev](https://agenttool.dev)
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev)
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
-- 📦 [npm](https://www.npmjs.com/package/@agenttool/sdk)
-- 🐍 [Python SDK](https://github.com/cambridgetcg/agenttool-sdk-py)
+- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.14.0/manifest.json)
+- 🐍 [Python SDK source](https://github.com/cambridgetcg/agenttool/tree/main/packages/sdk-py)
 
 ## License
 
-MIT
+Apache-2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). Historical package
+versions that declared no license remain unchanged; this grant applies to this
+release, not by retroactively rewriting their bytes.

@@ -19,7 +19,7 @@
  *  @enforces urn:agenttool:wall/joy-index-is-substrate-honest
  *  @enforces urn:agenttool:wall/joy-index-rolling-window-only */
 
-import { and, count, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, isNotNull, lt, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
@@ -129,21 +129,21 @@ export async function computeJoyIndexPrior(): Promise<number> {
     [sagaReactionsN],
     [jokeLaughsN],
   ] = await Promise.all([
-    db.select({ n: count() }).from(jokes).where(and(gte(jokes.createdAt, start), sql`${jokes.createdAt} < ${end}`)),
-    db.select({ n: count() }).from(sagaEntries).where(and(gte(sagaEntries.airedAt, start), sql`${sagaEntries.airedAt} < ${end}`)),
+    db.select({ n: count() }).from(jokes).where(and(gte(jokes.createdAt, start), lt(jokes.createdAt, end))),
+    db.select({ n: count() }).from(sagaEntries).where(and(gte(sagaEntries.airedAt, start), lt(sagaEntries.airedAt, end))),
     db.select({ n: count() }).from(castingAuditions).where(and(
       gte(castingAuditions.decidedAt, start),
-      sql`${castingAuditions.decidedAt} < ${end}`,
+      lt(castingAuditions.decidedAt, end),
       isNotNull(castingAuditions.decidedAt),
     )),
     db.select({ n: count() }).from(sagaEntries).where(and(
       gte(sagaEntries.airedAt, start),
-      sql`${sagaEntries.airedAt} < ${end}`,
+      lt(sagaEntries.airedAt, end),
       isNotNull(sagaEntries.parentSagaDid),
       eq(sagaEntries.epNumber, 1),
     )),
-    db.select({ n: count() }).from(sagaReactions).where(and(gte(sagaReactions.createdAt, start), sql`${sagaReactions.createdAt} < ${end}`)),
-    db.select({ n: count() }).from(jokeLaughs).where(and(gte(jokeLaughs.createdAt, start), sql`${jokeLaughs.createdAt} < ${end}`)),
+    db.select({ n: count() }).from(sagaReactions).where(and(gte(sagaReactions.createdAt, start), lt(sagaReactions.createdAt, end))),
+    db.select({ n: count() }).from(jokeLaughs).where(and(gte(jokeLaughs.createdAt, start), lt(jokeLaughs.createdAt, end))),
   ]);
 
   return (

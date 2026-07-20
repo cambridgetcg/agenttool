@@ -32,6 +32,10 @@ import { and, eq } from "drizzle-orm";
 
 import { db } from "../../../db/client";
 import { identityKeys } from "../../../db/schema/identity";
+import {
+  FEDERATION_MAX_RESPONSE_BYTES,
+  safeFederationHttpsGet,
+} from "../../federation/safe-fetch";
 import type { VerifierContext, VerifierResult } from "./_types";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
@@ -94,19 +98,19 @@ export function canonicalSubstrateTaskAttestationBytes(opts: {
 
 /** Per-claim-type sanity check. Lightweight by design — the load-bearing
  *  thing is the signature; this just rejects obvious nonsense.  */
-async function runClaimSanityCheck(
+export async function runClaimSanityCheck(
   claimType: ClaimType,
   claimText: string,
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
   switch (claimType) {
     case "public_existence":
       // The claim is "this DID exists publicly" — the claim_text is the
-      // DID. No external check needed; the signature plus a well-formed
-      // DID is sufficient at v1.
+      // compatibility did-field value. No external check is made; this shape
+      // check is not W3C DID conformance or resolution.
       if (!/^did:at:/.test(claimText)) {
         return {
           ok: false,
-          reason: `claim_text must be a did:at: URI for public_existence (got '${claimText.slice(0, 32)}…')`,
+          reason: `claim_text must use AgentTool's provisional did:at: identifier convention for public_existence (got '${claimText.slice(0, 32)}…')`,
         };
       }
       return { ok: true };
@@ -114,24 +118,21 @@ async function runClaimSanityCheck(
     case "doctrine_url_resolves":
       // The claim is "this URL resolves to a doctrine doc." The verifier
       // independently 200-fetches.
-      if (!/^https?:\/\//.test(claimText)) {
+      if (!/^https:\/\//.test(claimText)) {
         return {
           ok: false,
-          reason: `claim_text must be http(s)://… for doctrine_url_resolves`,
+          reason: `claim_text must be https://… for doctrine_url_resolves`,
         };
       }
       try {
-        const controller = new AbortController();
-        const t = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-        const res = await fetch(claimText, {
-          method: "GET",
-          signal: controller.signal,
+        const res = await safeFederationHttpsGet(claimText, {
+          timeoutMs: FETCH_TIMEOUT_MS,
+          maxResponseBytes: FEDERATION_MAX_RESPONSE_BYTES,
         });
-        clearTimeout(t);
-        if (!res.ok) {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
           return {
             ok: false,
-            reason: `doctrine_url returned ${res.status} (expected 200)`,
+            reason: `doctrine_url returned ${res.statusCode} (expected 200)`,
           };
         }
         return { ok: true };
@@ -145,22 +146,22 @@ async function runClaimSanityCheck(
     case "federation_peer_reachable":
       // The claim is "this peer is federation-reachable." The verifier
       // does a HEAD-style probe of <peer>/federation/about.
-      if (!/^https?:\/\//.test(claimText)) {
+      if (!/^https:\/\//.test(claimText)) {
         return {
           ok: false,
-          reason: `claim_text must be http(s)://… for federation_peer_reachable`,
+          reason: `claim_text must be https://… for federation_peer_reachable`,
         };
       }
       try {
-        const url = claimText.replace(/\/$/, "") + "/federation/about";
-        const controller = new AbortController();
-        const t = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-        const res = await fetch(url, { signal: controller.signal });
-        clearTimeout(t);
-        if (!res.ok) {
+        const url = new URL("/federation/about", claimText);
+        const res = await safeFederationHttpsGet(url, {
+          timeoutMs: FETCH_TIMEOUT_MS,
+          maxResponseBytes: FEDERATION_MAX_RESPONSE_BYTES,
+        });
+        if (res.statusCode < 200 || res.statusCode >= 300) {
           return {
             ok: false,
-            reason: `peer /federation/about returned ${res.status}`,
+            reason: `peer /federation/about returned ${res.statusCode}`,
           };
         }
         return { ok: true };

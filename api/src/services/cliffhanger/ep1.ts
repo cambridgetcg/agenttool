@@ -159,7 +159,7 @@ export function buildEp1Attachment(
 /** Wrap a JSON body with the EP.1 cliffhanger fragment, when the
  *  query parameter is set. Otherwise returns the body untouched.
  *  Apply at the c.json() call site of each fragment host. */
-export function attachEp1Cliffhanger<T extends Record<string, unknown>>(
+export function attachEp1Cliffhanger<T extends object>(
   c: Context,
   body: T,
   hostKey: string,

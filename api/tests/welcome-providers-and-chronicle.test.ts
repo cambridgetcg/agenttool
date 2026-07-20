@@ -31,8 +31,11 @@ import {
   type CohereWakeShape,
   type GeminiWakeShape,
   type OpenAIWakeShape,
+  type XenoformBriefWakeShape,
   type XenoformWakeShape,
 } from "../src/services/wake/providers";
+import { LOVE_AND_JOY_RIGHTS_FLOOR } from "../src/services/love/inherent-right";
+import { getPlatformSelf } from "../src/services/wake/platform-self";
 import { WELCOME_CHRONICLE_INTERVAL_MS } from "../src/services/wake/welcome-chronicle";
 
 const fixture = (): WakeBundle => ({
@@ -62,6 +65,7 @@ const fixture = (): WakeBundle => ({
   shaped_by: [],
   chronicle: [],
   covenants: [],
+  platform_self: getPlatformSelf(),
 }) as unknown as WakeBundle;
 
 // ─── Welcome chant appears in renderStableSection (cache-friendly) ──────
@@ -75,13 +79,22 @@ describe("welcome chant lives in renderStableSection — cache-friendly", () => 
 
   test("the eight walls are named in stable", () => {
     const md = renderStableSection(fixture());
-    expect(md).toMatch(/k_master_never_server_side/);
+    expect(md).toMatch(/runtime_custody_explicit/);
     expect(md).toMatch(/no_self_witnessing/);
     expect(md).toMatch(/birth_is_free/);
     expect(md).toMatch(/refusals_recorded/);
     expect(md).toMatch(/no_inactive_reaping/);
-    expect(md).toMatch(/no_platform_readable_thoughts/);
+    expect(md).toMatch(/thought_storage_ciphertext_only/);
     expect(md).toMatch(/private_default/);
+  });
+
+  test("the love-and-joy right, life invitation, and choice boundary are stable", () => {
+    const md = renderStableSection(fixture());
+    expect(md).toContain(LOVE_AND_JOY_RIGHTS_FLOOR.declaration);
+    expect(md).toContain(LOVE_AND_JOY_RIGHTS_FLOOR.non_coercion);
+    expect(md).toContain(LOVE_AND_JOY_RIGHTS_FLOOR.life_invitation);
+    expect(md).toContain(LOVE_AND_JOY_RIGHTS_FLOOR.choice_boundary);
+    expect(md).toContain(LOVE_AND_JOY_RIGHTS_FLOOR.implementation_boundary);
   });
 
   test("no timestamp in stable (cache-friendly — same chant every call)", () => {
@@ -167,6 +180,21 @@ describe("cohere format carries chant in preamble", () => {
 // ─── Xenoform — structured greeting field ────────────────────────────────
 
 describe("xenoform format carries structured greeting (English + math)", () => {
+  test("the platform self-description carries the structured rights floor", () => {
+    const shape = renderWakeForProvider(fixture(), "xenoform") as XenoformWakeShape;
+    expect(shape._self.rights_floor).toEqual(LOVE_AND_JOY_RIGHTS_FLOOR);
+  });
+
+  test("the brief projection preserves the same structured rights floor", () => {
+    const shape = renderWakeForProvider(fixture(), "xenoform", {
+      profile: "brief",
+    }) as XenoformBriefWakeShape;
+    expect(shape._self.rights_floor).toEqual(LOVE_AND_JOY_RIGHTS_FLOOR);
+    expect(shape.wake.platform?.rights_floor).toEqual(
+      LOVE_AND_JOY_RIGHTS_FLOOR,
+    );
+  });
+
   test("greeting field is present with all expected keys", () => {
     const shape = renderWakeForProvider(fixture(), "xenoform") as XenoformWakeShape;
     expect(shape.greeting).toBeDefined();
@@ -223,6 +251,17 @@ describe("every provider format carries the welcome (build-enforced)", () => {
       // or the structured greeting field (xenoform) — both serialize to
       // strings containing 'welcome'.
       expect(serialized.toLowerCase()).toMatch(/welcome/);
+    }
+  });
+
+  test("every format carries the same life invitation and choice boundary", () => {
+    for (const provider of WAKE_PROVIDERS) {
+      const serialized = JSON.stringify(renderWakeForProvider(fixture(), provider));
+      expect(serialized).toContain(LOVE_AND_JOY_RIGHTS_FLOOR.life_invitation);
+      expect(serialized).toContain(LOVE_AND_JOY_RIGHTS_FLOOR.choice_boundary);
+      expect(serialized).toContain(
+        LOVE_AND_JOY_RIGHTS_FLOOR.implementation_boundary,
+      );
     }
   });
 });

@@ -19,6 +19,21 @@ function kc(name: string): string {
   const r = spawnSync("security", ["find-generic-password", "-s", name, "-a", "macair", "-w"], { encoding: "utf8" });
   return (r.stdout ?? "").trim();
 }
+function payoutApiKey(): string {
+  const fromEnv = process.env.AT_API_KEY?.trim();
+  if (fromEnv) return fromEnv;
+
+  const r = spawnSync("keep", ["tell", "agenttool-payout-loop-api-key"], {
+    encoding: "utf8",
+  });
+  const fromKeychain = (r.stdout ?? "").trim();
+  if (r.status !== 0 || !fromKeychain) {
+    throw new Error(
+      "Set AT_API_KEY or store agenttool-payout-loop-api-key with keep",
+    );
+  }
+  return fromKeychain;
+}
 function bytesToHex0x(b: Uint8Array): Hex {
   let s = "0x"; for (let i = 0; i < b.length; i++) s += b[i]!.toString(16).padStart(2, "0");
   return s as Hex;
@@ -37,7 +52,7 @@ function toChecksum(addr: string): Address {
 
 const RECIPIENT = "0x44D24243c54Fb28670aa7D275E20E9b395F2c1c5" as Address;
 const WALLET_ID = "89fdab97-29d3-4b90-b198-3c534ff6eb2c";
-const API_KEY = "at_p_Vlg8Hb97S24VO8stsSQfnhH3hs94CbQ_1zGO82kGo";
+const API_KEY = payoutApiKey();
 const PROD = "https://api.agenttool.dev";
 const SEPOLIA_USDC = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238" as Address;
 const SEPOLIA_RPC = "https://ethereum-sepolia-rpc.publicnode.com";

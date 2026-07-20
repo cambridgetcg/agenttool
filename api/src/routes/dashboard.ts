@@ -10,7 +10,21 @@
  *  Pure aggregation over existing data (strands, thoughts, memories,
  *  traces, chronicle, covenants, inbox). No new schema. */
 
-import { and, count, desc, eq, gte, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  gte,
+  isNotNull,
+  isNull,
+  lte,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 
@@ -18,7 +32,7 @@ import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { covenants } from "../db/schema/continuity";
 import { wallets } from "../db/schema/economy";
-import { identities, identityKeys } from "../db/schema/identity";
+import { attestations, identities, identityKeys } from "../db/schema/identity";
 import { inboxMessages } from "../db/schema/inbox";
 import { memories } from "../db/schema/memory";
 import { strands, thoughts } from "../db/schema/strand";
@@ -73,6 +87,7 @@ app.get("/", async (c) => {
   try {
     composed = await composeExpression(
       project.id,
+      primary.id,
       (primary.expression ?? {}) as ExpressionData,
     );
   } catch {
@@ -508,7 +523,6 @@ app.get("/aggregate", async (c) => {
       did: identities.did,
       name: identities.displayName,
       status: identities.status,
-      trustScore: identities.trustScore,
     })
     .from(identities)
     .where(eq(identities.projectId, project.id));
@@ -578,17 +592,55 @@ app.get("/aggregate", async (c) => {
       };
     });
 
-  // 6. Top N by trust_score (already stored, just rank).
-  const topTrust = [...identityRows]
-    .filter((r) => r.status === "active")
-    .sort((a, b) => b.trustScore - a.trustScore)
-    .slice(0, TOP_N)
-    .map((r) => ({
-      identity_id: r.id,
-      did: r.did,
-      name: r.name,
-      trust_score: r.trustScore,
-    }));
+  // 6. Top N by current signed attestation count. The legacy trust score is
+  //    returned only for wire compatibility and never affects ordering.
+  const attestationCount = count(attestations.id);
+  const topAttestedRaw = await db
+    .select({
+      identityId: identities.id,
+      did: identities.did,
+      name: identities.displayName,
+      trustScore: identities.trustScore,
+      attestationCount,
+    })
+    .from(identities)
+    .leftJoin(
+      attestations,
+      and(
+        eq(attestations.subjectId, identities.id),
+        isNull(attestations.revokedAt),
+        or(
+          isNull(attestations.expiresAt),
+          gt(attestations.expiresAt, new Date()),
+        ),
+      ),
+    )
+    .where(
+      and(
+        eq(identities.projectId, project.id),
+        eq(identities.status, "active"),
+      ),
+    )
+    .groupBy(
+      identities.id,
+      identities.did,
+      identities.displayName,
+      identities.trustScore,
+      identities.createdAt,
+    )
+    .orderBy(
+      desc(attestationCount),
+      asc(identities.createdAt),
+      asc(identities.id),
+    )
+    .limit(TOP_N);
+  const topAttested = topAttestedRaw.map((r) => ({
+    identity_id: r.identityId,
+    did: r.did,
+    name: r.name,
+    trust_score: r.trustScore,
+    attestation_count: Number(r.attestationCount),
+  }));
 
   // 7. Pending dual-witness messages (if any) for any of our identities.
   const [{ pendingCosign }] = await db
@@ -643,7 +695,10 @@ app.get("/aggregate", async (c) => {
       top_active: topActive,
     },
     trust: {
-      top_attested: topTrust,
+      top_attested: topAttested,
+      _note:
+        "Ranked by current, non-revoked, non-expired signed attestation count. " +
+        "The neutral trust_score field remains only for response compatibility.",
     },
     inbox: {
       unread: Number(inboxUnread),

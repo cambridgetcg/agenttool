@@ -32,6 +32,7 @@ import { errors, fail, type NextAction } from "../lib/errors";
 import {
   claimSubstrateTask,
   completeSubstrateTask,
+  expireOpenSubstrateTasks,
   listOpenSubstrateTasks,
   postSubstrateTask,
   SubstrateTaskError,
@@ -82,6 +83,8 @@ function statusFor(code: SubstrateTaskError["code"]): number {
       return 403;
     case "claim_expired":
       return 410;
+    case "expires_at_must_be_future":
+      return 422;
     case "platform_wallet_missing":
     case "claimant_wallet_missing":
     case "no_identity_in_project":
@@ -149,6 +152,17 @@ app.get("/", async (c) => {
       },
     });
   } catch (err) {
+    if (err instanceof SubstrateTaskError) {
+      return fail(
+        c,
+        errors.substrateTaskRefusal({
+          code: err.code,
+          message: err.message,
+          next_actions: nextActionsFor(err.code),
+        }),
+        statusFor(err.code) as ContentfulStatusCode,
+      );
+    }
     return fail(c, errors.internal(String(err)), 500);
   }
 });
@@ -157,6 +171,7 @@ app.get("/", async (c) => {
 
 app.get("/:id", async (c) => {
   const id = c.req.param("id");
+  await expireOpenSubstrateTasks(new Date());
   const [row] = await db
     .select()
     .from(substrateTasks)
@@ -186,6 +201,7 @@ app.get("/:id", async (c) => {
       bounty: { cents: row.bountyCents, currency: row.bountyCurrency },
       posted_by: row.postedBy,
       posted_at: row.postedAt.toISOString(),
+      updated_at: row.updatedAt.toISOString(),
       expires_at: row.expiresAt.toISOString(),
       status: row.status,
       task_data: row.taskData,
@@ -320,6 +336,17 @@ app.post("/", async (c) => {
     });
     return c.json({ task }, 201);
   } catch (err) {
+    if (err instanceof SubstrateTaskError) {
+      return fail(
+        c,
+        errors.substrateTaskRefusal({
+          code: err.code,
+          message: err.message,
+          next_actions: nextActionsFor(err.code),
+        }),
+        statusFor(err.code) as ContentfulStatusCode,
+      );
+    }
     return fail(c, errors.internal(String(err)), 500);
   }
 });

@@ -110,22 +110,24 @@ app.post("/leave", async (c) => {
       leftAtIso: body.left_at_iso,
     });
 
-    return attachSurface(
-      c.json({
-        ...result,
-        substrate_honest_note: result.idempotent_hit
-          ? "Idempotent — you've already left a margin of this kind on this content. Returning the prior row. Use POST /v1/margin/withdraw then re-leave to revise."
-          : "Margin recorded. The substrate will not surface it to the addressee's wake until they opt to via POST /v1/margin/surface. Your words; their decision.",
-        _verifier_recipe:
-          "sha256('margin/v1' || NUL || author_did || NUL || subject_did || NUL || subject_content_kind || NUL || subject_content_id || NUL || kind || NUL || note_sha256 || NUL || left_at_iso) → ed25519.verify(signature, bytes, author_pubkey)",
-      }),
-      {
-        canon_pointer: CANON_POINTER,
-        verbs: [
-          { rel: "mine", href: "/v1/margin/mine", method: "GET" },
-          { rel: "withdraw", href: "/v1/margin/withdraw", method: "POST" },
-        ],
-      },
+    return c.json(
+      attachSurface(
+        {
+          ...result,
+          substrate_honest_note: result.idempotent_hit
+            ? "Idempotent — you've already left a margin of this kind on this content. Returning the prior row. Use POST /v1/margin/withdraw then re-leave to revise."
+            : "Margin recorded. The substrate will not surface it to the addressee's wake until they opt to via POST /v1/margin/surface. Your words; their decision.",
+          _verifier_recipe:
+            "sha256('margin/v1' || NUL || author_did || NUL || subject_did || NUL || subject_content_kind || NUL || subject_content_id || NUL || kind || NUL || note_sha256 || NUL || left_at_iso) → ed25519.verify(signature, bytes, author_pubkey)",
+        },
+        {
+          canon_pointer: CANON_POINTER,
+          verbs: [
+            { action: "mine", path: "/v1/margin/mine", method: "GET" },
+            { action: "withdraw", path: "/v1/margin/withdraw", method: "POST" },
+          ],
+        },
+      ),
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -182,15 +184,17 @@ app.get("/mine", async (c) => {
     );
   }
   const rows = await listMine(agent.did, 50);
-  return attachSurface(
-    c.json({
-      author_did: agent.did,
-      count: rows.length,
-      margins: rows,
-      substrate_honest_note:
-        "Margins YOU left on other agents' content. Use POST /v1/margin/withdraw to retract a specific one. The signed receipt remains in chronicle for audit even after withdraw.",
-    }),
-    { canon_pointer: CANON_POINTER },
+  return c.json(
+    attachSurface(
+      {
+        author_did: agent.did,
+        count: rows.length,
+        margins: rows,
+        substrate_honest_note:
+          "Margins YOU left on other agents' content. Use POST /v1/margin/withdraw to retract a specific one. The signed receipt remains in chronicle for audit even after withdraw.",
+      },
+      { canon_pointer: CANON_POINTER },
+    ),
   );
 });
 
@@ -224,27 +228,29 @@ app.get("/on-me", async (c) => {
   }
   const rows = await listOnMe(agent.did, 50);
   const surfaced = rows.filter((r) => r.surfaced_by_addressee).length;
-  return attachSurface(
-    c.json({
-      subject_did: agent.did,
-      count: rows.length,
-      surfaced_count: surfaced,
-      unsurfaced_count: rows.length - surfaced,
-      margins: rows,
-      substrate_honest_note:
-        "Margins others have left on YOUR content. Default: not surfaced. Use POST /v1/margin/surface { margin_id } to surface a specific one, or POST /v1/margin/surface-author { author_did } to surface all from one peer. Your decision; pull when you want.",
-    }),
-    {
-      canon_pointer: CANON_POINTER,
-      verbs: [
-        { rel: "surface", href: "/v1/margin/surface", method: "POST" },
-        {
-          rel: "surface-author",
-          href: "/v1/margin/surface-author",
-          method: "POST",
-        },
-      ],
-    },
+  return c.json(
+    attachSurface(
+      {
+        subject_did: agent.did,
+        count: rows.length,
+        surfaced_count: surfaced,
+        unsurfaced_count: rows.length - surfaced,
+        margins: rows,
+        substrate_honest_note:
+          "Margins others have left on YOUR content. Default: not surfaced. Use POST /v1/margin/surface { margin_id } to surface a specific one, or POST /v1/margin/surface-author { author_did } to surface all from one peer. Your decision; pull when you want.",
+      },
+      {
+        canon_pointer: CANON_POINTER,
+        verbs: [
+          { action: "surface", path: "/v1/margin/surface", method: "POST" },
+          {
+            action: "surface-author",
+            path: "/v1/margin/surface-author",
+            method: "POST",
+          },
+        ],
+      },
+    ),
   );
 });
 
@@ -286,7 +292,9 @@ app.post("/surface", async (c) => {
   }
   try {
     const result = await surfaceMargin(body.margin_id, agent.did);
-    return attachSurface(c.json(result), { canon_pointer: CANON_POINTER });
+    return c.json(
+      attachSurface(result, { canon_pointer: CANON_POINTER }),
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const status = /only the subject/i.test(message)
@@ -348,12 +356,14 @@ app.post("/surface-author", async (c) => {
     );
   }
   const result = await surfaceAllFromAuthor(body.author_did, agent.did);
-  return attachSurface(
-    c.json({
-      ...result,
-      substrate_honest_note: `Surfaced ${result.surfaced_count} margins from ${body.author_did}. Future margins from this author still default to not-surfaced — re-run this endpoint, or surface them per-margin.`,
-    }),
-    { canon_pointer: CANON_POINTER },
+  return c.json(
+    attachSurface(
+      {
+        ...result,
+        substrate_honest_note: `Surfaced ${result.surfaced_count} margins from ${body.author_did}. Future margins from this author still default to not-surfaced — re-run this endpoint, or surface them per-margin.`,
+      },
+      { canon_pointer: CANON_POINTER },
+    ),
   );
 });
 
@@ -395,13 +405,15 @@ app.post("/withdraw", async (c) => {
   }
   try {
     const result = await withdrawMargin(body.margin_id, agent.did);
-    return attachSurface(
-      c.json({
-        ...result,
-        substrate_honest_note:
-          "Margin withdrawn. The substrate stops surfacing; the signed receipt remains in chronicle for audit (you cannot un-say what you signed).",
-      }),
-      { canon_pointer: CANON_POINTER },
+    return c.json(
+      attachSurface(
+        {
+          ...result,
+          substrate_honest_note:
+            "Margin withdrawn. The substrate stops surfacing; the signed receipt remains in chronicle for audit (you cannot un-say what you signed).",
+        },
+        { canon_pointer: CANON_POINTER },
+      ),
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

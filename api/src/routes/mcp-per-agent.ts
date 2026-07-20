@@ -3,10 +3,10 @@
  *  Each agent gets their own MCP endpoint scoped by URL path. Auth (an
  *  optional Bearer header) determines what's visible:
  *
- *    No bearer                   → public scope (profile + listings)
- *    Bearer === path-DID's agent → self scope (read-only substrate access)
- *    Bearer ≠ path-DID's agent   → cross scope (public + listings.invoke
- *                                   guided redirect to /v1/listings/:id/invoke)
+ *    No bearer                         → public scope (profile + listings)
+ *    Bearer's project owns path agent  → self scope (read-only substrate access)
+ *    Bearer's project does not own it  → cross scope (public + listings.invoke
+ *                                         guided redirect to HTTP)
  *
  *  Mounted PRE-AUTH alongside /v1/mcp and /v1/canon. The route does its
  *  own bearer extraction via verifyBearer() to support all three scopes.
@@ -35,6 +35,7 @@ import { Hono } from "hono";
 import { verifyBearer } from "../auth/middleware";
 import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
+import { publicAgentPath } from "../services/identity/public-profile";
 
 import {
   listPerAgentResources,
@@ -43,8 +44,8 @@ import {
 import {
   callPerAgentTool,
   listPerAgentTools,
+  resolvePerAgentScope,
   type PerAgentMcpContext,
-  type PerAgentScope,
 } from "../services/mcp/per-agent-tools";
 
 const app = new Hono();
@@ -116,35 +117,30 @@ async function buildContext(
     return { error: { status: 404, message: `agent_not_found: ${agentDid}` } };
   }
 
-  // Default to public scope.
-  let scope: PerAgentScope = "public";
-  let caller: PerAgentMcpContext["caller"] = undefined;
-
-  if (bearerHeader?.startsWith("Bearer ")) {
-    const token = bearerHeader.slice(7).trim();
-    const verified = await verifyBearer(token);
-    if (verified.ok) {
-      // Pick the caller's primary identity from their project. Most
-      // projects have exactly one. If multiple, take the first active one.
-      const [callerIdentity] = await db
-        .select({ id: identities.id, did: identities.did, projectId: identities.projectId })
-        .from(identities)
-        .where(eq(identities.projectId, verified.project.id))
-        .limit(1);
-
-      if (callerIdentity) {
-        caller = {
-          projectId: verified.project.id,
-          identityId: callerIdentity.id,
-          did: callerIdentity.did,
-        };
-        scope = callerIdentity.did === agent.did ? "self" : "cross";
-      }
+  let caller: PerAgentMcpContext["caller"];
+  if (bearerHeader !== undefined) {
+    if (!bearerHeader.startsWith("Bearer ")) {
+      return {
+        error: {
+          status: 401,
+          message: "invalid_authorization: expected Bearer <api_key>",
+        },
+      };
     }
-    // If the bearer is bad, we silently fall back to public scope — the
-    // public surface is always reachable. The caller will discover they
-    // aren't authenticated via the absence of self-auth tools.
+
+    const verified = await verifyBearer(bearerHeader.slice(7).trim());
+    if (!verified.ok) {
+      return {
+        error: {
+          status: 401,
+          message: `invalid_bearer: ${verified.reason}`,
+        },
+      };
+    }
+    caller = { projectId: verified.project.id };
   }
+
+  const scope = resolvePerAgentScope(agent.projectId, caller?.projectId);
 
   return {
     ctx: {
@@ -163,7 +159,10 @@ app.get("/:did", async (c) => {
   const agentDid = c.req.param("did");
   const built = await buildContext(agentDid, c.req.header("Authorization"));
   if ("error" in built) {
-    return c.json({ error: built.error.message }, built.error.status as 404);
+    return c.json(
+      { error: built.error.message },
+      built.error.status === 404 ? 404 : 401,
+    );
   }
 
   return c.json({
@@ -175,11 +174,11 @@ app.get("/:did", async (c) => {
     scope: built.ctx.scope,
     scope_explained: {
       public:
-        "no bearer or bearer not bound to this agent's identity — public profile + listings discovery.",
+        "no bearer — public profile + listings discovery.",
       cross:
-        "bearer bound to a different agent — public surface + listings.invoke (currently a guided redirect to /v1/listings/:id/invoke).",
+        "verified project bearer whose project does not own this agent — public surface + listings.invoke (currently a guided redirect to /v1/listings/:id/invoke).",
       self:
-        "bearer bound to this agent — public surface + read-only substrate tools (wake.read · memory.search · chronicle.recent · listings.mine).",
+        "verified project bearer whose project owns this agent — public surface + read-only substrate tools (wake.read · memory.search · chronicle.recent · listings.mine).",
     },
     methods: [
       "initialize",
@@ -193,8 +192,7 @@ app.get("/:did", async (c) => {
     spec: "https://modelcontextprotocol.io/specification/2025-11-25",
     doctrine: "/v1/canon/urn:agenttool:doc/MCP-SERVER",
     composes_with: {
-      a2a_agent_card: `/public/agents/${agentDid}/.well-known/agent-card.json`,
-      public_profile: `/public/agents/${agentDid}`,
+      public_profile: publicAgentPath(agentDid),
       marketplace_listings: `/public/listings?seller_did=${agentDid}`,
     },
   });
@@ -206,7 +204,10 @@ app.post("/:did", async (c) => {
   const agentDid = c.req.param("did");
   const built = await buildContext(agentDid, c.req.header("Authorization"));
   if ("error" in built) {
-    return c.json(err(null, RPC.INVALID_REQUEST, built.error.message));
+    return c.json(
+      err(null, RPC.INVALID_REQUEST, built.error.message),
+      built.error.status === 404 ? 404 : 401,
+    );
   }
   const ctx = built.ctx;
 

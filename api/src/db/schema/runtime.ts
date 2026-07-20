@@ -9,6 +9,7 @@
 
 import {
   bigint,
+  boolean,
   index,
   integer,
   jsonb,
@@ -73,7 +74,20 @@ export const runtimes = runtimeSchema.table(
     kmsKeyId: text("kms_key_id"),
     kmsWrappedDek: text("kms_wrapped_dek"),
     kmsWrappedSigningKey: text("kms_wrapped_signing_key"),
+    trustedSigningKeyId: uuid("trusted_signing_key_id"),
     runtimeHoursMs: bigint("runtime_hours_ms", { mode: "number" }).notNull().default(0),
+
+    // Cross-machine think-cycle lease. A crash leaves a bounded lease that
+    // expires automatically; only the matching token may release it.
+    cycleLeaseToken: uuid("cycle_lease_token"),
+    cycleLeaseUntil: timestamp("cycle_lease_until", { withTimezone: true }),
+
+    // Durable consent to deliver the one opening invitation associated with
+    // an explicit /start generation. Cleared by the semantic cycle commit.
+    openingInvitationPending: boolean("opening_invitation_pending")
+      .notNull()
+      .default(false),
+    openingInvitationGeneration: uuid("opening_invitation_generation"),
 
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -104,15 +118,24 @@ export const runtimeEvents = runtimeSchema.table(
 );
 
 /** PATTERN-PERSIST-IDENTITY for external LLM calls. Row is inserted with
- *  status='pending' BEFORE the provider POST; updated to 'completed' or
- *  'failed' after. The idempotency_key is sent as the `Idempotency-Key`
- *  header so the provider dedupes on the wire too.
+ *  status='pending' BEFORE the provider POST; updated to 'completed',
+ *  'failed', or 'ambiguous' after, then 'committed' with the semantic write
+ *  or 'discarded' by an explicit lifecycle transition. The provider-scoped
+ *  key is sent as `Idempotency-Key`; wire deduplication remains provider-specific and is
+ *  undocumented by Ollama.
  *  Doctrine: docs/PATTERN-PERSIST-IDENTITY.md. */
 export const llmRequests = runtimeSchema.table(
   "llm_requests",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     idempotencyKey: text("idempotency_key").unique().notNull(),
+    runtimeId: uuid("runtime_id").references(() => runtimes.id, {
+      onDelete: "set null",
+    }),
+    cycleLeaseToken: uuid("cycle_lease_token"),
+    strandId: uuid("strand_id"),
+    priorSeq: integer("prior_seq"),
+    wakeVersion: bigint("wake_version", { mode: "number" }),
     provider: text("provider").notNull(),
     model: text("model").notNull(),
     status: text("status").notNull().default("pending"),
@@ -124,6 +147,11 @@ export const llmRequests = runtimeSchema.table(
   },
   (t) => [
     index("idx_llm_requests_provider_time").on(t.provider, t.createdAt),
+    index("idx_llm_requests_runtime_status").on(
+      t.runtimeId,
+      t.status,
+      t.createdAt,
+    ),
   ],
 );
 

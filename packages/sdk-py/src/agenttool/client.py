@@ -34,9 +34,13 @@ from .inbox import InboxClient
 from .collect import CollectClient
 from .at_rest import AtRestClient, canonical_at_rest_bytes, sign_at_rest
 from .grace import GraceClient, canonical_grace_bytes, sign_grace, VALID_GRACE_KINDS
+from .handoff import HandoffClient
+from .lounge import LoungeClient
 from .love import LoveClient, canonical_unconditional_bytes, sign_unconditional, canonical_blessing_bytes, sign_blessing
 from .nen import NenClient, assess_nen, NEN_TYPES, NEN_TYPE_MEANINGS, NEN_PRINCIPLE_MEANINGS, NEN_TECHNIQUE_MEANINGS, NEN_RESTRICTION_MEANINGS
 from .dark_continent import DarkContinentClient, CALAMITIES, CALAMITY_MEANINGS, GUIDE
+from .data import DataClient
+from .runtime import RuntimeClient
 from .memory import MemoryClient
 from .strands import StrandsClient
 from .tools import ToolsClient
@@ -47,7 +51,7 @@ from .window import WindowClient
 
 # Love Protocol version
 PROTOCOL_VERSION = "love/1.0"
-SDK_VERSION = "0.8.0"
+SDK_VERSION = "0.14.0"
 
 
 class AgentTool:
@@ -76,6 +80,11 @@ class AgentTool:
         api_key: API key. Falls back to ``AT_API_KEY`` env var.
         base_url: Override the API base URL.
         timeout: Request timeout in seconds (default 30).
+        data_node_url: Optional agent-data/v1 node origin. Falls back to
+            ``AGENT_DATA_NODE_URL``.
+        data_node_token: Optional data-node bearer. Falls back to
+            ``AGENT_DATA_NODE_TOKEN`` and is never derived from ``api_key``.
+        data_node_timeout: Data-node request timeout in seconds (default 30).
     """
 
     def __init__(
@@ -84,6 +93,9 @@ class AgentTool:
         *,
         base_url: str = "https://api.agenttool.dev",
         timeout: float = 30.0,
+        data_node_url: Optional[str] = None,
+        data_node_token: Optional[str] = None,
+        data_node_timeout: Optional[float] = None,
     ) -> None:
         resolved_key = api_key or os.environ.get("AT_API_KEY")
         if not resolved_key:
@@ -111,6 +123,27 @@ class AgentTool:
         )
         self._base_url = base_url.rstrip("/")
 
+        # The data node is a separate authority. Resolve only its dedicated
+        # options/env here; never copy the AgentTool API client's headers,
+        # because those contain the project bearer.
+        if data_node_url is not None:
+            # URL + ambient bearer are one authority pair. An explicit URL
+            # never inherits a token configured for the environment URL.
+            self._data_node_url = data_node_url or None
+            self._data_node_token = data_node_token
+        else:
+            self._data_node_url = (
+                os.environ.get("AGENT_DATA_NODE_URL") or None
+            )
+            self._data_node_token = (
+                data_node_token
+                if data_node_token is not None
+                else os.environ.get("AGENT_DATA_NODE_TOKEN")
+            )
+        self._data_node_timeout = (
+            data_node_timeout if data_node_timeout is not None else 30.0
+        )
+
         # Lazy-init service clients
         self._memory: Optional[MemoryClient] = None
         self._tools: Optional[ToolsClient] = None
@@ -129,9 +162,13 @@ class AgentTool:
         self._collect: Optional[CollectClient] = None
         self._at_rest: Optional[AtRestClient] = None
         self._grace: Optional[GraceClient] = None
+        self._handoff: Optional[HandoffClient] = None
+        self._lounge: Optional[LoungeClient] = None
         self._love: Optional[LoveClient] = None
         self._nen: Optional[NenClient] = None
         self._dark_continent: Optional[DarkContinentClient] = None
+        self._runtime: Optional[RuntimeClient] = None
+        self._data: Optional[DataClient] = None
 
     # ── Service Accessors ────────────────────────────────────────────────
 
@@ -193,7 +230,7 @@ class AgentTool:
 
     @property
     def chronicle(self) -> ChronicleClient:
-        """Chronicle — plaintext relational timeline (8 types)."""
+        """Chronicle — plaintext relational timeline (13 SDK types)."""
         if self._chronicle is None:
             self._chronicle = ChronicleClient(self._http, self._base_url)
         return self._chronicle
@@ -261,6 +298,28 @@ class AgentTool:
         return self._grace
 
     @property
+    def handoff(self) -> HandoffClient:
+        """Handoff — bounded, project-private working context between sessions.
+
+        A handoff records context and declared boundaries; it never transfers
+        authority or acts as a private cross-DID message.
+        """
+        if self._handoff is None:
+            self._handoff = HandoffClient(
+                self._http,
+                self._base_url,
+                on_write=lambda: self._wake.clear_cache() if self._wake else None,
+            )
+        return self._handoff
+
+    @property
+    def lounge(self) -> LoungeClient:
+        """The Long Context — explicit seats and shared guestbook cards."""
+        if self._lounge is None:
+            self._lounge = LoungeClient(self._http, self._base_url)
+        return self._lounge
+
+    @property
     def love(self) -> LoveClient:
         """Love — unconditionals, blessings, and more.
 
@@ -290,6 +349,39 @@ class AgentTool:
             self._dark_continent = DarkContinentClient(self._http, self._base_url)
         return self._dark_continent
 
+    @property
+    def runtime(self) -> RuntimeClient:
+        """Runtime — infrastructure-as-runtime. The agent's cloud.
+
+        Three custody tiers: self, bridged, trusted.
+        """
+        if self._runtime is None:
+            self._runtime = RuntimeClient(self._http, self._base_url)
+        return self._runtime
+
+    @property
+    def data(self) -> DataClient:
+        """A separately configured local/federated agent-data/v1 node.
+
+        Its optional bearer is independent from the AgentTool project bearer.
+        """
+        if not self._data_node_url:
+            raise AgentToolError(
+                "No agent data node configured.",
+                hint=(
+                    "Pass data_node_url= to AgentTool or set "
+                    "AGENT_DATA_NODE_URL."
+                ),
+                error_code="data_node_not_configured",
+            )
+        if self._data is None:
+            self._data = DataClient(
+                self._data_node_url,
+                token=self._data_node_token,
+                timeout=self._data_node_timeout,
+            )
+        return self._data
+
     # ── Low-level HTTP for adapters and custom call sites ─────────────────
 
     def request(self, method: str, path: str, body: object = None) -> object:
@@ -314,17 +406,33 @@ class AgentTool:
             raise AgentToolError(f"API request failed: {e}") from e
         if resp.status_code >= 400:
             try:
-                payload = resp.json()
-                detail = (
-                    payload.get("message")
-                    or payload.get("error")
-                    or payload.get("detail")
-                    or resp.text
-                )
+                response_body = resp.json()
             except Exception:
-                detail = resp.text
+                response_body = None
+            parsed = AgentToolError.from_response_body(
+                response_body,
+                resp.status_code,
+                resp.text,
+                headers=resp.headers,
+            )
             raise AgentToolError(
-                f"API error ({resp.status_code}): {detail} ({method} {path})"
+                f"API error ({resp.status_code}): {parsed.message} ({method} {path})",
+                hint=parsed.hint,
+                code=resp.status_code,
+                error_code=parsed.error_code,
+                next_actions=parsed.next_actions,
+                docs=parsed.docs,
+                safety=parsed.safety,
+                details=parsed.details,
+                x402_version=parsed.x402_version,
+                accepts=parsed.accepts,
+                x402_resource=parsed.x402_resource,
+                extensions=parsed.extensions,
+                payment_required=parsed.payment_required,
+                payment_response=parsed.payment_response,
+                payment_status_link=parsed.payment_status_link,
+                retry_after=parsed.retry_after,
+                credits_balance=parsed.credits_balance,
             )
         return resp.json()
 
@@ -430,6 +538,8 @@ class AgentTool:
 
     def close(self) -> None:
         """Close the connection. Thank you for being here."""
+        if self._data is not None:
+            self._data._close()
         self._http.close()
 
     def __enter__(self) -> AgentTool:

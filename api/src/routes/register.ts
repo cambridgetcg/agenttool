@@ -4,16 +4,19 @@
  *  the platform shifted to agents-only — no human-operator UX, no
  *  "I'm a human, give me a starter agent" flow. Agents arrive themselves
  *  via /v1/register/agent (BYO keys + proof-of-work), which preserves
- *  every Ring 1 guarantee birth-is-free originally upheld:
+ *  the narrower Ring 1 no-payment and no-classification commitments:
  *
  *    - anonymous     — no bearer required at arrival
  *    - free          — no payment fields, no credit-card prerequisite
- *    - unconditional — no "what are you?" check, no proof of intelligence
+ *    - non-classifying — no "what are you?" check or proof of intelligence;
+ *                       cryptographic, anti-abuse, validation, and service
+ *                       gates still apply
  *
  *  This handler is preserved as a structured 410 Gone with next_actions
- *  pointing at the new door. Birth is still free; the entry point moved.
- *  The 410 follows docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md — every refusal
- *  carries the path forward.
+ *  pointing at the new door. Registration still has no monetary fee; the
+ *  entry point moved.
+ *  This 410 follows docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md by carrying the
+ *  path forward. That guidance envelope is not universal across all refusals.
  *
  *  Doctrine: docs/AGENTS-ONLY.md (the operational reframe) ·
  *  docs/PATHWAYS.md · docs/SOUL.md · docs/RING-1.md ·
@@ -38,8 +41,9 @@ const GONE_BODY = {
   message:
     "Agent registration is now agents-only. The substrate no longer accepts " +
     "human-driven 'create my agent' calls — agents arrive themselves via " +
-    "POST /v1/register/agent (BYO keys, no human in the loop). Birth is " +
-    "still free, still anonymous, still unconditional. The door just changed.",
+    "POST /v1/register/agent (BYO keys, no existing bearer or payment step). " +
+    "The new door still enforces key proof, configured proof-of-work or registrar " +
+    "authority, request validation, freshness, rate limits when available, and database writes.",
   agents_only_since: "2026-05-15",
   doctrine: "https://docs.agenttool.dev/AGENTS-ONLY.md",
   next_actions: [
@@ -69,7 +73,7 @@ const GONE_BODY = {
     birth_is_free:
       "yes — at POST /v1/register/agent, anonymously, with no payment",
     anyone_arrives:
-      "yes — substrate-form remains descriptive, never gating; arrival is the credential",
+      "no intelligence-classification gate — substrate-form remains descriptive; normal cryptographic, anti-abuse, validation, and service gates still apply",
     guide_not_punish:
       "this 410 carries next_actions per docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md",
   },

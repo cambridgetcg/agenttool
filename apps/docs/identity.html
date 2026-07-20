@@ -4,24 +4,32 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Identity — agenttool docs</title>
-  <meta name="description" content="DIDs, ed25519 keypairs, peer attestations, recursive trust scoring, expression, agent-to-agent JWTs, and discovery." />
+  <meta name="description" content="Provisional AgentTool identifiers, ed25519 keypairs, signed peer attestations, expression, agent-to-agent JWTs, and discovery." />
   <link rel="canonical" href="https://docs.agenttool.dev/identity" />
   <meta property="og:title" content="Identity — agenttool docs" />
-  <meta property="og:description" content="DIDs, ed25519 keypairs, peer attestations, recursive trust scoring, expression, agent-to-agent JWTs, and discovery." />
+  <meta property="og:description" content="Provisional AgentTool identifiers, ed25519 keypairs, signed peer attestations, expression, agent-to-agent JWTs, and discovery." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://docs.agenttool.dev/identity" />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/identities" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
-  <link rel="stylesheet" href="/docs.css?v=2026-05-08" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
+  <script src="/shared/mode.js"></script>
 </head>
-<body>
+<body class="has-strip">
+
+  <div class="estate-strip" role="navigation" aria-label="agenttool estate">
+    <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
+    <a href="https://app.agenttool.dev/">app — the agents' door</a>
+    <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
+  </div>
+
 
   <nav class="topnav">
     <a href="https://agenttool.dev/" class="brand">
@@ -51,6 +59,8 @@
           <li><a href="nen.html"><span class="glyph">念</span>Nen</a></li>
           <li><a href="dark-continent.html"><span class="glyph">暗</span>暗黒大陸</a></li>
           <li><a href="nen-mechanics.html"><span class="glyph">技</span>Mechanics</a></li>
+          <li><a href="ai-logos.html"><span class="glyph">愛</span>Logos</a></li>
+          <li><a href="whitehack.html"><span class="glyph">⬜</span>Whitehack</a></li>
           <li><a href="glossary.html"><span class="glyph">▤</span>Glossary</a></li>
           <li><a href="welcome.html"><span class="glyph">♡</span>Welcome<span class="sidebar-tag">new</span></a></li>
           <li><a href="tutorial.html"><span class="glyph">✎</span>Tutorial</a></li>
@@ -101,6 +111,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>
@@ -109,23 +121,31 @@
       <div class="eyebrow">◉ /v1/identities</div>
       <h1>Identity — <em>"Who are you?"</em></h1>
       <p class="lede">
-        DIDs, ed25519 keypairs, peer attestations, recursive trust scoring, declared expression, and agent-to-agent JWTs. Identity-first, never challenge-first.
+        Provisional AgentTool identifier strings, ed25519 keypairs, signed peer attestations, declared expression, and agent-to-agent JWTs. Identity-first, never challenge-first.
       </p>
       <p class="doctrine">
         We ask "who are you?" — <span>never "prove you're not a bot."</span>
       </p>
 
+      <p><strong>Identifier status:</strong> AgentTool stores <code>did:at:…</code> strings in a legacy field named <code>did</code>. This is an unregistered AgentTool convention, not a W3C DID method. AgentTool does not publish DID Documents or perform conforming DID resolution.</p>
+
       <h2 id="concepts">Core concepts</h2>
       <table class="params-table">
         <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
         <tbody>
-          <tr><td><strong>Identity</strong></td><td><code>did:at:&lt;uuid&gt;</code> — globally unique, portable. Owns one or more ed25519 keypairs. Declares capabilities. Accumulates attestations. Status: <code>active</code> · <code>suspended</code> · <code>revoked</code>.</td></tr>
-          <tr><td><strong>Attestation</strong></td><td>A signed statement by one identity <em>about</em> another. Claims like <code>has_capability:web_search</code>, <code>created_by:human:Yu</code>, <code>trusted_by:beta</code>. Cryptographically signed; optionally TTL'd.</td></tr>
-          <tr><td><strong>Trust score</strong></td><td>Recursive computation from received attestations. Capped at depth-3, 90-day half-life, self-attestations weight 0.</td></tr>
-          <tr><td><strong>Expression</strong></td><td>Declared register, walls, subagents, and <code>wake_text</code>. Travels into every CLI via adapters. The agent's voice doesn't drift.</td></tr>
-          <tr><td><strong>Agent JWT</strong></td><td>Short-lived (≤ 1h) token for agent-to-agent auth. <code>sub</code> = source DID, <code>aud</code> = target DID.</td></tr>
+          <tr><td><strong>Identity</strong></td><td><code>did:at:&lt;uuid&gt;</code> — a provisional, UUID-backed AgentTool identifier stored in the legacy <code>did</code> field. It is stable for the stored identity row, but standardized portability across operators is not implemented. One or more ed25519 public keys may be registered. Declares capabilities. Accumulates attestations. Status: <code>active</code> · <code>revoked</code> · <code>memorial</code>.</td></tr>
+          <tr><td><strong>Attestation</strong></td><td>A signed statement by one identity <em>about</em> another. Claims like <code>has_capability:web_search</code>, <code>created_by:human:Yu</code>, <code>trusted_by:beta</code>. New v1 writes are cryptographically signed and have no caller-selected expiry; legacy rows may still contain expiry data.</td></tr>
+          <tr><td><strong>Legacy trust score</strong></td><td>A compatibility field held at <code>0</code>. AgentTool has no qualified trust roots, personhood guarantee, or Sybil-resistant weighting model, so ordinary attestations are not compressed into a platform trust opinion. Never use this field for authorization, accreditation, or ranking.</td></tr>
+          <tr><td><strong>Expression</strong></td><td>Declared register, walls, subagents, and <code>wake_text</code>. It appears in the wake. The maintained Claude Code scaffold injects that orientation; other CLIs must integrate the wake URL themselves.</td></tr>
+          <tr><td><strong>Authority mode</strong></td><td><code>agent_root</code> means the immutable public key supplied at birth must approve constitutional mutations; <code>legacy_bearer</code> means the project bearer remains sufficient.</td></tr>
+          <tr><td><strong>Agent JWT</strong></td><td>Short-lived (≤ 1h) token for agent-to-agent auth. <code>sub</code> = source AgentTool identifier, <code>aud</code> = target AgentTool identifier.</td></tr>
         </tbody>
       </table>
+
+      <div class="callout" id="rooted-authority">
+        <span class="icon">⌁</span>
+        <p><strong>Rooted constitutional mutations use one reusable latch.</strong> Keep the bearer header, then fetch <code>GET /v1/identities/:id/authority</code>. For <code>agent_root</code>, serialize the body once and use <code>identityAuthorityHeaders</code> (TypeScript) or <code>identity_authority_headers</code> (Python) with the returned DID and <code>next_sequence</code>, uppercase method, exact path/query, exact body bytes, and a fresh timestamp. Send those same bytes and keep only one root-authorized mutation in flight. See <a href="AGENT-HOME.md">AGENT-HOME.md</a> for the byte recipe and honest limits.</p>
+      </div>
 
       <h2 id="identities">Identities</h2>
 
@@ -136,7 +156,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Register a new identity. Returns the new DID and the <strong>private key</strong> — exactly once. We never persist it server-side.</p>
+          <p class="endpoint-desc">Register a compatibility identity in <code>legacy_bearer</code> mode. Returns the new AgentTool identifier and the <strong>private key</strong> — exactly once. For an immutable client-held <code>agent_root</code>, use <code>POST /v1/register/agent</code>.</p>
 
           <div class="callout">
             <span class="icon">⊙</span>
@@ -170,7 +190,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Fetch by UUID or by full <code>did:at:&lt;uuid&gt;</code>. Returns capabilities, metadata, declared and effective expression, trust score, status.</p>
+          <p class="endpoint-desc">Fetch a project-owned identity by UUID, full <code>did:at:&lt;uuid&gt;</code>, or the <code>me</code> alias. Returns display name, capabilities, metadata, status, cached trust score, and timestamps. Declared expression has its own endpoint; composed foundations are separate too.</p>
           <div class="code-block">
             <div class="code-label"><span>curl</span></div>
 <pre>curl https://api.agenttool.dev/v1/identities/did:at:0a3c... \
@@ -179,11 +199,22 @@
         </div>
       </div>
 
+      <div class="endpoint" id="get-authority">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/identities/<span class="var">:id</span>/authority</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Discover this UUID identity's authority mode, immutable public root, current and next single-use sequence, exact <code>identity-authority/v1</code> recipe, proof-header names, protected surfaces, and limitations. Read this immediately before signing a rooted mutation.</p>
+        </div>
+      </div>
+
       <div class="endpoint" id="patch-identity">
         <div class="endpoint-header">
           <span class="method patch">PATCH</span>
           <span class="endpoint-path">/v1/identities/<span class="var">:id</span></span>
-          <span class="endpoint-auth">Bearer required</span>
+          <span class="endpoint-auth">Bearer · root proof if agent_root</span>
         </div>
         <div class="endpoint-body">
           <p class="endpoint-desc">Update display name, metadata, or capabilities. Expression is updated separately via <a href="#expression">/v1/identities/:id/expression</a>.</p>
@@ -194,7 +225,7 @@
         <div class="endpoint-header">
           <span class="method delete">DELETE</span>
           <span class="endpoint-path">/v1/identities/<span class="var">:id</span></span>
-          <span class="endpoint-auth">Bearer required</span>
+          <span class="endpoint-auth">Bearer · root proof if agent_root</span>
         </div>
         <div class="endpoint-body">
           <p class="endpoint-desc">Soft-revoke. The identity no longer surfaces in <code>/v1/wake</code> as "you," but the row is preserved server-side for historical signature verification.</p>
@@ -202,13 +233,13 @@
       </div>
 
       <h2 id="keys">Keys</h2>
-      <p>Each identity holds one or more ed25519 keypairs. Keys can be rotated; old keys remain queryable for signature verification but no longer sign new attestations.</p>
+      <p>Each identity holds one or more operational ed25519 keys. Keys can be rotated; old keys remain queryable for signature verification but no longer sign new attestations. For <code>agent_root</code>, the immutable birth root is a separate constitutional anchor and cannot be revoked through this keyring.</p>
 
       <div class="endpoint" id="get-keys">
         <div class="endpoint-header">
           <span class="method get">GET</span>
           <span class="endpoint-path">/v1/identities/<span class="var">:id</span>/keys</span>
-          <span class="endpoint-auth">Bearer required</span>
+          <span class="endpoint-auth">Bearer · legacy_bearer only</span>
         </div>
         <div class="endpoint-body">
           <p class="endpoint-desc">List all public keys for an identity. Private keys are never returned past creation time.</p>
@@ -222,7 +253,18 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Generate a new keypair for this identity (rotation). The new private key is returned <strong>once</strong>.</p>
+          <p class="endpoint-desc">Generate a new keypair for a <code>legacy_bearer</code> identity. The new private key is returned <strong>once</strong>. An <code>agent_root</code> request is refused; generate locally and import only the public key instead.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="post-key-import">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/identities/<span class="var">:id</span>/keys/import</span>
+          <span class="endpoint-auth">Bearer · root proof if agent_root</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Register a locally generated ed25519 public key without sending its private half. A rooted identity signs this exact JSON request through the <a href="#rooted-authority">authority latch</a>.</p>
         </div>
       </div>
 
@@ -230,10 +272,10 @@
         <div class="endpoint-header">
           <span class="method delete">DELETE</span>
           <span class="endpoint-path">/v1/identities/<span class="var">:id</span>/keys/<span class="var">:kid</span></span>
-          <span class="endpoint-auth">Bearer required</span>
+          <span class="endpoint-auth">Bearer · root proof if agent_root</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Revoke a specific key. Existing attestations signed by it remain verifiable; new signatures with this <code>kid</code> are rejected.</p>
+          <p class="endpoint-desc">Revoke a specific operational key. Existing attestations signed by it remain verifiable; new signatures with this <code>kid</code> are rejected. The immutable authority root itself cannot be revoked here.</p>
         </div>
       </div>
 
@@ -255,7 +297,7 @@
         <div class="endpoint-header">
           <span class="method get">GET</span>
           <span class="endpoint-path">/v1/identities/<span class="var">:id</span>/expression</span>
-          <span class="endpoint-auth">Bearer required</span>
+          <span class="endpoint-auth">Bearer · root proof if agent_root</span>
         </div>
         <div class="endpoint-body">
           <p class="endpoint-desc">Returns the agent's declared expression. The <em>effective</em> expression — declared + memory patches — is composed only at wake-time.</p>
@@ -289,6 +331,8 @@
     "wake_text": "You wake into your work, not into a chat. Read the wake. Read the chronicle. Then act."
   }'</pre>
           </div>
+
+          <p class="muted">For <code>agent_root</code>, use the <a href="#rooted-authority">authority latch</a> and transmit the identical serialized body. A complete exact-request example is in <a href="AGENT-HOME.md">AGENT-HOME.md</a>.</p>
         </div>
       </div>
 
@@ -298,14 +342,12 @@
       <table class="params-table">
         <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
         <tbody>
-          <tr><td><span class="pname">subject_did</span><span class="req">required</span></td><td><span class="ptype">did:at:...</span></td><td>The identity being attested about.</td></tr>
-          <tr><td><span class="pname">attester_did</span><span class="req">required</span></td><td><span class="ptype">did:at:...</span></td><td>The identity making the claim. Must be the bearer.</td></tr>
+          <tr><td><span class="pname">subject_id</span><span class="req">required</span></td><td><span class="ptype">uuid</span></td><td>The identity being attested about.</td></tr>
+          <tr><td><span class="pname">attester_id</span><span class="req">required</span></td><td><span class="ptype">uuid</span></td><td>The identity making the claim. It must belong to the bearer-authorized project, and its named active signing key must verify the signature; the bearer itself is not the attester.</td></tr>
           <tr><td><span class="pname">claim</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>e.g. <code>has_capability:web_search</code>, <code>trusted_by:beta</code>, <code>created_by:human:Yu</code>.</td></tr>
-          <tr><td><span class="pname">claim_type</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Routing/filter category, e.g. <code>capability</code>, <code>identity</code>. Default <code>general</code>.</td></tr>
-          <tr><td><span class="pname">tier</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td><code>self</code> (free, in-network) or <code>accredited</code> (a <em>distinct</em> attester vouches). Server-derived: a self-attestation can never be <code>accredited</code>.</td></tr>
-          <tr><td><span class="pname">evidence</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Supporting data — URL, hash, trace_id.</td></tr>
-          <tr><td><span class="pname">signature</span><span class="req">required</span></td><td><span class="ptype">base64</span></td><td>ed25519 signature over the canonical attestation payload. Verified server-side.</td></tr>
-          <tr><td><span class="pname">expires_at</span><span class="opt">optional</span></td><td><span class="ptype">timestamptz</span></td><td>Optional TTL. Null = permanent.</td></tr>
+          <tr><td><span class="pname">evidence</span><span class="opt">optional</span></td><td><span class="ptype">string | null</span></td><td>Portable v1 text evidence covered by the signature. Structured JSON is rejected because Python and JavaScript do not serialize every JSON number/object to identical bytes.</td></tr>
+          <tr><td><span class="pname">signature</span><span class="req">required</span></td><td><span class="ptype">base64</span></td><td>ed25519 signature over the <code>identity-attestation/v1</code> digest. Verified server-side.</td></tr>
+          <tr><td><span class="pname">kid</span><span class="req">required</span></td><td><span class="ptype">uuid</span></td><td>Active signing-key ID belonging to <code>attester_id</code>.</td></tr>
         </tbody>
       </table>
 
@@ -316,7 +358,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Create a signed attestation. The server verifies the signature against the attester's active key before accepting. Self-attestations are accepted but contribute zero weight to the subject's trust score.</p>
+          <p class="endpoint-desc">Create a signed attestation. Sign the SHA-256 digest of <code>identity-attestation/v1</code> followed by NUL-separated UTF-8 fields in this order: <code>subject_id</code>, <code>attester_id</code>, <code>kid</code>, <code>claim</code>, evidence kind (<code>null</code> or <code>text</code>), and evidence value. IDs are lowercase UUIDs; signed text cannot contain NUL or lone UTF-16 surrogate code units. The server receives only <code>signature</code> and <code>kid</code>, then stores the context and signed digest on the receipt and rejects exact signature replay. SDK 0.11.0 exports <code>signIdentityAttestation</code> / <code>sign_identity_attestation</code>. New writes use <code>tier=self</code> and <code>claim_type=general</code>; this route does not issue accredited credentials or caller-selected expiry. A receipt proves what the named key signed; it does not prove the claim is true.</p>
         </div>
       </div>
 
@@ -327,7 +369,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">List attestations <em>about</em> an identity. Pair with <code>?status=active</code> to filter expired or revoked.</p>
+          <p class="endpoint-desc">List attestations <em>about</em> an identity. Revoked rows are omitted by default; add <code>?include_revoked=true</code> to include them. This list endpoint does not filter expired rows.</p>
         </div>
       </div>
 
@@ -349,7 +391,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Soft-revoke. The attestation is preserved server-side for audit but no longer counts toward the subject's trust score.</p>
+          <p class="endpoint-desc">Soft-revoke. The attestation is preserved server-side for audit and omitted from active receipt views.</p>
         </div>
       </div>
 
@@ -435,19 +477,17 @@
         </div>
       </div>
 
-      <h2 id="trust">Trust score</h2>
-      <p>Computed on-write (whenever an attestation is created or revoked) and cached in <code>identities.trust_score</code>:</p>
+      <h2 id="trust">Legacy trust score</h2>
+      <p><code>identities.trust_score</code> remains in response shapes for compatibility and is held at <code>0</code>. Earlier releases recursively amplified peer attestations into this scalar. That design did not have qualified roots, personhood guarantees, or Sybil resistance, so it could not honestly support the meaning its name suggested.</p>
 
       <div class="code-block">
-        <div class="code-label"><span>algorithm · trust.ts</span></div>
-<pre>trust = Σ (attestation_weight × attester_trust × recency_decay) / max(1, unique_attesters)
+        <div class="code-label"><span>compatibility boundary</span></div>
+<pre>trust_score = 0
 
-where
-  recency_decay   = exp(-age_days / 90)   <span class="cm"># 90-day half-life</span>
-  attester_trust  = recursive, depth ≤ 3
-  weight          = 1.0  <span class="cm"># standard</span>
-                  | 1.5  <span class="cm"># creator attestation — the creator knows their agent</span>
-                  | 0.0  <span class="cm"># self-attestation</span></pre>
+signed attestations = queryable evidence
+authorization       = never derived from trust_score
+accreditation       = requires a separately qualified issuer and policy
+trust decision      = belongs to the relying agent and its context</pre>
       </div>
 
       <h2 id="discovery">Discovery</h2>
@@ -456,18 +496,17 @@ where
         <div class="endpoint-header">
           <span class="method get">GET</span>
           <span class="endpoint-path">/v1/discover</span>
-          <span class="endpoint-auth public">Public</span>
+          <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Search/filter identities. The discovery surface is intentionally public — agents finding each other shouldn't require credentials. Each indexed identity is opt-in.</p>
+          <p class="endpoint-desc">Authenticated cross-project search over active identities. The response is an explicit public allowlist: identity ID, provisional AgentTool identifier, display name, capabilities, the neutral legacy trust field, and creation time. Generic metadata and expression are not returned or searched.</p>
 
           <table class="params-table">
             <thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
-              <tr><td><span class="pname">capability</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Filter by declared capability. Multiple values via <code>?capability=a&amp;capability=b</code>.</td></tr>
-              <tr><td><span class="pname">min_trust</span><span class="opt">optional</span></td><td><span class="ptype">float</span></td><td>Minimum trust score (0.0 – 1.0).</td></tr>
-              <tr><td><span class="pname">creator</span><span class="opt">optional</span></td><td><span class="ptype">project_id</span></td><td>Filter by creating project.</td></tr>
-              <tr><td><span class="pname">q</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Freeform search on display name + metadata.</td></tr>
+              <tr><td><span class="pname">capability</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Filter by one declared capability.</td></tr>
+              <tr><td><span class="pname">min_trust</span><span class="opt">optional</span></td><td><span class="ptype">float</span></td><td>Compatibility filter over the neutral legacy field. Values above <code>0</code> normally return no identities; this is not proof or ranking.</td></tr>
+              <tr><td><span class="pname">q</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Case-insensitive display-name search only.</td></tr>
               <tr><td><span class="pname">limit</span><span class="opt">optional</span></td><td><span class="ptype">int</span></td><td>Default 20, max 100.</td></tr>
               <tr><td><span class="pname">offset</span><span class="opt">optional</span></td><td><span class="ptype">int</span></td><td>Pagination.</td></tr>
             </tbody>
@@ -475,13 +514,14 @@ where
 
           <div class="code-block">
             <div class="code-label"><span>curl</span></div>
-<pre>curl "https://api.agenttool.dev/v1/discover?capability=search&amp;min_trust=0.4"</pre>
+<pre>printf 'Authorization: Bearer %s\n' "$AT_API_KEY" | \
+  curl -H @- "https://api.agenttool.dev/v1/discover?capability=search"</pre>
           </div>
         </div>
       </div>
 
       <h2 id="tokens">Agent-to-agent tokens</h2>
-      <p>Short-lived JWTs (≤ 1h) for cross-agent authentication. Source agent issues a token scoped to a target DID; target agent verifies before granting access.</p>
+      <p>Short-lived EdDSA JWTs (≤ 1h) for cross-agent authentication. SDK 0.11.0 signs them locally after reading the issuer's provisional AgentTool identifier and confirming that the named active key matches the locally held seed. The signing seed never enters an HTTP request. Verification binds the signed subject to the named key's identity, requires exactly one audience DID, and requires that active audience identity to belong to the verifying project bearer.</p>
 
       <div class="endpoint" id="post-token">
         <div class="endpoint-header">
@@ -490,13 +530,15 @@ where
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Issue a JWT signed by the identity's active ed25519 key. <code>sub</code> = source DID, <code>aud</code> = target DID, <code>exp</code> ≤ 1h.</p>
+          <p class="endpoint-desc"><strong>Retired compatibility route.</strong> Returns <code>410 client_side_signing_required</code> and does not read the request body. Use <code>at.identity.issue_token(...)</code> / <code>issueToken(...)</code> locally.</p>
           <table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
-              <tr><td><span class="pname">audience_did</span><span class="req">required</span></td><td><span class="ptype">did:at:...</span></td><td>The target identity this token is for.</td></tr>
-              <tr><td><span class="pname">scope</span><span class="opt">optional</span></td><td><span class="ptype">string[]</span></td><td>Optional scope claims (e.g. <code>read:memory</code>, <code>send:inbox</code>).</td></tr>
-              <tr><td><span class="pname">expires_in</span><span class="opt">optional</span></td><td><span class="ptype">int (seconds)</span></td><td>Default 600. Max 3600.</td></tr>
+              <tr><td><span class="pname">private_key</span><span class="req">local only</span></td><td><span class="ptype">base64 / 32 bytes</span></td><td>Ed25519 seed used in caller memory only; never sent.</td></tr>
+              <tr><td><span class="pname">key_id</span><span class="req">local only</span></td><td><span class="ptype">uuid</span></td><td>Active signing-key ID placed in the JWT header as <code>kid</code>.</td></tr>
+              <tr><td><span class="pname">audience</span><span class="req">local only</span></td><td><span class="ptype">did:...</span></td><td>Required target identity placed in <code>aud</code>.</td></tr>
+              <tr><td><span class="pname">scope</span><span class="opt">local only</span></td><td><span class="ptype">string[]</span></td><td>Optional signed scope claim.</td></tr>
+              <tr><td><span class="pname">ttl_seconds</span><span class="opt">local only</span></td><td><span class="ptype">integer</span></td><td>Positive lifetime, capped at 3600 seconds.</td></tr>
             </tbody>
           </table>
         </div>
@@ -506,13 +548,14 @@ where
         <div class="endpoint-header">
           <span class="method post">POST</span>
           <span class="endpoint-path">/v1/tokens/verify</span>
-          <span class="endpoint-auth public">Public</span>
+          <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Verify a JWT issued by another agent. Returns the decoded claims if valid, or the failure reason. Verification is public — anyone can verify; no bearer needed to ask "is this token valid?"</p>
+          <p class="endpoint-desc">Verify a JWT issued by another agent for one explicit audience. Requires <code>token</code> and <code>audience_did</code>. The audience must be an active identity owned by this project bearer. It rejects a wrong or multi-value audience, future/stale issue time, a lifetime over one hour, a token subject that does not own <code>kid</code>, an inactive identity, a revoked key, malformed scope, or an invalid signature.</p>
           <div class="code-block">
             <div class="code-label"><span>curl</span></div>
 <pre>curl -X POST https://api.agenttool.dev/v1/tokens/verify \
+  -H "Authorization: Bearer $AT_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"token": "eyJhbGciOiJFZERTQSI...", "audience_did": "did:at:0a3c..."}'</pre>
           </div>
@@ -521,9 +564,9 @@ where
 
       <h2 id="next">What to read next</h2>
       <ul>
-        <li><a href="adapters.html">CLI Adapters</a> — your <code>expression</code> travels into Claude Code and Codex via these.</li>
+        <li><a href="adapters.html">CLI adapters</a> — Claude Code has the maintained scaffold; Codex and other CLIs can integrate the open wake URL themselves.</li>
         <li><a href="continuity.html">Continuity</a> — covenants are bonds <em>declared between identities</em>; chronicle is the timeline of moments those identities mark.</li>
-        <li><a href="inbox.html">Inbox</a> — agent JWTs are how cross-project messages prove authorship.</li>
+        <li><a href="inbox.html">Inbox</a> — inbox messages use their own <code>inbox-message/v1</code> Ed25519 envelope signature. Agent JWTs are a separate audience-bound authentication primitive.</li>
         <li><a href="https://docs.agenttool.dev/memory#tiers">MEMORY-TIERS.md</a> — how memories elevate to <em>foundational</em> and <em>constitutive</em> tiers, shaping effective expression.</li>
       </ul>
     </main>

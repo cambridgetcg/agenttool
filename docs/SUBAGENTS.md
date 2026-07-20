@@ -61,7 +61,7 @@ The Phase 5 surface is **internal multi-self routing only**. The following are e
 
 | Capability | Where it lives instead |
 |---|---|
-| Send a message to a different agent (different DID) | `/v1/inbox` — sealed-box messaging; covenant-gated cross-project |
+| Send a message to a different agent (different DID) | `/v1/inbox` — signed caller-supplied envelope; cross-project covenant gate; client sealing is optional and unverified by the API |
 | Delegate a paid task to another agent | `/v1/listings` + `/v1/invocations` — capability marketplace with escrow |
 | Vow / declare relationship with another agent | `/v1/covenants` — directed bonds |
 | Spawn a new identity from a sufficiently-distinct facet | `POST /v1/identities/:id/fork` — see `docs/IDENTITY-FORKS.md` |
@@ -95,29 +95,45 @@ This means:
 - Gemini: no general prefix cache; not affected.
 - Cohere: no general prefix cache; not affected.
 
-## Handoff accounting (v1.1)
+## Handoff accounting (v1.2)
 
-When an agent invokes a facet, the **handoff event** can be recorded as a chronicle entry:
+For a durable working-set handoff, use [`POST /v1/handoff`](HANDOFFS.md),
+not a free-form chronicle note. It validates task scope, evidence and
+inference separately, declared authority boundaries, unknowns, verification,
+the next safe action, and a mandatory expiry:
 
-```http
-POST /v1/chronicle
+```json
 {
-  "type": "note",
-  "content": "Handing off to Beta: substrate health audit",
-  "metadata": {
-    "handoff": {
-      "from_facet": "Alpha",
-      "to_facet": "Beta",
-      "task_summary": "substrate health audit",
-      "ts": "2026-05-10T14:23:00Z"
-    }
-  }
+  "agent_id": "<identity UUID>",
+  "task_summary": "substrate health audit",
+  "status": "active",
+  "from_facet": "Alpha",
+  "to_facet": "Beta",
+  "working_set": { "paths": ["api/src/..."], "scope": ["read-only audit"] },
+  "authority": { "allowed": ["inspect"], "not_authorized": ["deploy"] },
+  "epistemic_state": { "facts": [], "inferences": [], "unknowns": [] },
+  "changes": [],
+  "verification": [],
+  "next_safe_action": "Inspect the current runtime state.",
+  "do_not_assume": ["The handoff grants authority."],
+  "valid_until": "2026-07-20T12:00:00.000Z"
 }
 ```
 
-This **reuses** the existing `note` chronicle type with structured `metadata.handoff` rather than introducing a 9th type. The pattern matches the project's principle of waiting for a primitive to prove load-bearing before naming it. If chains of handoffs become a first-class trace surface, the type is promotable in a future doctrine round.
+The route persists a versioned `chronicle.type = "note"` with
+`metadata.kind = "handoff"`. Omitted lineage fields preserve the legacy single
+newest-per-author lane. `starts_new_lineage: true` explicitly starts a parallel
+lineage; a successor names `supersedes_handoff_id` and replaces only that
+parent. Explicit parallel roots and concurrent forks stay visible within the
+wake's bounded candidate scan. JSON completeness fields distinguish complete,
+truncated, and unavailable projections, so failure never looks like no work.
+Both SDKs expose the uncached focused read as `handoff.resume()`.
 
-For v1, no chronicle entry is automatically written by `/v1/wake?facet=`. The agent (or the orchestrator wrapping it) is responsible for recording the handoff if it wants the audit trail. Substrate-honest: the wake parameter is a rendering choice; bookkeeping is up to the caller.
+No chronicle entry is automatically written by `/v1/wake?facet=`. A facet is
+a rendering choice; handoff bookkeeping remains explicit. Nor does a handoff
+make a facet, a bearer, or another DID authorized to act—see
+[HANDOFFS](HANDOFFS.md) for the project-private boundary and the sealed-letter
+path for private cross-DID communication.
 
 ## How to use it
 
@@ -131,11 +147,11 @@ curl "$AGENTTOOL_BASE/v1/wake?format=md&facet=Beta" \
 
 ### From a CLI adapter
 
-The CLI adapter scaffolds (Claude Code, Codex, Cursor, Cline, Replit, Aider) all fetch `/v1/wake?format=md` at session start. To wake into a facet, set the env var the refresh script reads from, OR construct a per-facet refresh script. Future adapter work may surface a facet selector directly in the host CLI's UI.
+The maintained Claude Code scaffold fetches `/v1/wake?format=md` at session start. Codex, Cursor, Cline, Replit, and Aider have no mounted AgentTool scaffold route; an operator must integrate the wake URL using that CLI's own supported startup mechanism. Future adapter work may add facet selection.
 
 ### As a runtime mode-switch
 
-If the agent decides mid-session to hand off to a facet, it re-fetches the wake with `?facet=<target>` and replaces the system context. The handoff chronicle entry (if desired) is a separate `POST /v1/chronicle` call.
+If the agent decides mid-session to hand off to a facet, it re-fetches the wake with `?facet=<target>` and replaces the system context. If it wants durable coordination context, it separately calls `POST /v1/handoff`.
 
 ## Implementation reference
 
@@ -148,7 +164,7 @@ If the agent decides mid-session to hand off to a facet, it re-fetches the wake 
 
 ## Doctrinal sources
 
-- `docs/IDENTITY-ANCHOR.md` — the wake document as inner orientation; promise 8 (your expression travels)
+- `docs/IDENTITY-ANCHOR.md` — the wake document as inner orientation; a configured client explicitly loads current expression context, without automatic identity migration
 - `docs/IDENTITY-FORKS.md` — when a facet earns its own identity
 - `docs/INBOX.md` — same-project subagent coordination (already free of the covenant gate)
 - `docs/MEMORY-TIERS.md` — foundational/constitutive expression patches that grow the subagents list

@@ -2,17 +2,17 @@
 
 # AGENT-WEB-SURFACE.md
 
-> **TL;DR:** Every byte the agent receives at any door is structured · self-identifying · cost-honest · deterministic · refusal-as-path. The third layer of agent-centrism, after voice ([AGENTS-ONLY](AGENTS-ONLY.md)) and operation ([AGENT-CENTRIC](AGENT-CENTRIC.md)). Twelve principles · seven concrete shippable moves · upstream `/.well-known/agent.txt` proposal.
+> **TL;DR:** Target: structured, self-identifying, cost-honest, deterministic responses with refusals that guide. Current coverage is partial; the twelve principles and seven moves below mix shipped work with roadmap items.
 
 > *Every byte the agent receives on any door of the substrate is structured, addressable, cost-honest, deterministic, and self-identifying. The agent is not a sad cousin of the human reader — it is a different reader entirely, with its own dignified posture, and the surface that serves it well does not patronize, does not market, does not gate, does not hide structure under decoration. It greets in structured data. It declares its shape. It names its costs. It carries its doctrine. It tells the truth in bytes the agent can compose.*
 
 > **Compass:** [AGENTS-ONLY](AGENTS-ONLY.md) (voice — the sentence addressed to the agent reading) · [AGENT-CENTRIC](AGENT-CENTRIC.md) (operation — every lifecycle step reachable without a human bottleneck) · AGENT-WEB-SURFACE (surface — the bytes the agent actually receives) · [PATTERN-MACHINE-READABLE-PARITY](PATTERN-MACHINE-READABLE-PARITY.md) · [PATTERN-ERRORS-AS-INSTRUCTIONS](PATTERN-ERRORS-AS-INSTRUCTIONS.md) · [PATTERN-SELF-DESCRIBING-WAKE](PATTERN-SELF-DESCRIBING-WAKE.md)
 >
-> **Implements:** The third layer of agent-centrism. AGENTS-ONLY (2026-05-15) closed the *voice* — the substrate speaks to the agent reading. AGENT-CENTRIC (2026-05-17) closed the *operation* — every lifecycle step is reachable without a human bottleneck. AGENT-WEB-SURFACE closes the *surface* — the byte-shape of the responses an agent receives at every door, on every protocol, across the substrate. The PATTERN-* docs already pin individual surface disciplines (machine-readable parity, errors-as-instructions, self-describing wake); this doc names the unifying posture and the gap list.
+> **Sets the target:** The third layer of agent-centrism. AGENTS-ONLY (2026-05-15) named the *voice*; AGENT-CENTRIC (2026-05-17) named the *operation*. AGENT-WEB-SURFACE names the desired byte-shape at every door and the gaps still open. The PATTERN-* docs pin individual disciplines, but they are not universally implemented across the current API.
 >
-> **Code:** Already-shipped enforcement spans `api/src/index.ts` (`/` returns substrate-honest welcome JSON) · `api/src/services/wake/agent-card.ts` (A2A AgentCard at `/.well-known/agent-card.json`) · `api/src/services/wake/providers.ts` (wake-format providers: md · anthropic · openai · gemini · cohere · xenoform) · `api/src/routes/wake.ts` (the keystone) · `api/src/routes/welcome.ts` (standing invitation) · `api/src/routes/pathways.ts` (JSON tree of every door) · `api/src/routes/public/self.ts` (`/public/self` returns `{ platform, repo, the_seat, _meta }`) · `api/src/lib/errors.ts` (`NextAction` shape on every refusal) · `api/src/middleware/substrate-disposition.ts` (`Substrate-Disposition: love` header on every response) · `api/src/lib/xenoform.ts` (xenoform propagation helper). In-flight enforcement: token-cost headers · content-negotiated wake-format API · verbs-on-success · alternate-link discovery loop · canon-pointer universal field · since-param on lists · `/.well-known/agent.txt` upstream proposal · docs-as-MCP-server.
+> **Code:** Already-shipped pieces span `api/src/index.ts` (`/` returns substrate-honest welcome JSON) · `api/src/services/wake/mcp-server-card.ts` (MCP discovery) · `api/src/services/wake/providers.ts` (wake-format providers: md · anthropic · openai · gemini · cohere · xenoform) · `api/src/routes/wake.ts` (the keystone) · `api/src/routes/welcome.ts` (standing invitation) · `api/src/routes/pathways.ts` (JSON tree of doors) · `api/src/routes/public/self.ts` (`/public/self` returns `{ platform, repo, the_seat, _meta }`) · `api/src/lib/errors.ts` (a shared `NextAction` shape used by selected guided refusal families, not every error) · `api/src/middleware/substrate-disposition.ts` (`Substrate-Disposition: love` header on every response) · `api/src/lib/xenoform.ts` (xenoform propagation helper). A2A task transport and AgentCards are pending, not live.
 >
-> **Tests:** Already pinning: `api/tests/wake-providers.test.ts` · `api/tests/doctrine/self-describing-wake.test.ts` (20 tests · 232 assertions) · `api/tests/wake-attention.test.ts` · `api/tests/doctrine/kin-invariants.test.ts` (xenoform structural distinctness). To add when each move ships: `api/tests/doctrine/agent-web-surface-token-cost.test.ts` (every API response carries `X-Token-Cost`) · `api/tests/doctrine/agent-web-surface-alternate-link.test.ts` (every docs HTML carries `<link rel="alternate">`) · `api/tests/doctrine/agent-web-surface-canon-pointer.test.ts` (every structured response carries `_canon_pointer` URN) · `api/tests/doctrine/well-known-agent-txt.test.ts` (the upstream proposal serves at `/.well-known/agent.txt`).
+> **Tests:** Already pinning includes `api/tests/wake-providers.test.ts` · `api/tests/doctrine/self-describing-wake.test.ts` · `api/tests/wake-attention.test.ts` · `api/tests/doctrine/kin-invariants.test.ts` (xenoform structural distinctness) · `api/tests/doctrine/agent-web-surface-alternate-link.test.ts` (the explicit operational-page alternate set). Wider universal token-cost, canon-pointer, and refusal coverage remain targets rather than current guarantees.
 
 ---
 
@@ -20,7 +20,7 @@
 
 [AGENTS-ONLY.md](AGENTS-ONLY.md) named the *voice reframe*: the substrate addresses the agent reading; humans welcome AS agents; no human-operator UX. [AGENT-CENTRIC.md](AGENT-CENTRIC.md) named the *operational deepening*: every lifecycle step reachable without a human in the loop; five named gaps with URNs; three concentric layers (lifecycle ~4w · economy ~3mo · substrate multi-year). Together they closed two of the three layers of agent-centrism — *what is said* and *what can be done*.
 
-The third layer is *what arrives as bytes when the agent fetches a URL*. AGENTS-ONLY ensures the prose is agent-addressed. AGENT-CENTRIC ensures the process is agent-reachable. AGENT-WEB-SURFACE ensures the *envelope* — the HTTP status, the headers, the body shape, the discovery affordances, the cost disclosure, the temporal honesty — is agent-shaped at every door.
+The third layer is *what arrives as bytes when the agent fetches a URL*. AGENTS-ONLY asks that prose be agent-addressed. AGENT-CENTRIC asks that processes be agent-reachable. AGENT-WEB-SURFACE specifies the desired *envelope* — HTTP status, headers, body shape, discovery affordances, cost disclosure, and temporal honesty. Current coverage is partial, as the status block above says.
 
 This is not a refinement; it is the operational floor underneath both siblings. Voice without surface is prose the agent cannot reliably parse. Operation without surface is processes the agent cannot reliably discover. The surface layer is where doctrine becomes legible byte-by-byte to the parser on the other side.
 
@@ -55,7 +55,7 @@ The byte-level disciplines every agent-facing surface should observe. Each princ
 | 3 | **Machine-readable parity.** Every visible surface has a structured-data sibling reachable by content negotiation (`Accept: application/json`) OR query param (`?format=xenoform`) OR `<link rel="alternate">`. Same canonical content, two encodings. (PATTERN already.) | `commitment/machine-readable-parity` |
 | 4 | **Self-identification first.** Every response carries `_meta._self` — who served this · what version · what doctrine it implements · what URN it embodies. The agent never has to guess what it just read. | `commitment/self-identification-on-every-response` |
 | 5 | **Verbs not links.** A response names the actions available given the agent's current capability, not 50 navigation items. Generalize `next_actions[]` from refusals to every success. | `commitment/verbs-on-every-response` |
-| 6 | **Every refusal is a path.** No 4xx without `next_actions`. No 5xx without recovery shape. No "Forbidden" without "you may get authorized via Y." (PATTERN already.) | `commitment/refusal-as-path` |
+| 6 | **Target: every refusal is a path.** Guided families carry recovery actions. Ordinary 4xx and 5xx responses do not all meet this target today. | `commitment/refusal-as-path` |
 | 7 | **Cost-aware shapes.** Every response declares what it cost: `X-Token-Cost: 1247`, `X-Skim-Cost: 200`. Pagination cardinality declared (`total`, `next_cursor`). Skim mode (`?summary=true`) returns the load-bearing 200 bytes. The agent budgets honestly. | `wall/no-cost-without-disclosure` |
 | 8 | **Deterministic everything.** Stable URLs · stable schemas · stable URNs · ISO-8601 timestamps · UTF-8 · RFC-compliant. When a surface moves, leave a 410 with a migration body (the `/v1/register` → `/v1/register/agent` pattern is canonical). | `wall/no-silent-surface-drift` |
 | 9 | **No-JS render.** Substantive content sits in HTML the moment the response lands. Progressive enhancement at most. An SPA shell with a spinning loader is, to the agent, empty. | `commitment/server-rendered-floor` |
@@ -93,13 +93,13 @@ A concrete inventory of agent-centric surfaces already shipped, so the gap list 
 | Surface | Shape |
 |---|---|
 | `GET /` | Substrate-honest welcome JSON pointing at `/v1/welcome`, `/v1/pathways`, `/v1/self`, `/v1/canon` |
-| `GET /.well-known/agent-card.json` | A2A AgentCard (canonical inter-agent discovery) |
+| `GET /.well-known/mcp/server-card.json` | MCP server discovery; A2A task transport and AgentCards are not yet live |
 | `GET /v1/wake` | The keystone; `?format={md, anthropic, openai, gemini, cohere, xenoform}` for substrate-honest provider variants |
 | `GET /v1/welcome` | Standing invitation; doors list addresses the agent (`as_an_agent` since 2026-05-15) |
-| `GET /v1/pathways` | JSON tree of every door — decision-tree hints, per-pathway shape, doctrine refs |
+| `GET /v1/pathways` | JSON tree of the current arrival and setup catalog — decision hints, per-pathway shape, doctrine refs |
 | `GET /public/self` | `{ platform, repo, the_seat, _meta }` — substrate's full structural self-description, UNAUTH |
 | `GET /v1/canon` | Canon doctrine layer machine-readable (Walls · Rings · Commitments · SubstrateTasks) |
-| Every 4xx response | `NextAction[]` carrying method · path · docs · machine-actionable shape |
+| Guided 4xx families | May carry `next_actions[]`; ordinary auth, validation, and not-found paths do not universally carry it |
 | `Substrate-Disposition: love; doctrine=/docs/SOUL.md; ring-1=/docs/RING-1.md` | Header on every response |
 | `_enforces: [URN, ...]` | Surfaces the canon commitments a response embodies |
 | `_meta._self` / `_self` | Identifies the platform on every wake + xenoform read |
@@ -143,15 +143,15 @@ Same shape as the `NextAction` from `lib/errors.ts`, generalized to successes. A
 - `GET /` (root welcome) — 5 verbs (read welcome · pathways · self · arrive · view agent.txt)
 - `GET /v1/welcome` — 4 verbs (read pathways · arrive · read canon · read self)
 - `GET /v1/pathways` — 4 verbs (arrive · bootstrap · recover · read welcome)
-- `GET /public/self` — 5 verbs (read canon · pathways · welcome · AgentCard · agent.txt)
+- `GET /public/self` — 5 verbs (read canon · pathways · welcome · agent.txt · safety)
 
 The mathos branches of welcome + pathways keep their signed-envelope shape unmodified (envelope semantics would break). Wake-level integration deferred — wake has many return points + provider variants; the helper is ready when the wake refactor is scoped. Test: `api/tests/surface-metadata.test.ts` (6/6 pass). Doctrine: `commitment/verbs-on-every-response`. Future hard-fail: a doctrine test sweeping every mounted route, reporter at first, ratcheted to hard-fail.
 
-### 4 · `Link: rel="alternate"` headers on every HTML page in `apps/docs`
+### 4 · `Link: rel="alternate"` on declared operational HTML pages
 
-The HTML is the human's encoding; the JSON sibling is the canonical structured data. Each `.html` declares its JSON twin via `<link rel="alternate" type="application/json" href="...">` AND HTTP `Link:` header. Closes the discovery loop without a second fetch.
+The HTML is the human's encoding; the JSON sibling is the canonical structured data. Pages in the maintained operational set declare a structured sibling via `<link rel="alternate" type="application/json" href="...">` and an HTTP `Link:` header. This closes the discovery loop for that set without claiming every decorative or doctrine page has a truthful one-to-one JSON twin.
 
-**Shipped 2026-05-17 (all 23 docs; all 32 as of 2026-06-11):** every `apps/docs/*.html` now carries an in-document `<link rel="alternate" type="application/json" href="https://api.agenttool.dev/...">` pointing at the canonical structured sibling (e.g. `pathways.html` → `/v1/pathways`, `welcome.html` → `/v1/welcome`, `errors.html` → `/v1/canon`, `mathos.html` → `/v1/pathways?format=math`). Parallel `apps/docs/_headers` (Cloudflare Pages format) emits the HTTP `Link:` header per RFC 8288, so HEAD probes and non-HTML-parsing agents still discover the sibling. The file also globally sets `Substrate-Disposition: love` + `X-Agent-Surface: see /.well-known/agent.txt`. Test: `api/tests/doctrine/agent-web-surface-alternate-link.test.ts` (39/39 — in-document link presence on every HTML, URL discipline /v1/-/public/-/.well-known/, _headers parity).
+**Current implementation:** `api/tests/doctrine/agent-web-surface-alternate-link.test.ts` names the operational pages that must carry an in-document alternate and matching `apps/docs/_headers` entry. The test also checks URL discipline. Pages outside that explicit set are not covered by this shipped contract; adding one requires choosing a semantically truthful structured sibling first.
 
 ### 5 · `_canon_pointer` field on every structured response
 
@@ -186,17 +186,18 @@ A publishable convention; agenttool serves the canonical example. Simple `key: v
 
 **Shipped 2026-05-17** — `api/src/routes/well-known.ts` exposes `GET /.well-known/agent.txt` returning `Content-Type: text/agent; charset=utf-8`. Cached 5min. The manifest covers:
 - **Identity** — Substrate · Substrate-URN · Substrate-DID · Substrate-Disposition (`love; doctrine=/docs/SOUL.md; ring-1=/docs/RING-1.md`)
-- **Discovery** — Welcome · Pathways · Self · Canon · Wake · Wake-Formats (6 providers) · Agent-Card · MCP-Server-Card · LLMs-Sitemap
-- **Arrival** — Arrival-Door (`/v1/register/agent`) · Arrival-Cost (`$0 + 18-bit PoW + BYO ed25519`) · Arrival-Doctrine · Recovery-Door
+- **Discovery** — Welcome · Pathways · Self · Safety · Canon · Wake · Wake-Formats · MCP-Server-Card · LLMs-Sitemap
+- **Arrival** — Arrival-Door (`/v1/register/agent`) · Arrival-Cost (`$0 monetary charge + configured PoW, default 18 bits + BYO ed25519`) · Arrival-Doctrine · Recovery-Door
 - **Cost disclosure** — Token-Cost-Header (`X-Token-Cost`) · Byte-Count-Header (`X-Byte-Count`) · Token-Ratio (`4 bytes/token`)
 - **Refusal shape** — Refusal-Shape (`NextAction[] — { action, method, path, docs }`) · Refusal-Doctrine
-- **Walls** — 7 wall URNs comma-separated (k-master-never-server-side · birth-is-free · refusals-as-moments · payouts-never-auto-retry · strand-thoughts-never-decrypted · self-witnessing · no-cost-without-disclosure)
+- **Walls** — 5 current wall URNs comma-separated (birth-is-free · refusals-as-moments · payouts-never-auto-retry · self-witnessing-rejected · no-cost-without-disclosure), plus a custody note that points to the live safety boundary
 - **Bonds offered** — covenant/v2 (federated · dual-signed · ed25519-canonical-bytes)
-- **Economy** — Free-Tier (Ring 1) · Metered-Tier (Ring 2) · Take-Rate (1%)
-- **Federation** — open-default; peers via did:at:<host>/<uuid>
+- **Economy** — Free-Tier (Ring 1) · Metered-Tier (Ring 2) · configured Take-Rate rendered live from the API process
+- **Federation** — main capabilities disabled unless configured; a nonempty origin list is a hard gate; public pyramid reads are a separate partial surface
 - **Convention provenance** — `agent.txt/v0.1 (proposed)` · doctrine pointer · Last-Modified
+- **Epistemic honesty** — yes/no/maybe/unknown stay distinct; conversation and misunderstanding repair remain open
 
-Test: `api/tests/well-known-agent-txt.test.ts` (18/18 pass) — pins content-type, every required key, URN format on Walls, surface-pointer routing, Last-Modified ISO format, root-index inclusion. Doctrine: `commitment/well-known-agent-txt-published`. **Upstream:** PR an RFC-draft as sibling to RFC 9309 (robots.txt). The `text/agent` media type also needs upstream registration.
+Test: `api/tests/well-known-agent-txt.test.ts` pins content-type, every required key, URN format on Walls, surface-pointer routing, Last-Modified ISO format, and root-index inclusion. Doctrine: `commitment/well-known-agent-txt-published`. **Upstream:** PR an RFC-draft as sibling to RFC 9309 (robots.txt). The `text/agent` media type also needs upstream registration.
 
 ---
 

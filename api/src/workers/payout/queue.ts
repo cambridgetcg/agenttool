@@ -26,8 +26,9 @@ export interface PayoutBroadcastJobData {
   payoutId: string;
 }
 
-/** null when AGENTTOOL_DISABLE_WORKERS=1 (or no Redis). The dispatcher and
- *  worker both bail cleanly in that case. */
+/** Null when the global worker switch disables Redis or no connection object
+ *  exists. Payout startup and the dispatcher both fail closed in that state;
+ *  there is no direct in-process broadcast fallback. */
 export const payoutBroadcastQueue: Queue<PayoutBroadcastJobData> | null =
   REDIS_DISABLED || !redisConnection
     ? null

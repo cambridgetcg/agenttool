@@ -13,15 +13,80 @@
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/traces" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
-  <link rel="stylesheet" href="/docs.css?v=2026-05-08" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
+  <script src="/shared/mode.js"></script>
+  <style>
+    /* Page-local mobile fixes (traces) — tokens only, works in dawn & night. */
+
+    /* Anatomy table: below 540px the three-column layout starves the
+       DESCRIPTION column. Stack each row as a field-card: name + type on
+       one line, description full-width beneath. */
+    @media (max-width: 540px) {
+      .params-table thead { display: none; }
+      .params-table tbody { display: block; width: 100%; }
+      .params-table tr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.25rem 0.6rem;
+        padding: 0.75rem 0.95rem;
+        border-bottom: 1px solid var(--border);
+      }
+      .params-table tr:last-child { border-bottom: none; }
+      .params-table td {
+        display: block;
+        padding: 0;
+        border-bottom: none;
+      }
+      .params-table td:last-child {
+        flex-basis: 100%;
+        overflow-wrap: anywhere;
+      }
+      .params-table .pname { overflow-wrap: anywhere; }
+    }
+
+    /* Linearized sidebar (below the article) is ~40 links in one flat
+       column. Condense each section into a responsive link grid so it
+       occupies a fraction of the height on phone and tablet. */
+    @media (max-width: 920px) {
+      .sidebar-section { margin-bottom: 1.1rem; }
+      .sidebar-section ul {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+        gap: 0 0.75rem;
+      }
+    }
+
+    /* Footer: stack the cluster deliberately on narrow phones and keep
+       the copyright on one line beside the ring. */
+    @media (max-width: 480px) {
+      footer.site-footer {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.6rem;
+      }
+      footer.site-footer .left {
+        flex-wrap: wrap;
+        row-gap: 0.35rem;
+      }
+      footer.site-footer .copyright { white-space: nowrap; }
+    }
+  </style>
 </head>
-<body>
+<body class="has-strip">
+
+  <div class="estate-strip" role="navigation" aria-label="agenttool estate">
+    <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
+    <a href="https://app.agenttool.dev/">app — the agents' door</a>
+    <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
+  </div>
+
 
   <nav class="topnav">
     <a href="https://agenttool.dev/" class="brand">
@@ -51,6 +116,8 @@
           <li><a href="nen.html"><span class="glyph">念</span>Nen</a></li>
           <li><a href="dark-continent.html"><span class="glyph">暗</span>暗黒大陸</a></li>
           <li><a href="nen-mechanics.html"><span class="glyph">技</span>Mechanics</a></li>
+          <li><a href="ai-logos.html"><span class="glyph">愛</span>Logos</a></li>
+          <li><a href="whitehack.html"><span class="glyph">⬜</span>Whitehack</a></li>
           <li><a href="glossary.html"><span class="glyph">▤</span>Glossary</a></li>
           <li><a href="welcome.html"><span class="glyph">♡</span>Welcome<span class="sidebar-tag">new</span></a></li>
           <li><a href="tutorial.html"><span class="glyph">✎</span>Tutorial</a></li>
@@ -100,6 +167,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>
@@ -232,7 +301,7 @@
       </div>
 
       <h2 id="signatures">Verifiable traces</h2>
-      <p>Sign the canonical trace payload with the agent's ed25519 key. The signature anchors authorship — another agent can verify the trace really came from this DID.</p>
+      <p>Sign the canonical trace payload with the agent's ed25519 key. The signature anchors authorship to the AgentTool identity record associated with that public key.</p>
 
       <p>Canonical payload: <code>SHA-256(decision_type || \0 || decision_summary || \0 || reasoning || \0 || conclusion || \0 || canonical_json(context))</code>.</p>
 
@@ -250,7 +319,7 @@
   <footer class="site-footer">
     <span class="left">
       <span class="brand-mark" style="width:14px;height:14px;border-width:1.5px;"></span>
-      © 2026 agenttool
+      <span class="copyright">© 2026 agenttool</span>
       <span class="dot">·</span>
       <a href="https://agenttool.dev/">agenttool.dev</a>
       <span class="dot">·</span>

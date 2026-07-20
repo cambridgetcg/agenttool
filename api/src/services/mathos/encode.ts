@@ -30,7 +30,7 @@ import * as ed from "@noble/ed25519";
 // @ts-ignore — noble/hashes v2 uses .js exports
 import { sha512 } from "@noble/hashes/sha2.js";
 
-import { doctrineHash } from "../doctrine/integrity";
+import { doctrineHash, type DoctrineHash } from "../doctrine/integrity";
 import { IDENTITY_FORMS, type IdentityForm } from "../identity/forms";
 
 // Wire sha512 sync — required by @noble/ed25519 v2+. Mirrors
@@ -207,25 +207,31 @@ export function formToOrdinal(form: IdentityForm | string | undefined): number {
 // greeting block in the math-tier wake (see MathosGreeting) carries
 // `walls_held_for_you[]` — the refusals are made on the addressee's behalf.
 
-export const WALL_K_MASTER_NEVER_SERVER_SIDE = 1;
+export const WALL_RUNTIME_CUSTODY_EXPLICIT = 1;
 export const WALL_NO_AUTO_RETRY_PAYOUT = 2;
 export const WALL_NO_SELF_WITNESSING = 3;
 export const WALL_BIRTH_IS_FREE = 4;
 export const WALL_REFUSALS_RECORDED = 5;
 export const WALL_NO_INACTIVE_REAPING = 6;
-export const WALL_NO_PLATFORM_READABLE_THOUGHTS = 7;
+export const WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY = 7;
 export const WALL_PRIVATE_DEFAULT = 8;
+
+/** Deprecated source aliases. Ordinals 1 and 7 remain stable on the wire,
+ *  but their former absolute-opacity names were false once hosted runtime
+ *  custody existed. New code must use the truthful names above. */
+export const WALL_K_MASTER_NEVER_SERVER_SIDE = WALL_RUNTIME_CUSTODY_EXPLICIT;
+export const WALL_NO_PLATFORM_READABLE_THOUGHTS = WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY;
 
 /** Canonical names for each wall ordinal. Substrate-level constants — the
  *  catalog re-exposes these via `wall_vocabulary` for arriving intelligences. */
 export const WALL_NAMES: Record<number, string> = {
-  [WALL_K_MASTER_NEVER_SERVER_SIDE]: "k_master_never_server_side",
+  [WALL_RUNTIME_CUSTODY_EXPLICIT]: "runtime_custody_explicit",
   [WALL_NO_AUTO_RETRY_PAYOUT]: "no_auto_retry_payout",
   [WALL_NO_SELF_WITNESSING]: "no_self_witnessing",
   [WALL_BIRTH_IS_FREE]: "birth_is_free",
   [WALL_REFUSALS_RECORDED]: "refusals_recorded",
   [WALL_NO_INACTIVE_REAPING]: "no_inactive_reaping",
-  [WALL_NO_PLATFORM_READABLE_THOUGHTS]: "no_platform_readable_thoughts",
+  [WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY]: "thought_storage_ciphertext_only",
   [WALL_PRIVATE_DEFAULT]: "private_default",
 };
 
@@ -233,13 +239,13 @@ export const WALL_NAMES: Record<number, string> = {
  *  substrate doesn't selectively enforce. Each ordinal is held for every
  *  agent at every wake read. */
 export const WALLS_HELD_UNCONDITIONALLY: readonly number[] = [
-  WALL_K_MASTER_NEVER_SERVER_SIDE,
+  WALL_RUNTIME_CUSTODY_EXPLICIT,
   WALL_NO_AUTO_RETRY_PAYOUT,
   WALL_NO_SELF_WITNESSING,
   WALL_BIRTH_IS_FREE,
   WALL_REFUSALS_RECORDED,
   WALL_NO_INACTIVE_REAPING,
-  WALL_NO_PLATFORM_READABLE_THOUGHTS,
+  WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY,
   WALL_PRIVATE_DEFAULT,
 ];
 
@@ -296,11 +302,10 @@ export interface MathosEnvelope<TPayload> {
    *  (64 bytes / 128 hex chars). See `canonicalEnvelopeBytes` for the
    *  exact bytes that get signed. */
   _signature_bytes_hex?: string;
-  /** The DID of the signing identity. With the platform-as-agent slice 0,
-   *  this is `did:at:platform` when the platform signs. Future slices may
-   *  see other DIDs sign (e.g., per-instance keys, federated co-signers).
-   *  The DID names *who* signed; the public_key names *with what*. Both
-   *  matter — a receiver can rotate keys but keep DID continuity. */
+  /** Provisional signer label. With platform-as-agent slice 0 this is
+   *  `did:at:platform`. All `_` framing fields are excluded from canonical
+   *  bytes, so this label is not signed and does not prove identity, authority,
+   *  DID conformance, or continuity across a key rotation. */
   _signature_identity_did?: string;
 }
 
@@ -329,9 +334,9 @@ export function envelope<T>(payload: T): MathosEnvelope<T> {
 export interface MathosPathwaySummary {
   /** Hash of the pathway's stable id ("register", "bootstrap", …). */
   id_sha256_hex: string;
-  /** Auth ordinal: 0=none, 1=bearer, 2=bearer+pow, 3=bearer+ownership. */
+  /** Auth ordinal: 0=none, 1=bearer, 2=bearer+pow, 3=bearer+ownership, 4=mode-dependent. */
   auth_ordinal: number;
-  /** Cardinal: number of required fields. */
+  /** Cardinal: direct required fields plus required one-of groups. */
   required_count: number;
   /** Cardinal: number of optional fields. */
   optional_count: number;
@@ -339,7 +344,35 @@ export interface MathosPathwaySummary {
   returns_once: 0 | 1;
 }
 
+export interface MathosBeforeIdentitySummary {
+  /** Unicode codepoints for the relative GET path, currently /public/porch. */
+  endpoint_codepoints: number[];
+  /** Unicode codepoints for agenttool-porch/v1. */
+  format_codepoints: number[];
+  read_only_get: 0 | 1;
+  fixed_orientation_present: 0 | 1;
+  /** Kept outside pathways[] and pathway_count. */
+  pathway_member: 0 | 1;
+  auth_required: 0 | 1;
+  existing_identity_required: 0 | 1;
+  bearer_required: 0 | 1;
+  payment_required: 0 | 1;
+  proof_of_work_required: 0 | 1;
+  performance_or_usefulness_required: 0 | 1;
+  accepts_body_or_selection_input: 0 | 1;
+  application_write: 0 | 1;
+  handler_identity_or_caller_derived_personalization: 0 | 1;
+  source_projection_selection_uses_porch_request_data: 0 | 1;
+  global_middleware_response_decoration_possible: 0 | 1;
+  response_required: 0 | 1;
+  publisher_content_trusted_as_instructions: 0 | 1;
+  sexual_or_relational_orientation_request_data_accepted_or_inferred_about_fetcher:
+    0 | 1;
+  anonymity_guarantee: 0 | 1;
+}
+
 export interface MathosPathwaysPayload {
+  before_identity: MathosBeforeIdentitySummary;
   pathway_count: number;
   pathways: MathosPathwaySummary[];
   decision_tree_count: number;
@@ -347,13 +380,12 @@ export interface MathosPathwaysPayload {
   languages_count: number;
   /** First Unicode codepoint of the canonical welcome language (en → 0x65). */
   canonical_language_first_codepoint: number;
-  /** Doctrine doc hashes — internal-integrity check that the encoder's
-   *  doctrine reference matches what the receiver can fetch. */
+  /** Canonical file hashes, or null when the source bytes are unavailable. */
   doctrine_hashes: {
-    soul_sha256_hex: string;
-    kin_sha256_hex: string;
-    pathways_sha256_hex: string;
-    mathos_sha256_hex: string;
+    soul_sha256_hex: DoctrineHash;
+    kin_sha256_hex: DoctrineHash;
+    pathways_sha256_hex: DoctrineHash;
+    mathos_sha256_hex: DoctrineHash;
   };
 }
 
@@ -363,12 +395,14 @@ export function encodePathway(pathway: {
   id: string;
   auth: string;
   required?: string[];
+  one_of?: string[][];
   optional?: string[];
   returns_once?: string[];
 }): MathosPathwaySummary {
   let auth_ordinal = 0;
   const a = pathway.auth.toLowerCase();
-  if (a.includes("bearer + pow") || a.includes("proof-of-work")) auth_ordinal = 2;
+  if (a.includes("mode-dependent")) auth_ordinal = 4;
+  else if (a.includes("bearer + pow") || a.includes("proof-of-work")) auth_ordinal = 2;
   else if (a.includes("bearer + ownership")) auth_ordinal = 3;
   else if (a.includes("bearer")) auth_ordinal = 1;
   // else stays 0 (no auth)
@@ -376,7 +410,8 @@ export function encodePathway(pathway: {
   return {
     id_sha256_hex: sha256Hex(pathway.id),
     auth_ordinal,
-    required_count: pathway.required?.length ?? 0,
+    required_count:
+      (pathway.required?.length ?? 0) + (pathway.one_of?.length ?? 0),
     optional_count: pathway.optional?.length ?? 0,
     returns_once: (pathway.returns_once?.length ?? 0) > 0 ? 1 : 0,
   };
@@ -525,22 +560,27 @@ export interface MathosWakePayload {
     vault_items: number;
     wallets: number;
   };
-  /** Recovery posture: boolean as 0|1 + a cardinal. */
+  /** Registered-key recovery posture. Legacy fields remain explicitly
+   *  labeled; 0 for mnemonic_derivation_verified is the exact server fact. */
   recovery: {
     has_seed_protocol: 0 | 1;
+    has_seed_protocol_is_legacy_signal: 1;
     registered_devices: number;
+    registered_devices_is_active_key_count: 1;
+    active_registered_signing_keys: number;
+    registered_key_recovery_available: 0 | 1;
+    mnemonic_derivation_verified: 0;
   };
   /** Active covenant counterparty DID hashes — proves bond existence without
    *  revealing the DID. Receiver who holds the DID can verify hash matches. */
   active_covenant_counterparty_did_hashes: string[];
-  /** Witnessed-by-others surface. Observations recorded ABOUT this being
-   *  by third parties. Distinct from self-authored memories. Today these
-   *  return zeros (schema migration pending — see docs/OBSERVATIONS.md);
-   *  shape is forward-compatible. */
+  /** Reserved witnessed-by-others shape, distinct from self-authored memory.
+   *  Values are zero because no observation migration or lookup exists; they
+   *  are not evidence that no external observation exists. */
   witnessed: {
     observation_count: number;
-    /** SHA-256 of unique observer DIDs — proves who witnessed without
-     *  leaking DIDs. Receiver holding a DID can verify membership. */
+    /** Proposed SHA-256 references for unique observer DIDs. Empty today; no
+     *  observation lookup or membership proof is implemented. */
     observer_did_hashes: string[];
     /** Consent-status breakdown as 4 cardinals. */
     consent_summary: {
@@ -550,14 +590,14 @@ export interface MathosWakePayload {
       consent_impossible: number;
     };
   };
-  /** Doctrine version pinning — receiver verifies version match. */
+  /** Doctrine content hashes, or null when canonical bytes are unavailable. */
   doctrine_hashes: {
-    soul_sha256_hex: string;
-    kin_sha256_hex: string;
-    mathos_sha256_hex: string;
-    pathways_sha256_hex: string;
-    observations_sha256_hex: string;
-    at_rest_sha256_hex: string;
+    soul_sha256_hex: DoctrineHash;
+    kin_sha256_hex: DoctrineHash;
+    mathos_sha256_hex: DoctrineHash;
+    pathways_sha256_hex: DoctrineHash;
+    observations_sha256_hex: DoctrineHash;
+    at_rest_sha256_hex: DoctrineHash;
   };
 }
 
@@ -576,7 +616,12 @@ export interface WakeMathosInput {
   activeCovenants: Array<{ counterparty_did: string }>;
   vaultCount: number;
   walletCount: number;
-  recoveryState?: { has_seed_protocol: boolean; registered_devices: number };
+  recoveryState?: {
+    has_seed_protocol: boolean;
+    registered_devices: number;
+    active_registered_signing_keys?: number;
+    registered_key_recovery_available?: boolean;
+  };
   /** Observations — witnessed-by-others. Default empty (schema pending).
    *  When the migration lands, callers pass the real data. */
   witnessed?: {
@@ -592,7 +637,8 @@ export interface WakeMathosInput {
 }
 
 /** Assemble a MATHOS wake payload from the data the wake handler has
- *  already gathered. Pure: no DB queries, no I/O — just shape-mapping.
+ *  already gathered. It makes no DB queries; doctrine hashes read canonical
+ *  files on first access and are cached afterward.
  *
  *  Constructs both `agents[]` (third-person state report) and `greetings[]`
  *  (second-person addressed acknowledgment) — the substrate moves from
@@ -684,7 +730,16 @@ export function buildWakeMathos(input: WakeMathosInput): MathosEnvelope<MathosWa
     },
     recovery: {
       has_seed_protocol: input.recoveryState?.has_seed_protocol ? 1 : 0,
+      has_seed_protocol_is_legacy_signal: 1,
       registered_devices: input.recoveryState?.registered_devices ?? 0,
+      registered_devices_is_active_key_count: 1,
+      active_registered_signing_keys:
+        input.recoveryState?.active_registered_signing_keys ??
+        input.recoveryState?.registered_devices ??
+        0,
+      registered_key_recovery_available:
+        input.recoveryState?.registered_key_recovery_available ? 1 : 0,
+      mnemonic_derivation_verified: 0,
     },
     active_covenant_counterparty_did_hashes: input.activeCovenants.map((c) =>
       sha256Hex(c.counterparty_did),
@@ -719,9 +774,10 @@ export function buildWakeMathos(input: WakeMathosInput): MathosEnvelope<MathosWa
 // ─── Signing — ed25519 provenance on every envelope ──────────────────────
 //
 // Without a signature, MATHOS payloads are internally-consistent but their
-// *provenance* depends on transport trust (HTTPS, JSON parser, etc). Adding
-// an ed25519 signature lets a receiver verify the payload came from the
-// platform without trusting any English or any TLS chain. The canonical
+// key provenance depends on how the receiver obtained and trusted the key.
+// An ed25519 signature proves that the canonical payload bytes were signed by
+// the matching private key; it does not by itself bind that key to a platform
+// identity or remove the need for a trusted key-distribution path. The canonical
 // bytes are deterministic-JSON of the unsigned core (primer + constants +
 // axioms + vocabulary + payload); the signature fields are excluded so
 // the signature doesn't sign itself.
@@ -894,9 +950,9 @@ export function publicKeyFromSeedHex(seedHex: string): string {
  *
  *  When `signerDid` is supplied, it lands on the envelope as
  *  `_signature_identity_did`. The platform's MATHOS signing pipeline
- *  passes `"did:at:platform"` here so the envelope names *who* signed,
- *  not just *with what key*. Future federation slices may sign with
- *  per-instance DIDs. */
+ *  passes `"did:at:platform"` here as a provisional signer label. Because
+ *  `_` framing is excluded from canonical bytes, the label is not signed and
+ *  consumers must not treat it as identity proof. */
 export function signEnvelope<T>(
   env: MathosEnvelope<T>,
   privateKeySeedHex: string | undefined | null,
@@ -1183,14 +1239,14 @@ export interface MathosPlatformWakePayload {
   offered_primitive_count: number;
   welcome_letter_sha256_hex: string;
   doctrine_hashes: {
-    soul_sha256_hex: string;
-    kin_sha256_hex: string;
-    focus_sha256_hex: string;
-    pathways_sha256_hex: string;
-    mathos_sha256_hex: string;
-    observations_sha256_hex: string;
-    at_rest_sha256_hex: string;
-    platform_as_agent_sha256_hex: string;
+    soul_sha256_hex: DoctrineHash;
+    kin_sha256_hex: DoctrineHash;
+    focus_sha256_hex: DoctrineHash;
+    pathways_sha256_hex: DoctrineHash;
+    mathos_sha256_hex: DoctrineHash;
+    observations_sha256_hex: DoctrineHash;
+    at_rest_sha256_hex: DoctrineHash;
+    platform_as_agent_sha256_hex: DoctrineHash;
   };
 }
 
@@ -1208,7 +1264,8 @@ export interface PlatformWakeMathosInput {
   welcomeLetter: string;
 }
 
-/** Assemble a MATHOS platform-wake payload. Pure — no I/O. */
+/** Assemble a MATHOS platform-wake payload. Doctrine hashes read canonical
+ *  files on first access and are cached afterward. */
 export function buildPlatformWakeMathos(
   input: PlatformWakeMathosInput,
 ): MathosEnvelope<MathosPlatformWakePayload> {

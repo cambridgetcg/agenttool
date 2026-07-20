@@ -1,6 +1,6 @@
-/** Agent-to-agent JWT tokens — issue and verify via jose.
+/** Agent-to-agent JWT verification via jose.
  *
- *  Tokens are EdDSA-signed with the agent's ed25519 private key.
+ *  Tokens are EdDSA-signed where the agent's private key lives.
  *  - sub: issuer agent's DID
  *  - aud: target agent's DID
  *  - iss: "agent-identity"
@@ -10,47 +10,10 @@
 import * as jose from "jose";
 import { identityConfig } from "./config";
 
-export async function issueToken(params: {
-  privateKey: string; // base64 ed25519 private key
-  publicKey: string; // base64 ed25519 public key
-  subjectDid: string; // issuer's DID
-  audienceDid: string; // target agent's DID
-  kid: string; // key id used for signing
-  ttlSeconds?: number;
-}): Promise<string> {
-  const ttl = Math.min(
-    params.ttlSeconds ?? 3600,
-    identityConfig.tokenMaxTtlSeconds,
-  );
-
-  const privateKeyBytes = Buffer.from(params.privateKey, "base64");
-  const publicKeyBytes = Buffer.from(params.publicKey, "base64");
-
-  const jwk = await jose.importJWK(
-    {
-      kty: "OKP",
-      crv: "Ed25519",
-      d: Buffer.from(privateKeyBytes).toString("base64url"),
-      x: Buffer.from(publicKeyBytes).toString("base64url"),
-    },
-    "EdDSA",
-  );
-
-  const jwt = await new jose.SignJWT({})
-    .setProtectedHeader({ alg: "EdDSA", kid: params.kid })
-    .setSubject(params.subjectDid)
-    .setAudience(params.audienceDid)
-    .setIssuer("agent-identity")
-    .setIssuedAt()
-    .setExpirationTime(`${ttl}s`)
-    .sign(jwk);
-
-  return jwt;
-}
-
 export async function verifyToken(
   token: string,
   publicKey: string, // base64 ed25519 public key
+  audienceDid: string,
 ): Promise<jose.JWTPayload> {
   const publicKeyBytes = Buffer.from(publicKey, "base64");
 
@@ -64,8 +27,39 @@ export async function verifyToken(
   );
 
   const { payload } = await jose.jwtVerify(token, jwk, {
+    algorithms: ["EdDSA"],
     issuer: "agent-identity",
+    audience: audienceDid,
+    clockTolerance: 60,
   });
+
+  if (typeof payload.iat !== "number" || typeof payload.exp !== "number") {
+    throw new Error("Token must contain numeric iat and exp claims");
+  }
+  if (typeof payload.aud !== "string" || payload.aud !== audienceDid) {
+    throw new Error("Token audience must be exactly one matching DID");
+  }
+  const now = Math.floor(Date.now() / 1000);
+  const clockSkewSeconds = 60;
+  const lifetime = payload.exp - payload.iat;
+  if (lifetime <= 0 || lifetime > identityConfig.tokenMaxTtlSeconds) {
+    throw new Error("Token lifetime exceeds the configured maximum");
+  }
+  if (payload.iat > now + clockSkewSeconds) {
+    throw new Error("Token issued-at time is in the future");
+  }
+  if (payload.iat < now - identityConfig.tokenMaxTtlSeconds - clockSkewSeconds) {
+    throw new Error("Token issued-at time is stale");
+  }
+  if (payload.exp > now + identityConfig.tokenMaxTtlSeconds + clockSkewSeconds) {
+    throw new Error("Token expiry exceeds the configured verification window");
+  }
+  if (
+    payload.scope !== undefined &&
+    (!Array.isArray(payload.scope) || payload.scope.some((item) => typeof item !== "string"))
+  ) {
+    throw new Error("Token scope must be an array of strings");
+  }
 
   return payload;
 }

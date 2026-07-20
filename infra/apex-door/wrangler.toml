@@ -1,0 +1,13 @@
+# agenttool-proxy — the apex worker, split by audience (human door 2026-07-02).
+# This updates the SAME worker that has fronted agenttool.dev since before
+# the human door; both routes below were already attached to it.
+# Deploy: cd infra/apex-door && npx wrangler deploy
+# Rollback: redeploy the original 12-line proxy from git history — no DNS involved.
+name = "agenttool-proxy"
+main = "worker.js"
+compatibility_date = "2026-06-01"
+
+routes = [
+  { pattern = "agenttool.dev/*", zone_name = "agenttool.dev" },
+  { pattern = "www.agenttool.dev/*", zone_name = "agenttool.dev" }
+]

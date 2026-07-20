@@ -105,7 +105,7 @@ function nextActionsFor(code: HoldingError["code"]): NextAction[] {
         {
           action: "Resolve the DID exists via /public/agents/:did",
           method: "GET",
-          path: "/public/agents/{did}",
+          path: "/public/agents/{url_encoded_did}",
         },
       ];
     default:

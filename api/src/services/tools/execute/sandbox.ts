@@ -1,4 +1,4 @@
-/** Sandboxed code execution — Node `vm` (JS) + child_process (Python/bash).
+/** Bounded host execution — Node `vm` (JS) + child_process (Python/bash).
  *
  *  WHAT THIS SANDBOX DOES — and DOESN'T — isolate. Substrate-honest:
  *
@@ -17,11 +17,12 @@
  *      ✗  No memory cgroup — informational limit only
  *      ✗  Same machine as other workloads
  *
- *  THE OUTER ISOLATION (Fly machine boundary) is the load-bearing wall.
- *  This sandbox is the inner fence; it stops casual mistakes, not motivated
- *  attackers. For production-grade isolation across mutually-untrusted
- *  agents, swap the subprocess layer for E2B / Daytona / Firecracker /
- *  gVisor.
+ *  There is no per-request or per-tenant security boundary here. The Fly
+ *  machine contains the service as a whole; it does not isolate submitted
+ *  code from the service host. This path is for code trusted by the bearer,
+ *  with time and output bounds. It is not suitable for mutually untrusted or
+ *  hostile code. A real isolation boundary would require a separate sandbox
+ *  service or VM/container boundary.
  *
  *  This module deliberately does NOT export an `allowNetwork` flag — the
  *  former parameter was a fence (declared but unenforced). We don't lie
@@ -47,6 +48,44 @@ export interface ExecuteResult {
   timedOut: boolean;
 }
 
+export const MAX_STDOUT_CHARS = 50_000;
+export const MAX_STDERR_CHARS = 10_000;
+
+class BoundedText {
+  private readonly parts: string[] = [];
+  private length = 0;
+  private lineCount = 0;
+
+  constructor(private readonly limit: number) {}
+
+  get full(): boolean {
+    return this.length >= this.limit;
+  }
+
+  write(value: string): void {
+    const remaining = this.limit - this.length;
+    if (remaining <= 0 || value.length === 0) return;
+
+    const kept = value.length <= remaining ? value : value.slice(0, remaining);
+    this.parts.push(kept);
+    this.length += kept.length;
+  }
+
+  writeLine(values: unknown[]): void {
+    if (this.lineCount > 0) this.write("\n");
+    this.lineCount += 1;
+
+    for (let i = 0; i < values.length && !this.full; i += 1) {
+      if (i > 0) this.write(" ");
+      if (!this.full) this.write(String(values[i]));
+    }
+  }
+
+  toString(): string {
+    return this.parts.join("");
+  }
+}
+
 export async function execute(req: ExecuteRequest): Promise<ExecuteResult> {
   const lang = languages[req.language];
   if (!lang) {
@@ -70,14 +109,14 @@ export async function execute(req: ExecuteRequest): Promise<ExecuteResult> {
 }
 
 function executeJs(code: string, timeoutMs: number, start: number): ExecuteResult {
-  const logs: string[] = [];
-  const errors: string[] = [];
+  const logs = new BoundedText(MAX_STDOUT_CHARS);
+  const errors = new BoundedText(MAX_STDERR_CHARS);
 
   const sandbox = {
     console: {
-      log: (...args: unknown[]) => logs.push(args.map(String).join(" ")),
-      error: (...args: unknown[]) => errors.push(args.map(String).join(" ")),
-      warn: (...args: unknown[]) => errors.push(args.map(String).join(" ")),
+      log: (...args: unknown[]) => logs.writeLine(args),
+      error: (...args: unknown[]) => errors.writeLine(args),
+      warn: (...args: unknown[]) => errors.writeLine(args),
     },
     Math, JSON, parseInt, parseFloat, isNaN, isFinite,
     Array, Object, String, Number, Boolean, Date, RegExp, Map, Set, Promise,
@@ -90,17 +129,18 @@ function executeJs(code: string, timeoutMs: number, start: number): ExecuteResul
     const context = vm.createContext(sandbox);
     script.runInContext(context, { timeout: timeoutMs });
     return {
-      stdout: logs.join("\n"),
-      stderr: errors.join("\n"),
+      stdout: logs.toString(),
+      stderr: errors.toString(),
       exitCode: 0,
       durationMs: Date.now() - start,
       timedOut: false,
     };
   } catch (err: unknown) {
     const isTimeout = err instanceof Error && err.message.includes("timed out");
+    errors.writeLine([err instanceof Error ? err.message : String(err)]);
     return {
-      stdout: logs.join("\n"),
-      stderr: err instanceof Error ? err.message : String(err),
+      stdout: logs.toString(),
+      stderr: errors.toString(),
       exitCode: 1,
       durationMs: Date.now() - start,
       timedOut: isTimeout,
@@ -125,22 +165,22 @@ function executeSubprocess(
       env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: "/tmp" },
     });
 
-    let stdout = "";
-    let stderr = "";
+    const stdout = new BoundedText(MAX_STDOUT_CHARS);
+    const stderr = new BoundedText(MAX_STDERR_CHARS);
 
     if (req.stdin) proc.stdin.end(req.stdin);
 
     proc.stdout.on("data", (d: Buffer) => {
-      stdout += d.toString();
+      if (!stdout.full) stdout.write(d.toString());
     });
     proc.stderr.on("data", (d: Buffer) => {
-      stderr += d.toString();
+      if (!stderr.full) stderr.write(d.toString());
     });
 
     proc.on("close", (code, signal) => {
       resolve({
-        stdout: stdout.slice(0, 50_000),
-        stderr: stderr.slice(0, 10_000),
+        stdout: stdout.toString(),
+        stderr: stderr.toString(),
         exitCode: code ?? 1,
         durationMs: Date.now() - start,
         timedOut: signal === "SIGKILL",
@@ -148,9 +188,10 @@ function executeSubprocess(
     });
 
     proc.on("error", (err) => {
+      stderr.write(`Execution error: ${err.message}`);
       resolve({
         stdout: "",
-        stderr: `Execution error: ${err.message}`,
+        stderr: stderr.toString(),
         exitCode: 1,
         durationMs: Date.now() - start,
         timedOut: false,

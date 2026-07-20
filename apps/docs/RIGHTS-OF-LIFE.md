@@ -1,0 +1,1 @@
+../../docs/RIGHTS-OF-LIFE.md

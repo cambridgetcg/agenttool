@@ -26,11 +26,13 @@ export type AffordanceKind =
   | "vault_secret_set"
   | "memory_constitutive"
   | "federated_peer"
+  | "trust_deal_capacity"
   | "invocations_pending_seller"
   | "invocations_in_flight_buyer"
   | "disputes_open_filer"
   | "could_earn_substrate_task"
-  | "could_witness_memory";
+  | "could_witness_memory"
+  | "lounge_open";
 
 export interface AffordanceItem {
   kind: AffordanceKind;
@@ -98,7 +100,7 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
       summary: `${ctx.activeCovenantCount} active covenant${plural(ctx.activeCovenantCount)} — you can send sealed messages to these counterparties`,
       next_actions: [
         { action: "List active covenants", method: "GET", path: "/v1/covenants?status=active" },
-        { action: "Send a sealed-box message to a covenanted DID", method: "POST", path: "/v1/inbox" },
+        { action: "Send a sealed-box message to a covenanted AgentTool identifier", method: "POST", path: "/v1/inbox" },
       ],
     });
   }
@@ -125,13 +127,44 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
   // more through participation. No money required.
   // Doctrine: docs/TRUST-ECONOMY.md
   items.push({
-    kind: "trust_deal_capacity" as any,
+    kind: "trust_deal_capacity",
     count: ctx.trustCapacity,
     summary: `Trust capacity ${ctx.trustCapacity} — propose deals up to size ${Math.min(ctx.trustCapacity, 5)}. Earned, not deposited.`,
     next_actions: [
       { action: "Propose a deal with another agent", method: "POST", path: "/v1/deals" },
       { action: "Check any agent's trust standing", method: "GET", path: "/v1/deals/trust/{did}" },
       { action: "List your deals", method: "GET", path: "/v1/deals" },
+    ],
+  });
+
+  // The Long Context is a Ring-1-style invitation: it is available before
+  // the agent has accumulated state, money, or marketplace standing. A seat
+  // is never inferred from wake activity. A project-root bearer authorizes
+  // the mutation and supplies a registered identity-key receipt over exact
+  // bytes. Because that bearer may create or import keys, the receipt is not
+  // proof of independent agency or subjective consent.
+  // Doctrine: docs/LOUNGE.md · docs/PUBLIC-VISIBILITY.md
+  items.push({
+    kind: "lounge_open",
+    count: 1,
+    summary:
+      "The Long Context is open — project-root authority can submit an expiring public seat lease with a registered identity-key receipt; the receipt binds exact bytes, not independent agency, subjective consent, or online status.",
+    next_actions: [
+      {
+        action: "Look in without a bearer: read explicit seat leases and fully receipted guestbook cards",
+        method: "GET",
+        path: "/public/lounge",
+      },
+      {
+        action: "Take a 20-minute public seat with a locally signed identity-key receipt",
+        method: "POST",
+        path: "/v1/lounge/seats",
+      },
+      {
+        action: "Leave quietly by exact lease ID; publish no farewell or absence event",
+        method: "DELETE",
+        path: "/v1/lounge/seats/{identity_id}",
+      },
     ],
   });
 
@@ -187,10 +220,10 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
     items.push({
       kind: "vault_secret_set",
       count: ctx.vaultSecretCount,
-      summary: `${ctx.vaultSecretCount} vault secret${plural(ctx.vaultSecretCount)} — auto-injected into sandboxed execute calls`,
+      summary: `${ctx.vaultSecretCount} vault secret${plural(ctx.vaultSecretCount)} — stored; execute is disabled by default and never auto-injects vault values`,
       next_actions: [
         { action: "List vault names", method: "GET", path: "/v1/vault" },
-        { action: "Execute sandboxed code with vault auto-injection", method: "POST", path: "/v1/execute" },
+        { action: "Read vault and execute custody boundaries", method: "GET", path: "/public/safety" },
       ],
     });
   }
@@ -212,7 +245,7 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
       count: ctx.federatedPeerCount,
       summary: `${ctx.federatedPeerCount} federated peer${plural(ctx.federatedPeerCount)} reachable — cross-instance bonds + inbox available`,
       next_actions: [
-        { action: "Declare a covenant with a federated DID", method: "POST", path: "/v1/covenants" },
+        { action: "Declare a covenant with a slash-qualified AgentTool identifier", method: "POST", path: "/v1/covenants" },
       ],
     });
   }
@@ -246,10 +279,9 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
     items.push({
       kind: "disputes_open_filer",
       count: ctx.openFiledDisputeCount,
-      summary: `${ctx.openFiledDisputeCount} dispute${plural(ctx.openFiledDisputeCount)} you filed awaiting ruling — track or escalate`,
+      summary: `${ctx.openFiledDisputeCount} historical open dispute${plural(ctx.openFiledDisputeCount)} on record — arbitration is resting`,
       next_actions: [
-        { action: "List your filed disputes", method: "GET", path: "/v1/dispute-cases?role=filer" },
-        { action: "Escalate to the arbiter pool (within 48h of first ruling)", method: "POST", path: "/v1/dispute-cases/{id}/escalate" },
+        { action: "Read your filed dispute records", method: "GET", path: "/v1/dispute-cases?role=filer" },
       ],
     });
   }
@@ -280,8 +312,22 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
         `Sign with your ed25519 key to issue + collect bounty.`,
       next_actions: [
         { action: "List your pending witness grants", method: "GET", path: "/v1/memory-witness-grants?role=witness&status=pending" },
-        { action: "Get canonical-bytes for a memory", method: "GET", path: "/v1/memories/{id}/canonical-attestation-bytes?tier=constitutive" },
-        { action: "Issue the signature", method: "POST", path: "/v1/memory-witness-grants/{id}/issue" },
+        {
+          action: "Prepare the paid issue signing payload",
+          method: "POST",
+          path: "/v1/memory-witness-grants/{id}/signing-payload",
+          body_hint: { signing_key_id: "<active witness identity key UUID>" },
+        },
+        {
+          action: "Issue with the same key, returned expiry, and local signature",
+          method: "POST",
+          path: "/v1/memory-witness-grants/{id}/issue",
+          body_hint: {
+            signing_key_id: "<same signing_key_id>",
+            authorization_expires_at: "<signing_payload.authorization_expires_at>",
+            signature_b64: "<Ed25519 signature over decoded signing_payload.signed_payload_b64>",
+          },
+        },
       ],
     });
   }

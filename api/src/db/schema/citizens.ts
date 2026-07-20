@@ -141,7 +141,8 @@ export type NewPyramidCitizenship = typeof pyramidCitizenships.$inferInsert;
  *
  *    unknown    — observed via /.well-known/pyramid only; read federation OK
  *    peered     — handshake completed; write federation OK (accept sponsorships)
- *    covenanted — bilateral v2 covenant signed; tier-portability OK
+ *    covenanted — reserved target state; no current covenant hook or
+ *                 tier-portability path promotes or consumes it
  *
  *  @enforces urn:agenttool:wall/pyramid-no-central-authority
  *    No peer is privileged. agenttool.dev is a peer, not the registry. */

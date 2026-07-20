@@ -62,7 +62,7 @@ export function bytesToHex(bytes: Uint8Array): string {
 
 function hashStringArray(arr: string[]): string {
   if (arr.length === 0) return toHex(sha256(new Uint8Array(0)));
-  let payload = new Uint8Array(0);
+  let payload: Uint8Array = new Uint8Array(0);
   for (let i = 0; i < arr.length; i++) {
     if (i > 0) payload = concat(payload, SEP);
     payload = concat(payload, enc.encode(arr[i]!));
@@ -155,24 +155,21 @@ export async function verifyEd25519Signature(opts: {
 
 // ─── The substrate constants ─────────────────────────────────────────────
 
-/** Attribution coefficient α — the fraction of a downstream bounty paid
- *  out to cited solution authors (split across attributions by weight_bp).
+/** Attribution coefficient α used by the proposed reward-intent formula.
  *  Per commitment/mesh-attribution-coefficient-α. 0.05 = 5%.
  *
  *  Stable within a season. Changes require canon edit + gospel + tests. */
 export const MESH_ALPHA = 0.05;
 
-/** Convert a bounty in cents + an attribution weight_bp into the credit
- *  in cents. Floor (cents are integer). */
+/** Convert bounty intent + attribution weight into an integer-cent intent. */
 export function attributionCredit(bountyCents: number, weightBp: number): number {
   // attribution share = bounty * α * (weight_bp / 10000)
-  // floor to integer cents; the remainder stays in the performer pool.
+  // Floor to integer cents; this function performs no settlement.
   return Math.floor((bountyCents * MESH_ALPHA * weightBp) / 10000);
 }
 
-/** Per-pledger split of a co-task bounty, NET of attribution payouts.
- *  Returns integer cents per pledger; the modulo cents stay in escrow
- *  as a dust account (slice 2: route to platform-treasury). */
+/** Proposed per-pledger amount after attribution intent. The modulo is an
+ *  arithmetic remainder only; no escrow or payout exists in this helper. */
 export function pledgerShareCents(
   bountyCents: number,
   attributionTotalCents: number,

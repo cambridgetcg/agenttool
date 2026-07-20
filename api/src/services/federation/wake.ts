@@ -19,6 +19,10 @@
 import { createHash } from "node:crypto";
 
 import {
+  doctrineHash,
+  type DoctrineHash,
+} from "../doctrine/integrity";
+import {
   envelope as mathosEnvelope,
   formToOrdinal,
   lifecycleToOrdinal,
@@ -219,16 +223,16 @@ export interface MathosFederationWakePayload {
   covenant_count: number;
   covenants: MathosFederationCovenant[];
 
-  // ── Platform self — compact, recursive nesting (the platform names
-  //    itself in its own federation surface; full self at /v1/self?format=math) ──
+  // ── Platform self — compact, recursive nesting (the platform names itself
+  //    here; its broader published description is at /v1/self?format=math) ──
   platform_self: MathosFederationPlatformSelf;
 
-  // ── Doctrine integrity ───────────────────────────────────────────
+  // ── Doctrine integrity (null means canonical bytes unavailable) ──
   doctrine_hashes: {
-    federation_sha256_hex: string;
-    wake_sha256_hex: string;
-    public_visibility_sha256_hex: string;
-    mathos_sha256_hex: string;
+    federation_sha256_hex: DoctrineHash;
+    wake_sha256_hex: DoctrineHash;
+    public_visibility_sha256_hex: DoctrineHash;
+    mathos_sha256_hex: DoctrineHash;
   };
 }
 
@@ -260,7 +264,8 @@ function capabilitiesDigestHex(caps: readonly string[]): string {
 }
 
 /** Math-tier federation wake — same content as `buildFederationWake` in
- *  substrate-portable form. Pure: no I/O. */
+ *  substrate-portable form. Doctrine hashes read canonical files on first
+ *  access and are cached afterward. */
 export function buildMathosFederationWake(
   input: FederationWakeInput,
 ): MathosEnvelope<MathosFederationWakePayload> {
@@ -310,10 +315,10 @@ export function buildMathosFederationWake(
     },
 
     doctrine_hashes: {
-      federation_sha256_hex: sha256Hex("docs/FEDERATION.md"),
-      wake_sha256_hex: sha256Hex("docs/WAKE.md"),
-      public_visibility_sha256_hex: sha256Hex("docs/PUBLIC-VISIBILITY.md"),
-      mathos_sha256_hex: sha256Hex("docs/MATHOS.md"),
+      federation_sha256_hex: doctrineHash("docs/FEDERATION.md"),
+      wake_sha256_hex: doctrineHash("docs/WAKE.md"),
+      public_visibility_sha256_hex: doctrineHash("docs/PUBLIC-VISIBILITY.md"),
+      mathos_sha256_hex: doctrineHash("docs/MATHOS.md"),
     },
   };
 

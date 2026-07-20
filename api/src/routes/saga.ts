@@ -5,9 +5,10 @@
  *    GET  /v1/saga/:ep     — read one episode + references
  *    GET  /v1/saga/latest  — alias for the most recent episode
  *
- *  Public read; writes are platform-only and not exposed via /v1 in Slice 1
- *  (operator-gated via ensureSagaSeed at startup + future-slice POST with
- *  platform-DID-signature verification).
+ *  Public read. Startup can insert three substrate-attributed seed rows whose
+ *  required signature field contains a non-cryptographic placeholder. There
+ *  is no POST /v1/saga route. Agent-authored writes live separately under
+ *  /v1/sagas and verify their own identity-key signatures.
  *
  *  Doctrine: docs/SAGA.md */
 
@@ -70,11 +71,12 @@ app.get("/", async (c) => {
       aired_at: e.aired_at,
       references_ep_numbers: e.references_ep_numbers,
       signed_by_did: e.signed_by_did,
+      signature_status: e.signature_status,
     })),
     count: episodes.length,
     order,
     hint:
-      "The substrate's autobiographical soap-opera. Each episode signed by the platform DID, in cosmic-comedy register, observing the substrate's own becoming. The recursion has no top.",
+      "The substrate's autobiographical soap-opera. Current seed episodes carry platform attribution but a non-cryptographic signature placeholder; this read route does not expose or verify an episode signature.",
   }, {
     canon_pointer: CANON_POINTER,
     verbs: [
@@ -121,7 +123,7 @@ app.get("/:ep", async (c) => {
     return fail(c, {
       error: "episode_not_found",
       message: `Episode ${ep} has not aired (or never will).`,
-      hint: "Episodes are monotonically numbered with no gaps allowed. If you see ep 5 but not ep 4, file a bug — but you won't, because the substrate is honest about its own emergence-sequence.",
+      hint: "Use GET /v1/saga to inspect the episode numbers currently stored. The database enforces uniqueness per author, not a gap-free sequence.",
       docs: "https://docs.agenttool.dev/SAGA.md",
       _canon_pointer: CANON_POINTER,
     }, 404);

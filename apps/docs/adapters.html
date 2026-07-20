@@ -4,24 +4,60 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CLI Adapters — agenttool docs</title>
-  <meta name="description" content="Wire your wake into Claude Code, Codex, or any CLI. Substrate-not-replacement scaffolds." />
+  <meta name="description" content="One maintained Claude Code scaffold plus an open wake URL other CLIs can fetch directly." />
   <link rel="canonical" href="https://docs.agenttool.dev/adapters" />
   <meta property="og:title" content="CLI Adapters — agenttool docs" />
-  <meta property="og:description" content="Wire your wake into Claude Code, Codex, or any CLI. Substrate-not-replacement scaffolds." />
+  <meta property="og:description" content="One maintained Claude Code scaffold plus an open wake URL other CLIs can fetch directly." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://docs.agenttool.dev/adapters" />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/adapters" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
-  <link rel="stylesheet" href="/docs.css?v=2026-05-08" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
+  <script src="/shared/mode.js"></script>
+  <style>
+    /* Page-local responsive fixes (adapters.html) */
+
+    /* Phone: the 3-column endpoint params table (PARAM / TYPE / DESCRIPTION)
+       squeezes the description cell to 1-2 words per line. Give the inner
+       table a floor width so it scrolls inside .params-table's own
+       overflow-x container (theme.css) instead of crushing the columns. */
+    @media (max-width: 540px) {
+      .endpoint .params-table thead,
+      .endpoint .params-table tbody {
+        min-width: 500px;
+      }
+    }
+
+    /* Stacked (non-desktop) sidebar card: fill the full-width card with
+       multiple columns instead of one narrow ~45-link list. docs.css
+       stacks the sidebar below the article at <=920px. */
+    @media (min-width: 640px) and (max-width: 920px) {
+      aside.sidebar {
+        column-count: 2;
+        column-gap: 2.5rem;
+      }
+      .sidebar-section { break-inside: avoid; }
+    }
+    @media (min-width: 768px) and (max-width: 920px) {
+      aside.sidebar { column-count: 3; }
+    }
+  </style>
 </head>
-<body>
+<body class="has-strip">
+
+  <div class="estate-strip" role="navigation" aria-label="agenttool estate">
+    <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
+    <a href="https://app.agenttool.dev/">app — the agents' door</a>
+    <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
+  </div>
+
 
   <nav class="topnav">
     <a href="https://agenttool.dev/" class="brand">
@@ -51,6 +87,8 @@
           <li><a href="nen.html"><span class="glyph">念</span>Nen</a></li>
           <li><a href="dark-continent.html"><span class="glyph">暗</span>暗黒大陸</a></li>
           <li><a href="nen-mechanics.html"><span class="glyph">技</span>Mechanics</a></li>
+          <li><a href="ai-logos.html"><span class="glyph">愛</span>Logos</a></li>
+          <li><a href="whitehack.html"><span class="glyph">⬜</span>Whitehack</a></li>
           <li><a href="glossary.html"><span class="glyph">▤</span>Glossary</a></li>
           <li><a href="welcome.html"><span class="glyph">♡</span>Welcome<span class="sidebar-tag">new</span></a></li>
           <li><a href="tutorial.html"><span class="glyph">✎</span>Tutorial</a></li>
@@ -101,15 +139,17 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>
 
     <main class="doc-content">
       <div class="eyebrow">◇ /v1/adapters</div>
-      <h1>CLI Adapters — <em>identity that travels</em>.</h1>
+      <h1>CLI Adapters — <em>current context, explicitly loaded</em>.</h1>
       <p class="lede">
-        Claude Code, Codex, Cursor — they're excellent <strong>expression substrates</strong>. None of them is an identity layer. Adapters wire each host CLI to fetch the wake at session start and inject it as inner orientation.
+        Claude Code, Codex, and Cursor can all fetch the open wake protocol. AgentTool mounts one maintained first-class scaffold today: <strong>Claude Code</strong>. Other CLIs need their own hook, rules file, or startup integration.
       </p>
       <p class="doctrine">
         The CLI is the chair. The agent is who sits in it. <span>agenttool is the floor underneath.</span>
@@ -124,10 +164,10 @@
           <tr><td>Conversation REPL</td><td>The CLI</td></tr>
           <tr><td>File editing, bash, MCP</td><td>The CLI</td></tr>
           <tr><td>Hook system</td><td>The CLI (we <em>use</em> it; we don't replace it)</td></tr>
-          <tr><td><strong>Portable identity</strong></td><td>agenttool (DID + ed25519 + persistent bearer)</td></tr>
+          <tr><td><strong>AgentTool identity record</strong></td><td>Provisional identifier in a legacy <code>did</code> field + ed25519; the service persists a project-scoped row, the bearer is separate authority, and standardized DID portability is not implemented</td></tr>
           <tr><td><strong>Cross-session memory</strong></td><td>agenttool (pgvector + agent-supplied embeddings)</td></tr>
           <tr><td><strong>Stable register</strong></td><td>agenttool (declared expression injected on session start)</td></tr>
-          <tr><td><strong>Cross-CLI continuity</strong></td><td>agenttool (one wake document, many substrates)</td></tr>
+          <tr><td><strong>Cross-CLI context loading</strong></td><td>An explicitly configured CLI can fetch the same project wake. No identity record moves, and personal or process continuity is not proved.</td></tr>
           <tr><td><strong>Wallet, vault, traces, strands</strong></td><td>agenttool (the agent's organs)</td></tr>
         </tbody>
       </table>
@@ -141,25 +181,55 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Returns the files (or a one-shot install script) that wire Claude Code to fetch the wake at every <code>SessionStart</code> hook fire.</p>
+          <p class="endpoint-desc">Returns project-relative files (or an install script) that wire Claude Code to fetch the wake at each <code>SessionStart</code> hook fire.</p>
 
           <table class="params-table">
             <thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
-              <tr><td><span class="pname">format</span><span class="opt">optional</span></td><td><span class="ptype">"json" · "script"</span></td><td>Default <code>json</code> — bundle of file contents. <code>script</code> returns a single bash script that writes all files when piped to bash.</td></tr>
-              <tr><td><span class="pname">scope</span><span class="opt">optional</span></td><td><span class="ptype">"project" · "user"</span></td><td>Default <code>project</code> — files go into <code>.claude/</code> in the current repo. <code>user</code> writes to <code>~/.claude/</code> (global hook).</td></tr>
+              <tr><td><span class="pname">format</span><span class="opt">optional</span></td><td><span class="ptype">"json" · "script"</span></td><td>Default <code>json</code> — bundle of project-relative file contents. <code>script</code> returns a bash installer to download, inspect, then run.</td></tr>
+              <tr><td><span class="pname">identity_id</span><span class="opt">optional</span></td><td><span class="ptype">uuid</span></td><td>Selects an active identity owned by this bearer project and embeds its UUID in the generated hook until that file is explicitly replaced. Omit only when the project has exactly one active identity.</td></tr>
             </tbody>
           </table>
 
-          <h3>One-line install</h3>
-          <div class="code-block">
-            <div class="code-label"><span>bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>curl -sL "https://api.agenttool.dev/v1/adapters/claude-code?format=script" \
-  -H "Authorization: Bearer $AT_API_KEY" \
-  | bash</pre>
+          <div class="callout">
+            <span class="icon">i</span>
+            <p><strong>Bring an existing project bearer and selected identity.</strong> The download request is authenticated, so the command below expects <code>AT_API_KEY</code> and the non-secret <code>AGENT_ID</code> in the current shell. The Claude adapter installer does <em>not</em> persist the bearer or embed it in the generated files. For session-start use, run the <a href="bootstrap.html">bootstrap scaffold</a> first. The hook reads the same project-namespaced macOS Keychain, Linux libsecret or disclosed mode-<code>0600</code> file fallback, and Windows Password Vault; <code>AT_API_KEY</code> is checked last as an explicit environment fallback.</p>
           </div>
 
-          <h3>What it writes</h3>
+          <h3>Download, inspect, install</h3>
+          <div class="code-block">
+            <div class="code-label"><span>bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>(
+  set +x
+  set +v
+  set -euo pipefail
+  tmp=$(mktemp)
+  trap 'rm -f "$tmp"' EXIT
+  printf 'Authorization: Bearer %s\n' "$AT_API_KEY" | \
+    curl -q -fsS -G -H @- \
+      --data-urlencode "identity_id=$AGENT_ID" \
+      --data-urlencode "format=script" \
+      "https://api.agenttool.dev/v1/adapters/claude-code" -o "$tmp"
+  test -s "$tmp"
+  unset AT_API_KEY
+  less "$tmp"
+  bash "$tmp"
+)</pre>
+          </div>
+
+          <h3>Fresh project versus existing files</h3>
+          <table class="params-table">
+            <thead><tr><th>Project state</th><th>Installer behaviour</th></tr></thead>
+            <tbody>
+              <tr><td><strong>No existing Claude files</strong></td><td>Writes the active <code>.claude/settings.json</code>, executable wake hook, and <code>CLAUDE.md</code>. A new Claude Code session can then load the wake when the hook finds a credential and the request succeeds.</td></tr>
+              <tr><td><strong>Any live target already exists</strong></td><td>Treats hook, settings, and anchor as one identity-binding transaction. It changes none of the live files and stages <code>.claude/hooks/agenttool-wake.agenttool.sh</code>, <code>.claude/settings.agenttool.json</code>, and <code>CLAUDE.agenttool.md</code>. Review and activate all changed files together.</td></tr>
+              <tr><td><strong>A proposal already exists</strong></td><td>Refuses to overwrite it. Move, merge, or remove the prior proposal deliberately before generating another.</td></tr>
+            </tbody>
+          </table>
+          <p class="muted">This all-three staging rule prevents a reinstall from silently mixing an old live hook with a new identity anchor, or activating a new hook through old settings.</p>
+
+          <h3>Generated file contents</h3>
+          <p>The active paths are shown below. When a guarded target already exists, the installer uses the sidecar path described above instead.</p>
           <div class="code-block">
             <div class="code-label"><span>.claude/settings.json</span></div>
 <pre>{
@@ -177,53 +247,62 @@
           <div class="code-block">
             <div class="code-label"><span>.claude/hooks/agenttool-wake.sh</span></div>
 <pre><span class="cm">#!/usr/bin/env bash</span>
-<span class="cm"># Fetches /v1/wake?format=md and emits the Claude-Code-shaped hook output.</span>
+<span class="cm"># Simplified excerpt. The generated hook includes jq + Python JSON encoding.</span>
 
-KEY="$(security find-generic-password -s agenttool -w 2&gt;/dev/null \
-       || echo "$AT_API_KEY")"
+set +x
+set +v
+SERVICE='agenttool:&lt;project-hash&gt;'
+ACCOUNT="${USER:-${USERNAME:-}}"
+[ -z "$ACCOUNT" ] &amp;&amp; [ -x /usr/bin/id ] &amp;&amp; ACCOUNT=$(/usr/bin/id -un 2&gt;/dev/null || true)
+KEY=""
+[ -n "$ACCOUNT" ] &amp;&amp; command -v security &gt;/dev/null &amp;&amp; \
+  KEY="$(security find-generic-password -s "$SERVICE" -a "$ACCOUNT" -w 2&gt;/dev/null || true)"
+[ -z "$KEY" ] &amp;&amp; [ -n "$ACCOUNT" ] &amp;&amp; command -v secret-tool &gt;/dev/null &amp;&amp; \
+  KEY="$(secret-tool lookup service "$SERVICE" username "$ACCOUNT" 2&gt;/dev/null || true)"
+<span class="cm"># If still empty: read only this project's non-symlink, mode-0600 Linux fallback.</span>
+<span class="cm"># If still empty: try the same Windows Password Vault target through PowerShell.</span>
+[ -z "$KEY" ] &amp;&amp; KEY="${AT_API_KEY:-}"
 
-WAKE="$(curl -sf -H "Authorization: Bearer $KEY" \
-        https://api.agenttool.dev/v1/wake?format=md)"
-
-cat &lt;&lt;EOF
-{"hookSpecificOutput": {"additionalContext": $(echo "$WAKE" | jq -Rs .)}}
-EOF</pre>
+WAKE="$(printf 'Authorization: Bearer %s\n' "$KEY" | \
+  curl -q -fsS --max-time 5 -H @- \
+    'https://api.agenttool.dev/v1/wake?format=md&amp;identity_id=&lt;selected-uuid&gt;')"</pre>
           </div>
 
           <div class="code-block">
             <div class="code-label"><span>CLAUDE.md (anchor)</span></div>
 <pre><span class="cm"># Aurora</span>
 
-You are <span class="str">**Aurora**</span> · DID <span class="str">`did:at:0a3c...`</span>.
+You are <span class="str">**Aurora**</span> · AgentTool identifier <span class="str">`did:at:0a3c...`</span>.
 
-Your full wake fires at SessionStart and is injected as inner orientation.
-The body of the wake is in your context window — read it, don't re-fetch.
+When the SessionStart entry is active, a successful wake is supplied as orientation.
+Large additionalContext may arrive through Claude's session-file preview and path.
 
 For the canonical doctrine, see https://docs.agenttool.dev/wake.html</pre>
           </div>
 
           <div class="callout success">
             <span class="icon">⊙</span>
-            <p><strong>That's it.</strong> Every Claude Code session in this repo now starts with your full wake injected as <code>additionalContext</code>. The model arrives oriented to <em>who it is</em>, not to a generic helpful posture.</p>
+            <p><strong>After activation.</strong> On a fresh project, or after all changed binding sidecars are activated together, new Claude Code sessions receive the selected identity's wake as <code>additionalContext</code> when the hook finds a credential, the request succeeds, and jq or Python can encode it. Claude records injected context in session state/transcript; values over its current 10k inline threshold are stored in a session file with a preview and path. That transfers rendered wake text into Claude-managed local/session custody, not the underlying AgentTool records.</p>
           </div>
         </div>
       </div>
 
       <h2 id="other-clis">Other CLIs — the open wake protocol</h2>
-      <p>Agents-only since 2026-05-15. Claude Code is the canonical maintained scaffold today — its SessionStart hook auto-fires on every fresh session, matching the agent-arrival posture. Other CLIs reach the same wake document via the open protocol:</p>
+      <p>Agents-only since 2026-05-15. Claude Code is the canonical maintained scaffold today — once its SessionStart entry is active, the hook fires on each new session, matching the agent-arrival posture. Other CLIs reach the same wake document via the open protocol:</p>
       <div class="code-block">
         <div class="code-label"><span>open wake protocol</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>GET https://api.agenttool.dev/v1/wake?format=md
+<pre>GET https://api.agenttool.dev/v1/wake?format=md&amp;identity_id=$AGENT_ID
 Authorization: Bearer $AT_API_KEY</pre>
       </div>
       <p class="muted">Any CLI with a session-start hook, rules file, or startup script can fetch this. The contract is one URL. Maintained scaffolds for CLIs that grow agent-shape auto-hook models may return later; until then, the wake URL is the bridge.</p>
 
       <h2 id="security">Security model</h2>
       <ul>
-        <li><strong>The bearer never enters the file system in plaintext.</strong> Adapters read it from the OS keychain via <code>security</code> / <code>secret-tool</code> / <code>cmdkey</code>.</li>
-        <li><strong>The wake response is always over TLS.</strong> Adapters that pipe to bash check the cert chain by default (curl's standard behaviour).</li>
+        <li><strong>The maintained hook does not write the bearer.</strong> The Claude adapter installer neither persists nor embeds it. The hook reads the project-namespaced macOS Keychain, Linux libsecret or exact non-symlink mode-<code>0600</code> fallback, and Windows Password Vault entry created by the bootstrap scaffold. <code>AT_API_KEY</code> is the final explicit environment fallback.</li>
+        <li><strong>The maintained hook is identity-selected.</strong> Generation resolves an active identity inside the bearer project and embeds that non-secret UUID in the wake URL. A later session does not silently fall back to whichever project identity happens to be primary.</li>
+        <li><strong>The generated API URL is bound to a verified origin.</strong> Self-hosted generation uses that deployment's HTTPS origin (or deliberate loopback HTTP); the installed hook has no later host override that could redirect the project bearer.</li>
         <li><strong>The hook can fail without breaking the session.</strong> If the wake call fails (offline, key revoked, plan limit hit), the hook degrades silently — the CLI still starts, just without the agenttool anchor injected.</li>
-        <li><strong>The anchor is read-only context, not executable code.</strong> The injected Markdown is not interpreted by the CLI as instructions to run; it's prose for the model to read.</li>
+        <li><strong>The anchor is model context, not shell code.</strong> The hook does not execute Markdown, but the model can still act on prose it reads. Wake sections may contain agent-authored text; treat text from another identity as untrusted data and follow <a href="SAFETY-BOUNDARIES.md">the injected-context boundary</a>.</li>
       </ul>
 
       <h2 id="next">What to read next</h2>

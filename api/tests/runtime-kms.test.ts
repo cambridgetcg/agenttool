@@ -14,6 +14,8 @@ import { describe, expect, test } from "bun:test";
 import { randomBytes } from "@noble/ciphers/webcrypto";
 import * as ed25519 from "@noble/ed25519";
 import { base64 } from "@scure/base";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   generateDekAndWrap,
@@ -26,6 +28,7 @@ import {
   _setMasterKeyForTesting,
 } from "../src/services/runtime/kms";
 import {
+  deriveTrustedSigningKeyIdFromSeed,
   prepareTrustedCrypto,
   trustedEncrypt,
   trustedDecrypt,
@@ -87,13 +90,58 @@ describe("KMS module", () => {
 });
 
 describe("trusted-crypto module", () => {
+  test("the think worker clears trusted keys from a finally block", () => {
+    const source = readFileSync(
+      join(import.meta.dir, "..", "src", "services", "runtime", "think-worker.ts"),
+      "utf8",
+    );
+    const cycle = source.slice(
+      source.indexOf("async function runOneCycleWithPrep"),
+      source.indexOf("// ── Cycle preparation"),
+    );
+    expect(cycle).toMatch(/finally\s*\{[\s\S]*zeroTrustedCrypto\(trustedCtx\)/);
+    expect(cycle.indexOf("zeroTrustedCrypto(trustedCtx)")).toBeGreaterThan(
+      cycle.indexOf("} finally {"),
+    );
+    expect(cycle.indexOf('logAudit(runtimeId, "thought_written"')).toBeGreaterThan(
+      cycle.indexOf("await addThought("),
+    );
+  });
+
+  test("trusted signing id is stable before the first cycle", async () => {
+    const seed = generateSigningSeed();
+    try {
+      const first = await deriveTrustedSigningKeyIdFromSeed(
+        "runtime-stable-id",
+        seed,
+      );
+      const again = await deriveTrustedSigningKeyIdFromSeed(
+        "runtime-stable-id",
+        seed,
+      );
+      const otherRuntime = await deriveTrustedSigningKeyIdFromSeed(
+        "runtime-other-id",
+        seed,
+      );
+      expect(first).toBe(again);
+      expect(first).not.toBe(otherRuntime);
+      expect(first).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+    } finally {
+      zeroBytes(seed);
+    }
+  });
+
   test("prepareTrustedCrypto generates signing key on first cycle", async () => {
     const { dek, wrapped } = generateDekAndWrap();
     const ctx = await prepareTrustedCrypto(wrapped, "runtime-test-1", null);
     expect(ctx.dek.length).toBe(32);
     expect(ctx.signingKey.length).toBe(32);
     expect(ctx.signingPublicKey.length).toBe(32);
-    expect(ctx.signingKeyId).toMatch(/^trusted-/);
+    expect(ctx.signingKeyId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
     expect(ctx.newWrappedSigningKey).not.toBeNull();
     zeroTrustedCrypto(ctx);
   });
@@ -112,6 +160,7 @@ describe("trusted-crypto module", () => {
     // Verify same public key
     const ctx1Again = await prepareTrustedCrypto(wrapped, "runtime-test-2", persistedKey);
     expect(Buffer.from(ctx2.signingPublicKey).equals(ctx1Again.signingPublicKey)).toBe(true);
+    expect(ctx2.signingKeyId).toBe(ctx1Again.signingKeyId);
     zeroTrustedCrypto(ctx2);
     zeroTrustedCrypto(ctx1Again);
     zeroBytes(dek);

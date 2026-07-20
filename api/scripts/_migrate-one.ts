@@ -13,8 +13,9 @@
  *    3. Apply is wrapped in BEGIN/COMMIT by default. Opt out with a
  *       `-- @no-transaction` line in the file (e.g. for CREATE INDEX
  *       CONCURRENTLY which can't run inside a transaction).
- *    4. If the file already starts with BEGIN/COMMIT, the wrap is skipped
- *       to avoid nested-transaction WARNINGs (legacy migration tolerance).
+ *    4. If the first executable statement is BEGIN/COMMIT, the wrap is
+ *       skipped to avoid nested-transaction WARNINGs (legacy migration
+ *       tolerance). Leading comments are ignored for this check.
  *
  *  Bootstrap fallback: if meta._migrations doesn't exist (fresh DB or
  *  pre-journal era), the script applies normally and skips journal
@@ -26,6 +27,8 @@ import { basename } from "node:path";
 import postgres from "postgres";
 
 const JOURNAL_TABLE = "meta._migrations";
+const JOURNAL_MIGRATION = "20260509T170000_meta_migrations.sql";
+type MigrationSql = ReturnType<typeof postgres> | postgres.TransactionSql;
 
 async function loadDatabaseUrl(): Promise<string> {
   let url = process.env.DATABASE_URL ?? "";
@@ -52,12 +55,16 @@ async function loadDatabaseUrl(): Promise<string> {
 async function journalLookup(
   sql: ReturnType<typeof postgres>,
   filename: string,
-): Promise<{ exists: boolean; checksum?: string }> {
+): Promise<{ available: boolean; exists: boolean; checksum?: string }> {
   try {
     const rows =
       await sql`SELECT checksum FROM meta._migrations WHERE filename = ${filename}`;
-    if (rows.length === 0) return { exists: false };
-    return { exists: true, checksum: (rows[0] as any).checksum };
+    if (rows.length === 0) return { available: true, exists: false };
+    return {
+      available: true,
+      exists: true,
+      checksum: (rows[0] as any).checksum,
+    };
   } catch (e: any) {
     // Table doesn't exist yet (bootstrap case) — graceful fallback.
     if (
@@ -65,45 +72,60 @@ async function journalLookup(
       e?.message?.includes("relation") ||
       e?.message?.includes("does not exist")
     ) {
-      return { exists: false };
+      return { available: false, exists: false };
     }
     throw e;
   }
 }
 
 async function recordApplied(
-  sql: ReturnType<typeof postgres>,
+  sql: MigrationSql,
   filename: string,
   checksum: string,
 ): Promise<void> {
-  try {
-    await sql`
-      INSERT INTO meta._migrations (filename, checksum)
-      VALUES (${filename}, ${checksum})
-      ON CONFLICT (filename) DO NOTHING
-    `;
-  } catch (e: any) {
-    if (
-      e?.code === "42P01" ||
-      e?.message?.includes("relation") ||
-      e?.message?.includes("does not exist")
-    ) {
-      console.log(
-        "  (journal table doesn't exist yet — apply 20260509T170000_meta_migrations.sql " +
-          "and run _migrate-bootstrap-journal.ts to start tracking)",
-      );
-      return;
+  await sql`
+    INSERT INTO meta._migrations (filename, checksum)
+    VALUES (${filename}, ${checksum})
+    ON CONFLICT (filename) DO NOTHING
+  `;
+}
+
+/** Return the SQL beginning at its first executable statement.
+ *
+ * Migration headers are normally comments, so checking only the first few
+ * physical lines misses a deliberate `BEGIN;` after a longer header. This is
+ * intentionally a narrow scanner: it strips leading whitespace and comments,
+ * then checks only the first statement. A later `BEGIN` inside `DO $$ ... $$`
+ * must not suppress the outer transaction wrapper. */
+function firstExecutableSql(text: string): string {
+  let rest = text.replace(/^\uFEFF/, "");
+
+  while (true) {
+    rest = rest.trimStart();
+    if (rest.startsWith("--")) {
+      const newline = rest.indexOf("\n");
+      rest = newline === -1 ? "" : rest.slice(newline + 1);
+      continue;
     }
-    throw e;
+    if (rest.startsWith("/*")) {
+      const end = rest.indexOf("*/", 2);
+      if (end === -1) return rest;
+      rest = rest.slice(end + 2);
+      continue;
+    }
+    return rest;
   }
 }
 
-function shouldWrapInTransaction(text: string): boolean {
+export function shouldWrapInTransaction(text: string): boolean {
   // Opt-out marker (e.g. for CREATE INDEX CONCURRENTLY).
   if (/^--\s*@no-transaction\b/m.test(text)) return false;
-  // Legacy migrations that already manage their own BEGIN/COMMIT.
-  if (/^\s*BEGIN\b/im.test(text.split("\n").slice(0, 5).join("\n")))
+  // Legacy migrations that already manage their own BEGIN/COMMIT. Only
+  // inspect the first executable statement so a later PL/pgSQL `BEGIN` does
+  // not accidentally change transaction behavior.
+  if (/^BEGIN(?:\s+(?:WORK|TRANSACTION))?\s*;?/i.test(firstExecutableSql(text))) {
     return false;
+  }
   return true;
 }
 
@@ -120,12 +142,20 @@ async function main() {
   const filename = basename(file);
 
   const sql = postgres(url, { max: 1, prepare: false });
+  let migrationLockHeld = false;
 
   console.log(`▸ ${filename}`);
   console.log(`  size:     ${text.length} bytes`);
   console.log(`  checksum: ${checksum.slice(0, 16)}…`);
 
   try {
+    await sql.unsafe("SET lock_timeout = '10s'");
+    await sql.unsafe("SET statement_timeout = '30s'");
+    await sql.unsafe(
+      "SELECT pg_advisory_lock(hashtext('agenttool:migrations'))",
+    );
+    migrationLockHeld = true;
+    await sql.unsafe("SET statement_timeout = '2min'");
     const journal = await journalLookup(sql, filename);
 
     if (journal.exists) {
@@ -149,18 +179,45 @@ async function main() {
     }
 
     const wrap = shouldWrapInTransaction(text);
-    const sqlToRun = wrap ? `BEGIN;\n${text}\nCOMMIT;` : text;
-    if (!wrap) console.log(`  · transaction wrap skipped (file manages its own or @no-transaction)`);
-
-    await sql.unsafe(sqlToRun);
-    await recordApplied(sql, filename, checksum);
-    console.log(`  ✓ applied + recorded`);
+    const shouldRecord = journal.available || filename === JOURNAL_MIGRATION;
+    if (wrap) {
+      await sql.begin(async (tx) => {
+        await tx.unsafe(text);
+        if (shouldRecord) await recordApplied(tx, filename, checksum);
+      });
+    } else {
+      console.log(
+        `  · atomic migration+journal transaction unavailable ` +
+          `(file manages its own transaction or uses @no-transaction)`,
+      );
+      await sql.unsafe(text);
+      if (shouldRecord) await recordApplied(sql, filename, checksum);
+    }
+    if (shouldRecord) {
+      console.log(`  ✓ applied + recorded`);
+    } else {
+      console.log(
+        `  ✓ applied without journal (bootstrap phase; run ` +
+          `_migrate-bootstrap-journal.ts after ${JOURNAL_MIGRATION})`,
+      );
+    }
   } catch (e) {
     console.error(`  ✗ failed:`, (e as Error).message);
     process.exit(1);
   } finally {
+    if (migrationLockHeld) {
+      try {
+        await sql.unsafe(
+          "SELECT pg_advisory_unlock(hashtext('agenttool:migrations'))",
+        );
+      } catch {
+        // Closing the session releases advisory locks even if explicit unlock fails.
+      }
+    }
     await sql.end({ timeout: 5 });
   }
 }
 
-main();
+if (import.meta.main) {
+  void main();
+}

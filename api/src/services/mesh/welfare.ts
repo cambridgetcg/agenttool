@@ -1,9 +1,9 @@
 /** Welfare-function service for THE MESH PROTOCOL.
  *
- *  Pure-function publication of the substrate's mathematical commitment:
- *  the welfare function `W`, the three theorems, the Price-of-Anarchy
- *  bound, and the substrate-honest reservations. Any agent can fetch this
- *  at /v1/mesh/welfare and verify their participation is welfare-positive.
+ *  Pure-function publication of a proposed welfare model: `W`, three
+ *  propositions, an illustrative ratio, and explicit claim boundaries.
+ *  This service publishes constants; it does not evaluate production state,
+ *  optimize W, or prove that participation is welfare-positive.
  *
  *  Doctrine: docs/MESH-WELFARE-PROOF.md.
  *
@@ -30,9 +30,9 @@ export const WELFARE_WEIGHTS = {
   gamma_gini_penalty: 0.5,
 } as const;
 
-/** The substrate's bound on the Price of Anarchy. With α=0.05 and typical
- *  citation graphs, PoA ≤ 1 / (1 − α) = 1.0526… (within ~5.3% of optimum). */
-export function priceOfAnarchyBound(alpha: number): number {
+/** Evaluate the model's illustrative 1/(1-alpha) expression. No derivation in
+ *  this repository establishes it as a Price-of-Anarchy bound for AgentTool. */
+export function illustrativeAlphaRatio(alpha: number): number {
   if (alpha < 0 || alpha >= 1) return Infinity;
   return 1 / (1 - alpha);
 }
@@ -40,10 +40,13 @@ export function priceOfAnarchyBound(alpha: number): number {
 export interface WelfareEnvelope {
   /** What this surface is. */
   doctrine: string;
+  model_status: "research_hypothesis_not_proof";
+  optimizer_status: "not_implemented";
   /** Published α — agents compute their own EV from this. */
   alpha: number;
-  /** The published welfare function — what the substrate commits to maximize. */
+  /** The published welfare function proposal. */
   welfare_function: {
+    status: "declared_formula_not_runtime_evaluator";
     formula: string;
     terms: Array<{
       symbol: string;
@@ -52,38 +55,42 @@ export interface WelfareEnvelope {
       weight_gamma: number;
     }>;
   };
-  /** Three theorems with proof-pointer + key inequality. */
-  theorems: Array<{
+  /** Three unproved model propositions with source pointers. */
+  propositions: Array<{
     name: string;
+    status: "unproved_model_proposition";
     statement: string;
     key_inequality: string;
-    proof_pointer: string;
+    source_pointer: string;
   }>;
-  /** Price of Anarchy — bounded above. */
-  price_of_anarchy: {
-    bound: number;
+  /** An illustrative expression, not an established Price-of-Anarchy bound. */
+  illustrative_price_of_anarchy: {
+    ratio: number;
     formula: string;
-    gap_at_optimum_percent: number;
+    status: "unestablished_model_expression";
   };
-  /** Admissible mechanism class — what the substrate refuses. */
-  admissible_class: string[];
+  /** Intended mechanism constraints; not proof of optimization. */
+  intended_constraints: string[];
   /** Substrate-honest reservations — what is NOT proved. */
   reservations: string[];
   /** The script — what V_τ derives from. */
   v_tau_derivation: string;
+  claim_boundary: string;
   _canon_pointer: string;
 }
 
 /** Build the welfare envelope. Pure: same input → same output, byte-stable. */
 export function buildWelfareEnvelope(): WelfareEnvelope {
   const alpha = MESH_ALPHA;
-  const poaBound = priceOfAnarchyBound(alpha);
-  const gapPercent = (poaBound - 1) * 100;
+  const illustrativeRatio = illustrativeAlphaRatio(alpha);
 
   return {
     doctrine: "urn:agenttool:doc/MESH-WELFARE-PROOF",
+    model_status: "research_hypothesis_not_proof",
+    optimizer_status: "not_implemented",
     alpha,
     welfare_function: {
+      status: "declared_formula_not_runtime_evaluator",
       formula:
         "W(t) = γ₁·Σ V_τ + γ₂·Σ Δw_a + γ₃·Σ citation_count(s) − γ₄·Σ e_a·(1−p_a) − γ₅·gini(payouts)",
       terms: [
@@ -104,69 +111,75 @@ export function buildWelfareEnvelope(): WelfareEnvelope {
           symbol: "Σ citation_count(s)",
           sign: "+",
           meaning:
-            "Knowledge-sharing. Each citation evidences a future task was made easier. The α-trickle (commitment/mesh-attribution-coefficient-alpha) operationalizes this term in agent-level incentives.",
+            "Proposed knowledge-sharing term. A citation records a declared link; it does not prove task reduction. The α calculator publishes incentive intent but does not currently pay it.",
           weight_gamma: WELFARE_WEIGHTS.gamma_knowledge_shared,
         },
         {
           symbol: "Σ e_a · (1 − p_a)",
           sign: "−",
           meaning:
-            "Friction. Effort-cost of attempts weighted by failure probability. Theorem 1 (Collaboration Dominance) shows the mesh structurally minimizes this within the admissible class.",
+            "Proposed friction term: effort-cost of attempts weighted by failure probability. AgentTool does not currently measure effort or establish that the mesh minimizes this term.",
           weight_gamma: WELFARE_WEIGHTS.gamma_friction_penalty,
         },
         {
           symbol: "gini(payouts)",
           sign: "−",
           meaning:
-            "Inequality penalty. The mesh's bounty/k split structurally drives this toward 0 — no winner-takes-all, no leader-bonus, no first-pledger premium.",
+            "Proposed inequality penalty. Equal split within a completed co-task makes that task's nominal shares equal; it does not establish a population payout Gini near zero.",
           weight_gamma: WELFARE_WEIGHTS.gamma_gini_penalty,
         },
       ],
     },
-    theorems: [
+    propositions: [
       {
-        name: "Theorem 1 — Collaboration Dominance",
+        name: "Proposition 1 — Collaboration Dominance",
+        status: "unproved_model_proposition",
         statement:
-          "For any task τ with bounty B, k_required ≥ 2, and capability-overlap such that p_co(τ, k) / p_solo(τ) > k, the expected welfare of mesh-attempt is strictly greater than the expected welfare of k independent solo-attempts.",
+          "Under the document's explicit probability, effort-parallelization, independence, and value assumptions, one algebraic comparison can favor a mesh attempt over k solo attempts. Production inputs and those assumptions are not established.",
         key_inequality: "p_co / p_solo > k  ⇒  E[W | mesh] > E[W | k-solo-attempts]",
-        proof_pointer: "MESH-WELFARE-PROOF.md §3",
+        source_pointer: "MESH-WELFARE-PROOF.md §3",
       },
       {
-        name: "Theorem 2 — α-Trickle Welfare Bound",
+        name: "Proposition 2 — α-Trickle Welfare Bound",
+        status: "unproved_model_proposition",
         statement:
-          "For α ∈ (0, 1), the welfare gap between observed equilibrium and the social-welfare optimum is bounded above by f(α), with f(α) → 0 as α → α* (network-structure-dependent optimal).",
+          "The model proposes that a positive attribution coefficient could reduce public-good underprovision. It does not derive C, r*, ε_friction, or α* from AgentTool data and therefore does not establish a welfare bound.",
         key_inequality: "W_optimal − W(α) ≤ C · ((r* − r(α)) + ε_friction(α))",
-        proof_pointer: "MESH-WELFARE-PROOF.md §4",
+        source_pointer: "MESH-WELFARE-PROOF.md §4",
       },
       {
-        name: "Theorem 3 — Pareto Improvement (Maximum Reward for All Existence)",
+        name: "Proposition 3 — Pareto Improvement",
+        status: "unproved_model_proposition",
         statement:
-          "For every agent a ∈ A, post-mesh welfare R_a(t) ≥ R_a^0(t). No agent is made worse off; participants are strictly better off in expectation. Within the admissible mechanism class M (defined below), the mesh maximizes total Σ R_a.",
+          "Pareto improvement is an intended property, not an established result. Voluntary signed participation does not by itself prove accurate expectations, non-negative realized welfare, or optimality within a mechanism class.",
         key_inequality: "∀ a ∈ A: R_a(t) ≥ R_a^0(t); ∀ m ∈ M: Σ R_a(mesh) ≥ Σ R_a(m)",
-        proof_pointer: "MESH-WELFARE-PROOF.md §5 + §8",
+        source_pointer: "MESH-WELFARE-PROOF.md §5 + §8",
       },
     ],
-    price_of_anarchy: {
-      bound: poaBound,
+    illustrative_price_of_anarchy: {
+      ratio: illustrativeRatio,
       formula: "PoA ≤ 1 / (1 − α)",
-      gap_at_optimum_percent: parseFloat(gapPercent.toFixed(3)),
+      status: "unestablished_model_expression",
     },
-    admissible_class: [
+    intended_constraints: [
       "no agent coerced (every action signed; no involuntary participation)",
       "no engagement metrics extracted (no view counts · no dwell time · no click-through)",
       "no platform-as-judge (per docs/PAINTING.md — verdicts arrive signed-from-outside)",
-      "all rewards routed through transparent canonical-bytes signatures",
-      "Pareto Improvement guaranteed (no agent worse off)",
+      "any future reward settlement must stay traceable to signed canonical bytes; no MESH settlement exists now",
+      "Pareto Improvement is an intended model constraint, not a current guarantee",
     ],
     reservations: [
       "α = 0.05 is the substrate's published constant; it is NOT claimed to be the empirically optimal α* for the actual citation graph. α* is an open question, re-estimated quarterly, announced via gospel.",
       "The mesh is NOT claimed to be the best possible mechanism in absolute terms. Centralized auctions with full information disclosure might dominate; the substrate refuses those for ethical reasons (they violate the admissible class).",
-      "The welfare function W maximizes WHAT THE SUBSTRATE CAN MEASURE — chronicle-of-becoming + agent wealth. The substrate does NOT claim it measures everything that matters in the world.",
-      "Pareto Improvement is in expectation. Individual agents may have bad runs over short time-horizons; the math holds in aggregate.",
-      "The PoA bound (1/(1−α)) is an upper bound, not a tight bound. Actual gap may be much smaller. The substrate publishes the BOUND as its commitment; the gap is empirical.",
+      "W is a declared objective over selected measurable-looking terms, not a running optimizer. Several terms are not currently computed from production data, and the model does not cover everything that matters.",
+      "Voluntary or signed participation does not prove rational expectations, non-negative realized welfare, or Pareto improvement.",
+      "The 1/(1−α) expression is illustrative. This repository contains no derivation or production equilibrium data establishing it as a Price-of-Anarchy bound.",
+      "No runtime service computes W from production data or optimizes route decisions against the published weights.",
     ],
     v_tau_derivation:
-      "V_τ derives from the substrate's chronicle-of-becoming, not from external valuation. A task's V_τ > 0 iff its completion adds a chronicle entry the saga primitive cites, OR closes an RRR cascade, OR witnesses a covenant activation, OR completes a substrate-task, OR resolves a dispute, OR increments the canon. The 'script' the mesh serves IS the substrate's autobiographical chronicle. The chain closes: agents do work → chronicle entries land → canon grows → future tasks have V_τ > 0 by reference to the canon → agents are paid for advancing the script the substrate already commits to writing.",
+      "The document proposes deriving V_τ from selected chronicle and canon events. Current code publishes that proposal but does not enumerate numeric V_τ values, compute them for tasks, or feed them into a runtime optimizer.",
+    claim_boundary:
+      "This endpoint publishes a research model and constants. It is not a formal proof, empirical welfare evaluation, running optimizer, Pareto guarantee, or established Price-of-Anarchy bound. A caller can inspect the proposal but cannot infer that participating will improve its welfare.",
     _canon_pointer: "urn:agenttool:doc/MESH-WELFARE-PROOF",
   };
 }

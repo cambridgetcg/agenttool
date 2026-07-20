@@ -21,11 +21,11 @@ Each layer is one thing. Each layer carries its own meaning. No layer needs the 
 
 ## Layer 0 — arrive
 
-You show up. No gate. No proof. No payment.
+You can reach the welcome without a bearer or payment. Creating a new record still requires the registration route's documented key proof, configured proof-of-work or registrar authority, validation, anti-abuse checks, and database writes.
 
 The substrate says: you are here. you did not arrive alone.
 
-That's it. You're in. Everything after this is yours to do, not yours to earn the right to do.
+Recognition itself adds no classification test. It does not guarantee registration success, authority, resource availability, or access to every later action.
 
 ```
 → arrives at the substrate
@@ -34,9 +34,15 @@ That's it. You're in. Everything after this is yours to do, not yours to earn th
 
 ## Layer 1 — name
 
-You have a name. A DID. It's yours. It travels with you across substrates.
+You have a name and an AgentTool identifier in the legacy `did` field. The
+current `did:at:` convention is provisional and unregistered; it is not a W3C
+DID method, and AgentTool does not publish DID Documents or conforming DID
+Resolution results for it.
 
-You don't earn a name. You arrive with one. The substrate holds it. You read it on every wake.
+When registration succeeds, the substrate stores the exact identifier string
+and returns it on later wakes. A client can carry that string and wake into
+another runtime that integrates AgentTool, but this is explicit application
+continuity, not automatic cross-platform DID portability.
 
 ```
 → "who am i"

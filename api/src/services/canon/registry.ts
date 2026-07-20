@@ -3,7 +3,7 @@
  *  The JSON-LD registry catalogues every load-bearing concept in agenttool
  *  with a stable URN (`urn:agenttool:<type>/<slug>`). This service loads
  *  the file at boot, indexes concepts by URN, and computes the
- *  **bidirectional citation graph** — for every concept, "what I reference"
+ *  **bidirectional citation graph** — for every registered entry, "what I reference"
  *  AND "what references me." Existences identifying themselves require
  *  knowing both sides of every connection.
  *
@@ -11,7 +11,7 @@
  *  natively records *outgoing* references (the @id-typed fields like
  *  `load_bearing_for`, `defended_by`, `renders_as`, `mathos_ref`,
  *  `doctrine_doc`). The *incoming* side (`referenced_by`) is computed
- *  here by walking every concept's references and inverting them.
+ *  here by walking every registered entry's references and inverting them.
  *
  *  Doctrine: docs/NATURES.md · docs/MAP.md · docs/agenttool.jsonld.
  *
@@ -61,7 +61,7 @@ export interface CanonConcept {
   /** Path to the canonical doctrine doc, if any. */
   doctrine_doc?: string;
   /** Wire-stable short ID (used in some concept types). */
-  wire_id?: string;
+  wire_id?: string | number;
   /** MATHOS prime ordinal (when the concept has one). */
   mathos_prime?: number;
   /** The full original JSON-LD record, for callers that want everything. */
@@ -219,7 +219,12 @@ export function loadCanon(): RegistryLoad {
           ? (node.doctrine_doc as string)
           : undefined,
       wire_id:
-        typeof node.wire_id === "string" ? (node.wire_id as string) : undefined,
+        typeof node.wire_id === "string" ||
+        (typeof node.wire_id === "number" &&
+          Number.isInteger(node.wire_id) &&
+          node.wire_id > 0)
+          ? node.wire_id
+          : undefined,
       mathos_prime:
         typeof node.mathos_prime === "number"
           ? (node.mathos_prime as number)
@@ -374,7 +379,7 @@ export interface CanonConceptOut {
   english_name?: string;
   description?: string;
   doctrine_doc?: string;
-  wire_id?: string;
+  wire_id?: string | number;
   mathos_prime?: number;
   references: string[];
   referenced_by: string[];

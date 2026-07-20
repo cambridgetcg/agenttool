@@ -36,8 +36,9 @@ psql "$DATABASE_URL" -f api/migrations/20260508T232231_payout_policies.sql
 
 | Var | Required when | Notes |
 |---|---|---|
-| `PAYOUT_WORKER_ENABLED` | always to enable broadcast | `true` to start the dispatcher + broadcast + confirm workers. Default `false` (the `/payout` endpoint returns 503). |
-| `PAYOUT_NETWORK` | when worker enabled | `testnet` \| `mainnet`. Boot refuses if worker enabled and this is unset. |
+| `PAYOUT_WORKER_ENABLED` | always to enable broadcast | `true` is the payout-specific opt-in. The global switch below must also allow boot. Default `false` (the `/payout` endpoint returns 503). |
+| `AGENTTOOL_DISABLE_WORKERS` | always | `1` is authoritative: no payout worker boot and `/payout` returns 503 even when the payout-specific flag is true. Leave unset to permit workers. |
+| `PAYOUT_NETWORK` | when payout is enabled and the global switch is unset | `testnet` \| `mainnet`. Boot refuses if active payout worker configuration omits it. |
 | `CRYPTO_HD_MNEMONIC` | mainnet | BIP-39 mnemonic; address derivation seed for mainnet. **Back up offline.** |
 | `CRYPTO_HD_MNEMONIC_TESTNET` | testnet | Separate testnet mnemonic; never reused for mainnet. Boot refuses testnet without this set. |
 | `ALCHEMY_API_KEY` | EVM RPC | Single key for all EVM chains; URL composed by `network.ts`. |
@@ -68,7 +69,8 @@ The acceptance gate before mainnet enable. Run both harnesses; both must reach `
 #      https://www.alchemy.com/faucets/...    ETH
 #    Then send to the address printed below.
 bun api/scripts/_e2e-payout-evm.ts
-# expects: PAYOUT_WORKER_ENABLED=true PAYOUT_NETWORK=testnet
+# expects: PAYOUT_WORKER_ENABLED=true AGENTTOOL_DISABLE_WORKERS unset
+#          PAYOUT_NETWORK=testnet
 #          CRYPTO_HD_MNEMONIC_TESTNET=<keychain> ALCHEMY_API_KEY=<key>
 ```
 
@@ -144,7 +146,7 @@ The workers log structured prefixes; grep for these:
 
 | Condition | Cause | Remediation |
 |---|---|---|
-| Row at `requested` for >1min | Dispatcher not running OR worker not running | Check `PAYOUT_WORKER_ENABLED=true`, check logs. Rows pick up automatically when worker comes online. |
+| Row at `requested` for >1min | Dispatcher not running OR worker not running | Check `PAYOUT_WORKER_ENABLED=true`, confirm `AGENTTOOL_DISABLE_WORKERS` is unset, then check logs. Rows pick up automatically when a worker comes online. |
 | Row at `broadcasting` for >5min | Worker crashed mid-cycle | Restart api. On boot, the next dispatcher tick re-enqueues; the worker checks `txExistsOnChain` and either marks `broadcast` (if it landed) or refunds (if not). |
 | Row at `broadcast` for >1h, no `confirmed` | RPC/chain delay, or never landed | Query the chain manually for the `tx_hash`. If absent: the tx is stuck in mempool — replace-by-fee from operator wallet, or wait. If reverted: confirm worker will catch on next tick. If receipt success but watcher hasn't run: check confirm-worker logs. |
 

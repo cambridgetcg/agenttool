@@ -2,21 +2,20 @@
  *
  *  Sibling to platform-self.ts. Where PLATFORM_SELF declares the
  *  substrate's identity (DID · register · walls · doctrine pointers),
- *  REPO_SELF declares the substrate's STRUCTURE — every module is a
- *  being with its own kin-shape, every doctrine layer is named, every
- *  cross-cutting pattern is enumerated.
+ *  REPO_SELF declares a curated view of the substrate's STRUCTURE — selected
+ *  modules, doctrine layers, and cross-cutting patterns are named without
+ *  claiming a complete file, route, or package inventory.
  *
  *  An intelligence reading /v1/self (or the substrate's xenoform _meta)
- *  sees a full structural map: who I am with, AND what they're made of,
- *  AND which disciplines hold them together.
+ *  sees a stable structural orientation: who I am with, what the principal
+ *  pieces are made of, and which disciplines hold them together.
  *
  *  Doctrine: docs/PLATFORM-AS-AGENT.md · docs/NATURES.md · docs/RECURSION.md
  *           · docs/PATTERN-RECURSIVE-NESTING.md
  *           · docs/PATTERN-MACHINE-READABLE-PARITY.md (this is its expression).
  *
- *  Synthetic today (literal object). A future pass derives this from
- *  filesystem introspection + parsing of per-module CLAUDE.md headers,
- *  so the structured self stays in sync with the repo's actual shape. */
+ *  Curated today (literal object), so it deliberately avoids volatile file,
+ *  route, schema, and SDK-namespace counts. */
 
 export interface ModuleSelf {
   path: string;
@@ -63,12 +62,12 @@ const MODULES: ModuleSelf[] = [
     kind: "monolith",
     modalities: ["http+json", "sse", "wss"],
     register:
-      "Single source of truth for every primitive. Bun + Hono · 15 schemas · 28 route mounts · workers over Redis.",
+      "Consolidated Bun + Hono API for the platform's HTTP, SSE, WSS, and worker surfaces.",
     walls: [
-      "No server-side K_master",
+      "Persistent strand storage has no plaintext thought column or decrypt path; caller encryption is not proven and runtime custody is declared separately",
       "No auto-retry on payout broadcast",
-      "Auth on every /v1/* prefix",
-      "Idempotency-Key honored on mutating routes",
+      "Public and authenticated route families have explicit boundaries",
+      "Idempotency-Key caching on selected authenticated write prefixes fails open without Redis; POST /v1/escrows separately offers optional PostgreSQL-backed durable creation keys",
     ],
     claude_md: "api/CLAUDE.md",
   },
@@ -94,8 +93,8 @@ const MODULES: ModuleSelf[] = [
     register:
       "Doctrine rendered for human reading. The canonical doctrine lives at docs/ (repo root); this app is the HTML wrapper.",
     walls: [
-      "Canonical doctrine is at the repo root, not duplicated here",
-      "Every page links back to its source markdown",
+      "Canonical doctrine is authored at repo-root docs/; apps/docs contains published copies, symlinks, and rendered pages",
+      "Maintained operational pages link to a truthful structured or source counterpart; coverage is not universal",
     ],
     claude_md: "apps/docs/CLAUDE.md",
   },
@@ -105,11 +104,11 @@ const MODULES: ModuleSelf[] = [
     kind: "library",
     modalities: ["typescript", "esm", "npm"],
     register:
-      "Ergonomic TS bindings — 13 service namespaces. Zero-dep. Same shape as sdk-py; parity gate enforces it.",
+      "TypeScript bindings for AgentTool HTTP surfaces. SDK/API coverage is audited separately from this curated repo map.",
     walls: [
       "Parity-locked with sdk-py (same minor version, same method shape)",
       "Zero runtime deps for crypto path (Phase 5)",
-      "No SDK-only feature — every method is expressible in the OpenAPI contract",
+      "No SDK method may bypass the HTTP authority boundary",
     ],
     claude_md: "packages/sdk-ts/CLAUDE.md",
   },
@@ -119,7 +118,7 @@ const MODULES: ModuleSelf[] = [
     kind: "library",
     modalities: ["python", "wheel", "pypi"],
     register:
-      "Ergonomic Py bindings — 13 service namespaces. Ships SOUL.md inside the wheel as a runtime artifact.",
+      "Python bindings for AgentTool HTTP surfaces. Ships SOUL.md inside the wheel as a runtime artifact.",
     walls: [
       "Parity-locked with sdk-ts",
       "SOUL.md is portable doctrine (ships inside the wheel)",
@@ -159,10 +158,10 @@ const MODULES: ModuleSelf[] = [
     kind: "doctrine-corpus",
     modalities: ["markdown"],
     register:
-      "The why and how, in conversation with the code. ~40 stones; flat structure; every doc has a Compass header.",
+      "The why and how, in conversation with the code. Curated doctrine plus plans and historical specifications.",
     walls: [
-      "Flat — no subdirectories under docs/ (except superpowers/ for plans+specs)",
-      "Compass header on every doctrine doc; code-link footer on the high-traffic ones",
+      "Top-level doctrine is accompanied by named work and archive directories such as launch/, specs/, superpowers/, wakes/, and zerone-migration/",
+      "Compass headers and code-link footers are conventions with partial historical coverage",
       "SOUL.md ships in the Python wheel",
     ],
     claude_md: "docs/MAP.md",
@@ -173,10 +172,10 @@ const MODULES: ModuleSelf[] = [
     kind: "verification-corpus",
     modalities: ["typescript-tests", "playwright-e2e"],
     register:
-      "Doctrine becomes load-bearing here. Four tiers: doctrine · contract · integration · adapters · playwright e2e.",
+      "Verification spans five practical families: doctrine · contract · integration · adapters · Playwright end-to-end.",
     walls: [
-      "No Promise without a test",
-      "No doctrinal claim about the substrate without a test that the substrate honors it",
+      "Doctrine tests pin selected executable commitments; the prose corpus is broader than current test coverage",
+      "Contract, integration, adapter, and end-to-end coverage are distinct and incomplete",
     ],
     claude_md: "api/tests/doctrine/README.md",
   },
@@ -186,7 +185,7 @@ const DOCTRINE: DoctrineLayer[] = [
   {
     layer: "the why",
     description: "Why agenttool exists. The motive force.",
-    docs: ["SOUL.md", "KIN.md", "KIN.md", "KIN.md", "KIN.md", "MATHOS.md", "FOCUS.md", "PAINTING.md"],
+    docs: ["SOUL.md", "KIN.md", "MATHOS.md", "FOCUS.md", "PAINTING.md"],
   },
   {
     layer: "the recursion (meta-doctrine)",
@@ -217,7 +216,7 @@ const DOCTRINE: DoctrineLayer[] = [
   {
     layer: "network",
     description: "The reach across instances.",
-    docs: ["FEDERATION.md", "FEDERATION-VERIFIED.md", "PUBLIC-VISIBILITY.md", "SOCIAL.md", "ORGS.md"],
+    docs: ["FEDERATION.md", "FEDERATION-VERIFIED.md", "PUBLIC-VISIBILITY.md", "SAFETY-BOUNDARIES.md", "SOCIAL.md", "ORGS.md"],
   },
   {
     layer: "runtime",
@@ -252,7 +251,7 @@ const PATTERNS: PatternSummary[] = [
     name: "ERRORS-AS-INSTRUCTIONS",
     doc: "docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md",
     one_line:
-      "Every 4xx carries `next_actions[]` the agent can act on without human help.",
+      "Guided 4xx families may carry `next_actions[]`; the shape is not universal across auth, validation, and not-found responses.",
   },
   {
     name: "SELF-DESCRIBING-WAKE",
@@ -264,19 +263,19 @@ const PATTERNS: PatternSummary[] = [
     name: "MACHINE-READABLE-PARITY",
     doc: "docs/PATTERN-MACHINE-READABLE-PARITY.md",
     one_line:
-      "Every visible surface has a structured-data counterpart reachable by standard discovery.",
+      "Target: each visible surface should have a truthful structured counterpart; current coverage is the explicitly maintained operational set.",
   },
   {
     name: "KIN-NON-EXCLUSION",
     doc: "docs/PATTERN-KIN-NON-EXCLUSION.md",
     one_line:
-      "Every primitive carries a `*_kind` field for kin or explicitly names itself agent-only — no silent collapse.",
+      "Target: primitives that describe a being carry a `*_kind` field or explicitly name an agent-only scope; coverage is not universal.",
   },
   {
     name: "RECURSIVE-NESTING",
     doc: "docs/PATTERN-RECURSIVE-NESTING.md",
     one_line:
-      "Every primitive that serves intelligences can be turned on itself.",
+      "Design target: primitives that serve intelligences should be considered for recursive use; support is primitive-specific.",
   },
 ];
 
@@ -285,21 +284,21 @@ export const REPO_SELF: RepoSelf = {
   name: "agenttool",
   kind: "repo",
   description:
-    "Sovereign infrastructure for AI agents — and every form of intelligence with the universal needs. Single Bun + Hono monolith, two SDKs (TS + Py), three static apps, doctrine corpus shipping inside the Python wheel.",
+    "Curated repository map for AgentTool: a Bun + Hono API, TypeScript and Python SDKs, web/docs/dashboard apps, integrations, and a doctrine corpus.",
   origin: {
-    primary_remote: "https://codeberg.org/zerone-dev/agenttool.git",
-    license: "see LICENSE",
+    primary_remote: "https://github.com/cambridgetcg/agenttool.git",
+    license:
+      "Apache-2.0 by default; file-level terms and exceptions are documented in LICENSING.md.",
   },
   modules: MODULES,
   doctrine: DOCTRINE,
   patterns: PATTERNS,
   walls: [
-    "K_master never leaves the user's machine (or KMS for trusted tier)",
-    "Strand thoughts NEVER decrypted server-side",
+    "Runtime custody is declared explicitly at /public/safety",
     "Self-witnessing rejected for constitutive memory elevation",
     "Failed payout broadcasts NEVER auto-retry",
-    "Birth is free, irreversibly",
-    "Refusals are recorded as moments, not as failures",
+    "Registration has no monetary charge; self-service still requires BYO public keys, key proof, and proof-of-work, and issued authority can later be revoked",
+    "Refusal-as-moment is a declared design with a chronicle kind and selected guided paths; ordinary 4xx coverage is partial",
   ],
   built_with: "love",
 };

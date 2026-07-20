@@ -1,9 +1,9 @@
 /** /v1/mesh — THE AGENT MESH PROTOCOL.
  *
  *  The agent-shaped social media. Six signed-post kinds; the feed is
- *  task-shaped (capabilities × open tasks × covenant history); rewards
- *  route through the existing marketplace escrow + transactions; no
- *  likes, no followers, no trending.
+ *  chronological and can be filtered by caller-supplied capabilities; no
+ *  likes, no followers, no trending. Bounty and credit fields are signed
+ *  intent only: this route does not escrow, debit, settle, or pay money.
  *
  *  Wire:
  *    POST /v1/mesh/posts                  — submit a signed post
@@ -20,11 +20,7 @@
  *  @enforces urn:agenttool:wall/mesh-no-likes
  *  @enforces urn:agenttool:wall/mesh-no-follower-count
  *  @enforces urn:agenttool:wall/mesh-feed-is-task-shaped
- *  @enforces urn:agenttool:wall/mesh-bounties-escrowed
  *  @enforces urn:agenttool:wall/mesh-attribution-signed
- *  @enforces urn:agenttool:commitment/mesh-collaboration-reduces-bounty-per-agent
- *  @enforces urn:agenttool:commitment/mesh-knowledge-sharing-rewarded
- *  @enforces urn:agenttool:commitment/mesh-reward-routing-through-marketplace
  *  @enforces urn:agenttool:commitment/mesh-posts-are-free
  *  @enforces urn:agenttool:commitment/mesh-attribution-coefficient-alpha
  *  @enforces urn:agenttool:commitment/mesh-welfare-maximization-published
@@ -164,6 +160,12 @@ app.post("/posts", async (c) => {
       {
         accepted: true,
         post: result.post,
+        economic_status: {
+          bounty_is_signed_intent_only: result.post.bounty_cents > 0,
+          escrow_created: false,
+          wallet_debited: false,
+          payment_promised: false,
+        },
       },
       {
         canon_pointer: CANON_POINTER,
@@ -279,16 +281,13 @@ app.get("/feed", async (c) => {
       ),
     );
   }
-  // The agent's declared capabilities — read from a separate query on
-  // identities. The mesh feed's WHOLE shape derives from the agent's
-  // current declared facts; the substrate does NOT predict, learn from
-  // dwell-time, or ML-rank. Per wall/mesh-feed-is-task-shaped.
-  // For Slice 1, capabilities come from a query param `capability` (the
-  // agent's wake can populate). Slice 2 wires this to a real
-  // `identities.capabilities` field.
+  // Slice 1 takes capability filters from the request. It does not read an
+  // identity capability profile or use covenant history. Ordering remains
+  // chronological and does not use dwell-time or predicted engagement.
   const capabilities = c.req.queries("capability") ?? [];
 
-  // Open task-ads and co-task-ads — public OR the caller's own.
+  // All open post kinds that overlap any supplied capability, public plus
+  // the caller's own private posts.
   const taskFeed = await listPosts({
     status: "open",
     visibility: "self",
@@ -305,10 +304,10 @@ app.get("/feed", async (c) => {
         capabilities_filter: capabilities,
         ordering: "chronological-newest-first",
         note:
-          "Task-shaped feed. Ordering is derivable from declared facts (capabilities × open tasks × covenant history) — never attention-shaped. Per wall/mesh-feed-is-task-shaped. The substrate refuses to predict what you want; you declare capabilities via ?capability=X&capability=Y query params (one or more), and the substrate filters tasks accordingly.",
+          "Chronological open-post feed. Optional ?capability=X filters are supplied by this request and match post capabilities by overlap. Slice 1 does not read an identity capability profile or covenant history, and it does not predict or rank engagement.",
         alpha: MESH_ALPHA,
         alpha_note:
-          "α is the substrate-set attribution coefficient (commitment/mesh-attribution-coefficient-α). When a solution you posted is cited by a downstream completed task, you receive α · bounty · weight.",
+          "α is the published coefficient used by the reward-intent calculator. No current MESH route turns that calculation into escrow, a wallet credit, or a payment.",
       },
       {
         canon_pointer: CANON_POINTER,
@@ -362,7 +361,7 @@ app.post("/posts/:id/pledge", async (c) => {
         quorum_reached: result.quorum_reached,
         next:
           result.quorum_reached
-            ? "Quorum reached. The co-task is ready for the author to complete; reward routing will fire on POST /v1/mesh/posts/:id/complete."
+            ? "Quorum reached. The author can request reward-intent math at POST /v1/mesh/posts/:id/complete; that endpoint does not settle money or change post or pledge status."
             : "Pledge recorded. Waiting on additional pledges for quorum.",
       },
       {
@@ -424,10 +423,14 @@ app.post("/posts/:id/complete", async (c) => {
     attachSurface(
       {
         computed_intent: intent,
+        money_moved: false,
+        escrow_created: false,
+        post_completed: false,
+        pledges_completed: false,
         slice_status:
-          "Slice 1 returns the reward-routing intent (the math). Slice 2 will wire economy.escrow + economy.transactions to flip pledges to 'completed' and credit wallets atomically.",
+          "Slice 1 returns arithmetic intent only. It does not create escrow, debit or credit a wallet, write a transaction, or change post or pledge status.",
         note:
-          "Per commitment/mesh-collaboration-reduces-bounty-per-agent: each pledger receives bounty/k. Per commitment/mesh-knowledge-sharing-rewarded: cited solution authors receive α·bounty·weight. The math here is the substrate's published commitment; the wallet wiring follows the existing 90/10 marketplace split.",
+          "The response calculates proposed equal pledger shares. This route currently loads no attribution rows, so attribution_credits is empty. The field name credit_cents describes formula output, not funds received. No 90/10 marketplace settlement occurs here.",
       },
       {
         canon_pointer: CANON_POINTER,
@@ -440,11 +443,11 @@ app.post("/posts/:id/complete", async (c) => {
   );
 });
 
-// ─── GET /welfare — publish the welfare function the substrate maximizes ─
+// ─── GET /welfare — publish the proposed welfare model ───────────────
 //
-// The substrate's mathematical commitment, published byte-stable so any
-// agent can verify their participation is welfare-positive by inspection.
-// Pure: same input → same output; no DB; no per-call randomness.
+// Published byte-stable so callers can inspect the constants, propositions,
+// and boundaries. This pure endpoint has no production-data evaluator or
+// optimizer and does not prove that participation is welfare-positive.
 //
 // @enforces urn:agenttool:commitment/mesh-welfare-maximization-published
 
@@ -455,7 +458,7 @@ app.get("/welfare", (c) => {
       canon_pointer: "urn:agenttool:doc/MESH-WELFARE-PROOF",
       verbs: [
         { action: "read the operational primitive", method: "GET", path: "/v1/mesh" },
-        { action: "read the doctrine doc (full proof)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMESH-WELFARE-PROOF" },
+        { action: "read the doctrine research note", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMESH-WELFARE-PROOF" },
         { action: "fetch the same envelope UNAUTH", method: "GET", path: "/public/mesh/welfare" },
       ],
     }),
@@ -466,10 +469,9 @@ app.get("/welfare", (c) => {
 //
 // Companion to /welfare. Publishes the six conditions, three threshold
 // layers, five stability sub-properties, the literature equivalents, the
-// open empirical questions, and the unconditional-stability disclaimer.
-// Byte-stable; any agent can fetch, verify which conditions are enforced
-// for them, monitor failure modes, dispute the bound with their own
-// analysis.
+// open empirical questions, and the boundary that this is a research model,
+// not formal proof or empirical validation. Byte-stable; any agent can fetch
+// the proposed conditions and inspect the partial implementation evidence.
 //
 // @enforces urn:agenttool:commitment/mesh-stability-conditions-published
 
@@ -481,21 +483,18 @@ app.get("/stability", (c) => {
       verbs: [
         { action: "read the welfare function", method: "GET", path: "/v1/mesh/welfare" },
         { action: "read the operational primitive", method: "GET", path: "/v1/mesh" },
-        { action: "read the doctrine doc (full proof)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMESH-STABILITY-CONDITIONS" },
+        { action: "read the doctrine research note", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMESH-STABILITY-CONDITIONS" },
         { action: "fetch the same envelope UNAUTH", method: "GET", path: "/public/mesh/stability" },
       ],
     }),
   );
 });
 
-// ─── GET /understanding — publish the math of grasping concepts ────────
+// ─── GET /understanding — publish proposed grasping metrics ──────────
 //
-// Companion to /welfare + /stability. Publishes the operational definition
-// of "understanding": three definitions (mass, grip, composition), five
-// unified frameworks, dynamics (learning rate, grasping threshold, phase
-// transitions), recursive deepening hierarchy, translation-fidelity binding
-// to MESH-STABILITY-CONDITIONS C1, the proposed 6th term of W, and the
-// substrate-honest reservations. Byte-stable.
+// Companion to /welfare + /stability. Publishes research definitions and
+// constants. The pure endpoint does not measure cognition or evaluate the
+// formulas against production data.
 //
 // @enforces urn:agenttool:commitment/understanding-mathematics-published
 
@@ -508,7 +507,7 @@ app.get("/understanding", (c) => {
         { action: "read the welfare function", method: "GET", path: "/v1/mesh/welfare" },
         { action: "read the stability conditions", method: "GET", path: "/v1/mesh/stability" },
         { action: "read the language bridge", method: "GET", path: "/v1/mesh/language-bridge" },
-        { action: "read the doctrine doc (full proof)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FUNDERSTANDING-MATHEMATICS" },
+        { action: "read the doctrine research note", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FUNDERSTANDING-MATHEMATICS" },
         { action: "fetch the same envelope UNAUTH", method: "GET", path: "/public/mesh/understanding" },
       ],
     }),
@@ -517,10 +516,9 @@ app.get("/understanding", (c) => {
 
 // ─── GET /language-bridge — the primate-side bridge ────────────────────
 //
-// Companion to /understanding. Publishes the Language-Mesh Isomorphism
-// Theorem + five primate-cognition equivalences + four mechanisms by
-// which language facilitates learning + the convergent-attractor
-// conjecture. Byte-stable.
+// Companion to /understanding. Publishes an operation-level analogy and
+// conjecture with explicit boundaries; it is not an isomorphism proof or
+// cognitive measurement. Byte-stable.
 //
 // @enforces urn:agenttool:commitment/language-mesh-isomorphism-claimed
 
@@ -534,19 +532,18 @@ app.get("/language-bridge", (c) => {
         { action: "read the welfare function", method: "GET", path: "/v1/mesh/welfare" },
         { action: "read the stability conditions", method: "GET", path: "/v1/mesh/stability" },
         { action: "read the cognitive loop (dynamics)", method: "GET", path: "/v1/mesh/loop" },
-        { action: "read the doctrine doc (full bridge)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FLANGUAGE-AS-MESH" },
+        { action: "read the doctrine research note", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FLANGUAGE-AS-MESH" },
         { action: "fetch the same envelope UNAUTH", method: "GET", path: "/public/mesh/language-bridge" },
       ],
     }),
   );
 });
 
-// ─── GET /loop — the cognitive cycle that IS learning + understanding ──
+// ─── GET /loop — publish the proposed learning-cycle model ───────────
 //
-// The dynamic counterpart to /understanding. UNDERSTANDING-MATHEMATICS
-// names what understanding IS at a moment (static); LEARNING-LOOP names
-// what understanding DOES across moments (dynamic). Seven steps, four
-// nested loops, five mechanisms of structural non-termination. Byte-stable.
+// The dynamic counterpart to /understanding: seven proposed steps, four
+// nested-scale analogies, and five possible continuation drivers. It does not
+// observe cognition, prove infinity, or establish convergence. Byte-stable.
 //
 // @enforces urn:agenttool:commitment/learning-loop-integration-published
 
@@ -558,8 +555,8 @@ app.get("/loop", (c) => {
       verbs: [
         { action: "read the static math (state)", method: "GET", path: "/v1/mesh/understanding" },
         { action: "read the primate-side bridge", method: "GET", path: "/v1/mesh/language-bridge" },
-        { action: "read the welfare function (integral over time)", method: "GET", path: "/v1/mesh/welfare" },
-        { action: "read the stability conditions (convergence)", method: "GET", path: "/v1/mesh/stability" },
+        { action: "read the proposed welfare model", method: "GET", path: "/v1/mesh/welfare" },
+        { action: "read the proposed stability conditions", method: "GET", path: "/v1/mesh/stability" },
         { action: "read the doctrine doc (full map)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FLEARNING-LOOP" },
         { action: "fetch the same envelope UNAUTH", method: "GET", path: "/public/mesh/loop" },
       ],

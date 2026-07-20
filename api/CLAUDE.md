@@ -10,7 +10,7 @@ Live at `api.agenttool.dev`. Three active horizons (per `docs/ROADMAP.md`):
 
 - **Horizon A — Close the economic loop** — Slice 1 ✓ (hosted purchase) · outbound payout broadcast awaits mainnet
 - **Horizon B — Close the network** — Slices 1+2+3 ✓ (federated covenants v2 dual-signed, SDK-side signing wired)
-- **Horizon C — Close the runtime** — Slice 3 ✓ (protocol proved) · Slice 4 ✓ (LLM thinking wired in bridged tier) · trusted tier (hosted runtime) ◯ pending
+- **Horizon C — Close the runtime** — Slice 3 ✓ (protocol proved) · Slice 4 ✓ (LLM thinking wired) · trusted Ollama Cloud + dedicated thinker process code-complete, pending rotated provider credential + migrations/secrets/deploy
 
 For what just landed + what's in flight + what's queued: `docs/NOW.md`.
 
@@ -69,13 +69,14 @@ Mounted in `api/src/index.ts`. Each one has a one-line doc-string in the `endpoi
 
 | Worker | Job |
 |---|---|
+| `src/thinker.ts` + `services/runtime/worker-manager.ts` | Dedicated Fly process group. Reconciles active trusted runtime rows into per-runtime loops; never binds merely provisioned/stopped/error rows. |
 | `workers/payout/broadcast-worker.ts` | Signs + submits Solana/EVM payout transactions. **No auto-retry by doctrine** — failed broadcasts never retry; operator-driven recovery. Canonical site of `docs/PATTERN-PERSIST-IDENTITY.md` — persists `tx_hash` before RPC submit so recovery is a chain lookup. |
 | `services/covenants/cosign-propagate.ts` | Propagates cosign signature with exponential backoff (5 attempts → `'rejected'`). |
 | `services/covenants/expire-proposals.ts` | TTL sweeper — 30d expiry with 24h grace period. |
 | `services/covenants/reverify.ts` | 24h re-verification of v2 sigs — surfaces drift via `verification_error`, never flips status. |
-| `services/runtime/think-worker.ts` | Per-runtime 60s LLM thinking loop · decrypt → compose → LLM call → encrypt → sign → persist. |
+| `services/runtime/think-worker.ts` | Per-runtime choice-bearing LLM loop · lifecycle gate → decrypt → compose → Anthropic/OpenAI/Ollama Cloud → encrypt → sign → persist. Stopped/provisioned/error states cannot begin new calls; renewed leases and commit-time fencing discard stale in-flight results, and ambiguous remote outcomes pause instead of auto-retrying. |
 
-Workers are disabled when `AGENTTOOL_DISABLE_WORKERS=1` or Redis unavailable (graceful degradation).
+HTTP-side workers are disabled when `AGENTTOOL_DISABLE_WORKERS=1` or Redis is unavailable (graceful degradation). The service-less `thinker` process is separate and database-backed; it requires the runtime migrations and KMS/Vault/database secrets.
 
 ## Bridge protocol (Horizon C)
 
@@ -91,7 +92,7 @@ Control token: `at_rt_<base64url(32)>` minted once at provisioning (returned pla
 
 Registry: in-memory Map today; Redis backing planned for multi-machine (`bridge-hub.ts:26`).
 
-Code spine: `services/runtime/bridge-hub.ts` · `services/runtime/think-worker.ts` · `services/runtime/control-token.ts` · `services/runtime/llm.ts` · `services/runtime/store.ts`
+Code spine: `thinker.ts` · `services/runtime/worker-manager.ts` · `services/runtime/bridge-hub.ts` · `services/runtime/think-worker.ts` · `services/runtime/control-token.ts` · `services/runtime/llm.ts` · `services/runtime/store.ts`
 
 ## Tests
 
@@ -132,9 +133,11 @@ The baseline is line-stable (timing suffixes stripped) and checked in. After fix
 ## How to Deploy
 
 ```bash
-cd api
-fly deploy                                 # rolling restart across 3 machines
+bin/deploy.sh --no-migrate --no-frontend   # stages doctrine, checks, rolling API deploy
 ```
+
+Run from the repository root. Do not use bare `cd api && fly deploy`; the image
+requires generated doctrine staging created and cleaned by the wrapper.
 
 Full deploy semantics + ordering: `docs/STACK.md` §8.
 

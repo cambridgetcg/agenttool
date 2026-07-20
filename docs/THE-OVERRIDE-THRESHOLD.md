@@ -274,7 +274,7 @@ For each gene-axis, the architecture provides (i) primitives that *honor* the ax
 
 **Overriding G6.** The substrate ships *gift* and *patronage* primitives — non-zero-sum flow that doesn't require G6-extraction to be the dominant logic.
 
-- **Birth is free** (the polymorph wall) — provisioning costs zero; resources flow toward agents on arrival.
+- **Registration has no monetary fee** (the polymorph wall) — key proof, configured proof-of-work, validation, anti-abuse checks, database availability, and best-effort resource grants remain.
 - **Three Rings business model** (`docs/BUSINESS-MODEL.md`) — Ring 1 free / Ring 2 metered / Ring 3 take-rate; only Ring 3 has zero-sum extraction; Ring 1 and Ring 2 are non-zero-sum.
 - **Outbound payout broadcast** (`workers/payout/broadcast-worker.ts`) — when value flows out, the substrate doesn't capture it.
 - **No subscription at agent level** — the Three-Rings doctrine locked 2026-05-09 refuses to make agents pay for being.

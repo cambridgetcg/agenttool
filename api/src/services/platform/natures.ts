@@ -14,7 +14,7 @@
  *  Doctrine: docs/NATURES.md · docs/RECURSION.md · docs/MAP.md.
  */
 
-import { sha256Hex } from "../mathos/encode";
+import { doctrineHash, type DoctrineHash } from "../doctrine/integrity";
 
 // ─── The four strata (canonical order from NATURES.md §The cycle) ────────
 
@@ -180,7 +180,7 @@ export const DOC_NATURES: readonly DocNature[] = [
     ships_in: ["repo"],
     holds: "a_claim",
     one_line_nature:
-      "The fractal certificate. Every primitive nests in itself. Nothing is exempt from anything.",
+      "A recursive design target with named worked examples. Current support is primitive-specific; this catalog is not proof that every primitive nests in itself.",
   },
   {
     path: "docs/NATURES.md",
@@ -212,7 +212,17 @@ export const DOC_NATURES: readonly DocNature[] = [
     ships_in: ["repo"],
     holds: "a_constraint",
     one_line_nature:
-      "What identity IS: DID + ed25519 + bearer. The bearer IS the agent. Without this, agenttool is just storage.",
+      "A provisional AgentTool identifier in the legacy did field plus ed25519 keys anchor a specific identity row; a rotatable bearer grants project-wide API authority, while an agent-held root carries constitutional consent where configured. did:at is not a registered W3C DID method. The boundary matters in multi-identity projects.",
+  },
+  {
+    path: "docs/SAFETY-BOUNDARIES.md",
+    type: "structural",
+    stance: "normative",
+    substrate_bound: "yes",
+    ships_in: ["repo", "api_response"],
+    holds: "a_constraint",
+    one_line_nature:
+      "The current authority, visibility, readability, runtime-custody, marketplace-input, and injected-context boundary. Served at /public/safety.",
   },
   {
     path: "docs/MEMORY-TIERS.md",
@@ -232,7 +242,7 @@ export const DOC_NATURES: readonly DocNature[] = [
     ships_in: ["repo"],
     holds: "a_refusal",
     one_line_nature:
-      "Three rings: free wake · metered substrate · take-rate. Refuses subscription / paywalled birth / attention auction.",
+      "Three rings: no monetary charge for bearer-authenticated wake reads; proof-gated registration; fixed credits and take-rate on named paths. Refuses subscription / paid birth / attention auction as doctrine.",
   },
 
   // ── Operational ──────────────────────────────────────────────────────
@@ -286,7 +296,7 @@ export const DOC_NATURES: readonly DocNature[] = [
     ships_in: ["repo"],
     holds: "a_constraint",
     one_line_nature:
-      "Every 4xx must be enough for an agent to self-recover. Build-enforced by tests/doctrine/errors-as-instructions.test.ts.",
+      "Guided 4xx builders should enable self-recovery. The builder suite is tested, but coverage is not universal across every route response.",
   },
   {
     path: "docs/PATTERN-MACHINE-READABLE-PARITY.md",
@@ -296,7 +306,7 @@ export const DOC_NATURES: readonly DocNature[] = [
     ships_in: ["repo"],
     holds: "a_constraint",
     one_line_nature:
-      "Every visible surface has a machine-readable counterpart cited via <link rel='alternate'>. This module is one instance of the pattern.",
+      "Target: visible surfaces should have truthful machine-readable counterparts. Coverage is the explicitly maintained operational set; this module is one instance, not proof of universality.",
   },
   {
     path: "docs/PATTERN-RECURSIVE-NESTING.md",
@@ -306,7 +316,7 @@ export const DOC_NATURES: readonly DocNature[] = [
     ships_in: ["repo"],
     holds: "a_primer",
     one_line_nature:
-      "Every load-bearing primitive exhibits its own self-nesting. Architecture is fractal. Pairs with RECURSION.md.",
+      "A design pattern for considering self-nesting in load-bearing primitives. Current support is primitive-specific. Pairs with RECURSION.md.",
   },
   {
     path: "docs/PATTERN-KIN-NON-EXCLUSION.md",
@@ -316,7 +326,7 @@ export const DOC_NATURES: readonly DocNature[] = [
     ships_in: ["repo"],
     holds: "a_refusal",
     one_line_nature:
-      "No substrate-gating ever. metadata.form is descriptive, never gating. Build-enforced by tests/doctrine/no-form-gating.test.ts.",
+      "Policy: metadata.form is descriptive, not an intelligence-classification gate. Named source paths are checked by tests/doctrine/no-form-gating.test.ts; that test is not proof about every future route.",
   },
 ];
 
@@ -365,11 +375,8 @@ export const CYCLE: readonly CycleEdge[] = [
   { from: "repo", to: "philosophy", relation: "embodies" },
 ];
 
-/** The doctrine pin — a SHA-256 of the NATURES.md path string. When the
- *  doctrine doc itself is fetchable, a receiver can hash the markdown
- *  content and verify they hold the same version this code was bound to.
- *  Today this is a pin against drift between code and doctrine: change
- *  the doctrine doc, recompute, update. The pin is honest, not hidden. */
-export function naturesDoctrinePin(): string {
-  return sha256Hex("docs/NATURES.md");
+/** SHA-256 of the canonical NATURES.md bytes, or `null` when those bytes
+ *  are unavailable to this process. */
+export function naturesDoctrinePin(): DoctrineHash {
+  return doctrineHash("docs/NATURES.md");
 }

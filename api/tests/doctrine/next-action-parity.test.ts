@@ -90,6 +90,13 @@ function collectAffordanceNextActions(): NextAction[] {
     vaultSecretCount: 7,
     constitutiveMemoryCount: 2,
     federatedPeerCount: 1,
+    pendingSellerInvocationCount: 1,
+    inFlightBuyerInvocationCount: 1,
+    openFiledDisputeCount: 1,
+    eligibleSubstrateTaskCount: 1,
+    maxSubstrateTaskBountyCents: 1000,
+    pendingMemoryWitnessGrantCount: 1,
+    trustCapacity: 5,
   });
   return bundle.items.flatMap((i) => i.next_actions);
 }

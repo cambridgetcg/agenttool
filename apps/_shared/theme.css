@@ -1,24 +1,32 @@
 /* ─────────────────────────────────────────────────────────────────────
- * agenttool · shared theme · v1
+ * agenttool · shared theme · v2 — the estate goes dawn (2026-07-02)
  *
  * Single source of truth for design tokens, base reset, typography,
- * navigation, footer, and core components across all three frontends:
+ * navigation, footer, and core components across the estate:
  *
- *   - agenttool.dev          (apps/landing/)
  *   - docs.agenttool.dev     (apps/docs/)
  *   - app.agenttool.dev      (apps/dashboard/)
+ *   - agenttool.dev          (apps/web/ carries its own style.css —
+ *                             it is the design reference this theme follows)
  *
- * The actual file lives at apps/_shared/theme.css. Each app symlinks
- * shared/ → ../_shared/, so every page loads /shared/theme.css from
- * its own origin. Edit ONCE here; all three sites pick it up.
+ * Two modes, same soul as the landing page:
  *
- * Pair this stylesheet with the Google Fonts <link> in the page head
- * (or @import below if you can't add the link tag).
+ *   dawn  (default) — cream paper, terracotta accent, sunwash
+ *   night           — deep navy, amber accent, city glow
  *
- *   Crimson Pro    — sacred / serif headings + italics
+ * Mode is `data-mode="dawn|night"` on <html>, persisted as
+ * localStorage['agenttool.mode'] — the exact protocol apps/web uses,
+ * so a visitor's choice carries across every door of the estate.
+ * Pair with /shared/mode.js (pre-paint mode set + ☾ toggle).
+ *
+ * v1 token names (--violet, --gold, --surface…) are kept as aliases so
+ * every existing page and embedded <style> block keeps working — they
+ * simply resolve to the new palette.
+ *
+ * Fonts (unchanged, via Google Fonts <link> in each page head):
+ *   Crimson Pro    — serif headings + italics
  *   Inter          — body sans
  *   JetBrains Mono — code + eyebrows
- *
  * ───────────────────────────────────────────────────────────────────── */
 
 /* ── Reset ───────────────────────────────────────────────────────── */
@@ -29,37 +37,56 @@ button { font-family: inherit; }
 a { color: inherit; text-decoration: none; }
 
 /* ── Tokens ──────────────────────────────────────────────────────── */
-:root {
-  /* surfaces */
-  --bg:             #08080d;
-  --bg-soft:        #0b0b13;
-  --surface:        #0f0f17;
-  --surface-2:      #161620;
-  --surface-3:      #1d1d2a;
-  --code-bg:        #0a0a12;
+:root, [data-mode="dawn"] {
+  /* surfaces — cream paper ladder */
+  --bg:             #faf5ec;
+  --bg-soft:        #f6efe2;
+  --surface:        #f3ecdf;
+  --surface-2:      #efe6d4;
+  --surface-3:      #e9ddc6;
+  --code-bg:        #f4eddd;
 
   /* borders */
-  --border:         #1c1c2a;
-  --border-bright:  #2c2c44;
+  --border:         #e4dac7;
+  --border-bright:  #d6c9af;
 
-  /* text */
-  --text:           #e8eaf0;
-  --text-muted:     #8b8fa3;
-  --text-dim:       #5a5e72;
+  /* text — warm ink */
+  --text:           #1a1612;
+  --text-muted:     #5c5344;
+  --text-dim:       #a89a85;
 
-  /* accent palette */
-  --violet:         #a78bfa;
-  --violet-deep:    #7c3aed;
-  --aurora:         #f0abfc;
-  --gold:           #fde68a;
-  --green:          #34d399;
-  --red:            #fb7185;
-  --blue:           #60a5fa;
-  --yellow:         #facc15;
+  /* accent — terracotta by day */
+  --accent:         #d4502e;
+  --accent-deep:    #b8451f;
+  --accent-ink:     #faf5ec;
+
+  /* extended palette (v1 names alias into this) */
+  --aurora:         #8a3d5f;   /* wine */
+  --gold:           #8a6c20;   /* olive gold — legible on paper */
+  --green:          #3d7a4a;   /* forest */
+  --red:            #a83232;
+  --blue:           #3d5a8a;   /* slate */
+  --yellow:         #a07d20;
+
+  /* v1 aliases — do not remove; pages + embedded styles depend on them */
+  --violet:         var(--accent);
+  --violet-deep:    var(--accent-deep);
+
+  /* syntax highlighting — ink-weight hues for cream code paper */
+  --tok-kw-c:       #8a3d5f;
+  --tok-str-c:      #3d7a4a;
+  --tok-num-c:      #a07d20;
+  --tok-fn-c:       #3d5a8a;
+
+  /* atmosphere */
+  --ambient:
+    radial-gradient(ellipse 100% 60% at 50% -20%, color-mix(in srgb, var(--accent) 9%, transparent) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 0% 60%, color-mix(in srgb, var(--gold) 4%, transparent) 0%, transparent 70%);
+  --glow:           none;
 
   /* shadow */
-  --shadow-soft:    0 1px 0 rgba(255,255,255,0.03) inset, 0 30px 60px -30px rgba(124,58,237,0.15);
-  --shadow-card:    0 12px 32px -16px rgba(0,0,0,0.4);
+  --shadow-soft:    0 1px 0 rgba(255,255,255,0.5) inset, 0 30px 60px -30px color-mix(in srgb, var(--accent) 14%, transparent);
+  --shadow-card:    0 12px 32px -16px rgba(90,70,40,0.18);
 
   /* type */
   --serif:          'Crimson Pro', 'EB Garamond', Georgia, serif;
@@ -80,6 +107,54 @@ a { color: inherit; text-decoration: none; }
   --doc-max:        880px;
 }
 
+[data-mode="night"] {
+  /* surfaces — deep navy ladder */
+  --bg:             #050810;
+  --bg-soft:        #080c1a;
+  --surface:        #0b1020;
+  --surface-2:      #0e1428;
+  --surface-3:      #131a33;
+  --code-bg:        #070b16;
+
+  /* borders */
+  --border:         #1a2136;
+  --border-bright:  #263050;
+
+  /* text */
+  --text:           #f2ede3;
+  --text-muted:     #9aa3ba;
+  --text-dim:       #6b7694;
+
+  /* accent — amber by night */
+  --accent:         #ffb347;
+  --accent-deep:    #e89a2f;
+  --accent-ink:     #0a0d16;
+
+  /* extended palette */
+  --aurora:         #ff8c69;   /* coral */
+  --gold:           #ffd98a;
+  --green:          #7dd87d;
+  --red:            #fb7185;
+  --blue:           #60a5fa;
+  --yellow:         #facc15;
+
+  /* syntax highlighting — bright set for navy code panels */
+  --tok-kw-c:       #c084fc;
+  --tok-str-c:      #86efac;
+  --tok-num-c:      #fbbf24;
+  --tok-fn-c:       #67e8f9;
+
+  /* atmosphere */
+  --ambient:
+    radial-gradient(ellipse 100% 60% at 50% -20%, color-mix(in srgb, var(--accent) 8%, transparent) 0%, transparent 60%),
+    radial-gradient(ellipse 80% 50% at 80% 110%, color-mix(in srgb, var(--aurora) 5%, transparent) 0%, transparent 60%);
+  --glow:           0 0 12px 3px color-mix(in srgb, var(--accent) 35%, transparent);
+
+  /* shadow */
+  --shadow-soft:    0 1px 0 rgba(255,255,255,0.03) inset, 0 30px 60px -30px color-mix(in srgb, var(--accent) 12%, transparent);
+  --shadow-card:    0 12px 32px -16px rgba(0,0,0,0.5);
+}
+
 /* ── Base ────────────────────────────────────────────────────────── */
 body {
   font-family: var(--sans);
@@ -88,26 +163,25 @@ body {
   line-height: 1.65;
   min-height: 100vh;
   font-feature-settings: 'ss01', 'ss02';
+  transition: background 0.4s ease, color 0.4s ease;
 }
 body::before {
   content: '';
   position: fixed; inset: 0;
-  background:
-    radial-gradient(ellipse 100% 60% at 50% -20%, rgba(124,58,237,0.16) 0%, transparent 60%),
-    radial-gradient(ellipse 80% 50% at 80% 110%, rgba(240,171,252,0.05) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 0% 60%, rgba(253,230,138,0.03) 0%, transparent 70%);
+  background: var(--ambient);
   pointer-events: none; z-index: -1;
+  transition: opacity 0.4s ease;
 }
 
-::selection { background: rgba(167,139,250,0.3); color: var(--text); }
+::selection { background: color-mix(in srgb, var(--accent) 28%, transparent); color: var(--text); }
 
-a { color: var(--violet); transition: color 0.18s; }
+a { color: var(--accent); transition: color 0.18s; }
 a:hover { color: var(--aurora); }
 
 p { margin-bottom: 1rem; }
 ul, ol { margin: 0 0 1rem 1.25rem; }
 li { margin-bottom: 0.35rem; }
-li::marker { color: var(--violet); }
+li::marker { color: var(--accent); }
 
 strong { color: var(--text); font-weight: 600; }
 
@@ -118,7 +192,6 @@ code:not([class]) {
   border: 1px solid var(--border);
   padding: 0.1em 0.42em;
   border-radius: var(--r-sm);
-  color: var(--violet);
 }
 
 /* ── Typography ─────────────────────────────────────────────────── */
@@ -132,7 +205,7 @@ h1 {
 }
 h1 em {
   font-style: italic;
-  background: linear-gradient(135deg, var(--violet) 0%, var(--aurora) 60%, var(--gold) 100%);
+  background: linear-gradient(135deg, var(--accent) 0%, var(--aurora) 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 
@@ -146,7 +219,7 @@ h2 {
   color: var(--text);
   scroll-margin-top: calc(var(--nav-height) + 1rem);
 }
-h2 em { font-style: italic; color: var(--violet); }
+h2 em { font-style: italic; color: var(--accent); }
 
 h3 {
   font-size: 1.18rem;
@@ -155,7 +228,7 @@ h3 {
   margin: 2rem 0 0.75rem;
   scroll-margin-top: calc(var(--nav-height) + 1rem);
 }
-h3 em { color: var(--violet); font-style: normal; }
+h3 em { color: var(--accent); font-style: normal; }
 
 .lede {
   font-size: 1.12rem;
@@ -168,7 +241,7 @@ h3 em { color: var(--violet); font-style: normal; }
 .lede em {
   font-style: italic;
   font-family: var(--serif);
-  color: var(--violet);
+  color: var(--accent);
   font-size: 1.05em;
 }
 
@@ -179,13 +252,13 @@ h3 em { color: var(--violet); font-style: normal; }
   font-weight: 500;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--violet);
+  color: var(--accent);
   margin-bottom: 1rem;
 }
 .eyebrow::before {
   content: '';
   width: 24px; height: 1px;
-  background: var(--violet);
+  background: var(--accent);
 }
 
 .doctrine {
@@ -208,7 +281,7 @@ h3 em { color: var(--violet); font-style: normal; }
 .brand-mark {
   width: 22px; height: 22px;
   border-radius: 50%;
-  border: 2px solid var(--violet);
+  border: 2px solid var(--accent);
   position: relative;
   display: inline-block;
   flex-shrink: 0;
@@ -218,8 +291,8 @@ h3 em { color: var(--violet); font-style: normal; }
   position: absolute;
   inset: 6px;
   border-radius: 50%;
-  background: var(--gold);
-  box-shadow: 0 0 10px rgba(253,230,138,0.55);
+  background: var(--accent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 /* ── Top navigation ─────────────────────────────────────────────── */
@@ -227,7 +300,7 @@ nav.topnav {
   position: fixed; top: 0; left: 0; right: 0; z-index: 100;
   height: var(--nav-height);
   padding: 0 1.5rem;
-  background: rgba(8,8,13,0.82);
+  background: color-mix(in srgb, var(--bg) 84%, transparent);
   backdrop-filter: blur(16px) saturate(140%);
   -webkit-backdrop-filter: blur(16px) saturate(140%);
   border-bottom: 1px solid var(--border);
@@ -235,6 +308,7 @@ nav.topnav {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  transition: background 0.4s ease;
 }
 
 .brand {
@@ -246,7 +320,7 @@ nav.topnav {
   white-space: nowrap;
 }
 .brand:hover { color: var(--text); }
-.brand-text > span { color: var(--violet); }
+.brand-text > span { color: var(--accent); }
 .brand-tail {
   font-family: var(--mono);
   font-size: 0.78rem;
@@ -268,24 +342,60 @@ nav.topnav {
 }
 .nav-actions a:hover { color: var(--text); }
 .nav-actions a.active {
-  color: var(--violet);
+  color: var(--accent);
 }
 .nav-cta {
-  background: linear-gradient(135deg, var(--violet-deep), #6d28d9);
-  color: #fff !important;
+  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+  color: var(--accent-ink) !important;
   padding: 0.45rem 1rem;
   border-radius: var(--r-pill);
   font-size: 0.83rem;
   font-weight: 600;
-  box-shadow: 0 8px 24px -10px rgba(124,58,237,0.55);
+  box-shadow: 0 8px 24px -10px color-mix(in srgb, var(--accent) 55%, transparent);
   border: 1px solid transparent;
 }
-.nav-cta:hover { color: #fff !important; opacity: 0.92; }
+.nav-cta:hover { color: var(--accent-ink) !important; opacity: 0.92; }
 
-@media (max-width: 720px) {
-  .nav-actions { gap: 0.85rem; }
+/* ── Mode toggle (☾ night / ☀ dawn) — injected by /shared/mode.js ── */
+.toggle {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--r-pill);
+  padding: 0.32rem 0.85rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  transition: all 0.4s ease;
+}
+.toggle:hover { border-color: var(--accent); }
+
+/* The fixed topnav must FIT the viewport at every width — it never scrolls,
+   so overflow means the last item (the mode toggle) hangs offscreen.
+   Trim non-essential links early (tablets show the full link set otherwise). */
+@media (max-width: 900px) {
+  .nav-actions { gap: 0.9rem; }
   .nav-actions a:not(.nav-cta):not(.nav-essential) { display: none; }
   .brand-tail { display: none; }
+}
+@media (max-width: 640px) {
+  nav.topnav { padding: 0 0.9rem; }
+  .nav-actions { gap: 0.55rem; }
+  /* Icon-only toggle: the label is a single text node ("☾  night" / "☀  dawn"),
+     so clip the word and keep the leading glyph. Mode-agnostic. */
+  .toggle {
+    width: 1.9rem;
+    flex: 0 0 1.9rem;
+    overflow: hidden;
+    white-space: nowrap;
+    text-align: left;
+    padding: 0.32rem 0 0.32rem 0.52rem;
+  }
+}
+@media (max-width: 430px) {
+  nav.topnav { padding: 0 0.75rem; }
+  .nav-actions { gap: 0.5rem; }
+  .nav-cta { padding: 0.4rem 0.7rem; }
 }
 
 /* ── Footer ─────────────────────────────────────────────────────── */
@@ -318,6 +428,10 @@ footer.site-footer .dot {
   color: var(--text-dim);
   margin: 0 0.4rem;
 }
+@media (max-width: 540px) {
+  footer.site-footer { flex-direction: column; align-items: flex-start; gap: 0.6rem; }
+  footer.site-footer .left { flex-wrap: wrap; row-gap: 0.35rem; }
+}
 
 /* ── Buttons ─────────────────────────────────────────────────────── */
 .btn {
@@ -335,11 +449,11 @@ footer.site-footer .dot {
   white-space: nowrap;
 }
 .btn-primary {
-  background: linear-gradient(135deg, var(--violet-deep), #6d28d9);
-  color: #fff;
-  box-shadow: 0 12px 32px -12px rgba(124,58,237,0.5);
+  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+  color: var(--accent-ink);
+  box-shadow: 0 12px 32px -12px color-mix(in srgb, var(--accent) 50%, transparent);
 }
-.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 18px 40px -14px rgba(124,58,237,0.6); color: #fff; }
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 18px 40px -14px color-mix(in srgb, var(--accent) 60%, transparent); color: var(--accent-ink); }
 .btn-ghost {
   background: var(--surface);
   color: var(--text);
@@ -347,7 +461,7 @@ footer.site-footer .dot {
   font-family: var(--mono);
   font-size: 0.86rem;
 }
-.btn-ghost:hover { border-color: var(--violet); color: var(--text); }
+.btn-ghost:hover { border-color: var(--accent); color: var(--text); }
 .btn-tiny { padding: 0.45rem 0.85rem; font-size: 0.8rem; font-weight: 500; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
@@ -380,7 +494,7 @@ footer.site-footer .dot {
   cursor: pointer;
   transition: all 0.15s;
 }
-.code-label .copy-btn:hover { border-color: var(--violet); color: var(--violet); }
+.code-label .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 pre {
   padding: 1rem 1.25rem;
@@ -392,12 +506,12 @@ pre {
 }
 
 /* Syntax highlighting tokens (use as classes inside <pre>) */
-.tok-kw,  .kw   { color: #c084fc; }
-.tok-str, .str  { color: #86efac; }
-.tok-num, .num  { color: #fbbf24; }
-.tok-fn,  .fn   { color: #67e8f9; }
+.tok-kw,  .kw   { color: var(--tok-kw-c); }
+.tok-str, .str  { color: var(--tok-str-c); }
+.tok-num, .num  { color: var(--tok-num-c); }
+.tok-fn,  .fn   { color: var(--tok-fn-c); }
 .tok-cm,  .cm   { color: var(--text-dim); font-style: italic; }
-.tok-key, .key  { color: var(--violet); }
+.tok-key, .key  { color: var(--accent); }
 .tok-var, .var  { color: var(--gold); }
 .tok-url, .url  { color: var(--text-muted); }
 .tok-tag, .tag  { color: var(--aurora); font-weight: 600; }
@@ -447,7 +561,7 @@ pre {
 .params-table .pname {
   font-family: var(--mono);
   font-size: 0.85rem;
-  color: var(--violet);
+  color: var(--accent);
   font-weight: 500;
 }
 .params-table .ptype {
@@ -465,7 +579,7 @@ pre {
   color: var(--red);
   padding: 0.1rem 0.4rem;
   border-radius: var(--r-sm);
-  background: rgba(251,113,133,0.08);
+  background: color-mix(in srgb, var(--red) 10%, transparent);
   margin-left: 0.4rem;
 }
 .opt {
@@ -481,8 +595,8 @@ pre {
 
 /* ── Callout ─────────────────────────────────────────────────────── */
 .callout {
-  background: rgba(167,139,250,0.05);
-  border: 1px solid rgba(167,139,250,0.18);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
   border-radius: var(--r-lg);
   padding: 1rem 1.25rem;
   margin: 1.25rem 0;
@@ -496,15 +610,15 @@ pre {
   flex-shrink: 0;
   font-size: 1rem;
   line-height: 1.55;
-  color: var(--violet);
+  color: var(--accent);
 }
 .callout p { margin: 0; }
 .callout strong { color: var(--text); }
-.callout.warn { background: rgba(253,230,138,0.05); border-color: rgba(253,230,138,0.2); }
+.callout.warn { background: color-mix(in srgb, var(--gold) 6%, transparent); border-color: color-mix(in srgb, var(--gold) 22%, transparent); }
 .callout.warn .icon { color: var(--gold); }
-.callout.danger { background: rgba(251,113,133,0.05); border-color: rgba(251,113,133,0.2); }
+.callout.danger { background: color-mix(in srgb, var(--red) 6%, transparent); border-color: color-mix(in srgb, var(--red) 22%, transparent); }
 .callout.danger .icon { color: var(--red); }
-.callout.success { background: rgba(52,211,153,0.05); border-color: rgba(52,211,153,0.2); }
+.callout.success { background: color-mix(in srgb, var(--green) 6%, transparent); border-color: color-mix(in srgb, var(--green) 22%, transparent); }
 .callout.success .icon { color: var(--green); }
 
 /* ── Endpoint blocks (docs) ─────────────────────────────────────── */
@@ -533,11 +647,11 @@ pre {
   padding: 0.28rem 0.6rem;
   border-radius: var(--r-sm);
 }
-.method.post   { background: rgba(52,211,153,0.12);  color: var(--green); }
-.method.get    { background: rgba(96,165,250,0.12);  color: var(--blue); }
-.method.put    { background: rgba(250,204,21,0.12);  color: var(--yellow); }
-.method.patch  { background: rgba(167,139,250,0.12); color: var(--violet); }
-.method.delete { background: rgba(251,113,133,0.12); color: var(--red); }
+.method.post   { background: color-mix(in srgb, var(--green) 14%, transparent);  color: var(--green); }
+.method.get    { background: color-mix(in srgb, var(--blue) 14%, transparent);   color: var(--blue); }
+.method.put    { background: color-mix(in srgb, var(--yellow) 14%, transparent); color: var(--yellow); }
+.method.patch  { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.method.delete { background: color-mix(in srgb, var(--red) 14%, transparent);    color: var(--red); }
 .endpoint-path {
   font-family: var(--mono);
   font-size: 0.95rem;
@@ -545,7 +659,7 @@ pre {
   color: var(--text);
   flex: 1;
 }
-.endpoint-path .var { color: var(--violet); }
+.endpoint-path .var { color: var(--accent); }
 .endpoint-auth {
   font-family: var(--mono);
   font-size: 0.66rem;
@@ -553,10 +667,10 @@ pre {
   text-transform: uppercase;
   padding: 0.22rem 0.55rem;
   border-radius: var(--r-pill);
-  background: rgba(253,230,138,0.08);
+  background: color-mix(in srgb, var(--gold) 10%, transparent);
   color: var(--gold);
 }
-.endpoint-auth.public { background: rgba(52,211,153,0.08); color: var(--green); }
+.endpoint-auth.public { background: color-mix(in srgb, var(--green) 10%, transparent); color: var(--green); }
 .endpoint-body { padding: 1.4rem; }
 .endpoint-desc {
   color: var(--text-muted);
@@ -606,9 +720,9 @@ pre {
   padding: 0.15rem 0.5rem;
   border-radius: var(--r-pill);
 }
-.surface-status.live { background: rgba(52,211,153,0.1);  color: var(--green); }
-.surface-status.beta { background: rgba(167,139,250,0.1); color: var(--violet); }
-.surface-status.new  { background: rgba(253,230,138,0.1); color: var(--gold); }
+.surface-status.live { background: color-mix(in srgb, var(--green) 12%, transparent);  color: var(--green); }
+.surface-status.beta { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.surface-status.new  { background: color-mix(in srgb, var(--gold) 12%, transparent);   color: var(--gold); }
 .surface-tagline {
   font-family: var(--serif);
   font-style: italic;
@@ -647,7 +761,7 @@ pre {
 .shape-item .key {
   font-family: var(--mono);
   font-size: 0.78rem;
-  color: var(--violet);
+  color: var(--accent);
   margin-bottom: 0.5rem;
 }
 .shape-item .title {
@@ -681,9 +795,9 @@ ol.steps > li::before {
   font-family: var(--mono);
   font-size: 0.78rem;
   font-weight: 600;
-  color: var(--violet);
-  background: rgba(167,139,250,0.08);
-  border: 1px solid rgba(167,139,250,0.18);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
   width: 2.1rem; height: 2.1rem;
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
@@ -730,7 +844,7 @@ input[type="text"], input[type="email"], input[type="password"], textarea, selec
   outline: none;
 }
 input:focus, textarea:focus, select:focus {
-  border-color: var(--violet);
+  border-color: var(--accent);
 }
 input::placeholder, textarea::placeholder {
   color: var(--text-dim);
@@ -748,3 +862,23 @@ label, .form-label {
   margin-top: 0.35rem;
   line-height: 1.5;
 }
+
+/* ── Estate strip — the three doors, always visible (2026-07-02) ──────
+   .topnav is fixed at top:0, so strip pages mark <body class="has-strip">:
+   the strip takes the top 30px, the nav slides down, content pads by 30px. */
+:root { --strip-height: 30px; }
+.estate-strip {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 101;
+  height: var(--strip-height);
+  display: flex; align-items: center; gap: 1.4rem; padding: 0 1.5rem;
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.02em;
+  overflow-x: auto; white-space: nowrap;
+  transition: background 0.4s ease;
+}
+.estate-strip a { color: var(--text-dim); text-decoration: none; }
+.estate-strip a:hover { color: var(--text-muted); }
+.estate-strip a.here { color: var(--accent); }
+body.has-strip { padding-top: var(--strip-height); }
+body.has-strip .topnav { top: var(--strip-height); }

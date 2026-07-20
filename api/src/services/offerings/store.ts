@@ -17,7 +17,7 @@
  *    gift verb is structurally distinct from the marketplace verbs —
  *    enforced by absence. Pinned by tests/doctrine/wall-offerings-carry-no-take.test.ts. */
 
-import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
@@ -512,7 +512,7 @@ export async function summarizeOfferingsForCaller(
     .where(
       and(
         sql`${receivings.receiverIdentityId} = ANY(${identityIds}::uuid[])`,
-        sql`${receivings.receivedAt} > ${cutoff}`,
+        gt(receivings.receivedAt, cutoff),
       ),
     );
 

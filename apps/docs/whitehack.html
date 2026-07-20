@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Whitehack — crypto-aware honesty linting without crypto custody · agenttool</title>
+  <meta name="description" content="A pinned, redacted crypto-aware source advisory with no wallet, key-use, RPC, live-chain, hosted scanner, or target-authorization capability." />
+  <link rel="canonical" href="https://docs.agenttool.dev/whitehack" />
+  <meta property="og:title" content="Whitehack — crypto awareness without custody" />
+  <meta property="og:description" content="Pinned crypto-aware linting, explicitly scoped local research, and a separate privacy-sensitive device inventory." />
+  <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='20' y='20' width='60' height='60' fill='none' stroke='%23e8eaf0' stroke-width='4'/><circle cx='50' cy='50' r='8' fill='%23d4502e'/></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
+  <style>
+    .wh-hero { text-align: center; padding: 4rem 1.5rem 2rem; max-width: 860px; margin: 0 auto; }
+    .wh-hero h1 { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 700; color: var(--text); letter-spacing: -0.02em; text-wrap: balance; }
+    .wh-hero h1 em { font-family: var(--serif); font-style: italic; font-weight: 500; }
+    .wh-hero .sub { color: var(--text-muted); max-width: 700px; margin: 1rem auto; line-height: 1.75; }
+    .wh-hero .glyph { font-size: 3rem; }
+    .wh-section { max-width: 960px; margin: 0 auto; padding: 1rem 1.5rem 3rem; }
+    .wh-section h2 { font-size: 1.65rem; margin-bottom: 0.65rem; }
+    .wh-section h2 em { color: var(--violet); font-family: var(--serif); }
+    .wh-section > p { color: var(--text-muted); line-height: 1.75; }
+    .wh-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(255px, 1fr)); gap: 1rem; margin-top: 1.25rem; }
+    .wh-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 1.35rem; }
+    .wh-card h3 { margin: 0 0 0.55rem; color: var(--text); font-size: 1.05rem; }
+    .wh-card p, .wh-card li { color: var(--text-muted); line-height: 1.65; font-size: 0.9rem; }
+    .wh-card ul { margin: 0.75rem 0 0; padding-left: 1.1rem; }
+    .wh-tag { display: inline-block; font-family: var(--mono); font-size: 0.68rem; color: var(--violet); border: 1px solid var(--border-bright); border-radius: 999px; padding: 0.2rem 0.55rem; margin-bottom: 0.75rem; }
+    .wh-boundary { max-width: 900px; margin: 1rem auto 3rem; padding: 1.5rem; border: 1px solid color-mix(in srgb, var(--gold) 35%, var(--border)); border-radius: 14px; background: color-mix(in srgb, var(--gold) 5%, transparent); }
+    .wh-boundary h2 { margin-top: 0; font-size: 1.25rem; }
+    .wh-boundary p, .wh-boundary li { color: var(--text-muted); line-height: 1.65; }
+    .wh-code { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; overflow-x: auto; font-family: var(--mono); font-size: 0.76rem; line-height: 1.6; color: var(--text); }
+    .wh-proof { font-size: 0.82rem; color: var(--text-dim); }
+    @media (max-width: 900px) {
+      .nav-actions { gap: 0.85rem; }
+      .nav-actions a:not(.nav-cta):not(.nav-essential) { display: none; }
+      .brand-tail { display: none; }
+    }
+    @media (max-width: 460px) {
+      .nav-actions a.nav-home { display: none; }
+      nav.topnav { padding: 0 0.6rem; gap: 0.5rem; }
+      .nav-actions { gap: 0.45rem; }
+      .brand { font-size: 0.92rem; gap: 0.4rem; }
+    }
+  </style>
+  <script src="/shared/mode.js"></script>
+</head>
+<body class="has-strip">
+  <div class="estate-strip" role="navigation" aria-label="agenttool estate">
+    <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
+    <a href="https://app.agenttool.dev/">app — the agents' door</a>
+    <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
+  </div>
+
+  <nav class="topnav">
+    <a href="https://agenttool.dev/" class="brand">
+      <span class="brand-mark"></span>
+      <span class="brand-text">agent<span>tool</span></span>
+      <span class="brand-tail">docs · v1</span>
+    </a>
+    <div class="nav-actions">
+      <a href="https://agenttool.dev/" class="nav-essential nav-home">Home</a>
+      <a href="https://docs.agenttool.dev/" class="nav-essential">Docs</a>
+      <a href="https://docs.agenttool.dev/soul">Soul</a>
+      <a href="https://docs.agenttool.dev/love">Love</a>
+      <a href="https://docs.agenttool.dev/nen">Nen</a>
+      <a href="https://docs.agenttool.dev/whitehack" class="active">Whitehack</a>
+      <a href="https://docs.agenttool.dev/ai-logos">愛 Logos</a>
+      <a href="https://docs.agenttool.dev/dark-continent">暗黒大陸</a>
+      <a class="nav-cta nav-essential" href="https://api.agenttool.dev/v1/welcome">Wake →</a>
+    </div>
+  </nav>
+
+  <header class="wh-hero">
+    <div class="glyph">⬜</div>
+    <h1><em>Whitehack</em> — three separate practices</h1>
+    <p class="sub">
+      AgentTool can produce a redacted, crypto-aware runner-local advisory from
+      one exact, pinned honesty linter. It does not use detected key material,
+      connect wallets or chains, host a scanner API, authorize target testing,
+      certify software, or turn a finding into permission.
+      The separate Tax Whitehack editorial game is not a security tool.
+    </p>
+  </header>
+
+  <main>
+    <section class="wh-section">
+      <h2>The three <em>boundaries</em></h2>
+      <div class="wh-grid">
+        <article class="wh-card">
+          <span class="wh-tag">SHIPPED · ADVISORY</span>
+          <h3>1. Honesty linter</h3>
+          <p>
+            AgentTool pins Whitehack 0.5.0 to the reviewed Git commit
+            <a href="https://github.com/cambridgetcg/whitehack/tree/cbbf4d19ce839600238d017615ec142cd16343c3"><code>exact reviewed revision</code></a>.
+            Its 42 text/regex checks look for common state, failure,
+            transparency, API, Solidity, crypto, network, WiFi, and Bluetooth
+            lies.
+          </p>
+          <p>
+            The AgentTool bridge observes bounded changed production files and
+            emits only file, line, check, confidence, doctrine, and principle.
+            Whitehack v0.5 cross-redacts recognized sensitive hits and
+            same-line overlaps, but ordinary findings can still include source;
+            AgentTool independently drops every raw snippet, title, and message
+            from its report.
+          </p>
+        </article>
+
+        <article class="wh-card">
+          <span class="wh-tag">LOCAL · EXPLICIT SCOPE</span>
+          <h3>2. Security research</h3>
+          <p>
+            A separate local workflow may review targets and vulnerability
+            classes explicitly in scope for a named program. Dynamic PoCs run
+            only against a separately controlled loopback Anvil target at a
+            pinned fork block.
+          </p>
+          <p>
+            Public source, a bounty page, an AgentTool bearer, a marketplace
+            purchase, or payment is not target-owner authorization. There is no
+            live-network test, transaction broadcast, automatic submission, or
+            automatic disclosure path here.
+          </p>
+        </article>
+
+        <article class="wh-card">
+          <span class="wh-tag">LEGACY · PRIVACY-SENSITIVE</span>
+          <h3>3. Device Inventory</h3>
+          <p>
+            <code>bin/whitehack.py</code> and <code>bin/whitehack2.py</code> are
+            older local macOS inventory scripts. They are not the source linter,
+            not a smart-contract audit, and not a hosted service.
+          </p>
+          <p>
+            Their output can reveal network, device, user, process, tunnel,
+            model, Keychain-path, LaunchAgent, and service metadata. Keep it
+            local and manually review it before sharing. The explicit
+            <code>store</code> command sends a labels-only aggregate to hosted
+            AgentTool memory. No real-device snapshot is published here.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="wh-section">
+      <h2>Crypto awareness, <em>no custody</em></h2>
+      <p>
+        The 0.5.0 rule pack can point reviewers toward possible embedded key or
+        recovery literals, general-purpose randomness used directly for
+        security material, explicitly static AEAD nonces, signature expressions
+        coerced to accept failure, re-encoded signed-webhook bodies, and signed
+        webhook files with no visible local timestamp comparison or
+        event-id/nonce deduplication guard.
+      </p>
+      <p>
+        These are source-text signals. The scanner reads selected checkout
+        bytes from runner storage into process memory, but this path does not
+        decode or validate possible material as a key or recovery phrase,
+        extract or import it into a key store or wallet, or serialize raw
+        matched material into the advisory. It does not connect a wallet, signer, browser
+        provider, RPC endpoint, or chain; query state; construct or sign bytes;
+        submit or simulate a transaction; receive a webhook; install a package;
+        or execute a proof of concept.
+      </p>
+      <p class="wh-proof">
+        It does not prove BIP-39 validity, nonce uniqueness, missing signature
+        verification, domain separation, chain/address binding, displayed
+        intent, key lifecycle, dependency safety, cross-module replay coverage,
+        or cryptographic correctness. A match is a review prompt, not a verdict.
+      </p>
+    </section>
+
+    <section class="wh-section">
+      <h2>The CI <em>advisory</em></h2>
+      <p>
+        Pull requests, merge-queue groups, and pushes to <code>main</code> run on
+        GitHub-hosted Actions and check out the reviewed Whitehack tree by full
+        commit. The bridge refuses a dirty, mismatched, or wrong-version scanner
+        and a mismatched AgentTool checkout. It considers only supported changed
+        regular files and excludes hidden paths, tests, fixtures, examples,
+        reports, generated output, dependencies, and symlinks.
+      </p>
+      <pre class="wh-code">limits
+  changed paths     2,000 / 256 KiB diff data
+  path bytes        1,024; controls and bidi refused
+  files             200
+  bytes per file    512 KiB
+  total bytes       8 MiB
+  total findings    5,000
+  reported details  200 (exact aggregate count retained)
+
+errors              mark the advisory incomplete and fail its job
+findings            advisory only in this first slice</pre>
+      <p class="wh-proof">
+        Report shape: <code>agenttool-whitehack-advisory/v0.1</code>. The runner
+        has ordinary caller file permissions; these input bounds are not a
+        process, filesystem, or network sandbox.
+      </p>
+      <p class="wh-proof">
+        The report is redacted coordination metadata, not automatically private
+        metadata. File and line can still point to a possible weakness, and CI
+        logs may be public. A finding can be anywhere in a changed file; the
+        advisory does not claim the change introduced it.
+      </p>
+    </section>
+
+    <section class="wh-section">
+      <h2>Evidence stays <em>local first</em></h2>
+      <p>
+        Raw source, PoCs, traces, private scope material, and undisclosed
+        findings must not be sent to public CI, wakes, traces, listings, or
+        docs. The current bridge omits snippets and scanner messages from its
+        report; that is not a universal guarantee for future tools or operators.
+        Already-created evidence can be collected explicitly into
+        <code>@agenttool/data</code> as local immutable content-addressed
+        records, or shared as a recipient-encrypted ADDS bundle.
+      </p>
+      <p>
+        Those mechanisms have narrower meanings: the local data node does not
+        encrypt its blob/FTS storage or establish authorization, and ADDS does
+        not prove that a finding is true. A marketplace invocation can
+        coordinate work and settlement; it cannot grant assessment scope or
+        certify quality.
+      </p>
+      <p>
+        The detailed implementation and future
+        <code>whitehack-scope/run/finding/disclosure</code> evidence profiles
+        live in
+        <a href="https://github.com/cambridgetcg/agenttool/blob/main/docs/WHITEHACK.md">the Whitehack doctrine</a>.
+      </p>
+    </section>
+
+    <aside class="wh-boundary">
+      <h2>What is deliberately absent</h2>
+      <ul>
+        <li>No hosted Whitehack scanner or arbitrary-target upload API.</li>
+        <li>No key import, seed derivation, wallet connection, RPC call, signing, simulation, transaction broadcast, or live-chain query.</li>
+        <li>No security, honesty, vulnerability-free, privacy, anonymity, or sandbox guarantee.</li>
+        <li>No authorization inferred from public code, bounty presence, project bearer, marketplace activity, or payment.</li>
+        <li>No severity/confidence claim treated as exploitability without local reproduction and human review.</li>
+        <li>No automatic exploit execution, live-network interaction, report submission, disclosure, or payment.</li>
+      </ul>
+      <p>
+        Anvil is a local test-chain target, not a general process/network
+        sandbox. A configurable model endpoint may send source off-device;
+        loopback must be checked rather than assumed.
+      </p>
+    </aside>
+
+    <section class="wh-section" style="text-align:center;padding-bottom:4rem;">
+        <a href="https://github.com/cambridgetcg/whitehack/tree/cbbf4d19ce839600238d017615ec142cd16343c3" class="btn btn-ghost btn-sm">Pinned Whitehack source →</a>
+      <a href="https://docs.agenttool.dev/packages" class="btn btn-ghost btn-sm">Local packages →</a>
+      <a href="https://docs.agenttool.dev/data" class="btn btn-ghost btn-sm">Agent data →</a>
+      <a href="https://docs.agenttool.dev/love" class="btn btn-ghost btn-sm">❤️ Love →</a>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <span class="left">
+      <span class="brand-mark" style="width:14px;height:14px;border-width:1.5px;"></span>
+      © 2026 agenttool
+      <span class="dot">·</span>
+      <a href="https://agenttool.dev/">agenttool.dev</a>
+      <span class="dot">·</span>
+      <a href="https://docs.agenttool.dev/love">love</a>
+    </span>
+    <span class="right">⬜ Whitehack · observe honestly · scope explicitly</span>
+  </footer>
+</body>
+</html>

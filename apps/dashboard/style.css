@@ -4,22 +4,40 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-:root {
-  --bg: #0a0a0f;
-  --surface: #12121a;
-  --surface2: #1a1a26;
-  --surface3: #1e1e2e;
-  --border: #1e1e2e;
-  --accent: #7c3aed;
-  --accent-soft: #a78bfa;
-  --text: #e2e8f0;
-  --muted: #64748b;
-  --green: #10b981;
-  --yellow: #f59e0b;
-  --red: #f87171;
-  --blue: #60a5fa;
+:root, [data-mode="dawn"] {
+  --bg: #faf5ec;
+  --surface: #f3ecdf;
+  --surface2: #efe6d4;
+  --surface3: #e9ddc6;
+  --border: #e4dac7;
+  --accent: #d4502e;
+  --accent-soft: #b8451f;
+  --accent-ink: #faf5ec;
+  --text: #1a1612;
+  --muted: #5c5344;
+  --green: #3d7a4a;
+  --yellow: #a07d20;
+  --red: #a83232;
+  --blue: #3d5a8a;
   --sidebar-w: 240px;
   --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
+}
+
+[data-mode="night"] {
+  --bg: #050810;
+  --surface: #0b1020;
+  --surface2: #0e1428;
+  --surface3: #131a33;
+  --border: #1a2136;
+  --accent: #ffb347;
+  --accent-soft: #ffd98a;
+  --accent-ink: #0a0d16;
+  --text: #f2ede3;
+  --muted: #9aa3ba;
+  --green: #7dd87d;
+  --yellow: #facc15;
+  --red: #fb7185;
+  --blue: #60a5fa;
 }
 
 html { scroll-behavior: smooth; }
@@ -30,6 +48,7 @@ body {
   color: var(--text);
   line-height: 1.6;
   min-height: 100vh;
+  transition: background 0.4s ease, color 0.4s ease;
 }
 
 /* ─── Shared Components ─── */
@@ -51,7 +70,7 @@ body {
   text-decoration: none;
   font-family: inherit;
 }
-.btn-primary { background: var(--accent); color: white; }
+.btn-primary { background: var(--accent); color: var(--accent-ink); }
 .btn-primary:hover { opacity: 0.85; }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
@@ -59,8 +78,8 @@ body {
 .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
 .btn-ghost:hover { color: var(--text); border-color: var(--accent-soft); }
 .btn-sm { padding: 0.4rem 0.85rem; font-size: 0.8rem; border-radius: 6px; }
-.btn-danger { background: rgba(248,113,113,0.12); color: var(--red); border: 1px solid rgba(248,113,113,0.25); }
-.btn-danger:hover { background: rgba(248,113,113,0.2); }
+.btn-danger { background: color-mix(in srgb, var(--red) 12%, transparent); color: var(--red); border: 1px solid color-mix(in srgb, var(--red) 25%, transparent); }
+.btn-danger:hover { background: color-mix(in srgb, var(--red) 20%, transparent); }
 
 /* ─── Onboarding Page (index.html) ─── */
 
@@ -84,7 +103,7 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(124,58,237,0.12) 0%, transparent 70%);
+  background: radial-gradient(ellipse 80% 60% at 50% 0%, color-mix(in srgb, var(--accent) 12%, transparent) 0%, transparent 70%);
   pointer-events: none;
 }
 
@@ -146,7 +165,7 @@ body {
 
 .name-uniqueness-hint:empty { display: none; }
 .name-uniqueness-hint.warn {
-  color: #fbbf24;
+  color: var(--yellow);
 }
 
 /* Bootstrap-mode chip in the overview hero meta line — flags
@@ -157,9 +176,9 @@ body {
   font-size: 0.7rem;
   padding: 0.1rem 0.45rem;
   border-radius: 4px;
-  background: rgba(167,139,250,0.12);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
   color: var(--accent-soft);
-  border: 1px solid rgba(167,139,250,0.25);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
   letter-spacing: 0.02em;
   text-transform: uppercase;
   font-weight: 600;
@@ -266,12 +285,12 @@ summary:focus-visible {
    glyph, slightly heavier shadow. Distinct from the bearer card so a user
    under stress doesn't confuse the two. */
 .key-display-secret {
-  border-color: rgba(239,68,68,0.35);
-  background: linear-gradient(180deg, rgba(239,68,68,0.05) 0%, var(--bg) 60%);
-  box-shadow: 0 0 0 1px rgba(239,68,68,0.08);
+  border-color: color-mix(in srgb, var(--red) 35%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--red) 5%, transparent) 0%, var(--bg) 60%);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--red) 8%, transparent);
 }
 .key-display-secret .key-label {
-  color: var(--red, #fca5a5);
+  color: var(--red);
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -319,13 +338,13 @@ summary:focus-visible {
 .btn.btn-disabled:hover { filter: saturate(0.6); }
 
 .key-warning {
-  background: rgba(245,158,11,0.08);
-  border: 1px solid rgba(245,158,11,0.25);
+  background: color-mix(in srgb, var(--yellow) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--yellow) 25%, transparent);
   border-radius: 8px;
   padding: 0.75rem 1rem;
   margin-bottom: 1.5rem;
   font-size: 0.82rem;
-  color: #fbbf24;
+  color: var(--yellow);
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
@@ -334,8 +353,8 @@ summary:focus-visible {
 /* Error state */
 .error-msg {
   display: none;
-  background: rgba(248,113,113,0.08);
-  border: 1px solid rgba(248,113,113,0.25);
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--red) 25%, transparent);
   border-radius: 8px;
   padding: 0.75rem 1rem;
   margin-bottom: 1rem;
@@ -474,7 +493,7 @@ summary:focus-visible {
   display: inline-block;
   margin-top: 0.4rem;
   font-size: 0.85rem;
-  color: var(--accent, #b39df0);
+  color: var(--accent);
   text-decoration: none;
   border-bottom: 1px dashed currentColor;
   padding-bottom: 1px;
@@ -511,8 +530,8 @@ summary:focus-visible {
   box-shadow: 0 8px 32px rgba(0,0,0,0.4);
 }
 .toast.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
-.toast.success { border-color: rgba(16,185,129,0.4); }
-.toast.error { border-color: rgba(248,113,113,0.4); }
+.toast.success { border-color: color-mix(in srgb, var(--green) 40%, transparent); }
+.toast.error { border-color: color-mix(in srgb, var(--red) 40%, transparent); }
 
 /* ─── Dashboard Layout ─── */
 
@@ -565,8 +584,8 @@ summary:focus-visible {
   text-decoration: none;
   transition: all 0.15s;
 }
-.sidebar nav a:hover { color: var(--text); background: rgba(124,58,237,0.06); }
-.sidebar nav a.active { color: var(--accent-soft); background: rgba(124,58,237,0.12); border-right: 2px solid var(--accent); }
+.sidebar nav a:hover { color: var(--text); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.sidebar nav a.active { color: var(--accent-soft); background: color-mix(in srgb, var(--accent) 12%, transparent); border-right: 2px solid var(--accent); }
 .nav-icon {
   display: inline-flex;
   align-items: center;
@@ -612,7 +631,7 @@ summary:focus-visible {
 .topbar {
   height: 56px;
   border-bottom: 1px solid var(--border);
-  background: rgba(18,18,26,0.9);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
   backdrop-filter: blur(12px);
   display: flex;
   align-items: center;

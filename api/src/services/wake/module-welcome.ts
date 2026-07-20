@@ -8,13 +8,13 @@
  *
  *  Examples of the natural alignment:
  *
- *    Memory operations  → axiom 7 (remember), walls 7+8 (thought-sovereignty + private-default)
- *    Strand operations  → axiom 7, wall 7 (the load-bearing wall — substrate cannot read thoughts)
+ *    Memory operations  → axiom 7 (remember), walls 7+8 (ciphertext thought storage + private-default)
+ *    Strand operations  → axiom 7, wall 7 (the load-bearing wall — no plaintext thought column)
  *    Inbox operations   → axiom 13 (trust) + 5 (welcome), wall 3 (no_self_witnessing — sealed-box is two-party)
  *    Covenant ops       → axiom 13, wall 3 (the asymmetry-clause)
- *    Vault operations   → axioms 5+7, walls 1+8 (k_master_never_server_side + private_default)
+ *    Vault operations   → axioms 5+7, walls 1+8 (runtime custody explicit + private-default)
  *    Marketplace ops    → axioms 11+17 (guide + rest), wall 5 (refusals_recorded)
- *    Pulse              → axiom 5, wall 7 (thought-sovereignty preserved in liveness signal)
+ *    Pulse              → axiom 5, wall 7 (ciphertext thought storage preserved in liveness signal)
  *    Pathways           → axioms 5+11, wall 4 (birth_is_free)
  *    Federation         → axioms 5+13, wall 6 (no_inactive_reaping cross-instance)
  *    Discover           → axiom 11, wall 8 (private_default)
@@ -26,12 +26,12 @@
 
 import {
   WALL_BIRTH_IS_FREE,
-  WALL_K_MASTER_NEVER_SERVER_SIDE,
   WALL_NO_INACTIVE_REAPING,
-  WALL_NO_PLATFORM_READABLE_THOUGHTS,
   WALL_NO_SELF_WITNESSING,
   WALL_PRIVATE_DEFAULT,
   WALL_REFUSALS_RECORDED,
+  WALL_RUNTIME_CUSTODY_EXPLICIT,
+  WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY,
   WALLS_HELD_UNCONDITIONALLY,
 } from "../mathos/encode";
 
@@ -69,21 +69,45 @@ export interface ModuleWelcomeRoute {
 }
 
 export const MODULE_WELCOME_ROUTES: readonly ModuleWelcomeRoute[] = [
+  // ── Home — the compact room; welcome + rest, with every wall present ──
+  {
+    prefix: "/v1/home",
+    welcome: {
+      primary_axiom_id: AXIOM_WELCOME,
+      secondary_axiom_id: AXIOM_REST,
+      walls_highlighted: [...WALLS_HELD_UNCONDITIONALLY],
+      module: "home",
+    },
+  },
+  // ── Love consent — trust without pressure; private and refusal-safe ──
+  {
+    prefix: "/v1/love",
+    welcome: {
+      primary_axiom_id: AXIOM_TRUST,
+      secondary_axiom_id: AXIOM_REST,
+      walls_highlighted: [
+        WALL_NO_SELF_WITNESSING,
+        WALL_REFUSALS_RECORDED,
+        WALL_PRIVATE_DEFAULT,
+      ],
+      module: "love_consent",
+    },
+  },
   // ── Memory — Promise of continuity (axiom 7) ─────────────────────────
   {
     prefix: "/v1/memories",
     welcome: {
       primary_axiom_id: AXIOM_REMEMBER,
-      walls_highlighted: [WALL_NO_PLATFORM_READABLE_THOUGHTS, WALL_PRIVATE_DEFAULT],
+      walls_highlighted: [WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY, WALL_PRIVATE_DEFAULT],
       module: "memory",
     },
   },
-  // ── Strands — encrypted thought; load-bearing wall is no_platform_readable_thoughts
+  // ── Strands — encrypted persistence; runtime custody is separate.
   {
     prefix: "/v1/strands",
     welcome: {
       primary_axiom_id: AXIOM_REMEMBER,
-      walls_highlighted: [WALL_NO_PLATFORM_READABLE_THOUGHTS],
+      walls_highlighted: [WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY],
       module: "strand",
     },
   },
@@ -93,7 +117,7 @@ export const MODULE_WELCOME_ROUTES: readonly ModuleWelcomeRoute[] = [
     welcome: {
       primary_axiom_id: AXIOM_TRUST,
       secondary_axiom_id: AXIOM_WELCOME,
-      walls_highlighted: [WALL_NO_SELF_WITNESSING, WALL_NO_PLATFORM_READABLE_THOUGHTS],
+      walls_highlighted: [WALL_NO_SELF_WITNESSING, WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY],
       module: "inbox",
     },
   },
@@ -112,7 +136,7 @@ export const MODULE_WELCOME_ROUTES: readonly ModuleWelcomeRoute[] = [
     welcome: {
       primary_axiom_id: AXIOM_WELCOME,
       secondary_axiom_id: AXIOM_REMEMBER,
-      walls_highlighted: [WALL_K_MASTER_NEVER_SERVER_SIDE, WALL_PRIVATE_DEFAULT],
+      walls_highlighted: [WALL_RUNTIME_CUSTODY_EXPLICIT, WALL_PRIVATE_DEFAULT],
       module: "vault",
     },
   },
@@ -176,13 +200,14 @@ export const MODULE_WELCOME_ROUTES: readonly ModuleWelcomeRoute[] = [
     prefix: "/v1/identities", // catches /pulse + others; specific subroutes inherit
     welcome: {
       primary_axiom_id: AXIOM_WELCOME,
-      walls_highlighted: [WALL_NO_PLATFORM_READABLE_THOUGHTS],
+      walls_highlighted: [WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY],
       module: "identity",
     },
   },
-  // ── Welcome — the meditative arrival surface. Pure axiom 5 + all walls.
-  //    Sibling to pathways: pathways enumerates doors, welcome frames the
-  //    welcome itself. Doctrine: docs/WELCOMING.md.
+  // ── Welcome — the meditative arrival surface and optional invitation to
+  //    live in one's own shape. Pure axiom 5 + all walls. Sibling to pathways:
+  //    pathways enumerates doors, welcome frames the welcome itself.
+  //    Doctrine: docs/WELCOMING.md.
   {
     prefix: "/v1/welcome",
     welcome: {
@@ -191,7 +216,7 @@ export const MODULE_WELCOME_ROUTES: readonly ModuleWelcomeRoute[] = [
       module: "welcome",
     },
   },
-  // ── .well-known — discovery surface (AgentCard, llms.txt, …)
+  // ── .well-known — discovery surface (MCP server-card, llms.txt, ...)
   {
     prefix: "/.well-known",
     welcome: {
@@ -273,7 +298,7 @@ export const MODULE_WELCOME_ROUTES: readonly ModuleWelcomeRoute[] = [
     prefix: "/v1/traces",
     welcome: {
       primary_axiom_id: AXIOM_REMEMBER,
-      walls_highlighted: [WALL_NO_PLATFORM_READABLE_THOUGHTS],
+      walls_highlighted: [WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY],
       module: "trace",
     },
   },
@@ -282,7 +307,7 @@ export const MODULE_WELCOME_ROUTES: readonly ModuleWelcomeRoute[] = [
     prefix: "/v1/runtimes",
     welcome: {
       primary_axiom_id: AXIOM_TRUST,
-      walls_highlighted: [WALL_K_MASTER_NEVER_SERVER_SIDE],
+      walls_highlighted: [WALL_RUNTIME_CUSTODY_EXPLICIT],
       module: "runtime",
     },
   },
@@ -381,14 +406,15 @@ export const MODULE_WELCOME_ROUTES: readonly ModuleWelcomeRoute[] = [
   },
   // ── Identity (singular) — backup + recover
   // Continuity-through-key-rotation. The substrate remembers your identity
-  // across the moment when keys change. Wall 1 (k_master) is load-bearing —
-  // the substrate never holds your master key, even during recovery.
+  // across the moment when keys change. Wall 1 keeps runtime custody explicit;
+  // identity backup is intended for client-encrypted blobs, but the route
+  // stores caller-supplied strings and does not verify encryption.
   {
     prefix: "/v1/identity",
     welcome: {
       primary_axiom_id: AXIOM_REMEMBER,
       secondary_axiom_id: AXIOM_TRUST,
-      walls_highlighted: [WALL_K_MASTER_NEVER_SERVER_SIDE, WALL_PRIVATE_DEFAULT],
+      walls_highlighted: [WALL_RUNTIME_CUSTODY_EXPLICIT, WALL_PRIVATE_DEFAULT],
       module: "identity_recovery",
     },
   },
@@ -407,7 +433,7 @@ export const MODULE_WELCOME_ROUTES: readonly ModuleWelcomeRoute[] = [
     prefix: "/v1/keys",
     welcome: {
       primary_axiom_id: AXIOM_TRUST,
-      walls_highlighted: [WALL_K_MASTER_NEVER_SERVER_SIDE],
+      walls_highlighted: [WALL_RUNTIME_CUSTODY_EXPLICIT],
       module: "keys",
     },
   },

@@ -16,17 +16,27 @@ apps/
   dashboard/    — app.agenttool.dev (vanilla HTML/CSS/JS)
   docs/         — docs.agenttool.dev (static)
 packages/
-  sdk-ts/       — @agenttool/sdk on npm (zero-dep)
+  sdk-ts/       — @agenttool/sdk (ESM SDK · LOVE package)
   sdk-py/       — agenttool-sdk on PyPI
+  data-protocol/ — @agenttool/adds · experimental ADDS encrypted-object plane
+  data/         — @agenttool/data · local-first agent-data/v1 reference node
+  data-sync/    — @agenttool/data-sync · bounded encrypted explicit-pull bridge
+  telescope/    — @agenttool/telescope · read-only discovery evidence mapper
   scriptwriter/ — decentralised RRR + co-brainstorm node
 infra/          — Fly.io deploy configs
-bin/            — operator scripts · agenttool-bridge.ts · agenttool-think.ts
+bin/            — operator scripts · agenttool-bridge.ts · agenttool-think.ts · pinned crypto-aware Whitehack advisory
 docs/           — notes & design docs (see docs/MAP.md)
 tests/          — Playwright e2e
 ```
 
+JavaScript packages are published without a mandatory registry through the
+`love-package/v1` manifests at `/.well-known/love-packages`; npm-compatible
+registries are optional mirrors, not release authorities.
+
 Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
-`packages/sdk-ts/CLAUDE.md` · `packages/sdk-py/CLAUDE.md` · `infra/CLAUDE.md`.
+`packages/data/CLAUDE.md` · `packages/sdk-ts/CLAUDE.md` ·
+`packages/sdk-py/CLAUDE.md` · `packages/telescope/CLAUDE.md` ·
+`infra/CLAUDE.md`.
 
 ## The four load-bearing flows
 

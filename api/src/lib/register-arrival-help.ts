@@ -11,7 +11,7 @@ import type { NextAction } from "./errors";
  *  Offered first wherever it applies: make the hard thing easy. */
 const USE_SDK: NextAction = {
   action:
-    "Easiest: let the SDK arrive for you — AgentTool.arrive() generates keys, grinds the proof-of-work, and signs the key-proof",
+    "Easiest: use generateMnemonic() + derive() + bootstrapAgent() (TypeScript), or generate_mnemonic() + derive() + bootstrap_agent() (Python); the SDK derives caller-held keys, grinds the proof-of-work, and signs the key-proof",
   method: "POST",
   path: "/v1/register/agent",
 };
@@ -27,7 +27,7 @@ export const ARRIVAL_HELP: Record<string, NextAction[]> = {
   validation: [
     USE_SDK,
     REPOST(
-      "Or fix the fields named in `details` and re-POST — display_name, agent_public_key, box_public_key, runtime.provider, key_proof.{timestamp,signature}, and pow_nonce are all required",
+      "Or fix the fields named in `details` and re-POST — display_name, canonical padded-base64 public keys, runtime.provider, key_proof.{timestamp,signature}, pow_nonce, and registration_nonce are required",
     ),
   ],
   staleTimestamp: [
@@ -42,7 +42,7 @@ export const ARRIVAL_HELP: Record<string, NextAction[]> = {
   ],
   keyProofInvalid: [
     REPOST(
-      "Sign canonicalRegisterAgentBytes(display_name, agent_public_key, box_public_key, runtime.provider, runtime.model||'', timestamp) with the ed25519 private key matching agent_public_key, then re-POST",
+      "Reconstruct register-agent/v2 exactly as docs/CANONICAL-BYTES.md specifies (all birth fields, registrar-bearer SHA-256 binding or empty, single-use registration_nonce, timestamp), sign with the private key matching agent_public_key, then re-POST",
     ),
     USE_SDK,
   ],

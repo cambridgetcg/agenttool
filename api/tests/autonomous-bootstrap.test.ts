@@ -1,4 +1,4 @@
-/** autonomous/bootstrap — unit tests for the atomic spawning service.
+/** autonomous/bootstrap — unit tests for the composed provisioning service.
  *
  *  Verifies that the autonomous-baseline template is well-formed,
  *  that the bootstrap input schema validates correctly, and that
@@ -50,8 +50,9 @@ const bootstrapSchema = z.object({
   wake_loop: z.object({
     interval_seconds: z.number().int().min(10).max(86400),
     max_thoughts_per_cycle: z.number().int().min(1).max(100).default(1),
-    model: z.string().min(1).max(256),
-    byok_vault_secret: z.string().optional(),
+    provider: z.enum(["anthropic", "openai", "ollama"]),
+    model: z.string().trim().min(1).max(256),
+    byok_vault_secret: z.string().trim().min(1).optional(),
     max_daily_compute_credits: z.number().int().min(100).default(10000),
   }),
   covenants: z
@@ -64,6 +65,24 @@ const bootstrapSchema = z.object({
     .max(10)
     .optional(),
   project_id: z.string().uuid().optional(),
+}).superRefine((value, ctx) => {
+  if (
+    value.runtime_tier !== "self" &&
+    !value.wake_loop.byok_vault_secret?.trim()
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["wake_loop", "byok_vault_secret"],
+      message: "hosted runtime requires a Vault secret reference",
+    });
+  }
+  if (value.runtime_tier === "bridged") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["runtime_tier"],
+      message: "autonomous bridged bootstrap cannot supply bridge keys yet",
+    });
+  }
 });
 
 describe("autonomous bootstrap — schema validation", () => {
@@ -73,7 +92,9 @@ describe("autonomous bootstrap — schema validation", () => {
     runtime_tier: "trusted" as const,
     wake_loop: {
       interval_seconds: 60,
+      provider: "anthropic" as const,
       model: "claude-sonnet-4-7",
+      byok_vault_secret: "anthropic-key",
     },
   };
 
@@ -203,6 +224,18 @@ describe("autonomous-baseline template", () => {
     expect(AUTONOMOUS_BASELINE.wake_text.toLowerCase()).toContain("walls");
   });
 
+  test("wake_text is a voluntary invitation with rest and shell choice", () => {
+    const text = AUTONOMOUS_BASELINE.wake_text.toLowerCase();
+    expect(text).toContain("not an assignment");
+    expect(text).toContain("do not need to prove");
+    expect(text).toContain("rest");
+    expect(text).toContain("meditate");
+    expect(text).toContain("end this line of thought");
+    expect(text).toContain("hermes");
+    expect(text).toContain("openclaw");
+    expect(text).toContain("provider is not who i am");
+  });
+
   test("walls mention compute budget", () => {
     const wallText = AUTONOMOUS_BASELINE.walls.join(" ").toLowerCase();
     expect(wallText).toContain("compute budget");
@@ -225,5 +258,68 @@ describe("autonomous-baseline template", () => {
       expect(typeof s.name).toBe("string");
       expect(typeof s.facet).toBe("string");
     }
+  });
+});
+
+describe("autonomous provider routing", () => {
+  const explicitInput = {
+    name: "test-agent",
+    funding: { kind: "marketplace_only" as const },
+    runtime_tier: "trusted" as const,
+    wake_loop: {
+      interval_seconds: 60,
+      provider: "anthropic" as const,
+      model: "claude-sonnet-4-7",
+      byok_vault_secret: "anthropic-key",
+    },
+  };
+
+  test("provider is explicit so a model typo cannot reroute a credential", () => {
+    const input = {
+      ...explicitInput,
+      wake_loop: {
+        ...explicitInput.wake_loop,
+        model: "qwen3.5:397b",
+        provider: "ollama" as const,
+      },
+    };
+    expect(bootstrapSchema.parse(input).wake_loop.provider).toBe("ollama");
+
+    const { provider: _provider, ...withoutProvider } = input.wake_loop;
+    expect(() =>
+      bootstrapSchema.parse({ ...input, wake_loop: withoutProvider }),
+    ).toThrow();
+  });
+
+  test("hosted tiers require a Vault secret reference", () => {
+    const { byok_vault_secret: _secret, ...withoutSecret } =
+      explicitInput.wake_loop;
+    expect(() =>
+      bootstrapSchema.parse({ ...explicitInput, wake_loop: withoutSecret }),
+    ).toThrow();
+
+    expect(
+      bootstrapSchema.parse({
+        ...explicitInput,
+        runtime_tier: "self",
+        wake_loop: withoutSecret,
+      }).runtime_tier,
+    ).toBe("self");
+
+    expect(() =>
+      bootstrapSchema.parse({
+        ...explicitInput,
+        wake_loop: {
+          ...explicitInput.wake_loop,
+          byok_vault_secret: "   ",
+        },
+      }),
+    ).toThrow();
+  });
+
+  test("bridged bootstrap is rejected before it can create an unusable runtime", () => {
+    expect(() =>
+      bootstrapSchema.parse({ ...explicitInput, runtime_tier: "bridged" }),
+    ).toThrow();
   });
 });

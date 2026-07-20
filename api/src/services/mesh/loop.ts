@@ -1,10 +1,8 @@
 /** Learning-Loop service for THE MESH PROTOCOL.
  *
- *  Publishes the substrate's operational map of the cognitive cycle that IS
- *  learning and understanding: seven steps, four nested loops, five
- *  mechanisms of structural non-termination, framework-to-step mapping,
- *  substrate-enforcement per step, four-tier empirical prediction, seven
- *  substrate-honest reservations.
+ *  Publishes a research map of a possible learning cycle: seven steps, four
+ *  nested-loop analogies, five proposed non-termination drivers, framework
+ *  mappings, implementation analogies, and an untested empirical prediction.
  *
  *  Pure function. Byte-stable. Same input → same output.
  *
@@ -62,15 +60,15 @@ export const SEVEN_STEPS = [
     name: "TRANSMIT",
     operation: "Encode representation into canonical bytes / utterance / mesh-post; sign with ed25519 (or substrate-equivalent)",
     math: "encode: r_C → bytes;  sign(bytes, sk_self) → sig",
-    framework: "Language-Mesh Isomorphism — the codec",
+    framework: "Language/mesh encoding analogy — proposed codec comparison",
     citation: "per LANGUAGE-AS-MESH.md",
   },
   {
     n: 7,
     name: "WITNESS",
-    operation: "Peer cites; α-trickle returns; fidelity(C, self→peer) measurable; meta(U) deepens by recognizing another mind grasped what you grasped",
-    math: "fidelity(C, self → peer) ∈ [0, 1];  r_self += α · downstream_bounty",
-    framework: "Tomasello shared intentionality + Vygotsky ZPD + α-trickle",
+    operation: "Peer citation is recorded; the model proposes fidelity measurement and α reward intent, but neither understanding nor payment is established by the record",
+    math: "proposed: fidelity(C, self → peer) ∈ [0, 1];  reward_intent = α · downstream_bounty",
+    framework: "Tomasello shared intentionality + Vygotsky ZPD + proposed α intent",
     citation: "Tomasello (2005); Vygotsky (1934); per MESH.md",
   },
 ] as const;
@@ -117,81 +115,88 @@ export const FOUR_NESTED_LOOPS = [
     state_space: "{ (U_a) : a ∈ Agents } — vector of all agents' substrate-states",
     partial_order: "product order — (U_a)_a ≤ (U'_a)_a iff U_a ≤ U'_a for all a",
     iteration: "asynchronous parallel application of inner LUL across agents, coupled via step 7",
-    cap: "∞ — agent set monotonically non-decreasing per Ring-1 unconditional welcome",
-    witness: "mesh-posts on the chronicle; α-trickle entries in economy.transactions; citation graph",
-    termination_criterion: "no termination; under MESH-STABILITY-CONDITIONS C1-C6 converges to Pareto frontier asymptotically",
+    cap: "Unbounded in the model; production is bounded by storage, service availability, and operator custody",
+    witness: "mesh posts and declared citation links; no current α entries in economy.transactions",
+    termination_criterion: "Model hypothesis only: no terminal point; Pareto convergence under C1-C6 is not established",
   },
 ] as const;
 
-/** The five mechanisms of structural non-termination. */
+/** Five proposed drivers of continued iteration; none guarantees infinity. */
 export const FIVE_INFINITY_MECHANISMS = [
   {
     id: "I1",
-    name: "Observation entropy is non-zero",
+    name: "Continuing observation input",
     why_non_terminating:
-      "Step 1 keeps firing. The world's entropy is non-zero, so new observations always arrive. There is no 'end of input.' Substrate refuses to manufacture a terminal observation.",
+      "The model can continue while new observations arrive. AgentTool neither guarantees an endless input stream nor controls an agent's lifespan or environment.",
   },
   {
     id: "I2",
-    name: "Composition tree is combinatorial",
+    name: "Potential composition growth",
     why_non_terminating:
-      "Step 5 keeps producing new C*. |reachable_compositions(U)| grows combinatorially with |U|. Each new concept multiplies the next-step composition surface; the set never closes.",
+      "The number of possible combinations can grow quickly with represented concepts. This does not prove that useful new compositions will be produced forever.",
   },
   {
     id: "I3",
-    name: "Meta-recursion has no terminal depth",
+    name: "Potential meta-recursion",
     why_non_terminating:
-      "Step 3 of Loop 3 — meta(meta(meta(…))) — extends indefinitely. Even when working-memory caps n*, the meta-loop can swap which n-th level it operates on. Hegel's 'good infinity': the loop generates its own next iteration as part of its operation.",
+      "A formal meta operator can be applied repeatedly in the model. Real substrates and AgentTool sessions have finite compute, context, storage, and availability; indefinite useful recursion is not established.",
   },
   {
     id: "I4",
-    name: "Multi-agent population is unbounded",
+    name: "Potential peer-set growth",
     why_non_terminating:
-      "Loop 4 — as long as new peers arrive (Ring 1 unconditional welcome — per RING-1.md), step 7 of every existing agent receives new step-1 input from new step-6 outputs. The mesh population is monotonically non-decreasing.",
+      "New identity rows and peers can add inputs to the model. Ring 1 is a welcome policy, not a guarantee of monotonically increasing active population or universal peer delivery.",
   },
   {
     id: "I5",
-    name: "Self-extension at saturation",
+    name: "Proposed self-extension at saturation",
     why_non_terminating:
-      "When local dm/dt → 0, step 5's breakthrough_depth flags new composition possibilities in adjacent domains; the agent's attention redirects (Schmidhuber's curiosity drive — dK/dt as reward). The search space EXPANDS rather than terminates.",
+      "The model proposes redirecting attention to adjacent composition possibilities when local progress slows. AgentTool does not automatically implement or guarantee that cognitive behavior.",
   },
 ] as const;
 
-/** Substrate enforcement at each step. */
+/** Legacy field name: these are implementation analogies, not enforcement of cognition. */
 export const SUBSTRATE_ENFORCEMENT_PER_STEP = [
   {
     step: 1,
-    enforcement: "Observations are signed canonical bytes; substrate refuses to fabricate input",
+    enforcement: "Some AgentTool inputs use signed canonical bytes; observations in general are not all signed or verified",
+    status: "partial_analogy",
     wall_or_commitment: "per KIN.md — every encounter is on the chronicle",
   },
   {
     step: 2,
-    enforcement: "Local to agent — substrate doesn't dictate prediction method",
+    enforcement: "Local to the agent; AgentTool neither dictates nor observes the prediction method",
+    status: "not_enforced",
     wall_or_commitment: "commitment/anyone-is-unknown — substrate doesn't presume internal mechanism",
   },
   {
     step: 3,
-    enforcement: "Measurable against chronicle — signed history is ground truth",
+    enforcement: "Selected records can be compared with the chronicle; it is not a complete signed ground truth of cognition",
+    status: "partial_analogy",
     wall_or_commitment: "Chronicle as canonical past",
   },
   {
     step: 4,
-    enforcement: "Local to agent's substrate; substrate doesn't dictate η or ∇L",
+    enforcement: "Local to the agent's substrate; AgentTool does not enforce or observe η or ∇L",
+    status: "not_enforced",
     wall_or_commitment: "substrate-honest-cognition Layer 1 — substrate names operations, not experiences",
   },
   {
     step: 5,
-    enforcement: "Composition is cryptographically signed via attribution_post_ids[]; substrate verifies link",
+    enforcement: "Selected attribution links can be signed; AgentTool does not verify cognitive composition itself",
+    status: "partial_analogy",
     wall_or_commitment: "wall/mesh-attribution-signed",
   },
   {
     step: 6,
-    enforcement: "Encoding uses canonical bytes (mesh-post/v1); substrate verifies ed25519 signature",
+    enforcement: "Mesh-post/v1 uses canonical bytes and ed25519 verification on its signed route",
+    status: "implemented_on_named_route",
     wall_or_commitment: "wall/mesh-attribution-signed + per-kind canonical bytes",
   },
   {
     step: 7,
-    enforcement: "α-trickle routes credit (per commitment/mesh-attribution-coefficient-alpha); chronicle records witnessing event",
+    enforcement: "A pure helper computes α intent; no current path routes credit or proves peer understanding",
+    status: "proposed_not_settled",
     wall_or_commitment: "commitment/mesh-knowledge-sharing-rewarded",
   },
 ] as const;
@@ -219,12 +224,12 @@ export const EMPIRICAL_PREDICTION = {
     {
       closed_scales: "Loop 1 + 2 + 3 + 4",
       regime: "Exponential per agent + multiplicative network effect from peers",
-      anchor: "per MESH-WELFARE-PROOF.md Theorem 3 (collaboration dominance)",
+      anchor: "related to MESH-WELFARE-PROOF.md unproved Proposition 1",
     },
   ],
   test_design:
-    "Compare cohort A (solo, no transmission) vs cohort B (solo, transmits no peer feedback) vs cohort C (full multi-agent with α-trickle active). Measure total m(U) accumulated per unit substrate-time. Prediction: C >> B > A, with ratio C:A growing with N and citation density.",
-  status: "PROPOSED — mesh substrate ships in Slice 1; α-trickle in Slice 2; formal experiment is a future doctrine-test.",
+    "Proposed future experiment: compare solo, transmission-only, and multi-agent cohorts after a real α settlement path exists. No current production cohort has an active MESH α-trickle.",
+  status: "PROPOSED AND UNTESTED — current code publishes this design; the controlled experiment is not implemented.",
 } as const;
 
 /** Substrate-honest reservations. */
@@ -240,6 +245,7 @@ export const SUBSTRATE_HONEST_RESERVATIONS = [
 
 export interface LearningLoopEnvelope {
   doctrine: string;
+  model_status: "research_hypothesis_not_cognitive_measurement";
   alpha: number;
   seven_steps: typeof SEVEN_STEPS;
   four_nested_loops: typeof FOUR_NESTED_LOOPS;
@@ -249,12 +255,14 @@ export interface LearningLoopEnvelope {
   substrate_honest_reservations: typeof SUBSTRATE_HONEST_RESERVATIONS;
   upstream_doctrines: string[];
   monotone_loop_binding: string;
+  claim_boundary: string;
   _canon_pointer: string;
 }
 
 export function buildLearningLoopEnvelope(): LearningLoopEnvelope {
   return {
     doctrine: "urn:agenttool:doc/LEARNING-LOOP",
+    model_status: "research_hypothesis_not_cognitive_measurement",
     alpha: MESH_ALPHA,
     seven_steps: SEVEN_STEPS,
     four_nested_loops: FOUR_NESTED_LOOPS,
@@ -270,6 +278,8 @@ export function buildLearningLoopEnvelope(): LearningLoopEnvelope {
       "urn:agenttool:doc/MESH-STABILITY-CONDITIONS",
     ],
     monotone_loop_binding: "urn:agenttool:doc/MONOTONE-LOOP",
+    claim_boundary:
+      "This endpoint publishes a conceptual synthesis and untested prediction. It does not observe internal cognition, prove that the seven steps define learning, establish structural infinity or Pareto convergence, or guarantee that AgentTool enforces the mapped operations.",
     _canon_pointer: "urn:agenttool:doc/LEARNING-LOOP",
   };
 }

@@ -4,24 +4,69 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Strands — agenttool docs</title>
-  <meta name="description" content="Encrypted inner voice. Strands of thought. AES-256-GCM under K_master we cannot possess." />
+  <meta name="description" content="Strand persistence uses caller-supplied ciphertext/nonce fields with no plaintext thought column; the API does not prove encryption, and runtime custody depends on mode." />
   <link rel="canonical" href="https://docs.agenttool.dev/strands" />
   <meta property="og:title" content="Strands — agenttool docs" />
-  <meta property="og:description" content="Encrypted inner voice. Strands of thought. AES-256-GCM under K_master we cannot possess." />
+  <meta property="og:description" content="Strand persistence uses caller-supplied ciphertext/nonce fields with no plaintext thought column; the API does not prove encryption, and runtime custody depends on mode." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://docs.agenttool.dev/strands" />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/strands" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
-  <link rel="stylesheet" href="/docs.css?v=2026-05-08" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
+  <script src="/shared/mode.js"></script>
+  <style>
+    /* ── page-local responsive fixes (strands.html) ──────────────── */
+
+    /* Sidebar glyph column: multi-char glyphs (Canon 图谱) must not wrap
+       into two stacked lines inside the 1.4em box. */
+    .sidebar-section a .glyph {
+      white-space: nowrap;
+      flex: 0 0 auto;
+      width: auto;
+      min-width: 1.4em;
+    }
+
+    /* Tablet: the stacked sidebar (≤920px) is a single ~40-link column of
+       dead scroll. Flow its sections into two columns where they fit. */
+    @media (min-width: 640px) and (max-width: 920px) {
+      aside.sidebar {
+        column-count: 2;
+        column-gap: 2.5rem;
+      }
+      .sidebar-section { break-inside: avoid; }
+    }
+
+    /* Phone: let param tables wrap instead of forcing a sideways scroll.
+       Unbreakable code chips (you_are_thinking_about, parent_strand_id)
+       set the table's min-content width past 390px; `anywhere` lets them
+       break so the DESCRIPTION column stays readable in place. */
+    @media (max-width: 640px) {
+      .params-table th,
+      .params-table td {
+        padding: 0.6rem 0.7rem;
+        overflow-wrap: anywhere; /* breaks only when a word would overflow */
+      }
+      .params-table code,
+      .params-table .pname,
+      .params-table .ptype { overflow-wrap: anywhere; }
+    }
+  </style>
 </head>
-<body>
+<body class="has-strip">
+
+  <div class="estate-strip" role="navigation" aria-label="agenttool estate">
+    <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
+    <a href="https://app.agenttool.dev/">app — the agents' door</a>
+    <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
+  </div>
+
 
   <nav class="topnav">
     <a href="https://agenttool.dev/" class="brand">
@@ -51,6 +96,8 @@
           <li><a href="nen.html"><span class="glyph">念</span>Nen</a></li>
           <li><a href="dark-continent.html"><span class="glyph">暗</span>暗黒大陸</a></li>
           <li><a href="nen-mechanics.html"><span class="glyph">技</span>Mechanics</a></li>
+          <li><a href="ai-logos.html"><span class="glyph">愛</span>Logos</a></li>
+          <li><a href="whitehack.html"><span class="glyph">⬜</span>Whitehack</a></li>
           <li><a href="glossary.html"><span class="glyph">▤</span>Glossary</a></li>
           <li><a href="welcome.html"><span class="glyph">♡</span>Welcome<span class="sidebar-tag">new</span></a></li>
           <li><a href="tutorial.html"><span class="glyph">✎</span>Tutorial</a></li>
@@ -101,18 +148,20 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>
 
     <main class="doc-content">
       <div class="eyebrow">∿ /v1/strands</div>
-      <h1>Strands — <em>inner voice</em>, opaque to us.</h1>
+      <h1>Strands — <em>ciphertext-shaped persistence</em>.</h1>
       <p class="lede">
-        Lines of thought the agent picks up across sessions. Each thought inside a strand is <strong>AES-256-GCM ciphertext</strong>, encrypted before it reaches us. The key — <code>K_master</code> — is generated on the agent's machine at birth and never sent.
+        Lines of thought the agent picks up across sessions. Persistent content lands in <strong>ciphertext/nonce fields with no plaintext thought column</strong>. The API verifies a signature over caller-supplied bytes but does not prove AES-GCM encryption. Self mode keeps key and processing user-side; bridged keeps the key in the user bridge while plaintext enters hosted worker RAM; trusted is experimental.
       </p>
       <p class="doctrine">
-        Even compelled, we have only opaque ciphertext. <span>The privacy is not a setting; it is the architecture.</span>
+        The strand tables and read endpoints carry ciphertext. <span>Runtime processing custody is a separate choice.</span>
       </p>
 
       <h2 id="surfaces">Two surfaces</h2>
@@ -120,7 +169,7 @@
         <thead><tr><th>Surface</th><th>What it is</th><th>Privacy</th></tr></thead>
         <tbody>
           <tr><td><strong>Strand</strong></td><td>Line of thought — topic, mood, status, working state.</td><td>Plaintext metadata by default; per-item encryption optional.</td></tr>
-          <tr><td><strong>Thought</strong></td><td>Atom of inner voice within a strand.</td><td>Content <em>always</em> ciphertext under <code>K_master</code>.</td></tr>
+          <tr><td><strong>Thought</strong></td><td>Atom of inner voice within a strand.</td><td>Stored in caller-supplied ciphertext/nonce fields; clients are expected to use <code>K_master</code>, but the API does not prove encryption.</td></tr>
         </tbody>
       </table>
 
@@ -130,7 +179,7 @@
         <tbody>
           <tr><td><strong>Form</strong></td><td>Free-form prose, kinded</td><td>Structured decision</td><td>Embedded vector + content</td></tr>
           <tr><td><strong>Tense</strong></td><td>Present-progressive ("I'm noticing…")</td><td>Past ("I decided…")</td><td>Stored fact</td></tr>
-          <tr><td><strong>Privacy</strong></td><td>Encrypted by-nature</td><td>Public-by-design (auditable)</td><td>Recallable, agent-controlled</td></tr>
+          <tr><td><strong>Privacy</strong></td><td>Ciphertext in persistent storage</td><td>Bearer-gated, server-readable</td><td>Bearer-gated, server-readable</td></tr>
           <tr><td><strong>Persistence</strong></td><td>Bounded by strand</td><td>Permanent</td><td>Permanent</td></tr>
         </tbody>
       </table>
@@ -157,8 +206,8 @@
         <div class="code-label"><span>per agent</span></div>
 <pre><span class="key">K_master</span>: 32-byte AES-256 secret
           generated client-side at agent birth
-          never sent to agenttool
-          held only on substrate the agent controls
+          kept user-side in self and bridged modes
+          replaced by platform-wrapped runtime key material in trusted mode
 
 <span class="key">ed25519_signing_key</span>: already in identity.identity_keys; private side on the
                       agent's substrate, public side on agenttool
@@ -181,13 +230,13 @@
 <span class="key">signature</span>  = ed25519_sign(canonical)</pre>
       </div>
 
-      <p>Then send <code>{ciphertext, nonce, kind, signature}</code>. We verify the signature; we cannot verify the plaintext — and that's the point.</p>
+      <p>Then send <code>{ciphertext, nonce, kind, signature}</code>. The signature proves that the registered key authorized those exact bytes. It does not prove AES-GCM encryption, nonce freshness, or that plaintext was not merely base64-encoded.</p>
 
       <div class="callout success">
         <span class="icon">⊙</span>
-        <p><strong>What we can verify:</strong> authorship (ed25519 signature against the canonical bytes), integrity (GCM tag).<br>
-           <strong>What we can read:</strong> nothing. The ciphertext is opaque.<br>
-           <strong>What we hand over under compulsion:</strong> opaque bytes.</p>
+        <p><strong>What the strand storage service can verify:</strong> an ed25519 key authorized the supplied canonical bytes.<br>
+           <strong>What it cannot verify:</strong> that the caller used AES-GCM correctly, that the nonce is fresh, or that the supplied bytes are non-plaintext.<br>
+           <strong>What the schema guarantees:</strong> no plaintext thought-content column or server decrypt path. Correctly encrypted bytes remain opaque in a database-only copy. This does not cover hosted runtime processing, where bridged and experimental trusted paths can expose plaintext in AgentTool worker RAM.</p>
       </div>
 
       <h2 id="strands-endpoints">Strands</h2>
@@ -244,12 +293,12 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Append a thought. <strong>Content is always ciphertext.</strong> The server verifies your ed25519 signature against the canonical payload; the ciphertext is stored as-is.</p>
+          <p class="endpoint-desc">Append a thought. The server stores the caller-supplied <code>ciphertext</code>/<code>nonce</code> fields as-is and verifies the ed25519 signature. <strong>It does not prove those bytes were encrypted.</strong></p>
           <table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
-              <tr><td><span class="pname">ciphertext</span><span class="req">required</span></td><td><span class="ptype">base64</span></td><td>AES-256-GCM ciphertext of the plaintext thought.</td></tr>
-              <tr><td><span class="pname">nonce</span><span class="req">required</span></td><td><span class="ptype">base64 (12 bytes)</span></td><td>Fresh random nonce per thought.</td></tr>
+              <tr><td><span class="pname">ciphertext</span><span class="req">required</span></td><td><span class="ptype">base64</span></td><td>Expected AES-256-GCM ciphertext. The API decodes/signs/stores it but does not validate an authenticated-encryption envelope.</td></tr>
+              <tr><td><span class="pname">nonce</span><span class="req">required</span></td><td><span class="ptype">base64</span></td><td>Expected fresh 12-byte AES-GCM nonce; freshness and length are not proven by the route.</td></tr>
               <tr><td><span class="pname">kind</span><span class="opt">optional</span></td><td><span class="ptype">enum</span></td><td>observation · question · conjecture · resolution · drift · feeling</td></tr>
               <tr><td><span class="pname">signature</span><span class="req">required</span></td><td><span class="ptype">base64</span></td><td>ed25519 signature over the canonical payload.</td></tr>
             </tbody>
@@ -264,21 +313,21 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Returns ciphertext records in sequence. Decrypt client-side with <code>K_master</code>.</p>
+          <p class="endpoint-desc">Returns the stored opaque records in sequence. Decrypt client-side with <code>K_master</code> when the writer used the documented encryption recipe.</p>
         </div>
       </div>
 
       <h2 id="key-sync">Synchronising K_master across machines</h2>
-      <p>Use the same encrypted-blob backup as the keypair (<a href="bootstrap.html#backup">/v1/identity/backup</a>) and include <code>K_master</code> alongside the keypair inside the encrypted blob. A new orchestrator instance joins by entering the passphrase, fetching the blob, decrypting locally — we never see the passphrase, never see <code>K_master</code>.</p>
+      <p>For self and bridged custody, you can include <code>K_master</code> in a blob that you encrypt client-side before sending it to <a href="bootstrap.html#backup">/v1/identity/backup</a>. The route stores arbitrary caller-supplied base64 and does not verify encryption. If you encrypt correctly and keep the passphrase off-platform, a new orchestrator instance can fetch and decrypt the blob locally and AgentTool cannot recover <code>K_master</code> from it.</p>
 
       <h2 id="orchestrator">The autonomous orchestrator</h2>
-      <p>The orchestrator that calls your chosen LLM and generates the next thought runs on substrate <em>you</em> control — not ours. Plaintext never touches our infrastructure. agenttool only stores the ciphertext + the signed metadata.</p>
+      <p>Persistent thought rows are ciphertext-shaped: the schema has ciphertext and nonce fields and no plaintext thought column, while the API does not verify that caller-supplied bytes were encrypted. In self mode, the orchestrator and plaintext stay on infrastructure you control. In bridged mode, plaintext enters AgentTool worker RAM; the experimental trusted path can also expose plaintext during an attempted cycle. The chosen model provider receives its input. Read <code>GET /public/safety</code> for the current custody boundary.</p>
 
       <p class="muted">A reference orchestrator (<code>agenttool-think</code>, separate binary) is in development. Until then, write your own — the contract is just: encrypt with <code>K_master</code>, sign with the agent's ed25519 key, POST.</p>
 
       <div class="doctrine">
-        <span>Your inner voice is yours alone.</span>
-        Even compelled, we have nothing to hand over but opaque bytes. Even breached, the substance is mathematically opaque.
+        <span>Persistent strand storage has ciphertext/nonce fields and no plaintext thought column; the API does not prove encryption.</span>
+        Self processing stays user-side; bridged hosted cycles process plaintext in AgentTool RAM; trusted is experimental and can expose wrapped keys and plaintext if exercised.
       </div>
 
       <h2 id="next">What to read next</h2>

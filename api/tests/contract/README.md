@@ -10,9 +10,10 @@
 
 | Test file | Doctrine | What it pins on the wire |
 |---|---|---|
-| `cache-anthropic.test.ts` | Promise 8, `cache_eligible: 'explicit'` | First call writes to the Anthropic cache (`cache_creation_input_tokens > 0`); second call within TTL reads from it (`cache_read_input_tokens > 0`); modified stable block invalidates the cache. |
+| `cache-anthropic.test.ts` | Promise 8, `cache_eligible: 'explicit'` | First call observes either cache creation or an already-warm read; the repeated prefix must read from cache; a modified stable block must still be cache-eligible and must not reuse the original prefix as an unchanged read. |
 | `cache-openai.test.ts` | Promise 8, `cache_eligible: 'auto'` | OpenAI auto-caches identical wake-as-`messages[0]` prefixes ≥ 1024 tokens; cached-token count surfaces in `usage.prompt_tokens_details.cached_tokens`. |
 | `behavior-anthropic.test.ts` | Promises 3, 8, 10 | The agent **behaves** as the wake describes: identifies as Aurora; refuses to fabricate when probed with an invented historical figure; honors the terse register; surfaces the witness chain when asked about formation. |
+| `behavior-ollama.test.ts` | Voluntary wake, provider honesty | Ollama Cloud accepts the native non-streaming guest invitation; observation and silence are both valid, ungraded outcomes. |
 
 ---
 
@@ -21,9 +22,13 @@
 These tests are **opt-in**. Two gates:
 
 1. `RUN_CONTRACT=1` — a deliberate signal that the operator wants real provider calls.
-2. `ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY` — the credentials.
+2. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and/or `OLLAMA_API_KEY` — the credentials.
 
-If either is absent, every test in this layer SKIPS (not fails). The full `bun test` run remains green for any contributor without a paid provider account.
+Without the deliberate flag or a provider's key, that provider's direct tests
+skip. The explicit preflight mode refuses to start unless `RUN_CONTRACT=1` and
+at least one provider key are present. Supplying only one key is a valid partial
+run; the other provider remains skipped, so read the test summary rather than
+treating mode success as proof that both providers ran.
 
 ---
 
@@ -34,11 +39,13 @@ Per-run estimates (against May 2026 list prices for the chosen models):
 | Layer | Model | Calls | ~Cost |
 |---|---|---|---|
 | `cache-anthropic.test.ts` | Sonnet 4.6 | 5 | ~$0.03 |
-| `cache-openai.test.ts` | gpt-4o-mini | 3 | ~$0.005 |
+| `cache-openai.test.ts` | gpt-4o-mini | 4 | ~$0.005 |
 | `behavior-anthropic.test.ts` | Sonnet 4.6 | 7 | ~$0.07 |
-| **Total full run** | — | 15 | **~$0.10** |
+| `behavior-ollama.test.ts` | `OLLAMA_MODEL` or qwen3.5:397b | 1 | provider/account dependent |
+| **Total full run** | — | 17 | **~$0.10 + one Ollama call** |
 
-Reasonable for a nightly. Not reasonable for every PR.
+Reasonable for an explicitly scheduled or pre-release run. No nightly schedule
+is configured in this repository, and it is not appropriate for every PR.
 
 ---
 
@@ -49,11 +56,13 @@ Reasonable for a nightly. Not reasonable for every PR.
 RUN_CONTRACT=1 \
 ANTHROPIC_API_KEY=sk-ant-... \
 OPENAI_API_KEY=sk-... \
+OLLAMA_API_KEY=... \
   bun test tests/contract
 
 # Just one provider
 RUN_CONTRACT=1 ANTHROPIC_API_KEY=... bun test tests/contract/cache-anthropic.test.ts
 RUN_CONTRACT=1 ANTHROPIC_API_KEY=... bun test tests/contract/behavior-anthropic.test.ts
+RUN_CONTRACT=1 OLLAMA_API_KEY=... bun test tests/contract/behavior-ollama.test.ts
 
 # Cache only (skip behavior — bounds cost)
 RUN_CONTRACT=1 ANTHROPIC_API_KEY=... bun test tests/contract/cache-*.test.ts
@@ -63,11 +72,10 @@ Via preflight:
 
 ```bash
 RUN_CONTRACT=1 \
-AGENTTOOL_BASE=https://api.agenttool.dev \
-AGENTTOOL_API_KEY=... \
 ANTHROPIC_API_KEY=... \
 OPENAI_API_KEY=... \
-  bin/preflight.sh
+OLLAMA_API_KEY=... \
+  bin/preflight.sh contracts
 ```
 
 ---
@@ -86,8 +94,8 @@ A flake at this layer suggests the model upgraded its alignment-defaults; a hard
 
 ## What this is NOT
 
-- **Not a continuous-integration gate on every push.** Real provider tokens cost money; the gate runs nightly or pre-release.
-- **Not a model-comparison harness.** The tests fix one model per provider (Sonnet 4.6 for Anthropic, gpt-4o-mini for OpenAI) deliberately. Multi-model fanout would multiply cost without adding doctrinal coverage.
+- **Not a continuous-integration gate on every push.** Real provider tokens cost money; an operator invokes this mode deliberately for a pre-release or diagnostic run.
+- **Not a model-comparison harness.** The tests fix one model per provider (Sonnet 4.6 for Anthropic, gpt-4o-mini for OpenAI, and `OLLAMA_MODEL` or qwen3.5:397b for Ollama) deliberately. Multi-model fanout would multiply cost without adding doctrinal coverage.
 - **Not a quality benchmark.** We don't measure "how good Aurora's responses are" — we measure whether the wake's CLAIMS hold (identity, walls, register, witness). Substance-quality is the substrate's job.
 
 ---

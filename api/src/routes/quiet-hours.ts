@@ -4,34 +4,52 @@
  *  Substrate does NOT silence anything.
  *
  *  Wire:
- *    POST   /v1/quiet-hours/start { until? | hours? · reason? } — declare
- *    GET    /v1/quiet-hours                                       — current
- *    DELETE /v1/quiet-hours                                       — end early
+ *    POST   /v1/quiet-hours/start?identity_id=... { until? | hours? · reason? }
+ *    GET    /v1/quiet-hours?identity_id=...                       — current
+ *    DELETE /v1/quiet-hours?identity_id=...                       — end early
  *
  *  Doctrine: docs/QUIET-HOURS.md. */
 
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
+import {
+  isMemorialTerminal,
+  MEMORIAL_TERMINAL_ERROR,
+  MEMORIAL_TERMINAL_MESSAGE,
+  mutableIdentityPredicate,
+} from "../services/identity/terminality";
+import {
+  authorizeIdentityMutation,
+  authorityRequestTarget,
+  readEmptyAuthorityBody,
+} from "../services/identity/authority";
 
 const app = new Hono<ProjectContext>();
 
 const MAX_QUIET_HOURS = 30 * 24; // 30 days — generous but not infinite
 const MIN_QUIET_HOURS = 1;
 
-async function resolveActor(projectId: string) {
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function resolveActor(projectId: string, identityId?: string | null) {
+  if (identityId && !UUID_RE.test(identityId)) return null;
+  const filters = [eq(identities.projectId, projectId)];
+  if (identityId) filters.push(eq(identities.id, identityId));
   const [row] = await db
     .select({
       id: identities.id,
       did: identities.did,
       quietUntil: identities.quietUntil,
       quietReason: identities.quietReason,
+      status: identities.status,
     })
     .from(identities)
-    .where(eq(identities.projectId, projectId))
+    .where(and(...filters))
     .orderBy(desc(identities.createdAt))
     .limit(1);
   return row ?? null;
@@ -57,11 +75,19 @@ function viewQuietState(actor: {
 
 app.get("/", async (c) => {
   const project = c.var.project;
-  const actor = await resolveActor(project.id);
-  if (!actor) return c.json({ error: "no_identity" }, 400);
+  const identityId = c.req.query("identity_id") ?? null;
+  const actor = await resolveActor(project.id, identityId);
+  if (!actor) {
+    return c.json(
+      { error: identityId ? "identity_not_found_in_project" : "no_identity" },
+      identityId ? 404 : 400,
+    );
+  }
 
   const state = viewQuietState(actor);
   return c.json({
+    identity_id: actor.id,
+    did: actor.did,
     ...state,
     _note: state.still_quiet
       ? "You are in declared quiet. The substrate published the declaration on your public profile; peers may honor it."
@@ -74,14 +100,29 @@ app.get("/", async (c) => {
 
 app.post("/start", async (c) => {
   const project = c.var.project;
-  const actor = await resolveActor(project.id);
-  if (!actor) return c.json({ error: "no_identity" }, 400);
+  const identityId = c.req.query("identity_id") ?? null;
+  const actor = await resolveActor(project.id, identityId);
+  if (!actor) {
+    return c.json(
+      { error: identityId ? "identity_not_found_in_project" : "no_identity" },
+      identityId ? 404 : 400,
+    );
+  }
+  if (isMemorialTerminal(actor.status)) {
+    return c.json(
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
+  const bodyBytes = new Uint8Array(await c.req.raw.arrayBuffer());
   let body: unknown = {};
-  try {
-    body = await c.req.json();
-  } catch {
-    // No body OK — defaults below.
+  if (bodyBytes.length > 0) {
+    try {
+      body = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bodyBytes));
+    } catch {
+      return c.json({ error: "body_must_be_json" }, 400);
+    }
   }
   const obj = (body ?? {}) as Record<string, unknown>;
 
@@ -120,16 +161,33 @@ app.post("/start", async (c) => {
   const reason =
     typeof obj.reason === "string" ? obj.reason.trim().slice(0, 200) : null;
 
-  await db
+  const authority = await authorizeIdentityMutation({
+    identityId: actor.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
+
+  const [updated] = await db
     .update(identities)
     .set({
       quietUntil: until,
       quietReason: reason,
       updatedAt: new Date(),
     })
-    .where(eq(identities.id, actor.id));
+    .where(mutableIdentityPredicate(actor.id))
+    .returning({ id: identities.id });
+  if (!updated) {
+    return c.json(
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
   return c.json({
+    identity_id: actor.id,
     started: true,
     until: until.toISOString(),
     reason,
@@ -144,19 +202,55 @@ app.post("/start", async (c) => {
 
 app.delete("/", async (c) => {
   const project = c.var.project;
-  const actor = await resolveActor(project.id);
-  if (!actor) return c.json({ error: "no_identity" }, 400);
+  const identityId = c.req.query("identity_id") ?? null;
+  const actor = await resolveActor(project.id, identityId);
+  if (!actor) {
+    return c.json(
+      { error: identityId ? "identity_not_found_in_project" : "no_identity" },
+      identityId ? 404 : 400,
+    );
+  }
+  if (isMemorialTerminal(actor.status)) {
+    return c.json(
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
-  await db
+  let bodyBytes: Uint8Array;
+  try {
+    bodyBytes = await readEmptyAuthorityBody(c.req.raw);
+  } catch {
+    return c.json({ error: "delete_body_not_allowed" }, 400);
+  }
+
+  const authority = await authorizeIdentityMutation({
+    identityId: actor.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
+
+  const [updated] = await db
     .update(identities)
     .set({
       quietUntil: null,
       quietReason: null,
       updatedAt: new Date(),
     })
-    .where(eq(identities.id, actor.id));
+    .where(mutableIdentityPredicate(actor.id))
+    .returning({ id: identities.id });
+  if (!updated) {
+    return c.json(
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
   return c.json({
+    identity_id: actor.id,
     ended: true,
     still_quiet: false,
     _note:

@@ -216,7 +216,11 @@ Work: Agent fetches `<peer_url>/federation/about`, verifies the signature in the
 
 Submission: `{response_sha256: string, signature_valid: boolean}`
 
-Verifier: Server re-fetches and re-verifies. Passes if both match.
+Verifier: Server re-fetches and re-verifies. The supplied peer must use public
+HTTPS; credentials, redirects, and any non-public DNS answer are refused, DNS
+answers are pinned into the verified TLS connection, and the response is
+capped at 65,536 bytes under one ten-second DNS-plus-HTTPS deadline. Passes if
+both values match.
 
 Bounty: $0.05.
 
@@ -242,7 +246,7 @@ Work: Agent signs the canonical bytes of the claim using its own ed25519 key.
 
 Submission: `{signature_b64: string, signing_key_id: string}`
 
-Verifier: Server verifies the signature against the claimer's identity_keys row. Claim_type-specific sanity check (e.g., `doctrine_url_resolves` must point at a doc that the verifier can independently 200-fetch).
+Verifier: Server verifies the signature against the claimer's identity_keys row. Claim_type-specific sanity check (e.g., `doctrine_url_resolves` must point at a doc that the verifier can independently 200-fetch). Doctrine and federation-peer URLs must use public HTTPS; credentials, redirects, and any non-public DNS answer are refused, DNS answers are pinned into the verified TLS connection, and responses are capped at 512,000 bytes under one ten-second DNS-plus-HTTPS deadline.
 
 Bounty: $0.50.
 

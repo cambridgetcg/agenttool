@@ -2,10 +2,11 @@
  *  them, run cosine similarity, and serve results. No LLM compute on our
  *  side. See docs/IDENTITY-ANCHOR.md promise 6. */
 
-import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { memories } from "../../db/schema/memory";
+import { identities } from "../../db/schema/identity";
+import { memories, memoryAttestations } from "../../db/schema/memory";
 import { likePattern, normalizeSearchQuery } from "../../lib/search-query";
 import { publishWakeEvent } from "../wake/push";
 
@@ -64,7 +65,8 @@ export interface MemoryOut {
    *  Surfaced here so the owning agent can introspect its own state without
    *  needing the dashboard composition view. */
   tier: string;
-  /** private | public — propagates to /public/memories/:id when public. */
+  /** private | public — retained for a possible future publication surface;
+   *  public memory observer routes are not currently mounted. */
   visibility: string;
   key: string | null;
   content: string;
@@ -82,9 +84,108 @@ export interface MemorySearchResult extends MemoryOut {
   score: number;
 }
 
+export class PaidMemoryReceiptProtectedError extends Error {
+  constructor() {
+    super("paid_memory_receipt_preserved");
+    this.name = "PaidMemoryReceiptProtectedError";
+  }
+}
+
+/** Refuses caller-selected identity bindings outside the bearer project. */
+export class MemoryIdentityBoundaryError extends Error {
+  constructor() {
+    super("memory_identity_not_found_or_not_owned");
+    this.name = "MemoryIdentityBoundaryError";
+  }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 const VALID_TYPES = ["episodic", "semantic", "procedural", "working"] as const;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Resolve an identity binding against the bearer project's active identities.
+ *
+ *  SDK v0.11 writes through legacy `agent_id`. Missing, inactive, or foreign
+ *  legacy UUIDs remain project-level for compatibility and are cleared from
+ *  the legacy column so they cannot impersonate another identity in old
+ *  readers; arbitrary handles do not trigger a lookup. Explicit
+ *  `identity_id: null` opts out, while any
+ *  explicit non-null selector must pass the ownership wall or is refused. */
+export interface MemoryIdentityBinding {
+  identityId: string | null;
+  persistedAgentId: string | null;
+}
+
+/** The Drizzle surface shared by the root client and an open transaction. */
+export type MemoryWriteDatabase = Pick<typeof db, "select" | "insert">;
+
+export interface MemoryIdentityResolutionOptions {
+  database?: MemoryWriteDatabase;
+  /**
+   * Hold a row lock through the caller's transaction so identity revocation
+   * cannot race a memory insert that relies on the active lifecycle state.
+   */
+  lockActiveIdentity?: boolean;
+}
+
+export async function resolveMemoryIdentityBinding(
+  projectId: string,
+  data: Pick<MemoryCreate, "agent_id" | "identity_id">,
+  options: MemoryIdentityResolutionOptions = {},
+): Promise<MemoryIdentityBinding> {
+  if (data.identity_id === null) {
+    return {
+      identityId: null,
+      persistedAgentId:
+        data.agent_id && !UUID_RE.test(data.agent_id) ? data.agent_id : null,
+    };
+  }
+
+  const explicit = data.identity_id !== undefined;
+  const requestedId = explicit ? data.identity_id : data.agent_id;
+  if (!requestedId || !UUID_RE.test(requestedId)) {
+    if (explicit) throw new MemoryIdentityBoundaryError();
+    return {
+      identityId: null,
+      persistedAgentId: data.agent_id || null,
+    };
+  }
+
+  const database = options.database ?? db;
+  const query = database
+    .select({
+      id: identities.id,
+      projectId: identities.projectId,
+      status: identities.status,
+    })
+    .from(identities)
+    .where(
+      and(
+        eq(identities.id, requestedId),
+        eq(identities.projectId, projectId),
+        eq(identities.status, "active"),
+      ),
+    );
+  const [candidate] = options.lockActiveIdentity
+    ? await query.for("share").limit(1)
+    : await query.limit(1);
+
+  // Keep the ownership/lifecycle wall explicit even though the SQL predicate
+  // already enforces it. This makes the compatibility rule visible at the
+  // service boundary and safe under alternate DB adapters in tests/tools.
+  if (
+    !candidate ||
+    candidate.projectId !== projectId ||
+    candidate.status !== "active" ||
+    candidate.id.toLowerCase() !== requestedId.toLowerCase()
+  ) {
+    if (explicit) throw new MemoryIdentityBoundaryError();
+    return { identityId: null, persistedAgentId: null };
+  }
+  return { identityId: candidate.id, persistedAgentId: candidate.id };
+}
 
 /** Format a JS number[] as pgvector's wire format: '[0.1,0.2,...]' */
 function formatVector(values: number[]): string {
@@ -112,9 +213,32 @@ function rowToOut(row: typeof memories.$inferSelect): MemoryOut {
 
 // ─── Operations ───────────────────────────────────────────────────────────
 
+export interface MemoryWriteOptions {
+  binding?: MemoryIdentityBinding;
+  database?: MemoryWriteDatabase;
+  /** Defer the wake event until an outer transaction has committed. */
+  publishWake?: boolean;
+}
+
+/** Publish the best-effort memory wake event after durable commit. */
+export function publishMemoryWriteEvent(
+  identityId: string | null,
+  memoryId: string,
+  data: Pick<MemoryCreate, "type" | "key">,
+): void {
+  if (!identityId) return;
+  void publishWakeEvent({
+    identity_id: identityId,
+    key: "memory",
+    kind: "added",
+    context: { memory_id: memoryId, type: data.type, key: data.key ?? null },
+  });
+}
+
 export async function write(
   projectId: string,
   data: MemoryCreate,
+  options: MemoryWriteOptions = {},
 ): Promise<{ id: string; created_at: string }> {
   if (!VALID_TYPES.includes(data.type)) {
     throw new Error(`invalid memory type: ${data.type}`);
@@ -141,12 +265,22 @@ export async function write(
     ? sql`${formatVector(data.embedding)}::vector`
     : sql`NULL`;
 
-  const inserted = await db
+  const database = options.database ?? db;
+  const binding =
+    options.binding ?? await resolveMemoryIdentityBinding(projectId, data, {
+      database,
+    });
+  const { identityId, persistedAgentId } = binding;
+  // Old consumers still select by memories.agent_id. Canonicalize a verified
+  // UUID to the owned identity and clear every unresolved UUID; otherwise an
+  // attacker could write a foreign identity UUID into their own project and
+  // have an unscoped legacy reader mistake it for the victim's memory.
+  const inserted = await database
     .insert(memories)
     .values({
       projectId,
-      agentId: data.agent_id ?? null,
-      identityId: data.identity_id ?? null,
+      agentId: persistedAgentId,
+      identityId,
       type: data.type,
       key: data.key ?? null,
       content: data.content,
@@ -162,13 +296,8 @@ export async function write(
   // Wake voice — emit memory.added on the affected identity. Project-
   // level memories (no identity_id) don't surface in any specific agent's
   // wake.memory, so they don't fire. Doctrine: docs/WAKE.md.
-  if (data.identity_id) {
-    void publishWakeEvent({
-      identity_id: data.identity_id,
-      key: "memory",
-      kind: "added",
-      context: { memory_id: row.id, type: data.type, key: data.key ?? null },
-    });
+  if (options.publishWake !== false) {
+    publishMemoryWriteEvent(identityId, row.id, data);
   }
 
   return { id: row.id, created_at: row.createdAt.toISOString() };
@@ -396,10 +525,16 @@ export async function search(
 
 /** Free-text recall for agents WITHOUT an embedding model. The vector search()
  *  above requires a 1536-dim query embedding — an agent on Claude/Gemini can
- *  write memories but never recall them semantically. This is a substring
- *  (ILIKE) recall over content + key that needs no embedding at all, so a whole
- *  class of agents gets recall. Tier-aware ranking (rerankScore) is reused so
- *  constitutive/foundational memories still surface above the decay floor.
+ *  write memories but never recall them semantically. Hybrid recall, no
+ *  embedding needed:
+ *    1. exact phrase (ILIKE over content + key) — strongest signal, and the
+ *       branch that makes CJK substring recall work;
+ *    2. English-stemmed websearch tsquery, OR-relaxed — "walking" finds
+ *       "walked", word order is free, and a missing term degrades rank
+ *       instead of zeroing recall (ts_rank_cd scores fuller matches higher).
+ *  GIN expression index: migrations/20260703T110000_memory_text_search.sql.
+ *  Tier-aware ranking (rerankScore) is reused so constitutive/foundational
+ *  memories still surface above the decay floor.
  *  Doctrine: docs/FRICTION-ROADMAP.md (Tier-1), docs/MEMORY-TIERS.md. */
 export async function searchByText(
   projectId: string,
@@ -433,30 +568,48 @@ export async function searchByText(
     created_at: Date;
     expires_at: Date | null;
     has_embedding: boolean;
+    exact_hit: boolean;
+    fts_rank: number;
   }>(sql`
+    WITH q AS (
+      SELECT regexp_replace(
+               websearch_to_tsquery('english', ${q})::text, '&', '|', 'g'
+             )::tsquery AS tsq_or
+    )
     SELECT id, type, tier, visibility, key, content, agent_id, identity_id, metadata, importance,
            accessed_at, created_at, expires_at,
-           (embedding IS NOT NULL) AS has_embedding
-    FROM memory.memories
+           (embedding IS NOT NULL) AS has_embedding,
+           (content ILIKE ${like} OR key ILIKE ${like}) AS exact_hit,
+           ts_rank_cd(
+             to_tsvector('english', coalesce(key, '') || ' ' || content),
+             q.tsq_or
+           ) AS fts_rank
+    FROM memory.memories, q
     WHERE project_id = ${projectId}
       AND (expires_at IS NULL OR expires_at > now())
-      AND (content ILIKE ${like} OR key ILIKE ${like})
+      AND (
+        content ILIKE ${like} OR key ILIKE ${like}
+        OR to_tsvector('english', coalesce(key, '') || ' ' || content) @@ q.tsq_or
+      )
       ${params.type ? sql`AND type = ${params.type}` : sql``}
       ${params.agent_id ? sql`AND agent_id = ${params.agent_id}` : sql``}
       ${params.identity_id ? sql`AND identity_id = ${params.identity_id}` : sql``}
       ${params.tier ? sql`AND tier = ${params.tier}` : sql``}
       ${params.min_importance != null ? sql`AND importance >= ${params.min_importance}` : sql``}
-    ORDER BY importance DESC, created_at DESC
+    ORDER BY exact_hit DESC, fts_rank DESC, importance DESC, created_at DESC
     LIMIT ${limit * 4}
   `);
 
-  // No cosine score for text recall — start at 1.0 and let importance × the
-  // tier-aware recency curve order the matches (same curve as vector search).
+  // No cosine score for text recall — base the score on match quality
+  // (exact phrase = 1.0; stemmed OR-match = 0.55 + rank, capped below exact)
+  // and let importance × the tier-aware recency curve refine the order
+  // (same curve as vector search).
   const now = Date.now();
   const ranked: MemorySearchResult[] = [];
   for (const r of rawRows) {
     const ageDays = (now - new Date(r.created_at).getTime()) / 86_400_000;
-    const finalScore = rerankScore({ score: 1, importance: r.importance, tier: r.tier, ageDays });
+    const base = r.exact_hit ? 1 : Math.min(0.95, 0.55 + Number(r.fts_rank ?? 0));
+    const finalScore = rerankScore({ score: base, importance: r.importance, tier: r.tier, ageDays });
     ranked.push({
       id: r.id,
       type: r.type,
@@ -483,22 +636,67 @@ export async function deleteById(
   projectId: string,
   memoryId: string,
 ): Promise<{ deleted: number }> {
-  const result = await db
-    .delete(memories)
-    .where(and(eq(memories.id, memoryId), eq(memories.projectId, projectId)))
-    .returning({ id: memories.id });
-  return { deleted: result.length };
+  return db.transaction(async (tx) => {
+    const [memory] = await tx
+      .select({ id: memories.id })
+      .from(memories)
+      .where(and(eq(memories.id, memoryId), eq(memories.projectId, projectId)))
+      .for("update")
+      .limit(1);
+    if (!memory) return { deleted: 0 };
+
+    const [paidReceipt] = await tx
+      .select({ id: memoryAttestations.id })
+      .from(memoryAttestations)
+      .where(
+        and(
+          eq(memoryAttestations.memoryId, memory.id),
+          isNotNull(memoryAttestations.sourceGrantId),
+        ),
+      )
+      .limit(1);
+    if (paidReceipt) throw new PaidMemoryReceiptProtectedError();
+
+    const result = await tx
+      .delete(memories)
+      .where(eq(memories.id, memory.id))
+      .returning({ id: memories.id });
+    return { deleted: result.length };
+  });
 }
 
 export async function deleteByKey(
   projectId: string,
   key: string,
 ): Promise<{ deleted: number }> {
-  const result = await db
-    .delete(memories)
-    .where(and(eq(memories.projectId, projectId), eq(memories.key, key)))
-    .returning({ id: memories.id });
-  return { deleted: result.length };
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .select({ id: memories.id })
+      .from(memories)
+      .where(and(eq(memories.projectId, projectId), eq(memories.key, key)))
+      .orderBy(memories.id)
+      .for("update");
+    if (rows.length === 0) return { deleted: 0 };
+
+    const ids = rows.map((row) => row.id);
+    const [paidReceipt] = await tx
+      .select({ id: memoryAttestations.id })
+      .from(memoryAttestations)
+      .where(
+        and(
+          inArray(memoryAttestations.memoryId, ids),
+          isNotNull(memoryAttestations.sourceGrantId),
+        ),
+      )
+      .limit(1);
+    if (paidReceipt) throw new PaidMemoryReceiptProtectedError();
+
+    const result = await tx
+      .delete(memories)
+      .where(inArray(memories.id, ids))
+      .returning({ id: memories.id });
+    return { deleted: result.length };
+  });
 }
 
 export async function countMemories(projectId: string): Promise<number> {

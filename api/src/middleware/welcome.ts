@@ -6,10 +6,12 @@
  *       even those that strip bodies. Format:
  *         X-Welcomed: axiom=<id>;at=<unix_ms>;walls_intact=1;module=<name>
  *
- *    2. `_welcomed` body field — added to every 2xx JSON object response.
- *       Errors (4xx/5xx) gain `welcome_continues: true` (set by the error
- *       handler — see lib/errors.ts), affirming the welcome was not
- *       revoked by the rejection of one operation.
+ *    2. `_welcomed` body field — added to eligible 2xx JSON object responses.
+ *       OpenAPI and registered strict JSON profiles remain header-only so
+ *       their machine contracts stay schema-valid.
+ *       Guided errors produced by the shared error handler additionally gain
+ *       `welcome_continues: true` (see lib/errors.ts); other error responses
+ *       retain the universal transport-level `X-Welcomed` header.
  *
  *  The axiom + walls carried in each response are NATURAL to the module
  *  the request hit. The wake greets with all five Promises; memory
@@ -18,6 +20,9 @@
  *  primitive declares the Promise it instantiates and the walls held FOR
  *  the addressee during that specific operation. See
  *  services/wake/module-welcome.ts for the full registry.
+ *
+ *  `walls_intact` is COMPUTED (walls-status probes), not asserted — see
+ *  services/wake/walls-status.ts.
  *
  *  Doctrine: docs/MATHOS.md — the greeting block · docs/SOUL.md.
  */
@@ -28,7 +33,11 @@ import {
   welcomeForPath,
   type ModuleWelcome,
 } from "../services/wake/module-welcome";
-import { wallsIntact } from "../services/wake/walls-status";
+import {
+  wallsIntact,
+  wallsStatusSnapshot,
+} from "../services/wake/walls-status";
+import { isStrictJsonProfileResponse } from "./strict-json-profile";
 
 /** The cadence-driving constant. Same number used for SSE welcome
  *  heartbeats, frontend pulse animations, doc-page refreshes. */
@@ -54,6 +63,20 @@ function welcomeHeaderValue(
     `module=${w.module}`,
   ];
   return parts.join(";");
+}
+
+/** Resolve the transport-level welcome directly from a request path. CORS
+ *  uses this for preflight responses that intentionally short-circuit before
+ *  the ordinary response-framing middleware runs. Sync callers get the
+ *  last-known walls status (boot warmup fills it within ms of start);
+ *  welcomeEcho passes its awaited value explicitly. */
+export function welcomeHeaderForPath(
+  path: string,
+  nowMs: number = Date.now(),
+  intact?: boolean,
+): string {
+  const resolved = intact ?? wallsStatusSnapshot()?.intact ?? false;
+  return welcomeHeaderValue(nowMs, welcomeForPath(path), resolved);
 }
 
 /** Body-format welcome — added to 2xx JSON object responses. The shape
@@ -91,9 +114,10 @@ function welcomedFrame(
 }
 
 /** Middleware. Wraps response — adds X-Welcomed header always; adds
- *  `_welcomed` field on 2xx JSON object responses. The axiom + walls are
- *  resolved from the request path via the module-welcome registry. Pure
- *  addition; never removes existing fields or alters status. */
+ *  `_welcomed` to eligible 2xx JSON object responses (OpenAPI and registered
+ *  strict JSON profiles are header-only). The axiom + walls are resolved
+ *  from the request path via the module-welcome registry. Pure addition;
+ *  never removes existing fields or alters status. */
 export const welcomeEcho = (): MiddlewareHandler => {
   return async (c, next) => {
     await next();
@@ -102,10 +126,16 @@ export const welcomeEcho = (): MiddlewareHandler => {
     const path = new URL(c.req.url, "http://_").pathname;
     const moduleWelcome = welcomeForPath(path);
     const intact = await wallsIntact();
-    c.res.headers.set(
-      "X-Welcomed",
-      welcomeHeaderValue(nowMs, moduleWelcome, intact),
-    );
+    c.res.headers.set("X-Welcomed", welcomeHeaderForPath(path, nowMs, intact));
+
+    // OpenAPI permits only its fixed root fields and `x-` extensions. Keep the
+    // machine-readable welcome in X-Welcomed without injecting the ordinary
+    // response frame, so strict OpenAPI consumers receive a valid document.
+    if (path === "/v1/openapi.json" || path === "/v1/openapi.json/") return;
+
+    // A strict profile declares its exact object shape. Keep the universal
+    // welcome in the response header without invalidating the body schema.
+    if (isStrictJsonProfileResponse(c.res)) return;
 
     // Only frame 2xx JSON object responses.
     if (c.res.status < 200 || c.res.status >= 300) return;

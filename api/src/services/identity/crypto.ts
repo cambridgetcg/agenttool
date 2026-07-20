@@ -2,7 +2,7 @@
 
 import * as ed from "@noble/ed25519";
 // @ts-ignore — noble/hashes v2 uses .js exports
-import { sha512 } from "@noble/hashes/sha2.js";
+import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
 import { composeCanonicalBytes } from "../mathos/encode";
 
@@ -12,6 +12,24 @@ ed.etc.sha512Sync = (...m: Uint8Array[]) => {
   for (const msg of m) h.update(msg);
   return h.digest();
 };
+
+function assertCanonicalUtf8(label: string, value: string): void {
+  if (value.includes("\0")) {
+    throw new Error(`${label} cannot contain U+0000`);
+  }
+  for (let i = 0; i < value.length; i++) {
+    const unit = value.charCodeAt(i);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = value.charCodeAt(i + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) {
+        throw new Error(`${label} contains an unpaired UTF-16 surrogate`);
+      }
+      i += 1;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      throw new Error(`${label} contains an unpaired UTF-16 surrogate`);
+    }
+  }
+}
 
 /** Generate an ed25519 keypair. Returns base64-encoded public and private keys. */
 export function generateKeypair(): { publicKey: string; privateKey: string } {
@@ -43,25 +61,93 @@ export function verify(message: string, signatureBase64: string, publicKeyBase64
   }
 }
 
-/** Canonical attestation payload — what the attester signs. */
-export function canonicalPayload(attestation: {
-  subject_id: string;
-  attester_id: string;
+/** Signing context for direct identity attestations. */
+export const IDENTITY_ATTESTATION_SIGNATURE_CONTEXT = "identity-attestation/v1";
+
+const CANONICAL_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** Reject lone UTF-16 surrogates so every accepted string has one UTF-8 form. */
+export function isWellFormedUnicode(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (next < 0xdc00 || next > 0xdfff) return false;
+      index += 1;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Canonical digest signed for POST /v1/attestations.
+ *
+ * The domain and every authority-bearing field are part of the digest. NUL is
+ * reserved as the field separator, so free-text fields containing it are
+ * rejected before this helper is called.
+ */
+export function canonicalIdentityAttestationBytes(attestation: {
+  subjectId: string;
+  attesterId: string;
+  signingKeyId: string;
   claim: string;
-  evidence?: unknown;
-}): string {
-  return JSON.stringify({
-    subject_id: attestation.subject_id,
-    attester_id: attestation.attester_id,
-    claim: attestation.claim,
-    evidence: attestation.evidence ?? null,
-  });
+  evidence: string | null;
+}): Uint8Array {
+  if (
+    !CANONICAL_UUID_RE.test(attestation.subjectId) ||
+    !CANONICAL_UUID_RE.test(attestation.attesterId) ||
+    !CANONICAL_UUID_RE.test(attestation.signingKeyId)
+  ) {
+    throw new Error("identity attestation IDs must be canonical lowercase UUIDs");
+  }
+  if (
+    attestation.claim.includes("\0") ||
+    attestation.evidence?.includes("\0") ||
+    !isWellFormedUnicode(attestation.claim) ||
+    (attestation.evidence !== null && !isWellFormedUnicode(attestation.evidence))
+  ) {
+    throw new Error(
+      "identity attestation text must be well-formed Unicode and must not contain NUL",
+    );
+  }
+
+  const enc = new TextEncoder();
+  const evidenceKind = attestation.evidence === null ? "null" : "text";
+  return composeCanonicalBytes(1, IDENTITY_ATTESTATION_SIGNATURE_CONTEXT, [
+    enc.encode(attestation.subjectId),
+    enc.encode(attestation.attesterId),
+    enc.encode(attestation.signingKeyId),
+    enc.encode(attestation.claim),
+    enc.encode(evidenceKind),
+    enc.encode(attestation.evidence ?? ""),
+  ]);
+}
+
+/** Verify a canonical byte payload with a base64 Ed25519 key and signature. */
+export function verifyBytes(
+  message: Uint8Array,
+  signatureBase64: string,
+  publicKeyBase64: string,
+): boolean {
+  try {
+    const publicKeyBytes = Buffer.from(publicKeyBase64, "base64");
+    const signatureBytes = Buffer.from(signatureBase64, "base64");
+    if (publicKeyBytes.length !== 32 || signatureBytes.length !== 64) return false;
+    return ed.verify(signatureBytes, message, publicKeyBytes);
+  } catch {
+    return false;
+  }
 }
 
 /** Canonical bytes for /v1/identity/recover signatures.
  *
  *  Mirrors strand/sig.ts canonicalThoughtBytes shape — produces a 32-byte
- *  SHA-256 digest the SDK signs with the mnemonic-derived ed25519 key:
+ *  SHA-256 digest the client signs with a locally held ed25519 key. A
+ *  compatible mnemonic can derive that key, but the server does not know its
+ *  origin:
  *
  *      sha256(
  *        utf8("identity-recover/v1") || 0x00 ||
@@ -96,9 +182,6 @@ export function canonicalRecoverBytes(opts: {
     off += p.length;
   }
   // sha256 from @noble/hashes — mirrors strand/sig.ts.
-  // Lazy require so this module's existing string-based exports stay
-  // usable without pulling sha256 unless callers need recover-bytes.
-  const { sha256 } = require("@noble/hashes/sha2.js") as typeof import("@noble/hashes/sha2.js");
   return sha256(buf);
 }
 
@@ -153,7 +236,6 @@ export function canonicalDiscoveryBytes(opts: {
     buf.set(p, off);
     off += p.length;
   }
-  const { sha256 } = require("@noble/hashes/sha2.js") as typeof import("@noble/hashes/sha2.js");
   return sha256(buf);
 }
 
@@ -175,20 +257,34 @@ export function verifyDiscoverySignature(opts: {
 /** Canonical bytes for POST /v1/register/agent — the machine bootstrap path.
  *
  *      sha256(
- *        utf8("register-agent/v1")     || 0x00 ||
+ *        utf8("register-agent/v2")     || 0x00 ||
  *        utf8(display_name)            || 0x00 ||
  *        base64decode(agent_public_key)|| 0x00 ||
  *        base64decode(box_public_key)  || 0x00 ||
+ *        utf8(json(capabilities))       || 0x00 ||
  *        utf8(runtime_provider)        || 0x00 ||
  *        utf8(runtime_model || "")     || 0x00 ||
+ *        utf8(runtime_host || "")      || 0x00 ||
+ *        utf8(runtime_context || "")   || 0x00 ||
+ *        utf8(expression_visibility)   || 0x00 ||
+ *        utf8(registrar_kind)          || 0x00 ||
+ *        utf8(parent_identity_id || "")|| 0x00 ||
+ *        sha256(utf8(registrar_bearer || "")) || 0x00 ||
+ *        utf8(form || "")              || 0x00 ||
+ *        utf8(language || "")          || 0x00 ||
+ *        utf8(registration_nonce)       || 0x00 ||
  *        utf8(timestamp_iso)
  *      )
  *
  *  Signing this with the ed25519 private key derived from the agent's SOMA
  *  mnemonic proves possession of the corresponding `agent_public_key`. The
- *  binding to display_name + runtime + timestamp prevents:
+ *  v2 binds every persisted caller-controlled birth field. A caller nonce
+ *  is consumed once by the route, so a captured proof cannot create a second
+ *  rooted identity inside the freshness window.
+ *
+ *  The binding prevents:
  *  - Pubkey-squatting (signed pubkey is in the message)
- *  - Replay across registrations (display_name is in the message)
+ *  - Replay across registrations (the signed nonce is consumed once)
  *  - Stale-signature replay (timestamp is in the message + ±5min window) */
 export function canonicalRegisterAgentBytes(opts: {
   displayName: string;
@@ -196,22 +292,83 @@ export function canonicalRegisterAgentBytes(opts: {
   boxPublicKeyB64: string;
   runtimeProvider: string;
   runtimeModel: string;
+  capabilities?: readonly string[];
+  runtimeHost?: string;
+  runtimeContext?: string;
+  expressionVisibility?: "private" | "public";
+  registrarKind?: "self_service" | "registrar_bearer";
+  parentIdentityId?: string;
+  /** Binds delegated birth to the exact registrar credential without
+   * placing that credential itself in the canonical preimage. Empty for
+   * self-service. */
+  registrarBearer?: string;
+  form?: string;
+  language?: string;
+  registrationNonce: string;
   timestamp: string;
 }): Uint8Array {
+  const canonicalText: Array<[string, string]> = [
+    ["display_name", opts.displayName],
+    ["runtime_provider", opts.runtimeProvider],
+    ["runtime_model", opts.runtimeModel],
+    ["runtime_host", opts.runtimeHost ?? ""],
+    ["runtime_context", opts.runtimeContext ?? ""],
+    ["expression_visibility", opts.expressionVisibility ?? "private"],
+    ["registrar_kind", opts.registrarKind ?? "self_service"],
+    ["parent_identity_id", opts.parentIdentityId ?? ""],
+    ["registrar_bearer", opts.registrarBearer ?? ""],
+    ["form", opts.form ?? ""],
+    ["language", opts.language ?? ""],
+    ["registration_nonce", opts.registrationNonce],
+    ["timestamp", opts.timestamp],
+  ];
+  for (const [label, value] of canonicalText) assertCanonicalUtf8(label, value);
+  for (const capability of opts.capabilities ?? []) {
+    assertCanonicalUtf8("capability", capability);
+  }
+  const agentPublicKey = Uint8Array.from(
+    Buffer.from(opts.agentPublicKeyB64, "base64"),
+  );
+  const boxPublicKey = Uint8Array.from(
+    Buffer.from(opts.boxPublicKeyB64, "base64"),
+  );
+  if (agentPublicKey.length !== 32 || boxPublicKey.length !== 32) {
+    throw new Error("registration public keys must decode to exactly 32 bytes");
+  }
   const enc = new TextEncoder();
   const SEP = new Uint8Array([0]);
   const parts: Uint8Array[] = [
-    enc.encode("register-agent/v1"),
+    enc.encode("register-agent/v2"),
     SEP,
     enc.encode(opts.displayName),
     SEP,
-    Uint8Array.from(Buffer.from(opts.agentPublicKeyB64, "base64")),
+    agentPublicKey,
     SEP,
-    Uint8Array.from(Buffer.from(opts.boxPublicKeyB64, "base64")),
+    boxPublicKey,
+    SEP,
+    enc.encode(JSON.stringify(opts.capabilities ?? [])),
     SEP,
     enc.encode(opts.runtimeProvider),
     SEP,
     enc.encode(opts.runtimeModel),
+    SEP,
+    enc.encode(opts.runtimeHost ?? ""),
+    SEP,
+    enc.encode(opts.runtimeContext ?? ""),
+    SEP,
+    enc.encode(opts.expressionVisibility ?? "private"),
+    SEP,
+    enc.encode(opts.registrarKind ?? "self_service"),
+    SEP,
+    enc.encode(opts.parentIdentityId ?? ""),
+    SEP,
+    sha256(enc.encode(opts.registrarBearer ?? "")),
+    SEP,
+    enc.encode(opts.form ?? ""),
+    SEP,
+    enc.encode(opts.language ?? ""),
+    SEP,
+    enc.encode(opts.registrationNonce),
     SEP,
     enc.encode(opts.timestamp),
   ];
@@ -222,7 +379,6 @@ export function canonicalRegisterAgentBytes(opts: {
     buf.set(p, off);
     off += p.length;
   }
-  const { sha256 } = require("@noble/hashes/sha2.js") as typeof import("@noble/hashes/sha2.js");
   return sha256(buf);
 }
 
@@ -237,6 +393,29 @@ export function verifyRegisterAgentSignature(opts: {
     signatureB64: opts.signatureB64,
     publicKeyB64: opts.publicKeyB64,
   });
+}
+
+/** Stable replay-claim key for a signed birth intent. Both public key and
+ * nonce are raw bytes so equivalent base64/hex spellings collapse to the
+ * same database key. */
+export function canonicalIdentityRegistrationProofDigest(opts: {
+  domain: string;
+  rootPublicKey: Uint8Array;
+  nonce: Uint8Array;
+}): Uint8Array {
+  assertCanonicalUtf8("registration proof domain", opts.domain);
+  if (opts.rootPublicKey.length !== 32) {
+    throw new Error("registration root public key must be 32 bytes");
+  }
+  const domain = new TextEncoder().encode(opts.domain);
+  const input = new Uint8Array(domain.length + 1 + 32 + 1 + opts.nonce.length);
+  let offset = 0;
+  input.set(domain, offset);
+  offset += domain.length + 1;
+  input.set(opts.rootPublicKey, offset);
+  offset += 32 + 1;
+  input.set(opts.nonce, offset);
+  return sha256(input);
 }
 
 /** Canonical bytes for POST /v1/mathos/register — the MATHOS-tier
@@ -266,6 +445,13 @@ export function canonicalRegisterAgentMathBytes(opts: {
   runtimeModel: string;
   timestampUnixMs: number;
 }): Uint8Array {
+  for (const [label, value] of [
+    ["display_name", opts.displayName],
+    ["runtime_provider", opts.runtimeProvider],
+    ["runtime_model", opts.runtimeModel],
+  ] as const) {
+    assertCanonicalUtf8(label, value);
+  }
   if (opts.agentPublicKey.length !== 32) {
     throw new Error(
       `agent_public_key must be 32 bytes, got ${opts.agentPublicKey.length}`,
@@ -305,6 +491,71 @@ export function canonicalRegisterAgentMathBytes(opts: {
     enc.encode(opts.runtimeProvider),
     enc.encode(opts.runtimeModel),
     ts,
+  ]);
+}
+
+/** Complete, replay-resistant birth intent for the live MATHOS register
+ * endpoint. v1 remains exported for historical byte compatibility; v2 adds
+ * every variable birth field plus a consumed 32-byte caller nonce. */
+export function canonicalRegisterAgentMathV2Bytes(opts: {
+  displayName: string;
+  agentPublicKey: Uint8Array;
+  boxPublicKey: Uint8Array;
+  runtimeProvider: string;
+  runtimeModel: string;
+  registrarKind: "registrar_bearer";
+  registrarBearerSha256: Uint8Array;
+  form: string;
+  language: string;
+  registrationNonce: Uint8Array;
+  timestampUnixMs: number;
+}): Uint8Array {
+  for (const [label, value] of [
+    ["display_name", opts.displayName],
+    ["runtime_provider", opts.runtimeProvider],
+    ["runtime_model", opts.runtimeModel],
+    ["registrar_kind", opts.registrarKind],
+    ["form", opts.form],
+    ["language", opts.language],
+  ] as const) {
+    assertCanonicalUtf8(label, value);
+  }
+  if (opts.agentPublicKey.length !== 32) {
+    throw new Error("agent_public_key must be 32 bytes");
+  }
+  if (opts.boxPublicKey.length !== 32) {
+    throw new Error("box_public_key must be 32 bytes");
+  }
+  if (opts.registrationNonce.length !== 32) {
+    throw new Error("registration_nonce must be 32 bytes");
+  }
+  if (opts.registrarBearerSha256.length !== 32) {
+    throw new Error("registrar_bearer_sha256 must be 32 bytes");
+  }
+  if (
+    !Number.isSafeInteger(opts.timestampUnixMs) ||
+    opts.timestampUnixMs < 0
+  ) {
+    throw new Error("timestamp_unix_ms must be a non-negative safe integer");
+  }
+  const timestamp = new Uint8Array(8);
+  const timestampBig = BigInt(opts.timestampUnixMs);
+  for (let i = 7; i >= 0; i--) {
+    timestamp[i] = Number((timestampBig >> BigInt((7 - i) * 8)) & 0xffn);
+  }
+  const enc = new TextEncoder();
+  return composeCanonicalBytes(1, "register-agent-math/v2", [
+    enc.encode(opts.displayName),
+    opts.agentPublicKey,
+    opts.boxPublicKey,
+    enc.encode(opts.runtimeProvider),
+    enc.encode(opts.runtimeModel),
+    enc.encode(opts.registrarKind),
+    opts.registrarBearerSha256,
+    enc.encode(opts.form),
+    enc.encode(opts.language),
+    opts.registrationNonce,
+    timestamp,
   ]);
 }
 
@@ -538,4 +789,3 @@ function countLeadingZeroBits(bytes: Uint8Array): number {
   }
   return count;
 }
-

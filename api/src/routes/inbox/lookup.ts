@@ -29,7 +29,7 @@ app.get("/:did", async (c) => {
     box_key_id: result.box_key_id,
     public_key: result.public_key,
     note:
-      "Use this to encrypt a sealed-box message. ECDH(your_ephemeral_priv, public_key) → shared secret → AES-256-GCM seal.",
+      "Seal with EXACTLY: ECDH(your_ephemeral_priv, public_key) → HKDF-SHA256(ikm=shared_secret, salt=empty, info=\"agenttool-inbox-v1\", L=32) → AES-256-GCM(key, 12-byte random nonce); fields {ct, nonce, sender_pub} std-base64. Skipping the HKDF or using another info string produces ciphertext the recipient cannot open.",
   });
 });
 

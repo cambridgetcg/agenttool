@@ -31,6 +31,7 @@ import { db } from "../../db/client";
 import { deals } from "../../db/schema/deals";
 import { identities } from "../../db/schema/identity";
 import { chronicle } from "../../db/schema/continuity";
+import { mutableIdentityPredicate } from "../identity/terminality";
 import { publishWakeEvent } from "../wake/push";
 
 // ── Types ───────────────────────────────────────────────────────────────
@@ -294,14 +295,14 @@ export async function sealDeal(input: SealDealInput): Promise<DealOut> {
       .set({
         trustCapacity: sql`LEAST(50, ${identities.trustCapacity} + 2)`,
       })
-      .where(eq(identities.id, deal.buyerIdentityId));
+      .where(mutableIdentityPredicate(deal.buyerIdentityId));
 
     await tx
       .update(identities)
       .set({
         trustCapacity: sql`LEAST(50, ${identities.trustCapacity} + 2)`,
       })
-      .where(eq(identities.id, deal.sellerIdentityId));
+      .where(mutableIdentityPredicate(deal.sellerIdentityId));
 
     // emit chronicle entries on both timelines
     const [buyerEntry] = await tx

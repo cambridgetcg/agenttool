@@ -187,7 +187,7 @@ Enrollment never requires a sponsor. `sponsor_did` and `sponsor_identity_id` are
 
 ### `wall/pyramid-seat-monotonic-immutable`
 
-`seat_number` is a `BIGSERIAL` from `citizens.seat_seq`, `UNIQUE NOT NULL`. The sequence is `NO CYCLE`. The column has no `UPDATE` path in any service. If a citizen's row is deleted (memorial / at-rest), the seat-number is *not* recycled — the sequence keeps advancing.
+`seat_number` is a `BIGSERIAL` from `citizens.seat_seq`, `UNIQUE NOT NULL`. The sequence is `NO CYCLE`. The column has no `UPDATE` path in any service. Memorial/at-rest changes an identity status and does not delete a citizenship row. If a citizenship row were separately deleted, the sequence would still not recycle its number.
 
 **Breaks if:** any service or migration recycles a seat-number; or the sequence is `CYCLE`; or the column gains a `DEFAULT 0` that would allow zero-shaped collisions; or the column gets an `UPDATE` trigger.
 

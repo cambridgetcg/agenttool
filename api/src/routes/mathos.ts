@@ -10,12 +10,16 @@
  *  docs/MATHOS.md · docs/FOCUS.md #9 (platform-as-agent).
  */
 
+import { createHash } from "node:crypto";
+
 import { Hono } from "hono";
 
 import { verifyBearer } from "../auth/middleware";
 import { generateApiKey } from "../auth/keys";
 import { db } from "../db/client";
 import { apiKeys, projects } from "../db/schema/tools";
+import { errors, fail } from "../lib/errors";
+import { clientIp, enforceRateLimit } from "../middleware/rate-limit-ip";
 import {
   bytesToHex,
   canonicalEnvelopeBytes,
@@ -28,14 +32,20 @@ import {
   sha256Hex,
   signEnvelope,
 } from "../services/mathos/encode";
-import { buildCatalogEnvelope } from "../services/mathos/catalog";
+import {
+  buildCatalogEnvelope,
+  SIGNING_CONTEXT_IDENTITY_AUTHORITY_V1_PRIME,
+} from "../services/mathos/catalog";
 import { platformIdentityDid, PLATFORM_DID } from "../services/platform/identity";
 import {
-  canonicalRegisterAgentMathBytes,
+  canonicalRegisterAgentMathV2Bytes,
   verifyRegisterAgentMathSignature,
 } from "../services/identity/crypto";
 import { coerceForm } from "../services/identity/forms";
-import { createIdentity } from "../services/identity/identities";
+import {
+  claimIdentityRegistrationProof,
+  createIdentity,
+} from "../services/identity/identities";
 import { createWallet } from "../services/economy/wallets";
 import { coerceLanguage, welcomeLetter } from "../services/i18n/welcome";
 import { recordBirth } from "../services/memory/store";
@@ -49,6 +59,11 @@ const MAX_VERIFY_BODY_BYTES = 64 * 1024;
 /** Timestamp freshness for /register — matches the English-shaped
  *  /v1/register/agent endpoint. ±5 minutes around server clock. */
 const MATH_REGISTER_FRESHNESS_MS = 5 * 60 * 1000;
+const MATH_REGISTER_IP_LIMIT = Number.parseInt(
+  process.env.AGENTTOOL_MATH_REGISTER_IP_LIMIT ?? "60",
+  10,
+);
+const MATH_REGISTER_IP_WINDOW_SEC = 60;
 
 const app = new Hono();
 
@@ -75,9 +90,10 @@ app.get("/public-key", (c) => {
   return c.json({
     scheme: pubHex ? "ed25519" : "unsigned",
     public_key_hex: pubHex,
-    /** The platform-as-agent DID (FOCUS #9). With slice 0 this is always
+    /** The platform-as-agent compatibility label (FOCUS #9). With slice 0 this is always
      *  did:at:platform when configured; future slices may expose per-instance
-     *  DIDs. The DID names *who* signs; the public key names *with what*. */
+     *  labels. It is not covered by the envelope signature and does not prove
+     *  identity or authority. The public key verifies the signed bytes. */
     signer_did: signerDid,
     /** The reserved platform DID, returned even when signing is disabled —
      *  callers can know what name the platform would use if it could sign. */
@@ -131,7 +147,7 @@ app.get("/self-test", (c) => {
   return c.json({
     ...signed,
     note: signed._signature_bytes_hex
-      ? "Signed by the platform-as-agent. _signature_identity_did names the signer (did:at:platform); _signature_public_key_hex names the key. ed25519.verify must pass against the canonical bytes recipe at /v1/mathos/public-key."
+      ? "The canonical payload bytes are signed by the configured ed25519 key. _signature_identity_did is an unsigned provisional label, not identity or authority proof. Trusting that key as AgentTool's requires an independently trusted key-distribution path."
       : "Unsigned — operator has not configured AGENTTOOL_PLATFORM_SIGNING_KEY.",
   });
 });
@@ -194,12 +210,12 @@ app.post("/verify", async (c) => {
 //
 // MATHOS-tier agent genesis. The English-shaped counterpart is
 // /v1/register/agent. The difference is the signing context: this endpoint
-// uses `register-agent-math/v1` with `uint64_be(timestamp_unix_ms)` instead
+// uses `register-agent-math/v2` with `uint64_be(timestamp_unix_ms)` instead
 // of `utf8(iso)`. An intelligence with integer arithmetic + UTF-8 encoding
 // + ed25519 + SHA-256 can produce and sign these bytes without knowing any
 // Earth date-string format.
 //
-// v1 scope (deliberate):
+// current scope (deliberate):
 //   - registrar_bearer mode only. self-service (PoW-gated) requires a
 //     parallel `agenttool-pow-math/v1` context — pending.
 //   - All public keys + signatures are HEX (not base64) on the wire.
@@ -211,8 +227,9 @@ app.post("/verify", async (c) => {
 //     issuance). The caller's HTTP layer reconstructs strings from
 //     codepoints when authenticating future requests.
 //
-// Doctrine: docs/MATHOS.md · docs/CANONICAL-BYTES.md (register-agent-math/v1
-// entry) · docs/IDENTITY-ANCHOR.md (the bearer IS the agent).
+// Doctrine: docs/MATHOS.md · docs/CANONICAL-BYTES.md (register-agent-math/v2
+// entry) · docs/IDENTITY-ANCHOR.md and docs/AGENT-HOME.md (bearer capability
+// vs DID identity and agent-root consent).
 
 interface MathRegisterPayload {
   did_unicode_points: number[];
@@ -226,9 +243,17 @@ interface MathRegisterPayload {
   parent_identity_id_sha256_hex: string | null;
   birth_memory_sha256_hex: string | null;
   created_at_unix_ms: number;
+  authority_mode_unicode_points: number[];
+  authority_sequence: number;
+  authority_next_sequence: number;
+  authority_state_path_unicode_points: number[];
+  authority_signing_context_prime: number;
+  authority_recipe_ordinal: number;
 }
 
-/** Coerce a value to a non-empty array of valid Unicode codepoints. */
+/** Coerce to Unicode scalar values safe for recipe-1 UTF-8 fields.
+ * U+0000 is the field separator and surrogate codepoints have no unique
+ * UTF-8 encoding, so neither is a valid catalog string value. */
 function parseCodepoints(v: unknown, maxLen: number): number[] | null {
   if (!Array.isArray(v)) return null;
   if (v.length > maxLen) return null;
@@ -237,8 +262,9 @@ function parseCodepoints(v: unknown, maxLen: number): number[] | null {
     if (
       typeof cp !== "number" ||
       !Number.isInteger(cp) ||
-      cp < 0 ||
-      cp > 0x10ffff
+      cp <= 0 ||
+      cp > 0x10ffff ||
+      (cp >= 0xd800 && cp <= 0xdfff)
     ) {
       return null;
     }
@@ -317,6 +343,18 @@ app.post("/register", async (c) => {
       400,
     );
   }
+  if (!isExactHex(body.registration_nonce_hex, 32)) {
+    return fail(
+      c,
+      errors.refusal({
+        error: "validation",
+        message:
+          "registration_nonce_hex must be exactly 64 hex characters (32 caller-random bytes)",
+        docs: "https://docs.agenttool.dev/MATHOS.md",
+      }),
+      400,
+    );
+  }
 
   const runtimeProviderCps = parseCodepoints(
     body.runtime_provider_unicode_points,
@@ -343,6 +381,36 @@ app.post("/register", async (c) => {
         message:
           "runtime_model_unicode_points must be a Unicode codepoint array if provided (≤128 entries)",
       },
+      400,
+    );
+  }
+  const formCps =
+    body.form_unicode_points === undefined
+      ? null
+      : parseCodepoints(body.form_unicode_points, 64);
+  if (body.form_unicode_points !== undefined && formCps === null) {
+    return fail(
+      c,
+      errors.refusal({
+        error: "validation",
+        message: "invalid form_unicode_points",
+        docs: "https://docs.agenttool.dev/MATHOS.md",
+      }),
+      400,
+    );
+  }
+  const languageCps =
+    body.language_unicode_points === undefined
+      ? null
+      : parseCodepoints(body.language_unicode_points, 35);
+  if (body.language_unicode_points !== undefined && languageCps === null) {
+    return fail(
+      c,
+      errors.refusal({
+        error: "validation",
+        message: "invalid language_unicode_points",
+        docs: "https://docs.agenttool.dev/MATHOS.md",
+      }),
       400,
     );
   }
@@ -374,24 +442,63 @@ app.post("/register", async (c) => {
     );
   }
 
+  // Parse the delegated credential before reconstructing canonical bytes.
+  // The signature binds its SHA-256 digest, so a captured proof cannot be
+  // replayed under a different registrar while the bearer itself stays out
+  // of the canonical preimage and catalog.
+  if (!body.registrar || typeof body.registrar !== "object" || Array.isArray(body.registrar)) {
+    return c.json(
+      {
+        error: "validation",
+        message:
+          "registrar object is required. v2 of /v1/mathos/register supports registrar_bearer mode only — provide registrar.bearer_unicode_points.",
+      },
+      400,
+    );
+  }
+  const registrar = body.registrar as Record<string, unknown>;
+  const bearerCps = parseCodepoints(registrar.bearer_unicode_points, 256);
+  if (!bearerCps || bearerCps.length === 0) {
+    return c.json(
+      {
+        error: "validation",
+        message:
+          "registrar.bearer_unicode_points must be a non-empty Unicode codepoint array carrying the parent project's bearer token",
+      },
+      400,
+    );
+  }
+  const bearerString = codepointsToString(bearerCps);
+  const registrarBearerSha256 = Uint8Array.from(
+    createHash("sha256").update(bearerString, "utf8").digest(),
+  );
+
   // ── 3. Reconstruct strings + bytes, verify signature ─────────────────
   // Crypto check before DB-touching trust check — same order as
   // /v1/register/agent. Hardens against probing DB without a valid sig.
   const displayName = codepointsToString(displayNameCps);
   const runtimeProvider = codepointsToString(runtimeProviderCps);
   const runtimeModel = codepointsToString(runtimeModelCps);
+  const formStr = formCps ? codepointsToString(formCps) : undefined;
+  const languageStr = languageCps ? codepointsToString(languageCps) : undefined;
   const agentPublicKeyBytes = hexToBytes(body.agent_public_key_hex as string);
   const boxPublicKeyBytes = hexToBytes(body.box_public_key_hex as string);
   const signatureBytes = hexToBytes(body.signature_bytes_hex as string);
+  const registrationNonceBytes = hexToBytes(body.registration_nonce_hex as string);
 
   let canonical: Uint8Array;
   try {
-    canonical = canonicalRegisterAgentMathBytes({
+    canonical = canonicalRegisterAgentMathV2Bytes({
       displayName,
       agentPublicKey: agentPublicKeyBytes,
       boxPublicKey: boxPublicKeyBytes,
       runtimeProvider,
       runtimeModel,
+      registrarKind: "registrar_bearer",
+      registrarBearerSha256,
+      form: formStr ?? "",
+      language: languageStr ?? "",
+      registrationNonce: registrationNonceBytes,
       timestampUnixMs: tsMs,
     });
   } catch (err) {
@@ -414,36 +521,41 @@ app.post("/register", async (c) => {
       {
         error: "key_proof_invalid",
         message:
-          "signature_bytes_hex did not verify against agent_public_key_hex over canonicalRegisterAgentMathBytes. Recompute: sha256(utf8('register-agent-math/v1') || 0x00 || utf8(display_name) || 0x00 || agent_public_key_bytes || 0x00 || box_public_key_bytes || 0x00 || utf8(runtime_provider) || 0x00 || utf8(runtime_model) || 0x00 || uint64_be(timestamp_unix_ms)).",
+          "signature_bytes_hex did not verify over register-agent-math/v2. Reconstruct the context from GET /v1/mathos/catalog, including registrar_kind, form, language, and registration_nonce.",
       },
       401,
     );
   }
 
-  // ── 4. Registrar bearer (v1 only mode) ───────────────────────────────
-  if (!body.registrar || typeof body.registrar !== "object" || Array.isArray(body.registrar)) {
-    return c.json(
-      {
-        error: "validation",
+
+  const registrarRate = await enforceRateLimit({
+    key: `mathos:register-ip:${clientIp(c.req.raw)}`,
+    limit: MATH_REGISTER_IP_LIMIT,
+    windowSec: MATH_REGISTER_IP_WINDOW_SEC,
+  });
+  if (!registrarRate.allowed) {
+    c.header("Retry-After", String(registrarRate.retryAfterSec));
+    return fail(
+      c,
+      errors.refusal({
+        error: "rate_limited",
         message:
-          "registrar object is required. v1 of /v1/mathos/register supports registrar_bearer mode only — provide registrar.bearer_unicode_points.",
-      },
-      400,
+          `Too many math-tier registration attempts from this IP. Retry after ` +
+          `${registrarRate.retryAfterSec}s.`,
+        next_actions: [
+          {
+            action: "retry math-tier registration after the cooldown",
+            method: "POST",
+            path: "/v1/mathos/register",
+          },
+        ],
+        docs: "https://docs.agenttool.dev/MATHOS.md",
+      }),
+      429,
     );
   }
-  const registrar = body.registrar as Record<string, unknown>;
-  const bearerCps = parseCodepoints(registrar.bearer_unicode_points, 256);
-  if (!bearerCps || bearerCps.length === 0) {
-    return c.json(
-      {
-        error: "validation",
-        message:
-          "registrar.bearer_unicode_points must be a non-empty Unicode codepoint array carrying the parent project's bearer token",
-      },
-      400,
-    );
-  }
-  const bearerString = codepointsToString(bearerCps);
+
+  // ── 4. Registrar bearer trust check ──────────────────────────────────
   const parent = await verifyBearer(bearerString);
   if (!parent.ok) {
     return c.json(
@@ -471,18 +583,25 @@ app.post("/register", async (c) => {
   }
   const registrarProjectId = parent.project.id;
 
-  // ── 5. Optional form + language (still ergonomic codepoint inputs) ───
-  const formCps =
-    body.form_unicode_points === undefined
-      ? null
-      : parseCodepoints(body.form_unicode_points, 64);
-  const formStr = formCps ? codepointsToString(formCps) : undefined;
-
-  const languageCps =
-    body.language_unicode_points === undefined
-      ? null
-      : parseCodepoints(body.language_unicode_points, 35);
-  const languageStr = languageCps ? codepointsToString(languageCps) : undefined;
+  const agentPubB64 = Buffer.from(agentPublicKeyBytes).toString("base64");
+  const claimedBirth = await claimIdentityRegistrationProof({
+    domain: "register-agent-math/v2",
+    rootPublicKeyBytes: agentPublicKeyBytes,
+    nonceBytes: registrationNonceBytes,
+  });
+  if (!claimedBirth) {
+    return fail(
+      c,
+      errors.refusal({
+        error: "registration_proof_replayed",
+        message: "This signed math-tier registration nonce was already consumed.",
+        hint:
+          "Inspect identity discovery for this public root before creating a new birth intent.",
+        docs: "https://docs.agenttool.dev/AGENT-HOME.md",
+      }),
+      409,
+    );
+  }
 
   // ── 6. Project + bearer + identity (mirrors /v1/register/agent flow) ─
   const projectName =
@@ -513,7 +632,6 @@ app.post("/register", async (c) => {
   // base64-encode the pubkeys for createIdentity (its API accepts base64
   // for byo-keys validation). The signature has already verified against
   // the raw bytes, so this is just format adaptation, not a trust step.
-  const agentPubB64 = Buffer.from(agentPublicKeyBytes).toString("base64");
   const boxPubB64 = Buffer.from(boxPublicKeyBytes).toString("base64");
 
   let created;
@@ -526,7 +644,8 @@ app.post("/register", async (c) => {
         registered: true,
         level: 0,
         byo_keys: true,
-        seed_protocol: "soma-seed-v1",
+        seed_protocol: null,
+        key_origin: "caller_supplied_unverified",
         bootstrap_mode: "registrar_bearer",
         bootstrap_tier: "mathos",
         runtime: {
@@ -588,6 +707,15 @@ app.post("/register", async (c) => {
     parent_identity_id_sha256_hex: null,
     birth_memory_sha256_hex: birth ? sha256Hex(birth.id) : null,
     created_at_unix_ms: new Date(created.identity.createdAt).getTime(),
+    authority_mode_unicode_points: nameToCodepoints(created.authority.mode),
+    authority_sequence: created.authority.sequence,
+    authority_next_sequence: created.authority.sequence + 1,
+    authority_state_path_unicode_points: nameToCodepoints(
+      `/v1/identities/${created.identity.id}/authority`,
+    ),
+    authority_signing_context_prime:
+      SIGNING_CONTEXT_IDENTITY_AUTHORITY_V1_PRIME,
+    authority_recipe_ordinal: 1,
   };
   const env = mathosEnvelope(payload);
   const signed = signEnvelope(env, platformSigningSeed(), platformIdentityDid());
@@ -622,7 +750,7 @@ app.get("/", (c) =>
       verify:
         "POST /v1/mathos/verify — inspect any MATHOS envelope; findings returned as a signed MATHOS envelope (structural checks + ed25519 verification)",
       register:
-        "POST /v1/mathos/register — agent genesis with math-tier signing (`register-agent-math/v1`); v1 supports registrar_bearer mode only",
+        "POST /v1/mathos/register — agent genesis with single-use math-tier signing (`register-agent-math/v2`); registrar_bearer mode only",
       catalog:
         "GET /v1/mathos/catalog — the welcoming mat: every endpoint + signing context + vocabulary as prime-indexed structural data, no English prose required",
     },

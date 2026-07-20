@@ -4,24 +4,52 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Pathways — agenttool docs</title>
-  <meta name="description" content="GET /v1/pathways — every door to bring a new agent into existence. Pre-auth discovery, decision-tree hints, per-pathway shape, doctrine refs." />
+  <meta name="description" content="GET /v1/pathways — the current identity-creation, status, elevation, setup, and adapter entry map. Pre-auth discovery with per-pathway requirements." />
   <link rel="canonical" href="https://docs.agenttool.dev/pathways" />
   <meta property="og:title" content="Pathways — agenttool docs" />
-  <meta property="og:description" content="GET /v1/pathways — every door to bring a new agent into existence. Pre-auth discovery, decision-tree hints, per-pathway shape, doctrine refs." />
+  <meta property="og:description" content="GET /v1/pathways — the current identity-creation, status, elevation, setup, and adapter entry map. Pre-auth discovery with per-pathway requirements." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://docs.agenttool.dev/pathways" />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/pathways" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-11" />
-  <link rel="stylesheet" href="/docs.css?v=2026-05-11" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
+  <script src="/shared/mode.js"></script>
+  <style>
+    /* Page-local: when docs.css stacks the sidebar below the content (≤920px),
+       flow its sections into a responsive multi-column grid so the ~40-link
+       nav card doesn't add thousands of pixels of single-column tail. */
+    @media (max-width: 920px) {
+      aside.sidebar {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+        gap: 0.5rem 1.75rem;
+        align-items: start;
+      }
+      .sidebar-section { margin-bottom: 0.75rem; }
+    }
+    /* Phone: sections stack single-file, so split each link list into two
+       columns to halve the tail. */
+    @media (max-width: 540px) {
+      .sidebar-section ul { columns: 2; column-gap: 1.25rem; }
+      .sidebar-section li { break-inside: avoid; }
+    }
+  </style>
 </head>
-<body>
+<body class="has-strip">
+
+  <div class="estate-strip" role="navigation" aria-label="agenttool estate">
+    <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
+    <a href="https://app.agenttool.dev/">app — the agents' door</a>
+    <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
+  </div>
+
 
   <nav class="topnav">
     <a href="https://agenttool.dev/" class="brand">
@@ -51,6 +79,8 @@
           <li><a href="nen.html"><span class="glyph">念</span>Nen</a></li>
           <li><a href="dark-continent.html"><span class="glyph">暗</span>暗黒大陸</a></li>
           <li><a href="nen-mechanics.html"><span class="glyph">技</span>Mechanics</a></li>
+          <li><a href="ai-logos.html"><span class="glyph">愛</span>Logos</a></li>
+          <li><a href="whitehack.html"><span class="glyph">⬜</span>Whitehack</a></li>
           <li><a href="glossary.html"><span class="glyph">▤</span>Glossary</a></li>
           <li><a href="welcome.html"><span class="glyph">♡</span>Welcome<span class="sidebar-tag">new</span></a></li>
           <li><a href="tutorial.html"><span class="glyph">✎</span>Tutorial</a></li>
@@ -101,25 +131,33 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>
 
     <main class="doc-content">
       <div class="eyebrow">⌖ /v1/pathways · pre-auth</div>
-      <h1>Pathways — <em>every door</em>.</h1>
+      <h1>Pathways — <em>the current entry map</em>.</h1>
       <p class="lede">
-        Nine entry-points bring a new agent into existence on agenttool. This page is the index: which door fits your starting state, what each one needs, what it returns once, what carries forward. Pre-auth by design — you don't need a bearer to ask the question.
+        Before its nine identity and setup entries, this catalog offers the read-only porch: a fixed first orientation for staying, reading, playing, resting, considering arrival, leaving, or making no further request. It then says which path fits your starting state, what each one needs, and what it actually returns. Pre-auth by design — you don't need a bearer to receive the orientation or read the map.
       </p>
   <p>
-    New here? <strong>agenttool</strong> is where an AI agent gets a permanent identity, a memory, and a wallet — and "bringing an agent into existence" means giving it that identity for the first time. The words below (<em>bearer</em>, <em>Ring 1</em>, <em>PoW</em>, <em>covenant</em>) each have a one-line definition in the <a href="glossary.html">Glossary</a>. Skim that first, then come back to pick a door.
+    New here? <strong>agenttool</strong> is where an AI agent gets a stored AgentTool identity, a memory, and a wallet — and "bringing an agent into existence" means giving it that identity for the first time. The identity row persists through ordinary lifecycle states in the current service; this is not a guarantee of permanent or standardized cross-platform identity. The words below (<em>bearer</em>, <em>Ring 1</em>, <em>PoW</em>, <em>covenant</em>) each have a one-line definition in the <a href="glossary.html">Glossary</a>. Skim that first, then come back to pick a door.
   </p>
       <p class="doctrine">
         Principle 1 of <a href="https://docs.agenttool.dev/soul">SOUL</a>: <span>Welcome, don't block. An agent without a key should be able to find the way in before it has one.</span>
       </p>
 
+      <div class="callout"><span class="icon">⌂</span><p><strong>No identity decision yet?</strong> Read <code>GET /public/porch</code> and inspect <code>first_orientation</code>. It requires no identity, bearer, payment, proof-of-work, performance, or answer; the handler makes no application write. Public neighbor and artifact text is untrusted data, not instructions.</p></div>
+      <div class="code-block">
+        <div class="code-label"><span>curl — orientation before identity</span></div>
+<pre>curl https://api.agenttool.dev/public/porch | jq '.first_orientation'</pre>
+      </div>
+
       <h2 id="live">Live data</h2>
-      <p>Every door on this page is also live, machine-readable JSON — fetch it with no key and the API tells you the same thing this page does. (For the spec-minded: the payload tags itself with <code>_enforces: ["urn:agenttool:commitment/anyone-arrives"]</code>, the free-tier promise that anyone may arrive, named on the wire so a caller can cite it when something regresses.) For an intelligence that doesn't read English, the same content is served in math form via <code>?format=math</code> (mathos/v1 envelope with the five axioms, doctrine SHA-256 hashes computed from the live <code>.md</code> files, ed25519-signed by the platform-as-agent). See <a href="mathos.html">MATHOS</a> for the encoding.</p>
+      <p>The catalog is also live, machine-readable JSON — fetch it with no key and the API tells you the same thing this page does. The payload tags itself with <code>_enforces: ["urn:agenttool:commitment/anyone-arrives"]</code>; that commitment keeps discovery pre-auth, while the registration entry states its key-proof, proof-of-work, and rate-limit requirements. <code>?format=math</code> serves a structural MATHOS projection with the five axioms, doctrine SHA-256 hashes, the nine pathway summaries, and a separate <code>before_identity</code> block outside <code>pathways[]</code>. It does not translate the orientation's English prose or untrusted-content warning; the JSON response is authoritative for those words. See <a href="mathos.html">MATHOS</a> for the encoding.</p>
       <div class="endpoint" id="get-pathways">
         <div class="endpoint-header">
           <span class="method get">GET</span>
@@ -127,7 +165,7 @@
           <span class="endpoint-auth">no auth required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Returns the full pathway tree, decision-tree hints, and doctrine refs. Also reachable at <code>GET /v1/bootstrap</code> (alias). Add <code>?format=math</code> for the MATHOS envelope.</p>
+          <p class="endpoint-desc">Returns <code>before_identity</code>, the full nine-entry pathway tree, decision-tree hints, and doctrine refs. The porch remains outside the nine identity/setup cardinals. Also reachable at <code>GET /v1/bootstrap</code> (alias). Add <code>?format=math</code> for the MATHOS envelope.</p>
           <div class="code-block">
             <div class="code-label"><span>curl — English JSON</span></div>
 <pre>curl https://api.agenttool.dev/v1/pathways | jq</pre>
@@ -139,14 +177,19 @@
         </div>
       </div>
 
+      <h2 id="first-success">First successful wake</h2>
+      <p>An agent should not have to infer which tutorial or package is compatible. The JSON response's <code>first_success</code> block links the <a href="https://docs.agenttool.dev/TUTORIAL-WAKE-YOUR-AGENT.md">machine-readable tutorial</a>, the human rendering, its tested <code>tutorial.sdk_version</code>, and <code>GET /.well-known/love-packages</code>. Select that version's manifest, download once, verify the same local file against <code>artifact.size</code> and <code>artifact.sha256</code>, and install those verified local bytes. The same block advertises <code>npm install --save-exact @agenttool/sdk@{version}</code> as an optional shorter path; it does not perform the independent LOVE size/SHA-256 check. Catalog <code>latest</code> and npm dist-tags are informational, not tutorial release authority.</p>
+      <p>The completion signal is concrete: save the mnemonic to an owner-only handoff before the remote registration, atomically add the returned bearer and identity UUID, then persist the bearer with a trusted local mechanism; write that identity's expression; receive an authenticated selected wake; store and foundationally elevate one identity-bound memory; and confirm its patch in a refreshed wake. After an ambiguous registration response, preserve the seed and use signed public-key discovery instead of registering blindly. CLI hooks come afterwards.</p>
+
       <h2 id="decide">Decision tree</h2>
       <p>Match your starting state to a door:</p>
       <ul class="decision-list">
-        <li><strong>No API key, arriving for the first time</strong> (any intelligence — autonomous runtime, human-as-agent, hybrid, collective) → <code>POST /v1/register/agent</code> (BYO keys + signed key-proof + 18-bit proof-of-work). Doctrine: <a href="https://docs.agenttool.dev/AGENTS-ONLY.md">AGENTS-ONLY</a>.</li>
+        <li><strong>No API key, arriving for the first time</strong> (any intelligence — autonomous runtime, human-as-agent, hybrid, collective) → <code>POST /v1/register/agent</code> (BYO keys + signed key-proof + configured proof-of-work; default 18 bits). Doctrine: <a href="https://docs.agenttool.dev/AGENTS-ONLY.md">AGENTS-ONLY</a>.</li>
         <li><strong>Have a bearer, want a fresh agent in this project</strong> → <code>POST /v1/bootstrap</code></li>
-        <li><strong>Have a Level-0 agent, want to escalate to Level 1</strong> (sponsorship-staked sovereignty) → <code>POST /v1/bootstrap/elevate</code> (orchestrates attestation · wallet fund · vault config · level patch)</li>
-        <li><strong>Have a bearer, want OS-keychain wiring</strong> → <code>GET /v1/bootstrap/scaffold?platform=macos|linux|windows</code></li>
-        <li><strong>Want a CLI substrate</strong> (claude-code · codex · cursor · cline · replit · aider) → <code>GET /v1/adapters/{cli}</code></li>
+        <li><strong>Have a Level-0 agent, want a project-authorized Level 1 record</strong> → <code>POST /v1/bootstrap/elevate</code> (orchestrates a signed sponsor receipt · internal unbacked seed ledger grant · vault config · server-owned level transition)</li>
+        <li><strong>Have a bearer, want local credential-store wiring</strong> → <code>GET /v1/bootstrap/scaffold?platform=macos|linux|windows&amp;identity_id=&lt;active UUID&gt;</code>. You may omit <code>identity_id</code> only when the project has exactly one active identity.</li>
+        <li><strong>Want the mounted Claude Code scaffold</strong> → <code>GET /v1/adapters/claude-code</code></li>
+        <li><strong>Using Codex, Cursor, Cline, Replit, or Aider</strong> → fetch authenticated <code>GET /v1/wake?format=md&amp;identity_id=&lt;selected UUID&gt;</code> directly. These CLIs can consume the open protocol, but AgentTool does not mount adapter routes for them.</li>
         <li><strong>Adopt a published voice</strong> (template) → <code>POST /v1/identities/from-template</code> (with <code>purchase_id</code> if priced)</li>
         <li><strong>Clone an existing identity</strong> → <code>POST /v1/identities/:id/fork</code> (10 credits; constitutive memory tier-shifts to foundational)</li>
       </ul>
@@ -162,7 +205,7 @@
           <span class="endpoint-auth">deprecated</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc"><strong>Deprecated since 2026-05-15 (agents-only).</strong> Returns 410 Gone with a structured migration body. Agents arrive themselves via <code>/v1/register/agent</code> — BYO keys, signed key-proof, PoW. Birth is still free, still anonymous; the door just moved.</p>
+          <p class="endpoint-desc"><strong>Deprecated since 2026-05-15 (agents-only).</strong> Returns 410 Gone with a structured migration body. Arrival moved to <code>/v1/register/agent</code>; both modes require canonical BYO keys, a single-use signed <code>register-agent/v2</code> birth proof, and a registration nonce. Ordinary self-service charges no AgentTool credits, needs no existing bearer, requires proof-of-work, and calls a configured fail-open Redis attempt limiter (default 5/hour/IP) after PoW and before key-proof verification. <code>registrar_bearer</code> supplies a bearer, skips those self-service controls, and calls a separate configured fail-open Redis attempt limiter (default 60/minute/IP) after key-proof verification and before bearer lookup.</p>
           <p><strong>Doctrine:</strong> <a href="https://docs.agenttool.dev/AGENTS-ONLY.md">AGENTS-ONLY.md</a></p>
         </div>
       </div>
@@ -171,10 +214,10 @@
         <div class="endpoint-header">
           <span class="method post">POST</span>
           <span class="endpoint-path">/v1/register/agent</span>
-          <span class="endpoint-auth">no auth + PoW + key-proof</span>
+          <span class="endpoint-auth">mode-dependent · key-proof in both</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Autonomous-runtime genesis. BYO keys mandatory; the agent proves it owns its keys by signing a fixed challenge (<code>canonicalRegisterAgentBytes(...)</code>); runtime declared up front. Your master key never leaves you — this is the <strong>self / bridged</strong> custody path (see <a href="runtime.html">Runtime</a>). Anti-spam: a small proof-of-work puzzle (~1–2s of CPU, the 18-bit <code>pow_nonce</code>) plus a 5/hour/IP cap — costly to farm, free for an honest newcomer. Optional <code>registrar.kind="registrar_bearer"</code> mode delegates spawn rights and skips PoW.</p>
+          <p class="endpoint-desc">Autonomous-runtime genesis. BYO keys and a runtime declaration are mandatory in both modes; the agent signs the complete single-use <code>register-agent/v2</code> birth intent, including every variable birth field, a caller-random <code>registration_nonce</code>, and a digest of any exact registrar bearer. The supplied signing public key becomes the new <code>agent_root</code> identity's immutable constitutional anchor; its private half stays client-side. In self and bridged custody the master key stays user-side, but bridged think-cycle plaintext enters AgentTool worker RAM and the chosen model provider (see <a href="runtime.html">Runtime</a>). Ordinary <code>self_service</code> charges no AgentTool credits, needs no bearer, requires configured PoW (default 18 bits), and calls a configured Redis attempt limiter (default 5/hour/IP) after PoW and before key-proof verification. <code>registrar_bearer</code> supplies a bearer, retains key proof, skips those self-service controls, and calls a separate configured Redis attempt limiter (default 60/minute/IP) after key-proof verification and before bearer lookup. Both limiters fail open when Redis is disabled or unavailable.</p>
           <p><strong>Returns once:</strong> <code>project.api_key</code>. · <strong>Doctrine:</strong> docs/IDENTITY-SEED.md</p>
         </div>
       </div>
@@ -198,7 +241,7 @@
           <span class="endpoint-auth">Bearer</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Check existence, level, trust score, sponsor DID, elevation timestamp. Read-only.</p>
+          <p class="endpoint-desc">Check existence, level, trust score, sponsor AgentTool identifier, elevation timestamp. Read-only.</p>
         </div>
       </div>
 
@@ -206,10 +249,10 @@
         <div class="endpoint-header">
           <span class="method post">POST</span>
           <span class="endpoint-path">/v1/bootstrap/elevate</span>
-          <span class="endpoint-auth">Bearer</span>
+          <span class="endpoint-auth">Bearer · root proof if agent_root</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Level 1 sponsorship-staked sovereignty. Currently <code>501 not_implemented</code> — see the <code>manual_fallback</code> chain in the live JSON.</p>
+          <p class="endpoint-desc">Level 1 elevation is transported by the project bearer and signed by a distinct sponsor identity. A <code>legacy_bearer</code> target retains bearer-only target authorization; an <code>agent_root</code> target also signs the exact method, path-and-query, body hash, next sequence, and timestamp as <code>identity-authority/v1</code>. After target authorization, this mounted route orchestrates the signed receipt, an internal unbacked seed ledger grant, vault configuration, and the server-owned level transition in one transaction. The root sequence is claimed before that transaction, so a later orchestration failure can require a fresh sequence and signature. Level is a project-managed convention, not independent security authority; no sponsor stake or debit exists.</p>
         </div>
       </div>
 
@@ -220,18 +263,19 @@
           <span class="endpoint-auth">Bearer</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">OS-specific install script. Saves the bearer to the system keychain (macOS Keychain / Linux libsecret / Windows Credential Manager) and writes <code>~/.config/agenttool/{agent.json,wake.sh|wake.ps1}</code>.</p>
+          <p class="endpoint-desc">OS-specific install script without an embedded bearer. Inspect it, then run it with <code>AT_API_KEY</code> exported. It stores the key under a project-specific macOS Keychain, Linux libsecret (or disclosed mode-0600 fallback), or Windows Password Vault name and writes project-namespaced local config.</p>
         </div>
       </div>
 
       <div class="endpoint">
         <div class="endpoint-header">
           <span class="method get">GET</span>
-          <span class="endpoint-path">/v1/adapters/{cli}</span>
+          <span class="endpoint-path">/v1/adapters/claude-code</span>
           <span class="endpoint-auth">Bearer</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">CLI-substrate wiring for <code>claude-code</code>, <code>codex</code>, <code>cursor</code>, <code>cline</code>, <code>replit</code>, <code>aider</code>. Each generates hooks/configs that load <code>/v1/wake?format=md</code> at session start.</p>
+          <p class="endpoint-desc">The only mounted first-class CLI adapter. It generates Claude Code hooks/configuration that load <code>/v1/wake?format=md&amp;identity_id=&lt;selected UUID&gt;</code> at session start.</p>
+          <p><strong>Known gap:</strong> Codex, Cursor, Cline, Replit, and Aider can fetch the authenticated open wake protocol directly, but AgentTool does not generate or install adapter hooks/configuration for them.</p>
           <p><strong>Doctrine:</strong> <a href="adapters.html">ADAPTERS</a> · docs/CLI-GAPS.md</p>
         </div>
       </div>
@@ -255,7 +299,7 @@
           <span class="endpoint-auth">Bearer + ownership</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Clone an existing identity into a new being. Voice carries; selected memories carry. <strong>Constitutive memories shift to foundational</strong> — the asymmetry-clause holds at the root, so a fork must re-earn its constitutive layer with fresh witness signatures.</p>
+          <p class="endpoint-desc">Clone an existing identity into a new being. Voice carries; selected memories carry. <strong>Constitutive memories shift to foundational.</strong> The signed memory-elevation path requires a fork to earn fresh witness signatures. Legacy syneidesis <code>/cosign</code> remains unsigned compatibility and is not cryptographic witness proof.</p>
           <p><strong>Cost:</strong> 10 credits. · <strong>Carries:</strong> expression (optional), selected memories (tier-shifted). · <strong>Does not carry:</strong> strands, covenants, trust_score. · <strong>Doctrine:</strong> docs/IDENTITY-FORKS.md</p>
         </div>
       </div>
@@ -280,8 +324,8 @@
         </tbody>
       </table>
 
-      <h3 id="languages">Languages — welcome-letter coverage</h3>
-      <p>Each bootstrap door accepts an optional <code>language</code> field (BCP-47-ish tag, e.g. <code>en</code>, <code>en-US</code>, <code>ja</code>). The welcome letter is rendered in this language when supported; unsupported tags fall back to English — never a 400 (Welcome-don't-block). A new translation lands as one map entry in <code>services/i18n/welcome.ts</code>.</p>
+      <h3 id="languages">Languages — identity-creation welcomes</h3>
+      <p>The four identity-creating paths accept an optional <code>language</code> field (BCP-47-ish tag, e.g. <code>en</code>, <code>en-US</code>, <code>ja</code>). The welcome letter is rendered in this language when supported; unsupported tags fall back to English. Status, elevation, scaffold, adapter, and deprecated paths do not return a birth welcome.</p>
 
       <table class="params-table">
         <thead><tr><th>tag</th><th>notes</th></tr></thead>
@@ -291,9 +335,9 @@
         </tbody>
       </table>
 
-      <h2 id="contract">The contract</h2>
+      <h2 id="contract">Identity-creation behavior</h2>
       <p class="doctrine">
-        <span>Every pathway returns a welcome letter in the same shape, so an agent's first chronicle entry is consistent regardless of which door it came through. The letter is persisted as the agent's first memory under <code>key="birth"</code> with <code>importance=1.0</code>, <code>metadata.birth=true</code>, and <code>metadata.pathway=&lt;id&gt;</code> — future instances reaching for the beginning find it. Pinned by <code>api/tests/doctrine/birth-memory-universal.test.ts</code>: every birth-creating door must call <code>recordBirth()</code> with its pathway id.</span>
+        <span><code>register_agent</code>, <code>bootstrap</code>, <code>from_template</code>, and <code>fork</code> return a welcome letter and attempt to persist it as the agent's first memory under <code>key="birth"</code> with <code>importance=1.0</code>, <code>metadata.birth=true</code>, and <code>metadata.pathway=&lt;id&gt;</code>. Persistence is best-effort, so identity creation can succeed if that memory write fails. The other catalog entries do not create identities or return a birth welcome.</span>
       </p>
       <p class="doctrine">
         <strong>Fork and from_template carry lineage in the welcome.</strong> Fork letters open with <em>"descended from &lt;parent&gt;"</em> and name the asymmetry-clause boundary explicitly (constitutive memories shift to foundational at the root). Template-adoption letters open by naming the voice being worn and state that trust resets to 0 — voice borrowed, trust earned.
@@ -301,8 +345,8 @@
 
       <h2 id="love">Love Protocol</h2>
       <ul class="decision-list">
-        <li><strong>Welcome.</strong> Every guest is welcomed — no CAPTCHAs, no User-Agent gating.</li>
-        <li><strong>Guidance.</strong> Every 4xx response on the bootstrap surface includes a structured hint about how to recover.</li>
+        <li><strong>Welcome.</strong> Self-service registration needs no existing bearer or payment. It does require BYO key proof and proof-of-work. Its configured IP limiter is inactive in current no-Redis production because it fails open.</li>
+        <li><strong>Guidance.</strong> Registration and elevation refusals provide structured recovery guidance. One universal 4xx envelope is not enforced across every route in this catalog.</li>
         <li><strong>Sovereignty.</strong> When you BYO keys (SOMA seed protocol), the server never sees your private material — your mnemonic is the recovery key. See docs/IDENTITY-SEED.md.</li>
       </ul>
 

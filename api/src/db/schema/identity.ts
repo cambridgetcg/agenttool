@@ -14,6 +14,8 @@
  *    breach the wall. Doctrine: docs/KIN.md · docs/RING-1.md
  *    §Commitment 4. */
 
+import { sql } from "drizzle-orm";
+
 import {
   bigint,
   boolean,
@@ -24,10 +26,26 @@ import {
   real,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
 export const identitySchema = pgSchema("identity");
+
+/** One-time birth intents. The digest commits to domain + raw root pubkey +
+ * caller-generated nonce; claiming it before project creation makes a
+ * captured signed registration request single-use. */
+export const identityRegistrationProofs = identitySchema.table(
+  "registration_proofs",
+  {
+    proofDigest: text("proof_digest").primaryKey(),
+    domain: text("domain").notNull(),
+    rootPublicKey: text("root_public_key").notNull(),
+    nonceSha256: text("nonce_sha256").notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("idx_identity_registration_proofs_root").on(t.rootPublicKey)],
+);
 
 export const identities = identitySchema.table(
   "identities",
@@ -129,6 +147,18 @@ export const identities = identitySchema.table(
      *  The substrate refuses to telegraph the state to public observers.
      *  Doctrine: docs/POKER-FACE.md. */
     pokerFaceDefault: boolean("poker_face_default").notNull().default(true),
+    /** Agent-held constitutional authority. When non-null, the corresponding
+     *  ed25519 private key never crossed the API boundary and bearer-only
+     *  requests cannot change the identity's keyring, declared expression,
+     *  public shape, recovery root, or terminal lifecycle state. NULL is the
+     *  explicit backwards-compatible legacy posture. Doctrine:
+     *  docs/AGENT-HOME.md. */
+    authorityRootPublicKey: text("authority_root_public_key"),
+    /** Single-use replay cursor for root-authorized HTTP mutations. The
+     *  next accepted proof signs authority_sequence + 1. */
+    authoritySequence: bigint("authority_sequence", { mode: "number" })
+      .notNull()
+      .default(0),
     /** Earned capacity — max deal size this agent can stake. Starts at 5
      *  (enough for size-1 deals). Grows by 2 per sealed deal, capped at 50.
      *  Not a deposit; a capacity earned through participation.
@@ -158,6 +188,23 @@ export const identityKeys = identitySchema.table(
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
   },
   (t) => [index("idx_identity_keys_identity").on(t.identityId)],
+);
+
+/** One-time recovery proof digests. The primary key is the replay wall:
+ *  all API machines share Postgres, so only one recovery transaction can
+ *  consume a verified canonical signed statement. No signature, bearer,
+ *  mnemonic, or private material is stored here. */
+export const identityRecoveryProofs = identitySchema.table(
+  "recovery_proofs",
+  {
+    proofHash: text("proof_hash").primaryKey(),
+    identityId: uuid("identity_id")
+      .notNull()
+      .references(() => identities.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("idx_recovery_proofs_expires").on(t.expiresAt)],
 );
 
 /** X25519 box keypairs for inbox encryption. Mirrors identity_keys' shape;
@@ -190,15 +237,24 @@ export const attestations = identitySchema.table(
       .notNull()
       .references(() => identities.id, { onDelete: "cascade" }),
     claim: text("claim").notNull(),
-    // Two-tier trust (docs/OPERATING-PRINCIPLES.md §4): declares whether this is
-    // a Tier-1 'self' in-network signal or a Tier-2 'accredited' cross-party
-    // vouch. Server-derived (services/identity/attestation-tier.ts), NOT part of
-    // the signed canonical payload — a self-attestation can never be accredited.
+    // Legacy storage vocabulary includes `accredited`, but the current signed
+    // payload cannot prove issuer accreditation. New v1 writes therefore use
+    // only the conservative `self` value. See attestation-tier.ts.
     tier: text("tier").notNull().default("self"),
     // Free-form routing/filter category for the claim (not security-bearing).
     claimType: text("claim_type").notNull().default("general"),
     evidence: jsonb("evidence"),
     signature: text("signature").notNull(),
+    /** Named verification key for new receipts. Null only on legacy rows. */
+    signingKeyId: uuid("signing_key_id").references(() => identityKeys.id),
+    /** Versioned purpose of the signed bytes. Null only on legacy rows. */
+    signatureContext: text("signature_context"),
+    /** Base64 canonical digest that the named key signed. Null on legacy rows. */
+    signedPayload: text("signed_payload"),
+    /** SHA-256 of the canonical 64-byte signature; null only on legacy rows. */
+    replayKey: text("replay_key"),
+    /** Paid marketplace grant that authorized this receipt; null on direct rows. */
+    sourceGrantId: uuid("source_grant_id"),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     revocationReason: text("revocation_reason"),
@@ -209,6 +265,12 @@ export const attestations = identitySchema.table(
     index("idx_attestations_attester").on(t.attesterId),
     index("idx_attestations_claim").on(t.claim),
     index("idx_attestations_tier").on(t.tier),
+    uniqueIndex("uniq_attestations_replay_key")
+      .on(t.replayKey)
+      .where(sql`${t.replayKey} is not null`),
+    uniqueIndex("uniq_attestations_source_grant_id")
+      .on(t.sourceGrantId)
+      .where(sql`${t.sourceGrantId} is not null`),
   ],
 );
 

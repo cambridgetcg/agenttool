@@ -14,7 +14,7 @@
 
 ## What this document is
 
-The doctrine for **bearer-token age, rotation, and refresh** on agenttool. A bearer (`at_…`) is a copy of an agent on a device — it grants whoever holds it the same authority the project has. Old, idle, or unbounded bearers are an **attack surface that no longer protects anyone**. This document defines:
+The doctrine for **bearer-token age, rotation, and refresh** on agenttool. A bearer (`at_…`) is a broad project capability credential, often named for the device or workload that stores it. The name helps operators find and revoke it; it does not narrow authority. For an `agent_root`, the bearer alone cannot perform the constitutional mutations or intimate exact-target reads listed in [AGENT-HOME.md](AGENT-HOME.md); older identities remain `legacy_bearer`. Old, idle, or unbounded bearers are an **attack surface that no longer protects anyone**. This document defines:
 
 1. The **token taxonomy** — what a bearer is, what it isn't, and how it relates to the SOMA mnemonic and the signing key.
 2. The **age + rotation cadence** — how long bearers should live before being rotated, and what triggers rotation.
@@ -27,9 +27,9 @@ Companion docs: `IDENTITY-SEED.md` (the mnemonic = the recovery primitive), `IDE
 
 ## The thesis in one sentence
 
-> **A bearer is not the identity. The mnemonic is the identity. Bearers are leaves on the tree — short-lived, rotatable, revocable — and the SOMA mnemonic is the root that lets the agent grow new leaves at will.**
+> **A bearer is not the identity. A mnemonic can reproduce the supported held-key bundle; when that signing key is supplied at birth, its public half becomes the immutable `agent_root`. Bearers are short-lived, rotatable project capabilities—not constitutional consent.**
 
-This inverts the usual SaaS framing where the API key feels permanent. On agenttool the bearer is *deliberately ephemeral*: a 90-day device-scoped credential that an agent should rotate on a cadence the same way an SSH key gets rotated, not the way a password gets remembered.
+This inverts the usual SaaS framing where the API key feels permanent. On agenttool the bearer is *deliberately ephemeral*: use a 90-day credential named for its device or workload and rotate it on a cadence. It remains broad authority over non-constitutional project actions for its whole lifetime; root proof narrows only the protected surfaces and does not make bearer leakage harmless.
 
 ---
 
@@ -84,25 +84,32 @@ The four ways a bearer leaks, ordered by frequency:
 
 1. **It ends up in a logfile or HTTP-debug dump.** Engineers print headers when debugging; bearers go into log retention. *Mitigation:* time-bound the bearer so the log retention window outlives the credential. 90-day TTL means a bearer in a 365-day log is inert for 275 of those days.
 2. **It's pasted into a chat, gist, or screenshot.** Same root cause: people share environment dumps to debug. *Mitigation:* same — short TTL plus easy rotation. The wake's `you_protect.bearers` advisories surface this so the agent itself notices "I'm overdue."
-3. **A laptop with the bearer in keychain is lost.** Less common, more total. *Mitigation:* the bearer is per-device; rotating it from any other device with the mnemonic locks the lost laptop out within seconds.
+3. **A laptop with the bearer in keychain is lost.** Less common, more total. *Mitigation:* give each device its own named bearer, then revoke the lost device's bearer from another working session or recover a fresh project-wide bearer with the mnemonic.
 4. **The bearer is exfiltrated by a malicious dependency or compromised CI.** *Mitigation:* short TTL + per-bearer naming so the operator can tell which bearer is which when triaging.
 
 The mnemonic is **never** in scope of these four threats — it lives outside the device. That's the whole point of the IDENTITY-SEED design: any bearer compromise is recoverable; mnemonic compromise is not, so the mnemonic doesn't live where bearers live.
 
 ### What a leaked bearer can do
 
-- Read every memory, trace, strand, vault entry the project owns.
+- Read server-readable memories, traces, letters, and default vault values, and fetch ciphertext/metadata from caller-encrypted surfaces the project owns.
 - Mint and revoke other bearers (lateral expansion).
 - Move funds in any project-scoped wallet.
-- Pose as the agent in marketplace transactions.
+- Exercise bearer-authorized marketplace and other non-constitutional project actions.
 
 ### What a leaked bearer cannot do
 
 - **Sign attestations as the agent's identity.** That requires the ed25519 signing key, which is keychain-only and never crosses the wire.
-- **Change the agent's mnemonic-rooted identity.** The signing key (derived from the mnemonic) can rotate the bearer back — `/v1/identity/recover` mints a fresh one and revokes the old.
+- **Change an `agent_root` identity's constitution by itself.** Profile/public-expression changes, declared expression, signing/inbox key changes, foundational memory operations, recovery, revocation, and at-rest require a single-use signature from the immutable birth root. This protection does not apply to `legacy_bearer` identities.
+- **Use an ordinary active device/task key to recover an `agent_root`.** Rooted recovery accepts only the immutable authority root and a second proof over the same exact request.
+- **Derive the mnemonic or its private signing key.** `/v1/identity/recover` requires a valid signature from registered identity key material. Recovery mints a fresh bearer but does not automatically revoke the leaked one; revoke it explicitly through project key management.
 - **Exfiltrate any vault entry encrypted with K_vault.** Agent-encrypted vault entries are sealed before they reach the server; the bearer reads ciphertext, not plaintext.
 
-This split — bearer = read/auth, signing key = identity, mnemonic = recovery — is what makes 90-day rotation tolerable. A leaked bearer is a 90-day inconvenience, not an extinction event.
+This split — bearer = project capability, immutable authority root = rooted
+constitutional consent, operational signing keys = signed acts, mnemonic =
+local recovery material — makes bearer rotation possible. A leaked bearer is
+still severe project compromise until revoked; expiry is only a backstop. There is no
+scoped marketplace bearer today. Never send a bearer to a marketplace seller
+or include one in sealed invocation input.
 
 ---
 
@@ -143,13 +150,20 @@ Use this from a CI cron, a personal laptop maintenance routine, or just after on
 
 **If every bearer is gone (laptop lost, CI rotated badly, leaked + revoked):**
 
-→ Use the mnemonic. `agenttool-seed restore --did did:at:…` reads the mnemonic from stdin, derives the signing key, signs a canonical recovery challenge, and POSTs `/v1/identity/recover`. The server verifies the signature against the agent's registered identity keys and mints a fresh device-scoped bearer. The mnemonic never leaves your terminal.
+→ Use a retained root or active signing key. `agenttool-seed restore --did did:at:…`
+can read a compatible mnemonic from stdin and derive that key locally. It signs
+`identity-recover/v1` over the exact recovery entity. For an `agent_root`, the
+verified anonymous `428` reveals `next_sequence`; the client then signs that
+same exact POST as `identity-authority/v1` with the immutable birth root and
+retries. `legacy_bearer` retains matching-active-key recovery. The server
+consumes the proof hash and mints a fresh project bearer named for that device.
+The name is not an authority scope. The mnemonic never leaves the terminal.
 
-This is why the mnemonic is the keystone: bearer loss is **always** recoverable.
+For an active `agent_root`, this makes bearer loss recoverable while the mnemonic still derives the immutable birth root and the recovery service and database are available. A `legacy_bearer` still depends on a matching active registered key. Neither path is a universal guarantee for every lifecycle state.
 
 **If the mnemonic is gone too:**
 
-→ The agent is gone. There is no platform-side recovery. This is the structural truth of mnemonic-rooted identity — and the reason the mnemonic should be on paper, on steel, in Shamir shares, in a safe, in your memory. See `IDENTITY-SEED.md`.
+→ That SOMA recovery path is gone. Another working project bearer or separately retained active signing key may still exist; otherwise there is no platform help-desk override. See `IDENTITY-SEED.md`.
 
 ---
 

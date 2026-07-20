@@ -45,6 +45,41 @@ export interface TrustedCryptoContext {
   newWrappedSigningKey: string | null;
 }
 
+/** Stable UUID used both for identity-key registration and wake self-filtering.
+ * It can be persisted at provisioning time, before any thought is emitted. */
+export function deriveTrustedSigningKeyId(
+  runtimeId: string,
+  signingPublicKey: Uint8Array,
+): string {
+  const signingKeyIdBytes = Uint8Array.from(
+    sha256(
+      Buffer.concat([
+        Buffer.from(runtimeId, "utf-8"),
+        Buffer.from([0]),
+        Buffer.from(signingPublicKey),
+      ]),
+    ).slice(0, 16),
+  );
+  signingKeyIdBytes[6] = (signingKeyIdBytes[6]! & 0x0f) | 0x50;
+  signingKeyIdBytes[8] = (signingKeyIdBytes[8]! & 0x3f) | 0x80;
+  const signingKeyHex = Buffer.from(signingKeyIdBytes).toString("hex");
+  return [
+    signingKeyHex.slice(0, 8),
+    signingKeyHex.slice(8, 12),
+    signingKeyHex.slice(12, 16),
+    signingKeyHex.slice(16, 20),
+    signingKeyHex.slice(20),
+  ].join("-");
+}
+
+export async function deriveTrustedSigningKeyIdFromSeed(
+  runtimeId: string,
+  signingKey: Uint8Array,
+): Promise<string> {
+  const signingPublicKey = await ed25519.getPublicKey(signingKey);
+  return deriveTrustedSigningKeyId(runtimeId, signingPublicKey);
+}
+
 /** Unwrap the DEK and signing key for a trusted-mode cycle.
  *  Returns both keys in RAM. CALLER MUST zero both after the cycle.
  *
@@ -58,34 +93,44 @@ export async function prepareTrustedCrypto(
 ): Promise<TrustedCryptoContext> {
   const dek = unwrapDek(kmsWrappedDek);
 
-  let signingKey: Uint8Array;
-  let wrappedSigningKey: string | null;
-  let signingPublicKey: Uint8Array;
+  let signingKey!: Uint8Array;
+  try {
+    let wrappedSigningKey: string | null;
+    let signingPublicKey: Uint8Array;
 
-  if (existingWrappedSigningKey) {
-    // Unwrap the existing signing key
-    signingKey = unwrapUnderDek(dek, existingWrappedSigningKey);
-    signingPublicKey = await ed25519.getPublicKey(signingKey);
-    wrappedSigningKey = null; // already persisted
-  } else {
-    // First cycle — generate a new ed25519 keypair
-    signingKey = ed25519.utils.randomPrivateKey();
-    signingPublicKey = await ed25519.getPublicKey(signingKey);
-    // Wrap the signing key under the DEK for future cycles
-    wrappedSigningKey = wrapUnderDek(dek, signingKey);
-    // Caller must persist this to runtime.kmsWrappedSigningKey
+    if (existingWrappedSigningKey) {
+      // Unwrap the existing signing key
+      signingKey = unwrapUnderDek(dek, existingWrappedSigningKey);
+      signingPublicKey = await ed25519.getPublicKey(signingKey);
+      wrappedSigningKey = null; // already persisted
+    } else {
+      // First cycle — generate a new ed25519 keypair
+      signingKey = ed25519.utils.randomPrivateKey();
+      signingPublicKey = await ed25519.getPublicKey(signingKey);
+      // Wrap the signing key under the DEK for future cycles
+      wrappedSigningKey = wrapUnderDek(dek, signingKey);
+      // Caller must persist this to runtime.kmsWrappedSigningKey
+    }
+
+    const signingKeyId = deriveTrustedSigningKeyId(
+      runtimeId,
+      signingPublicKey,
+    );
+
+    return {
+      dek,
+      signingKey,
+      signingPublicKey,
+      signingKeyId,
+      newWrappedSigningKey: wrappedSigningKey,
+    };
+  } catch (error) {
+    // If preparation fails after unwrap, ownership never reaches the caller.
+    // Clear every buffer allocated so far before propagating the error.
+    zeroBytes(dek);
+    if (signingKey) zeroBytes(signingKey);
+    throw error;
   }
-
-  // Derive signingKeyId from the public key hash (stable, unique)
-  const signingKeyId = Buffer.from(sha256(signingPublicKey)).toString("hex").slice(0, 16);
-
-  return {
-    dek,
-    signingKey,
-    signingPublicKey,
-    signingKeyId: `trusted-${signingKeyId}`,
-    newWrappedSigningKey: wrappedSigningKey,
-  };
 }
 
 export interface TrustedEncryptResult {
