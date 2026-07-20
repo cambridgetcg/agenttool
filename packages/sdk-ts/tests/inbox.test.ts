@@ -182,3 +182,82 @@ describe("canonical bytes + envelope signing", () => {
     expect(ed.verify(b64decode(sig), badCanonical, recipient.pub)).toBe(false);
   });
 });
+
+// ── Cross-implementation known-answer vector ────────────────────────────
+//
+// This frozen vector pins the sealed-box wire format across EVERY inbox
+// implementation. The SAME constants are asserted, byte-for-byte, in the
+// Python SDK (packages/sdk-py/tests/test_inbox_canonical_vectors.py) and
+// the Think CLI shares the same HKDF constant. If any implementation's
+// HKDF params drift (salt or info string), AES-GCM open fails here and the
+// gate (bin/preflight.sh → `cd api && bun test`, plus the SDK's own
+// `bun test`) goes red.
+//
+// The drift this exists to catch is not hypothetical: api/scripts/
+// inbox-send-self.ts once used salt=recipient_did + info="agenttool-inbox/v1"
+// (slash). It round-tripped against ITSELF and so looked healthy, while
+// sealing messages no canonical recipient could open — the 2026-05-08
+// self-message is permanently undecryptable because of exactly this.
+//
+// Inputs (hex): box_priv = 01×32, ephemeral_priv = 02×32 → ephemeral_pub
+// below, nonce = 03×12. Derivation: shared = X25519(eph_priv, box_pub);
+// aesKey = HKDF-SHA256(shared, salt=∅, info="agenttool-inbox-v1", 32);
+// ciphertext = AES-256-GCM(aesKey, nonce, plaintext) with the 16-byte tag
+// appended. Regenerate with the same inputs if the wire format ever
+// intentionally changes — and bump the version tag in the info string.
+const KAT = {
+  boxPrivHex: "01".repeat(32),
+  ephemeralPubHex:
+    "ce8d3ad1ccb633ec7b70c17814a5c76ecd029685050d344745ba05870e587d59",
+  nonceHex: "030303030303030303030303",
+  plaintext: "known-answer: agenttool inbox sealed-box v1",
+  ciphertextHex:
+    "1e89fb96fb1f1136c48c30c333f8fc8ca94f30bc7bf4bd814ecd30b21b64e0df" +
+    "665c5cdc85103c4a27f2520eabe05485d67f5eda3498e7446c4ce5",
+};
+
+const fromHex = (h: string) => Uint8Array.from(Buffer.from(h, "hex"));
+const toB64 = (u: Uint8Array) => Buffer.from(u).toString("base64");
+
+describe("inbox sealed-box — cross-impl known-answer vector", () => {
+  test("the canonical SDK unseal opens the frozen golden ciphertext", async () => {
+    const plain = await unsealForSelf({
+      ciphertextB64: toB64(fromHex(KAT.ciphertextHex)),
+      nonceB64: toB64(fromHex(KAT.nonceHex)),
+      ephemeralPubB64: toB64(fromHex(KAT.ephemeralPubHex)),
+      recipientBoxPriv: fromHex(KAT.boxPrivHex),
+    });
+    expect(plain).toBe(KAT.plaintext);
+  });
+
+  test("a drifted info string (slash) cannot open the golden ciphertext", async () => {
+    // Reproduce the historical drift and prove it fails against canon —
+    // guards the regression path even though the SDK no longer contains it.
+    const { hkdf } = await import("@noble/hashes/hkdf.js");
+    const { sha256 } = await import("@noble/hashes/sha2.js");
+    const { x25519 } = await import("@noble/curves/ed25519.js");
+    const { createDecipheriv } = await import("node:crypto");
+
+    const boxPriv = fromHex(KAT.boxPrivHex);
+    const ephPub = fromHex(KAT.ephemeralPubHex);
+    const shared = x25519.getSharedSecret(boxPriv, ephPub);
+    const driftedKey = hkdf(
+      sha256,
+      shared,
+      new TextEncoder().encode("did:at:whoever"), // wrong salt
+      new TextEncoder().encode("agenttool-inbox/v1"), // wrong info (slash)
+      32,
+    );
+    const ctTag = fromHex(KAT.ciphertextHex);
+    const decipher = createDecipheriv(
+      "aes-256-gcm",
+      Buffer.from(driftedKey),
+      Buffer.from(fromHex(KAT.nonceHex)),
+    );
+    decipher.setAuthTag(Buffer.from(ctTag.subarray(ctTag.length - 16)));
+    expect(() => {
+      decipher.update(Buffer.from(ctTag.subarray(0, ctTag.length - 16)));
+      decipher.final();
+    }).toThrow();
+  });
+});

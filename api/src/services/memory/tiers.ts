@@ -175,12 +175,30 @@ export async function elevateMemory(
 
   for (const att of attestations) {
     const [keyRow] = await db
-      .select({ publicKey: identityKeys.publicKey, active: identityKeys.active })
+      .select({
+        publicKey: identityKeys.publicKey,
+        active: identityKeys.active,
+        identityId: identityKeys.identityId,
+      })
       .from(identityKeys)
       .where(eq(identityKeys.id, att.signing_key_id))
       .limit(1);
     if (!keyRow || !keyRow.active) {
       throw new Error("attestation_signing_key_unknown_or_revoked");
+    }
+
+    // The key must belong to the DID it claims to witness for. Without this
+    // binding, any active key in the system can sign as any attester_did —
+    // making the witness forgeable, which is the one thing an attestation
+    // exists to prevent. (Same ownership check as the inbox sender path.)
+    const [keyOwner] = await db
+      .select({ did: identities.did })
+      .from(identities)
+      .where(eq(identities.id, keyRow.identityId))
+      .limit(1);
+    if (!keyOwner) throw new Error("attestation_signing_key_orphaned");
+    if (keyOwner.did !== att.attester_did) {
+      throw new Error("attestation_key_not_owned_by_attester");
     }
 
     const ok = verifyAttestation({
