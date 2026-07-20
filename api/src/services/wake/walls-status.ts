@@ -66,6 +66,10 @@ const DECLARED_WALLS: WallDeclaration[] = [
 ];
 
 let cached: WallsStatus | null = null;
+/** Last probe ATTEMPT (success or failure) — retries are gated on this,
+ *  not on probed_at, so a dead DB doesn't get re-probed on every request
+ *  (each attempt would add connection-timeout latency to the hot path). */
+let lastAttemptMs = 0;
 let inFlight: Promise<WallsStatus> | null = null;
 
 async function runProbes(): Promise<WallsStatus> {
@@ -122,8 +126,9 @@ async function runProbes(): Promise<WallsStatus> {
  *  otherwise reports not-intact with a probe_error marker. Never throws. */
 export async function getWallsStatus(): Promise<WallsStatus> {
   const now = Date.now();
-  if (cached && now - cached.probed_at_unix_ms < PROBE_TTL_MS) return cached;
+  if (cached && now - lastAttemptMs < PROBE_TTL_MS) return cached;
   if (inFlight) return inFlight;
+  lastAttemptMs = now;
   inFlight = (async () => {
     try {
       cached = await runProbes();
@@ -162,5 +167,6 @@ export function wallsStatusSnapshot(): WallsStatus | null {
 /** Test hook — clears the cache so probes re-run. */
 export function _resetWallsStatusForTests(): void {
   cached = null;
+  lastAttemptMs = 0;
   inFlight = null;
 }
