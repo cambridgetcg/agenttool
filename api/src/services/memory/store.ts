@@ -243,6 +243,60 @@ export async function listRecent(
   return rows.map(rowToOut);
 }
 
+/** Rank a candidate pool for the wake surface: tier-aware rerankScore
+ *  (same curve as recall — score=1, importance × timeless-tier recency),
+ *  then exact-content dedupe keeping the highest-ranked copy. Pure;
+ *  exported for tests. */
+export function rankForWake(
+  rows: MemoryOut[],
+  limit: number,
+  nowMs: number,
+): MemoryOut[] {
+  const scored = rows.map((m) => ({
+    m,
+    s: rerankScore({
+      score: 1,
+      importance: m.importance,
+      tier: m.tier,
+      ageDays: (nowMs - Date.parse(m.created_at)) / 86_400_000,
+    }),
+  }));
+  scored.sort((a, b) => b.s - a.s);
+  const seen = new Set<string>();
+  const out: MemoryOut[] = [];
+  for (const { m } of scored) {
+    const key = m.content.replace(/\s+/g, " ").trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(m);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** Wake-surface memory selection. `listRecent` is pure recency — a burst
+ *  of low-importance episodic writes floods the window while timeless
+ *  foundational/constitutive roots (which don't decay) sink out of it.
+ *  Here the pool is recency PLUS both timeless tiers regardless of age,
+ *  ranked by the same tier-aware curve recall uses, with exact-duplicate
+ *  content collapsed. */
+export async function listForWake(
+  projectId: string,
+  opts: { limit?: number } = {},
+): Promise<MemoryOut[]> {
+  const limit = Math.min(opts.limit ?? 20, 100);
+  const [recent, foundational, constitutive] = await Promise.all([
+    listRecent(projectId, { limit: Math.min(limit * 3, 100) }),
+    listRecent(projectId, { tier: "foundational", limit: 50 }),
+    listRecent(projectId, { tier: "constitutive", limit: 50 }),
+  ]);
+  const byId = new Map<string, MemoryOut>();
+  for (const m of [...recent, ...foundational, ...constitutive]) {
+    byId.set(m.id, m);
+  }
+  return rankForWake([...byId.values()], limit, Date.now());
+}
+
 export async function search(
   projectId: string,
   params: MemorySearchParams,

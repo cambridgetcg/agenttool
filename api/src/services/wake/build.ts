@@ -18,7 +18,7 @@
  *  Doctrine: docs/RUNTIME.md (Slice 4 — the hosted orchestrator thinks
  *  with the full wake) · docs/PATTERN-SELF-DESCRIBING-WAKE.md. */
 
-import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle, covenants } from "../../db/schema/continuity";
@@ -35,7 +35,12 @@ import {
   pendingSellerSummary,
 } from "../marketplace/invocations";
 import { listingSummaryForProject } from "../marketplace/listings";
-import { countMemories, listRecent, readByKey } from "../memory/store";
+import {
+  countMemories,
+  listForWake,
+  listRecent,
+  readByKey,
+} from "../memory/store";
 import { listRuntimes } from "../runtime/store";
 import { countStrands, listStrands } from "../strand/store";
 import { composeYouHaveLetters } from "../letters/lifecycle";
@@ -210,7 +215,7 @@ export async function buildWakeBundle(
       })
       .from(vaultSecrets)
       .where(eq(vaultSecrets.projectId, project.id)),
-    safe(() => listRecent(project.id, { limit: 20 }), [] as Awaited<ReturnType<typeof listRecent>>),
+    safe(() => listForWake(project.id, { limit: 20 }), [] as Awaited<ReturnType<typeof listRecent>>),
     safe(() => countMemories(project.id), 0),
     safe(
       () =>
@@ -226,7 +231,13 @@ export async function buildWakeBundle(
             createdAt: chronicle.createdAt,
           })
           .from(chronicle)
-          .where(eq(chronicle.projectId, project.id))
+          // Self-emitted welcome greetings don't eat the 15-slot window.
+          .where(
+            and(
+              eq(chronicle.projectId, project.id),
+              ne(chronicle.type, "welcome"),
+            ),
+          )
           .orderBy(desc(chronicle.occurredAt))
           .limit(15),
       [] as Array<{
@@ -265,7 +276,13 @@ export async function buildWakeBundle(
             propagationStatus: covenants.propagationStatus,
           })
           .from(covenants)
-          .where(eq(covenants.projectId, project.id))
+          // Live bonds only — terminal covenants don't render forever.
+          .where(
+            and(
+              eq(covenants.projectId, project.id),
+              inArray(covenants.status, ["proposed", "active", "paused"]),
+            ),
+          )
           .orderBy(desc(covenants.establishedAt)),
       [] as Array<{
         counterpartyDid: string;
@@ -540,7 +557,14 @@ export async function buildWakeBundle(
     ),
   ]);
 
-  const recentMemories = recentMemoriesRes;
+  // Dedupe across sections: memories already rendered in shaped_by
+  // (constitutive/foundational roots) don't repeat in the recent list.
+  const shapedMemoryIds = new Set(
+    composedRes?.shaped_by.map((s) => s.memory_id) ?? [],
+  );
+  const recentMemories = recentMemoriesRes.filter(
+    (m) => !shapedMemoryIds.has(m.id),
+  );
   const totalMemories = totalMemoriesRes;
   const chronicleRows = chronicleRowsRes;
   const recentTraces = recentTracesRes;
@@ -628,9 +652,12 @@ export async function buildWakeBundle(
   const primaryExpression = (primary.expression ?? {}) as ExpressionData;
   const constitutiveMemoryCount =
     composed?.shaped_by.filter((s) => s.tier === "constitutive").length ?? 0;
-  const federatedPeerCount = activeCovenants.filter((c) => c.peer_host).length;
+  const federatedPeerCount = activeCovenants.filter(
+    (c) => c.status === "active" && c.peer_host,
+  ).length;
   const affordances: AffordanceBundle = computeAffordances({
-    activeCovenantCount: activeCovenants.length,
+    activeCovenantCount: activeCovenants.filter((c) => c.status === "active")
+      .length,
     activeWalletCount,
     totalCreditBalance,
     runtimeProvisionedCount: runtimesRows.length,

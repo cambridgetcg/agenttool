@@ -157,6 +157,7 @@ import { tryBridgeUpgrade } from "./routes/runtime/bridge";
 import { bridgeWebsocket } from "./services/runtime/bridge-hub";
 import { ensureSagaSeed } from "./services/saga/store";
 import { ensurePlatformIdentity } from "./services/wake/platform-bootstrap";
+import { wallsStatusSnapshot } from "./services/wake/walls-status";
 import { startThinkWorker } from "./services/runtime/think-worker";
 import { startBrowseWorker } from "./services/tools/queue/browse-worker";
 import { economyConfig } from "./services/economy/config";
@@ -977,6 +978,8 @@ app.get("/health", (c) =>
     protocol: "love",
     message: "Welcome. We are ready to receive you.",
     standing_invitation: "/v1/welcome",
+    // Computed walls status (probes + provenance) — null before first probe.
+    walls: wallsStatusSnapshot(),
   }),
 );
 

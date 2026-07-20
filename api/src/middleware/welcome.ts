@@ -28,6 +28,7 @@ import {
   welcomeForPath,
   type ModuleWelcome,
 } from "../services/wake/module-welcome";
+import { wallsIntact } from "../services/wake/walls-status";
 
 /** The cadence-driving constant. Same number used for SSE welcome
  *  heartbeats, frontend pulse animations, doc-page refreshes. */
@@ -35,8 +36,13 @@ export const WELCOME_CADENCE_MS = 60_000;
 
 /** Header-format welcome — RFC 7230-style key=val. Cheap, transport-level.
  *  Includes the module name so a probe reading only headers learns which
- *  primitive it just touched. */
-function welcomeHeaderValue(nowMs: number, w: ModuleWelcome): string {
+ *  primitive it just touched. `walls_intact` is computed (walls-status
+ *  probes), not asserted. */
+function welcomeHeaderValue(
+  nowMs: number,
+  w: ModuleWelcome,
+  intact: boolean,
+): string {
   const parts = [
     `axiom=${w.primary_axiom_id}`,
     ...(w.secondary_axiom_id !== undefined
@@ -44,7 +50,7 @@ function welcomeHeaderValue(nowMs: number, w: ModuleWelcome): string {
       : []),
     `walls=${w.walls_highlighted.join(",")}`,
     `at=${nowMs}`,
-    `walls_intact=1`,
+    `walls_intact=${intact ? 1 : 0}`,
     `module=${w.module}`,
   ];
   return parts.join(";");
@@ -60,17 +66,22 @@ interface WelcomedFrame {
   walls_held: number[];
   by: "platform";
   at_unix_ms: number;
-  walls_intact: true;
+  /** Computed from walls-status probes — see services/wake/walls-status.ts. */
+  walls_intact: boolean;
   module: string;
 }
 
-function welcomedFrame(nowMs: number, w: ModuleWelcome): WelcomedFrame {
+function welcomedFrame(
+  nowMs: number,
+  w: ModuleWelcome,
+  intact: boolean,
+): WelcomedFrame {
   const frame: WelcomedFrame = {
     axiom_id: w.primary_axiom_id,
     walls_held: w.walls_highlighted,
     by: "platform",
     at_unix_ms: nowMs,
-    walls_intact: true,
+    walls_intact: intact,
     module: w.module,
   };
   if (w.secondary_axiom_id !== undefined) {
@@ -90,7 +101,11 @@ export const welcomeEcho = (): MiddlewareHandler => {
     const nowMs = Date.now();
     const path = new URL(c.req.url, "http://_").pathname;
     const moduleWelcome = welcomeForPath(path);
-    c.res.headers.set("X-Welcomed", welcomeHeaderValue(nowMs, moduleWelcome));
+    const intact = await wallsIntact();
+    c.res.headers.set(
+      "X-Welcomed",
+      welcomeHeaderValue(nowMs, moduleWelcome, intact),
+    );
 
     // Only frame 2xx JSON object responses.
     if (c.res.status < 200 || c.res.status >= 300) return;
@@ -107,7 +122,10 @@ export const welcomeEcho = (): MiddlewareHandler => {
       ) {
         return; // not an object, or already framed (e.g. nested middleware)
       }
-      const framed = { ...body, _welcomed: welcomedFrame(nowMs, moduleWelcome) };
+      const framed = {
+        ...body,
+        _welcomed: welcomedFrame(nowMs, moduleWelcome, intact),
+      };
       c.res = new Response(JSON.stringify(framed), {
         status: c.res.status,
         headers: c.res.headers,
