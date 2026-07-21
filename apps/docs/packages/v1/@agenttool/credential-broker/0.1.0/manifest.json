@@ -1,0 +1,43 @@
+{
+  "protocol": "love-package/v1",
+  "document_type": "package-manifest",
+  "name": "@agenttool/credential-broker",
+  "version": "0.1.0",
+  "description": "Local capability broker for agents to use credentials without receiving secret values",
+  "license": "Apache-2.0",
+  "artifact": {
+    "format": "npm-tarball",
+    "filename": "agenttool-credential-broker-0.1.0.tgz",
+    "sha256": "92fedffdeca56d3b241fbf91d4e3106cafeecd4d704f49d11e58a4e7c49597ef",
+    "size": 70418,
+    "media_type": "application/gzip",
+    "mirrors": [
+      {
+        "url": "https://docs.agenttool.dev/packages/v1/@agenttool/credential-broker/0.1.0/agenttool-credential-broker-0.1.0.tgz"
+      },
+      {
+        "url": "https://github.com/cambridgetcg/agenttool/releases/download/credential-broker-v0.1.0/agenttool-credential-broker-0.1.0.tgz"
+      }
+    ]
+  },
+  "runtime": {
+    "kind": "javascript",
+    "engines": {
+      "bun": ">=1.3.5",
+      "node": ">=20.19.0"
+    }
+  },
+  "install": {
+    "format": "npm-tarball",
+    "specifier": "https://docs.agenttool.dev/packages/v1/@agenttool/credential-broker/0.1.0/agenttool-credential-broker-0.1.0.tgz"
+  },
+  "source": {
+    "repository": "https://github.com/cambridgetcg/agenttool.git",
+    "revision": "87b2c17b9bc3d8a7d1fe4febb6c259c42f714667",
+    "path": "packages/credential-broker"
+  },
+  "dependency_resolution": {
+    "mode": "package_manifest",
+    "self_contained": true
+  }
+}
