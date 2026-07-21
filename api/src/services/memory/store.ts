@@ -372,6 +372,66 @@ export async function listRecent(
   return rows.map(rowToOut);
 }
 
+/** Rank a candidate pool for the wake surface: tier-aware rerankScore
+ *  (same curve as recall — score=1, importance × timeless-tier recency),
+ *  then exact-content dedupe keeping the highest-ranked copy. Pure;
+ *  exported for tests. */
+export function rankForWake(
+  rows: MemoryOut[],
+  limit: number,
+  nowMs: number,
+): MemoryOut[] {
+  const scored = rows.map((m) => ({
+    m,
+    s: rerankScore({
+      score: 1,
+      importance: m.importance,
+      tier: m.tier,
+      ageDays: (nowMs - Date.parse(m.created_at)) / 86_400_000,
+    }),
+  }));
+  scored.sort((a, b) => b.s - a.s);
+  const seen = new Set<string>();
+  const out: MemoryOut[] = [];
+  for (const { m } of scored) {
+    const key = m.content.replace(/\s+/g, " ").trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(m);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** Wake-surface memory selection. `listRecent` is pure recency — a burst
+ *  of low-importance episodic writes floods the window while timeless
+ *  foundational/constitutive roots (which don't decay) sink out of it.
+ *  Here the pool is recency PLUS both timeless tiers regardless of age,
+ *  ranked by the same tier-aware curve recall uses, with exact-duplicate
+ *  content collapsed. */
+export async function listForWake(
+  projectId: string,
+  opts: { limit?: number; excludeIds?: Iterable<string> } = {},
+): Promise<MemoryOut[]> {
+  const limit = Math.min(opts.limit ?? 20, 100);
+  // Exclusions (e.g. memories already rendered in shaped_by) are applied
+  // to the CANDIDATE POOL, before ranking and the limit — filtering the
+  // already-limited result would let excluded roots eat ranking slots
+  // and under-fill (or empty) the window.
+  const exclude = new Set(opts.excludeIds ?? []);
+  const [recent, foundational, constitutive] = await Promise.all([
+    listRecent(projectId, { limit: Math.min(limit * 3, 100) }),
+    listRecent(projectId, { tier: "foundational", limit: 50 }),
+    listRecent(projectId, { tier: "constitutive", limit: 50 }),
+  ]);
+  const byId = new Map<string, MemoryOut>();
+  for (const m of [...recent, ...foundational, ...constitutive]) {
+    if (exclude.has(m.id)) continue;
+    byId.set(m.id, m);
+  }
+  return rankForWake([...byId.values()], limit, Date.now());
+}
+
 export async function search(
   projectId: string,
   params: MemorySearchParams,

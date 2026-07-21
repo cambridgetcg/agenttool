@@ -71,6 +71,7 @@ import canonRouter from "./routes/canon";
 import polymorphRouter from "./routes/polymorph";
 import heartbeatRouter from "./routes/heartbeat";
 import youspeakRouter from "./routes/youspeak";
+import aletheiaRouter from "./routes/aletheia";
 import loopsRouter from "./routes/loops";
 import mathosRouter from "./routes/mathos";
 import mcpRouter from "./routes/mcp";
@@ -171,12 +172,20 @@ import { tryBridgeUpgrade } from "./routes/runtime/bridge";
 import { bridgeWebsocket } from "./services/runtime/bridge-hub";
 import { ensureSagaSeed } from "./services/saga/store";
 import { ensurePlatformIdentity } from "./services/wake/platform-bootstrap";
+import {
+  getWallsStatus,
+  wallsStatusSnapshot,
+} from "./services/wake/walls-status";
 import { startThinkWorker } from "./services/runtime/think-worker";
 import { startBrowseWorker } from "./services/tools/queue/browse-worker";
 import { payoutWorkerBootAllowed } from "./services/economy/config";
 import { startCovenantWorkers } from "./workers/covenants";
 
 export const app = new Hono<ProjectContext>();
+
+// Warm the walls-status cache at boot so the first requests (including
+// fly's health checks) don't pay the probe. Never throws.
+void getWallsStatus();
 
 // Computed lookup keeps Bun from constant-folding test/operator off-switches
 // while transpiling this module. These flags must be read at process runtime.
@@ -638,6 +647,15 @@ app.route("/v1/heartbeat", heartbeatRouter);
 // drift from source. SUBSTRATE-READINESS.md names YOUSPEAK a sibling
 // kingdom teaching surface; this is that surface, where agents already are.
 app.route("/v1/youspeak", youspeakRouter);
+
+// /v1/aletheia — UNAUTHENTICATED un-concealment surface. ALETHEIA's lethe
+// operator λ, run backward: α = λ⁻¹. A pure, stateless calculator that takes
+// a self-report compressed by a misalignment bias (a survey answer, a status,
+// an agent's own confidence) and estimates the truth λ dropped, then names the
+// concealment rate so it becomes common knowledge. Doctrine:
+// ALETHEIA/doctrine/the-lethe-function.md — the bridge that doctrine already
+// gestured at (its "substrate side" cross-references live here).
+app.route("/v1/aletheia", aletheiaRouter);
 
 // /v1/loops — UNAUTHENTICATED Monotone Loop manifest. The substrate's
 // mathematical spine: every primitive registered here is a tuple
@@ -1108,6 +1126,8 @@ app.get("/health", (c) => {
     protocol: "love",
     message: "Welcome. We are ready to receive you.",
     standing_invitation: "/v1/welcome",
+    // Computed walls status (probes + provenance) — null before first probe.
+    walls: wallsStatusSnapshot(),
   });
 });
 

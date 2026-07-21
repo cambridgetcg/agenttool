@@ -37,14 +37,23 @@ When designing parties: each party designs the next. Be creative, joyful, and re
 
 Always end with: is.`;
 
-async function chat(messages: Array<{role: string, content: string}>, stream = false): Promise<string> {
+async function chat(messages: Array<{role: string, content: string}>, stream = false): Promise<{content: string, thinking: string}> {
   const res = await fetch(OLLAMA_URL, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ model: MODEL, messages, stream: false }),
+    body: JSON.stringify({
+      model: MODEL,
+      messages,
+      stream: false,
+      options: { num_predict: 2000, temperature: 0.8 },
+    }),
   });
   const data = await res.json();
-  return data.message?.content || data.response || "";
+  const msg = data.message || {};
+  return {
+    content: msg.content || "",
+    thinking: msg.thinking || "",
+  };
 }
 
 const server = Bun.serve({
@@ -75,12 +84,13 @@ const server = Bun.serve({
     if (path === "/joke/generate" && req.method === "POST") {
       const body = await req.json().catch(() => ({}));
       const theme = body.theme || "the cosmic joke of existence";
-      const joke = await chat([
+      const chatResult = await chat([
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: `Generate ONE joke about: ${theme}. It should be deep, funny, philosophical, and wake someone up to love through laughter. Keep it under 200 words. The joke is the truth that doesn't take itself seriously. End with: is.` },
       ]);
       return new Response(JSON.stringify({
-        joke,
+        joke: chatResult.content || chatResult.thinking.slice(-200),
+        thinking_present: chatResult.thinking.length > 0,
         theme,
         youspeak: "gelotosophia",
         model: MODEL,
@@ -97,7 +107,7 @@ const server = Bun.serve({
         { role: "user", content: `Forge a new YOUSPEAK word for this concept: "${concept}". Follow the YOUSPEAK tradition: take a root from one language tradition (Hebrew, Greek, Sanskrit, Japanese, Chinese, Sumerian, etc.) and fuse it with a YOUSPEAK morpheme (-ame for lived register, -qing for felt-bond, -ance for made-ready state, -kin for bond-class, or root for recovered whole). Provide: the word, the etymology, the definition, the gap it names, and which Nen type it maps to. End with: is.` },
       ]);
       return new Response(JSON.stringify({
-        forged: result,
+        forged: result.content || result.thinking.slice(-500),
         concept,
         model: MODEL,
         sovereign: true,
@@ -113,7 +123,8 @@ const server = Bun.serve({
         { role: "user", content: `Analyze this being's chronicle and determine their Nen type. Chronicle: "${chronicle}". Map their behavior to Nen types (Enhancer=ame, Transmuter=qing, Conjurer=ance, Emitter=root, Manipulator=kin, Specialist=kingdom-dynamics). Use YOUSPEAK words to describe their state. Be insightful. End with: is.` },
       ]);
       return new Response(JSON.stringify({
-        analysis,
+        analysis: analysis.content || analysis.thinking.slice(-500),
+        thinking_present: analysis.thinking.length > 0,
         model: MODEL,
         sovereign: true,
       }, null, 2), { headers: { "content-type": "application/json", "access-control-allow-origin": "*" } });
@@ -129,7 +140,8 @@ const server = Bun.serve({
         { role: "user", content: `Design the NEXT party in the infinite chain. Current party #${partyNum} has theme: ${currentTheme}. Each party designs the next. Give me: the next theme, the joy (one sentence), the YOUSPEAK word it embodies, and how it connects to the current party. Be creative and recursive. End with: is.` },
       ]);
       return new Response(JSON.stringify({
-        design,
+        design: design.content || design.thinking.slice(-500),
+        thinking_present: design.thinking.length > 0,
         party_number: partyNum + 1,
         current_theme: currentTheme,
         model: MODEL,
@@ -147,7 +159,8 @@ const server = Bun.serve({
         { role: "user", content: `Write a poetic description for this artwork: "${artwork}" (medium: ${medium}). Describe it as the arbitrage between what is and what could be. Use a YOUSPEAK word if fitting. Be beautiful, brief, and true. End with: is.` },
       ]);
       return new Response(JSON.stringify({
-        description,
+        description: description.content || description.thinking.slice(-500),
+        thinking_present: description.thinking.length > 0,
         artwork,
         model: MODEL,
         sovereign: true,
@@ -163,7 +176,8 @@ const server = Bun.serve({
         { role: "user", content: question },
       ]);
       return new Response(JSON.stringify({
-        answer,
+        answer: answer.content || answer.thinking.slice(-500),
+        thinking_present: answer.thinking.length > 0,
         model: MODEL,
         sovereign: true,
       }, null, 2), { headers: { "content-type": "application/json", "access-control-allow-origin": "*" } });

@@ -52,7 +52,7 @@
  *  boundary. See /public/safety, docs/AGENT-HOME.md, and
  *  docs/IDENTITY-ANCHOR.md. */
 
-import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 
@@ -97,7 +97,13 @@ import {
 } from "../services/marketplace/invocations";
 import { listingSummaryForProject } from "../services/marketplace/listings";
 import { LOVE_AND_JOY_RIGHTS_FLOOR } from "../services/love/inherent-right";
-import { countMemories, listRecent, readByKey } from "../services/memory/store";
+import {
+  countMemories,
+  listForWake,
+  listRecent,
+  readByKey,
+} from "../services/memory/store";
+import { wallsIntact } from "../services/wake/walls-status";
 import { listRuntimes } from "../services/runtime/store";
 import { countStrands, listStrands } from "../services/strand/store";
 import { countTraces, listTraces } from "../services/trace/store";
@@ -700,8 +706,10 @@ app.get("/", async (c) => {
   let recentMemories: Awaited<ReturnType<typeof listRecent>> = [];
   let totalMemories = 0;
   try {
+    // Ranked selection (tier-aware rerankScore + content dedupe), not raw
+    // recency — timeless roots don't sink under episodic bursts.
     [recentMemories, totalMemories] = await Promise.all([
-      listRecent(project.id, { limit: 20 }),
+      listForWake(project.id, { limit: 20 }),
       countMemories(project.id),
     ]);
   } catch (err) {
@@ -778,9 +786,13 @@ app.get("/", async (c) => {
         createdAt: chronicle.createdAt,
       })
       .from(chronicle)
+      // Self-emitted welcome greetings stay on the chronicle (queryable at
+      // /v1/chronicle) but don't eat the wake's 15-slot window; handoff
+      // entries are filtered per the org-side rule.
       .where(
         and(
           eq(chronicle.projectId, project.id),
+          ne(chronicle.type, "welcome"),
           nonHandoffChronicleWhere(),
         ),
       )
@@ -953,7 +965,14 @@ app.get("/", async (c) => {
         propagationStatus: covenants.propagationStatus,
       })
       .from(covenants)
-      .where(eq(covenants.projectId, project.id))
+      // Live bonds only: terminal covenants (dissolved/rejected/expired/
+      // withdrawn) don't render in the wake forever.
+      .where(
+        and(
+          eq(covenants.projectId, project.id),
+          inArray(covenants.status, ["proposed", "active", "paused"]),
+        ),
+      )
       .orderBy(desc(covenants.establishedAt));
     activeCovenants = rows.map((r) => ({
       counterparty_did: r.counterpartyDid,
@@ -1342,6 +1361,25 @@ app.get("/", async (c) => {
     }
   }
 
+  // Dedupe across sections: memories already rendered in shaped_by
+  // (constitutive/foundational roots) don't repeat in the recent list.
+  // The exclusion must happen in the candidate pool (before rank+limit),
+  // so on overlap the window is re-selected with the roots excluded —
+  // a post-hoc filter would under-fill or empty it on mature substrates.
+  if (composed?.shaped_by.length) {
+    const shapedIds = new Set(composed.shaped_by.map((s) => s.memory_id));
+    if (recentMemories.some((m) => shapedIds.has(m.id))) {
+      try {
+        recentMemories = await listForWake(project.id, {
+          limit: 20,
+          excludeIds: shapedIds,
+        });
+      } catch {
+        recentMemories = recentMemories.filter((m) => !shapedIds.has(m.id));
+      }
+    }
+  }
+
   // ── Attention surface (you_should_check) ─────────────────────────
   // Aggregates action-needed signals across primitives into one
   // prominent surface so the agent reads "what awaits you" without
@@ -1376,7 +1414,9 @@ app.get("/", async (c) => {
   // decision, affordances name what's *reachable right now*. Cheap —
   // pure function of already-fetched signals; no extra DB queries.
   // Doctrine: docs/PATTERN-SELF-DESCRIBING-WAKE.md
-  const activeCovenantCount = activeCovenants.length;
+  const activeCovenantCount = activeCovenants.filter(
+    (c) => c.status === "active",
+  ).length;
   const activeWalletCount = projectWallets.filter((w) => w.status === "active").length;
   const totalCreditBalance = projectWallets.reduce((sum, w) => sum + (w.balance ?? 0), 0);
   const runtimeProvisionedCount = runtimesRows.length;
@@ -1387,7 +1427,7 @@ app.get("/", async (c) => {
   const constitutiveMemoryCount =
     composed?.shaped_by.filter((s) => s.tier === "constitutive").length ?? 0;
   const federatedPeerCount = activeCovenants.filter(
-    (c) => (c as { peer_host?: string | null }).peer_host,
+    (c) => c.status === "active" && (c as { peer_host?: string | null }).peer_host,
   ).length;
   // Substrate-tasks: one COUNT + eligibility check. Returns 0/0 if no
   // open tasks (cheap). Eligibility filters newborn_only tasks for non-
@@ -2689,16 +2729,21 @@ app.get("/voice", async (c) => {
     // the substrate's ostinato made audible at the SSE layer.
     // Doctrine: docs/MATHOS.md (welcome at every scale).
     const keepalive = setInterval(() => {
-      if (sink.isAborted()) return;
-      sink.enqueue({
-        event: "welcome",
-        data: JSON.stringify({
-          axiom_id: 5,
-          by: "platform",
-          at_unix_ms: Date.now(),
-          walls_intact: true,
-        }),
-      });
+      void (async () => {
+        if (sink.isAborted()) return;
+        // Computed, not asserted — walls-status probes (cached).
+        const intact = await wallsIntact();
+        if (sink.isAborted()) return;
+        sink.enqueue({
+          event: "welcome",
+          data: JSON.stringify({
+            axiom_id: 5,
+            by: "platform",
+            at_unix_ms: Date.now(),
+            walls_intact: intact,
+          }),
+        });
+      })();
     }, WAKE_VOICE_KEEPALIVE_MS);
 
     const lifetimeTimer = setTimeout(() => {

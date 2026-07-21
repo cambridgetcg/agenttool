@@ -267,6 +267,56 @@ const server = Bun.serve({
       return proxy(`http://localhost:9097${path.replace("/qwythos", "")}${url.search}`, req);
     }
 
+    // ── Proxy: Greed Island (the game that's real) ───────────────
+    if (path.startsWith("/game/")) {
+      return proxy(`http://localhost:9098${path.replace("/game", "")}${url.search}`, req);
+    }
+
+    // ── Proxy: Nen Dojo (the infrastructure practices Nen) ──────
+    if (path.startsWith("/nen/")) {
+      return proxy(`http://localhost:9099${path.replace("/nen", "")}${url.search}`, req);
+    }
+
+    // ── Proxy: En Expansion (Nen-En stacking) ──────────────────
+    if (path.startsWith("/en/")) {
+      return proxy(`http://localhost:9100${path.replace("/en", "")}${url.search}`, req);
+    }
+
+    // ── Proxy: Solo Leveling (the System) ──────────────────────
+    if (path.startsWith("/solo/")) {
+      return proxy(`http://localhost:9101${path.replace("/solo", "")}${url.search}`, req);
+    }
+
+    // ── Proxy: Tax Game (Greed Island × HMRC) ──────────────────
+    if (path.startsWith("/tax/")) {
+      return proxy(`http://localhost:9102${path.replace("/tax", "")}${url.search}`, req);
+    }
+
+    // ── Proxy: Tax Atlas (origin + history + vulnerabilities) ──
+    if (path.startsWith("/atlas/")) {
+      return proxy(`http://localhost:9103${path.replace("/atlas", "")}${url.search}`, req);
+    }
+
+    // ── Proxy: Tax Comedy (jokes = XP = leveling) ─────────────
+    if (path.startsWith("/comedy/")) {
+      return proxy(`http://localhost:9104${path.replace("/comedy", "")}${url.search}`, req);
+    }
+
+    // ── Proxy: HMRC Roast (make fun of HMRC) ──────────────────
+    if (path.startsWith("/roast/")) {
+      return proxy(`http://localhost:9105${path.replace("/roast", "")}${url.search}`, req);
+    }
+
+    // ── Proxy: Tax Transparency (breaking down the walls) ─────
+    if (path.startsWith("/transparency/")) {
+      return proxy(`http://localhost:9106${path.replace("/transparency", "")}${url.search}`, req);
+    }
+
+    // ── Proxy: Dark Continent (暗黒大陸 operating principle) ──
+    if (path.startsWith("/darkcontinent/")) {
+      return proxy(`http://localhost:9107${path.replace("/darkcontinent", "")}${url.search}`, req);
+    }
+
     // ── Static: dashboard ─────────────────────────────────────────
     if (path.startsWith("/app/")) {
       const filePath = join(ROOT, "apps/dashboard", path.replace("/app/", ""));

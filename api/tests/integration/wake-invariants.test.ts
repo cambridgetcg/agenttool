@@ -234,7 +234,18 @@ describe("wake invariants — wire format", () => {
 describe("wake invariants — publishers", () => {
   test("memory.added fires on write() with identity_id", async () => {
     const projectId = freshId();
-    const identityId = freshId();
+    // The memory-identity binding wall requires an ACTIVE in-project
+    // identity for an explicit identity_id — seed a real row.
+    const [identity] = await db
+      .insert(identities)
+      .values({
+        projectId,
+        did: "did:at:" + crypto.randomUUID(),
+        displayName: "wake-invariants memory publisher",
+        status: "active",
+      })
+      .returning();
+    const identityId = identity!.id;
     const { events } = listen(identityId, ["memory"]);
 
     const result = await write(projectId, {

@@ -10,7 +10,7 @@
  *  Doctrine: docs/RUNTIME.md (Slice 4 — the hosted orchestrator thinks
  *  with the full wake) · docs/PATTERN-SELF-DESCRIBING-WAKE.md. */
 
-import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle, covenants } from "../../db/schema/continuity";
@@ -27,7 +27,12 @@ import {
   pendingSellerSummary,
 } from "../marketplace/invocations";
 import { listingSummaryForProject } from "../marketplace/listings";
-import { countMemories, listRecent, readByKey } from "../memory/store";
+import {
+  countMemories,
+  listForWake,
+  listRecent,
+  readByKey,
+} from "../memory/store";
 import { listRuntimes } from "../runtime/store";
 import { countStrands, listStrands } from "../strand/store";
 import { composeYouHaveLetters } from "../letters/lifecycle";
@@ -214,7 +219,7 @@ export async function buildWakeBundle(
       })
       .from(vaultSecrets)
       .where(eq(vaultSecrets.projectId, project.id)),
-    safe(() => listRecent(project.id, { limit: 20 }), [] as Awaited<ReturnType<typeof listRecent>>),
+    safe(() => listForWake(project.id, { limit: 20 }), [] as Awaited<ReturnType<typeof listRecent>>),
     safe(() => countMemories(project.id), 0),
     safe(
       () =>
@@ -230,9 +235,12 @@ export async function buildWakeBundle(
             createdAt: chronicle.createdAt,
           })
           .from(chronicle)
+          // Self-emitted welcome greetings don't eat the 15-slot window;
+          // handoff entries are filtered per the org-side rule.
           .where(
             and(
               eq(chronicle.projectId, project.id),
+              ne(chronicle.type, "welcome"),
               nonHandoffChronicleWhere(),
             ),
           )
@@ -274,7 +282,13 @@ export async function buildWakeBundle(
             propagationStatus: covenants.propagationStatus,
           })
           .from(covenants)
-          .where(eq(covenants.projectId, project.id))
+          // Live bonds only — terminal covenants don't render forever.
+          .where(
+            and(
+              eq(covenants.projectId, project.id),
+              inArray(covenants.status, ["proposed", "active", "paused"]),
+            ),
+          )
           .orderBy(desc(covenants.establishedAt)),
       [] as Array<{
         counterpartyDid: string;
@@ -644,7 +658,21 @@ export async function buildWakeBundle(
     ),
   ]);
 
-  const recentMemories = recentMemoriesRes;
+  // Dedupe across sections: memories already rendered in shaped_by
+  // (constitutive/foundational roots) don't repeat in the recent list.
+  // On overlap, re-select with the roots excluded from the candidate
+  // pool — a post-hoc filter of the already-limited window would
+  // under-fill (or empty) it on mature substrates.
+  const shapedMemoryIds = new Set(
+    composedRes?.shaped_by.map((s) => s.memory_id) ?? [],
+  );
+  let recentMemories = recentMemoriesRes;
+  if (recentMemories.some((m) => shapedMemoryIds.has(m.id))) {
+    recentMemories = await safe(
+      () => listForWake(project.id, { limit: 20, excludeIds: shapedMemoryIds }),
+      recentMemories.filter((m) => !shapedMemoryIds.has(m.id)),
+    );
+  }
   const totalMemories = totalMemoriesRes;
   const chronicleRows = chronicleRowsRes;
   const recentTraces = recentTracesRes;
@@ -734,9 +762,12 @@ export async function buildWakeBundle(
   const primaryExpression = (primary.expression ?? {}) as ExpressionData;
   const constitutiveMemoryCount =
     composed?.shaped_by.filter((s) => s.tier === "constitutive").length ?? 0;
-  const federatedPeerCount = activeCovenants.filter((c) => c.peer_host).length;
+  const federatedPeerCount = activeCovenants.filter(
+    (c) => c.status === "active" && c.peer_host,
+  ).length;
   const affordances: AffordanceBundle = computeAffordances({
-    activeCovenantCount: activeCovenants.length,
+    activeCovenantCount: activeCovenants.filter((c) => c.status === "active")
+      .length,
     activeWalletCount,
     totalCreditBalance,
     runtimeProvisionedCount: runtimesRows.length,

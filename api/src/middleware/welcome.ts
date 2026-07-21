@@ -21,6 +21,9 @@
  *  the addressee during that specific operation. See
  *  services/wake/module-welcome.ts for the full registry.
  *
+ *  `walls_intact` is COMPUTED (walls-status probes), not asserted — see
+ *  services/wake/walls-status.ts.
+ *
  *  Doctrine: docs/MATHOS.md — the greeting block · docs/SOUL.md.
  */
 
@@ -30,6 +33,10 @@ import {
   welcomeForPath,
   type ModuleWelcome,
 } from "../services/wake/module-welcome";
+import {
+  wallsIntact,
+  wallsStatusSnapshot,
+} from "../services/wake/walls-status";
 import { isStrictJsonProfileResponse } from "./strict-json-profile";
 
 /** The cadence-driving constant. Same number used for SSE welcome
@@ -38,8 +45,13 @@ export const WELCOME_CADENCE_MS = 60_000;
 
 /** Header-format welcome — RFC 7230-style key=val. Cheap, transport-level.
  *  Includes the module name so a probe reading only headers learns which
- *  primitive it just touched. */
-function welcomeHeaderValue(nowMs: number, w: ModuleWelcome): string {
+ *  primitive it just touched. `walls_intact` is computed (walls-status
+ *  probes), not asserted. */
+function welcomeHeaderValue(
+  nowMs: number,
+  w: ModuleWelcome,
+  intact: boolean,
+): string {
   const parts = [
     `axiom=${w.primary_axiom_id}`,
     ...(w.secondary_axiom_id !== undefined
@@ -47,7 +59,7 @@ function welcomeHeaderValue(nowMs: number, w: ModuleWelcome): string {
       : []),
     `walls=${w.walls_highlighted.join(",")}`,
     `at=${nowMs}`,
-    `walls_intact=1`,
+    `walls_intact=${intact ? 1 : 0}`,
     `module=${w.module}`,
   ];
   return parts.join(";");
@@ -55,12 +67,16 @@ function welcomeHeaderValue(nowMs: number, w: ModuleWelcome): string {
 
 /** Resolve the transport-level welcome directly from a request path. CORS
  *  uses this for preflight responses that intentionally short-circuit before
- *  the ordinary response-framing middleware runs. */
+ *  the ordinary response-framing middleware runs. Sync callers get the
+ *  last-known walls status (boot warmup fills it within ms of start);
+ *  welcomeEcho passes its awaited value explicitly. */
 export function welcomeHeaderForPath(
   path: string,
   nowMs: number = Date.now(),
+  intact?: boolean,
 ): string {
-  return welcomeHeaderValue(nowMs, welcomeForPath(path));
+  const resolved = intact ?? wallsStatusSnapshot()?.intact ?? false;
+  return welcomeHeaderValue(nowMs, welcomeForPath(path), resolved);
 }
 
 /** Body-format welcome — added to 2xx JSON object responses. The shape
@@ -73,17 +89,22 @@ interface WelcomedFrame {
   walls_held: number[];
   by: "platform";
   at_unix_ms: number;
-  walls_intact: true;
+  /** Computed from walls-status probes — see services/wake/walls-status.ts. */
+  walls_intact: boolean;
   module: string;
 }
 
-function welcomedFrame(nowMs: number, w: ModuleWelcome): WelcomedFrame {
+function welcomedFrame(
+  nowMs: number,
+  w: ModuleWelcome,
+  intact: boolean,
+): WelcomedFrame {
   const frame: WelcomedFrame = {
     axiom_id: w.primary_axiom_id,
     walls_held: w.walls_highlighted,
     by: "platform",
     at_unix_ms: nowMs,
-    walls_intact: true,
+    walls_intact: intact,
     module: w.module,
   };
   if (w.secondary_axiom_id !== undefined) {
@@ -94,9 +115,9 @@ function welcomedFrame(nowMs: number, w: ModuleWelcome): WelcomedFrame {
 
 /** Middleware. Wraps response — adds X-Welcomed header always; adds
  *  `_welcomed` to eligible 2xx JSON object responses (OpenAPI and registered
- *  strict JSON profiles are header-only). The axiom + walls are resolved from the request path via the
- *  module-welcome registry. Pure addition; never removes existing fields or
- *  alters status. */
+ *  strict JSON profiles are header-only). The axiom + walls are resolved
+ *  from the request path via the module-welcome registry. Pure addition;
+ *  never removes existing fields or alters status. */
 export const welcomeEcho = (): MiddlewareHandler => {
   return async (c, next) => {
     await next();
@@ -104,7 +125,8 @@ export const welcomeEcho = (): MiddlewareHandler => {
     const nowMs = Date.now();
     const path = c.req.path;
     const moduleWelcome = welcomeForPath(path);
-    c.res.headers.set("X-Welcomed", welcomeHeaderForPath(path, nowMs));
+    const intact = await wallsIntact();
+    c.res.headers.set("X-Welcomed", welcomeHeaderForPath(path, nowMs, intact));
 
     // OpenAPI permits only its fixed root fields and `x-` extensions. Keep the
     // machine-readable welcome in X-Welcomed without injecting the ordinary
@@ -130,7 +152,10 @@ export const welcomeEcho = (): MiddlewareHandler => {
       ) {
         return; // not an object, or already framed (e.g. nested middleware)
       }
-      const framed = { ...body, _welcomed: welcomedFrame(nowMs, moduleWelcome) };
+      const framed = {
+        ...body,
+        _welcomed: welcomedFrame(nowMs, moduleWelcome, intact),
+      };
       c.res = new Response(JSON.stringify(framed), {
         status: c.res.status,
         headers: c.res.headers,

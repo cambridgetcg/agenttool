@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+node_modules
 .pnpm-store/
 .venv/
 venv/
@@ -72,3 +73,6 @@ api/kingdom-bundle.json.bundled
 bin/.heartbeat-state.json
 bin/*.wav
 .superpowers/
+
+# local play scripts — never published
+api/scratch/
