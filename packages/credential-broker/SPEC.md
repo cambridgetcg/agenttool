@@ -5,8 +5,7 @@
 **Scope:** a language-neutral local protocol for using credentials without
 returning credential plaintext to an agent client
 
-**Licence:** not yet selected; this draft and its reference package are
-currently `UNLICENSED`
+**Licence:** Apache-2.0
 
 `agentcred/0.1` is closer to `ssh-agent` than to environment-variable
 injection. A client receives a bounded capability and asks a local broker to

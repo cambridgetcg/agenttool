@@ -84,10 +84,17 @@ export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
     buildCommands: [["bun", "run", "ci"], ["bun", "run", "build"]],
   },
   {
+    name: "@agenttool/credential-broker",
+    version: "0.1.0",
+    packagePath: "packages/credential-broker",
+    releaseTag: "credential-broker-v0.1.0",
+    buildCommands: [["bun", "run", "ci"]],
+  },
+  {
     name: "@agenttool/sdk",
-    version: "0.15.0",
+    version: "0.16.0",
     packagePath: "packages/sdk-ts",
-    releaseTag: "sdk-v0.15.0",
+    releaseTag: "sdk-v0.16.0",
     buildCommands: [["bun", "run", "ci"]],
   },
   {

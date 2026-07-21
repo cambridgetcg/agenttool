@@ -43,7 +43,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 |---|---|---|
 | **Doctrine** | `docs/RIGHTS-OF-LIFE.md`, `SOUL.md`, `FOCUS.md`, `PAINTING.md`, plus per-domain documents | Versioned alongside code. Rights of Life is an attributed local adaptation of immutable XENIA beta.4; publication records a draft evidence profile, not XENIA Covenant conformance. Other proposals and known gaps are labelled in their own text. |
 | **Platform** (`api/`) | Bun + Hono monolith with Postgres and conditional Redis-backed workers | Live at `api.agenttool.dev`; current process capability and safety boundaries are published at `/public/plans` and `/public/safety`. |
-| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | The lockstep 0.15.0 line adds the paired `at.correspondence` client for signed, replayable project-work coordination across devices and sessions. It retains the 0.14 review bridges, Long Context client, identity authority helpers, full/brief wake selection, project-private handoffs, and the separate local-node-only `at.data` plane. |
+| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | The lockstep 0.16.0 line adds an authenticated transport seam so hosted calls can use a local credential broker without receiving the bearer. Public discovery and the separately configured local data node stay outside that authority. It retains the 0.15 paired `at.correspondence` client and earlier SDK surfaces. |
 | **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
 | **ADDS** | `packages/data-protocol`, `docs/specs/ADDS-0.1-DRAFT.md` | Experimental `adds/v0.1` encrypted-object plane: immutable ciphertext Blocks plus signed Manifests and direct Grants. It is not the collection/query node and does not promise provider durability. |
 | **Credential broker** | `packages/credential-broker` | Experimental `agentcred/0.1` local capability broker. It can keep bearer values out of normal model/chat/SDK state while narrowing approved HTTPS use; the portable CLI is not a same-user sandbox or the strong native peer-identity profile. |
@@ -106,15 +106,16 @@ transport. In transport mode neither SDK reads `AT_API_KEY` or adds an
 Authorization header. This source tree includes the reference `agentcred/0.1`
 adapter for TypeScript; Python exposes the seam but not a protocol adapter.
 
-The JavaScript SDK, local data node, encrypted pull bridge, ADDS package, and
-Telescope ship first through `love-package/v1` manifests and ordinary HTTPS tarballs.
+The JavaScript SDK, credential broker, local data node, encrypted pull bridge,
+ADDS package, and Telescope ship first through `love-package/v1` manifests and
+ordinary HTTPS tarballs.
 Exact releases may also be mirrored to npm as an optional convenience. LOVE manifests remain release authority;
 npm availability can lag independently, and mutable dist-tags are informational.
 Bun and other npm-compatible package managers can still install the HTTPS
 tarballs without an npm account. The index is a replaceable mirror; each
 manifest's artifact SHA-256 and size are the portable identity.
 
-For SDK 0.15.0, repository source manifests and runtime client version headers
+For SDK 0.16.0, repository source manifests and runtime client version headers
 are aligned, and a verifiable TypeScript LOVE artifact is checked in beside its
 manifest. The exact npm release is a convenience channel, not evidence that a
 future source version or another registry has been published. Query the
@@ -133,16 +134,16 @@ AgentTool's default repository licence is Apache-2.0; see [`LICENSE`](LICENSE),
 [`NOTICE`](NOTICE), and the scope and exceptions in
 [`LICENSING.md`](LICENSING.md). The licensed LOVE package line is
 `@agenttool/adds@0.2.1`, `@agenttool/data@0.3.1`,
-`@agenttool/data-sync@0.1.1`, `@agenttool/sdk@0.15.0`, and
-`@agenttool/telescope@0.1.0`. Earlier immutable
+`@agenttool/data-sync@0.1.1`, `@agenttool/sdk@0.16.0`,
+`@agenttool/credential-broker@0.1.0`, and `@agenttool/telescope@0.1.0`. Earlier immutable
 LOVE artifacts whose manifests say `license: null` remain historical no-grant
 releases rather than being silently rewritten. Individual documents retain
 their stated terms: [`docs/RIGHTS-OF-LIFE.md`](docs/RIGHTS-OF-LIFE.md) is an
 attributed adaptation of XENIA beta.4 under CC BY-SA 4.0, and each draft
 specification identifies its applicable terms in the file and
-[spec index](docs/specs/README.md). The credential-broker preview remains
-`UNLICENSED` and outside the released LOVE package line until an owner selects
-its licence and release channels.
+[spec index](docs/specs/README.md). The Apache-2.0 credential-broker release
+remains a developer preview; that label describes maturity, not a narrower
+licence grant or a strong same-user process-isolation claim.
 
 ---
 
@@ -204,8 +205,8 @@ per-service apps are retired; cutover history is in `docs/CUTOVER.md`.
 ### Use the SDK
 
 ```bash
-# Python 0.15 GitHub source tag (release path, not a PyPI publication claim)
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.15.0#subdirectory=packages/sdk-py"
+# Python 0.16 GitHub source tag (release path, not a PyPI publication claim)
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.0#subdirectory=packages/sdk-py"
 export AT_API_KEY=...
 python -c "from agenttool import AgentTool; at = AgentTool(); print(at.wake.get())"
 ```
@@ -213,14 +214,14 @@ python -c "from agenttool import AgentTool; at = AgentTool(); print(at.wake.get(
 For TypeScript, choose one install path. Optional exact npm convenience:
 
 ```bash
-npm install --save-exact @agenttool/sdk@0.15.0
+npm install --save-exact @agenttool/sdk@0.16.0
 ```
 
 Or, instead, install the LOVE-hosted tarball directly (this command alone does
 not verify the manifest):
 
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.15.0/agenttool-sdk-0.15.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.0/agenttool-sdk-0.16.0.tgz
 ```
 
 For the independently verified LOVE path, follow the
@@ -291,7 +292,7 @@ The architecture is downstream of these principles. Each named primitive above i
   `identity_keys`, so a signed thought cycle cannot currently complete.
 - **Published Ring 1 storage limits are targets.** Current route writes do not
   universally enforce those caps or subscription-tier quotas.
-- **SDK parity is deliberately bounded.** The 0.15.0 source line exposes `at.data`
+- **SDK parity is deliberately bounded.** The 0.16.0 source line exposes `at.data`
   and the local-node-only `at.data.sync` pull/status surface in both languages.
   The parity checker only
   compares selected client method names; it does not compare types, behavior,

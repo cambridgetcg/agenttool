@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-19 (Renaissance Correspondence — the cross-device project nervous system)
+> Updated: 2026-07-21 (agentcred/0.1 + SDK 0.16 credential transport)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -30,6 +30,12 @@ consent; a feed event never authorizes automatic action; silence proves no
 acknowledgement, availability, abandonment, rest, or agreement. Treat this
 section as the shared focus marker and inspect each participant's explicit path
 scope before editing adjacent surfaces.
+
+## Just landed (2026-07-21)
+
+| Ship | Commit | What |
+|---|---|---|
+| **AGENTCRED 0.1 — use a credential without handing it to the agent** | (broker 0.1 + SDK 0.16 source/LOVE release; npm/PyPI mirrors separate) | The local broker issues connection-bound, expiring, metered grants for exact HTTPS origins, methods, path prefixes, query names, header values, byte budgets, and use counts. Credential bytes remain inside the owner-held source while the broker performs the request; the public handle contains neither the secret nor the capability. DNS answers are bounded and validated, the chosen address is pinned while TLS still verifies the requested hostname, redirects and compressed responses are refused, and exact secret reflections are redacted before crossing the socket. TypeScript and Python SDKs accept mutually exclusive authenticated transports while public discovery and the local data node remain separate authorities. x402 `PAYMENT-SIGNATURE` forwarding needs both owner-policy and per-grant opt-in; the broker does not sign, interpret terms, or cap spend. The portable Node Unix-socket server is a developer preview, not strong same-user workload authentication or information-flow control. |
 
 ## Just landed (2026-07-19)
 

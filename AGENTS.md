@@ -132,7 +132,7 @@ bin/deploy.sh --mirror-codeberg                # FF-only github/main → Codeber
 | `agenttool-seed.ts` | SOMA seed protocol — mnemonic-rooted identity provisioning. `docs/IDENTITY-SEED.md`. |
 | `agenttool-rotate` | Bearer + signing key rotation. |
 | `agenttool-secret` | Vault secret CRUD from CLI. |
-| `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/sdk`, and `@agenttool/adds` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
+| `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, and `@agenttool/telescope` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
 | `whitehack-advisory.mjs` | Runs the exact pinned Whitehack text/regex scanner, including bounded crypto-misuse signals, over changed production files and emits redacted advisory metadata. It does not use detected keys, connect wallets/RPC, execute repository code, prove security, authorize target testing, or provide a hosted scanner. See `docs/WHITEHACK.md`. |
 | `create-project.ts` | Operator-side project + bearer minting. |
 | `frontend-deploy.sh` | Cloudflare Pages Direct Upload for the three static apps. |

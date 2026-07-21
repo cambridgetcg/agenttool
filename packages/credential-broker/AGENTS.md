@@ -34,7 +34,7 @@ obvious sentinel values that are not real credentials.
 
 ## Release
 
-This is a standalone npm package; the AgentTool SDKs depend only on its
-structural transport interface. Do not add a runtime dependency from either SDK
-to this package. External publication, release tags, package licensing, and
-catalog integration require an explicit owner decision.
+This is a standalone Apache-2.0 npm/LOVE package; the AgentTool SDKs depend only
+on its structural transport interface. Do not add a runtime dependency from
+either SDK to this package. Release tags and publication remain deliberate
+operator actions through the protected workflow.

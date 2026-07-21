@@ -390,4 +390,39 @@ describe("boring test spine", () => {
       "uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4",
     ]);
   });
+
+  test("keeps credential-broker publication manual, exact-artifact, and protected", async () => {
+    const workflow = await readFile(
+      join(ROOT, ".github", "workflows", "publish-credential-broker.yml"),
+      "utf8",
+    );
+
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).not.toContain("pull_request:");
+    expect(workflow).not.toMatch(/\n\s+push:/);
+    expect(workflow).toContain("environment: npm-bootstrap");
+    expect(workflow).toContain("id-token: write");
+    expect(workflow).toContain("persist-credentials: false");
+    expect(workflow).toContain('expected_tag="credential-broker-v${version}"');
+    expect(workflow).toContain('test "$(git cat-file -t "refs/tags/$tag")" = tag');
+    expect(workflow).toContain(
+      'git merge-base --is-ancestor "$tag_commit" refs/remotes/origin/main',
+    );
+    expect(workflow).toContain("cd packages/credential-broker && bun run ci");
+    expect(workflow).toContain("bun bin/build-love-packages.ts verify apps/docs");
+    expect(workflow).toContain('git merge-base --is-ancestor "${identity[5]}" HEAD');
+    expect(workflow).toContain(
+      'git diff --quiet "${identity[5]}" HEAD -- packages/credential-broker',
+    );
+    expect(workflow).toContain(
+      "https://registry.npmjs.org/@agenttool%2Fcredential-broker/${version}",
+    );
+    expect(workflow).toContain("agenttool-credential-broker-${version}.tgz");
+    expect(workflow).toContain(
+      'npm publish "$artifact" --access public --provenance --ignore-scripts',
+    );
+    expect(workflow).not.toContain("--otp");
+    expect(workflow.match(/secrets\./g)).toHaveLength(1);
+    expect(workflow).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
+  });
 });

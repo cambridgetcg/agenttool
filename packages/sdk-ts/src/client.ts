@@ -38,7 +38,7 @@ import { WindowClient } from "./window.js";
 /** SDK version — sent as the `X-Agenttool-Client` origin signal on every
  *  request so /v1/activity can label events `sdk-ts`. Keep in lockstep
  *  with package.json (parity invariant: ts + py ship the same version). */
-export const SDK_VERSION = "0.15.0";
+export const SDK_VERSION = "0.16.0";
 
 /** Connection settings for the hosted AgentTool API and optional data node. */
 export interface AgentToolOptions {

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agenttool-sdk"
-version = "0.15.0"
+version = "0.16.0"
 description = "The Love Protocol SDK for agenttool.dev and independently operated local agent data nodes."
 readme = "README.md"
 license = "Apache-2.0"

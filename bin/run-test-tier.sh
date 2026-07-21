@@ -89,7 +89,7 @@ readonly QUARANTINED_DOCTRINE_TESTS=(
 # Test support code is not a test tier. Keep this exact inventory so a new
 # executable fixture cannot enter the hermetic process boundary unnoticed.
 readonly TEST_SUPPORT_FILES=(
-  tests/fixtures/onboarding-sdk-v0.15.ts
+  tests/fixtures/onboarding-sdk-v0.16.ts
   tests/fixtures/static-parser-noncooperative.ts
 )
 

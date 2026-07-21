@@ -6,7 +6,30 @@
 >
 > **Implements:** the SDK plane — hand-written clients for a selected subset of [ROADMAP.md](ROADMAP.md). CI compares method names for the maintained parity target list; it does not prove complete route, signature, or wire-model parity.
 
-## Current release — 0.15.0 (2026-07-19)
+## Current release — 0.16.0 (2026-07-21)
+
+This minor adds an authenticated transport seam in both maintained SDKs. A
+caller may choose either the ordinary project bearer or an operator-supplied
+transport; supplying both fails closed. Transport mode does not read
+`AT_API_KEY` and does not construct an Authorization header. Public discovery
+and the separately configured `at.data` node remain outside the hosted
+transport's authority.
+
+The TypeScript SDK composes directly with the separately released
+`agentcred/0.1` reference broker through its structural request interface and
+has no runtime dependency on that package. Python exposes the paired
+`httpx.BaseTransport` seam without bundling a protocol adapter. This separation
+keeps the SDK usable with other local credential brokers.
+
+### 0.16.0 release record
+
+The lockstep source identities, client headers, builder target, current public
+discovery pins, and onboarding fixture all name 0.16.0. The TypeScript LOVE
+artifact and digest-bearing manifest are checked in separately from the clean
+source commit whose revision the manifest records. npm/PyPI mirrors and the
+`sdk-v0.16.0` tag remain independently verifiable release operations.
+
+## Previous checked-in release — 0.15.0 (2026-07-19)
 
 This minor adds the paired Renaissance Correspondence client in both maintained
 SDKs. `at.correspondence` signs project-work events locally, replays the durable
@@ -19,15 +42,6 @@ The boundary is deliberate: claims are courtesy notices rather than locks,
 events grant no permission or automatic-action authority, Git remains file and
 merge truth, silence proves no acknowledgement, and project-private bodies are
 server-readable rather than end-to-end encrypted.
-
-### 0.15.0 release record
-
-The lockstep source identities, client headers, builder target, current public
-discovery pins, and onboarding fixture all name 0.15.0. The TypeScript LOVE
-artifact and digest-bearing manifest are checked in separately from the clean
-source commit whose revision the manifest records. Tagging, GitHub release
-creation, npm/PyPI mirroring, production deployment, and the Codeberg mirror
-remain distinct external operations whose state must be verified directly.
 
 ## Previous checked-in release — 0.14.0 (2026-07-19)
 
@@ -408,6 +422,7 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **0.13.0** | Typed full/brief wake selection and profile-isolated caching; broader public/federation/org/template/dashboard coverage remains planned | no — additive |
 | **0.14.0** | Live trace-wire alignment with explicit external signals; fail-closed local covenant review; paired Long Context client; identity mutation/private-read authority proofs; current register-agent/v2 arrival contract | **yes — pre-1.0 public trace shapes corrected** |
 | **0.15.0** | Paired Renaissance Correspondence client: local event signing, durable replay, advisory claim projection, finite project voice, and Wake invalidation hints | no — additive |
+| **0.16.0** | Authenticated transport seam for local credential brokers, with explicit public-discovery and local-data authority separation | no — additive |
 | **1.0.0** | API freeze + comprehensive docstrings + READMEs + integration test suite | no — declarative |
 
 ## Non-goals

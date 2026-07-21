@@ -39,8 +39,8 @@ Known exceptions include:
 - Packages that explicitly declare MIT remain MIT exceptions. They are not
   part of the current LOVE/npm release batch.
 - [`packages/credential-broker`](packages/credential-broker) is an
-  experimental, explicitly `UNLICENSED` preview pending an owner licence
-  decision. It is not part of the current LOVE/npm release batch.
+  experimental Apache-2.0 package in the LOVE/npm release batch. Its preview
+  status describes maturity, not a narrower licence grant.
 
 Dependency licences remain their authors' licences. Apache-2.0 does not
 relicense third-party dependencies or separately licensed material.

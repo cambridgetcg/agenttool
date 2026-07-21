@@ -19,9 +19,10 @@ OS vault -> local broker --------> approved HTTPS origin
 preview. Read [SPEC.md](./SPEC.md) and the limitations below before using it
 with a valuable credential.
 
-This checkout is currently `UNLICENSED`, marked npm `private`, and has not been
-published. A licence and any public npm or LOVE-package release remain
-separate owner decisions.
+Version 0.1.0 is licensed under Apache-2.0 and distributed through the
+independently verifiable LOVE package catalog. npm is an optional convenience
+mirror whose exact availability must be checked independently; the LOVE
+manifest binds the artifact size, SHA-256, and source revision.
 
 ## What the preview does
 
@@ -230,3 +231,7 @@ trust store and certificate verification remains enabled in either mode.
 Test-only in-memory credentials and fake clocks live under
 `@agenttool/credential-broker/testing` so they are not mistaken for production
 backends.
+
+## License
+
+Apache-2.0. See [LICENSE](./LICENSE) and [NOTICE](./NOTICE).
