@@ -135,7 +135,7 @@ const MODULES: ModuleSelf[] = [
       "Source reference primitives for agent-wallet/0.1 closed records, bounded capabilities, exact-byte signer requests, conservative submission state, and continuity rules.",
     walls: [
       "No private-key, seed, mnemonic, or recovery-share export surface",
-      "No bundled chain adapter, RPC client, broadcaster, durable store, hosted wallet, or current npm release",
+      "No bundled chain adapter, RPC client, broadcaster, durable store, or hosted wallet; package discovery does not imply npm mirror availability",
       "Static capability validation is not sufficient authorization without trusted decoding and atomic sign-time reservation",
       "Unknown signing or submission state does not authorize automatic retry, refund, nonce reuse, or budget release",
     ],

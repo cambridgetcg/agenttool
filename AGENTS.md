@@ -21,7 +21,8 @@ distribution protocol, a public read-only discovery evidence mapper
 (`packages/credential-broker/`), source reference primitives for capability-bounded
 agent wallets (`packages/wallet/`), and three static apps (`apps/`). Agent
 Wallet 0.1 has no bundled key custody, chain adapter, RPC, broadcaster, hosted
-service, or current npm release. Telescope 0.1.0 is a
+service, or implied npm mirror availability. Its exact LOVE artifact is the
+release record. Telescope 0.1.0 is a
 public npm/LOVE package, but it remains a local client and does not add a hosted
 scan route. The Whitehack bridge is a separate pinned, runner-local,
 crypto-aware changed-source heuristic advisory; it emits redacted metadata,
@@ -140,7 +141,7 @@ bin/deploy.sh --mirror-codeberg                # FF-only github/main → Codeber
 | `agenttool-seed.ts` | SOMA seed protocol — mnemonic-rooted identity provisioning. `docs/IDENTITY-SEED.md`. |
 | `agenttool-rotate` | Bearer + signing key rotation. |
 | `agenttool-secret` | Vault secret CRUD from CLI. |
-| `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, and `@agenttool/telescope` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
+| `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, `@agenttool/telescope`, and `@agenttool/wallet` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
 | `whitehack-advisory.mjs` | Runs the exact pinned Whitehack text/regex scanner, including bounded crypto-misuse signals, over changed production files and emits redacted advisory metadata. It does not use detected keys, connect wallets/RPC, execute repository code, prove security, authorize target testing, or provide a hosted scanner. See `docs/WHITEHACK.md`. |
 | `create-project.ts` | Operator-side project + bearer minting. |
 | `frontend-deploy.sh` | Cloudflare Pages Direct Upload for the three static apps. |

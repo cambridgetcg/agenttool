@@ -41,9 +41,10 @@ npm pack --ignore-scripts --dry-run
 
 ## Release State
 
-Version `0.1.0` is currently source-only. A package manifest being publishable
-does not prove that npm contains the package. Do not describe it as published
-until the exact registry version and tarball contents have been verified.
+Version `0.1.0` is distributed through the checked-in `love-package/v1`
+artifact. A LOVE manifest does not prove that npm contains the package. Treat
+npm as an optional mirror and verify the exact registry version and tarball
+contents before describing that mirror as available.
 
 ## Key Files
 

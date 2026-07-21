@@ -9,9 +9,10 @@ a local-first agent data node (`packages/data`), an experimental encrypted
 object protocol package (`packages/data-protocol`), an experimental local
 credential broker (`packages/credential-broker`), and three static surfaces
 (`apps/web`, `apps/dashboard`, and `apps/docs`).
-The source-only `@agenttool/wallet` package defines capability-bounded wallet
+The Apache-2.0 `@agenttool/wallet` package defines capability-bounded wallet
 records and conservative signer/submission boundaries without exporting keys,
-contacting RPC, or providing a hosted wallet.
+contacting RPC, or providing a hosted wallet. Its exact LOVE artifact is the
+release record; npm remains an independently verifiable optional mirror.
 The public `@agenttool/telescope` CLI/library maps agent discovery evidence
 without invoking protocols or actions. It ships through LOVE/npm as a local
 client and is not exposed as a hosted arbitrary-target scanner.
@@ -52,7 +53,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 | **Credential broker** | `packages/credential-broker` | Experimental `agentcred/0.1` local capability broker. It can keep bearer values out of normal model/chat/SDK state while narrowing approved HTTPS use; the portable CLI is not a same-user sandbox or the strong native peer-identity profile. |
 | **LOVE packages** | `docs/LOVE-PACKAGE-PROTOCOL.md`, `bin/build-love-packages.ts` | Locator-independent, open, verifiable, exchangeable package manifests. Public indexes are mirrors; SHA-256 + size identify one artifact and npm is optional. |
 | **Telescope** | `packages/telescope` | Public `@agenttool/telescope@0.1.0` read-only discovery evidence mapper. Bounded public-HTTPS probes map `agent.txt`, Pathways, LOVE/npm, MCP, A2A, WebFinger, and Offer Bus boundaries; generated commands are never executed. DNS-AID and PKARR remain opt-in adapter seams. Distribution does not add a hosted scan route. |
-| **Agent Wallet** | `packages/wallet`, `docs/specs/AGENT-WALLET-0.1.md` | Source reference for `agent-wallet/0.1`: closed signed descriptor/capability/intent/receipt/continuity records, exact-byte signer requests, and conservative unknown states. No key custody, chain adapter, RPC, broadcaster, hosted wallet, LOVE artifact, or npm release is claimed. |
+| **Agent Wallet** | `packages/wallet`, `docs/specs/AGENT-WALLET-0.1.md` | Apache-2.0 LOVE release for `agent-wallet/0.1`: closed signed descriptor/capability/intent/receipt/continuity records, exact-byte signer requests, and conservative unknown states. npm is an optional mirror whose exact availability is checked independently. No key custody, chain adapter, RPC, broadcaster, or hosted wallet is supplied. |
 | **Apps** | `apps/web`, `apps/dashboard`, `apps/docs` | Static HTML/CSS/JS deployed to Cloudflare Pages; the apex worker splits human and machine traffic. |
 | **Infra** | `api/fly.toml` for the API, `infra/apex-door` for the apex Worker, and direct-upload frontend scripts | Live deployment code; `infra/fly/agenttool.toml` is a snapshot, not the canonical API config |
 | **Lineage** | Former `agent-*` per-service apps retired | The API monolith carries the active service domains; cutover history is in `docs/CUTOVER.md` |
@@ -111,9 +112,9 @@ transport. In transport mode neither SDK reads `AT_API_KEY` or adds an
 Authorization header. This source tree includes the reference `agentcred/0.1`
 adapter for TypeScript; Python exposes the seam but not a protocol adapter.
 
-The JavaScript SDK, credential broker, local data node, encrypted pull bridge,
-ADDS package, and Telescope ship first through `love-package/v1` manifests and
-ordinary HTTPS tarballs.
+The JavaScript SDK, credential broker, Agent Wallet, local data node, encrypted
+pull bridge, ADDS package, and Telescope ship first through `love-package/v1`
+manifests and ordinary HTTPS tarballs.
 Exact releases may also be mirrored to npm as an optional convenience. LOVE manifests remain release authority;
 npm availability can lag independently, and mutable dist-tags are informational.
 Bun and other npm-compatible package managers can still install the HTTPS
@@ -140,15 +141,17 @@ AgentTool's default repository licence is Apache-2.0; see [`LICENSE`](LICENSE),
 [`LICENSING.md`](LICENSING.md). The licensed LOVE package line is
 `@agenttool/adds@0.2.1`, `@agenttool/data@0.3.1`,
 `@agenttool/data-sync@0.1.1`, `@agenttool/sdk@0.16.0`,
-`@agenttool/credential-broker@0.1.0`, and `@agenttool/telescope@0.1.0`. Earlier immutable
+`@agenttool/credential-broker@0.1.0`, `@agenttool/wallet@0.1.0`, and
+`@agenttool/telescope@0.1.0`. Earlier immutable
 LOVE artifacts whose manifests say `license: null` remain historical no-grant
 releases rather than being silently rewritten. Individual documents retain
 their stated terms: [`docs/RIGHTS-OF-LIFE.md`](docs/RIGHTS-OF-LIFE.md) is an
 attributed adaptation of XENIA beta.4 under CC BY-SA 4.0, and each draft
 specification identifies its applicable terms in the file and
-[spec index](docs/specs/README.md). The Apache-2.0 credential-broker release
-remains a developer preview; that label describes maturity, not a narrower
-licence grant or a strong same-user process-isolation claim.
+[spec index](docs/specs/README.md). The Apache-2.0 credential-broker and Agent
+Wallet releases remain developer previews; that label describes maturity, not
+a narrower licence grant, strong same-user process-isolation claim, or wallet
+execution-conformance claim.
 
 ---
 

@@ -385,7 +385,8 @@ app.get("/wake-keystone", (c) => {
         source:
           "https://github.com/cambridgetcg/agenttool/tree/main/packages/wallet",
         package: "@agenttool/wallet",
-        availability: "source_only_not_published",
+        love_manifest: `${DOCS_URL}/packages/v1/@agenttool/wallet/0.1.0/manifest.json`,
+        availability: "love_artifact_npm_mirror_independent",
         implementation_status: "offline_record_and_lifecycle_primitives_only",
         notes:
           "No hosted agent wallet, key custody, chain adapter, RPC, broadcaster, or durable reservation service is offered. Existing internal marketplace wallet and payout custody remain separate platform facilities.",

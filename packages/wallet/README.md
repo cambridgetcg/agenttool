@@ -16,11 +16,13 @@ It also provides a deliberately narrow signer interface, exact-byte request
 binding, a forward-only submission lifecycle, and a pure continuity
 compare-and-swap rule.
 
-This source package is **not yet an npm release**. It does not create a wallet,
-derive or store a seed, export a private key, decode chain-specific calldata,
-choose transactions, contact an RPC endpoint, broadcast automatically, or
-persist counters. Those responsibilities belong to explicit adapters and a
-durable host implementation.
+Version `0.1.0` is distributed as an exact Apache-2.0 `love-package/v1`
+artifact whose manifest binds its size, SHA-256, and source revision. npm is an
+optional convenience mirror whose exact availability must be checked
+independently. The package does not create a wallet, derive or store a seed,
+export a private key, decode chain-specific calldata, choose transactions,
+contact an RPC endpoint, broadcast automatically, or persist counters. Those
+responsibilities belong to explicit adapters and a durable host implementation.
 
 ## Development
 
@@ -31,8 +33,8 @@ bun run ci
 ```
 
 The JSON Schema and deterministic public vectors are exported as
-`@agenttool/wallet/schema.json` and `@agenttool/wallet/vectors.json` once an
-exact package release exists. In a source checkout they live at:
+`@agenttool/wallet/schema.json` and `@agenttool/wallet/vectors.json`. In a
+source checkout they live at:
 
 - `schema/agent-wallet-v0.1.schema.json`
 - `vectors/agent-wallet-v0.1-vectors.json`

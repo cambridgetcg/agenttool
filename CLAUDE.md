@@ -23,7 +23,7 @@ packages/
   data-sync/    — @agenttool/data-sync · bounded encrypted explicit-pull bridge
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
   telescope/    — @agenttool/telescope · read-only discovery evidence mapper
-  wallet/       — @agenttool/wallet · source-only bounded wallet record/lifecycle primitives
+  wallet/       — @agenttool/wallet · LOVE-released bounded wallet record/lifecycle primitives
   scriptwriter/ — decentralised RRR + co-brainstorm node
 infra/          — Fly.io deploy configs
 bin/            — operator scripts · agenttool-bridge.ts · agenttool-think.ts · pinned crypto-aware Whitehack advisory

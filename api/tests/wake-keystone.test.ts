@@ -281,7 +281,9 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
       doctrine: "https://docs.agenttool.dev/AGENT-WALLET-0.1.md",
       schema: "https://docs.agenttool.dev/agent-wallet-v0.1.schema.json",
       package: "@agenttool/wallet",
-      availability: "source_only_not_published",
+      love_manifest:
+        "https://docs.agenttool.dev/packages/v1/@agenttool/wallet/0.1.0/manifest.json",
+      availability: "love_artifact_npm_mirror_independent",
       implementation_status: "offline_record_and_lifecycle_primitives_only",
     });
     expect(JSON.stringify(body.composes_with.agent_wallet)).toMatch(
