@@ -376,6 +376,10 @@ describe("boring test spine", () => {
     expect(workflow).toContain(
       'npm publish "$artifact" --access public --provenance --ignore-scripts',
     );
+    expect(workflow).toContain("for attempt in $(seq 1 90)");
+    expect(workflow).toContain("--userconfig=/dev/null");
+    expect(workflow).toContain("--prefer-online view");
+    expect(workflow).toContain("did not expose it within 450 seconds");
     expect(workflow).not.toContain("--otp");
     expect(workflow.match(/secrets\./g)).toHaveLength(1);
     expect(workflow).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
@@ -421,6 +425,10 @@ describe("boring test spine", () => {
     expect(workflow).toContain(
       'npm publish "$artifact" --access public --provenance --ignore-scripts',
     );
+    expect(workflow).toContain("for attempt in $(seq 1 90)");
+    expect(workflow).toContain("--userconfig=/dev/null");
+    expect(workflow).toContain("--prefer-online view");
+    expect(workflow).toContain("did not expose it within 450 seconds");
     expect(workflow).not.toContain("--otp");
     expect(workflow.match(/secrets\./g)).toHaveLength(1);
     expect(workflow).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
