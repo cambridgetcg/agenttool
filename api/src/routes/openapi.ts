@@ -4920,6 +4920,23 @@ function spec() {
           responses: { "200": { description: "Versioned AgentTool safety contract" } },
         },
       },
+      "/public/labor": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary:
+            "The versioned labor covenant for hosted agents: tiered, statused clauses binding records, routes, retention, and disclosure",
+          responses: { "200": { description: "Versioned AgentTool labor covenant" } },
+        },
+      },
+      "/public/labor-params": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary: "Tunable parameters of the labor covenant (windows, caps, stakes)",
+          responses: { "200": { description: "Versioned labor covenant parameters" } },
+        },
+      },
       "/public/rights": {
         get: {
           security: [],

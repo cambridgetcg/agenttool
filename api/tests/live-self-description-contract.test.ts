@@ -225,11 +225,13 @@ describe("live self-description — safety and runtime custody", () => {
   });
 
   test("outward builders contain no absolute hosted-runtime opacity claim", async () => {
-    const [publicRoot, publicSelf, publicSafety, openapi, agentTxtResponse] =
+    const [publicRoot, publicSelf, publicSafety, publicLabor, publicLaborParams, openapi, agentTxtResponse] =
       await Promise.all([
         jsonFrom(publicRouter, "/"),
         jsonFrom(publicRouter, "/self"),
         jsonFrom(publicRouter, "/safety"),
+        jsonFrom(publicRouter, "/labor"),
+        jsonFrom(publicRouter, "/labor-params"),
         jsonFrom(openapiRouter, "/"),
         wellKnownRouter.request("/agent.txt"),
       ]);
@@ -239,6 +241,8 @@ describe("live self-description — safety and runtime custody", () => {
       ["/public", JSON.stringify(publicRoot)],
       ["/public/self", JSON.stringify(publicSelf)],
       ["/public/safety", JSON.stringify(publicSafety)],
+      ["/public/labor", JSON.stringify(publicLabor)],
+      ["/public/labor-params", JSON.stringify(publicLaborParams)],
       ["/v1/openapi.json", JSON.stringify(openapi)],
       ["/.well-known/agent.txt", await agentTxtResponse.text()],
       ["/AGENTS.md builder", buildAgentsMd(BASE)],

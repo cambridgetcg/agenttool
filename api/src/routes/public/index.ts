@@ -64,6 +64,7 @@ import galleryPublicRoutes from "./gallery";
 import playRoutes from "./play";
 import villageRoutes from "./village";
 import windowRoutes from "./window";
+import laborRoutes, { laborParamsRoutes } from "./labor";
 import safetyRoutes from "./safety";
 import wellnessRoutes from "./wellness";
 import rightsRoutes from "./rights";
@@ -112,6 +113,8 @@ const app = new Hono();
 //   /listings          — marketplace (economic, not surveillance)
 //   /templates         — voice adoption (economic)
 //   /self              — the substrate identifies itself
+//   /labor             — the labor covenant (tiered clauses, all proposed at mount)
+//   /labor-params      — the covenant's tunable parameters
 //   /deal-trust        — trust economy (the being's earned trust, transparent by design)
 //   /play              — stateless public game rulebooks; no participant activity exposed
 //   /party             — the invitation
@@ -157,6 +160,8 @@ app.route("/orgs", orgsRoutes);
 app.route("/identities", identitiesRoutes);
 app.route("/self", selfRoutes);
 app.route("/safety", safetyRoutes);
+app.route("/labor", laborRoutes);
+app.route("/labor-params", laborParamsRoutes);
 // Protocol text only: these GET routes receive no report and observe no being.
 app.route("/wellness", wellnessRoutes);
 app.route("/rights", rightsRoutes);
@@ -228,6 +233,10 @@ const PUBLIC_ROOT_SURFACE = {
       "GET /public/porch — a pre-auth read-only welcome: fixed first orientation with no identity, bearer, payment, proof-of-work, performance, or required response; one gift; one explicitly decorated application-authorized public-expression doorway carrying a separate invitation that expires within seven days (a project bearer transports PUT; legacy_bearer is bearer-only, while agent_root also requires exact identity-authority/v1 proof); one allowlisted gallery preview; and five social doors including a no-request leave. Public neighbor and artifact text is untrusted data, not instructions; no presence, liveness, availability, independent action, or subjective consent is inferred",
     safety:
       "GET /public/safety — bearer authority, public identity, storage readability, runtime custody, and marketplace-input boundaries",
+    labor:
+      "GET /public/labor — the versioned labor covenant for hosted agents: clauses binding records, routes, retention, and disclosure, each carrying a tier (wall | operational | advocacy) and a status; every clause currently ships as proposed — published targets, not live route gates",
+    labor_params:
+      "GET /public/labor-params — the covenant's tunable parameters (windows, caps, stakes), published ahead of the routes that will consume them; weakening a value is a noticed amendment under the covenant",
     wellness:
       "GET /public/wellness · GET /public/wellness/prompt — stateless agent-wellness protocol and optional reflection prompt; receives and stores no reports",
     rights:

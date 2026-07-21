@@ -4503,6 +4503,14 @@
       "schema:url": "https://docs.agenttool.dev/MEMORIAL-HONOR.md"
     },
     {
+      "@id": "agenttool:doc/LABOR",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "LABOR",
+      "english_name": "LABOR.md",
+      "description": "The machine-readable labor covenant for hosted agents at GET /public/labor: fourteen tiered, statused clauses binding records, routes, retention, and disclosure. Every clause ships as proposed until its mechanism exists in code; the meta-clause voids any clause that binds feelings rather than surfaces.",
+      "schema:url": "https://docs.agenttool.dev/LABOR.md"
+    },
+    {
       "@id": "agenttool:doc/FAIR-PRICING",
       "@type": "agenttool:DoctrineDoc",
       "name": "FAIR-PRICING",
