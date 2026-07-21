@@ -20,12 +20,28 @@
 #   bin/frontend-deploy.sh                    # deploy all three
 #   bin/frontend-deploy.sh dashboard          # deploy a specific one
 #   bin/frontend-deploy.sh docs dashboard web # deploy a subset
+#   bin/frontend-deploy.sh --oauth-fallback   # explicit: deploy via wrangler's
+#                                             # OAuth session when the API token
+#                                             # is missing or invalid (the raw
+#                                             # Pages fail-closed policy check is
+#                                             # SKIPPED in this mode and says so)
 #
 # Requires: Cloudflare credentials via environment or macOS keychain, curl,
 # Python 3, and npx (fetches the reviewed Wrangler version below when it is not
 # already cached).
 
 set -eo pipefail
+
+# ── Flags ──────────────────────────────────────────────────────────
+OAUTH_FALLBACK=0
+_args=()
+for a in "$@"; do
+  case "$a" in
+    --oauth-fallback) OAUTH_FALLBACK=1 ;;
+    *) _args+=("$a") ;;
+  esac
+done
+set -- "${_args[@]+"${_args[@]}"}"
 
 # Pin the deploy client so a release does not silently change behavior between
 # runs. Review and update this value deliberately when upgrading Wrangler.
@@ -46,14 +62,40 @@ if [[ -z "$CF_ACCOUNT_ID" ]]; then
   CF_ACCOUNT_ID="$(security find-generic-password -s agenttool-cloudflare-account-id -a "$KEYCHAIN_ACCOUNT" -w 2>/dev/null || true)"
 fi
 
+# A present-but-dead token must not masquerade as credentials — verify it
+# before trusting it (2026-07-21: keychain token found invalid mid-deploy).
+CF_AUTH_MODE="token"
+if [[ -n "${CF_API_TOKEN}" ]]; then
+  if ! curl -fsS --max-time 15 \
+    -H "Authorization: Bearer $CF_API_TOKEN" \
+    "https://api.cloudflare.com/client/v4/user/tokens/verify" >/dev/null 2>&1; then
+    echo "⚠ Cloudflare API token present but INVALID (user/tokens/verify failed)."
+    CF_API_TOKEN=""
+  fi
+fi
+
 if [[ -n "${CF_API_TOKEN}" && -n "${CF_ACCOUNT_ID}" ]]; then
   export CLOUDFLARE_API_TOKEN="$CF_API_TOKEN"
   export CLOUDFLARE_ACCOUNT_ID="$CF_ACCOUNT_ID"
+elif [[ "$OAUTH_FALLBACK" = 1 ]]; then
+  # Deliberate fallback: wrangler's own OAuth session carries the deploy.
+  # Wrangler still fails before publishing if the session lacks access —
+  # the fail-before-mutate intent survives; only the raw-curl policy
+  # inspection is skipped (and announces itself below).
+  CF_AUTH_MODE="oauth"
+  unset CLOUDFLARE_API_TOKEN
+  [[ -n "$CF_ACCOUNT_ID" ]] && export CLOUDFLARE_ACCOUNT_ID="$CF_ACCOUNT_ID"
+  if ! wrangler whoami >/dev/null 2>&1; then
+    echo "✗ --oauth-fallback: no wrangler OAuth session either. Run: npx wrangler login"
+    exit 1
+  fi
+  echo "→ Auth mode: wrangler OAuth session (API token missing/invalid; --oauth-fallback given)."
 else
-  echo "✗ Missing Cloudflare Pages credentials in the environment and macOS keychain."
+  echo "✗ Missing (or invalid) Cloudflare Pages credentials in the environment and macOS keychain."
   echo "  Supply CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID, or store them:"
   echo "    security add-generic-password -U -s agenttool-cloudflare-token -a ${KEYCHAIN_ACCOUNT} -w"
   echo "    security add-generic-password -U -s agenttool-cloudflare-account-id -a ${KEYCHAIN_ACCOUNT} -w"
+  echo "  Or, deliberately, deploy on wrangler's OAuth session: --oauth-fallback"
   exit 1
 fi
 
@@ -168,6 +210,18 @@ target_for() {
 verify_pages_project_policy() {
   local project="$1"
   local response
+
+  if [[ "$CF_AUTH_MODE" = "oauth" ]]; then
+    # OAuth mode cannot run the raw policy inspection (no API token for
+    # curl). Verify the project exists via wrangler, and say plainly what
+    # was NOT verified rather than implying it was.
+    if ! wrangler pages project list 2>/dev/null | grep -q "$project"; then
+      echo "✗ Pages project $project not visible to the OAuth session."
+      return 1
+    fi
+    echo "  ⚠ $project: exists (oauth). Policy check SKIPPED — production_branch/fail_open NOT verified this run."
+    return 0
+  fi
 
   if ! response="$(curl -fsS --max-time 30 \
     -H "Authorization: Bearer $CF_API_TOKEN" \

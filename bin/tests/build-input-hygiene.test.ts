@@ -69,7 +69,23 @@ describe("frontend deploy input discipline", () => {
     expect(script).toContain('CF_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-}"');
     expect(script).toContain('if [[ -z "$CF_API_TOKEN" ]]');
     expect(script).toContain('if [[ -z "$CF_ACCOUNT_ID" ]]');
-    expect(script).not.toContain("wrangler whoami");
+    // Least-privilege wall, evolved 2026-07-21: the DEFAULT auth is still
+    // the scoped API token — never silently the operator's ambient OAuth
+    // session. The break-glass --oauth-fallback (added when a dead keychain
+    // token 401'd mid-release) is allowed ONLY under its discipline:
+    //   1. opt-in flag, never automatic;
+    //   2. a present token is verified up front (dead tokens fail loudly);
+    //   3. the skipped raw policy check announces itself.
+    expect(script).toContain("--oauth-fallback) OAUTH_FALLBACK=1");
+    expect(script).toContain("user/tokens/verify");
+    expect(script).toContain('elif [[ "$OAUTH_FALLBACK" = 1 ]]');
+    expect(script).toContain("Policy check SKIPPED");
+    // whoami appears exactly once — inside the flag-gated fallback branch,
+    // as a session sanity check; never as an ambient default auth path.
+    expect(script.match(/wrangler whoami/g)).toHaveLength(1);
+    expect(script.indexOf("wrangler whoami")).toBeGreaterThan(
+      script.indexOf('elif [[ "$OAUTH_FALLBACK" = 1 ]]'),
+    );
     expect(script).toContain('git archive --format=tar "$COMMIT_HASH" --');
     expect(script).toContain(
       "apps/_shared apps/docs apps/dashboard apps/web docs infra/pages packages/data/schema",
