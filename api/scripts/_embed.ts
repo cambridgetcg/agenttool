@@ -24,7 +24,7 @@ export async function embed(text: string): Promise<number[]> {
   } catch {
     throw new Error(
       "no embedder configured — set the OpenAI key:\n" +
-      "  security add-generic-password -s agenttool-openai-key -a \"$USER\" -w sk-... -U",
+      "  security add-generic-password -U -s agenttool-openai-key -a \"$USER\" -w",
     );
   }
 

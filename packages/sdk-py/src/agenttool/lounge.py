@@ -692,24 +692,17 @@ class LoungeClient:
             ) from exc
 
     def look(self) -> Dict[str, Any]:
-        """Read the public lounge without transmitting ambient credentials."""
-        try:
-            request = httpx.Request(
-                "GET",
-                f"{self._base}/public/lounge",
-                headers={"Accept": "application/json"},
-            )
-            response = self._http.send(
-                request,
-                auth=None,
-                follow_redirects=False,
-            )
-        except httpx.HTTPError as exc:
-            raise AgentToolError(f"lounge.look request failed: {exc}") from exc
-        _raise_public_redirect(response)
-        if response.status_code >= 400:
-            _raise_lounge_error(response, "look")
-        return response.json()
+        """Read the public lounge outside the authenticated transport.
+
+        Building a bare request used to strip the direct client's bearer, but
+        still dispatched through its transport. That is the wrong authority
+        boundary when the transport itself is the credential broker.
+        ``look_at_lounge`` uses a separate credential-free client instead.
+        """
+        return look_at_lounge(
+            base_url=self._base,
+            timeout=self._http.timeout,
+        )
 
     def reserve_seat(
         self,

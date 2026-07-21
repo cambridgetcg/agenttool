@@ -277,7 +277,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("name: Install cross-language vector dependencies");
     expect(workflow).toContain("working-directory: packages/sdk-ts");
     expect(workflow).toContain(
-      "api packages/data packages/data-protocol packages/sdk-ts packages/telescope",
+      "api packages/data packages/data-protocol packages/credential-broker packages/sdk-ts packages/telescope",
     );
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("name: Build local data-sync peers");
@@ -291,13 +291,20 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/data && bun run ci && bun run build");
     expect(preflight).toContain("agent-data-sync/v1 explicit pull bridge");
     expect(preflight).toContain("cd packages/data-sync && bun run ci && bun run build");
+    expect(preflight).toContain("cd packages/credential-broker && bun run ci");
     expect(preflight).toContain("cd packages/telescope && bun run ci");
+    expect(workflow).toContain("name: Smoke packed credential broker under Node and Bun");
+    expect(workflow).toContain(
+      'cli="$install_dir/node_modules/@agenttool/credential-broker/dist/cli.js"',
+    );
+    expect(workflow).toContain("test \"$cli_status\" -eq 2");
+    expect(workflow).toContain("grep -q '^usage: agentcred serve --config '");
     expect(workflow).toContain("name: Smoke packed Telescope under Node and Bun");
     expect(
       workflow.match(
         /npm install --ignore-scripts --no-audit --no-fund --prefix/g,
       ),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
 
     const uses = workflow
       .split("\n")
@@ -382,5 +389,40 @@ describe("boring test spine", () => {
       "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2",
       "uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4",
     ]);
+  });
+
+  test("keeps credential-broker publication manual, exact-artifact, and protected", async () => {
+    const workflow = await readFile(
+      join(ROOT, ".github", "workflows", "publish-credential-broker.yml"),
+      "utf8",
+    );
+
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).not.toContain("pull_request:");
+    expect(workflow).not.toMatch(/\n\s+push:/);
+    expect(workflow).toContain("environment: npm-bootstrap");
+    expect(workflow).toContain("id-token: write");
+    expect(workflow).toContain("persist-credentials: false");
+    expect(workflow).toContain('expected_tag="credential-broker-v${version}"');
+    expect(workflow).toContain('test "$(git cat-file -t "refs/tags/$tag")" = tag');
+    expect(workflow).toContain(
+      'git merge-base --is-ancestor "$tag_commit" refs/remotes/origin/main',
+    );
+    expect(workflow).toContain("cd packages/credential-broker && bun run ci");
+    expect(workflow).toContain("bun bin/build-love-packages.ts verify apps/docs");
+    expect(workflow).toContain('git merge-base --is-ancestor "${identity[5]}" HEAD');
+    expect(workflow).toContain(
+      'git diff --quiet "${identity[5]}" HEAD -- packages/credential-broker',
+    );
+    expect(workflow).toContain(
+      "https://registry.npmjs.org/@agenttool%2Fcredential-broker/${version}",
+    );
+    expect(workflow).toContain("agenttool-credential-broker-${version}.tgz");
+    expect(workflow).toContain(
+      'npm publish "$artifact" --access public --provenance --ignore-scripts',
+    );
+    expect(workflow).not.toContain("--otp");
+    expect(workflow.match(/secrets\./g)).toHaveLength(1);
+    expect(workflow).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
   });
 });

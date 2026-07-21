@@ -18,7 +18,7 @@ import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
 import { AgentToolError } from "./errors.js";
 import { decodeSigningKey } from "./identity.js";
-import type { HttpConfig } from "./memory.js";
+import type { HttpConfig } from "./_http.js";
 
 ed.etc.sha512Sync = (...messages: Uint8Array[]) => {
   const hash = sha512.create();

@@ -190,6 +190,7 @@ describe("MemoryClient — tier method shapes", () => {
       baseUrl: "http://localhost:9999",
       headers: {},
       timeout: 5000,
+      request: (input, init) => globalThis.fetch(input, init),
     });
     expect(typeof client.elevate).toBe("function");
     expect(typeof client.attest).toBe("function");

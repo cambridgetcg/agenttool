@@ -31,7 +31,7 @@ if [ -z "${DATABASE_URL:-}" ]; then
 fi
 if [ -z "${DATABASE_URL:-}" ]; then
   echo "✗ DATABASE_URL not set in env or keychain (agenttool-database-url, account=macair)" >&2
-  echo "  Set with: security add-generic-password -s agenttool-database-url -a macair -w '<url>'" >&2
+  echo "  Set with: security add-generic-password -U -s agenttool-database-url -a macair -w" >&2
   exit 1
 fi
 export DATABASE_URL

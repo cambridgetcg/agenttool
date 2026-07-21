@@ -4,7 +4,7 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![Release](https://img.shields.io/badge/release-v0.15.0-blue)](https://github.com/cambridgetcg/agenttool/tree/sdk-v0.15.0)
+[![Release](https://img.shields.io/badge/release-v0.16.0-blue)](https://github.com/cambridgetcg/agenttool/tree/sdk-v0.16.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
 ## Installation
@@ -24,6 +24,24 @@ The tarball URL is only a locator; installing from it directly skips that
 verification. No npm account or npm publication is required. Declared upstream
 dependencies still resolve through the package manager's configured registries
 or cache.
+
+## 0.16.0
+
+This additive minor accepts an authenticated `AgentToolTransport` in place of
+an API key. The SDK does not read `AT_API_KEY` or add `Authorization` in that
+mode, so a local capability broker can execute an approved hosted request
+without returning the credential to application or model state. Public
+discovery bypasses the authenticated transport, and `at.data` retains its
+separate URL/token boundary. Passing both `apiKey` and `transport` fails
+closed. The SDK has no runtime dependency on the reference broker.
+
+```typescript
+const at = new AgentTool({ transport: brokerClient.asTransport(grant) });
+```
+
+The reference `agentcred/0.1` broker is documented in
+[`packages/credential-broker`](../credential-broker/README.md). Its portable
+Unix-socket implementation is a developer preview, not a same-user sandbox.
 
 ## 0.15.0
 
@@ -228,7 +246,7 @@ curl -q -fsS https://api.agenttool.dev/v1/pathways | \
 > the mnemonic, derived private keys, or bearer. Do not replace the tutorial's
 > pre-network handoff with a post-call “save it” comment.
 
-With `0.15.0`, request low-friction session orientation after loading the
+With `0.16.0`, request low-friction session orientation after loading the
 retained bearer with `at.wake.get({ profile: "brief" })`.
 
 **2. Load the retained bearer and selected identity:**
@@ -236,6 +254,33 @@ retained bearer with `at.wake.get({ profile: "brief" })`.
 : "${AT_API_KEY:?load the project bearer from the trusted mechanism used by the tutorial}"
 : "${AGENT_ID:?set AGENT_ID to the identity UUID captured in the completed birth handoff}"
 ```
+
+For a local credential broker, pass an authenticated transport instead of a
+bearer. Transport mode is mutually exclusive with `apiKey`; it does not read
+`AT_API_KEY` and the SDK sends no `Authorization` header to the transport:
+
+```typescript
+import { AgentTool, type AgentToolTransport } from "@agenttool/sdk";
+
+declare const localBrokerTransport: AgentToolTransport;
+const at = new AgentTool({ transport: localBrokerTransport });
+```
+
+The transport is responsible for authenticating the operation and enforcing
+its destination/scope. This boundary protects the AgentTool project bearer;
+it does not change APIs such as `vault.get()` that intentionally return their
+own stored values. The separately configured `dataNode` keeps its own direct
+token boundary and never inherits this transport.
+
+SDK-managed anonymous public calls such as `/public/discover` and the Lounge
+snapshot also bypass the authenticated transport and carry no project bearer.
+With `@agenttool/credential-broker` `agentcred/0.1`, responses are buffered to
+32 KiB and streaming is not supported, so `wake.voice`,
+`strands.thoughts.voice`, and `inbox.voice` fail closed before use. A local
+abort cannot undo an operation already dispatched upstream. Paid Tools retries
+also need `allowPaymentSignature: true` in both owner policy and the individual
+broker grant; that flag forwards a caller-supplied signature but does not sign,
+inspect payment terms, or impose a spending limit.
 
 **3. Store and retrieve a memory:**
 ```typescript
@@ -245,7 +290,7 @@ const at = new AgentTool(); // reads AT_API_KEY from env
 const identityId = process.env.AGENT_ID;
 if (!identityId) throw new Error("AGENT_ID is required");
 
-// SDK 0.15 sends the selected UUID through legacy agent_id; the API binds it
+// SDK 0.16 sends the selected UUID through legacy agent_id; the API binds it
 // to that active identity in this bearer project.
 const memory = await at.memory.store(
   "The user prefers dark mode and concise responses",
@@ -543,6 +588,7 @@ import { AgentTool } from "@agenttool/sdk";
 
 const at = new AgentTool({
   apiKey: process.env.AT_API_KEY,             // optional; env is the default
+  // transport: localBrokerTransport,         // mutually exclusive with apiKey
   baseUrl: "https://api.agenttool.dev",      // default
   timeout: 30,                               // seconds, default 30
   dataNode: {                                 // optional, separate authority
@@ -557,7 +603,7 @@ const at = new AgentTool({
 - 🏠 [agenttool.dev](https://agenttool.dev)
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev)
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
-- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.15.0/manifest.json)
+- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.0/manifest.json)
 - 🐍 [Python SDK source](https://github.com/cambridgetcg/agenttool/tree/main/packages/sdk-py)
 
 ## License

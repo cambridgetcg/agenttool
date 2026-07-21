@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/sdk",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "description": "TypeScript SDK for agenttool.dev and independently operated local agent data nodes",
   "license": "Apache-2.0",
   "type": "module",

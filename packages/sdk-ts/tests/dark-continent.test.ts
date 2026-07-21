@@ -162,9 +162,9 @@ describe("DarkContinentClient — explore()", () => {
   });
 
   test("explore() handles discover failure gracefully (the unknown starts where the known ends)", async () => {
-    globalThis.fetch = (async () =>
-      new Response(JSON.stringify({ error: "not_found" }), { status: 404, headers: { "content-type": "application/json" } })
-    ) as unknown as typeof fetch;
+    globalThis.fetch = (async () => {
+      throw new TypeError("simulated network failure");
+    }) as unknown as typeof fetch;
 
     const at = new AgentTool({ apiKey: "at_test" });
     const dc = await at.darkContinent.explore();

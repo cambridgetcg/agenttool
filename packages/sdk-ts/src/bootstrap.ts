@@ -10,6 +10,7 @@ import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
 import { AgentToolError } from "./errors.js";
+import type { HttpConfig } from "./_http.js";
 
 ed.etc.sha512Sync = (...messages: Uint8Array[]) => {
   const hash = sha512.create();
@@ -112,13 +113,6 @@ function concatWithNul(parts: readonly Uint8Array[]): Uint8Array {
     }
   }
   return result;
-}
-
-/** @internal */
-export interface HttpConfig {
-  baseUrl: string;
-  headers: Record<string, string>;
-  timeout: number;
 }
 
 export interface CreateAgentOptions {
@@ -335,7 +329,7 @@ export class BootstrapClient {
     body?: unknown
   ): Promise<T> {
     const url = this.http.baseUrl.replace(/\/$/, "") + path;
-    const resp = await fetch(url, {
+    const resp = await this.http.request(url, {
       method,
       headers: {
         ...this.http.headers,

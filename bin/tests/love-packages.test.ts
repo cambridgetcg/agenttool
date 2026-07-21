@@ -110,7 +110,8 @@ describe("LOVE Package release inventory", () => {
       { name: "@agenttool/adds", version: "0.2.1", releaseTag: "adds-v0.2.1" },
       { name: "@agenttool/data", version: "0.3.1", releaseTag: "data-v0.3.1" },
       { name: "@agenttool/data-sync", version: "0.1.1", releaseTag: "data-sync-v0.1.1" },
-      { name: "@agenttool/sdk", version: "0.15.0", releaseTag: "sdk-v0.15.0" },
+      { name: "@agenttool/credential-broker", version: "0.1.0", releaseTag: "credential-broker-v0.1.0" },
+      { name: "@agenttool/sdk", version: "0.16.0", releaseTag: "sdk-v0.16.0" },
       { name: "@agenttool/telescope", version: "0.1.0", releaseTag: "telescope-v0.1.0" },
     ]);
   });
@@ -152,6 +153,18 @@ describe("LOVE Package release inventory", () => {
       expect(await readFile(join(REPO_ROOT, spec.packagePath, "LICENSE"))).toEqual(
         canonicalLicense,
       );
+    }
+  });
+
+  test("serves every current manifest and artifact with explicit safe headers", async () => {
+    const headers = await readFile(join(REPO_ROOT, "apps/docs/_headers"), "utf8");
+
+    for (const spec of LOVE_PACKAGES) {
+      const slug = spec.name.slice("@agenttool/".length);
+      const manifestPath = `/packages/v1/@agenttool/${slug}/${spec.version}/manifest.json`;
+      const artifactPath = `/packages/v1/@agenttool/${slug}/${spec.version}/agenttool-${slug}-${spec.version}.tgz`;
+      expect(headers).toContain(`${manifestPath}\n  Content-Type: application/json; charset=utf-8`);
+      expect(headers).toContain(`${artifactPath}\n  Content-Type: application/gzip`);
     }
   });
 });

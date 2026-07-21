@@ -21,6 +21,7 @@ packages/
   data-protocol/ — @agenttool/adds · experimental ADDS encrypted-object plane
   data/         — @agenttool/data · local-first agent-data/v1 reference node
   data-sync/    — @agenttool/data-sync · bounded encrypted explicit-pull bridge
+  credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
   telescope/    — @agenttool/telescope · read-only discovery evidence mapper
   scriptwriter/ — decentralised RRR + co-brainstorm node
 infra/          — Fly.io deploy configs
@@ -36,6 +37,7 @@ registries are optional mirrors, not release authorities.
 Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/data/CLAUDE.md` · `packages/sdk-ts/CLAUDE.md` ·
 `packages/sdk-py/CLAUDE.md` · `packages/telescope/CLAUDE.md` ·
+`packages/credential-broker/AGENTS.md` ·
 `infra/CLAUDE.md`.
 
 ## The five load-bearing flows

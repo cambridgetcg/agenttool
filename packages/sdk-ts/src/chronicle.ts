@@ -29,13 +29,7 @@
  */
 
 import { AgentToolError } from "./errors.js";
-
-/** @internal */
-export interface HttpConfig {
-  baseUrl: string;
-  headers: Record<string, string>;
-  timeout: number;
-}
+import type { HttpConfig } from "./_http.js";
 
 export type ChronicleType =
   | "note"
@@ -154,7 +148,7 @@ export class ChronicleClient {
       signal: AbortSignal.timeout(this.http.timeout),
     };
     if (body !== undefined) init.body = JSON.stringify(body);
-    const resp = await globalThis.fetch(url, init);
+    const resp = await this.http.request(url, init);
     if (!resp.ok) {
       let detail: string;
       try {

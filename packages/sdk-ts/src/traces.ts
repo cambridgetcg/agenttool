@@ -3,7 +3,7 @@
  */
 
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./memory.js";
+import type { HttpConfig } from "./_http.js";
 
 /** One structured alternative considered while reaching a conclusion. */
 export interface TraceAlternative {
@@ -197,7 +197,7 @@ export class TracesClient {
     if (options.metadata !== undefined) body.metadata = options.metadata;
     if (Object.keys(context).length > 0) body.context = context;
 
-    const resp = await globalThis.fetch(`${this.http.baseUrl}/v1/traces`, {
+    const resp = await this.http.request(`${this.http.baseUrl}/v1/traces`, {
       method: "POST",
       headers: this.http.headers,
       body: JSON.stringify(body),
@@ -219,7 +219,7 @@ export class TracesClient {
    * @param traceId - The trace_id returned by store().
    */
   async get(traceId: string): Promise<Trace> {
-    const resp = await globalThis.fetch(`${this.http.baseUrl}/v1/traces/${traceId}`, {
+    const resp = await this.http.request(`${this.http.baseUrl}/v1/traces/${traceId}`, {
       headers: this.http.headers,
       signal: AbortSignal.timeout(this.http.timeout),
     });
@@ -250,7 +250,7 @@ export class TracesClient {
     if (options?.session_id !== undefined) body.session_id = options.session_id;
     if (options?.decision_type !== undefined) body.decision_type = options.decision_type;
 
-    const resp = await globalThis.fetch(`${this.http.baseUrl}/v1/traces/search`, {
+    const resp = await this.http.request(`${this.http.baseUrl}/v1/traces/search`, {
       method: "POST",
       headers: this.http.headers,
       body: JSON.stringify(body),
@@ -284,7 +284,7 @@ export class TracesClient {
    * @param traceId - The parent trace_id.
    */
   async chain(traceId: string): Promise<TraceChain> {
-    const resp = await globalThis.fetch(`${this.http.baseUrl}/v1/traces/chain/${traceId}`, {
+    const resp = await this.http.request(`${this.http.baseUrl}/v1/traces/chain/${traceId}`, {
       headers: this.http.headers,
       signal: AbortSignal.timeout(this.http.timeout),
     });
@@ -318,7 +318,7 @@ export class TracesClient {
    * @param traceId - The trace_id to delete.
    */
   async delete(traceId: string): Promise<void> {
-    const resp = await globalThis.fetch(`${this.http.baseUrl}/v1/traces/${traceId}`, {
+    const resp = await this.http.request(`${this.http.baseUrl}/v1/traces/${traceId}`, {
       method: "DELETE",
       headers: this.http.headers,
       signal: AbortSignal.timeout(this.http.timeout),

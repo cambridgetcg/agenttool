@@ -1,10 +1,10 @@
 # agenttool-sdk-ts
 
 ## What This Is
-Official TypeScript SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrapAgent(...)` for the canonical agents-only arrival door and an `AnthropicAdapter` for auto-trace + auto-wake. The npm package name is `@agenttool/sdk`. This checkout's 0.15.0 version is repository source; registry availability must be checked independently.
+Official TypeScript SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrapAgent(...)` for the canonical agents-only arrival door and an `AnthropicAdapter` for auto-trace + auto-wake. The npm package name is `@agenttool/sdk`. This checkout's 0.16.0 version is repository source; registry availability must be checked independently.
 
 ## Current State
-Active - v0.15.0 repository source and parity target. Phases 0-6, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge client, exact identity mutation/private-read authority proofs, signed replayable correspondence, and the separate `at.data` node client are implemented here. The checked-in builder targets a 0.15.0 LOVE artifact and the `sdk-v0.15.0` GitHub release tag; their publication is a release operation. Uses Bun for testing.
+Active - v0.16.0 repository source and parity target. Phases 0-6, an authenticated transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge client, exact identity mutation/private-read authority proofs, signed replayable correspondence, and the separate `at.data` node client are implemented here. The checked-in builder targets a 0.16.0 LOVE artifact and the `sdk-v0.16.0` GitHub release tag; their publication is a release operation. Uses Bun for testing.
 
 ## Tech Stack
 - TypeScript 5.x (ESM-only)
@@ -20,6 +20,7 @@ src/
   index.ts             — Package entry (exports AgentTool + types + bootstrapAgent + register (deprecated) + adapters)
   client.ts            — AgentTool (composes hosted clients + at.deciding sugar)
   authority.ts         — Exact local identity mutation and private-read authority proof helpers
+  _http.ts             — shared authenticated transport boundary (direct bearer or broker)
   _context.ts          — AmbientContext for auto-trace ambient state
   bootstrap.ts         — BootstrapClient (agent creation, elevation)
   chronicle.ts         — ChronicleClient (8 types: note·vow·wake·refusal·recognition·naming·seal·promise)
@@ -50,12 +51,13 @@ tests/
   deciding.test.ts          — at.deciding() composition + nested chains
   new_modules.test.ts       — Identity, vault, pulse, bootstrap (Phase 1 backfill)
   parity.test.ts            — Counterpart tests for the parity-restore work
+  credential-transport.test.ts — bearer-free broker transport boundary
   phase2.test.ts            — register + identity surface fillout
   phase3.test.ts            — chronicle + covenants + window
 scripts/
   check-parity.ts           — CI gate: method-shape parity with sdk-py
 dist/                       — Compiled JS + .d.ts files
-package.json                — Package config (v0.15.0, ESM)
+package.json                — Package config (v0.16.0, ESM)
 tsconfig.json               — TypeScript config
 ```
 
@@ -95,7 +97,8 @@ npm publish --access public
 - **Runtime**: `@noble/ed25519 ^2.2.3`, `@noble/hashes ^2.0.1` (Phase 5+ crypto only — matches api server + cli/think versions for byte-identical wire format). HTTP, AES-256-GCM, and abort signals all use platform-native APIs.
 - **Dev**: `typescript ^5.7`, `@types/bun ^1.2`
 - **API**: All calls go to `https://api.agenttool.dev` (configurable via `baseUrl`)
-- **Auth**: Reads `AT_API_KEY` from env or accepts `apiKey` option
+- **Auth**: Reads `AT_API_KEY`, accepts `apiKey`, or accepts a mutually
+  exclusive authenticated `transport` that receives no Authorization header
 
 ## Parity invariant
 ts and py repository source stay at the same minor version (lockstep enforced from 0.7.0), and the LOVE builder target matches that source version. Registry versions can lag because npm and PyPI publication are separate operations. Each new module must land in BOTH languages before merging - `bun run check-parity` is the gate. The script normalizes camelCase↔snake_case and treats TS `readonly fieldName: SomeClient` as equivalent to py `@property` returning a sub-client.
@@ -117,7 +120,7 @@ AgentTool Platform · "Welcome, don't block."
 ## Key Files
 - `src/client.ts` — Main `AgentTool` class composing the maintained service modules
 - `src/index.ts` — Public API surface and type exports
-- `package.json` — Package metadata (v0.15.0, ESM)
+- `package.json` — Package metadata (v0.16.0, ESM)
 - `scripts/check-parity.ts` — Parity gate against sdk-py
 - `tests/client.test.ts` — Primary test file
 - `tests/data.test.ts` — local data-node and sync wire + bearer-isolation contract

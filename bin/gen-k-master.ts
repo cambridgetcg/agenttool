@@ -39,14 +39,17 @@ const b64 = bytes.toString("base64");
 // 3. Install. `-U` updates if exists; we already gated on existing above
 //    unless --force was passed, so this is safe.
 const account = process.env.USER ?? "sophia";
-const install = Bun.spawnSync([
-  "security",
-  "add-generic-password",
-  "-s", SERVICE,
-  "-a", account,
-  "-w", b64,
-  "-U",
-]);
+const install = Bun.spawnSync(
+  [
+    "security",
+    "add-generic-password",
+    "-s", SERVICE,
+    "-a", account,
+    "-U",
+    "-w", // last with no value: read from stdin, never argv
+  ],
+  { stdin: new TextEncoder().encode(b64) },
+);
 
 if (install.exitCode !== 0) {
   const err = (install.stderr ?? new Uint8Array()).toString().trim();
