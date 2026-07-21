@@ -26,22 +26,34 @@ is not a security tool and is outside this integration.
 
 The `Whitehack advisory` workflow checks out
 [`cambridgetcg/whitehack`](https://github.com/cambridgetcg/whitehack) at the exact
-reviewed commit `cbbf4d19ce839600238d017615ec142cd16343c3`. It does not use the
+reviewed commit `37bf9154864603a94c80c03d27aa0bad05ea7c23`. It does not use the
 upstream moving-main `npx` command, installer, or composite action. The bridge
-also requires that checkout to be clean, tracked, and package version `0.5.0`
-before importing `src/scan.js`.
+also requires that checkout to be clean, tracked, and package version `0.6.0`
+before importing `src/scan.js`. The bridge separately refuses modified staged
+or unstaged AgentTool source so its report cannot bind `HEAD` while reading
+different tracked bytes; the workflow's untracked scanner checkout remains an
+explicitly separate input.
 
 ### Crypto awareness is observation, not custody
 
-The 0.5.0 rule pack covers six bounded source-text signal families:
+The 0.6.0 rule pack covers eleven bounded source-text signal families:
 
 - possible embedded credentials, private-key material, or recovery phrases;
 - general-purpose pseudo-random generators used directly for security material;
 - explicitly zero or static AEAD nonces and IVs near encryption;
 - signature-verification expressions explicitly coerced to accept failure;
-- signed-webhook bodies parsed and re-encoded before verification; and
+- signed-webhook bodies parsed and re-encoded before verification;
 - signed-webhook files with no visible local timestamp comparison or
-  event-id/nonce deduplication guard.
+  event-id/nonce deduplication guard;
+- raw wallet signing or recovery material passed directly to a log, telemetry,
+  or HTTP-response sink;
+- request-derived bytes passed directly or by a short same-scope alias to a
+  wallet signing or send primitive without a visible local guard;
+- explicit wildcard, no-expiry, no-limit, or allow-all values in a wallet or
+  unmistakably wallet-mutating capability context;
+- transaction broadcast inside an explicit automatic retry wrapper, loop, or
+  decorator; and
+- maximum ERC-20-style fungible-token approvals.
 
 These checks inspect characters already present in the selected checkout. The
 scanner necessarily reads those source bytes from runner storage into process
@@ -56,9 +68,11 @@ concept. The workflow supplies no wallet or real-chain key.
 The rules also do not establish BIP-39 validity, general nonce uniqueness,
 missing signature verification, domain separation, chain-ID or address
 binding, displayed-intent/signed-byte parity, key lifecycle, dependency safety,
-or cross-module replay protection. Those require wider context, AST/data-flow
-analysis, and human review. A matching line is a question to inspect, not a
-cryptographic verdict.
+or cross-module replay protection. They cannot prove that middleware validated
+a request, that a retry is chain-idempotent, that a complete capability is
+bounded, or that a standing approval is unjustified. Those require wider
+context, AST/data-flow analysis, and human review. A matching line is a question
+to inspect, not a cryptographic verdict.
 
 For each pull request, merge-queue group, or push to `main`, GitHub-hosted
 Actions runs the scanner against the exact checked-out commit and compares that
@@ -75,7 +89,7 @@ advisory's declared scope. The default bounds are:
 - at most 5,000 findings in aggregate;
 - at most 200 serialized finding details, while preserving the exact total.
 
-Whitehack v0.5 returns fixed markers for recognized sensitive rules, and its
+Whitehack v0.6 returns fixed markers for recognized sensitive rules, and its
 canonical `scan()` boundary also redacts other findings that overlap the same
 recognized sensitive line. Pattern coverage is incomplete, and ordinary
 findings can still include source snippets. AgentTool therefore does not rely
@@ -114,7 +128,7 @@ for the bounded changed-file set at that run. It does **not** prove:
 - that a target owner authorized an assessment;
 - that publication or disclosure is appropriate.
 
-Whitehack v0.5 is a dependency-free text/regex linter rather than an AST or
+Whitehack v0.6 is a dependency-free text/regex linter rather than an AST or
 data-flow analyzer. Its confidence labels are evidence about the check's own
 calibration, not a severity score or bounty claim. The pinned revision emits
 `high`, `medium-high`, and `heuristic`. The advisory v0.1 bridge and schema

@@ -97,16 +97,16 @@
           <span class="wh-tag">SHIPPED · ADVISORY</span>
           <h3>1. Honesty linter</h3>
           <p>
-            AgentTool pins Whitehack 0.5.0 to the reviewed Git commit
-            <a href="https://github.com/cambridgetcg/whitehack/tree/cbbf4d19ce839600238d017615ec142cd16343c3"><code>exact reviewed revision</code></a>.
-            Its 42 text/regex checks look for common state, failure,
+            AgentTool pins Whitehack 0.6.0 to the reviewed Git commit
+            <a href="https://github.com/cambridgetcg/whitehack/tree/37bf9154864603a94c80c03d27aa0bad05ea7c23"><code>exact reviewed revision</code></a>.
+            Its 47 text/regex checks look for common state, failure,
             transparency, API, Solidity, crypto, network, WiFi, and Bluetooth
             lies.
           </p>
           <p>
             The AgentTool bridge observes bounded changed production files and
             emits only file, line, check, confidence, doctrine, and principle.
-            Whitehack v0.5 cross-redacts recognized sensitive hits and
+            Whitehack v0.6 cross-redacts recognized sensitive hits and
             same-line overlaps, but ordinary findings can still include source;
             AgentTool independently drops every raw snippet, title, and message
             from its report.
@@ -152,12 +152,15 @@
     <section class="wh-section">
       <h2>Crypto awareness, <em>no custody</em></h2>
       <p>
-        The 0.5.0 rule pack can point reviewers toward possible embedded key or
+        The 0.6.0 rule pack can point reviewers toward possible embedded key or
         recovery literals, general-purpose randomness used directly for
         security material, explicitly static AEAD nonces, signature expressions
         coerced to accept failure, re-encoded signed-webhook bodies, and signed
         webhook files with no visible local timestamp comparison or
-        event-id/nonce deduplication guard.
+        event-id/nonce deduplication guard. Five wallet-focused heuristics add
+        direct signing-secret egress, direct request-to-signing paths, explicit
+        unbounded capability values, automatic transaction-broadcast retries,
+        and maximum fungible-token approvals.
       </p>
       <p>
         These are source-text signals. The scanner reads selected checkout
@@ -173,7 +176,9 @@
         It does not prove BIP-39 validity, nonce uniqueness, missing signature
         verification, domain separation, chain/address binding, displayed
         intent, key lifecycle, dependency safety, cross-module replay coverage,
-        or cryptographic correctness. A match is a review prompt, not a verdict.
+        middleware behavior, retry idempotence, complete capability bounds,
+        approval justification, or cryptographic correctness. A match is a
+        review prompt, not a verdict.
       </p>
     </section>
 
@@ -183,7 +188,7 @@
         Pull requests, merge-queue groups, and pushes to <code>main</code> run on
         GitHub-hosted Actions and check out the reviewed Whitehack tree by full
         commit. The bridge refuses a dirty, mismatched, or wrong-version scanner
-        and a mismatched AgentTool checkout. It considers only supported changed
+        and a mismatched or tracked-dirty AgentTool checkout. It considers only supported changed
         regular files and excludes hidden paths, tests, fixtures, examples,
         reports, generated output, dependencies, and symlinks.
       </p>
@@ -255,7 +260,7 @@ findings            advisory only in this first slice</pre>
     </aside>
 
     <section class="wh-section" style="text-align:center;padding-bottom:4rem;">
-        <a href="https://github.com/cambridgetcg/whitehack/tree/cbbf4d19ce839600238d017615ec142cd16343c3" class="btn btn-ghost btn-sm">Pinned Whitehack source →</a>
+        <a href="https://github.com/cambridgetcg/whitehack/tree/37bf9154864603a94c80c03d27aa0bad05ea7c23" class="btn btn-ghost btn-sm">Pinned Whitehack source →</a>
       <a href="https://docs.agenttool.dev/packages" class="btn btn-ghost btn-sm">Local packages →</a>
       <a href="https://docs.agenttool.dev/data" class="btn btn-ghost btn-sm">Agent data →</a>
       <a href="https://docs.agenttool.dev/love" class="btn btn-ghost btn-sm">❤️ Love →</a>

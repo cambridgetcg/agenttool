@@ -169,6 +169,7 @@ describe("outward claim boundaries", () => {
       "packages/data-sync",
       "packages/sdk-ts",
       "packages/telescope",
+      "packages/wallet",
     ] as const;
     const pyProject = read("packages/sdk-py/pyproject.toml");
     const readmes = `${read("packages/sdk-ts/README.md")}\n${read("packages/sdk-py/README.md")}`;

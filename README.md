@@ -9,6 +9,9 @@ a local-first agent data node (`packages/data`), an experimental encrypted
 object protocol package (`packages/data-protocol`), an experimental local
 credential broker (`packages/credential-broker`), and three static surfaces
 (`apps/web`, `apps/dashboard`, and `apps/docs`).
+The source-only `@agenttool/wallet` package defines capability-bounded wallet
+records and conservative signer/submission boundaries without exporting keys,
+contacting RPC, or providing a hosted wallet.
 The public `@agenttool/telescope` CLI/library maps agent discovery evidence
 without invoking protocols or actions. It ships through LOVE/npm as a local
 client and is not exposed as a hosted arbitrary-target scanner.
@@ -49,6 +52,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 | **Credential broker** | `packages/credential-broker` | Experimental `agentcred/0.1` local capability broker. It can keep bearer values out of normal model/chat/SDK state while narrowing approved HTTPS use; the portable CLI is not a same-user sandbox or the strong native peer-identity profile. |
 | **LOVE packages** | `docs/LOVE-PACKAGE-PROTOCOL.md`, `bin/build-love-packages.ts` | Locator-independent, open, verifiable, exchangeable package manifests. Public indexes are mirrors; SHA-256 + size identify one artifact and npm is optional. |
 | **Telescope** | `packages/telescope` | Public `@agenttool/telescope@0.1.0` read-only discovery evidence mapper. Bounded public-HTTPS probes map `agent.txt`, Pathways, LOVE/npm, MCP, A2A, WebFinger, and Offer Bus boundaries; generated commands are never executed. DNS-AID and PKARR remain opt-in adapter seams. Distribution does not add a hosted scan route. |
+| **Agent Wallet** | `packages/wallet`, `docs/specs/AGENT-WALLET-0.1.md` | Source reference for `agent-wallet/0.1`: closed signed descriptor/capability/intent/receipt/continuity records, exact-byte signer requests, and conservative unknown states. No key custody, chain adapter, RPC, broadcaster, hosted wallet, LOVE artifact, or npm release is claimed. |
 | **Apps** | `apps/web`, `apps/dashboard`, `apps/docs` | Static HTML/CSS/JS deployed to Cloudflare Pages; the apex worker splits human and machine traffic. |
 | **Infra** | `api/fly.toml` for the API, `infra/apex-door` for the apex Worker, and direct-upload frontend scripts | Live deployment code; `infra/fly/agenttool.toml` is a snapshot, not the canonical API config |
 | **Lineage** | Former `agent-*` per-service apps retired | The API monolith carries the active service domains; cutover history is in `docs/CUTOVER.md` |
@@ -93,6 +97,7 @@ fast-changing percentages and slice counts.
 | **agent data** | Local collections, content-addressed blobs, provenance, full-text query, and resumable change cursors | Standalone data plane; projection into AgentTool memory is explicit rather than a hosted raw-data lake |
 | **ADDS** | Provider-independent encrypted Blocks, signed Manifests, direct read Grants, locations, Heads, and Receipts | Experimental lower layer; no discovery network, query language, proof of storage, global revocation, or durability guarantee |
 | **LOVE packages** | Public discovery, portable manifests, versioned tarballs, SHA-256 integrity, and mirror fallback | Distribution protocol only; a digest proves bytes, not authorship, safety, licensing, or future availability |
+| **Agent Wallet** | Capability, intent, simulation/signing receipts, signer boundary, and continuity rules | Offline source primitives only; static validation does not replace trusted chain decoding, atomic reservation, custody, RPC, or broadcast operations |
 
 ---
 
@@ -169,7 +174,7 @@ and docs carry local guidance files; `apps/web` does not.
 
 GitHub `main` is the reviewed coordination/release head; Codeberg `main` is an
 explicit fast-forward-only mirror. Required GitHub CI installs JavaScript
-dependencies for the API/protocol and data/ADDS/credential-broker/TypeScript SDK/Telescope jobs from
+dependencies for the API/protocol and data/ADDS/credential-broker/TypeScript SDK/Agent Wallet/Telescope jobs from
 frozen Bun lockfiles. The Python SDK is tested on Python 3.9–3.14 with the
 compatible dependency set pip resolves from `pyproject.toml`; this is neither a
 frozen lock nor a minimum-version matrix. CI receives no application/service credentials. Pushes do not

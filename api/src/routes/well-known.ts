@@ -378,6 +378,18 @@ app.get("/wake-keystone", (c) => {
         notes:
           "Read-only operating-conditions protocol. AgentTool receives no report and reads no identity or transcript.",
       },
+      agent_wallet: {
+        protocol: "agent-wallet/0.1",
+        doctrine: `${DOCS_URL}/AGENT-WALLET-0.1.md`,
+        schema: `${DOCS_URL}/agent-wallet-v0.1.schema.json`,
+        source:
+          "https://github.com/cambridgetcg/agenttool/tree/main/packages/wallet",
+        package: "@agenttool/wallet",
+        availability: "source_only_not_published",
+        implementation_status: "offline_record_and_lifecycle_primitives_only",
+        notes:
+          "No hosted agent wallet, key custody, chain adapter, RPC, broadcaster, or durable reservation service is offered. Existing internal marketplace wallet and payout custody remain separate platform facilities.",
+      },
       being_rights: {
         url: `${ORG_URL}/public/rights`,
         protocol: "being-rights/v1",

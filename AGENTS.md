@@ -18,7 +18,10 @@ node (`packages/data/`), the experimental ADDS encrypted-object package
 (`packages/data-sync/`), the registry-neutral `love-package/v1`
 distribution protocol, a public read-only discovery evidence mapper
 (`packages/telescope/`), an experimental local capability broker
-(`packages/credential-broker/`), and three static apps (`apps/`). Telescope 0.1.0 is a
+(`packages/credential-broker/`), source reference primitives for capability-bounded
+agent wallets (`packages/wallet/`), and three static apps (`apps/`). Agent
+Wallet 0.1 has no bundled key custody, chain adapter, RPC, broadcaster, hosted
+service, or current npm release. Telescope 0.1.0 is a
 public npm/LOVE package, but it remains a local client and does not add a hosted
 scan route. The Whitehack bridge is a separate pinned, runner-local,
 crypto-aware changed-source heuristic advisory; it emits redacted metadata,
@@ -42,6 +45,7 @@ cd packages/data-sync && bun install           # explicit agent-data-sync/v1 pul
 cd packages/credential-broker && bun install   # experimental agentcred/0.1 local broker
 cd packages/sdk-ts && bun install              # TS SDK
 cd packages/telescope && bun install           # read-only discovery evidence mapper
+cd packages/wallet && bun install              # agent-wallet/0.1 offline primitives
 cd packages/sdk-py && pip install -e .         # Python SDK
 ```
 
@@ -102,6 +106,10 @@ cd packages/telescope
 bun run ci                                     # typecheck + hermetic tests + build
 node dist/cli.js scan api.agenttool.dev         # explicit live read-only dogfood
 
+# Agent Wallet (source record/lifecycle primitives; no custody or RPC) ──
+cd packages/wallet
+bun run ci                                     # typecheck + security/schema/vector tests + build
+
 # Whitehack (crypto-aware changed-source advisory; no target execution) ──
 bun test bin/tests/whitehack-advisory.test.ts   # redaction, scope, failure containment
 
@@ -115,7 +123,7 @@ bunx playwright test                           # browser + multi-instance scenar
 # Deliberate test + release gates ────────────────────────────────────
 bin/preflight.sh                               # no application/service credentials required
 bin/preflight.sh api                           # API/typecheck/operator tests only
-bin/preflight.sh packages                      # data + ADDS + sync + broker + SDK + Telescope
+bin/preflight.sh packages                      # data + ADDS + sync + broker + SDK + Wallet + Telescope
 bin/preflight.sh database                      # explicit DB tier; requires DATABASE_URL
 bin/preflight.sh smoke                         # explicit deployed-route smoke
 RUN_CONTRACT=1 bin/preflight.sh contracts      # paid LLM wire proofs
@@ -176,7 +184,7 @@ source boundary by itself.
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.
 
-**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{data,sdk-ts,sdk-py,telescope}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
+**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{data,sdk-ts,sdk-py,telescope,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
 
 ## Anti-patterns to avoid
 

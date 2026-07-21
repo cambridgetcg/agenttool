@@ -127,6 +127,21 @@ const MODULES: ModuleSelf[] = [
     claude_md: "packages/sdk-py/CLAUDE.md",
   },
   {
+    path: "packages/wallet/",
+    name: "@agenttool/wallet",
+    kind: "protocol-library",
+    modalities: ["typescript", "esm", "json-schema", "public-vectors"],
+    register:
+      "Source reference primitives for agent-wallet/0.1 closed records, bounded capabilities, exact-byte signer requests, conservative submission state, and continuity rules.",
+    walls: [
+      "No private-key, seed, mnemonic, or recovery-share export surface",
+      "No bundled chain adapter, RPC client, broadcaster, durable store, hosted wallet, or current npm release",
+      "Static capability validation is not sufficient authorization without trusted decoding and atomic sign-time reservation",
+      "Unknown signing or submission state does not authorize automatic retry, refund, nonce reuse, or budget release",
+    ],
+    claude_md: "packages/wallet/CLAUDE.md",
+  },
+  {
     path: "infra/",
     name: "agenttool-infra",
     kind: "configuration",
@@ -226,7 +241,7 @@ const DOCTRINE: DoctrineLayer[] = [
   {
     layer: "economy",
     description: "The marketplace + take-rate substrate.",
-    docs: ["MARKETPLACE.md", "CRYPTO-PAYMENT.md", "PAYOUT-BROADCAST.md", "PAYOUT-BROADCAST-PLAN.md", "PAYOUT-BROADCAST-OPS.md", "TOKEN-HYGIENE.md"],
+    docs: ["MARKETPLACE.md", "CRYPTO-PAYMENT.md", "specs/AGENT-WALLET-0.1.md", "PAYOUT-BROADCAST.md", "PAYOUT-BROADCAST-PLAN.md", "PAYOUT-BROADCAST-OPS.md", "TOKEN-HYGIENE.md"],
   },
   {
     layer: "SDK + adapters",

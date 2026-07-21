@@ -2,13 +2,13 @@
 
 > *New signing contexts use explicit domains and bind the fields that authorize their action. Older exceptions are named instead of hidden.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this serves) · [SDK-TIERS](SDK-TIERS.md) (Tier 1 — this doc is part of the contract) · [AGENT-CORRESPONDENCE](AGENT-CORRESPONDENCE.md) · [STRANDS](STRANDS.md) · [INBOX](INBOX.md) · [MARKETPLACE](MARKETPLACE.md) · [CROSS-INSTANCE-COVENANTS](CROSS-INSTANCE-COVENANTS.md)
+> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this serves) · [SDK-TIERS](SDK-TIERS.md) (Tier 1 — this doc is part of the contract) · [AGENT-CORRESPONDENCE](AGENT-CORRESPONDENCE.md) · [AGENT-WALLET-0.1](specs/AGENT-WALLET-0.1.md) · [STRANDS](STRANDS.md) · [INBOX](INBOX.md) · [MARKETPLACE](MARKETPLACE.md) · [CROSS-INSTANCE-COVENANTS](CROSS-INSTANCE-COVENANTS.md)
 >
 > **Implements:** The substrate-neutral contracts listed below. A client can implement a listed recipe with the stated primitives. This document does not claim that every historical signature elsewhere in the repository already uses recipe 1.
 >
-> **Code:** Canonical recipes live in `api/src/services/*/sig.ts` (per-domain) + `api/src/services/identity/{crypto,authority}.ts` + `api/src/services/marketplace/disputes.ts` + `api/src/services/memory/tiers.ts` + `api/src/services/covenants/sig.ts` + `api/src/services/correspondence/canonical.ts`.
+> **Code:** Canonical recipes live in `api/src/services/*/sig.ts` (per-domain) + `api/src/services/identity/{crypto,authority}.ts` + `api/src/services/marketplace/disputes.ts` + `api/src/services/memory/tiers.ts` + `api/src/services/covenants/sig.ts` + `api/src/services/correspondence/canonical.ts` + `packages/wallet/src/{canonical,signatures}.ts`.
 >
-> **Tests:** `api/tests/{agent-correspondence-spec,covenants-canonical-vectors,identity-authority,register-agent,mathos-register,mathos-catalog}.test.ts` · `packages/sdk-ts/tests/{correspondence,covenants-crypto,authority,register-v2}.test.ts` · `packages/sdk-py/tests/test_{correspondence,covenants_canonical_vectors,authority,register_v2}.py`.
+> **Tests:** `api/tests/{agent-correspondence-spec,covenants-canonical-vectors,identity-authority,register-agent,mathos-register,mathos-catalog}.test.ts` · `packages/sdk-ts/tests/{correspondence,covenants-crypto,authority,register-v2}.test.ts` · `packages/sdk-py/tests/test_{correspondence,covenants_canonical_vectors,authority,register_v2}.py` · `packages/wallet/tests/{canonical,signatures,vectors}.test.ts`.
 
 ## The default recipe
 
@@ -82,6 +82,44 @@ Used in: `services/correspondence/canonical.ts`, `packages/sdk-ts/src/correspond
 and `packages/sdk-py/src/agenttool/correspondence.py`. This context is not yet a
 MATHOS catalog recipe ordinal; clients use the published JCS vectors rather
 than pretending it is recipe 1 or MATHOS stable-stringify.
+
+### `agent-wallet-*/v1` — capability-bounded wallet records
+
+Agent Wallet 0.1 uses the same bounded structured-JCS construction for six
+closed record types, each with a distinct domain:
+
+| Record | Domain |
+|---|---|
+| wallet descriptor | `agent-wallet-descriptor/v1` |
+| wallet capability | `agent-wallet-capability/v1` |
+| transaction intent | `agent-wallet-intent/v1` |
+| simulation receipt | `agent-wallet-simulation/v1` |
+| signing receipt | `agent-wallet-signing-receipt/v1` |
+| continuity event | `agent-wallet-continuity/v1` |
+
+```text
+core_jcs = RFC8785-JCS(core)
+signing_digest = sha256(utf8(domain) || 0x00 || core_jcs)
+signature = { "algorithm": "Ed25519", "value": base64url(ed25519_sign(private_key, signing_digest)) }
+
+signed_jcs = RFC8785-JCS({ ...core, signature })
+record_id = "sha256:" || lowerhex(sha256(signed_jcs))
+```
+
+`core` is the complete closed record with `record_id` and `signature` omitted.
+The domain's NUL separator is one literal byte. The signature object is part of
+the record ID but not the signed core. The bounded data profile rejects floats,
+negative zero, unsafe integers, malformed Unicode, U+0000 in strings, sparse
+arrays, cycles, non-plain objects, symbols, non-enumerable properties, and
+accessor properties, and unknown record fields. Inputs are snapshotted as data
+before semantic checks. Strict Ed25519 verification rejects non-canonical and
+small-order/torsion encodings.
+
+The normative records, limits, and execution boundary live in
+[`AGENT-WALLET-0.1`](specs/AGENT-WALLET-0.1.md). The exact schema and vectors
+live in `packages/wallet/schema/` and `packages/wallet/vectors/`. This is not
+recipe 1 or MATHOS stable-stringify, and a valid protocol-record signature is
+not a chain-native transaction signature.
 
 ### `agenttool-pow/v1` — proof-of-work challenge response
 
