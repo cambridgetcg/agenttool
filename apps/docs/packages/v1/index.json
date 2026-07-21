@@ -113,6 +113,16 @@
           "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/telescope/0.1.0/manifest.json"
         }
       ]
+    },
+    {
+      "name": "@agenttool/wallet",
+      "latest": "0.1.0",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/wallet/0.1.0/manifest.json"
+        }
+      ]
     }
   ]
 }

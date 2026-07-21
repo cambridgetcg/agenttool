@@ -449,6 +449,9 @@ describe("boring test spine", () => {
     expect(workflow).toContain("contents: write");
     expect(workflow).toContain("id-token: write");
     expect(workflow).toContain("persist-credentials: false");
+    expect(workflow).toContain(
+      "test \"$GITHUB_REPOSITORY\" = 'cambridgetcg/agenttool'",
+    );
     expect(workflow).toContain('expected_tag="wallet-v${version}"');
     expect(workflow).toContain('test "$(git cat-file -t "refs/tags/$tag")" = tag');
     expect(workflow).toContain(
@@ -472,6 +475,8 @@ describe("boring test spine", () => {
     expect(workflow).toContain("--prefer-online view");
     expect(workflow).toContain("did not expose it within 450 seconds");
     expect(workflow).toContain("GH_TOKEN: ${{ github.token }}");
+    expect(workflow).toContain("https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${tag}");
+    expect(workflow).toMatch(/GitHub API returned HTTP \$\{release_status\}.*refusing to infer release absence/);
     expect(workflow).toContain('gh release create "$tag" "$artifact#$filename"');
     expect(workflow).toContain('gh release upload "$tag" "$artifact"');
     expect(workflow).toContain('cmp --silent "$artifact" "$mirror_dir/$filename"');

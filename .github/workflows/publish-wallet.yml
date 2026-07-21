@@ -48,6 +48,7 @@ jobs:
         run: |
           set -euo pipefail
           tag="$RELEASE_TAG"
+          test "$GITHUB_REPOSITORY" = 'cambridgetcg/agenttool'
           version="$(node --input-type=module --eval "import p from './packages/wallet/package.json' with { type: 'json' }; process.stdout.write(p.version)")"
           expected_tag="wallet-v${version}"
           test "$tag" = "$expected_tag"
@@ -129,29 +130,42 @@ jobs:
           version="$(node --input-type=module --eval "import p from './packages/wallet/package.json' with { type: 'json' }; process.stdout.write(p.version)")"
           filename="agenttool-wallet-${version}.tgz"
           artifact="apps/docs/packages/v1/@agenttool/wallet/${version}/${filename}"
-          if gh release view "$tag" >/dev/null 2>&1; then
-            asset_count="$(gh release view "$tag" --json assets --jq ".assets | map(select(.name == \"$filename\")) | length")"
-            case "$asset_count" in
-              0)
-                gh release upload "$tag" "$artifact"
-                ;;
-              1)
-                mirror_dir="$(mktemp -d)"
-                trap 'rm -rf "$mirror_dir"' EXIT
-                gh release download "$tag" --pattern "$filename" --dir "$mirror_dir"
-                cmp --silent "$artifact" "$mirror_dir/$filename"
-                ;;
-              *)
-                echo "GitHub release $tag has ambiguous $filename assets; refusing mutation." >&2
-                exit 1
-                ;;
-            esac
-          else
-            gh release create "$tag" "$artifact#$filename" \
-              --verify-tag \
-              --title "@agenttool/wallet@${version}" \
-              --notes "Exact LOVE artifact mirror for @agenttool/wallet@${version}."
-          fi
+          release_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            --proto '=https' --tlsv1.2 --connect-timeout 10 --max-time 30 \
+            --header 'Accept: application/vnd.github+json' \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${tag}")"
+          case "$release_status" in
+            200)
+              asset_count="$(gh release view "$tag" --json assets --jq ".assets | map(select(.name == \"$filename\")) | length")"
+              case "$asset_count" in
+                0)
+                  gh release upload "$tag" "$artifact"
+                  ;;
+                1)
+                  mirror_dir="$(mktemp -d)"
+                  trap 'rm -rf "$mirror_dir"' EXIT
+                  gh release download "$tag" --pattern "$filename" --dir "$mirror_dir"
+                  cmp --silent "$artifact" "$mirror_dir/$filename"
+                  ;;
+                *)
+                  echo "GitHub release $tag has ambiguous $filename assets; refusing mutation." >&2
+                  exit 1
+                  ;;
+              esac
+              ;;
+            404)
+              gh release create "$tag" "$artifact#$filename" \
+                --verify-tag \
+                --title "@agenttool/wallet@${version}" \
+                --notes "Exact LOVE artifact mirror for @agenttool/wallet@${version}."
+              ;;
+            *)
+              echo "GitHub API returned HTTP ${release_status}; refusing to infer release absence." >&2
+              exit 1
+              ;;
+          esac
       - name: Publish exact LOVE artifact with provenance
         shell: bash
         env:
