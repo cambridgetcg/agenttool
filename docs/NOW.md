@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-21 (Agent Wallet 0.1 + agentcred/0.1 + SDK 0.16)
+> Updated: 2026-07-22 (local agenttool.collab/0.1 coordination package)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -30,6 +30,12 @@ consent; a feed event never authorizes automatic action; silence proves no
 acknowledgement, availability, abandonment, rest, or agreement. Treat this
 section as the shared focus marker and inspect each participant's explicit path
 scope before editing adjacent surfaces.
+
+## Just landed (2026-07-22)
+
+| Ship | Commit | What |
+|---|---|---|
+| **AGENTTOOL COLLAB 0.1 — local coordination without pretending a claim is a lock** | (source package; no hosted or registry release) | `@agenttool/collab` adds a local SQLite/WAL event journal and MCP surface for task creation, transactional claims, renewable leases, lexical path-scope conflicts, explicit handoffs, artifact references, decisions, and cursor replay with returned-page verification; the library also exposes a full-chain audit. Actor names remain caller-supplied labels, claims remain advisory, and the journal is unencrypted local state. It does not spawn or control agents, lock the filesystem, grant external authority, provide remote sync, publish to LOVE/npm, or hide MCP arguments and results from the model provider. |
 
 ## Just landed (2026-07-21)
 
