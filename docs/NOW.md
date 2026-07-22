@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-21 (agentcred/0.1 + SDK 0.16 credential transport)
+> Updated: 2026-07-21 (Agent Wallet 0.1 + agentcred/0.1 + SDK 0.16)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -35,6 +35,7 @@ scope before editing adjacent surfaces.
 
 | Ship | Commit | What |
 |---|---|---|
+| **AGENT WALLET 0.1 — capability before custody** | (source + LOVE release; npm/GitHub mirrors separate) | `@agenttool/wallet` defines six closed, domain-separated Ed25519 records for wallet descriptors, delegated capabilities, transaction intents, simulation and signing receipts, and continuity events. Verified records carry an in-process brand; static authorization binds exact records, accounts, targets, assets, fee/spend/use limits, expiry, simulations, and host-authenticated approval IDs. The signer seam accepts exact unsigned bytes and a non-exportable provider description, while a trusted chain adapter must still decode and prove signed/unsigned/intent correspondence before broadcast. Sign-time counters and nonces remain durable host responsibilities. Signing and submission move forward once; unknown outcomes do not authorize automatic retry, refund, nonce reuse, or budget release without positive reconciliation evidence. The package ships JSON Schema and deterministic vectors through an exact Apache-2.0 LOVE artifact. It does not custody, derive, export, retrieve, or persist keys; choose transactions; authenticate approval evidence; contact RPC; broadcast; provide a hosted wallet; or claim execution conformance. npm and GitHub Releases are independently verifiable optional mirrors. |
 | **AGENTCRED 0.1 — use a credential without handing it to the agent** | (broker 0.1 + SDK 0.16 source/LOVE release; npm/PyPI mirrors separate) | The local broker issues connection-bound, expiring, metered grants for exact HTTPS origins, methods, path prefixes, query names, header values, byte budgets, and use counts. Credential bytes remain inside the owner-held source while the broker performs the request; the public handle contains neither the secret nor the capability. DNS answers are bounded and validated, the chosen address is pinned while TLS still verifies the requested hostname, redirects and compressed responses are refused, and exact secret reflections are redacted before crossing the socket. TypeScript and Python SDKs accept mutually exclusive authenticated transports while public discovery and the local data node remain separate authorities. x402 `PAYMENT-SIGNATURE` forwarding needs both owner-policy and per-grant opt-in; the broker does not sign, interpret terms, or cap spend. The portable Node Unix-socket server is a developer preview, not strong same-user workload authentication or information-flow control. |
 
 ## Just landed (2026-07-19)

@@ -155,6 +155,11 @@ const checks = [
   ["signature-fail-open", "medium-high", 2],
   ["webhook-reencoded-body", "heuristic", 1],
   ["signed-webhook-without-replay-guard", "heuristic", 4],
+  ["wallet-key-egress", "medium-high", 2],
+  ["wallet-direct-request-signing", "heuristic", 3],
+  ["wallet-capability-unbounded", "heuristic", 3],
+  ["wallet-broadcast-auto-retry", "heuristic", 2],
+  ["unlimited-token-approval", "heuristic", 3],
 ];
 export async function scan() {
   return checks.map(([check, confidence, principle]) => ({
@@ -180,7 +185,7 @@ export async function scan() {
     });
 
     expect(report.status).toBe("complete");
-    expect(report.findings).toHaveLength(6);
+    expect(report.findings).toHaveLength(11);
     expect(report.findings.map(({ check }) => check).sort()).toEqual([
       "hardcoded-secret",
       "weak-crypto",
@@ -188,6 +193,11 @@ export async function scan() {
       "signature-fail-open",
       "webhook-reencoded-body",
       "signed-webhook-without-replay-guard",
+      "wallet-key-egress",
+      "wallet-direct-request-signing",
+      "wallet-capability-unbounded",
+      "wallet-broadcast-auto-retry",
+      "unlimited-token-approval",
     ].sort());
     for (const finding of report.findings) {
       expect(Object.keys(finding)).toEqual([
@@ -511,6 +521,9 @@ export async function scan() {
     expect(listChangedPaths(root, base, head)).toEqual(["src/renamed.ts"]);
     expect(() => verifyCheckedOutHead(root, base, head)).not.toThrow();
     expect(() => verifyCheckedOutHead(root, base, base)).toThrow();
+
+    await appendFile(join(root, "src", "renamed.ts"), "// dirty tracked source\n");
+    expect(() => verifyCheckedOutHead(root, base, head)).toThrow(/source_not_clean/);
   });
 
   test("rejects workflow-command and bidi filenames directly from Git diff", async () => {

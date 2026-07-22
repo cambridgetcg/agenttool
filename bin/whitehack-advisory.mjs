@@ -26,8 +26,8 @@ import {
 import { pathToFileURL } from "node:url";
 
 export const WHITEHACK_REPOSITORY = "https://github.com/cambridgetcg/whitehack";
-export const WHITEHACK_REVISION = "cbbf4d19ce839600238d017615ec142cd16343c3";
-export const WHITEHACK_VERSION = "0.5.0";
+export const WHITEHACK_REVISION = "37bf9154864603a94c80c03d27aa0bad05ea7c23";
+export const WHITEHACK_VERSION = "0.6.0";
 export const ADVISORY_SCHEMA = "agenttool-whitehack-advisory/v0.1";
 
 export const DEFAULT_LIMITS = Object.freeze({
@@ -289,6 +289,9 @@ export function verifyCheckedOutHead(root, base, head) {
   if (checkedOut !== head) fail("checked_out_head_mismatch");
   git(["cat-file", "-e", `${base}^{commit}`], root);
   git(["cat-file", "-e", `${head}^{commit}`], root);
+  if (git(["status", "--porcelain=v1", "--untracked-files=no"], root).trim()) {
+    fail("source_not_clean");
+  }
 }
 
 async function verifyScanner(scannerRootInput, expectedRevision, expectedVersion) {

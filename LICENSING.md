@@ -41,6 +41,9 @@ Known exceptions include:
 - [`packages/credential-broker`](packages/credential-broker) is an
   experimental Apache-2.0 package in the LOVE/npm release batch. Its preview
   status describes maturity, not a narrower licence grant.
+- [`packages/wallet`](packages/wallet) is an Apache-2.0 package in the LOVE/npm
+  release batch. Its Working Draft and preview status describe protocol
+  maturity, not a narrower licence grant or execution-conformance claim.
 
 Dependency licences remain their authors' licences. Apache-2.0 does not
 relicense third-party dependencies or separately licensed material.

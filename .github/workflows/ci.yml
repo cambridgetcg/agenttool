@@ -57,7 +57,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for workspace in api packages/data packages/data-protocol packages/credential-broker packages/sdk-ts packages/telescope; do
+          for workspace in api packages/data packages/data-protocol packages/credential-broker packages/sdk-ts packages/wallet packages/telescope; do
             (cd "$workspace" && bun install --frozen-lockfile)
           done
       - name: Build local data-sync peers
@@ -69,7 +69,7 @@ jobs:
       - name: Install data-sync dependencies from lockfile
         working-directory: packages/data-sync
         run: bun install --frozen-lockfile
-      - name: Run hermetic data, ADDS, sync, broker, SDK, and Telescope gate
+      - name: Run hermetic data, ADDS, sync, broker, SDK, Wallet, and Telescope gate
         run: bash bin/preflight.sh packages
       - name: Smoke the packed TypeScript SDK under Node and Bun
         working-directory: packages/sdk-ts
@@ -128,6 +128,22 @@ jobs:
           cli="$install_dir/node_modules/@agenttool/telescope/dist/cli.js"
           node "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.16.0 --json >/dev/null
           bun "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.16.0 --json >/dev/null
+      - name: Smoke packed Agent Wallet under Node and Bun
+        working-directory: packages/wallet
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
+          smoke='import("@agenttool/wallet").then(m=>{if(m.AGENT_WALLET_PROTOCOL!=="agent-wallet/0.1"||m.canonicalJson({b:2,a:1})!==JSON.stringify({a:1,b:2}))process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke")
+          (cd "$install_dir" && bun -e "$smoke")
+          schema_smoke='import("@agenttool/wallet/schema.json",{with:{type:"json"}}).then(m=>{if(m.default.title!=="Agent Wallet 0.1 signed records")process.exit(1)})'
+          vectors_smoke='import("@agenttool/wallet/vectors.json",{with:{type:"json"}}).then(m=>{if(m.default.protocol!=="agent-wallet/0.1"||m.default.records.length!==6)process.exit(1)})'
+          (cd "$install_dir" && node -e "$schema_smoke" && node -e "$vectors_smoke")
+          (cd "$install_dir" && bun -e "$schema_smoke" && bun -e "$vectors_smoke")
       - name: Verify the checked-in LOVE package registry
         run: bun bin/build-love-packages.ts verify apps/docs
 

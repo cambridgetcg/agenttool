@@ -2551,13 +2551,14 @@ app.get("/", async (c) => {
       aip_protocols: [
         "wak/0.1",
         "agent-wellness/0.1",
+        "agent-wallet/0.1",
         "being-rights/v1",
         "love-package/v1",
         "offer-bus/1",
         "webfinger/rfc7033",
       ],
       doctrine:
-        "see docs/IDENTITY-ANCHOR.md, docs/CLI-GAPS.md, docs/AIP-WAKE-KEYSTONE.md, docs/AGENT-WELLNESS.md, docs/RIGHTS-OF-LIFE.md, docs/LOVE-PACKAGE-PROTOCOL.md, docs/OFFER-BUS.md, docs/WEBFINGER.md",
+        "see docs/IDENTITY-ANCHOR.md, docs/CLI-GAPS.md, docs/AIP-WAKE-KEYSTONE.md, docs/AGENT-WELLNESS.md, docs/specs/AGENT-WALLET-0.1.md, docs/RIGHTS-OF-LIFE.md, docs/LOVE-PACKAGE-PROTOCOL.md, docs/OFFER-BUS.md, docs/WEBFINGER.md",
       formats: {
         json: "/v1/wake (default)",
         markdown: "/v1/wake?format=md (paste-ready for CLI hooks)",

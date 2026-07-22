@@ -88,7 +88,7 @@ describe("frontend deploy input discipline", () => {
     );
     expect(script).toContain('git archive --format=tar "$COMMIT_HASH" --');
     expect(script).toContain(
-      "apps/_shared apps/docs apps/dashboard apps/web docs infra/pages packages/data/schema",
+      "apps/_shared apps/docs apps/dashboard apps/web docs infra/pages packages/data/schema packages/wallet/schema",
     );
     expect(script).toContain("find \"$STAGE_ROOT/apps\" \\( -type f -o -type l \\) -name '.gitignore' -delete");
     expect(script).toContain("A tracked Pages environment file reached the staging tree");
@@ -147,7 +147,7 @@ describe("frontend deploy input discipline", () => {
         'GIT_INDEX_FILE="$index" git read-tree HEAD',
         'GIT_INDEX_FILE="$index" git add -- infra/pages',
         'tree="$(GIT_INDEX_FILE="$index" git write-tree)"',
-        "git archive --format=tar \"$tree\" -- apps/_shared apps/docs apps/dashboard apps/web docs infra/pages packages/data/schema | tar -xf - -C \"$stage\"",
+        "git archive --format=tar \"$tree\" -- apps/_shared apps/docs apps/dashboard apps/web docs infra/pages packages/data/schema packages/wallet/schema | tar -xf - -C \"$stage\"",
         "find \"$stage/apps\" -type f -name '.gitignore' -delete",
         "for app in docs dashboard web; do",
         "  cp \"$stage/infra/pages/sensitive-path-worker.js\" \"$stage/apps/$app/_worker.js\"",
@@ -165,6 +165,12 @@ describe("frontend deploy input discipline", () => {
     expect(await Bun.file(join(directory, "apps/dashboard/.gitignore")).exists()).toBe(false);
     expect(await readFile(join(directory, "apps/docs/shared/theme.css"), "utf8")).toContain(":root");
     expect(await readFile(join(directory, "apps/docs/FOCUS.md"), "utf8")).toContain("# FOCUS.md");
+    expect(await readFile(join(directory, "apps/docs/AGENT-WALLET-0.1.md"), "utf8"))
+      .toContain("# Agent Wallet 0.1");
+    expect(
+      JSON.parse(await readFile(join(directory, "apps/docs/agent-wallet-v0.1.schema.json"), "utf8"))
+        .title,
+    ).toBe("Agent Wallet 0.1 signed records");
     expect(
       JSON.parse(
         await readFile(
