@@ -24,19 +24,38 @@ is not a security tool and is outside this integration.
 
 ## Shipped slice: redacted crypto-aware changed-source advisory
 
-The `Whitehack advisory` workflow checks out
-[`cambridgetcg/whitehack`](https://github.com/cambridgetcg/whitehack) at the exact
-reviewed commit `37bf9154864603a94c80c03d27aa0bad05ea7c23`. It does not use the
-upstream moving-main `npx` command, installer, or composite action. The bridge
-also requires that checkout to be clean, tracked, and package version `0.6.0`
-before importing `src/scan.js`. The bridge separately refuses modified staged
-or unstaged AgentTool source so its report cannot bind `HEAD` while reading
-different tracked bytes; the workflow's untracked scanner checkout remains an
-explicitly separate input.
+The `Whitehack advisory` workflow installs the exact public package
+[`@agenttool/whitehack-scan@0.7.1`](https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.7.1)
+inside `tools/whitehack-advisory/`. Its npm 11.17.0 lock binds the registry
+tarball to integrity
+`sha512-Q1rLwnfXqKvMgjYtuiR3oeb8lS7N/0Y/Vxh7M6ZtkRFVEydsvKw5yMxORUSLYvBVgj2mB8LsujOhZwAJOYCvlg==`.
+CI uses `npm ci --ignore-scripts` with an isolated user config and explicit
+public registry, verifies the registry signature and SLSA attestation, and
+fails if the registry cannot supply or authenticate those exact bytes. The
+package's reviewed source revision is
+[`920035b9bdd3c63da32f0ed2859613b9f2a04b53`](https://github.com/cambridgetcg/whitehack/tree/920035b9bdd3c63da32f0ed2859613b9f2a04b53),
+recorded by the versioned exact
+[`whitehack-v0.7.1`](https://github.com/cambridgetcg/whitehack/releases/tag/whitehack-v0.7.1)
+LOVE/GitHub/npm release.
+
+The bridge independently checks the private tool lock's topology, exact name,
+version, registry URL, and integrity; the installed package's name, version,
+module type, `./core` export, zero runtime dependencies, and absence of npm
+install/publish/version lifecycle hooks; and the real paths of the package and
+core module. It then calls only the pure `scanText()` API on source text that
+AgentTool already bounded and decoded. It does not invoke `npx`, a moving tag,
+the Whitehack CLI, or the filesystem-walking `scan()` API. The closed v0.1
+report keeps the reviewed source revision and version; its npm integrity is an
+execution-input gate rather than a new report field.
+
+This makes the public npm registry a CI acquisition dependency, not the release
+authority for Whitehack or a general trust guarantee for npm packages. The
+bridge separately refuses modified staged or unstaged AgentTool source so its
+report cannot bind `HEAD` while reading different tracked bytes.
 
 ### Crypto awareness is observation, not custody
 
-The 0.6.0 rule pack covers eleven bounded source-text signal families:
+The 0.7.1 rule pack covers eleven bounded source-text signal families:
 
 - possible embedded credentials, private-key material, or recovery phrases;
 - general-purpose pseudo-random generators used directly for security material;
@@ -60,10 +79,11 @@ scanner necessarily reads those source bytes from runner storage into process
 memory, but this path does not decode or validate possible material as a key or
 recovery phrase, extract or import it into a key store or wallet, or serialize
 raw matched material into the advisory.
-It does not connect a wallet, signer, browser provider, RPC endpoint, or chain;
+The pure scan function does not connect a wallet, signer, browser provider, RPC endpoint, or chain;
 query balances or state; construct or sign bytes; submit or simulate a
-transaction; receive a webhook; install a dependency; or execute a proof of
-concept. The workflow supplies no wallet or real-chain key.
+transaction; receive a webhook; install another dependency; or execute a proof
+of concept. The preceding CI setup step installs the one locked scanner package
+with lifecycle scripts disabled; it supplies no wallet or real-chain key.
 
 The rules also do not establish BIP-39 validity, general nonce uniqueness,
 missing signature verification, domain separation, chain-ID or address
@@ -85,12 +105,13 @@ advisory's declared scope. The default bounds are:
 - at most 1,024 UTF-8 bytes per path, with control and bidi characters refused;
 - at most 200 files;
 - at most 512 KiB per file;
+- at most 10,000 lines per file at the scanner boundary;
 - at most 8 MiB in total;
 - at most 5,000 findings in aggregate;
 - at most 200 serialized finding details, while preserving the exact total.
 
-Whitehack v0.6 returns fixed markers for recognized sensitive rules, and its
-canonical `scan()` boundary also redacts other findings that overlap the same
+Whitehack 0.7.1 returns fixed markers for recognized sensitive rules, and its
+pure `scanText()` boundary also redacts other findings that overlap the same
 recognized sensitive line. Pattern coverage is incomplete, and ordinary
 findings can still include source snippets. AgentTool therefore does not rely
 on upstream redaction and independently retains only:
@@ -103,7 +124,9 @@ The report omits the source snippet, finding title/message, and captured scanner
 console/error text. A scanner import/read/error signal makes the advisory
 `incomplete` or fails the run instead of reporting an honest-looking empty
 result. Findings themselves are advisory in this first slice and do not fail
-CI. The workflow runs no repository install, build, test, or application code.
+CI. Apart from pinning npm itself, the workflow installs only the isolated
+scanner tool; it runs no AgentTool repository install, build, test, or
+application code.
 
 The closed report shape is
 `agenttool-whitehack-advisory/v0.1`, described by
@@ -128,8 +151,8 @@ for the bounded changed-file set at that run. It does **not** prove:
 - that a target owner authorized an assessment;
 - that publication or disclosure is appropriate.
 
-Whitehack v0.6 is a dependency-free text/regex linter rather than an AST or
-data-flow analyzer. Its confidence labels are evidence about the check's own
+Whitehack 0.7.1 is a zero-runtime-dependency text/regex linter rather than an AST
+or data-flow analyzer. Its confidence labels are evidence about the check's own
 calibration, not a severity score or bounty claim. The pinned revision emits
 `high`, `medium-high`, and `heuristic`. The advisory v0.1 bridge and schema
 also retain `medium` for compatibility, accept exactly those four labels, and
@@ -200,8 +223,8 @@ Treat a Whitehack update as executable supply-chain work:
    per-finding override against the bridge's closed metadata contract;
 4. test missing/unreadable paths, output redaction, file limits, hostile honest
    counterparts, and self-noise;
-5. update the revision in the workflow, bridge, doctrine, and public page
-   together;
+5. update the exact package version, source revision, registry URL, lock
+   integrity, bridge, doctrine, and public page together;
 6. run the focused advisory/schema tests and full AgentTool preflight;
 7. keep findings advisory until precision and a reviewed baseline justify a gate.
 

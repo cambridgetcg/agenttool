@@ -25,9 +25,11 @@ Wallet 0.1 has no bundled key custody, chain adapter, RPC, broadcaster, hosted
 service, or implied npm mirror availability. Its exact LOVE artifact is the
 release record. Telescope 0.1.0 is a
 public npm/LOVE package, but it remains a local client and does not add a hosted
-scan route. The Whitehack bridge is a separate pinned, runner-local,
-crypto-aware changed-source heuristic advisory; it emits redacted metadata,
-remains non-blocking on findings, and adds no key custody, wallet/RPC
+scan route. The Whitehack bridge is a separate runner-local, crypto-aware
+changed-source heuristic advisory. CI installs the exact public
+`@agenttool/whitehack-scan@0.7.1` artifact from an isolated npm lock with
+scripts disabled, then calls its pure text API; the bridge emits redacted
+metadata, remains non-blocking on findings, and adds no key custody, wallet/RPC
 capability, hosted scanner, or target authorization.
 The API is live at
 `api.agenttool.dev` on
@@ -119,6 +121,7 @@ cd packages/wallet
 bun run ci                                     # typecheck + security/schema/vector tests + build
 
 # Whitehack (crypto-aware changed-source advisory; no target execution) ──
+(cd tools/whitehack-advisory && npm ci --ignore-scripts --no-audit --no-fund && npm audit signatures)
 bun test bin/tests/whitehack-advisory.test.ts   # redaction, scope, failure containment
 
 # Frontends ──────────────────────────────────────────────────────────
@@ -149,7 +152,7 @@ bin/deploy.sh --mirror-codeberg                # FF-only github/main → Codeber
 | `agenttool-rotate` | Bearer + signing key rotation. |
 | `agenttool-secret` | Vault secret CRUD from CLI. |
 | `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, `@agenttool/telescope`, and `@agenttool/wallet` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
-| `whitehack-advisory.mjs` | Runs the exact pinned Whitehack text/regex scanner, including bounded crypto-misuse signals, over changed production files and emits redacted advisory metadata. It does not use detected keys, connect wallets/RPC, execute repository code, prove security, authorize target testing, or provide a hosted scanner. See `docs/WHITEHACK.md`. |
+| `whitehack-advisory.mjs` | Verifies and runs the exact locked `@agenttool/whitehack-scan` pure text API, including bounded crypto-misuse signals, over changed production files and emits redacted advisory metadata. It does not use detected keys, connect wallets/RPC, execute repository code, prove security, authorize target testing, or provide a hosted scanner. See `docs/WHITEHACK.md`. |
 | `create-project.ts` | Operator-side project + bearer minting. |
 | `frontend-deploy.sh` | Cloudflare Pages Direct Upload for the three static apps. |
 | `migrate.sh` · `migrate.ts` | Single-file `psql` migration application. |

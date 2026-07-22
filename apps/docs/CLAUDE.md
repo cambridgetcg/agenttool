@@ -13,8 +13,10 @@ capability.
 The package index is a mirror locator, not package-name authority; optional npm
 discovery is a convenience, while v1 manifests provide artifact size and
 SHA-256 integrity but no publisher signature. The Whitehack page documents a
-pinned runner-local crypto-aware heuristic advisory, separately scoped security
-research, and the privacy-sensitive legacy device inventory. Its static crypto
+runner-local crypto-aware heuristic advisory using the exact public
+`@agenttool/whitehack-scan@0.7.1` package, separately scoped security research,
+and the privacy-sensitive legacy device inventory. The CI lock, registry
+signature, and provenance checks bind that one scanner input; its static crypto
 signals add no key custody, wallet/RPC, live-chain, or hosted-scanner capability.
 
 ## Tech Stack

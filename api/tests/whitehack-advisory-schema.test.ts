@@ -1,5 +1,4 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -9,6 +8,9 @@ import addFormats from "ajv-formats";
 
 import schema from "../../specs/agenttool-whitehack-advisory-v0.1.schema.json";
 import {
+  WHITEHACK_INTEGRITY,
+  WHITEHACK_PACKAGE,
+  WHITEHACK_TARBALL_URL,
   WHITEHACK_VERSION,
   runAdvisory,
 } from "../../bin/whitehack-advisory.mjs";
@@ -18,29 +20,59 @@ const ajv = new Ajv2020({ strict: true });
 addFormats(ajv);
 const validate = ajv.compile(schema);
 
-function git(cwd: string, args: string[]): string {
-  return execFileSync("git", args, {
-    cwd,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
-}
-
 async function temporaryRoot(prefix: string): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), prefix));
   cleanup.push(root);
   return root;
 }
 
-async function scannerFixture(): Promise<{ root: string; revision: string }> {
-  const root = await temporaryRoot("whitehack-schema-scanner-");
+async function scannerFixture(): Promise<{ root: string; lockPath: string }> {
+  const toolRoot = await temporaryRoot("whitehack-schema-tool-");
+  const root = join(toolRoot, "node_modules", "@agenttool", "whitehack-scan");
+  const lockPath = join(toolRoot, "package-lock.json");
   await mkdir(join(root, "src"), { recursive: true });
+  await writeFile(join(toolRoot, "package.json"), `${JSON.stringify({
+    name: "@agenttool/whitehack-advisory-schema-fixture",
+    version: "0.0.0",
+    private: true,
+    packageManager: "npm@11.17.0",
+    devDependencies: { [WHITEHACK_PACKAGE]: WHITEHACK_VERSION },
+  }, null, 2)}\n`);
+  await writeFile(lockPath, `${JSON.stringify({
+    name: "@agenttool/whitehack-advisory-schema-fixture",
+    version: "0.0.0",
+    lockfileVersion: 3,
+    requires: true,
+    packages: {
+      "": {
+        name: "@agenttool/whitehack-advisory-schema-fixture",
+        version: "0.0.0",
+        devDependencies: { [WHITEHACK_PACKAGE]: WHITEHACK_VERSION },
+      },
+      [`node_modules/${WHITEHACK_PACKAGE}`]: {
+        version: WHITEHACK_VERSION,
+        resolved: WHITEHACK_TARBALL_URL,
+        integrity: WHITEHACK_INTEGRITY,
+        dev: true,
+      },
+    },
+  }, null, 2)}\n`);
   await writeFile(
     join(root, "package.json"),
-    `${JSON.stringify({ name: "whitehack", version: WHITEHACK_VERSION, type: "module" })}\n`,
+    `${JSON.stringify({
+      name: WHITEHACK_PACKAGE,
+      version: WHITEHACK_VERSION,
+      type: "module",
+      exports: { "./core": "./src/core.js" },
+    })}\n`,
   );
-  await writeFile(join(root, "src", "scan.js"), `
-export async function scan() {
+  await writeFile(join(root, "src", "core.js"), `
+export const CHECK_MANIFEST = Object.freeze(Array.from(
+  { length: 47 },
+  (_, index) => Object.freeze({ id: \`fixture-\${index + 1}\` }),
+));
+
+export function scanText() {
   return [{
     line: 1,
     check: "schema-check",
@@ -53,20 +85,7 @@ export async function scan() {
   }];
 }
 `);
-  git(root, ["init", "-q", "-b", "main"]);
-  git(root, ["add", "."]);
-  git(root, [
-    "-c",
-    "commit.gpgsign=false",
-    "-c",
-    "user.name=Whitehack Schema Test",
-    "-c",
-    "user.email=whitehack-schema@example.invalid",
-    "commit",
-    "-qm",
-    "test: scanner fixture",
-  ]);
-  return { root, revision: git(root, ["rev-parse", "HEAD"]) };
+  return { root, lockPath };
 }
 
 afterAll(async () => {
@@ -83,8 +102,8 @@ describe("agenttool-whitehack-advisory/v0.1 JSON Schema", () => {
     const report = await runAdvisory({
       root: source,
       paths: ["src/app.ts"],
+      scanner_lock: scanner.lockPath,
       scanner_root: scanner.root,
-      expected_revision: scanner.revision,
       base: "a".repeat(40),
       head: "b".repeat(40),
     });

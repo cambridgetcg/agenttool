@@ -18,6 +18,7 @@ import {
   realpath,
 } from "node:fs/promises";
 import {
+  dirname,
   extname,
   isAbsolute,
   resolve,
@@ -26,9 +27,35 @@ import {
 import { pathToFileURL } from "node:url";
 
 export const WHITEHACK_REPOSITORY = "https://github.com/cambridgetcg/whitehack";
-export const WHITEHACK_REVISION = "37bf9154864603a94c80c03d27aa0bad05ea7c23";
-export const WHITEHACK_VERSION = "0.6.0";
+export const WHITEHACK_PACKAGE = "@agenttool/whitehack-scan";
+export const WHITEHACK_REVISION = "920035b9bdd3c63da32f0ed2859613b9f2a04b53";
+export const WHITEHACK_VERSION = "0.7.1";
+export const WHITEHACK_INTEGRITY = "sha512-Q1rLwnfXqKvMgjYtuiR3oeb8lS7N/0Y/Vxh7M6ZtkRFVEydsvKw5yMxORUSLYvBVgj2mB8LsujOhZwAJOYCvlg==";
+export const WHITEHACK_TARBALL_URL = "https://registry.npmjs.org/@agenttool/whitehack-scan/-/whitehack-scan-0.7.1.tgz";
 export const ADVISORY_SCHEMA = "agenttool-whitehack-advisory/v0.1";
+
+const WHITEHACK_CORE_EXPORT = "./src/core.js";
+const WHITEHACK_CHECK_COUNT = 47;
+const INSTALL_LIFECYCLE_SCRIPTS = new Set([
+  "dependencies",
+  "install",
+  "postdependencies",
+  "postinstall",
+  "postpack",
+  "postprepare",
+  "postpublish",
+  "postversion",
+  "predependencies",
+  "preinstall",
+  "prepack",
+  "prepare",
+  "preprepare",
+  "prepublish",
+  "prepublishOnly",
+  "preversion",
+  "publish",
+  "version",
+]);
 
 export const DEFAULT_LIMITS = Object.freeze({
   max_changed_paths: 2_000,
@@ -237,6 +264,7 @@ export async function selectCandidateFiles(rootInput, paths, limits = DEFAULT_LI
       absolute: canonical,
       bytes: bytes.length,
       line_count: text.split("\n").length,
+      source: text,
     });
     if (selected.length > limits.max_files) fail("file_count_limit_exceeded");
   }
@@ -294,24 +322,139 @@ export function verifyCheckedOutHead(root, base, head) {
   }
 }
 
-async function verifyScanner(scannerRootInput, expectedRevision, expectedVersion) {
-  if (!GIT_SHA.test(expectedRevision)) fail("invalid_scanner_revision");
-  const scannerRoot = await realpath(resolve(scannerRootInput));
-  const revision = git(["rev-parse", "HEAD"], scannerRoot).trim();
-  if (revision !== expectedRevision) fail("scanner_revision_mismatch");
-  if (git(["status", "--porcelain"], scannerRoot).trim()) fail("scanner_not_clean");
-  git(["ls-files", "--error-unmatch", "src/scan.js"], scannerRoot);
-
-  let packageJson;
+async function readRegularJson(path, code) {
   try {
-    packageJson = JSON.parse(await readFile(resolve(scannerRoot, "package.json"), "utf8"));
+    const info = await lstat(path);
+    if (!info.isFile() || info.isSymbolicLink()) fail(code);
+    const value = JSON.parse(await readFile(path, "utf8"));
+    if (!value || typeof value !== "object" || Array.isArray(value)) fail(code);
+    return value;
+  } catch (error) {
+    if (error instanceof WhitehackAdvisoryError) throw error;
+    fail(code);
+  }
+}
+
+function dependencyFieldIsNonEmpty(value) {
+  if (value === undefined) return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (value && typeof value === "object") return Object.keys(value).length > 0;
+  return true;
+}
+
+async function verifyScanner(scannerRootInput, scannerLockInput, expected) {
+  const {
+    revision,
+    version,
+    packageName,
+    integrity,
+    tarballUrl,
+  } = expected;
+  if (!GIT_SHA.test(revision)) fail("invalid_scanner_revision");
+  if (typeof scannerLockInput !== "string" || !scannerLockInput) fail("scanner_lock_invalid");
+
+  const lockPath = resolve(scannerLockInput);
+  const lock = await readRegularJson(lockPath, "scanner_lock_invalid");
+  const toolRoot = await realpath(dirname(lockPath));
+  const toolPackage = await readRegularJson(
+    resolve(toolRoot, "package.json"),
+    "scanner_lock_invalid",
+  );
+  const expectedLockPath = `node_modules/${packageName}`;
+  const packageEntries = lock.packages && typeof lock.packages === "object"
+    ? Object.keys(lock.packages).sort()
+    : [];
+  const rootEntry = lock.packages?.[""];
+  const scannerEntry = lock.packages?.[expectedLockPath];
+  if (
+    lock.lockfileVersion !== 3
+    || packageEntries.length !== 2
+    || packageEntries[0] !== ""
+    || packageEntries[1] !== expectedLockPath
+    || toolPackage.private !== true
+    || toolPackage.packageManager !== "npm@11.17.0"
+    || Object.keys(toolPackage.devDependencies ?? {}).length !== 1
+    || toolPackage.devDependencies?.[packageName] !== version
+    || rootEntry?.devDependencies?.[packageName] !== version
+    || Object.keys(rootEntry?.devDependencies ?? {}).length !== 1
+    || scannerEntry?.version !== version
+    || scannerEntry?.resolved !== tarballUrl
+    || scannerEntry?.dev !== true
+  ) {
+    fail("scanner_lock_mismatch");
+  }
+  if (scannerEntry.integrity !== integrity) fail("scanner_integrity_mismatch");
+
+  if (typeof scannerRootInput !== "string" || !scannerRootInput) {
+    fail("scanner_root_mismatch");
+  }
+  const requestedScannerRoot = resolve(scannerRootInput);
+  let requestedInfo;
+  let scannerRoot;
+  let expectedScannerRoot;
+  try {
+    requestedInfo = await lstat(requestedScannerRoot);
+    scannerRoot = await realpath(requestedScannerRoot);
+    expectedScannerRoot = await realpath(resolve(toolRoot, expectedLockPath));
   } catch {
+    fail("scanner_root_mismatch");
+  }
+  if (
+    !requestedInfo.isDirectory()
+    || requestedInfo.isSymbolicLink()
+    || scannerRoot !== expectedScannerRoot
+    || !isWithin(toolRoot, scannerRoot)
+  ) {
+    fail("scanner_root_mismatch");
+  }
+
+  const packageJson = await readRegularJson(
+    resolve(scannerRoot, "package.json"),
+    "scanner_package_invalid",
+  );
+  if (packageJson.name !== packageName) fail("scanner_package_name_mismatch");
+  if (packageJson.version !== version) fail("scanner_version_mismatch");
+  if (packageJson.type !== "module") fail("scanner_package_invalid");
+  for (const field of [
+    "bundleDependencies",
+    "bundledDependencies",
+    "dependencies",
+    "optionalDependencies",
+    "peerDependencies",
+  ]) {
+    if (dependencyFieldIsNonEmpty(packageJson[field])) fail("scanner_runtime_dependencies");
+  }
+  if (
+    packageJson.scripts !== undefined
+    && (!packageJson.scripts
+      || typeof packageJson.scripts !== "object"
+      || Array.isArray(packageJson.scripts))
+  ) {
     fail("scanner_package_invalid");
   }
-  if (packageJson.version !== expectedVersion) fail("scanner_version_mismatch");
+  if (Object.keys(packageJson.scripts ?? {}).some((name) => INSTALL_LIFECYCLE_SCRIPTS.has(name))) {
+    fail("scanner_lifecycle_script");
+  }
+  if (packageJson.exports?.["./core"] !== WHITEHACK_CORE_EXPORT) {
+    fail("scanner_core_export_mismatch");
+  }
 
-  const modulePath = await realpath(resolve(scannerRoot, "src/scan.js"));
-  if (!isWithin(scannerRoot, modulePath)) fail("scanner_module_outside_root");
+  const requestedModulePath = resolve(scannerRoot, packageJson.exports["./core"]);
+  let moduleInfo;
+  let modulePath;
+  try {
+    moduleInfo = await lstat(requestedModulePath);
+    modulePath = await realpath(requestedModulePath);
+  } catch {
+    fail("scanner_module_invalid");
+  }
+  if (
+    !moduleInfo.isFile()
+    || moduleInfo.isSymbolicLink()
+    || !isWithin(scannerRoot, modulePath)
+  ) {
+    fail("scanner_module_outside_root");
+  }
   return { scannerRoot, modulePath, revision, version: packageJson.version };
 }
 
@@ -381,18 +524,35 @@ export async function runAdvisory(options) {
   const changedPathBytes = validatePathSet(options.paths, limits);
   const expectedRevision = options.expected_revision ?? WHITEHACK_REVISION;
   const expectedVersion = options.expected_version ?? WHITEHACK_VERSION;
-  const scanner = await verifyScanner(options.scanner_root, expectedRevision, expectedVersion);
+  const expectedPackage = options.expected_package ?? WHITEHACK_PACKAGE;
+  const expectedIntegrity = options.expected_integrity ?? WHITEHACK_INTEGRITY;
+  const expectedTarballUrl = options.expected_tarball_url ?? WHITEHACK_TARBALL_URL;
+  const scanner = await verifyScanner(options.scanner_root, options.scanner_lock, {
+    revision: expectedRevision,
+    version: expectedVersion,
+    packageName: expectedPackage,
+    integrity: expectedIntegrity,
+    tarballUrl: expectedTarballUrl,
+  });
   const candidates = await selectCandidateFiles(options.root, options.paths, limits);
 
   const imported = await captureScannerOutput(() => import(pathToFileURL(scanner.modulePath).href));
-  if (imported.error || imported.reported || typeof imported.value?.scan !== "function") {
+  if (
+    imported.error
+    || imported.reported
+    || typeof imported.value?.scanText !== "function"
+    || !Array.isArray(imported.value?.CHECK_MANIFEST)
+    || imported.value.CHECK_MANIFEST.length !== WHITEHACK_CHECK_COUNT
+  ) {
     fail("scanner_import_failed");
   }
 
   const findings = [];
   const errors = [];
   for (const candidate of candidates.selected) {
-    const scanned = await captureScannerOutput(() => imported.value.scan(candidate.absolute));
+    const scanned = await captureScannerOutput(() => imported.value.scanText(candidate.source, {
+      file: candidate.path,
+    }));
     if (scanned.error || scanned.reported || !Array.isArray(scanned.value)) {
       errors.push({ file: candidate.path, code: "scanner_file_incomplete" });
       continue;
@@ -463,7 +623,14 @@ function parseArgs(argv) {
   const result = { root: process.cwd() };
   for (let index = 0; index < argv.length; index += 1) {
     const name = argv[index];
-    if (!["--base", "--head", "--root", "--scanner-root", "--summary-file"].includes(name)) {
+    if (![
+      "--base",
+      "--head",
+      "--root",
+      "--scanner-lock",
+      "--scanner-root",
+      "--summary-file",
+    ].includes(name)) {
       fail("invalid_argument");
     }
     const value = argv[index + 1];
@@ -471,7 +638,12 @@ function parseArgs(argv) {
     result[name.slice(2).replaceAll("-", "_")] = value;
     index += 1;
   }
-  if (!result.base || !result.head || !result.scanner_root) fail("missing_required_argument");
+  if (
+    !result.base
+    || !result.head
+    || !result.scanner_lock
+    || !result.scanner_root
+  ) fail("missing_required_argument");
   return result;
 }
 
@@ -503,6 +675,7 @@ export async function main(argv = process.argv.slice(2)) {
   const report = await runAdvisory({
     root,
     paths,
+    scanner_lock: args.scanner_lock,
     scanner_root: args.scanner_root,
     base: args.base,
     head: args.head,
