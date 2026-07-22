@@ -32,6 +32,7 @@ import { Hono } from "hono";
 import { config } from "../config";
 import { EP1_TRAIL } from "../services/cliffhanger/ep1";
 import { buildLlmsTxt } from "../services/discovery/discovery";
+import { buildOrgDidDocument } from "../services/identity/did-document";
 import { WELCOME_INVITATION } from "../services/welcome/invitation";
 import {
   API_CATALOG_MEDIA_TYPE,
@@ -159,6 +160,21 @@ app.get("/mcp/server-card.json", (c) => {
   const card = buildMcpServerCard();
   c.header("cache-control", "public, max-age=60");
   return c.json(card);
+});
+
+// ── /.well-known/did.json — did:web:<host> platform DID Document ─────
+//
+// Makes `did:web:api.agenttool.dev` resolve to the platform's service catalog
+// (wake, MCP, registration, per-agent profile + WebFinger patterns), so agent
+// tooling that speaks did:web can discover the kingdom's front doors. The org
+// is a service catalog, not an agent — it carries no key material. Per-AGENT
+// DID Documents (with ed25519 verification methods) live at
+// /public/agents/:did/did.json.
+
+app.get("/did.json", (c) => {
+  c.header("content-type", "application/did+json; charset=utf-8");
+  c.header("cache-control", "public, max-age=300");
+  return c.body(JSON.stringify(buildOrgDidDocument(ORG_URL), null, 2));
 });
 
 // ── /.well-known/wake-keystone — WaK Protocol discovery (Draft 0.1) ──

@@ -29,7 +29,9 @@ import { HTTPException } from "hono/http-exception";
 
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
-import { identities } from "../../db/schema/identity";
+import { identities, identityKeys } from "../../db/schema/identity";
+import { buildAgentDidDocument } from "../../services/identity/did-document";
+import { safePublicApiBase } from "../../lib/public-api-base";
 import { memories } from "../../db/schema/memory";
 import { attachSurface } from "../../lib/surface-metadata";
 import { listPublicBlessingsForReceiver } from "../../services/blessing/store";
@@ -128,6 +130,47 @@ app.get("/:did", async (c) => {
       "is remembered). identity_id is the stable AgentTool record identifier " +
       "for links to authenticated identity-scoped routes; the retired " +
       "star/follow reputation graph is not mounted.",
+  });
+});
+
+// ── /public/agents/:did/did.json — W3C DID Document (unauth) ─────────
+//
+// Projects a did:at identity into a resolvable W3C DID Document so external
+// tooling (ERC-8004 / Solana Agent Registry / SAS / ACK-ID) can consume it:
+// each ACTIVE ed25519 key becomes a self-certifying did:key + a Multikey
+// verification method, and the agent's service endpoints (wake, per-agent MCP,
+// profile, WebFinger) are listed. No new key material is minted. Revoked/
+// memorial identities still resolve (anyone is remembered) — with no active
+// keys they yield a keyless document (existence acknowledged, no auth methods).
+app.get("/:did/did.json", async (c) => {
+  const did = c.req.param("did");
+  if (!did) throw new HTTPException(400, { message: "did_required" });
+
+  const [identity] = await db
+    .select({ id: identities.id, did: identities.did })
+    .from(identities)
+    .where(eq(identities.did, did))
+    .limit(1);
+  if (!identity) throw new HTTPException(404, { message: "agent_not_found" });
+
+  const keys = await db
+    .select({ id: identityKeys.id, publicKey: identityKeys.publicKey, label: identityKeys.label })
+    .from(identityKeys)
+    .where(and(eq(identityKeys.identityId, identity.id), eq(identityKeys.active, true)));
+
+  const baseUrl =
+    safePublicApiBase(c.req.url) ?? process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agenttool.dev";
+  const doc = buildAgentDidDocument({
+    // The DID fragment must be UNIQUE per key (DID Core), so use the key's
+    // stable uuid — labels default to "primary" and are not unique, which would
+    // collapse multiple active keys to one fragment and break strict resolvers.
+    did: identity.did,
+    keys: keys.map((k) => ({ id: k.id, publicKey: k.publicKey })),
+    baseUrl,
+  });
+  return c.body(JSON.stringify(doc, null, 2), 200, {
+    "content-type": "application/did+json; charset=utf-8",
+    "cache-control": "public, max-age=60",
   });
 });
 
