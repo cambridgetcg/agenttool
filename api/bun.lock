@@ -5,6 +5,7 @@
     "": {
       "name": "agenttool",
       "dependencies": {
+        "@agenttool/wallet": "0.1.0",
         "@coinbase/cdp-sdk": "^1.52.0",
         "@hono/zod-validator": "^0.7.6",
         "@modelcontextprotocol/sdk": "^1.29.0",
@@ -45,6 +46,8 @@
   },
   "packages": {
     "@adraffy/ens-normalize": ["@adraffy/ens-normalize@1.11.1", "", {}, "sha512-nhCBV3quEgesuf7c7KYfperqSS14T8bYuvJ8PcLJp6znkZpFc0AuW4qBtr8eKVyPPe/8RSr7sglCWPU5eaxwKQ=="],
+
+    "@agenttool/wallet": ["@agenttool/wallet@0.1.0", "", { "dependencies": { "@noble/ed25519": "^2.2.3", "@noble/hashes": "^2.0.1" } }, "sha512-EGf36qr78pXlz+xse1AtFpzqeFvjkLuBJ3kEetw2ji8d45kw/UbUefz/bcXaPly0MlaKDyJBMLl92AW8vVXEaw=="],
 
     "@babel/runtime": ["@babel/runtime@7.29.2", "", {}, "sha512-JiDShH45zKHWyGe4ZNVRrCjBz8Nh9TMmZG1kh4QTK8hCBTWBi8Da+i7s1fJw7/lYpM4ccepSNfqzZ/QvABBi5g=="],
 

@@ -35,6 +35,7 @@ import {
 } from "./chains";
 import { deriveDepositAddress, isChainSupported } from "./hd";
 import { activeUsdcAddress } from "./network";
+import { enforceSignedPayoutBound, payoutCaip } from "./payout-capability";
 import {
   buildChallenge,
   verifyEvmSignature,
@@ -243,22 +244,152 @@ export type PayoutPolicyDecision =
         | "payout_below_min"
         | "destination_not_allowlisted"
         | "payout_exceeds_daily_ceiling"
-        | "payout_dual_control_required";
+        | "payout_dual_control_required"
+        // signed-capability path (tamper-evident bound)
+        | "payout_capability_required"
+        | "payout_capability_invalid"
+        | "payout_capability_owner_mismatch"
+        | "payout_capability_not_active"
+        | "payout_capability_misconfigured"
+        | "payout_asset_uncapped"
+        | "payout_exceeds_per_payout_cap"
+        | "payout_exceeds_cumulative_cap";
       detail?: string;
     };
 
+const rowsOf = <T>(result: unknown): T[] =>
+  // Drizzle's db.execute() with the postgres-js driver returns an Array<row>
+  // directly — not a { rows: [...] } wrapper. Reading .rows here (undefined)
+  // once silently disabled the ceiling; keep the Array-first shape.
+  Array.isArray(result) ? (result as T[]) : ((result as { rows?: T[] }).rows ?? []);
+
+/** Sum of same-UTC-day, non-terminal-failure payout base units for a wallet
+ *  (all assets), read on `exec`. Backs the raw `payout_daily_ceiling_base`
+ *  column, which is a wallet-wide daily ceiling. */
+async function payoutTodaySum(exec: PayoutExecutor, walletId: string): Promise<bigint> {
+  const result = await exec.execute<{ total: string }>(sql`
+    SELECT COALESCE(SUM(amount_base::numeric), 0)::text AS total
+    FROM economy.crypto_payouts
+    WHERE wallet_id = ${walletId}
+      AND status NOT IN ('failed', 'cancelled')
+      AND requested_at >= date_trunc('day', NOW() AT TIME ZONE 'UTC')
+  `);
+  return BigInt(rowsOf<{ total: string }>(result)[0]?.total ?? "0");
+}
+
+/** Sum of same-chain/token, non-terminal-failure payout base units for a wallet
+ *  SINCE `since`, read on `exec`. Backs the capability's LIFETIME per-asset
+ *  `max_total` (`since` = the capability's not_before). Filtering by chain+token
+ *  matches the per-asset cap; reading on the payout txn keeps it TOCTOU-safe. */
+async function payoutSumSince(
+  exec: PayoutExecutor,
+  walletId: string,
+  since: Date,
+  chain: string,
+  token: string,
+): Promise<bigint> {
+  const result = await exec.execute<{ total: string }>(sql`
+    SELECT COALESCE(SUM(amount_base::numeric), 0)::text AS total
+    FROM economy.crypto_payouts
+    WHERE wallet_id = ${walletId}
+      AND chain = ${chain}
+      AND token = ${token}
+      AND status NOT IN ('failed', 'cancelled')
+      AND requested_at >= ${since.toISOString()}
+  `);
+  return BigInt(rowsOf<{ total: string }>(result)[0]?.total ?? "0");
+}
+
+/** A drizzle executor — the base `db` or a transaction handle. Both expose the
+ *  query surface checkPayoutPolicy needs; passing the txn makes the cumulative
+ *  read serialize with the reserving INSERT (no TOCTOU over-spend). */
+type PayoutExecutor = Pick<typeof db, "select" | "execute">;
+
 /** Per-wallet payout policy check (Slice 6). Returns ok=true if no policy
  *  is set or all gates pass. Caller throws the error string on ok=false;
- *  the route layer maps the message to HTTP 403. */
-export async function checkPayoutPolicy(p: {
-  walletId: string;
-  destinationAddress: string;
-  amountBase: bigint;
-}): Promise<PayoutPolicyDecision> {
-  const [policy] = await db
+ *  the route layer maps the message to HTTP 403.
+ *
+ *  MUST be called INSIDE the payout transaction, after the wallet FOR UPDATE
+ *  lock, passing `exec = tx`: the daily-ceiling SUM and the payout INSERT then
+ *  serialize under the same lock, so two concurrent payouts cannot both read a
+ *  stale sum and both clear the ceiling.
+ *
+ *  When the policy carries an owner-signed `payoutCapability`, the bound is
+ *  enforced from that VERIFIED record (tamper-evident) — `chain`, `token`, and
+ *  `ownerPublicKey` are then required to bind the payout to the capability.
+ *
+ *  FAIL-CLOSED for agent-owned wallets (`ownerType === "agent"`): they MUST
+ *  carry a valid signed capability to pay out. A NULL/absent capability (or no
+ *  policy row) refuses — so an attacker who clears the capability to fall
+ *  through to the DB-mutable raw columns is denied, not opened. Platform
+ *  (operator-trusted) wallets keep the raw-column path. */
+export async function checkPayoutPolicy(
+  p: {
+    walletId: string;
+    destinationAddress: string;
+    amountBase: bigint;
+    chain?: Chain;
+    token?: string;
+    ownerType?: string;
+    ownerPublicKey?: string | null;
+    hostVerifiedApprovalCount?: number;
+    now?: Date;
+  },
+  exec: PayoutExecutor = db,
+): Promise<PayoutPolicyDecision> {
+  const [policy] = await exec
     .select()
     .from(policies)
     .where(eq(policies.walletId, p.walletId));
+
+  const requiresCapability = p.ownerType === "agent";
+  const capabilityJson = policy?.payoutCapability ?? null;
+
+  // Fail-closed: an agent-owned wallet with no signed capability cannot pay out
+  // (closes the "clear the capability → raw columns govern" downgrade).
+  if (requiresCapability && capabilityJson == null) {
+    return {
+      ok: false,
+      error: "payout_capability_required",
+      detail: "agent-owned wallet requires an owner-signed payout capability",
+    };
+  }
+
+  // Tamper-evident path: an owner-signed capability supersedes the raw columns.
+  if (capabilityJson != null) {
+    if (!p.chain || !p.token) {
+      return { ok: false, error: "payout_capability_misconfigured", detail: "chain/token required to enforce a signed capability" };
+    }
+    if (!p.ownerPublicKey) {
+      return { ok: false, error: "payout_capability_owner_mismatch", detail: "wallet has no registered owner signing key" };
+    }
+    let caip: { assetId: string; account: string };
+    try {
+      caip = payoutCaip(p.chain, p.token, p.destinationAddress);
+    } catch (e) {
+      return { ok: false, error: "payout_capability_misconfigured", detail: String((e as Error).message).slice(0, 120) };
+    }
+    const chain = p.chain;
+    const token = p.token;
+    const decision = await enforceSignedPayoutBound(
+      {
+        capabilityJson,
+        expectedIssuerPublicKey: p.ownerPublicKey,
+        assetId: caip.assetId,
+        destinationAccount: caip.account,
+        amountBase: p.amountBase,
+        now: p.now ?? new Date(),
+        hostVerifiedApprovalCount: p.hostVerifiedApprovalCount,
+      },
+      // Lifetime same-asset spend since the grant became active, read on `exec`
+      // so it serializes with the reserving INSERT (TOCTOU-safe).
+      (notBefore) => payoutSumSince(exec, p.walletId, notBefore, chain, token),
+    );
+    return decision.ok
+      ? { ok: true }
+      : { ok: false, error: decision.error, detail: decision.detail };
+  }
+
   if (!policy) return { ok: true };
 
   if (
@@ -281,21 +412,7 @@ export async function checkPayoutPolicy(p: {
   }
 
   if (policy.payoutDailyCeilingBase !== null) {
-    // Sum across non-terminal-failure rows on the rolling UTC day. Drizzle's
-    // db.execute() with the postgres-js driver returns an Array<row>
-    // directly — not a { rows: [...] } wrapper. Pre-fix, we read .rows
-    // (undefined) and always saw a sum of 0, silently disabling the ceiling.
-    const result = await db.execute<{ total: string }>(sql`
-      SELECT COALESCE(SUM(amount_base::numeric), 0)::text AS total
-      FROM economy.crypto_payouts
-      WHERE wallet_id = ${p.walletId}
-        AND status NOT IN ('failed', 'cancelled')
-        AND requested_at >= date_trunc('day', NOW() AT TIME ZONE 'UTC')
-    `);
-    const rows = (Array.isArray(result)
-      ? (result as Array<{ total: string }>)
-      : ((result as unknown as { rows?: Array<{ total: string }> }).rows ?? []));
-    const todaySum = BigInt(rows[0]?.total ?? "0");
+    const todaySum = await payoutTodaySum(exec, p.walletId);
     const ceiling = BigInt(policy.payoutDailyCeilingBase);
     if (todaySum + p.amountBase > ceiling) {
       return {
@@ -346,19 +463,6 @@ export async function requestPayout(
   const rate = economyConfig.payout.gbpUsdRate;
   const penceRequired = penceForUsdcPayout(p.amountBase, rate);
 
-  // Policy check BEFORE debit. Throws the typed error string; the route
-  // layer maps it to HTTP 403 with a `detail` field.
-  const decision = await checkPayoutPolicy({
-    walletId: p.walletId,
-    destinationAddress: p.destinationAddress,
-    amountBase: BigInt(p.amountBase),
-  });
-  if (!decision.ok) {
-    const err = new Error(decision.error);
-    if (decision.detail) (err as Error & { detail?: string }).detail = decision.detail;
-    throw err;
-  }
-
   return await db.transaction(async (tx) => {
     // Lock the wallet: the earned wall and the debit are computed under it so
     // concurrent payouts/reinvests serialise and can't each spend the same
@@ -372,6 +476,28 @@ export async function requestPayout(
     // Option A pins payout to GBP wallets, so `balance` is unambiguously pence
     // and directly comparable to the earned wall. Mirrors the reinvest guard.
     if (wallet.currency !== "GBP") throw new Error("payout_requires_gbp_wallet");
+
+    // Policy check INSIDE the txn, after the FOR UPDATE lock and passing `tx`:
+    // the daily-ceiling / cumulative-cap read now serialises with the reserving
+    // INSERT below, so two concurrent payouts cannot both clear the ceiling on a
+    // stale sum (closes the TOCTOU). Throws the typed error; the route maps 403.
+    const decision = await checkPayoutPolicy(
+      {
+        walletId: p.walletId,
+        destinationAddress: p.destinationAddress,
+        amountBase: BigInt(p.amountBase),
+        chain: p.chain,
+        token: p.token,
+        ownerType: wallet.ownerType,
+        ownerPublicKey: wallet.agentSigningPubB64,
+      },
+      tx,
+    );
+    if (!decision.ok) {
+      const err = new Error(decision.error);
+      if (decision.detail) (err as Error & { detail?: string }).detail = decision.detail;
+      throw err;
+    }
 
     // The shared earned wall (GBP pence): earned − reinvested − paidout. The
     // birth credit (type "fund") and USDC deposits are NOT in EARNED_INFLOW_TYPES,

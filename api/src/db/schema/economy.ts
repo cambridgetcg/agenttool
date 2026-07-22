@@ -105,6 +105,12 @@ export const policies = economySchema.table("policies", {
   payoutDualControlThresholdBase: bigint("payout_dual_control_threshold_base", {
     mode: "number",
   }),
+  // An owner-signed `agent-wallet/0.1` capability. When present, the payout
+  // bound is enforced from THIS verified record (tamper-evident) instead of the
+  // raw columns above — editing the row breaks the signature and the payout is
+  // refused. NULL = fall back to the raw-column gates. Migration:
+  // 20260722T140000_payout_capability.sql.
+  payoutCapability: jsonb("payout_capability"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

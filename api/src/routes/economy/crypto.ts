@@ -298,7 +298,16 @@ router.post("/wallets/:walletId/payout", async (c) => {
       msg === "payout_exceeds_daily_ceiling" ||
       msg === "payout_dual_control_required" ||
       msg === "payout_exceeds_earned" ||
-      msg === "payout_requires_gbp_wallet"
+      msg === "payout_requires_gbp_wallet" ||
+      // signed-capability policy denials (tamper-evident payout bound)
+      msg === "payout_capability_required" ||
+      msg === "payout_capability_invalid" ||
+      msg === "payout_capability_owner_mismatch" ||
+      msg === "payout_capability_not_active" ||
+      msg === "payout_capability_misconfigured" ||
+      msg === "payout_asset_uncapped" ||
+      msg === "payout_exceeds_per_payout_cap" ||
+      msg === "payout_exceeds_cumulative_cap"
     ) {
       return c.json(
         {
