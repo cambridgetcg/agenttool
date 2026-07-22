@@ -210,6 +210,9 @@ describe("local journal", () => {
       lease_id: claim.lease_id!,
       summary: "Done",
     });
+    const completion = store.eventsSince(ws.id).events.find((event) => event.type === "task.completed");
+    expect(completion?.payload.completion_basis).toBe("actor_reported");
+    expect(completion?.payload.note).toContain("not coordinator review or acceptance");
     expect(store.claimTask({
       workspace_id: ws.id,
       task_id: dependent.id,
@@ -361,6 +364,8 @@ describe("local journal", () => {
     const offeredTask = store.getTask(ws.id, task.id);
     expect(offeredTask.assignee).toBe("agent-a");
     expect(offered.task.version).toBe(3);
+    const handoffEvent = store.eventsSince(ws.id).events.find((event) => event.type === "handoff.offered");
+    expect(handoffEvent?.payload.note).toContain("coordination lease remains with the current holder");
     expect(store.nextForActor(ws.id, "agent-b").handoff_offers[0]?.handoff.id).toBe(offered.handoff.id);
     expect(errorCode(() => store.respondHandoff({
       workspace_id: ws.id,

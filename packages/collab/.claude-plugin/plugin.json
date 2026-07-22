@@ -1,0 +1,26 @@
+{
+  "name": "agenttool-collab",
+  "version": "0.1.0",
+  "description": "Local advisory task leases, handoffs, decisions, and event cursors for parallel coding agents",
+  "author": {
+    "name": "AgentTool contributors",
+    "url": "https://agenttool.dev"
+  },
+  "homepage": "https://github.com/cambridgetcg/agenttool/tree/main/packages/collab",
+  "repository": "https://github.com/cambridgetcg/agenttool",
+  "license": "Apache-2.0",
+  "keywords": [
+    "agents",
+    "collaboration",
+    "local-first",
+    "mcp"
+  ],
+  "mcpServers": {
+    "agenttool-collab": {
+      "command": "bun",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/dist/agenttool-collab-mcp.js"
+      ]
+    }
+  }
+}

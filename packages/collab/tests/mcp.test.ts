@@ -38,6 +38,7 @@ describe("MCP surface", () => {
       "collab_events_since",
       "collab_handoff_offer",
       "collab_handoff_respond",
+      "collab_journal_verify",
       "collab_next",
       "collab_task_block",
       "collab_task_claim",
@@ -52,6 +53,49 @@ describe("MCP surface", () => {
       "collab_workspace_open",
       "collab_workspace_status",
     ]);
+  });
+
+  test("declares local side effects and read-only tools accurately", () => {
+    const { server } = node();
+    const tools = (server as any)._registeredTools;
+    const readOnly = [
+      "collab_events_since",
+      "collab_journal_verify",
+      "collab_task_get",
+      "collab_task_list",
+      "collab_workspace_status",
+    ];
+
+    for (const registration of Object.values(tools) as any[]) {
+      expect(registration.annotations.openWorldHint).toBe(false);
+      expect(registration.annotations.destructiveHint).toBe(false);
+    }
+    for (const name of readOnly) {
+      expect(tools[name].annotations).toEqual({
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      });
+    }
+
+    expect(tools.collab_next.annotations.readOnlyHint).toBe(false);
+    expect(tools.collab_next.annotations.idempotentHint).toBe(false);
+    expect(tools.collab_task_complete.annotations.readOnlyHint).toBe(false);
+    expect(tools.collab_task_complete.annotations.idempotentHint).toBe(true);
+  });
+
+  test("states the honest exchange, lease, and actor-reported completion boundaries", () => {
+    const { server } = node();
+    const internal = server as any;
+    const instructions = internal.server._instructions as string;
+    const tools = internal._registeredTools;
+
+    expect(instructions).toContain("observations, inferences, proposals, or authorised decisions");
+    expect(instructions).toContain("advisory coordination lease");
+    expect(instructions).toContain("Completion is actor-reported");
+    expect(tools.collab_task_complete.description).toContain("not review or acceptance");
+    expect(tools.collab_handoff_offer.description).toContain("keeps the coordination lease");
   });
 
   test("runs workspace → task → claim → next through tool handlers", async () => {
@@ -94,5 +138,25 @@ describe("MCP surface", () => {
 
     expect(result.isError).toBe(true);
     expect(result.structuredContent.error).toBe("task_not_found");
+  });
+
+  test("verifies the full journal and labels the verification scope", async () => {
+    const { root, store, server } = node();
+    const opened = await callTool(server, "collab_workspace_open", { root_path: root, actor: "root" });
+    const workspaceId = opened.structuredContent.workspace.id;
+
+    const valid = await callTool(server, "collab_journal_verify", { workspace_id: workspaceId });
+    expect(valid.isError).toBeUndefined();
+    expect(valid.structuredContent).toEqual({
+      workspace_id: workspaceId,
+      chain_valid: true,
+      verification_scope: "full_journal",
+    });
+
+    store.db.query(`UPDATE events SET payload_json = ? WHERE workspace_id = ? AND sequence = 1`)
+      .run('{"changed":true}', workspaceId);
+    const tampered = await callTool(server, "collab_journal_verify", { workspace_id: workspaceId });
+    expect(tampered.structuredContent.chain_valid).toBe(false);
+    expect(tampered.structuredContent.verification_scope).toBe("full_journal");
   });
 });

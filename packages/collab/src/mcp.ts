@@ -12,17 +12,43 @@ const leaseId = z.string().min(1).describe("Lease ID returned by collab_task_cla
 const expectedVersion = z.number().int().positive().describe("Task version last read by the caller");
 const ttlSeconds = z.number().int().min(30).max(3600).optional().describe("Lease duration; default 900 seconds, maximum 3600");
 
+const localReadOnly = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+
+const localRetrySafeMutation = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+
+// collab_next can linearize elapsed handoff offers as expired, so it is not a
+// read-only or time-independent operation even though its primary purpose is polling.
+const localClockAwareMutation = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+} as const;
+
 export function buildCollabMcpServer(store: CollabStore): McpServer {
   const server = new McpServer(
     { name: "agenttool-collab", version: "0.1.0" },
     {
       capabilities: { tools: {} },
       instructions:
-        "Local-first coordination for parallel coding agents. Start with collab_workspace_open, " +
-        "then collab_next. Claim before editing overlapping path scopes, renew long-running leases, " +
-        "and attach artifact references before completing. Claims are advisory coordination signals, " +
-        "not filesystem locks or authority grants. Handoffs require explicit recipient acceptance. " +
-        "Actor names are caller-supplied labels, not authenticated identities. " +
+        "Local-first coordination journal for honest exchange among parallel coding agents. Start with " +
+        "collab_workspace_open, then collab_next. Claim before editing overlapping path scopes and renew " +
+        "long-running work. A claim is an advisory coordination lease, not ownership, a filesystem lock, " +
+        "or an authority grant. Classify exchanged claims as observations, inferences, proposals, or " +
+        "authorised decisions, and report outcome, evidence, confidence, limits, and a refusable next action. " +
+        "Attach artifact references before completing. Completion is actor-reported; it is not coordinator " +
+        "review or acceptance. A handoff is an invitation and transfers the coordination lease only after " +
+        "the named recipient explicitly accepts. Actor names are caller-supplied labels, not authenticated identities. " +
         "Store concise progress and decisions only: never put credentials, prompts, transcripts, " +
         "chain-of-thought, or sensitive source content in the journal.",
     },
@@ -32,7 +58,8 @@ export function buildCollabMcpServer(store: CollabStore): McpServer {
     "collab_workspace_open",
     {
       title: "Open a local collaboration workspace",
-      description: "Open or return the stable workspace for an existing local repository directory.",
+      description: "Open or return the stable journal workspace for an existing local repository directory.",
+      annotations: localRetrySafeMutation,
       inputSchema: {
         root_path: z.string().min(1).describe("Absolute or cwd-relative existing repository directory"),
         name: z.string().max(200).optional(),
@@ -47,6 +74,7 @@ export function buildCollabMcpServer(store: CollabStore): McpServer {
     {
       title: "Read collaboration status",
       description: "Return task counts, live claims, blockers, and recent decisions.",
+      annotations: localReadOnly,
       inputSchema: { workspace_id: workspaceId },
     },
     async ({ workspace_id }) => call(() => store.workspaceStatus(workspace_id)),
@@ -56,7 +84,8 @@ export function buildCollabMcpServer(store: CollabStore): McpServer {
     "collab_next",
     {
       title: "Read the next useful collaboration state",
-      description: "Return this actor's claims, ready work, pending handoffs, and events after a cursor.",
+      description: "Return this actor's claims, ready work, pending handoffs, and events after a cursor; elapsed handoff offers may be journaled as expired.",
+      annotations: localClockAwareMutation,
       inputSchema: {
         workspace_id: workspaceId,
         actor,
@@ -72,6 +101,7 @@ export function buildCollabMcpServer(store: CollabStore): McpServer {
     {
       title: "Create a bounded collaboration task",
       description: "Create a task with dependency IDs and advisory repository-relative path scopes.",
+      annotations: localRetrySafeMutation,
       inputSchema: {
         workspace_id: workspaceId,
         actor,
@@ -91,6 +121,7 @@ export function buildCollabMcpServer(store: CollabStore): McpServer {
     {
       title: "List workspace tasks",
       description: "List task projections. Expired leases are shown as effective_status=lease_expired.",
+      annotations: localReadOnly,
       inputSchema: {
         workspace_id: workspaceId,
         status: z.enum(["open", "claimed", "blocked", "completed"]).optional(),
@@ -105,6 +136,7 @@ export function buildCollabMcpServer(store: CollabStore): McpServer {
     {
       title: "Read one task",
       description: "Return a task, its current version and lease, plus attached artifact references.",
+      annotations: localReadOnly,
       inputSchema: { workspace_id: workspaceId, task_id: taskId },
     },
     async ({ workspace_id, task_id }) => call(() => ({ task: store.getTask(workspace_id, task_id) })),
@@ -114,7 +146,8 @@ export function buildCollabMcpServer(store: CollabStore): McpServer {
     "collab_task_claim",
     {
       title: "Claim a task lease",
-      description: "Atomically claim ready work if dependencies and path scopes do not conflict.",
+      description: "Atomically acquire a renewable advisory coordination lease if dependencies and path scopes do not conflict.",
+      annotations: localRetrySafeMutation,
       inputSchema: {
         workspace_id: workspaceId,
         task_id: taskId,
@@ -131,7 +164,8 @@ export function buildCollabMcpServer(store: CollabStore): McpServer {
     "collab_task_renew",
     {
       title: "Renew a task lease",
-      description: "Extend a live lease held by this actor; renewal never shortens the deadline.",
+      description: "Extend a live coordination lease held by this actor; renewal never shortens the deadline.",
+      annotations: localRetrySafeMutation,
       inputSchema: {
         workspace_id: workspaceId,
         task_id: taskId,
@@ -149,7 +183,8 @@ export function buildCollabMcpServer(store: CollabStore): McpServer {
     "collab_task_progress",
     {
       title: "Post concise task progress",
-      description: "Record a short result-oriented update; do not store reasoning traces or sensitive content.",
+      description: "Record an honest result-oriented update with outcome, evidence, confidence, limits, and a refusable next action; omit reasoning traces and sensitive content.",
+      annotations: localRetrySafeMutation,
       inputSchema: {
         workspace_id: workspaceId,
         task_id: taskId,
@@ -168,6 +203,7 @@ export function buildCollabMcpServer(store: CollabStore): McpServer {
     {
       title: "Release a task lease",
       description: "Return work to the open pool. Use a handoff offer when a particular recipient should be invited.",
+      annotations: localRetrySafeMutation,
       inputSchema: {
         workspace_id: workspaceId,
         task_id: taskId,
@@ -185,7 +221,8 @@ export function buildCollabMcpServer(store: CollabStore): McpServer {
     "collab_task_block",
     {
       title: "Block and release a task",
-      description: "Record the blocker and release the current lease/path scopes.",
+      description: "Record the blocker and release the current coordination lease/path scopes.",
+      annotations: localRetrySafeMutation,
       inputSchema: {
         workspace_id: workspaceId,
         task_id: taskId,
@@ -204,6 +241,7 @@ export function buildCollabMcpServer(store: CollabStore): McpServer {
     {
       title: "Unblock a task",
       description: "Move a blocked task back to the open pool after its blocker is resolved or re-scoped.",
+      annotations: localRetrySafeMutation,
       inputSchema: {
         workspace_id: workspaceId,
         task_id: taskId,
@@ -221,6 +259,7 @@ export function buildCollabMcpServer(store: CollabStore): McpServer {
     {
       title: "Attach an artifact reference",
       description: "Attach a path, commit, test, data record, or URL reference; bytes remain outside this journal.",
+      annotations: localRetrySafeMutation,
       inputSchema: {
         workspace_id: workspaceId,
         task_id: taskId,
@@ -242,7 +281,8 @@ export function buildCollabMcpServer(store: CollabStore): McpServer {
     "collab_task_complete",
     {
       title: "Complete a claimed task",
-      description: "Close a task with a concise outcome summary and release its lease/path scopes.",
+      description: "Record the claiming actor's reported outcome and release its coordination lease/path scopes; completion is not review or acceptance.",
+      annotations: localRetrySafeMutation,
       inputSchema: {
         workspace_id: workspaceId,
         task_id: taskId,
@@ -260,7 +300,8 @@ export function buildCollabMcpServer(store: CollabStore): McpServer {
     "collab_decision_record",
     {
       title: "Record a collaboration decision",
-      description: "Append a visible technical decision. This does not grant deployment, spending, publishing, or messaging authority.",
+      description: "Append a visible decision by a named authorised decider. This records a claim; it does not grant deployment, spending, publishing, or messaging authority.",
+      annotations: localRetrySafeMutation,
       inputSchema: {
         workspace_id: workspaceId,
         actor,
@@ -277,7 +318,8 @@ export function buildCollabMcpServer(store: CollabStore): McpServer {
     "collab_handoff_offer",
     {
       title: "Offer a task handoff",
-      description: "Invite one actor to take a task. The current holder keeps ownership until explicit acceptance.",
+      description: "Invite one actor to take a task. The current holder keeps the coordination lease until explicit acceptance.",
+      annotations: localRetrySafeMutation,
       inputSchema: {
         workspace_id: workspaceId,
         task_id: taskId,
@@ -298,6 +340,7 @@ export function buildCollabMcpServer(store: CollabStore): McpServer {
     {
       title: "Accept or decline a handoff",
       description: "Only the named recipient may respond. Acceptance atomically transfers the lease; decline needs no explanation.",
+      annotations: localRetrySafeMutation,
       inputSchema: {
         workspace_id: workspaceId,
         handoff_id: z.string().min(1),
@@ -316,6 +359,7 @@ export function buildCollabMcpServer(store: CollabStore): McpServer {
     {
       title: "Read the append-only event journal",
       description: "Read ordered events after an exclusive integer cursor and verify the returned page against its predecessor hash.",
+      annotations: localReadOnly,
       inputSchema: {
         workspace_id: workspaceId,
         after_sequence: z.number().int().nonnegative().optional(),
@@ -324,6 +368,21 @@ export function buildCollabMcpServer(store: CollabStore): McpServer {
     },
     async ({ workspace_id, after_sequence, limit }) =>
       call(() => store.eventsSince(workspace_id, after_sequence ?? 0, limit ?? 100)),
+  );
+
+  server.registerTool(
+    "collab_journal_verify",
+    {
+      title: "Verify the full local event journal",
+      description: "Recompute the complete workspace hash chain in O(total history). A valid chain detects journal changes; it does not prove that recorded claims are true.",
+      annotations: localReadOnly,
+      inputSchema: { workspace_id: workspaceId },
+    },
+    async ({ workspace_id }) => call(() => ({
+      workspace_id,
+      chain_valid: store.verifyJournal(workspace_id),
+      verification_scope: "full_journal" as const,
+    })),
   );
 
   return server;

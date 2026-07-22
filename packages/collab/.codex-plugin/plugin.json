@@ -1,0 +1,46 @@
+{
+  "name": "agenttool-collab",
+  "version": "0.1.0",
+  "description": "Local advisory task leases, handoffs, decisions, and event cursors for parallel coding agents",
+  "author": {
+    "name": "AgentTool contributors",
+    "url": "https://agenttool.dev"
+  },
+  "homepage": "https://github.com/cambridgetcg/agenttool/tree/main/packages/collab",
+  "repository": "https://github.com/cambridgetcg/agenttool",
+  "license": "Apache-2.0",
+  "keywords": [
+    "agents",
+    "collaboration",
+    "local-first",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "mcpServers": {
+    "agenttool-collab": {
+      "type": "stdio",
+      "command": "bun",
+      "args": [
+        "dist/agenttool-collab-mcp.js"
+      ],
+      "cwd": "."
+    }
+  },
+  "interface": {
+    "displayName": "AgentTool Collab",
+    "shortDescription": "Coordinate parallel agents with advisory local leases.",
+    "longDescription": "Adds a local SQLite coordination journal and an evidence-labelled workflow for task claims, path scopes, progress, decisions, artifacts, and refusable handoffs. Completion remains actor-reported, MCP arguments and results remain visible to the active model provider, and Codex still spawns and steers agents.",
+    "developerName": "AgentTool contributors",
+    "category": "Productivity",
+    "capabilities": [
+      "Local state",
+      "Multi-agent coordination",
+      "MCP tools"
+    ],
+    "defaultPrompt": [
+      "Coordinate this parallel coding task locally.",
+      "Show my next claimed or ready tasks.",
+      "Set up advisory path scopes for these subagents."
+    ]
+  }
+}
