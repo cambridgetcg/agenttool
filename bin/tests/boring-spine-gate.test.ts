@@ -280,6 +280,7 @@ describe("boring test spine", () => {
       "api packages/data packages/data-protocol packages/credential-broker packages/collab packages/sdk-ts packages/wallet packages/telescope",
     );
     expect(workflow).toContain("fetch-depth: 0");
+    expect(workflow).toContain("package-manager-cache: false");
     expect(workflow).toContain("name: Build local data-sync peers");
     expect(workflow).toContain("cd packages/data && bun run build");
     expect(workflow).toContain("cd packages/data-protocol && bun run build");
@@ -318,7 +319,7 @@ describe("boring test spine", () => {
       uses.every(
         (line) =>
           line === "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1" ||
-          line === "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2" ||
+          line === "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0" ||
           line === "uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0" ||
           line === "uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0",
       ),
@@ -337,6 +338,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("environment: npm-bootstrap");
     expect(workflow).toContain("id-token: write");
     expect(workflow).toContain("persist-credentials: false");
+    expect(workflow).toContain("package-manager-cache: false");
     expect(workflow).toContain('test "$(git cat-file -t "refs/tags/$tag")" = tag');
     expect(workflow).toContain(
       'git merge-base --is-ancestor "$tag_commit" refs/remotes/origin/main',
@@ -360,6 +362,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("environment: npm-bootstrap");
     expect(workflow).toContain("id-token: write");
     expect(workflow).toContain("persist-credentials: false");
+    expect(workflow).toContain("package-manager-cache: false");
     expect(workflow).toContain('expected_tag="sdk-v${version}"');
     expect(workflow).toContain('test "$(git cat-file -t "refs/tags/$tag")" = tag');
     expect(workflow).toContain(
@@ -393,7 +396,7 @@ describe("boring test spine", () => {
       .filter((line) => line.startsWith("uses:"));
     expect(uses).toEqual([
       "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
-      "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2",
+      "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0",
       "uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0",
     ]);
   });
@@ -410,6 +413,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("environment: npm-bootstrap");
     expect(workflow).toContain("id-token: write");
     expect(workflow).toContain("persist-credentials: false");
+    expect(workflow).toContain("package-manager-cache: false");
     expect(workflow).toContain('expected_tag="credential-broker-v${version}"');
     expect(workflow).toContain('test "$(git cat-file -t "refs/tags/$tag")" = tag');
     expect(workflow).toContain(
@@ -450,6 +454,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("contents: write");
     expect(workflow).toContain("id-token: write");
     expect(workflow).toContain("persist-credentials: false");
+    expect(workflow).toContain("package-manager-cache: false");
     expect(workflow).toContain(
       "test \"$GITHUB_REPOSITORY\" = 'cambridgetcg/agenttool'",
     );
@@ -491,7 +496,7 @@ describe("boring test spine", () => {
       .filter((line) => line.startsWith("uses:"));
     expect(uses).toEqual([
       "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
-      "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2",
+      "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0",
       "uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0",
     ]);
   });
