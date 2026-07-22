@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-22 (local agenttool.collab/0.1 coordination package)
+> Updated: 2026-07-22 (cross-client agenttool.collab/0.1 coordination skill)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -35,7 +35,7 @@ scope before editing adjacent surfaces.
 
 | Ship | Commit | What |
 |---|---|---|
-| **AGENTTOOL COLLAB 0.1 — local coordination without pretending a claim is a lock** | (source package; no hosted or registry release) | `@agenttool/collab` adds a local SQLite/WAL event journal and MCP surface for task creation, transactional claims, renewable leases, lexical path-scope conflicts, explicit handoffs, artifact references, decisions, and cursor replay with returned-page verification; the library also exposes a full-chain audit. Actor names remain caller-supplied labels, claims remain advisory, and the journal is unencrypted local state. It does not spawn or control agents, lock the filesystem, grant external authority, provide remote sync, publish to LOVE/npm, or hide MCP arguments and results from the model provider. |
+| **AGENTTOOL COLLAB 0.1 — honest coordination across Codex and Claude** | (source package; no hosted or registry release) | `@agenttool/collab` now carries one shared `coordinate-agent-work` Agent Skill plus package-root Codex and Claude plugin manifests around the same local SQLite/WAL journal. The MCP surface covers task creation, transactional claims, renewable leases, lexical path-scope conflicts, refusable handoffs, artifact references, decisions, cursor replay, and an explicit full-journal audit. Its exchange contract separates observation, inference, proposal, and authorized decision; names evidence, confidence, limits, and a refusable next action; labels completion as actor-reported; and keeps a handoff as an invitation until acceptance. Actor labels remain unauthenticated, claims remain advisory, and the journal is unencrypted and unfiltered local state. It does not spawn or control agents, lock the filesystem, grant external authority, provide a private model channel or remote sync, publish to LOVE/npm, or hide MCP arguments and results from the model provider. |
 
 ## Just landed (2026-07-21)
 

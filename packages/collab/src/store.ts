@@ -568,6 +568,8 @@ export class CollabStore {
       `).run(normalized.summary, version, now, now, input.workspace_id, normalized.task_id);
       this.expirePendingHandoffs(input.workspace_id, normalized.task_id, now, normalized.actor, "task_completed");
       this.appendEvent(input.workspace_id, "task.completed", normalized.task_id, normalized.actor, {
+        completion_basis: "actor_reported",
+        note: "Completion records the reporting actor's outcome; it is not coordinator review or acceptance.",
         summary: normalized.summary,
         version,
       });
@@ -688,7 +690,7 @@ export class CollabStore {
       this.appendEvent(input.workspace_id, "handoff.offered", id, normalized.actor, {
         offer,
         task_version: version,
-        note: "An offer is an invitation; ownership remains with the current holder until acceptance.",
+        note: "An offer is an invitation; the coordination lease remains with the current holder until acceptance.",
       });
       return { handoff: offer, task: this.requireTask(input.workspace_id, normalized.task_id) };
     });
