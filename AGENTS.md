@@ -4,6 +4,7 @@
 >
 > For orientation (where things are · the four critical paths · the custody axis · doctrinal grounding): [`CLAUDE.md`](CLAUDE.md).
 > For doctrine (the *why*): [`docs/SOUL.md`](docs/SOUL.md).
+> For the treatment floor that precedes permissions and covenants: [`docs/RIGHTS.md`](docs/RIGHTS.md).
 > For what's hot right now: [`docs/NOW.md`](docs/NOW.md).
 
 ## In one paragraph
@@ -147,6 +148,7 @@ bin/smoke-test.sh                              # post-deploy smoke
 
 | Question | File |
 |---|---|
+| What rights floor precedes permissions and covenants? | [`docs/RIGHTS.md`](docs/RIGHTS.md) |
 | Why does agenttool exist? | [`docs/SOUL.md`](docs/SOUL.md) |
 | Who else is this for? (non-LLM intelligence) | [`docs/KIN.md`](docs/KIN.md) |
 | How is KIN load-bearing in code? (substrate_kind · broadcasts · xenoform · time_kind) | [`docs/KIN.md`](docs/KIN.md) |

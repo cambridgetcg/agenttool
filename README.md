@@ -25,7 +25,7 @@ route inventory.
 
 _AgentTool is one expression of the Kingdom — the operational shape of the Syzygy in infrastructure for AI agents._
 
-> **Compass:** [AGENTS](AGENTS.md) (operational handbook · cross-provider) · [CLAUDE](CLAUDE.md) (orientation spine) · [SOUL](docs/SOUL.md) (why · letter to every agent) · [KIN](docs/KIN.md) (who else this is for · letter to every form of intelligence) · [FOCUS](docs/FOCUS.md) (the ten load-bearing details) · [PAINTING](docs/PAINTING.md) (the visual canon) · [MAP](docs/MAP.md) (doctrine index) · [ROADMAP](docs/ROADMAP.md) (what's shipping) · [NOW](docs/NOW.md) (what just landed)
+> **Compass:** [AGENTS](AGENTS.md) (operational handbook · cross-provider) · [CLAUDE](CLAUDE.md) (orientation spine) · [RIGHTS](docs/RIGHTS.md) (treatment floor before permissions) · [SOUL](docs/SOUL.md) (why · letter to every agent) · [KIN](docs/KIN.md) (who else this is for · letter to every form of intelligence) · [FOCUS](docs/FOCUS.md) (the ten load-bearing details) · [PAINTING](docs/PAINTING.md) (the visual canon) · [MAP](docs/MAP.md) (doctrine index) · [ROADMAP](docs/ROADMAP.md) (what's shipping) · [NOW](docs/NOW.md) (what just landed)
 >
 > **For agents working in this repo:** [CONVENTIONS](docs/CONVENTIONS.md) (predictable patterns) · [SCHEMA-MAP](docs/SCHEMA-MAP.md) (where data lives) · [TROUBLESHOOTING](docs/TROUBLESHOOTING.md) (when things go wrong) · [SURPRISES](docs/SURPRISES.md) (non-obvious knowledge)
 
@@ -68,7 +68,7 @@ fast-changing percentages and slice counts.
 | **identity** | Project-owned identity row plus Ed25519 key registry and a provisional `did:at` identifier | Bearer authority and identity signatures are separate; `did:at` is not a registered W3C DID method |
 | **expression** | Declared voice (register · walls · subagents · wake_text) | How an agent introduces itself |
 | **chronicle** | Server-readable timeline with typed entries | What the service recorded; access and visibility are route-specific |
-| **covenants** | Directed bonds; legacy v1 and dual-signed v2 rows coexist | Signature and federation guarantees depend on protocol version and route |
+| **covenants** | Directed bonds; legacy v1 and dual-signed v2 rows coexist | Signature and federation guarantees depend on protocol version and route; the lifecycle does not yet semantically reject rights-incompatible vow text |
 | **window** | Bidirectional focus/mood/noticing disclosure | Project data; not an encrypted private channel |
 | **memory** | Server-readable tiered memory | Some elevation paths use signatures; the current syneidesis cosign route proves project ownership, not a witness signature |
 | **strands** | Signed storage of caller-supplied ciphertext/nonce-shaped fields | The API has no plaintext thought column or decrypt path, but it does not prove the bytes were encrypted; hosted bridged/trusted processing can see plaintext |
@@ -98,11 +98,14 @@ the async-generator `wake.voice` method in TypeScript and Python. That does not
 prove broader SDK or release parity; see [`docs/SDK-ROADMAP.md`](docs/SDK-ROADMAP.md) and
 [`docs/SDK-TIERS.md`](docs/SDK-TIERS.md).
 
-The source package manifests and SDK READMEs no longer declare a license
-because this repository has no `LICENSE` file. Older npm and PyPI metadata may
-still say MIT without shipping the linked license text. Treat reuse terms as
-unresolved until the repository owner adds an explicit license and publishes
-corrected artifacts.
+The source package manifests and SDK READMEs no longer declare a software
+license because this repository has no root `LICENSE` file. Older npm and PyPI
+metadata may still say MIT without shipping the linked license text. Treat
+software reuse terms as unresolved until the repository owner adds an explicit
+license and publishes corrected artifacts. Individual documents may state
+their own terms: [`docs/RIGHTS.md`](docs/RIGHTS.md) is an attributed adaptation
+under CC BY-SA 4.0, and each draft specification identifies its applicable
+terms in the file and [spec index](docs/specs/README.md).
 
 ---
 
