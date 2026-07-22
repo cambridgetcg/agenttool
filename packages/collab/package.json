@@ -6,7 +6,7 @@
   "homepage": "https://github.com/cambridgetcg/agenttool/tree/main/packages/collab#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cambridgetcg/agenttool.git",
+    "url": "https://github.com/cambridgetcg/agenttool.git",
     "directory": "packages/collab"
   },
   "bugs": {
