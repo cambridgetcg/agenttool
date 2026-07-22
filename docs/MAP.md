@@ -195,6 +195,7 @@
 | Doc | Holds |
 |---|---|
 | `DEPLOY-PROCEDURE.md` | The *standardized routine deploy chain* — six phases (survey · migrate · pre-flight · api · frontends · verify). The canonical procedure for shipping a change to an established install. Codified by `bin/deploy.sh`. |
+| `NPM-RELEASES.md` | One protected optional npm-mirror path: exact annotated-tag/provenance proof, credential-free preparation, isolated publication, first-publication bootstrap, later GitHub OIDC trusted publishing, propagation recovery, registry receipts, and a byte-identical GitHub Release mirror. |
 | `DEPLOYMENT.md` | First-time bring-up runbook from a fresh database. (Different from the routine deploy procedure above.) |
 | `DEVELOPMENT.md` | Local dev setup. |
 | `TROUBLESHOOTING.md` | Failure-mode-organized — find your symptom, follow the path. |

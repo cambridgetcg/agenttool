@@ -211,6 +211,7 @@ describe("LOVE Package builder and verifier", () => {
     const contents = inspectNpmTarball(artifact);
     expect(contents.paths).toContain("package/package.json");
     expect(contents.paths).toContain("package/dist/index.js");
+    expect(contents.sizes["package/package.json"]).toBeGreaterThan(0);
     expect(contents.paths.some((path) => path.startsWith("package/src/"))).toBe(false);
     expect(contents.paths.some((path) => path.startsWith("package/node_modules/"))).toBe(false);
 

@@ -81,17 +81,10 @@ bun run ci      # parity → build → test
 
 ## How to Publish to npm
 
-This optional registry step is separate from committing and deploying the LOVE
-artifact and publishing the GitHub release.
-
-```bash
-# From the clean release commit. `prepack` repeats the full SDK gate.
-test -z "$(git status --porcelain)"
-bun install --frozen-lockfile
-bun run ci
-npm pack --dry-run
-npm publish --access public
-```
+Use the repository's protected manual `publish-npm.yml` workflow. It publishes
+the exact checked-in LOVE artifact, verifies the annotated SDK tag is contained
+in GitHub `main`, and requires byte-identical public registry read-back. Do not
+run a second local `npm publish` path. See [`docs/NPM-RELEASES.md`](../../docs/NPM-RELEASES.md).
 
 ## Dependencies
 - **Runtime**: `@noble/ed25519 ^2.2.3`, `@noble/hashes ^2.0.1` (Phase 5+ crypto only — matches api server + cli/think versions for byte-identical wire format). HTTP, AES-256-GCM, and abort signals all use platform-native APIs.

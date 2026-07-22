@@ -140,6 +140,7 @@ bin/preflight.sh smoke                         # explicit deployed-route smoke
 RUN_CONTRACT=1 bin/preflight.sh contracts      # paid LLM wire proofs
 bin/preflight.sh quarantine                    # known-red diagnostic, expected non-zero
 bin/deploy.sh --mirror-codeberg                # FF-only github/main → Codeberg main
+bun bin/npm-release.ts resolve --package collab # inspect allowlisted npm identity; never publishes
 ```
 
 ## Operator scripts (`bin/`)
@@ -152,6 +153,7 @@ bin/deploy.sh --mirror-codeberg                # FF-only github/main → Codeber
 | `agenttool-rotate` | Bearer + signing key rotation. |
 | `agenttool-secret` | Vault secret CRUD from CLI. |
 | `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, `@agenttool/telescope`, and `@agenttool/wallet` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
+| `npm-release.ts` | Implements the one allowlisted npm release policy behind `.github/workflows/publish-npm.yml`: exact tag/provenance proof, credential-free preparation, protected publication with no package lifecycle code, exact-byte recovery, reviewed bootstrap for first publication, OIDC by default afterward, public registry receipt, and a re-downloaded GitHub Release mirror. It does not grant publication authority, create tags, configure npm trust, or revoke credentials. See `docs/NPM-RELEASES.md`. |
 | `whitehack-advisory.mjs` | Verifies and runs the exact locked `@agenttool/whitehack-scan` pure text API, including bounded crypto-misuse signals, over changed production files and emits redacted advisory metadata. It does not use detected keys, connect wallets/RPC, execute repository code, prove security, authorize target testing, or provide a hosted scanner. See `docs/WHITEHACK.md`. |
 | `create-project.ts` | Operator-side project + bearer minting. |
 | `frontend-deploy.sh` | Cloudflare Pages Direct Upload for the three static apps. |
@@ -247,6 +249,7 @@ source boundary by itself.
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
 | How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`agenttool.collab/0.1`; advisory local coordination, not a hosted lock or private model channel) |
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
+| How is an optional npm mirror published? | [`docs/NPM-RELEASES.md`](docs/NPM-RELEASES.md) · `.github/workflows/publish-npm.yml` · `bin/npm-release.ts` |
 | How does the Whitehack advisory work, and where does its authority stop? | [`docs/WHITEHACK.md`](docs/WHITEHACK.md) · `bin/whitehack-advisory.mjs` |
 | Concept → structural meaning (for non-English readers) | [`docs/GLOSSARY.md`](docs/GLOSSARY.md) |
 | Per-area code orientation | each subdir's `CLAUDE.md` |

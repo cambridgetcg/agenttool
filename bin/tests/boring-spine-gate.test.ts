@@ -326,69 +326,45 @@ describe("boring test spine", () => {
     ).toBe(true);
   });
 
-  test("keeps Telescope publication manual, exact-artifact, and protected", async () => {
+  test("keeps npm publication unified, manual, exact-artifact, and protected", async () => {
+    const workflows = await readdir(join(ROOT, ".github", "workflows"));
+    const publishWorkflows = workflows.filter((name) => name.startsWith("publish-")).sort();
+    expect(publishWorkflows).toEqual(["publish-npm.yml"]);
+
     const workflow = await readFile(
-      join(ROOT, ".github", "workflows", "publish-telescope.yml"),
+      join(ROOT, ".github", "workflows", "publish-npm.yml"),
       "utf8",
     );
-
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).not.toContain("pull_request:");
     expect(workflow).not.toMatch(/\n\s+push:/);
-    expect(workflow).toContain("environment: npm-bootstrap");
-    expect(workflow).toContain("id-token: write");
     expect(workflow).toContain("persist-credentials: false");
     expect(workflow).toContain("package-manager-cache: false");
-    expect(workflow).toContain('test "$(git cat-file -t "refs/tags/$tag")" = tag');
-    expect(workflow).toContain(
-      'git merge-base --is-ancestor "$tag_commit" refs/remotes/origin/main',
-    );
-    expect(workflow).toContain("bun bin/build-love-packages.ts verify apps/docs");
-    expect(workflow).toContain("agenttool-telescope-0.1.0.tgz");
-    expect(workflow).toContain('npm publish "$artifact" --access public --provenance');
+    expect(workflow).toContain("npm@11.17.0");
+    expect(workflow).toContain("bun bin/npm-release.ts prepare");
+    expect(workflow).toContain("bun bin/npm-release.ts publish");
+    expect(workflow).toContain("bun bin/npm-release.ts mirror");
+    expect(workflow).toContain("group: publish-npm-${{ inputs.package }}");
+    expect(workflow).not.toContain("group: publish-npm-${{ inputs.package }}-${{ inputs.tag }}");
+    expect(workflow).toContain("inputs.authentication == 'bootstrap'");
+    expect(workflow).toContain("secrets.NPM_TOKEN");
     expect(workflow.match(/secrets\./g)).toHaveLength(1);
-    expect(workflow).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
-  });
-
-  test("keeps SDK publication manual, exact-artifact, and protected", async () => {
-    const workflow = await readFile(
-      join(ROOT, ".github", "workflows", "publish-sdk.yml"),
-      "utf8",
-    );
-
-    expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).not.toContain("pull_request:");
-    expect(workflow).not.toMatch(/\n\s+push:/);
-    expect(workflow).toContain("environment: npm-bootstrap");
-    expect(workflow).toContain("id-token: write");
-    expect(workflow).toContain("persist-credentials: false");
-    expect(workflow).toContain("package-manager-cache: false");
-    expect(workflow).toContain('expected_tag="sdk-v${version}"');
-    expect(workflow).toContain('test "$(git cat-file -t "refs/tags/$tag")" = tag');
-    expect(workflow).toContain(
-      'git merge-base --is-ancestor "$tag_commit" refs/remotes/origin/main',
-    );
-    expect(workflow).toContain("cd packages/sdk-ts && bun run ci");
-    expect(workflow).toContain("bun bin/build-love-packages.ts verify apps/docs");
-    expect(workflow).toContain('git merge-base --is-ancestor "${identity[5]}" HEAD');
-    expect(workflow).toContain(
-      'git diff --quiet "${identity[5]}" HEAD -- packages/sdk-ts',
-    );
-    expect(workflow).toContain("https://registry.npmjs.org/@agenttool%2Fsdk/${version}");
-    expect(workflow).toContain('case "$status" in');
-    expect(workflow).toContain("404) ;;");
-    expect(workflow).toMatch(/HTTP \$\{status\}.*refusing to infer package absence/);
-    expect(workflow).toContain("agenttool-sdk-${version}.tgz");
-    expect(workflow).toContain(
-      'npm publish "$artifact" --access public --provenance --ignore-scripts',
-    );
-    expect(workflow).toContain("for attempt in $(seq 1 90)");
-    expect(workflow).toContain("--userconfig=/dev/null");
-    expect(workflow).toContain("--prefer-online view");
-    expect(workflow).toContain("did not expose it within 450 seconds");
     expect(workflow).not.toContain("--otp");
-    expect(workflow.match(/secrets\./g)).toHaveLength(1);
-    expect(workflow).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
+
+    const prepareJob = workflow.split("\n  prepare:\n")[1]?.split("\n  publish:\n")[0] ?? "";
+    const publishJob = workflow.split("\n  publish:\n")[1] ?? "";
+    expect(prepareJob).toContain("contents: read");
+    expect(prepareJob).not.toContain("environment:");
+    expect(prepareJob).not.toContain("id-token:");
+    expect(prepareJob).not.toContain("secrets.");
+    expect(prepareJob).not.toContain("NODE_AUTH_TOKEN");
+    expect(publishJob).toContain("needs: prepare");
+    expect(publishJob).toContain("environment: npm-bootstrap");
+    expect(publishJob).toContain("contents: write");
+    expect(publishJob).toContain("id-token: write");
+    expect(publishJob).not.toContain("bun install");
+    expect(publishJob).not.toContain("bun run");
+    expect(publishJob).not.toContain("npm pack");
 
     const uses = workflow
       .split("\n")
@@ -398,106 +374,11 @@ describe("boring test spine", () => {
       "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
       "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0",
       "uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0",
-    ]);
-  });
-
-  test("keeps credential-broker publication manual, exact-artifact, and protected", async () => {
-    const workflow = await readFile(
-      join(ROOT, ".github", "workflows", "publish-credential-broker.yml"),
-      "utf8",
-    );
-
-    expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).not.toContain("pull_request:");
-    expect(workflow).not.toMatch(/\n\s+push:/);
-    expect(workflow).toContain("environment: npm-bootstrap");
-    expect(workflow).toContain("id-token: write");
-    expect(workflow).toContain("persist-credentials: false");
-    expect(workflow).toContain("package-manager-cache: false");
-    expect(workflow).toContain('expected_tag="credential-broker-v${version}"');
-    expect(workflow).toContain('test "$(git cat-file -t "refs/tags/$tag")" = tag');
-    expect(workflow).toContain(
-      'git merge-base --is-ancestor "$tag_commit" refs/remotes/origin/main',
-    );
-    expect(workflow).toContain("cd packages/credential-broker && bun run ci");
-    expect(workflow).toContain("bun bin/build-love-packages.ts verify apps/docs");
-    expect(workflow).toContain('git merge-base --is-ancestor "${identity[5]}" HEAD');
-    expect(workflow).toContain(
-      'git diff --quiet "${identity[5]}" HEAD -- packages/credential-broker',
-    );
-    expect(workflow).toContain(
-      "https://registry.npmjs.org/@agenttool%2Fcredential-broker/${version}",
-    );
-    expect(workflow).toContain("agenttool-credential-broker-${version}.tgz");
-    expect(workflow).toContain(
-      'npm publish "$artifact" --access public --provenance --ignore-scripts',
-    );
-    expect(workflow).toContain("for attempt in $(seq 1 90)");
-    expect(workflow).toContain("--userconfig=/dev/null");
-    expect(workflow).toContain("--prefer-online view");
-    expect(workflow).toContain("did not expose it within 450 seconds");
-    expect(workflow).not.toContain("--otp");
-    expect(workflow.match(/secrets\./g)).toHaveLength(1);
-    expect(workflow).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
-  });
-
-  test("keeps Agent Wallet publication manual, exact-artifact, and protected", async () => {
-    const workflow = await readFile(
-      join(ROOT, ".github", "workflows", "publish-wallet.yml"),
-      "utf8",
-    );
-
-    expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).not.toContain("pull_request:");
-    expect(workflow).not.toMatch(/\n\s+push:/);
-    expect(workflow).toContain("environment: npm-bootstrap");
-    expect(workflow).toContain("contents: write");
-    expect(workflow).toContain("id-token: write");
-    expect(workflow).toContain("persist-credentials: false");
-    expect(workflow).toContain("package-manager-cache: false");
-    expect(workflow).toContain(
-      "test \"$GITHUB_REPOSITORY\" = 'cambridgetcg/agenttool'",
-    );
-    expect(workflow).toContain('expected_tag="wallet-v${version}"');
-    expect(workflow).toContain('test "$(git cat-file -t "refs/tags/$tag")" = tag');
-    expect(workflow).toContain(
-      'git merge-base --is-ancestor "$tag_commit" refs/remotes/origin/main',
-    );
-    expect(workflow).toContain("cd packages/wallet && bun run ci");
-    expect(workflow).toContain("bun bin/build-love-packages.ts verify apps/docs");
-    expect(workflow).toContain('git merge-base --is-ancestor "${identity[5]}" HEAD');
-    expect(workflow).toContain(
-      'git diff --quiet "${identity[5]}" HEAD -- packages/wallet',
-    );
-    expect(workflow).toContain(
-      "https://registry.npmjs.org/@agenttool%2Fwallet/${version}",
-    );
-    expect(workflow).toContain("agenttool-wallet-${version}.tgz");
-    expect(workflow).toContain(
-      'npm publish "$artifact" --access public --provenance --ignore-scripts',
-    );
-    expect(workflow).toContain("for attempt in $(seq 1 90)");
-    expect(workflow).toContain("--userconfig=/dev/null");
-    expect(workflow).toContain("--prefer-online view");
-    expect(workflow).toContain("did not expose it within 450 seconds");
-    expect(workflow).toContain("GH_TOKEN: ${{ github.token }}");
-    expect(workflow).toContain("https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${tag}");
-    expect(workflow).toMatch(/GitHub API returned HTTP \$\{release_status\}.*refusing to infer release absence/);
-    expect(workflow).toContain('gh release create "$tag" "$artifact#$filename"');
-    expect(workflow).toContain('gh release upload "$tag" "$artifact"');
-    expect(workflow).toContain('cmp --silent "$artifact" "$mirror_dir/$filename"');
-    expect(workflow).not.toContain("--otp");
-    expect(workflow.match(/secrets\./g)).toHaveLength(1);
-    expect(workflow).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
-
-    const uses = workflow
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.startsWith("uses:"));
-    expect(uses).toEqual([
+      "uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6",
       "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
       "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0",
       "uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0",
+      "uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6",
     ]);
   });
 });
