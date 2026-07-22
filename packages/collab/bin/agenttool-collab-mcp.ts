@@ -1,0 +1,43 @@
+#!/usr/bin/env bun
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { homedir } from "node:os";
+import { isAbsolute, join, resolve } from "node:path";
+import { buildCollabMcpServer } from "../src/mcp.js";
+import { CollabStore } from "../src/store.js";
+
+function defaultDatabasePath(): string {
+  const dataHome = process.env.XDG_DATA_HOME;
+  const base = dataHome
+    ? (isAbsolute(dataHome) ? dataHome : resolve(dataHome))
+    : join(homedir(), ".local", "share");
+  return join(base, "agenttool", "collab.sqlite");
+}
+
+async function main(): Promise<void> {
+  const databasePath = process.env.AGENTOOL_COLLAB_DB ?? defaultDatabasePath();
+  const store = new CollabStore(databasePath);
+  const server = buildCollabMcpServer(store);
+  const transport = new StdioServerTransport();
+
+  let shuttingDown = false;
+  const shutdown = async (exitCode: number) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    try {
+      await server.close();
+    } finally {
+      store.close();
+      process.exit(exitCode);
+    }
+  };
+  process.once("SIGINT", () => void shutdown(0));
+  process.once("SIGTERM", () => void shutdown(0));
+
+  await server.connect(transport);
+  process.stderr.write("· agenttool-collab MCP ready (local SQLite journal)\n");
+}
+
+main().catch((error) => {
+  process.stderr.write(`✖ ${error instanceof Error ? error.message : String(error)}\n`);
+  process.exit(1);
+});

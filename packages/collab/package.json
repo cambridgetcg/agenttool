@@ -1,0 +1,45 @@
+{
+  "name": "@agenttool/collab",
+  "version": "0.1.0",
+  "description": "Local-first coordination journal for parallel coding agents",
+  "type": "module",
+  "main": "src/index.ts",
+  "module": "src/index.ts",
+  "bin": {
+    "agenttool-collab-mcp": "./bin/agenttool-collab-mcp.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./protocol": "./src/protocol.ts",
+    "./mcp": "./src/mcp.ts"
+  },
+  "files": [
+    "src",
+    "bin",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "ci": "bun run typecheck && bun test"
+  },
+  "license": "MIT",
+  "engines": {
+    "bun": ">=1.3"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.7.0"
+  },
+  "keywords": [
+    "agents",
+    "collaboration",
+    "local-first",
+    "mcp",
+    "sqlite"
+  ]
+}
