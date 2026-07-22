@@ -317,10 +317,10 @@ describe("boring test spine", () => {
     expect(
       uses.every(
         (line) =>
-          line === "uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4" ||
+          line === "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1" ||
           line === "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2" ||
-          line === "uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4" ||
-          line === "uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5",
+          line === "uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0" ||
+          line === "uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0",
       ),
     ).toBe(true);
   });
@@ -392,9 +392,9 @@ describe("boring test spine", () => {
       .map((line) => line.trim())
       .filter((line) => line.startsWith("uses:"));
     expect(uses).toEqual([
-      "uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4",
+      "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
       "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2",
-      "uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4",
+      "uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0",
     ]);
   });
 
@@ -490,9 +490,9 @@ describe("boring test spine", () => {
       .map((line) => line.trim())
       .filter((line) => line.startsWith("uses:"));
     expect(uses).toEqual([
-      "uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4",
+      "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
       "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2",
-      "uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4",
+      "uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0",
     ]);
   });
 });
