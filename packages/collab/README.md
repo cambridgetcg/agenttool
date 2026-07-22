@@ -54,3 +54,14 @@ against a local attacker who can rewrite the database and recompute hashes.
 Normal event polling verifies only the returned page against its predecessor
 inside one consistent SQLite read snapshot; `CollabStore.verifyJournal()` is
 the explicit O(total history) full audit.
+
+The MCP adapter pins the split `@modelcontextprotocol/server@2.0.0-beta.5`
+package and wires only its 2025-compatible stdio transport. The exact beta is
+locked because that upstream API is still pre-release; upgrades require the
+type, test, audit, and real wire-handshake gates used for this version.
+
+## Distribution
+
+This source package is covered by Apache-2.0; packaged archives include their
+own `LICENSE` and `NOTICE`. Version 0.1.0 is not yet a LOVE or npm release, and
+the repository does not advertise a hosted collab service.

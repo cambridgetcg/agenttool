@@ -18,8 +18,9 @@ node (`packages/data/`), the experimental ADDS encrypted-object package
 (`packages/data-sync/`), the registry-neutral `love-package/v1`
 distribution protocol, a public read-only discovery evidence mapper
 (`packages/telescope/`), an experimental local capability broker
-(`packages/credential-broker/`), source reference primitives for capability-bounded
-agent wallets (`packages/wallet/`), and three static apps (`apps/`). Agent
+(`packages/credential-broker/`), a local-first multi-agent coordination journal
+(`packages/collab/`), source reference primitives for capability-bounded agent
+wallets (`packages/wallet/`), and three static apps (`apps/`). Agent
 Wallet 0.1 has no bundled key custody, chain adapter, RPC, broadcaster, hosted
 service, or implied npm mirror availability. Its exact LOVE artifact is the
 release record. Telescope 0.1.0 is a
@@ -44,6 +45,7 @@ cd packages/data-protocol && bun install       # ADDS encrypted-object protocol
 cd packages/data && bun install                # local-first agent-data/v1 node
 cd packages/data-sync && bun install           # explicit agent-data-sync/v1 pull bridge
 cd packages/credential-broker && bun install   # experimental agentcred/0.1 local broker
+cd packages/collab && bun install              # local agenttool.collab/0.1 coordination journal
 cd packages/sdk-ts && bun install              # TS SDK
 cd packages/telescope && bun install           # read-only discovery evidence mapper
 cd packages/wallet && bun install              # agent-wallet/0.1 offline primitives
@@ -89,6 +91,11 @@ cd packages/credential-broker
 bun run ci                                     # protocol, policy, socket, and no-reveal tests
 npm pack --dry-run                             # package boundary; does not publish
 
+# Local multi-agent coordination journal ─────────────────────────────
+cd packages/collab
+bun run ci                                     # typecheck + store/MCP/concurrency tests
+npm pack --dry-run                             # package boundary; does not publish
+
 # Registry-neutral JavaScript package artifacts ────────────────────
 bun bin/build-love-packages.ts build <staging-dir> # clean tracked tree required; never publishes or uploads
 
@@ -124,7 +131,7 @@ bunx playwright test                           # browser + multi-instance scenar
 # Deliberate test + release gates ────────────────────────────────────
 bin/preflight.sh                               # no application/service credentials required
 bin/preflight.sh api                           # API/typecheck/operator tests only
-bin/preflight.sh packages                      # data + ADDS + sync + broker + SDK + Wallet + Telescope
+bin/preflight.sh packages                      # data + ADDS + sync + broker + collab + SDK + Wallet + Telescope
 bin/preflight.sh database                      # explicit DB tier; requires DATABASE_URL
 bin/preflight.sh smoke                         # explicit deployed-route smoke
 RUN_CONTRACT=1 bin/preflight.sh contracts      # paid LLM wire proofs
@@ -235,6 +242,7 @@ source boundary by itself.
 | How would another language reach the API? | [`docs/SDK-TIERS.md`](docs/SDK-TIERS.md) (four-tier stack) · [`docs/CANONICAL-BYTES.md`](docs/CANONICAL-BYTES.md) (signing recipes) |
 | How does an agent keep and query raw collected data locally? | [`docs/AGENT-DATA-PROTOCOL.md`](docs/AGENT-DATA-PROTOCOL.md) · `packages/data/` (reference node) |
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
+| How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`agenttool.collab/0.1`; advisory local coordination, not a hosted lock or private model channel) |
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
 | How does the Whitehack advisory work, and where does its authority stop? | [`docs/WHITEHACK.md`](docs/WHITEHACK.md) · `bin/whitehack-advisory.mjs` |
 | Concept → structural meaning (for non-English readers) | [`docs/GLOSSARY.md`](docs/GLOSSARY.md) |

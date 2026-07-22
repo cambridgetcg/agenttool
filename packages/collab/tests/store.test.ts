@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { CollabError } from "../src/errors.js";
 import { CollabStore, normalizePathScopes, pathConflicts } from "../src/store.js";
 
@@ -49,6 +49,15 @@ describe("local journal", () => {
     expect(store.verifyJournal(first.id)).toBe(true);
     expect(statSync(databasePath).mode & 0o777).toBe(0o600);
     expect(statSync(join(directory, "state")).mode & 0o777).toBe(0o700);
+  });
+
+  test("anchors a relative database path when the store is constructed", () => {
+    store.close();
+    const relativeDatabasePath = relative(process.cwd(), databasePath);
+    store = new CollabStore(relativeDatabasePath, { now: () => new Date(currentTime) });
+
+    expect(store.db.filename).toBe(resolve(relativeDatabasePath));
+    expect(statSync(databasePath).mode & 0o777).toBe(0o600);
   });
 
   test("deduplicates committed mutations and rejects reuse with changed content", () => {

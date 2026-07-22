@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { buildCollabMcpServer } from "../src/mcp.js";

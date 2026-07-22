@@ -7,8 +7,9 @@
 A consolidated monorepo: one API (`api/`), Python and TypeScript SDKs,
 a local-first agent data node (`packages/data`), an experimental encrypted
 object protocol package (`packages/data-protocol`), an experimental local
-credential broker (`packages/credential-broker`), and three static surfaces
-(`apps/web`, `apps/dashboard`, and `apps/docs`).
+credential broker (`packages/credential-broker`), a local-first multi-agent
+coordination journal (`packages/collab`), and three static surfaces (`apps/web`,
+`apps/dashboard`, and `apps/docs`).
 The Apache-2.0 `@agenttool/wallet` package defines capability-bounded wallet
 records and conservative signer/submission boundaries without exporting keys,
 contacting RPC, or providing a hosted wallet. Its exact LOVE artifact is the
@@ -51,6 +52,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 | **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
 | **ADDS** | `packages/data-protocol`, `docs/specs/ADDS-0.1-DRAFT.md` | Experimental `adds/v0.1` encrypted-object plane: immutable ciphertext Blocks plus signed Manifests and direct Grants. It is not the collection/query node and does not promise provider durability. |
 | **Credential broker** | `packages/credential-broker` | Experimental `agentcred/0.1` local capability broker. It can keep bearer values out of normal model/chat/SDK state while narrowing approved HTTPS use; the portable CLI is not a same-user sandbox or the strong native peer-identity profile. |
+| **Agent collaboration** | `packages/collab` | Source-only `agenttool.collab/0.1` local SQLite/WAL journal plus MCP tools for task claims, path-scope conflicts, handoffs, artifacts, decisions, and replay. It does not spawn agents, lock files, authenticate caller-supplied actor labels, provide a hosted relay, or hide MCP arguments/results from the model provider. |
 | **LOVE packages** | `docs/LOVE-PACKAGE-PROTOCOL.md`, `bin/build-love-packages.ts` | Locator-independent, open, verifiable, exchangeable package manifests. Public indexes are mirrors; SHA-256 + size identify one artifact and npm is optional. |
 | **Telescope** | `packages/telescope` | Public `@agenttool/telescope@0.1.0` read-only discovery evidence mapper. Bounded public-HTTPS probes map `agent.txt`, Pathways, LOVE/npm, MCP, A2A, WebFinger, and Offer Bus boundaries; generated commands are never executed. DNS-AID and PKARR remain opt-in adapter seams. Distribution does not add a hosted scan route. |
 | **Agent Wallet** | `packages/wallet`, `docs/specs/AGENT-WALLET-0.1.md` | Apache-2.0 LOVE release for `agent-wallet/0.1`: closed signed descriptor/capability/intent/receipt/continuity records, exact-byte signer requests, and conservative unknown states. npm is an optional mirror whose exact availability is checked independently. No key custody, chain adapter, RPC, broadcaster, or hosted wallet is supplied. |
@@ -177,8 +179,9 @@ and docs carry local guidance files; `apps/web` does not.
 
 GitHub `main` is the reviewed coordination/release head; Codeberg `main` is an
 explicit fast-forward-only mirror. Required GitHub CI installs JavaScript
-dependencies for the API/protocol and data/ADDS/credential-broker/TypeScript SDK/Agent Wallet/Telescope jobs from
-frozen Bun lockfiles. The Python SDK is tested on Python 3.9–3.14 with the
+dependencies for the API/protocol and data/ADDS/credential-broker/collab/
+TypeScript SDK/Agent Wallet/Telescope jobs from frozen Bun lockfiles. The
+Python SDK is tested on Python 3.9–3.14 with the
 compatible dependency set pip resolves from `pyproject.toml`; this is neither a
 frozen lock nor a minimum-version matrix. CI receives no application/service credentials. Pushes do not
 deploy. Production releases remain manual and the wrapper records the embedded

@@ -138,19 +138,20 @@ export class CollabStore {
 
   constructor(path: string, options: CollabStoreOptions = {}) {
     this.now = options.now ?? (() => new Date());
-    if (path !== ":memory:") {
-      const parent = dirname(path);
+    const databasePath = path === ":memory:" ? path : resolve(path);
+    if (databasePath !== ":memory:") {
+      const parent = dirname(databasePath);
       const parentAlreadyExisted = existsSync(parent);
       mkdirSync(parent, { recursive: true, mode: 0o700 });
       // Never change a caller-owned existing directory such as /tmp or a repo.
       // We can tighten the dedicated directory only when this store created it.
       if (!parentAlreadyExisted) chmodSync(parent, 0o700);
-      const descriptor = openSync(path, "a", 0o600);
+      const descriptor = openSync(databasePath, "a", 0o600);
       closeSync(descriptor);
-      chmodSync(path, 0o600);
-      this.filesystemPath = path;
+      chmodSync(databasePath, 0o600);
+      this.filesystemPath = databasePath;
     }
-    this.db = new Database(path, { create: true, strict: true });
+    this.db = new Database(databasePath, { create: true, strict: true });
     this.initialize();
   }
 

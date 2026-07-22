@@ -277,7 +277,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("name: Install cross-language vector dependencies");
     expect(workflow).toContain("working-directory: packages/sdk-ts");
     expect(workflow).toContain(
-      "api packages/data packages/data-protocol packages/credential-broker packages/sdk-ts packages/wallet packages/telescope",
+      "api packages/data packages/data-protocol packages/credential-broker packages/collab packages/sdk-ts packages/wallet packages/telescope",
     );
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("name: Build local data-sync peers");
@@ -292,6 +292,7 @@ describe("boring test spine", () => {
     expect(preflight).toContain("agent-data-sync/v1 explicit pull bridge");
     expect(preflight).toContain("cd packages/data-sync && bun run ci && bun run build");
     expect(preflight).toContain("cd packages/credential-broker && bun run ci");
+    expect(preflight).toContain("cd packages/collab && bun run ci");
     expect(preflight).toContain("cd packages/wallet && bun run ci");
     expect(preflight).toContain("cd packages/telescope && bun run ci");
     expect(workflow).toContain("name: Smoke packed credential broker under Node and Bun");

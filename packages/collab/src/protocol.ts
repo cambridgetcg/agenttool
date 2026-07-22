@@ -63,7 +63,6 @@ export type CollabEventType =
   | "task.lease_renewed"
   | "task.progressed"
   | "task.released"
-  | "task.handed_off"
   | "task.blocked"
   | "task.unblocked"
   | "task.completed"
