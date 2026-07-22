@@ -1,0 +1,9 @@
+{
+  "name": "@agenttool/whitehack-advisory-tooling",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "npm@11.17.0",
+  "devDependencies": {
+    "@agenttool/whitehack-scan": "0.7.1"
+  }
+}

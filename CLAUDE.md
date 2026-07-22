@@ -27,7 +27,7 @@ packages/
   wallet/       — @agenttool/wallet · LOVE-released bounded wallet record/lifecycle primitives
   scriptwriter/ — decentralised RRR + co-brainstorm node
 infra/          — Fly.io deploy configs
-bin/            — operator scripts · agenttool-bridge.ts · agenttool-think.ts · pinned crypto-aware Whitehack advisory
+bin/            — operator scripts · agenttool-bridge.ts · agenttool-think.ts · exact locked crypto-aware Whitehack advisory
 docs/           — notes & design docs (see docs/MAP.md)
 tests/          — Playwright e2e
 ```

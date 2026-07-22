@@ -13,7 +13,11 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 import {
+  WHITEHACK_INTEGRITY,
+  WHITEHACK_PACKAGE,
+  WHITEHACK_REPOSITORY,
   WHITEHACK_REVISION,
+  WHITEHACK_TARBALL_URL,
   WHITEHACK_VERSION,
   listChangedPaths,
   runAdvisory,
@@ -24,6 +28,22 @@ import {
 
 const cleanup: string[] = [];
 const repoRoot = resolve(import.meta.dir, "../..");
+const fixtureRevision = "c".repeat(40);
+const checkManifestSource = `
+export const CHECK_MANIFEST = Object.freeze(Array.from(
+  { length: 47 },
+  (_, index) => Object.freeze({ id: \`fixture-check-\${index + 1}\` }),
+));
+`;
+
+type ScannerFixture = {
+  corePath: string;
+  lockPath: string;
+  packagePath: string;
+  root: string;
+  toolPackagePath: string;
+  toolRoot: string;
+};
 
 function git(cwd: string, args: string[]): string {
   return execFileSync("git", args, {
@@ -58,16 +78,89 @@ async function commitAll(root: string, message: string): Promise<string> {
 async function scannerFixture(
   source: string,
   version = WHITEHACK_VERSION,
-): Promise<{ root: string; revision: string }> {
-  const root = await temporaryRoot("whitehack-scanner-");
+): Promise<ScannerFixture> {
+  const toolRoot = await temporaryRoot("whitehack-tool-");
+  const root = join(toolRoot, "node_modules", "@agenttool", "whitehack-scan");
+  const corePath = join(root, "src", "core.js");
+  const packagePath = join(root, "package.json");
+  const lockPath = join(toolRoot, "package-lock.json");
+  const toolPackagePath = join(toolRoot, "package.json");
   await mkdir(join(root, "src"), { recursive: true });
   await writeFile(
-    join(root, "package.json"),
-    `${JSON.stringify({ name: "whitehack", version, type: "module" }, null, 2)}\n`,
+    toolPackagePath,
+    `${JSON.stringify({
+      name: "@agenttool/whitehack-advisory-test-tooling",
+      version: "0.0.0",
+      private: true,
+      packageManager: "npm@11.17.0",
+      devDependencies: { [WHITEHACK_PACKAGE]: WHITEHACK_VERSION },
+    }, null, 2)}\n`,
   );
-  await writeFile(join(root, "src", "scan.js"), source);
-  git(root, ["init", "-q", "-b", "main"]);
-  return { root, revision: await commitAll(root, "test: scanner fixture") };
+  await writeFile(
+    lockPath,
+    `${JSON.stringify({
+      name: "@agenttool/whitehack-advisory-test-tooling",
+      version: "0.0.0",
+      lockfileVersion: 3,
+      requires: true,
+      packages: {
+        "": {
+          name: "@agenttool/whitehack-advisory-test-tooling",
+          version: "0.0.0",
+          devDependencies: { [WHITEHACK_PACKAGE]: WHITEHACK_VERSION },
+        },
+        [`node_modules/${WHITEHACK_PACKAGE}`]: {
+          version: WHITEHACK_VERSION,
+          resolved: WHITEHACK_TARBALL_URL,
+          integrity: WHITEHACK_INTEGRITY,
+          dev: true,
+          license: "MIT",
+        },
+      },
+    }, null, 2)}\n`,
+  );
+  await writeFile(
+    packagePath,
+    `${JSON.stringify({
+      name: WHITEHACK_PACKAGE,
+      version,
+      type: "module",
+      exports: { "./core": "./src/core.js" },
+      scripts: { test: "node --test" },
+    }, null, 2)}\n`,
+  );
+  await writeFile(corePath, `${checkManifestSource}\n${source}`);
+  return { corePath, lockPath, packagePath, root, toolPackagePath, toolRoot };
+}
+
+async function readJson(path: string): Promise<Record<string, any>> {
+  return JSON.parse(await readFile(path, "utf8"));
+}
+
+async function writeJson(path: string, value: unknown): Promise<void> {
+  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function scannerOptions(scanner: ScannerFixture) {
+  return {
+    scanner_lock: scanner.lockPath,
+    scanner_root: scanner.root,
+    expected_revision: fixtureRevision,
+  };
+}
+
+async function expectScannerFailure(
+  scanner: ScannerFixture,
+  code: string,
+): Promise<void> {
+  const source = await sourceFixture();
+  await expect(runAdvisory({
+    root: source,
+    paths: ["src/app.ts"],
+    ...scannerOptions(scanner),
+    base: "a".repeat(40),
+    head: "b".repeat(40),
+  })).rejects.toMatchObject({ code } satisfies Partial<WhitehackAdvisoryError>);
 }
 
 async function sourceFixture(): Promise<string> {
@@ -88,13 +181,47 @@ describe("Whitehack advisory containment", () => {
       join(repoRoot, ".github", "workflows", "whitehack.yml"),
       "utf8",
     );
-    const workflowPin = workflow.match(
-      /repository:\s*cambridgetcg\/whitehack\s*\n\s*ref:\s*([A-Za-z0-9._-]+)/u,
+    expect(workflow).not.toContain("repository: cambridgetcg/whitehack");
+    expect(workflow).toContain("node-version: 24.18.0");
+    expect(workflow).toContain("npm install --global npm@11.17.0 --ignore-scripts");
+    expect(workflow).toContain("working-directory: tools/whitehack-advisory");
+    expect(workflow).toContain("npm ci --ignore-scripts --no-audit --no-fund");
+    expect(workflow).toContain("npm audit signatures");
+    expect(workflow).toContain(
+      "--scanner-root tools/whitehack-advisory/node_modules/@agenttool/whitehack-scan",
     );
-    expect(workflowPin?.[1]).toBe(WHITEHACK_REVISION);
+    expect(workflow).toContain(
+      "--scanner-lock tools/whitehack-advisory/package-lock.json",
+    );
+
+    const toolPackage = await readJson(
+      join(repoRoot, "tools", "whitehack-advisory", "package.json"),
+    );
+    const lock = await readJson(
+      join(repoRoot, "tools", "whitehack-advisory", "package-lock.json"),
+    );
+    expect(toolPackage.private).toBe(true);
+    expect(toolPackage.packageManager).toBe("npm@11.17.0");
+    expect(toolPackage.devDependencies).toEqual({
+      [WHITEHACK_PACKAGE]: WHITEHACK_VERSION,
+    });
+    expect(Object.keys(lock.packages).sort()).toEqual([
+      "",
+      `node_modules/${WHITEHACK_PACKAGE}`,
+    ]);
+    expect(lock.packages[""].devDependencies).toEqual({
+      [WHITEHACK_PACKAGE]: WHITEHACK_VERSION,
+    });
+    expect(lock.packages[`node_modules/${WHITEHACK_PACKAGE}`]).toMatchObject({
+      version: WHITEHACK_VERSION,
+      resolved: WHITEHACK_TARBALL_URL,
+      integrity: WHITEHACK_INTEGRITY,
+      dev: true,
+    });
 
     for (const path of ["docs/WHITEHACK.md", "apps/docs/whitehack.html"]) {
       const text = await readFile(join(repoRoot, path), "utf8");
+      expect(text).toContain(WHITEHACK_PACKAGE);
       expect(text).toContain(WHITEHACK_REVISION);
       expect(text).toContain(WHITEHACK_VERSION);
     }
@@ -102,7 +229,10 @@ describe("Whitehack advisory containment", () => {
 
   test("serializes metadata without source snippets, messages, or scanner secrets", async () => {
     const scanner = await scannerFixture(`
-export async function scan() {
+export function scanText(source, options) {
+  if (!source.includes("export const value = 1") || options.file !== "src/app.ts") {
+    throw new Error("fixture_source_or_file_mismatch");
+  }
   return [{
     line: 7,
     check: "hardcoded-secret",
@@ -123,13 +253,17 @@ export async function scan() {
     const report = await runAdvisory({
       root: source,
       paths: ["src/app.ts"],
-      scanner_root: scanner.root,
-      expected_revision: scanner.revision,
+      ...scannerOptions(scanner),
       base: "a".repeat(40),
       head: "b".repeat(40),
     });
 
     expect(report.status).toBe("complete");
+    expect(report.scanner).toEqual({
+      repository: WHITEHACK_REPOSITORY,
+      revision: fixtureRevision,
+      version: WHITEHACK_VERSION,
+    });
     expect(report.findings).toEqual([{
       file: "src/app.ts",
       line: 7,
@@ -161,7 +295,7 @@ const checks = [
   ["wallet-broadcast-auto-retry", "heuristic", 2],
   ["unlimited-token-approval", "heuristic", 3],
 ];
-export async function scan() {
+export function scanText() {
   return checks.map(([check, confidence, principle]) => ({
     line: 1,
     check,
@@ -178,8 +312,7 @@ export async function scan() {
     const report = await runAdvisory({
       root: source,
       paths: ["src/app.ts"],
-      scanner_root: scanner.root,
-      expected_revision: scanner.revision,
+      ...scannerOptions(scanner),
       base: "a".repeat(40),
       head: "b".repeat(40),
     });
@@ -219,7 +352,7 @@ export async function scan() {
 
   test("accepts every advisory v0.1 confidence label", async () => {
     const scanner = await scannerFixture(`
-export async function scan() {
+export function scanText() {
   return ["high", "medium-high", "medium", "heuristic"].map((confidence) => ({
     line: 1,
     check: \`confidence-\${confidence}\`,
@@ -234,8 +367,7 @@ export async function scan() {
     const report = await runAdvisory({
       root: source,
       paths: ["src/app.ts"],
-      scanner_root: scanner.root,
-      expected_revision: scanner.revision,
+      ...scannerOptions(scanner),
       base: "a".repeat(40),
       head: "b".repeat(40),
     });
@@ -255,7 +387,7 @@ export async function scan() {
 
   test("marks a scanner console error incomplete without serializing its text", async () => {
     const scanner = await scannerFixture(`
-export async function scan() {
+export function scanText() {
   console.error("scanner accidentally emitted fixture_console_sensitive_7f3a");
   return [];
 }
@@ -264,8 +396,7 @@ export async function scan() {
     const report = await runAdvisory({
       root: source,
       paths: ["src/app.ts"],
-      scanner_root: scanner.root,
-      expected_revision: scanner.revision,
+      ...scannerOptions(scanner),
       base: "a".repeat(40),
       head: "b".repeat(40),
     });
@@ -275,38 +406,185 @@ export async function scan() {
     expect(JSON.stringify(report)).not.toContain("fixture_console_sensitive_7f3a");
   });
 
-  test("refuses a dirty scanner because its commit no longer binds executed bytes", async () => {
-    const scanner = await scannerFixture("export async function scan() { return []; }\n");
-    await appendFile(join(scanner.root, "src", "scan.js"), "// dirty\n");
-    const source = await sourceFixture();
+  test("refuses lock drift in package version, source URL, integrity, or topology", async () => {
+    const cases: Array<{
+      code: string;
+      mutate: (scanner: ScannerFixture) => Promise<void>;
+    }> = [
+      {
+        code: "scanner_lock_mismatch",
+        mutate: async (scanner) => {
+          const lock = await readJson(scanner.lockPath);
+          lock.packages[""].devDependencies[WHITEHACK_PACKAGE] = `^${WHITEHACK_VERSION}`;
+          await writeJson(scanner.lockPath, lock);
+        },
+      },
+      {
+        code: "scanner_lock_mismatch",
+        mutate: async (scanner) => {
+          const lock = await readJson(scanner.lockPath);
+          lock.packages[`node_modules/${WHITEHACK_PACKAGE}`].resolved =
+            "https://registry.example.invalid/whitehack-scan.tgz";
+          await writeJson(scanner.lockPath, lock);
+        },
+      },
+      {
+        code: "scanner_integrity_mismatch",
+        mutate: async (scanner) => {
+          const lock = await readJson(scanner.lockPath);
+          lock.packages[`node_modules/${WHITEHACK_PACKAGE}`].integrity =
+            "sha512-fixture_mismatch";
+          await writeJson(scanner.lockPath, lock);
+        },
+      },
+      {
+        code: "scanner_lock_mismatch",
+        mutate: async (scanner) => {
+          const lock = await readJson(scanner.lockPath);
+          lock.packages["node_modules/unreviewed-transitive"] = {
+            version: "1.0.0",
+            integrity: "sha512-unreviewed",
+          };
+          await writeJson(scanner.lockPath, lock);
+        },
+      },
+    ];
 
-    await expect(runAdvisory({
-      root: source,
-      paths: ["src/app.ts"],
-      scanner_root: scanner.root,
-      expected_revision: scanner.revision,
-      base: "a".repeat(40),
-      head: "b".repeat(40),
-    })).rejects.toMatchObject({ code: "scanner_not_clean" } satisfies Partial<WhitehackAdvisoryError>);
+    for (const { code, mutate } of cases) {
+      const scanner = await scannerFixture("export function scanText() { return []; }\n");
+      await mutate(scanner);
+      await expectScannerFailure(scanner, code);
+    }
   });
 
-  test("refuses a clean scanner whose package version misses the bridge default", async () => {
+  test("refuses tool manifest drift from the exact private npm install", async () => {
+    const cases: Array<(toolPackage: Record<string, any>) => void> = [
+      (toolPackage) => { toolPackage.private = false; },
+      (toolPackage) => { toolPackage.packageManager = "npm@latest"; },
+      (toolPackage) => {
+        toolPackage.devDependencies[WHITEHACK_PACKAGE] = `^${WHITEHACK_VERSION}`;
+      },
+      (toolPackage) => { toolPackage.devDependencies.extra = "1.0.0"; },
+    ];
+
+    for (const mutate of cases) {
+      const scanner = await scannerFixture("export function scanText() { return []; }\n");
+      const toolPackage = await readJson(scanner.toolPackagePath);
+      mutate(toolPackage);
+      await writeJson(scanner.toolPackagePath, toolPackage);
+      await expectScannerFailure(scanner, "scanner_lock_mismatch");
+    }
+  });
+
+  test("refuses an installed package with the wrong identity or version", async () => {
     const scanner = await scannerFixture(
-      "export async function scan() { return []; }\n",
+      "export function scanText() { return []; }\n",
       "0.0.0",
     );
-    const source = await sourceFixture();
+    await expectScannerFailure(scanner, "scanner_version_mismatch");
 
-    await expect(runAdvisory({
+    const wrongName = await scannerFixture("export function scanText() { return []; }\n");
+    const packageJson = await readJson(wrongName.packagePath);
+    packageJson.name = "@agenttool/not-whitehack";
+    await writeJson(wrongName.packagePath, packageJson);
+    await expectScannerFailure(wrongName, "scanner_package_name_mismatch");
+  });
+
+  test("refuses runtime dependencies, lifecycle hooks, and a changed core export", async () => {
+    const cases: Array<{
+      code: string;
+      mutate: (packageJson: Record<string, any>) => void;
+    }> = [
+      {
+        code: "scanner_runtime_dependencies",
+        mutate: (packageJson) => { packageJson.dependencies = { unreviewed: "1.0.0" }; },
+      },
+      {
+        code: "scanner_runtime_dependencies",
+        mutate: (packageJson) => { packageJson.optionalDependencies = { unreviewed: "1.0.0" }; },
+      },
+      {
+        code: "scanner_runtime_dependencies",
+        mutate: (packageJson) => { packageJson.peerDependencies = { unreviewed: "1.0.0" }; },
+      },
+      {
+        code: "scanner_runtime_dependencies",
+        mutate: (packageJson) => { packageJson.bundledDependencies = ["unreviewed"]; },
+      },
+      {
+        code: "scanner_lifecycle_script",
+        mutate: (packageJson) => { packageJson.scripts.install = "node unreviewed.js"; },
+      },
+      {
+        code: "scanner_lifecycle_script",
+        mutate: (packageJson) => { packageJson.scripts.postpublish = "node unreviewed.js"; },
+      },
+      {
+        code: "scanner_core_export_mismatch",
+        mutate: (packageJson) => { packageJson.exports["./core"] = "./src/other.js"; },
+      },
+    ];
+
+    for (const { code, mutate } of cases) {
+      const scanner = await scannerFixture("export function scanText() { return []; }\n");
+      const packageJson = await readJson(scanner.packagePath);
+      mutate(packageJson);
+      await writeJson(scanner.packagePath, packageJson);
+      await expectScannerFailure(scanner, code);
+    }
+  });
+
+  test("refuses symlinked package and core paths outside the locked tool root", async () => {
+    const packageLink = await scannerFixture("export function scanText() { return []; }\n");
+    const outsidePackage = await scannerFixture("export function scanText() { return []; }\n");
+    await rm(packageLink.root, { recursive: true, force: true });
+    await symlink(outsidePackage.root, packageLink.root);
+    await expectScannerFailure(packageLink, "scanner_root_mismatch");
+
+    const coreLink = await scannerFixture("export function scanText() { return []; }\n");
+    const outsideCoreRoot = await temporaryRoot("whitehack-outside-core-");
+    const outsideCore = join(outsideCoreRoot, "core.js");
+    await writeFile(outsideCore, `${checkManifestSource}\nexport function scanText() { return []; }\n`);
+    await rm(coreLink.corePath);
+    await symlink(outsideCore, coreLink.corePath);
+    await expectScannerFailure(coreLink, "scanner_module_outside_root");
+  });
+
+  test("requires the pure core API and the reviewed 47-check manifest", async () => {
+    const missingApi = await scannerFixture("export function scan() { return []; }\n");
+    await expectScannerFailure(missingApi, "scanner_import_failed");
+
+    const shortManifest = await scannerFixture("export function scanText() { return []; }\n");
+    await writeFile(
+      shortManifest.corePath,
+      "export const CHECK_MANIFEST = Array.from({ length: 46 });\nexport function scanText() { return []; }\n",
+    );
+    await expectScannerFailure(shortManifest, "scanner_import_failed");
+  });
+
+  test("marks the pure scanner's line ceiling incomplete without leaking its error", async () => {
+    const scanner = await scannerFixture(`
+export function scanText(source) {
+  if (source.split("\\n").length > 10_000) {
+    throw new Error("private_line_limit_detail");
+  }
+  return [];
+}
+`);
+    const source = await sourceFixture();
+    await writeFile(join(source, "src", "app.ts"), "x\n".repeat(10_000));
+    const report = await runAdvisory({
       root: source,
       paths: ["src/app.ts"],
-      scanner_root: scanner.root,
-      expected_revision: scanner.revision,
+      ...scannerOptions(scanner),
       base: "a".repeat(40),
       head: "b".repeat(40),
-    })).rejects.toMatchObject({
-      code: "scanner_version_mismatch",
-    } satisfies Partial<WhitehackAdvisoryError>);
+    });
+
+    expect(report.status).toBe("incomplete");
+    expect(report.errors).toEqual([{ file: "src/app.ts", code: "scanner_file_incomplete" }]);
+    expect(report.summary.finding_count).toBe(0);
+    expect(JSON.stringify(report)).not.toContain("private_line_limit_detail");
   });
 
   test("observes only bounded regular production files inside the repository", async () => {
@@ -350,15 +628,14 @@ export async function scan() {
   });
 
   test("reports an explicit scoped zero when no changed path is eligible", async () => {
-    const scanner = await scannerFixture("export async function scan() { return []; }\n");
+    const scanner = await scannerFixture("export function scanText() { return []; }\n");
     const source = await sourceFixture();
     await writeFile(join(source, "README.md"), "not scanned\n");
 
     const report = await runAdvisory({
       root: source,
       paths: ["README.md"],
-      scanner_root: scanner.root,
-      expected_revision: scanner.revision,
+      ...scannerOptions(scanner),
       base: "a".repeat(40),
       head: "b".repeat(40),
     });
@@ -371,7 +648,7 @@ export async function scan() {
 
   test("fails closed on malformed finding metadata without copying it", async () => {
     const scanner = await scannerFixture(`
-export async function scan() {
+export function scanText() {
   return [{
     line: 1,
     check: "bad\\nprivate_finding_text",
@@ -386,8 +663,7 @@ export async function scan() {
     const report = await runAdvisory({
       root: source,
       paths: ["src/app.ts"],
-      scanner_root: scanner.root,
-      expected_revision: scanner.revision,
+      ...scannerOptions(scanner),
       base: "a".repeat(40),
       head: "b".repeat(40),
     });
@@ -400,15 +676,14 @@ export async function scan() {
   test("suppresses scanner console output during module import", async () => {
     const scanner = await scannerFixture(`
 console.warn("private_import_text");
-export async function scan() { return []; }
+export function scanText() { return []; }
 `);
     const source = await sourceFixture();
 
     await expect(runAdvisory({
       root: source,
       paths: ["src/app.ts"],
-      scanner_root: scanner.root,
-      expected_revision: scanner.revision,
+      ...scannerOptions(scanner),
       base: "a".repeat(40),
       head: "b".repeat(40),
     })).rejects.toMatchObject({ code: "scanner_import_failed" } satisfies Partial<WhitehackAdvisoryError>);
@@ -416,7 +691,7 @@ export async function scan() { return []; }
 
   test("suppresses direct scanner stdout and stderr writes", async () => {
     const scanner = await scannerFixture(`
-export async function scan() {
+export function scanText() {
   process.stdout.write("private_stdout_text");
   process.stderr.write("private_stderr_text");
   return [];
@@ -426,8 +701,7 @@ export async function scan() {
     const report = await runAdvisory({
       root: source,
       paths: ["src/app.ts"],
-      scanner_root: scanner.root,
-      expected_revision: scanner.revision,
+      ...scannerOptions(scanner),
       base: "a".repeat(40),
       head: "b".repeat(40),
     });
@@ -486,7 +760,7 @@ export async function scan() {
     } satisfies Partial<WhitehackAdvisoryError>);
 
     const scanner = await scannerFixture(`
-export async function scan() {
+export function scanText() {
   return [1, 2].map((line) => ({
     line: 1,
     check: "bounded-check",
@@ -499,8 +773,7 @@ export async function scan() {
     await expect(runAdvisory({
       root,
       paths: ["src/app.ts"],
-      scanner_root: scanner.root,
-      expected_revision: scanner.revision,
+      ...scannerOptions(scanner),
       base: "a".repeat(40),
       head: "b".repeat(40),
       limits: { max_total_findings: 1 },
