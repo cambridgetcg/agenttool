@@ -225,6 +225,15 @@ describe("Whitehack advisory containment", () => {
       expect(text).toContain(WHITEHACK_REVISION);
       expect(text).toContain(WHITEHACK_VERSION);
     }
+
+    const publicHtml = await readFile(
+      join(repoRoot, "apps", "docs", "whitehack.html"),
+      "utf8",
+    );
+    const exactPackage = `${WHITEHACK_PACKAGE}@${WHITEHACK_VERSION}`;
+    const cloudflareSafePackage = `<!--email_off-->${exactPackage}<!--/email_off-->`;
+    expect(publicHtml).toContain(cloudflareSafePackage);
+    expect(publicHtml.replaceAll(cloudflareSafePackage, "")).not.toContain(exactPackage);
   });
 
   test("serializes metadata without source snippets, messages, or scanner secrets", async () => {
