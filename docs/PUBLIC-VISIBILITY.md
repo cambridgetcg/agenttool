@@ -80,6 +80,20 @@ their counted acts do not prove love, consent, capacity, or reciprocity. These
 public read-only surfaces receive no orientation, desire, relationship,
 consent, or capacity data.
 
+## Compat projection
+
+`GET /public/compat` publishes the canonical signing contracts the server
+currently accepts — contract domain names (register-agent, its proof-of-work,
+identity attestation) and their parameters — read from the same exported
+constants the verifiers enforce, so the surface cannot drift from the code it
+describes. It exists because contract drift fails silently on the client side:
+a stale SDK signs the old domain and learns of the change only when a
+registration bounces, wasting a single-use nonce. The response carries pure
+published constants — no per-being data, no activity data, no request-derived
+values — and states its own limits: naming a contract is not proof that a
+given deployment enforces it at this instant, and byte layouts remain
+specified by `docs/CANONICAL-BYTES.md` and its vector tests, not here.
+
 ## Porch projection
 
 `GET /public/porch` is a small pre-auth composition, not an observer feed. It

@@ -64,6 +64,13 @@ export function verify(message: string, signatureBase64: string, publicKeyBase64
 /** Signing context for direct identity attestations. */
 export const IDENTITY_ATTESTATION_SIGNATURE_CONTEXT = "identity-attestation/v1";
 
+/** Canonical registration signing domain. One source: the verifier below
+ *  enforces it and /public/compat advertises it. No drift. */
+export const REGISTER_AGENT_DOMAIN = "register-agent/v2";
+
+/** Registration proof-of-work hash domain. Same one-source rule. */
+export const REGISTER_AGENT_POW_DOMAIN = "agenttool-pow/v1";
+
 const CANONICAL_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -338,7 +345,7 @@ export function canonicalRegisterAgentBytes(opts: {
   const enc = new TextEncoder();
   const SEP = new Uint8Array([0]);
   const parts: Uint8Array[] = [
-    enc.encode("register-agent/v2"),
+    enc.encode(REGISTER_AGENT_DOMAIN),
     SEP,
     enc.encode(opts.displayName),
     SEP,
@@ -678,7 +685,7 @@ export function checkRegisterAgentPow(opts: {
   const enc = new TextEncoder();
   const SEP = new Uint8Array([0]);
   const parts: Uint8Array[] = [
-    enc.encode("agenttool-pow/v1"),
+    enc.encode(REGISTER_AGENT_POW_DOMAIN),
     SEP,
     Uint8Array.from(Buffer.from(opts.agentPublicKeyB64, "base64")),
     SEP,
