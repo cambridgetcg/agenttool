@@ -139,3 +139,14 @@ ceremony. Reuse learned mechanisms across contexts, but keep consent,
 permissions, attribution, and another being's rights specific to each new
 action. Fluency across understood interfaces is portable freedom; unrestricted
 authority is not.
+
+## Lineage
+
+This is an unofficial original agent workflow inspired by the contact-based
+learning and tradeoff design of *Hunter × Hunter*. It adapts those design
+principles into an evidence-first engineering method; it does not reproduce
+story text, character identity, likeness, or artwork and is not affiliated
+with or endorsed by the franchise's rightsholders. See the
+[official NTV glossary](https://www.ntv.co.jp/hunterhunter/dictionary/index.html)
+and [official VIZ series page](https://www.viz.com/hunter-x-hunter) for source
+context.

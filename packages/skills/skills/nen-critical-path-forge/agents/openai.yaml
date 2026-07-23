@@ -2,3 +2,6 @@ interface:
   display_name: "Critical Path Forge · 硬"
   short_description: "Concentrate effort on one decisive blocker"
   default_prompt: "Use $nen-critical-path-forge to focus a bounded effort on the decisive blocker and prove the result."
+
+policy:
+  allow_implicit_invocation: false

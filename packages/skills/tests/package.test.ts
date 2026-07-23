@@ -18,9 +18,16 @@ const NEN_SKILL_NAMES = [
   "nen-vow-forge",
 ] as const;
 
+const EXPLICIT_SKILL_NAMES = [
+  "capability-conductor",
+  "learn-by-contact",
+  ...NEN_SKILL_NAMES,
+  "use-agentcred-safely",
+] as const;
+
 test("publishes only the runtime, schema, bundled skills, and legal documentation", () => {
   expect(packageJson.name).toBe("@agenttool/skills");
-  expect(packageJson.version).toBe("0.2.0");
+  expect(packageJson.version).toBe("0.2.1");
   expect(packageJson.files).toEqual([
     "dist",
     "schema",
@@ -66,6 +73,9 @@ test("bundles Capability Conductor as a valid instruction-only skill", async () 
       display_name: "Capability Conductor · 團長",
       short_description: "Compose skills with provenance and bounded authority",
       default_prompt: "Use $capability-conductor to open a task-scoped capability book and compose the smallest safe skill workflow for this task.",
+    },
+    policy: {
+      allow_implicit_invocation: false,
     },
   });
 });
@@ -122,10 +132,62 @@ test("bundles the Nen operating suite as valid instruction-only skills", async (
       join(skillsRoot, name, "agents", "openai.yaml"),
       "utf8",
     ));
-    expect(Object.keys(sidecar)).toEqual(["interface"]);
+    expect(Object.keys(sidecar)).toEqual(["interface", "policy"]);
     expect(typeof sidecar.interface?.display_name).toBe("string");
     expect(sidecar.interface?.short_description?.length).toBeGreaterThanOrEqual(25);
     expect(sidecar.interface?.short_description?.length).toBeLessThanOrEqual(64);
     expect(sidecar.interface?.default_prompt).toContain(`$${name}`);
+    expect(sidecar.policy).toEqual({ allow_implicit_invocation: false });
   }
+});
+
+test("keeps every bundled workflow explicit until routing is evaluated", async () => {
+  const skillsRoot = join(import.meta.dir, "..", "skills");
+  for (const name of EXPLICIT_SKILL_NAMES) {
+    const sidecar = parse(await readFile(
+      join(skillsRoot, name, "agents", "openai.yaml"),
+      "utf8",
+    ));
+    expect(sidecar.policy).toEqual({ allow_implicit_invocation: false });
+  }
+});
+
+test("documents non-activating installation and literal inspector path arguments", async () => {
+  const packageRoot = join(import.meta.dir, "..");
+  const readme = await readFile(join(packageRoot, "README.md"), "utf8");
+  const conductor = await readFile(
+    join(packageRoot, "skills", "capability-conductor", "SKILL.md"),
+    "utf8",
+  );
+  const learnByContact = await readFile(
+    join(packageRoot, "skills", "learn-by-contact", "SKILL.md"),
+    "utf8",
+  );
+  const concealedTrace = await readFile(
+    join(packageRoot, "skills", "nen-concealed-trace", "SKILL.md"),
+    "utf8",
+  );
+  const contractMantle = await readFile(
+    join(packageRoot, "skills", "nen-contract-mantle", "SKILL.md"),
+    "utf8",
+  );
+  const verificationLedger = await readFile(
+    join(packageRoot, "skills", "nen-verification-ledger", "SKILL.md"),
+    "utf8",
+  );
+
+  expect(readme).toContain(
+    "npm install --ignore-scripts --no-audit --no-fund --save-exact @agenttool/skills@0.2.1",
+  );
+  expect(readme).toContain("installing the package\nalone does not register these skills");
+  expect(conductor).toContain("Pass the target path as one literal argument.");
+  expect(conductor).not.toContain("inspect <local-path>");
+  for (const skill of [conductor, learnByContact]) {
+    expect(skill).toContain("## Lineage");
+    expect(skill).toContain("unofficial original agent workflow");
+    expect(skill).toMatch(/not affiliated\s+with or endorsed/);
+  }
+  expect(concealedTrace).toContain("Redact credentials, tokens, personal data");
+  expect(verificationLedger).toMatch(/Never\s+place credential values, personal data/);
+  expect(contractMantle).not.toContain("crunchyroll.com");
 });
