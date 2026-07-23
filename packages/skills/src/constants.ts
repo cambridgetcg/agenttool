@@ -1,7 +1,7 @@
 import type { InspectionLimits } from "./types.js";
 
 export const PACKAGE_NAME = "@agenttool/skills";
-export const PACKAGE_VERSION = "0.2.0";
+export const PACKAGE_VERSION = "0.2.1";
 export const REPORT_SCHEMA_VERSION = "agenttool.skills/inspect-v0.1";
 export const REPORT_SCHEMA_ID = "urn:agenttool:skills:inspection:v0.1";
 

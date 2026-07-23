@@ -65,4 +65,6 @@ the user's intent changes.
 This is an original agent workflow inspired by Ten's conservation of aura and
 Ken's sustained whole-body defense. It adapts the design principle, not story
 text or character identity. See the
-[Crunchyroll Nen guide](https://www.crunchyroll.com/news/guides/2024/12/12/hunter-x-hunter-nen-explained).
+[official NTV glossary](https://www.ntv.co.jp/hunterhunter/dictionary/index.html)
+and [official VIZ series page](https://www.viz.com/hunter-x-hunter) for source
+context.

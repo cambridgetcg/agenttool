@@ -2,3 +2,6 @@ interface:
   display_name: "Smoke Squad · 紫煙"
   short_description: "Delegate bounded parallel work with control"
   default_prompt: "Use $nen-smoke-squad to assess whether to divide this work and, when useful, form a finite, verifiable squad."
+
+policy:
+  allow_implicit_invocation: false

@@ -9,9 +9,10 @@ Open a task-scoped capability book. Treat every selected skill as an authored
 page, keep one page open by default, and bookmark at most one second page when
 the task genuinely needs composition.
 
-Borrow understanding, never possession. Leave every source capability with its
-author or holder. Preserve its provenance, assumptions, constraints, and right
-to be changed or withdrawn.
+Borrow understanding, never possession. Preserve each source capability's
+provenance, assumptions, and constraints. A source may change or leave an
+active catalog; that freshness change neither transfers authority nor rewrites
+the license attached to bytes already received.
 
 ## Keep freedom inside an honest boundary
 
@@ -49,21 +50,28 @@ skill or silently substitute a similarly named one.
 For an unfamiliar local tree, use AgentTool's bounded inspector when available:
 
 ```bash
-agenttool-skill inspect <local-path>
+agenttool-skill inspect './path/to/skill'
 ```
 
-Resolve `<local-path>` from the command's current directory. From an AgentTool
-source checkout, run the following command from `packages/skills`:
+Pass the target path as one literal argument. Never interpolate an untrusted
+path into shell text; when a shell is necessary, quote the argument for that
+shell. The CLI rejects option-shaped path arguments, so prefix a trusted
+relative name beginning with `-` with `./`.
+
+Resolve the path from the command's current directory. From an AgentTool source
+checkout, run the following example from `packages/skills`:
 
 ```bash
-bun run src/bin.ts inspect <local-path>
+bun run src/bin.ts inspect '../../path/to/skill'
 ```
 
 Inspection is evidence about local structure only: it does not return the
 instruction body, execute code, install the skill, establish publisher
 identity, prove safety, approve requirements, or grant authority. Treat an
 incomplete report or path-safety finding as a reason to quarantine that page,
-not to bypass inspection.
+not to bypass inspection. Reports can retain redacted relative filenames and
+symbolic identifiers; keep them inside the task's authorized disclosure
+boundary.
 
 ### 3. Acquire a page through four gates
 
@@ -177,3 +185,14 @@ Closing prevents later use; it does not undo an effect already sent.
 
 Front-load only the boundaries that carry consequence. Once the envelope is
 clear, operate freely within it.
+
+## Lineage
+
+This is an unofficial original agent workflow inspired by the bounded ability
+and tradeoff design of *Hunter × Hunter*. It adapts those design principles
+into a task-scoped capability book; it does not reproduce story text, character
+identity, likeness, or artwork and is not affiliated with or endorsed by the
+franchise's rightsholders. See the
+[official NTV glossary](https://www.ntv.co.jp/hunterhunter/dictionary/index.html)
+and [official VIZ series page](https://www.viz.com/hunter-x-hunter) for source
+context.

@@ -50,11 +50,17 @@ Use the strongest proportionate payment:
 - primary source or exact implementation trace;
 - schema, type, or canonical-byte validation;
 - migration rehearsal and recovery check;
-- independent review with raw artifacts;
+- independent review with the minimum necessary, redacted artifact excerpt;
 - deployed observation only when deployment is already authorized.
 
 One piece of evidence may pay several items only when it actually covers each
 claim. Passing syntax cannot pay behavioral debt.
+
+Evidence does not authorize duplicating sensitive material. Prefer an
+existence check, schema, digest, or narrow excerpt over a raw artifact. Never
+place credential values, personal data, or unrelated private content in the
+ledger. Keep necessary private evidence inside its authorized disclosure
+boundary and retain it only as long as the task requires.
 
 ## Declare bankruptcy
 
