@@ -1,0 +1,57 @@
+{
+  "name": "@agenttool/correspondence-yutabase",
+  "version": "0.1.0-dev.0",
+  "description": "Pure deterministic mapping plans from Agent Correspondence records to YUTABASE cards and threads",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "PERSISTENCE-CONTRACT.md",
+    "CLAUDE.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20.19.0",
+    "bun": ">=1.3.5"
+  },
+  "scripts": {
+    "clean": "node --eval \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "bun run clean && tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "smoke:node": "node scripts/smoke-node.mjs",
+    "ci": "bun run typecheck && bun test && bun run build && bun run smoke:node",
+    "prepack": "bun run ci"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.7.0"
+  },
+  "keywords": [
+    "agents",
+    "correspondence",
+    "yutabase",
+    "projection",
+    "semantic-graph",
+    "uuidv5"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "directory": "packages/correspondence-yutabase"
+  },
+  "homepage": "https://docs.agenttool.dev/AGENT-CORRESPONDENCE.md"
+}

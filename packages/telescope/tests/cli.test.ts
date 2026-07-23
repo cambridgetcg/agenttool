@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { runCli } from "../src/cli-core.js";
+import { TOOL_VERSION } from "../src/constants.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -51,7 +52,7 @@ describe("CLI", () => {
     const version = capture();
     expect(await runCli(["--version"], version.io)).toBe(0);
     expect(version.output()).toEqual({
-      stdout: "0.1.0\n",
+      stdout: `${TOOL_VERSION}\n`,
       stderr: "",
     });
   });

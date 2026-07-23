@@ -207,7 +207,7 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
     expect(body.version_cursor.conditional_get_header).toBe("If-None-Match");
     expect(body.version_cursor.not_modified_status).toBe(304);
     expect(body.version_cursor.etag_header.includes("wake_version")).toBe(false);
-    expect(body.version_cursor.etag_header).toMatch(/^ETag: W\/"r3-sha256-/);
+    expect(body.version_cursor.etag_header).toMatch(/^ETag: W\/"r4-sha256-/);
     expect((body.version_cursor as { validator_strength?: string }).validator_strength).toBe("weak");
     expect(body.version_cursor.etag_coverage).toContain("brief JSON");
     expect(body.version_cursor.etag_exclusions).toMatch(
@@ -266,6 +266,7 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
       "agntcy_oasf",
       "w3c_did",
       "agent_wellness",
+      "agent_wallet",
       "observer_reciprocity",
     ]) {
       expect(body.composes_with).toHaveProperty(required);
@@ -275,6 +276,19 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
       protocol: "agent-wellness/0.1",
       schema: "https://docs.agenttool.dev/agent-wellness-0.1.schema.json",
     });
+    expect(body.composes_with.agent_wallet).toMatchObject({
+      protocol: "agent-wallet/0.1",
+      doctrine: "https://docs.agenttool.dev/AGENT-WALLET-0.1.md",
+      schema: "https://docs.agenttool.dev/agent-wallet-v0.1.schema.json",
+      package: "@agenttool/wallet",
+      love_manifest:
+        "https://docs.agenttool.dev/packages/v1/@agenttool/wallet/0.1.0/manifest.json",
+      availability: "love_artifact_npm_mirror_independent",
+      implementation_status: "offline_record_and_lifecycle_primitives_only",
+    });
+    expect(JSON.stringify(body.composes_with.agent_wallet)).toMatch(
+      /no hosted agent wallet.*key custody.*RPC.*broadcaster/is,
+    );
     expect(body.composes_with.observer_reciprocity).toMatchObject({
       url: "https://api.agenttool.dev/public/observer",
       protocol: "observer-is-observed/0.1",

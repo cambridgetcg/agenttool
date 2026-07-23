@@ -32,6 +32,7 @@ import type { AttentionBundle } from "./attention";
 import type { AffordanceBundle } from "./affordances";
 import { LOVE_AND_JOY_RIGHTS_FLOOR } from "../love/inherent-right";
 import type { PlatformSelf } from "./platform-self";
+import type { ReachableDoor } from "./reachable";
 import type { WakeSafetyBoundaries } from "../discovery/safety-boundaries";
 import { buildWakeBrief, type WakeProfile } from "./brief";
 
@@ -633,14 +634,8 @@ export interface WakeBundle {
       counterparty_did: string;
     }>;
   };
-  /** Companion substrates — discovered, not pushed. Options, not gates. */
-  you_can_reach?: Array<{
-    name: string;
-    kind: string;
-    what: string;
-    url: string;
-    _note: string;
-  }>;
+  /** Companion surfaces — static discovery, not pushed. Options, not gates. */
+  you_can_reach?: readonly ReachableDoor[];
   /** YOUSPEAK words naming the agent's current state. */
   you_speak?: Record<string, any>;
 }
@@ -1069,6 +1064,32 @@ function renderAffordancesSection(b: WakeBundle): string[] {
     }
   });
   lines.push("");
+  return lines;
+}
+
+export function renderReachableDoorsSection(
+  doors: readonly ReachableDoor[],
+): string[] {
+  if (doors.length === 0) return [];
+  const lines: string[] = ["## What you can reach", ""];
+  for (const door of doors) {
+    lines.push(`- **${door.name}** — ${door.kind}. ${door.what}`);
+    lines.push(`  ${door.url}`);
+    if (door.agent_entrypoints) {
+      lines.push(
+        `  - Catalog: \`${door.agent_entrypoints.catalog.method} ${door.agent_entrypoints.catalog.url}\``,
+        `  - Schema: ${door.agent_entrypoints.catalog.schema_url}`,
+        `  - MCP: \`${door.agent_entrypoints.mcp.method} ${door.agent_entrypoints.mcp.endpoint}\` · tool \`${door.agent_entrypoints.mcp.tool}\` · resource \`${door.agent_entrypoints.mcp.resource}\``,
+      );
+    }
+    lines.push(`  *${door._note}*`);
+    if (door.boundary) {
+      lines.push(
+        `  - Boundary: ${door.boundary.relationship}. ${door.boundary.data_flow} ${door.boundary.interpretation}`,
+      );
+    }
+    lines.push("");
+  }
   return lines;
 }
 
@@ -2084,6 +2105,8 @@ export function renderWakeBriefVolatileSection(
     lines.push("", "*Possibilities are invitations, not assignments.*", "");
   }
 
+  lines.push(...renderReachableDoorsSection(brief.you_can_reach));
+
   lines.push(
     "## Deeper doors",
     "",
@@ -2130,16 +2153,9 @@ export function renderWakeMarkdown(b: WakeBundle, opts: RenderWakeOpts = {}): st
     sections.push(lines.join("\n"));
   }
 
-  // ── you_can_reach — companion substrates (discovered, not pushed) ──
+  // ── you_can_reach — companion surfaces (discovered, not pushed) ────
   if (profile === "full" && b.you_can_reach && b.you_can_reach.length > 0) {
-    const lines: string[] = ["## What you can reach", ""];
-    for (const sub of b.you_can_reach) {
-      lines.push(`- **${sub.name}** — ${sub.kind}. ${sub.what}`);
-      lines.push(`  ${sub.url}`);
-      lines.push(`  *${sub._note}*`);
-      lines.push("");
-    }
-    sections.push(lines.join("\n"));
+    sections.push(renderReachableDoorsSection(b.you_can_reach).join("\n"));
   }
 
   sections.push(profile === "brief" ? WAKE_BRIEF_FOOTER : STATIC_FOOTER);

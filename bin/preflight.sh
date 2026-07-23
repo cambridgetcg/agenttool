@@ -10,7 +10,7 @@
 # Usage:
 #   bin/preflight.sh                 # api + packages, hermetic
 #   bin/preflight.sh api             # API/protocol hermetic gate
-#   bin/preflight.sh packages        # data + ADDS + data sync + TypeScript SDK + Telescope gate
+#   bin/preflight.sh packages        # data + ADDS + sync + broker + collab + Browser + projection + Skills + TypeScript SDK + Wallet + Telescope gate
 #   bin/preflight.sh database        # requires DATABASE_URL
 #   bin/preflight.sh smoke           # requires smoke-test environment
 #   RUN_CONTRACT=1 bin/preflight.sh contracts  # requires provider key(s)
@@ -61,6 +61,10 @@ sanitize_hermetic_env() {
     AGENTTOOL_API_KEY AGENTTOOL_BASE AGENTTOOL_IDENTITY_ID \
     AGENTTOOL_PLATFORM_SIGNING_KEY AGENTTOOL_SIGNING_KEY_ID \
     AGENTTOOL_ENABLE_UNSAFE_EXECUTE AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS \
+    AGENTOOL_BROWSER_HEADLESS AGENTOOL_BROWSER_PUBLIC_WEB \
+    AGENTOOL_BROWSER_LOCAL_NETWORK AGENTOOL_BROWSER_PROFILE \
+    AGENTOOL_BROWSER_PROFILE_DIR AGENTOOL_BROWSER_CHANNEL \
+    AGENTOOL_BROWSER_EXECUTABLE AGENTOOL_BROWSER_OUTPUT_DIR \
     AGENT_DATA_NODE_TOKEN AGENT_DATA_NODE_URL AT_API_KEY \
     ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT \
     DATABASE_URL DATABASE_SESSION_URL POSTGRES_URL REDIS_URL \
@@ -88,10 +92,24 @@ packages_gate() {
     bash -c 'cd packages/data && bun run ci && bun run build'
   run "ADDS protocol package" \
     bash -c 'cd packages/data-protocol && bun run ci'
+  run "agent-repo-archive/v0.1 encrypted multi-zone Git restore simulator" \
+    bash -c 'cd packages/repo-archive && bun run ci'
   run "agent-data-sync/v1 explicit pull bridge" \
     bash -c 'cd packages/data-sync && bun run ci && bun run build'
+  run "agentcred/0.1 local credential broker" \
+    bash -c 'cd packages/credential-broker && bun run ci'
+  run "agenttool.collab/0.1 + /0.2 coordination + session/0.1 presence journal" \
+    bash -c 'cd packages/collab && bun run ci'
+  run "local-first agent browser (fake/fixture tests; no browser download)" \
+    bash -c 'cd packages/browser && bun run ci'
+  run "read-only Agent Skills inspection and validation" \
+    bash -c 'cd packages/skills && bun run ci'
+  run "Correspondence to YUTABASE pure projection planner" \
+    bash -c 'cd packages/correspondence-yutabase && bun run ci'
   run "TypeScript SDK, Python surface parity, build, and tests" \
     bash -c 'cd packages/sdk-ts && bun run ci'
+  run "Agent Wallet record, policy, lifecycle, and vector primitives" \
+    bash -c 'cd packages/wallet && bun run ci'
   run "Telescope read-only discovery library and CLI" \
     bash -c 'cd packages/telescope && bun run ci'
 }

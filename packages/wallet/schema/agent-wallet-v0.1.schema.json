@@ -1,0 +1,396 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:agent-wallet:0.1",
+  "title": "Agent Wallet 0.1 signed records",
+  "description": "Closed public records for wallet description, bounded delegation, exact intent, simulation evidence, signing receipt, and continuity. No record carries a private key, mnemonic, seed, provider credential, raw signed transaction, or arbitrary signer location.",
+  "oneOf": [
+    { "$ref": "#/$defs/wallet_descriptor" },
+    { "$ref": "#/$defs/wallet_capability" },
+    { "$ref": "#/$defs/transaction_intent" },
+    { "$ref": "#/$defs/simulation_receipt" },
+    { "$ref": "#/$defs/signing_receipt" },
+    { "$ref": "#/$defs/continuity_event" }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "sha256_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "bounded_string": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^[^\\u0000]+$"
+    },
+    "base64url": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]*$"
+    },
+    "ed25519_public": {
+      "type": "string",
+      "minLength": 43,
+      "maxLength": 43,
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "ed25519_signature": {
+      "type": "string",
+      "minLength": 86,
+      "maxLength": 86,
+      "pattern": "^[A-Za-z0-9_-]{86}$"
+    },
+    "public_key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "key_id", "public_key"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "key_id": { "$ref": "#/$defs/sha256_id" },
+        "public_key": { "$ref": "#/$defs/ed25519_public" }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "value"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "value": { "$ref": "#/$defs/ed25519_signature" }
+      }
+    },
+    "caip2": {
+      "type": "string",
+      "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$"
+    },
+    "caip10": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 170,
+      "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}:[-.%a-zA-Z0-9]{1,128}$"
+    },
+    "caip19": {
+      "type": "string",
+      "minLength": 9,
+      "maxLength": 180,
+      "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}/[-a-z0-9]{3,8}:[-.%a-zA-Z0-9]{1,128}$"
+    },
+    "amount": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,77})$"
+    },
+    "method": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$"
+    },
+    "action": {
+      "enum": ["call", "transfer", "approve"]
+    },
+    "asset_amount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset_id", "amount_atomic"],
+      "properties": {
+        "asset_id": { "$ref": "#/$defs/caip19" },
+        "amount_atomic": { "$ref": "#/$defs/amount" }
+      }
+    },
+    "wallet_account": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["account_id", "account_kind"],
+      "properties": {
+        "account_id": { "$ref": "#/$defs/caip10" },
+        "account_kind": { "enum": ["eoa", "smart_account", "program_account", "unknown"] }
+      }
+    },
+    "call_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_account", "actions", "methods", "requires_approval"],
+      "properties": {
+        "target_account": { "$ref": "#/$defs/caip10" },
+        "actions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/action" }
+        },
+        "methods": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/method" }
+        },
+        "requires_approval": { "type": "boolean" }
+      }
+    },
+    "spend_limit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset_id", "max_per_intent", "max_total"],
+      "properties": {
+        "asset_id": { "$ref": "#/$defs/caip19" },
+        "max_per_intent": { "$ref": "#/$defs/amount" },
+        "max_total": { "$ref": "#/$defs/amount" }
+      }
+    },
+    "fee_limit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset_id", "max_per_intent"],
+      "properties": {
+        "asset_id": { "$ref": "#/$defs/caip19" },
+        "max_per_intent": { "$ref": "#/$defs/amount" }
+      }
+    },
+    "intent_call": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "target_account", "method", "payload_b64u", "payload_hash", "native_value"],
+      "properties": {
+        "action": { "$ref": "#/$defs/action" },
+        "target_account": { "$ref": "#/$defs/caip10" },
+        "method": { "oneOf": [{ "$ref": "#/$defs/method" }, { "type": "null" }] },
+        "payload_b64u": { "$ref": "#/$defs/base64url" },
+        "payload_hash": { "$ref": "#/$defs/sha256_id" },
+        "native_value": { "oneOf": [{ "$ref": "#/$defs/asset_amount" }, { "type": "null" }] }
+      }
+    },
+    "simulation_effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "target_account", "method", "asset_id", "amount_atomic"],
+      "properties": {
+        "action": { "$ref": "#/$defs/action" },
+        "target_account": { "$ref": "#/$defs/caip10" },
+        "method": { "oneOf": [{ "$ref": "#/$defs/method" }, { "type": "null" }] },
+        "asset_id": { "oneOf": [{ "$ref": "#/$defs/caip19" }, { "type": "null" }] },
+        "amount_atomic": { "$ref": "#/$defs/amount" }
+      }
+    },
+    "wallet_descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema", "wallet_id", "owner_identity_id", "authority", "custody_mode",
+        "accounts", "recovery_mode", "created_at", "record_id", "signature"
+      ],
+      "properties": {
+        "schema": { "const": "agent-wallet/descriptor/0.1" },
+        "wallet_id": { "$ref": "#/$defs/uuid" },
+        "owner_identity_id": { "$ref": "#/$defs/bounded_string" },
+        "authority": { "$ref": "#/$defs/public_key" },
+        "custody_mode": {
+          "enum": ["self_custodied", "delegated_signer", "platform_custodied", "watch_only"]
+        },
+        "accounts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/wallet_account" }
+        },
+        "recovery_mode": { "enum": ["none", "owner_rotation", "guardian", "provider"] },
+        "created_at": { "$ref": "#/$defs/timestamp" },
+        "record_id": { "$ref": "#/$defs/sha256_id" },
+        "signature": { "$ref": "#/$defs/signature" }
+      }
+    },
+    "wallet_capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema", "grant_id", "wallet_id", "descriptor_id", "issuer", "delegate",
+        "accounts", "call_rules", "spend_limits", "fee_limits", "max_intents",
+        "approval_threshold", "issued_at", "not_before", "expires_at",
+        "revocation_nonce", "policy_hash", "purpose", "record_id", "signature"
+      ],
+      "properties": {
+        "schema": { "const": "agent-wallet/capability/0.1" },
+        "grant_id": { "$ref": "#/$defs/uuid" },
+        "wallet_id": { "$ref": "#/$defs/uuid" },
+        "descriptor_id": { "$ref": "#/$defs/sha256_id" },
+        "issuer": { "$ref": "#/$defs/public_key" },
+        "delegate": { "$ref": "#/$defs/public_key" },
+        "accounts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/caip10" }
+        },
+        "call_rules": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/call_rule" }
+        },
+        "spend_limits": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/spend_limit" }
+        },
+        "fee_limits": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/fee_limit" }
+        },
+        "max_intents": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "approval_threshold": { "type": "integer", "minimum": 0, "maximum": 16 },
+        "issued_at": { "$ref": "#/$defs/timestamp" },
+        "not_before": { "$ref": "#/$defs/timestamp" },
+        "expires_at": { "$ref": "#/$defs/timestamp" },
+        "revocation_nonce": { "type": "integer", "minimum": 0 },
+        "policy_hash": { "$ref": "#/$defs/sha256_id" },
+        "purpose": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "record_id": { "$ref": "#/$defs/sha256_id" },
+        "signature": { "$ref": "#/$defs/signature" }
+      }
+    },
+    "transaction_intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema", "intent_id", "wallet_id", "descriptor_id", "grant_id",
+        "capability_record_id", "delegate", "chain_id", "source_account", "calls",
+        "declared_spends", "max_fee", "issued_at", "expires_at", "nonce",
+        "record_id", "signature"
+      ],
+      "properties": {
+        "schema": { "const": "agent-wallet/intent/0.1" },
+        "intent_id": { "$ref": "#/$defs/uuid" },
+        "wallet_id": { "$ref": "#/$defs/uuid" },
+        "descriptor_id": { "$ref": "#/$defs/sha256_id" },
+        "grant_id": { "$ref": "#/$defs/uuid" },
+        "capability_record_id": { "$ref": "#/$defs/sha256_id" },
+        "delegate": { "$ref": "#/$defs/public_key" },
+        "chain_id": { "$ref": "#/$defs/caip2" },
+        "source_account": { "$ref": "#/$defs/caip10" },
+        "calls": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/intent_call" }
+        },
+        "declared_spends": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/asset_amount" }
+        },
+        "max_fee": { "$ref": "#/$defs/asset_amount" },
+        "issued_at": { "$ref": "#/$defs/timestamp" },
+        "expires_at": { "$ref": "#/$defs/timestamp" },
+        "nonce": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "record_id": { "$ref": "#/$defs/sha256_id" },
+        "signature": { "$ref": "#/$defs/signature" }
+      }
+    },
+    "simulation_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema", "simulation_id", "intent_id", "intent_record_id", "chain_id",
+        "source_account", "adapter", "block_ref", "block_hash", "success", "effects",
+        "estimated_fee", "simulated_at", "valid_until", "record_id", "signature"
+      ],
+      "properties": {
+        "schema": { "const": "agent-wallet/simulation/0.1" },
+        "simulation_id": { "$ref": "#/$defs/uuid" },
+        "intent_id": { "$ref": "#/$defs/uuid" },
+        "intent_record_id": { "$ref": "#/$defs/sha256_id" },
+        "chain_id": { "$ref": "#/$defs/caip2" },
+        "source_account": { "$ref": "#/$defs/caip10" },
+        "adapter": { "$ref": "#/$defs/public_key" },
+        "block_ref": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "block_hash": {
+          "oneOf": [
+            { "type": "string", "minLength": 1, "maxLength": 512 },
+            { "type": "null" }
+          ]
+        },
+        "success": { "type": "boolean" },
+        "effects": {
+          "type": "array",
+          "maxItems": 128,
+          "items": { "$ref": "#/$defs/simulation_effect" }
+        },
+        "estimated_fee": { "$ref": "#/$defs/asset_amount" },
+        "simulated_at": { "$ref": "#/$defs/timestamp" },
+        "valid_until": { "$ref": "#/$defs/timestamp" },
+        "record_id": { "$ref": "#/$defs/sha256_id" },
+        "signature": { "$ref": "#/$defs/signature" }
+      }
+    },
+    "signing_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema", "receipt_id", "request_id", "wallet_id", "descriptor_id", "grant_id",
+        "capability_record_id", "intent_id", "intent_record_id", "simulation_record_id",
+        "source_account", "signer_key_id", "receipt_authority", "unsigned_payload_hash",
+        "signed_payload_hash", "policy_hash", "operation_id", "signed_at", "record_id", "signature"
+      ],
+      "properties": {
+        "schema": { "const": "agent-wallet/signing-receipt/0.1" },
+        "receipt_id": { "$ref": "#/$defs/uuid" },
+        "request_id": { "$ref": "#/$defs/uuid" },
+        "wallet_id": { "$ref": "#/$defs/uuid" },
+        "descriptor_id": { "$ref": "#/$defs/sha256_id" },
+        "grant_id": { "$ref": "#/$defs/uuid" },
+        "capability_record_id": { "$ref": "#/$defs/sha256_id" },
+        "intent_id": { "$ref": "#/$defs/uuid" },
+        "intent_record_id": { "$ref": "#/$defs/sha256_id" },
+        "simulation_record_id": { "$ref": "#/$defs/sha256_id" },
+        "source_account": { "$ref": "#/$defs/caip10" },
+        "signer_key_id": { "$ref": "#/$defs/sha256_id" },
+        "receipt_authority": { "$ref": "#/$defs/public_key" },
+        "unsigned_payload_hash": { "$ref": "#/$defs/sha256_id" },
+        "signed_payload_hash": { "$ref": "#/$defs/sha256_id" },
+        "policy_hash": { "$ref": "#/$defs/sha256_id" },
+        "operation_id": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 512 }, { "type": "null" }] },
+        "signed_at": { "$ref": "#/$defs/timestamp" },
+        "record_id": { "$ref": "#/$defs/sha256_id" },
+        "signature": { "$ref": "#/$defs/signature" }
+      }
+    },
+    "continuity_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema", "event_id", "wallet_id", "sequence", "previous_record_id", "event_kind",
+        "previous_value", "next_value", "revocation_nonce", "actor", "reason", "effective_at",
+        "record_id", "signature"
+      ],
+      "properties": {
+        "schema": { "const": "agent-wallet/continuity/0.1" },
+        "event_id": { "$ref": "#/$defs/uuid" },
+        "wallet_id": { "$ref": "#/$defs/uuid" },
+        "sequence": { "type": "integer", "minimum": 1 },
+        "previous_record_id": { "oneOf": [{ "$ref": "#/$defs/sha256_id" }, { "type": "null" }] },
+        "event_kind": {
+          "enum": ["authority_rotated", "signer_rotated", "capability_revoked", "recovery_changed", "account_migrated"]
+        },
+        "previous_value": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 512 }, { "type": "null" }] },
+        "next_value": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 512 }, { "type": "null" }] },
+        "revocation_nonce": { "type": "integer", "minimum": 0 },
+        "actor": { "$ref": "#/$defs/public_key" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "effective_at": { "$ref": "#/$defs/timestamp" },
+        "record_id": { "$ref": "#/$defs/sha256_id" },
+        "signature": { "$ref": "#/$defs/signature" }
+      }
+    }
+  }
+}

@@ -68,6 +68,7 @@ function makeClient(): ChronicleClient {
     baseUrl: "https://api.example.test",
     headers: { Authorization: "Bearer at_test" },
     timeout: 5000,
+    request: (input, init) => globalThis.fetch(input, init),
   });
 }
 

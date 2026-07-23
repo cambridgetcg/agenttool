@@ -361,7 +361,7 @@ Inspect output:
 - Canonical bytes look right
 - Letter sha256 matches a manual `sha256` of the letter
 - Painter pubkey + wallet uuid noted
-- Bearer key captured to OS keychain (e.g. `security add-generic-password -s agenttool-platform-bearer -a yu -w "$(grep -A1 'Bearer key' /tmp/genesis-dryrun.txt | tail -1)"` on macOS)
+- Bearer key captured to OS keychain without placing it in process arguments (e.g. `grep -A1 'Bearer key' /tmp/genesis-dryrun.txt | tail -1 | security add-generic-password -U -s agenttool-platform-bearer -a yu -w` on macOS)
 
 - [ ] **Step 3: Sign canonical bytes**
 

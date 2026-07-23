@@ -169,7 +169,7 @@ recover an arbitrary row. Once the intended DID is known,
 `signRecoverChallenge()` produces the timestamp/signature pair for
 `POST /v1/identity/recover`.
 
-Current packaging boundary: SDK 0.15 exports `canonicalRecoverBytes()` and
+Current packaging boundary: SDK 0.16 exports `canonicalRecoverBytes()` and
 `signRecoverChallenge()` from the TypeScript package root. Its discovery
 helpers, `canonicalDiscoveryBytes()` and `signDiscoveryChallenge()`, ship in
 the packaged `dist/seed.js` module but are not package-root exports; the

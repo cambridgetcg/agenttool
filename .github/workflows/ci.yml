@@ -20,9 +20,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Bun 1.3.5
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.3.5
       - name: Install API dependencies from lockfile
@@ -42,22 +42,23 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Set up Bun 1.3.5
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.3.5
       - name: Set up Node 20.19.0
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 20.19.0
+          package-manager-cache: false
       - name: Install package and LOVE validation dependencies from lockfiles
         shell: bash
         run: |
           set -euo pipefail
-          for workspace in api packages/data packages/data-protocol packages/sdk-ts packages/telescope; do
+          for workspace in api packages/data packages/data-protocol packages/repo-archive packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope; do
             (cd "$workspace" && bun install --frozen-lockfile)
           done
       - name: Build local data-sync peers
@@ -69,7 +70,7 @@ jobs:
       - name: Install data-sync dependencies from lockfile
         working-directory: packages/data-sync
         run: bun install --frozen-lockfile
-      - name: Run hermetic data, ADDS, sync, SDK, and Telescope gate
+      - name: Run hermetic data, ADDS, sync, broker, collab, Browser, projection, Skills, SDK, Wallet, and Telescope gate
         run: bash bin/preflight.sh packages
       - name: Smoke the packed TypeScript SDK under Node and Bun
         working-directory: packages/sdk-ts
@@ -83,6 +84,58 @@ jobs:
           smoke='import("@agenttool/sdk").then(m=>{const p={subject_id:"550e8400-e29b-41d4-a716-446655440002",attester_id:"550e8400-e29b-41d4-a716-446655440001",kid:"550e8400-e29b-41d4-a716-446655440010",claim:"packed"};if(typeof m.AgentTool!=="function"||m.canonicalIdentityAttestationBytes(p).length!==32)process.exit(1)})'
           (cd "$install_dir" && node -e "$smoke")
           (cd "$install_dir" && bun -e "$smoke")
+      - name: Smoke packed credential broker under Node and Bun
+        working-directory: packages/credential-broker
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
+          smoke='Promise.all([import("@agenttool/credential-broker"),import("@agenttool/credential-broker/testing")]).then(([m,t])=>{if(m.AGENTCRED_PROTOCOL!=="agentcred/0.1"||typeof m.AgentCredClient!=="function"||typeof t.InMemoryCredentialSource!=="function")process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke")
+          (cd "$install_dir" && bun -e "$smoke")
+          cli="$install_dir/node_modules/@agenttool/credential-broker/dist/cli.js"
+          test -x "$install_dir/node_modules/.bin/agentcred"
+          set +e
+          node "$cli" >"$install_dir/cli.stdout" 2>"$install_dir/cli.stderr"
+          cli_status="$?"
+          set -e
+          test "$cli_status" -eq 2
+          test ! -s "$install_dir/cli.stdout"
+          grep -q '^usage: agentcred serve --config ' "$install_dir/cli.stderr"
+      - name: Smoke packed Agent Skills under Node and Bun
+        working-directory: packages/skills
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
+          smoke='import("@agenttool/skills").then(m=>{if(typeof m.inspectLocalSkills!=="function"||typeof m.stableStringify!=="function")process.exit(1)})'
+          schema_smoke='import("@agenttool/skills/report.schema.json",{with:{type:"json"}}).then(m=>{if(m.default.title!=="AgentTool Skills inspection report v0.1")process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke" && node -e "$schema_smoke")
+          (cd "$install_dir" && bun -e "$smoke" && bun -e "$schema_smoke")
+          package_root="$install_dir/node_modules/@agenttool/skills"
+          cli="$package_root/dist/bin.js"
+          test -x "$install_dir/node_modules/.bin/agenttool-skill"
+          test "$("$install_dir/node_modules/.bin/agenttool-skill" --version)" = "0.1.0"
+          test "$(node "$cli" --version)" = "0.1.0"
+          test "$(bun "$cli" --version)" = "0.1.0"
+          node "$cli" validate "$package_root/skills/use-agentcred-safely" >"$install_dir/report.json"
+          node --input-type=module --eval '
+            import { readFileSync } from "node:fs";
+            const report = JSON.parse(readFileSync(process.argv[1], "utf8"));
+            if (
+              report.valid !== true
+              || report.kind !== "agenttool.skills.inspection"
+              || report.skills.length !== 1
+              || report.skills[0].name !== "use-agentcred-safely"
+              || Object.hasOwn(report, "installPlan")
+            ) process.exit(1);
+          ' "$install_dir/report.json"
       - name: Smoke packed Telescope under Node and Bun
         working-directory: packages/telescope
         shell: bash
@@ -100,13 +153,64 @@ jobs:
           (cd "$install_dir" && bun -e "$schema_smoke")
           node "$install_dir/node_modules/@agenttool/telescope/dist/cli.js" --help >/dev/null
           bun "$install_dir/node_modules/@agenttool/telescope/dist/cli.js" --help >/dev/null
-          manifest="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.15.0/manifest.json"
-          artifact="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.15.0/agenttool-sdk-0.15.0.tgz"
+          manifest="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.16.0/manifest.json"
+          artifact="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.16.0/agenttool-sdk-0.16.0.tgz"
           size="$(node --input-type=module --eval "import{readFileSync}from'node:fs';const m=JSON.parse(readFileSync(process.argv[1],'utf8'));process.stdout.write(String(m.artifact.size))" "$manifest")"
           sha256="$(node --input-type=module --eval "import{readFileSync}from'node:fs';const m=JSON.parse(readFileSync(process.argv[1],'utf8'));process.stdout.write(m.artifact.sha256)" "$manifest")"
           cli="$install_dir/node_modules/@agenttool/telescope/dist/cli.js"
-          node "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.15.0 --json >/dev/null
-          bun "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.15.0 --json >/dev/null
+          node "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.16.0 --json >/dev/null
+          bun "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.16.0 --json >/dev/null
+      - name: Smoke packed Agent Wallet under Node and Bun
+        working-directory: packages/wallet
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
+          smoke='import("@agenttool/wallet").then(m=>{if(m.AGENT_WALLET_PROTOCOL!=="agent-wallet/0.1"||m.canonicalJson({b:2,a:1})!==JSON.stringify({a:1,b:2}))process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke")
+          (cd "$install_dir" && bun -e "$smoke")
+          schema_smoke='import("@agenttool/wallet/schema.json",{with:{type:"json"}}).then(m=>{if(m.default.title!=="Agent Wallet 0.1 signed records")process.exit(1)})'
+          vectors_smoke='import("@agenttool/wallet/vectors.json",{with:{type:"json"}}).then(m=>{if(m.default.protocol!=="agent-wallet/0.1"||m.default.records.length!==6)process.exit(1)})'
+          (cd "$install_dir" && node -e "$schema_smoke" && node -e "$vectors_smoke")
+          (cd "$install_dir" && bun -e "$schema_smoke" && bun -e "$vectors_smoke")
+      - name: Smoke packed Agent Browser under Node and Bun
+        working-directory: packages/browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
+          smoke='import("@agenttool/browser").then(m=>{if(typeof m.AgentBrowser!=="function"||typeof m.buildBrowserMcpServer!=="function"||m.OBSERVATION_SCHEMA!=="agent-browser-observation/0.1")process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke")
+          (cd "$install_dir" && bun -e "$smoke")
+          cli="$install_dir/node_modules/@agenttool/browser/dist/bin/agenttool-browser.js"
+          test -x "$install_dir/node_modules/.bin/agenttool-browser"
+          node "$cli" help | grep -q '^agenttool-browser 0.1.0$'
+          bun "$cli" help | grep -q '^agenttool-browser 0.1.0$'
+      - name: Smoke packed Repo Archive under Node and Bun
+        working-directory: packages/repo-archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
+          smoke='import("@agenttool/repo-archive").then(m=>{if(m.ARCHIVE_PROTOCOL!=="agent-repo-archive/v0.1"||typeof m.archiveRepository!=="function"||typeof m.restoreRepository!=="function")process.exit(1)})'
+          schema_smoke='import("@agenttool/repo-archive/schema.json",{with:{type:"json"}}).then(m=>{if(m.default.title!=="Agent Repo Archive 0.1 signed control records")process.exit(1)})'
+          vectors_smoke='import("@agenttool/repo-archive/vectors.json",{with:{type:"json"}}).then(m=>{if(m.default.protocol!=="agent-repo-archive/v0.1")process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke" && node -e "$schema_smoke" && node -e "$vectors_smoke")
+          (cd "$install_dir" && bun -e "$smoke" && bun -e "$schema_smoke" && bun -e "$vectors_smoke")
+          package_root="$install_dir/node_modules/@agenttool/repo-archive"
+          cli="$package_root/dist/cli.js"
+          test -x "$install_dir/node_modules/.bin/agent-repo-archive"
+          node "$cli" --help | grep -q '^Usage:$'
+          bun "$cli" --help | grep -q '^Usage:$'
       - name: Verify the checked-in LOVE package registry
         run: bun bin/build-love-packages.ts verify apps/docs
 
@@ -123,9 +227,9 @@ jobs:
         working-directory: packages/sdk-py
     steps:
       - name: Check out repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip

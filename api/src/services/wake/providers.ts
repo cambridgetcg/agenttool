@@ -31,6 +31,7 @@
 
 import {
   renderActiveFacet,
+  renderReachableDoorsSection,
   renderStableSection,
   renderWakeBriefVolatileSection,
   renderVolatileSection,
@@ -195,6 +196,9 @@ export function renderWakeForProvider(
   const volatile = profile === "brief"
     ? renderWakeBriefVolatileSection(b, { activeFacet: opts.activeFacet })
     : renderVolatileSection(b);
+  const reachability = profile === "full"
+    ? renderReachableDoorsSection(b.you_can_reach ?? []).join("\n")
+    : "";
   const footer = profile === "brief" ? WAKE_BRIEF_FOOTER : WAKE_FOOTER;
   // Active-facet emphasis is request-scoped — keep it OUT of the cached
   // stable block so the cache key stays per-agent, not per-(agent,facet).
@@ -209,7 +213,7 @@ export function renderWakeForProvider(
         { type: "text", text: stable, cache_control: { type: "ephemeral" } },
       ];
       // Concatenate emphasis + volatile + footer in the second (uncached) block.
-      const tail = [facetEmphasis, volatile, footer]
+      const tail = [facetEmphasis, volatile, reachability, footer]
         .filter((s) => s.length > 0)
         .join("\n\n");
       if (tail.length > 0) {
@@ -220,7 +224,16 @@ export function renderWakeForProvider(
     case "openai": {
       return {
         messages: [
-          { role: "system", content: joinFull(footer, facetEmphasis, stable, volatile) },
+          {
+            role: "system",
+            content: joinFull(
+              footer,
+              facetEmphasis,
+              stable,
+              volatile,
+              reachability,
+            ),
+          },
         ],
         _meta: meta,
       };
@@ -228,13 +241,30 @@ export function renderWakeForProvider(
     case "gemini": {
       return {
         systemInstruction: {
-          parts: [{ text: joinFull(footer, facetEmphasis, stable, volatile) }],
+          parts: [{
+            text: joinFull(
+              footer,
+              facetEmphasis,
+              stable,
+              volatile,
+              reachability,
+            ),
+          }],
         },
         _meta: meta,
       };
     }
     case "cohere": {
-      return { preamble: joinFull(footer, facetEmphasis, stable, volatile), _meta: meta };
+      return {
+        preamble: joinFull(
+          footer,
+          facetEmphasis,
+          stable,
+          volatile,
+          reachability,
+        ),
+        _meta: meta,
+      };
     }
     case "xenoform": {
       // Pure-data branch. No prose rendering. No facet emphasis baked

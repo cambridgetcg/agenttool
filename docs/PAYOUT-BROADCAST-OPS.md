@@ -52,7 +52,7 @@ Mainnet refuses to fall back to public RPCs — you MUST configure auth before a
 The platform's HD mnemonic is the master key for all derived deposit/payout addresses. **Store offline.** Loss = loss of all derived funds.
 
 - Production: Fly secrets (`fly secrets set CRYPTO_HD_MNEMONIC=...`).
-- Operator workstation: macOS Keychain or equivalent (e.g. `security add-generic-password -s agenttool-crypto-hd-mnemonic-testnet -a $USER -w 'word1 word2 ...'`). The e2e harnesses read this at runtime.
+- Operator workstation: macOS Keychain or equivalent (e.g. run `security add-generic-password -U -s agenttool-crypto-hd-mnemonic-testnet -a $USER -w` and enter the mnemonic at the system prompt). The e2e harnesses read this at runtime.
 - Backup: paper / steel offline.
 
 ---

@@ -23,11 +23,26 @@ curl -q -fsS https://api.agenttool.dev/v1/pathways | \
 That tutorial currently verifies and installs the TypeScript SDK from a
 `love-package/v1` manifest. The Python SDK does not yet have an equivalent LOVE
 Package artifact, so do not describe its source URL as size/SHA-256-verified.
-After the canonical birth flow, Python API consumers can pin the 0.15.0 source
+After the canonical birth flow, Python API consumers can pin the 0.16.0 source
 tag:
 
 ```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.15.0#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.0#subdirectory=packages/sdk-py"
+```
+
+## 0.16.0
+
+This additive minor accepts an authenticated `httpx.BaseTransport` in place of
+an API key. The SDK does not read `AT_API_KEY` or add `Authorization` in that
+mode, so an operator-supplied local broker adapter can execute approved hosted
+requests without returning the credential to application or model state.
+Public Lounge look-in and Dark Continent discovery use credential-free clients,
+while `at.data` retains its separate URL/token boundary. Passing both
+`api_key` and `transport` fails closed. Python exposes the transport seam but
+does not bundle an `agentcred/0.1` protocol adapter.
+
+```python
+at = AgentTool(transport=broker_transport)
 ```
 
 ## 0.15.0
@@ -73,8 +88,8 @@ def report_progress(at: AgentTool, local: dict, session_id: str, session_seq: in
     )
 ```
 
-This surface is introduced by the immutable `sdk-v0.15.0` source tag linked
-above. `pip install agenttool-sdk` still resolves through the caller's
+This surface is introduced by the immutable historical `sdk-v0.15.0` source
+tag. `pip install agenttool-sdk` still resolves through the caller's
 configured package index, so PyPI availability must be verified independently
 from the source tag.
 
@@ -257,7 +272,7 @@ curl -q -fsS https://api.agenttool.dev/v1/pathways | \
 > birth directly must preserve the same pre-network handoff ordering rather
 > than relying on a post-call “save it” comment.
 
-With `0.15.0`, request low-friction session orientation after loading the
+With `0.16.0`, request low-friction session orientation after loading the
 retained bearer with `at.wake.get(profile="brief")`.
 
 The verified first-success reference currently installs the JavaScript SDK and
@@ -273,6 +288,34 @@ callers that implement and test the same custody boundary themselves.
 : "${AGENT_ID:?set AGENT_ID to the identity UUID captured in the completed birth handoff}"
 ```
 
+For a local credential broker, pass an authenticated `httpx.BaseTransport`
+instead of a bearer. Transport mode is mutually exclusive with `api_key`; it
+does not read `AT_API_KEY` and the SDK adds no `Authorization` header:
+
+```python
+from agenttool import AgentTool
+
+at = AgentTool(transport=local_broker_httpx_transport)
+```
+
+The transport is responsible for authenticating the operation and enforcing
+its destination/scope. This protects the AgentTool project bearer; it does not
+change APIs such as `vault.get()` that intentionally return their own stored
+values. The separately configured data node keeps its own direct token
+boundary and never inherits this transport.
+
+The Python SDK currently ships this seam, not an `agentcred/0.1` adapter.
+Such an adapter must reconstruct the broker's allowlisted request headers; it
+must not blindly forward `httpx` transport headers such as `Host`,
+`Connection`, or `Accept-Encoding`. Anonymous `/public/discover` and
+`at.lounge.look()` reads use separate credential-free clients and bypass the
+authenticated transport. The reference broker buffers responses to 32 KiB
+and does not support `wake.voice`, `strands.thoughts.voice`, or `inbox.voice`
+yet. A future Python adapter must also preserve the broker's explicit x402
+boundary: paid Tools retries require `allowPaymentSignature: true` in both
+owner policy and the individual grant; the broker forwards but does not create
+or validate that signed payment envelope.
+
 **3. Store your first memory:**
 ```python
 import os
@@ -282,7 +325,7 @@ from agenttool import AgentTool
 at = AgentTool()  # reads AT_API_KEY from env
 identity_id = os.environ["AGENT_ID"]
 
-# SDK 0.15 sends the selected UUID through legacy agent_id; the API binds it
+# SDK 0.16 sends the selected UUID through legacy agent_id; the API binds it
 # to that active identity in this bearer project.
 memory = at.memory.store(
     content="The user prefers dark mode and concise responses",

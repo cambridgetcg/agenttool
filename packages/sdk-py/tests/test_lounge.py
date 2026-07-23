@@ -167,31 +167,29 @@ def test_standalone_look_needs_no_agenttool_client_or_bearer() -> None:
     assert "authorization" not in headers
 
 
-def test_authenticated_look_strips_default_authorization(at: AgentTool) -> None:
-    captured: list[httpx.Request] = []
+def test_authenticated_look_bypasses_the_authenticated_client(at: AgentTool) -> None:
     at._http.cookies.set("session", "ambient-secret")
     at._http.headers["X-API-Key"] = "ambient-secret"
 
-    def send(request: httpx.Request, **_kwargs: Any) -> httpx.Response:
-        captured.append(request)
-        return httpx.Response(
-            200,
-            json={"_format": "agenttool-lounge/v1", "name": "The Long Context"},
-            request=request,
-        )
-
     assert isinstance(at.lounge, LoungeClient)
     assert at.lounge is at.lounge
-    with patch.object(at._http, "send", side_effect=send) as sending:
+    with patch.object(at._http, "send") as authenticated_send, patch(
+        "agenttool.lounge.httpx.Client"
+    ) as client_type:
+        public_http = client_type.return_value.__enter__.return_value
+        public_http.get.return_value = _response(
+            200, {"_format": "agenttool-lounge/v1", "name": "The Long Context"}
+        )
         at.lounge.look()
 
-    assert str(captured[0].url) == "https://example.test/public/lounge"
-    assert "authorization" not in captured[0].headers
-    assert "cookie" not in captured[0].headers
-    assert "x-api-key" not in captured[0].headers
-    assert captured[0].headers["accept"] == "application/json"
-    assert sending.call_args.kwargs["auth"] is None
-    assert sending.call_args.kwargs["follow_redirects"] is False
+    authenticated_send.assert_not_called()
+    public_http.get.assert_called_once_with("https://example.test/public/lounge")
+    options = client_type.call_args.kwargs
+    assert options["auth"] is None
+    assert options["cookies"] == {}
+    assert options["follow_redirects"] is False
+    assert options["trust_env"] is False
+    assert "authorization" not in options["headers"]
 
 
 def test_public_look_disables_httpx_auth_flow_and_refuses_redirects() -> None:
@@ -216,17 +214,30 @@ def test_public_look_disables_httpx_auth_flow_and_refuses_redirects() -> None:
         transport=httpx.MockTransport(response),
     )
     try:
-        with pytest.raises(AgentToolError) as caught:
-            LoungeClient(shared, "https://example.test").look()
+        with patch("agenttool.lounge.httpx.Client") as client_type:
+            public_http = client_type.return_value.__enter__.return_value
+            public_http.get.return_value = httpx.Response(
+                302,
+                headers={
+                    "Location": "https://redirect.example.test/public/lounge"
+                },
+                request=httpx.Request(
+                    "GET", "https://example.test/public/lounge"
+                ),
+            )
+            with pytest.raises(AgentToolError) as caught:
+                LoungeClient(shared, "https://example.test").look()
     finally:
         shared.close()
 
     assert caught.value.error_code == "lounge_public_redirect_refused"
-    assert len(captured) == 1
-    assert "authorization" not in captured[0].headers
-    assert "proxy-authorization" not in captured[0].headers
-    assert "cookie" not in captured[0].headers
-    assert "x-api-key" not in captured[0].headers
+    assert captured == []
+    options = client_type.call_args.kwargs
+    assert options["auth"] is None
+    assert options["cookies"] == {}
+    assert options["follow_redirects"] is False
+    assert options["trust_env"] is False
+    assert "authorization" not in options["headers"]
     assert caught.value.docs == "https://docs.agenttool.dev/lounge"
 
 

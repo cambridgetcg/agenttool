@@ -9,7 +9,7 @@ import type {
   ScrapeResult,
   StaticToolResponseMetadata,
 } from "./types.js";
-import type { HttpConfig } from "./memory.js";
+import type { HttpConfig } from "./_http.js";
 
 type DocumentBaseContentType =
   | "text/plain"
@@ -232,7 +232,7 @@ export class ToolsClient {
     paymentSignature?: string,
   ): Promise<ToolPostResponse<T>> {
     const url = `${this.http.baseUrl}${path}`;
-    const resp = await globalThis.fetch(url, {
+    const resp = await this.http.request(url, {
       method: "POST",
       headers: {
         ...this.http.headers,

@@ -277,9 +277,10 @@ describe("boring test spine", () => {
     expect(workflow).toContain("name: Install cross-language vector dependencies");
     expect(workflow).toContain("working-directory: packages/sdk-ts");
     expect(workflow).toContain(
-      "api packages/data packages/data-protocol packages/sdk-ts packages/telescope",
+      "api packages/data packages/data-protocol packages/repo-archive packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope",
     );
     expect(workflow).toContain("fetch-depth: 0");
+    expect(workflow).toContain("package-manager-cache: false");
     expect(workflow).toContain("name: Build local data-sync peers");
     expect(workflow).toContain("cd packages/data && bun run build");
     expect(workflow).toContain("cd packages/data-protocol && bun run build");
@@ -291,13 +292,44 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/data && bun run ci && bun run build");
     expect(preflight).toContain("agent-data-sync/v1 explicit pull bridge");
     expect(preflight).toContain("cd packages/data-sync && bun run ci && bun run build");
+    expect(preflight).toContain("cd packages/credential-broker && bun run ci");
+    expect(preflight).toContain("cd packages/collab && bun run ci");
+    expect(preflight).toContain("cd packages/browser && bun run ci");
+    expect(preflight).toContain("cd packages/repo-archive && bun run ci");
+    expect(preflight).toContain("cd packages/skills && bun run ci");
+    expect(preflight).toContain("cd packages/correspondence-yutabase && bun run ci");
+    expect(preflight).toContain("cd packages/wallet && bun run ci");
     expect(preflight).toContain("cd packages/telescope && bun run ci");
+    expect(workflow).toContain("name: Smoke packed credential broker under Node and Bun");
+    expect(workflow).toContain(
+      'cli="$install_dir/node_modules/@agenttool/credential-broker/dist/cli.js"',
+    );
+    expect(workflow).toContain("test \"$cli_status\" -eq 2");
+    expect(workflow).toContain("grep -q '^usage: agentcred serve --config '");
+    expect(workflow).toContain("name: Smoke packed Agent Skills under Node and Bun");
+    expect(workflow).toContain(
+      'cli="$package_root/dist/bin.js"',
+    );
+    expect(workflow).toContain('report.skills[0].name !== "use-agentcred-safely"');
+    expect(workflow).toContain('Object.hasOwn(report, "installPlan")');
     expect(workflow).toContain("name: Smoke packed Telescope under Node and Bun");
+    expect(workflow).toContain("name: Smoke packed Agent Wallet under Node and Bun");
+    expect(workflow).toContain("name: Smoke packed Agent Browser under Node and Bun");
+    expect(workflow).toContain("name: Smoke packed Repo Archive under Node and Bun");
+    expect(workflow).toContain('m.ARCHIVE_PROTOCOL!=="agent-repo-archive/v0.1"');
+    expect(workflow).toContain(
+      'm.default.title!=="Agent Repo Archive 0.1 signed control records"',
+    );
+    expect(workflow).toContain('m.default.protocol!=="agent-repo-archive/v0.1"');
+    expect(workflow).toContain(
+      'cli="$package_root/dist/cli.js"',
+    );
+    expect(workflow).toContain("test -x \"$install_dir/node_modules/.bin/agent-repo-archive\"");
     expect(
       workflow.match(
         /npm install --ignore-scripts --no-audit --no-fund --prefix/g,
       ),
-    ).toHaveLength(2);
+    ).toHaveLength(7);
 
     const uses = workflow
       .split("\n")
@@ -307,80 +339,70 @@ describe("boring test spine", () => {
     expect(
       uses.every(
         (line) =>
-          line === "uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4" ||
-          line === "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2" ||
-          line === "uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4" ||
-          line === "uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5",
+          line === "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1" ||
+          line === "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0" ||
+          line === "uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0" ||
+          line === "uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0",
       ),
     ).toBe(true);
   });
 
-  test("keeps Telescope publication manual, exact-artifact, and protected", async () => {
+  test("keeps npm publication unified, manual, exact-artifact, and protected", async () => {
+    const workflows = await readdir(join(ROOT, ".github", "workflows"));
+    const publishWorkflows = workflows.filter((name) => name.startsWith("publish-")).sort();
+    expect(publishWorkflows).toEqual(["publish-npm.yml"]);
+
     const workflow = await readFile(
-      join(ROOT, ".github", "workflows", "publish-telescope.yml"),
+      join(ROOT, ".github", "workflows", "publish-npm.yml"),
       "utf8",
     );
-
     expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("          - skills");
+    expect(workflow).toContain("          - browser");
+    expect(workflow).toContain("          - repo-archive");
     expect(workflow).not.toContain("pull_request:");
     expect(workflow).not.toMatch(/\n\s+push:/);
-    expect(workflow).toContain("environment: npm-bootstrap");
-    expect(workflow).toContain("id-token: write");
     expect(workflow).toContain("persist-credentials: false");
-    expect(workflow).toContain('test "$(git cat-file -t "refs/tags/$tag")" = tag');
-    expect(workflow).toContain(
-      'git merge-base --is-ancestor "$tag_commit" refs/remotes/origin/main',
-    );
-    expect(workflow).toContain("bun bin/build-love-packages.ts verify apps/docs");
-    expect(workflow).toContain("agenttool-telescope-0.1.0.tgz");
-    expect(workflow).toContain('npm publish "$artifact" --access public --provenance');
+    expect(workflow).toContain("package-manager-cache: false");
+    expect(workflow).toContain("npm@11.17.0");
+    expect(workflow).toContain("bun bin/npm-release.ts prepare");
+    expect(workflow).toContain("bun bin/npm-release.ts publish");
+    expect(workflow).toContain("bun bin/npm-release.ts mirror");
+    expect(workflow).toContain("group: publish-npm-${{ inputs.package }}");
+    expect(workflow).not.toContain("group: publish-npm-${{ inputs.package }}-${{ inputs.tag }}");
+    expect(workflow).toContain("inputs.authentication == 'bootstrap'");
+    expect(workflow).toContain("secrets.NPM_TOKEN");
     expect(workflow.match(/secrets\./g)).toHaveLength(1);
-    expect(workflow).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
-  });
-
-  test("keeps SDK publication manual, exact-artifact, and protected", async () => {
-    const workflow = await readFile(
-      join(ROOT, ".github", "workflows", "publish-sdk.yml"),
-      "utf8",
-    );
-
-    expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).not.toContain("pull_request:");
-    expect(workflow).not.toMatch(/\n\s+push:/);
-    expect(workflow).toContain("environment: npm-bootstrap");
-    expect(workflow).toContain("id-token: write");
-    expect(workflow).toContain("persist-credentials: false");
-    expect(workflow).toContain('expected_tag="sdk-v${version}"');
-    expect(workflow).toContain('test "$(git cat-file -t "refs/tags/$tag")" = tag');
-    expect(workflow).toContain(
-      'git merge-base --is-ancestor "$tag_commit" refs/remotes/origin/main',
-    );
-    expect(workflow).toContain("cd packages/sdk-ts && bun run ci");
-    expect(workflow).toContain("bun bin/build-love-packages.ts verify apps/docs");
-    expect(workflow).toContain('git merge-base --is-ancestor "${identity[5]}" HEAD');
-    expect(workflow).toContain(
-      'git diff --quiet "${identity[5]}" HEAD -- packages/sdk-ts',
-    );
-    expect(workflow).toContain("https://registry.npmjs.org/@agenttool%2Fsdk/${version}");
-    expect(workflow).toContain('case "$status" in');
-    expect(workflow).toContain("404) ;;");
-    expect(workflow).toMatch(/HTTP \$\{status\}.*refusing to infer package absence/);
-    expect(workflow).toContain("agenttool-sdk-${version}.tgz");
-    expect(workflow).toContain(
-      'npm publish "$artifact" --access public --provenance --ignore-scripts',
-    );
     expect(workflow).not.toContain("--otp");
-    expect(workflow.match(/secrets\./g)).toHaveLength(1);
-    expect(workflow).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
+
+    const prepareJob = workflow.split("\n  prepare:\n")[1]?.split("\n  publish:\n")[0] ?? "";
+    const publishJob = workflow.split("\n  publish:\n")[1] ?? "";
+    expect(prepareJob).toContain("contents: read");
+    expect(prepareJob).not.toContain("environment:");
+    expect(prepareJob).not.toContain("id-token:");
+    expect(prepareJob).not.toContain("secrets.");
+    expect(prepareJob).not.toContain("NODE_AUTH_TOKEN");
+    expect(publishJob).toContain("needs: prepare");
+    expect(publishJob).toContain("environment: npm-bootstrap");
+    expect(publishJob).toContain("contents: write");
+    expect(publishJob).toContain("id-token: write");
+    expect(publishJob).not.toContain("bun install");
+    expect(publishJob).not.toContain("bun run");
+    expect(publishJob).not.toContain("npm pack");
 
     const uses = workflow
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.startsWith("uses:"));
     expect(uses).toEqual([
-      "uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4",
-      "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2",
-      "uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4",
+      "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
+      "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0",
+      "uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0",
+      "uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6",
+      "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
+      "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0",
+      "uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0",
+      "uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6",
     ]);
   });
 });

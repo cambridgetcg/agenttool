@@ -1,0 +1,70 @@
+{
+  "name": "@agenttool/browser",
+  "version": "0.1.0",
+  "description": "Local-first browser control shaped for agents",
+  "author": "AgentTool contributors",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
+  "bin": {
+    "agenttool-browser": "./dist/bin/agenttool-browser.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CLAUDE.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20.19.0",
+    "bun": ">=1.3.5"
+  },
+  "scripts": {
+    "clean": "node --eval \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "bun run clean && tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests",
+    "smoke:runtimes": "node --input-type=module --eval \"const m = await import('./dist/src/index.js'); if (typeof m.AgentBrowser !== 'function') process.exit(1)\" && bun --eval \"const m = await import('./dist/src/index.js'); if (typeof m.AgentBrowser !== 'function') process.exit(1)\"",
+    "check:package": "npm pack --dry-run --ignore-scripts",
+    "ci": "bun run typecheck && bun run test && bun run build && bun run smoke:runtimes && bun run check:package",
+    "prepack": "bun run typecheck && bun run test && bun run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0-beta.5",
+    "playwright-core": "1.59.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.7.0"
+  },
+  "keywords": [
+    "agent",
+    "browser",
+    "automation",
+    "playwright",
+    "mcp",
+    "jsonl",
+    "local-first"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "directory": "packages/browser"
+  },
+  "homepage": "https://github.com/cambridgetcg/agenttool/tree/main/packages/browser#readme",
+  "bugs": {
+    "url": "https://github.com/cambridgetcg/agenttool/issues"
+  }
+}

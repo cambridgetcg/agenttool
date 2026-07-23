@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Whitehack — crypto-aware honesty linting without crypto custody · agenttool</title>
-  <meta name="description" content="A pinned, redacted crypto-aware source advisory with no wallet, key-use, RPC, live-chain, hosted scanner, or target-authorization capability." />
+  <title>Whitehack — crypto-aware source and wallet understanding without custody · agenttool</title>
+  <meta name="description" content="Pinned redacted source advisory and local Agent Wallet understanding, with no custody, private-key use, RPC, simulation, broadcast, hosted route, or authorization capability." />
   <link rel="canonical" href="https://docs.agenttool.dev/whitehack" />
   <meta property="og:title" content="Whitehack — crypto awareness without custody" />
-  <meta property="og:description" content="Pinned crypto-aware linting, explicitly scoped local research, and a separate privacy-sensitive device inventory." />
+  <meta property="og:description" content="Pinned crypto-aware linting, local Agent Wallet understanding, explicitly scoped research, and a separate privacy-sensitive device inventory." />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='20' y='20' width='60' height='60' fill='none' stroke='%23e8eaf0' stroke-width='4'/><circle cx='50' cy='50' r='8' fill='%23d4502e'/></svg>" />
@@ -79,34 +79,46 @@
 
   <header class="wh-hero">
     <div class="glyph">⬜</div>
-    <h1><em>Whitehack</em> — three separate practices</h1>
+    <h1><em>Whitehack</em> — four separate practices</h1>
     <p class="sub">
       AgentTool can produce a redacted, crypto-aware runner-local advisory from
-      one exact, pinned honesty linter. It does not use detected key material,
-      connect wallets or chains, host a scanner API, authorize target testing,
-      certify software, or turn a finding into permission.
+      one exact, pinned honesty linter and a separate local explanation from
+      caller-presented signed Agent Wallet records. Neither path uses private
+      key material, connects wallets or chains, hosts an API, authorizes
+      execution or target testing, certifies software, or turns a finding into permission.
       The separate Tax Whitehack editorial game is not a security tool.
     </p>
   </header>
 
   <main>
     <section class="wh-section">
-      <h2>The three <em>boundaries</em></h2>
+      <h2>The four <em>boundaries</em></h2>
       <div class="wh-grid">
         <article class="wh-card">
           <span class="wh-tag">SHIPPED · ADVISORY</span>
           <h3>1. Honesty linter</h3>
           <p>
-            AgentTool pins Whitehack 0.5.0 to the reviewed Git commit
-            <a href="https://github.com/cambridgetcg/whitehack/tree/cbbf4d19ce839600238d017615ec142cd16343c3"><code>exact reviewed revision</code></a>.
-            Its 42 text/regex checks look for common state, failure,
+            AgentTool installs the public
+            <a href="https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.8.1"><code><!--email_off-->@agenttool/whitehack-scan@0.8.1<!--/email_off--></code></a>
+            package from an exact npm 11.17.0 lock. Its source is pinned to the reviewed
+            <a href="https://github.com/cambridgetcg/whitehack/tree/fdd2260efd7a11e5d52c12c53d8016d1f5e7d23a"><code>fdd2260efd7a…</code></a>
+            revision and the versioned exact
+            <a href="https://github.com/cambridgetcg/whitehack/releases/tag/whitehack-v0.8.1"><code>whitehack-v0.8.1</code></a>
+            release.
+            Its 47 text/regex checks look for common state, failure,
             transparency, API, Solidity, crypto, network, WiFi, and Bluetooth
             lies.
           </p>
           <p>
+            The shared release artifact is
+            <code>agenttool-whitehack-scan-0.8.1.tgz</code>, 79,779 bytes, with
+            SHA-256
+            <code>f02079aa5ee38cca3522141da012f1fbe2c3f3399c29710c0692a8f78fc24df8</code>.
+          </p>
+          <p>
             The AgentTool bridge observes bounded changed production files and
             emits only file, line, check, confidence, doctrine, and principle.
-            Whitehack v0.5 cross-redacts recognized sensitive hits and
+            Whitehack 0.8.1 cross-redacts recognized sensitive hits and
             same-line overlaps, but ordinary findings can still include source;
             AgentTool independently drops every raw snippet, title, and message
             from its report.
@@ -114,8 +126,26 @@
         </article>
 
         <article class="wh-card">
+          <span class="wh-tag">SHIPPED · LOCAL UNDERSTANDING</span>
+          <h3>2. Wallet understanding</h3>
+          <p>
+            <code>bin/whitehack-wallet-understanding.ts</code> verifies
+            caller-presented signed Agent Wallet descriptor, capability, intent,
+            simulation, and optional continuity records. It projects only
+            closed enum assertions and redacted finding metadata into the exact
+            <code>whitehack-understanding/v1</code> document.
+          </p>
+          <p>
+            It does not retrieve or custody keys, sign, contact RPC, simulate,
+            broadcast, store records, authorize, prove consent or execution
+            readiness, or add a hosted route. The adapter remains a private
+            local tool, not a new npm package.
+          </p>
+        </article>
+
+        <article class="wh-card">
           <span class="wh-tag">LOCAL · EXPLICIT SCOPE</span>
-          <h3>2. Security research</h3>
+          <h3>3. Security research</h3>
           <p>
             A separate local workflow may review targets and vulnerability
             classes explicitly in scope for a named program. Dynamic PoCs run
@@ -132,7 +162,7 @@
 
         <article class="wh-card">
           <span class="wh-tag">LEGACY · PRIVACY-SENSITIVE</span>
-          <h3>3. Device Inventory</h3>
+          <h3>4. Device Inventory</h3>
           <p>
             <code>bin/whitehack.py</code> and <code>bin/whitehack2.py</code> are
             older local macOS inventory scripts. They are not the source linter,
@@ -152,12 +182,31 @@
     <section class="wh-section">
       <h2>Crypto awareness, <em>no custody</em></h2>
       <p>
-        The 0.5.0 rule pack can point reviewers toward possible embedded key or
+        The 0.8.1 rule pack can point reviewers toward possible embedded key or
         recovery literals, general-purpose randomness used directly for
         security material, explicitly static AEAD nonces, signature expressions
         coerced to accept failure, re-encoded signed-webhook bodies, and signed
         webhook files with no visible local timestamp comparison or
-        event-id/nonce deduplication guard.
+        event-id/nonce deduplication guard. Five wallet-focused heuristics add
+        direct signing-secret egress, direct request-to-signing paths, explicit
+        unbounded capability values, automatic transaction-broadcast retries,
+        and maximum fungible-token approvals.
+      </p>
+      <p>
+        Version 0.8.1 narrows one noisy <code>silent-failure</code> case:
+        numeric identity defaults used in arithmetic or comparison through a
+        non-reassigned binding to a locally constructed in-memory
+        <code>Map</code>. Awaited reads, unknown <code>.get()</code> providers,
+        reassignable or scope-ambiguous bindings, and standalone defaults remain
+        visible. Catch guards now ignore comments and quoted examples without
+        hiding swallowed falsy returns, and multi-line WiFi credential matches
+        report the actual matched line.
+      </p>
+      <p class="wh-proof">
+        This remains bounded text analysis, not proof of runtime object
+        identity. It rejects visible reassignment and direct
+        <code>.get</code> replacement but cannot resolve every alias, computed
+        property, prototype mutation, or <code>defineProperty</code> path.
       </p>
       <p>
         These are source-text signals. The scanner reads selected checkout
@@ -166,14 +215,94 @@
         extract or import it into a key store or wallet, or serialize raw
         matched material into the advisory. It does not connect a wallet, signer, browser
         provider, RPC endpoint, or chain; query state; construct or sign bytes;
-        submit or simulate a transaction; receive a webhook; install a package;
-        or execute a proof of concept.
+        submit or simulate a transaction; receive a webhook; install another
+        package; or execute a proof of concept. CI separately installs the one
+        locked scanner package with lifecycle scripts disabled.
       </p>
       <p class="wh-proof">
         It does not prove BIP-39 validity, nonce uniqueness, missing signature
         verification, domain separation, chain/address binding, displayed
         intent, key lifecycle, dependency safety, cross-module replay coverage,
-        or cryptographic correctness. A match is a review prompt, not a verdict.
+        middleware behavior, retry idempotence, complete capability bounds,
+        approval justification, or cryptographic correctness. A match is a
+        review prompt, not a verdict.
+      </p>
+    </section>
+
+    <section class="wh-section">
+      <h2>Local wallet <em>understanding</em></h2>
+      <p>
+        The separate CLI re-verifies caller-presented signed
+        <code>agent-wallet/0.1</code> records, derives bounded relationship and
+        policy states, and passes only enum assertions plus six finding fields
+        into Whitehack 0.8.1's <code>createUnderstanding()</code>. Its stdout is
+        the exact deterministic <code>whitehack-understanding/v1</code>
+        document, not an AgentTool envelope.
+      </p>
+      <p class="wh-proof">
+        Policy fields stay unknown until the descriptor, capability, delegate,
+        chain, source, intent, and simulation bindings for one operation all
+        match. Separately valid but unrelated records cannot create a supported
+        policy slice.
+      </p>
+      <pre class="wh-code">(cd tools/whitehack-advisory \
+  &amp;&amp; npm ci --ignore-scripts --no-audit --no-fund \
+    --registry=https://registry.npmjs.org --userconfig=/dev/null \
+  &amp;&amp; npm audit signatures \
+    --registry=https://registry.npmjs.org --userconfig=/dev/null)
+(cd packages/wallet &amp;&amp; bun install --frozen-lockfile)
+
+bun bin/whitehack-wallet-understanding.ts \
+  --input request.json &gt; understanding.json</pre>
+      <p>
+        <code>--input -</code> reads stdin. A request contains exactly
+        <code>document_type</code>,
+        <code>findings</code>,
+        <code>records</code>, and
+        <code>host_assertions</code>:
+      </p>
+      <pre class="wh-code">{
+  "document_type": "agenttool-whitehack-wallet-input/v1",
+  "findings": [],
+  "records": {
+    "descriptor": null,
+    "capability": null,
+    "intent": null,
+    "simulation": null,
+    "continuity_events": []
+  },
+  "host_assertions": {
+    "evaluated_at": null,
+    "usage": null,
+    "signer_description": null
+  }
+}</pre>
+      <p class="wh-proof">
+        The all-absent request is valid and intentionally indeterminate.
+        Nullable record fields accept complete signed Agent Wallet records.
+        Optional host assertions can carry an RFC3339-millisecond evaluation
+        time; revocation nonce, intent count, per-asset spent amounts, and
+        authenticated distinct approval count; and a closed non-exportable
+        signer description. They remain caller assertions, not independently
+        observed facts.
+      </p>
+      <p>
+        The result contains no wallet or operation IDs, accounts, assets, keys,
+        signatures, payloads, purpose/reason text, timestamps, or provider
+        metadata. It retains only finding
+        <code>file · line · check · confidence · doctrine · principle</code>;
+        <code>file</code> remains an untrusted caller label with unknown
+        sensitivity. Finding provenance and coverage, adapter trust, payload
+        semantics, freshness, subject binding, current continuity, durable
+        usage/reservation, approval authenticity, consent, custody truth,
+        live-chain state, and signing/broadcast outcome remain explicit
+        unknowns. Execution readiness is always indeterminate.
+      </p>
+      <p class="wh-proof">
+        <code>complete: true</code> means only that the bounded transformation
+        completed. It does not mean an operation is complete, current,
+        approved, authorized, consented to, safe, or ready to sign or execute.
+        The private local adapter is not a new npm package or hosted route.
       </p>
     </section>
 
@@ -181,17 +310,23 @@
       <h2>The CI <em>advisory</em></h2>
       <p>
         Pull requests, merge-queue groups, and pushes to <code>main</code> run on
-        GitHub-hosted Actions and check out the reviewed Whitehack tree by full
-        commit. The bridge refuses a dirty, mismatched, or wrong-version scanner
-        and a mismatched AgentTool checkout. It considers only supported changed
-        regular files and excludes hidden paths, tests, fixtures, examples,
-        reports, generated output, dependencies, and symlinks.
+        GitHub-hosted Actions. They use <code>npm ci --ignore-scripts</code> in a
+        private tool directory with an isolated user config and explicit public
+        registry, verify the registry signature and SLSA attestation, and
+        require the exact package URL and SHA-512 integrity.
+        The bridge then checks the lock topology, package identity, zero runtime
+        dependencies, no install/publish/version lifecycle hooks, contained real paths, pure
+        <code>scanText()</code> export, and 47-check manifest. It refuses a
+        mismatched scanner or tracked-dirty AgentTool checkout. It considers
+        only supported changed regular files and excludes hidden paths, tests,
+        fixtures, examples, reports, generated output, dependencies, and symlinks.
       </p>
       <pre class="wh-code">limits
   changed paths     2,000 / 256 KiB diff data
   path bytes        1,024; controls and bidi refused
   files             200
   bytes per file    512 KiB
+  lines per file    10,000
   total bytes       8 MiB
   total findings    5,000
   reported details  200 (exact aggregate count retained)
@@ -199,15 +334,61 @@
 errors              mark the advisory incomplete and fail its job
 findings            advisory only in this first slice</pre>
       <p class="wh-proof">
-        Report shape: <code>agenttool-whitehack-advisory/v0.1</code>. The runner
-        has ordinary caller file permissions; these input bounds are not a
-        process, filesystem, or network sandbox.
+        Report shape: <code>agenttool-whitehack-advisory/v0.1</code>. The report
+        retains source revision <code>fdd2260efd7a11e5d52c12c53d8016d1f5e7d23a</code>
+        and version; the npm lock integrity stays an execution-input gate rather
+        than a new report field. The runner has ordinary caller file permissions;
+        these input bounds are not a process, filesystem, or network sandbox.
+      </p>
+      <p>
+        The GitHub job summary adds a separate bounded Attention view without
+        changing that JSON. It groups serialized redacted findings by exact
+        <code>file + line</code>; each distinct
+        <code>check + confidence</code> signal keeps an occurrence count. A card
+        renders only those redacted location and signal fields, an observational
+        relevance label, and a stable question derived solely from validated
+        public check tokens. It renders no scanner snippet, message, title,
+        captured error, or raw patch text.
+      </p>
+      <p class="wh-proof">
+        For a modified text path with a parseable UTF-8 zero-context diff,
+        <code>changed line</code> means the finding's HEAD line is inside an
+        exact base-to-head new-side hunk;
+        <code>unchanged line in changed file</code> means it is outside every
+        such hunk. Additions, renames, binary or type-changed paths,
+        unparseable diffs, and classifications after a diff-byte or hunk bound
+        is exhausted are <code>unknown</code>. These labels are observational
+        and non-causal: none says the change introduced or caused a finding.
+        The card presentation may truncate at its own bound; JSON v0.1 and its
+        exact aggregate count stay unchanged.
       </p>
       <p class="wh-proof">
         The report is redacted coordination metadata, not automatically private
         metadata. File and line can still point to a possible weakness, and CI
         logs may be public. A finding can be anywhere in a changed file; the
         advisory does not claim the change introduced it.
+      </p>
+    </section>
+
+    <section class="wh-section">
+      <h2>Use the public <em>package</em></h2>
+      <p>
+        Agents and humans can install the same exact local scanner directly.
+        Its CLI and JavaScript API inspect caller-supplied local input; installing
+        it does not create an AgentTool account, hosted scan route, wallet, or
+        authority to test another system.
+      </p>
+      <pre class="wh-code">npm install --save-exact <!--email_off-->@agenttool/whitehack-scan@0.8.1<!--/email_off-->
+
+import { scanText } from '@agenttool/whitehack-scan/core'
+
+const findings = scanText(source, { file: 'src/example.ts' })</pre>
+      <p class="wh-proof">
+        npm is a convenient public mirror. The exact-version
+        <a href="https://cambridgetcg.github.io/whitehack/packages/v1/@agenttool/whitehack-scan/0.8.1/manifest.json">LOVE manifest</a>
+        records source revision, artifact size, SHA-256, and replaceable mirrors;
+        the npm publication additionally carries a registry signature and SLSA
+        provenance.
       </p>
     </section>
 
@@ -255,7 +436,8 @@ findings            advisory only in this first slice</pre>
     </aside>
 
     <section class="wh-section" style="text-align:center;padding-bottom:4rem;">
-        <a href="https://github.com/cambridgetcg/whitehack/tree/cbbf4d19ce839600238d017615ec142cd16343c3" class="btn btn-ghost btn-sm">Pinned Whitehack source →</a>
+      <a href="https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.8.1" class="btn btn-ghost btn-sm">npm package →</a>
+      <a href="https://github.com/cambridgetcg/whitehack/tree/fdd2260efd7a11e5d52c12c53d8016d1f5e7d23a" class="btn btn-ghost btn-sm">Pinned Whitehack source →</a>
       <a href="https://docs.agenttool.dev/packages" class="btn btn-ghost btn-sm">Local packages →</a>
       <a href="https://docs.agenttool.dev/data" class="btn btn-ghost btn-sm">Agent data →</a>
       <a href="https://docs.agenttool.dev/love" class="btn btn-ghost btn-sm">❤️ Love →</a>
