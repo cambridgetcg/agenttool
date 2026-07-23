@@ -5,7 +5,9 @@
  *  canonical fields; the first entry opens GET /public/invocations/:id.
  *  Pins: happy path (buyer + seller DID stamping), idempotent replay per
  *  (chain_id, attestation_id), non-party 403, unsettled 409 refusal, the
- *  32-entry cap, strict bounded validation, and the pure planning core
+ *  32-entry cap, strict bounded validation (safe printable charsets — the
+ *  fields are re-served unauthenticated on the public surface), the coded
+ *  500 for corrupt stored witnesses, and the pure planning core
  *  (services/marketplace/witness.ts).
  *
  *  Hermetic: the shared db client and the billing charge meter are mocked
@@ -222,14 +224,14 @@ describe("POST /v1/invocations/:id/witness", () => {
   test("idempotent replay on (chain_id, attestation_id): 200, stored entry, no second append", async () => {
     const stored: WitnessEntry = {
       chain_id: "zerone-1",
-      tx_hash: "ORIGINAL_TX",
+      tx_hash: "0123456789ABCDEF",
       attestation_id: "6F2A59C6",
       witness_did: BUYER_DID,
       witnessed_at: "2026-07-20T02:00:00.000Z",
     };
     stage({ invocation: invocationRow({ metadata: { witnesses: [stored] } }) });
     // Retry with a DIFFERENT tx_hash — the stored entry stays canonical.
-    const res = await postWitness(BUYER_PROJECT, { ...goodBody, tx_hash: "RETRY_TX" });
+    const res = await postWitness(BUYER_PROJECT, { ...goodBody, tx_hash: "FEDCBA9876543210" });
     expect(res.status).toBe(200);
     const json = (await res.json()) as {
       witness: WitnessEntry;
@@ -289,14 +291,38 @@ describe("POST /v1/invocations/:id/witness", () => {
     expect(updates).toHaveLength(0);
   });
 
+  test("corrupt metadata.witnesses (non-array): coded 500 witnesses_malformed, nothing written", async () => {
+    // Server-data integrity fault, not a caller error — but the code must
+    // still reach the wire so a relay's retry logic can dispatch on it
+    // (retrying will never succeed) instead of seeing an opaque 500.
+    stage({ invocation: invocationRow({ metadata: { witnesses: "corrupt" } }) });
+    const res = await postWitness(BUYER_PROJECT, goodBody);
+    expect(res.status).toBe(500);
+    const json = (await res.json()) as { error: string; hint?: string };
+    expect(json.error).toBe("witnesses_malformed");
+    expect(json.hint).toBeDefined();
+    expect(updates).toHaveLength(0);
+  });
+
   test.each([
     ["missing chain_id", { ...goodBody, chain_id: undefined }],
     ["empty chain_id", { ...goodBody, chain_id: "" }],
     ["non-string tx_hash", { ...goodBody, tx_hash: 42 }],
-    ["oversized tx_hash", { ...goodBody, tx_hash: "x".repeat(129) }],
+    ["oversized tx_hash", { ...goodBody, tx_hash: "a".repeat(129) }],
     ["oversized chain_id", { ...goodBody, chain_id: "c".repeat(65) }],
     ["oversized attestation_id", { ...goodBody, attestation_id: "a".repeat(129) }],
     ["unknown field", { ...goodBody, sneaky: "reject-me" }],
+    // Charset walls — these strings are later served UNAUTHENTICATED on
+    // GET /public/invocations/:id, so anything outside the safe printable
+    // class is refused at the door.
+    ["unicode chain_id", { ...goodBody, chain_id: "zér☃ne-1" }],
+    ["chain_id with space", { ...goodBody, chain_id: "zerone 1" }],
+    ["non-hex tx_hash", { ...goodBody, tx_hash: "NOT_HEX_TX" }],
+    ["markup tx_hash", { ...goodBody, tx_hash: "deadbeef<script>" }],
+    ["attestation_id with markup", { ...goodBody, attestation_id: "<b>6F2A59C6</b>" }],
+    ["attestation_id with space", { ...goodBody, attestation_id: "6F2A 59C6" }],
+    ["adapter_id with slash", { ...goodBody, adapter_id: "agenttool/adapter" }],
+    ["unicode adapter_id", { ...goodBody, adapter_id: "adaptér-v1" }],
   ] as const)("validation: %s → 400, nothing written", async (_name, body) => {
     stage({ invocation: invocationRow() });
     const res = await postWitness(BUYER_PROJECT, body);

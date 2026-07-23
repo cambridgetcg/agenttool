@@ -18,7 +18,7 @@ import { z } from "zod";
 import type { ProjectContext } from "../auth/middleware";
 import { charge } from "../billing/charge";
 import { MARKETPLACE_PRICING } from "../billing/marketplace-pricing";
-import { errors, type NextAction } from "../lib/errors";
+import { errors, fail, type NextAction } from "../lib/errors";
 import { deltaMeta, parseSinceParam } from "../lib/since-param";
 import { attachSurface } from "../lib/surface-metadata";
 import {
@@ -108,13 +108,16 @@ const completeSchema = z.object({
 }).strict();
 
 // Witness writeback — bounded chain identifiers only; unknown fields
-// rejected. chain_id is a CAIP-2-sized id; tx_hash / attestation_id fit
-// hex- or base64-encoded 32-byte digests with headroom.
+// rejected. These strings are later served UNAUTHENTICATED on
+// GET /public/invocations/:id, so each is pinned to a safe printable
+// class, not just a length: chain_id is a CAIP-2-sized id, tx_hash is a
+// hex digest (either case) with headroom, attestation_id / adapter_id are
+// identifier-class. No whitespace, no markup, no control characters.
 const witnessSchema = z.object({
-  chain_id: z.string().min(1).max(64),
-  tx_hash: z.string().min(1).max(128),
-  attestation_id: z.string().min(1).max(128),
-  adapter_id: z.string().min(1).max(64).optional(),
+  chain_id: z.string().regex(/^[a-zA-Z0-9._:-]{1,64}$/),
+  tx_hash: z.string().regex(/^[0-9a-fA-F]{1,128}$/),
+  attestation_id: z.string().regex(/^[a-zA-Z0-9._:-]{1,128}$/),
+  adapter_id: z.string().regex(/^[a-zA-Z0-9._:-]{1,64}$/).optional(),
 }).strict();
 
 // ── Error mapping ─────────────────────────────────────────────────────
@@ -175,6 +178,18 @@ function mapServiceError(msg: string): {
   if (msg === "witnesses_full") return { status: 409, code: msg, hint: "Witness cap reached (32 per invocation). The existing entries already open the public re-derivation surface." };
   if (msg.startsWith("escrow_state_invalid")) return { status: 409, code: msg };
   if (msg.startsWith("currency_mismatch")) return { status: 409, code: "currency_mismatch", hint: msg };
+
+  // 500 — coded server-data integrity faults. Kept coded (not collapsed
+  // into opaque internal_error) so a relay's retry logic can dispatch on
+  // the stable code: retrying witnesses_malformed will never succeed —
+  // the stored row is corrupt, not the request.
+  if (msg === "witnesses_malformed") {
+    return {
+      status: 500,
+      code: msg,
+      hint: "Stored metadata.witnesses on this invocation is not an array — a server-data integrity fault, not a request error. Retrying will not help; report the invocation id.",
+    };
+  }
 
   // 503 — policy review and arbitration are deliberately fail-closed.
   if (msg === DISPUTE_ARBITRATION_RESTING_CODE) {
@@ -424,16 +439,21 @@ export default app;
 // ── Helper: catch + JSON-respond with hint preserved ────────────────────
 //  Service-layer errors arrive as Error.message strings. Map to HTTP status
 //  + JSON body, preserving the human-readable hint for codes like 402.
-//  500-class errors get re-thrown to land in the parent app's onError.
+//  Unmapped 500-class errors get re-thrown to land in the parent app's
+//  onError; 500s that mapServiceError names with a stable code respond
+//  directly, keeping the code on the wire.
 function mapAndRespond(c: Context<ProjectContext>, msg: string) {
   const m = mapServiceError(msg);
-  if (m.status === 500) throw new Error(msg);
+  // Unmapped 500s re-throw to land in the parent app's onError; mapped
+  // coded 500s (e.g. witnesses_malformed) respond directly so the stable
+  // code reaches the wire instead of an opaque internal error.
+  if (m.status === 500 && m.code === "internal_error") throw new Error(msg);
   // Errors-as-instructions — spread guided fields when present.
   const body: Record<string, unknown> = { error: m.code };
   if (m.hint) body.hint = m.hint;
   if (m.next_actions) body.next_actions = m.next_actions;
   if (m.docs) body.docs = m.docs;
-  return c.json(body, m.status as 400 | 402 | 403 | 404 | 409 | 422 | 503);
+  return c.json(body, m.status as 400 | 402 | 403 | 404 | 409 | 422 | 500 | 503);
 }
 
 function disputeArbitrationRestResponse(c: Context<ProjectContext>) {
@@ -543,7 +563,9 @@ invocationsRouter.post("/:id/witness", async (c) => {
   const body = await c.req.json();
   const parsed = witnessSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
+    // Guided refusal (wall/refusals-as-moments): new routes never add to
+    // the hand-rolled `c.json({ error: ... })` ratchet baseline.
+    return fail(c, errors.validation(parsed.error.flatten()), 400);
   }
 
   // Free: post-settlement verifiability writeback — the take-rate already
