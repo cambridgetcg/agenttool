@@ -16,10 +16,23 @@ The boundary is deliberate:
 
 ## Developer-preview status
 
-Version `0.1.0-dev.0` is a source-tree preview. It is not a deployed
-projector, a YUTABASE conformance claim, a hosted service, or evidence that an
-npm mirror contains this package. The package has no runtime dependencies and
-performs no network or database I/O.
+Version `0.1.0-dev.0` is a public npm developer preview. The protected release
+path read the registry and GitHub Release tarballs back as byte-identical. It
+is not a deployed projector, a YUTABASE conformance claim, or a hosted service.
+The package has no runtime dependencies and performs no network or database
+I/O.
+
+At first publication npm exposed the sole version through both `next` and
+`latest`, even though the release requested `next`. Use the exact prerelease or
+`next`; do not treat the registry fallback tag as a maturity signal.
+
+## Install
+
+    npm install --save-exact @agenttool/correspondence-yutabase@0.1.0-dev.0
+
+Or explicitly track the preview channel:
+
+    npm install @agenttool/correspondence-yutabase@next
 
 ## Use
 
@@ -190,4 +203,5 @@ input to this planner.
 
 ## License
 
-Apache-2.0. No package publication is implied by this source preview.
+Apache-2.0. Publication distributes the pure planner only; it does not deploy
+an executor, connect a database, or grant mutation authority.
