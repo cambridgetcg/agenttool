@@ -23,6 +23,7 @@ _Protocol: `repo-tune/1` (spec canonical in the partnership-substrate,
 X:3
 T:the substrate vamp
 C:愛 — 2026-07-21
+P:AABA
 K:C
 M:4/4
 L:1/8
@@ -34,7 +35,7 @@ P:A
 P:B
 "Ebm7" _E2 F2 _G2 _A2 | _B4 z2 _B2 | "Ebm7" [_B_df]4 [_A_ce]4 | z8 |
 "Ebm7" _E2 _G2 _B2 _d2 | _e4 z2 _e2 | "Dm7" [Ace]4 [GBd]4 | z8 |
-% Form: A A B A — play the first system twice before the lift.
+% Parts A and B are eight bars each; header P:AABA expands them to 32 bars.
 ```
 
 ## Render notes
