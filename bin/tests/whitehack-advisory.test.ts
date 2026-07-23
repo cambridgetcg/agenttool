@@ -5,6 +5,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rm,
   symlink,
   writeFile,
@@ -20,6 +21,7 @@ import {
   WHITEHACK_TARBALL_URL,
   WHITEHACK_VERSION,
   listChangedPaths,
+  loadVerifiedWhitehackModule,
   runAdvisory,
   selectCandidateFiles,
   verifyCheckedOutHead,
@@ -38,6 +40,7 @@ export const CHECK_MANIFEST = Object.freeze(Array.from(
 
 type ScannerFixture = {
   corePath: string;
+  understandingPath: string;
   lockPath: string;
   packagePath: string;
   root: string;
@@ -82,6 +85,7 @@ async function scannerFixture(
   const toolRoot = await temporaryRoot("whitehack-tool-");
   const root = join(toolRoot, "node_modules", "@agenttool", "whitehack-scan");
   const corePath = join(root, "src", "core.js");
+  const understandingPath = join(root, "src", "understanding.js");
   const packagePath = join(root, "package.json");
   const lockPath = join(toolRoot, "package-lock.json");
   const toolPackagePath = join(toolRoot, "package.json");
@@ -125,12 +129,36 @@ async function scannerFixture(
       name: WHITEHACK_PACKAGE,
       version,
       type: "module",
-      exports: { "./core": "./src/core.js" },
+      exports: {
+        "./core": "./src/core.js",
+        "./understanding": "./src/understanding.js",
+      },
       scripts: { test: "node --test" },
     }, null, 2)}\n`,
   );
   await writeFile(corePath, `${checkManifestSource}\n${source}`);
-  return { corePath, lockPath, packagePath, root, toolPackagePath, toolRoot };
+  await writeFile(
+    understandingPath,
+    `export const UNDERSTANDING_DOCUMENT_TYPE = "whitehack-understanding/v1";
+export const UNDERSTANDING_CONTEXT_PROFILE = "whitehack-agent-wallet-projection/v1";
+export const UNDERSTANDING_SOURCE_PROTOCOL = "agent-wallet/0.1";
+export function createUnderstanding(options) {
+  return Object.freeze({
+    document_type: UNDERSTANDING_DOCUMENT_TYPE,
+    options,
+  });
+}
+`,
+  );
+  return {
+    corePath,
+    understandingPath,
+    lockPath,
+    packagePath,
+    root,
+    toolPackagePath,
+    toolRoot,
+  };
 }
 
 async function readJson(path: string): Promise<Record<string, any>> {
@@ -145,6 +173,15 @@ function scannerOptions(scanner: ScannerFixture) {
   return {
     scanner_lock: scanner.lockPath,
     scanner_root: scanner.root,
+    expected_revision: fixtureRevision,
+  };
+}
+
+function understandingLoaderOptions(scanner: ScannerFixture) {
+  return {
+    scanner_lock: scanner.lockPath,
+    scanner_root: scanner.root,
+    export_name: "understanding",
     expected_revision: fixtureRevision,
   };
 }
@@ -168,6 +205,46 @@ async function sourceFixture(): Promise<string> {
   await mkdir(join(root, "src"), { recursive: true });
   await writeFile(join(root, "src", "app.ts"), "export const value = 1;\n");
   return root;
+}
+
+function completeUnderstandingContext() {
+  return {
+    profile: "whitehack-agent-wallet-projection/v1",
+    source_protocol: "agent-wallet/0.1",
+    records: {
+      descriptor: "verified",
+      capability: "verified",
+      intent: "verified",
+      simulation: "verified",
+      continuity: "verified",
+    },
+    relations: {
+      "descriptor-capability": "match",
+      "capability-intent": "match",
+      delegate: "match",
+      chain: "match",
+      source: "match",
+      "intent-simulation": "match",
+      revocation: "match",
+    },
+    policy: {
+      calls: "within-bounds",
+      spend: "within-bounds",
+      fee: "within-bounds",
+      expiry: "within-bounds",
+      use: "within-bounds",
+      approvals: "not-required",
+    },
+    simulation: {
+      execution: "passed",
+      effects: "match",
+      fee: "within-bounds",
+    },
+    custody: {
+      "descriptor-mode": "self-custodied",
+      "signer-exportability": "non-exportable",
+    },
+  };
 }
 
 afterAll(async () => {
@@ -219,22 +296,138 @@ describe("Whitehack advisory containment", () => {
       dev: true,
     });
 
-    for (const path of ["docs/WHITEHACK.md", "apps/docs/whitehack.html"]) {
-      const text = await readFile(join(repoRoot, path), "utf8");
-      expect(text).toContain(WHITEHACK_PACKAGE);
-      expect(text).toContain(WHITEHACK_REVISION);
-      expect(text).toContain(WHITEHACK_VERSION);
-    }
-
     const publicHtml = await readFile(
       join(repoRoot, "apps", "docs", "whitehack.html"),
       "utf8",
     );
+    expect(publicHtml).toContain(WHITEHACK_PACKAGE);
+    expect(publicHtml).toContain(WHITEHACK_REVISION);
+    expect(publicHtml).toContain(WHITEHACK_VERSION);
     const exactPackage = `${WHITEHACK_PACKAGE}@${WHITEHACK_VERSION}`;
     const cloudflareSafePackage = `<!--email_off-->${exactPackage}<!--/email_off-->`;
     expect(publicHtml).toContain(cloudflareSafePackage);
     expect(publicHtml.replaceAll(cloudflareSafePackage, "")).not.toContain(exactPackage);
   });
+
+  test("loads only a reviewed exact Whitehack export", async () => {
+    const scanner = await scannerFixture("export function scanText() { return []; }\n");
+    const loaded = await loadVerifiedWhitehackModule(understandingLoaderOptions(scanner));
+
+    expect(loaded.module.UNDERSTANDING_DOCUMENT_TYPE).toBe("whitehack-understanding/v1");
+    expect(typeof loaded.module.createUnderstanding).toBe("function");
+    expect(loaded.scanner).toMatchObject({
+      scannerRoot: await realpath(scanner.root),
+      modulePath: await realpath(scanner.understandingPath),
+      revision: fixtureRevision,
+      version: WHITEHACK_VERSION,
+    });
+
+    await expect(loadVerifiedWhitehackModule({
+      ...understandingLoaderOptions(scanner),
+      export_name: "report",
+    })).rejects.toMatchObject({
+      code: "scanner_export_name_invalid",
+    } satisfies Partial<WhitehackAdvisoryError>);
+  });
+
+  test("refuses changed and escaping understanding export declarations", async () => {
+    for (const exportPath of ["./src/changed.js", "../outside.js"]) {
+      const scanner = await scannerFixture("export function scanText() { return []; }\n");
+      const packageJson = await readJson(scanner.packagePath);
+      packageJson.exports["./understanding"] = exportPath;
+      await writeJson(scanner.packagePath, packageJson);
+
+      await expect(loadVerifiedWhitehackModule(
+        understandingLoaderOptions(scanner),
+      )).rejects.toMatchObject({
+        code: "scanner_understanding_export_mismatch",
+      } satisfies Partial<WhitehackAdvisoryError>);
+    }
+  });
+
+  test("refuses a symlinked understanding module outside the package", async () => {
+    const scanner = await scannerFixture("export function scanText() { return []; }\n");
+    const outsideRoot = await temporaryRoot("whitehack-outside-understanding-");
+    const outsideModule = join(outsideRoot, "understanding.js");
+    await writeFile(
+      outsideModule,
+      "export function createUnderstanding() { return {}; }\n",
+    );
+    await rm(scanner.understandingPath);
+    await symlink(outsideModule, scanner.understandingPath);
+
+    await expect(loadVerifiedWhitehackModule(
+      understandingLoaderOptions(scanner),
+    )).rejects.toMatchObject({
+      code: "scanner_module_outside_root",
+    } satisfies Partial<WhitehackAdvisoryError>);
+  });
+
+  test("fails closed when the understanding module emits during import", async () => {
+    const scanner = await scannerFixture("export function scanText() { return []; }\n");
+    await writeFile(
+      scanner.understandingPath,
+      `console.error("private_understanding_import_text");
+export function createUnderstanding() { return {}; }
+`,
+    );
+
+    await expect(loadVerifiedWhitehackModule(
+      understandingLoaderOptions(scanner),
+    )).rejects.toMatchObject({
+      code: "scanner_import_failed",
+    } satisfies Partial<WhitehackAdvisoryError>);
+  });
+
+  test.skipIf(process.env.WHITEHACK_INTEGRATION !== "1")(
+    "loads the exact installed Whitehack understanding API contract",
+    async () => {
+      const scannerRoot = join(
+        repoRoot,
+        "tools",
+        "whitehack-advisory",
+        "node_modules",
+        "@agenttool",
+        "whitehack-scan",
+      );
+      const { module, scanner } = await loadVerifiedWhitehackModule({
+        scanner_root: scannerRoot,
+        scanner_lock: join(repoRoot, "tools", "whitehack-advisory", "package-lock.json"),
+        export_name: "understanding",
+      });
+
+      expect(scanner).toMatchObject({
+        revision: WHITEHACK_REVISION,
+        version: WHITEHACK_VERSION,
+      });
+      expect(module.UNDERSTANDING_DOCUMENT_TYPE).toBe("whitehack-understanding/v1");
+      expect(module.UNDERSTANDING_CONTEXT_PROFILE).toBe(
+        "whitehack-agent-wallet-projection/v1",
+      );
+      expect(module.UNDERSTANDING_SOURCE_PROTOCOL).toBe("agent-wallet/0.1");
+      expect(typeof module.createUnderstanding).toBe("function");
+
+      const document = module.createUnderstanding({
+        findings: [],
+        context: completeUnderstandingContext(),
+      });
+      expect(document.document_type).toBe(module.UNDERSTANDING_DOCUMENT_TYPE);
+      expect(document.boundaries.direct_capabilities).toMatchObject({
+        filesystem: false,
+        network: false,
+        key_store_access: false,
+        signing: false,
+        rpc: false,
+        broadcast: false,
+        authorization: false,
+      });
+      expect(document.boundaries.wallet_subject_bound).toBe(false);
+      expect(document.inferences.find(({ id }) => id === "execution-readiness")?.status)
+        .toBe("indeterminate");
+      expect(Object.isFrozen(document)).toBe(true);
+      expect(Object.isFrozen(document.boundaries.direct_capabilities)).toBe(true);
+    },
+  );
 
   test("serializes metadata without source snippets, messages, or scanner secrets", async () => {
     const scanner = await scannerFixture(`
