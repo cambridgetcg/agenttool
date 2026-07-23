@@ -61,16 +61,20 @@ jobs:
           for workspace in api packages/data packages/data-protocol packages/repo-archive packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope; do
             (cd "$workspace" && bun install --frozen-lockfile)
           done
-      - name: Build local data-sync peers
+      - name: Build local data-sync and projector peers
         shell: bash
         run: |
           set -euo pipefail
           (cd packages/data && bun run build)
           (cd packages/data-protocol && bun run build)
-      - name: Install data-sync dependencies from lockfile
-        working-directory: packages/data-sync
-        run: bun install --frozen-lockfile
-      - name: Run hermetic data, ADDS, sync, broker, collab, Browser, projection, Skills, SDK, Wallet, and Telescope gate
+          (cd packages/correspondence-yutabase && bun run build)
+      - name: Install local-dependent package dependencies from lockfiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd packages/data-sync && bun install --frozen-lockfile)
+          (cd packages/correspondence-yutabase-projector && bun install --frozen-lockfile)
+      - name: Run hermetic data, ADDS, sync, archive, broker, collab, Browser, projection, local projector, Skills, SDK, Wallet, and Telescope gate
         run: bash bin/preflight.sh packages
       - name: Smoke the packed TypeScript SDK under Node and Bun
         working-directory: packages/sdk-ts
@@ -213,6 +217,81 @@ jobs:
           bun "$cli" --help | grep -q '^Usage:$'
       - name: Verify the checked-in LOVE package registry
         run: bun bin/build-love-packages.ts verify apps/docs
+
+  yutabase-projector-postgres:
+    name: YUTABASE projector (PostgreSQL ${{ matrix.postgres }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ["16", "17"]
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: projector-test-only
+          POSTGRES_DB: yutabase_projector
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d yutabase_projector"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGPASSWORD: projector-test-only
+      AGENTTOOL_YUTABASE_TEST_DATABASE_URL: postgresql://postgres:projector-test-only@127.0.0.1:5432/yutabase_projector
+    steps:
+      - name: Check out AgentTool
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check out exact YUTABASE fixture
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: cambridgetcg/yutabase
+          ref: 066afc12c2c7f10bab776a20005e397fca33818c
+          path: _yutabase-fixture
+          persist-credentials: false
+      - name: Set up Bun 1.3.5
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.5
+      - name: Set up Node 20.19.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20.19.0
+          package-manager-cache: false
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Install and build projection dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd packages/correspondence-yutabase && bun install --frozen-lockfile && bun run build)
+          (cd packages/correspondence-yutabase-projector && bun install --frozen-lockfile)
+      - name: Install exact YUTABASE candidate schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          for migration in \
+            0001_yu_core.sql \
+            0002_starter_lexicon.sql \
+            0004_candidate_hardening.sql
+          do
+            psql "$AGENTTOOL_YUTABASE_TEST_DATABASE_URL" \
+              --no-psqlrc \
+              --single-transaction \
+              --set=ON_ERROR_STOP=1 \
+              --file "_yutabase-fixture/sql/$migration"
+          done
+      - name: Run destructive disposable-database integration gate
+        working-directory: packages/correspondence-yutabase-projector
+        run: bun run test:postgres
 
   sdk-python:
     name: Python SDK (${{ matrix.python-version }})

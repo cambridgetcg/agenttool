@@ -267,12 +267,13 @@ describe("boring test spine", () => {
     }
   });
 
-  test("pins a three-job secret-free workflow and frozen installs", async () => {
+  test("pins a four-job secret-free workflow and frozen installs", async () => {
     const workflow = await readFile(join(ROOT, ".github", "workflows", "ci.yml"), "utf8");
     expect(workflow).toContain("name: API and protocol");
     expect(workflow).toContain("name: Data, ADDS, and SDK");
-    expect(workflow.match(/bun-version: 1\.3\.5/g)).toHaveLength(2);
-    expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(3);
+    expect(workflow).toContain("name: YUTABASE projector (PostgreSQL ${{ matrix.postgres }})");
+    expect(workflow.match(/bun-version: 1\.3\.5/g)).toHaveLength(3);
+    expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(4);
     expect(workflow).toContain("bun install --frozen-lockfile");
     expect(workflow).toContain("name: Install cross-language vector dependencies");
     expect(workflow).toContain("working-directory: packages/sdk-ts");
@@ -281,11 +282,17 @@ describe("boring test spine", () => {
     );
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("package-manager-cache: false");
-    expect(workflow).toContain("name: Build local data-sync peers");
+    expect(workflow).toContain("name: Build local data-sync and projector peers");
     expect(workflow).toContain("cd packages/data && bun run build");
     expect(workflow).toContain("cd packages/data-protocol && bun run build");
-    expect(workflow).toContain("name: Install data-sync dependencies from lockfile");
-    expect(workflow).toContain("working-directory: packages/data-sync");
+    expect(workflow).toContain("cd packages/correspondence-yutabase && bun run build");
+    expect(workflow).toContain(
+      "name: Install local-dependent package dependencies from lockfiles",
+    );
+    expect(workflow).toContain("cd packages/data-sync && bun install --frozen-lockfile");
+    expect(workflow).toContain(
+      "cd packages/correspondence-yutabase-projector && bun install --frozen-lockfile",
+    );
     expect(workflow).not.toContain("secrets.");
 
     const preflight = await readFile(join(ROOT, "bin", "preflight.sh"), "utf8");
@@ -298,6 +305,7 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/repo-archive && bun run ci");
     expect(preflight).toContain("cd packages/skills && bun run ci");
     expect(preflight).toContain("cd packages/correspondence-yutabase && bun run ci");
+    expect(preflight).toContain("cd packages/correspondence-yutabase-projector && bun run ci");
     expect(preflight).toContain("cd packages/wallet && bun run ci");
     expect(preflight).toContain("cd packages/telescope && bun run ci");
     expect(workflow).toContain("name: Smoke packed credential broker under Node and Bun");
@@ -335,7 +343,7 @@ describe("boring test spine", () => {
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.startsWith("uses:"));
-    expect(uses).toHaveLength(7);
+    expect(uses).toHaveLength(11);
     expect(
       uses.every(
         (line) =>

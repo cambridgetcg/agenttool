@@ -21,7 +21,9 @@ distribution protocol, a public read-only discovery evidence mapper
 (`packages/telescope/`), an experimental local capability broker
 (`packages/credential-broker/`), a local-first multi-agent coordination journal
 (`packages/collab/`), a deterministic metadata-only Correspondence-to-YUTABASE
-projection planner (`packages/correspondence-yutabase/`), source reference
+projection planner (`packages/correspondence-yutabase/`), a private
+loopback-only durable projector into a rebuildable local YUTABASE sidecar
+(`packages/correspondence-yutabase-projector/`), source reference
 primitives for capability-bounded agent wallets (`packages/wallet/`), a
 read-only portable Agent Skills inspector (`packages/skills/`), a local-first
 agent browser (`packages/browser/`), and three static apps
@@ -68,6 +70,7 @@ cd packages/collab && bun install              # public 0.3: collab/0.1 compatib
 cd packages/skills && bun install              # read-only portable Agent Skills inspection
 cd packages/browser && bun install             # public local-first agent browser package
 cd packages/correspondence-yutabase && bun install # pure Correspondence projection planner
+cd packages/correspondence-yutabase-projector && bun install # private local durable projector
 cd packages/sdk-ts && bun install              # TS SDK
 cd packages/telescope && bun install           # read-only discovery evidence mapper
 cd packages/wallet && bun install              # agent-wallet/0.1 offline primitives
@@ -137,6 +140,11 @@ npm pack --dry-run --ignore-scripts            # does not publish, install, or d
 cd packages/correspondence-yutabase
 bun run ci                                     # typecheck + vectors + build + Node smoke
 npm pack --dry-run                             # package boundary; does not publish
+
+# Private local Correspondence → YUTABASE projector ─────────────────
+cd packages/correspondence-yutabase-projector
+bun run ci                                     # hermetic verification, source, transaction, and package-boundary tests
+# test:postgres is destructive and requires a disposable exact YUTABASE PostgreSQL 16/17 target
 
 # Registry-neutral JavaScript package artifacts ────────────────────
 bun bin/build-love-packages.ts build <staging-dir> # clean tracked tree required; never publishes or uploads

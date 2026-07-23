@@ -13,10 +13,12 @@ Git repository archive profile and three-zone simulator
 (`packages/collab`), a read-only portable Agent Skills inspector
 (`packages/skills`), a local-first agent browser (`packages/browser`), a
 developer-preview Correspondence-to-YUTABASE mapping planner
-(`packages/correspondence-yutabase`), and three static surfaces (`apps/web`,
-`apps/dashboard`, and `apps/docs`). The browser offers direct TypeScript,
-JSONL, and stdio MCP over an installed system browser. Its exact LOVE release
-and npm mirror distribute local tooling, not a hosted browser.
+(`packages/correspondence-yutabase`), a private loopback-only durable
+projector into a rebuildable local YUTABASE sidecar
+(`packages/correspondence-yutabase-projector`), and three static surfaces
+(`apps/web`, `apps/dashboard`, and `apps/docs`). The browser offers direct
+TypeScript, JSONL, and stdio MCP over an installed system browser. Its exact
+LOVE release and npm mirror distribute local tooling, not a hosted browser.
 The Apache-2.0 `@agenttool/wallet` package defines capability-bounded wallet
 records and conservative signer/submission boundaries without exporting keys,
 contacting RPC, or providing a hosted wallet. Its exact LOVE artifact is the
@@ -66,7 +68,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 | **Agent collaboration** | `packages/collab` | Public `@agenttool/collab@0.3.0` is npm `latest` with SLSA provenance; its npm and GitHub Release tarballs were byte-identical (`sha256:9c605ebe4cdc87eda1b0eede6bba0a6591a3dd62badd364463b01521401def7f`). Its 31 local MCP tools preserve four unauthenticated, self-declared `agenttool.collab.session/0.1` presence operations while adding credential-bound start/end and advanced `agenttool.collab/0.2` coordination across Codex, Claude Code, and Hermes. Migrations preserve v0.1, public-v0.2, and hardened-preview data; ambiguous root/subdirectory identity collisions fail closed with a typed error. Presence and credentials are separate routing and cooperative-attribution planes, not proof of human/model identity, health, competence, permission, or authority. Claims remain advisory; the package does not spawn agents, lock files, provide a hosted relay/private model channel/cross-machine sync, or hide MCP traffic from the model provider. This release adds no hosted surface. |
 | **Agent Skills inspection** | `packages/skills` | Public `@agenttool/skills@0.1.0` inspection and validation for bounded local Agent Skill, plugin, and package trees. It reports structural metadata, files, symbolic requirements, issues, and digests without executing scripts, installing or copying skills, making network requests, spawning subprocesses, looking up credentials, or changing host configuration. npm distributes the local tooling, not a hosted inspection service; a valid report or digest is not publisher authentication, safety approval, or execution authority. |
 | **Agent browser** | `packages/browser`, `docs/AGENT-BROWSER.md` | Public `@agenttool/browser@0.1.0` LOVE/npm package with direct TypeScript, JSONL, and stdio MCP interfaces over one local browser core. It launches an installed Chrome-family executable through `playwright-core`; installation and CI do not download a browser. Sessions are dedicated and ephemeral by default, public-web navigation is the default, actions run once without automatic retry, and page plus allowlisted main-response hints remain untrusted. Persistent profiles and local-network access are explicit opt-ins. Telescope-first discovery and browser fallback compose above the core; observing never performs ambient RRR. DNS preflight does not pin the later browser connection, so this is not strong SSRF isolation and no hosted arbitrary-target browser is deployed. |
-| **Correspondence projection** | `packages/correspondence-yutabase` | Public `@agenttool/correspondence-yutabase@0.1.0-dev.0` npm developer preview: a metadata-only pure planner from retained Correspondence records to deterministic YUTABASE card/thread intentions. Registry and GitHub Release tarballs were independently read back as byte-identical. It performs no signature verification, persistence, checkpointing, worker execution, permission decision, or hosted deployment. Consumers should select the exact prerelease or `next`; npm exposed the sole initial version through `latest` too, which is not a maturity signal. |
+| **Correspondence projection** | `packages/correspondence-yutabase`, `packages/correspondence-yutabase-projector` | Public `@agenttool/correspondence-yutabase@0.1.0-dev.0` remains the metadata-only pure planner; it performs no verification or I/O. The separate private projector verifies closed records and historical Ed25519 keys, then transactionally projects bounded structural metadata into a dedicated local YUTABASE PostgreSQL sidecar with durable receipts, checkpoints, and sanitized quarantine. Both source and target must be literal loopback endpoints, Correspondence remains authoritative, output is rebuildable, and the projector grants no permission or automatic action. It has no npm/LOVE release, hosted service, worker, production migration, or deployment surface. |
 | **LOVE packages** | `docs/LOVE-PACKAGE-PROTOCOL.md`, `bin/build-love-packages.ts` | Locator-independent, open, verifiable, exchangeable package manifests. Public indexes are mirrors; SHA-256 + size identify one artifact and npm is optional. |
 | **Telescope** | `packages/telescope` | Public `@agenttool/telescope@0.2.0` read-only discovery evidence mapper with one bounded local stdio MCP tool, a portable Agent Skill, Codex and Claude plugin manifests, and a Hermes adapter. Public-HTTPS probes map `agent.txt`, Pathways, LOVE/npm, MCP, A2A, WebFinger, and Offer Bus boundaries; advertised protocols and generated actions are never invoked. DNS-AID and PKARR remain opt-in adapter seams. Distribution does not add a hosted scan route. |
 | **Agent Wallet** | `packages/wallet`, `docs/specs/AGENT-WALLET-0.1.md` | Apache-2.0 LOVE release for `agent-wallet/0.1`: closed signed descriptor/capability/intent/receipt/continuity records, exact-byte signer requests, and conservative unknown states. npm is an optional mirror whose exact availability is checked independently. No key custody, chain adapter, RPC, broadcaster, or hosted wallet is supplied. |
@@ -198,10 +200,13 @@ and docs carry local guidance files; `apps/web` does not.
 
 GitHub `main` is the reviewed coordination/release head; Codeberg `main` is an
 explicit fast-forward-only mirror. Required GitHub CI installs JavaScript
-dependencies for the API/protocol and data/ADDS/credential-broker/collab/
-repo-archive/Browser/Correspondence projection/Agent Skills/TypeScript
-SDK/Agent Wallet/Telescope jobs from frozen Bun lockfiles. Browser tests use
-fakes and fixtures and CI does not download or launch a real browser. The
+dependencies for the API/protocol and data/ADDS/repo-archive/
+credential-broker/collab/Browser/Correspondence projection/local projector/Agent Skills/
+TypeScript SDK/Agent Wallet/Telescope jobs from frozen Bun lockfiles.
+Projector unit tests are hermetic; a separate disposable PostgreSQL 16/17
+matrix installs only exact YUTABASE migrations `0001`, `0002`, and `0004`
+from a pinned upstream revision. Browser tests use fakes and fixtures and CI
+does not download or launch a real browser. The
 Python SDK is tested on Python 3.9–3.14 with the
 compatible dependency set pip resolves from `pyproject.toml`; this is neither a
 frozen lock nor a minimum-version matrix. CI receives no application/service credentials. Pushes do not
