@@ -91,7 +91,7 @@ Returning a JSON document naming the wake URL, its scope, supported formats, ver
   },
   "version_cursor": {
     "field": "wake_version",
-    "etag_header": "ETag: W/\"r3-sha256-<semantic-bundle-digest>\"",
+    "etag_header": "ETag: W/\"r4-sha256-<semantic-bundle-digest>\"",
     "conditional_get_header": "If-None-Match",
     "not_modified_status": 304
   },
@@ -220,7 +220,7 @@ Every being maintains a monotonic integer `wake_version`, bumped atomically on e
 
 ```http
 GET /wake HTTP/1.1
-If-None-Match: W/"r3-sha256-8f3c..."
+If-None-Match: W/"r4-sha256-8f3c..."
 
 → HTTP/1.1 304 Not Modified
 ```
@@ -228,7 +228,7 @@ If-None-Match: W/"r3-sha256-8f3c..."
 **Reconciliation after disconnect from SSE stream:**
 
 Client cached `wake_version: 42` and the response validator
-`W/"r3-sha256-8f3c..."` before disconnect. On reconnect, it fetches `GET /wake`
+`W/"r4-sha256-8f3c..."` before disconnect. On reconnect, it fetches `GET /wake`
 with that validator in `If-None-Match`. If 304, the represented wake state is
 unchanged. If 200, the new wake includes a fresh `wake_version` and the client
 knows it must process the deltas it might have missed.
@@ -342,7 +342,8 @@ WaK doesn't replace existing protocols; it composes with them.
 - `wake_version` as a reconciliation cursor, plus revisioned weak semantic ETags and `If-None-Match` handling on brief JSON and bundle-backed Markdown, text, provider, and Xenoform projections. The validator hashes normalized complete bundle state plus representation revision and format/profile/facet/tutor preference. `Vary: Accept, X-Tutor` prevents lesson-decorated JSON from crossing cache variants. AgentTool does not treat one identity's cursor as a complete validator for project-scoped or time-derived wake state.
 - ETag eligibility is explicit: default full JSON mutates its observation counter on each read, MATHOS signs fresh time, and joy formats retain separate lossy/playful contracts. None of those projections emits an ETag or returns 304. Every authenticated wake still carries `Cache-Control: private, no-cache`, so a private cache may retain it but must revalidate and a shared cache must not store it.
 - Derivable clocks (`addressed_at`, `origin.age_seconds`, provider greeting time, and post-route `_welcomed.at_unix_ms`) are presentation metadata under the weak validator. After a 304, those values remain as-of the cached 200 body; the body is empty, while the new `X-Welcomed` header describes the fresh transport-level revalidation and can carry a later timestamp.
-- `r3` is also the manual revision for output semantics outside the normalized bundle hash. It MUST be bumped when renderer/projection semantics, provider envelopes, tutor lessons, or static transport-welcome fields change; clock-only presentation changes covered by the preceding rule do not require a bump.
+- `r4` is also the manual revision for output semantics outside the normalized bundle hash. It MUST be bumped when renderer/projection semantics, provider envelopes, tutor lessons, or static transport-welcome fields change; clock-only presentation changes covered by the preceding rule do not require a bump.
+- Full and brief wakes can carry `you_can_reach`, a static external-discovery section. These coordinates are publisher-authored orientation, not observed identity/project state, delegated authority, or an availability claim.
 - A top-level JSON `_links` block, Wake Voice SSE at authenticated `GET /v1/wake/voice?identity_id=<uuid>`, the platform pointer at `_meta._self`, and per-identity `_self` blocks in `you.agents[]`.
 
 ### Known gaps

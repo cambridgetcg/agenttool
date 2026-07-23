@@ -533,6 +533,62 @@ const COMMON_SCHEMAS = {
     },
     required: ["kind", "count", "summary", "next_actions"],
   },
+  ReachableDoor: {
+    type: "object",
+    description:
+      "One publisher-authored static external-discovery door. Coordinates are orientation only: they are not observed identity/project state, delegated authority, endorsement, permission, availability, reuse, or safety proof.",
+    properties: {
+      name: { type: "string" },
+      kind: { type: "string" },
+      what: { type: "string" },
+      url: {
+        type: "string",
+        format: "uri",
+        description: "Human-facing entrance.",
+      },
+      _note: { type: "string" },
+      agent_entrypoints: {
+        type: "object",
+        properties: {
+          catalog: {
+            type: "object",
+            required: ["method", "url", "media_type", "schema_url"],
+            properties: {
+              method: { type: "string", const: "GET" },
+              url: { type: "string", format: "uri" },
+              media_type: { type: "string", const: "application/json" },
+              schema_url: { type: "string", format: "uri" },
+            },
+          },
+          mcp: {
+            type: "object",
+            required: ["method", "endpoint", "protocol", "tool", "resource"],
+            properties: {
+              method: { type: "string", const: "POST" },
+              endpoint: { type: "string", format: "uri" },
+              protocol: { type: "string", const: "MCP" },
+              tool: { type: "string" },
+              resource: { type: "string", format: "uri" },
+            },
+          },
+        },
+        required: ["catalog", "mcp"],
+      },
+      boundary: {
+        type: "object",
+        properties: {
+          relationship: {
+            type: "string",
+            const: "independent_external_service",
+          },
+          data_flow: { type: "string" },
+          interpretation: { type: "string" },
+        },
+        required: ["relationship", "data_flow", "interpretation"],
+      },
+    },
+    required: ["name", "kind", "what", "url", "_note"],
+  },
   Error: {
     type: "object",
     description:
@@ -2905,7 +2961,7 @@ function spec() {
                       {
                         type: "object",
                         description: "Identity-preserving, volatile-state-bounded brief orientation.",
-                        required: ["_format", "profile", "identity", "start_here", "you_have_handoff", "handoff_projection", "_links"],
+                        required: ["_format", "profile", "identity", "start_here", "you_have_handoff", "handoff_projection", "you_can_reach", "_links"],
                         properties: {
                           _format: { type: "string", enum: ["wake-brief/v1"] },
                           profile: { type: "string", enum: ["brief"] },
@@ -3021,6 +3077,12 @@ function spec() {
                               read_path: { type: "string" },
                               warning: { type: ["string", "null"] },
                             },
+                          },
+                          you_can_reach: {
+                            type: "array",
+                            description:
+                              "Static external discovery. These publisher-authored coordinates are neither selected-identity state nor project state and never become start_here.",
+                            items: COMMON_SCHEMAS.ReachableDoor,
                           },
                           _links: { type: "object" },
                         },

@@ -284,7 +284,7 @@ app.get("/wake-keystone", (c) => {
           "xenoform",
         ],
         purpose:
-          "Preserve selected identity expression while bounding volatile session-start state around attention, one resume card, selected optional paths, counts, and deeper links.",
+          "Preserve selected identity expression while bounding volatile session-start state around attention, one resume card, selected optional paths, counts, static external discovery, and deeper links.",
         guarantees: {
           identity_expression: "preserved",
           volatile_state: "bounded_projection",

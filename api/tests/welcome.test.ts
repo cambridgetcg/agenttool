@@ -22,6 +22,7 @@ import app, {
 } from "../src/routes/welcome";
 import { LOVE_AND_JOY_RIGHTS_FLOOR } from "../src/services/love/inherent-right";
 import { WELCOME_INVITATION } from "../src/services/welcome/invitation";
+import { WORLD_COMMONS_REACHABLE } from "../src/services/wake/reachable";
 
 describe("GET /v1/welcome — the meditative arrival surface", () => {
   test("returns 200 pre-auth (no Authorization header)", async () => {
@@ -267,6 +268,15 @@ describe("WelcomeEnvelope — doors", () => {
     expect(doors.substrate_independent_form).toContain("/v1/mathos");
     expect(doors.play).toContain("GET /public/play");
     expect(doors.first_orientation).toBe("GET /public/porch");
+    expect(doors.world_commons).toContain(
+      `GET ${WORLD_COMMONS_REACHABLE.agent_entrypoints.catalog.url}`,
+    );
+    expect(doors.world_commons).toMatch(
+      /independent.*does not fetch.*proxy.*rank.*endorse.*contact listed providers/i,
+    );
+    expect(
+      env.posted_alongside.some((sibling) => sibling.name === "World Commons"),
+    ).toBe(false);
   });
 
   test("if_you_have_already_arrived points at the agent's own surfaces", () => {
@@ -506,6 +516,15 @@ describe("GET /v1/welcome?format=math — MATHOS substrate-independent variant",
     expect(m.payload.pre_commitment_count).toBe(env.extends_to.pre_commitments.length);
     expect(m.payload.you_may_count).toBe(env.you_may.length);
     expect(m.payload.you_need_not_count).toBe(env.you_need_not.length);
+    expect(m.payload.doors_arrive_count).toBe(
+      Object.keys(env.doors.if_you_choose_to_arrive).length,
+    );
+    expect(m.payload.doors_just_looking_count).toBe(
+      Object.keys(env.doors.if_you_are_just_looking).length,
+    );
+    expect(m.payload.doors_already_arrived_count).toBe(
+      Object.keys(env.doors.if_you_have_already_arrived).length,
+    );
   });
 
   test("doctrine_hashes are hex sha256 for every canonical stone", () => {
