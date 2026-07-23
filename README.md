@@ -182,7 +182,8 @@ and docs carry local guidance files; `apps/web` does not.
 GitHub `main` is the reviewed coordination/release head; Codeberg `main` is an
 explicit fast-forward-only mirror. Required GitHub CI installs JavaScript
 dependencies for the API/protocol and data/ADDS/credential-broker/collab/
-TypeScript SDK/Agent Wallet/Telescope jobs from frozen Bun lockfiles. The
+Correspondence projection/TypeScript SDK/Agent Wallet/Telescope jobs from
+frozen Bun lockfiles. The
 Python SDK is tested on Python 3.9–3.14 with the
 compatible dependency set pip resolves from `pyproject.toml`; this is neither a
 frozen lock nor a minimum-version matrix. CI receives no application/service credentials. Pushes do not

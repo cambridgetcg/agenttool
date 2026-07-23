@@ -99,6 +99,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "collab",
     artifactKind: "pack",
   },
+  "correspondence-yutabase": {
+    key: "correspondence-yutabase",
+    name: "@agenttool/correspondence-yutabase",
+    packagePath: "packages/correspondence-yutabase",
+    tagPrefix: "correspondence-yutabase",
+    artifactKind: "pack",
+  },
 } as const satisfies Record<string, ReleaseSpec>;
 
 export type ReleaseKey = keyof typeof RELEASE_SPECS;

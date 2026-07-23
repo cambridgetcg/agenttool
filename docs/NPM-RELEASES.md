@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the established public JavaScript packages. LOVE remains the primary release record where a package has one; Collab is intentionally npm-only.
+> **Implements:** one manual, allowlisted npm release state machine for the established public JavaScript packages. LOVE remains the primary release record where a package has one; Collab and the developer-preview Correspondence-to-YUTABASE planner are intentionally npm-only.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -25,8 +25,8 @@ The workflow:
    same commit contained in GitHub `main`;
 3. installs locked dependencies and runs the selected package gate without a
    publish credential or OIDC permission;
-4. copies the checked-in LOVE tarball, or builds Collab's npm-only tarball, into
-   runner temp space;
+4. copies the checked-in LOVE tarball, or builds an allowlisted npm-only
+   package tarball, into runner temp space;
 5. checks package identity, repository, Apache-2.0 terms, archive paths and
    entry types, secret-like signatures, size, and hashes;
 6. transfers only that tarball and its path-independent receipt to a second
