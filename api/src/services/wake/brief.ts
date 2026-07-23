@@ -185,6 +185,7 @@ export interface WakeBrief {
     handoffs: string;
     offer_bus: string;
     webfinger: string;
+    signing_compatibility: string;
   };
   _meta: {
     identity_expression: "preserved";
@@ -513,6 +514,7 @@ export function buildWakeBrief(
       handoffs: handoffReadPath,
       offer_bus: `/feeds/offers.atom?seller_did=${encodeURIComponent(b.agent.did)}`,
       webfinger: `/.well-known/webfinger?resource=${encodeURIComponent(b.agent.did)}`,
+      signing_compatibility: "/public/compat",
     },
     _meta: {
       identity_expression: "preserved",
