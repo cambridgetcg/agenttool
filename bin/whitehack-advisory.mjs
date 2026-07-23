@@ -28,10 +28,10 @@ import { pathToFileURL } from "node:url";
 
 export const WHITEHACK_REPOSITORY = "https://github.com/cambridgetcg/whitehack";
 export const WHITEHACK_PACKAGE = "@agenttool/whitehack-scan";
-export const WHITEHACK_REVISION = "e82e6fc7952d536d356fb201e71f548e262feac9";
-export const WHITEHACK_VERSION = "0.8.0";
-export const WHITEHACK_INTEGRITY = "sha512-UuqkB4uhnaDh6ZP/LVf1/20FWBJHt0kmvqzMFC2hzZdc6hKVvAtX6hlQFm1FuTpaHd1lcLkDjSmd9ebX+pL+vA==";
-export const WHITEHACK_TARBALL_URL = "https://registry.npmjs.org/@agenttool/whitehack-scan/-/whitehack-scan-0.8.0.tgz";
+export const WHITEHACK_REVISION = "fdd2260efd7a11e5d52c12c53d8016d1f5e7d23a";
+export const WHITEHACK_VERSION = "0.8.1";
+export const WHITEHACK_INTEGRITY = "sha512-6FUlV1rOLZqPxLHcHE+x3f2XHCOwSsWSqEi+TDxi4pRJEe/CGoIN4Lw8mghsRvmUrtbHtFBrxLyRSk/5iMazPw==";
+export const WHITEHACK_TARBALL_URL = "https://registry.npmjs.org/@agenttool/whitehack-scan/-/whitehack-scan-0.8.1.tgz";
 export const ADVISORY_SCHEMA = "agenttool-whitehack-advisory/v0.1";
 
 const WHITEHACK_EXPORTS = Object.freeze({
@@ -69,6 +69,18 @@ export const DEFAULT_LIMITS = Object.freeze({
   max_total_bytes: 8 * 1024 * 1024,
   max_total_findings: 5_000,
   max_reported_findings: 200,
+});
+
+// Attention cards are a separate, deliberately lossy presentation. These
+// bounds do not alter the closed advisory/v0.1 JSON report or its limits.
+export const DEFAULT_ATTENTION_LIMITS = Object.freeze({
+  max_findings: 200,
+  max_cards: 200,
+  max_checks_per_card: 200,
+  max_files: 200,
+  max_hunks: 20_000,
+  max_diff_bytes: 16 * 1024 * 1024,
+  max_summary_bytes: 512 * 1024,
 });
 
 const SUPPORTED_EXTENSIONS = new Set([
@@ -120,6 +132,11 @@ const CONFIDENCE = new Set(["high", "medium-high", "medium", "heuristic"]);
 const SAFE_TOKEN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const GIT_SHA = /^[0-9a-f]{40}$/i;
 const UNSAFE_PATH_CHARACTERS = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u;
+const ATTENTION_RELEVANCE = new Set([
+  "changed line",
+  "unchanged line in changed file",
+  "unknown",
+]);
 
 export class WhitehackAdvisoryError extends Error {
   constructor(code) {
@@ -311,6 +328,299 @@ export function listChangedPaths(root, base, head, limitOverrides = DEFAULT_LIMI
   const paths = text.split("\0").filter(Boolean);
   validatePathSet(paths, limits);
   return paths;
+}
+
+function normalizeAttentionLimits(overrides = {}) {
+  if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
+    fail("invalid_attention_limits");
+  }
+  if (Object.keys(overrides).some((key) => !(key in DEFAULT_ATTENTION_LIMITS))) {
+    fail("invalid_attention_limits");
+  }
+  const limits = { ...DEFAULT_ATTENTION_LIMITS, ...overrides };
+  for (const [key, ceiling] of Object.entries(DEFAULT_ATTENTION_LIMITS)) {
+    if (!Number.isSafeInteger(limits[key]) || limits[key] < 1 || limits[key] > ceiling) {
+      fail("invalid_attention_limits");
+    }
+  }
+  return limits;
+}
+
+function parseZeroContextHunks(text, remainingHunks) {
+  const ranges = [];
+  let hunkCount = 0;
+  const header =
+    /^@@ -([0-9]+)(?:,([0-9]+))? \+([0-9]+)(?:,([0-9]+))? @@(?: .*)?$/gmu;
+  let match;
+  while ((match = header.exec(text)) !== null) {
+    hunkCount += 1;
+    if (hunkCount > remainingHunks) {
+      return { bounded: false, hunk_count: remainingHunks, ranges: [] };
+    }
+    const start = Number(match[3]);
+    const count = match[4] === undefined ? 1 : Number(match[4]);
+    if (
+      !Number.isSafeInteger(start)
+      || start < 0
+      || !Number.isSafeInteger(count)
+      || count < 0
+    ) {
+      return { bounded: false, hunk_count: 0, ranges: [] };
+    }
+    if (count > 0) ranges.push({ start, end: start + count - 1 });
+  }
+  return { bounded: true, hunk_count: hunkCount, ranges };
+}
+
+function changedPathStatuses(root, base, head, remainingBytes) {
+  let output;
+  try {
+    output = execFileSync(
+      "git",
+      [
+        "--no-pager",
+        "diff",
+        "--name-status",
+        "-z",
+        "--no-renames",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--diff-filter=ACMT",
+        base,
+        head,
+        "--",
+      ],
+      {
+        cwd: root,
+        encoding: null,
+        maxBuffer: remainingBytes + 1,
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    );
+  } catch {
+    return { bytes: remainingBytes, statuses: new Map() };
+  }
+  if (output.length > remainingBytes) {
+    return { bytes: remainingBytes, statuses: new Map() };
+  }
+  const text = output.toString("utf8");
+  if (!Buffer.from(text, "utf8").equals(output)) {
+    return { bytes: output.length, statuses: new Map() };
+  }
+  const fields = text.split("\0");
+  if (fields.at(-1) === "") fields.pop();
+  const statuses = new Map();
+  for (let index = 0; index < fields.length;) {
+    const status = fields[index];
+    const path = fields[index + 1];
+    if (!/^[AMT]$/u.test(status) || path === undefined) {
+      return { bytes: output.length, statuses: new Map() };
+    }
+    statuses.set(path, status);
+    index += 2;
+  }
+  return { bytes: output.length, statuses };
+}
+
+function diffRangesForPath(root, base, head, path, remainingBytes, remainingHunks) {
+  let patch;
+  try {
+    patch = execFileSync(
+      "git",
+      [
+        "--literal-pathspecs",
+        "--no-pager",
+        "diff",
+        "--no-color",
+        "--unified=0",
+        "--no-renames",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--diff-filter=M",
+        base,
+        head,
+        "--",
+        path,
+      ],
+      {
+        cwd: root,
+        encoding: null,
+        maxBuffer: remainingBytes + 1,
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    );
+  } catch {
+    return {
+      bytes: remainingBytes,
+      hunk_count: 0,
+      exhausted: true,
+      known: false,
+      ranges: [],
+    };
+  }
+  if (patch.length > remainingBytes) {
+    return {
+      bytes: remainingBytes,
+      hunk_count: 0,
+      exhausted: true,
+      known: false,
+      ranges: [],
+    };
+  }
+  const text = patch.toString("utf8");
+  if (!Buffer.from(text, "utf8").equals(patch)) {
+    return {
+      bytes: patch.length,
+      hunk_count: 0,
+      exhausted: false,
+      known: false,
+      ranges: [],
+    };
+  }
+  if (/^(?:Binary files .* differ|GIT binary patch)$/gmu.test(text)) {
+    return {
+      bytes: patch.length,
+      hunk_count: 0,
+      exhausted: false,
+      known: false,
+      ranges: [],
+    };
+  }
+  const parsed = parseZeroContextHunks(text, remainingHunks);
+  const apparentHunkCount = text.match(/^@@ /gmu)?.length ?? 0;
+  const known = parsed.bounded
+    && parsed.hunk_count > 0
+    && apparentHunkCount === parsed.hunk_count;
+  return {
+    bytes: patch.length,
+    hunk_count: parsed.hunk_count,
+    exhausted: !parsed.bounded,
+    known,
+    ranges: parsed.ranges,
+  };
+}
+
+function reviewQuestionFor(checks) {
+  const tokens = [...new Set(checks.map(({ check }) => check))].sort();
+  const readableTokens = tokens.length < 2
+    ? tokens[0]
+    : `${tokens.slice(0, -1).join(", ")} and ${tokens.at(-1)}`;
+  const subject = tokens.length === 1
+    ? `the public ${readableTokens} check token`
+    : `the public check tokens ${readableTokens}`;
+  return `What trust boundary or invariant should a reviewer verify for ${subject}? Which regression test records the intended behaviour?`;
+}
+
+/**
+ * Build a bounded, presentation-only view of redacted findings.
+ *
+ * For a path Git classifies as modified text, "changed line" means the
+ * finding's HEAD line is inside a parseable zero-context new-side hunk for the
+ * exact base..head pair. "unchanged line in changed file" means it is outside
+ * every such hunk. Added, renamed, binary, type-changed, and unparseable paths
+ * are "unknown". None of these labels assert that a change caused a finding.
+ */
+export function buildAttentionCards({
+  root,
+  base,
+  head,
+  findings,
+  limits: limitOverrides = DEFAULT_ATTENTION_LIMITS,
+}) {
+  const limits = normalizeAttentionLimits(limitOverrides);
+  if (!GIT_SHA.test(base) || !GIT_SHA.test(head)) fail("invalid_git_revision");
+  if (!Array.isArray(findings)) fail("invalid_attention_findings");
+  if (findings.length > limits.max_findings) fail("attention_finding_count_limit_exceeded");
+
+  const byLocation = new Map();
+  for (const finding of findings) {
+    if (!finding || typeof finding !== "object" || Array.isArray(finding)) {
+      fail("invalid_attention_finding");
+    }
+    validateRelativePath(finding.file, DEFAULT_LIMITS);
+    if (!Number.isSafeInteger(finding.line) || finding.line < 1) {
+      fail("invalid_attention_finding");
+    }
+    if (!isSafeToken(finding.check) || !CONFIDENCE.has(finding.confidence)) {
+      fail("invalid_attention_finding");
+    }
+    const key = JSON.stringify([finding.file, finding.line]);
+    let card = byLocation.get(key);
+    if (!card) {
+      card = {
+        file: finding.file,
+        line: finding.line,
+        checks: new Map(),
+      };
+      byLocation.set(key, card);
+      if (byLocation.size > limits.max_cards) fail("attention_card_count_limit_exceeded");
+    }
+    const signalKey = JSON.stringify([finding.check, finding.confidence]);
+    const previous = card.checks.get(signalKey);
+    card.checks.set(signalKey, {
+      check: finding.check,
+      confidence: finding.confidence,
+      count: (previous?.count ?? 0) + 1,
+    });
+    if (card.checks.size > limits.max_checks_per_card) {
+      fail("attention_check_count_limit_exceeded");
+    }
+  }
+
+  const files = [...new Set([...byLocation.values()].map(({ file }) => file))].sort();
+  if (files.length > limits.max_files) fail("attention_file_count_limit_exceeded");
+  validatePathSet(files, DEFAULT_LIMITS);
+
+  const classifications = new Map();
+  const pathStatuses = changedPathStatuses(root, base, head, limits.max_diff_bytes);
+  let diffBytes = pathStatuses.bytes;
+  let hunkCount = 0;
+  let classificationStopped = false;
+  for (const file of files) {
+    if (classificationStopped || pathStatuses.statuses.get(file) !== "M") {
+      classifications.set(file, { known: false, ranges: [] });
+      continue;
+    }
+    if (diffBytes >= limits.max_diff_bytes || hunkCount >= limits.max_hunks) {
+      classificationStopped = true;
+      classifications.set(file, { known: false, ranges: [] });
+      continue;
+    }
+    const diff = diffRangesForPath(
+      root,
+      base,
+      head,
+      file,
+      limits.max_diff_bytes - diffBytes,
+      limits.max_hunks - hunkCount,
+    );
+    diffBytes += diff.bytes;
+    hunkCount += diff.hunk_count;
+    classifications.set(file, { known: diff.known, ranges: diff.ranges });
+    if (diff.exhausted) classificationStopped = true;
+  }
+
+  return [...byLocation.values()]
+    .map((card) => {
+      const classification = classifications.get(card.file);
+      let relevance = "unknown";
+      if (classification?.known) {
+        relevance = classification.ranges
+          .some(({ start, end }) => card.line >= start && card.line <= end)
+          ? "changed line"
+          : "unchanged line in changed file";
+      }
+      const checks = [...card.checks.values()]
+        .sort((a, b) => a.check.localeCompare(b.check)
+          || a.confidence.localeCompare(b.confidence));
+      return {
+        file: card.file,
+        line: card.line,
+        relevance,
+        checks,
+      };
+    })
+    .sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
 }
 
 export function verifyCheckedOutHead(root, base, head) {
@@ -527,7 +837,7 @@ function isSafeToken(value) {
 
 export function redactFinding(finding, file, lineCount = Number.MAX_SAFE_INTEGER) {
   if (!finding || typeof finding !== "object" || Array.isArray(finding)) return null;
-  const line = finding.line === 0 ? 1 : finding.line;
+  const line = finding.line;
   if (!Number.isSafeInteger(line) || line < 1 || line > lineCount) return null;
   if (!isSafeToken(finding.check) || !isSafeToken(finding.doctrine)) return null;
   if (!CONFIDENCE.has(finding.confidence)) return null;
@@ -684,24 +994,141 @@ function parseArgs(argv) {
   return result;
 }
 
-function markdownSummary(report) {
+// Encode every non-structural filename character as an HTML numeric reference.
+// This keeps Markdown syntax, HTML tags, table delimiters, and workflow-command
+// looking text inert while preserving its rendered human-readable form.
+export function escapeAttentionText(value) {
+  if (
+    typeof value !== "string"
+    || UNSAFE_PATH_CHARACTERS.test(value)
+    || value.includes("\n")
+    || value.includes("\r")
+  ) {
+    fail("invalid_attention_text");
+  }
+  return [...value].map((character) => (
+    /^[A-Za-z0-9 /.-]$/u.test(character)
+      ? character
+      : `&#x${character.codePointAt(0).toString(16)};`
+  )).join("");
+}
+
+export function markdownSummary(
+  report,
+  cards = [],
+  limitOverrides = DEFAULT_ATTENTION_LIMITS,
+) {
+  const limits = normalizeAttentionLimits(limitOverrides);
+  if (!Array.isArray(cards) || cards.length > limits.max_cards) {
+    fail("invalid_attention_cards");
+  }
   const lines = [
     "## Whitehack advisory",
     "",
-    `- Status: \`${report.status}\``,
+    `- Status: ${escapeAttentionText(report.status)}`,
     `- Changed supported files observed: ${report.scope.candidate_count}`,
     `- Findings: ${report.summary.finding_count}`,
-    `- Scanner: Whitehack ${report.scanner.version} at \`${report.scanner.revision.slice(0, 12)}\``,
+    `- Scanner: Whitehack ${escapeAttentionText(report.scanner.version)} at ${escapeAttentionText(report.scanner.revision.slice(0, 12))}`,
     "",
     "This is a redacted heuristic observation, not a security proof or authorization to test a target.",
   ];
   const checks = Object.entries(report.summary.by_check);
   if (checks.length) {
     lines.push("", "| Check | Count |", "|---|---:|");
-    for (const [check, count] of checks) lines.push(`| \`${check}\` | ${count} |`);
+    for (const [check, count] of checks) {
+      lines.push(`| ${escapeAttentionText(check)} | ${count} |`);
+    }
+  }
+  if (cards.length) {
+    lines.push(
+      "",
+      `### Attention cards (${cards.length} grouped locations)`,
+      "",
+      "The Findings count above counts redacted finding occurrences; signals at the same file and line are grouped here.",
+      "",
+      "For modified text paths, relevance is line membership in an exact zero-context base-to-head Git hunk. Added, renamed, binary, type-changed, or unparseable paths are unknown. No label claims that a change caused a finding.",
+      "",
+    );
+    const cardChunks = [];
+    for (const [index, card] of cards.entries()) {
+      if (
+        !card
+        || typeof card !== "object"
+        || Array.isArray(card)
+        || !ATTENTION_RELEVANCE.has(card.relevance)
+        || !Number.isSafeInteger(card.line)
+        || card.line < 1
+        || !Array.isArray(card.checks)
+        || card.checks.length < 1
+        || card.checks.length > limits.max_checks_per_card
+      ) {
+        fail("invalid_attention_card");
+      }
+      validateRelativePath(card.file, DEFAULT_LIMITS);
+      const supportingChecks = card.checks.map(({ check, confidence, count }) => {
+        if (
+          !isSafeToken(check)
+          || !CONFIDENCE.has(confidence)
+          || !Number.isSafeInteger(count)
+          || count < 1
+          || count > limits.max_findings
+        ) {
+          fail("invalid_attention_card");
+        }
+        const occurrence = count === 1 ? "" : ` x${count}`;
+        return `${escapeAttentionText(check)} (${escapeAttentionText(confidence)})${occurrence}`;
+      }).join(", ");
+      cardChunks.push([
+        `${index + 1}. **${escapeAttentionText(card.relevance)}**`,
+        `   - File and line: ${escapeAttentionText(card.file)}&#x3a;${card.line}`,
+        `   - Supporting checks: ${supportingChecks}`,
+        `   - Review question: ${escapeAttentionText(reviewQuestionFor(card.checks))}`,
+        "",
+      ]);
+    }
+    const afterCards = [];
+    if (report.finding_details_truncated) {
+      afterCards.push(
+        `Only the first ${report.scope.limits.max_reported_findings} redacted finding details are available for attention cards.`,
+        "",
+      );
+    }
+    let shown = 0;
+    for (const chunk of cardChunks) {
+      const nextShown = shown + 1;
+      const boundedNotice = nextShown < cardChunks.length
+        ? [
+            `Attention card presentation stopped at the ${limits.max_summary_bytes}-byte bound: ${nextShown} of ${cardChunks.length} grouped locations shown.`,
+            "",
+          ]
+        : [];
+      const candidate = [
+        ...lines,
+        ...chunk,
+        ...boundedNotice,
+        ...afterCards,
+        "",
+      ];
+      if (Buffer.byteLength(`${candidate.join("\n")}\n`, "utf8") > limits.max_summary_bytes) {
+        break;
+      }
+      lines.push(...chunk);
+      shown = nextShown;
+    }
+    if (shown < cardChunks.length) {
+      lines.push(
+        `Attention card presentation stopped at the ${limits.max_summary_bytes}-byte bound: ${shown} of ${cardChunks.length} grouped locations shown.`,
+        "",
+      );
+    }
+    lines.push(...afterCards);
   }
   lines.push("");
-  return `${lines.join("\n")}\n`;
+  const summary = `${lines.join("\n")}\n`;
+  if (Buffer.byteLength(summary, "utf8") > limits.max_summary_bytes) {
+    fail("attention_summary_byte_limit_exceeded");
+  }
+  return summary;
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -718,7 +1145,15 @@ export async function main(argv = process.argv.slice(2)) {
     head: args.head,
   });
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-  if (args.summary_file) await appendFile(args.summary_file, markdownSummary(report), "utf8");
+  if (args.summary_file) {
+    const cards = buildAttentionCards({
+      root,
+      base: args.base,
+      head: args.head,
+      findings: report.findings,
+    });
+    await appendFile(args.summary_file, markdownSummary(report, cards), "utf8");
+  }
   if (report.status !== "complete") process.exitCode = 1;
 }
 
