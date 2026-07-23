@@ -141,10 +141,11 @@ show also require and check a halt. A halt does not kill a write already inside
 one operating-system call; the durable attempt and pending files make the next
 invocation stop normal reads until recovery completes.
 
-Sync uses a no-wait local lock. A second live process is refused. A lock whose
-recorded process no longer exists is recovered; an ambiguous lock remains
-closed for inspection. State and control writes use a private temporary file,
-file sync, atomic rename, and directory sync where the filesystem supports it.
+Sync uses a no-wait local lock. A second live process is refused. Only a lock
+containing exactly one valid owner record for a process proven no longer
+running is recovered. Empty, malformed, or multiply owned locks remain closed
+for inspection. State and control writes use a private temporary file, file
+sync, atomic rename, and directory sync where the filesystem supports it.
 
 An attempt marker is installed before the first Agent Data record mutation.
 After a crash:
