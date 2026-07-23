@@ -7,6 +7,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
   realpath,
   rm,
   symlink,
@@ -25,6 +26,7 @@ import {
   CASTLE_COLLECTION_ID,
   CASTLE_COLLECTION_SCHEMA,
   CASTLE_DOCUMENT_PROFILE,
+  CASTLE_FORMAT_SCHEMA,
   CASTLE_OWNER_SCHEMA,
   CASTLE_PENDING_SCHEMA,
   CASTLE_ROOT_SCHEMA,
@@ -186,6 +188,194 @@ async function openFixtureNode(fixture: Fixture): Promise<DataNode> {
 
 async function expectCode(promise: Promise<unknown>, code: string): Promise<void> {
   await expect(promise).rejects.toMatchObject({ code });
+}
+
+async function snapshotTree(
+  root: string,
+  prefix = "",
+): Promise<Readonly<Record<string, string>>> {
+  const result: Record<string, string> = {};
+  for (const entry of await readdir(join(root, prefix), {
+    withFileTypes: true,
+  })) {
+    const relativePath = join(prefix, entry.name);
+    if (entry.isDirectory()) {
+      Object.assign(result, await snapshotTree(root, relativePath));
+    } else if (entry.isFile()) {
+      result[relativePath] = sha256Hex(await readFile(join(root, relativePath)));
+    } else {
+      result[relativePath] = `special:${entry.isSymbolicLink() ? "symlink" : "other"}`;
+    }
+  }
+  return Object.freeze(result);
+}
+
+async function materializeExactV01Bridge(fixture: Fixture): Promise<string> {
+  const repository = resolve(import.meta.dir, "../..");
+  const destination = join(fixture.parent, "exact-agenttool-v0.1");
+  await mkdir(destination, { mode: 0o700 });
+  const commit = "8525b77ac9f51b13e0e5fdd44606456bc76a3903";
+  const archived = spawnSync("git", [
+    "--no-replace-objects",
+    "-C",
+    repository,
+    "archive",
+    "--format=tar",
+    commit,
+    "--",
+    "bin/agenttool-castle.ts",
+    "packages/data",
+  ], {
+    encoding: null,
+    maxBuffer: 4 * 1024 * 1024,
+    env: {
+      ...process.env,
+      GIT_NO_REPLACE_OBJECTS: "1",
+      GIT_OPTIONAL_LOCKS: "0",
+      GIT_TERMINAL_PROMPT: "0",
+    },
+  });
+  if (archived.status !== 0 || !archived.stdout) {
+    throw new Error(`could not archive exact v0.1 bridge: ${archived.stderr}`);
+  }
+  const extracted = spawnSync("tar", ["-xf", "-", "-C", destination], {
+    input: archived.stdout,
+    encoding: "utf8",
+  });
+  if (extracted.status !== 0) {
+    throw new Error(`could not extract exact v0.1 bridge: ${extracted.stderr}`);
+  }
+  const script = join(destination, "bin", "agenttool-castle.ts");
+  const version = spawnSync(process.execPath, [script, "--version"], {
+    encoding: "utf8",
+  });
+  expect(version.status).toBe(0);
+  expect(version.stdout.trim()).toBe("0.1.0");
+  return script;
+}
+
+function stateEntryFromRecord(record: any): any {
+  return {
+    logical_id: record.metadata.logical_id,
+    kind: record.metadata.document_kind,
+    record_id: record.id,
+    sha256: record.content.sha256,
+    bytes: record.content.size,
+    title: record.metadata.title,
+    source_revision: record.metadata.source_revision,
+  };
+}
+
+async function collectDocumentVariant(
+  node: DataNode,
+  original: any,
+  options: {
+    profile: "castle-document/v1" | typeof CASTLE_DOCUMENT_PROFILE;
+    title: string;
+    supersedes_id?: string;
+  },
+): Promise<any> {
+  const text = new TextDecoder().decode(await node.readContent(original));
+  const observedAt = new Date(Date.now() + 1_000).toISOString();
+  const version = options.profile === CASTLE_DOCUMENT_PROFILE
+    ? original.version
+    : `${original.metadata.source_revision}:sha256:${original.content.sha256}`;
+  return (await node.collect({
+    collection_id: CASTLE_COLLECTION_ID,
+    collector_id: "text",
+    input: {
+      text,
+      media_type: "text/markdown",
+      source_uri: original.source.uri,
+      external_id: original.source.external_id,
+      key: original.key,
+      version,
+      ...(options.supersedes_id
+        ? { supersedes_id: options.supersedes_id }
+        : {}),
+      observed_at: observedAt,
+      metadata: {
+        ...original.metadata,
+        profile: options.profile,
+        title: options.title,
+      },
+      provenance: [{
+        activity: "projected_from_committed_git_blob",
+        at: observedAt,
+        actor: "local:agenttool-castle",
+        input_ids: [],
+      }],
+    } as JsonObject,
+  })).records[0]!;
+}
+
+async function collectReplacementRoot(
+  node: DataNode,
+  state: any,
+  active: Readonly<Record<string, any>>,
+  mutate?: (manifest: any) => void,
+): Promise<any> {
+  const original = node.getRecord(state.root_record_id, true)!;
+  const manifest = JSON.parse(
+    new TextDecoder().decode(await node.readContent(original)),
+  );
+  manifest.active = Object.keys(active).sort().map((path) => ({
+    path,
+    ...active[path],
+  }));
+  mutate?.(manifest);
+  const text = `${canonicalJson(manifest)}\n`;
+  const digest = sha256Hex(text);
+  const observedAt = new Date(Date.now() + 2_000).toISOString();
+  return (await node.collect({
+    collection_id: CASTLE_COLLECTION_ID,
+    collector_id: "text",
+    input: {
+      text,
+      media_type: "application/json",
+      source_uri: "castle:///manifest",
+      external_id: "castle-root",
+      key: "castle:root:manifest",
+      version: `${state.current_revision}:sha256:${digest}`,
+      supersedes_id: state.root_record_id,
+      observed_at: observedAt,
+      metadata: {
+        profile: CASTLE_ROOT_SCHEMA,
+        source_revision: state.current_revision,
+        source_committed_at: manifest.source_committed_at,
+        selection_sha256: state.selection_sha256,
+        active_records: manifest.active.length,
+        local_private_projection: true,
+      },
+      provenance: [{
+        activity: "bound_local_projection",
+        at: observedAt,
+        actor: "local:agenttool-castle",
+        input_ids: manifest.active.map((entry: any) => entry.record_id),
+      }],
+    } as JsonObject,
+  })).records[0]!;
+}
+
+function replacementState(
+  state: any,
+  active: Readonly<Record<string, any>>,
+  root: any,
+  additionalKnownIds: readonly string[],
+): any {
+  return {
+    ...state,
+    root_record_id: root.id,
+    root_lineage_record_id: root.id,
+    active,
+    lineage: {
+      ...state.lineage,
+      ...active,
+    },
+    known_record_ids: [
+      ...new Set([...state.known_record_ids, ...additionalKnownIds, root.id]),
+    ].sort(),
+  };
 }
 
 describe("Castle committed-snapshot plan", () => {
@@ -405,6 +595,16 @@ describe("Castle local projection", () => {
     expect(JSON.stringify(state)).not.toContain(fixture.selection);
     expect((await lstat(fixture.data)).mode & 0o077).toBe(0);
     expect((await lstat(join(fixture.data, "castle-state.json"))).mode & 0o077).toBe(0);
+    expect(JSON.parse(
+      await readFile(join(fixture.data, "castle-owner.json"), "utf8"),
+    ).schema).toBe(CASTLE_OWNER_SCHEMA);
+    expect(JSON.parse(
+      await readFile(join(fixture.data, "castle-format.json"), "utf8"),
+    )).toMatchObject({
+      schema: CASTLE_FORMAT_SCHEMA,
+      collection_id: CASTLE_COLLECTION_ID,
+      source_root_sha256: state.source_root_sha256,
+    });
 
     const search = await searchCastle({
       data_root: fixture.data,
@@ -447,6 +647,63 @@ describe("Castle local projection", () => {
     });
   });
 
+  test("fences the exact merged v0.1 binary before downgrade writes", async () => {
+    const fixture = await createFixture();
+    await writeSelection(fixture, revision(fixture), [ROOM, WORD]);
+    await syncCastle(syncOptions(fixture));
+    const exactV01 = await materializeExactV01Bridge(fixture);
+
+    await writeFile(
+      join(fixture.castle, ROOM.path),
+      "# Harbor\n\nA changed harbor that v0.1 must not project.\n",
+    );
+    const changedRevision = await commit(fixture, "change one downgrade document");
+    await writeSelection(fixture, changedRevision, [ROOM, WORD]);
+
+    const ownerPath = join(fixture.data, "castle-owner.json");
+    const owner = JSON.parse(await readFile(ownerPath, "utf8"));
+    owner.schema = "castle-agenttool-owner/v1";
+    await writeFile(ownerPath, `${JSON.stringify(owner, null, 2)}\n`, {
+      mode: 0o600,
+    });
+    expect(JSON.parse(
+      await readFile(join(fixture.data, "castle-format.json"), "utf8"),
+    ).schema).toBe(CASTLE_FORMAT_SCHEMA);
+    const before = await snapshotTree(fixture.data);
+
+    const downgraded = spawnSync(process.execPath, [
+      exactV01,
+      "sync",
+      "--castle-root",
+      fixture.castle,
+      "--data-root",
+      fixture.data,
+      "--selection",
+      fixture.selection,
+      "--json",
+    ], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        HOME: fixture.parent,
+        GIT_TERMINAL_PROMPT: "0",
+      },
+      timeout: 30_000,
+    });
+    expect(downgraded.error).toBeUndefined();
+    expect(downgraded.status).toBe(1);
+    expect(downgraded.stderr).toContain("data_root_contains_unowned_entry");
+    expect(await snapshotTree(fixture.data)).toEqual(before);
+
+    await expect(syncCastle(syncOptions(fixture))).resolves.toMatchObject({
+      status: "synced",
+      active_records: 2,
+    });
+    expect(JSON.parse(await readFile(ownerPath, "utf8")).schema).toBe(
+      CASTLE_OWNER_SCHEMA,
+    );
+  });
+
   test("migrates a v1 pending title wedge beyond its immutable first envelope", async () => {
     const path = "words/legacy-title.md";
     const logicalId = "castle:word:legacy-title";
@@ -471,7 +728,7 @@ describe("Castle local projection", () => {
     await mkdir(fixture.data, { mode: 0o700 });
     const sourceRoot = await realpath(fixture.castle);
     await writeFile(join(fixture.data, "castle-owner.json"), `${JSON.stringify({
-      schema: CASTLE_OWNER_SCHEMA,
+      schema: "castle-agenttool-owner/v1",
       collection_id: CASTLE_COLLECTION_ID,
       source_root_sha256: sha256Hex(sourceRoot),
       created_at: "2026-07-23T12:00:00.000Z",
@@ -709,6 +966,12 @@ describe("Castle local projection", () => {
       DataNode.prototype.collect = originalCollect;
     }
     expect(interruptedV2).toBe(true);
+    expect(JSON.parse(
+      await readFile(join(fixture.data, "castle-owner.json"), "utf8"),
+    ).schema).toBe(CASTLE_OWNER_SCHEMA);
+    expect(JSON.parse(
+      await readFile(join(fixture.data, "castle-format.json"), "utf8"),
+    ).schema).toBe(CASTLE_FORMAT_SCHEMA);
     expect((await readState(fixture)).active[path].title).toBe(legacyTitle);
     await expect(lstat(join(fixture.data, "castle-pending.json"))).rejects.toMatchObject({
       code: "ENOENT",
@@ -761,6 +1024,337 @@ describe("Castle local projection", () => {
       status: "unchanged",
       active_records: 1,
     });
+  });
+
+  test("rejects a v2 title fabricated against the stored Markdown bytes", async () => {
+    const fixture = await createFixture();
+    await writeSelection(fixture, revision(fixture), [ROOM]);
+    await syncCastle(syncOptions(fixture));
+    const state = await readState(fixture);
+
+    const node = await openFixtureNode(fixture);
+    const original = node.getRecord(state.active[ROOM.path].record_id)!;
+    const fabricated = await collectDocumentVariant(node, original, {
+      profile: CASTLE_DOCUMENT_PROFILE,
+      title: "Fabricated Harbor",
+      supersedes_id: original.id,
+    });
+    const active = {
+      [ROOM.path]: stateEntryFromRecord(fabricated),
+    };
+    const root = await collectReplacementRoot(node, state, active);
+    node.close();
+    const fabricatedState = replacementState(
+      state,
+      active,
+      root,
+      [fabricated.id],
+    );
+    await writeFile(
+      join(fixture.data, "castle-state.json"),
+      `${JSON.stringify(fabricatedState, null, 2)}\n`,
+      { mode: 0o600 },
+    );
+
+    await expectCode(showCastle({
+      data_root: fixture.data,
+      halt_paths: [fixture.halt],
+      path: ROOM.path,
+    }), "state_current_record_missing_or_mismatched");
+    await expectCode(searchCastle({
+      data_root: fixture.data,
+      halt_paths: [fixture.halt],
+      text: "anchor",
+    }), "state_current_record_missing_or_mismatched");
+    await expectCode(
+      syncCastle(syncOptions(fixture)),
+      "state_current_record_missing_or_mismatched",
+    );
+    await expect(castleStatus({
+      data_root: fixture.data,
+      halt_paths: [fixture.halt],
+    })).resolves.toMatchObject({
+      state: "invalid",
+      recorded_state: "active",
+      projection_integrity: "invalid",
+      usable: false,
+      validation_error: "state_current_record_missing_or_mismatched",
+    });
+    await expect(withdrawCastle({
+      data_root: fixture.data,
+      reason: "Remove the fabricated projection",
+    })).resolves.toMatchObject({
+      status: "withdrawn",
+      new_logical_tombstones: 4,
+    });
+  });
+
+  test("accepts and migrates the trimmed boundary title written by merged v0.1", async () => {
+    const path = "words/trimmed-legacy.md";
+    const selected = {
+      path,
+      logical_id: "castle:word:trimmed-legacy",
+      kind: "word",
+    } as const;
+    const fixture = await createFixture({
+      [path]: `# ${"a".repeat(199)} tail\n\nMerged v0.1 trimmed this boundary.\n`,
+    });
+    await writeSelection(fixture, revision(fixture), [selected]);
+    await syncCastle(syncOptions(fixture));
+    const state = await readState(fixture);
+    const node = await openFixtureNode(fixture);
+    const original = node.getRecord(state.active[path].record_id)!;
+    expect(original.metadata.title).toBe("a".repeat(199));
+    const legacy = await collectDocumentVariant(node, original, {
+      profile: "castle-document/v1",
+      title: "a".repeat(199),
+      supersedes_id: original.id,
+    });
+    const active = { [path]: stateEntryFromRecord(legacy) };
+    const root = await collectReplacementRoot(node, state, active);
+    node.close();
+    await writeFile(
+      join(fixture.data, "castle-state.json"),
+      `${JSON.stringify(replacementState(
+        state,
+        active,
+        root,
+        [legacy.id],
+      ), null, 2)}\n`,
+      { mode: 0o600 },
+    );
+
+    await expect(showCastle({
+      data_root: fixture.data,
+      halt_paths: [fixture.halt],
+      path,
+    })).resolves.toContain("Merged v0.1");
+    await expect(syncCastle(syncOptions(fixture))).resolves.toMatchObject({
+      status: "synced",
+      active_records: 1,
+    });
+    expect((await readState(fixture)).active[path].title).toBe("a".repeat(199));
+  });
+
+  test("rejects a canonical fabricated root whose active mapping differs from state", async () => {
+    const fixture = await createFixture();
+    await writeSelection(fixture, revision(fixture), [ROOM]);
+    await syncCastle(syncOptions(fixture));
+    const state = await readState(fixture);
+    const node = await openFixtureNode(fixture);
+    const root = await collectReplacementRoot(
+      node,
+      state,
+      state.active,
+      (manifest) => {
+        manifest.active[0].title = "Root-only fabrication";
+      },
+    );
+    node.close();
+    const fabricatedState = {
+      ...state,
+      root_record_id: root.id,
+      root_lineage_record_id: root.id,
+      known_record_ids: [...new Set([
+        ...state.known_record_ids,
+        root.id,
+      ])].sort(),
+    };
+    await writeFile(
+      join(fixture.data, "castle-state.json"),
+      `${JSON.stringify(fabricatedState, null, 2)}\n`,
+      { mode: 0o600 },
+    );
+
+    await expectCode(showCastle({
+      data_root: fixture.data,
+      halt_paths: [fixture.halt],
+      path: ROOM.path,
+    }), "state_root_record_missing_or_mismatched");
+    await expectCode(
+      syncCastle(syncOptions(fixture)),
+      "state_root_record_missing_or_mismatched",
+    );
+  });
+
+  test("binds control state to the durable format source root", async () => {
+    const fixture = await createFixture();
+    await writeSelection(fixture, revision(fixture), [ROOM]);
+    await syncCastle(syncOptions(fixture));
+    const state = await readState(fixture);
+    await writeFile(
+      join(fixture.data, "castle-state.json"),
+      `${JSON.stringify({
+        ...state,
+        source_root_sha256: state.source_root_sha256 === "f".repeat(64)
+          ? "e".repeat(64)
+          : "f".repeat(64),
+      }, null, 2)}\n`,
+      { mode: 0o600 },
+    );
+
+    await expectCode(showCastle({
+      data_root: fixture.data,
+      halt_paths: [fixture.halt],
+      path: ROOM.path,
+    }), "data_root_belongs_to_another_castle");
+    await expect(castleStatus({
+      data_root: fixture.data,
+      halt_paths: [fixture.halt],
+    })).resolves.toMatchObject({
+      state: "invalid",
+      recorded_state: "active",
+      projection_integrity: "invalid",
+      validation_error: "data_root_belongs_to_another_castle",
+      usable: false,
+    });
+  });
+
+  test("rejects an impossible v1 title but keeps withdrawal available", async () => {
+    const fixture = await createFixture();
+    await writeSelection(fixture, revision(fixture), [ROOM]);
+    await syncCastle(syncOptions(fixture));
+    const state = await readState(fixture);
+    const node = await openFixtureNode(fixture);
+    const original = node.getRecord(state.active[ROOM.path].record_id)!;
+    const impossible = await collectDocumentVariant(node, original, {
+      profile: "castle-document/v1",
+      title: "Impossible historical title",
+      supersedes_id: original.id,
+    });
+    const active = {
+      [ROOM.path]: stateEntryFromRecord(impossible),
+    };
+    const root = await collectReplacementRoot(node, state, active);
+    node.close();
+    await writeFile(
+      join(fixture.data, "castle-state.json"),
+      `${JSON.stringify(replacementState(
+        state,
+        active,
+        root,
+        [impossible.id],
+      ), null, 2)}\n`,
+      { mode: 0o600 },
+    );
+
+    await expectCode(showCastle({
+      data_root: fixture.data,
+      halt_paths: [fixture.halt],
+      path: ROOM.path,
+    }), "state_current_record_missing_or_mismatched");
+    await expect(withdrawCastle({
+      data_root: fixture.data,
+      reason: "Withdraw an impossible legacy envelope",
+    })).resolves.toMatchObject({
+      status: "withdrawn",
+      new_logical_tombstones: 4,
+    });
+    const withdrawn = await readState(fixture);
+    expect(withdrawn.lineage[ROOM.path].record_id).toBe(original.id);
+    expect(withdrawn.lineage[ROOM.path].record_id).not.toBe(impossible.id);
+  });
+
+  test("rejects mixed active profiles everywhere except the withdrawal path", async () => {
+    const fixture = await createFixture();
+    await writeSelection(fixture, revision(fixture), [ROOM, WORD]);
+    await syncCastle(syncOptions(fixture));
+    const state = await readState(fixture);
+    const node = await openFixtureNode(fixture);
+    const originalWord = node.getRecord(state.active[WORD.path].record_id)!;
+    const legacyWord = await collectDocumentVariant(node, originalWord, {
+      profile: "castle-document/v1",
+      title: "Joy",
+      supersedes_id: originalWord.id,
+    });
+    const active = {
+      ...state.active,
+      [WORD.path]: stateEntryFromRecord(legacyWord),
+    };
+    const root = await collectReplacementRoot(node, state, active);
+    node.close();
+    await writeFile(
+      join(fixture.data, "castle-state.json"),
+      `${JSON.stringify(replacementState(
+        state,
+        active,
+        root,
+        [legacyWord.id],
+      ), null, 2)}\n`,
+      { mode: 0o600 },
+    );
+
+    await expectCode(showCastle({
+      data_root: fixture.data,
+      halt_paths: [fixture.halt],
+      path: ROOM.path,
+    }), "state_current_record_missing_or_mismatched");
+    await expect(castleStatus({
+      data_root: fixture.data,
+      halt_paths: [fixture.halt],
+    })).resolves.toMatchObject({
+      state: "invalid",
+      recorded_state: "active",
+      projection_integrity: "invalid",
+      usable: false,
+    });
+    await expect(withdrawCastle({
+      data_root: fixture.data,
+      reason: "Withdraw a mixed legacy projection",
+    })).resolves.toMatchObject({
+      status: "withdrawn",
+      new_logical_tombstones: 5,
+    });
+  });
+
+  test("fully validates pending state before applying any tombstone", async () => {
+    const fixture = await createFixture();
+    await writeSelection(fixture, revision(fixture), [ROOM]);
+    await syncCastle(syncOptions(fixture));
+    const state = await readState(fixture);
+    const stateBytes = await readFile(
+      join(fixture.data, "castle-state.json"),
+      "utf8",
+    );
+    const node = await openFixtureNode(fixture);
+    const original = node.getRecord(state.active[ROOM.path].record_id)!;
+    const fabricated = await collectDocumentVariant(node, original, {
+      profile: CASTLE_DOCUMENT_PROFILE,
+      title: "Pending fabrication",
+      supersedes_id: original.id,
+    });
+    const active = {
+      [ROOM.path]: stateEntryFromRecord(fabricated),
+    };
+    const root = await collectReplacementRoot(node, state, active);
+    node.close();
+    const nextState = replacementState(state, active, root, [fabricated.id]);
+    await writeFile(
+      join(fixture.data, "castle-pending.json"),
+      `${JSON.stringify({
+        schema: CASTLE_PENDING_SCHEMA,
+        next_state: nextState,
+        tombstone_ids: [original.id, state.root_record_id],
+      }, null, 2)}\n`,
+      { mode: 0o600 },
+    );
+
+    await expectCode(
+      syncCastle(syncOptions(fixture)),
+      "state_current_record_missing_or_mismatched",
+    );
+    expect(await readFile(
+      join(fixture.data, "castle-state.json"),
+      "utf8",
+    )).toBe(stateBytes);
+    await expect(lstat(join(fixture.data, "castle-pending.json"))).resolves.toBeTruthy();
+    const reopened = await openFixtureNode(fixture);
+    try {
+      expect(reopened.getTombstone(original.id)).toBeNull();
+      expect(reopened.getTombstone(state.root_record_id)).toBeNull();
+    } finally {
+      reopened.close();
+    }
   });
 
   test("records same-path corrections and requires explicit retirement", async () => {
@@ -904,11 +1498,28 @@ describe("Castle local projection", () => {
       status: "withdrawn",
       physical_erasure: false,
     });
-    const stopped = await castleStatus({
-      data_root: fixture.data,
-      halt_paths: [fixture.halt],
-    });
+    const originalReadContent = DataNode.prototype.readContent;
+    let statusBlobReads = 0;
+    DataNode.prototype.readContent = async function (...args) {
+      statusBlobReads += 1;
+      return originalReadContent.apply(this, args);
+    };
+    let stopped: Readonly<Record<string, unknown>>;
+    try {
+      stopped = await castleStatus({
+        data_root: fixture.data,
+        halt_paths: [fixture.halt],
+      });
+    } finally {
+      DataNode.prototype.readContent = originalReadContent;
+    }
+    expect(statusBlobReads).toBe(0);
     expect(stopped.state).toBe("withdrawn");
+    expect(stopped).toMatchObject({
+      recorded_state: "withdrawn",
+      projection_integrity: "not_checked",
+      usable: false,
+    });
 
     let node = await openFixtureNode(fixture);
     try {
@@ -1076,6 +1687,11 @@ describe("Castle local projection", () => {
     });
     const selectedRevision = revision(fixture);
     await writeSelection(fixture, selectedRevision, [ROOM]);
+    const plan = await buildCastlePlan({
+      castle_root: fixture.castle,
+      selection_path: fixture.selection,
+    });
+    const document = plan.documents[0]!;
     await mkdir(fixture.data, { mode: 0o700 });
     const sourceRoot = await realpath(fixture.castle);
     await writeFile(join(fixture.data, "castle-owner.json"), `${JSON.stringify({
@@ -1087,11 +1703,11 @@ describe("Castle local projection", () => {
     await writeFile(join(fixture.data, "castle-attempt.json"), `${JSON.stringify({
       schema: CASTLE_ATTEMPT_SCHEMA,
       revision: selectedRevision,
-      selection_sha256: "a".repeat(64),
+      selection_sha256: plan.selection_sha256,
       started_at: "2026-07-23T12:01:00.000Z",
     })}\n`, { mode: 0o600 });
 
-    const text = await readFile(join(fixture.castle, ROOM.path), "utf8");
+    const text = document.text;
     const digest = sha256Hex(text);
     const node = await DataNode.open({
       root: fixture.data,
@@ -1108,6 +1724,7 @@ describe("Castle local projection", () => {
         },
       }],
     });
+    const observedAt = "2026-07-23T12:01:01.000Z";
     const orphan = await node.collect({
       collection_id: CASTLE_COLLECTION_ID,
       collector_id: "text",
@@ -1118,15 +1735,27 @@ describe("Castle local projection", () => {
         external_id: ROOM.path,
         key: ROOM.logical_id,
         version: `${selectedRevision}:sha256:${digest}`,
+        observed_at: observedAt,
         metadata: {
           profile: "castle-document/v1",
           logical_id: ROOM.logical_id,
           document_kind: ROOM.kind,
           source_path: ROOM.path,
           source_revision: selectedRevision,
+          source_committed_at: plan.revision_time,
+          source_blob_oid: document.git_blob_oid,
           source_sha256: digest,
           title: "Harbor",
+          links: [...document.links],
+          content_is_untrusted_markdown: true,
+          local_private_projection: true,
         },
+        provenance: [{
+          activity: "projected_from_committed_git_blob",
+          at: observedAt,
+          actor: "local:agenttool-castle",
+          input_ids: [],
+        }],
       },
     });
     const orphanId = orphan.records[0]!.id;
