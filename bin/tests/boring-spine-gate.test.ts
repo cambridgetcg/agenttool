@@ -277,7 +277,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("name: Install cross-language vector dependencies");
     expect(workflow).toContain("working-directory: packages/sdk-ts");
     expect(workflow).toContain(
-      "api packages/data packages/data-protocol packages/credential-broker packages/collab packages/correspondence-yutabase packages/sdk-ts packages/wallet packages/telescope",
+      "api packages/data packages/data-protocol packages/credential-broker packages/collab packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope",
     );
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("package-manager-cache: false");
@@ -294,6 +294,7 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/data-sync && bun run ci && bun run build");
     expect(preflight).toContain("cd packages/credential-broker && bun run ci");
     expect(preflight).toContain("cd packages/collab && bun run ci");
+    expect(preflight).toContain("cd packages/skills && bun run ci");
     expect(preflight).toContain("cd packages/correspondence-yutabase && bun run ci");
     expect(preflight).toContain("cd packages/wallet && bun run ci");
     expect(preflight).toContain("cd packages/telescope && bun run ci");
@@ -303,13 +304,19 @@ describe("boring test spine", () => {
     );
     expect(workflow).toContain("test \"$cli_status\" -eq 2");
     expect(workflow).toContain("grep -q '^usage: agentcred serve --config '");
+    expect(workflow).toContain("name: Smoke packed Agent Skills under Node and Bun");
+    expect(workflow).toContain(
+      'cli="$package_root/dist/bin.js"',
+    );
+    expect(workflow).toContain('report.skills[0].name !== "use-agentcred-safely"');
+    expect(workflow).toContain('Object.hasOwn(report, "installPlan")');
     expect(workflow).toContain("name: Smoke packed Telescope under Node and Bun");
     expect(workflow).toContain("name: Smoke packed Agent Wallet under Node and Bun");
     expect(
       workflow.match(
         /npm install --ignore-scripts --no-audit --no-fund --prefix/g,
       ),
-    ).toHaveLength(4);
+    ).toHaveLength(5);
 
     const uses = workflow
       .split("\n")
@@ -337,6 +344,7 @@ describe("boring test spine", () => {
       "utf8",
     );
     expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("          - skills");
     expect(workflow).not.toContain("pull_request:");
     expect(workflow).not.toMatch(/\n\s+push:/);
     expect(workflow).toContain("persist-credentials: false");

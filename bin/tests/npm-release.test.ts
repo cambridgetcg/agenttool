@@ -17,7 +17,7 @@ import {
 } from "../npm-release";
 
 describe("standard npm release policy", () => {
-  test("allowlists the nine established public packages", () => {
+  test("allowlists the ten established public packages", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "collab",
@@ -26,6 +26,7 @@ describe("standard npm release policy", () => {
       "data",
       "data-sync",
       "sdk",
+      "skills",
       "telescope",
       "wallet",
     ]);
@@ -37,6 +38,11 @@ describe("standard npm release policy", () => {
     expect(releaseSpec("correspondence-yutabase")).toMatchObject({
       name: "@agenttool/correspondence-yutabase",
       packagePath: "packages/correspondence-yutabase",
+      artifactKind: "pack",
+    });
+    expect(releaseSpec("skills")).toMatchObject({
+      name: "@agenttool/skills",
+      packagePath: "packages/skills",
       artifactKind: "pack",
     });
     expect(releaseSpec("data-sync")).toMatchObject({
@@ -56,6 +62,8 @@ describe("standard npm release policy", () => {
     expect(packedFilename("@agenttool/correspondence-yutabase", "0.1.0-dev.0")).toBe(
       "agenttool-correspondence-yutabase-0.1.0-dev.0.tgz",
     );
+    expect(expectedTag(releaseSpec("skills"), "0.1.0")).toBe("skills-v0.1.0");
+    expect(packedFilename("@agenttool/skills", "0.1.0")).toBe("agenttool-skills-0.1.0.tgz");
     expect(() => expectedTag(releaseSpec("sdk"), "latest")).toThrow("invalid package version");
   });
 

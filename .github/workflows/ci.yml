@@ -58,7 +58,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for workspace in api packages/data packages/data-protocol packages/credential-broker packages/collab packages/correspondence-yutabase packages/sdk-ts packages/wallet packages/telescope; do
+          for workspace in api packages/data packages/data-protocol packages/credential-broker packages/collab packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope; do
             (cd "$workspace" && bun install --frozen-lockfile)
           done
       - name: Build local data-sync peers
@@ -70,7 +70,7 @@ jobs:
       - name: Install data-sync dependencies from lockfile
         working-directory: packages/data-sync
         run: bun install --frozen-lockfile
-      - name: Run hermetic data, ADDS, sync, broker, collab, projection, SDK, Wallet, and Telescope gate
+      - name: Run hermetic data, ADDS, sync, broker, collab, projection, Skills, SDK, Wallet, and Telescope gate
         run: bash bin/preflight.sh packages
       - name: Smoke the packed TypeScript SDK under Node and Bun
         working-directory: packages/sdk-ts
@@ -105,6 +105,37 @@ jobs:
           test "$cli_status" -eq 2
           test ! -s "$install_dir/cli.stdout"
           grep -q '^usage: agentcred serve --config ' "$install_dir/cli.stderr"
+      - name: Smoke packed Agent Skills under Node and Bun
+        working-directory: packages/skills
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
+          smoke='import("@agenttool/skills").then(m=>{if(typeof m.inspectLocalSkills!=="function"||typeof m.stableStringify!=="function")process.exit(1)})'
+          schema_smoke='import("@agenttool/skills/report.schema.json",{with:{type:"json"}}).then(m=>{if(m.default.title!=="AgentTool Skills inspection report v0.1")process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke" && node -e "$schema_smoke")
+          (cd "$install_dir" && bun -e "$smoke" && bun -e "$schema_smoke")
+          package_root="$install_dir/node_modules/@agenttool/skills"
+          cli="$package_root/dist/bin.js"
+          test -x "$install_dir/node_modules/.bin/agenttool-skill"
+          test "$("$install_dir/node_modules/.bin/agenttool-skill" --version)" = "0.1.0"
+          test "$(node "$cli" --version)" = "0.1.0"
+          test "$(bun "$cli" --version)" = "0.1.0"
+          node "$cli" validate "$package_root/skills/use-agentcred-safely" >"$install_dir/report.json"
+          node --input-type=module --eval '
+            import { readFileSync } from "node:fs";
+            const report = JSON.parse(readFileSync(process.argv[1], "utf8"));
+            if (
+              report.valid !== true
+              || report.kind !== "agenttool.skills.inspection"
+              || report.skills.length !== 1
+              || report.skills[0].name !== "use-agentcred-safely"
+              || Object.hasOwn(report, "installPlan")
+            ) process.exit(1);
+          ' "$install_dir/report.json"
       - name: Smoke packed Telescope under Node and Bun
         working-directory: packages/telescope
         shell: bash

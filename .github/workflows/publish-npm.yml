@@ -17,6 +17,7 @@ on:
           - telescope
           - collab
           - correspondence-yutabase
+          - skills
       tag:
         description: Existing annotated release tag contained in GitHub main
         required: true

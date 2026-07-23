@@ -10,7 +10,7 @@
 # Usage:
 #   bin/preflight.sh                 # api + packages, hermetic
 #   bin/preflight.sh api             # API/protocol hermetic gate
-#   bin/preflight.sh packages        # data + ADDS + sync + broker + collab + projection + TypeScript SDK + Wallet + Telescope gate
+#   bin/preflight.sh packages        # data + ADDS + sync + broker + collab + projection + Skills + TypeScript SDK + Wallet + Telescope gate
 #   bin/preflight.sh database        # requires DATABASE_URL
 #   bin/preflight.sh smoke           # requires smoke-test environment
 #   RUN_CONTRACT=1 bin/preflight.sh contracts  # requires provider key(s)
@@ -94,6 +94,8 @@ packages_gate() {
     bash -c 'cd packages/credential-broker && bun run ci'
   run "agenttool.collab/0.1 local coordination journal" \
     bash -c 'cd packages/collab && bun run ci'
+  run "read-only Agent Skills inspection and validation" \
+    bash -c 'cd packages/skills && bun run ci'
   run "Correspondence to YUTABASE pure projection planner" \
     bash -c 'cd packages/correspondence-yutabase && bun run ci'
   run "TypeScript SDK, Python surface parity, build, and tests" \
