@@ -7,18 +7,21 @@ import {
   RELEASE_RECEIPT_SCHEMA,
   RELEASE_SPECS,
   expectedTag,
+  isPrereleaseVersion,
   packedFilename,
   readReleaseReceipt,
   registryDecision,
   registryPackagePath,
   releaseSpec,
+  validateNpmTagForVersion,
 } from "../npm-release";
 
 describe("standard npm release policy", () => {
-  test("allowlists the eight established public packages", () => {
+  test("allowlists the nine established public packages", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "collab",
+      "correspondence-yutabase",
       "credential-broker",
       "data",
       "data-sync",
@@ -29,6 +32,11 @@ describe("standard npm release policy", () => {
     expect(releaseSpec("collab")).toMatchObject({
       name: "@agenttool/collab",
       packagePath: "packages/collab",
+      artifactKind: "pack",
+    });
+    expect(releaseSpec("correspondence-yutabase")).toMatchObject({
+      name: "@agenttool/correspondence-yutabase",
+      packagePath: "packages/correspondence-yutabase",
       artifactKind: "pack",
     });
     expect(releaseSpec("data-sync")).toMatchObject({
@@ -45,7 +53,20 @@ describe("standard npm release policy", () => {
     expect(expectedTag(releaseSpec("credential-broker"), "0.1.0")).toBe("credential-broker-v0.1.0");
     expect(expectedTag(releaseSpec("sdk"), "0.16.0")).toBe("sdk-v0.16.0");
     expect(packedFilename("@agenttool/collab", "0.1.0")).toBe("agenttool-collab-0.1.0.tgz");
+    expect(packedFilename("@agenttool/correspondence-yutabase", "0.1.0-dev.0")).toBe(
+      "agenttool-correspondence-yutabase-0.1.0-dev.0.tgz",
+    );
     expect(() => expectedTag(releaseSpec("sdk"), "latest")).toThrow("invalid package version");
+  });
+
+  test("keeps prereleases off the latest npm dist-tag", () => {
+    expect(isPrereleaseVersion("0.1.0-dev.0")).toBe(true);
+    expect(isPrereleaseVersion("0.1.0")).toBe(false);
+    expect(() => validateNpmTagForVersion("0.1.0-dev.0", "latest")).toThrow(
+      "requires npm dist-tag next",
+    );
+    expect(() => validateNpmTagForVersion("0.1.0-dev.0", "next")).not.toThrow();
+    expect(() => validateNpmTagForVersion("0.1.0", "latest")).not.toThrow();
   });
 
   test("encodes scoped registry paths without accepting arbitrary names", () => {

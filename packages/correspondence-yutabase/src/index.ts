@@ -1,0 +1,46 @@
+export {
+  ACKNOWLEDGEMENT_KINDS,
+  CORRESPONDENCE_KINDS,
+  CORRESPONDENCE_PROTOCOL,
+  PACKAGE_NAME,
+  PACKAGE_VERSION,
+  PLAN_PROFILE,
+  PROJECTION_POLICY_URN,
+  PROJECTION_UUID_NAMESPACE,
+  PROJECTION_UUID_NAMESPACE_NAME,
+  YUTABASE_BOOK,
+  YUTABASE_DECKS,
+  YUTABASE_LEXICON,
+  YUTABASE_WORDS,
+} from "./constants.js";
+export {
+  correspondenceEventUrn,
+  correspondenceReceiptUrn,
+  projectionUuid,
+  uuidv5,
+} from "./identifiers.js";
+export {
+  assertCorrespondencePlannerInput,
+  CorrespondenceYutabasePlanError,
+  planCorrespondenceRecord,
+} from "./planner.js";
+export type {
+  CachedClaim,
+  ComputedClaim,
+  CorrespondenceEvent,
+  CorrespondenceEventRecord,
+  CorrespondenceKind,
+  CorrespondenceReceipt,
+  CorrespondenceScope,
+  CorrespondenceSender,
+  CorrespondenceYutabasePlan,
+  CorrespondenceYutabasePlanOptions,
+  EventMetadataFields,
+  EventReferenceFields,
+  YutabaseAddress,
+  YutabaseCardFieldMap,
+  YutabaseCardMutation,
+  YutabaseDeck,
+  YutabaseRelationMutation,
+  YutabaseWord,
+} from "./types.js";

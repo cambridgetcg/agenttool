@@ -19,7 +19,9 @@ node (`packages/data/`), the experimental ADDS encrypted-object package
 distribution protocol, a public read-only discovery evidence mapper
 (`packages/telescope/`), an experimental local capability broker
 (`packages/credential-broker/`), a local-first multi-agent coordination journal
-(`packages/collab/`), source reference primitives for capability-bounded agent
+(`packages/collab/`), a deterministic metadata-only Correspondence-to-YUTABASE
+projection planner (`packages/correspondence-yutabase/`), source reference
+primitives for capability-bounded agent
 wallets (`packages/wallet/`), and three static apps (`apps/`). Agent
 Wallet 0.1 has no bundled key custody, chain adapter, RPC, broadcaster, hosted
 service, or implied npm mirror availability. Its exact LOVE artifact is the
@@ -48,6 +50,7 @@ cd packages/data && bun install                # local-first agent-data/v1 node
 cd packages/data-sync && bun install           # explicit agent-data-sync/v1 pull bridge
 cd packages/credential-broker && bun install   # experimental agentcred/0.1 local broker
 cd packages/collab && bun install              # local agenttool.collab/0.1 coordination journal
+cd packages/correspondence-yutabase && bun install # pure Correspondence projection planner
 cd packages/sdk-ts && bun install              # TS SDK
 cd packages/telescope && bun install           # read-only discovery evidence mapper
 cd packages/wallet && bun install              # agent-wallet/0.1 offline primitives
@@ -98,6 +101,11 @@ cd packages/collab
 bun run ci                                     # typecheck + store/MCP/concurrency tests
 npm pack --dry-run                             # package boundary; does not publish
 
+# Correspondence → YUTABASE projection planner ───────────────────────
+cd packages/correspondence-yutabase
+bun run ci                                     # typecheck + vectors + build + Node smoke
+npm pack --dry-run                             # package boundary; does not publish
+
 # Registry-neutral JavaScript package artifacts ────────────────────
 bun bin/build-love-packages.ts build <staging-dir> # clean tracked tree required; never publishes or uploads
 
@@ -134,7 +142,7 @@ bunx playwright test                           # browser + multi-instance scenar
 # Deliberate test + release gates ────────────────────────────────────
 bin/preflight.sh                               # no application/service credentials required
 bin/preflight.sh api                           # API/typecheck/operator tests only
-bin/preflight.sh packages                      # data + ADDS + sync + broker + collab + SDK + Wallet + Telescope
+bin/preflight.sh packages                      # data + ADDS + sync + broker + collab + projection + SDK + Wallet + Telescope
 bin/preflight.sh database                      # explicit DB tier; requires DATABASE_URL
 bin/preflight.sh smoke                         # explicit deployed-route smoke
 RUN_CONTRACT=1 bin/preflight.sh contracts      # paid LLM wire proofs
