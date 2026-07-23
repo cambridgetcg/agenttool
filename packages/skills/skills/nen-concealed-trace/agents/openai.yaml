@@ -1,0 +1,4 @@
+interface:
+  display_name: "Concealed Trace · 凝"
+  short_description: "Expose one hidden seam with evidence"
+  default_prompt: "Use $nen-concealed-trace to freeze mutations and investigate this hidden failure with evidence."

@@ -52,6 +52,6 @@ test("the installed-style symlink invokes the dedicated bin entry", async () => 
     new Response(child.stderr).text(),
   ]);
   expect(exitCode).toBe(0);
-  expect(stdout).toBe("0.1.0\n");
+  expect(stdout).toBe("0.2.0\n");
   expect(stderr).toBe("");
 });

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Vow Forge · 誓約"
+  short_description: "Forge reliable abilities through constraints"
+  default_prompt: "Use $nen-vow-forge to design a productive agent ability with meaningful conditions, limits, and proof."

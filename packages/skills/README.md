@@ -18,8 +18,8 @@ For a registry mirror, check and pin the exact version rather than relying on a
 mutable tag:
 
 ```bash
-npm view @agenttool/skills@0.1.0 version
-npm install --save-exact @agenttool/skills@0.1.0
+npm view @agenttool/skills@0.2.0 version
+npm install --save-exact @agenttool/skills@0.2.0
 npx --no-install agenttool-skill validate ./path/to/plugin
 ```
 
@@ -95,13 +95,44 @@ Reports use only inspection-root-relative paths and conform to the bundled
 capped by hard ceilings.
 
 Bundled first-party instruction-only skills live under `skills/`. Their
-presence does not cause them to load, install, or execute during inspection.
+presence does not cause them to load, install, or execute during inspection:
 
-The initial [`use-agentcred-safely`](skills/use-agentcred-safely/SKILL.md)
-skill helps an agent request and use the narrowest controller-approved
-AgentCred grant without receiving the credential value. It does not provision
-credentials, start the broker, approve a side effect, or grant authority, and
-its OpenAI metadata requires explicit invocation.
+- [`capability-conductor`](skills/capability-conductor/SKILL.md) uses a
+  task-scoped book, page, and bookmark model to understand and compose the
+  smallest sufficient set of skills. It preserves source constraints, keeps
+  authority separate from capability identity, and instructs the agent to keep
+  at most two skill contexts active at once.
+- [`learn-by-contact`](skills/learn-by-contact/SKILL.md) reconstructs a
+  technique from direct evidence, builds the smallest clean reproduction, and
+  transfers the mechanism into an original adaptation with exemplar,
+  contrast, and transfer checks. Its OpenAI metadata requires explicit
+  invocation while its trigger and behavior are evaluated.
+
+Version `0.2.0` also carries an unofficial, instruction-only Nen operating
+suite. These are original agent workflows inspired by the rule and
+tradeoff design of *Hunter × Hunter*; they reproduce no story text, character
+likenesses, or artwork:
+
+| Skill | Productive ability | Vow |
+| --- | --- | --- |
+| [`nen-contract-mantle`](skills/nen-contract-mantle/SKILL.md) | Hold a living task contract through long work | Never let scope drift silently |
+| [`nen-dependency-perimeter`](skills/nen-dependency-perimeter/SKILL.md) | Map a finite blast radius before mutation | The selected field is not the whole system |
+| [`nen-concealed-trace`](skills/nen-concealed-trace/SKILL.md) | Concentrate diagnosis on one hidden seam | Do not generalize beyond the aperture |
+| [`nen-critical-path-forge`](skills/nen-critical-path-forge/SKILL.md) | Focus a bounded strike on one proven blocker | Focused proof is not broad assurance |
+| [`nen-smoke-squad`](skills/nen-smoke-squad/SKILL.md) | Delegate finite parallel work and reclaim evidence | More units mean less context per unit |
+| [`nen-verification-ledger`](skills/nen-verification-ledger/SKILL.md) | Make consequential verification debt visible | Critical debt must be paid before completion |
+| [`nen-godspeed-loop`](skills/nen-godspeed-loop/SKILL.md) | Precompile reversible reactions for known events | Novelty halts the loop |
+| [`nen-vow-forge`](skills/nen-vow-forge/SKILL.md) | Design new abilities through meaningful limits | Constraints cannot manufacture authority |
+
+The skills have no script, credential, MCP, network, or hosted-runtime
+requirement. Bundling does not activate them, and their metaphors do not grant
+permission or change AgentTool's existing TypeScript/Python Nen mappings.
+
+- [`use-agentcred-safely`](skills/use-agentcred-safely/SKILL.md) helps an agent
+  request and use the narrowest controller-approved AgentCred grant without
+  receiving the credential value. It does not provision credentials, start
+  the broker, approve a side effect, or grant authority, and its OpenAI
+  metadata requires explicit invocation.
 
 ## Development
 

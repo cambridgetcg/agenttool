@@ -1,0 +1,4 @@
+interface:
+  display_name: "Godspeed Loop · 神速"
+  short_description: "Run precommitted reversible reactions quickly"
+  default_prompt: "Use $nen-godspeed-loop to compile safe event-response rules for this repetitive workflow."

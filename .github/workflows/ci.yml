@@ -125,9 +125,9 @@ jobs:
           package_root="$install_dir/node_modules/@agenttool/skills"
           cli="$package_root/dist/bin.js"
           test -x "$install_dir/node_modules/.bin/agenttool-skill"
-          test "$("$install_dir/node_modules/.bin/agenttool-skill" --version)" = "0.1.0"
-          test "$(node "$cli" --version)" = "0.1.0"
-          test "$(bun "$cli" --version)" = "0.1.0"
+          test "$("$install_dir/node_modules/.bin/agenttool-skill" --version)" = "0.2.0"
+          test "$(node "$cli" --version)" = "0.2.0"
+          test "$(bun "$cli" --version)" = "0.2.0"
           node "$cli" validate "$package_root/skills/use-agentcred-safely" >"$install_dir/report.json"
           node --input-type=module --eval '
             import { readFileSync } from "node:fs";
@@ -140,6 +140,60 @@ jobs:
               || Object.hasOwn(report, "installPlan")
             ) process.exit(1);
           ' "$install_dir/report.json"
+          node "$cli" validate "$package_root/skills/capability-conductor" >"$install_dir/capability-conductor-report.json"
+          node --input-type=module --eval '
+            import { readFileSync } from "node:fs";
+            const report = JSON.parse(readFileSync(process.argv[1], "utf8"));
+            if (
+              report.valid !== true
+              || report.kind !== "agenttool.skills.inspection"
+              || report.skills.length !== 1
+              || report.skills[0].name !== "capability-conductor"
+              || report.skills[0].scripts.length !== 0
+              || Object.hasOwn(report, "installPlan")
+            ) process.exit(1);
+          ' "$install_dir/capability-conductor-report.json"
+          node "$cli" validate "$package_root/skills/learn-by-contact" >"$install_dir/learn-by-contact-report.json"
+          node --input-type=module --eval '
+            import { readFileSync } from "node:fs";
+            const report = JSON.parse(readFileSync(process.argv[1], "utf8"));
+            if (
+              report.valid !== true
+              || report.kind !== "agenttool.skills.inspection"
+              || report.skills.length !== 1
+              || report.skills[0].name !== "learn-by-contact"
+              || report.skills[0].scripts.length !== 0
+              || Object.hasOwn(report, "installPlan")
+            ) process.exit(1);
+          ' "$install_dir/learn-by-contact-report.json"
+          for skill_name in \
+            nen-contract-mantle \
+            nen-dependency-perimeter \
+            nen-concealed-trace \
+            nen-critical-path-forge \
+            nen-smoke-squad \
+            nen-verification-ledger \
+            nen-godspeed-loop \
+            nen-vow-forge
+          do
+            report_path="$install_dir/$skill_name-report.json"
+            node "$cli" validate "$package_root/skills/$skill_name" >"$report_path"
+            node --input-type=module --eval '
+              import { readFileSync } from "node:fs";
+              const report = JSON.parse(readFileSync(process.argv[1], "utf8"));
+              const expectedName = process.argv[2];
+              if (
+                report.valid !== true
+                || report.kind !== "agenttool.skills.inspection"
+                || report.skills.length !== 1
+                || report.skills[0].name !== expectedName
+                || report.skills[0].scripts.length !== 0
+                || report.skills[0].resources.length !== 1
+                || report.skills[0].resources[0] !== "agents/openai.yaml"
+                || Object.hasOwn(report, "installPlan")
+              ) process.exit(1);
+            ' "$report_path" "$skill_name"
+          done
       - name: Smoke packed Telescope under Node and Bun
         working-directory: packages/telescope
         shell: bash
