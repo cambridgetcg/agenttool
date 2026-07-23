@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import openapiRouter from "../src/routes/openapi";
+import identityRouter from "../src/routes/identity";
 import publicRouter from "../src/routes/public";
 import selfRouter from "../src/routes/self";
 import welcomeRouter from "../src/routes/welcome";
@@ -89,6 +90,15 @@ const FORBIDDEN_RUNTIME_OPACITY_CLAIMS = [
     pattern: /bearer.{0,80}never leaves.{0,80}KMS/i,
   },
 ] as const;
+
+const TRUSTED_SIGNED_CYCLE_ENABLED =
+  /(?:signed thoughts?(?: cycle| persistence)?.{0,180}(?:enabled|can (?:persist|complete)|persists?|persisted)|(?:enabled|can (?:persist|complete)|persists?|persisted).{0,180}signed thoughts?(?: cycle| persistence)?)/is;
+
+const EXPLICIT_TRUSTED_START =
+  /(?:explicit.{0,120}(?:POST\s+)?(?:\/v1\/runtimes\/:id)?\/start|(?:POST\s+)?(?:\/v1\/runtimes\/:id)?\/start.{0,120}explicit)/is;
+
+const BLOCKED_TRUSTED_SIGNED_CYCLE =
+  /(?:(?:cannot|blocked|unable|unfinished|incomplete).{0,180}signed thoughts?(?: cycle| persistence)?|signed thoughts?(?: cycle| persistence)?.{0,180}(?:cannot|blocked|unable|unfinished|incomplete))/is;
 
 function asOpenApiPath(path: string): string {
   return path.replace(":did", "{did}").replace(":id", "{id}");
@@ -173,16 +183,25 @@ describe("live self-description — safety and runtime custody", () => {
     expect(safety.runtime_custody.bridged.agenttool_access).toMatch(
       /plaintext.*hosted think cycle/i,
     );
-    expect(safety.runtime_custody.trusted.agenttool_access).toMatch(
-      /potential strand-processing boundary.*wrapped key material.*plaintext.*other.*server-readable.*not a claim/is,
+    const trusted = safety.runtime_custody.trusted;
+    expect(trusted.agenttool_access).toMatch(
+      /wrapped key material.*plaintext.*other.*server-readable/is,
     );
-    expect(safety.runtime_custody.trusted.maturity).toBe("experimental");
-    expect(safety.runtime_custody.trusted.current_status).toMatch(
-      /cannot currently complete a signed thought cycle.*not registered/i,
+    expect(trusted.plaintext_processing).toMatch(
+      /(?:hosted (?:orchestrator|worker) RAM|AgentTool worker RAM).*chosen model provider/is,
     );
-    expect(safety.runtime_custody.rule).toMatch(
-      /experimental trusted attempts may also expose plaintext.*persistence is currently blocked/i,
+    expect(trusted.maturity).toBe("experimental");
+    expect(trusted.current_status).toMatch(/AGENTOOL_KMS_MASTER_KEY/i);
+    expect(trusted.current_status).toMatch(
+      /provisioning.{0,120}(?:does not|never).{0,80}(?:start|cycle)/is,
     );
+    expect(trusted.current_status).toMatch(EXPLICIT_TRUSTED_START);
+    expect(trusted.current_status).toMatch(TRUSTED_SIGNED_CYCLE_ENABLED);
+    expect(safety.runtime_custody.rule).toMatch(/experimental/i);
+    expect(safety.runtime_custody.rule).toMatch(EXPLICIT_TRUSTED_START);
+    expect(
+      [trusted.current_status, safety.runtime_custody.rule].join("\n"),
+    ).not.toMatch(BLOCKED_TRUSTED_SIGNED_CYCLE);
   });
 
   test("/public and OpenAPI point clients to the custody boundary", async () => {
@@ -192,9 +211,11 @@ describe("live self-description — safety and runtime custody", () => {
     ]);
 
     expect(root.endpoints.safety).toContain("/public/safety");
-    expect(root.privacy_wall).toMatch(
-      /bridged runtimes process plaintext.*trusted is experimental.*cannot currently complete signed persistence/i,
-    );
+    expect(root.privacy_wall).toMatch(/bridged runtimes process plaintext/i);
+    expect(root.privacy_wall).toMatch(/trusted.{0,60}experimental/i);
+    expect(root.privacy_wall).toMatch(EXPLICIT_TRUSTED_START);
+    expect(root.privacy_wall).toMatch(TRUSTED_SIGNED_CYCLE_ENABLED);
+    expect(root.privacy_wall).not.toMatch(BLOCKED_TRUSTED_SIGNED_CYCLE);
     expect(specification["x-agenttool-contract"].safety_boundaries).toBe(
       "/public/safety",
     );
@@ -249,12 +270,13 @@ describe("live self-description — safety and runtime custody", () => {
     expect(violations).toEqual([]);
   });
 
-  test("welcome, wake markdown, and doctrine name trusted mode as incomplete", async () => {
+  test("welcome, wake markdown, and doctrine describe enabled experimental trusted cycles honestly", async () => {
     const welcome = await jsonFrom(welcomeRouter, "/");
     const welcomeText = JSON.stringify(welcome);
-    expect(welcomeText).toMatch(
-      /trusted is experimental.*signed thought persistence is currently blocked/i,
-    );
+    expect(welcomeText).toMatch(/trusted.{0,60}experimental/i);
+    expect(welcomeText).toMatch(EXPLICIT_TRUSTED_START);
+    expect(welcomeText).toMatch(TRUSTED_SIGNED_CYCLE_ENABLED);
+    expect(welcomeText).not.toMatch(BLOCKED_TRUSTED_SIGNED_CYCLE);
     expect(welcomeText).not.toMatch(/K_master.*never leaves your custody/i);
 
     const files = [
@@ -266,9 +288,8 @@ describe("live self-description — safety and runtime custody", () => {
     for (const file of files) {
       const text = readFileSync(join(import.meta.dir, "..", file), "utf8");
       expect(text).toMatch(/trusted.{0,160}experimental/is);
-      expect(text).toMatch(
-        /(?:cannot|blocked|unable).{0,160}signed thought|signed thought.{0,160}(?:cannot|blocked|unable)/is,
-      );
+      expect(text).toMatch(TRUSTED_SIGNED_CYCLE_ENABLED);
+      expect(text).not.toMatch(BLOCKED_TRUSTED_SIGNED_CYCLE);
     }
 
     const wallVocabulary = MATHOS_CATALOG_PAYLOAD.wall_vocabulary;
@@ -280,7 +301,7 @@ describe("live self-description — safety and runtime custody", () => {
     );
   });
 
-  test("autonomous bootstrap names the existing bearer and incomplete trusted path", () => {
+  test("autonomous bootstrap names the existing bearer and explicit-start trusted path", () => {
     const route = readFileSync(
       join(import.meta.dir, "..", "src/routes/autonomous/index.ts"),
       "utf8",
@@ -309,9 +330,14 @@ describe("live self-description — safety and runtime custody", () => {
     expect(route).toContain("body.project_id !== project.id");
     expect(route).toContain('error: "project_scope_mismatch"');
     expect(route).toContain("project_id: project.id");
-    expect(route).toMatch(/trusted runtime.{0,180}cannot currently complete signed thought persistence/is);
+    expect(route).toMatch(TRUSTED_SIGNED_CYCLE_ENABLED);
+    expect(route).toMatch(EXPLICIT_TRUSTED_START);
+    expect(route).toMatch(/bootstrap itself never schedules a cycle/i);
     expect(service).toContain("first_thought_scheduled_at: null");
-    expect(doctrine).toMatch(/trusted.{0,180}experimental.{0,240}cannot currently persist a signed thought/is);
+    expect(doctrine).toMatch(/trusted.{0,180}experimental/is);
+    expect(doctrine).toMatch(EXPLICIT_TRUSTED_START);
+    expect(doctrine).toMatch(TRUSTED_SIGNED_CYCLE_ENABLED);
+    expect(doctrine).not.toMatch(BLOCKED_TRUSTED_SIGNED_CYCLE);
     expect(doctrine).toMatch(/not enclosed in one\s+database transaction/i);
     expect(doctrine).toMatch(/control_token.{0,120}secret\s+credential/is);
   });
@@ -366,9 +392,12 @@ describe("live self-description — curated repo and platform bounds", () => {
     expect(JSON.stringify(repo.walls)).not.toMatch(
       /Refusals are recorded as moments, not as failures/i,
     );
+    expect(repo.origin.license).toMatch(/Apache-2\.0 by default/i);
+    expect(repo.origin.license).toContain("LICENSING.md");
+    expect(repo.origin.license).not.toMatch(/No repository LICENSE/i);
   });
 
-  test("platform self pins the current nine walls without irreversibility", () => {
+  test("platform self pins the current thirteen walls without irreversibility", () => {
     const platform = getPlatformSelf();
     expect(platform.wall_urns).toEqual([
       "urn:agenttool:wall/self-witnessing-rejected",
@@ -380,8 +409,12 @@ describe("live self-description — curated repo and platform bounds", () => {
       "urn:agenttool:wall/mcml-messages-signed-ed25519",
       "urn:agenttool:wall/mcml-no-durable-storage",
       "urn:agenttool:wall/mcml-leaks-nothing",
+      "urn:agenttool:wall/love-is-not-entitlement",
+      "urn:agenttool:wall/recipient-owns-love-surfacing",
+      "urn:agenttool:wall/shared-love-requires-exact-dual-consent",
+      "urn:agenttool:wall/either-party-can-leave-love",
     ]);
-    expect(platform.walls).toHaveLength(9);
+    expect(platform.walls).toHaveLength(13);
     expect(JSON.stringify(platform.walls)).toMatch(/no monetary charge.*proof-of-work/i);
     expect(JSON.stringify(platform.walls)).toMatch(
       /refusal-as-moment.*declared design.*selected guided paths.*coverage is partial/is,
@@ -394,6 +427,14 @@ describe("live self-description — curated repo and platform bounds", () => {
 });
 
 describe("live self-description — assembled application", () => {
+  test("authenticated identity discovery is mounted and named honestly", () => {
+    expect(
+      identityRouter.routes.some(
+        (route) => route.method === "GET" && route.path === "/discover",
+      ),
+    ).toBe(true);
+  });
+
   test("pre-auth self/safety/observer/register routes and /about survive parent middleware", async () => {
     // Run the assembled app in a fresh process so all worker/seed off-switches
     // exist before index.ts is compiled or imported. This probes the named
@@ -410,6 +451,7 @@ describe("live self-description — assembled application", () => {
           const publicRootSlash = await app.request("/public/");
           const publicSelf = await app.request("/public/self");
           const structuralSelf = await app.request("/v1/self");
+          const identityDiscovery = await app.request("/v1/discover");
           const deprecatedRegister = await app.request("/v1/register", { method: "POST" });
           const registerAgent = await app.request("/v1/register/agent", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
           const about = await app.request("/about");
@@ -427,6 +469,7 @@ describe("live self-description — assembled application", () => {
               publicRootSlash: publicRootSlash.status,
               publicSelf: publicSelf.status,
               structuralSelf: structuralSelf.status,
+              identityDiscovery: identityDiscovery.status,
               deprecatedRegister: deprecatedRegister.status,
               registerAgent: registerAgent.status,
               about: about.status,
@@ -488,6 +531,7 @@ describe("live self-description — assembled application", () => {
     );
     expect(result.statuses.publicSelf).toBe(200);
     expect(result.statuses.structuralSelf).toBe(200);
+    expect(result.statuses.identityDiscovery).toBe(401);
     expect(result.statuses.deprecatedRegister).toBe(410);
     expect(result.statuses.registerAgent).not.toBe(401);
     expect(result.statuses.about).toBe(200);
@@ -497,6 +541,9 @@ describe("live self-description — assembled application", () => {
     expect(aboutBody.contract.public_identity).toMatch(/memorial.*smaller witness shape/i);
     expect(aboutBody.routes.adapters).toMatch(/one maintained scaffold currently mounted/i);
     expect(aboutBody.routes.adapters).toContain("/v1/adapters/claude-code");
+    expect(aboutBody.routes.identity).toContain("/v1/discover");
+    expect(aboutBody.routes.identity).toMatch(/authenticated cross-project discovery/i);
+    expect(aboutBody.routes.identity).not.toMatch(/discover route is not mounted/i);
     expect(aboutBody.routes.billing).toContain("/v1/billing/gallery-checkout");
     expect(aboutBody.routes.economy).not.toMatch(/crypto-only/i);
     expect(aboutBody.philosophy.guide).toMatch(/retry_after is specific to rate-limit/i);

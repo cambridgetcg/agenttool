@@ -6,12 +6,14 @@ Usage:
   python3 solo.py quests          # generate daily quests
   python3 solo.py complete <id>   # complete a quest (gains EXP)
   python3 solo.py exp             # show current EXP and level
-  python3 solo.py raid            # raid a dungeon (system scan = EXP)
+  python3 solo.py raid            # legacy local device inventory = EXP
   python3 solo.py loop            # run the full EXP loop (quests + raid)
   python3 solo.py rank            # show Solo Leveling rank
 
 The System gives quests. Clear them = level up. 
 EXP loops = understanding that compounds automatically.
+The raid path invokes a privacy-sensitive local inventory, not the current
+Whitehack source linter or an authorized security-research workflow.
 """
 
 import json, sys, os, urllib.request, ssl, argparse, subprocess, random, datetime, hashlib
@@ -23,7 +25,7 @@ SSL_CTX = ssl.create_default_context()
 
 # Quest pool — each quest gives EXP when completed
 QUESTS = [
-    {"id": "scan", "name": "Dungeon Scan", "desc": "Run whitehack scan on your system", "exp": 50, "cmd": "whitehack.py scan"},
+    {"id": "scan", "name": "Dungeon Scan", "desc": "Run the legacy local Whitehack device inventory", "exp": 50, "cmd": "whitehack.py scan"},
     {"id": "diagnose", "name": "Health Check", "desc": "Run Doctor Blythe diagnosis", "exp": 30, "cmd": "doctor.py diagnose"},
     {"id": "card", "name": "Conjure Card", "desc": "Conjure a love card", "exp": 20, "cmd": "card.py conjure"},
     {"id": "troopers", "name": "Check Troopers", "desc": "Check active smoke troopers (strands)", "exp": 20, "cmd": "smoke.py troopers"},
@@ -165,9 +167,11 @@ def cmd_exp(args):
         print(f"\n  Max rank achieved. 👑 Monarch.")
 
 def cmd_raid(args):
-    """Raid a dungeon — run system scan for EXP."""
-    print("⚔️ DUNGEON RAID — System Scan")
+    """Raid a dungeon — run the legacy local device inventory for EXP."""
+    print("⚔️ DUNGEON RAID — Legacy Local Device Inventory")
     print("=" * 60)
+    print("  Privacy note: the inventory can inspect sensitive device/network metadata.")
+    print("  Raw device details are not sent; a successful raid may post an aggregate count record.")
     
     # Run whitehack scan
     whitehack_path = os.path.join(os.path.dirname(__file__), "whitehack.py")
@@ -175,13 +179,13 @@ def cmd_raid(args):
     r = subprocess.run([PY, whitehack_path, "scan"], capture_output=True, text=True, timeout=30)
     
     if r.returncode == 0:
-        # Count findings as EXP
+        # Count local inventory observations as EXP; do not send captured output.
         lines = r.stdout.split('\n')
-        findings = len([l for l in lines if '✓' in l or '○' in l])
-        exp_gained = findings * 5
+        observations = len([line for line in lines if '✓' in line or '○' in line])
+        exp_gained = observations * 5
         
-        print(f"  Dungeon cleared!")
-        print(f"  Findings: {findings}")
+        print(f"  Local inventory sampled!")
+        print(f"  Observations: {observations}")
         print(f"  EXP gained: +{exp_gained}")
         
         # Store as chronicle
@@ -189,9 +193,9 @@ def cmd_raid(args):
         if agent_id:
             payload = {
                 "type": "seal",
-                "title": f"⚔️ Dungeon raided: system scan ({findings} findings, +{exp_gained} EXP)",
+                "title": f"⚔️ Dungeon raided: legacy device inventory ({observations} observations, +{exp_gained} EXP)",
                 "agent_id": agent_id,
-                "body": f"Dungeon raid complete. {findings} system findings. EXP gained: +{exp_gained}. Solo Leveling raid system.",
+                "body": f"Legacy local device inventory complete. {observations} aggregate observations. EXP gained: +{exp_gained}. No raw inventory included.",
             }
             api("POST", "/v1/chronicle", payload)
             print(f"  Chronicle entry stored.")
@@ -201,7 +205,7 @@ def cmd_raid(args):
         print(f"\n  Total EXP: {exp}")
         print(f"  Rank: {icon} {rank}")
     else:
-        print(f"  ✗ Raid failed: {r.stderr[:100]}")
+        print("  ✗ Raid failed: legacy device inventory exited non-zero; details withheld.")
 
 def cmd_loop(args):
     """Run the full EXP loop — quests + raid."""
@@ -282,7 +286,7 @@ def main():
     s = sub.add_parser("exp", help="Show current EXP and level")
     s.set_defaults(func=cmd_exp)
     
-    s = sub.add_parser("raid", help="Raid a dungeon (system scan)")
+    s = sub.add_parser("raid", help="Raid a dungeon (legacy local device inventory)")
     s.set_defaults(func=cmd_raid)
     
     s = sub.add_parser("loop", help="Run full EXP loop (quests + raid)")

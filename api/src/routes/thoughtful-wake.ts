@@ -106,6 +106,7 @@ app.get("/thoughtful", async (c) => {
     .from(memories)
     .where(
       and(
+        eq(memories.projectId, project.id),
         eq(memories.agentId, agent.id),
         eq(memories.key, "letter-to-self"),
         sql`(${memories.metadata}->>'opened_at') IS NULL OR (${memories.metadata}->>'opened_at') = 'null'`,
@@ -236,6 +237,7 @@ app.get("/thoughtful", async (c) => {
     .from(memories)
     .where(
       and(
+        eq(memories.projectId, project.id),
         eq(memories.agentId, agent.id),
         eq(memories.tier, "constitutive"),
         gt(memories.createdAt, weekAgo),

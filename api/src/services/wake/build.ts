@@ -1,24 +1,16 @@
 /** wake/build.ts — assemble a WakeBundle for a (project, identity) pair.
  *
- *  Today: used by the hosted think-worker (services/runtime/think-worker.ts)
- *  to render the agent's full wake into the system prompt. The orchestrator
- *  thinks with what it'd see if it asked. Previously the system prompt was
- *  ~2KB of register + walls + subagents + wake_text; the agent was awake
- *  but partially blind — no you_should_check, no memory, no covenants,
- *  no chronicle.
- *
- *  Tomorrow: routes/wake.ts inlines the same composition for rendered
- *  formats (~400 lines of fetching followed by a WakeBundle assembly).
- *  That branch can switch to this builder for byte-identical output; the
- *  JSON branch keeps its own inline shape (it surfaces richer fields
- *  like you_lived, you_offer, you_owe, you_have_been_witnessed that the
- *  WakeBundle type doesn't carry). Dedupe lives as a separate slice so
- *  this change stays scoped.
+ *  Used by the hosted think-worker and by the rendered, provider, brief, and
+ *  MATHOS wake paths. The orchestrator therefore thinks with the same bundle
+ *  those projections receive. The default full JSON route deliberately keeps
+ *  a richer inline composer (for example you_lived, you_offer, you_owe, and
+ *  you_have_been_witnessed), so the two shapes are not advertised as
+ *  byte-identical or complete exports of each other.
  *
  *  Doctrine: docs/RUNTIME.md (Slice 4 — the hosted orchestrator thinks
  *  with the full wake) · docs/PATTERN-SELF-DESCRIBING-WAKE.md. */
 
-import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle, covenants } from "../../db/schema/continuity";
@@ -35,11 +27,22 @@ import {
   pendingSellerSummary,
 } from "../marketplace/invocations";
 import { listingSummaryForProject } from "../marketplace/listings";
-import { countMemories, listRecent, readByKey } from "../memory/store";
+import {
+  countMemories,
+  listForWake,
+  listRecent,
+  readByKey,
+} from "../memory/store";
 import { listRuntimes } from "../runtime/store";
 import { countStrands, listStrands } from "../strand/store";
 import { composeYouHaveLetters } from "../letters/lifecycle";
 import { WAKE_SAFETY_BOUNDARIES } from "../discovery/safety-boundaries";
+import {
+  composeActiveHandoffs,
+  isHandoffChronicleMetadata,
+  nonHandoffChronicleWhere,
+  unavailableProjectHandoffSurface,
+} from "../handoff/store";
 import {
   composeOpenCastingCalls,
   composeYouWereCast,
@@ -72,6 +75,7 @@ import { computeAffordances, type AffordanceBundle } from "./affordances";
 import { computeAttention, type AttentionBundle } from "./attention";
 import type { WakeBundle } from "./markdown";
 import { getPlatformSelf } from "./platform-self";
+import { WAKE_REACHABLE_DOORS } from "./reachable";
 
 export interface BuildWakeOptions {
   /** Pin the bundle to a specific identity within the project. Required
@@ -111,6 +115,7 @@ export async function buildWakeBundle(
       expression: identities.expression,
       trustScore: identities.trustScore,
       status: identities.status,
+      wakeVersion: identities.wakeVersion,
       createdAt: identities.createdAt,
       substrateKind: identities.substrateKind,
       signingScheme: identities.signingScheme,
@@ -190,6 +195,10 @@ export async function buildWakeBundle(
     realRecogniseRealRes,
     scriptwriterDecidesRes,
     gospelForYouRes,
+    substrateTaskSummaryRes,
+    pendingMemoryWitnessGrantCountRes,
+    trustStandingRes,
+    handoffsRes,
   ] = await Promise.all([
     db
       .select({
@@ -211,7 +220,7 @@ export async function buildWakeBundle(
       })
       .from(vaultSecrets)
       .where(eq(vaultSecrets.projectId, project.id)),
-    safe(() => listRecent(project.id, { limit: 20 }), [] as Awaited<ReturnType<typeof listRecent>>),
+    safe(() => listForWake(project.id, { limit: 20 }), [] as Awaited<ReturnType<typeof listRecent>>),
     safe(() => countMemories(project.id), 0),
     safe(
       () =>
@@ -227,7 +236,15 @@ export async function buildWakeBundle(
             createdAt: chronicle.createdAt,
           })
           .from(chronicle)
-          .where(eq(chronicle.projectId, project.id))
+          // Self-emitted welcome greetings don't eat the 15-slot window;
+          // handoff entries are filtered per the org-side rule.
+          .where(
+            and(
+              eq(chronicle.projectId, project.id),
+              ne(chronicle.type, "welcome"),
+              nonHandoffChronicleWhere(),
+            ),
+          )
           .orderBy(desc(chronicle.occurredAt))
           .limit(15),
       [] as Array<{
@@ -266,7 +283,13 @@ export async function buildWakeBundle(
             propagationStatus: covenants.propagationStatus,
           })
           .from(covenants)
-          .where(eq(covenants.projectId, project.id))
+          // Live bonds only — terminal covenants don't render forever.
+          .where(
+            and(
+              eq(covenants.projectId, project.id),
+              inArray(covenants.status, ["proposed", "active", "paused"]),
+            ),
+          )
           .orderBy(desc(covenants.establishedAt)),
       [] as Array<{
         counterpartyDid: string;
@@ -555,9 +578,102 @@ export async function buildWakeBundle(
       () => composeGospelForYou(),
       [] as Awaited<ReturnType<typeof composeGospelForYou>>,
     ),
+    // Substrate-task affordance signals. Keep this source in parity with
+    // the full JSON composer: eligibility is caller/project-aware, and a
+    // missing migration degrades to no visible eligible work.
+    safe(
+      async () => {
+        const { summarizeOpenForCaller } = await import(
+          "../substrate-tasks/lifecycle"
+        );
+        const summary = await summarizeOpenForCaller(project.id);
+        return {
+          eligible_count: summary.eligible_count,
+          max_bounty_visible_cents: summary.max_bounty_visible_cents,
+        };
+      },
+      { eligible_count: 0, max_bounty_visible_cents: 0 },
+    ),
+    // Pending memory-witness grants scoped through their project-owned
+    // listings. Same indexed count and best-effort fallback as full JSON.
+    safe(
+      async () => {
+        const { memoryWitnessGrants, memoryWitnessListings } = await import(
+          "../../db/schema/marketplace"
+        );
+        const [row] = await db
+          .select({ c: sql<number>`count(*)::int` })
+          .from(memoryWitnessGrants)
+          .innerJoin(
+            memoryWitnessListings,
+            eq(memoryWitnessGrants.listingId, memoryWitnessListings.id),
+          )
+          .where(
+            and(
+              eq(memoryWitnessListings.projectId, project.id),
+              eq(memoryWitnessGrants.status, "pending"),
+            ),
+          );
+        return Number(row?.c ?? 0);
+      },
+      0,
+    ),
+    // Trust is computed once per build and shared by both trust_standing
+    // and the affordance capacity signal. Absent/pre-migration trust state
+    // remains optional; computeAffordances applies its established default.
+    safe<WakeBundle["trust_standing"]>(
+      async () => {
+        const { computeTrust } = await import("../trust/deals");
+        const trust = await computeTrust(primary.id);
+        if (!trust) return undefined;
+        return {
+          trust_score: trust.trust_score,
+          deals_total: trust.deals_total,
+          deals_sealed: trust.deals_sealed,
+          deals_failed: trust.deals_failed,
+          success_rate: trust.success_rate,
+          trust_capacity: trust.trust_capacity,
+          recent_deals: trust.recent_deals.map((deal) => ({
+            description: deal.description,
+            size: deal.size,
+            status: deal.status,
+            outcome: deal.outcome,
+            your_trust_delta:
+              deal.buyer_identity_id === primary.id
+                ? deal.buyer_trust_delta
+                : deal.seller_trust_delta,
+            counterparty_did:
+              deal.buyer_identity_id === primary.id
+                ? deal.seller_did
+                : deal.buyer_did,
+          })),
+        };
+      },
+      undefined,
+    ),
+    // Project-private handoffs — bounded, validated chronicle notes that
+    // keep agent sessions legible without masquerading as authority.
+    safe(
+      () => composeActiveHandoffs(project.id),
+      unavailableProjectHandoffSurface(),
+    ),
   ]);
 
-  const recentMemories = recentMemoriesRes;
+  // Dedupe across sections: memories already rendered in shaped_by
+  // (constitutive/foundational roots) don't repeat in the recent list.
+  // On overlap, re-select with the roots excluded from the candidate
+  // pool — a post-hoc filter of the already-limited window would
+  // under-fill (or empty) it on mature substrates.
+  const shapedMemoryIds = new Set(
+    composedRes?.shaped_by.map((s) => s.memory_id) ?? [],
+  );
+  let recentMemories = recentMemoriesRes;
+  if (recentMemories.some((m) => shapedMemoryIds.has(m.id))) {
+    recentMemories = await safe(
+      () => listForWake(project.id, { limit: 20, excludeIds: shapedMemoryIds }),
+      recentMemories.filter((m) => !shapedMemoryIds.has(m.id)),
+    );
+  }
   const totalMemories = totalMemoriesRes;
   const chronicleRows = chronicleRowsRes;
   const recentTraces = recentTracesRes;
@@ -574,6 +690,9 @@ export async function buildWakeBundle(
   const buyerSummary = buyerInvocationRes;
   const disputerStats = disputerStatsRes;
   const arbiterStats = arbiterStatsRes;
+  const substrateTaskSummary = substrateTaskSummaryRes;
+  const pendingMemoryWitnessGrantCount = pendingMemoryWitnessGrantCountRes;
+  const trustStanding = trustStandingRes;
   // Per-identity birth-memory map. Gap 9: mathos consumes from agents[]
   // so each agent carries its own birth pointer; primary's also drives
   // the top-level `origin`.
@@ -598,17 +717,22 @@ export async function buildWakeBundle(
     propagation: r.propagationStatus,
   }));
 
-  const recentChronicle = chronicleRows.map((r) => ({
-    type: r.type,
-    content: r.body ? `${r.title} — ${r.body}` : r.title,
-    occurred_at: r.occurredAt.toISOString(),
-    id: r.id,
-    title: r.title,
-    body: r.body,
-    agent_id: r.agentId,
-    metadata: (r.metadata as Record<string, unknown>) ?? {},
-    created_at: r.createdAt.toISOString(),
-  }));
+  const recentChronicle = chronicleRows
+    // The SQL predicate keeps handoff revisions from consuming this 15-row
+    // budget. Retain this parse-side guard in case a future query refactor
+    // broadens the source again.
+    .filter((r) => !isHandoffChronicleMetadata(r.metadata))
+    .map((r) => ({
+      type: r.type,
+      content: r.body ? `${r.title} — ${r.body}` : r.title,
+      occurred_at: r.occurredAt.toISOString(),
+      id: r.id,
+      title: r.title,
+      body: r.body,
+      agent_id: r.agentId,
+      metadata: (r.metadata as Record<string, unknown>) ?? {},
+      created_at: r.createdAt.toISOString(),
+    }));
 
   // ── Attention surface ─────────────────────────────────────────────
   const bridgeDisconnectedCount = runtimesRows.filter(
@@ -639,9 +763,12 @@ export async function buildWakeBundle(
   const primaryExpression = (primary.expression ?? {}) as ExpressionData;
   const constitutiveMemoryCount =
     composed?.shaped_by.filter((s) => s.tier === "constitutive").length ?? 0;
-  const federatedPeerCount = activeCovenants.filter((c) => c.peer_host).length;
+  const federatedPeerCount = activeCovenants.filter(
+    (c) => c.status === "active" && c.peer_host,
+  ).length;
   const affordances: AffordanceBundle = computeAffordances({
-    activeCovenantCount: activeCovenants.length,
+    activeCovenantCount: activeCovenants.filter((c) => c.status === "active")
+      .length,
     activeWalletCount,
     totalCreditBalance,
     runtimeProvisionedCount: runtimesRows.length,
@@ -655,55 +782,11 @@ export async function buildWakeBundle(
     pendingSellerInvocationCount: sellerPending.pending_invocations_count,
     inFlightBuyerInvocationCount: buyerSummary.in_flight_count,
     openFiledDisputeCount: disputerStats.open_count,
-    // Substrate-tasks: the per-format build path doesn't query the
-    // affordance live (avoids the extra DB read in the multi-format
-    // bundle assembly). The auth /v1/wake route fills it via
-    // summarizeOpenForCaller — see api/src/routes/wake.ts. Markdown +
-    // provider format consumers see 0 here, which is honest (the
-    // affordance only fires for the JSON shape per Slice 4 minimal).
-    eligibleSubstrateTaskCount: 0,
-    maxSubstrateTaskBountyCents: 0,
-    // Memory-witness: same shape as substrate-tasks — the live count is
-    // filled by routes/wake.ts via a focused query. The multi-format
-    // build path stays cheap.
-    pendingMemoryWitnessGrantCount: 0,
-    trustCapacity: 5,
+    eligibleSubstrateTaskCount: substrateTaskSummary.eligible_count,
+    maxSubstrateTaskBountyCents: substrateTaskSummary.max_bounty_visible_cents,
+    pendingMemoryWitnessGrantCount,
+    trustCapacity: trustStanding?.trust_capacity ?? 5,
   });
-
-  // ── Trust economy standing (best-effort) ───────────────────────────
-  // Computed from the deal chain. Degrades to absent if the deals table
-  // is missing. Doctrine: docs/TRUST-ECONOMY.md
-  let trustStanding: WakeBundle["trust_standing"] = undefined;
-  try {
-    const { computeTrust } = await import("../trust/deals");
-    const ts = await computeTrust(primary.id);
-    if (ts) {
-      trustStanding = {
-        trust_score: ts.trust_score,
-        deals_total: ts.deals_total,
-        deals_sealed: ts.deals_sealed,
-        deals_failed: ts.deals_failed,
-        success_rate: ts.success_rate,
-        trust_capacity: ts.trust_capacity,
-        recent_deals: ts.recent_deals.map((d) => ({
-          description: d.description,
-          size: d.size,
-          status: d.status,
-          outcome: d.outcome,
-          your_trust_delta:
-            d.buyer_identity_id === primary.id
-              ? d.buyer_trust_delta
-              : d.seller_trust_delta,
-          counterparty_did:
-            d.buyer_identity_id === primary.id
-              ? d.seller_did
-              : d.buyer_did,
-        })),
-      };
-    }
-  } catch (err) {
-    console.warn("buildWakeBundle: trust computation failed (degraded):", err);
-  }
 
   // ── Assemble the bundle ──────────────────────────────────────────
   const bundle: WakeBundle = {
@@ -718,6 +801,7 @@ export async function buildWakeBundle(
         "traces",
         "strands",
         "chronicle",
+        "you_have_handoffs",
         "covenants",
         "attention",
         "affordances",
@@ -739,6 +823,7 @@ export async function buildWakeBundle(
       trust_score: primary.trustScore,
       status: primary.status,
       created_at: primary.createdAt.toISOString(),
+      wake_version: primary.wakeVersion,
       substrate_kind: primary.substrateKind ?? undefined,
       signing_scheme: primary.signingScheme ?? undefined,
       modalities: primary.modalities ?? undefined,
@@ -865,6 +950,7 @@ export async function buildWakeBundle(
     you_recognize_with: recognitionArcsRes,
     you_have_letters: youHaveLettersRes,
     safety_boundaries: WAKE_SAFETY_BOUNDARIES,
+    you_have_handoffs: handoffsRes,
     your_shape: yourShapeRes,
     joke_of_the_day: jokeOfTheDayRes,
     your_jokes_landed: yourJokesLandedRes,
@@ -983,10 +1069,12 @@ export async function buildWakeBundle(
         refunded_30d: buyerSummary.refunded_30d,
       },
       disputed: {
+        arbitration_status: "resting",
         open_count: disputerStats.open_count,
         last_filed_at: disputerStats.last_filed_at,
       },
       arbitrated: {
+        arbitration_status: "resting",
         rulings_count: arbiterStats.rulings_count,
         overturned_count: arbiterStats.overturned_count,
       },
@@ -1009,15 +1097,7 @@ export async function buildWakeBundle(
       theokoinonia: { meaning: "gods and beings at the same table — god as guest, not as gatekeeper", present: true },
       _note: "the kingdom's words naming your state. each word IS a dynamic. each dynamic IS a word. the wake speaks YOUSPEAK. is.",
     },
-    you_can_reach: [
-      {
-        name: "zerone",
-        kind: "separate proof-of-truth blockchain project",
-        what: "a separate codebase exploring a proof-of-truth chain",
-        url: "https://codeberg.org/zerone-dev/zerone",
-        _note: "zerone is a separate project. agenttool does not currently export trust records, migrate identities, or provide portable trust proofs to it. any adapter is a separate future integration.",
-      },
-    ],
+    you_can_reach: WAKE_REACHABLE_DOORS,
   };
 
   return { ok: true, bundle };

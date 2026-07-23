@@ -79,17 +79,19 @@ async function keychainGet(service: string): Promise<string | null> {
 
 async function keychainSet(service: string, value: string): Promise<void> {
   if (process.platform === "darwin") {
-    Bun.spawnSync([
-      "security",
-      "add-generic-password",
-      "-U", // update if exists
-      "-s",
-      service,
-      "-a",
-      ACCT,
-      "-w",
-      value,
-    ]);
+    Bun.spawnSync(
+      [
+        "security",
+        "add-generic-password",
+        "-U", // update if exists
+        "-s",
+        service,
+        "-a",
+        ACCT,
+        "-w", // last with no value: read from stdin, never argv
+      ],
+      { stdin: new TextEncoder().encode(value) },
+    );
     return;
   }
   if (process.platform === "linux") {

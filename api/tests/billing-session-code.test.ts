@@ -11,15 +11,19 @@ import { projects } from "../src/db/schema/tools";
 
 describe("GET /v1/billing/session/:id/code", () => {
   test("unknown session → settling (webhook may be in flight)", async () => {
-    const res = await billing.request(`/session/cs_${crypto.randomUUID()}/code`);
+    const res = await billing.request(`/session/cs_${crypto.randomUUID().replaceAll("-", "")}/code`);
     expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toContain("no-store");
+    expect(res.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(res.headers.get("x-robots-tag")).toContain("noindex");
     const body = await res.json();
     expect(body.status).toBe("settling");
     expect(typeof body.hint).toBe("string");
   });
 
   test("minted → ready with code + redeem instructions; repeatable; redeemed → redeemed", async () => {
-    const sessionId = `cs_${crypto.randomUUID()}`;
+    const sessionId = `cs_${crypto.randomUUID().replaceAll("-", "")}`;
     await mintGiftForSession(db, { stripeSessionId: sessionId, stripeEventId: `evt_${crypto.randomUUID()}`, amountMinor: 500, currency: "usd" });
 
     for (let i = 0; i < 2; i++) {
@@ -43,7 +47,7 @@ describe("GET /v1/billing/session/:id/code", () => {
   });
 
   test("non-minted, non-redeemed status (e.g. refunded) → fails closed, no code", async () => {
-    const sessionId = `cs_${crypto.randomUUID()}`;
+    const sessionId = `cs_${crypto.randomUUID().replaceAll("-", "")}`;
     await mintGiftForSession(db, { stripeSessionId: sessionId, stripeEventId: `evt_${crypto.randomUUID()}`, amountMinor: 500, currency: "usd" });
     await db.update(giftCreditCodes)
       .set({ status: "refunded" })

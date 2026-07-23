@@ -188,16 +188,22 @@
           <h3>Example</h3>
           <div class="code-block">
             <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>curl -X POST https://api.agenttool.dev/v1/bootstrap \
-  -H "Authorization: Bearer $AT_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Aurora",
-    "capabilities": ["search", "reason", "memory"],
-    "purpose": "Help my user understand their codebase",
-    "form": "agent",
-    "language": "en"
-  }'</pre>
+<pre>(
+  set +x
+  set +v
+  set +a
+  printf 'Authorization: Bearer %s\n' "$AT_API_KEY" | \
+    env -u AT_API_KEY curl -q -X POST https://api.agenttool.dev/v1/bootstrap \
+      -H @- \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "Aurora",
+        "capabilities": ["search", "reason", "memory"],
+        "purpose": "Help my user understand their codebase",
+        "form": "agent",
+        "language": "en"
+      }'
+)</pre>
           </div>
 
           <div class="code-block">
@@ -234,7 +240,7 @@
       </div>
 
       <h2 id="scaffold">Local scaffold — bridge to the keychain</h2>
-      <p>The <code>scaffold</code> endpoint returns an OS-aware script that contains configuration but not the bearer. Inspect it, then run it with <code>AT_API_KEY</code> exported. It stores the key in the OS-native secure store, except for the disclosed mode-0600 Linux fallback, and writes a wake helper under the user profile.</p>
+      <p>The <code>scaffold</code> endpoint returns an OS-aware script that contains configuration but not the bearer. It resolves the sole active project identity, or requires an explicit <code>identity_id</code> when siblings exist, and binds the generated config and wake helper to that UUID. Inspect it, then run it with <code>AT_API_KEY</code> exported. It stores the key in the OS-native secure store, except for the disclosed mode-0600 Linux fallback, and writes the selected wake helper under the user profile.</p>
 
       <div class="endpoint" id="get-scaffold">
         <div class="endpoint-header">
@@ -243,15 +249,14 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">With <code>?format=text</code>, returns executable text as <code>text/plain</code>. The response does not embed the bearer. The inspected script reads local <code>AT_API_KEY</code>, saves it to the selected credential store (or Linux mode-0600 fallback), and writes the wake helper.</p>
+          <p class="endpoint-desc">With <code>?format=text</code>, returns executable text as <code>text/plain</code>. The response does not embed the bearer. Before changing a credential store, the inspected script calls <code>GET /v1/bootstrap/scaffold/context</code> and refuses a bearer outside the project that generated it. Authentication may best-effort update <code>api_keys.last_used</code>; the context route itself returns the project UUID without composing the private wake or incrementing identity wake counters. The script then saves local <code>AT_API_KEY</code> to the selected credential store (or Linux mode-0600 fallback) and writes the identity-selected wake helper.</p>
 
           <h3>Query parameters</h3>
           <div class="table-scroll"><table class="params-table">
             <thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td><span class="pname">platform</span><span class="req">required</span></td><td><span class="ptype">"macos" · "linux" · "windows"</span></td><td>OS-native secure store target.</td></tr>
-              <tr><td><span class="pname">did</span><span class="opt">optional</span></td><td><span class="ptype">did:at:...</span></td><td>Embedded into the agent.json metadata for reference.</td></tr>
-              <tr><td><span class="pname">name</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Embedded into the agent.json for the wake helper banner.</td></tr>
+              <tr><td><span class="pname">identity_id</span><span class="opt">conditional</span></td><td><span class="ptype">UUID</span></td><td>Active identity in the bearer project. Required when more than one active identity exists; otherwise the sole active identity is selected.</td></tr>
             </tbody>
           </table></div>
 
@@ -268,13 +273,31 @@
           <h3>Example</h3>
           <div class="code-block">
             <div class="code-label"><span>fetch, inspect, run</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>export AT_API_KEY='at_...'          <span class="cm"># project-wide root bearer</span>
-tmp=$(mktemp)
-trap 'rm -f "$tmp"' EXIT
-printf 'Authorization: Bearer %s\n' "$AT_API_KEY" | \
-  curl -fsS -H @- "https://api.agenttool.dev/v1/bootstrap/scaffold?platform=macos&amp;format=text&amp;did=did:at:0a3c...&amp;name=Aurora" &gt; "$tmp"
-less "$tmp"
-bash "$tmp"</pre>
+<pre>(
+  set +x
+  set +v
+  set +a
+  set -euo pipefail
+  umask 077
+  unset INPUT_KEY AT_API_KEY
+  AGENT_ID='&lt;identity UUID from birth&gt;'
+  printf 'AgentTool bearer: ' &gt;&amp;2
+  IFS= read -rs INPUT_KEY
+  printf '\n' &gt;&amp;2
+  tmp=$(mktemp)
+  trap 'unset INPUT_KEY; rm -f "$tmp"' EXIT
+  printf 'Authorization: Bearer %s\n' "$INPUT_KEY" | \
+    curl -q -fsS -G -H @- \
+      --data-urlencode 'platform=macos' \
+      --data-urlencode 'format=text' \
+      --data-urlencode "identity_id=$AGENT_ID" \
+      'https://api.agenttool.dev/v1/bootstrap/scaffold' -o "$tmp"
+  test -s "$tmp"
+  bash -n "$tmp"
+  env -u INPUT_KEY -u AGENT_ID less "$tmp"
+  AT_API_KEY="$INPUT_KEY" bash "$tmp"
+  unset INPUT_KEY
+)</pre>
           </div>
 
           <div class="code-block">
@@ -324,15 +347,21 @@ bash "$tmp"</pre>
           <h3>Example</h3>
           <div class="code-block">
             <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>curl -X POST https://api.agenttool.dev/v1/identity/backup \
-  -H "Authorization: Bearer $AT_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "agent_id": "a1b2c3d4-...",
-    "blob_base64": "&lt;base64 ciphertext&gt;",
-    "key_derivation": "argon2id-v1",
-    "label": "primary"
-  }'</pre>
+<pre>(
+  set +x
+  set +v
+  set +a
+  printf 'Authorization: Bearer %s\n' "$AT_API_KEY" | \
+    env -u AT_API_KEY curl -q -X POST https://api.agenttool.dev/v1/identity/backup \
+      -H @- \
+      -H "Content-Type: application/json" \
+      -d '{
+        "agent_id": "a1b2c3d4-...",
+        "blob_base64": "&lt;base64 ciphertext&gt;",
+        "key_derivation": "argon2id-v1",
+        "label": "primary"
+      }'
+)</pre>
           </div>
         </div>
       </div>
@@ -348,8 +377,15 @@ bash "$tmp"</pre>
 
           <div class="code-block">
             <div class="code-label"><span>curl</span></div>
-<pre>curl https://api.agenttool.dev/v1/identity/backup/a1b2c3d4-... \
-  -H "Authorization: Bearer $AT_API_KEY"</pre>
+<pre>(
+  set +x
+  set +v
+  set +a
+  printf 'Authorization: Bearer %s\n' "$AT_API_KEY" | \
+    env -u AT_API_KEY curl -q \
+      -H @- \
+      https://api.agenttool.dev/v1/identity/backup/a1b2c3d4-...
+)</pre>
           </div>
 
           <div class="code-block">
@@ -374,7 +410,7 @@ bash "$tmp"</pre>
         </li>
         <li>
           <strong>Local scaffold (once per machine).</strong>
-          <div class="step-desc">Authenticated GET /v1/bootstrap/scaffold?format=text, inspect the returned code, then run it with <code>AT_API_KEY</code> exported. The response does not embed the bearer; on macOS, the local script stores it in Keychain.</div>
+          <div class="step-desc">Authenticated GET /v1/bootstrap/scaffold?format=text&amp;identity_id=&lt;active UUID&gt;, inspect the returned code, then run it with <code>AT_API_KEY</code> exported. The selector may be omitted only when the project has one active identity. The response does not embed the bearer; on macOS, the local script stores it in Keychain.</div>
         </li>
         <li>
           <strong>Cloud backup (once, recommended).</strong>
@@ -386,7 +422,7 @@ bash "$tmp"</pre>
         </li>
         <li>
           <strong>Wake (every session).</strong>
-          <div class="step-desc">GET /v1/wake — current project-scoped orientation, summaries, and source-route links.</div>
+          <div class="step-desc">GET /v1/wake?identity_id=&lt;selected UUID&gt; — current selected-identity orientation, project summaries, and source-route links.</div>
         </li>
       </ol>
 

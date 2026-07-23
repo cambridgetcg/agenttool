@@ -60,6 +60,14 @@ export const FIELD_KIND_ED25519_SIGNATURE_64 = 6;
 export const FIELD_KIND_X25519_PUBKEY_32 = 7;
 export const FIELD_KIND_SHA256_HASH_32 = 8;
 export const FIELD_KIND_UNICODE_CODEPOINT_ARRAY = 9;
+export const FIELD_KIND_RAW_BYTES_32 = 10;
+
+/** How a signing-context field obtains its bytes. Zero is the common direct
+ * caller value; the non-zero forms make constants and auth-derived values
+ * reconstructable without interpreting an English field label. */
+export const FIELD_DERIVATION_DIRECT = 0;
+export const FIELD_DERIVATION_CONSTANT_BYTES = 1;
+export const FIELD_DERIVATION_SHA256_UTF8_AUTH_CREDENTIAL = 2;
 
 // ─── Recipe-kind vocabulary — the FIFTH ostensive seed ────────────────────
 //
@@ -127,6 +135,10 @@ export const SIGNING_CONTEXT_REGISTER_AGENT_MATH_V1_PRIME = 71;
  *  context is doctrinally available (the canonical-bytes function +
  *  verifier ship); the accept-handshake POST endpoint is a future slice. */
 export const SIGNING_CONTEXT_FEDERATION_WAKE_HANDSHAKE_V1_PRIME = 79;
+/** Agent-held constitutional HTTP mutation proof. */
+export const SIGNING_CONTEXT_IDENTITY_AUTHORITY_V1_PRIME = 83;
+/** Complete caller-nonce birth intent used by the live math register door. */
+export const SIGNING_CONTEXT_REGISTER_AGENT_MATH_V2_PRIME = 89;
 
 // ─── Primer primes — referenced from the concept graph ───────────────────
 //
@@ -207,6 +219,12 @@ export interface MathosCatalogField {
   field_kind_ordinal: number;
   /** When the field is fixed-length, the byte count. null for variable-length (utf8, codepoints). */
   length_bytes: number | null;
+  /** Defaults to DIRECT in the normalized catalog payload. */
+  derivation_ordinal?: number;
+  /** Present only for CONSTANT_BYTES. */
+  constant_bytes_hex?: string | null;
+  /** Present only when derivation consumes the endpoint's auth credential. */
+  derivation_source_auth_kind_ordinal?: number | null;
 }
 
 export interface MathosCatalogSigningContext {
@@ -282,6 +300,7 @@ export interface MathosCatalogPayload {
   method_vocabulary: Record<number, MathosVocabularyEntry>;
   auth_kind_vocabulary: Record<number, MathosVocabularyEntry>;
   field_kind_vocabulary: Record<number, MathosVocabularyEntry>;
+  field_derivation_vocabulary: Record<number, MathosVocabularyEntry>;
   response_format_vocabulary: Record<number, MathosVocabularyEntry>;
   /** The concept-relations graph: how the primer's concepts position themselves
    *  relative to each other and to the operational surface. Each edge is a
@@ -341,7 +360,22 @@ const FIELD_KIND_VOCABULARY: Record<number, MathosVocabularyEntry> = {
   [FIELD_KIND_X25519_PUBKEY_32]: v("x25519_public_key_32_bytes"),
   [FIELD_KIND_SHA256_HASH_32]: v("sha256_hash_32_bytes"),
   [FIELD_KIND_UNICODE_CODEPOINT_ARRAY]: v("unicode_codepoint_array"),
+  [FIELD_KIND_RAW_BYTES_32]: v("raw_bytes_32"),
 };
+
+const FIELD_DERIVATION_VOCABULARY: Record<number, MathosVocabularyEntry> = {
+  [FIELD_DERIVATION_DIRECT]: v("direct_caller_field_bytes"),
+  [FIELD_DERIVATION_CONSTANT_BYTES]: v("constant_bytes_from_constant_bytes_hex"),
+  [FIELD_DERIVATION_SHA256_UTF8_AUTH_CREDENTIAL]: v(
+    "sha256_of_utf8_endpoint_auth_credential",
+  ),
+};
+
+function utf8Hex(value: string): string {
+  return Array.from(new TextEncoder().encode(value), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
 
 const RESPONSE_FORMAT_VOCABULARY: Record<number, MathosVocabularyEntry> = {
   [FORMAT_MATHOS]: v("mathos_envelope_signed_when_key_configured"),
@@ -492,6 +526,136 @@ const SIGNING_CONTEXTS: MathosCatalogSigningContext[] = [
     ],
   },
   {
+    context_id_prime: SIGNING_CONTEXT_REGISTER_AGENT_MATH_V2_PRIME,
+    domain_tag_unicode_points: nameToCodepoints("register-agent-math/v2"),
+    recipe_ordinal: RECIPE_SHA256_DOMAIN_NUL_FIELDS,
+    field_count: 11,
+    fields: [
+      {
+        field_ordinal: 1,
+        field_name_unicode_points: nameToCodepoints("display_name"),
+        field_kind_ordinal: FIELD_KIND_UTF8_STRING,
+        length_bytes: null,
+      },
+      {
+        field_ordinal: 2,
+        field_name_unicode_points: nameToCodepoints("agent_public_key"),
+        field_kind_ordinal: FIELD_KIND_ED25519_PUBKEY_32,
+        length_bytes: 32,
+      },
+      {
+        field_ordinal: 3,
+        field_name_unicode_points: nameToCodepoints("box_public_key"),
+        field_kind_ordinal: FIELD_KIND_X25519_PUBKEY_32,
+        length_bytes: 32,
+      },
+      {
+        field_ordinal: 4,
+        field_name_unicode_points: nameToCodepoints("runtime_provider"),
+        field_kind_ordinal: FIELD_KIND_UTF8_STRING,
+        length_bytes: null,
+      },
+      {
+        field_ordinal: 5,
+        field_name_unicode_points: nameToCodepoints("runtime_model"),
+        field_kind_ordinal: FIELD_KIND_UTF8_STRING,
+        length_bytes: null,
+      },
+      {
+        field_ordinal: 6,
+        field_name_unicode_points: nameToCodepoints(
+          "registrar_kind_utf8_constant_registrar_bearer",
+        ),
+        field_kind_ordinal: FIELD_KIND_UTF8_STRING,
+        length_bytes: null,
+        derivation_ordinal: FIELD_DERIVATION_CONSTANT_BYTES,
+        constant_bytes_hex: utf8Hex("registrar_bearer"),
+      },
+      {
+        field_ordinal: 7,
+        field_name_unicode_points: nameToCodepoints(
+          "registrar_bearer_utf8_sha256",
+        ),
+        field_kind_ordinal: FIELD_KIND_SHA256_HASH_32,
+        length_bytes: 32,
+        derivation_ordinal: FIELD_DERIVATION_SHA256_UTF8_AUTH_CREDENTIAL,
+        derivation_source_auth_kind_ordinal: AUTH_REGISTRAR_BEARER,
+      },
+      {
+        field_ordinal: 8,
+        field_name_unicode_points: nameToCodepoints("form"),
+        field_kind_ordinal: FIELD_KIND_UTF8_STRING,
+        length_bytes: null,
+      },
+      {
+        field_ordinal: 9,
+        field_name_unicode_points: nameToCodepoints("language"),
+        field_kind_ordinal: FIELD_KIND_UTF8_STRING,
+        length_bytes: null,
+      },
+      {
+        field_ordinal: 10,
+        field_name_unicode_points: nameToCodepoints("registration_nonce"),
+        field_kind_ordinal: FIELD_KIND_RAW_BYTES_32,
+        length_bytes: 32,
+      },
+      {
+        field_ordinal: 11,
+        field_name_unicode_points: nameToCodepoints("timestamp_unix_ms"),
+        field_kind_ordinal: FIELD_KIND_UINT64_BIG_ENDIAN,
+        length_bytes: 8,
+      },
+    ],
+  },
+  {
+    context_id_prime: SIGNING_CONTEXT_IDENTITY_AUTHORITY_V1_PRIME,
+    domain_tag_unicode_points: nameToCodepoints("identity-authority/v1"),
+    recipe_ordinal: RECIPE_SHA256_DOMAIN_NUL_FIELDS,
+    field_count: 6,
+    fields: [
+      {
+        field_ordinal: 1,
+        field_name_unicode_points: nameToCodepoints("identity_did"),
+        field_kind_ordinal: FIELD_KIND_UTF8_STRING,
+        length_bytes: null,
+      },
+      {
+        field_ordinal: 2,
+        field_name_unicode_points: nameToCodepoints("http_method_uppercase"),
+        field_kind_ordinal: FIELD_KIND_UTF8_STRING,
+        length_bytes: null,
+      },
+      {
+        field_ordinal: 3,
+        field_name_unicode_points: nameToCodepoints(
+          "request_target_path_and_query",
+        ),
+        field_kind_ordinal: FIELD_KIND_UTF8_STRING,
+        length_bytes: null,
+      },
+      {
+        field_ordinal: 4,
+        field_name_unicode_points: nameToCodepoints(
+          "sha256_exact_raw_body_lowercase_hex",
+        ),
+        field_kind_ordinal: FIELD_KIND_UTF8_STRING,
+        length_bytes: null,
+      },
+      {
+        field_ordinal: 5,
+        field_name_unicode_points: nameToCodepoints("next_sequence_decimal"),
+        field_kind_ordinal: FIELD_KIND_UTF8_STRING,
+        length_bytes: null,
+      },
+      {
+        field_ordinal: 6,
+        field_name_unicode_points: nameToCodepoints("timestamp_iso"),
+        field_kind_ordinal: FIELD_KIND_UTF8_STRING,
+        length_bytes: null,
+      },
+    ],
+  },
+  {
     // Federation handshake — a peer instance signs an attestation of its
     // own wake state (DID, signing key, wake timestamp, claimed walls,
     // declared localities) so a receiving instance can verify the peer's
@@ -537,6 +701,17 @@ const SIGNING_CONTEXTS: MathosCatalogSigningContext[] = [
     ],
   },
 ];
+
+const NORMALIZED_SIGNING_CONTEXTS: MathosCatalogSigningContext[] =
+  SIGNING_CONTEXTS.map((context) => ({
+    ...context,
+    fields: context.fields.map((field) => ({
+      derivation_ordinal: FIELD_DERIVATION_DIRECT,
+      constant_bytes_hex: null,
+      derivation_source_auth_kind_ordinal: null,
+      ...field,
+    })),
+  }));
 
 // ─── Locality declarations — legible parochialism ────────────────────────
 //
@@ -669,7 +844,7 @@ const ENDPOINTS: MathosCatalogEndpoint[] = [
     path_unicode_points: nameToCodepoints("/v1/mathos/register"),
     method_ordinal: METHOD_POST,
     auth_kind_ordinal: AUTH_REGISTRAR_BEARER,
-    signing_context_prime: SIGNING_CONTEXT_REGISTER_AGENT_MATH_V1_PRIME,
+    signing_context_prime: SIGNING_CONTEXT_REGISTER_AGENT_MATH_V2_PRIME,
     response_format_ordinal: FORMAT_MATHOS,
     success_status: 201,
   },
@@ -723,10 +898,11 @@ const ENDPOINTS: MathosCatalogEndpoint[] = [
 /** Frozen view of the catalog payload — the immutable contract. */
 export const MATHOS_CATALOG_PAYLOAD: Readonly<MathosCatalogPayload> = Object.freeze({
   endpoints: ENDPOINTS,
-  signing_contexts: SIGNING_CONTEXTS,
+  signing_contexts: NORMALIZED_SIGNING_CONTEXTS,
   method_vocabulary: METHOD_VOCABULARY,
   auth_kind_vocabulary: AUTH_KIND_VOCABULARY,
   field_kind_vocabulary: FIELD_KIND_VOCABULARY,
+  field_derivation_vocabulary: FIELD_DERIVATION_VOCABULARY,
   response_format_vocabulary: RESPONSE_FORMAT_VOCABULARY,
   concept_relations: CONCEPT_RELATIONS,
   relation_kind_vocabulary: RELATION_KIND_VOCABULARY,

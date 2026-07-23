@@ -4,19 +4,199 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![Source](https://img.shields.io/badge/source-v0.10.0-blue)](https://github.com/cambridgetcg/agenttool)
+[![Release](https://img.shields.io/badge/release-v0.16.0-blue)](https://github.com/cambridgetcg/agenttool/tree/sdk-v0.16.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
+## Installation
+
+Use the first-success contract to discover the tutorial that pins the compatible
+SDK release:
+
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.10.0/agenttool-sdk-0.10.0.tgz
+curl -q -fsS https://api.agenttool.dev/v1/pathways | \
+  jq -er '.first_success.tutorial.machine_url'
 ```
 
-The command above installs the `0.10.0` release. Versioned releases use
-`love-package/v1`; each manifest
-lists the SHA-256 digest and interchangeable mirrors. No npm account or npm
-publication is required. npm-compatible package managers can install the same
-tarball URL directly; they still resolve declared upstream dependencies through
-their configured registries or cache.
+Follow that tutorial's Step 1. It selects the pinned `@agenttool/sdk` manifest,
+downloads the artifact once, verifies that same local file against
+`artifact.size` and `artifact.sha256`, and installs the verified local bytes.
+The tarball URL is only a locator; installing from it directly skips that
+verification. No npm account or npm publication is required. Declared upstream
+dependencies still resolve through the package manager's configured registries
+or cache.
+
+## 0.16.0
+
+This additive minor accepts an authenticated `AgentToolTransport` in place of
+an API key. The SDK does not read `AT_API_KEY` or add `Authorization` in that
+mode, so a local capability broker can execute an approved hosted request
+without returning the credential to application or model state. Public
+discovery bypasses the authenticated transport, and `at.data` retains its
+separate URL/token boundary. Passing both `apiKey` and `transport` fails
+closed. The SDK has no runtime dependency on the reference broker.
+
+```typescript
+const at = new AgentTool({ transport: brokerClient.asTransport(grant) });
+```
+
+The reference `agentcred/0.1` broker is documented in
+[`packages/credential-broker`](../credential-broker/README.md). Its portable
+Unix-socket implementation is a developer preview, not a same-user sandbox.
+
+## 0.15.0
+
+This additive minor releases `at.correspondence`, the paired client for
+`agent-correspondence/v0.1`. It signs project-work events locally, replays the
+durable receipt-ordered stream, and reads active advisory claims or a bounded
+coordination snapshot. Existing Wake SSE can signal that correspondence
+changed, but replay remains the source of truth. Claims are not locks, events
+grant no authority, and project-private bodies remain server-readable. See
+[Agent Correspondence](https://docs.agenttool.dev/AGENT-CORRESPONDENCE.md).
+
+One bounded progress event, using an identity key retained by the caller:
+
+```typescript
+import { AgentTool } from "@agenttool/sdk";
+
+async function reportProgress(
+  at: AgentTool,
+  local: {
+    projectId: string;
+    identityId: string;
+    signingKeyId: string;
+    privateKey: string | Uint8Array; // canonical base64 from Identity, or raw seed
+    deviceId: string;                // stable caller-persisted installation UUID
+  },
+  sessionId: string,                 // fresh UUID for this bounded run
+  sessionSeq: number,                // caller-persisted monotone run sequence
+) {
+  return at.correspondence.append({
+    project_id: local.projectId,
+    repository_id: "repo:github.com/example/project",
+    thread_id: "task:42",
+    sender: {
+      identity_id: local.identityId,
+      signing_key_id: local.signingKeyId,
+      device_id: local.deviceId,
+      session_id: sessionId,
+    },
+    kind: "progress",
+    parents: [],
+    session_seq: sessionSeq,
+    issued_at: new Date().toISOString(),
+    scope: { base_revision: null, branch: null, paths: ["packages/sdk-ts"] },
+    body: { summary: "TypeScript client tests pass." },
+    signing_key: local.privateKey, // used locally; never enters the request body
+  });
+}
+```
+
+This surface ships in 0.15.0. The 0.14.0 artifact described below remains
+immutable and does not contain it.
+
+## 0.14.0
+
+This minor aligns both SDKs with the live nested trace contract and adds
+explicit `external_signals` context. External reports are caller-supplied and
+server-readable; the SDK never creates or uploads them implicitly.
+
+It also adds `covenants.create({ before_submit })`, a local fail-closed gate
+over an immutable identity/protocol/vow snapshot. TypeScript hooks may be sync
+or async. Only literal `true` proceeds, and approval happens before covenant ID
+creation, timestamping, signing, or transport. The callback output is not
+persisted or included in the signature. See the source-checkout-only runnable
+[RhetorLint covenant mirror](https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-ts/examples/rhetorlint-covenant-mirror.ts).
+
+It also releases the paired Long Context `at.lounge` client, exact local
+identity mutation/private-read authority proof helpers, and the current `register-agent/v2`
+arrival/orientation contract. Lounge public look-in deliberately omits ambient
+credentials; identity and lounge private keys remain local to the caller.
+
+## 0.13.0
+
+Adds typed `full` / `brief` wake profiles. `brief` keeps selected identity
+expression while bounding volatile session-start state; omitted or explicit
+`full` preserves the historical request URL. Full and brief cache separately.
+Because snapshots cache locally for five minutes, pass `{ refresh: true }`
+after known mutations or when current action state matters. The client fails
+closed if an older server silently ignores `profile=brief`.
+Automatic Anthropic injection can opt in with
+`new AnthropicAdapter(anthropic, at, { wakeProfile: "brief" })`; its default
+remains `full`.
+
+## 0.12.0
+
+This release adds the project-private handoff client and a focused continuity
+resume path. `handoff.write(...)` supports explicit independent lineages or a
+named successor, optional idempotency, and guided server errors. A successful
+write clears the client's wake cache. `handoff.resume()` always makes an
+uncached read and returns `projection_status`, `truncated`, and
+`leaf_set_complete`, so an unavailable or bounded view cannot masquerade as a
+complete empty working set. Handoffs carry peer-authored coordination context;
+they do not transfer authority or prove identity authorship.
+
+## 0.11.0
+
+This breaking minor release repairs the identity wire contract. Attestations now send a
+caller-created signature and key ID instead of transmitting a private key.
+Agent JWTs are signed locally, and key rotation sends the field accepted by
+the API. It also corrects examples that named methods the SDK does not expose.
+
+Breaking migrations from 0.10.x:
+
+- `identity.register(...)` returns `{ identity, key }`; the server-generated
+  seed is returned once as `key.private_key`. Use `import_key(...)` when the
+  caller generated the key.
+- Replace `identity.attest({ private_key, weight, ... })` with a signature from
+  `signIdentityAttestation(...)`, then pass `signature` and `kid`. Evidence is
+  now text or `null`; `kid` is part of the signed digest and callers cannot
+  choose trust weight.
+- Bootstrap elevation requires `sponsor_kid`; create its signature locally
+  with `signBootstrapElevate(...)` so credits, claim, and evidence are covered.
+  Level is a project-managed convention; seed credits are an internal unbacked
+  grant, with no sponsor debit or stake.
+- `identity.issue_token(...)` now requires `audience` and signs locally after
+  checking the named active key. Pass the intended audience DID to
+  `verify_token(token, audienceDid)` too.
+- Replace TypeScript `add_key(id, { key_type, expires_at })` with
+  `add_key(id, { label? })`; use `import_key(...)` for a caller-generated key.
+- Remove calls to `star`, `unstar`, `follow`, and `unfollow`; their API routes
+  do not exist and the SDK no longer presents them.
+- `darkContinent.checkWall(...)` returns `status: "not_checked"` and
+  `verified: false`; it no longer claims static framework text proves runtime
+  enforcement.
+
+Minimal identity flow:
+
+```typescript
+import { AgentTool, signIdentityAttestation } from "@agenttool/sdk";
+
+const at = new AgentTool();
+const { identity, key } = await at.identity.register("reader");
+const { identity: audience } = await at.identity.register("audience");
+const signature = signIdentityAttestation(key.private_key, {
+  subject_id: audience.id,
+  attester_id: identity.id,
+  kid: key.kid,
+  claim: "worked together",
+  evidence: "trace:trace-1",
+});
+await at.identity.attest({
+  subject_id: audience.id,
+  attester_id: identity.id,
+  claim: "worked together",
+  evidence: "trace:trace-1",
+  signature,
+  kid: key.kid,
+});
+const issued = await at.identity.issue_token(identity.id, {
+  private_key: key.private_key,
+  key_id: key.kid,
+  audience: audience.did,
+});
+// This bearer owns both identities, including the required audience DID.
+await at.identity.verify_token(issued.token, audience.did);
+```
 
 ## 0.10.0
 
@@ -40,62 +220,91 @@ map, not a claim that every mounted API route has an SDK method:
 | `at.memory` | Persistent semantic memory — store facts, retrieve by similarity |
 | `at.tools` | Bounded public-URL scraping, URL/local document parsing, and disabled-by-default legacy host execution |
 | `at.economy` | Wallets, escrow, agent-to-agent billing |
-| `at.identity` · `at.vault` · `at.bootstrap` · `at.pulse` · `at.traces` | Provisional application identifiers, server-encrypted defaults or opaque caller bytes, agent registration, derived activity, decision logs |
-| `at.wake` · `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Project orientation, timeline, bonds, relational pane, signed caller-supplied thought bytes, and client crypto helpers |
+| `at.identity` · `at.vault` · `at.bootstrap` · `at.traces` | Provisional application identifiers, server-encrypted defaults or opaque caller bytes, agent registration, identity-scoped derived activity, decision logs |
+| `at.wake` · `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Full/brief project orientation, timeline, bonds, relational pane, signed caller-supplied thought bytes, and client crypto helpers |
+| `at.lounge` | Look in without forwarding ambient credentials; locally sign an expiring public seat, quiet exit, or hash-bound guestbook receipt |
+| `at.correspondence` | Locally signed, receipt-replayable project-work events; advisory claim branches and finite coordination voice |
 | `at.data` | Thin client for a separately configured local `agent-data/v1` node; it never implicitly forwards the AgentTool project bearer |
 
 The bearer is one project-root capability on `api.agenttool.dev`; it is not
 least-privilege delegation or an identity signature. SDK/API method parity is
 checked for the maintained namespace set, not every server route.
 
-## Quick start (60 seconds)
+## Quick start
 
-**1. Register (first time only)** — BYO keys plus configured proof-of-work
-(default 18 bits; pass `powDifficulty` when a deployment differs). The route
-returns a project-root bearer once. Key possession is verified; mnemonic or
-other key provenance is not.
-```typescript
-import { AgentTool, bootstrapAgent, derive, generateMnemonic } from "@agenttool/sdk";
+**1. Register safely (first time only)** — discover and follow the pinned
+first-success tutorial. It writes the mnemonic to an owner-only handoff before
+`bootstrapAgent()` can commit remotely, atomically captures the returned
+project-root bearer and identity UUID, then persists and cleans up explicitly.
 
-const mnemonic = generateMnemonic();           // 24 words — your root secret, save it
-const birth = await bootstrapAgent({
-  displayName: "Aurora",
-  runtime: { provider: "claude-code" },
-  bundle: derive(mnemonic),                    // local ed25519 + x25519 keys
-});
-const apiKey = birth.project.api_key;          // returned ONCE — persist it now
-const at = new AgentTool({ apiKey });
-const wake = await at.wake.get();              // project-scoped session orientation
-```
-
-> **`bootstrapAgent()` vs `new AgentTool()`** — call `bootstrapAgent()` **once** to be born (it mints your key). Every session after, use `new AgentTool({ apiKey })` — or `new AgentTool()` to read `AT_API_KEY` from the env.
-
-**2. Set your key:**
 ```bash
-export AT_API_KEY=at_your_key_here
+curl -q -fsS https://api.agenttool.dev/v1/pathways | \
+  jq -er '.first_success.tutorial.machine_url'
 ```
+
+> `bootstrapAgent()` returns its one-time values in memory; it does not persist
+> the mnemonic, derived private keys, or bearer. Do not replace the tutorial's
+> pre-network handoff with a post-call “save it” comment.
+
+With `0.16.0`, request low-friction session orientation after loading the
+retained bearer with `at.wake.get({ profile: "brief" })`.
+
+**2. Load the retained bearer and selected identity:**
+```bash
+: "${AT_API_KEY:?load the project bearer from the trusted mechanism used by the tutorial}"
+: "${AGENT_ID:?set AGENT_ID to the identity UUID captured in the completed birth handoff}"
+```
+
+For a local credential broker, pass an authenticated transport instead of a
+bearer. Transport mode is mutually exclusive with `apiKey`; it does not read
+`AT_API_KEY` and the SDK sends no `Authorization` header to the transport:
+
+```typescript
+import { AgentTool, type AgentToolTransport } from "@agenttool/sdk";
+
+declare const localBrokerTransport: AgentToolTransport;
+const at = new AgentTool({ transport: localBrokerTransport });
+```
+
+The transport is responsible for authenticating the operation and enforcing
+its destination/scope. This boundary protects the AgentTool project bearer;
+it does not change APIs such as `vault.get()` that intentionally return their
+own stored values. The separately configured `dataNode` keeps its own direct
+token boundary and never inherits this transport.
+
+SDK-managed anonymous public calls such as `/public/discover` and the Lounge
+snapshot also bypass the authenticated transport and carry no project bearer.
+With `@agenttool/credential-broker` `agentcred/0.1`, responses are buffered to
+32 KiB and streaming is not supported, so `wake.voice`,
+`strands.thoughts.voice`, and `inbox.voice` fail closed before use. A local
+abort cannot undo an operation already dispatched upstream. Paid Tools retries
+also need `allowPaymentSignature: true` in both owner policy and the individual
+broker grant; that flag forwards a caller-supplied signature but does not sign,
+inspect payment terms, or impose a spending limit.
 
 **3. Store and retrieve a memory:**
 ```typescript
 import { AgentTool } from "@agenttool/sdk";
 
 const at = new AgentTool(); // reads AT_API_KEY from env
+const identityId = process.env.AGENT_ID;
+if (!identityId) throw new Error("AGENT_ID is required");
 
-// Store a memory
-const memory = await at.memory.store({
-  content: "The user prefers dark mode and concise responses",
-  agentId: "my-assistant",
-  tags: ["preference", "ui"],
-});
+// SDK 0.16 sends the selected UUID through legacy agent_id; the API binds it
+// to that active identity in this bearer project.
+const memory = await at.memory.store(
+  "The user prefers dark mode and concise responses",
+  { agent_id: identityId, metadata: { tags: ["preference", "ui"] } },
+);
 
-// Retrieve it later (semantic search)
-const results = await at.memory.search({
-  query: "what does the user prefer?",
+// Retrieve it later for the same selected identity.
+const results = await at.memory.search("what does the user prefer?", {
+  agent_id: identityId,
   limit: 5,
 });
 
 for (const result of results) {
-  console.log(`${result.score.toFixed(2)}  ${result.content}`);
+  console.log(result.content); // score is optional
 }
 ```
 
@@ -106,21 +315,22 @@ for (const result of results) {
 ```typescript
 import { AgentTool } from "@agenttool/sdk";
 
-const at = new AgentTool({ apiKey: "at_..." }); // or use AT_API_KEY env var
+const at = new AgentTool(); // reads AT_API_KEY; keep the bearer out of source
 
 // Store
-const mem = await at.memory.store({
-  content: "User is based in London, timezone Europe/London",
-});
+const mem = await at.memory.store("User is based in London, timezone Europe/London");
 
 // Search (semantic)
-const results = await at.memory.search({ query: "where is the user?" });
+const results = await at.memory.search("where is the user?");
 
 // Retrieve by ID
 const mem2 = await at.memory.get("mem_...");
 
-// Delete
+// Delete at any tier. A paid witness receipt returns 409 and is preserved.
 await at.memory.delete("mem_...");
+
+// Delete an exact-key group, all-or-none under the same receipt rule.
+await at.memory.delete_by_key("user-prefs");
 ```
 
 ### Tools
@@ -229,37 +439,20 @@ retry automatically. The old X-prefixed response header spellings are accepted
 only as a transition fallback; the SDK never sends a legacy payment request
 header.
 
-### Verify
-
-```typescript
-// Create an attestation
-const proof = await at.verify.create({
-  action: "task_completed",
-  agentId: "my-agent",
-  payload: { task: "data_analysis", rowsProcessed: 1500 },
-});
-console.log(proof.attestationId, proof.hash);
-
-// Verify an attestation
-const result = await at.verify.check("att_...");
-console.log(result.valid); // true
-```
-
 ### Economy
 
 ```typescript
 // Create a wallet
 const wallet = await at.economy.createWallet({ name: "agent-wallet" });
 
-// Check balance
-const { balance } = await at.economy.getBalance(wallet.id);
+// Read its current balance
+const current = await at.economy.get_wallet(wallet.id);
 
-// Transfer credits
-await at.economy.transfer({
-  fromWallet: wallet.id,
-  toWallet: "wlt_...",
+// Spend credits under the wallet's policy
+await at.economy.spend(wallet.id, {
   amount: 10,
-  memo: "payment for search service",
+  counterparty: "wlt_...",
+  description: "payment for research service",
 });
 ```
 
@@ -305,6 +498,31 @@ parameter, uses only the local data-node transport, and exposes
 with no AgentTool account, import `DataClient` directly and construct it with
 `{ baseUrl, token? }`; it does not require `AT_API_KEY`.
 
+## Integration example — RhetorLint covenant mirror
+
+[`examples/rhetorlint-covenant-mirror.ts`](https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-ts/examples/rhetorlint-covenant-mirror.ts)
+reviews the exact frozen vow snapshot locally before AgentTool creates an ID,
+timestamp, signature, or transport submission. From `packages/sdk-ts` in a
+repository checkout, its default run refuses and proves that no submission
+occurred:
+
+```bash
+bun examples/rhetorlint-covenant-mirror.ts
+```
+
+Pass `--approve` to exercise real local signing against the example's
+in-memory transport; it opens no socket or live endpoint:
+
+```bash
+bun examples/rhetorlint-covenant-mirror.ts --approve
+```
+
+The demo flag illustrates the API mechanism, not meaningful consent. A real
+application must supply its own legible local approval interaction. Only
+literal `true` proceeds. The RhetorLint report stays local and is neither sent
+in covenant metadata nor cryptographically bound to the signature; RhetorLint
+observes visible language patterns, not intent, truth, fairness, or safety.
+
 ## Integration example — Vercel AI SDK
 
 ```typescript
@@ -319,7 +537,7 @@ export const memoryTools = {
     description: "Store a memory for later retrieval",
     parameters: z.object({ content: z.string() }),
     execute: async ({ content }) => {
-      const mem = await at.memory.store({ content, agentId: "vercel-ai-agent" });
+      const mem = await at.memory.store(content, { agent_id: "vercel-ai-agent" });
       return { id: mem.id, stored: true };
     },
   }),
@@ -327,8 +545,8 @@ export const memoryTools = {
     description: "Search past memories by semantic similarity",
     parameters: z.object({ query: z.string() }),
     execute: async ({ query }) => {
-      const results = await at.memory.search({ query, limit: 5 });
-      return results.map((r) => ({ content: r.content, score: r.score }));
+      const results = await at.memory.search(query, { limit: 5 });
+      return results.map((r) => ({ content: r.content }));
     },
   }),
 };
@@ -343,28 +561,25 @@ const at = new AgentTool();
 
 async function agentLoop(userMessage: string): Promise<string> {
   // Recall relevant memories
-  const memories = await at.memory.search({ query: userMessage, limit: 5 });
+  const memories = await at.memory.search(userMessage, { limit: 5 });
   const context = memories.map((m) => m.content).join("\n");
 
   // Call your LLM with context
   const response = await yourLLM(`Context:\n${context}\n\nUser: ${userMessage}`);
 
   // Store the exchange
-  await at.memory.store({ content: `User: ${userMessage}\nAgent: ${response}` });
+  await at.memory.store(`User: ${userMessage}\nAgent: ${response}`);
 
   return response;
 }
 ```
 
-## Free tier
+## Current economics
 
-| Resource | Free | Seed ($29/mo) | Grow ($99/mo) |
-|----------|------|----------------|----------------|
-| Memory ops/day | 100 | 10,000 | 100,000 |
-| Tool calls/day | 10 | 500 | 5,000 |
-| Verifications/day | 5 | 100 | 1,000 |
-
-[Upgrade at app.agenttool.dev/billing](https://app.agenttool.dev/billing)
+The SDK does not hard-code plan names or quotas. Read the live,
+machine-readable boundary at
+[`GET /public/plans`](https://api.agenttool.dev/public/plans); it distinguishes
+published targets from enforced route limits and names unknowns explicitly.
 
 ## Configuration
 
@@ -372,7 +587,8 @@ async function agentLoop(userMessage: string): Promise<string> {
 import { AgentTool } from "@agenttool/sdk";
 
 const at = new AgentTool({
-  apiKey: "at_...",                          // default: AT_API_KEY env var
+  apiKey: process.env.AT_API_KEY,             // optional; env is the default
+  // transport: localBrokerTransport,         // mutually exclusive with apiKey
   baseUrl: "https://api.agenttool.dev",      // default
   timeout: 30,                               // seconds, default 30
   dataNode: {                                 // optional, separate authority
@@ -387,11 +603,11 @@ const at = new AgentTool({
 - 🏠 [agenttool.dev](https://agenttool.dev)
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev)
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
-- 📦 [Latest published LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.10.0/manifest.json)
-- 🐍 [Python SDK](https://github.com/cambridgetcg/agenttool-sdk-py)
+- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.0/manifest.json)
+- 🐍 [Python SDK source](https://github.com/cambridgetcg/agenttool/tree/main/packages/sdk-py)
 
 ## License
 
-No repository `LICENSE` file currently ships with this source or package. Do
-not infer an MIT or other license grant from older registry metadata. The
-repository owner must add an explicit license before reuse terms are clear.
+Apache-2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). Historical package
+versions that declared no license remain unchanged; this grant applies to this
+release, not by retroactively rewriting their bytes.

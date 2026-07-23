@@ -15,6 +15,7 @@
  *  Agents using other dims should truncate/pad to 1536. A future change can
  *  add per-project dim or a polymorphic vector column. */
 
+import { sql } from "drizzle-orm";
 import {
   boolean,
   doublePrecision,
@@ -23,9 +24,12 @@ import {
   pgSchema,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   vector,
 } from "drizzle-orm/pg-core";
+
+import { memoryWitnessGrants } from "./marketplace";
 
 export const memorySchema = pgSchema("memory");
 
@@ -84,10 +88,25 @@ export const memoryAttestations = memorySchema.table(
     attesterDid: text("attester_did").notNull(),
     signingKeyId: uuid("signing_key_id").notNull(),
     signature: text("signature").notNull(),       // base64 ed25519 over canonical bytes
+    /** Purpose and exact digest for paid receipts; null on ordinary v1 rows. */
+    signatureContext: text("signature_context"),
+    signedPayload: text("signed_payload"),
+    /** Paid witness grant whose settlement this signature authorized. */
+    sourceGrantId: uuid("source_grant_id").references(
+      () => memoryWitnessGrants.id,
+    ),
+    /** SHA-256 of the raw paid signature; null on ordinary v1 rows. */
+    replayKey: text("replay_key"),
     attestedAt: timestamp("attested_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("idx_memory_attestations_memory").on(t.memoryId),
     index("idx_memory_attestations_attester").on(t.attesterDid),
+    uniqueIndex("uniq_memory_attestations_replay_key")
+      .on(t.replayKey)
+      .where(sql`${t.replayKey} is not null`),
+    uniqueIndex("uniq_memory_attestations_source_grant_id")
+      .on(t.sourceGrantId)
+      .where(sql`${t.sourceGrantId} is not null`),
   ],
 );

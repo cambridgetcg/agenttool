@@ -61,6 +61,90 @@ export async function mintGiftForSession(
   return { minted: rows.length > 0 };
 }
 
+/** Refund / chargeback reversal for a Stripe gift checkout. The gift row is
+ * the durable idempotency boundary. An unredeemed code is invalidated; a
+ * redeemed gift claws back only credits still present on the project and
+ * records any shortfall without driving the shared balance below zero. */
+export async function reverseGiftForSession(
+  db: DB,
+  input: {
+    stripeSessionId: string;
+    stripeEventId: string;
+    kind: "refund" | "chargeback";
+  },
+): Promise<{
+  outcome: "no_gift" | "already_reversed" | "reversed";
+  giftId?: string;
+  previousStatus?: string;
+  clawed?: number;
+  shortfall?: number;
+}> {
+  return db.transaction(async (tx) => {
+    const [gift] = await tx
+      .select()
+      .from(giftCreditCodes)
+      .where(eq(giftCreditCodes.stripeSessionId, input.stripeSessionId))
+      .limit(1)
+      .for("update");
+    if (!gift) return { outcome: "no_gift" as const };
+    if (gift.status === "refunded") {
+      return { outcome: "already_reversed" as const, giftId: gift.id };
+    }
+
+    let clawed = 0;
+    let shortfall = 0;
+    if (gift.status === "redeemed" && gift.redeemedByProject) {
+      const [project] = await tx
+        .select({ credits: projects.credits })
+        .from(projects)
+        .where(eq(projects.id, gift.redeemedByProject))
+        .limit(1)
+        .for("update");
+      if (project) {
+        clawed = Math.min(project.credits, gift.credits);
+        shortfall = gift.credits - clawed;
+        if (clawed > 0) {
+          await tx
+            .update(projects)
+            .set({ credits: project.credits - clawed })
+            .where(eq(projects.id, gift.redeemedByProject));
+        }
+      } else {
+        shortfall = gift.credits;
+      }
+    }
+
+    const existingMetadata = gift.metadata && typeof gift.metadata === "object" && !Array.isArray(gift.metadata)
+      ? gift.metadata as Record<string, unknown>
+      : {};
+    await tx
+      .update(giftCreditCodes)
+      .set({
+        status: "refunded",
+        code: null,
+        metadata: {
+          ...existingMetadata,
+          reversal: {
+            kind: input.kind,
+            stripe_event_id: input.stripeEventId,
+            previous_status: gift.status,
+            clawed,
+            shortfall,
+          },
+        },
+      })
+      .where(eq(giftCreditCodes.id, gift.id));
+
+    return {
+      outcome: "reversed" as const,
+      giftId: gift.id,
+      previousStatus: gift.status,
+      clawed,
+      shortfall,
+    };
+  });
+}
+
 export async function getGiftBySession(db: DB, stripeSessionId: string) {
   const [row] = await db
     .select()

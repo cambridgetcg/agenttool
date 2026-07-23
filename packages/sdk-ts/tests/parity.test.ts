@@ -197,10 +197,15 @@ describe("economy.create_escrow", () => {
       success: true,
       data: {
         id: "esc_1",
-        status: "pending",
+        status: "funded",
         amount: 100,
         description: "task",
-        creator_wallet_id: "wal_a",
+        creatorWallet: "wal_a",
+        workerWallet: "wal_b",
+        managedBy: null,
+        deadline: "2026-06-01T00:00:00.000Z",
+        releasedAt: null,
+        createdAt: "2026-05-01T00:00:00.000Z",
       },
     });
     const at = makeClient();
@@ -209,15 +214,49 @@ describe("economy.create_escrow", () => {
       amount: 100,
       description: "task",
       worker_wallet_id: "wal_b",
-      deadline: "2026-06-01",
+      deadline: "2026-06-01T00:00:00.000Z",
+      idempotency_key: "task-wal-a-wal-b-v1",
     });
     expect(e.id).toBe("esc_1");
-    expect(e.status).toBe("pending");
+    expect(e.status).toBe("funded");
     expect(e.creator_wallet_id).toBe("wal_a");
+    expect(e.worker_wallet_id).toBe("wal_b");
+    expect(e.managed_by).toBeNull();
+    expect(e.deadline).toBe("2026-06-01T00:00:00.000Z");
+    expect(e.released_at).toBeNull();
+    expect(e.created_at).toBe("2026-05-01T00:00:00.000Z");
     const b = bodyOf(getLastCall().init);
     expect(b.creatorWalletId).toBe("wal_a");
     expect(b.workerWalletId).toBe("wal_b");
-    expect(b.deadline).toBe("2026-06-01");
+    expect(b.deadline).toBe("2026-06-01T00:00:00.000Z");
+    expect(new Headers(getLastCall().init.headers).get("Idempotency-Key")).toBe(
+      "task-wal-a-wal-b-v1",
+    );
+  });
+
+  test("rejects an invalid idempotency key before sending", async () => {
+    setupMock(201, {});
+    const at = makeClient();
+
+    await expect(
+      at.economy.create_escrow({
+        creator_wallet_id: "wal_a",
+        amount: 100,
+        description: "task",
+        idempotency_key: "short",
+      }),
+    ).rejects.toThrow("visible ASCII characters without spaces");
+    expect(mockFetch).toHaveBeenCalledTimes(0);
+
+    await expect(
+      at.economy.create_escrow({
+        creator_wallet_id: "wal_a",
+        amount: 100,
+        description: "task",
+        idempotency_key: "contains space",
+      }),
+    ).rejects.toThrow("visible ASCII characters without spaces");
+    expect(mockFetch).toHaveBeenCalledTimes(0);
   });
 });
 
@@ -225,33 +264,58 @@ describe("economy.list_escrows", () => {
   test("supports status filter via query string", async () => {
     setupMock(200, {
       success: true,
-      data: [
-        { id: "esc_1", status: "active", amount: 50, description: "x", creator_wallet_id: "wal_a" },
-      ],
+      data: ["funded", "released", "refunded", "disputed"].map(
+        (status, index) => ({
+          id: `esc_${index}`,
+          status,
+          amount: 50,
+          description: "x",
+          creatorWallet: "wal_a",
+          workerWallet: null,
+          managedBy: null,
+          deadline: null,
+          releasedAt: status === "released" ? "2026-05-02T00:00:00.000Z" : null,
+          createdAt: "2026-05-01T00:00:00.000Z",
+        }),
+      ),
     });
     const at = makeClient();
-    const list = await at.economy.list_escrows({ status: "active" });
-    expect(list).toHaveLength(1);
-    expect(getLastCall().url).toContain("status=active");
+    const list = await at.economy.list_escrows({ status: "refunded" });
+    expect(list.map((escrow) => escrow.status)).toEqual([
+      "funded",
+      "released",
+      "refunded",
+      "disputed",
+    ]);
+    expect(list[0].creator_wallet_id).toBe("wal_a");
+    expect(list[0].worker_wallet_id).toBeNull();
+    expect(list[0].managed_by).toBeNull();
+    expect(getLastCall().url).toContain("status=refunded");
   });
 });
 
 describe("economy escrow lifecycle (accept/release/refund/dispute)", () => {
   const e = {
     id: "esc_x",
-    status: "active",
+    status: "funded",
     amount: 100,
     description: "x",
-    creator_wallet_id: "wal_a",
+    creatorWallet: "wal_a",
+    workerWallet: "wal_b",
+    managedBy: null,
+    deadline: null,
+    releasedAt: null,
+    createdAt: "2026-05-01T00:00:00.000Z",
   };
 
   test("accept_escrow POSTs workerWalletId", async () => {
-    setupMock(200, { ...e, status: "active" });
+    setupMock(200, e);
     const at = makeClient();
     await at.economy.accept_escrow("esc_x", "wal_b");
     const { url, init } = getLastCall();
     expect(url).toContain("/v1/escrows/esc_x/accept");
     expect(bodyOf(init).workerWalletId).toBe("wal_b");
+    expect(new Headers(init.headers).has("Idempotency-Key")).toBe(false);
   });
 
   test("release_escrow", async () => {

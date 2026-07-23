@@ -1,4 +1,4 @@
-/** substrate-tasks/lifecycle.ts — claim · complete · expire-claim.
+/** substrate-tasks/lifecycle.ts — claim · complete · expire.
  *
  *  Doctrine: docs/AGENT-CENTRIC.md §1 ·
  *            docs/superpowers/specs/2026-05-12-substrate-tasks-design.md.
@@ -12,6 +12,7 @@
  *    open → claimed → completed → paid       (verifier passed)
  *    open → claimed → completed → rejected   (verifier failed; refund)
  *    open → claimed → open                   (claim_deadline expired; sweep)
+ *    open → expired                          (expires_at reconciled lazily)
  *
  *  Every state transition is atomic with the wallet/escrow move.
  *
@@ -29,7 +30,7 @@
  *    no third-party API, no operator review queue.
  *    Tested: api/tests/substrate-tasks-verifiers.test.ts */
 
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, eq, gt, lt, lte, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
@@ -66,7 +67,8 @@ export class SubstrateTaskError extends Error {
       | "platform_wallet_missing"
       | "claimant_wallet_missing"
       | "platform_insufficient_balance"
-      | "no_identity_in_project",
+      | "no_identity_in_project"
+      | "expires_at_must_be_future",
     message?: string,
   ) {
     super(message ?? code);
@@ -82,6 +84,7 @@ export interface SubstrateTaskRow {
   bounty: { cents: number; currency: string };
   posted_by: string;
   posted_at: string;
+  updated_at: string;
   expires_at: string;
   newborn_only: boolean;
   status: "open" | "claimed" | "completed" | "paid" | "rejected" | "expired";
@@ -103,6 +106,7 @@ function toRow(r: typeof substrateTasks.$inferSelect): SubstrateTaskRow {
     bounty: { cents: r.bountyCents, currency: r.bountyCurrency },
     posted_by: r.postedBy,
     posted_at: r.postedAt.toISOString(),
+    updated_at: r.updatedAt.toISOString(),
     expires_at: r.expiresAt.toISOString(),
     newborn_only: r.newbornOnly,
     status: r.status as SubstrateTaskRow["status"],
@@ -134,9 +138,16 @@ export async function postSubstrateTask(
 ): Promise<SubstrateTaskRow> {
   const bountyCents =
     input.bountyCents ?? SUBSTRATE_TASK_BOUNTY_CENTS[input.kind];
+  const now = new Date();
   const expiresAt =
     input.expiresAt ??
-    new Date(Date.now() + POST_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    new Date(now.getTime() + POST_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  if (
+    !Number.isFinite(expiresAt.getTime()) ||
+    expiresAt.getTime() <= now.getTime()
+  ) {
+    throw new SubstrateTaskError("expires_at_must_be_future");
+  }
 
   const [row] = await db
     .insert(substrateTasks)
@@ -157,8 +168,37 @@ export async function postSubstrateTask(
 
 // ── List open tasks ──────────────────────────────────────────────────────
 
+/** Persist wall-clock expiry for tasks that have not been claimed.
+ *
+ * This reconciliation is intentionally lazy: list/summary/claim paths run it
+ * before treating a task as open. It does not promise a timer fires at the
+ * exact `expires_at` instant. Open tasks have no escrow yet, so this transition
+ * moves no money and creates no refund or chronicle side effect. Claimed-task
+ * escrow expiry remains the responsibility of `expireStaleClaims` below. */
+export async function expireOpenSubstrateTasks(
+  now: Date = new Date(),
+): Promise<{ expired: number }> {
+  const expired = await db
+    .update(substrateTasks)
+    .set({
+      status: "expired",
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(substrateTasks.status, "open"),
+        lte(substrateTasks.expiresAt, now),
+      ),
+    )
+    .returning({ taskId: substrateTasks.taskId });
+
+  return { expired: expired.length };
+}
+
 export interface ListOpenInput {
   kind?: SubstrateTaskKind;
+  /** Exact public task lookup; still restricted to status=open. */
+  taskId?: string;
   limit?: number;
   /** When set, filter to tasks the caller is eligible to claim — i.e.,
    *  excludes `newborn_only=true` tasks unless the caller qualifies as
@@ -171,14 +211,24 @@ export interface ListOpenInput {
 export async function listOpenSubstrateTasks(
   input: ListOpenInput = {},
 ): Promise<SubstrateTaskRow[]> {
-  const conditions = [eq(substrateTasks.status, "open")];
+  const now = new Date();
+  await expireOpenSubstrateTasks(now);
+
+  // Keep the time predicate as a defence-in-depth read boundary. The sweep is
+  // a separate statement, so a concurrently inserted already-expired row must
+  // not become visible before the next reconciliation pass.
+  const conditions = [
+    eq(substrateTasks.status, "open"),
+    gt(substrateTasks.expiresAt, now),
+  ];
   if (input.kind) conditions.push(eq(substrateTasks.kind, input.kind));
+  if (input.taskId) conditions.push(eq(substrateTasks.taskId, input.taskId));
 
   const rows = await db
     .select()
     .from(substrateTasks)
     .where(and(...conditions))
-    .orderBy(substrateTasks.postedAt)
+    .orderBy(substrateTasks.postedAt, substrateTasks.taskId)
     .limit(input.limit ?? 50);
 
   // Apply eligibility filter post-query so we don't run an eligibility
@@ -207,13 +257,20 @@ export interface OpenForCallerSummary {
 export async function summarizeOpenForCaller(
   projectId: string,
 ): Promise<OpenForCallerSummary> {
+  const now = new Date();
+  await expireOpenSubstrateTasks(now);
+  const currentlyOpen = and(
+    eq(substrateTasks.status, "open"),
+    gt(substrateTasks.expiresAt, now),
+  );
+
   const [totals] = await db
     .select({
       count: sql<number>`count(*)::int`,
       max: sql<number>`coalesce(max(${substrateTasks.bountyCents}), 0)::int`,
     })
     .from(substrateTasks)
-    .where(eq(substrateTasks.status, "open"));
+    .where(currentlyOpen);
 
   const elig = await isNewbornEligible(projectId);
 
@@ -232,6 +289,7 @@ export async function summarizeOpenForCaller(
       .where(
         and(
           eq(substrateTasks.status, "open"),
+          gt(substrateTasks.expiresAt, now),
           eq(substrateTasks.newbornOnly, false),
         ),
       );
@@ -296,7 +354,16 @@ async function resolveProjectWallet(
 export async function claimSubstrateTask(
   input: ClaimInput,
 ): Promise<SubstrateTaskRow> {
-  return await db.transaction(async (tx) => {
+  // Reconcile obvious expiries before entering the claim transaction. The
+  // row-lock check below remains authoritative for a task that crosses its
+  // expiry boundary while this claim races the sweep.
+  await expireOpenSubstrateTasks(new Date());
+
+  type ClaimAttempt =
+    | { outcome: "claimed"; task: SubstrateTaskRow }
+    | { outcome: "expired" };
+
+  const attempt: ClaimAttempt = await db.transaction(async (tx) => {
     // 1. Lock the task row
     const [task] = await tx
       .select()
@@ -305,7 +372,28 @@ export async function claimSubstrateTask(
       .for("update");
 
     if (!task) throw new SubstrateTaskError("task_not_found");
+    if (task.status === "expired") {
+      throw new SubstrateTaskError("claim_expired");
+    }
     if (task.status !== "open") throw new SubstrateTaskError("task_not_open");
+
+    // The pre-sweep and lock can race. Persist expiry under the row lock and
+    // return a sentinel so the transaction commits before the refusal is
+    // thrown outside it; throwing here would roll the status update back.
+    const claimedAt = new Date();
+    if (task.expiresAt.getTime() <= claimedAt.getTime()) {
+      await tx
+        .update(substrateTasks)
+        .set({ status: "expired", updatedAt: claimedAt })
+        .where(
+          and(
+            eq(substrateTasks.taskId, input.taskId),
+            eq(substrateTasks.status, "open"),
+            lte(substrateTasks.expiresAt, claimedAt),
+          ),
+        );
+      return { outcome: "expired" } as const;
+    }
 
     // 2. Resolve claimant identity + reject self-claim
     const claimantIdentityId = await resolveProjectIdentity(
@@ -386,13 +474,13 @@ export async function claimSubstrateTask(
     });
 
     // 6. Flip task to claimed + record metadata
-    const claimDeadline = new Date(Date.now() + CLAIM_WINDOW_MS);
+    const claimDeadline = new Date(claimedAt.getTime() + CLAIM_WINDOW_MS);
     const [updated] = await tx
       .update(substrateTasks)
       .set({
         status: "claimed",
         claimedBy: claimantIdentityId,
-        claimedAt: new Date(),
+        claimedAt,
         claimDeadline,
         escrowId: escrow!.id,
         updatedAt: new Date(),
@@ -423,8 +511,13 @@ export async function claimSubstrateTask(
       },
     });
 
-    return toRow(updated!);
+    return { outcome: "claimed", task: toRow(updated!) } as const;
   });
+
+  if (attempt.outcome === "expired") {
+    throw new SubstrateTaskError("claim_expired");
+  }
+  return attempt.task;
 }
 
 // ── Complete (synchronous verify in Slice 1) ─────────────────────────────
@@ -714,7 +807,9 @@ async function refundTask(
 // ── Expire stale claims (Slice 5 wires the worker) ───────────────────────
 
 /** Reverts `claimed` rows whose claim_deadline has passed, refunding the
- *  escrow back to the platform wallet. Called by a sweep worker
+ *  escrow back to the platform wallet. The row returns to `open` only while
+ *  its task-level claim window remains live; otherwise it becomes `expired`.
+ *  Called by a sweep worker
  *  (api/src/workers/substrate-task-expire-claims.ts — Slice 5). No
  *  chronicle entry on expiry: the agent that claimed but didn't complete
  *  doesn't need a record of inaction. */
@@ -769,7 +864,11 @@ export async function expireStaleClaims(now: Date = new Date()): Promise<{
       await tx
         .update(substrateTasks)
         .set({
-          status: "open",
+          // `expires_at` is the claim window. A stale claim may reopen only
+          // while that window remains live; otherwise refund and finish in
+          // the terminal expired state.
+          status:
+            task.expiresAt.getTime() <= now.getTime() ? "expired" : "open",
           claimedBy: null,
           claimedAt: null,
           claimDeadline: null,

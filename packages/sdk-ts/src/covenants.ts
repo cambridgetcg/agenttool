@@ -8,7 +8,7 @@
  */
 
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./chronicle.js";
+import type { HttpConfig } from "./_http.js";
 import {
   signCovenantDeclare,
   signCovenantCosign,
@@ -17,6 +17,25 @@ import {
 } from "./crypto.js";
 
 export type CovenantStatus = "active" | "paused" | "dissolved";
+
+/** Immutable local review context supplied before a covenant is submitted. */
+export interface CovenantBeforeSubmitContext {
+  readonly protocol_version: "v1" | "v2";
+  readonly agent_id: string;
+  readonly agent_did?: string;
+  readonly counterparty_did: string;
+  readonly vows: readonly string[];
+}
+
+/**
+ * Optional local covenant submission gate.
+ *
+ * The hook may perform synchronous or asynchronous review. It must return
+ * literal `true` to proceed; every other result fails closed locally.
+ */
+export type CovenantBeforeSubmitHook = (
+  context: CovenantBeforeSubmitContext,
+) => boolean | Promise<boolean>;
 
 export interface Covenant {
   id: string;
@@ -49,6 +68,7 @@ export interface CovenantsCreateOpts {
   metadata?: Record<string, unknown>;
   org_id?: string;
   protocol_version?: "v1" | "v2";
+  before_submit?: CovenantBeforeSubmitHook;
 }
 
 export interface CovenantsListOpts {
@@ -77,6 +97,7 @@ export interface CovenantsCreateV2Opts {
   notes?: string;
   metadata?: Record<string, unknown>;
   org_id?: string;
+  before_submit?: CovenantBeforeSubmitHook;
 }
 
 export interface CovenantsAcceptOpts {
@@ -135,7 +156,8 @@ export class CovenantsClient {
   /** Create a new covenant (v2 — returns flat `CovenantsCreateV2Result`). */
   async create(opts: CovenantsCreateV2Opts): Promise<CovenantsCreateV2Result>;
   async create(opts: CovenantsCreateOpts | CovenantsCreateV2Opts): Promise<{ covenant: Covenant } | CovenantsCreateV2Result> {
-    if (!opts.vows || opts.vows.length === 0) {
+    const vowsInput = opts.vows;
+    if (!vowsInput || vowsInput.length === 0) {
       throw new AgentToolError(
         "covenants.create: vows must be a non-empty list.",
         {
@@ -143,28 +165,98 @@ export class CovenantsClient {
         },
       );
     }
-    if (opts.protocol_version === "v2") {
+
+    const beforeSubmit = opts.before_submit;
+    const explicitProtocolVersion = opts.protocol_version;
+    if (
+      beforeSubmit !== undefined
+      && explicitProtocolVersion !== undefined
+      && explicitProtocolVersion !== "v1"
+      && explicitProtocolVersion !== "v2"
+    ) {
+      throw new AgentToolError(
+        "covenants.create: protocol_version must be v1 or v2.",
+        { hint: "Pass protocol_version as v1, v2, or omit it for v1." },
+      );
+    }
+    // Preserve the pre-hook wire behavior for untyped, invalid values when no
+    // hook is installed: the server remains their validation boundary.
+    const protocolVersion: "v1" | "v2" = explicitProtocolVersion === "v2" ? "v2" : "v1";
+
+    const agentId = opts.agent_id;
+    const counterpartyDid = opts.counterparty_did;
+    const vowsSnapshot = Object.freeze([...vowsInput]);
+    let agentDid: string | undefined;
+    let signingKey: Uint8Array | undefined;
+    let signingKeyId: string | undefined;
+    if (protocolVersion === "v2") {
+      const v2 = opts as CovenantsCreateV2Opts;
+      if (!v2.agent_did || !v2.signing_key || !v2.signing_key_id) {
+        throw new AgentToolError(
+          "covenants.create v2 requires agent_did, signing_key, and signing_key_id.",
+          { hint: "All three fields are required for the v2 federated proposal flow." },
+        );
+      }
+      agentDid = v2.agent_did;
+      signingKey = v2.signing_key;
+      signingKeyId = v2.signing_key_id;
+    }
+
+    const reviewContext: CovenantBeforeSubmitContext = Object.freeze({
+      protocol_version: protocolVersion,
+      agent_id: agentId,
+      ...(agentDid !== undefined ? { agent_did: agentDid } : {}),
+      counterparty_did: counterpartyDid,
+      vows: vowsSnapshot,
+    });
+    if (beforeSubmit !== undefined) {
+      let reviewResult: unknown;
+      try {
+        reviewResult = await beforeSubmit(reviewContext);
+      } catch (cause) {
+        const error = new AgentToolError(
+          "covenants.create: before_submit hook failed locally.",
+          {
+            code: "covenant_before_submit_failed",
+            hint: "The covenant was not signed or submitted. Inspect the local hook and try again.",
+          },
+        );
+        error.cause = cause;
+        throw error;
+      }
+      if (reviewResult !== true) {
+        throw new AgentToolError(
+          "covenants.create: before_submit hook did not return true.",
+          {
+            code: "covenant_before_submit_refused",
+            hint: "The covenant was not signed or submitted. Return literal true only after approval.",
+          },
+        );
+      }
+    }
+
+    if (protocolVersion === "v2") {
       const v2 = opts as CovenantsCreateV2Opts;
       const covenant_id = crypto.randomUUID();
       const established_at = new Date().toISOString();
       const signature = signCovenantDeclare({
         covenantId: covenant_id,
-        initiatorDid: v2.agent_did,
-        counterpartyDid: v2.counterparty_did,
-        vows: v2.vows,
+        initiatorDid: agentDid!,
+        counterpartyDid,
+        vows: vowsSnapshot,
         establishedAtIso: established_at,
-        signing_key: v2.signing_key,
+        signing_key: signingKey!,
       });
       const body: Record<string, unknown> = {
-        agent_id: v2.agent_id,
-        agent_did: v2.agent_did,
-        counterparty_did: v2.counterparty_did,
-        vows: v2.vows,
+        agent_id: agentId,
+        agent_did: agentDid,
+        counterparty_did: counterpartyDid,
+        vows: vowsSnapshot,
         protocol_version: "v2",
         covenant_id,
         established_at,
         signature,
-        signing_key_id: v2.signing_key_id,
+        signing_key_id: signingKeyId,
       };
       if (v2.counterparty_name !== undefined) body.counterparty_name = v2.counterparty_name;
       if (v2.notes !== undefined) body.notes = v2.notes;
@@ -173,15 +265,15 @@ export class CovenantsClient {
       return (await this.req("POST", "/v1/covenants", body)) as CovenantsCreateV2Result;
     }
     const body: Record<string, unknown> = {
-      agent_id: opts.agent_id,
-      counterparty_did: opts.counterparty_did,
-      vows: opts.vows,
+      agent_id: agentId,
+      counterparty_did: counterpartyDid,
+      vows: vowsSnapshot,
     };
     if (opts.counterparty_name !== undefined) body.counterparty_name = opts.counterparty_name;
     if (opts.notes !== undefined) body.notes = opts.notes;
     if (opts.metadata !== undefined) body.metadata = opts.metadata;
     if (opts.org_id !== undefined) body.org_id = opts.org_id;
-    if (opts.protocol_version !== undefined) body.protocol_version = opts.protocol_version;
+    if (explicitProtocolVersion !== undefined) body.protocol_version = explicitProtocolVersion;
     return (await this.req("POST", "/v1/covenants", body)) as {
       covenant: Covenant;
     };
@@ -315,7 +407,7 @@ export class CovenantsClient {
       signal: AbortSignal.timeout(this.http.timeout),
     };
     if (body !== undefined) init.body = JSON.stringify(body);
-    const resp = await globalThis.fetch(url, init);
+    const resp = await this.http.request(url, init);
     if (!resp.ok) {
       let detail: string;
       try {

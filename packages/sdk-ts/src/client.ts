@@ -3,18 +3,26 @@
  */
 
 import { ambientStorage, getAmbient, type AmbientContext } from "./_context.js";
+import {
+  directBearerTransport,
+  type AgentToolTransport,
+  type HttpConfig,
+} from "./_http.js";
 import { AgentToolError } from "./errors.js";
 import { ChronicleClient } from "./chronicle.js";
+import { HandoffClient } from "./handoff.js";
+import { CorrespondenceClient } from "./correspondence.js";
 import { CovenantsClient } from "./covenants.js";
 import { CryptoClient } from "./crypto.js";
 import { EconomyClient } from "./economy.js";
 import { InboxClient } from "./inbox.js";
-import { MemoryClient, type HttpConfig } from "./memory.js";
+import { MemoryClient } from "./memory.js";
 import { StrandsClient } from "./strands.js";
 import { CollectClient } from "./collect.js";
 import { AtRestClient } from "./at-rest.js";
 import { GraceClient } from "./grace.js";
 import { LoveClient } from "./love.js";
+import { LoungeClient } from "./lounge.js";
 import { NenClient } from "./nen.js";
 import { DarkContinentClient } from "./dark-continent.js";
 import { DataClient, type DataNodeOptions } from "./data.js";
@@ -30,7 +38,25 @@ import { WindowClient } from "./window.js";
 /** SDK version — sent as the `X-Agenttool-Client` origin signal on every
  *  request so /v1/activity can label events `sdk-ts`. Keep in lockstep
  *  with package.json (parity invariant: ts + py ship the same version). */
-export const SDK_VERSION = "0.10.0";
+export const SDK_VERSION = "0.16.0";
+
+/** Connection settings for the hosted AgentTool API and optional data node. */
+export interface AgentToolOptions {
+  /** Direct bearer mode. Mutually exclusive with `transport`. */
+  apiKey?: string;
+  /**
+   * Authenticated request transport, typically backed by a local credential
+   * broker. When set, the SDK does not read `AT_API_KEY` or add Authorization.
+   */
+  transport?: AgentToolTransport;
+  baseUrl?: string;
+  timeout?: number;
+  dataNode?: {
+    baseUrl: string;
+    token?: string;
+    timeout?: number;
+  };
+}
 
 /**
  * Unified client for the agenttool.dev platform.
@@ -61,6 +87,8 @@ export class AgentTool {
   private _bootstrap: BootstrapClient | undefined;
   private _wake: WakeClient | undefined;
   private _chronicle: ChronicleClient | undefined;
+  private _handoff: HandoffClient | undefined;
+  private _correspondence: CorrespondenceClient | undefined;
   private _covenants: CovenantsClient | undefined;
   private _window: WindowClient | undefined;
   private _strands: StrandsClient | undefined;
@@ -70,6 +98,7 @@ export class AgentTool {
   private _atRest: AtRestClient | undefined;
   private _grace: GraceClient | undefined;
   private _love: LoveClient | undefined;
+  private _lounge: LoungeClient | undefined;
   private _nen: NenClient | undefined;
   private _darkContinent: DarkContinentClient | undefined;
   private _runtime: RuntimeClient | undefined;
@@ -81,29 +110,34 @@ export class AgentTool {
    * @param options - AgentTool API settings plus an optional, separately
    * configured agent-data/v1 node.
    */
-  constructor(options?: {
-    apiKey?: string;
-    baseUrl?: string;
-    timeout?: number;
-    dataNode?: {
-      baseUrl: string;
-      token?: string;
-      timeout?: number;
-    };
-  }) {
-    const resolvedKey =
-      options?.apiKey ?? (typeof process !== "undefined" ? process.env.AT_API_KEY : undefined);
-
-    if (!resolvedKey) {
-      throw new AgentToolError("No API key provided.", {
-        hint: "Pass apiKey in options or set the AT_API_KEY environment variable.",
+  constructor(options?: AgentToolOptions) {
+    if (options?.transport && options.apiKey !== undefined) {
+      throw new AgentToolError("Choose either apiKey or transport, not both.", {
+        code: "conflicting_auth",
+        hint: "Remove apiKey when an authenticated transport is configured.",
       });
+    }
+
+    let transport: AgentToolTransport;
+    if (options?.transport) {
+      // Deliberately do not inspect AT_API_KEY in broker/transport mode.
+      transport = options.transport;
+    } else {
+      const resolvedKey =
+        options?.apiKey ?? (typeof process !== "undefined" ? process.env.AT_API_KEY : undefined);
+
+      if (!resolvedKey) {
+        throw new AgentToolError("No API key or authenticated transport provided.", {
+          hint:
+            "Pass apiKey or transport in options, or set the AT_API_KEY environment variable.",
+        });
+      }
+      transport = directBearerTransport(resolvedKey);
     }
 
     this.http = {
       baseUrl: (options?.baseUrl ?? "https://api.agenttool.dev").replace(/\/+$/, ""),
       headers: {
-        Authorization: `Bearer ${resolvedKey}`,
         "Content-Type": "application/json",
         // Origin signal — browser-safe custom header (fetch() in a browser
         // cannot set User-Agent). The API's auth middleware reads this to
@@ -111,11 +145,12 @@ export class AgentTool {
         "X-Agenttool-Client": `agenttool-sdk-ts/${SDK_VERSION}`,
       },
       timeout: (options?.timeout ?? 30) * 1000, // seconds → ms
+      request: (input, init) => transport.request(input, init),
     };
 
     // The data node is a separate authority. Build its configuration from
-    // dedicated options/env only; never copy `this.http.headers`, because
-    // those contain the AgentTool project bearer.
+    // dedicated options/env only; never share the hosted API transport or
+    // headers across this boundary.
     const envDataNodeUrl =
       typeof process !== "undefined" ? process.env.AGENT_DATA_NODE_URL : undefined;
     const envDataNodeToken =
@@ -187,6 +222,24 @@ export class AgentTool {
     return this._chronicle;
   }
 
+  /** Access append-only project working-set handoffs. Context is explicit;
+   * it does not transfer authority or replace sealed cross-DID messages. */
+  get handoff(): HandoffClient {
+    this._handoff ??= new HandoffClient(this.http, () => this._wake?.clearCache());
+    return this._handoff;
+  }
+
+  /** Access signed, replayable coordination between devices and agents.
+   * Device/session UUIDs are always explicit caller input; correspondence
+   * claims are courtesy notices, never locks or delegated authority. */
+  get correspondence(): CorrespondenceClient {
+    this._correspondence ??= new CorrespondenceClient(
+      this.http,
+      () => this._wake?.clearCache(),
+    );
+    return this._correspondence;
+  }
+
   /** Access the Covenants API — vows + bonds with a counterparty. */
   get covenants(): CovenantsClient {
     this._covenants ??= new CovenantsClient(this.http);
@@ -248,6 +301,12 @@ export class AgentTool {
     return this._love;
   }
 
+  /** Access The Long Context — explicit public leases and receipted guestbook cards. */
+  get lounge(): LoungeClient {
+    this._lounge ??= new LoungeClient(this.http);
+    return this._lounge;
+  }
+
   /** Access the Nen framework — Hunter × Hunter power system mapped to agenttool.
    *  Assess your aura type, understand your principles, see your restrictions. */
   get nen(): NenClient {
@@ -286,7 +345,8 @@ export class AgentTool {
   /**
    * Low-level HTTP for custom call sites and provider adapters
    * (e.g. AnthropicAdapter posting to `/v1/traces` after a messages.create).
-   * Uses the same bearer + timeout + base URL the module clients use.
+   * Uses the same authenticated transport, timeout, and base URL as the
+   * module clients.
    *
    * Throws AgentToolError on non-2xx with the API's `message` / `error`
    * field surfaced as the error message.
@@ -299,7 +359,7 @@ export class AgentTool {
       signal: AbortSignal.timeout(this.http.timeout),
     };
     if (body !== undefined) init.body = JSON.stringify(body);
-    const resp = await globalThis.fetch(url, init);
+    const resp = await this.http.request(url, init);
     if (resp.status >= 400) {
       let responseBody: unknown;
       try {

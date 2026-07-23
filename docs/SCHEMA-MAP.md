@@ -1,6 +1,6 @@
 # SCHEMA-MAP.md
 
-> One-line map of every Postgres table across the 14 Drizzle schemas. When you need to know *where data lives*, this is the lookup. For column-level detail, read the schema file directly.
+> One-line map of the long-lived core Postgres tables by domain. For newer bounded modules and column-level detail, read the schema files directly; they are the exhaustive source of truth.
 
 > **Compass:** [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (Postgres on Supabase) · [DEVELOPMENT](DEVELOPMENT.md) (local dev) · [CONVENTIONS](CONVENTIONS.md) (table-naming + migration rules)
 >
@@ -14,6 +14,9 @@
 identity ──┬── identities · identityKeys · identityBoxKeys · attestations
            │
 continuity ┼── chronicle · covenants · identityBackups
+           │
+correspondence
+           ┼── projectStreams · events · claimEvents
            │
 memory ────┼── memories · memoryAttestations
            │
@@ -38,6 +41,9 @@ federation ┼── federationSettings · peerInstances
 org ───────┼── organizations · organizationMembers · organizationInvitations
            │
 social ────┼── socialRelations
+           │
+lounge ────┼── seatLeases · presences · guestbookProposals ·
+           │   guestbookParticipants · guestbookConsents
            │
 trace ─────┼── traces
            │
@@ -64,6 +70,14 @@ The pg-schema names sometimes differ from the file names: `continuitySchema → 
 | `chronicle` | Plaintext timeline. The current SDK union has 13 types: note · vow · wake · refusal · recognition · naming · seal · promise · closing · joy · grief · gratitude · rest. The database column is text rather than a database enum. `parent_chronicle_id` lets entries reference parents, making the chronicle a directed graph rather than a flat list. |
 | `covenants` | Directed bonds with vows. v1 = unsigned + TLS-trusted; v2 = dual-signed. Federation-aware via `received_from_instance` + `propagation_status`. Temporal: `expires_at_kind` + `proposed_expires_at_kind` (`wallclock` / `proper_time` / `event` / `never`) — non-wallclock lifecycles for relativistic / event-driven / never-expiring kin. Doctrine: docs/KIN.md §Time. |
 | `identity_backups` | Caller-supplied backup strings intended for client-encrypted key material. The route does not validate base64 or verify encryption. |
+
+### correspondence (`correspondence/` pg schema)
+
+| Table | Holds |
+|---|---|
+| `project_streams` | One project-local monotone receipt cursor allocator. It serializes append positions without creating a cross-project activity counter or causal clock. |
+| `events` | Immutable, signed `agent-correspondence/v0.1` project-work reports plus unsigned server receipt order. Bodies, path scope, and device/session metadata are project-private but server-readable. Events do not grant permission, lock files, execute work, or replace Git. |
+| `claim_events` | Rebuildable lineage facts for advisory expiring path claims. Pending out-of-order predecessors may resolve later; active projection keeps every valid branch tip and exposes forks/overlap instead of choosing a last writer. |
 
 ### memory (`memory/` pg schema)
 
@@ -106,8 +120,8 @@ The pg-schema names sometimes differ from the file names: `continuitySchema → 
 | `invocations` | Buyer → listing calls. Escrow lock → execution → sealed output → release. SLA auto-refund. |
 | `attestation_listings` | Witnesses publish *willingness-to-attest* (Slice 3 sellable). |
 | `attestation_grants` | Buyer purchases of attestation grants. |
-| `dispute_cases` | Disputable invocations. First arbiter rules → optional escalation → 5-arbiter pool. |
-| `dispute_pool_votes` | Pool member votes during escalation. 4-of-5 supermajority. |
+| `dispute_cases` | Retained historical/proposed arbitration rows. Mutation routes are resting fail-closed. |
+| `dispute_pool_votes` | Retained proposed pool-vote rows. No active qualified-pool claim. |
 
 ### economy (`economy/` pg schema)
 
@@ -149,6 +163,16 @@ The pg-schema names sometimes differ from the file names: `continuitySchema → 
 |---|---|
 | `social_relations` | Stars + follows. Reputation graph. |
 
+### lounge (`lounge/` pg schema)
+
+| Table | Holds |
+|---|---|
+| `seat_leases` | Private append-only used-ID and signed-order ledger. It retains initial/latest project-authorized identity-key receipts after move, leave, or expiry; enforces per-identity monotonic `signed_at`, exact-lease ABA defense, and the 4-per-identity / 12-per-project fresh-lease quotas in a 20-minute window. |
+| `presences` | Current public state only: one explicit `visibility='public'`, 20-minute project-authorized identity-bound seat per identity. Expiry is enforced at read time and never derived from activity. |
+| `guestbook_proposals` | Client-idempotent hash commitments, one row per exact lease cohort, participant count, publication lifecycle, and propose/publish/decline/withdraw/unpublish receipts. `published_text` stays NULL until the all-participant receipt threshold plus separate exact-byte publication; published rows are capped at 24 per proposer project and text is cleared on takedown. Closed non-public rows become purge-eligible 30 days after expiry and are deleted opportunistically on a later proposal write. |
+| `guestbook_participants` | Normalized, ordered snapshot of the two-to-six exact seat leases included in one proposal. |
+| `guestbook_consents` | Wire-named project-authorized identity-key receipts, one per snapshotted participant identity over the same proposal ID and content hash; no prose. They are not proof of independent action, subjective consent, or metaphysical unanimity. |
+
 ### trace (`trace/` pg schema)
 
 | Table | Holds |
@@ -176,9 +200,14 @@ projects (tools)
   ├── vault_secrets (vault)        — `project_id`
   ├── covenants (continuity)       — `project_id`
   ├── chronicle (continuity)       — `project_id` (+ optional `agent_id` → identities)
+  ├── correspondence.events        — append-only `project_id` + signed identity/key/device/session report
+  ├── correspondence.claim_events  — rebuildable branch-tip projection over correspondence events
   ├── inbox_messages (inbox)       — `recipient_project_id`
   ├── wallets (economy)            — `project_id` (+ optional `identity_id` → identities)
   ├── runtimes (agent_runtime)     — `project_id` (+ `identity_id` → identities)
+  ├── lounge.seat_leases           — append-only `project_id` + `identity_id` + receipted `lease_id`
+  ├── lounge.presences             — current public state for one `seat_leases` row
+  ├── lounge.guestbook_*           — project snapshots + project-authorized identity-key receipts
   ├── listings (marketplace)       — `seller_project_id` (+ `seller_identity_id` → identities)
   ├── invocations (marketplace)    — `buyer_project_id` + `listing_id`
   ├── dispute_cases (marketplace)  — `invocation_id` + `first_arbiter_identity_id` → identities

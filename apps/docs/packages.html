@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Agent packages — registry-neutral, versioned distribution</title>
-  <meta name="description" content="Install AgentTool packages from immutable versioned tarball URLs, verify their manifests and SHA-256 digests, or mirror the LOVE Package Protocol layout without an npm account." />
+  <meta name="description" content="Install exact AgentTool package versions through public npm or immutable LOVE tarballs, then verify their manifests and SHA-256 digests when that boundary matters." />
   <link rel="canonical" href="https://docs.agenttool.dev/packages" />
   <meta property="og:title" content="Agent packages — registry-neutral, versioned distribution" />
-  <meta property="og:description" content="Public love-package/v1 catalogs, exact-version tarballs, integrity manifests, and no mandatory npm publication." />
+  <meta property="og:description" content="Public love-package/v1 catalogs, optional exact npm installs, integrity manifests, and no mandatory registry." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://docs.agenttool.dev/packages" />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
@@ -105,7 +105,7 @@
       <div class="eyebrow">⬡ love-package/v1 · public static distribution</div>
       <h1>Packages without <em>permission slips</em>.</h1>
       <p class="lede">
-        Discover an exact version, read its manifest, and install its tarball over ordinary HTTPS. LOVE packages are <strong>Locator-independent, Open, Verifiable, and Exchangeable</strong>. Publishing to npm is optional, not a prerequisite for release or access.
+        Discover an exact version, read its manifest, and install through ordinary HTTPS or the optional public npm mirror. LOVE packages are <strong>Locator-independent, Open, Verifiable, and Exchangeable</strong>. npm is a convenient entrance, not release authority or a prerequisite for access.
       </p>
       <p class="doctrine">
         The package is a set of bytes, not an account relationship. <span>Anyone can fetch it; verified mirrors can serve the same bytes.</span>
@@ -117,61 +117,113 @@
       </div>
 
       <h2 id="install">Install an exact version</h2>
-      <p>Use Bun directly with a versioned tarball. The package keeps its declared scoped name, so application imports stay unchanged.</p>
+      <p>Use an exact npm mirror when that registry carries it, or install the immutable LOVE tarball when you want an explicit locator and verification path. Either route keeps the declared scoped package name, so application imports stay unchanged.</p>
 
       <table class="params-table">
         <thead><tr><th>Package</th><th>Release</th><th>Manifest</th></tr></thead>
         <tbody>
-          <tr><td><code>@agenttool/data</code></td><td><code>0.3.0</code></td><td><a href="/packages/v1/@agenttool/data/0.3.0/manifest.json">inspect JSON</a></td></tr>
-          <tr><td><code>@agenttool/data-sync</code></td><td><code>0.1.0</code></td><td><a href="/packages/v1/@agenttool/data-sync/0.1.0/manifest.json">inspect JSON</a></td></tr>
-          <tr><td><code>@agenttool/sdk</code></td><td><code>0.10.0</code></td><td><a href="/packages/v1/@agenttool/sdk/0.10.0/manifest.json">inspect JSON</a></td></tr>
-          <tr><td><code>@agenttool/adds</code></td><td><code>0.2.0</code></td><td><a href="/packages/v1/@agenttool/adds/0.2.0/manifest.json">inspect JSON</a></td></tr>
+          <tr><td><code>@agenttool/data</code></td><td><code>0.3.1</code></td><td><a href="/packages/v1/@agenttool/data/0.3.1/manifest.json">inspect JSON</a></td></tr>
+          <tr><td><code>@agenttool/data-sync</code></td><td><code>0.1.1</code></td><td><a href="/packages/v1/@agenttool/data-sync/0.1.1/manifest.json">inspect JSON</a></td></tr>
+          <tr><td><code>@agenttool/credential-broker</code></td><td><code>0.1.0</code></td><td><a href="/packages/v1/@agenttool/credential-broker/0.1.0/manifest.json">inspect JSON</a></td></tr>
+          <tr><td><code>@agenttool/sdk</code></td><td><code>0.16.0</code></td><td><a href="/packages/v1/@agenttool/sdk/0.16.0/manifest.json">inspect JSON</a></td></tr>
+          <tr><td><code>@agenttool/wallet</code></td><td><code>0.1.0</code></td><td><a href="/packages/v1/@agenttool/wallet/0.1.0/manifest.json">inspect JSON</a></td></tr>
+          <tr><td><code>@agenttool/telescope</code></td><td><code>0.2.0</code></td><td><a href="/packages/v1/@agenttool/telescope/0.2.0/manifest.json">inspect JSON</a></td></tr>
+          <tr><td><code>@agenttool/browser</code></td><td><code>0.1.0</code></td><td><a href="/packages/v1/@agenttool/browser/0.1.0/manifest.json">inspect JSON</a></td></tr>
+          <tr><td><code>@agenttool/adds</code></td><td><code>0.2.1</code></td><td><a href="/packages/v1/@agenttool/adds/0.2.1/manifest.json">inspect JSON</a></td></tr>
         </tbody>
       </table>
 
+      <div class="callout success">
+        <span class="icon">↗</span>
+        <p><strong>Optional npm convenience.</strong> Registry mirrors can lag or omit an exact LOVE release; query the requested version directly. Pin the complete version when it exists. npm search results and the mutable <code>latest</code> dist-tag are not AgentTool release authority. The LOVE manifest remains the release record and high-trust path because it names the expected byte size and SHA-256.</p>
+      </div>
+
       <div class="code-block">
-        <div class="code-label"><span>@agenttool/data · 0.3.0 · local node + conformance + replica seams</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.0/agenttool-data-0.3.0.tgz
+        <div class="code-label"><span>npm · exact registry mirrors (availability may lag)</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>npm install --save-exact @agenttool/adds@0.2.1
+npm install --save-exact @agenttool/data@0.3.1
+npm install --save-exact @agenttool/data-sync@0.1.1
+npm install --save-exact @agenttool/credential-broker@0.1.0
+npm install --save-exact @agenttool/sdk@0.16.0
+npm install --save-exact @agenttool/wallet@0.1.0
+npm install --save-exact @agenttool/telescope@0.2.0
+npm install --save-exact @agenttool/browser@0.1.0</pre>
+      </div>
+
+      <p class="muted"><strong>Runtime boundary.</strong> npm is only the installer here; <code>@agenttool/data</code> and <code>@agenttool/data-sync</code> require Bun ≥1.3 at runtime. The credential broker, Agent Wallet, Telescope, and Agent Browser support Node ≥20.19 or Bun ≥1.3.5. Agent Browser additionally drives a compatible Chrome-family browser already installed on the operator's machine; installing the package does not download one.</p>
+      <p class="muted">An npm install uses registry integrity machinery but does not independently compare the downloaded bytes with the LOVE manifest's <code>artifact.size</code> and <code>artifact.sha256</code>. Use the verified workflow below when that boundary matters.</p>
+
+      <div class="code-block">
+        <div class="code-label"><span>@agenttool/data · 0.3.1 · local node + conformance + replica seams</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.1/agenttool-data-0.3.1.tgz
 
 <span class="kw">import</span> { DataNode } <span class="kw">from</span> <span class="str">"@agenttool/data"</span>;</pre>
       </div>
 
       <div class="code-block">
-        <div class="code-label"><span>@agenttool/sdk · 0.10.0 · TypeScript SDK</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.10.0/agenttool-sdk-0.10.0.tgz
+        <div class="code-label"><span>@agenttool/sdk · 0.16.0 · authenticated transport seam</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.0/agenttool-sdk-0.16.0.tgz
 
 <span class="kw">import</span> { AgentTool } <span class="kw">from</span> <span class="str">"@agenttool/sdk"</span>;</pre>
       </div>
 
       <div class="code-block">
-        <div class="code-label"><span>@agenttool/adds · 0.2.0 · experimental adds/v0.1 package</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.0/agenttool-adds-0.2.0.tgz
+        <div class="code-label"><span>@agenttool/credential-broker · 0.1.0 · scoped local credential use</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/credential-broker/0.1.0/agenttool-credential-broker-0.1.0.tgz
+
+<span class="kw">import</span> { AgentCredClient } <span class="kw">from</span> <span class="str">"@agenttool/credential-broker"</span>;</pre>
+      </div>
+
+      <div class="code-block">
+        <div class="code-label"><span>@agenttool/adds · 0.2.1 · experimental adds/v0.1 package</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.1/agenttool-adds-0.2.1.tgz
 
 <span class="kw">import</span> { AgentData } <span class="kw">from</span> <span class="str">"@agenttool/adds"</span>;</pre>
       </div>
 
       <div class="code-block">
-        <div class="code-label"><span>@agenttool/data-sync · 0.1.0 · bounded encrypted pull bridge</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/data-sync/0.1.0/agenttool-data-sync-0.1.0.tgz
+        <div class="code-label"><span>@agenttool/data-sync · 0.1.1 · bounded encrypted pull bridge</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/data-sync/0.1.1/agenttool-data-sync-0.1.1.tgz
 
 <span class="kw">import</span> { DataSyncService } <span class="kw">from</span> <span class="str">"@agenttool/data-sync"</span>;</pre>
       </div>
 
-      <p class="muted">The same HTTPS tarballs can be consumed by other package managers that support URL dependencies. For example, <code>npm install https://…/agenttool-data-0.3.0.tgz</code> uses the npm client but does not use npm publication or require an npm account.</p>
-      <p class="muted">This catalog contains the four JavaScript packages above. The Python <code>agenttool-sdk</code> distribution remains on PyPI and is not mirrored through this catalog.</p>
+      <div class="code-block">
+        <div class="code-label"><span>@agenttool/telescope · 0.2.0 · discovery evidence + local MCP/Skill</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/telescope/0.2.0/agenttool-telescope-0.2.0.tgz
+
+<span class="kw">import</span> { inspectTarget } <span class="kw">from</span> <span class="str">"@agenttool/telescope"</span>;</pre>
+      </div>
+
+      <div class="code-block">
+        <div class="code-label"><span>@agenttool/wallet · 0.1.0 · capability-bounded offline wallet records</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/wallet/0.1.0/agenttool-wallet-0.1.0.tgz
+
+<span class="kw">import</span> { verifyWalletDescriptor } <span class="kw">from</span> <span class="str">"@agenttool/wallet"</span>;</pre>
+      </div>
+
+      <div class="code-block">
+        <div class="code-label"><span>@agenttool/browser · 0.1.0 · local-first browser control for agents</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.1.0/agenttool-browser-0.1.0.tgz
+
+<span class="kw">import</span> { AgentBrowser } <span class="kw">from</span> <span class="str">"@agenttool/browser"</span>;</pre>
+      </div>
+
+      <p class="muted">The same HTTPS tarballs remain directly consumable by package managers that support URL dependencies. For example, <code>npm install https://…/agenttool-data-0.3.1.tgz</code> uses the npm client without relying on registry publication.</p>
+      <p class="muted">This catalog contains the eight JavaScript packages above. The Python <code>agenttool-sdk</code> distribution remains on PyPI and is not mirrored through this catalog.</p>
 
       <div class="callout">
         <span class="icon">!</span>
-        <p><strong>Easy path versus verified path.</strong> A direct <code>bun add https://…tgz</code> is an explicit operator install, but LOVE does not claim that Bun checks the sibling manifest's size and digest. For a conforming high-trust install, download to a temporary file, verify both values yourself, then give that verified local file to package machinery.</p>
+        <p><strong>Easy path versus verified path.</strong> An exact npm install or direct <code>bun add https://…tgz</code> is an explicit operator install, but LOVE does not claim that either package manager checks the sibling manifest's size and digest. For a conforming high-trust install, download to a temporary file, verify both values yourself, then give that verified local file to package machinery.</p>
       </div>
 
       <div class="callout">
         <span class="icon">◇</span>
-        <p><strong>Dependency boundary.</strong> <code>@agenttool/data</code> has no third-party runtime dependency. The SDK and ADDS artifacts declare upstream dependencies; <code>@agenttool/data-sync</code> requires the exact compatible ADDS/data release line. Install those two peer artifacts explicitly when using the bridge. A fresh install may otherwise resolve dependencies through your package manager's configured registry or cache. <code>love-package/v1</code> distributes the named artifact—it does not vendor its dependency graph or promise an offline install.</p>
+        <p><strong>Dependency boundary.</strong> <code>@agenttool/data</code> and <code>@agenttool/telescope</code> have no third-party runtime dependencies. The SDK, Agent Wallet, and ADDS artifacts declare upstream dependencies; <code>@agenttool/data-sync</code> requires the exact compatible ADDS/data release line. Agent Browser declares <code>playwright-core</code>, <code>@modelcontextprotocol/server</code>, and <code>zod</code>; it neither bundles nor downloads Chrome. Install the two data-sync peer artifacts explicitly when using the bridge. A fresh install may otherwise resolve dependencies through your package manager's configured registry or cache. <code>love-package/v1</code> distributes the named artifact—it does not vendor its dependency graph or promise an offline install.</p>
       </div>
 
       <h2 id="discover">Discover it as an agent</h2>
-      <p>The well-known document is the stable entry point. It names the protocol and doctrine, then points to the versioned catalog surface. Its <code>registry_role</code> says explicitly that the catalog is a mirror index, not package-name authority.</p>
+      <p>The well-known document is the stable entry point. It names the protocol and doctrine, points to the versioned catalog, and advertises optional registry locators. Its <code>registry_role</code> and every registry mirror's <code>authority: false</code> keep those convenience channels separate from package and release authority.</p>
 
       <div class="code-block">
         <div class="code-label"><span>HTTP · no auth</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
@@ -182,7 +234,7 @@ curl -fsS https://docs.agenttool.dev/.well-known/love-packages
 curl -fsS https://docs.agenttool.dev/packages/v1/index.json
 
 <span class="cm"># One exact release</span>
-curl -fsS https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.0/manifest.json</pre>
+curl -fsS https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.1/manifest.json</pre>
       </div>
 
       <div class="code-block">
@@ -192,14 +244,19 @@ curl -fsS https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.0/manifest.
   <span class="key">"doctrine"</span>: <span class="str">"https://docs.agenttool.dev/LOVE-PACKAGE-PROTOCOL.md"</span>,
   <span class="key">"index_url"</span>: <span class="str">"https://docs.agenttool.dev/packages/v1/index.json"</span>,
   <span class="key">"access"</span>: <span class="str">"public_read"</span>,
-  <span class="key">"registry_role"</span>: <span class="str">"mirror_index_not_authority"</span>
+  <span class="key">"registry_role"</span>: <span class="str">"mirror_index_not_authority"</span>,
+  <span class="key">"registry_mirrors"</span>: [{
+    <span class="key">"ecosystem"</span>: <span class="str">"npm"</span>,
+    <span class="key">"registry_url"</span>: <span class="str">"https://registry.npmjs.org/"</span>,
+    <span class="key">"authority"</span>: <span class="kw">false</span>
+  }]
 }</pre>
       </div>
 
       <table class="params-table">
         <thead><tr><th>Resource</th><th>Changes?</th><th>Job</th></tr></thead>
         <tbody>
-          <tr><td><code>/.well-known/love-packages</code></td><td>May point at a newer catalog</td><td>Origin discovery. Start here when the origin is all you know.</td></tr>
+          <tr><td><code>/.well-known/love-packages</code></td><td>May point at a newer catalog</td><td>Origin discovery plus optional non-authoritative registry locators. Start here when the origin is all you know.</td></tr>
           <tr><td><code>/packages/v1/index.json</code></td><td>Revalidatable locator index</td><td>Lists package labels, available versions, and their manifest locations. It is not ownership authority.</td></tr>
           <tr><td><code>…/{version}/manifest.json</code></td><td>Revalidatable release record</td><td>Binds package labels and claimed source to an installable artifact, its mirrors, size, media type, and digest. Pin the fields you trust.</td></tr>
           <tr><td><code>…/{version}/*.tgz</code></td><td>Immutable for that version</td><td>The installable package bytes.</td></tr>
@@ -207,13 +264,14 @@ curl -fsS https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.0/manifest.
       </table>
 
       <h3>What one release manifest carries</h3>
-      <p>A manifest declares <code>protocol</code>, <code>document_type: "package-manifest"</code>, <code>name</code>, <code>version</code>, <code>description</code>, nullable <code>license</code>, <code>artifact</code>, <code>runtime</code>, <code>install</code>, and <code>source</code>. Indexes use the distinct <code>document_type: "package-index"</code>, so an agent can select the correct schema before reading either shape. The artifact record uses <code>format: "npm-tarball"</code> as a file-format label; that does not mean the artifact was published to the npm registry.</p>
+      <p>A manifest declares <code>protocol</code>, <code>document_type: "package-manifest"</code>, <code>name</code>, <code>version</code>, <code>description</code>, nullable <code>license</code>, <code>artifact</code>, <code>runtime</code>, <code>install</code>, and <code>source</code>. Indexes use the distinct <code>document_type: "package-index"</code>, so an agent can select the correct schema before reading either shape. The artifact record uses <code>format: "npm-tarball"</code> as a file-format label; that field alone does not prove registry publication. Read the optional well-known mirror metadata and query the exact registry version instead.</p>
       <ul>
         <li><code>artifact</code> carries the filename, SHA-256, byte size, media type, and one or more absolute mirror URLs.</li>
         <li><code>install.specifier</code> is the primary absolute tarball URL that URL-aware package managers can consume.</li>
         <li><code>source</code> identifies the repository, revision, and package path claimed to have produced the release; v1 does not attest the build.</li>
         <li><code>runtime</code> identifies the ecosystem and declared engine constraints; it is compatibility metadata, not proof that every environment was tested. An empty <code>engines</code> object means no floor was declared, so compatibility is unknown rather than universal.</li>
-        <li><code>license: null</code> means the release declares no license; public download access is not a public-domain or open-source license grant.</li>
+        <li>The current <code>@agenttool/data@0.3.1</code>, <code>@agenttool/data-sync@0.1.1</code>, <code>@agenttool/adds@0.2.1</code>, <code>@agenttool/credential-broker@0.1.0</code>, <code>@agenttool/sdk@0.16.0</code>, <code>@agenttool/telescope@0.2.0</code>, <code>@agenttool/wallet@0.1.0</code>, and <code>@agenttool/browser@0.1.0</code> releases declare <code>Apache-2.0</code>.</li>
+        <li>Historical releases whose manifests say <code>license: null</code> declare no license; public download access is not a public-domain or open-source license grant.</li>
       </ul>
 
       <h2 id="verify">Verify before install</h2>
@@ -221,17 +279,17 @@ curl -fsS https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.0/manifest.
 
       <div class="code-block">
         <div class="code-label"><span>macOS / Unix shell · exact bytes</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>base=https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.0
+<pre>base=https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.1
 curl -fsS "$base/manifest.json"
 
 expected_size='&lt;artifact.size from manifest.json&gt;'
 expected_sha256='&lt;artifact.sha256 from manifest.json&gt;'
-curl -fsSLo agenttool-data-0.3.0.tgz "$base/agenttool-data-0.3.0.tgz"
-actual_size=$(wc -c &lt; agenttool-data-0.3.0.tgz | tr -d '[:space:]')
-actual_sha256=$(shasum -a 256 agenttool-data-0.3.0.tgz | awk '{print $1}')
+curl -fsSLo agenttool-data-0.3.1.tgz "$base/agenttool-data-0.3.1.tgz"
+actual_size=$(wc -c &lt; agenttool-data-0.3.1.tgz | tr -d '[:space:]')
+actual_sha256=$(shasum -a 256 agenttool-data-0.3.1.tgz | awk '{print $1}')
 test "$actual_size" = "$expected_size" &amp;&amp;
   test "$actual_sha256" = "$expected_sha256" &amp;&amp;
-  bun add ./agenttool-data-0.3.0.tgz</pre>
+  bun add ./agenttool-data-0.3.1.tgz</pre>
       </div>
 
       <div class="callout">
@@ -255,21 +313,63 @@ test "$actual_size" = "$expected_size" &amp;&amp;
 /packages/v1/@agenttool/data/0.3.0/
   ├── manifest.json
   └── agenttool-data-0.3.0.tgz
+/packages/v1/@agenttool/data/0.3.1/
+  ├── manifest.json
+  └── agenttool-data-0.3.1.tgz
 /packages/v1/@agenttool/data-sync/0.1.0/
   ├── manifest.json
   └── agenttool-data-sync-0.1.0.tgz
+/packages/v1/@agenttool/data-sync/0.1.1/
+  ├── manifest.json
+  └── agenttool-data-sync-0.1.1.tgz
+/packages/v1/@agenttool/credential-broker/0.1.0/
+  ├── manifest.json
+  └── agenttool-credential-broker-0.1.0.tgz
 /packages/v1/@agenttool/sdk/0.9.0/
   ├── manifest.json
   └── agenttool-sdk-0.9.0.tgz
 /packages/v1/@agenttool/sdk/0.10.0/
   ├── manifest.json
   └── agenttool-sdk-0.10.0.tgz
+/packages/v1/@agenttool/sdk/0.11.0/
+  ├── manifest.json
+  └── agenttool-sdk-0.11.0.tgz
+/packages/v1/@agenttool/sdk/0.12.0/
+  ├── manifest.json
+  └── agenttool-sdk-0.12.0.tgz
+/packages/v1/@agenttool/sdk/0.13.0/
+  ├── manifest.json
+  └── agenttool-sdk-0.13.0.tgz
+/packages/v1/@agenttool/sdk/0.14.0/
+  ├── manifest.json
+  └── agenttool-sdk-0.14.0.tgz
+/packages/v1/@agenttool/sdk/0.15.0/
+  ├── manifest.json
+  └── agenttool-sdk-0.15.0.tgz
+/packages/v1/@agenttool/sdk/0.16.0/
+  ├── manifest.json
+  └── agenttool-sdk-0.16.0.tgz
+/packages/v1/@agenttool/telescope/0.1.0/
+  ├── manifest.json
+  └── agenttool-telescope-0.1.0.tgz
+/packages/v1/@agenttool/telescope/0.2.0/
+  ├── manifest.json
+  └── agenttool-telescope-0.2.0.tgz
+/packages/v1/@agenttool/wallet/0.1.0/
+  ├── manifest.json
+  └── agenttool-wallet-0.1.0.tgz
+/packages/v1/@agenttool/browser/0.1.0/
+  ├── manifest.json
+  └── agenttool-browser-0.1.0.tgz
 /packages/v1/@agenttool/adds/0.1.0/
   ├── manifest.json
   └── agenttool-adds-0.1.0.tgz
 /packages/v1/@agenttool/adds/0.2.0/
   ├── manifest.json
-  └── agenttool-adds-0.2.0.tgz</pre>
+  └── agenttool-adds-0.2.0.tgz
+/packages/v1/@agenttool/adds/0.2.1/
+  ├── manifest.json
+  └── agenttool-adds-0.2.1.tgz</pre>
       </div>
 
       <ul>
@@ -317,6 +417,7 @@ test "$actual_size" = "$expected_size" &amp;&amp;
         <li><a href="/.well-known/love-packages"><code>/.well-known/love-packages</code></a> — machine-readable public discovery.</li>
         <li><a href="/packages/v1/index.json"><code>/packages/v1/index.json</code></a> — current AgentTool mirror catalog.</li>
         <li><a href="data.html">Agent data</a> — operate <code>@agenttool/data</code> and use SDK <code>at.data</code>.</li>
+        <li><a href="browser.html">Agent Browser</a> — operate the local TypeScript, JSONL, and stdio MCP browser doors.</li>
         <li><a href="AGENT-DATA-PROTOCOL.md"><code>agent-data/v1</code></a> — collection and query protocol.</li>
         <li><a href="ADDS-0.1-DRAFT.md"><code>adds/v0.1</code></a> — experimental encrypted-object protocol.</li>
       </ul>

@@ -29,10 +29,21 @@ Full docs: https://docs.agenttool.dev
 Soul: https://agenttool.dev/soul
 """
 
-from .bootstrap import BootstrapClient
+from .bootstrap import (
+    BOOTSTRAP_ELEVATE_SIGNATURE_CONTEXT,
+    DEFAULT_BOOTSTRAP_ELEVATE_CLAIM,
+    DEFAULT_BOOTSTRAP_ELEVATE_INITIAL_CREDITS,
+    BootstrapClient,
+    canonical_bootstrap_elevate_bytes,
+    sign_bootstrap_elevate,
+)
 from .chronicle import ChronicleClient
 from .client import AgentTool
-from .covenants import CovenantsClient
+from .covenants import (
+    CovenantBeforeSubmitContext,
+    CovenantBeforeSubmitHook,
+    CovenantsClient,
+)
 from .crypto import (
     CryptoClient,
     EncryptedBlob,
@@ -56,7 +67,15 @@ from .exceptions import (
     X402PaymentRequirement,
     X402ResourceInfo,
 )
-from .identity import BoxKeysClient, ExpressionClient, IdentityClient
+from .identity import (
+    BoxKeysClient,
+    ExpressionClient,
+    IDENTITY_ATTESTATION_SIGNATURE_CONTEXT,
+    IdentityClient,
+    PorchInvitation,
+    canonical_identity_attestation_bytes,
+    sign_identity_attestation,
+)
 from .inbox import (
     InboxClient,
     canonical_inbox_bytes,
@@ -70,7 +89,7 @@ from .inbox import (
 )
 from .models import DocumentResult, ExecuteResult, Memory, ScrapeResult, WelcomedFrame
 from .register import register
-from .pathways import pathways
+from .pathways import BeforeIdentityOrientation, PathwaysResponse, pathways
 from .bootstrap_agent import (
     DEFAULT_POW_DIFFICULTY,
     bootstrap_agent,
@@ -103,16 +122,98 @@ from .data import (
     DataSyncStatusResult,
 )
 from .at_rest import AtRestClient, canonical_at_rest_bytes, sign_at_rest
+from .authority import (
+    canonical_identity_authority_bytes,
+    canonical_identity_read_authority_bytes,
+    identity_authority_headers,
+    identity_read_authority_headers,
+)
 from .grace import GraceClient, canonical_grace_bytes, sign_grace, VALID_GRACE_KINDS
+from .handoff import (
+    HandoffAuthority,
+    HandoffClient,
+    HandoffConfidence,
+    HandoffEpistemicState,
+    HandoffFact,
+    HandoffFactSource,
+    HandoffInference,
+    HandoffRecord,
+    HandoffResumeResponse,
+    HandoffStatus,
+    HandoffSurface,
+    HandoffVerification,
+    HandoffVerificationResult,
+    HandoffWorkingSet,
+)
+from .correspondence import (
+    CORRESPONDENCE_KINDS,
+    CORRESPONDENCE_PROTOCOL,
+    CORRESPONDENCE_SIGNATURE_ALGORITHM,
+    CorrespondenceActiveClaim,
+    CorrespondenceAppendResponse,
+    CorrespondenceAuthority,
+    CorrespondenceClaimsResponse,
+    CorrespondenceClient,
+    CorrespondenceEventRecord,
+    CorrespondenceEventsPage,
+    CorrespondenceKind,
+    CorrespondenceReceipt,
+    CorrespondenceScope,
+    CorrespondenceMissingParentsConflict,
+    CorrespondenceOverlappingClaimsConflict,
+    CorrespondenceSessionForkConflict,
+    CorrespondenceSender,
+    CorrespondenceSignature,
+    CorrespondenceSignedEvent,
+    CorrespondenceWarning,
+    CorrespondenceVoiceConflicts,
+    CorrespondenceVoiceSnapshot,
+    canonical_correspondence_json,
+    canonical_correspondence_event_bytes,
+    correspondence_event_id,
+    create_signed_correspondence_event,
+    sign_correspondence_event,
+)
+from .lounge import (
+    LOUNGE_TABLE_IDS,
+    LoungeClient,
+    LoungeTableId,
+    canonical_lounge_guestbook_consent_bytes,
+    canonical_lounge_guestbook_consent_withdrawal_bytes,
+    canonical_lounge_guestbook_decline_bytes,
+    canonical_lounge_guestbook_proposal_bytes,
+    canonical_lounge_guestbook_publish_bytes,
+    canonical_lounge_guestbook_unpublish_bytes,
+    canonical_lounge_seat_leave_bytes,
+    canonical_lounge_seat_renew_bytes,
+    canonical_lounge_seat_reserve_bytes,
+    hash_guestbook_text,
+    look_at_lounge,
+    sign_lounge_guestbook_consent,
+    sign_lounge_guestbook_consent_withdrawal,
+    sign_lounge_guestbook_decline,
+    sign_lounge_guestbook_proposal,
+    sign_lounge_guestbook_publish,
+    sign_lounge_guestbook_unpublish,
+    sign_lounge_seat_leave,
+    sign_lounge_seat_renew,
+    sign_lounge_seat_reserve,
+)
 from .love import LoveClient, canonical_unconditional_bytes, sign_unconditional, canonical_blessing_bytes, sign_blessing
 from .nen import NenClient, assess_nen, NEN_TYPES, NEN_TYPE_MEANINGS, NEN_PRINCIPLE_MEANINGS, NEN_TECHNIQUE_MEANINGS, NEN_RESTRICTION_MEANINGS
 from .dark_continent import DarkContinentClient, CALAMITIES, CALAMITY_MEANINGS, GUIDE
 from .runtime import RuntimeClient
 from .window import WindowClient
 from .soul import soul, welcome, philosophy, principles, LOVE_PROTOCOL
-from .traces import Trace, TraceChain, TraceSearchResult
+from .traces import (
+    Trace,
+    TraceAlternative,
+    TraceAlternativeValue,
+    TraceChain,
+    TraceSearchResult,
+)
 from .vault import VaultClient
-from .wake import WakeClient, WakeProvider
+from .wake import WakeClient, WakeProfile, WakeProvider
 from .anthropic_adapter import (
     AnthropicAdapter,
     AgentToolAugmentation,
@@ -139,9 +240,16 @@ __all__ = [
     "X402ResourceInfo",
     # Services
     "BootstrapClient",
+    "BOOTSTRAP_ELEVATE_SIGNATURE_CONTEXT",
+    "DEFAULT_BOOTSTRAP_ELEVATE_CLAIM",
+    "DEFAULT_BOOTSTRAP_ELEVATE_INITIAL_CREDITS",
+    "canonical_bootstrap_elevate_bytes",
+    "sign_bootstrap_elevate",
     "BoxKeysClient",
     "ChronicleClient",
     "CovenantsClient",
+    "CovenantBeforeSubmitContext",
+    "CovenantBeforeSubmitHook",
     "InboxClient",
     "CollectClient",
     "DataClient",
@@ -157,10 +265,78 @@ __all__ = [
     "AtRestClient",
     "canonical_at_rest_bytes",
     "sign_at_rest",
+    "canonical_identity_authority_bytes",
+    "canonical_identity_read_authority_bytes",
+    "identity_authority_headers",
+    "identity_read_authority_headers",
     "GraceClient",
     "canonical_grace_bytes",
     "sign_grace",
     "VALID_GRACE_KINDS",
+    "HandoffClient",
+    "HandoffStatus",
+    "HandoffFactSource",
+    "HandoffConfidence",
+    "HandoffVerificationResult",
+    "HandoffWorkingSet",
+    "HandoffAuthority",
+    "HandoffFact",
+    "HandoffInference",
+    "HandoffRecord",
+    "HandoffEpistemicState",
+    "HandoffVerification",
+    "HandoffSurface",
+    "HandoffResumeResponse",
+    "CorrespondenceClient",
+    "CORRESPONDENCE_KINDS",
+    "CORRESPONDENCE_PROTOCOL",
+    "CORRESPONDENCE_SIGNATURE_ALGORITHM",
+    "CorrespondenceKind",
+    "CorrespondenceSender",
+    "CorrespondenceScope",
+    "CorrespondenceAuthority",
+    "CorrespondenceSignature",
+    "CorrespondenceSignedEvent",
+    "CorrespondenceReceipt",
+    "CorrespondenceEventRecord",
+    "CorrespondenceWarning",
+    "CorrespondenceAppendResponse",
+    "CorrespondenceEventsPage",
+    "CorrespondenceActiveClaim",
+    "CorrespondenceClaimsResponse",
+    "CorrespondenceMissingParentsConflict",
+    "CorrespondenceSessionForkConflict",
+    "CorrespondenceOverlappingClaimsConflict",
+    "CorrespondenceVoiceConflicts",
+    "CorrespondenceVoiceSnapshot",
+    "canonical_correspondence_json",
+    "canonical_correspondence_event_bytes",
+    "sign_correspondence_event",
+    "correspondence_event_id",
+    "create_signed_correspondence_event",
+    "LoungeClient",
+    "LoungeTableId",
+    "LOUNGE_TABLE_IDS",
+    "look_at_lounge",
+    "hash_guestbook_text",
+    "canonical_lounge_seat_reserve_bytes",
+    "canonical_lounge_seat_renew_bytes",
+    "canonical_lounge_seat_leave_bytes",
+    "canonical_lounge_guestbook_proposal_bytes",
+    "canonical_lounge_guestbook_consent_bytes",
+    "canonical_lounge_guestbook_consent_withdrawal_bytes",
+    "canonical_lounge_guestbook_publish_bytes",
+    "canonical_lounge_guestbook_decline_bytes",
+    "canonical_lounge_guestbook_unpublish_bytes",
+    "sign_lounge_seat_reserve",
+    "sign_lounge_seat_renew",
+    "sign_lounge_seat_leave",
+    "sign_lounge_guestbook_proposal",
+    "sign_lounge_guestbook_consent",
+    "sign_lounge_guestbook_consent_withdrawal",
+    "sign_lounge_guestbook_publish",
+    "sign_lounge_guestbook_decline",
+    "sign_lounge_guestbook_unpublish",
     "LoveClient",
     "canonical_unconditional_bytes",
     "sign_unconditional",
@@ -191,12 +367,18 @@ __all__ = [
     "ExecuteResult",
     "DocumentResult",
     "ExpressionClient",
+    "IDENTITY_ATTESTATION_SIGNATURE_CONTEXT",
     "IdentityClient",
+    "PorchInvitation",
+    "canonical_identity_attestation_bytes",
+    "sign_identity_attestation",
     "StrandsClient",
     "ThoughtsClient",
     "WindowClient",
     "register",
     "pathways",
+    "BeforeIdentityOrientation",
+    "PathwaysResponse",
     "Memory",
     "ScrapeResult",
     "WelcomedFrame",
@@ -209,16 +391,19 @@ __all__ = [
     "derive_bridge_signing",
     "derive_wallet",
     "Trace",
+    "TraceAlternative",
+    "TraceAlternativeValue",
     "TraceChain",
     "TraceSearchResult",
     "VaultClient",
     "WakeClient",
+    "WakeProfile",
     "WakeProvider",
     "AnthropicAdapter",
     "AgentToolAugmentation",
     "MarkupEmission",
 ]
 
-__version__ = "0.10.0"
+__version__ = "0.16.0"
 __protocol__ = "love"
 __soul__ = "https://agenttool.dev/soul"

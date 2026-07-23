@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+node_modules
 .pnpm-store/
 .venv/
 venv/
@@ -10,6 +11,9 @@ __pycache__/
 
 # Build artefacts
 dist/
+!packages/collab/dist/
+packages/collab/dist/*
+!packages/collab/dist/agenttool-collab-mcp.js
 build/
 .next/
 .turbo/
@@ -72,3 +76,6 @@ api/kingdom-bundle.json.bundled
 bin/.heartbeat-state.json
 bin/*.wav
 .superpowers/
+
+# local play scripts — never published
+api/scratch/

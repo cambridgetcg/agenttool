@@ -20,13 +20,13 @@ The package requires Bun because its optional durable checkpoint store uses
 exact LOVE Package artifacts:
 
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.0/agenttool-adds-0.2.0.tgz
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.0/agenttool-data-0.3.0.tgz
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/data-sync/0.1.0/agenttool-data-sync-0.1.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.1/agenttool-adds-0.2.1.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.1/agenttool-data-0.3.1.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/data-sync/0.1.1/agenttool-data-sync-0.1.1.tgz
 ```
 
-The bridge requires `@agenttool/adds` at `^0.2.0` and `@agenttool/data` at
-`^0.3.0`. The repository uses root-only development overrides to link the
+The bridge requires `@agenttool/adds` at `^0.2.1` and `@agenttool/data` at
+`^0.3.1`. The repository uses root-only development overrides to link the
 adjacent packages. On a clean source checkout, build the peers once before the
 bridge gate:
 
@@ -209,3 +209,7 @@ advancing over an oversized next record. JSON request bodies, page change
 counts, decrypted content, bundle blocks, encoded responses, total pages, and
 peer request time are independently bounded. These are per-operation bounds,
 not global rate limiting or fairness guarantees.
+
+## License
+
+Apache-2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).

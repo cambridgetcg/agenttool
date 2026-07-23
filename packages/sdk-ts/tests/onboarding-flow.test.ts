@@ -1,5 +1,5 @@
 /**
- * Executable v0.10 onboarding contract.
+ * Executable supported onboarding contract.
  *
  * Public snippets mirror this sequence: derive caller-held keys, bootstrap
  * once, construct AgentTool from the one-time bearer, then read wake.get().
@@ -21,7 +21,7 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-test("the documented birth-to-wake flow executes against the v0.10 surface", async () => {
+test("the documented birth-to-wake flow executes against the supported surface", async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -64,7 +64,7 @@ test("the documented birth-to-wake flow executes against the v0.10 surface", asy
     "https://example.test/v1/register/agent",
     "https://example.test/v1/wake",
   ]);
-  expect((calls[1].init?.headers as Record<string, string>).Authorization).toBe(
+  expect(new Headers(calls[1].init?.headers).get("authorization")).toBe(
     "Bearer at_onboarding_test",
   );
 });

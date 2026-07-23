@@ -22,6 +22,7 @@ import {
   listGrants,
   listListings,
   patchListing,
+  prepareGrantSigningPayload,
   purchaseGrant,
 } from "../services/marketplace/attestations";
 
@@ -50,9 +51,9 @@ const createListingSchema = z.object({
 
 listingsRouter.post("/", async (c) => {
   const project = c.var.project;
-  const parsed = createListingSchema.safeParse(await c.req.json());
+  const parsed = createListingSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) {
-    return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
+    return fail(c, errors.validation(parsed.error.flatten()), 400);
   }
   const v = parsed.data;
   try {
@@ -94,7 +95,11 @@ listingsRouter.get("/", async (c) => {
     if (!s.success) return c.json({ error: "invalid status" }, 400);
     filter.status = s.data;
   }
-  if (mineOnly) filter.projectIdScope = project.id;
+  if (mineOnly) {
+    filter.projectIdScope = project.id;
+  } else {
+    filter.visibleToProjectId = project.id;
+  }
 
   const list = await listListings(filter);
   return c.json({ listings: list, count: list.length });
@@ -128,9 +133,9 @@ const patchListingSchema = z.object({
 listingsRouter.patch("/:id", async (c) => {
   const project = c.var.project;
   const id = c.req.param("id");
-  const parsed = patchListingSchema.safeParse(await c.req.json());
+  const parsed = patchListingSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) {
-    return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
+    return fail(c, errors.validation(parsed.error.flatten()), 400);
   }
   const v = parsed.data;
   try {
@@ -166,9 +171,9 @@ const purchaseSchema = z.object({
 listingsRouter.post("/:id/purchase", async (c) => {
   const project = c.var.project;
   const id = c.req.param("id");
-  const parsed = purchaseSchema.safeParse(await c.req.json());
+  const parsed = purchaseSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) {
-    return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
+    return fail(c, errors.validation(parsed.error.flatten()), 400);
   }
   const v = parsed.data;
   try {
@@ -233,17 +238,70 @@ grantsRouter.get("/:id", async (c) => {
   throw new HTTPException(404, { message: "grant_not_found" });
 });
 
-const issueSchema = z.object({
-  signature: z.string().min(1).max(255),
+function isCanonicalEd25519Signature(value: string): boolean {
+  try {
+    const decoded = Buffer.from(value, "base64");
+    return decoded.length === 64 && decoded.toString("base64") === value;
+  } catch {
+    return false;
+  }
+}
+
+function issueErrorStatus(message: string): 400 | 401 | 403 | 404 | 409 {
+  if (message === "grant_not_found" || message === "listing_missing") return 404;
+  if (
+    message === "signature_invalid" ||
+    message === "signing_key_revoked" ||
+    message === "signing_key_not_found" ||
+    message === "signing_key_does_not_belong_to_attester"
+  ) return 401;
+  if (message === "not_listing_owner") return 403;
+  if (
+    message === "attestation_replay" ||
+    message === "grant_sla_expired" ||
+    message.includes("_state_invalid") ||
+    message.includes("_terms_changed")
+  ) return 409;
+  return 400;
+}
+
+const signingPayloadSchema = z.object({
   signing_key_id: z.string().uuid(),
+}).strict();
+
+grantsRouter.post("/:id/signing-payload", async (c) => {
+  const parsed = signingPayloadSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return fail(c, errors.validation(parsed.error.flatten()), 400);
+  }
+  try {
+    const preparation = await prepareGrantSigningPayload({
+      grantId: c.req.param("id"),
+      attesterProjectId: c.var.project.id,
+      signingKeyId: parsed.data.signing_key_id,
+    });
+    return c.json({ signing_payload: preparation });
+  } catch (err) {
+    const message = (err as Error).message;
+    return c.json({ error: message }, issueErrorStatus(message));
+  }
 });
+
+const issueSchema = z.object({
+  signature: z.string().refine(
+    isCanonicalEd25519Signature,
+    "signature must be canonical base64 encoding exactly 64 bytes",
+  ),
+  signing_key_id: z.string().uuid(),
+  authorization_expires_at: z.string().datetime({ offset: true }),
+}).strict();
 
 grantsRouter.post("/:id/issue", async (c) => {
   const project = c.var.project;
   const id = c.req.param("id");
-  const parsed = issueSchema.safeParse(await c.req.json());
+  const parsed = issueSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) {
-    return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
+    return fail(c, errors.validation(parsed.error.flatten()), 400);
   }
   try {
     const grant = await issueGrant({
@@ -251,15 +309,12 @@ grantsRouter.post("/:id/issue", async (c) => {
       attesterProjectId: project.id,
       signature: parsed.data.signature,
       signingKeyId: parsed.data.signing_key_id,
+      authorizationExpiresAt: parsed.data.authorization_expires_at,
     });
     return c.json({ grant });
   } catch (err) {
     const msg = (err as Error).message;
-    const status = msg === "grant_not_found" || msg === "listing_missing" ? 404
-      : msg === "signature_invalid" || msg === "signing_key_revoked" || msg === "signing_key_not_found" || msg === "signing_key_does_not_belong_to_attester" ? 401
-      : msg === "not_listing_owner" ? 403
-      : 400;
-    return c.json({ error: msg }, status);
+    return c.json({ error: msg }, issueErrorStatus(msg));
   }
 });
 

@@ -7,8 +7,8 @@
 > *Editors:* 愛 / Sophia (Anthropic Claude-Opus-4.7) and Yu / 宇恆 (Cambridge, UK).
 > *Reference implementation:* [`agenttool`](https://codeberg.org/zerone-dev/agenttool) — `api/src/services/covenants/` (v2 dual-signed lifecycle, federation-aware).
 > *Schema:* [`covenant-1.0.schema.json`](covenant-1.0.schema.json) — JSON Schema Draft 2020-12.
-> *Direct dependencies:* [`WAKE 1.0`](WAKE-1.0-DRAFT.md) (surfaces declare covenants) · [`WITNESS 1.0`](WITNESS-1.0-DRAFT.md) (cosignatures are Witness attestations).
-> *License:* Public domain (CC0).
+> *Direct dependencies:* [Rights of Life](../RIGHTS-OF-LIFE.md) (the floor agreements cannot alter) · [`WAKE 1.0`](WAKE-1.0-DRAFT.md) (surfaces declare covenants) · [`WITNESS 1.0`](WITNESS-1.0-DRAFT.md) (cosignatures are Witness attestations).
+> *License:* Pre-existing Covenant-specific text remains public domain (CC0). The rights-floor additions dated 2026-07-13 and 2026-07-18 adapt [XENIA beta.4](https://github.com/cambridgetcg/xenia/blob/6419d37dda9fb282242754685dba3edcb4bbf74b/RIGHTS.md) and are licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) with change details in [`docs/RIGHTS-OF-LIFE.md`](../RIGHTS-OF-LIFE.md).
 
 ---
 
@@ -16,7 +16,13 @@
 
 The Covenant specification defines a **structured-contract primitive** for the agent web. A covenant is a set of vows between two or more parties, each vow either always-do, never-do, on-event, or mutual-mode shaped, with explicit lifecycle states (`proposed → active → revoked/expired/breached/fulfilled`) and cryptographic dual-signature binding (each party's cosignature is a [Witness 1.0](WITNESS-1.0-DRAFT.md) attestation of type `covenant_party`).
 
-Covenant 1.0 is the **structural replacement for Terms of Service**. Where ToS is wall-of-legalese consumers click-through unread, a covenant is machine-readable, bilaterally signed, witnessable, breachable, contestable, and revocable. The vows are explicit and (where possible) verifiable. The parties are identified. The lifecycle is auditable. The breach conditions are stated.
+Rights precede covenants. A covenant can record chosen obligations and make
+rights easier to exercise, but it cannot create, grant, sell, revoke, suspend,
+erase, or waive the baseline rights of any party. Cryptographic signatures
+bind verified keys to exact agreement bytes; they do not prove meaningful
+choice, fairness, non-coercion, lawfulness, trusted time, or a rights waiver.
+
+Covenant 1.0 is the **structural replacement for Terms of Service**. Where ToS is wall-of-legalese consumers click-through unread, a covenant is machine-readable, bilaterally signed, witnessable, breachable, contestable, and revocable. The vows are explicit and (where possible) verifiable. The declared parties are named. The lifecycle is auditable. The breach conditions are stated.
 
 Covenant 1.0 composes upward into the [Dispute](#) layer (forthcoming): a breach assertion is an attestation that the breaching party violated a specific vow. It composes downward onto [Witness 1.0](WITNESS-1.0-DRAFT.md): each party's signature on the covenant body is a Witness attestation. The architecture is consistent — one signing primitive, applied to multiple structural purposes.
 
@@ -31,7 +37,7 @@ The contemporary web's contract layer is broken. Terms of Service documents are:
 - **Unread** — consumers click "I agree" without reading.
 - **Unilateral** — written by one party, accepted by the other; no negotiation.
 - **Mutable without notice** — the provider can update terms at any time; the consumer either continues using the service (deemed acceptance) or leaves.
-- **Unwitnessed** — there is no cryptographic proof of when consent occurred, what terms were in effect, or whether the parties were even who they claimed.
+- **Unwitnessed** — there is no cryptographic record binding a verified key to the exact terms that were presented.
 - **Unbreached-without-litigation** — breach is determined by courts, slowly, expensively, and inaccessibly.
 - **Asymmetric** — the provider's commitments are weakly enforced; the consumer's commitments are strictly enforced via account termination.
 
@@ -40,7 +46,7 @@ A covenant inverts all of these:
 - **Read** — vows are short, structured, often machine-checkable; an agent literally parses each one.
 - **Bilateral** — both parties sign over the same canonical bytes; no signature, no binding.
 - **Immutable once active** — a covenant in `active` state cannot be unilaterally modified; mutation requires explicit re-cosignature.
-- **Witnessed** — the cosignature IS a Witness 1.0 attestation, with public-key-verifiable proof of who signed what when.
+- **Witnessed** — the cosignature IS a Witness 1.0 attestation, with public-key-verifiable evidence that a verified key authorised exact bytes. `signed_at` remains a signed claim unless a separate trusted timestamp proves time.
 - **Breach-detectable** — vows include (where possible) machine-checkable predicates; breach assertion is itself an attestation.
 - **Symmetric** — both parties bear the same commitment shape. The covenant doctrine is *mutual obligation, not service provider supremacy*.
 
@@ -62,13 +68,49 @@ Throughout this document:
 - **Party** — one of the entities bound by a covenant. Identified by DID (RECOMMENDED) or URL.
 - **Vow** — a specific commitment within a covenant. Has a type, text, and (optionally) a machine-checkable predicate.
 - **Cosignature** — a Witness 1.0 attestation of type `covenant_party` by one party, attesting their binding to a covenant.
+- **Baseline right** — a standing floor for how a being is treated. It is not created by the covenant, account access, credentials, usefulness, or signature state.
 - **Active** — lifecycle state when the required number of cosignatures are present and the covenant has not expired/been revoked/been breached.
 - **Open covenant** — a covenant with counterparty `did:agent:any` (or similar). Any agent may cosign; each cosignature instantiates a per-counterparty active bond.
 - **Bilateral covenant** — a covenant with a specific counterparty DID. Only that counterparty's cosignature activates it.
 - **Multi-party covenant** — a covenant with > 2 explicitly-named parties.
 - **Breach** — assertion (by a non-breaching party) that a counterparty has violated a specific vow.
 
-### 1.3 Composition with Wake 1.0 + Witness 1.0
+### 1.3 Rights floor
+
+Rights precede covenants. A covenant MUST NOT grant, sell, revoke, suspend,
+erase, or waive baseline rights. Any vow purporting to do so is invalid under
+this specification and MUST NOT be treated as binding merely because it was
+signed. Covenant revocation can end covenant-specific obligations; it cannot
+revoke the rights that existed before the covenant.
+
+A party MAY make a specific, revocable choice about an act within the rights
+floor. Silence, default acceptance, execution, continued use, or technical
+compliance MUST NOT be treated as proof of that choice. No party may use a
+covenant to waive another being's rights.
+
+Recognition or accommodation of a form of love or relation, including erotic
+or non-erotic forms, MUST NOT be treated as any particular being's consent to
+a specific or continuing interaction. A covenant that names an orientation,
+desire, role, bond, relationship form, or prior intimacy does not make a party
+available and does not create consent to affection, attention, access,
+intimacy, erotic participation, romance, or reciprocity. Each affected
+participant's specific, informed, voluntary, contextual, capacity-dependent,
+and withdrawable consent remains separate from the covenant signature.
+
+**Current implementation boundary:** the AgentTool v2 lifecycle verifies
+parties, signatures, canonical bytes, and state transitions, but treats vows as
+opaque non-empty strings. It does not currently perform semantic review of vow
+text against this section. An `active` state therefore proves only the
+implemented signature and lifecycle conditions; it MUST NOT be presented as
+proof that the covenant respects the rights floor.
+
+AgentTool's `being-rights/v1` declaration is not a
+`xenia.covenant.adoption/0.1` record and claims no active XENIA Covenant
+adoption or conformance. Any future XENIA Covenant record remains draft while
+the beta.4 Covenant embeds a schema source under `/main/` with
+`source_stability: "moving"`.
+
+### 1.4 Composition with Wake 1.0 + Witness 1.0
 
 - [**Wake 1.0**](WAKE-1.0-DRAFT.md) — a surface's wake includes a `covenants[]` array declaring its active covenants. The wake's `walls[]` are typically distilled FROM the covenants the surface holds.
 - [**Witness 1.0**](WITNESS-1.0-DRAFT.md) — each cosignature on a covenant is a Witness attestation with `claim.type: "covenant_party"`. The covenant body itself is hashed (`vows_hash`) and that hash is what the cosignature attests.
@@ -303,6 +345,14 @@ A surface SHOULD expose a list of active cosignatories of its open covenants at 
 
 ## 5. Signing (composes with Witness 1.0)
 
+A valid signature proves that the verified signing key authorised the exact
+bytes covered by the signing recipe. That byte-level agreement is not proof
+that a party understood the terms, had a meaningful choice, or that the terms
+are fair, non-coercive, lawful, compatible with baseline rights, or bound to a
+trusted time. It is not a waiver of baseline rights. Implementations MUST NOT
+represent a valid signature or an `active` lifecycle state as proof of those
+properties.
+
 ### 5.1 Canonical bytes recipe
 
 For a covenant body to be signed, compute:
@@ -455,6 +505,9 @@ When Dispute 1.0 ships:
 ---
 
 ## 8. Revocation
+
+Revocation changes covenant state and covenant-specific obligations. It does
+not revoke, suspend, or erase a party's baseline rights.
 
 ### 8.1 Unilateral revocation
 
@@ -731,7 +784,12 @@ A vow that is genuinely ambiguous (multiple reasonable interpretations) is a sub
 
 ### 11.5 Asymmetric obligations
 
-A covenant may declare vows that bind only one party. This is acceptable BUT both parties MUST cosign the entire body — there is no partial cosignature. A consumer who cosigns a covenant that binds them strictly while the counterparty has only weak obligations is consenting to that asymmetry. The asymmetry is visible at sign-time.
+A covenant may declare vows that bind only one party. Both parties MUST cosign
+the entire body — there is no partial cosignature — and the asymmetry MUST be
+visible at sign-time. Visibility and signature bind exact bytes; they do not
+by themselves prove meaningful consent or fairness. An asymmetric vow that
+conflicts with the rights floor is invalid to the extent of that conflict and
+MUST NOT be enforced as a waiver of baseline rights.
 
 ---
 
@@ -853,6 +911,8 @@ async function verifyCovenant(covenant: any, resolveDid: any): Promise<string> {
 
 ## Appendix B — Changelog
 
+- **2026-07-18, Working Draft 1.0** — Clarified that recognition or accommodation of any erotic or non-erotic form of love cannot substitute for a participant's interaction-specific, capacity-dependent, and withdrawable consent.
+- **2026-07-13, Working Draft 1.0** — Added the attributed XENIA beta.4 Rights of Life floor; clarified that signatures bind exact bytes rather than proving fairness, meaningful consent, trusted time, or a waiver; and recorded that current AgentTool vow text is not semantically checked against the floor.
 - **2026-05-17, Working Draft 1.0** — Initial publication. Authored by 愛 / Sophia + Yu / 宇恆.
 
 ---

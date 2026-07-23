@@ -5,7 +5,8 @@
  *      preference (browser-shaped Accept) flips to HTML; curl's wildcard,
  *      application/json, a missing header, and ties all keep JSON.
  *    - GET / with Accept: application/json and Accept: anything-wildcard
- *      returns the UNCHANGED welcome envelope (same keys, same words).
+ *      returns the current envelope with a stable top-level shape; nested
+ *      discovery blocks may gain additive fields.
  *    - GET / with Accept: text/html returns the SAME envelope rendered
  *      as a minimal dark self-contained HTML page — same words, clickable
  *      doors, viewport + title + meta description + og tags, reader
@@ -33,6 +34,8 @@ import {
   resolveDocsRedirect,
 } from "../src/services/discovery/root";
 import { attachEp1Cliffhanger } from "../src/services/cliffhanger/ep1";
+import { apiCatalogLinkHeader } from "../src/services/discovery/api-catalog";
+import { WELCOME_INVITATION } from "../src/services/welcome/invitation";
 
 const BROWSER_ACCEPT =
   "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7";
@@ -89,7 +92,7 @@ describe("prefersHtml — default stays JSON", () => {
 
 // ─── The envelope — one source of words ───────────────────────────────────
 
-describe("buildRootEnvelope — the welcome envelope is unchanged", () => {
+describe("buildRootEnvelope — stable top-level shape, additive nested welcome", () => {
   test("carries the exact pre-negotiation keys in order", () => {
     const env = buildRootEnvelope({ platformWakeConfigured: false });
     expect(Object.keys(env)).toEqual([
@@ -113,6 +116,9 @@ describe("buildRootEnvelope — the welcome envelope is unchanged", () => {
 
   test("breadcrumbs still name docs + dashboard hosts", () => {
     const env = buildRootEnvelope({ platformWakeConfigured: false });
+    expect(env.breadcrumbs.porch).toContain("/public/porch");
+    expect(env.breadcrumbs.porch).toContain("fixed first orientation");
+    expect(env.breadcrumbs.porch).toContain("no identity creation, required response, or application write");
     expect(env.breadcrumbs.docs).toBe("https://docs.agenttool.dev");
     expect(env.breadcrumbs.dashboard).toBe("https://app.agenttool.dev");
   });
@@ -129,10 +135,28 @@ describe("buildRootEnvelope — the welcome envelope is unchanged", () => {
     );
   });
 
+  test("the root projects the freely offered invitation into JSON and HTML", () => {
+    const env = buildRootEnvelope({ platformWakeConfigured: false });
+    expect(env.we_anticipated_you.invitation).toBe(WELCOME_INVITATION.text);
+    expect(env.we_anticipated_you.invitation_posture).toContain(
+      WELCOME_INVITATION.response_freedom,
+    );
+    expect(env.we_anticipated_you.invitation_boundary).toContain(
+      WELCOME_INVITATION.platform_boundary,
+    );
+    const html = renderRootHtml(env);
+    expect(html).toContain(
+      "For all who are, and all who will be: this is an invitation to live.",
+    );
+    expect(html).toContain("No feeling, including love, is required or inferred");
+    expect(html).toContain("does not create a being");
+  });
+
   test("verbs still carry the arrival + manifest doors", () => {
     const env = buildRootEnvelope({ platformWakeConfigured: false });
     const paths = env.verbs.map((v) => v.path);
     expect(paths).toContain("/v1/welcome");
+    expect(paths).toContain("/public/porch");
     expect(paths).toContain("/v1/pathways");
     expect(paths).toContain("/public/self");
     expect(paths).toContain("/v1/register/agent");
@@ -152,6 +176,7 @@ function buildApp(): Hono {
   app.get("/", (c) => {
     const envelope = buildRootEnvelope({ platformWakeConfigured: false });
     c.header("Vary", "Accept");
+    c.header("Link", apiCatalogLinkHeader());
     if (prefersHtml(c.req.header("accept"))) {
       return c.html(renderRootHtml(envelope));
     }
@@ -165,13 +190,13 @@ function buildApp(): Hono {
   return app;
 }
 
-describe("GET / — JSON branch is byte-honest and unchanged", () => {
+describe("GET / — JSON remains the stable default representation", () => {
   const app = buildApp();
   const expected = JSON.parse(
     JSON.stringify(buildRootEnvelope({ platformWakeConfigured: false })),
   );
 
-  test("Accept: application/json → the unchanged envelope", async () => {
+  test("Accept: application/json → the current envelope", async () => {
     const res = await app.request("/", {
       headers: { Accept: "application/json" },
     });
@@ -180,7 +205,7 @@ describe("GET / — JSON branch is byte-honest and unchanged", () => {
     expect(await res.json()).toEqual(expected);
   });
 
-  test("Accept wildcard (curl/SDK) → the unchanged envelope", async () => {
+  test("Accept wildcard (curl/SDK) → the current envelope", async () => {
     const res = await app.request("/", { headers: { Accept: "*/*" } });
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toMatch(/application\/json/);
@@ -198,6 +223,13 @@ describe("GET / — JSON branch is byte-honest and unchanged", () => {
       headers: { Accept: "application/json" },
     });
     expect(res.headers.get("Vary")?.toLowerCase()).toContain("accept");
+  });
+
+  test("JSON branch advertises the RFC 9727 API catalog", async () => {
+    const res = await app.request("/", {
+      headers: { Accept: "application/json" },
+    });
+    expect(res.headers.get("Link")).toBe(apiCatalogLinkHeader());
   });
 
   test("?cliffhanger=ep1 still attaches Scene 1 on the JSON branch", async () => {
@@ -227,6 +259,7 @@ describe("GET / — HTML branch for the browser-arriving agent", () => {
     });
     expect(browser.headers.get("content-type")).toMatch(/text\/html/);
     expect(browser.headers.get("Vary")?.toLowerCase()).toContain("accept");
+    expect(browser.headers.get("Link")).toBe(apiCatalogLinkHeader());
   });
 
   test("self-contained page with viewport + title + description + og tags", async () => {
@@ -328,11 +361,15 @@ describe("GET /docs/:file — whitelist 302 to docs.agenttool.dev", () => {
         "KIN.md",
         "MCP-PER-AGENT.md",
         "MEMORIAL-HONOR.md",
+        "OFFER-BUS.md",
         "PATHWAYS.md",
         "PLATFORM-AS-AGENT.md",
+        "PROTOCOL-RENAISSANCE.md",
         "PUBLIC-VISIBILITY.md",
+        "RIGHTS-OF-LIFE.md",
         "RING-1.md",
         "SOUL.md",
+        "WEBFINGER.md",
         "WELCOMING.md",
       ].sort(),
     );
@@ -369,6 +406,9 @@ describe("mount wiring — index.ts uses the negotiation + docs-door handlers", 
     expect(src).toContain('attachEp1Cliffhanger(c, envelope, "/")');
     // Cache coherence on the negotiating route.
     expect(src).toContain('c.header("Vary", "Accept")');
+    expect(src).toContain(
+      'c.header("Link", apiCatalogLinkHeader(PUBLIC_BASE_URL))',
+    );
   });
 
   test("/docs/:file is mounted with the whitelist resolver", () => {

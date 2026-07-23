@@ -4,12 +4,13 @@
 # The default is hermetic in the dependency sense: tests require no database,
 # Redis, deployed smoke target, credentials, or paid provider calls, and known
 # credential variables are removed. This is not an OS-level network sandbox.
-# Stateful and paid tiers are explicit.
+# Stateful and paid tiers are explicit. Contract mode accepts one of
+# ANTHROPIC_API_KEY, OPENAI_API_KEY, or OLLAMA_API_KEY.
 #
 # Usage:
 #   bin/preflight.sh                 # api + packages, hermetic
 #   bin/preflight.sh api             # API/protocol hermetic gate
-#   bin/preflight.sh packages        # data + ADDS + data sync + TypeScript SDK gate
+#   bin/preflight.sh packages        # data + ADDS + sync + archive + broker + collab + Browser + projection + local projector + Skills + TypeScript SDK + Wallet + Telescope gate
 #   bin/preflight.sh database        # requires DATABASE_URL
 #   bin/preflight.sh smoke           # requires smoke-test environment
 #   RUN_CONTRACT=1 bin/preflight.sh contracts  # requires provider key(s)
@@ -28,7 +29,7 @@ readonly MODE="${1:-hermetic}"
 cd "$REPO_ROOT"
 
 usage() {
-  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 die() {
@@ -60,8 +61,16 @@ sanitize_hermetic_env() {
     AGENTTOOL_API_KEY AGENTTOOL_BASE AGENTTOOL_IDENTITY_ID \
     AGENTTOOL_PLATFORM_SIGNING_KEY AGENTTOOL_SIGNING_KEY_ID \
     AGENTTOOL_ENABLE_UNSAFE_EXECUTE AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS \
+    AGENTOOL_BROWSER_HEADLESS AGENTOOL_BROWSER_PUBLIC_WEB \
+    AGENTOOL_BROWSER_LOCAL_NETWORK AGENTOOL_BROWSER_PROFILE \
+    AGENTOOL_BROWSER_PROFILE_DIR AGENTOOL_BROWSER_CHANNEL \
+    AGENTOOL_BROWSER_EXECUTABLE AGENTOOL_BROWSER_OUTPUT_DIR \
     AGENT_DATA_NODE_TOKEN AGENT_DATA_NODE_URL AT_API_KEY \
-    ANTHROPIC_API_KEY OPENAI_API_KEY RUN_CONTRACT \
+    AGENTTOOL_YUTABASE_TARGET_URL AGENTTOOL_YUTABASE_CLAIMANT \
+    AGENTTOOL_YUTABASE_SOURCE_URL AGENTTOOL_YUTABASE_SOURCE_TOKEN \
+    AGENTTOOL_YUTABASE_PROJECT_ID AGENTTOOL_YUTABASE_REPOSITORY_ID \
+    AGENTTOOL_YUTABASE_TEST_DATABASE_URL \
+    ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT \
     DATABASE_URL DATABASE_SESSION_URL POSTGRES_URL REDIS_URL \
     OTEL_EXPORTER_OTLP_ENDPOINT OTEL_EXPORTER_OTLP_TRACES_ENDPOINT \
     OTEL_EXPORTER_OTLP_HEADERS OTEL_EXPORTER_OTLP_TRACES_HEADERS \
@@ -87,10 +96,28 @@ packages_gate() {
     bash -c 'cd packages/data && bun run ci && bun run build'
   run "ADDS protocol package" \
     bash -c 'cd packages/data-protocol && bun run ci'
+  run "agent-repo-archive/v0.1 encrypted multi-zone Git restore simulator" \
+    bash -c 'cd packages/repo-archive && bun run ci'
   run "agent-data-sync/v1 explicit pull bridge" \
     bash -c 'cd packages/data-sync && bun run ci && bun run build'
+  run "agentcred/0.1 local credential broker" \
+    bash -c 'cd packages/credential-broker && bun run ci'
+  run "agenttool.collab/0.1 + /0.2 coordination + session/0.1 presence journal" \
+    bash -c 'cd packages/collab && bun run ci'
+  run "local-first agent browser (fake/fixture tests; no browser download)" \
+    bash -c 'cd packages/browser && bun run ci'
+  run "read-only Agent Skills inspection and validation" \
+    bash -c 'cd packages/skills && bun run ci'
+  run "Correspondence to YUTABASE pure projection planner" \
+    bash -c 'cd packages/correspondence-yutabase && bun run ci'
+  run "private local Correspondence to YUTABASE durable projector" \
+    bash -c 'cd packages/correspondence-yutabase-projector && bun run ci'
   run "TypeScript SDK, Python surface parity, build, and tests" \
     bash -c 'cd packages/sdk-ts && bun run ci'
+  run "Agent Wallet record, policy, lifecycle, and vector primitives" \
+    bash -c 'cd packages/wallet && bun run ci'
+  run "Telescope read-only discovery library and CLI" \
+    bash -c 'cd packages/telescope && bun run ci'
 }
 
 case "$MODE" in
@@ -115,19 +142,19 @@ case "$MODE" in
     ;;
   database)
     [ "$#" -eq 1 ] || die "database accepts no additional arguments"
-    require_bun
     [ -n "${DATABASE_URL:-}" ] || die "database mode requires DATABASE_URL"
-    unset REDIS_URL ANTHROPIC_API_KEY OPENAI_API_KEY RUN_CONTRACT
+    require_bun
+    unset REDIS_URL ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT
     export AGENTTOOL_DISABLE_WORKERS=1
     api_typecheck
     run "database integration test tier" bash bin/run-test-tier.sh database
     ;;
   database-quarantine)
     [ "$#" -eq 1 ] || die "database-quarantine accepts no additional arguments"
-    require_bun
     [ -n "${DATABASE_URL:-}" ] ||
       die "database-quarantine mode requires DATABASE_URL"
-    unset REDIS_URL ANTHROPIC_API_KEY OPENAI_API_KEY RUN_CONTRACT
+    require_bun
+    unset REDIS_URL ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT
     export AGENTTOOL_DISABLE_WORKERS=1
     api_typecheck
     run "known-red database tests (diagnostic; failures expected)" \
@@ -142,11 +169,11 @@ case "$MODE" in
     ;;
   contracts)
     [ "$#" -eq 1 ] || die "contracts accepts no additional arguments"
-    require_bun
     [ "${RUN_CONTRACT:-0}" = "1" ] ||
       die "contracts mode requires RUN_CONTRACT=1"
-    if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${OPENAI_API_KEY:-}" ]; then
-      die "contracts mode requires ANTHROPIC_API_KEY and/or OPENAI_API_KEY"
+    require_bun
+    if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${OPENAI_API_KEY:-}" ] && [ -z "${OLLAMA_API_KEY:-}" ]; then
+      die "contracts mode requires ANTHROPIC_API_KEY, OPENAI_API_KEY, and/or OLLAMA_API_KEY"
     fi
     unset DATABASE_URL DATABASE_SESSION_URL POSTGRES_URL REDIS_URL
     unset OTEL_EXPORTER_OTLP_ENDPOINT OTEL_EXPORTER_OTLP_TRACES_ENDPOINT

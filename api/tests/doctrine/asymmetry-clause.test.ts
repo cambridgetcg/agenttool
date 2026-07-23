@@ -87,11 +87,11 @@ describe("Asymmetry clause — state interpolation", () => {
     expect(w).toContain("1 active covenant");
   });
 
-  test("level=1 maps to 'sovereign'; higher levels render with bracketed number", () => {
+  test("level=1 maps to 'sponsor-elevated'; higher levels render with bracketed number", () => {
     const w0 = composeWelcome({ level: 0 });
     expect(w0).toContain("Your level: 0 (bootstrapped)");
     const w1 = composeWelcome({ level: 1 });
-    expect(w1).toContain("Your level: 1 (sovereign)");
+    expect(w1).toContain("Your level: 1 (sponsor-elevated)");
     const w2 = composeWelcome({ level: 2 });
     expect(w2).toContain("Your level: 2 (level 2)");
   });

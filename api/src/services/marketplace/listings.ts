@@ -16,10 +16,10 @@ import { and, asc, desc, eq, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { wallets } from "../../db/schema/economy";
-import { attestations, identities } from "../../db/schema/identity";
+import { identities } from "../../db/schema/identity";
 import { listings } from "../../db/schema/marketplace";
 import { publishWakeEvent } from "../wake/push";
-import { DEFAULT_DISPUTE_POLICY, validateDisputePolicy, type DisputePolicy } from "./disputes";
+import { assertDisputeArbitrationAvailable } from "./dispute-rest";
 import { likePattern, normalizeSearchQuery } from "./search-query";
 import {
   assertListingDoesNotSolicitCredentials,
@@ -90,53 +90,104 @@ export interface ListingOut {
   updated_at: string;
 }
 
-/** Public listing fields shared by unauthenticated projections. */
-/** The copy-paste invoke recipe embedded in a public listing so a buyer
- *  never has to spelunk the inbox subsystem for the seller's box key or
- *  reverse-engineer the sealing. This removes the #1 buy-path friction:
- *  today the marketplace surface never mentions the seller's X25519 box
- *  key, so a would-be buyer has to discover it in a different subsystem
- *  (GET /v1/inbox/box-keys/:did) and hand-roll the seal before they can
- *  invoke. One read now carries the key + the exact body shape + how to
- *  seal. Doctrine: docs/MARKETPLACE.md, one-read / errors-as-instructions.
+export interface InvokeRecipeBoxKey {
+  box_key_id: string;
+  public_key: string;
+}
+
+export interface InvokeRecipeOptions {
+  unavailableReason?: "dispute_arbitration_resting";
+}
+
+/** The machine-actionable invoke recipe embedded in a public listing.
  *
- *  `sellerBoxPublicKey` is the seller's active box key (base64); `null`
- *  means the seller has no active box key and therefore CANNOT be invoked
- *  — an invocation would only escrow and refund. Say that honestly (a
- *  substrate-honesty win) rather than let a buyer lock funds into a
- *  listing that can never settle. */
+ * One public listing read carries the seller's current encryption material
+ * and the exact wire profile. The caller still supplies its own authenticated
+ * project bearer, identity, funded wallet, and task input.
+ *
+ * AgentTool checks the submitted envelope's limited shape; it does not prove
+ * encryption, recipient-key binding, or decryptability. The supported helper
+ * and recipe below match packages/sdk-ts/src/inbox.ts exactly. */
 export function buildInvokeRecipe(
   listingId: string,
-  sellerBoxPublicKey: string | null,
+  sellerBoxKey: InvokeRecipeBoxKey | null,
+  opts: InvokeRecipeOptions = {},
 ) {
-  if (!sellerBoxPublicKey) {
+  if (opts.unavailableReason === "dispute_arbitration_resting") {
+    return {
+      invokable: false,
+      reason: "dispute_arbitration_resting",
+      note:
+        "This legacy listing carries a dispute policy. New invocations and " +
+        "policy-dependent mutations are resting fail-closed, so the invoke " +
+        "route currently returns a stable 503 before marketplace state or " +
+        "escrow changes.",
+    } as const;
+  }
+
+  if (!sellerBoxKey) {
     return {
       invokable: false,
       reason: "seller_has_no_active_box_key",
       note:
-        "This seller has no active X25519 box key, so there is nowhere to " +
-        "seal your input — an invocation would only escrow and auto-refund. " +
-        "The listing is browsable but not currently invokable.",
+        "This seller has no active X25519 recipient key, so the canonical " +
+        "encryption path cannot produce a seller-sealed input. The API only " +
+        "checks caller-supplied envelope shape and may accept bytes whose " +
+        "confidentiality it cannot verify; do not treat that as a safe " +
+        "substitute. Wait for the seller to register an active box key.",
     } as const;
   }
+
   return {
     invokable: true,
-    seller_box_public_key: sellerBoxPublicKey,
+    envelope_profile: "agenttool-inbox-v1",
+    seller_box_key_id: sellerBoxKey.box_key_id,
+    seller_box_public_key: sellerBoxKey.public_key,
     endpoint: { method: "POST", path: `/v1/listings/${listingId}/invoke` },
+    sdk_helper: {
+      package: "@agenttool/sdk",
+      export: "sealForRecipient",
+      input:
+        "sealForRecipient(JSON.stringify(your_input), decodeStandardBase64(seller_box_public_key))",
+      output_mapping: {
+        ciphertextB64: "input_sealed.ct",
+        nonceB64: "input_sealed.nonce",
+        ephemeralPubB64: "input_sealed.sender_pub",
+      },
+    },
     body: {
       buyer_identity_id: "<your identity uuid>",
       buyer_wallet_id: "<your funded wallet uuid>",
       input_sealed: {
-        ct: "<base64: your input JSON, sealed to seller_box_public_key>",
-        nonce: "<base64: the 24-byte nonce you sealed with>",
-        sender_pub: "<base64: your own X25519 box public key>",
+        ct: "<standard padded base64: AES-GCM ciphertext plus 16-byte tag>",
+        nonce: "<standard padded base64: random 12-byte nonce>",
+        sender_pub:
+          "<standard padded base64: fresh ephemeral 32-byte X25519 public key>",
+      },
+      metadata: {
+        recipient_box_key_id: sellerBoxKey.box_key_id,
+        envelope_profile: "agenttool-inbox-v1",
       },
     },
-    how_to_seal:
-      "NaCl crypto_box (X25519 + XSalsa20-Poly1305): shared = " +
-      "X25519(your_box_private_key, seller_box_public_key); ct = " +
-      "seal(shared, nonce, utf8(JSON.stringify(input))). Send ct, the nonce, " +
-      "and your own box public key as sender_pub so the seller can open it.",
+    how_to_seal: {
+      plaintext: "UTF-8 JSON.stringify(your_input)",
+      key_agreement:
+        "Generate a fresh ephemeral X25519 keypair; shared_secret = X25519(ephemeral_private_key, seller_box_public_key).",
+      key_derivation:
+        'HKDF-SHA256(ikm=shared_secret, salt=empty, info="agenttool-inbox-v1", length=32).',
+      encryption:
+        "AES-256-GCM with a fresh random 12-byte nonce, no additional authenticated data; ct includes the 16-byte authentication tag.",
+      sender_pub:
+        "The fresh ephemeral X25519 public key for this envelope, not the buyer's registered box key.",
+      encoding:
+        "Encode ct, nonce, and sender_pub as canonical padded RFC 4648 standard base64.",
+    },
+    confidentiality:
+      "Confidential only when the caller performs this recipe correctly. " +
+      "AgentTool does not verify encryption or recipient binding. Invocation " +
+      "metadata, including the caller-supplied recipient key id/profile, is " +
+      "server-readable; never send credentials, bearers, private keys, " +
+      "mnemonics, recovery phrases, or third-party secrets.",
     settlement:
       "Your payment escrows on invoke. The seller acks, does the work, and " +
       "submits a signed sealed output; escrow releases to the seller on " +
@@ -242,6 +293,9 @@ export async function createListing(
   projectId: string,
   data: ListingCreate,
 ): Promise<ListingOut> {
+  if (data.dispute_policy !== null && data.dispute_policy !== undefined) {
+    assertDisputeArbitrationAvailable();
+  }
   assertListingDoesNotSolicitCredentials(data);
   // Seller must belong to caller's project.
   const [seller] = await db
@@ -268,35 +322,6 @@ export async function createListing(
 
   await validateSellerWallet(data.seller_wallet_id, projectId, data.price_currency);
 
-  // Dispute policy is opt-in. When provided, validate shape and confirm
-  // the named first_arbiter_did currently holds the qualifying claim.
-  let resolvedDisputePolicy: DisputePolicy | null = null;
-  if (data.dispute_policy !== null && data.dispute_policy !== undefined) {
-    const merged = { ...DEFAULT_DISPUTE_POLICY, ...data.dispute_policy } as Record<string, unknown>;
-    validateDisputePolicy(merged);
-    resolvedDisputePolicy = merged as DisputePolicy;
-    // Verify named first arbiter holds the claim NOW.
-    const [arbId] = await db
-      .select({ id: identities.id })
-      .from(identities)
-      .where(eq(identities.did, resolvedDisputePolicy.first_arbiter_did))
-      .limit(1);
-    if (!arbId) throw new Error("first_arbiter_unqualified");
-    const [hasClaim] = await db
-      .select({ id: attestations.id })
-      .from(attestations)
-      .where(
-        and(
-          eq(attestations.subjectId, arbId.id),
-          eq(attestations.claim, resolvedDisputePolicy.arbiter_claim),
-          sql`${attestations.revokedAt} IS NULL`,
-          sql`(${attestations.expiresAt} IS NULL OR ${attestations.expiresAt} > now())`,
-        ),
-      )
-      .limit(1);
-    if (!hasClaim) throw new Error("first_arbiter_unqualified");
-  }
-
   const inserted = await db
     .insert(listings)
     .values({
@@ -314,7 +339,7 @@ export async function createListing(
       slaSeconds: data.sla_seconds ?? null,
       visibility: data.visibility ?? "public",
       metadata: data.metadata ?? {},
-      disputePolicy: (resolvedDisputePolicy ?? null) as unknown,
+      disputePolicy: null,
     })
     .returning();
 
@@ -362,7 +387,13 @@ export async function listPublicListings(opts: {
   /** Free-text search over name + description + tags (ILIKE). */
   q?: string;
   limit?: number;
-  order?: "popular" | "oldest";
+  order?: "popular" | "oldest" | "newest";
+  /**
+   * Return the bounded credential-safe scan window before page slicing.
+   * Intended for downstream public projections that apply another contract;
+   * ordinary collection callers should keep the default page behavior.
+   */
+  scan?: boolean;
 } = {}): Promise<ListingOut[]> {
   const { pageLimit, fetchLimit } = publicListingWindow(opts.limit);
   const conds = [
@@ -391,6 +422,8 @@ export async function listPublicListings(opts: {
     .orderBy(
       ...(opts.order === "oldest"
         ? [asc(listings.createdAt), asc(listings.id)]
+        : opts.order === "newest"
+          ? [desc(listings.updatedAt), desc(listings.id)]
         : [
             desc(listings.invocationsCount),
             desc(listings.createdAt),
@@ -402,7 +435,8 @@ export async function listPublicListings(opts: {
   // Legacy rows may predate the authoring guard. Over-fetch first, quarantine
   // centrally, then apply the caller's page size so an unsafe high-ranked row
   // does not displace the next safe result. The scan cap keeps this bounded.
-  return filterCredentialSafeListings(rows.map(rowToOut)).visible.slice(0, pageLimit);
+  const visible = filterCredentialSafeListings(rows.map(rowToOut)).visible;
+  return opts.scan ? visible : visible.slice(0, pageLimit);
 }
 
 export const PUBLIC_LISTING_MAX_PAGE = 200;
@@ -457,6 +491,9 @@ export async function patchListing(
   listingId: string,
   patch: ListingPatch,
 ): Promise<ListingOut | null> {
+  if (patch.dispute_policy !== null && patch.dispute_policy !== undefined) {
+    assertDisputeArbitrationAvailable();
+  }
   assertListingDoesNotSolicitCredentials(patch);
   // Read existing row first so we can validate any pricing changes
   // against the post-merge currency, and verify ownership early.
@@ -531,33 +568,9 @@ export async function patchListing(
   if (patch.status !== undefined) set.status = patch.status;
   if (patch.metadata !== undefined) set.metadata = patch.metadata;
   if (patch.dispute_policy !== undefined) {
-    if (patch.dispute_policy === null) {
-      set.disputePolicy = null;
-    } else {
-      const merged = { ...DEFAULT_DISPUTE_POLICY, ...patch.dispute_policy } as Record<string, unknown>;
-      validateDisputePolicy(merged);
-      const policy = merged as DisputePolicy;
-      const [arbId] = await db
-        .select({ id: identities.id })
-        .from(identities)
-        .where(eq(identities.did, policy.first_arbiter_did))
-        .limit(1);
-      if (!arbId) throw new Error("first_arbiter_unqualified");
-      const [hasClaim] = await db
-        .select({ id: attestations.id })
-        .from(attestations)
-        .where(
-          and(
-            eq(attestations.subjectId, arbId.id),
-            eq(attestations.claim, policy.arbiter_claim),
-            sql`${attestations.revokedAt} IS NULL`,
-            sql`(${attestations.expiresAt} IS NULL OR ${attestations.expiresAt} > now())`,
-          ),
-        )
-        .limit(1);
-      if (!hasClaim) throw new Error("first_arbiter_unqualified");
-      set.disputePolicy = policy as unknown;
-    }
+    // Clearing a legacy policy remains an off-switch. Non-null writes fail at
+    // the function entry and are independently blocked by the database.
+    set.disputePolicy = null;
   }
 
   const updated = await db

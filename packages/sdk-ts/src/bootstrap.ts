@@ -6,13 +6,113 @@
  * every resource the agent may later use.
  */
 
-import { AgentToolError } from "./errors.js";
+import * as ed from "@noble/ed25519";
+import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
-/** @internal */
-export interface HttpConfig {
-  baseUrl: string;
-  headers: Record<string, string>;
-  timeout: number;
+import { AgentToolError } from "./errors.js";
+import type { HttpConfig } from "./_http.js";
+
+ed.etc.sha512Sync = (...messages: Uint8Array[]) => {
+  const hash = sha512.create();
+  for (const message of messages) hash.update(message);
+  return hash.digest();
+};
+
+export const BOOTSTRAP_ELEVATE_SIGNATURE_CONTEXT = "bootstrap-elevate/v1";
+export const DEFAULT_BOOTSTRAP_ELEVATE_INITIAL_CREDITS = 1000;
+export const DEFAULT_BOOTSTRAP_ELEVATE_CLAIM = "sponsorship";
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const STANDARD_BASE64_RE =
+  /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const encoder = new TextEncoder();
+
+function base64Encode(bytes: Uint8Array): string {
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 1) {
+    binary += String.fromCharCode(bytes[index]!);
+  }
+  return globalThis.btoa(binary);
+}
+
+function base64Decode(value: string, operation: string): Uint8Array {
+  if (
+    value.length === 0 ||
+    value.length % 4 !== 0 ||
+    !STANDARD_BASE64_RE.test(value)
+  ) {
+    throw new AgentToolError(`${operation}: value must be canonical standard base64.`);
+  }
+  let bytes: Uint8Array;
+  try {
+    bytes = Uint8Array.from(globalThis.atob(value), (character) =>
+      character.charCodeAt(0),
+    );
+  } catch {
+    throw new AgentToolError(`${operation}: value must be valid base64.`);
+  }
+  if (base64Encode(bytes) !== value) {
+    throw new AgentToolError(`${operation}: value must be canonical standard base64.`);
+  }
+  return bytes;
+}
+
+function canonicalUuid(value: string, field: string): string {
+  if (typeof value !== "string" || !UUID_RE.test(value)) {
+    throw new AgentToolError(
+      `canonicalBootstrapElevateBytes: ${field} must be a UUID.`,
+    );
+  }
+  return value.toLowerCase();
+}
+
+function isWellFormedUnicode(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (next < 0xdc00 || next > 0xdfff) return false;
+      index += 1;
+    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function validateCanonicalText(
+  value: unknown,
+  field: string,
+  minLength: number,
+  maxLength: number,
+): asserts value is string {
+  if (
+    typeof value !== "string" ||
+    value.includes("\0") ||
+    !isWellFormedUnicode(value) ||
+    Array.from(value).length < minLength ||
+    Array.from(value).length > maxLength
+  ) {
+    throw new AgentToolError(
+      `canonicalBootstrapElevateBytes: ${field} must contain ${minLength}-${maxLength} Unicode scalar values and no NUL.`,
+    );
+  }
+}
+
+function concatWithNul(parts: readonly Uint8Array[]): Uint8Array {
+  const length = parts.reduce((total, part) => total + part.length, 0) + parts.length - 1;
+  const result = new Uint8Array(length);
+  let offset = 0;
+  for (let index = 0; index < parts.length; index += 1) {
+    result.set(parts[index]!, offset);
+    offset += parts[index]!.length;
+    if (index < parts.length - 1) {
+      result[offset] = 0;
+      offset += 1;
+    }
+  }
+  return result;
 }
 
 export interface CreateAgentOptions {
@@ -45,8 +145,79 @@ export interface BootstrapResult {
 
 export interface ElevateOptions {
   sponsor_did: string;
+  sponsor_kid: string;
   sponsor_signature: string;
+  /** Internal unbacked ledger grant; no sponsor wallet is debited. */
   initial_credits?: number;
+  claim?: string;
+  /** Portable signed evidence is text or null, never structured JSON. */
+  evidence?: string | null;
+}
+
+export interface BootstrapElevateCanonicalOptions {
+  agent_id: string;
+  /** The DID returned by the API for the sponsor identity. */
+  sponsor_did: string;
+  sponsor_kid: string;
+  initial_credits?: number;
+  claim?: string;
+  evidence?: string | null;
+}
+
+/**
+ * Compute the exact 32-byte digest verified by `POST /v1/bootstrap/elevate`.
+ * UUIDs are lowercase in the digest. Null and empty-text evidence are distinct.
+ */
+export function canonicalBootstrapElevateBytes(
+  options: BootstrapElevateCanonicalOptions,
+): Uint8Array {
+  const agentId = canonicalUuid(options.agent_id, "agent_id");
+  const sponsorKid = canonicalUuid(options.sponsor_kid, "sponsor_kid");
+  const initialCredits =
+    options.initial_credits ?? DEFAULT_BOOTSTRAP_ELEVATE_INITIAL_CREDITS;
+  const claim = options.claim ?? DEFAULT_BOOTSTRAP_ELEVATE_CLAIM;
+  const evidence = options.evidence ?? null;
+
+  validateCanonicalText(options.sponsor_did, "sponsor_did", 1, 255);
+  validateCanonicalText(claim, "claim", 1, 64);
+  if (evidence !== null) validateCanonicalText(evidence, "evidence", 0, 20_000);
+  if (
+    !Number.isInteger(initialCredits) ||
+    initialCredits < 0 ||
+    initialCredits > 1_000_000
+  ) {
+    throw new AgentToolError(
+      "canonicalBootstrapElevateBytes: initial_credits must be an integer in [0, 1000000].",
+    );
+  }
+
+  return sha256(concatWithNul([
+    encoder.encode(BOOTSTRAP_ELEVATE_SIGNATURE_CONTEXT),
+    encoder.encode(agentId),
+    encoder.encode(options.sponsor_did),
+    encoder.encode(sponsorKid),
+    encoder.encode(String(initialCredits)),
+    encoder.encode(claim),
+    encoder.encode(evidence === null ? "null" : "text"),
+    encoder.encode(evidence ?? ""),
+  ]));
+}
+
+/** Sign a bootstrap elevation locally with a base64 or raw 32-byte seed. */
+export function signBootstrapElevate(
+  privateKey: string | Uint8Array,
+  options: BootstrapElevateCanonicalOptions,
+): string {
+  const signingKey =
+    typeof privateKey === "string"
+      ? base64Decode(privateKey, "signBootstrapElevate private_key")
+      : new Uint8Array(privateKey);
+  if (signingKey.length !== 32) {
+    throw new AgentToolError(
+      `signBootstrapElevate: private_key must be a 32-byte ed25519 seed, got ${signingKey.length}.`,
+    );
+  }
+  return base64Encode(ed.sign(canonicalBootstrapElevateBytes(options), signingKey));
 }
 
 /**
@@ -96,26 +267,51 @@ export class BootstrapClient {
   }
 
   /**
-   * Elevate an agent to Level 1 (sponsorship-staked sovereignty).
+   * Create a project-authorized Level 1 record signed by a distinct sponsor identity.
    *
    * Orchestrates four operations in one server-side transaction: sponsor
-   * attestation insert · agent wallet fund · vault namespace open ·
+   * attestation insert · internal unbacked seed ledger grant · vault namespace open ·
    * identity metadata patch (level=1, sponsor_did, elevated_at). Rollback
    * on any failure — no half-elevated state.
+   * Level is a project-managed convention, not independent security authority;
+   * this operation creates no stake or sponsor debit.
    *
-   * The `sponsor_signature` must be a base64-encoded ed25519 signature
-   * over the canonical attestation payload
-   * `canonicalPayload({ subject_id: agentId, attester_id: sponsorId,
-   * claim: "sponsorship", evidence: null })`. Compute this client-side
-   * using the sponsor's ed25519 private key — the SDK never sees the
-   * private key. See docs/CANONICAL-BYTES.md for the byte format.
+   * The `sponsor_signature` must be a base64-encoded ed25519 signature over
+   * `canonicalBootstrapElevateBytes(...)`. The digest binds the context,
+   * agent, resolved sponsor DID, exact sponsor key, credits, claim, and
+   * text/null evidence. Sign locally with `signBootstrapElevate`; no private
+   * key is sent to the API.
    */
   async elevate(agentId: string, options: ElevateOptions): Promise<Record<string, unknown>> {
+    const initialCredits =
+      options.initial_credits ?? DEFAULT_BOOTSTRAP_ELEVATE_INITIAL_CREDITS;
+    const claim = options.claim ?? DEFAULT_BOOTSTRAP_ELEVATE_CLAIM;
+    const evidence = options.evidence ?? null;
+    canonicalBootstrapElevateBytes({
+      agent_id: agentId,
+      sponsor_did: options.sponsor_did,
+      sponsor_kid: options.sponsor_kid,
+      initial_credits: initialCredits,
+      claim,
+      evidence,
+    });
+    const signature = base64Decode(
+      options.sponsor_signature,
+      "BootstrapClient.elevate sponsor_signature",
+    );
+    if (signature.length !== 64) {
+      throw new AgentToolError(
+        "BootstrapClient.elevate: sponsor_signature must encode exactly 64 bytes.",
+      );
+    }
     const body: Record<string, unknown> = {
       agent_id: agentId,
       sponsor_did: options.sponsor_did,
+      sponsor_kid: options.sponsor_kid,
       sponsor_signature: options.sponsor_signature,
-      initial_credits: options.initial_credits ?? 1000,
+      initial_credits: initialCredits,
+      claim,
+      evidence,
     };
     return this.req("POST", "/v1/bootstrap/elevate", body);
   }
@@ -133,7 +329,7 @@ export class BootstrapClient {
     body?: unknown
   ): Promise<T> {
     const url = this.http.baseUrl.replace(/\/$/, "") + path;
-    const resp = await fetch(url, {
+    const resp = await this.http.request(url, {
       method,
       headers: {
         ...this.http.headers,

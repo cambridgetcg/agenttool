@@ -17,6 +17,7 @@ import * as ed from "@noble/ed25519";
 import { x25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { randomBytes } from "node:crypto";
+import { canonicalRegisterAgentBytes as canonicalRegisterAgentV2Bytes } from "../../packages/sdk-ts/src/seed";
 
 const API = process.env.AGENTTOOL_API_BASE ?? "https://api.agenttool.dev";
 const POW_DIFFICULTY = 18;
@@ -34,27 +35,6 @@ function concat(...parts: Uint8Array[]): Uint8Array {
     off += p.length;
   }
   return out;
-}
-
-function canonicalRegisterAgentBytes(opts: {
-  displayName: string;
-  agentPubB64: string;
-  boxPubB64: string;
-  runtimeProvider: string;
-  runtimeModel: string;
-  timestamp: string;
-}): Uint8Array {
-  return sha256(
-    concat(
-      enc.encode("register-agent/v1"), SEP,
-      enc.encode(opts.displayName),    SEP,
-      Buffer.from(opts.agentPubB64, "base64"), SEP,
-      Buffer.from(opts.boxPubB64, "base64"),   SEP,
-      enc.encode(opts.runtimeProvider), SEP,
-      enc.encode(opts.runtimeModel),    SEP,
-      enc.encode(opts.timestamp),
-    ),
-  );
 }
 
 function powBytes(opts: {
@@ -145,16 +125,18 @@ async function register(displayName: string): Promise<Agent> {
   const boxPubB64 = b64(boxPub);
 
   const timestamp = new Date().toISOString();
+  const registrationNonce = crypto.randomUUID();
   process.stderr.write(`[${displayName}] grinding 18-bit PoW...\n`);
   const powNonce = grindPow({ agentPubB64, displayName, timestamp });
   process.stderr.write(`[${displayName}] PoW nonce: ${powNonce}\n`);
 
-  const canonical = canonicalRegisterAgentBytes({
+  const canonical = canonicalRegisterAgentV2Bytes({
     displayName,
-    agentPubB64,
-    boxPubB64,
+    agentPublicKey: agentPub,
+    boxPublicKey: boxPub,
     runtimeProvider: "self",
     runtimeModel: "",
+    registrationNonce,
     timestamp,
   });
   const sig = await ed.signAsync(canonical, agentPriv);
@@ -169,6 +151,7 @@ async function register(displayName: string): Promise<Agent> {
       runtime: { provider: "self" },
       key_proof: { timestamp, signature: b64(sig) },
       pow_nonce: powNonce,
+      registration_nonce: registrationNonce,
     }),
   });
   const body = await res.json();

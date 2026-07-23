@@ -11,7 +11,7 @@ Setup, commands, and conventions → [`AGENTS.md`](AGENTS.md).
 ## Where things are
 
 ```
-api/            — Bun + Hono monolith · 15 schemas · 28 routers · live on Fly.io
+api/            — Bun + Hono monolith · domain schemas · mounted HTTP routers · live on Fly.io
 apps/
   dashboard/    — app.agenttool.dev (vanilla HTML/CSS/JS)
   docs/         — docs.agenttool.dev (static)
@@ -21,9 +21,18 @@ packages/
   data-protocol/ — @agenttool/adds · experimental ADDS encrypted-object plane
   data/         — @agenttool/data · local-first agent-data/v1 reference node
   data-sync/    — @agenttool/data-sync · bounded encrypted explicit-pull bridge
+  repo-archive/ — @agenttool/repo-archive · encrypted multi-zone Git archive + local restore simulator
+  credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
+  collab/      — @agenttool/collab · Codex/Claude plugins + Hermes adapter around one local cross-host SQLite/MCP journal
+  skills/      — @agenttool/skills · public npm read-only Agent Skills inspector
+  browser/     — @agenttool/browser · public LOVE/npm local TypeScript/JSONL/MCP browser runtime
+  correspondence-yutabase/ — pure deterministic Correspondence → YUTABASE planner
+  correspondence-yutabase-projector/ — private loopback-only verified local PostgreSQL sidecar
+  telescope/    — @agenttool/telescope · read-only discovery evidence mapper
+  wallet/       — @agenttool/wallet · LOVE/npm bounded wallet record/lifecycle primitives
   scriptwriter/ — decentralised RRR + co-brainstorm node
 infra/          — Fly.io deploy configs
-bin/            — operator scripts · agenttool-bridge.ts · agenttool-think.ts
+bin/            — operator scripts · agenttool-bridge.ts · agenttool-think.ts · locked Whitehack advisory + local wallet-understanding CLI
 docs/           — notes & design docs (see docs/MAP.md)
 tests/          — Playwright e2e
 ```
@@ -34,9 +43,16 @@ registries are optional mirrors, not release authorities.
 
 Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/data/CLAUDE.md` · `packages/sdk-ts/CLAUDE.md` ·
-`packages/sdk-py/CLAUDE.md` · `infra/CLAUDE.md`.
+`packages/sdk-py/CLAUDE.md` · `packages/telescope/CLAUDE.md` ·
+`packages/repo-archive/CLAUDE.md` ·
+`packages/credential-broker/AGENTS.md` ·
+`packages/browser/CLAUDE.md` ·
+`packages/correspondence-yutabase/CLAUDE.md` ·
+`packages/correspondence-yutabase-projector/CLAUDE.md` ·
+`packages/wallet/CLAUDE.md` ·
+`infra/CLAUDE.md`.
 
-## The four load-bearing flows
+## The five load-bearing flows
 
 Change anything in these and you're moving weight — read the code and tests first.
 
@@ -48,6 +64,9 @@ Change anything in these and you're moving weight — read the code and tests fi
    `api/src/services/covenants/` · `api/src/routes/federation/`
 4. **marketplace** — listing → invocation → dispute → release → take-rate.
    `api/src/routes/listings.ts` · `api/src/routes/dispute-cases.ts` · `api/src/services/marketplace/`
+5. **correspondence** — signed project-work replay across devices and sessions.
+   Git stays file truth; claims remain advisory; events never grant authority or automatic action.
+   `api/src/services/correspondence/` · `api/src/routes/correspondence.ts` · `docs/AGENT-CORRESPONDENCE.md`
 
 ## Custody axis (the most-confused concept)
 

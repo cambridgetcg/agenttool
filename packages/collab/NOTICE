@@ -1,0 +1,8 @@
+AgentTool
+Copyright 2026 AgentTool contributors
+
+This product includes software developed by AgentTool contributors.
+
+The standalone MCP executable includes software from the Model Context
+Protocol TypeScript SDK and Zod projects. Their copyright notices and license
+texts are reproduced in THIRD_PARTY_LICENSES.

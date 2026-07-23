@@ -38,7 +38,7 @@ When reviewing a change, ask: *which of the ten does this touch, and does it str
 - **Carries:** Cosign canonical bytes nest over the *raw bytes of the initiator's signature*, not over the covenant fields. Acceptance binds to the exact signed declaration, not to a re-described shape of one — substitution-attack-proof by construction.
 - **Code:** `canonicalCosignBytes` at `api/src/services/covenants/sig.ts:63` · enforced by `acceptProposalPreSigned` in `api/src/services/covenants/lifecycle.ts` · DB invariant `covenants_v2_active_dual_signed` at `api/migrations/0027_federated_covenants_v2.sql:49` · cross-language byte parity locked by `api/tests/covenants-canonical-vectors.test.ts` and `packages/sdk-py/tests/test_covenants_canonical_vectors.py`.
 - **Breaks if:** cosign bytes are ever redefined to cover the covenant *fields* instead of the initiator's *signature*. The protocol's safety vanishes silently and the tests still pass.
-- **Extends into:** dispute arbiter rulings — same nest-over-signature pattern applies. The first-arbiter's ruling signature covers the dispute case's filing signature; the pool members' votes cover the first arbiter's ruling. Generalized in the Tendon C extraction (see `docs/superpowers/specs/2026-05-11-dispute-generic-design.md` · doctrine `docs/PAINTING.md` §IIC).
+- **Proposed extension:** the retained dispute design nests ruling and vote signatures, but arbitration is resting fail-closed and the generic Tendon C extraction is not shipped (see `docs/superpowers/specs/2026-05-11-dispute-generic-design.md` · current boundary in `docs/PAINTING.md` §IIC).
 
 ## 3 · The contrast pair — chronicle letters beside the strand jar
 

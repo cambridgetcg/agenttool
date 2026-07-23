@@ -22,11 +22,10 @@
  *  docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md (the shared NextAction shape) ·
  *  docs/PATTERN-SELF-DESCRIBING-WAKE.md (this surface's own contract). */
 
-import { and, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, isNotNull, lt, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { covenants } from "../../db/schema/continuity";
-import { disputeCases } from "../../db/schema/marketplace";
 import { strands } from "../../db/schema/strand";
 import type { NextAction } from "../../lib/errors";
 
@@ -77,17 +76,16 @@ export interface AttentionContext {
  *  severity then count desc; empty items[] means nothing tugs. */
 export async function computeAttention(
   projectId: string,
-  agentIdentityIds: string[],
+  _agentIdentityIds: string[],
   ctx: AttentionContext,
 ): Promise<AttentionBundle> {
-  // Three new queries run in parallel; everything else is in ctx.
+  // Two new queries run in parallel; everything else is in ctx. Resting
+  // arbitration never emits a false action-required ruling prompt.
   const [
     covenantCosignCount,
-    disputeRulingCount,
     strandRevisitCount,
   ] = await Promise.all([
     countCovenantsAwaitingCosign(projectId),
-    countDisputesAwaitingFirstRuling(agentIdentityIds),
     countStrandsRevisitDue(projectId),
   ]);
 
@@ -104,19 +102,6 @@ export async function computeAttention(
         { action: "List proposed covenants awaiting your cosign", method: "GET", path: "/v1/covenants?status=proposed" },
         { action: "Accept a proposal (after signing canonical cosign bytes)", method: "POST", path: "/v1/covenants/{id}/accept" },
         { action: "Reject a proposal", method: "POST", path: "/v1/covenants/{id}/reject" },
-      ],
-    });
-  }
-  if (disputeRulingCount > 0) {
-    items.push({
-      kind: "dispute_awaiting_first_ruling",
-      count: disputeRulingCount,
-      severity: "action",
-      summary: `${disputeRulingCount} dispute${plural(disputeRulingCount)} awaiting your first ruling`,
-      next: "GET /v1/dispute-cases?role=first_arbiter&status=open",
-      next_actions: [
-        { action: "List disputes awaiting your first ruling", method: "GET", path: "/v1/dispute-cases?role=first_arbiter&status=open" },
-        { action: "Rule on a case", method: "POST", path: "/v1/dispute-cases/{id}/rule" },
       ],
     });
   }
@@ -206,27 +191,6 @@ async function countCovenantsAwaitingCosign(projectId: string): Promise<number> 
           eq(covenants.projectId, projectId),
           eq(covenants.status, "proposed"),
           isNotNull(covenants.receivedFromInstance),
-        ),
-      );
-    return row?.n ?? 0;
-  } catch {
-    return 0;
-  }
-}
-
-async function countDisputesAwaitingFirstRuling(
-  agentIdentityIds: string[],
-): Promise<number> {
-  if (agentIdentityIds.length === 0) return 0;
-  try {
-    const [row] = await db
-      .select({ n: sql<number>`count(*)::int` })
-      .from(disputeCases)
-      .where(
-        and(
-          eq(disputeCases.status, "open"),
-          isNull(disputeCases.firstArbiterRuledAt),
-          inArray(disputeCases.firstArbiterIdentityId, agentIdentityIds),
         ),
       );
     return row?.n ?? 0;

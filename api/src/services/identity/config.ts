@@ -18,10 +18,6 @@ export const identityConfig = {
     tokenIssue: envInt("CREDIT_TOKEN_ISSUE", 1),
   },
 
-  // Trust score parameters.
-  trustDecayDays: envInt("TRUST_DECAY_DAYS", 90),
-  trustMaxDepth: envInt("TRUST_MAX_DEPTH", 3),
-
   // Agent-to-agent JWT TTL cap.
   tokenMaxTtlSeconds: envInt("TOKEN_MAX_TTL_SECONDS", 3600),
 } as const;

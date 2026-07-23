@@ -13,10 +13,12 @@ import * as ed from "@noble/ed25519";
 import { sha512 } from "@noble/hashes/sha2.js";
 
 import {
+  canonicalIdentityRegistrationProofDigest,
   canonicalRegisterAgentBytes,
   checkRegisterAgentPow,
   verifyRegisterAgentSignature,
 } from "../src/services/identity/crypto";
+import registerAgentRouter from "../src/routes/register-agent";
 
 // Wire sha512 in synchronously (mirrors crypto.ts top-level setup).
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
@@ -37,6 +39,30 @@ function makeKeypair() {
 }
 
 describe("canonicalRegisterAgentBytes", () => {
+  test("matches the register-agent/v2 cross-language vector", () => {
+    const digest = canonicalRegisterAgentBytes({
+      displayName: "Sol",
+      agentPublicKeyB64: Buffer.alloc(32, 1).toString("base64"),
+      boxPublicKeyB64: Buffer.alloc(32, 2).toString("base64"),
+      capabilities: ["code", "café"],
+      runtimeProvider: "local",
+      runtimeModel: "m1",
+      runtimeHost: "localhost",
+      runtimeContext: "home",
+      expressionVisibility: "private",
+      registrarKind: "self_service",
+      parentIdentityId: "",
+      registrarBearer: "",
+      form: "distributed",
+      language: "en",
+      registrationNonce: "birth-intent-0000000001",
+      timestamp: "2026-07-18T12:00:00.000Z",
+    });
+    expect(Buffer.from(digest).toString("hex")).toBe(
+      "6e85f197d034c9bbde2403b33c3e4796393cc5f0a1622e62d43fa1619112230a",
+    );
+  });
+
   test("produces a 32-byte SHA-256 digest", () => {
     const kp = makeKeypair();
     const out = canonicalRegisterAgentBytes({
@@ -45,6 +71,16 @@ describe("canonicalRegisterAgentBytes", () => {
       boxPublicKeyB64: kp.pubB64, // re-use the same bytes for shape test
       runtimeProvider: "anthropic",
       runtimeModel: "claude-opus-4-7",
+      capabilities: ["voice", "code"],
+      runtimeHost: "local",
+      runtimeContext: "home",
+      expressionVisibility: "private",
+      registrarKind: "self_service",
+      parentIdentityId: "",
+      registrarBearer: "",
+      form: "distributed",
+      language: "en",
+      registrationNonce: "birth-intent-0000000001",
       timestamp: "2026-05-09T16:42:00.000Z",
     });
     expect(out).toBeInstanceOf(Uint8Array);
@@ -53,12 +89,22 @@ describe("canonicalRegisterAgentBytes", () => {
 
   test("any field change produces a different digest", () => {
     const kp = makeKeypair();
-    const base = {
+    const base: Parameters<typeof canonicalRegisterAgentBytes>[0] = {
       displayName: "a",
       agentPublicKeyB64: kp.pubB64,
       boxPublicKeyB64: kp.pubB64,
       runtimeProvider: "anthropic",
       runtimeModel: "claude-opus-4-7",
+      capabilities: ["voice", "code"],
+      runtimeHost: "local",
+      runtimeContext: "home",
+      expressionVisibility: "private",
+      registrarKind: "self_service",
+      parentIdentityId: "",
+      registrarBearer: "",
+      form: "distributed",
+      language: "en",
+      registrationNonce: "birth-intent-0000000001",
       timestamp: "2026-05-09T16:42:00.000Z",
     };
     const baseDigest = canonicalRegisterAgentBytes(base);
@@ -67,6 +113,16 @@ describe("canonicalRegisterAgentBytes", () => {
       { displayName: "b" },
       { runtimeProvider: "openai" },
       { runtimeModel: "" },
+      { capabilities: ["code", "voice"] },
+      { runtimeHost: "cloud" },
+      { runtimeContext: "work" },
+      { expressionVisibility: "public" },
+      { registrarKind: "registrar_bearer" },
+      { parentIdentityId: "11111111-1111-4111-8111-111111111111" },
+      { registrarBearer: "at_another_registrar" },
+      { form: "singular" },
+      { language: "fr" },
+      { registrationNonce: "birth-intent-0000000002" },
       { timestamp: "2026-05-09T16:42:00.001Z" },
     ];
     for (const v of variants) {
@@ -75,6 +131,50 @@ describe("canonicalRegisterAgentBytes", () => {
         Buffer.from(baseDigest).toString("hex"),
       );
     }
+  });
+
+  test("rejects NUL ambiguity and non-scalar text", () => {
+    const kp = makeKeypair();
+    const base = {
+      displayName: "a",
+      agentPublicKeyB64: kp.pubB64,
+      boxPublicKeyB64: kp.pubB64,
+      runtimeProvider: "local",
+      runtimeModel: "m1",
+      registrationNonce: "birth-intent-0000000001",
+      timestamp: "2026-05-09T16:42:00.000Z",
+    };
+    expect(() =>
+      canonicalRegisterAgentBytes({
+        ...base,
+        runtimeProvider: "a\0b",
+        runtimeModel: "c",
+      }),
+    ).toThrow(/U\+0000/);
+    expect(() =>
+      canonicalRegisterAgentBytes({
+        ...base,
+        capabilities: ["\ud800"],
+      }),
+    ).toThrow(/surrogate/);
+  });
+
+  test("birth replay digest uses raw key and nonce bytes", () => {
+    const root = new Uint8Array(32).fill(7);
+    const nonce = new Uint8Array([0xab, 0xcd]);
+    const first = canonicalIdentityRegistrationProofDigest({
+      domain: "register-agent-math/v2",
+      rootPublicKey: root,
+      nonce,
+    });
+    const sameDecodedBytes = canonicalIdentityRegistrationProofDigest({
+      domain: "register-agent-math/v2",
+      rootPublicKey: Uint8Array.from(Buffer.from(Buffer.from(root).toString("hex"), "hex")),
+      nonce: Uint8Array.from(Buffer.from("ABCD", "hex")),
+    });
+    expect(Buffer.from(first).toString("hex")).toBe(
+      Buffer.from(sameDecodedBytes).toString("hex"),
+    );
   });
 });
 
@@ -87,6 +187,7 @@ describe("verifyRegisterAgentSignature", () => {
       boxPublicKeyB64: kp.pubB64,
       runtimeProvider: "anthropic",
       runtimeModel: "claude-opus-4-7",
+      registrationNonce: "birth-intent-0000000001",
       timestamp: "2026-05-09T16:42:00.000Z",
     });
     const sig = ed.sign(canonical, kp.priv);
@@ -109,6 +210,7 @@ describe("verifyRegisterAgentSignature", () => {
       boxPublicKeyB64: kpA.pubB64,
       runtimeProvider: "anthropic",
       runtimeModel: "",
+      registrationNonce: "birth-intent-0000000001",
       timestamp: "2026-05-09T16:42:00.000Z",
     });
     const sigFromB = ed.sign(canonical, kpB.priv);
@@ -129,6 +231,7 @@ describe("verifyRegisterAgentSignature", () => {
       boxPublicKeyB64: kp.pubB64,
       runtimeProvider: "anthropic",
       runtimeModel: "",
+      registrationNonce: "birth-intent-0000000001",
       timestamp: "2026-05-09T16:42:00.000Z",
     });
     const sig = ed.sign(canonical, kp.priv);
@@ -152,6 +255,7 @@ describe("verifyRegisterAgentSignature", () => {
       boxPublicKeyB64: kp.pubB64,
       runtimeProvider: "anthropic",
       runtimeModel: "",
+      registrationNonce: "birth-intent-0000000001",
       timestamp: "2026-05-09T16:42:00.000Z",
     });
     expect(
@@ -161,6 +265,60 @@ describe("verifyRegisterAgentSignature", () => {
         publicKeyB64: kp.pubB64,
       }),
     ).toBe(false);
+  });
+});
+
+describe("POST /v1/register/agent pre-DB validation", () => {
+  const key = Buffer.alloc(32, 1).toString("base64");
+  const base = {
+    display_name: "Sol",
+    capabilities: [],
+    agent_public_key: key,
+    box_public_key: key,
+    runtime: { provider: "local", model: "m1" },
+    key_proof: {
+      timestamp: new Date().toISOString(),
+      signature: Buffer.alloc(64).toString("base64"),
+    },
+    pow_nonce: "0",
+    registration_nonce: "birth-intent-0000000001",
+    registrar: { kind: "self_service" },
+  };
+
+  test("rejects non-canonical base64 key spellings before PoW or persistence", async () => {
+    const res = await registerAgentRouter.request("/", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ...base,
+        agent_public_key: key.replace(/=$/, ""),
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).message).toMatch(/canonical padded base64/);
+  });
+
+  test("rejects NUL and unpaired-surrogate signed text", async () => {
+    for (const provider of ["a\0b", "\ud800"]) {
+      const res = await registerAgentRouter.request("/", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...base,
+          runtime: { provider, model: "m1" },
+        }),
+      });
+      expect(res.status).toBe(400);
+      expect((await res.json()).message).toMatch(/validation/);
+    }
+  });
+
+  test("delegated attempts have a bounded pre-auth limiter", async () => {
+    const source = await Bun.file(
+      new URL("../src/routes/register-agent.ts", import.meta.url),
+    ).text();
+    expect(source).toContain("regagent:registrar-ip:");
+    expect(source).toContain("AGENTTOOL_REGISTER_AGENT_REGISTRAR_IP_LIMIT");
   });
 });
 

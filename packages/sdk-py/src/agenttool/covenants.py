@@ -14,8 +14,9 @@ returns those fields verbatim — Phase 7 adds the federation surface.
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 
 import httpx
 
@@ -28,6 +29,21 @@ from .crypto import (
 )
 
 CovenantStatus = Literal["active", "paused", "dissolved"]
+
+
+@dataclass(frozen=True)
+class CovenantBeforeSubmitContext:
+    """Immutable local review context supplied before covenant submission."""
+
+    protocol_version: Literal["v1", "v2"]
+    agent_id: str
+    agent_did: Optional[str]
+    counterparty_did: str
+    vows: Tuple[str, ...]
+
+
+CovenantBeforeSubmitHook = Callable[[CovenantBeforeSubmitContext], bool]
+"""Synchronous local gate that must return literal ``True`` to proceed."""
 
 
 def _iso_now() -> str:
@@ -84,6 +100,7 @@ class CovenantsClient:
         agent_did: Optional[str] = None,
         signing_key: Optional[bytes] = None,
         signing_key_id: Optional[str] = None,
+        before_submit: Optional[CovenantBeforeSubmitHook] = None,
     ) -> Dict[str, Any]:
         """Create a new covenant.
 
@@ -101,6 +118,9 @@ class CovenantsClient:
             agent_did: Initiator DID (required for v2).
             signing_key: 32-byte ed25519 seed (required for v2).
             signing_key_id: Key ID to include in the request (required for v2).
+            before_submit: Optional synchronous local review hook. It receives
+                an immutable snapshot and must return literal ``True``. Any
+                other result or exception stops before signing or submission.
 
         Returns:
             For v1 (default): ``{"covenant": {id, agent_id, counterparty_did,
@@ -110,15 +130,65 @@ class CovenantsClient:
             protocol_version: "v2", signature, signing_key_id,
             proposed_expires_at, established_at}`` — no ``covenant`` wrapper.
         """
-        if not vows:
+        vows_snapshot = tuple(vows)
+        if not vows_snapshot:
             raise AgentToolError(
                 "covenants.create: vows must be a non-empty list.",
                 hint="Pass at least one vow string. A covenant without a vow is just a contact.",
             )
+        if before_submit is not None and protocol_version not in (None, "v1", "v2"):
+            raise AgentToolError(
+                "covenants.create: protocol_version must be v1 or v2.",
+                hint="Pass protocol_version as v1, v2, or omit it for v1.",
+            )
+        # Without a hook, preserve the old wire behavior for untyped invalid
+        # values and leave their validation to the server.
+        resolved_protocol: Literal["v1", "v2"] = (
+            "v2" if protocol_version == "v2" else "v1"
+        )
+
+        if resolved_protocol == "v2" and (
+            not agent_did or not signing_key or not signing_key_id
+        ):
+            raise AgentToolError(
+                "covenants.create v2 requires agent_did, signing_key, and signing_key_id.",
+                hint="All three fields are required for the v2 federated proposal flow.",
+            )
+
+        review_context = CovenantBeforeSubmitContext(
+            protocol_version=resolved_protocol,
+            agent_id=agent_id,
+            agent_did=agent_did if resolved_protocol == "v2" else None,
+            counterparty_did=counterparty_did,
+            vows=vows_snapshot,
+        )
+        if before_submit is not None:
+            try:
+                review_result = before_submit(review_context)
+            except Exception as exc:
+                raise AgentToolError(
+                    "covenants.create: before_submit hook failed locally.",
+                    hint=(
+                        "The covenant was not signed or submitted. "
+                        "Inspect the local hook and try again."
+                    ),
+                    error_code="covenant_before_submit_failed",
+                ) from exc
+            if review_result is not True:
+                raise AgentToolError(
+                    "covenants.create: before_submit hook did not return true.",
+                    hint=(
+                        "The covenant was not signed or submitted. Return literal "
+                        "True only after approval."
+                    ),
+                    error_code="covenant_before_submit_refused",
+                )
+
+        transport_vows = list(vows_snapshot)
         body: Dict[str, Any] = {
             "agent_id": agent_id,
             "counterparty_did": counterparty_did,
-            "vows": vows,
+            "vows": transport_vows,
         }
         if counterparty_name is not None:
             body["counterparty_name"] = counterparty_name
@@ -129,19 +199,17 @@ class CovenantsClient:
         if org_id is not None:
             body["org_id"] = org_id
 
-        if protocol_version == "v2":
-            if not agent_did or not signing_key or not signing_key_id:
-                raise AgentToolError(
-                    "covenants.create v2 requires agent_did, signing_key, and signing_key_id.",
-                    hint="All three fields are required for the v2 federated proposal flow.",
-                )
+        if resolved_protocol == "v2":
+            assert agent_did is not None
+            assert signing_key is not None
+            assert signing_key_id is not None
             covenant_id = str(uuid.uuid4())
             established_at = _iso_now()
             signature = sign_covenant_declare(
                 covenant_id=covenant_id,
                 initiator_did=agent_did,
                 counterparty_did=counterparty_did,
-                vows=vows,
+                vows=transport_vows,
                 established_at_iso=established_at,
                 signing_key=signing_key,
             )

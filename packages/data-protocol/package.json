@@ -1,7 +1,8 @@
 {
   "name": "@agenttool/adds",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "ADDS 0.1 — offline-first, agent-native encrypted distribution and storage",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -17,7 +18,9 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "NOTICE"
   ],
   "scripts": {
     "build": "tsc",

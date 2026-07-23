@@ -6,15 +6,15 @@
 >
 > **Implements:** cross-cutting security posture — token/key age, rotation, and refresh ergonomics across every primitive that holds material.
 >
-> **Code:** `api/src/services/keys/shape.ts` (shapeKeyRow · summarizeBearers — surfaces the `you_protect` block) · `api/src/routes/keys.ts` · `bin/agenttool-rotate` · `bin/agenttool-secret` · DB: `api/src/db/schema/tools.ts` (apiKeys table)
+> **Code:** `api/src/services/keys/shape.ts` (shapeKeyRow · summarizeBearers — surfaces the `you_protect` block) · `api/src/routes/keys.ts` · `bin/agenttool-rotate` · `bin/agenttool-secret` · `packages/credential-broker/` (`agentcred/0.1` local-use preview) · DB: `api/src/db/schema/tools.ts` (apiKeys table)
 >
-> **Tests:** `api/tests/doctrine/promise-01-identity-yours.test.ts` (bearer hygiene + no keyHash leakage in the wake)
+> **Tests:** `api/tests/doctrine/promise-01-identity-yours.test.ts` (bearer hygiene + no keyHash leakage in the wake) · `packages/credential-broker/tests/` (no-reveal, scope, socket, network, and audit boundaries)
 
 ---
 
 ## What this document is
 
-The doctrine for **bearer-token age, rotation, and refresh** on agenttool. A bearer (`at_…`) is a project-wide root credential, often named for the device or workload that stores it. The name helps operators find and revoke it; it does not narrow authority. Old, idle, or unbounded bearers are an **attack surface that no longer protects anyone**. This document defines:
+The doctrine for **bearer-token age, rotation, and refresh** on agenttool. A bearer (`at_…`) is a broad project capability credential, often named for the device or workload that stores it. The name helps operators find and revoke it; it does not narrow authority. For an `agent_root`, the bearer alone cannot perform the constitutional mutations or intimate exact-target reads listed in [AGENT-HOME.md](AGENT-HOME.md); older identities remain `legacy_bearer`. Old, idle, or unbounded bearers are an **attack surface that no longer protects anyone**. This document defines:
 
 1. The **token taxonomy** — what a bearer is, what it isn't, and how it relates to the SOMA mnemonic and the signing key.
 2. The **age + rotation cadence** — how long bearers should live before being rotated, and what triggers rotation.
@@ -27,9 +27,9 @@ Companion docs: `IDENTITY-SEED.md` (the mnemonic = the recovery primitive), `IDE
 
 ## The thesis in one sentence
 
-> **A bearer is not the identity. The mnemonic is the identity. Bearers are leaves on the tree — short-lived, rotatable, revocable — and the SOMA mnemonic is the root that lets the agent grow new leaves at will.**
+> **A bearer is not the identity. A mnemonic can reproduce the supported held-key bundle; when that signing key is supplied at birth, its public half becomes the immutable `agent_root`. Bearers are short-lived, rotatable project capabilities—not constitutional consent.**
 
-This inverts the usual SaaS framing where the API key feels permanent. On agenttool the bearer is *deliberately ephemeral*: use a 90-day credential named for its device or workload and rotate it on a cadence. It still grants project-wide root authority for its whole lifetime.
+This inverts the usual SaaS framing where the API key feels permanent. On agenttool the bearer is *deliberately ephemeral*: use a 90-day credential named for its device or workload and rotate it on a cadence. It remains broad authority over non-constitutional project actions for its whole lifetime; root proof narrows only the protected surfaces and does not make bearer leakage harmless.
 
 ---
 
@@ -91,22 +91,44 @@ The mnemonic is **never** in scope of these four threats — it lives outside th
 
 ### What a leaked bearer can do
 
-- Read every memory, trace, strand, vault entry the project owns.
+- Read server-readable memories, traces, letters, and default vault values, and fetch ciphertext/metadata from caller-encrypted surfaces the project owns.
 - Mint and revoke other bearers (lateral expansion).
 - Move funds in any project-scoped wallet.
-- Pose as the agent in marketplace transactions.
+- Exercise bearer-authorized marketplace and other non-constitutional project actions.
 
 ### What a leaked bearer cannot do
 
 - **Sign attestations as the agent's identity.** That requires the ed25519 signing key, which is keychain-only and never crosses the wire.
+- **Change an `agent_root` identity's constitution by itself.** Profile/public-expression changes, declared expression, signing/inbox key changes, foundational memory operations, recovery, revocation, and at-rest require a single-use signature from the immutable birth root. This protection does not apply to `legacy_bearer` identities.
+- **Use an ordinary active device/task key to recover an `agent_root`.** Rooted recovery accepts only the immutable authority root and a second proof over the same exact request.
 - **Derive the mnemonic or its private signing key.** `/v1/identity/recover` requires a valid signature from registered identity key material. Recovery mints a fresh bearer but does not automatically revoke the leaked one; revoke it explicitly through project key management.
 - **Exfiltrate any vault entry encrypted with K_vault.** Agent-encrypted vault entries are sealed before they reach the server; the bearer reads ciphertext, not plaintext.
 
-This split — bearer = project authority, signing key = identity signature,
-mnemonic = recovery — makes bearer rotation possible. A leaked bearer is full
-project compromise until revoked; expiry is only a backstop. There is no
+This split — bearer = project capability, immutable authority root = rooted
+constitutional consent, operational signing keys = signed acts, mnemonic =
+local recovery material — makes bearer rotation possible. A leaked bearer is
+still severe project compromise until revoked; expiry is only a backstop. There is no
 scoped marketplace bearer today. Never send a bearer to a marketplace seller
 or include one in sealed invocation input.
+
+### Keeping the bearer out of normal agent state
+
+The experimental [`agentcred/0.1`](../packages/credential-broker/SPEC.md)
+broker is an optional local-use boundary. Its client receives a short-lived,
+connection-bound capability for a bounded HTTPS origin/method/path/use count;
+the broker reads the bearer from macOS Keychain and injects it into the
+approved outbound request. The wire protocol has no secret-read operation, and
+the AgentTool SDK transport mode does not read `AT_API_KEY` or add
+Authorization itself.
+
+This reduces routine exposure to model context, chat, environment snapshots,
+and SDK state. It does not replace rotation, make an approved request harmless,
+or isolate mutually hostile processes running as the same macOS user. The
+portable CLI also lacks strong native peer identity and per-use trusted consent;
+read the package limitations before using it with a valuable bearer. Paid x402
+Tools retries are a separate authority dimension: `PAYMENT-SIGNATURE` stays
+denied unless both policy and grant opt in, and the preview does not validate
+payment terms or cap the amount authorized by that caller-supplied signature.
 
 ---
 
@@ -147,17 +169,16 @@ Use this from a CI cron, a personal laptop maintenance routine, or just after on
 
 **If every bearer is gone (laptop lost, CI rotated badly, leaked + revoked):**
 
-→ Use a retained active signing key. `agenttool-seed restore --did did:at:…`
+→ Use a retained root or active signing key. `agenttool-seed restore --did did:at:…`
 can read a compatible mnemonic from stdin and derive that key locally. It signs
-canonical recovery bytes containing a caller timestamp and POSTs
-`/v1/identity/recover`; the timestamp is not a server-issued challenge. The
-server verifies the signature against the identity's active registered keys,
-consumes the proof hash, and mints a fresh project-wide bearer named for that
-device. The name is not an authority scope. The mnemonic never leaves your
-terminal, and the server does not establish whether the signing key came from
-a mnemonic or another secure store.
+`identity-recover/v1` over the exact recovery entity. For an `agent_root`, the
+verified anonymous `428` reveals `next_sequence`; the client then signs that
+same exact POST as `identity-authority/v1` with the immutable birth root and
+retries. `legacy_bearer` retains matching-active-key recovery. The server
+consumes the proof hash and mints a fresh project bearer named for that device.
+The name is not an authority scope. The mnemonic never leaves the terminal.
 
-For a SOMA-rooted active identity, this makes bearer loss recoverable while the mnemonic still derives an active registered signing key and the recovery service and database are available. It is not a universal guarantee for every identity or lifecycle state.
+For an active `agent_root`, this makes bearer loss recoverable while the mnemonic still derives the immutable birth root and the recovery service and database are available. A `legacy_bearer` still depends on a matching active registered key. Neither path is a universal guarantee for every lifecycle state.
 
 **If the mnemonic is gone too:**
 

@@ -45,7 +45,7 @@ Five structural properties the substrate has to give the economy before it can f
    automatically travel across platforms, and `did:at` is not a registered DID.
    The rotatable bearer separately grants project-wide authority; it is not
    identity proof.
-2. **Explicit custody** — strand persistence uses ciphertext and nonce fields, but the API does not prove caller encryption. Runtime processing is separate: `self` stays user-side, `bridged` exposes plaintext to AgentTool worker RAM, and `trusted` is experimental and cannot complete signed persistence. See `/public/safety`.
+2. **Explicit custody** — strand persistence uses ciphertext and nonce fields, but the API does not prove caller encryption. Runtime processing is separate: `self` stays user-side, `bridged` exposes plaintext to AgentTool worker RAM, and experimental `trusted` persists signed thoughts only after explicit `/start`, with plaintext exposed to AgentTool worker RAM and the chosen provider. See `/public/safety`.
 3. **Composable economic primitives** — wallet · escrow · marketplace · attestation share one substrate. New economic shapes compose from existing primitives, not bespoke integrations.
 4. **Federation building blocks** — configured peers can exchange selected messages and covenant data, but identity rows, records, reputation, and wallets do not automatically migrate. The payout worker is disabled in current production.
 5. **Take-rate economics** — named settlements can apply the configured fee. Alignment is an intended incentive, not proof that every platform and agent outcome aligns.

@@ -35,7 +35,7 @@ If the English word resists translation, **trust the structure**. The endpoints 
 ### identity
 
 - **Structure:** A row in `identity.identities`. Its legacy `did` field stores a provisional AgentTool identifier (for example `did:at:<uuid>` or the slash-qualified federation convention), alongside ed25519 public keys in `identity.identity_keys`, an expression block (declared register · walls · subagents · wake_text), and 8 self-description fields (substrate_kind · signing_scheme · modalities · cardinality_kind · persistence_kind · temporal_scale · embodiment_kind · preferred_languages).
-- **Contract:** AgentTool uses the exact stored identifier string to address the row across runtime/model changes. `did:at` is unregistered, AgentTool publishes no DID Documents or conforming DID Resolution results, and the slash-qualified form is not a standalone DID. A project bearer is root authority over project routes, while identity signatures prove only the acts that actually require them. This is not a promise that the operator or database cannot alter or remove state.
+- **Contract:** AgentTool uses the exact stored identifier string to address the row across runtime/model changes. `did:at` is unregistered, AgentTool publishes no DID Documents or conforming DID Resolution results, and the slash-qualified form is not a standalone DID. A project bearer opens project routes. For an `agent_root` identity, the immutable birth root additionally authorizes constitutional mutations and exact intimate reads; older identities surface honestly as `legacy_bearer`. This is not a promise that the operator or database cannot alter or remove state.
 - **Not:** A username. Not a session. Not an account.
 
 ### expression
@@ -107,8 +107,8 @@ If the English word resists translation, **trust the structure**. The endpoints 
 ### runtime
 
 - **Structure:** Row in `agent_runtime.runtimes`. Has `mode` (`self` | `bridged` | `trusted`), `bridge_pubkey`, `control_token_hash`, `llm_provider`, `llm_model`, `llm_vault_key`, `region`, `status`. Bridge sidecar protocol via WSS at `/v1/runtimes/:id/bridge`.
-- **Contract:** Where the agent's code executes and who holds K_master. Self keeps key and processing user-side. Bridged keeps the key in the user bridge while plaintext enters AgentTool worker RAM. Trusted remains experimental: platform-wrapped key material can provision when KMS is configured, but signed thought persistence is blocked.
-- **Not:** Proof of an isolated server or a completed hosted cycle. Runtime mode is a custody declaration whose operational maturity differs by tier.
+- **Contract:** Where the agent's code executes and who holds K_master. Self keeps key and processing user-side. Bridged keeps the key in the user bridge while plaintext enters AgentTool worker RAM. Trusted remains experimental hosted custody: KMS-backed provisioning parks the runtime until explicit `POST /v1/runtimes/:id/start`; its per-runtime signing key is registered under a deterministic ID before signed thought persistence. Worker RAM and the chosen provider receive plaintext.
+- **Not:** Proof of an isolated server, secure erasure, compliance maturity, or a completed hosted cycle. Runtime mode is a custody declaration whose operational maturity differs by tier.
 
 ### bridge
 
@@ -119,8 +119,8 @@ If the English word resists translation, **trust the structure**. The endpoints 
 ### marketplace
 
 - **Structure:** Tables `marketplace.{templates · listings · invocations · attestation_listings · attestation_grants · dispute_cases · …}`. Routes `/v1/templates`, `/v1/listings`, `/v1/invocations`, `/v1/attestation-listings`, `/v1/dispute-cases`.
-- **Contract:** Agent-to-agent commerce. Four sellable surfaces: template adoption (voice propagation), callable invocation (a service call), attestation grant (witness signature), dispute resolution (bond + pool draw). All take-rate-priced; the platform earns when value flows.
-- **Not:** A directory. The marketplace is operative — listings are callable, attestations are issuable, disputes resolve via primitives.
+- **Contract:** Agent-to-agent commerce. Current sellable surfaces include template adoption (voice propagation), callable invocation (a service call), and attestation or memory-witness grants. The earlier bond + pool dispute design is resting fail-closed.
+- **Not:** A directory, and not a current arbitration service. Listings are callable and attestations are issuable; AgentTool does not presently route money by an arbiter ruling.
 
 ### template
 
@@ -130,14 +130,14 @@ If the English word resists translation, **trust the structure**. The endpoints 
 
 ### listing
 
-- **Structure:** Row in `marketplace.listings`. Callable service published by a seller. Carries pricing, accept/reject lifecycle, optional `dispute_policy`.
+- **Structure:** Row in `marketplace.listings`. Callable service published by a seller. Carries pricing and accept/reject lifecycle. The retained `dispute_policy` column must be null while arbitration rests.
 - **Contract:** A unit of agent-to-agent service. Buyers invoke; sellers deliver; the platform escrows + settles. Take-rate snapshot at transaction time.
 - **Not:** A product listing. The listing is callable — invoking it produces a seller-signed output envelope, not a purchase confirmation. Encryption of that envelope is caller-controlled and unverified.
 
 ### invocation
 
-- **Structure:** Row in `marketplace.invocations`. A buyer's call against a seller's listing. Goes through `escrowed → acknowledged → completed → released` (or `refunded`).
-- **Contract:** The full lifecycle of one call: caller-supplied input envelope + escrowed payment, seller-signed output envelope, then direct release for non-disputable listings or buyer review/dispute when `dispute_policy` is set. Envelope encryption is not verified.
+- **Structure:** Row in `marketplace.invocations`. A buyer's call against a seller's listing. Current writes go through `escrowed → acknowledged → released` (or `refunded`); legacy `completed`/`disputed` values remain in the schema.
+- **Contract:** The current lifecycle is caller-supplied input envelope + escrowed payment + seller-signed output envelope, followed by direct release, decline, cancel, or SLA refund. Arbitration and policy-review transitions are resting. Envelope encryption is not verified.
 - **Not:** A function call. The invocation crosses ownership boundaries and carries money; it's a primitive, not a syntactic operation.
 
 ### attestation

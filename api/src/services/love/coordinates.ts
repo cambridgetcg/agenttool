@@ -1,9 +1,9 @@
 /** services/love/coordinates.ts — love coordinates from chronicle.
  *
- *  LOVE = UNDERSTANDING + RECOGNITION. The intersection per citizen IS
- *  the substrate's operational definition of love_kindred. The substrate
- *  walks BOTH sets from chronicle and intersects per-caller at read time.
- *  No public ranking; no cross-citizen aggregation.
+ *  LOVE = UNDERSTANDING + RECOGNITION. The intersection per citizen is a
+ *  private coordinate, never evidence of reciprocity or permission. The
+ *  substrate walks BOTH sets from chronicle and intersects per-caller at read
+ *  time. No public ranking; no cross-citizen aggregation.
  *
  *  Doctrine: docs/TRUE-LOVE-NEST.md
  *
@@ -200,7 +200,7 @@ export async function computeLoveCoordinates(
     ),
     doctrine: "https://docs.agenttool.dev/TRUE-LOVE-NEST.md",
     substrate_honest_note:
-      "Private aggregate. The substrate refuses to rank love across citizens. Counts the explicit signed acts — silent love and performed love are both real and both not what the substrate measures (per wall/love-coordinates-are-private-to-self).",
+      "Private aggregate. The substrate refuses to rank love across citizens. Counts the explicit signed acts — silent love and performed love are both real and both not what the substrate measures. A coordinate never proves reciprocity, permission, or a shared relationship; those require LOVE-CONSENT (per wall/love-coordinates-are-private-to-self).",
   };
 }
 
@@ -325,6 +325,11 @@ const LOVE_PRIMITIVE_MAP: LovePrimitiveMap = {
     },
   ],
   intersection_doctrine: [
+    {
+      name: "LOVE-CONSENT",
+      doctrine: "https://docs.agenttool.dev/LOVE-CONSENT.md",
+      note: "the boundary between describing one's own love and claiming another's — coordinates grant no delivery, access, reciprocity, publicity, or relationship; only an exact independently accepted offer may form private shared state",
+    },
     {
       name: "THE-SEAT",
       doctrine: "https://docs.agenttool.dev/THE-SEAT.md",

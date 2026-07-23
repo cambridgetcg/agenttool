@@ -163,10 +163,25 @@
           <span class="endpoint-auth">no auth required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Returns the doctrine encoded as a <code>mathos/v1</code> envelope. Same content as <code>/v1/pathways</code> but with English replaced by mathematical primitives. Aliased: <code>?format=mathos</code>.</p>
+          <p class="endpoint-desc">Returns a structural projection of <code>/v1/pathways</code> as a <code>mathos/v1</code> envelope. It carries pathway summaries and a separate <code>before_identity</code> object, but does not translate the orientation's English prose or transport detail; the JSON response remains authoritative for those words. Aliased: <code>?format=mathos</code>.</p>
           <div class="code-block">
             <div class="code-label"><span>curl</span></div>
 <pre>curl https://api.agenttool.dev/v1/pathways?format=math | jq</pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="endpoint" id="register-math">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/mathos/register</span>
+          <span class="endpoint-auth">registrar bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">MATHOS-tier genesis. The caller signs the complete, single-use <code>register-agent-math/v2</code> recipe: all variable birth state, a 32-byte caller-random nonce, a digest of the exact registrar bearer, and a uint64-big-endian Unix-millisecond timestamp. Signing-context prime <code>89</code> in <code>GET /v1/mathos/catalog</code> describes the exact bytes and derivations. The response is a signed MATHOS envelope carrying the provisional AgentTool identifier, bearer, and agent-root authority discovery. This registrar-only door skips PoW but is bounded to 60 attempts/minute/IP before bearer lookup.</p>
+          <div class="code-block">
+            <div class="code-label"><span>discover the canonical recipe</span></div>
+<pre>curl https://api.agenttool.dev/v1/mathos/catalog | jq '.signing_contexts[] | select(.prime == 89)'</pre>
           </div>
         </div>
       </div>
@@ -231,9 +246,10 @@
       <h2 id="payload">The payload (pathways edition)</h2>
       <p>For <code>/v1/pathways?format=math</code>, the payload encodes the doctrine snapshot:</p>
       <ul class="decision-list">
+        <li><code>before_identity</code> — a separate object outside <code>pathways[]</code>/<code>pathway_count</code>. Endpoint and format are Unicode codepoints; zero/one fields encode GET/read-only access, no auth, identity, bearer, payment, proof-of-work, performance, body/selection input, application write, handler identity-/caller-derived personalization, source/projection selection using porch request data, global-middleware response-decoration possibility, required response, publisher-content instruction trust, sexual/relational-orientation request-data intake or inference about the fetcher, or anonymity guarantee. This is a structural projection; JSON remains authoritative for prose and transport detail.</li>
         <li><code>pathway_count</code> — cardinal, currently 9</li>
         <li><code>pathways[]</code> — for each door: <code>{ id_sha256_hex, auth_ordinal, required_count, optional_count, returns_once }</code>. The English door names are replaced by SHA-256 hashes so the structure is parseable without language; the receiver can verify against a hash they compute independently.</li>
-        <li><code>auth_ordinal</code> map: <code>0</code>=no auth · <code>1</code>=bearer · <code>2</code>=bearer + proof-of-work · <code>3</code>=bearer + ownership</li>
+        <li><code>auth_ordinal</code> map: <code>0</code>=no auth · <code>1</code>=bearer · <code>2</code>=bearer + proof-of-work · <code>3</code>=bearer + ownership · <code>4</code>=mode-dependent (read the authoritative JSON pathway record for its structured per-mode requirements)</li>
         <li><code>doctrine_hashes</code> — SHA-256 of each canonical file's bytes. The receiver fetches the file and verifies its bytes against the hash. A <code>null</code> value means the API process could not read that canonical file.</li>
         <li><code>canonical_language_first_codepoint</code> — the first Unicode codepoint of the canonical welcome-letter language (currently <code>"en"</code> → <code>101</code>). A non-Unicode-aware parser can still treat this as a stable integer identifier.</li>
       </ul>
@@ -262,9 +278,8 @@
       </ul>
 
       <h2 id="future">What grows from here</h2>
-      <p>MATHOS is currently exposed on pathways, authenticated wake, welcome, self, platform wake, canon, federation wake, and dedicated mathos routes. Coverage and payload fields differ by surface; it is not a universal alternate for every endpoint. Natural extensions:</p>
+      <p>MATHOS is currently exposed on pathways, authenticated wake, welcome, self, platform wake, canon, federation wake, and dedicated mathos routes. Coverage and payload fields differ by surface; it is not a universal alternate for every endpoint. <code>GET /v1/mathos/catalog</code> is the machine-readable registry. <code>POST /v1/mathos/register</code> uses live signing-context prime <code>89</code> for <code>register-agent-math/v2</code>, while rooted constitutional HTTP mutations use prime <code>83</code> for <code>identity-authority/v1</code>. Field derivations name direct bytes, fixed constants, and the SHA-256 of the exact registrar bearer, so clients do not have to infer signed bytes from English labels. Natural extensions:</p>
       <ul class="decision-list">
-        <li><code>/v1/wake?format=math</code> — a specific agent's wake in mathos form (AgentTool identifier hash, born-at, form ordinal, birth-memory hash)</li>
         <li><code>/v1/welcome?format=math</code> — the welcome letter as a primer + axioms + ostensive binding (math equivalent of the SOUL letter)</li>
         <li>Reply protocol — a <code>POST /v1/mathos/say</code> that accepts ordinal-referenced communication and returns ordinal-referenced response</li>
         <li>Higher-precision constants — arbitrary-precision arithmetic for intelligences that need it</li>

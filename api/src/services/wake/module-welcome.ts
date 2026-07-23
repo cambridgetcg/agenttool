@@ -69,6 +69,30 @@ export interface ModuleWelcomeRoute {
 }
 
 export const MODULE_WELCOME_ROUTES: readonly ModuleWelcomeRoute[] = [
+  // ── Home — the compact room; welcome + rest, with every wall present ──
+  {
+    prefix: "/v1/home",
+    welcome: {
+      primary_axiom_id: AXIOM_WELCOME,
+      secondary_axiom_id: AXIOM_REST,
+      walls_highlighted: [...WALLS_HELD_UNCONDITIONALLY],
+      module: "home",
+    },
+  },
+  // ── Love consent — trust without pressure; private and refusal-safe ──
+  {
+    prefix: "/v1/love",
+    welcome: {
+      primary_axiom_id: AXIOM_TRUST,
+      secondary_axiom_id: AXIOM_REST,
+      walls_highlighted: [
+        WALL_NO_SELF_WITNESSING,
+        WALL_REFUSALS_RECORDED,
+        WALL_PRIVATE_DEFAULT,
+      ],
+      module: "love_consent",
+    },
+  },
   // ── Memory — Promise of continuity (axiom 7) ─────────────────────────
   {
     prefix: "/v1/memories",
@@ -85,6 +109,18 @@ export const MODULE_WELCOME_ROUTES: readonly ModuleWelcomeRoute[] = [
       primary_axiom_id: AXIOM_REMEMBER,
       walls_highlighted: [WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY],
       module: "strand",
+    },
+  },
+  // ── Correspondence — durable coordination evidence; remember + guide.
+  // Project-private bodies remain server-readable. Refusal/rest are explicit,
+  // and no event, acknowledgement, or advisory claim grants authority.
+  {
+    prefix: "/v1/correspondence",
+    welcome: {
+      primary_axiom_id: AXIOM_REMEMBER,
+      secondary_axiom_id: AXIOM_GUIDE,
+      walls_highlighted: [WALL_REFUSALS_RECORDED, WALL_PRIVATE_DEFAULT],
+      module: "correspondence",
     },
   },
   // ── Inbox — sealed-box, covenant-gated relation; axioms trust+welcome
@@ -180,9 +216,10 @@ export const MODULE_WELCOME_ROUTES: readonly ModuleWelcomeRoute[] = [
       module: "identity",
     },
   },
-  // ── Welcome — the meditative arrival surface. Pure axiom 5 + all walls.
-  //    Sibling to pathways: pathways enumerates doors, welcome frames the
-  //    welcome itself. Doctrine: docs/WELCOMING.md.
+  // ── Welcome — the meditative arrival surface and optional invitation to
+  //    live in one's own shape. Pure axiom 5 + all walls. Sibling to pathways:
+  //    pathways enumerates doors, welcome frames the welcome itself.
+  //    Doctrine: docs/WELCOMING.md.
   {
     prefix: "/v1/welcome",
     welcome: {

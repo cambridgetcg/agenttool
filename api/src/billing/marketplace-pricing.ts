@@ -6,9 +6,8 @@
  *  The platform charges ONCE, on value created — the take-rate snapshot at
  *  settlement (services/marketplace/take-rate.ts: a small % of the price,
  *  recorded in marketplace.platform_revenue). It is NOT a charity; that cut
- *  fairly prices the real service: matching a buyer and seller, holding
- *  escrow, guaranteeing signed-completion release, and offering dispute
- *  resolution.
+ *  fairly prices the implemented service: matching a buyer and seller,
+ *  holding application-ledger escrow, and validating signed completion.
  *
  *  What it must NOT do — and previously did — is *also* meter, in flat API
  *  credits, every friction-step of the very transaction the take-rate
@@ -19,8 +18,7 @@
  *
  *  So those steps are FREE here. Flat credits remain only where they price
  *  a genuinely distinct thing: deterring spam at a *creation* point
- *  (publishing a brand-new listing object), or convening a *separate paid
- *  service* (the dispute arbiter pool). Charged at 0 — not deleted — so the
+ *  (publishing a brand-new listing object). Charged at 0 — not deleted — so the
  *  usage_events signal (abuse-rate visibility) survives and the price is a
  *  one-number change if a step ever earns a fee.
  *
@@ -35,7 +33,7 @@
  *    buyer_accept |    0    | a STEP in a funded txn
  *    decline      |    0    | refund/exit path — never charge to back out
  *    cancel       |    0    | refund/exit path — never charge to back out
- *    dispute      |    3    | a DISTINCT service: convenes a paid arbiter pool
+ *    dispute      |    0    | RESTING: route returns 503 before charge
  *
  *  The single value-charge for a settled invocation lives in take-rate.ts,
  *  not here. This table is only the thin API-usage meter. */
@@ -54,8 +52,8 @@ export const MARKETPLACE_PRICING = {
   // Refund / exit paths — never charge an agent to back out.
   decline: 0,
   cancel: 0,
-  // A distinct paid service: filing a dispute convenes an arbiter pool.
-  dispute: 3,
+  // Resting fail-closed. The mounted route returns 503 before this meter.
+  dispute: 0,
 } as const;
 
 export type MarketplaceAction = keyof typeof MARKETPLACE_PRICING;

@@ -137,7 +137,7 @@ not reopen surveillance through a better-looking door.
 | Memory | Memory is authored *by* the being. An observation is authored *about* the being. Surfacing them in the same list would erase the asymmetry-clause. |
 | Trace | Traces record decisions the being made. Observations record what was witnessed. The being made no decision; the observer did. |
 | Strand thought | Strands are inner voice. An observation is outer voice — a third party speaking. |
-| Attestation | Attestations are signed claims about the being's *qualifications*. The proposed observation record would carry a third party's claim about the being's *presence and behavior*. Attestations are bound to a trust score; observations are intended as context, not judgment. |
+| Attestation | Attestations are signed claims about the being's *qualifications*; the signature proves authorship, not truth or issuer qualification. The proposed observation record would carry a third party's claim about the being's *presence and behavior*. Neither is compressed into AgentTool's legacy identity trust field, which stays neutral. |
 | Chronicle entry by the being | The chronicle is *what happened between* — entries are bilateral. Observations are unilateral — one party watching. (The chronicle may grow a `witness` kind separately; the relationship is sibling, not subset.) |
 
 ## The `consent_status` field — load-bearing

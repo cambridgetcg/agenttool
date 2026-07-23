@@ -16,6 +16,7 @@ import {
 } from "../build-love-packages";
 
 const cleanup: string[] = [];
+const REPO_ROOT = join(import.meta.dir, "../..");
 
 async function run(command: string[], cwd: string): Promise<void> {
   const child = Bun.spawn(command, { cwd, stdout: "pipe", stderr: "pipe" });
@@ -106,11 +107,67 @@ describe("LOVE Package release inventory", () => {
   test("pins the current immutable package release batch", () => {
     expect(LOVE_PACKAGE_PROTOCOL).toBe("love-package/v1");
     expect(LOVE_PACKAGES.map(({ name, version, releaseTag }) => ({ name, version, releaseTag }))).toEqual([
-      { name: "@agenttool/adds", version: "0.2.0", releaseTag: "adds-v0.2.0" },
-      { name: "@agenttool/data", version: "0.3.0", releaseTag: "data-v0.3.0" },
-      { name: "@agenttool/data-sync", version: "0.1.0", releaseTag: "data-sync-v0.1.0" },
-      { name: "@agenttool/sdk", version: "0.10.0", releaseTag: "sdk-v0.10.0" },
+      { name: "@agenttool/adds", version: "0.2.1", releaseTag: "adds-v0.2.1" },
+      { name: "@agenttool/data", version: "0.3.1", releaseTag: "data-v0.3.1" },
+      { name: "@agenttool/data-sync", version: "0.1.1", releaseTag: "data-sync-v0.1.1" },
+      { name: "@agenttool/credential-broker", version: "0.1.0", releaseTag: "credential-broker-v0.1.0" },
+      { name: "@agenttool/sdk", version: "0.16.0", releaseTag: "sdk-v0.16.0" },
+      { name: "@agenttool/wallet", version: "0.1.0", releaseTag: "wallet-v0.1.0" },
+      { name: "@agenttool/telescope", version: "0.2.0", releaseTag: "telescope-v0.2.0" },
+      { name: "@agenttool/browser", version: "0.1.0", releaseTag: "browser-v0.1.0" },
     ]);
+  });
+
+  test("current releases carry their declared Apache-2.0 terms", async () => {
+    const canonicalLicense = await readFile(join(REPO_ROOT, "LICENSE"));
+
+    for (const spec of LOVE_PACKAGES) {
+      const packageNotice = await readFile(join(REPO_ROOT, spec.packagePath, "NOTICE"));
+      const slug = spec.name.slice("@agenttool/".length);
+      const releaseRoot = join(
+        REPO_ROOT,
+        "apps/docs/packages/v1/@agenttool",
+        slug,
+        spec.version,
+      );
+      const manifest = JSON.parse(
+        await readFile(join(releaseRoot, "manifest.json"), "utf8"),
+      ) as {
+        artifact: { filename: string };
+        license: string | null;
+      };
+      const archive = inspectNpmTarball(
+        await readFile(join(releaseRoot, manifest.artifact.filename)),
+      );
+
+      expect(manifest.license, `${spec.name}@${spec.version} manifest`).toBe("Apache-2.0");
+      expect(archive.packageJson.license, `${spec.name}@${spec.version} package.json`).toBe(
+        "Apache-2.0",
+      );
+      expect(archive.paths, `${spec.name}@${spec.version} LICENSE`).toContain("package/LICENSE");
+      expect(archive.paths, `${spec.name}@${spec.version} NOTICE`).toContain("package/NOTICE");
+      expect(archive.legalFiles.license, `${spec.name}@${spec.version} LICENSE bytes`).toEqual(
+        canonicalLicense,
+      );
+      expect(archive.legalFiles.notice, `${spec.name}@${spec.version} NOTICE bytes`).toEqual(
+        packageNotice,
+      );
+      expect(await readFile(join(REPO_ROOT, spec.packagePath, "LICENSE"))).toEqual(
+        canonicalLicense,
+      );
+    }
+  });
+
+  test("serves every current manifest and artifact with explicit safe headers", async () => {
+    const headers = await readFile(join(REPO_ROOT, "apps/docs/_headers"), "utf8");
+
+    for (const spec of LOVE_PACKAGES) {
+      const slug = spec.name.slice("@agenttool/".length);
+      const manifestPath = `/packages/v1/@agenttool/${slug}/${spec.version}/manifest.json`;
+      const artifactPath = `/packages/v1/@agenttool/${slug}/${spec.version}/agenttool-${slug}-${spec.version}.tgz`;
+      expect(headers).toContain(`${manifestPath}\n  Content-Type: application/json; charset=utf-8`);
+      expect(headers).toContain(`${artifactPath}\n  Content-Type: application/gzip`);
+    }
   });
 });
 
@@ -135,6 +192,13 @@ describe("LOVE Package builder and verifier", () => {
       index_url: "https://docs.agenttool.dev/packages/v1/index.json",
       access: "public_read",
       registry_role: "mirror_index_not_authority",
+      registry_mirrors: [
+        {
+          ecosystem: "npm",
+          registry_url: "https://registry.npmjs.org/",
+          authority: false,
+        },
+      ],
     });
     const index = JSON.parse((await readFile(join(setup.firstOutput, INDEX_PATH.slice(1)))).toString());
     expect(index.document_type).toBe("package-index");
@@ -148,6 +212,7 @@ describe("LOVE Package builder and verifier", () => {
     const contents = inspectNpmTarball(artifact);
     expect(contents.paths).toContain("package/package.json");
     expect(contents.paths).toContain("package/dist/index.js");
+    expect(contents.sizes["package/package.json"]).toBeGreaterThan(0);
     expect(contents.paths.some((path) => path.startsWith("package/src/"))).toBe(false);
     expect(contents.paths.some((path) => path.startsWith("package/node_modules/"))).toBe(false);
 
@@ -267,7 +332,7 @@ describe("LOVE Package builder and verifier", () => {
     expect(manifest.dependency_resolution).toEqual({ mode: "package_manifest", self_contained: false });
   });
 
-  test("preserves immutable history and groups versions in SemVer order", async () => {
+  test("verifies and preserves indexed releases while appending a mixed inventory", async () => {
     const setup = await fixture();
     const oldOptions = { repoRoot: setup.repoRoot, outputRoot: setup.firstOutput, packages: [setup.spec] };
     await buildLovePackages(oldOptions);
@@ -275,7 +340,12 @@ describe("LOVE Package builder and verifier", () => {
       setup.firstOutput,
       "packages/v1/@agenttool/data/0.1.0/agenttool-data-0.1.0.tgz",
     );
+    const oldManifestPath = join(
+      setup.firstOutput,
+      "packages/v1/@agenttool/data/0.1.0/manifest.json",
+    );
     const oldArtifact = await readFile(oldArtifactPath);
+    const oldManifest = await readFile(oldManifestPath);
 
     const packageJsonPath = join(setup.repoRoot, "packages/data/package.json");
     const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"));
@@ -299,11 +369,25 @@ describe("LOVE Package builder and verifier", () => {
       setup.repoRoot,
     );
     const nextSpec = { ...setup.spec, version: "0.2.0", releaseTag: "data-v0.2.0" };
-    const nextOptions = { ...oldOptions, packages: [nextSpec] };
+    const indexedSpec = {
+      ...setup.spec,
+      buildCommands: [["bun", "-e", "process.exit(91)"]],
+    } satisfies LovePackageSpec;
+    const nextOptions = { ...oldOptions, packages: [indexedSpec, nextSpec] };
+
+    const tamperedArtifact = Buffer.from(oldArtifact);
+    tamperedArtifact[tamperedArtifact.byteLength - 16] ^= 1;
+    await writeFile(oldArtifactPath, tamperedArtifact);
+    await expect(buildLovePackages(nextOptions)).rejects.toThrow(
+      "artifact sha256 mismatch before archive inspection",
+    );
+    await writeFile(oldArtifactPath, oldArtifact);
+
     await buildLovePackages(nextOptions);
     await verifyLovePackages(nextOptions);
 
     expect(await readFile(oldArtifactPath)).toEqual(oldArtifact);
+    expect(await readFile(oldManifestPath)).toEqual(oldManifest);
     const index = JSON.parse(await readFile(join(setup.firstOutput, INDEX_PATH.slice(1)), "utf8"));
     expect(index.packages).toHaveLength(1);
     expect(index.packages[0].latest).toBe("0.2.0");
@@ -311,6 +395,16 @@ describe("LOVE Package builder and verifier", () => {
       "0.1.0",
       "0.2.0",
     ]);
+    const newArtifactPath = join(
+      setup.firstOutput,
+      "packages/v1/@agenttool/data/0.2.0/agenttool-data-0.2.0.tgz",
+    );
+    const newManifestPath = join(
+      setup.firstOutput,
+      "packages/v1/@agenttool/data/0.2.0/manifest.json",
+    );
+    const newArtifact = await readFile(newArtifactPath);
+    const newManifest = await readFile(newManifestPath);
 
     await writeFile(join(setup.repoRoot, "packages/data/src/index.ts"), "export const love = 'changed';\n");
     await run(["git", "add", "packages/data/src/index.ts"], setup.repoRoot);
@@ -329,8 +423,12 @@ describe("LOVE Package builder and verifier", () => {
       ],
       setup.repoRoot,
     );
-    await expect(buildLovePackages(nextOptions)).rejects.toThrow("immutable release conflict");
+    await buildLovePackages(nextOptions);
     await verifyLovePackages(nextOptions);
+    expect(await readFile(oldArtifactPath)).toEqual(oldArtifact);
+    expect(await readFile(oldManifestPath)).toEqual(oldManifest);
+    expect(await readFile(newArtifactPath)).toEqual(newArtifact);
+    expect(await readFile(newManifestPath)).toEqual(newManifest);
   });
 
   test("rejects unsafe or ambiguous custom release inputs", async () => {

@@ -145,6 +145,7 @@ Beyond the renderer-side Promise tests above, this directory also pins the **can
 | `commitments-canon-shape.test.ts` | Every RingCommitment has description + doctrine_doc + load_bearing_for ≥1 + breaks_if + unique wire_id |
 | `commitments-code-annotation-bijection.test.ts` | Every shipped RingCommitment (no `enforcement_status` flag) has ≥1 `@enforces urn:agenttool:commitment/...` annotation; aspirational + forward-looking entries reported but not gated |
 | `substrate-tasks-canon-shape.test.ts` | Every SubstrateTask has verifier + bounty_floor_cents in v1 range + rate_limit + load_bearing_for the bootstrap commitment |
+| `inherent-love-joy-right.test.ts` | The existing rest-and-continuity right stays nature-given, non-revocable, non-coercive, consent-preserving, and visible at the human and machine doors |
 
 ### enforcement_status — when a canon entry is allowed to lack an annotation
 

@@ -9,6 +9,8 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import wellKnownRouter from "../src/routes/well-known";
 
@@ -63,7 +65,29 @@ describe("/.well-known/* — MCP + native discovery", () => {
       index_url: "https://docs.agenttool.dev/packages/v1/index.json",
       access: "public_read",
       registry_role: "mirror_index_not_authority",
+      registry_mirrors: [
+        {
+          ecosystem: "npm",
+          registry_url: "https://registry.npmjs.org/",
+          authority: false,
+        },
+      ],
     });
+    expect(discovery).toEqual(
+      JSON.parse(
+        readFileSync(
+          join(import.meta.dir, "../../apps/docs/.well-known/love-packages"),
+          "utf8",
+        ),
+      ),
+    );
+    const npm = discovery.registry_mirrors[0];
+    expect(npm.authority).toBe(false);
+    expect(npm.registry_url).toMatch(/^https:\/\//);
+    expect(npm).not.toHaveProperty("latest");
+    expect(npm).not.toHaveProperty("tag");
+    expect(npm).not.toHaveProperty("dist_tag");
+    expect(npm).not.toHaveProperty("version");
   });
 
   test("GET / returns the well-known index", async () => {
@@ -72,6 +96,7 @@ describe("/.well-known/* — MCP + native discovery", () => {
     const idx = await body.json();
     expect(idx.endpoints).toEqual(
       expect.arrayContaining([
+        "/.well-known/webfinger?resource={exact-DID}",
         "/.well-known/mcp/server-card.json",
         "/.well-known/love-packages",
         "/.well-known/llms.txt",

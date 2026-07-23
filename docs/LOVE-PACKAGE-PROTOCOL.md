@@ -406,6 +406,13 @@ verify the bytes itself, and then give the verified local file to package
 machinery. Installers MUST NOT assume that a third-party package manager
 verifies the LOVE digest.
 
+An exact registry command such as
+`npm install --save-exact <name>@<version>` MAY be offered as an optional
+convenience. It is not LOVE discovery or verification unless the fetched
+registry tarball is a declared mirror and its raw bytes match
+`artifact.size` and `artifact.sha256`. An npm dist-tag, search rank, or package
+page is never release authority.
+
 ### 4.5 `source`
 
 | Field | Requirement | Meaning |
@@ -486,17 +493,34 @@ When present, the resource is a UTF-8 JSON pointer with these fields:
   "doctrine": "https://docs.agenttool.dev/LOVE-PACKAGE-PROTOCOL.md",
   "index_url": "https://docs.agenttool.dev/packages/v1/index.json",
   "access": "public_read",
-  "registry_role": "mirror_index_not_authority"
+  "registry_role": "mirror_index_not_authority",
+  "registry_mirrors": [
+    {
+      "ecosystem": "npm",
+      "registry_url": "https://registry.npmjs.org/",
+      "authority": false
+    }
+  ]
 }
 ```
 
-All five shown fields are required. `protocol` MUST be `love-package/v1`.
+The five core fields from `protocol` through `registry_role` are required;
+`registry_mirrors` is an optional extension. `protocol` MUST be
+`love-package/v1`.
 `doctrine` and `index_url` MUST be absolute HTTP(S) URLs without userinfo or a
 fragment; both are subject to the initial-and-every-redirect egress policy in
 §3.4. `access` MUST be `public_read`, and `registry_role` MUST be
 `mirror_index_not_authority`; these constants keep the access and authority
 boundaries machine-readable. Consumers MUST ignore unknown discovery fields
 under the same extension rule as manifests.
+
+The AgentTool reference host uses that extension rule to advertise
+`registry_mirrors`. Each entry is an optional convenience locator for the
+exact package name and version a consumer already selected from an index,
+manifest, or caller contract. `authority: false` is load-bearing: the entry
+does not assert complete registry coverage, authorize a mutable dist-tag,
+override a caller lock, or replace manifest size and SHA-256 verification.
+Consumers that do not understand this extension safely ignore it.
 
 The AgentTool reference host uses:
 
@@ -688,6 +712,13 @@ SHA-256 before archive inspection, binds embedded package identity, rejects
 unsafe archives, surfaces digest conflicts, and keeps discovery non-executing.
 
 The AgentTool catalog publishes `@agenttool/data`, `@agenttool/data-sync`,
-`@agenttool/sdk`, and `@agenttool/adds` through this profile. Their presence
-demonstrates the read and verification path; it does not make AgentTool a
-required registry or add a publisher-signature claim.
+`@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, and
+`@agenttool/telescope`, and `@agenttool/wallet` through this profile. Their presence demonstrates the
+read and verification path; it does not make AgentTool a required registry or
+add a publisher-signature claim.
+Historical catalog releases whose manifests say `license: null` provide no
+reuse grant; the current `@agenttool/data@0.3.1`,
+`@agenttool/data-sync@0.1.1`, `@agenttool/adds@0.2.1`,
+`@agenttool/credential-broker@0.1.0`, `@agenttool/sdk@0.16.0`, and
+`@agenttool/telescope@0.2.0` and `@agenttool/wallet@0.1.0` releases instead declare `Apache-2.0` without
+retroactively changing those immutable older releases.

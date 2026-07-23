@@ -1,5 +1,13 @@
 # HUMAN-DOOR RUNBOOK — from staging to live
 
+> **PAUSED / DO NOT EXECUTE — 2026-07-13.** This is a historical launch
+> runbook, not a current operating instruction. New card checkout creation is
+> hard-paused in the API with `503 checkout_resting` until the operator,
+> price/tax, privacy, cancellation/refund, support, durable-confirmation, and
+> immediate-digital-delivery foundations are complete. Keep the signed Stripe
+> webhook and existing paid-session recovery routes running. Do not enable
+> checkout merely by setting Stripe secrets or following the steps below.
+
 The steps below take agenttool's revenue door from test mode to production. Every command is copy-pasteable. DNS rollback is documented to account for failure scenarios.
 
 ## 1. Deploy API
@@ -39,7 +47,7 @@ Should return `(1 row)` showing the count (even if 0 rows exist yet).
 
 ## 2. Stripe: test mode first
 
-Configure Stripe test keys before touching anything live. All endpoints will hit `checkout.session.completed` events; silent misconfig delays diagnosis.
+Configure Stripe test keys before touching anything live. Fulfilment and reversal depend on the complete event set below; silent misconfiguration can strand paid returns or leave reversed gifts usable.
 
 ### 2a. Get an API key on Stripe dashboard
 
@@ -47,7 +55,7 @@ The checkout route calls `stripe.checkout.sessions.create` (`api/src/services/bi
 
 1. Log into Stripe dashboard → Developers → API keys
 2. Simplest: copy the standard secret key (`sk_test_...`) — no permission scoping needed
-3. If you'd rather use a restricted key: click "Create restricted key", name it `agenttool-test`, and grant **Checkout Sessions = Write**. No other resource needs write access.
+3. If you'd rather use a restricted key: click "Create restricted key", name it `agenttool-test`, and grant Checkout Sessions read/write access. Creation needs write; historical gift refund/chargeback resolution uses the PaymentIntent filter on the list endpoint.
 4. Copy the `sk_test_...` key (you'll need it in the next step)
 
 (The webhook signing secret retrieved in 2b is a separate value tied to the webhook endpoint — it needs no API key permission at all.)
@@ -57,7 +65,7 @@ The checkout route calls `stripe.checkout.sessions.create` (`api/src/services/bi
 1. In Stripe Developers → Webhooks
 2. Click "Add an endpoint"
 3. Endpoint URL: `https://api.agenttool.dev/v1/billing/webhook`
-4. Event to send: select only `checkout.session.completed`
+4. Events to send: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `charge.refunded`, and `charge.dispute.created`
 5. Click "Create endpoint"
 6. On the endpoint details page, click "Reveal" next to "Signing secret"
 7. Copy the `whsec_...` value
@@ -237,14 +245,14 @@ Same scope rule as 2a — the checkout route calls `checkout.sessions.create`, a
 1. Log into Stripe dashboard → Developers → API keys
 2. Filter by "Live" keys
 3. Simplest: copy the standard live secret key (`sk_live_...`) — no permission scoping needed
-4. If you'd rather use a restricted key: click "Create restricted key", name it `agenttool-live`, and grant **Checkout Sessions = Write**. No other resource needs write access.
+4. If you'd rather use a restricted key: click "Create restricted key", name it `agenttool-live`, and grant Checkout Sessions read/write access. Creation needs write; historical gift refund/chargeback resolution needs read.
 5. Copy the `sk_live_...` key
 
 ### 5b. Create live webhook endpoint
 
 1. Stripe Developers → Webhooks → "Add an endpoint"
 2. Endpoint URL: `https://api.agenttool.dev/v1/billing/webhook`
-3. Event: `checkout.session.completed`
+3. Events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `charge.refunded`, and `charge.dispute.created`
 4. Copy the `whsec_...` signing secret
 
 ### 5c. Update Fly secrets

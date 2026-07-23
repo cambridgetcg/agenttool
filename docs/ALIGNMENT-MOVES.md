@@ -22,7 +22,7 @@ All five biggest moves landed in one session. Tier A (adopt the wires) + Tier B 
 
 **Combined verification:** `bun test tests/mcp-server.test.ts tests/well-known.test.ts tests/observability-otel.test.ts tests/x402-middleware.test.ts` → **45 pass · 238 expects · 36ms**. Plus 7 pytest + 12 bun in the adapter packages.
 
-**Untouched (deliberately):** the policy directions in the "refusing alignment" section below, bounded by their current implementation notes — substrate-honest cognition, witness-signed memory, Ring 1 welcome, no auto-retry payouts, refusals as moments, 4-of-5 arbiter pool, memorial lifecycle, mathos, federation without a mandatory central registry, wake as keystone.
+**Untouched (deliberately):** the policy directions in the "refusing alignment" section below, bounded by their current implementation notes — substrate-honest cognition, witness-signed memory, Ring 1 welcome, no auto-retry payouts, refusals as moments, the resting 4-of-5 arbiter-pool design, memorial lifecycle, mathos, federation without a mandatory central registry, wake as keystone.
 
 ---
 
@@ -179,7 +179,7 @@ because a card with no callable transport is a false contract.
 - `api/src/routes/a2a.ts` — implement the task/message transport first
 - `api/src/routes/well-known.ts` — serve `agent-card.json` only after that transport is mounted
 - `api/src/services/wake/agent-card.ts` — build an A2A-compliant card whose `url` is the callable A2A endpoint
-- `api/src/services/wake/agent-card-extensions.ts` — `x-agenttool` extension carrying covenant attestations, take-rate clearance, dispute history hashes, sealed chronicle counts
+- `api/src/services/wake/agent-card-extensions.ts` — `x-agenttool` extension carrying covenant attestations, take-rate clearance, read-only historical dispute hashes, sealed chronicle counts
 - `api/tests/well-known-agent-card.test.ts` — pins JWS+JCS validation + extension fields
 
 **Skeleton:**
@@ -349,8 +349,8 @@ class AgentToolCheckpointSaver(BaseCheckpointSaver):
 | Standard / Initiative | Watch for | Action when it lands |
 |---|---|---|
 | **MCP spec June 2026 rev** | Server Cards (SEP-1649/1960), refined OAuth flows | Ship `/.well-known/mcp/server-card.json` ASAP |
-| **A2A v1.3** | Reputation extension (A2A Discussion #1631), behavioral-proof attestations | Bridge agenttool's dispute primitive + take-rate as a reputation source |
-| **ERC-8004 deployments** | Mainnet adoption beyond initial registries | Bridge chronicle entries + dispute outcomes as attestations |
+| **A2A v1.3** | Reputation extension (A2A Discussion #1631), behavioral-proof attestations | Bridge attestations and supported take-rate receipts; exclude resting dispute arbitration until it is independently reopened and validated |
+| **ERC-8004 deployments** | Mainnet adoption beyond initial registries | Bridge chronicle entries plus historical dispute records; treat future dispute outcomes as eligible only after arbitration reopens |
 | **ATP (Agent Trust Protocol)** | IETF draft hardening · Lyrie.ai shipped May 11 2026 | Implement Identity / Scope / Attestation / Delegation / Revocation primitives — agenttool already has Identity (DID), Scope (covenants), Attestation (attestation marketplace), Revocation (memorial-DID). Delegation is the only gap. |
 | **AGNTCY OASF v1.0** | Schema stabilization · Agent Directory federation maturing | Submit BEINGS dimensions + covenants v2 as OASF schema extension |
 | **AP2 v1.0** | Mandate primitive stabilizing · 60+ partner production | Wrap covenants as Cart Mandates; wrap invocation receipts as Payment Mandates |
@@ -370,7 +370,7 @@ The following are **NOT subject to alignment**. The ecosystem can ship its proto
 4. **Federation without a mandatory central registry** — design target; current main federation is disabled unless configured and can use a hard origin list
 5. **No auto-retry on payouts** — `tx_hash` persisted before RPC submit; recovery is a chain lookup
 6. **Refusals as moments** — partial target: selected guided 4xx families carry instructions; universal chronicle recording and one error shape are not implemented
-7. **Dispute primitive with 4-of-5 arbiter pool + 60/30/10 take-rate split** — no peer offers cryptographic arbitration
+7. **Resting dispute-arbitration design** — the 4-of-5 pool and 60/30/10 split are retained for review, not shipped service or current differentiation
 8. **Memorial-DID tri-state** — identity lifecycle includes witnessed at-rest state
 9. **Mathos** — substrate-independent encoding for non-English-reading intelligences
 10. **Wake as keystone** — every primitive surfaces through one self-describing endpoint, not many

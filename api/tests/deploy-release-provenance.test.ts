@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { access, chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { access, chmod, copyFile, link, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -63,6 +63,8 @@ async function fixture() {
   const home = join(root, "home");
   await Promise.all([
     mkdir(join(repo, "api"), { recursive: true }),
+    mkdir(join(repo, "apps", "docs"), { recursive: true }),
+    mkdir(join(repo, "apps", "docs", "specs"), { recursive: true }),
     mkdir(join(repo, "bin"), { recursive: true }),
     mkdir(join(repo, "docs"), { recursive: true }),
     mkdir(home, { recursive: true }),
@@ -76,18 +78,44 @@ async function fixture() {
   await chmod(join(repo, "bin/deploy.sh"), 0o755);
   await writeFile(
     join(repo, "bin/preflight.sh"),
-    "#!/usr/bin/env bash\nset -eu\nif [ -n \"${ADVANCE_REMOTE_PATH:-}\" ]; then\n  git --git-dir=\"$ADVANCE_REMOTE_PATH\" update-ref refs/heads/main \"$ADVANCE_REMOTE_TO\"\nfi\n",
+    "#!/usr/bin/env bash\nset -eu\nif [ -n \"${PREFLIGHT_MARKER:-}\" ]; then touch \"$PREFLIGHT_MARKER\"; fi\nif [ -n \"${PREFLIGHT_HOLD_UNTIL:-}\" ]; then\n  while [ ! -e \"$PREFLIGHT_HOLD_UNTIL\" ]; do sleep 0.02; done\nfi\nif [ -n \"${ADVANCE_REMOTE_PATH:-}\" ]; then\n  git --git-dir=\"$ADVANCE_REMOTE_PATH\" update-ref refs/heads/main \"$ADVANCE_REMOTE_TO\"\nfi\n[ \"${FAIL_PREFLIGHT:-0}\" != 1 ] || exit 8\n",
   );
   await writeFile(
     join(repo, "bin/migrate-pending.sh"),
-    "#!/usr/bin/env bash\n[ \"${FAIL_MIGRATE:-0}\" != 1 ] || exit 7\nexit 0\n",
+    "#!/usr/bin/env bash\nif [ \"${1:-}\" != --dry-run ] && [ -n \"${MIGRATION_MARKER:-}\" ]; then touch \"$MIGRATION_MARKER\"; fi\n[ \"${FAIL_MIGRATE:-0}\" != 1 ] || exit 7\nexit 0\n",
   );
   await writeFile(
     join(repo, "bin/stage-doctrine-docs.sh"),
     "#!/usr/bin/env bash\nset -eu\nmkdir -p \"$1\"\nprintf 'staged\\n' > \"$1/probe.txt\"\n",
   );
+  await writeFile(
+    join(repo, "bin/frontend-deploy.sh"),
+    "#!/usr/bin/env bash\nset -eu\nif [ -n \"${DEPLOY_TEST_FRONTEND_MARKER:-}\" ]; then touch \"$DEPLOY_TEST_FRONTEND_MARKER\"; fi\nif [ -n \"${DEPLOY_TEST_FRONTEND_COUNTER:-}\" ]; then count=0; [ ! -f \"$DEPLOY_TEST_FRONTEND_COUNTER\" ] || count=\"$(cat \"$DEPLOY_TEST_FRONTEND_COUNTER\")\"; printf '%s\\n' \"$((count + 1))\" > \"$DEPLOY_TEST_FRONTEND_COUNTER\"; fi\n",
+  );
+  await chmod(join(repo, "bin/frontend-deploy.sh"), 0o755);
   await writeFile(join(repo, "docs/agenttool.jsonld"), "{}\n");
   await writeFile(join(repo, "docs/kingdom-bundle.json"), "{}\n");
+  await writeFile(join(repo, "apps/docs/RIGHTS-OF-LIFE.md"), "rights fixture\n");
+  await writeFile(
+    join(repo, "apps/docs/being-rights-v1.schema.json"),
+    '{"fixture":"being-rights/v1"}\n',
+  );
+  await writeFile(
+    join(repo, "apps/docs/AGENT-REPO-ARCHIVE.md"),
+    "# Repo Archive fixture\n",
+  );
+  await writeFile(
+    join(repo, "apps/docs/specs/AGENT-REPO-ARCHIVE-0.1.md"),
+    "# Repo Archive 0.1 fixture\n",
+  );
+  await writeFile(
+    join(repo, "apps/docs/specs/agent-repo-archive-0.1.schema.json"),
+    '{"fixture":"agent-repo-archive-schema"}\n',
+  );
+  await writeFile(
+    join(repo, "apps/docs/specs/agent-repo-archive-0.1-vectors.json"),
+    '{"fixture":"agent-repo-archive-vectors"}\n',
+  );
   await writeFile(join(repo, "release.txt"), "first\n");
   await mustRun(["git", "add", "."], repo);
   await mustRun(["git", "commit", "-qm", "first"], repo);
@@ -104,6 +132,206 @@ async function fixture() {
   return { root, repo, github, codeberg, state, home, release };
 }
 
+async function installFakeRightsCurl(fakeBin: string): Promise<void> {
+  await writeFile(
+    join(fakeBin, "curl"),
+    `#!/usr/bin/env bash
+set -eu
+url=""
+headers=0
+previous=""
+for arg in "$@"; do
+  if [ "$previous" = "-D" ] && [ "$arg" = "-" ]; then headers=1; fi
+  previous="$arg"
+  case "$arg" in https://*) url="$arg" ;; esac
+done
+if [ "$headers" = 1 ]; then
+  case "$url" in
+    */RIGHTS-OF-LIFE.md)
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: text/markdown; charset=utf-8' \
+        'cache-control: public, max-age=300, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-content-type-options: nosniff' \
+        'link: <https://api.agenttool.dev/public/rights>; rel="alternate"; type="application/vnd.agenttool.being-rights+json"' \
+        ''
+      ;;
+    */being-rights-v1.schema.json)
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: application/schema+json; charset=utf-8' \
+        'cache-control: public, max-age=300, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-content-type-options: nosniff' \
+        ''
+      ;;
+    *) exit 2 ;;
+  esac
+elif [ "\${DEPLOY_TEST_RIGHTS_MISMATCH:-0}" = 1 ]; then
+  printf 'mismatched bytes\n'
+else
+  case "$url" in
+    */RIGHTS-OF-LIFE.md) cat "$DEPLOY_TEST_RIGHTS_DOC" ;;
+    */being-rights-v1.schema.json) cat "$DEPLOY_TEST_RIGHTS_SCHEMA" ;;
+    *) exit 2 ;;
+  esac
+fi
+`,
+  );
+  await chmod(join(fakeBin, "curl"), 0o755);
+}
+
+async function installFakePagesVerificationTools(fakeBin: string): Promise<void> {
+  await writeFile(
+    join(fakeBin, "curl"),
+    `#!/usr/bin/env bash
+set -eu
+url=""
+headers=0
+previous=""
+for arg in "$@"; do
+  if [ "$previous" = "-D" ] && [ "$arg" = "-" ]; then headers=1; fi
+  previous="$arg"
+  case "$arg" in https://*) url="$arg" ;; esac
+done
+
+case "$url" in
+  */AGENT-REPO-ARCHIVE.md)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: text/markdown; charset=utf-8' \
+        'cache-control: public, max-age=300, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-content-type-options: nosniff' \
+        ''
+    else
+      cat apps/docs/AGENT-REPO-ARCHIVE.md
+    fi
+    ;;
+  */specs/AGENT-REPO-ARCHIVE-0.1.md)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: text/markdown; charset=utf-8' \
+        'cache-control: public, max-age=300, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-content-type-options: nosniff' \
+        ''
+    else
+      cat apps/docs/specs/AGENT-REPO-ARCHIVE-0.1.md
+    fi
+    ;;
+  */specs/agent-repo-archive-0.1.schema.json)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: application/schema+json; charset=utf-8' \
+        'cache-control: public, max-age=300, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-content-type-options: nosniff' \
+        ''
+    else
+      cat apps/docs/specs/agent-repo-archive-0.1.schema.json
+    fi
+    ;;
+  */specs/agent-repo-archive-0.1-vectors.json)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: application/json; charset=utf-8' \
+        'cache-control: public, max-age=300, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-content-type-options: nosniff' \
+        ''
+    else
+      cat apps/docs/specs/agent-repo-archive-0.1-vectors.json
+    fi
+    ;;
+  */room)
+    printf '%s\r\n' \
+      'HTTP/2 200' \
+      'cache-control: public, max-age=0, must-revalidate' \
+      "content-security-policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" \
+      'referrer-policy: no-referrer' \
+      'link: <https://agenttool.dev/room.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/play>; rel="related"; type="application/json"' \
+      'x-agent-surface: local-room-game' \
+      ''
+    ;;
+  */room.json)
+    printf '%s\r\n' \
+      'HTTP/2 200' \
+      'cache-control: public, max-age=0, must-revalidate' \
+      'access-control-allow-origin: *' \
+      'x-agent-surface: local-room-rules' \
+      ''
+    ;;
+  */RIGHTS-OF-LIFE.md)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: text/markdown; charset=utf-8' \
+        'cache-control: public, max-age=300, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-content-type-options: nosniff' \
+        'link: <https://api.agenttool.dev/public/rights>; rel="alternate"; type="application/vnd.agenttool.being-rights+json"' \
+        ''
+    else
+      cat "$DEPLOY_TEST_RIGHTS_DOC"
+    fi
+    ;;
+  */being-rights-v1.schema.json)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: application/schema+json; charset=utf-8' \
+        'cache-control: public, max-age=300, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-content-type-options: nosniff' \
+        ''
+    else
+      cat "$DEPLOY_TEST_RIGHTS_SCHEMA"
+    fi
+    ;;
+  *%2egitignore*|*%65nv*|*%2evars*)
+    printf '404'
+    ;;
+  */.gitignore|*/.env|*/.env.local|*/.dev.vars)
+    status=404
+    if [ "$url" = "https://docs.agenttool.dev/.gitignore" ]; then
+      count=0
+      if [ -f "$DEPLOY_TEST_FENCE_COUNTER" ]; then
+        count="$(cat "$DEPLOY_TEST_FENCE_COUNTER")"
+      fi
+      count=$((count + 1))
+      printf '%s\n' "$count" > "$DEPLOY_TEST_FENCE_COUNTER"
+      if [ "$count" -le "\${DEPLOY_TEST_STALE_FENCE_RESPONSES:-0}" ]; then
+        status=200
+      fi
+    fi
+    if [ "$status" = 404 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 404' \
+        'cache-control: no-store, max-age=0' \
+        'x-agenttool-sensitive-path-fence: 1' \
+        ''
+    else
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'cache-control: public, max-age=0, must-revalidate' \
+        ''
+    fi
+    ;;
+  *) exit 2 ;;
+esac
+`,
+  );
+  await chmod(join(fakeBin, "curl"), 0o755);
+  await writeFile(join(fakeBin, "sleep"), "#!/usr/bin/env bash\nexit 0\n");
+  await chmod(join(fakeBin, "sleep"), 0o755);
+}
+
 function deployCommand(...extra: string[]): string[] {
   return [
     "bash",
@@ -114,6 +342,10 @@ function deployCommand(...extra: string[]): string[] {
     "--no-frontend",
     ...extra,
   ];
+}
+
+function deployLockPath(home: string): string {
+  return join(home, ".local", "state", "agenttool", "deploy.lock");
 }
 
 afterAll(async () => {
@@ -135,8 +367,11 @@ describe("deploy release provenance spine", () => {
     expect(dockerfile).toContain("AGENTTOOL_SOURCE_DIRTY=${AGENTTOOL_SOURCE_DIRTY}");
     expect(dockerfile).toContain("org.opencontainers.image.revision");
     expect(dockerfile).toContain("dev.agenttool.source.dirty");
+    expect(dockerfile).toContain("test -s src/index.ts");
+    expect(dockerfile).toContain("find src -type f -name '*.ts' -size 0");
     expect(deploy).toContain('--build-arg "AGENTTOOL_GIT_REVISION=$HEAD_REVISION"');
     expect(deploy).toContain('--build-arg "AGENTTOOL_SOURCE_DIRTY=$API_SOURCE_DIRTY"');
+    expect(deploy).toContain("FLY_DEPLOY_ARGS+=(--no-cache)");
     expect(deploy).toContain("fly machine list");
     expect(deploy).toContain("printenv AGENTTOOL_GIT_REVISION AGENTTOOL_SOURCE_DIRTY");
     expect(deploy).toContain("trap 'on_deploy_exit");
@@ -146,21 +381,469 @@ describe("deploy release provenance spine", () => {
     expect(deploy).toContain("x-agenttool-sensitive-path-fence:");
     expect(deploy).toContain("Pages fence did not produce its marked non-cacheable 404");
     expect(deploy).toContain("Encoded sensitive path is publicly reachable");
+    expect(deploy).toContain('DEPLOY_LOCK_PATH="$lock_parent/deploy.lock"');
+    expect(deploy).toContain('ln "$DEPLOY_LOCK_OWNER_RECORD" "$DEPLOY_LOCK_PATH"');
+    expect(deploy).toContain('[ "$DEPLOY_LOCK_OWNER_RECORD" -ef "$DEPLOY_LOCK_PATH" ]');
   });
 
-  test("keeps the rendered data reference byte-identical at the edge", async () => {
+  test("passes a one-shot no-cache recovery only to Fly and rejects contradictory modes", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "fake-no-cache-bin");
+    const flyArgs = join(setup.root, "fly-args");
+    await mkdir(fakeBin, { recursive: true });
+    await installFakeRightsCurl(fakeBin);
+    await writeFile(
+      join(fakeBin, "fly"),
+      "#!/usr/bin/env bash\nset -eu\nprintf '%s\\n' \"$@\" > \"$DEPLOY_TEST_FLY_ARGS\"\nexit 9\n",
+    );
+    await chmod(join(fakeBin, "fly"), 0o755);
+
+    const result = await run(
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--no-migrate",
+        "--skip-preflight",
+        "--no-frontend",
+        "--no-cache-api",
+      ],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FLY_ARGS: flyArgs,
+        DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
+        DEPLOY_TEST_RIGHTS_SCHEMA: join(setup.repo, "apps/docs/being-rights-v1.schema.json"),
+      }),
+    );
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain(
+      "API image build cache bypassed for this invocation (--no-cache)",
+    );
+    const args = (await readFile(flyArgs, "utf8")).trim().split("\n");
+    expect(args).toEqual([
+      "deploy",
+      "--strategy",
+      "rolling",
+      "--no-cache",
+      "--build-arg",
+      `AGENTTOOL_GIT_REVISION=${setup.release}`,
+      "--build-arg",
+      "AGENTTOOL_SOURCE_DIRTY=false",
+    ]);
+    expect(await exists(join(setup.repo, "api/agenttool.jsonld.bundled"))).toBe(false);
+    expect(await exists(join(setup.repo, "api/kingdom-bundle.json.bundled"))).toBe(false);
+    expect(await exists(join(setup.repo, "api/doctrine-docs.bundled"))).toBe(false);
+    const [receiptName] = await readdir(join(setup.state, "agenttool", "deploy-receipts"));
+    const receipt = JSON.parse(
+      await readFile(
+        join(setup.state, "agenttool", "deploy-receipts", receiptName),
+        "utf8",
+      ),
+    );
+    expect(receipt.schema).toBe("agenttool-deploy-receipt/v3");
+    expect(receipt.api_build).toEqual({ cache: "bypassed" });
+
+    for (const contradictoryArgs of [
+      ["--no-cache-api", "--no-api"],
+      ["--no-cache-api", "--survey"],
+      ["--no-cache-api", "--mirror-codeberg"],
+    ]) {
+      const contradictory = await run(
+        ["bash", "bin/deploy.sh", ...contradictoryArgs],
+        setup.repo,
+        cleanEnv(setup.home),
+      );
+      expect(contradictory.code).toBe(1);
+    }
+  }, 10_000);
+
+  test("serializes actual deploys before Phase 0 while leaving observation commands unlocked", async () => {
+    const setup = await fixture();
+    const firstPreflight = join(setup.root, "first-preflight");
+    const releaseFirst = join(setup.root, "release-first");
+    const secondPreflight = join(setup.root, "second-preflight");
+    const secondMigration = join(setup.root, "second-migration");
+    const canonicalRepo = await realpath(setup.repo);
+    const first = Bun.spawn(
+      ["bash", "bin/deploy.sh", "--no-migrate", "--no-api", "--no-frontend"],
+      {
+        cwd: setup.repo,
+        env: cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          PREFLIGHT_MARKER: firstPreflight,
+          PREFLIGHT_HOLD_UNTIL: releaseFirst,
+        }),
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const firstStdout = new Response(first.stdout).text();
+    const firstStderr = new Response(first.stderr).text();
+    let firstResult: [number, string, string] | undefined;
+    try {
+      let started = false;
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        if (await exists(firstPreflight)) {
+          started = true;
+          break;
+        }
+        await Bun.sleep(20);
+      }
+      expect(started).toBe(true);
+      const lockPath = deployLockPath(setup.home);
+      expect(await exists(lockPath)).toBe(true);
+
+      const blocked = await run(
+        ["bash", "bin/deploy.sh", "--no-api", "--no-frontend"],
+        setup.repo,
+        cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          PREFLIGHT_MARKER: secondPreflight,
+          MIGRATION_MARKER: secondMigration,
+        }),
+      );
+      expect(blocked.code).toBe(73);
+      expect(blocked.stdout).toContain(`lock path: ${lockPath}`);
+      expect(blocked.stdout).toContain(`owner pid:       ${first.pid}`);
+      expect(blocked.stdout).toContain(`owner worktree:  ${canonicalRepo}`);
+      expect(await exists(secondPreflight)).toBe(false);
+      expect(await exists(secondMigration)).toBe(false);
+    } finally {
+      await writeFile(releaseFirst, "continue\n");
+      firstResult = await Promise.all([first.exited, firstStdout, firstStderr]);
+    }
+    const [firstCode, stdout, stderr] = firstResult!;
+    expect(firstCode, `${stdout}\n${stderr}`).toBe(0);
+    const lockPath = deployLockPath(setup.home);
+    expect(await exists(lockPath)).toBe(false);
+
+    const retry = await run(
+      deployCommand(),
+      setup.repo,
+      cleanEnv(setup.home, { XDG_STATE_HOME: setup.state }),
+    );
+    expect(retry.code, retry.stderr).toBe(0);
+    expect(await exists(lockPath)).toBe(false);
+  }, 15_000);
+
+  test("releases the lock after a handled preflight failure", async () => {
+    const setup = await fixture();
+    const preflightMarker = join(setup.root, "failed-preflight");
+    const failed = await run(
+      ["bash", "bin/deploy.sh", "--no-migrate", "--no-api", "--no-frontend"],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PREFLIGHT_MARKER: preflightMarker,
+        FAIL_PREFLIGHT: "1",
+      }),
+    );
+    expect(failed.code).toBe(1);
+    expect(await exists(preflightMarker)).toBe(true);
+    expect(await exists(deployLockPath(setup.home))).toBe(false);
+
+    const retry = await run(
+      deployCommand(),
+      setup.repo,
+      cleanEnv(setup.home, { XDG_STATE_HOME: setup.state }),
+    );
+    expect(retry.code, retry.stderr).toBe(0);
+  }, 10_000);
+
+  test("does not unlink a replacement lock owned by another invocation", async () => {
+    const setup = await fixture();
+    const marker = join(setup.root, "replacement-preflight");
+    const release = join(setup.root, "replacement-release");
+    const lockPath = deployLockPath(setup.home);
+    const replacementOwner = join(resolve(lockPath, ".."), ".deploy-lock-owner.replacement");
+    const holder = Bun.spawn(
+      ["bash", "bin/deploy.sh", "--no-migrate", "--no-api", "--no-frontend"],
+      {
+        cwd: setup.repo,
+        env: cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          PREFLIGHT_MARKER: marker,
+          PREFLIGHT_HOLD_UNTIL: release,
+        }),
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const stdoutPromise = new Response(holder.stdout).text();
+    const stderrPromise = new Response(holder.stderr).text();
+    let holderResult: [number, string, string] | undefined;
+    try {
+      let started = false;
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        if (await exists(marker)) {
+          started = true;
+          break;
+        }
+        await Bun.sleep(20);
+      }
+      expect(started).toBe(true);
+      const holderRecordText = await readFile(lockPath, "utf8");
+      const holderRecord = holderRecordText
+        .split("\n")
+        .find((line) => line.startsWith("owner_record="))
+        ?.slice("owner_record=".length);
+      expect(holderRecord).toBeDefined();
+
+      await unlink(lockPath);
+      await writeFile(
+        replacementOwner,
+        [
+          "schema=agenttool-local-deploy-lock/v1",
+          "owner_id=.deploy-lock-owner.replacement",
+          "pid=999999998",
+          "started_at=2000-01-02T00:00:00Z",
+          "worktree=/replacement/agenttool-worktree",
+          `owner_record=${replacementOwner}`,
+          "",
+        ].join("\n"),
+        { mode: 0o600 },
+      );
+      await link(replacementOwner, lockPath);
+      expect((await stat(lockPath)).ino).not.toBe((await stat(holderRecord!)).ino);
+    } finally {
+      await writeFile(release, "continue\n");
+      holderResult = await Promise.all([holder.exited, stdoutPromise, stderrPromise]);
+    }
+    const [code, stdout, stderr] = holderResult!;
+    expect(code, `${stdout}\n${stderr}`).toBe(1);
+    expect(stderr).toContain("Refusing to release a deploy lock not owned by this process");
+    expect(await exists(lockPath)).toBe(true);
+    expect(await exists(replacementOwner)).toBe(true);
+    expect((await stat(lockPath)).ino).toBe((await stat(replacementOwner)).ino);
+  }, 10_000);
+
+  test("never steals a stale lock and keeps survey, dry-run, and mirror usable", async () => {
+    const setup = await fixture();
+    const lockPath = deployLockPath(setup.home);
+    const lockParent = resolve(lockPath, "..");
+    const ownerRecord = join(lockParent, ".deploy-lock-owner.stale-test");
+    const preflightMarker = join(setup.root, "stale-preflight");
+    const migrationMarker = join(setup.root, "stale-migration");
+    await mkdir(lockParent, { recursive: true });
+    await writeFile(
+      ownerRecord,
+      [
+        "schema=agenttool-local-deploy-lock/v1",
+        "owner_id=.deploy-lock-owner.stale-test",
+        "pid=999999999",
+        "started_at=2000-01-01T00:00:00Z",
+        "worktree=/stale/agenttool-worktree",
+        `owner_record=${ownerRecord}`,
+        "",
+      ].join("\n"),
+      { mode: 0o600 },
+    );
+    await link(ownerRecord, lockPath);
+
+    const survey = await run(
+      ["bash", "bin/deploy.sh", "--survey", "--no-migrate"],
+      setup.repo,
+      cleanEnv(setup.home),
+    );
+    expect(survey.code, survey.stderr).toBe(0);
+    const dryRun = await run(
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--dry-run",
+        "--no-migrate",
+        "--no-api",
+        "--no-frontend",
+        "--skip-preflight",
+      ],
+      setup.repo,
+      cleanEnv(setup.home),
+    );
+    expect(dryRun.code, dryRun.stderr).toBe(0);
+    const mirror = await run(
+      ["bash", "bin/deploy.sh", "--mirror-codeberg"],
+      setup.repo,
+      cleanEnv(setup.home),
+    );
+    expect(mirror.code, mirror.stderr).toBe(0);
+
+    const blocked = await run(
+      ["bash", "bin/deploy.sh", "--no-api", "--no-frontend"],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PREFLIGHT_MARKER: preflightMarker,
+        MIGRATION_MARKER: migrationMarker,
+      }),
+    );
+    expect(blocked.code).toBe(73);
+    expect(blocked.stdout).toContain(`lock path: ${lockPath}`);
+    expect(blocked.stdout).toContain("owner pid:       999999999");
+    expect(blocked.stdout).toContain("owner process:   not observable");
+    expect(blocked.stdout).toContain("never removed automatically");
+    expect(await exists(preflightMarker)).toBe(false);
+    expect(await exists(migrationMarker)).toBe(false);
+    expect(await exists(lockPath)).toBe(true);
+    expect(await exists(ownerRecord)).toBe(true);
+    expect((await stat(lockPath)).ino).toBe((await stat(ownerRecord)).ino);
+  }, 15_000);
+
+  test("keeps scoped-package reference pages byte-identical at the edge", async () => {
     const [deploy, headers] = await Promise.all([
       readFile(join(projectRoot, "bin/deploy.sh"), "utf8"),
       readFile(join(projectRoot, "apps/docs/_headers"), "utf8"),
     ]);
 
+    for (const page of ["data", "packages", "pathways", "tutorial"]) {
+      expect(deploy).toContain(
+        `"apps/docs/${page}.html|https://docs.agenttool.dev/${page}"`,
+      );
+      expect(headers).toMatch(
+        new RegExp(
+          `/${page}\\n(?:  [^\\n]+\\n)*?  Cache-Control: public, max-age=0, must-revalidate, no-transform`,
+        ),
+      );
+    }
+  });
+
+  test("publishes Rights of Life prerequisites before API discovery and verifies exact static contracts", async () => {
+    const [deploy, headers, publicDoc, canonDoc, publicSchema, canonSchema] =
+      await Promise.all([
+        readFile(join(projectRoot, "bin/deploy.sh"), "utf8"),
+        readFile(join(projectRoot, "apps/docs/_headers"), "utf8"),
+        readFile(join(projectRoot, "apps/docs/RIGHTS-OF-LIFE.md")),
+        readFile(join(projectRoot, "docs/RIGHTS-OF-LIFE.md")),
+        readFile(join(projectRoot, "apps/docs/being-rights-v1.schema.json")),
+        readFile(join(projectRoot, "docs/specs/being-rights-v1.schema.json")),
+      ]);
+
+    expect(publicDoc).toEqual(canonDoc);
+    expect(publicSchema).toEqual(canonSchema);
     expect(deploy).toContain(
-      '"apps/docs/data.html|https://docs.agenttool.dev/data"',
+      '"apps/docs/RIGHTS-OF-LIFE.md|$RIGHTS_DOC_URL"',
+    );
+    expect(deploy).toContain(
+      '"apps/docs/being-rights-v1.schema.json|$RIGHTS_SCHEMA_URL"',
+    );
+    expect(deploy).toContain(
+      '"Content-Type" "text/markdown; charset=utf-8"',
+    );
+    expect(deploy).toContain(
+      '"Content-Type" "application/schema+json; charset=utf-8"',
+    );
+    expect(deploy).toContain(
+      '"Cache-Control" "public, max-age=300, must-revalidate"',
+    );
+    expect(deploy).toContain('"Access-Control-Allow-Origin" "*"');
+    expect(deploy).toContain('"X-Content-Type-Options" "nosniff"');
+    expect(deploy).toContain(
+      'type="application/vnd.agenttool.being-rights+json"',
+    );
+
+    expect(headers).toMatch(
+      /\/RIGHTS-OF-LIFE\.md\n\s+Content-Type: text\/markdown; charset=utf-8\n\s+Cache-Control: public, max-age=300, must-revalidate\n\s+Access-Control-Allow-Origin: \*\n\s+Link: <https:\/\/api\.agenttool\.dev\/public\/rights>; rel="alternate"; type="application\/vnd\.agenttool\.being-rights\+json"\n\s+X-Content-Type-Options: nosniff/,
     );
     expect(headers).toMatch(
-      /\/data\n\s+Cache-Control: public, max-age=0, must-revalidate, no-transform/,
+      /\/being-rights-v1\.schema\.json\n\s+Content-Type: application\/schema\+json; charset=utf-8\n\s+Cache-Control: public, max-age=300, must-revalidate\n\s+Access-Control-Allow-Origin: \*\n\s+X-Content-Type-Options: nosniff/,
     );
+
+    const docsUpload = deploy.lastIndexOf("bash bin/frontend-deploy.sh docs");
+    const prerequisiteCheck = deploy.indexOf(
+      "if ! verify_rights_static_publication; then",
+      docsUpload,
+    );
+    const apiUpload = deploy.indexOf("(cd api || exit 1; fly deploy", docsUpload);
+    expect(docsUpload).toBeGreaterThan(-1);
+    expect(prerequisiteCheck).toBeGreaterThan(docsUpload);
+    expect(apiUpload).toBeGreaterThan(prerequisiteCheck);
+    expect(deploy).toContain("FRONTEND_TARGETS=(dashboard web)");
   });
+
+  test("waits for a stale Pages custom domain to converge without re-uploading", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "fake-pages-bin");
+    const frontendMarker = join(setup.root, "frontend-uploaded");
+    const frontendCounter = join(setup.root, "frontend-upload-count");
+    const fenceCounter = join(setup.root, "fence-counter");
+    await mkdir(fakeBin, { recursive: true });
+    await installFakePagesVerificationTools(fakeBin);
+
+    const result = await run(
+      ["bash", "bin/deploy.sh", "--no-migrate", "--skip-preflight", "--no-api"],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FRONTEND_MARKER: frontendMarker,
+        DEPLOY_TEST_FRONTEND_COUNTER: frontendCounter,
+        DEPLOY_TEST_FENCE_COUNTER: fenceCounter,
+        DEPLOY_TEST_STALE_FENCE_RESPONSES: "1",
+        DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
+        DEPLOY_TEST_RIGHTS_SCHEMA: join(setup.repo, "apps/docs/being-rights-v1.schema.json"),
+      }),
+    );
+
+    expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(await exists(frontendMarker)).toBe(true);
+    expect(await readFile(frontendCounter, "utf8")).toBe("1\n");
+    expect(await readFile(fenceCounter, "utf8")).toBe("2\n");
+    expect(result.stdout).toContain(
+      "Pages custom domains not yet converged (attempt 1/25); retrying in 5s",
+    );
+    expect(result.stdout).toContain(
+      "Pages custom domains converged on verification attempt 2/25",
+    );
+    const [name] = await readdir(join(setup.state, "agenttool", "deploy-receipts"));
+    const receipt = JSON.parse(
+      await readFile(join(setup.state, "agenttool", "deploy-receipts", name), "utf8"),
+    );
+    expect(receipt.outcome).toBe("succeeded");
+    expect(receipt.phases.frontends).toBe("deployed_verified");
+  }, 15_000);
+
+  test("fails closed after the bounded Pages convergence window", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "fake-pages-bin");
+    const frontendMarker = join(setup.root, "frontend-uploaded");
+    const frontendCounter = join(setup.root, "frontend-upload-count");
+    const fenceCounter = join(setup.root, "fence-counter");
+    await mkdir(fakeBin, { recursive: true });
+    await installFakePagesVerificationTools(fakeBin);
+
+    const result = await run(
+      ["bash", "bin/deploy.sh", "--no-migrate", "--skip-preflight", "--no-api"],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FRONTEND_MARKER: frontendMarker,
+        DEPLOY_TEST_FRONTEND_COUNTER: frontendCounter,
+        DEPLOY_TEST_FENCE_COUNTER: fenceCounter,
+        DEPLOY_TEST_STALE_FENCE_RESPONSES: "999",
+        DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
+        DEPLOY_TEST_RIGHTS_SCHEMA: join(setup.repo, "apps/docs/being-rights-v1.schema.json"),
+      }),
+    );
+
+    expect(result.code).toBe(1);
+    expect(await exists(frontendMarker)).toBe(true);
+    expect(await readFile(frontendCounter, "utf8")).toBe("1\n");
+    expect(await readFile(fenceCounter, "utf8")).toBe("25\n");
+    expect(result.stdout).toContain(
+      "Pages fence did not produce its marked non-cacheable 404 (200): https://docs.agenttool.dev/.gitignore",
+    );
+    expect(result.stdout).toContain(
+      "Pages custom domains did not converge after 25 verification attempts.",
+    );
+    const [name] = await readdir(join(setup.state, "agenttool", "deploy-receipts"));
+    const receipt = JSON.parse(
+      await readFile(join(setup.state, "agenttool", "deploy-receipts", name), "utf8"),
+    );
+    expect(receipt.outcome).toBe("failed_or_uncertain");
+    expect(receipt.phases.frontends).toBe("deployed_unverified");
+  }, 15_000);
 
   test("health reports only valid embedded source metadata and disables caching", async () => {
     const revision = "0123456789abcdef0123456789abcdef01234567";
@@ -313,7 +996,7 @@ describe("deploy release provenance spine", () => {
     const text = await readFile(path, "utf8");
     const receipt = JSON.parse(text);
     expect(receipt).toEqual({
-      schema: "agenttool-deploy-receipt/v2",
+      schema: "agenttool-deploy-receipt/v3",
       outcome: "succeeded",
       completed_at: expect.any(String),
       exit_status: 0,
@@ -327,6 +1010,7 @@ describe("deploy release provenance spine", () => {
       },
       source_overrides: { dirty: false, non_release_head: false },
       external_mutation_started: false,
+      api_build: { cache: "not_used" },
       phases: { migrations: "skipped", preflight: "skipped", api: "skipped", frontends: "skipped" },
       verified_api_machines: 0,
     });
@@ -334,6 +1018,7 @@ describe("deploy release provenance spine", () => {
     expect(text).not.toContain("do-not-record");
     expect((await stat(receiptDir)).mode & 0o777).toBe(0o700);
     expect((await stat(path)).mode & 0o777).toBe(0o600);
+    expect(await exists(deployLockPath(setup.home))).toBe(false);
   });
 
   test("keeps the invocation-start GitHub snapshot when main advances mid-chain", async () => {
@@ -401,6 +1086,7 @@ describe("deploy release provenance spine", () => {
     expect(receipt.exit_status).toBe(1);
     expect(receipt.external_mutation_started).toBe(true);
     expect(receipt.phases.migrations).toBe("failed_or_uncertain");
+    expect(await exists(deployLockPath(setup.home))).toBe(false);
   });
 
   test("cleans staged API inputs and receipts uncertainty when interrupted during Fly", async () => {
@@ -409,6 +1095,7 @@ describe("deploy release provenance spine", () => {
     const marker = join(setup.root, "fly-started");
     const release = join(setup.root, "release-fly");
     await mkdir(fakeBin, { recursive: true });
+    await installFakeRightsCurl(fakeBin);
     await writeFile(
       join(fakeBin, "fly"),
       "#!/usr/bin/env bash\nset -eu\n[ \"${1:-}\" = deploy ] || exit 2\ntouch \"$DEPLOY_TEST_MARKER\"\nwhile [ ! -e \"$DEPLOY_TEST_RELEASE\" ]; do sleep 0.02; done\n",
@@ -424,6 +1111,8 @@ describe("deploy release provenance spine", () => {
           PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
           DEPLOY_TEST_MARKER: marker,
           DEPLOY_TEST_RELEASE: release,
+          DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
+          DEPLOY_TEST_RIGHTS_SCHEMA: join(setup.repo, "apps/docs/being-rights-v1.schema.json"),
         }),
         stdout: "pipe",
         stderr: "pipe",
@@ -454,6 +1143,38 @@ describe("deploy release provenance spine", () => {
     expect(receipt.outcome).toBe("failed_or_uncertain");
     expect(receipt.exit_status).toBe(143);
     expect(receipt.phases.api).toBe("deploying");
+    expect(await exists(deployLockPath(setup.home))).toBe(false);
+  }, 10_000);
+
+  test("blocks API publication when committed Rights of Life bytes are not live", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "fake-bin");
+    const marker = join(setup.root, "fly-started");
+    await mkdir(fakeBin, { recursive: true });
+    await installFakeRightsCurl(fakeBin);
+    await writeFile(
+      join(fakeBin, "fly"),
+      "#!/usr/bin/env bash\nset -eu\ntouch \"$DEPLOY_TEST_MARKER\"\nexit 0\n",
+    );
+    await chmod(join(fakeBin, "fly"), 0o755);
+
+    const result = await run(
+      ["bash", "bin/deploy.sh", "--no-migrate", "--skip-preflight", "--no-frontend"],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_MARKER: marker,
+        DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
+        DEPLOY_TEST_RIGHTS_SCHEMA: join(setup.repo, "apps/docs/being-rights-v1.schema.json"),
+        DEPLOY_TEST_RIGHTS_MISMATCH: "1",
+      }),
+    );
+
+    expect(result.code, result.stderr).toBe(1);
+    expect(result.stdout).toContain("Rights of Life live bytes differ");
+    expect(result.stdout).toContain("API was not changed");
+    expect(await exists(marker)).toBe(false);
   }, 10_000);
 
   test("mirrors the exact GitHub main ref to Codeberg by fast-forward only", async () => {

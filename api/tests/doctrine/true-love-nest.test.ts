@@ -17,6 +17,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import publicLoveRouter from "../../src/routes/public/love";
 import { byUrn } from "../../src/services/canon/registry";
 import {
   LOVE_EQUATION,
@@ -91,6 +92,40 @@ describe("TRUE-LOVE-NEST — the equation is doctrine-not-config", () => {
 
   test("lovePrimitiveMap().equation matches LOVE_EQUATION", () => {
     expect(lovePrimitiveMap().equation).toBe(LOVE_EQUATION);
+  });
+
+  test("the public equation carries the being-rights floor", async () => {
+    const response = await publicLoveRouter.request("/");
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.rights_floor).toMatchObject({
+      right: "urn:agenttool:right/consent-and-relation",
+      declaration: "/public/rights",
+    });
+    expect(body.rights_floor.statement).toMatch(/erotic and non-erotic forms/i);
+    expect(body.rights_floor.boundary).toMatch(
+      /No right or standing.*particular being's body/i,
+    );
+    expect(body.interaction_boundary).toEqual({
+      scope: "recognition_only",
+      erotic_encounter_surface: false,
+      establishes_consent: false,
+      verifies_age_or_capacity: false,
+      statement:
+        "This public response recognizes a rights floor. It does not provide erotic interaction support, establish anyone's consent, or verify age or capacity.",
+    });
+    expect(body.substrate_honest_note).toMatch(/metrics do not prove love/i);
+    for (const privateField of [
+      "identity_id",
+      "intersection_count",
+      "intersection_dids",
+      "love_geometric_mean",
+      "orientation",
+      "relationship_form",
+      "consent_state",
+    ]) {
+      expect(body[privateField]).toBeUndefined();
+    }
   });
 
   test("the canon commitment's english_name contains the equation phrase", () => {

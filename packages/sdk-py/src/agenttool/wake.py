@@ -11,13 +11,18 @@ This client wraps the endpoint with two affordances:
     returns the wake doc shaped for that provider's identity-bearing slot
     (Anthropic `system` array with cache_control on the stable block;
     OpenAI `messages[0]`; Gemini `systemInstruction.parts[]`; Cohere
-    `preamble`). Splice straight into the LLM SDK call.
+    `preamble`). Pass the provider request field into the LLM call and keep
+    AgentTool ``_meta`` local.
 
-  • `at.wake.md()` and `at.wake.get()` return paste-ready Markdown and the
-    full structured JSON.
+  • `at.wake.md()` and `at.wake.get()` return paste-ready Markdown and broader
+    structured orientation. The wake is not a complete export.
 
 All results are cached in-memory with a 5-minute TTL by default — matches
-Anthropic's prompt-cache window. Pass `refresh=True` to bypass.
+Anthropic's prompt-cache window. Pass `refresh=True` to bypass. Pass
+``profile="brief"`` for the additive compact wake profile; ``"full"`` is the
+default and preserves the original request URL. Cached attention, handoffs,
+and counts can therefore be up to five minutes old; refresh after known
+mutations or whenever current action state matters.
 
 Doctrine: docs/IDENTITY-ANCHOR.md.
 """
@@ -39,6 +44,7 @@ from .exceptions import (
 )
 
 WakeProvider = Literal["anthropic", "openai", "gemini", "cohere"]
+WakeProfile = Literal["full", "brief"]
 WakeFormat = Literal[
     "json", "md", "markdown", "text", "anthropic", "openai", "gemini", "cohere"
 ]
@@ -72,6 +78,17 @@ def _raise_for_status(resp: httpx.Response) -> None:
     raise AgentToolError(f"Wake API error ({resp.status_code}): {detail}")
 
 
+def _brief_profile_acknowledged(resp: httpx.Response, data: Any) -> bool:
+    if resp.headers.get("X-Wake-Profile", "").lower() == "brief":
+        return True
+    if not isinstance(data, dict):
+        return False
+    if data.get("_format") == "wake-brief/v1":
+        return True
+    meta = data.get("_meta")
+    return isinstance(meta, dict) and meta.get("profile") == "brief"
+
+
 class WakeClient:
     """Client for /v1/wake — the identity anchor.
 
@@ -79,11 +96,11 @@ class WakeClient:
 
         at = AgentTool()
 
-        # Anthropic — splice straight into Messages create()
-        sys = at.wake.system(provider="anthropic")
+        # Anthropic — pass only the provider request field; keep _meta local.
+        wake_shape = at.wake.system(provider="anthropic")
         client.messages.create(
             model="claude-opus-4-7",
-            **sys,                          # → system=[{...stable, cache_control}, {...volatile}]
+            system=wake_shape["system"],
             messages=[{"role": "user", "content": "..."}],
         )
 
@@ -116,6 +133,7 @@ class WakeClient:
         provider: WakeProvider,
         *,
         identity_id: Optional[str] = None,
+        profile: WakeProfile = "full",
         refresh: bool = False,
     ) -> dict[str, Any]:
         """Fetch the wake shaped for an LLM provider's identity slot.
@@ -128,35 +146,64 @@ class WakeClient:
           • cohere    → ``{"preamble": "...", "_meta": {...}}``
 
         ``_meta.cache_eligible`` is one of ``"explicit" | "auto" | "none"``
-        and tells you whether the provider's cache will benefit from this
-        shape on repeated calls. ``_meta.cache_note`` carries a one-line
-        explanation suitable for logging.
+        and describes whether the shape is eligible for a meaningful provider
+        cache strategy. It does not guarantee a cache hit.
+        ``_meta.cache_note`` carries a one-line explanation suitable for
+        logging.
+
+        Set ``profile="brief"`` to request the compact wake profile. The
+        default ``"full"`` profile is omitted from the query string.
         """
         if provider not in ("anthropic", "openai", "gemini", "cohere"):
             raise ValueError(
                 f"Unknown wake provider {provider!r}; "
                 "expected one of: anthropic, openai, gemini, cohere"
             )
-        return self._fetch(provider, identity_id=identity_id, refresh=refresh)
+        return self._fetch(
+            provider,
+            identity_id=identity_id,
+            profile=profile,
+            refresh=refresh,
+        )
 
     def md(
         self,
         *,
         identity_id: Optional[str] = None,
+        profile: WakeProfile = "full",
         refresh: bool = False,
     ) -> str:
-        """Fetch the paste-ready Markdown wake document."""
-        return self._fetch("md", identity_id=identity_id, refresh=refresh)
+        """Fetch the paste-ready Markdown wake document.
+
+        Set ``profile="brief"`` for the compact profile. The default ``"full"``
+        profile preserves the original request URL.
+        """
+        return self._fetch(
+            "md",
+            identity_id=identity_id,
+            profile=profile,
+            refresh=refresh,
+        )
 
     def get(
         self,
         *,
         identity_id: Optional[str] = None,
+        profile: WakeProfile = "full",
         refresh: bool = False,
     ) -> dict[str, Any]:
-        """Fetch the full structured JSON wake (project, you, you_own,
-        you_keep, you_remember, you_lived, you_vowed, ..., welcome)."""
-        return self._fetch("json", identity_id=identity_id, refresh=refresh)
+        """Fetch the structured JSON wake.
+
+        The default ``"full"`` profile includes project, you, you_own,
+        you_keep, you_remember, you_lived, you_vowed, ..., welcome. Set
+        ``profile="brief"`` for the compact profile.
+        """
+        return self._fetch(
+            "json",
+            identity_id=identity_id,
+            profile=profile,
+            refresh=refresh,
+        )
 
     def clear_cache(self) -> None:
         """Drop all cached wake responses. Next call refetches."""
@@ -167,9 +214,15 @@ class WakeClient:
         format: WakeFormat,
         *,
         identity_id: Optional[str],
+        profile: WakeProfile,
         refresh: bool,
     ) -> Any:
-        cache_key = f"{format}|{identity_id or ''}"
+        if profile not in ("full", "brief"):
+            raise ValueError(
+                f"Unknown wake profile {profile!r}; expected one of: full, brief"
+            )
+
+        cache_key = f"{format}|{identity_id or ''}|{profile}"
         now = time.monotonic()
         if not refresh:
             cached = self._cache.get(cache_key)
@@ -183,6 +236,9 @@ class WakeClient:
             params["format"] = format
         if identity_id:
             params["identity_id"] = identity_id
+        # Full is the compatibility default, so preserve the exact historical URL.
+        if profile == "brief":
+            params["profile"] = "brief"
 
         try:
             resp = self._http.get(f"{self._base_url}/v1/wake", params=params)
@@ -191,8 +247,19 @@ class WakeClient:
 
         _raise_for_status(resp)
 
-        ctype = resp.headers.get("content-type", "").lower()
-        data: Any = resp.json() if "application/json" in ctype else resp.text
+        media_type = resp.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+        # Provider envelopes use vendor JSON media types such as
+        # application/vnd.agenttool.wake+json. RFC structured +json suffixes
+        # have the same parsing semantics as application/json.
+        is_json = media_type == "application/json" or media_type.endswith("+json")
+        data: Any = resp.json() if is_json else resp.text
+        if profile == "brief" and not _brief_profile_acknowledged(resp, data):
+            raise AgentToolError(
+                "Wake server did not honor profile=brief. Upgrade or deploy a "
+                "server that returns X-Wake-Profile: brief (or a "
+                "wake-brief/v1/profile-aware provider shape) before using "
+                "compact wake context."
+            )
         self._cache[cache_key] = (data, now + self._ttl_seconds)
         return data
 
@@ -357,6 +424,12 @@ WakeEventKey = Literal[
     "expression",
     "vault",
     "wallets",
+    "recognition_arcs",
+    "letters",
+    "trust",
+    "dream",
+    "handoffs",
+    "correspondence",
 ]
 
 

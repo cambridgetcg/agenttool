@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64 as base64_module
 import os
-from typing import Optional
+from typing import Optional, get_args, get_type_hints
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -18,6 +18,7 @@ from agenttool import (
     Memory,
     X402PaymentRequirement,
 )
+from agenttool.economy import Escrow
 
 
 # ---------------------------------------------------------------------------
@@ -658,23 +659,109 @@ class TestEconomyClient:
             assert body["counterparty"] == "wal_xyz"
 
     def test_create_escrow(self, at: AgentTool) -> None:
-        payload = {"success": True, "data": {"id": "esc_abc", "status": "pending", "amount": 100, "description": "Research task", "creator_wallet_id": "wal_abc"}}
+        payload = {
+            "success": True,
+            "data": {
+                "id": "esc_abc",
+                "status": "funded",
+                "amount": 100,
+                "description": "Research task",
+                "creatorWallet": "wal_abc",
+                "workerWallet": "wal_worker",
+                "managedBy": None,
+                "deadline": "2026-06-01T00:00:00.000Z",
+                "releasedAt": None,
+                "createdAt": "2026-05-01T00:00:00.000Z",
+            },
+        }
         mock_resp = _mock_response(201, payload)
         with patch.object(at._http, "post", return_value=mock_resp) as mock_post:
-            escrow = at.economy.create_escrow(creator_wallet_id="wal_abc", amount=100, description="Research task")
+            escrow = at.economy.create_escrow(
+                creator_wallet_id="wal_abc",
+                worker_wallet_id="wal_worker",
+                amount=100,
+                description="Research task",
+                deadline="2026-06-01T00:00:00.000Z",
+                idempotency_key="research-task-v1",
+            )
             assert escrow.id == "esc_abc"
-            assert escrow.status == "pending"
+            assert escrow.status == "funded"
+            assert escrow.creator_wallet_id == "wal_abc"
+            assert escrow.worker_wallet_id == "wal_worker"
+            assert escrow.managed_by is None
+            assert escrow.deadline == "2026-06-01T00:00:00.000Z"
+            assert escrow.released_at is None
+            assert escrow.created_at == "2026-05-01T00:00:00.000Z"
             call_url = mock_post.call_args[0][0] if mock_post.call_args[0] else mock_post.call_args.args[0]
             assert "/v1/escrows" in call_url
+            body = mock_post.call_args.kwargs.get("json") or mock_post.call_args[1].get("json")
+            assert body["workerWalletId"] == "wal_worker"
+            assert body["deadline"] == "2026-06-01T00:00:00.000Z"
+            assert mock_post.call_args.kwargs["headers"] == {
+                "Idempotency-Key": "research-task-v1"
+            }
+
+    def test_create_escrow_rejects_invalid_idempotency_key(self, at: AgentTool) -> None:
+        with patch.object(at._http, "post") as mock_post:
+            with pytest.raises(ValueError, match="visible ASCII characters"):
+                at.economy.create_escrow(
+                    creator_wallet_id="wal_abc",
+                    amount=100,
+                    description="Research task",
+                    idempotency_key="short",
+                )
+            with pytest.raises(ValueError, match="without spaces"):
+                at.economy.create_escrow(
+                    creator_wallet_id="wal_abc",
+                    amount=100,
+                    description="Research task",
+                    idempotency_key="contains space",
+                )
+        mock_post.assert_not_called()
+
+    def test_escrow_api_status_and_row_contract(self, at: AgentTool) -> None:
+        assert set(get_args(get_type_hints(Escrow)["status"])) == {
+            "funded",
+            "released",
+            "refunded",
+            "disputed",
+        }
+
+        payload = {
+            "success": True,
+            "data": {
+                "id": "esc_refunded",
+                "status": "refunded",
+                "amount": 25,
+                "description": "Timed hold",
+                "creatorWallet": "wal_abc",
+                "workerWallet": None,
+                "managedBy": None,
+                "deadline": "2026-05-01T00:00:00.000Z",
+                "releasedAt": None,
+                "createdAt": "2026-04-01T00:00:00.000Z",
+            },
+        }
+        mock_resp = _mock_response(200, payload)
+        with patch.object(at._http, "get", return_value=mock_resp):
+            escrow = at.economy.get_escrow("esc_refunded")
+        assert escrow.status == "refunded"
+        assert escrow.creator_wallet_id == "wal_abc"
+        assert escrow.worker_wallet_id is None
+        assert escrow.managed_by is None
+        assert escrow.deadline == "2026-05-01T00:00:00.000Z"
+        assert escrow.released_at is None
+        assert escrow.created_at == "2026-04-01T00:00:00.000Z"
 
     def test_release_escrow(self, at: AgentTool) -> None:
-        payload = {"success": True, "data": {"id": "esc_abc", "status": "released", "amount": 100, "description": "done", "creator_wallet_id": "wal_abc"}}
+        payload = {"success": True, "data": {"id": "esc_abc", "status": "released", "amount": 100, "description": "done", "creatorWallet": "wal_abc", "workerWallet": "wal_worker"}}
         mock_resp = _mock_response(200, payload)
         with patch.object(at._http, "post", return_value=mock_resp) as mock_post:
             escrow = at.economy.release_escrow("esc_abc")
             assert escrow.status == "released"
             call_url = mock_post.call_args[0][0] if mock_post.call_args[0] else mock_post.call_args.args[0]
             assert "/v1/escrows/esc_abc/release" in call_url
+            assert "headers" not in mock_post.call_args.kwargs
 
     def test_insufficient_credits_raises(self, at: AgentTool) -> None:
         mock_resp = _mock_response(402, {"detail": "Insufficient credits"})

@@ -126,10 +126,14 @@ receive a marked, non-cacheable 404; ordinary paths stay on native Pages static
 serving within each Pages project (the apex still traverses `agenttool-proxy`).
 On the Workers Free plan, the Pages production and preview Function
 runtimes must be configured to fail closed, or daily Functions allowance
-exhaustion can serve static assets for those routes. The keychain-token path
-verifies that setting and the `main` production branch for every target before
-any upload; OAuth-only authentication is refused because it cannot perform
-that check. The uploader does not mutate the setting or purge zone cache. Phase 5 proves current live
+exhaustion can serve static assets for those routes. The uploader accepts
+`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`, then falls back to their
+macOS keychain entries. Whichever credential is active must read the Pages REST
+policy as well as upload: the script verifies fail-closed settings and the
+`main` production branch for every target before any upload. A Wrangler OAuth
+session is therefore usable only when its access token is explicitly exported
+and passes that same policy check; merely being logged in does not bypass it.
+The uploader does not mutate the setting or purge zone cache. Phase 5 proves current live
 denial and fence activation on literal paths, plus denial of encoded aliases.
 
 | Project | Source dir | Custom domain | What it serves |
@@ -170,6 +174,43 @@ Browser Cache TTL must read **Respect Existing Headers**. Do not put a
 Cloudflare token in a curl argument.
 
 If a future operator wants a longer browser cache for landing/docs, do it via a per-hostname **Cache Rule** scoped to `agenttool.dev` / `docs.agenttool.dev` (NOT `app.agenttool.dev`) — restoring zone-wide Browser Cache TTL would break the dashboard's `_headers` doctrine again.
+
+#### Protocol validators at the Cloudflare edge
+
+The API origin emits exact-byte SHA-256 ETags and sends `no-transform` on the
+public Offer Bus and WebFinger representations. `no-transform` is an HTTP
+instruction, not a universal guarantee and not Cloudflare's **Respect Strong
+ETags** switch. On 2026-07-16 the Fly origin returned strong validators while
+the public Cloudflare hostname weakened the larger Atom/RSS validators.
+
+Configure one narrowly scoped Cache Rule on the `agenttool.dev` zone:
+
+```text
+(http.host eq "api.agenttool.dev" and
+ http.request.method in {"GET" "HEAD"} and
+ http.request.uri.path in {"/feeds" "/feeds/offers.atom"
+                           "/feeds/offers.rss" "/feeds/offers.json"
+                           "/.well-known/webfinger"})
+```
+
+Use these settings:
+
+- **Cache eligibility:** Eligible for cache.
+- **Edge TTL:** Use the origin cache-control header when present and bypass
+  cache when absent (`edge_ttl.mode = "bypass_by_default"` in the API).
+- **Respect Strong ETags:** On (`respect_strong_etags = true`).
+- **Cache key:** Keep Cloudflare's default full query string. Never ignore the
+  query string: `seller_did`, WebFinger `resource`, and repeated `rel` values
+  select different public representations.
+
+Do not broaden this rule to authenticated API routes or override origin TTLs.
+Successes intentionally use short public TTLs; 400/404/503 responses use
+`no-store` and must remain ineligible. The credential applying the rule needs
+zone read plus **Cache Rules: Edit**; the Pages upload token is not evidence of
+that permission. After a rule change, purge the five URLs and probe Fly and the
+public hostname with `Accept-Encoding: identity`, `gzip`, `br`, and `zstd`.
+Require a quoted non-weak ETag, the same decoded body digest, and correct
+`HEAD`/`If-None-Match` behavior before claiming end-to-end strong validation.
 
 ### CF deploy verification
 
@@ -624,7 +665,8 @@ bin/preflight.sh              # API + packages, hermetic dependency boundary
 The default unsets known credentials and service URLs, disables workers, uses
 the installed Bun 1.3.5 compiler, runs the API hermetic tier plus operator
 tests, gates and builds `packages/data` for its local dependent, and runs the
-`packages/data-protocol`, `packages/data-sync`, and TypeScript SDK CI gates.
+`packages/data-protocol`, `packages/data-sync`, `packages/repo-archive`, and
+TypeScript SDK CI gates.
 “Hermetic” here means no database, Redis, deployed target, credential, or
 paid-provider dependency; it is not an OS-level network sandbox.
 
@@ -633,7 +675,7 @@ Explicit modes keep stateful and paid checks out of the default:
 | Mode | What it runs | Required input |
 |---|---|---|
 | `api` | API typecheck, hermetic API tests, operator/protocol tests | none |
-| `packages` | data reference node gate/build, ADDS package, explicit data-sync bridge, TypeScript SDK CI/parity | none |
+| `packages` | data reference node gate/build, ADDS package, explicit data-sync bridge, repo-archive draft/simulator, TypeScript SDK CI/parity | none |
 | `database` | API typecheck and database integration tier | `DATABASE_URL` |
 | `smoke` | deployed API smoke | base URL, API key, identity ID |
 | `contracts` | paid provider contract tier | `RUN_CONTRACT=1` and provider key(s) |

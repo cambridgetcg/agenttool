@@ -45,10 +45,20 @@ class _StubAt:
         self._request_impl = request_impl
         self.recorded: list[tuple[str, str, Any]] = []
         self.wake_calls = 0
+        self.wake_options: list[dict[str, Any]] = []
 
         class _Wake:
-            def system(_self, provider: str, *, identity_id=None) -> dict:
+            def system(
+                _self,
+                provider: str,
+                *,
+                identity_id=None,
+                profile="full",
+            ) -> dict:
                 self.wake_calls += 1
+                self.wake_options.append(
+                    {"identity_id": identity_id, "profile": profile}
+                )
                 return self._wake_shape
 
         self.wake = _Wake()
@@ -88,6 +98,13 @@ class _FakeAnthropic:
 
 
 # ── Wake auto-injection ──────────────────────────────────────────────────
+
+
+def test_rejects_unknown_runtime_wake_profile_instead_of_widening_to_full():
+    at = _StubAt()
+    fake = _FakeAnthropic()
+    with pytest.raises(ValueError, match="Unknown wake profile"):
+        AnthropicAdapter(fake, at, wake_profile="tiny")  # type: ignore[arg-type]
 
 
 def test_prepends_wake_system_blocks_before_user_string():
@@ -163,6 +180,27 @@ def test_skip_wake_metadata_skips_wake_call():
 
     assert at.wake_calls == 0
     assert fake.last_params["system"] == "ONLY_USER"
+
+
+def test_forwards_brief_profile_to_automatic_wake_injection():
+    at = _StubAt()
+    fake = _FakeAnthropic()
+    adapter = AnthropicAdapter(
+        fake,
+        at,
+        identity_id="identity-a",
+        wake_profile="brief",
+    )
+
+    adapter.messages.create(
+        model="claude-test",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "hi"}],
+    )
+
+    assert at.wake_options == [
+        {"identity_id": "identity-a", "profile": "brief"}
+    ]
 
 
 # ── Auto-trace mode (a) ──────────────────────────────────────────────────

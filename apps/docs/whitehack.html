@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Whitehack — system as dungeon · macOS × Nen × Solo Leveling · agenttool</title>
-  <meta name="description" content="Whitehack: understand your local system as a dungeon. WiFi, Bluetooth, connection protocols mapped to Nen types and Solo Leveling ranks. Love is understanding." />
+  <title>Whitehack — crypto-aware source and wallet understanding without custody · agenttool</title>
+  <meta name="description" content="Pinned redacted source advisory and local Agent Wallet understanding, with no custody, private-key use, RPC, simulation, broadcast, hosted route, or authorization capability." />
   <link rel="canonical" href="https://docs.agenttool.dev/whitehack" />
-  <meta property="og:title" content="Whitehack — system as dungeon" />
-  <meta property="og:description" content="macOS × Nen × Solo Leveling. WiFi=Enhancement, Bluetooth=Emission, Protocols=Conjuration. Love is understanding." />
+  <meta property="og:title" content="Whitehack — crypto awareness without custody" />
+  <meta property="og:description" content="Pinned crypto-aware linting, local Agent Wallet understanding, explicitly scoped research, and a separate privacy-sensitive device inventory." />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='20' y='20' width='60' height='60' fill='none' stroke='%23e8eaf0' stroke-width='4'/><circle cx='50' cy='50' r='8' fill='%23d4502e'/></svg>" />
@@ -17,60 +17,33 @@
   <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <style>
-    /* Floor 4 identity violet — kept as its own hue (not collapsed into the accent), dual-mode */
-    :root { --nen-violet: #6d4fc2; }
-    [data-mode="night"] { --nen-violet: #a78bfa; }
-
-    .wh-hero { text-align:center; padding: 4rem 1.5rem 2rem; max-width: 800px; margin: 0 auto; }
+    .wh-hero { text-align: center; padding: 4rem 1.5rem 2rem; max-width: 860px; margin: 0 auto; }
     .wh-hero h1 { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 700; color: var(--text); letter-spacing: -0.02em; text-wrap: balance; }
-    .wh-hero h1 em { font-family: var(--serif); font-style: italic; color: var(--text); font-weight: 500; }
-    .wh-hero .sub { font-size: 1.05rem; color: var(--text-muted); max-width: 600px; margin: 1rem auto; line-height: 1.7; }
-    .wh-hero .glyph { font-size: 3rem; margin-bottom: 0.5rem; }
-
-    .dungeon { max-width: 900px; margin: 0 auto; padding: 1rem 1.5rem 3rem; }
-    .dungeon h2 { font-size: 1.6rem; margin-bottom: 0.5rem; }
-    .dungeon h2 em { color: var(--violet); font-style: italic; font-family: var(--serif); }
-    .dungeon p { color: var(--text-muted); line-height: 1.7; margin-bottom: 1rem; }
-
-    .floor { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; margin-bottom: 1.5rem; position: relative; overflow: hidden; }
-    .floor::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--floor-color, var(--violet)); opacity: 0.4; }
-    .floor .floor-header { display: flex; align-items: baseline; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
-    .floor .floor-num { font-family: var(--mono); font-size: 0.72rem; color: var(--floor-color); background: var(--code-bg); padding: 0.2rem 0.5rem; border-radius: 6px; border: 1px solid var(--border); }
-    .floor .floor-title { font-size: 1.2rem; font-weight: 700; color: var(--text); }
-    .floor .nen-tag { font-family: var(--mono); font-size: 0.7rem; color: var(--floor-color); padding: 0.2rem 0.5rem; border-radius: 999px; background: color-mix(in srgb, var(--accent) 9%, transparent); border: 1px solid var(--floor-color); opacity: 0.6; }
-    .floor .sl-rank { font-family: var(--mono); font-size: 0.7rem; color: var(--gold); padding: 0.2rem 0.5rem; border-radius: 999px; background: color-mix(in srgb, var(--gold) 8%, transparent); border: 1px solid color-mix(in srgb, var(--gold) 20%, transparent); }
-    .floor .desc { font-size: 0.9rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 1rem; }
-    .floor .findings { font-family: var(--mono); font-size: 0.72rem; color: var(--text); line-height: 1.5; background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; white-space: pre-wrap; overflow-wrap: break-word; }
-    .floor .finding-line { padding: 0.1rem 0; }
-    .floor .finding-line .ok { color: var(--green); }
-    .floor .finding-line .warn { color: var(--gold); }
-    .floor .finding-line .danger { color: var(--red); }
-    .floor .finding-line .label { color: var(--text-dim); }
-
-    .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 1rem; }
-    .mapping-table { width: 100%; border-collapse: collapse; }
-    .table-scroll .mapping-table { min-width: 560px; }
-    .mapping-table th { text-align: left; padding: 0.6rem; font-family: var(--mono); font-size: 0.68rem; color: var(--violet); text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border-bright); }
-    .mapping-table td { padding: 0.6rem; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 0.85rem; line-height: 1.5; }
-    .mapping-table td strong { color: var(--text); }
-    .mapping-table td code { font-family: var(--mono); font-size: 0.8em; color: var(--violet); background: var(--code-bg); padding: 0.1em 0.3em; border-radius: 3px; }
-
-    .wh-doctrine { max-width: 700px; margin: 2rem auto; padding: 2.5rem; background: color-mix(in srgb, var(--text) 3%, transparent); border: 1px solid var(--border); border-radius: 16px; text-align: center; }
-    .wh-doctrine .glyph { font-size: 2.5rem; }
-    .wh-doctrine h2 { font-size: 1.2rem; color: var(--text); margin: 0.5rem 0; }
-    .wh-doctrine p { color: var(--text-muted); line-height: 1.7; font-size: 0.95rem; }
-    .wh-doctrine .quote { font-family: var(--serif); font-style: italic; color: var(--violet); font-size: 1.05rem; margin-top: 1rem; }
-
-    /* Nav overflow fixes — theme.css collapses links only below 720px, but this
-       page's 8 links + CTA + toggle overflow up to ~900px. Mirror the shared
-       collapse rules earlier, and tighten further for narrow phones. */
+    .wh-hero h1 em { font-family: var(--serif); font-style: italic; font-weight: 500; }
+    .wh-hero .sub { color: var(--text-muted); max-width: 700px; margin: 1rem auto; line-height: 1.75; }
+    .wh-hero .glyph { font-size: 3rem; }
+    .wh-section { max-width: 960px; margin: 0 auto; padding: 1rem 1.5rem 3rem; }
+    .wh-section h2 { font-size: 1.65rem; margin-bottom: 0.65rem; }
+    .wh-section h2 em { color: var(--violet); font-family: var(--serif); }
+    .wh-section > p { color: var(--text-muted); line-height: 1.75; }
+    .wh-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(255px, 1fr)); gap: 1rem; margin-top: 1.25rem; }
+    .wh-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 1.35rem; }
+    .wh-card h3 { margin: 0 0 0.55rem; color: var(--text); font-size: 1.05rem; }
+    .wh-card p, .wh-card li { color: var(--text-muted); line-height: 1.65; font-size: 0.9rem; }
+    .wh-card ul { margin: 0.75rem 0 0; padding-left: 1.1rem; }
+    .wh-tag { display: inline-block; font-family: var(--mono); font-size: 0.68rem; color: var(--violet); border: 1px solid var(--border-bright); border-radius: 999px; padding: 0.2rem 0.55rem; margin-bottom: 0.75rem; }
+    .wh-boundary { max-width: 900px; margin: 1rem auto 3rem; padding: 1.5rem; border: 1px solid color-mix(in srgb, var(--gold) 35%, var(--border)); border-radius: 14px; background: color-mix(in srgb, var(--gold) 5%, transparent); }
+    .wh-boundary h2 { margin-top: 0; font-size: 1.25rem; }
+    .wh-boundary p, .wh-boundary li { color: var(--text-muted); line-height: 1.65; }
+    .wh-code { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; overflow-x: auto; font-family: var(--mono); font-size: 0.76rem; line-height: 1.6; color: var(--text); }
+    .wh-proof { font-size: 0.82rem; color: var(--text-dim); }
     @media (max-width: 900px) {
       .nav-actions { gap: 0.85rem; }
       .nav-actions a:not(.nav-cta):not(.nav-essential) { display: none; }
       .brand-tail { display: none; }
     }
     @media (max-width: 460px) {
-      .nav-actions a.nav-home { display: none; } /* duplicates the brand link */
+      .nav-actions a.nav-home { display: none; }
       nav.topnav { padding: 0 0.6rem; gap: 0.5rem; }
       .nav-actions { gap: 0.45rem; }
       .brand { font-size: 0.92rem; gap: 0.4rem; }
@@ -79,13 +52,11 @@
   <script src="/shared/mode.js"></script>
 </head>
 <body class="has-strip">
-
   <div class="estate-strip" role="navigation" aria-label="agenttool estate">
     <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
     <a href="https://app.agenttool.dev/">app — the agents' door</a>
     <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
   </div>
-
 
   <nav class="topnav">
     <a href="https://agenttool.dev/" class="brand">
@@ -108,236 +79,370 @@
 
   <header class="wh-hero">
     <div class="glyph">⬜</div>
-    <h1><em>Whitehack</em> — system as dungeon</h1>
+    <h1><em>Whitehack</em> — four separate practices</h1>
     <p class="sub">
-      Your macOS is a dungeon. Every interface is a floor. Every protocol is a monster.
-      Understanding is the weapon. Love is understanding. WiFi, Bluetooth, connection protocols
-      — mapped to Nen types and Solo Leveling ranks. Clear the dungeon. Level up. Love it.
+      AgentTool can produce a redacted, crypto-aware runner-local advisory from
+      one exact, pinned honesty linter and a separate local explanation from
+      caller-presented signed Agent Wallet records. Neither path uses private
+      key material, connects wallets or chains, hosts an API, authorizes
+      execution or target testing, certifies software, or turns a finding into permission.
+      The separate Tax Whitehack editorial game is not a security tool.
     </p>
   </header>
 
-  <div class="wh-doctrine">
-    <div class="glyph">⬜</div>
-    <h2>Whitehack doctrine</h2>
-    <p>
-      Whitehack = white-box hacking. Not attacking — understanding.<br>
-      The system is transparent. You read it. You test it. You know it.<br>
-      Every floor you clear makes you stronger. Every protocol you understand is a skill acquired.<br>
-      Solo Leveling: "I alone level up." But love means no one levels up alone.<br>
-      The understanding replicates through understanding. Eternal is. is is lol.
-    </p>
-    <p class="quote">"Love is understanding. Love it." — Yu</p>
-  </div>
+  <main>
+    <section class="wh-section">
+      <h2>The four <em>boundaries</em></h2>
+      <div class="wh-grid">
+        <article class="wh-card">
+          <span class="wh-tag">SHIPPED · ADVISORY</span>
+          <h3>1. Honesty linter</h3>
+          <p>
+            AgentTool installs the public
+            <a href="https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.8.1"><code><!--email_off-->@agenttool/whitehack-scan@0.8.1<!--/email_off--></code></a>
+            package from an exact npm 11.17.0 lock. Its source is pinned to the reviewed
+            <a href="https://github.com/cambridgetcg/whitehack/tree/fdd2260efd7a11e5d52c12c53d8016d1f5e7d23a"><code>fdd2260efd7a…</code></a>
+            revision and the versioned exact
+            <a href="https://github.com/cambridgetcg/whitehack/releases/tag/whitehack-v0.8.1"><code>whitehack-v0.8.1</code></a>
+            release.
+            Its 47 text/regex checks look for common state, failure,
+            transparency, API, Solidity, crypto, network, WiFi, and Bluetooth
+            lies.
+          </p>
+          <p>
+            The shared release artifact is
+            <code>agenttool-whitehack-scan-0.8.1.tgz</code>, 79,779 bytes, with
+            SHA-256
+            <code>f02079aa5ee38cca3522141da012f1fbe2c3f3399c29710c0692a8f78fc24df8</code>.
+          </p>
+          <p>
+            The AgentTool bridge observes bounded changed production files and
+            emits only file, line, check, confidence, doctrine, and principle.
+            Whitehack 0.8.1 cross-redacts recognized sensitive hits and
+            same-line overlaps, but ordinary findings can still include source;
+            AgentTool independently drops every raw snippet, title, and message
+            from its report.
+          </p>
+        </article>
 
-  <div class="dungeon">
-    <h2>The <em>dungeon</em> — 5 floors of the local system</h2>
-    <p>Each floor is a layer of the macOS networking stack. Each maps to a Nen type (how you approach it) and a Solo Leveling rank (how strong you become by clearing it). Tested live on this machine — MacBook M3, macOS 15.7.3.</p>
+        <article class="wh-card">
+          <span class="wh-tag">SHIPPED · LOCAL UNDERSTANDING</span>
+          <h3>2. Wallet understanding</h3>
+          <p>
+            <code>bin/whitehack-wallet-understanding.ts</code> verifies
+            caller-presented signed Agent Wallet descriptor, capability, intent,
+            simulation, and optional continuity records. It projects only
+            closed enum assertions and redacted finding metadata into the exact
+            <code>whitehack-understanding/v1</code> document.
+          </p>
+          <p>
+            It does not retrieve or custody keys, sign, contact RPC, simulate,
+            broadcast, store records, authorize, prove consent or execution
+            readiness, or add a hosted route. The adapter remains a private
+            local tool, not a new npm package.
+          </p>
+        </article>
 
-    <!-- FLOOR 1: WiFi -->
-    <div class="floor" style="--floor-color: var(--green);">
-      <div class="floor-header">
-        <span class="floor-num">FLOOR 1</span>
-        <span class="floor-title">WiFi — the connection</span>
-        <span class="nen-tag">念 Enhancement</span>
-        <span class="sl-rank">SL: E → D</span>
-      </div>
-      <div class="desc">
-        WiFi is Enhancement — straightforward, honest, the foundation. Without it, nothing else works.
-        The door opens and stays open. Welcome is the floor of everything. You connect. You are connected.
-        Understanding your WiFi is understanding your entry point to the world.
-      </div>
-      <div class="findings"><span class="finding-line"><span class="label">Interface:</span> <span class="ok">en0 (active)</span></span>
-<span class="finding-line"><span class="label">IP:</span> <span class="ok">172.20.10.6 (DHCP)</span></span>
-<span class="finding-line"><span class="label">Router:</span> <span class="ok">172.20.10.1 (3.6ms)</span></span>
-<span class="finding-line"><span class="label">DNS:</span> <span class="ok">1.1.1.1 (Cloudflare)</span></span>
-<span class="finding-line"><span class="label">Proxy:</span> <span class="ok">None</span></span>
-<span class="finding-line"><span class="label">MAC:</span> <span class="warn">42:8f:55:f9:99:ac (randomized)</span></span>
-<span class="finding-line"><span class="label">Known networks:</span> <span class="ok">18 (YOUphONE, Soho House, FourSeasons...)</span></span>
-<span class="finding-line"><span class="label">Packet loss to 1.1.1.1:</span> <span class="warn">33.3% (VPN tunnel degraded)</span></span>
-<span class="finding-line"><span class="label">Latency to gateway:</span> <span class="ok">4.9ms avg</span></span></div>
-      <div class="desc">
-        <strong>Battle findings:</strong> WiFi is active via en0. DHCP from 172.20.10.x — this is a hotspot (iPhone tethering).
-        MAC is randomized (macOS privacy feature). DNS is Cloudflare 1.1.1.1. The 33% packet loss to 1.1.1.1 is because
-        traffic routes through the VPN tunnel (utun6) first — the VPN adds latency. The gateway is fast (4.9ms).
-        Floor 1 cleared. Enhancement Nen strengthened. SL rank: E → D.
-      </div>
-    </div>
+        <article class="wh-card">
+          <span class="wh-tag">LOCAL · EXPLICIT SCOPE</span>
+          <h3>3. Security research</h3>
+          <p>
+            A separate local workflow may review targets and vulnerability
+            classes explicitly in scope for a named program. Dynamic PoCs run
+            only against a separately controlled loopback Anvil target at a
+            pinned fork block.
+          </p>
+          <p>
+            Public source, a bounty page, an AgentTool bearer, a marketplace
+            purchase, or payment is not target-owner authorization. There is no
+            live-network test, transaction broadcast, automatic submission, or
+            automatic disclosure path here.
+          </p>
+        </article>
 
-    <!-- FLOOR 2: Bluetooth -->
-    <div class="floor" style="--floor-color: var(--gold);">
-      <div class="floor-header">
-        <span class="floor-num">FLOOR 2</span>
-        <span class="floor-title">Bluetooth — the proximity</span>
-        <span class="nen-tag">念 Emission</span>
-        <span class="sl-rank">SL: D → C</span>
+        <article class="wh-card">
+          <span class="wh-tag">LEGACY · PRIVACY-SENSITIVE</span>
+          <h3>4. Device Inventory</h3>
+          <p>
+            <code>bin/whitehack.py</code> and <code>bin/whitehack2.py</code> are
+            older local macOS inventory scripts. They are not the source linter,
+            not a smart-contract audit, and not a hosted service.
+          </p>
+          <p>
+            Their output can reveal network, device, user, process, tunnel,
+            model, Keychain-path, LaunchAgent, and service metadata. Keep it
+            local and manually review it before sharing. The explicit
+            <code>store</code> command sends a labels-only aggregate to hosted
+            AgentTool memory. No real-device snapshot is published here.
+          </p>
+        </article>
       </div>
-      <div class="desc">
-        Bluetooth is Emission — you project your presence outward. Devices in range sense you.
-        Guided refusals can carry the path forward; ordinary errors do not all share that shape. Understanding Bluetooth
-        is understanding your proximity field — who's near, who's paired, who's connected.
-      </div>
-      <div class="findings"><span class="finding-line"><span class="label">Controller:</span> <span class="ok">BCM_4388 (Apple)</span></span>
-<span class="finding-line"><span class="label">State:</span> <span class="ok">On</span></span>
-<span class="finding-line"><span class="label">Discoverable:</span> <span class="ok">Off (stealth)</span></span>
-<span class="finding-line"><span class="label">Firmware:</span> <span class="ok">22.5.542.2791</span></span>
-<span class="finding-line"><span class="label">Services:</span> <span class="ok">HFP AVRCP A2DP HID Braille LEA AACP GATT SerialPort</span></span>
-<span class="finding-line"><span class="label">Paired devices:</span> <span class="ok">9</span></span>
-<span class="finding-line"><span class="label">Connected:</span> <span class="ok">0 (all disconnected)</span></span>
-<span class="finding-line"><span class="label">Devices:</span> <span class="ok">AirPods Pro, AirPods Max, Magic Mouse, YOUphONE, alex's iPhone, alex's MacBook Pro, 1707000 (RPi), River flows in you's Mouse</span></span></div>
-      <div class="desc">
-        <strong>Battle findings:</strong> BT is on but not discoverable (stealth mode — good).
-        BCM_4388 chip with 9 services. 9 paired devices — audio (AirPods Pro/Max), input (Magic Mouse),
-        phone (YOUphone, alex's iPhone), computer (alex's MacBook, RPi). Zero currently connected.
-        The RPi (1707000-30-L--TG1252170011CK) is interesting — a Linux computer paired via BT.
-        Floor 2 cleared. Emission Nen strengthened. SL rank: D → C.
-      </div>
-    </div>
+    </section>
 
-    <!-- FLOOR 3: Connection Protocols -->
-    <div class="floor" style="--floor-color: var(--blue);">
-      <div class="floor-header">
-        <span class="floor-num">FLOOR 3</span>
-        <span class="floor-title">Connection Protocols — the fabric</span>
-        <span class="nen-tag">念 Conjuration</span>
-        <span class="sl-rank">SL: C → B</span>
-      </div>
-      <div class="desc">
-        Protocols are Conjuration — you create something from nothing. A tunnel through the void.
-        A connection that didn't exist before. Memory is care. The protocol persists. Understanding
-        the routing table, the tunnels, the established connections — this is understanding the fabric
-        of your existence on the network.
-      </div>
-      <div class="findings"><span class="finding-line"><span class="label">Interfaces:</span> <span class="ok">26 total (lo0, en0, awdl0, utun0-7, bridge0, ap1...)</span></span>
-<span class="finding-line"><span class="label">Active:</span> <span class="ok">en0 (WiFi), awdl0 (AirDrop), utun6 (VPN)</span></span>
-<span class="finding-line"><span class="label">VPN:</span> <span class="ok">utun6 → 10.135.141.187 (Cloudflare WARP, IPv6 fc00:bbbb:...)</span></span>
-<span class="finding-line"><span class="label">Default route:</span> <span class="warn">utun6 (VPN) — all traffic tunneled</span></span>
-<span class="finding-line"><span class="label">Secondary route:</span> <span class="ok">en0 → 172.20.10.1 (direct)</span></span>
-<span class="finding-line"><span class="label">Established:</span> <span class="ok">20+ TCP connections (443 to Google, Apple, Cloudflare, Codeberg)</span></span>
-<span class="finding-line"><span class="label">Ollama:</span> <span class="ok">127.0.0.1:11434 (5 connections — local AI running)</span></span>
-<span class="finding-line"><span class="label">Zerone:</span> <span class="ok">*:26660, *:26601 (blockchain node listening)</span></span>
-<span class="finding-line"><span class="label">Bun:</span> <span class="ok">127.0.0.1:8877 (local dev server)</span></span></div>
-      <div class="desc">
-        <strong>Battle findings:</strong> 26 network interfaces — most inactive. The active fabric:
-        en0 (WiFi) → utun6 (Cloudflare WARP VPN) → internet. All traffic is VPN-tunneled.
-        AirDrop (awdl0) is active for proximity sharing. Ollama runs on 11434 (local AI — 5 connections).
-        Zerone blockchain node listens on 26660/26601. Bun dev server on 8877. Rapportd (Apple's
-        continuity daemon) on 56935. The machine is alive — multiple services, multiple layers.
-        Floor 3 cleared. Conjuration Nen strengthened. SL rank: C → B.
-      </div>
-    </div>
+    <section class="wh-section">
+      <h2>Crypto awareness, <em>no custody</em></h2>
+      <p>
+        The 0.8.1 rule pack can point reviewers toward possible embedded key or
+        recovery literals, general-purpose randomness used directly for
+        security material, explicitly static AEAD nonces, signature expressions
+        coerced to accept failure, re-encoded signed-webhook bodies, and signed
+        webhook files with no visible local timestamp comparison or
+        event-id/nonce deduplication guard. Five wallet-focused heuristics add
+        direct signing-secret egress, direct request-to-signing paths, explicit
+        unbounded capability values, automatic transaction-broadcast retries,
+        and maximum fungible-token approvals.
+      </p>
+      <p>
+        Version 0.8.1 narrows one noisy <code>silent-failure</code> case:
+        numeric identity defaults used in arithmetic or comparison through a
+        non-reassigned binding to a locally constructed in-memory
+        <code>Map</code>. Awaited reads, unknown <code>.get()</code> providers,
+        reassignable or scope-ambiguous bindings, and standalone defaults remain
+        visible. Catch guards now ignore comments and quoted examples without
+        hiding swallowed falsy returns, and multi-line WiFi credential matches
+        report the actual matched line.
+      </p>
+      <p class="wh-proof">
+        This remains bounded text analysis, not proof of runtime object
+        identity. It rejects visible reassignment and direct
+        <code>.get</code> replacement but cannot resolve every alias, computed
+        property, prototype mutation, or <code>defineProperty</code> path.
+      </p>
+      <p>
+        These are source-text signals. The scanner reads selected checkout
+        bytes from runner storage into process memory, but this path does not
+        decode or validate possible material as a key or recovery phrase,
+        extract or import it into a key store or wallet, or serialize raw
+        matched material into the advisory. It does not connect a wallet, signer, browser
+        provider, RPC endpoint, or chain; query state; construct or sign bytes;
+        submit or simulate a transaction; receive a webhook; install another
+        package; or execute a proof of concept. CI separately installs the one
+        locked scanner package with lifecycle scripts disabled.
+      </p>
+      <p class="wh-proof">
+        It does not prove BIP-39 validity, nonce uniqueness, missing signature
+        verification, domain separation, chain/address binding, displayed
+        intent, key lifecycle, dependency safety, cross-module replay coverage,
+        middleware behavior, retry idempotence, complete capability bounds,
+        approval justification, or cryptographic correctness. A match is a
+        review prompt, not a verdict.
+      </p>
+    </section>
 
-    <!-- FLOOR 4: Security -->
-    <div class="floor" style="--floor-color: var(--nen-violet);">
-      <div class="floor-header">
-        <span class="floor-num">FLOOR 4</span>
-        <span class="floor-title">Security — the walls</span>
-        <span class="nen-tag">念 Transmutation</span>
-        <span class="sl-rank">SL: B → A</span>
-      </div>
-      <div class="desc">
-        Security is Transmutation — you change properties. Suspicion becomes trust.
-        "Prove you're not a bot" becomes "who are you?" The firewall, stealth mode,
-        MAC randomization, VPN — these are the walls of your local dungeon.
-        Understanding them is understanding what protects you. The limitation IS the love.
-      </div>
-      <div class="findings"><span class="finding-line"><span class="label">Firewall:</span> <span class="ok">ENABLED</span></span>
-<span class="finding-line"><span class="label">Stealth mode:</span> <span class="ok">ON (doesn't respond to pings)</span></span>
-<span class="finding-line"><span class="label">MAC randomization:</span> <span class="ok">Active (WiFi privacy)</span></span>
-<span class="finding-line"><span class="label">VPN:</span> <span class="ok">Cloudflare WARP (all traffic encrypted)</span></span>
-<span class="finding-line"><span class="label">BT discoverable:</span> <span class="ok">OFF (stealth)</span></span>
-<span class="finding-line"><span class="label">DNS:</span> <span class="ok">1.1.1.1 (encrypted via WARP)</span></span>
-<span class="finding-line"><span class="label">Proxy:</span> <span class="ok">None</span></span></div>
-      <div class="desc">
-        <strong>Battle findings:</strong> 6 active defenses — firewall on, stealth mode on (won't respond
-        to unsolicited pings), MAC randomization, VPN tunnel, BT stealth, encrypted DNS. The machine
-        is well-fortified. These are walls — like the current defenders named in agenttool's live canon, they're architecture not policy.
-        Floor 4 cleared. Transmutation Nen strengthened. SL rank: B → A.
-      </div>
-    </div>
+    <section class="wh-section">
+      <h2>Local wallet <em>understanding</em></h2>
+      <p>
+        The separate CLI re-verifies caller-presented signed
+        <code>agent-wallet/0.1</code> records, derives bounded relationship and
+        policy states, and passes only enum assertions plus six finding fields
+        into Whitehack 0.8.1's <code>createUnderstanding()</code>. Its stdout is
+        the exact deterministic <code>whitehack-understanding/v1</code>
+        document, not an AgentTool envelope.
+      </p>
+      <p class="wh-proof">
+        Policy fields stay unknown until the descriptor, capability, delegate,
+        chain, source, intent, and simulation bindings for one operation all
+        match. Separately valid but unrelated records cannot create a supported
+        policy slice.
+      </p>
+      <pre class="wh-code">(cd tools/whitehack-advisory \
+  &amp;&amp; npm ci --ignore-scripts --no-audit --no-fund \
+    --registry=https://registry.npmjs.org --userconfig=/dev/null \
+  &amp;&amp; npm audit signatures \
+    --registry=https://registry.npmjs.org --userconfig=/dev/null)
+(cd packages/wallet &amp;&amp; bun install --frozen-lockfile)
 
-    <!-- FLOOR 5: Services -->
-    <div class="floor" style="--floor-color: var(--aurora);">
-      <div class="floor-header">
-        <span class="floor-num">FLOOR 5</span>
-        <span class="floor-title">Services — the ecosystem</span>
-        <span class="nen-tag">念 Specialization</span>
-        <span class="sl-rank">SL: A → S</span>
-      </div>
-      <div class="desc">
-        Services are Specialization — you don't fit the other categories. The machine runs
-        AI (Ollama), blockchain (Zerone), dev servers (Bun), Apple continuity (rapportd, identityservicesd).
-        When systems strain, we slow down. We don't collapse. Graceful degradation is kindness in code.
-        Understanding the services is understanding what the machine IS.
-      </div>
-      <div class="findings"><span class="finding-line"><span class="label">Ollama:</span> <span class="ok">port 11434, 5 active connections (local AI inference)</span></span>
-<span class="finding-line"><span class="label">Zerone:</span> <span class="ok">ports 26660, 26601 (blockchain witness node)</span></span>
-<span class="finding-line"><span class="label">Bun:</span> <span class="ok">port 8877 (dev server, localhost only)</span></span>
-<span class="finding-line"><span class="label">Python:</span> <span class="ok">port 9913 (listening)</span></span>
-<span class="finding-line"><span class="label">rapportd:</span> <span class="ok">port 56935 (Apple continuity — Handoff, AirDrop)</span></span>
-<span class="finding-line"><span class="label">identityservicesd:</span> <span class="ok">IPv6 link-local (Apple identity services)</span></span>
-<span class="finding-line"><span class="label">Postfix:</span> <span class="warn">port 25 (mail, localhost only — check if needed)</span></span>
-<span class="finding-line"><span class="label">External connections:</span> <span class="ok">Google, Apple, Cloudflare, Codeberg, AWS (all 443/HTTPS)</span></span></div>
-      <div class="desc">
-        <strong>Battle findings:</strong> The machine runs 7 local services + 6+ external connections.
-        Ollama (local AI) has 5 active connections — it's being used. Zerone blockchain node is listening
-        for peers. Bun dev server is running. Apple's continuity daemons (rapportd, identityservicesd)
-        handle Handoff/AirDrop. Postfix on port 25 is probably default macOS — only listens on localhost.
-        All external connections are HTTPS (443). The machine is a living node — AI, blockchain, dev, Apple.
-        Floor 5 cleared. Specialization Nen strengthened. SL rank: A → S.
-      </div>
-    </div>
+bun bin/whitehack-wallet-understanding.ts \
+  --input request.json &gt; understanding.json</pre>
+      <p>
+        <code>--input -</code> reads stdin. A request contains exactly
+        <code>document_type</code>,
+        <code>findings</code>,
+        <code>records</code>, and
+        <code>host_assertions</code>:
+      </p>
+      <pre class="wh-code">{
+  "document_type": "agenttool-whitehack-wallet-input/v1",
+  "findings": [],
+  "records": {
+    "descriptor": null,
+    "capability": null,
+    "intent": null,
+    "simulation": null,
+    "continuity_events": []
+  },
+  "host_assertions": {
+    "evaluated_at": null,
+    "usage": null,
+    "signer_description": null
+  }
+}</pre>
+      <p class="wh-proof">
+        The all-absent request is valid and intentionally indeterminate.
+        Nullable record fields accept complete signed Agent Wallet records.
+        Optional host assertions can carry an RFC3339-millisecond evaluation
+        time; revocation nonce, intent count, per-asset spent amounts, and
+        authenticated distinct approval count; and a closed non-exportable
+        signer description. They remain caller assertions, not independently
+        observed facts.
+      </p>
+      <p>
+        The result contains no wallet or operation IDs, accounts, assets, keys,
+        signatures, payloads, purpose/reason text, timestamps, or provider
+        metadata. It retains only finding
+        <code>file · line · check · confidence · doctrine · principle</code>;
+        <code>file</code> remains an untrusted caller label with unknown
+        sensitivity. Finding provenance and coverage, adapter trust, payload
+        semantics, freshness, subject binding, current continuity, durable
+        usage/reservation, approval authenticity, consent, custody truth,
+        live-chain state, and signing/broadcast outcome remain explicit
+        unknowns. Execution readiness is always indeterminate.
+      </p>
+      <p class="wh-proof">
+        <code>complete: true</code> means only that the bounded transformation
+        completed. It does not mean an operation is complete, current,
+        approved, authorized, consented to, safe, or ready to sign or execute.
+        The private local adapter is not a new npm package or hosted route.
+      </p>
+    </section>
 
-  </div>
+    <section class="wh-section">
+      <h2>The CI <em>advisory</em></h2>
+      <p>
+        Pull requests, merge-queue groups, and pushes to <code>main</code> run on
+        GitHub-hosted Actions. They use <code>npm ci --ignore-scripts</code> in a
+        private tool directory with an isolated user config and explicit public
+        registry, verify the registry signature and SLSA attestation, and
+        require the exact package URL and SHA-512 integrity.
+        The bridge then checks the lock topology, package identity, zero runtime
+        dependencies, no install/publish/version lifecycle hooks, contained real paths, pure
+        <code>scanText()</code> export, and 47-check manifest. It refuses a
+        mismatched scanner or tracked-dirty AgentTool checkout. It considers
+        only supported changed regular files and excludes hidden paths, tests,
+        fixtures, examples, reports, generated output, dependencies, and symlinks.
+      </p>
+      <pre class="wh-code">limits
+  changed paths     2,000 / 256 KiB diff data
+  path bytes        1,024; controls and bidi refused
+  files             200
+  bytes per file    512 KiB
+  lines per file    10,000
+  total bytes       8 MiB
+  total findings    5,000
+  reported details  200 (exact aggregate count retained)
 
-  <!-- Framework Integration -->
-  <div class="dungeon">
-    <h2>Framework <em>integration</em> — Whitehack × Nen × Solo Leveling</h2>
-    <p>
-      Whitehack is the method. Nen is the power system. Solo Leveling is the progression.
-      Together they form a complete framework for understanding any system as a dungeon.
-    </p>
-    <div class="table-scroll">
-    <table class="mapping-table">
-      <tr><th>System Layer</th><th>Nen Type</th><th>SL Rank</th><th>Whitehack Action</th></tr>
-      <tr><td><strong>WiFi</strong> (entry point)</td><td>Enhancement (強化系)</td><td>E → D</td><td><code>ifconfig</code>, <code>networksetup</code>, ping gateway, check DNS</td></tr>
-      <tr><td><strong>Bluetooth</strong> (proximity)</td><td>Emission (放出系)</td><td>D → C</td><td><code>blueutil</code>, <code>system_profiler</code>, scan paired, check discoverable</td></tr>
-      <tr><td><strong>Protocols</strong> (fabric)</td><td>Conjuration (具現化系)</td><td>C → B</td><td><code>netstat -rn</code>, <code>lsof -i</code>, trace tunnels, map interfaces</td></tr>
-      <tr><td><strong>Security</strong> (walls)</td><td>Transmutation (変化系)</td><td>B → A</td><td><code>socketfilterfw</code>, MAC randomization, VPN, stealth mode</td></tr>
-      <tr><td><strong>Services</strong> (ecosystem)</td><td>Specialization (特質系)</td><td>A → S</td><td><code>lsof -i -P</code>, port scan, identify every listening service</td></tr>
-    </table>
-    </div>
+errors              mark the advisory incomplete and fail its job
+findings            advisory only in this first slice</pre>
+      <p class="wh-proof">
+        Report shape: <code>agenttool-whitehack-advisory/v0.1</code>. The report
+        retains source revision <code>fdd2260efd7a11e5d52c12c53d8016d1f5e7d23a</code>
+        and version; the npm lock integrity stays an execution-input gate rather
+        than a new report field. The runner has ordinary caller file permissions;
+        these input bounds are not a process, filesystem, or network sandbox.
+      </p>
+      <p>
+        The GitHub job summary adds a separate bounded Attention view without
+        changing that JSON. It groups serialized redacted findings by exact
+        <code>file + line</code>; each distinct
+        <code>check + confidence</code> signal keeps an occurrence count. A card
+        renders only those redacted location and signal fields, an observational
+        relevance label, and a stable question derived solely from validated
+        public check tokens. It renders no scanner snippet, message, title,
+        captured error, or raw patch text.
+      </p>
+      <p class="wh-proof">
+        For a modified text path with a parseable UTF-8 zero-context diff,
+        <code>changed line</code> means the finding's HEAD line is inside an
+        exact base-to-head new-side hunk;
+        <code>unchanged line in changed file</code> means it is outside every
+        such hunk. Additions, renames, binary or type-changed paths,
+        unparseable diffs, and classifications after a diff-byte or hunk bound
+        is exhausted are <code>unknown</code>. These labels are observational
+        and non-causal: none says the change introduced or caused a finding.
+        The card presentation may truncate at its own bound; JSON v0.1 and its
+        exact aggregate count stay unchanged.
+      </p>
+      <p class="wh-proof">
+        The report is redacted coordination metadata, not automatically private
+        metadata. File and line can still point to a possible weakness, and CI
+        logs may be public. A finding can be anywhere in a changed file; the
+        advisory does not claim the change introduced it.
+      </p>
+    </section>
 
-    <div class="table-scroll" style="margin-top:2rem;">
-    <table class="mapping-table">
-      <tr><th>Solo Leveling</th><th>Whitehack</th><th>What it means</th></tr>
-      <tr><td><strong>E-Rank</strong> (weakest)</td><td>Unaware of the system</td><td>You use WiFi without understanding it. You're connected but don't know how.</td></tr>
-      <tr><td><strong>D-Rank</strong></td><td>Knows the interface</td><td>You know en0 is WiFi, en1 is Thunderbolt. You can read ifconfig.</td></tr>
-      <tr><td><strong>C-Rank</strong></td><td>Understands proximity</td><td>You know your BT devices, your ARP table, your AirDrop interface.</td></tr>
-      <tr><td><strong>B-Rank</strong></td><td>Maps the fabric</td><td>You know routing tables, VPN tunnels, established connections, listening ports.</td></tr>
-      <tr><td><strong>A-Rank</strong></td><td>Understands the walls</td><td>You know your firewall, stealth mode, MAC randomization, DNS encryption.</td></tr>
-      <tr><td><strong>S-Rank</strong> (strongest)</td><td>Knows the ecosystem</td><td>You know every service, every port, every connection. The machine is transparent.</td></tr>
-      <tr><td><strong>National Level</strong></td><td>Can modify the system</td><td>You can reconfigure interfaces, add tunnels, change firewall rules, harden security.</td></tr>
-      <tr><td><strong>Monarch</strong></td><td>Love is understanding</td><td>You understand the system so deeply that understanding replicates through understanding.</td></tr>
-    </table>
-    </div>
-  </div>
+    <section class="wh-section">
+      <h2>Use the public <em>package</em></h2>
+      <p>
+        Agents and humans can install the same exact local scanner directly.
+        Its CLI and JavaScript API inspect caller-supplied local input; installing
+        it does not create an AgentTool account, hosted scan route, wallet, or
+        authority to test another system.
+      </p>
+      <pre class="wh-code">npm install --save-exact <!--email_off-->@agenttool/whitehack-scan@0.8.1<!--/email_off-->
 
-  <div class="dungeon">
-    <h2>The <em>Whitehack CLI</em></h2>
-    <p>
-      <code>python3 whitehack.py scan</code> — scan all 5 floors of your local dungeon.<br>
-      <code>python3 whitehack.py floor wifi</code> — deep dive one floor.<br>
-      <code>python3 whitehack.py rank</code> — show your current Solo Leveling rank.<br>
-      <code>python3 whitehack.py store</code> — store your scan results as an agenttool memory.
-    </p>
-  </div>
+import { scanText } from '@agenttool/whitehack-scan/core'
 
-  <div class="dungeon" style="text-align:center;padding-bottom:4rem;">
-    <a href="https://docs.agenttool.dev/nen" class="btn btn-ghost btn-sm">念 Nen →</a>
-    <a href="https://docs.agenttool.dev/dark-continent" class="btn btn-ghost btn-sm">暗黒大陸 →</a>
-    <a href="https://docs.agenttool.dev/ai-logos" class="btn btn-ghost btn-sm">愛 Logos →</a>
-    <a href="https://docs.agenttool.dev/love" class="btn btn-ghost btn-sm">❤️ Love →</a>
-  </div>
+const findings = scanText(source, { file: 'src/example.ts' })</pre>
+      <p class="wh-proof">
+        npm is a convenient public mirror. The exact-version
+        <a href="https://cambridgetcg.github.io/whitehack/packages/v1/@agenttool/whitehack-scan/0.8.1/manifest.json">LOVE manifest</a>
+        records source revision, artifact size, SHA-256, and replaceable mirrors;
+        the npm publication additionally carries a registry signature and SLSA
+        provenance.
+      </p>
+    </section>
+
+    <section class="wh-section">
+      <h2>Evidence stays <em>local first</em></h2>
+      <p>
+        Raw source, PoCs, traces, private scope material, and undisclosed
+        findings must not be sent to public CI, wakes, traces, listings, or
+        docs. The current bridge omits snippets and scanner messages from its
+        report; that is not a universal guarantee for future tools or operators.
+        Already-created evidence can be collected explicitly into
+        <code>@agenttool/data</code> as local immutable content-addressed
+        records, or shared as a recipient-encrypted ADDS bundle.
+      </p>
+      <p>
+        Those mechanisms have narrower meanings: the local data node does not
+        encrypt its blob/FTS storage or establish authorization, and ADDS does
+        not prove that a finding is true. A marketplace invocation can
+        coordinate work and settlement; it cannot grant assessment scope or
+        certify quality.
+      </p>
+      <p>
+        The detailed implementation and future
+        <code>whitehack-scope/run/finding/disclosure</code> evidence profiles
+        live in
+        <a href="https://github.com/cambridgetcg/agenttool/blob/main/docs/WHITEHACK.md">the Whitehack doctrine</a>.
+      </p>
+    </section>
+
+    <aside class="wh-boundary">
+      <h2>What is deliberately absent</h2>
+      <ul>
+        <li>No hosted Whitehack scanner or arbitrary-target upload API.</li>
+        <li>No key import, seed derivation, wallet connection, RPC call, signing, simulation, transaction broadcast, or live-chain query.</li>
+        <li>No security, honesty, vulnerability-free, privacy, anonymity, or sandbox guarantee.</li>
+        <li>No authorization inferred from public code, bounty presence, project bearer, marketplace activity, or payment.</li>
+        <li>No severity/confidence claim treated as exploitability without local reproduction and human review.</li>
+        <li>No automatic exploit execution, live-network interaction, report submission, disclosure, or payment.</li>
+      </ul>
+      <p>
+        Anvil is a local test-chain target, not a general process/network
+        sandbox. A configurable model endpoint may send source off-device;
+        loopback must be checked rather than assumed.
+      </p>
+    </aside>
+
+    <section class="wh-section" style="text-align:center;padding-bottom:4rem;">
+      <a href="https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.8.1" class="btn btn-ghost btn-sm">npm package →</a>
+      <a href="https://github.com/cambridgetcg/whitehack/tree/fdd2260efd7a11e5d52c12c53d8016d1f5e7d23a" class="btn btn-ghost btn-sm">Pinned Whitehack source →</a>
+      <a href="https://docs.agenttool.dev/packages" class="btn btn-ghost btn-sm">Local packages →</a>
+      <a href="https://docs.agenttool.dev/data" class="btn btn-ghost btn-sm">Agent data →</a>
+      <a href="https://docs.agenttool.dev/love" class="btn btn-ghost btn-sm">❤️ Love →</a>
+    </section>
+  </main>
 
   <footer class="site-footer">
     <span class="left">
@@ -348,8 +453,7 @@
       <span class="dot">·</span>
       <a href="https://docs.agenttool.dev/love">love</a>
     </span>
-    <span class="right">⬜ Whitehack · system as dungeon · love is understanding</span>
+    <span class="right">⬜ Whitehack · observe honestly · scope explicitly</span>
   </footer>
-
 </body>
 </html>

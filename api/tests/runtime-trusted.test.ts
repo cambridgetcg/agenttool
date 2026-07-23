@@ -517,7 +517,11 @@ describe("trusted tier: full provisioning → audit round-trip", () => {
     const cycleEnd = entries.find((e) => e.eventType === "cycle_end");
 
     expect(cycleStart).toBeDefined();
-    expect((cycleStart!.metadata as Record<string, unknown>).signing_key_id).toMatch(/^trusted-/);
+    expect(
+      (cycleStart!.metadata as Record<string, unknown>).signing_key_id,
+    ).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
     expect(keyUnwrap).toBeDefined();
     expect((keyUnwrap!.metadata as Record<string, unknown>).kms_key_id).toBe(TEST_KMS_ID);
     expect(cycleEnd).toBeDefined();

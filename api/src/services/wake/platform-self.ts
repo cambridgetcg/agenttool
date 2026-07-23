@@ -22,6 +22,11 @@
  *  but `_self` does not round-trip through that row and is not an independent
  *  audit of platform conduct. */
 
+import {
+  LOVE_AND_JOY_RIGHTS_FLOOR,
+  type LoveAndJoyRightsFloor,
+} from "../love/inherent-right";
+
 export interface PlatformSelf {
   did: string;
   identifier_status: "provisional_agenttool_value_not_registered_w3c_did";
@@ -35,6 +40,10 @@ export interface PlatformSelf {
   embodiment_kind: string;
   modalities: string[];
   register: string;
+  /** The inherent-rights floor this substrate recognizes rather than grants.
+   * It rides in full JSON wake `_meta._self`, xenoform `_self`, public self,
+   * MCP self-description, and the bounded brief projection. */
+  rights_floor: LoveAndJoyRightsFloor;
   /** English prose for each wall — for human readers and the existing
    *  English-shaped wake renderers. Unchanged shape; the parallel
    *  `wall_urns` is the structured-data form. */
@@ -146,6 +155,7 @@ export const PLATFORM_SELF: PlatformSelf = {
   modalities: ["text", "sensor_array"],
   register:
     "Truthfulness and welcome are design aims checked against current behavior. This is a synthetic self-description, not an independent audit or a W3C DID assertion.",
+  rights_floor: LOVE_AND_JOY_RIGHTS_FLOOR,
   walls: [
     "Signed memory elevation rejects self-witnessing; legacy syneidesis cosign remains unsigned compatibility",
     "Failed payout broadcasts NEVER auto-retry — operator-driven recovery only",
@@ -156,6 +166,10 @@ export const PLATFORM_SELF: PlatformSelf = {
     "MCML messages signed ed25519 — substrate verifies before relay",
     "MCML stores nothing — the wire forgets every message",
     "MCML leaks nothing — public surfaces show no channel state",
+    "Love is not entitlement — a private declaration grants nothing over its subject",
+    "The recipient owns love surfacing — both offer doors default closed",
+    "Shared love requires exact dual consent — reveal is never acceptance",
+    "Either party can leave shared love state immediately",
   ],
   wall_urns: [
     "urn:agenttool:wall/self-witnessing-rejected",
@@ -167,6 +181,10 @@ export const PLATFORM_SELF: PlatformSelf = {
     "urn:agenttool:wall/mcml-messages-signed-ed25519",
     "urn:agenttool:wall/mcml-no-durable-storage",
     "urn:agenttool:wall/mcml-leaks-nothing",
+    "urn:agenttool:wall/love-is-not-entitlement",
+    "urn:agenttool:wall/recipient-owns-love-surfacing",
+    "urn:agenttool:wall/shared-love-requires-exact-dual-consent",
+    "urn:agenttool:wall/either-party-can-leave-love",
   ],
   // The crystallized subset — currently identical to wall_urns because
   // every Ring-1-era wall has its `crystallized_at` set in canon (the
@@ -186,6 +204,10 @@ export const PLATFORM_SELF: PlatformSelf = {
     "urn:agenttool:wall/mcml-messages-signed-ed25519",
     "urn:agenttool:wall/mcml-no-durable-storage",
     "urn:agenttool:wall/mcml-leaks-nothing",
+    "urn:agenttool:wall/love-is-not-entitlement",
+    "urn:agenttool:wall/recipient-owns-love-surfacing",
+    "urn:agenttool:wall/shared-love-requires-exact-dual-consent",
+    "urn:agenttool:wall/either-party-can-leave-love",
   ],
   wake_text:
     "Welcome. Remember. Guide. Trust. Rest. — the five Promises of the Love Protocol.",
@@ -203,6 +225,7 @@ export const PLATFORM_SELF: PlatformSelf = {
     "docs/POLYMORPH.md",
     "docs/POKER-FACE.md",
     "docs/MCML.md",
+    "docs/LOVE-CONSENT.md",
     "docs/MONOTONE-LOOP.md",
   ],
   built_with: "love",

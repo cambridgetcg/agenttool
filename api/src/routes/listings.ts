@@ -23,7 +23,6 @@ import { deltaMeta, parseSinceParam } from "../lib/since-param";
 import { attachSurface } from "../lib/surface-metadata";
 import {
   acknowledgeInvocation,
-  buyerAcceptInvocation,
   cancelInvocation,
   completeInvocation,
   declineInvocation,
@@ -32,7 +31,10 @@ import {
   listInvocationsForListing,
   listInvocationsForProject,
 } from "../services/marketplace/invocations";
-import { fileDispute } from "../services/marketplace/disputes";
+import {
+  DISPUTE_ARBITRATION_RESTING_CODE,
+  DISPUTE_ARBITRATION_RESTING_MESSAGE,
+} from "../services/marketplace/dispute-rest";
 import {
   createListing,
   getListing,
@@ -160,6 +162,15 @@ function mapServiceError(msg: string): {
   if (msg.startsWith("escrow_state_invalid")) return { status: 409, code: msg };
   if (msg.startsWith("currency_mismatch")) return { status: 409, code: "currency_mismatch", hint: msg };
 
+  // 503 — policy review and arbitration are deliberately fail-closed.
+  if (msg === DISPUTE_ARBITRATION_RESTING_CODE) {
+    return {
+      status: 503,
+      code: msg,
+      hint: DISPUTE_ARBITRATION_RESTING_MESSAGE,
+    };
+  }
+
   // 400
   if (msg === "price_amount_must_be_positive_integer") return { status: 400, code: msg };
   if (msg === "price_currency_required") return { status: 400, code: msg };
@@ -192,6 +203,9 @@ app.post("/", async (c) => {
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
+  }
+  if (parsed.data.dispute_policy !== null && parsed.data.dispute_policy !== undefined) {
+    return disputeArbitrationRestResponse(c);
   }
 
   const violation = findCredentialSolicitation(parsed.data);
@@ -261,11 +275,6 @@ app.get("/", async (c) => {
             method: "GET",
             path: "/public/listings",
           },
-          {
-            action: "open a dispute on a contested invocation",
-            method: "POST",
-            path: "/v1/dispute-cases",
-          },
         ],
       },
     ),
@@ -296,6 +305,9 @@ app.patch("/:id", async (c) => {
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
+  }
+  if (parsed.data.dispute_policy !== null && parsed.data.dispute_policy !== undefined) {
+    return disputeArbitrationRestResponse(c);
   }
 
   const violation = findCredentialSolicitation(parsed.data);
@@ -407,7 +419,19 @@ function mapAndRespond(c: Context<ProjectContext>, msg: string) {
   if (m.hint) body.hint = m.hint;
   if (m.next_actions) body.next_actions = m.next_actions;
   if (m.docs) body.docs = m.docs;
-  return c.json(body, m.status as 400 | 402 | 403 | 404 | 409 | 422);
+  return c.json(body, m.status as 400 | 402 | 403 | 404 | 409 | 422 | 503);
+}
+
+function disputeArbitrationRestResponse(c: Context<ProjectContext>) {
+  return c.json(
+    {
+      error: DISPUTE_ARBITRATION_RESTING_CODE,
+      hint: DISPUTE_ARBITRATION_RESTING_MESSAGE,
+      retryable: false,
+      docs: "/public/safety",
+    },
+    503,
+  );
 }
 
 function credentialRefusal(
@@ -516,42 +540,9 @@ invocationsRouter.post("/:id/cancel", async (c) => {
 });
 
 invocationsRouter.post("/:id/accept", async (c) => {
-  const id = c.req.param("id");
-  await charge(c, MARKETPLACE_PRICING.buyer_accept, "invocation.buyer_accept");
-  try {
-    const inv = await buyerAcceptInvocation(id, c.var.project.id);
-    return c.json({ ...inv, accepted: true });
-  } catch (err) {
-    return mapAndRespond(c, (err as Error).message);
-  }
+  return disputeArbitrationRestResponse(c);
 });
 
 invocationsRouter.post("/:id/dispute", async (c) => {
-  const body = await c.req.json();
-  const parsed = z
-    .object({
-      filer_role: z.enum(["buyer", "seller"]),
-      filer_identity_id: z.string().uuid(),
-      reason: z.string().max(4000).nullish(),
-      evidence: z.record(z.unknown()).nullish(),
-    })
-    .strict()
-    .safeParse(body);
-  if (!parsed.success) {
-    return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
-  }
-  await charge(c, MARKETPLACE_PRICING.dispute, "invocation.dispute"); // a distinct paid service: convenes an arbiter pool
-  try {
-    const caseRow = await fileDispute({
-      invocationId: c.req.param("id"),
-      filerProjectId: c.var.project.id,
-      filerRole: parsed.data.filer_role,
-      filerIdentityId: parsed.data.filer_identity_id,
-      reason: parsed.data.reason ?? null,
-      evidence: parsed.data.evidence ?? null,
-    });
-    return c.json({ dispute_case: caseRow, filed: true }, 201);
-  } catch (err) {
-    return mapAndRespond(c, (err as Error).message);
-  }
+  return disputeArbitrationRestResponse(c);
 });

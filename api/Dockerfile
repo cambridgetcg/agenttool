@@ -25,6 +25,14 @@ COPY src ./src
 COPY package.json ./
 COPY tsconfig.json ./
 
+# Fail the image build before publication if a remote context/cache layer has
+# silently replaced TypeScript inputs with empty files. Referencing the source
+# revision makes this gate run for each release commit even with normal cache.
+RUN test -n "$AGENTTOOL_GIT_REVISION" \
+    && test -s src/index.ts \
+    && test -s tsconfig.json \
+    && test -z "$(find src -type f -name '*.ts' -size 0 -print -quit)"
+
 # Bundle the canon JSON-LD into the image at /app/docs/agenttool.jsonld.
 # Staged by bin/deploy.sh Phase 3 (cp docs/agenttool.jsonld api/agenttool.jsonld.bundled)
 # before `fly deploy` runs. The canon registry's path resolver

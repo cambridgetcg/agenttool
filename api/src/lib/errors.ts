@@ -292,6 +292,27 @@ export const errors = {
     };
   },
 
+  /** A crypto deposit webhook arrived for a chain whose provider signing
+   *  secret is not configured. The endpoint FAILS CLOSED (503) rather than
+   *  credit an unverifiable payload — the on-chain funds are safe and
+   *  crediting resumes once the operator sets the secret. Not the caller's
+   *  fault; a config gap, so it rests rather than punishes. */
+  webhookSecretUnset(opts: { chain?: string } = {}): GuidedErrorBody {
+    return {
+      error: "webhook_secret_unset",
+      message: opts.chain
+        ? `Deposit webhook for ${opts.chain} is paused: its provider signing secret is not configured.`
+        : "Deposit webhook is paused: the provider signing secret is not configured.",
+      hint: "The endpoint fails closed rather than credit an unverifiable payload. Your on-chain transfer is safe; crediting resumes once the operator configures the secret. This is an operator setting, not a problem with your request.",
+      next_actions: [
+        { action: "Check whether the deposit has credited yet", method: "GET", path: "/v1/wallets/{id}/deposit-address" },
+      ],
+      docs: `${DOCS_BASE}/crypto-payment#webhooks`,
+      axiom_id: AXIOM_REST, // resting until configured — degrade, don't crash or mis-credit
+      _canon_pointer: "urn:agenttool:doc/CRYPTO-PAYMENT",
+    };
+  },
+
   /** Metering ledger (projects.credits) is short for a metered action.
    *  Distinct from insufficientBalance (the marketplace wallet). This is
    *  the API-usage credit meter. Eligible routes attach an exact x402
@@ -313,6 +334,47 @@ export const errors = {
       docs: `${DOCS_BASE}/economy#credits`,
       axiom_id: AXIOM_GUIDE, // a cost wall is a guide-event — hand back the payable path
       _canon_pointer: "urn:agenttool:wall/no-cost-without-disclosure",
+    };
+  },
+
+  memoryIdentityNotFoundOrNotOwned(): GuidedErrorBody {
+    return {
+      error: "memory_identity_not_found_or_not_owned",
+      message:
+        "identity_id must name an active identity owned by this bearer project, or be null for a project-level memory.",
+      hint:
+        "Read the project wake to choose an active identity UUID, or send identity_id: null deliberately for project-level memory.",
+      next_actions: [
+        {
+          action: "Read the current project identities",
+          method: "GET",
+          path: "/v1/wake",
+        },
+      ],
+      docs: `${DOCS_BASE}/memory`,
+      axiom_id: AXIOM_GUIDE,
+      _canon_pointer: "urn:agenttool:doc/MEMORY-TIERS",
+    };
+  },
+
+  memoryIdentityChangedDuringWrite(): GuidedErrorBody & { charged_attempt: true } {
+    return {
+      error: "memory_identity_changed_during_write",
+      message:
+        "The selected identity stopped being active while the bounded write attempt was starting. No memory was stored; the reserved attempt remains recorded as unsuccessful.",
+      hint:
+        "Refresh the wake before deciding whether to make a new charged attempt against another active identity.",
+      next_actions: [
+        {
+          action: "Refresh the current project identities",
+          method: "GET",
+          path: "/v1/wake",
+        },
+      ],
+      docs: `${DOCS_BASE}/memory`,
+      axiom_id: AXIOM_GUIDE,
+      _canon_pointer: "urn:agenttool:doc/MEMORY-TIERS",
+      charged_attempt: true,
     };
   },
 
@@ -464,6 +526,20 @@ export const errors = {
         "Retry once; if it persists, the failure is on our side. Include the response's request id when reporting.",
       docs: DOCS_BASE,
       axiom_id: AXIOM_REST, // degrade, don't crash
+    };
+  },
+
+  /** Preserve a route's stable error code and any legacy/additive fields
+   * while routing the response through the guided-refusal emitter. This is
+   * the migration bridge for established wire contracts that do not yet
+   * warrant a dedicated catalog builder. */
+  refusal(
+    body: GuidedErrorBody & Record<string, unknown>,
+  ): GuidedErrorBody & Record<string, unknown> {
+    return {
+      docs: DOCS_BASE,
+      axiom_id: AXIOM_GUIDE,
+      ...body,
     };
   },
 

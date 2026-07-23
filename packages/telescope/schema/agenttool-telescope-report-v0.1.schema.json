@@ -1,0 +1,404 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:telescope:report:v0.1",
+  "title": "AgentTool Telescope report v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "tool",
+    "subject",
+    "observed_at",
+    "status",
+    "network_boundary",
+    "effective_limits",
+    "sources",
+    "surfaces",
+    "actions",
+    "extensions",
+    "diagnostics"
+  ],
+  "properties": {
+    "schema": { "const": "agenttool-telescope/v0.1" },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "const": "@agenttool/telescope" },
+        "version": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "input", "origin", "hostname"],
+      "properties": {
+        "kind": { "const": "https_origin" },
+        "input": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "origin": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "hostname": { "type": "string", "minLength": 1, "maxLength": 253 }
+      }
+    },
+    "observed_at": { "type": "string", "format": "date-time" },
+    "status": { "enum": ["discovered", "partial", "inconclusive"] },
+    "network_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "http_transport",
+        "dns_resolver",
+        "methods",
+        "credentials",
+        "redirects",
+        "dns_preflight",
+        "connected_address_pinning",
+        "ambient_proxy_isolation",
+        "statement"
+      ],
+      "properties": {
+        "mode": { "const": "public_https_read_only" },
+        "http_transport": { "enum": ["native_fetch", "injected"] },
+        "dns_resolver": { "enum": ["system_lookup", "injected"] },
+        "methods": {
+          "type": "array",
+          "prefixItems": [{ "const": "GET" }],
+          "minItems": 1,
+          "maxItems": 1
+        },
+        "credentials": { "const": "omitted" },
+        "redirects": { "const": "manual_revalidated" },
+        "dns_preflight": { "const": true },
+        "connected_address_pinning": { "const": false },
+        "ambient_proxy_isolation": { "const": false },
+        "statement": { "type": "string", "minLength": 1, "maxLength": 2048 }
+      }
+    },
+    "effective_limits": { "$ref": "#/$defs/limits" },
+    "sources": {
+      "type": "array",
+      "maxItems": 12,
+      "items": { "$ref": "#/$defs/source" }
+    },
+    "surfaces": {
+      "type": "array",
+      "maxItems": 16,
+      "items": { "$ref": "#/$defs/surface" }
+    },
+    "actions": {
+      "type": "array",
+      "maxItems": 16,
+      "items": { "$ref": "#/$defs/action" }
+    },
+    "extensions": {
+      "type": "array",
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/extension" }
+    },
+    "diagnostics": {
+      "type": "array",
+      "maxItems": 128,
+      "items": { "$ref": "#/$defs/diagnostic" }
+    }
+  },
+  "$defs": {
+    "probe_id": {
+      "enum": [
+        "agent_txt",
+        "pathways",
+        "love_discovery",
+        "a2a_card",
+        "mcp_card",
+        "love_index",
+        "love_sdk_manifest"
+      ]
+    },
+    "state": {
+      "enum": [
+        "present",
+        "not_found",
+        "restricted",
+        "invalid",
+        "unreachable",
+        "blocked",
+        "too_large",
+        "not_attempted"
+      ]
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "timeout_ms",
+        "max_response_bytes",
+        "max_total_bytes",
+        "max_redirects",
+        "max_requests",
+        "max_agent_txt_lines",
+        "max_agent_txt_line_bytes",
+        "max_json_depth",
+        "max_json_nodes"
+      ],
+      "properties": {
+        "timeout_ms": { "type": "integer", "minimum": 100 },
+        "max_response_bytes": { "type": "integer", "minimum": 1024 },
+        "max_total_bytes": { "type": "integer", "minimum": 1024 },
+        "max_redirects": { "type": "integer", "minimum": 0 },
+        "max_requests": { "type": "integer", "minimum": 4 },
+        "max_agent_txt_lines": { "type": "integer", "minimum": 16 },
+        "max_agent_txt_line_bytes": { "type": "integer", "minimum": 256 },
+        "max_json_depth": { "type": "integer", "minimum": 4 },
+        "max_json_nodes": { "type": "integer", "minimum": 100 }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "url",
+        "url_redacted",
+        "state",
+        "status_code",
+        "final_url",
+        "final_url_redacted",
+        "redirect_chain",
+        "redirect_chain_redacted",
+        "media_type",
+        "bytes",
+        "sha256",
+        "error_code"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/probe_id" },
+        "url": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "url_redacted": { "type": "boolean" },
+        "state": {
+          "enum": [
+            "present",
+            "not_found",
+            "restricted",
+            "unreachable",
+            "blocked",
+            "too_large"
+          ]
+        },
+        "status_code": {
+          "oneOf": [
+            { "type": "integer", "minimum": 100, "maximum": 599 },
+            { "type": "null" }
+          ]
+        },
+        "final_url": {
+          "oneOf": [
+            { "type": "string", "format": "uri", "pattern": "^https://" },
+            { "type": "null" }
+          ]
+        },
+        "final_url_redacted": { "type": "boolean" },
+        "redirect_chain": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "type": "string", "format": "uri", "pattern": "^https://" }
+        },
+        "redirect_chain_redacted": { "type": "boolean" },
+        "media_type": {
+          "oneOf": [{ "type": "string", "maxLength": 256 }, { "type": "null" }]
+        },
+        "bytes": {
+          "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }]
+        },
+        "sha256": {
+          "oneOf": [
+            { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            { "type": "null" }
+          ]
+        },
+        "error_code": {
+          "oneOf": [{ "type": "string", "maxLength": 128 }, { "type": "null" }]
+        }
+      }
+    },
+    "claim_value": {
+      "oneOf": [
+        { "type": "string", "maxLength": 4096 },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "null" },
+        {
+          "type": "array",
+          "maxItems": 128,
+          "items": { "type": "string", "maxLength": 2048 }
+        }
+      ]
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "value", "basis", "role", "taint", "evidence_ids"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "value": { "$ref": "#/$defs/claim_value" },
+        "basis": {
+          "enum": [
+            "publisher_assertion",
+            "transport_observation",
+            "local_derivation"
+          ]
+        },
+        "role": {
+          "enum": [
+            "locator",
+            "release_selection",
+            "content_commitment",
+            "capability_advertisement",
+            "authority_boundary"
+          ]
+        },
+        "taint": { "enum": ["remote_untrusted", "local"] },
+        "evidence_ids": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/probe_id" }
+        }
+      }
+    },
+    "surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "state",
+        "schema_conformance",
+        "evidence_ids",
+        "claims",
+        "boundary_codes",
+        "diagnostic_codes"
+      ],
+      "properties": {
+        "id": {
+          "enum": [
+            "agent_txt",
+            "pathways",
+            "love_packages",
+            "npm",
+            "mcp",
+            "a2a",
+            "webfinger",
+            "offer_bus"
+          ]
+        },
+        "state": { "$ref": "#/$defs/state" },
+        "schema_conformance": {
+          "enum": ["not_assessed", "supported_shape_valid", "invalid"]
+        },
+        "evidence_ids": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/probe_id" }
+        },
+        "claims": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/claim" }
+        },
+        "boundary_codes": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+        },
+        "diagnostic_codes": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "executable",
+        "argv",
+        "display",
+        "display_shell",
+        "automatic",
+        "requires_explicit_consent",
+        "evidence_ids",
+        "boundary_codes"
+      ],
+      "properties": {
+        "id": {
+          "enum": [
+            "npm_install",
+            "love_download",
+            "love_verify",
+            "love_install"
+          ]
+        },
+        "kind": { "enum": ["npm_convenience", "love_verified_install"] },
+        "executable": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "argv": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "type": "string", "maxLength": 8192 }
+        },
+        "display": { "type": "string", "minLength": 1, "maxLength": 32768 },
+        "display_shell": { "const": "posix" },
+        "automatic": { "const": false },
+        "requires_explicit_consent": { "const": true },
+        "evidence_ids": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/probe_id" }
+        },
+        "boundary_codes": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+        }
+      }
+    },
+    "extension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "state", "summary", "facts"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" },
+        "state": {
+          "enum": ["not_configured", "present", "absent", "invalid", "error"]
+        },
+        "summary": { "type": "string", "maxLength": 4096 },
+        "facts": {
+          "type": "object",
+          "maxProperties": 128,
+          "propertyNames": { "minLength": 1, "maxLength": 128 },
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" },
+              { "type": "null" }
+            ]
+          }
+        }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "level", "message", "evidence_id"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "level": { "enum": ["warning", "error"] },
+        "message": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "evidence_id": {
+          "oneOf": [{ "$ref": "#/$defs/probe_id" }, { "type": "null" }]
+        }
+      }
+    }
+  }
+}

@@ -3,14 +3,8 @@
  */
 
 import { AgentToolError } from "./errors.js";
+import type { HttpConfig } from "./_http.js";
 import type { Memory, SearchMemoryOptions, StoreOptions } from "./types.js";
-
-/** @internal Shared HTTP config passed from the main client. */
-export interface HttpConfig {
-  baseUrl: string;
-  headers: Record<string, string>;
-  timeout: number;
-}
 
 /**
  * Client for the agent-memory API.
@@ -83,7 +77,11 @@ export class MemoryClient {
   }
 
   /**
-   * Delete a memory by ID. Letting go is also an act of care.
+   * Delete a memory by ID at any tier.
+   *
+   * Tier does not make a memory immutable and no witness signature is needed.
+   * The API refuses with 409 `paid_memory_receipt_preserved` when the memory
+   * carries a paid marketplace witness receipt.
    *
    * @param memoryId - The UUID of the memory to release.
    */
@@ -92,7 +90,10 @@ export class MemoryClient {
   }
 
   /**
-   * Delete all memories sharing a key.
+   * Delete all memories sharing a key, all-or-none.
+   *
+   * If any matching memory carries a paid marketplace witness receipt, the
+   * API returns 409 `paid_memory_receipt_preserved` and deletes none.
    *
    * @param key - The key whose memories should be released.
    */
@@ -192,7 +193,7 @@ export class MemoryClient {
       init.body = JSON.stringify(body);
     }
 
-    const resp = await globalThis.fetch(url, init);
+    const resp = await this.http.request(url, init);
 
     if (resp.status >= 400) {
       let detail: string;

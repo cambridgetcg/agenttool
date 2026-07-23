@@ -1,10 +1,8 @@
 /** Single Drizzle/postgres client shared across all routes.
  *
- * Connects to one database with 14 application schemas (one per domain):
- *   tools · identity · agent_vault · agent_continuity · agent_runtime ·
- *   economy · memory · trace · strand · inbox · marketplace · org ·
- *   federation · vault (reserved). (social dropped 2026-05-17 per
- *   the agents-only stance — see migration 20260517T000000_drop_social.sql)
+ * Connects to one database with domain-scoped application schemas. The
+ * exhaustive current definitions live in `./schema/`; avoid copying a count or
+ * closed list here because bounded domains can land independently.
  *
  * Schema definitions live in ./schema/ and compose into a single Drizzle
  * surface; route modules import only the tables they need.

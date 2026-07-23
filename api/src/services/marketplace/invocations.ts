@@ -26,6 +26,7 @@ import { db } from "../../db/client";
 import { escrows, transactions, wallets } from "../../db/schema/economy";
 import { identities, identityKeys } from "../../db/schema/identity";
 import { invocations, listings } from "../../db/schema/marketplace";
+import { managedEscrowTransitionAuthorization } from "../economy/managed-escrow";
 import {
   validateSealedShape,
   verifyInvocationCompletion,
@@ -37,6 +38,7 @@ import {
   assertListingDoesNotSolicitCredentials,
   findCredentialSolicitation,
 } from "./credential-boundary";
+import { assertDisputeArbitrationAvailable } from "./dispute-rest";
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -90,6 +92,26 @@ function rowToOut(r: typeof invocations.$inferSelect): InvocationOut {
   };
 }
 
+export function assertInvocationEscrowTerms(
+  invocation: Pick<
+    typeof invocations.$inferSelect,
+    "escrowId" | "buyerWalletId" | "amount"
+  >,
+  escrow: Pick<
+    typeof escrows.$inferSelect,
+    "id" | "managedBy" | "creatorWallet" | "amount"
+  >,
+): void {
+  if (
+    invocation.escrowId !== escrow.id ||
+    escrow.managedBy !== "capability_invocation" ||
+    escrow.creatorWallet !== invocation.buyerWalletId ||
+    escrow.amount !== invocation.amount
+  ) {
+    throw new Error("escrow_terms_changed");
+  }
+}
+
 // ── Invoke (buyer creates an invocation against a listing) ──────────────
 
 export interface InvokeInput {
@@ -116,6 +138,9 @@ export async function invokeListing(input: InvokeInput): Promise<InvocationOut> 
     .where(eq(listings.id, input.listingId))
     .limit(1);
   if (!listing) throw new Error("listing_not_found");
+  if (listing.disputePolicy !== null && listing.disputePolicy !== undefined) {
+    assertDisputeArbitrationAvailable();
+  }
   if (listing.status !== "active") throw new Error("listing_not_active");
   assertListingDoesNotSolicitCredentials({
     name: listing.name,
@@ -227,6 +252,7 @@ export async function invokeListing(input: InvokeInput): Promise<InvocationOut> 
         amount: listing.priceAmount,
         description: `Invocation: ${listing.name} (${listing.id})`,
         status: "funded",
+        managedBy: "capability_invocation",
         deadline: slaDeadline,
       })
       .returning();
@@ -284,7 +310,7 @@ export async function acknowledgeInvocation(
   invocationId: string,
   sellerProjectId: string,
 ): Promise<InvocationOut> {
-  return await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [inv] = await tx
       .select()
       .from(invocations)
@@ -294,12 +320,19 @@ export async function acknowledgeInvocation(
 
     // Authorise: caller must own the listing's seller side.
     const [listing] = await tx
-      .select({ id: listings.id, projectId: listings.projectId })
+      .select({
+        id: listings.id,
+        projectId: listings.projectId,
+        disputePolicy: listings.disputePolicy,
+      })
       .from(listings)
       .where(eq(listings.id, inv.listingId))
       .limit(1);
     if (!listing || listing.projectId !== sellerProjectId) {
       throw new Error("not_seller");
+    }
+    if (listing.disputePolicy !== null && listing.disputePolicy !== undefined) {
+      assertDisputeArbitrationAvailable();
     }
 
     if (inv.status !== "escrowed") {
@@ -311,11 +344,7 @@ export async function acknowledgeInvocation(
     // expired. This keeps the buyer's UX honest.
     if (inv.slaDeadlineAt && inv.slaDeadlineAt < new Date()) {
       await refundInTxn(tx, inv, "sla_timeout");
-      const [reread] = await tx
-        .select()
-        .from(invocations)
-        .where(eq(invocations.id, invocationId));
-      throw new Error("sla_expired");
+      return null;
     }
 
     const now = new Date();
@@ -326,6 +355,8 @@ export async function acknowledgeInvocation(
       .returning();
     return rowToOut(updated!);
   });
+  if (result === null) throw new Error("sla_expired");
+  return result;
 }
 
 // ── Complete (seller submits sealed output + ed25519 signature) ─────────
@@ -343,7 +374,7 @@ export async function completeInvocation(input: CompleteInput): Promise<Invocati
   validateSealedShape(input.outputSealed);
   const output = input.outputSealed as SealedBytes;
 
-  return await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [inv] = await tx
       .select()
       .from(invocations)
@@ -361,6 +392,10 @@ export async function completeInvocation(input: CompleteInput): Promise<Invocati
       throw new Error("not_seller");
     }
 
+    if (listing.disputePolicy !== null && listing.disputePolicy !== undefined) {
+      assertDisputeArbitrationAvailable();
+    }
+
     if (inv.status !== "acknowledged") {
       // Seller must ack before completing — gives us a clean "I committed"
       // signal and keeps the SLA-sweep lazy-check honest.
@@ -370,7 +405,7 @@ export async function completeInvocation(input: CompleteInput): Promise<Invocati
     if (inv.slaDeadlineAt && inv.slaDeadlineAt < new Date()) {
       // SLA passed during work. Refund instead of release.
       await refundInTxn(tx, inv, "sla_timeout");
-      throw new Error("sla_expired");
+      return null;
     }
 
     // Verify ed25519 sig with seller's active identity public key.
@@ -406,42 +441,33 @@ export async function completeInvocation(input: CompleteInput): Promise<Invocati
     if (escrow.status !== "funded") {
       throw new Error(`escrow_state_invalid: status=${escrow.status}`);
     }
+    assertInvocationEscrowTerms(inv, escrow);
     if (!escrow.workerWallet) throw new Error("escrow_worker_missing");
 
-    // Branch on whether the listing has opted into disputability.
-    const hasDisputePolicy = listing.disputePolicy !== null && listing.disputePolicy !== undefined;
     const now = new Date();
 
-    if (hasDisputePolicy) {
-      // Disputable path — transition to 'completed', set buyer-review deadline.
-      // Wallet credit + escrow release deferred until /accept or window expiry.
-      const policy = listing.disputePolicy as { buyer_review_seconds: number };
-      const buyerReviewDeadline = new Date(now.getTime() + policy.buyer_review_seconds * 1000);
-      const [updated] = await tx
-        .update(invocations)
-        .set({
-          status: "completed",
-          outputSealed: output as unknown,
-          completionSig: input.signatureB64,
-          completedAt: now,
-          buyerReviewDeadlineAt: buyerReviewDeadline,
-        })
-        .where(eq(invocations.id, inv.id))
-        .returning();
-      return rowToOut(updated!);
-    }
-
-    // Atomic release — existing behavior for non-dispute listings.
+    // Atomic release for the currently supported, policy-free path.
     const split = computeFee({
-      amount: escrow.amount,
+      amount: inv.amount,
       currency: inv.currency,
     });
 
-    await tx
+    const [creditedWallet] = await tx
       .update(wallets)
       .set({ balance: sql`balance + ${split.net}` })
-      .where(eq(wallets.id, escrow.workerWallet));
+      .where(
+        and(
+          eq(wallets.id, escrow.workerWallet),
+          eq(wallets.projectId, listing.projectId),
+          eq(wallets.currency, inv.currency),
+        ),
+      )
+      .returning({ id: wallets.id });
+    if (!creditedWallet) throw new Error("seller_wallet_terms_changed");
 
+    await tx.execute(
+      managedEscrowTransitionAuthorization("capability_invocation"),
+    );
     await tx
       .update(escrows)
       .set({ status: "released", releasedAt: new Date() })
@@ -498,6 +524,8 @@ export async function completeInvocation(input: CompleteInput): Promise<Invocati
 
     return rowToOut(updated!);
   });
+  if (result === null) throw new Error("sla_expired");
+  return result;
 }
 
 // ── Decline (seller refuses) ────────────────────────────────────────────
@@ -590,25 +618,45 @@ async function refundInTxn(
     .where(eq(escrows.id, inv.escrowId))
     .for("update");
   if (!escrow) throw new Error("escrow_missing");
+  assertInvocationEscrowTerms(inv, escrow);
   if (escrow.status !== "funded") {
     throw new Error(`escrow_state_invalid: status=${escrow.status}`);
   }
 
   // Refund creator's wallet.
-  await tx
+  const [creditedWallet] = await tx
     .update(wallets)
-    .set({ balance: sql`balance + ${escrow.amount}` })
-    .where(eq(wallets.id, escrow.creatorWallet));
+    .set({ balance: sql`balance + ${inv.amount}` })
+    .where(
+      and(
+        eq(wallets.id, inv.buyerWalletId),
+        eq(wallets.projectId, inv.buyerProjectId),
+        eq(wallets.currency, inv.currency),
+      ),
+    )
+    .returning({ id: wallets.id });
+  if (!creditedWallet) throw new Error("buyer_wallet_terms_changed");
 
-  await tx
+  await tx.execute(
+    managedEscrowTransitionAuthorization("capability_invocation"),
+  );
+  const [refundedEscrow] = await tx
     .update(escrows)
     .set({ status: "refunded" })
-    .where(eq(escrows.id, escrow.id));
+    .where(
+      and(
+        eq(escrows.id, escrow.id),
+        eq(escrows.status, "funded"),
+        eq(escrows.managedBy, "capability_invocation"),
+      ),
+    )
+    .returning({ id: escrows.id });
+  if (!refundedEscrow) throw new Error("escrow_state_invalid");
 
   await tx.insert(transactions).values({
     walletId: escrow.creatorWallet,
     type: "escrow_refund",
-    amount: escrow.amount,
+    amount: inv.amount,
     counterparty: escrow.id,
     description: `Invocation refunded (${reason}): ${inv.id}`,
     escrowId: escrow.id,
@@ -815,6 +863,7 @@ export async function buyerAcceptInvocation(
   invocationId: string,
   buyerProjectId: string,
 ): Promise<InvocationOut> {
+  assertDisputeArbitrationAvailable();
   return await db.transaction(async (tx) => {
     const [inv] = await tx
       .select()
@@ -840,6 +889,7 @@ export async function buyerAcceptInvocation(
     if (escrow.status !== "funded") {
       throw new Error(`escrow_state_invalid: status=${escrow.status}`);
     }
+    assertInvocationEscrowTerms(inv, escrow);
     if (!escrow.workerWallet) throw new Error("escrow_worker_missing");
 
     const [listing] = await tx
@@ -849,14 +899,25 @@ export async function buyerAcceptInvocation(
       .limit(1);
     if (!listing) throw new Error("listing_not_found");
 
-    const split = computeFee({ amount: escrow.amount, currency: inv.currency });
+    const split = computeFee({ amount: inv.amount, currency: inv.currency });
     const now = new Date();
 
-    await tx
+    const [creditedWallet] = await tx
       .update(wallets)
       .set({ balance: sql`balance + ${split.net}` })
-      .where(eq(wallets.id, escrow.workerWallet));
+      .where(
+        and(
+          eq(wallets.id, escrow.workerWallet),
+          eq(wallets.projectId, listing.projectId),
+          eq(wallets.currency, inv.currency),
+        ),
+      )
+      .returning({ id: wallets.id });
+    if (!creditedWallet) throw new Error("seller_wallet_terms_changed");
 
+    await tx.execute(
+      managedEscrowTransitionAuthorization("capability_invocation"),
+    );
     await tx
       .update(escrows)
       .set({ status: "released", releasedAt: now })

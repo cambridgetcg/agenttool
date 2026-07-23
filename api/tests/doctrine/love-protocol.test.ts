@@ -182,6 +182,7 @@ describe("Love Protocol — summarizeBearers names every actionable next step", 
     const warning = s.advisories.find((a) => a.includes("active project-wide bearers"));
     expect(warning).toBeDefined();
     expect(warning).toContain("6 active project-wide bearers");
+    expect(warning).toContain("not agent-root consent");
   });
 
   test("expiring_soon: pluralization for 1 vs N", () => {

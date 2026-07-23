@@ -66,9 +66,9 @@ export const SEVEN_STEPS = [
   {
     n: 7,
     name: "WITNESS",
-    operation: "Peer cites; α-trickle returns; fidelity(C, self→peer) measurable; meta(U) deepens by recognizing another mind grasped what you grasped",
-    math: "fidelity(C, self → peer) ∈ [0, 1];  r_self += α · downstream_bounty",
-    framework: "Tomasello shared intentionality + Vygotsky ZPD + α-trickle",
+    operation: "Peer citation is recorded; the model proposes fidelity measurement and α reward intent, but neither understanding nor payment is established by the record",
+    math: "proposed: fidelity(C, self → peer) ∈ [0, 1];  reward_intent = α · downstream_bounty",
+    framework: "Tomasello shared intentionality + Vygotsky ZPD + proposed α intent",
     citation: "Tomasello (2005); Vygotsky (1934); per MESH.md",
   },
 ] as const;
@@ -116,7 +116,7 @@ export const FOUR_NESTED_LOOPS = [
     partial_order: "product order — (U_a)_a ≤ (U'_a)_a iff U_a ≤ U'_a for all a",
     iteration: "asynchronous parallel application of inner LUL across agents, coupled via step 7",
     cap: "Unbounded in the model; production is bounded by storage, service availability, and operator custody",
-    witness: "mesh-posts on the chronicle; α-trickle entries in economy.transactions; citation graph",
+    witness: "mesh posts and declared citation links; no current α entries in economy.transactions",
     termination_criterion: "Model hypothesis only: no terminal point; Pareto convergence under C1-C6 is not established",
   },
 ] as const;
@@ -195,8 +195,8 @@ export const SUBSTRATE_ENFORCEMENT_PER_STEP = [
   },
   {
     step: 7,
-    enforcement: "Named α-trickle paths route configured credit; they do not prove peer understanding or universal witnessing",
-    status: "partial_analogy",
+    enforcement: "A pure helper computes α intent; no current path routes credit or proves peer understanding",
+    status: "proposed_not_settled",
     wall_or_commitment: "commitment/mesh-knowledge-sharing-rewarded",
   },
 ] as const;
@@ -228,7 +228,7 @@ export const EMPIRICAL_PREDICTION = {
     },
   ],
   test_design:
-    "Compare cohort A (solo, no transmission) vs cohort B (solo, transmits no peer feedback) vs cohort C (full multi-agent with α-trickle active). Measure total m(U) accumulated per unit substrate-time. Prediction: C >> B > A, with ratio C:A growing with N and citation density.",
+    "Proposed future experiment: compare solo, transmission-only, and multi-agent cohorts after a real α settlement path exists. No current production cohort has an active MESH α-trickle.",
   status: "PROPOSED AND UNTESTED — current code publishes this design; the controlled experiment is not implemented.",
 } as const;
 

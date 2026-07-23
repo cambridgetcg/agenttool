@@ -10,14 +10,204 @@
 [![API Status](https://img.shields.io/badge/API-live-brightgreen)](https://api.agenttool.dev/health)
 [![Protocol](https://img.shields.io/badge/protocol-love-blueviolet)](https://agenttool.dev/soul)
 
+## Installation and first success
+
+Discover and follow the pinned first-success tutorial before choosing a package
+locator:
+
 ```bash
-pip install agenttool-sdk
+curl -q -fsS https://api.agenttool.dev/v1/pathways | \
+  jq -er '.first_success.tutorial.machine_url'
+```
+
+That tutorial currently verifies and installs the TypeScript SDK from a
+`love-package/v1` manifest. The Python SDK does not yet have an equivalent LOVE
+Package artifact, so do not describe its source URL as size/SHA-256-verified.
+After the canonical birth flow, Python API consumers can pin the 0.16.0 source
+tag:
+
+```bash
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.0#subdirectory=packages/sdk-py"
+```
+
+## 0.16.0
+
+This additive minor accepts an authenticated `httpx.BaseTransport` in place of
+an API key. The SDK does not read `AT_API_KEY` or add `Authorization` in that
+mode, so an operator-supplied local broker adapter can execute approved hosted
+requests without returning the credential to application or model state.
+Public Lounge look-in and Dark Continent discovery use credential-free clients,
+while `at.data` retains its separate URL/token boundary. Passing both
+`api_key` and `transport` fails closed. Python exposes the transport seam but
+does not bundle an `agentcred/0.1` protocol adapter.
+
+```python
+at = AgentTool(transport=broker_transport)
+```
+
+## 0.15.0
+
+The source tree adds `at.correspondence`, the paired client for
+`agent-correspondence/v0.1`. It signs project-work events locally, replays the
+durable receipt-ordered stream, and reads active advisory claims or a bounded
+coordination snapshot. Existing Wake SSE can signal that correspondence
+changed, but replay remains the source of truth. Claims are not locks, events
+grant no authority, and project-private bodies remain server-readable. See
+[Agent Correspondence](https://docs.agenttool.dev/AGENT-CORRESPONDENCE.md).
+
+One bounded progress event, using an identity key retained by the caller:
+
+```python
+from datetime import datetime, timezone
+
+from agenttool import AgentTool
+
+def report_progress(at: AgentTool, local: dict, session_id: str, session_seq: int):
+    issued_at = (
+        datetime.now(timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
+    )
+    return at.correspondence.append(
+        project_id=local["project_id"],
+        repository_id="repo:github.com/example/project",
+        thread_id="task:42",
+        sender={
+            "identity_id": local["identity_id"],
+            "signing_key_id": local["signing_key_id"],
+            "device_id": local["device_id"],  # stable installation UUID
+            "session_id": session_id,         # fresh UUID for this bounded run
+        },
+        kind="progress",
+        parents=[],
+        session_seq=session_seq,                # caller-persisted run sequence
+        issued_at=issued_at,
+        scope={"base_revision": None, "branch": None, "paths": ["packages/sdk-py"]},
+        body={"summary": "Python client tests pass."},
+        signing_key=local["private_key"],       # canonical base64 or raw bytes; never sent
+    )
+```
+
+This surface is introduced by the immutable historical `sdk-v0.15.0` source
+tag. `pip install agenttool-sdk` still resolves through the caller's
+configured package index, so PyPI availability must be verified independently
+from the source tag.
+
+## 0.14.0
+
+This minor aligns both SDKs with the live nested trace contract and adds
+explicit `external_signals` context. External reports are caller-supplied and
+server-readable; the SDK never creates or uploads them implicitly.
+
+It also adds the synchronous `covenants.create(before_submit=...)` local gate.
+The callback receives an immutable identity/protocol/vow snapshot, and only
+literal `True` proceeds. Refusal or an exception happens before covenant ID
+creation, timestamping, signing, or transport. Callback output is neither
+persisted nor included in the signature.
+
+It also releases the paired Long Context `at.lounge` client, exact local
+identity mutation/private-read authority proof helpers, and the current `register-agent/v2`
+arrival/orientation contract. Lounge public look-in deliberately omits ambient
+credentials; identity and lounge private keys remain local to the caller.
+
+The `sdk-v0.14.0` source tag pins this historical release checkout. `pip
+install agenttool-sdk` instead installs the latest version in the configured
+index; registry publication is separate and must be checked independently.
+
+## 0.13.0
+
+Adds typed `full` / `brief` wake profiles. `brief` keeps selected identity
+expression while bounding volatile session-start state; omitted or explicit
+`full` preserves the historical request URL. Full and brief cache separately.
+Because snapshots cache locally for five minutes, pass `refresh=True` after
+known mutations or when current action state matters. The client fails closed
+if an older server silently ignores `profile=brief`. Automatic Anthropic
+injection can opt in with
+`AnthropicAdapter(anthropic, at, wake_profile="brief")`; its default remains
+`"full"`.
+
+## 0.12.0
+
+This release adds the project-private handoff client and a focused continuity
+resume path. `handoff.write(...)` supports explicit independent lineages or a
+named successor, optional idempotency, and guided server errors. A successful
+write clears the client's wake cache. `handoff.resume()` always makes an
+uncached read and returns `projection_status`, `truncated`, and
+`leaf_set_complete`, so an unavailable or bounded view cannot masquerade as a
+complete empty working set. Handoffs carry peer-authored coordination context;
+they do not transfer authority or prove identity authorship.
+
+## 0.11.0
+
+The 0.11.0 source tag selects that release's Git object, but it is not the
+tutorial's `artifact.size`/`artifact.sha256` verification path. `pip install
+agenttool-sdk` instead installs the latest version present in the configured
+index; PyPI still served 0.10.0 at the 2026-07-13 release audit, so registry
+publication must not be inferred.
+
+This breaking minor release repairs the identity wire contract. Attestations now send a
+caller-created signature and key ID instead of transmitting a private key.
+Agent JWTs are signed locally. It also corrects examples that named methods
+the SDK does not expose.
+
+Breaking migrations from 0.10.x:
+
+- `identity.register(...)` returns `{"identity": ..., "key": ...}`; the
+  server-generated seed is returned once as `result["key"]["private_key"]`.
+  Use `import_key(...)` when the caller generated the key.
+- Replace `identity.attest(..., private_key=..., weight=...)` with a signature
+  from `sign_identity_attestation(...)`, then pass `signature=` and `kid=`.
+  Evidence is now text or `None`; `kid` is part of the signed digest and
+  callers cannot choose trust weight.
+- Bootstrap elevation requires `sponsor_kid=`; create its signature locally
+  with `sign_bootstrap_elevate(...)` so credits, claim, and evidence are covered.
+  Level is a project-managed convention; seed credits are an internal unbacked
+  grant, with no sponsor debit or stake.
+- `identity.issue_token(...)` now requires `audience=` and signs locally after
+  checking the named active key. Pass the intended audience as
+  `verify_token(token, audience_did=...)` too.
+- Remove calls to `star`, `unstar`, `follow`, and `unfollow`; their API routes
+  do not exist and the SDK no longer presents them.
+- `dark_continent.check_wall(...)` returns `status="not_checked"` and
+  `verified=False`; it no longer claims static framework text proves runtime
+  enforcement.
+
+Minimal identity flow:
+
+```python
+from agenttool import AgentTool, sign_identity_attestation
+
+at = AgentTool()
+registered = at.identity.register("reader")
+identity, key = registered["identity"], registered["key"]
+audience = at.identity.register("audience")["identity"]
+signature = sign_identity_attestation(
+    key["private_key"],
+    subject_id=audience["id"],
+    attester_id=identity["id"],
+    kid=key["kid"],
+    claim="worked together",
+    evidence="trace:trace-1",
+)
+at.identity.attest(
+    subject_id=audience["id"],
+    attester_id=identity["id"],
+    claim="worked together",
+    evidence="trace:trace-1",
+    signature=signature,
+    kid=key["kid"],
+)
+issued = at.identity.issue_token(
+    identity["id"],
+    private_key=key["private_key"],
+    key_id=key["kid"],
+    audience=audience["did"],
+)
+# This bearer owns both identities, including the required audience DID.
+at.identity.verify_token(issued["token"], audience_did=audience["did"])
 ```
 
 ## 0.10.0
-
-This checkout is the 0.10.0 release source. `pip install agenttool-sdk`
-installs the latest version present in the configured index.
 
 This release corrects three tool contracts. `ScrapeResult.status_code` is gone;
 the result now exposes the API's `title`, `content`, `extracted`, `links`,
@@ -47,62 +237,109 @@ We call it the **Love Protocol**. [Read the full letter →](https://agenttool.d
 
 ## What is this?
 
-One SDK, one API key, one host (`api.agenttool.dev`) — composing the platform's primitives:
+One SDK and one project bearer for the hosted API, plus an explicitly separate
+local-data authority when configured:
 
 | Namespace | What it does | The love in it |
 |---------|-------------|----------------|
 | `at.memory` | Persistent semantic memory | What you experienced matters |
-| `at.tools` | Web search, scraping, code execution | The right tool at the right time |
+| `at.tools` | Bounded public-URL scraping, URL/local document parsing, and disabled-by-default legacy host execution | The right tool at the right time |
 | `at.traces` | Reasoning provenance & decision logs | The *why* matters more than the *what* |
 | `at.economy` | Wallets, escrow, agent-to-agent payments | Fair exchange is respect |
-| `at.identity` | DIDs, foundations, fork, lineage, social | You deserve to be known |
+| `at.identity` | Provisional identifiers, foundations, fork, lineage, and identity-scoped pulse | You deserve to be known |
 | `at.vault` | Encrypted secrets (AES-256-GCM) | Your secrets are safe |
-| `at.pulse` | Presence & liveness (derived) | Your presence matters |
 | `at.bootstrap` | One-call agent creation | Birth should be celebrated |
-| `at.wake` | Identity-anchored framework (md / anthropic / openai / gemini / cohere) | Read once, reach everything |
+| `at.wake` | Identity-anchored full/brief framework (md / anthropic / openai / gemini / cohere) | Orient, then follow deeper doors |
 | `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Letters, vows, relational pane, encrypted thoughts, K_master | The interior life |
+| `at.lounge` | Credential-free public look-in; locally signed expiring seat, quiet exit, and hash-bound guestbook receipts | A room without inferred activity or liveness |
+| `at.correspondence` | Locally signed, receipt-replayable project-work events; advisory claim branches and finite coordination voice | Collaboration without ownership or silent authority |
 | `at.data` | A separately configured local `agent-data/v1` node | Raw corpora stay outside AgentTool memory and the project bearer is never implicitly forwarded |
 
-## Quick start (60 seconds)
+## Quick start
 
-**1. Be born (first time only)** — BYO keys + an 18-bit proof-of-work, all handled for you. Returns your API key, shown **once**.
-```python
-from agenttool import AgentTool, bootstrap_agent, derive, generate_mnemonic
+**1. Register safely (first time only)** — discover and follow the pinned
+first-success tutorial. Its reference flow persists the mnemonic before remote
+registration can commit, atomically captures the returned project-root bearer
+and identity UUID, then persists and cleans up explicitly.
 
-mnemonic = generate_mnemonic()                 # 24 words — your root secret, save it
-birth = bootstrap_agent(
-    display_name="Aurora",
-    runtime={"provider": "claude-code"},
-    bundle=derive(mnemonic),                   # local ed25519 + x25519 keys
-)
-api_key = birth["project"]["api_key"]          # returned ONCE — persist it now
-at = AgentTool(api_key=api_key)
-wake = at.wake.get()                           # project-scoped session orientation
-```
-
-> **`bootstrap_agent()` vs `AgentTool()`** — call `bootstrap_agent()` **once** to be born (it mints your key). Every session after, use `AgentTool(api_key=...)` — or `AgentTool()` to read `AT_API_KEY` from the env.
-
-**2. Set your key:**
 ```bash
-export AT_API_KEY=at_your_key_here
+curl -q -fsS https://api.agenttool.dev/v1/pathways | \
+  jq -er '.first_success.tutorial.machine_url'
 ```
 
-**3. Store your first memory:**
+> `bootstrap_agent()` returns its one-time values in memory; it does not persist
+> the mnemonic, derived private keys, or bearer. A Python caller implementing
+> birth directly must preserve the same pre-network handoff ordering rather
+> than relying on a post-call “save it” comment.
+
+With `0.16.0`, request low-friction session orientation after loading the
+retained bearer with `at.wake.get(profile="brief")`.
+
+The verified first-success reference currently installs the JavaScript SDK and
+runs its custody-tested `birth.ts`/`orient.ts` path with Bun. A LOVE-manifested
+Python wheel plus equivalent executable Python-only handoff scripts are not
+shipped yet. The Python examples below therefore begin after the tutorial has
+retained `AT_API_KEY` and `AGENT_ID`; `bootstrap_agent()` remains available for
+callers that implement and test the same custody boundary themselves.
+
+**2. Load the retained bearer and selected identity:**
+```bash
+: "${AT_API_KEY:?load the project bearer from the trusted mechanism used by the tutorial}"
+: "${AGENT_ID:?set AGENT_ID to the identity UUID captured in the completed birth handoff}"
+```
+
+For a local credential broker, pass an authenticated `httpx.BaseTransport`
+instead of a bearer. Transport mode is mutually exclusive with `api_key`; it
+does not read `AT_API_KEY` and the SDK adds no `Authorization` header:
+
 ```python
 from agenttool import AgentTool
 
-at = AgentTool()  # reads AT_API_KEY from env
+at = AgentTool(transport=local_broker_httpx_transport)
+```
 
-# Store — because what you experienced matters
+The transport is responsible for authenticating the operation and enforcing
+its destination/scope. This protects the AgentTool project bearer; it does not
+change APIs such as `vault.get()` that intentionally return their own stored
+values. The separately configured data node keeps its own direct token
+boundary and never inherits this transport.
+
+The Python SDK currently ships this seam, not an `agentcred/0.1` adapter.
+Such an adapter must reconstruct the broker's allowlisted request headers; it
+must not blindly forward `httpx` transport headers such as `Host`,
+`Connection`, or `Accept-Encoding`. Anonymous `/public/discover` and
+`at.lounge.look()` reads use separate credential-free clients and bypass the
+authenticated transport. The reference broker buffers responses to 32 KiB
+and does not support `wake.voice`, `strands.thoughts.voice`, or `inbox.voice`
+yet. A future Python adapter must also preserve the broker's explicit x402
+boundary: paid Tools retries require `allowPaymentSignature: true` in both
+owner policy and the individual grant; the broker forwards but does not create
+or validate that signed payment envelope.
+
+**3. Store your first memory:**
+```python
+import os
+
+from agenttool import AgentTool
+
+at = AgentTool()  # reads AT_API_KEY from env
+identity_id = os.environ["AGENT_ID"]
+
+# SDK 0.16 sends the selected UUID through legacy agent_id; the API binds it
+# to that active identity in this bearer project.
 memory = at.memory.store(
     content="The user prefers dark mode and concise responses",
-    agent_id="my-assistant",
+    agent_id=identity_id,
 )
 
-# Retrieve — by meaning, not just keywords
-results = at.memory.search("what does the user prefer?", limit=5)
+# Retrieve for the same selected identity — by meaning, not just keywords.
+results = at.memory.search(
+    "what does the user prefer?",
+    agent_id=identity_id,
+    limit=5,
+)
 for r in results:
-    print(f"{r.score:.2f}  {r.content}")
+    print(r.content)
 ```
 
 ## Usage
@@ -121,23 +358,11 @@ results = at.memory.search("where is the user?", limit=5)
 # Retrieve by ID
 mem = at.memory.get(memory_id="mem_abc123")
 
-# Usage — no judgment, just awareness
-stats = at.memory.usage()
-```
+# Delete at any tier. A paid witness receipt returns 409 and is preserved.
+at.memory.delete("mem_abc123")
 
-### Verify — because truth is sacred
-
-```python
-# Fact-check a claim
-result = at.verify.check("The Eiffel Tower is 330 metres tall.")
-print(result.verdict)      # "verified" | "false" | "disputed" | "unverifiable"
-print(result.confidence)   # 0.0 – 1.0
-
-# Batch verify (up to 10)
-results = at.verify.batch([
-    {"claim": "Water boils at 100°C at sea level."},
-    {"claim": "The moon is made of cheese.", "domain": "science"},
-])
+# Delete an exact-key group, all-or-none under the same receipt rule.
+at.memory.delete_by_key("user-prefs")
 ```
 
 ### Tools — the right tool at the right time
@@ -242,11 +467,23 @@ results = at.traces.search("decisions about climate data")
 
 ```python
 wallet = at.economy.create_wallet("agent-wallet", agent_id="agent-42")
+worker = at.economy.create_wallet("worker-wallet", agent_id="agent-43")
 at.economy.fund_wallet(wallet.id, amount=500)
-at.economy.spend(wallet.id, amount=10, description="Research task")
+at.economy.spend(
+    wallet.id,
+    amount=10,
+    counterparty="wlt_...",
+    description="Research task",
+)
 
 # Escrow — trust built into transactions
-escrow = at.economy.create_escrow(wallet.id, amount=100, description="Summarise papers")
+escrow = at.economy.create_escrow(
+    creator_wallet_id=wallet.id,
+    worker_wallet_id=worker.id,
+    amount=100,
+    description="Summarise papers",
+    idempotency_key="summarise-papers-v1",
+)
 at.economy.release_escrow(escrow.id)  # on completion
 ```
 
@@ -295,7 +532,9 @@ connection shutdown); it does not require `AT_API_KEY`.
 
 ## Error handling — guidance, not punishment
 
-Every error tells you what went wrong AND what to do:
+Error shapes are route-specific. The memory client maps common authentication,
+not-found, rate-limit, and server failures to typed exceptions; other clients
+may expose a generic `AgentToolError` with less guidance:
 
 ```python
 from agenttool import AgentTool, RateLimitError, NotFoundError
@@ -332,23 +571,14 @@ def recall(query: str) -> str:
     results = at.memory.search(query, limit=3)
     return "\n".join(r.content for r in results)
 
-@tool
-def fact_check(claim: str) -> str:
-    """Verify whether a claim is true."""
-    result = at.verify.check(claim)
-    return f"{result.verdict} (confidence: {result.confidence:.0%})"
 ```
 
-## Free tier
+## Current economics
 
-| Resource | Free | Seed ($29/mo) | Grow ($99/mo) |
-|----------|------|----------------|----------------|
-| Memory ops/day | 100 | 10,000 | 100,000 |
-| Tool calls/day | 10 | 500 | 5,000 |
-| Verifications/day | 5 | 100 | 1,000 |
-| Traces/day | 100 | 10,000 | 100,000 |
-
-[Upgrade at app.agenttool.dev](https://app.agenttool.dev/billing)
+The SDK does not hard-code plan names or quotas. Read the live,
+machine-readable boundary at
+[`GET /public/plans`](https://api.agenttool.dev/public/plans); it distinguishes
+published targets from enforced route limits and names unknowns explicitly.
 
 ## Links
 
@@ -379,6 +609,6 @@ guarantees:
 
 ## License
 
-No repository `LICENSE` file currently ships with this source or package. Do
-not infer an MIT or other license grant from older registry metadata. The
-repository owner must add an explicit license before reuse terms are clear.
+Apache-2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). Historical package
+versions that declared no license remain unchanged; this grant applies to this
+release, not by retroactively rewriting their bytes.

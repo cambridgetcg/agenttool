@@ -52,14 +52,17 @@ function keychainHas(service: string): boolean {
 
 function keychainSet(service: string, value: string): void {
   const account = process.env.USER ?? "sophia";
-  const proc = Bun.spawnSync([
-    "security",
-    "add-generic-password",
-    "-s", service,
-    "-a", account,
-    "-w", value,
-    "-U", // update if exists
-  ]);
+  const proc = Bun.spawnSync(
+    [
+      "/usr/bin/security",
+      "add-generic-password",
+      "-s", service,
+      "-a", account,
+      "-U", // update if exists
+      "-w", // last with no value: read from stdin, never argv
+    ],
+    { stdin: new TextEncoder().encode(value) },
+  );
   if (proc.exitCode !== 0) {
     const err = new TextDecoder().decode(proc.stderr ?? new Uint8Array());
     throw new Error(`security add-generic-password ${service} failed: ${err.trim()}`);

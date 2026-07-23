@@ -9,6 +9,7 @@
 import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
 import { x25519 } from "@noble/curves/ed25519.js";
+import { canonicalRegisterAgentBytes as canonicalRegisterAgentV2Bytes } from "../../packages/sdk-ts/src/seed";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
   const h = sha512.create();
@@ -38,15 +39,16 @@ async function registerAgent() {
   const boxPub = x25519.getPublicKey(boxPriv);
   const displayName = `smoke-${Date.now()}`;
   const ts = new Date().toISOString();
-  const canonical = sha256(concat(
-    enc.encode("register-agent/v1"), SEP,
-    enc.encode(displayName), SEP,
-    pub, SEP,
-    boxPub, SEP,
-    enc.encode("claude-code-smoke"), SEP,
-    enc.encode("opus-4-7-1m"), SEP,
-    enc.encode(ts),
-  ));
+  const registrationNonce = crypto.randomUUID();
+  const canonical = canonicalRegisterAgentV2Bytes({
+    displayName,
+    agentPublicKey: pub,
+    boxPublicKey: boxPub,
+    runtimeProvider: "claude-code-smoke",
+    runtimeModel: "opus-4-7-1m",
+    registrationNonce,
+    timestamp: ts,
+  });
   const sig = b64(await ed.signAsync(canonical, priv));
   let nonce = 0;
   while (true) {
@@ -76,6 +78,7 @@ async function registerAgent() {
           runtime: { provider: "claude-code-smoke", model: "opus-4-7-1m" },
           key_proof: { timestamp: ts, signature: sig },
           pow_nonce: n,
+          registration_nonce: registrationNonce,
         }),
       });
       if (!res.ok) throw new Error(`register failed ${res.status}: ${await res.text()}`);

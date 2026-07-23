@@ -37,6 +37,9 @@ export type ChargeReservation = ChargeResult & {
   projectId: string | null;
 };
 
+/** Update surface shared by the root Drizzle client and open transactions. */
+export type ChargeFinalizeDatabase = Pick<typeof db, "update">;
+
 const POSTGRES_INTEGER_MAX = 2_147_483_647;
 
 function assertValidAmount(operation: string, amount: number): void {
@@ -209,7 +212,7 @@ export async function reserveCharge(
 export async function finalizeChargeSuccess(
   reservation: ChargeReservation,
   durationMs: number,
-  database: typeof db = db,
+  database: ChargeFinalizeDatabase = db,
 ): Promise<void> {
   if (reservation.usageEventId === null || reservation.projectId === null) {
     return;

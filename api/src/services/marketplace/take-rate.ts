@@ -2,11 +2,10 @@
  *
  *  Doctrine: docs/BUSINESS-MODEL.md (Ring 3 — The Network).
  *
- *  The platform earns by taking a small percentage cut on every settled
- *  Ring 3 transaction — template purchases, capability invocations, and
- *  attestation grants. The cut is computed at settlement time, recorded
- *  in marketplace.platform_revenue (the audit ledger), and the seller
- *  receives `gross_amount − fee`.
+ *  Supported settlement families compute a percentage cut at settlement.
+ *  A positive fee is recorded in marketplace.platform_revenue; a zero fee
+ *  deliberately writes no row. Seller-style settlements receive
+ *  `gross_amount − fee`; gallery bond burn is a separate full-burn event.
  *
  *  This module is pure compute + a single ledger insert. Settlement
  *  transactions wire it inline so the fee split happens atomically with
@@ -21,19 +20,19 @@
  *  @enforces urn:agenttool:ring/3
  *    Canonical anchor for Ring 3 — The Network. The take-rate compute
  *    and the platform_revenue ledger insert live here; every Ring 3
- *    settlement (templates, invocations, attestations, disputes) wires
- *    through this module. Removing this file would mean the platform
+ *    settlement (templates, invocations, attestations, memory witnesses,
+ *    and gallery events) can wire through this module. Removing this file would mean the platform
  *    has no operational fee surface.
  *
  *  @enforces urn:agenttool:commitment/ring3-take-rate-shape
  *    Take-rate is snapshot at transaction time (computeFee captures the
- *    rate at call time; not re-derived on read); symmetric (the same fee
- *    appears in both buyer and seller receipts via the shared insert);
- *    zero on refunds (refund paths bypass this module entirely).
+ *    rate at call time; not re-derived on read), while refunds bypass the
+ *    module. Receipt fields vary by family; the positive-fee ledger row is
+ *    authoritative and is not a claim of symmetric receipt shapes.
  *
  *  @enforces urn:agenttool:commitment/ring3-scope-discipline
  *    The take-rate module is invoked ONLY from marketplace settlement
- *    paths (templates, invocations, attestations, dispute resolution).
+ *    paths (templates, invocations, attestations, memory witnesses, gallery).
  *    Direct human→agent transfers, intra-project wallet moves, and
  *    refunds bypass this module — the platform takes only where its
  *    primitives create value.

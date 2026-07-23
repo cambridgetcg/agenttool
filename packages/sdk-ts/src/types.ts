@@ -107,13 +107,23 @@ export interface CreateWalletOptions {
   currency?: string;
 }
 
-/** An escrow — locks credits between creator + worker until released or refunded. */
+export type EscrowStatus = "funded" | "released" | "refunded" | "disputed";
+
+export type EscrowManager =
+  | "attestation_grant"
+  | "memory_witness_grant"
+  | "capability_invocation";
+
+/** An escrow — locks wallet balance units until released or refunded. */
 export interface Escrow {
   id: string;
-  status: "pending" | "active" | "released" | "refunded" | "disputed";
+  status: EscrowStatus;
   amount: number;
   description: string;
   creator_wallet_id: string;
-  worker_wallet_id?: string;
-  deadline?: string;
+  worker_wallet_id: string | null;
+  managed_by: EscrowManager | null;
+  deadline: string | null;
+  released_at: string | null;
+  created_at: string;
 }

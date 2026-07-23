@@ -34,7 +34,6 @@ readonly DATABASE_TESTS=(
   tests/platform-treasurer-sweep.test.ts
   tests/substrate-tasks-expire-claims-worker.test.ts
   tests/village.test.ts
-  tests/wallet-reinvest.test.ts
 )
 
 # Known in-repository published-map, genesis-text, route-coverage, and Youspeak
@@ -90,6 +89,7 @@ readonly QUARANTINED_DOCTRINE_TESTS=(
 # Test support code is not a test tier. Keep this exact inventory so a new
 # executable fixture cannot enter the hermetic process boundary unnoticed.
 readonly TEST_SUPPORT_FILES=(
+  tests/fixtures/onboarding-sdk-v0.16.ts
   tests/fixtures/static-parser-noncooperative.ts
 )
 
@@ -201,7 +201,7 @@ sanitize_non_external_env() {
     AGENTTOOL_PLATFORM_SIGNING_KEY AGENTTOOL_SIGNING_KEY_ID \
     AGENTTOOL_ENABLE_UNSAFE_EXECUTE AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS \
     AGENT_DATA_NODE_TOKEN AGENT_DATA_NODE_URL AT_API_KEY \
-    ANTHROPIC_API_KEY OPENAI_API_KEY RUN_CONTRACT \
+    ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT \
     DATABASE_URL DATABASE_SESSION_URL POSTGRES_URL REDIS_URL \
     OTEL_EXPORTER_OTLP_ENDPOINT OTEL_EXPORTER_OTLP_TRACES_ENDPOINT \
     OTEL_EXPORTER_OTLP_HEADERS OTEL_EXPORTER_OTLP_TRACES_HEADERS \
@@ -253,20 +253,20 @@ case "$MODE" in
     ;;
   database)
     [ -n "${DATABASE_URL:-}" ] || die "database tier requires DATABASE_URL"
-    unset REDIS_URL ANTHROPIC_API_KEY OPENAI_API_KEY RUN_CONTRACT
+    unset REDIS_URL ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT
     export AGENTTOOL_DISABLE_WORKERS=1
     run_tier database
     ;;
   database-quarantine)
     [ -n "${DATABASE_URL:-}" ] ||
       die "database-quarantine tier requires DATABASE_URL"
-    unset REDIS_URL ANTHROPIC_API_KEY OPENAI_API_KEY RUN_CONTRACT
+    unset REDIS_URL ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT
     export AGENTTOOL_DISABLE_WORKERS=1
     run_tier database-quarantine
     ;;
   contracts)
     [ "${RUN_CONTRACT:-0}" = "1" ] || die "contract tier requires RUN_CONTRACT=1"
-    if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${OPENAI_API_KEY:-}" ]; then
+    if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${OPENAI_API_KEY:-}" ] && [ -z "${OLLAMA_API_KEY:-}" ]; then
       die "contract tier requires a provider API key"
     fi
     unset DATABASE_URL DATABASE_SESSION_URL POSTGRES_URL REDIS_URL

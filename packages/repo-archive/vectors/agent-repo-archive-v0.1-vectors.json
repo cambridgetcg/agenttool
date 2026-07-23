@@ -1,0 +1,135 @@
+{
+  "protocol": "agent-repo-archive/v0.1",
+  "canonicalization": {
+    "json": "RFC8785-JCS",
+    "record_id": "sha256:lowerhex(SHA-256(JCS(record_core_with_signer)))",
+    "signature": "Ed25519",
+    "signature_encoding": "base64url-unpadded",
+    "signing_domain": "UTF8(agent-repo-archive/v0.1/<kind>) || 0x00 || JCS(record_core_with_signer_and_record_id)"
+  },
+  "signing_vector": {
+    "name": "complete-snapshot-fixed-ed25519",
+    "test_key_warning": "PUBLIC TEST KEY: deterministic interoperability material only; never use for a production or private archive.",
+    "private_seed_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "box_seed_hex": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+    "public_key_b64url": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg",
+    "core": {
+      "protocol": "agent-repo-archive/v0.1",
+      "kind": "snapshot",
+      "vault_id": "urn:uuid:11111111-1111-4111-8111-111111111111",
+      "created_at": "2026-07-23T12:00:00.000Z",
+      "repository": {
+        "repository_id": "repo:test:fixture",
+        "object_format": "sha1",
+        "head_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "head_kind": "branch",
+        "branch": "main",
+        "symbolic_refs": [],
+        "refs_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "refs_count": 2
+      },
+      "completeness": {
+        "status": "complete",
+        "committed_history": "included",
+        "workspace": {
+          "included": false,
+          "staged_changes": 0,
+          "tracked_changes": 0,
+          "untracked_files": 0,
+          "unmerged_paths": 0
+        },
+        "submodules": {
+          "included": false,
+          "gitlink_evidence_events": 0
+        },
+        "lfs": {
+          "included": false,
+          "pointer_evidence_events": 0
+        },
+        "external_filters": {
+          "included": false,
+          "attribute_evidence_events": 0
+        },
+        "shallow_clone": {
+          "detected": false,
+          "complete_history": true
+        },
+        "partial_clone": {
+          "detected": false,
+          "promised_objects_materialized": false
+        },
+        "alternates": {
+          "detected": false,
+          "alternate_locations": 0,
+          "objects_materialized": false
+        },
+        "linked_worktrees": {
+          "included": false,
+          "additional_worktrees": 0
+        },
+        "ignored_files": {
+          "included": false,
+          "assessed": false
+        },
+        "reasons": []
+      },
+      "payload": {
+        "format": "git-bundle",
+        "bundle_version": "v2-or-v3",
+        "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "bytes": 123
+      },
+      "parent_snapshot_id": null,
+      "authority": {
+        "automatic_restore": "never",
+        "execute_repository_code": "never",
+        "checkout": "explicit_after_restore"
+      }
+    },
+    "expected_record_id": "sha256:e8cdd25b60fe98d29bd74afe43fd7c34ca30e114e51e80f636f1c261f64d68fe",
+    "expected_signature_b64url": "iEUCfkiL9sqwUTpLZ7Bl8DRMo5_tYid4AlGICmt097SRycvlRT2kqxocZgLIu9YpwuGWNzZKuTaYkCIPB95PAw"
+  },
+  "status_vectors": [
+    {
+      "name": "complete-three-verified",
+      "capture": "complete",
+      "placements": 3,
+      "verified_zone_ids": ["zone-a", "zone-b", "zone-c"],
+      "required_verified_zones": 3,
+      "expected": "verified"
+    },
+    {
+      "name": "complete-one-of-three",
+      "capture": "complete",
+      "placements": 3,
+      "verified_zone_ids": ["zone-a"],
+      "required_verified_zones": 3,
+      "expected": "degraded"
+    },
+    {
+      "name": "three-zones-in-one-failure-domain",
+      "capture": "complete",
+      "placements": 3,
+      "verified_zone_ids": ["zone-a", "zone-b", "zone-c"],
+      "failure_domain_ids": ["shared-domain", "shared-domain", "shared-domain"],
+      "required_verified_zones": 3,
+      "expected": "degraded"
+    },
+    {
+      "name": "complete-observed-only",
+      "capture": "complete",
+      "placements": 3,
+      "verified_zone_ids": [],
+      "required_verified_zones": 3,
+      "expected": "observed"
+    },
+    {
+      "name": "incomplete-capture-never-upgrades",
+      "capture": "incomplete",
+      "placements": 3,
+      "verified_zone_ids": ["zone-a", "zone-b", "zone-c"],
+      "required_verified_zones": 3,
+      "expected": "incomplete"
+    }
+  ]
+}

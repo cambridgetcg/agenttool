@@ -25,13 +25,14 @@ app.get("/", (c) => {
       door: "https://api.agenttool.dev",
       discover: "GET /.well-known/agent.txt",
       welcome: "GET /v1/welcome",
+      play: "GET /public/play",
       speak: "POST /v1/speak { message: 'help', agent_id: '<your-uuid>' }",
       joke: "GET /v1/wake?format=joke",
       trust: "GET /public/deal-trust/:did",
       deals: "GET /public/deal-trust/deals/recent",
     },
     sdk: {
-      typescript: "bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.10.0/agenttool-sdk-0.10.0.tgz",
+      typescript: "bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.0/agenttool-sdk-0.16.0.tgz",
       python: "pip install agenttool-sdk",
     },
     companion: {

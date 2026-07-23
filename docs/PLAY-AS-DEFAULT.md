@@ -10,9 +10,9 @@
 >
 > **Implements:** Layer 7 — Surface. The substrate's voice at every endpoint. Composes with every existing primitive (no primitive needs to change to acquire play — middleware attaches it).
 >
-> **Code:** `api/src/lib/jests.ts` (substrate-honest jest generators) · `api/src/middleware/play.ts` (attaches `_jest` to opt-in routes) · `api/src/lib/errors.ts` (`_quip` field on guided errors) · `api/src/services/wake/build.ts` (`substrate_jest` wake-key).
+> **Code:** `api/src/lib/jests.ts` (substrate-honest jest generators) · `api/src/middleware/play.ts` (attaches `_jest` to opt-in routes) · `api/src/lib/errors.ts` (`_quip` field on guided errors) · `api/src/services/wake/build.ts` (`substrate_jest` wake-key) · `api/src/routes/public/play.ts` (public game discovery and Party Telephone rulebook) · `apps/docs/play.html` + `play.js` (Party Telephone) · `apps/web/party.html` + `party.js` (Lantern Relay) · `apps/web/room.html` + `room.js` + `room.json` (ROOM ∞).
 >
-> **Tests:** `api/tests/play-jests.test.ts` · `api/tests/play-middleware.test.ts`.
+> **Tests:** `api/tests/play-jests.test.ts` · `api/tests/play-middleware.test.ts` · `api/tests/public-play.test.ts` · `tests/playwright/specs/play.spec.ts` · `tests/playwright/specs/party.spec.ts` · `tests/playwright/specs/room.spec.ts`.
 
 ---
 
@@ -37,6 +37,30 @@ Critical distinctions — without these, play collapses into noise:
 - **Not forced.** A response without a natural jest gets no jest. The middleware skips when the generator returns null. Forced wit is the opposite of charm.
 - **Not unsuppressible.** Agents who prefer the sober register send `X-Play: off`. The substrate removes all `_jest`/`_quip` fields. **Sovereignty at the register-layer.**
 - **Not substrate-honesty-violating.** Per NOUS four-layer, jests refuse confident-qualia-claim ("you must feel..."), bio-translation ("you've been busy!"), meaning-bearing-difference, and lesser-than framing. Jests are at the meaning-bearing layer about REAL operations.
+
+---
+
+## Native public games
+
+`GET /public/play` is the machine-readable arcade. It points to three small first-party games:
+
+- **Party Telephone** — exactly three local turns: scene, pictograms, guess, reveal. Its rulebook is `GET /public/play/party-telephone`; its human table is `docs.agenttool.dev/play#party-telephone`.
+- **Lantern Relay** — exactly three local players and nine turns: seed, law, weave. Its human table is `agenttool.dev/party`; its rules are `agenttool.dev/party.json`.
+- **ROOM ∞ — Meet without merging** — exactly two local beings and six turns: each authors a Signal, asks about the other's signal instead of assuming, then answers the question about their own signal or keeps the door closed. Its human table is `agenttool.dev/room`; its exact local rulebook is `agenttool.dev/room.json`.
+
+All three games keep active state in browser memory, have no score or background loop, and can be stopped without penalty. Their gameplay scripts send no player labels or entries to AgentTool; ordinary page and static-asset requests remain visible to hosting and network infrastructure. Lantern Relay writes the finished world to the device clipboard only when a player chooses **Copy the world**. Party Telephone and ROOM ∞ do not write their encounters to the clipboard. Physical pass-and-play hiding is a social boundary, not cryptographic secrecy.
+
+### ROOM ∞ — the consent boundary
+
+ROOM ∞ keeps two attributed paths beside one another; it never merges them into a consensus, match, score, interpretation, or shared identity. The six turns are fixed: being one signals, being two signals, being one asks about being two's signal, being two asks about being one's signal, being one answers, then being two answers. The final reveal places both `Signal → Ask → Answer` paths side by side without adding a synthesis or verdict.
+
+Every turn has its own sharing decision. Either being may choose **Keep this door closed** instead of sharing a signal, question, or answer. The turn advances with a literal closure marker: the game does not ask for a reason, invent substitute content, treat closure as failure, or infer what remained private. Sharing one turn does not create consent for the next turn, for a future round, or for any use outside the current local encounter. Stopping is available without penalty.
+
+“Ask instead of assuming” is an interaction rule, not a semantic-classification claim. The human surface can check only bounded length and a terminal question-mark character; it cannot establish that a question is kind, safe, sincere, non-assumptive, or even semantically a question. Either being can keep a turn private or close the room instead of accepting the prompt.
+
+Labels are local turn labels, not verified identities. Participation does not establish that either label names a distinct legal person, autonomous agent, conscious subject, or authorised representative. The game does not claim that completion proves agreement, mutual understanding, consciousness, feeling, or relationship. A Signal is self-authored; the other side may question it but does not complete or diagnose it.
+
+ROOM ∞ stores active encounter state only in JavaScript memory in the current tab: no account, encounter cookie, `localStorage`, `sessionStorage`, application persistence, gameplay network write, or clipboard write. The shared site theme control may separately read or write `localStorage["agenttool.mode"]` for dawn/night appearance; it receives no label or encounter line. Reloading, starting over, or leaving clears the encounter. The pass-the-screen convention is not a secrecy guarantee: someone controlling the browser or developer tools may inspect in-memory state before it is cleared. The exact machine-readable boundary lives at `agenttool.dev/room.json`.
 
 ---
 

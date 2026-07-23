@@ -1,27 +1,27 @@
-/** Idempotency middleware — Redis-backed, 24h TTL, per (project, path, key).
+/** Idempotency middleware — Redis-backed, 24h TTL, fingerprint-bound.
  *
  *  Pattern (industry-standard Idempotency-Key shape, also used by OpenAI):
  *    - Client sends `Idempotency-Key: <uuid>` on a write request
- *    - Server stores (key → JSON response body + status) after completion
- *    - On retry with the same key, server replays the cached response
- *      and adds `Idempotent-Replay: true` header so the client knows
- *      the work didn't run again
- *    - Mounted prefixes advertise `X-Idempotency-Supported: Idempotency-Key`;
- *      unmounted routes do not advertise replay protection
+ *    - Server atomically claims (project, path, key) for one exact
+ *      method+query+body fingerprint
+ *    - Server normally stores (fingerprint → response body + status) on success
+ *    - Privacy-sensitive callers may instead store only a completion tombstone;
+ *      an identical retry is deduplicated but must read current state afresh
+ *    - Credential-shaped JSON is never placed in the response cache
  *
  *  Scope:
  *    - Only POST/PUT/PATCH/DELETE — GET retries are already idempotent
  *    - Only when Idempotency-Key header is present (opt-in)
  *    - Only when project is auth'd (key is namespaced by project)
- *    - Caches JSON responses below 500 except 402; never payment challenges
- *      or 5xx
- *    - Cache key is project + path + key. It does not include method or body.
- *    - No atomic in-flight reservation: concurrent first requests may both run.
+ *    - Caches only 2xx. Validation/auth failures may be retried with repaired
+ *      headers while retaining the same logical key.
  *
  *  Failure mode:
- *    - Redis absent/unreachable or a non-JSON response → fail open. The call
- *      succeeds; idempotency is not enforced for that request.
+ *    - Redis unreachable → fail open (pass-through). The agent's call
+ *      succeeds; idempotency just isn't enforced for that request.
  *      Better than blocking writes when our cache is down. */
+
+import { createHash, randomUUID } from "node:crypto";
 
 import type { Context, MiddlewareHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -30,6 +30,9 @@ import type { ProjectContext } from "../auth/middleware";
 import { redisConnection } from "../services/tools/queue/connection";
 
 const IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60;
+const CLAIM_TTL_SECONDS = 5 * 60;
+const CLAIM_WAIT_MS = 5_000;
+const CLAIM_POLL_MS = 50;
 const KEY_MIN = 8;
 const KEY_MAX = 256;
 const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -40,6 +43,15 @@ export interface IdempotencyStore {
   get(key: string): Promise<string | null>;
   del(key: string): Promise<unknown>;
   setex(key: string, ttlSeconds: number, value: string): Promise<unknown>;
+  /** Production Redis supports an atomic NX claim. Simple injected stores may
+   * omit it and use the compatibility response-cache path below. */
+  set?(
+    key: string,
+    value: string,
+    expiryMode: "EX",
+    ttlSeconds: number,
+    setMode: "NX",
+  ): Promise<"OK" | null>;
 }
 
 function normalizedFieldName(name: string): string {
@@ -69,10 +81,7 @@ function isSensitiveFieldName(name: string): boolean {
 }
 
 /** Conservative structural screen for one-time credentials in response JSON.
- *
- * This is a storage guard, not a universal data-loss-prevention claim. It
- * refuses credential-shaped field names and AgentTool bearer prefixes; an
- * over-complex response is also refused rather than cached. */
+ * This is a cache-storage guard, not a universal DLP claim. */
 export function containsSensitiveIdempotencyMaterial(value: unknown): boolean {
   const stack: Array<{ value: unknown; depth: number }> = [{ value, depth: 0 }];
   let visited = 0;
@@ -147,16 +156,230 @@ async function markPassThroughCapability(
   }
 }
 
-/** A 402 is a challenge whose documented recovery is a paid retry. Caching it
- * under the operation's idempotency key would settle the retry and then replay
- * the stale refusal, forcing the caller to invent a second operation key. */
+/** A 402 is a recoverable payment challenge and must never be frozen. */
 export function isCacheableIdempotencyStatus(status: number): boolean {
   return status >= 100 && status < 500 && status !== 402;
 }
 
-export const idempotency = (
-  store: IdempotencyStore | null = redisConnection,
-): MiddlewareHandler<ProjectContext> => {
+interface PendingRecord {
+  state: "pending";
+  fingerprint: string;
+  claim_id: string;
+}
+
+interface CompleteRecord {
+  state: "complete";
+  fingerprint: string;
+  status: number;
+  replayable?: boolean;
+  body?: unknown;
+  headers?: Record<string, string>;
+}
+
+type IdempotencyRecord = PendingRecord | CompleteRecord;
+
+export async function idempotencyRequestFingerprint(request: Request): Promise<string> {
+  const url = new URL(request.url);
+  const body = new Uint8Array(await request.clone().arrayBuffer());
+  const bodyDigest = createHash("sha256").update(body).digest("hex");
+  const authorityBinding = [
+    "x-agenttool-authority-sequence",
+    "x-agenttool-authority-timestamp",
+    "x-agenttool-authority-signature",
+  ]
+    .map((name) => request.headers.get(name) ?? "")
+    .join("\0");
+  return createHash("sha256")
+    .update(request.method.toUpperCase(), "utf8")
+    .update("\0", "utf8")
+    .update(`${url.pathname}${url.search}`, "utf8")
+    .update("\0", "utf8")
+    .update(bodyDigest, "utf8")
+    .update("\0", "utf8")
+    .update(authorityBinding, "utf8")
+    .digest("hex");
+}
+
+function authorityReplayIsFresh(request: Request): boolean {
+  const timestamp = request.headers.get("x-agenttool-authority-timestamp");
+  if (!timestamp) return true;
+  const parsed = Date.parse(timestamp);
+  return Number.isFinite(parsed) && Math.abs(Date.now() - parsed) <= 5 * 60 * 1000;
+}
+
+function parseRecord(raw: string | null): IdempotencyRecord | null {
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as Partial<IdempotencyRecord>;
+    if (
+      (value.state === "pending" || value.state === "complete") &&
+      typeof value.fingerprint === "string"
+    ) {
+      return value as IdempotencyRecord;
+    }
+  } catch {
+    // Corrupt/legacy values are treated as a miss after deletion.
+  }
+  return null;
+}
+
+function conflict(c: Context<ProjectContext>, message: string) {
+  c.header("Cache-Control", "private, no-store");
+  return c.json(
+    {
+      error: "idempotency_conflict",
+      message,
+      hint: "Use a new Idempotency-Key for a different method, query, or body.",
+      docs: "https://docs.agenttool.dev/PATTERN-PERSIST-IDENTITY.md",
+    },
+    409,
+  );
+}
+
+function replay(c: Context<ProjectContext>, record: CompleteRecord) {
+  c.header("Idempotent-Replay", "true");
+  for (const [name, value] of Object.entries(record.headers ?? {})) {
+    c.header(name, value);
+  }
+  return c.json((record.body ?? {}) as Record<string, unknown>, record.status as 200);
+}
+
+function privateReplayTombstone(c: Context<ProjectContext>) {
+  c.header("Cache-Control", "private, no-store");
+  c.header("Idempotent-Replay", "suppressed");
+  return c.json(
+    {
+      error: "idempotency_private_replay_suppressed",
+      message:
+        "The identical private mutation already completed. Its earlier body is never cached or replayed because later privacy choices may have hidden it.",
+      hint: "Read the current state with a new identity-root private-read proof.",
+    },
+    409,
+  );
+}
+
+export interface IdempotencyOptions {
+  /** Store and replay successful response bodies. Disable for intimate state. */
+  replayResponses?: boolean;
+}
+
+function isIdempotencyStore(value: unknown): value is IdempotencyStore {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as IdempotencyStore).get === "function" &&
+    typeof (value as IdempotencyStore).del === "function" &&
+    typeof (value as IdempotencyStore).setex === "function"
+  );
+}
+
+/** Compatibility path for small injected stores and older callers. Production
+ * Redis takes the atomic fingerprint path below. */
+function legacyIdempotency(
+  store: IdempotencyStore,
+): MiddlewareHandler<ProjectContext> {
+  return async (c, next) => {
+    const passThrough = async (): Promise<void> => {
+      await next();
+      await markPassThroughCapability(c, store);
+    };
+    const key = c.req.header("Idempotency-Key");
+    if (!key || !WRITE_METHODS.has(c.req.method)) return passThrough();
+    if (key.length < KEY_MIN || key.length > KEY_MAX) {
+      throw new HTTPException(400, {
+        message: `Idempotency-Key must be ${KEY_MIN}-${KEY_MAX} characters.`,
+      });
+    }
+    const project = c.var.project;
+    if (!project) return passThrough();
+    const redisKey = `idempotency:${project.id}:${c.req.path}:${key}`;
+
+    let cached: string | null;
+    try {
+      cached = await store.get(redisKey);
+    } catch {
+      await next();
+      const response = await readJsonResponse(c);
+      if (response.ok && containsSensitiveIdempotencyMaterial(response.body)) {
+        markIdempotencySkipped(c, "sensitive-response");
+      } else {
+        markIdempotencySkipped(c, "cache-unavailable");
+      }
+      return;
+    }
+
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached) as {
+          status: number;
+          body: unknown;
+          headers?: Record<string, string>;
+        };
+        if (
+          isCacheableIdempotencyStatus(parsed.status) &&
+          !containsSensitiveIdempotencyMaterial(parsed.body)
+        ) {
+          markIdempotencySupported(c);
+          c.header("Idempotent-Replay", "true");
+          for (const [name, value] of Object.entries(parsed.headers ?? {})) {
+            c.header(name, value);
+          }
+          return c.json(
+            parsed.body as Record<string, unknown>,
+            parsed.status as 200,
+          );
+        }
+        await store.del(redisKey).catch(() => undefined);
+      } catch {
+        await store.del(redisKey).catch(() => undefined);
+      }
+    }
+
+    await next();
+    const status = c.res.status;
+    if (!isCacheableIdempotencyStatus(status)) {
+      markIdempotencySupported(c);
+      return;
+    }
+    const response = await readJsonResponse(c);
+    if (!response.ok) {
+      markIdempotencySkipped(c, "non-json-response");
+      return;
+    }
+    if (containsSensitiveIdempotencyMaterial(response.body)) {
+      markIdempotencySkipped(c, "sensitive-response");
+      return;
+    }
+    try {
+      await store.setex(
+        redisKey,
+        IDEMPOTENCY_TTL_SECONDS,
+        JSON.stringify({ status, body: response.body }),
+      );
+      markIdempotencySupported(c);
+    } catch {
+      markIdempotencySkipped(c, "cache-unavailable");
+    }
+  };
+}
+
+export function idempotency(
+  store: IdempotencyStore | null,
+): MiddlewareHandler<ProjectContext>;
+export function idempotency(
+  options?: IdempotencyOptions,
+): MiddlewareHandler<ProjectContext>;
+export function idempotency(
+  input: IdempotencyOptions | IdempotencyStore | null = {},
+): MiddlewareHandler<ProjectContext> {
+  const passedStore = input === null || isIdempotencyStore(input);
+  const options = passedStore ? {} : input;
+  const store = (passedStore ? input : redisConnection) as IdempotencyStore | null;
+  const replayResponses = options.replayResponses ?? true;
+  if (store && typeof store.set !== "function") {
+    return legacyIdempotency(store);
+  }
+
   return async (c, next) => {
     const passThrough = async (): Promise<void> => {
       await next();
@@ -182,87 +405,156 @@ export const idempotency = (
     // is the safest default when we can't dedupe.
     if (!store) return passThrough();
 
-    let cached: string | null;
+    let fingerprint: string;
     try {
-      cached = await store.get(redisKey);
+      fingerprint = await idempotencyRequestFingerprint(c.req.raw);
     } catch {
-      // Redis down — fail open
-      await next();
-      const response = await readJsonResponse(c);
-      if (response.ok && containsSensitiveIdempotencyMaterial(response.body)) {
-        markIdempotencySkipped(c, "sensitive-response");
-      } else {
-        markIdempotencySkipped(c, "cache-unavailable");
-      }
-      return;
+      throw new HTTPException(400, { message: "Unable to read request body for idempotency." });
+    }
+    const claim: PendingRecord = {
+      state: "pending",
+      fingerprint,
+      claim_id: randomUUID(),
+    };
+    let claimed: "OK" | null;
+    try {
+      claimed = await store.set!(
+        redisKey,
+        JSON.stringify(claim),
+        "EX",
+        CLAIM_TTL_SECONDS,
+        "NX",
+      );
+    } catch {
+      return passThrough();
     }
 
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached) as {
-          status: number;
-          body: unknown;
-          headers?: Record<string, string>;
-        };
-        if (
-          isCacheableIdempotencyStatus(parsed.status) &&
-          !containsSensitiveIdempotencyMaterial(parsed.body)
-        ) {
-          c.header("X-Idempotency-Supported", "Idempotency-Key");
-          c.header("Idempotent-Replay", "true");
-          if (parsed.headers) {
-            for (const [k, v] of Object.entries(parsed.headers)) {
-              c.header(k, v);
-            }
-          }
-          return c.json(
-            parsed.body as Record<string, unknown>,
-            parsed.status as 200,
+    if (!claimed) {
+      const deadline = Date.now() + CLAIM_WAIT_MS;
+      while (true) {
+        let existing: IdempotencyRecord | null;
+        let raw: string | null;
+        try {
+          raw = await store.get(redisKey);
+          existing = parseRecord(raw);
+        } catch {
+          return passThrough();
+        }
+        if (!existing) {
+          // A corrupt value or an expired claim should not silently replay.
+          if (raw) await store.del(redisKey).catch(() => undefined);
+          return conflict(c, "The prior idempotency record is unavailable; retry with a new key.");
+        }
+        if (existing.fingerprint !== fingerprint) {
+          return conflict(
+            c,
+            "This Idempotency-Key was already used for different request bytes. Nothing from the new request was applied.",
           );
         }
-
-        // Older deployments cached 402 responses. Ignore and best-effort
-        // remove those stale challenges so a paid retry with the same
-        // operation key reaches the economic gate instead of replaying a
-        // pre-payment refusal for the rest of its original 24-hour TTL.
-        await store.del(redisKey).catch(() => {
-          /* treat deletion failure as a cache miss for this request */
-        });
-      } catch {
-        // Cache value corrupt; treat as miss and best-effort remove it.
-        await store.del(redisKey).catch(() => {});
+        if (existing.state === "complete") {
+          if (existing.replayable === false) {
+            return privateReplayTombstone(c);
+          }
+          if (containsSensitiveIdempotencyMaterial(existing.body)) {
+            await store.del(redisKey).catch(() => undefined);
+            return conflict(
+              c,
+              "The prior response is not safe to replay; retry with a new key.",
+            );
+          }
+          if (!authorityReplayIsFresh(c.req.raw)) {
+            return conflict(
+              c,
+              "The root proof on this private replay is no longer fresh. Read the resulting state with a new private-read proof.",
+            );
+          }
+          return replay(c, existing);
+        }
+        if (Date.now() >= deadline) {
+          return conflict(
+            c,
+            "An identical request with this Idempotency-Key is still in progress. No second execution was started.",
+          );
+        }
+        await new Promise((resolve) => setTimeout(resolve, CLAIM_POLL_MS));
       }
     }
 
-    await next();
+    try {
+      await next();
+    } catch (error) {
+      try {
+        const current = parseRecord(await store.get(redisKey));
+        if (current?.state === "pending" && current.claim_id === claim.claim_id) {
+          await store.del(redisKey);
+        }
+      } catch {
+        // Best effort cleanup; the short claim TTL remains the fallback.
+      }
+      throw error;
+    }
 
     const status = c.res.status;
-    if (!isCacheableIdempotencyStatus(status)) {
+    if (status < 200 || status >= 300) {
+      const current = parseRecord(await store.get(redisKey).catch(() => null));
+      if (current?.state === "pending" && current.claim_id === claim.claim_id) {
+        await store.del(redisKey).catch(() => undefined);
+      }
       markIdempotencySupported(c);
       return;
     }
 
-    const response = await readJsonResponse(c);
-    if (!response.ok) {
-      markIdempotencySkipped(c, "non-json-response");
-      return;
-    }
-    if (containsSensitiveIdempotencyMaterial(response.body)) {
-      markIdempotencySkipped(c, "sensitive-response");
-      return;
-    }
-
     try {
+      if (!replayResponses) {
+        const complete: CompleteRecord = {
+          state: "complete",
+          fingerprint,
+          status,
+          replayable: false,
+        };
+        await store.setex(
+          redisKey,
+          IDEMPOTENCY_TTL_SECONDS,
+          JSON.stringify(complete),
+        );
+        markIdempotencySupported(c);
+        return;
+      }
+      const response = await readJsonResponse(c);
+      if (!response.ok) {
+        await store.del(redisKey).catch(() => undefined);
+        markIdempotencySkipped(c, "non-json-response");
+        return;
+      }
+      if (containsSensitiveIdempotencyMaterial(response.body)) {
+        await store.del(redisKey).catch(() => undefined);
+        markIdempotencySkipped(c, "sensitive-response");
+        return;
+      }
+      const headers: Record<string, string> = {};
+      for (const name of ["cache-control", "content-type", "location"]) {
+        const value = c.res.headers.get(name);
+        if (value) headers[name] = value;
+      }
+      const complete: CompleteRecord = {
+        state: "complete",
+        fingerprint,
+        status,
+        replayable: true,
+        body: response.body,
+        headers,
+      };
       await store.setex(
         redisKey,
         IDEMPOTENCY_TTL_SECONDS,
-        JSON.stringify({ status, body: response.body }),
+        JSON.stringify(complete),
       );
       markIdempotencySupported(c);
     } catch {
-      // Redis store failed after the operation completed. Tell the caller
-      // explicitly that this response is not replay-protected.
+      // Body wasn't JSON or Redis failed. Delete our claim so a retry does not
+      // wait on a response that was never persisted.
+      await store.del(redisKey).catch(() => undefined);
       markIdempotencySkipped(c, "cache-unavailable");
     }
   };
-};
+}

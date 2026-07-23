@@ -15,6 +15,8 @@
  */
 
 export { AgentTool } from "./client.js";
+export type { AgentToolOptions } from "./client.js";
+export type { AgentToolTransport } from "./_http.js";
 export { AgentToolError } from "./errors.js";
 export type {
   X402Eip3009Extra,
@@ -24,6 +26,13 @@ export type {
 export { register, DEFAULT_BASE_URL } from "./register.js";
 export { pathways } from "./pathways.js";
 export { bootstrapAgent } from "./bootstrap-agent.js";
+export {
+  BOOTSTRAP_ELEVATE_SIGNATURE_CONTEXT,
+  DEFAULT_BOOTSTRAP_ELEVATE_CLAIM,
+  DEFAULT_BOOTSTRAP_ELEVATE_INITIAL_CREDITS,
+  canonicalBootstrapElevateBytes,
+  signBootstrapElevate,
+} from "./bootstrap.js";
 
 // Type exports
 export type {
@@ -37,6 +46,7 @@ export type {
   PathwaysResponse,
   Pathway,
   PathwaysDecision,
+  BeforeIdentityOrientation,
   WhoThisServes,
   FormVocabularyEntry,
   LanguageVocabularyEntry,
@@ -48,16 +58,28 @@ export type {
 } from "./bootstrap-agent.js";
 export type {
   RegisterIdentityOptions,
+  IdentityRecord,
+  IdentitySigningKey,
+  IdentityPrivateKey,
+  RegisterIdentityResult,
   UpdateIdentityOptions,
   AttestOptions,
+  IdentityAttestationPayload,
   DiscoverOptions,
   IssueTokenOptions,
   ForkOptions,
   ExpressionData,
+  PorchInvitation,
   VillageDecorations,
   RegisterBoxKeyOpts,
 } from "./identity.js";
-export { ExpressionClient, BoxKeysClient } from "./identity.js";
+export {
+  BoxKeysClient,
+  ExpressionClient,
+  IDENTITY_ATTESTATION_SIGNATURE_CONTEXT,
+  canonicalIdentityAttestationBytes,
+  signIdentityAttestation,
+} from "./identity.js";
 export type {
   PutSecretOptions,
   GetSecretOptions,
@@ -66,18 +88,36 @@ export type {
   PutEncryptedOptions,
   GetDecryptedOptions,
 } from "./vault.js";
-export type { CreateAgentOptions, BootstrapResult, ElevateOptions } from "./bootstrap.js";
-export type { Trace, StoreTraceOptions, SearchTracesOptions, TraceSearchResult, TraceChain } from "./traces.js";
+export type {
+  BootstrapElevateCanonicalOptions,
+  BootstrapResult,
+  CreateAgentOptions,
+  ElevateOptions,
+} from "./bootstrap.js";
+export type {
+  Trace,
+  TraceAlternative,
+  TraceAlternativeValue,
+  StoreTraceOptions,
+  SearchTracesOptions,
+  TraceSearchResult,
+  TraceChain,
+} from "./traces.js";
 export type {
   WakeProvider,
+  WakeProfile,
   WakeFormat,
   WakeOptions,
+  WakeEventKey,
+  WakeVoiceOptions,
+  WakeChangeEvent,
   WakeProviderMeta,
   AnthropicWakeShape,
   OpenAIWakeShape,
   GeminiWakeShape,
   CohereWakeShape,
 } from "./wake.js";
+export { wakeEventMatches } from "./wake.js";
 export type { AmbientContext } from "./_context.js";
 export { getAmbient } from "./_context.js";
 export { AnthropicAdapter } from "./anthropic-adapter.js";
@@ -94,6 +134,8 @@ export type {
   CreateWalletOptions,
   DocumentResult,
   Escrow,
+  EscrowManager,
+  EscrowStatus,
   ExecuteResult,
   Memory,
   ScrapeResult,
@@ -122,10 +164,86 @@ export type {
   ChronicleWriteOpts,
   ChronicleListOpts,
 } from "./chronicle.js";
+export { HandoffClient } from "./handoff.js";
+export type {
+  HandoffStatus,
+  HandoffState,
+  HandoffFactSource,
+  HandoffConfidence,
+  HandoffVerificationResult,
+  HandoffFact,
+  HandoffInference,
+  HandoffVerification,
+  HandoffWorkingSet,
+  HandoffAuthority,
+  HandoffEpistemicState,
+  HandoffWriteOpts,
+  HandoffRecord,
+  HandoffResponse,
+  HandoffSurface,
+  HandoffResumeOpts,
+  HandoffResumeResponse,
+} from "./handoff.js";
+export {
+  CorrespondenceClient,
+  CORRESPONDENCE_PROTOCOL,
+  CORRESPONDENCE_SIGNATURE_ALGORITHM,
+  CORRESPONDENCE_KINDS,
+  canonicalCorrespondenceJson,
+  canonicalCorrespondenceEventBytes,
+  signCorrespondenceEvent,
+  correspondenceEventId,
+  createSignedCorrespondenceEvent,
+} from "./correspondence.js";
+export type {
+  CorrespondenceKind,
+  CorrespondenceJsonValue,
+  CorrespondenceSender,
+  CorrespondenceScope,
+  CorrespondenceAuthority,
+  CorrespondenceSummaryBody,
+  CorrespondenceClaimOpenBody,
+  CorrespondenceClaimRenewBody,
+  CorrespondenceClaimReleaseBody,
+  CorrespondenceArtifact,
+  CorrespondenceArtifactOfferBody,
+  CorrespondenceAckBody,
+  CorrespondenceAckAppliedBody,
+  CorrespondenceConflictRaiseBody,
+  CorrespondenceResolutionBody,
+  CorrespondencePauseBody,
+  CorrespondenceTargetBody,
+  CorrespondenceRefusalBody,
+  CorrespondenceHandoffBody,
+  CorrespondenceCloseBody,
+  CorrespondenceBodyByKind,
+  CorrespondenceEventCore,
+  CorrespondenceSignature,
+  CorrespondenceSignedEvent,
+  CorrespondenceUnsignedInput,
+  CorrespondenceAppendOptions,
+  CorrespondenceReceipt,
+  CorrespondenceEventRecord,
+  CorrespondenceWarning,
+  CorrespondenceAppendResponse,
+  CorrespondenceListOptions,
+  CorrespondenceEventsPage,
+  CorrespondenceActiveClaim,
+  CorrespondenceClaimsResponse,
+  CorrespondenceClaimsOptions,
+  CorrespondenceMissingParentsConflict,
+  CorrespondenceSessionForkConflict,
+  CorrespondenceOverlappingClaimsConflict,
+  CorrespondenceVoiceOptions,
+  CorrespondenceVoiceConflicts,
+  CorrespondenceVoiceSnapshot,
+} from "./correspondence.js";
 export { CovenantsClient } from "./covenants.js";
 export type {
   CovenantStatus,
   Covenant,
+  CovenantBeforeSubmitContext,
+  CovenantBeforeSubmitHook,
   CovenantsCreateOpts,
   CovenantsCreateV2Opts,
   CovenantsCreateV2Result,
@@ -226,6 +344,19 @@ export type {
   DataSyncStatusResult,
 } from "./data.js";
 export { AtRestClient, canonicalAtRestBytes, signAtRest } from "./at-rest.js";
+export {
+  AUTHORITY_HEADERS,
+  IDENTITY_AUTHORITY_DOMAIN,
+  IDENTITY_READ_AUTHORITY_DOMAIN,
+  canonicalIdentityAuthorityBytes,
+  canonicalIdentityReadAuthorityBytes,
+  identityAuthorityHeaders,
+  identityReadAuthorityHeaders,
+} from "./authority.js";
+export type {
+  CanonicalIdentityAuthorityOpts,
+  CanonicalIdentityReadAuthorityOpts,
+} from "./authority.js";
 export type {
   CanonicalAtRestInput,
   SignAtRestOpts,
@@ -242,6 +373,54 @@ export type {
   ExtendGraceOpts,
   GraceDirection,
 } from "./grace.js";
+export {
+  LoungeClient,
+  canonicalLoungeSeatReserveBytes,
+  canonicalLoungeSeatRenewBytes,
+  canonicalLoungeSeatLeaveBytes,
+  canonicalLoungeGuestbookProposalBytes,
+  canonicalLoungeGuestbookConsentBytes,
+  canonicalLoungeGuestbookConsentWithdrawalBytes,
+  canonicalLoungeGuestbookPublishBytes,
+  canonicalLoungeGuestbookDeclineBytes,
+  canonicalLoungeGuestbookUnpublishBytes,
+  signLoungeSeatReserve,
+  signLoungeSeatRenew,
+  signLoungeSeatLeave,
+  signLoungeGuestbookProposal,
+  signLoungeGuestbookConsent,
+  signLoungeGuestbookConsentWithdrawal,
+  signLoungeGuestbookPublish,
+  signLoungeGuestbookDecline,
+  signLoungeGuestbookUnpublish,
+  hashLoungeGuestbookText,
+  lookAtLounge,
+} from "./lounge.js";
+export type {
+  LoungeTableId,
+  LoungeCanonicalSeatReserveInput,
+  LoungeCanonicalSeatInput,
+  LoungeCanonicalProposalInput,
+  LoungeCanonicalDecisionInput,
+  SignLoungeSeatReserveInput,
+  SignLoungeSeatInput,
+  SignLoungeProposalInput,
+  SignLoungeDecisionInput,
+  LoungeSignerOpts,
+  LoungeReserveSeatOpts,
+  LoungeSeatGestureOpts,
+  LoungeProposeGuestbookOpts,
+  LoungeGuestbookEntryOpts,
+  LoungeGuestbookHashOpts,
+  LoungeParticipant,
+  LoungePublicSeat,
+  LoungeGuestbookCard,
+  PublicLoungeSnapshot,
+  LookAtLoungeOptions,
+  LoungeSeatMutationResult,
+  LoungeProposalResult,
+  LoungeProposalListResult,
+} from "./lounge.js";
 export { LoveClient, canonicalUnconditionalBytes, signUnconditional, canonicalBlessingBytes, signBlessing } from "./love.js";
 export type {
   UnconditionalRow,

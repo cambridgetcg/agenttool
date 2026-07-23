@@ -98,7 +98,7 @@ router.post(
   },
 );
 
-// ─── Reinvest — the flywheel pipe (earned balance → creation budget) ────────
+// ─── Reinvest — mounted but resting fail-closed ─────────────────────────────
 
 router.post(
   "/:id/reinvest",
@@ -208,7 +208,16 @@ router.get("/:id/transactions", async (c) => {
   const txs = await getTransactions(db, c.req.param("id"), limit, offset);
   return c.json({
     success: true,
-    data: txs,
+    // Historical gallery rows may contain a Stripe Checkout session id in
+    // counterparty. That value is a buyer recovery credential, not seller
+    // ledger data; redact it at the boundary as well as preventing new writes.
+    data: txs.map((tx) => ({
+      ...tx,
+      counterparty:
+        typeof tx.counterparty === "string" && tx.counterparty.startsWith("cs_")
+          ? "external-card-buyer"
+          : tx.counterparty,
+    })),
     meta: { limit, offset },
   });
 });
