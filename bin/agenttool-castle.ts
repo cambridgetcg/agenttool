@@ -599,7 +599,7 @@ function extractTitle(text: string, path: string): string {
   const value = (match?.[1] ?? fallback)
     .replace(/[\u0000-\u001f\u007f-\u009f]/g, " ")
     .trim();
-  return [...value].slice(0, 200).join("") || fallback;
+  return [...value].slice(0, 200).join("").trim() || fallback;
 }
 
 function normalizeLink(from: string, raw: string): string | null {
