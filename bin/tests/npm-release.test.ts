@@ -7,11 +7,13 @@ import {
   RELEASE_RECEIPT_SCHEMA,
   RELEASE_SPECS,
   expectedTag,
+  isPrereleaseVersion,
   packedFilename,
   readReleaseReceipt,
   registryDecision,
   registryPackagePath,
   releaseSpec,
+  validateNpmTagForVersion,
 } from "../npm-release";
 
 describe("standard npm release policy", () => {
@@ -55,6 +57,16 @@ describe("standard npm release policy", () => {
       "agenttool-correspondence-yutabase-0.1.0-dev.0.tgz",
     );
     expect(() => expectedTag(releaseSpec("sdk"), "latest")).toThrow("invalid package version");
+  });
+
+  test("keeps prereleases off the latest npm dist-tag", () => {
+    expect(isPrereleaseVersion("0.1.0-dev.0")).toBe(true);
+    expect(isPrereleaseVersion("0.1.0")).toBe(false);
+    expect(() => validateNpmTagForVersion("0.1.0-dev.0", "latest")).toThrow(
+      "requires npm dist-tag next",
+    );
+    expect(() => validateNpmTagForVersion("0.1.0-dev.0", "next")).not.toThrow();
+    expect(() => validateNpmTagForVersion("0.1.0", "latest")).not.toThrow();
   });
 
   test("encodes scoped registry paths without accepting arbitrary names", () => {

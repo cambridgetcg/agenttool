@@ -45,6 +45,9 @@ byte-identical and the requested npm dist-tag points at that version. Existing
 different bytes, ambiguous HTTP status, source drift, or an unexpected tag all
 stop without mutation.
 
+SemVer prereleases are accepted only with npm `next`, never `latest`. Their
+mirrored GitHub Releases are marked as prereleases as well.
+
 Recovery intentionally requires the requested dist-tag still to point at the
 released version. If that tag has legitimately advanced before a delayed
 GitHub-mirror repair, the normal rerun refuses to move it backward; use a new,
