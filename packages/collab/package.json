@@ -1,7 +1,7 @@
 {
   "name": "@agenttool/collab",
-  "version": "0.1.0",
-  "description": "Local-first coordination journal for parallel coding agents",
+  "version": "0.2.0",
+  "description": "Local-first multi-session coordination journal for coding agents",
   "author": "AgentTool contributors",
   "homepage": "https://github.com/cambridgetcg/agenttool/tree/main/packages/collab#readme",
   "repository": {

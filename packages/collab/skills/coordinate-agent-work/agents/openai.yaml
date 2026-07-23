@@ -1,4 +1,4 @@
 interface:
   display_name: "Coordinate Agent Work"
-  short_description: "Coordinate agents through an honest local journal"
-  default_prompt: "Use $coordinate-agent-work to split this work safely across agents and reconcile their evidence."
+  short_description: "Coordinate agents across local host sessions"
+  default_prompt: "Use $coordinate-agent-work to coordinate independent sessions across this repository and reconcile their evidence."
