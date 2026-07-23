@@ -110,4 +110,5 @@ This is an original agent workflow inspired by Nen's personalized expression
 and its use of meaningful conditions and limitations, including Chain Jail's
 narrow target vow. See the
 [official NTV glossary](https://www.ntv.co.jp/hunterhunter/dictionary/index.html)
-and [VIZ chapter 83](https://www.viz.com/shonenjump/hunter-x-hunter-chapter-83/chapter/5040).
+and [official VIZ series page](https://www.viz.com/hunter-x-hunter) for source
+context.

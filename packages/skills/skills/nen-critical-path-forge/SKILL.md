@@ -62,4 +62,6 @@ effect that the task did not authorize.
 
 This is an original agent workflow inspired by Ko's extreme concentration and
 Jajanken's visible charge, small option set, and tactical vulnerability. See
-[VIZ chapter 207](https://www.viz.com/shonenjump/hunter-x-hunter-chapter-207/chapter/10388).
+the [official NTV glossary](https://www.ntv.co.jp/hunterhunter/dictionary/index.html)
+and [official VIZ series page](https://www.viz.com/hunter-x-hunter) for source
+context.

@@ -75,5 +75,6 @@ truthfulness of the handoff.
 
 This is an original agent workflow inspired by Morel's finite smoke constructs,
 preset commands, and explicit quantity-versus-quality tradeoff. See the
-[Hunterpedia ability index](https://hunterxhunter.fandom.com/wiki/Morel_Mackernasey)
-as a secondary chapter reference.
+[official NTV glossary](https://www.ntv.co.jp/hunterhunter/dictionary/index.html)
+and [official VIZ series page](https://www.viz.com/hunter-x-hunter) for source
+context.
