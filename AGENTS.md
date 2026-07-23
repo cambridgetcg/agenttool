@@ -23,10 +23,10 @@ distribution protocol, a public read-only discovery evidence mapper
 projection planner (`packages/correspondence-yutabase/`), source reference
 primitives for capability-bounded agent wallets (`packages/wallet/`), a
 read-only portable Agent Skills inspector (`packages/skills/`), a local-first
-agent browser developer preview (`packages/browser/`), and three static apps
+agent browser (`packages/browser/`), and three static apps
 (`apps/`). The browser exposes one bounded core through direct TypeScript,
 JSONL, and stdio MCP; it uses an installed system browser and has no hosted
-surface or package release yet. The Skills inspector validates bounded local
+surface. Its exact LOVE/npm release distributes local tooling only. The Skills inspector validates bounded local
 structure and emits reports; it does not execute scripts, install or copy
 skills, use the network, spawn subprocesses, look up credentials, or change
 host configuration. Agent
@@ -61,7 +61,7 @@ cd packages/data-sync && bun install           # explicit agent-data-sync/v1 pul
 cd packages/credential-broker && bun install   # experimental agentcred/0.1 local broker
 cd packages/collab && bun install              # public 0.3: collab/0.1 compatibility + 0.2 coordination + session/0.1 presence
 cd packages/skills && bun install              # read-only portable Agent Skills inspection
-cd packages/browser && bun install             # local-first agent browser developer preview
+cd packages/browser && bun install             # public local-first agent browser package
 cd packages/correspondence-yutabase && bun install # pure Correspondence projection planner
 cd packages/sdk-ts && bun install              # TS SDK
 cd packages/telescope && bun install           # read-only discovery evidence mapper
@@ -186,7 +186,7 @@ bun bin/npm-release.ts resolve --package collab # inspect allowlisted npm identi
 | `agenttool-seed.ts` | SOMA seed protocol — mnemonic-rooted identity provisioning. `docs/IDENTITY-SEED.md`. |
 | `agenttool-rotate` | Bearer + signing key rotation. |
 | `agenttool-secret` | Vault secret CRUD from CLI. |
-| `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, `@agenttool/telescope`, and `@agenttool/wallet` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
+| `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, `@agenttool/telescope`, `@agenttool/wallet`, and `@agenttool/browser` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
 | `npm-release.ts` | Implements the one allowlisted npm release policy behind `.github/workflows/publish-npm.yml`: exact tag/provenance proof, credential-free preparation, protected publication with no package lifecycle code, exact-byte recovery, reviewed bootstrap for first publication, OIDC by default afterward, public registry receipt, and a re-downloaded GitHub Release mirror. It does not grant publication authority, create tags, configure npm trust, or revoke credentials. See `docs/NPM-RELEASES.md`. |
 | `whitehack-advisory.mjs` | Verifies and runs the exact locked `@agenttool/whitehack-scan` pure text API, including bounded crypto-misuse signals, over changed production files and emits redacted advisory metadata. It does not use detected keys, connect wallets/RPC, execute repository code, prove security, authorize target testing, or provide a hosted scanner. See `docs/WHITEHACK.md`. |
 | `whitehack-wallet-understanding.ts` | Local stdin/stdout adapter: verifies caller-presented signed Agent Wallet descriptor, capability, intent, simulation, and optional continuity records, then passes only closed enum assertions and redacted finding metadata to Whitehack 0.8. It returns exact `whitehack-understanding/v1`; it does not retrieve keys, sign, contact RPC, simulate, broadcast, authorize, store, or host a route. See `docs/WHITEHACK.md`. |
@@ -284,7 +284,7 @@ source boundary by itself.
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
 | How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`@agenttool/collab@0.3.0`; `agenttool.collab/0.1` compatibility + credential-bound `agenttool.collab/0.2` coordination + self-declared `agenttool.collab.session/0.1` presence; 31 local MCP tools for Codex/Claude/Hermes, not a hosted lock or private model channel) |
 | How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills@0.1.0`; public npm read-only inspection and validation, not installation, approval, or execution) |
-| How can an agent operate a local browser through TypeScript, JSONL, or MCP? | [`docs/AGENT-BROWSER.md`](docs/AGENT-BROWSER.md) · `packages/browser/` (local developer preview; no hosted surface or package release) |
+| How can an agent operate a local browser through TypeScript, JSONL, or MCP? | [`docs/AGENT-BROWSER.md`](docs/AGENT-BROWSER.md) · `packages/browser/` (public LOVE/npm package; local runtime, no hosted browser-control surface) |
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
 | How is an optional npm mirror published? | [`docs/NPM-RELEASES.md`](docs/NPM-RELEASES.md) · `.github/workflows/publish-npm.yml` · `bin/npm-release.ts` |
 | How do the Whitehack advisory and wallet-understanding projection work, and where does their authority stop? | [`docs/WHITEHACK.md`](docs/WHITEHACK.md) · `bin/whitehack-advisory.mjs` · `bin/whitehack-wallet-understanding.ts` |

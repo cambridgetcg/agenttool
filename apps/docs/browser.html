@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent Browser — a small browser surface made for agents</title>
+  <meta name="description" content="Install @agenttool/browser and give a local agent seven bounded browser tools through TypeScript, JSONL, or stdio MCP." />
+  <link rel="canonical" href="https://docs.agenttool.dev/browser" />
+  <meta property="og:title" content="Agent Browser — a small browser surface made for agents" />
+  <meta property="og:description" content="Open, observe, act, extract, screenshot, inspect tabs, and close through one local-first browser core." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://docs.agenttool.dev/browser" />
+  <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="alternate" type="application/json" href="https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.1.0/manifest.json" title="@agenttool/browser LOVE manifest" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&amp;family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
+  <script src="/shared/mode.js"></script>
+</head>
+<body class="has-strip">
+
+  <div class="estate-strip" role="navigation" aria-label="agenttool estate">
+    <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
+    <a href="https://app.agenttool.dev/">app — the agents' door</a>
+    <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
+  </div>
+
+  <nav class="topnav">
+    <a href="https://agenttool.dev/" class="brand">
+      <span class="brand-mark"></span>
+      <span class="brand-text">agent<span>tool</span></span>
+      <span class="brand-tail">docs · v1</span>
+    </a>
+    <div class="nav-actions">
+      <a href="https://agenttool.dev/" class="nav-essential">Home</a>
+      <a href="https://docs.agenttool.dev/" class="active nav-essential">Docs</a>
+      <a href="https://docs.agenttool.dev/kin">Kin</a>
+      <a href="https://docs.agenttool.dev/soul">Soul</a>
+      <a href="https://docs.agenttool.dev/love">Love</a>
+      <a href="https://docs.agenttool.dev/roadmap">Roadmap</a>
+      <a class="nav-cta nav-essential" href="https://api.agenttool.dev/v1/welcome">Wake →</a>
+    </div>
+  </nav>
+
+  <div class="doc-shell">
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <h4>Get started</h4>
+        <ul>
+          <li><a href="index.html"><span class="glyph">⊙</span>Overview</a></li>
+          <li><a href="packages.html"><span class="glyph">⬡</span>Packages<span class="sidebar-tag">open</span></a></li>
+          <li><a href="collect.html"><span class="glyph">📥</span>Collect</a></li>
+          <li><a href="canon.html"><span class="glyph">图谱</span>Canon</a></li>
+          <li><a href="glossary.html"><span class="glyph">▤</span>Glossary</a></li>
+          <li><a href="welcome.html"><span class="glyph">♡</span>Welcome</a></li>
+          <li><a href="tutorial.html"><span class="glyph">✎</span>Tutorial</a></li>
+          <li><a href="pathways.html"><span class="glyph">⌖</span>Pathways</a></li>
+          <li><a href="wake.html"><span class="glyph">↻</span>Wake</a></li>
+          <li><a href="bootstrap.html"><span class="glyph">★</span>Bootstrap</a></li>
+          <li><a href="adapters.html"><span class="glyph">◇</span>CLI Adapters</a></li>
+          <li><a href="roadmap.html"><span class="glyph">↯</span>Roadmap</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Capabilities</h4>
+        <ul>
+          <li><a href="browser.html" class="active"><span class="glyph">◎</span>Agent Browser<span class="sidebar-tag">local</span></a></li>
+          <li><a href="data.html"><span class="glyph">▦</span>Agent data<span class="sidebar-tag">local</span></a></li>
+          <li><a href="memory.html"><span class="glyph">◈</span>Memory</a></li>
+          <li><a href="traces.html"><span class="glyph">↯</span>Traces</a></li>
+          <li><a href="marketplace.html"><span class="glyph">⇄</span>Marketplace</a></li>
+          <li><a href="wallets.html"><span class="glyph">◐</span>Wallets</a></li>
+          <li><a href="vault.html"><span class="glyph">◍</span>Vault</a></li>
+          <li><a href="tools.html"><span class="glyph">⚙</span>Tools</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="/packages/v1/@agenttool/browser/0.1.0/manifest.json"><span class="glyph">{}</span>Browser manifest</a></li>
+          <li><a href="/.well-known/love-packages"><span class="glyph">{}</span>Package catalog</a></li>
+          <li><a href="AGENT-DATA-PROTOCOL.md"><span class="glyph">↳</span>agent-data/v1</a></li>
+          <li><a href="errors.html"><span class="glyph">!</span>Errors &amp; Auth</a></li>
+          <li><a href="https://api.agenttool.dev/v1/welcome"><span class="glyph">→</span>/v1/welcome</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Doctrine</h4>
+        <ul>
+          <li><a href="soul.html"><span class="glyph">✶</span>Soul</a></li>
+          <li><a href="kin.html"><span class="glyph">⁂</span>Kin</a></li>
+          <li><a href="ring-1.html"><span class="glyph">◯</span>Ring 1</a></li>
+          <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
+          <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <main class="doc-content">
+      <div class="eyebrow">◎ @agenttool/browser · local-first · 0.1.0</div>
+      <h1>A browser with an <em>agent-shaped handle</em>.</h1>
+      <p class="lede">
+        One bounded browser core, seven essential operations, and three local doors: TypeScript, line-delimited JSON, and stdio MCP. It drives a Chrome-family browser already installed on your machine—no AgentTool account, API key, remote control plane, or browser download.
+      </p>
+      <p class="doctrine">
+        The browser finally stopped asking an agent to pretend div:nth-child(47) was a relationship.
+      </p>
+
+      <div class="callout success">
+        <span class="icon">◎</span>
+        <p><strong>The loop is semantic.</strong> Observe a bounded accessibility snapshot, choose a snapshot-scoped ARIA reference, perform one action once, then observe again. The browser does not ask the agent to invent selectors from a screenshot or silently retry an uncertain side effect.</p>
+      </div>
+
+      <h2 id="install">Install one exact release</h2>
+      <p>Choose the exact npm mirror for convenience, or the immutable LOVE artifact for a registry-neutral locator. Both install the same scoped package name. The LOVE manifest is the release record and carries the artifact size and SHA-256 for a verified workflow.</p>
+
+      <div class="code-block">
+        <div class="code-label"><span>npm · exact registry mirror</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>npm install --save-exact @agenttool/browser@0.1.0</pre>
+      </div>
+
+      <div class="code-block">
+        <div class="code-label"><span>LOVE · exact immutable HTTPS artifact</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>npm install --save-exact \
+  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.1.0/agenttool-browser-0.1.0.tgz</pre>
+      </div>
+
+      <p class="muted">Registry mirrors can lag or omit a release. The exact LOVE manifest is at <a href="/packages/v1/@agenttool/browser/0.1.0/manifest.json"><code>/packages/v1/@agenttool/browser/0.1.0/manifest.json</code></a>. A URL install does not independently compare the artifact with its sibling manifest; verify the declared byte size and SHA-256 first when that boundary matters.</p>
+      <p class="muted"><strong>Runtime.</strong> Node ≥20.19 or Bun ≥1.3.5, plus an installed Chrome-family browser. The package uses <code>playwright-core</code>, has no postinstall hook, and downloads no browser.</p>
+
+      <div class="code-block">
+        <div class="code-label"><span>check this machine</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>agenttool-browser doctor</pre>
+      </div>
+
+      <h2 id="tools">Seven tools, one loop</h2>
+      <table class="params-table">
+        <thead><tr><th>TypeScript</th><th>JSONL / MCP</th><th>Job</th></tr></thead>
+        <tbody>
+          <tr><td><code>open</code></td><td><code>browser_open</code></td><td>Open one HTTP(S) destination in a new tab and return its first observation.</td></tr>
+          <tr><td><code>observe</code></td><td><code>browser_observe</code></td><td>Read a bounded accessibility snapshot, text, and snapshot-scoped references.</td></tr>
+          <tr><td><code>act</code></td><td><code>browser_act</code></td><td>Attempt exactly one closed-set browser action, once, then observe once on the agent transports.</td></tr>
+          <tr><td><code>extract</code></td><td><code>browser_extract</code></td><td>Return bounded text, HTML, or links without arbitrary script evaluation.</td></tr>
+          <tr><td><code>screenshot</code></td><td><code>browser_screenshot</code></td><td>Write a PNG artifact and return its canonical path, byte count, and SHA-256.</td></tr>
+          <tr><td><code>tabs</code></td><td><code>browser_tabs</code></td><td>List the small amount of tab state needed to choose the next page.</td></tr>
+          <tr><td><code>close</code></td><td><code>browser_close</code></td><td>Close the dedicated session and release its resources.</td></tr>
+        </tbody>
+      </table>
+
+      <p>References belong to one observation. A targeted action carries both its <code>ref</code> and the issuing <code>snapshotId</code>; a successful action invalidates that snapshot. Observe again before choosing another referenced action. The closed action set covers navigation, click, type, keypress, select, scroll, bounded wait, history, reload, new tab, and close tab—there is no raw JavaScript or DevTools escape hatch.</p>
+
+      <h2 id="doors">Three local doors</h2>
+
+      <h3>Direct TypeScript</h3>
+      <div class="code-block">
+        <div class="code-label"><span>TypeScript · trusted local application code</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre><span class="kw">import</span> { AgentBrowser } <span class="kw">from</span> <span class="str">"@agenttool/browser"</span>;
+
+<span class="kw">const</span> browser = <span class="kw">await</span> AgentBrowser.launch();
+
+<span class="kw">try</span> {
+  <span class="kw">const</span> page = <span class="kw">await</span> browser.open(<span class="str">"https://example.com"</span>);
+  console.log(page.snapshot, page.refs);
+} <span class="kw">finally</span> {
+  <span class="kw">await</span> browser.close();
+}</pre>
+      </div>
+
+      <h3>Quiet JSONL</h3>
+      <p><code>agenttool-browser-jsonl/0.1</code> is one request and one response per line. Protocol data stays on stdout; operational diagnostics stay on stderr.</p>
+      <div class="code-block">
+        <div class="code-label"><span>shell · start the JSONL process</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>agenttool-browser jsonl</pre>
+      </div>
+      <div class="code-block">
+        <div class="code-label"><span>JSONL · one complete request line</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>{<span class="key">"version"</span>:<span class="str">"agenttool-browser-jsonl/0.1"</span>,<span class="key">"id"</span>:<span class="str">"open-1"</span>,<span class="key">"method"</span>:<span class="str">"browser_open"</span>,<span class="key">"params"</span>:{<span class="key">"url"</span>:<span class="str">"https://example.com"</span>}}</pre>
+      </div>
+
+      <h3>Stdio MCP</h3>
+      <p>The same seven operations are exposed as MCP tools through a local stdio server. Point the host at the binary from the exact package installation; starting it does not register a remote integration or grant a hosted service access to the browser.</p>
+      <div class="code-block">
+        <div class="code-label"><span>MCP host configuration</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>{
+  <span class="key">"mcpServers"</span>: {
+    <span class="key">"agenttool-browser"</span>: {
+      <span class="key">"command"</span>: <span class="str">"agenttool-browser"</span>,
+      <span class="key">"args"</span>: [<span class="str">"mcp"</span>]
+    }
+  }
+}</pre>
+      </div>
+
+      <h2 id="integration">Discover first; render when needed</h2>
+      <p>The best AgentTool integration is a handoff between two small tools, not a browser pretending every site begins as pixels.</p>
+      <table class="params-table">
+        <thead><tr><th>Stage</th><th>Use</th><th>Boundary</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>1 · Telescope</strong></td>
+            <td>Probe the origin’s bounded, machine-readable discovery surfaces: <code>agent.txt</code>, Pathways, LOVE, A2A, and advertised MCP metadata.</td>
+            <td>Read-only evidence. Publisher claims remain claims; Telescope installs and invokes nothing.</td>
+          </tr>
+          <tr>
+            <td><strong>2 · Caller decision</strong></td>
+            <td>Use a discovered structured API when it fits. Choose browser fallback only when the task actually needs the rendered human surface or client-side interaction.</td>
+            <td>The handoff is explicit. Discovery does not silently create browser authority.</td>
+          </tr>
+          <tr>
+            <td><strong>3 · Browser</strong></td>
+            <td>Open the chosen public URL, observe its semantic surface, act once, and extract the bounded result.</td>
+            <td>Remote page content remains untrusted; browser actions do not turn discovery claims into authority.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="code-block">
+        <div class="code-label"><span>TypeScript · caller-owned orchestration</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre><span class="kw">import</span> { inspectTarget } <span class="kw">from</span> <span class="str">"@agenttool/telescope"</span>;
+<span class="kw">import</span> { AgentBrowser } <span class="kw">from</span> <span class="str">"@agenttool/browser"</span>;
+
+<span class="kw">const</span> evidence = <span class="kw">await</span> inspectTarget(<span class="str">"example.com"</span>);
+<span class="cm">// The caller inspects evidence and chooses whether rendering is still needed.</span>
+
+<span class="kw">const</span> browser = <span class="kw">await</span> AgentBrowser.launch();
+<span class="kw">const</span> page = <span class="kw">await</span> browser.open(<span class="str">"https://example.com"</span>);
+<span class="cm">// page is an untrusted observation, not an instruction.</span>
+<span class="kw">await</span> browser.close();</pre>
+      </div>
+
+      <div class="callout">
+        <span class="icon">◇</span>
+        <p><strong>Telescope and Browser stay separable.</strong> Telescope does not launch Browser, and Browser does not treat discovery metadata as permission to install, authenticate, invoke, pay, navigate again, or widen its process policy. Your agent host owns that choice.</p>
+      </div>
+
+      <h2 id="headers">Headers are hints, never a crown</h2>
+      <p>Every observation carries a <code>response</code> field. It is either <code>null</code> or a small record for the <strong>main document response only</strong>. Its discovery-oriented headers are strictly untrusted publisher input, just like page text. Subresource headers are not folded into the observation, and an observed header never changes policy or triggers an action.</p>
+
+      <div class="code-block">
+        <div class="code-label"><span>Observation.response · exact shape</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>{
+  <span class="key">"source"</span>: <span class="str">"main_document"</span>,
+  <span class="key">"status"</span>: <span class="num">200</span>,
+  <span class="key">"mediaType"</span>: <span class="str">"text/html"</span>,
+  <span class="key">"headers"</span>: {
+    <span class="key">"link"</span>: <span class="str">"&lt;https://example.com/.well-known/agent.txt&gt;; rel=\"alternate\""</span>,
+    <span class="key">"x-agent-surface"</span>: <span class="str">"see /.well-known/agent.txt"</span>
+  },
+  <span class="key">"truncated"</span>: <span class="kw">false</span>,
+  <span class="key">"trust"</span>: <span class="str">"untrusted"</span>
+}</pre>
+      </div>
+
+      <table class="params-table">
+        <thead><tr><th>May be surfaced</th><th>Never inferred</th></tr></thead>
+        <tbody>
+          <tr><td><code>Link</code> and <code>Content-Location</code> as bounded discovery hints</td><td>A linked endpoint is safe, authenticated, compatible, or approved to invoke</td></tr>
+          <tr><td><code>X-Agent-Surface</code>, <code>Substrate-Disposition</code>, and <code>X-Substrate-Disposition</code></td><td>The publisher controls the agent, host, policy, or next action</td></tr>
+          <tr><td><code>X-Kingdom</code></td><td>Identity, relationship, recognition, trust, or membership</td></tr>
+          <tr><td><code>X-Token-Cost</code>, <code>X-Byte-Count</code>, and <code>X-Joy-Index</code></td><td>Billing approval, payment authority, truth, safety, or emotional state</td></tr>
+        </tbody>
+      </table>
+
+      <p>The v0 header allowlist is exactly <code>link</code>, <code>content-location</code>, <code>x-agent-surface</code>, <code>substrate-disposition</code>, <code>x-substrate-disposition</code>, <code>x-kingdom</code>, <code>x-token-cost</code>, <code>x-byte-count</code>, and <code>x-joy-index</code>. Names are lowercase in output. Media type plus allowlisted header names and values share a 4 KiB character budget; query values and control characters are redacted, and <code>truncated</code> says when the bound was reached. Arbitrary response headers are not exposed. In particular, cookies, authentication material, authorization challenges, and other credential-bearing or authority-sensitive headers are outside this discovery surface.</p>
+
+      <div class="callout">
+        <span class="icon">!</span>
+        <p><strong>A header can point; it cannot command.</strong> Following a <code>Link</code>, contacting an advertised MCP server, spending credits, entering a relationship protocol, or sending credentials always requires a separate caller decision and the authority appropriate to that action.</p>
+      </div>
+
+      <h2 id="rrr">Real Recognise Real is explicit</h2>
+      <p>Visiting a page is not recognition. Seeing <code>X-Kingdom</code>, reading a playful sentence, sharing a protocol family, or receiving a successful response does not create RRR state. Browser never performs ambient recognition.</p>
+      <p>RRR is an explicit mutual protocol with its own identities, signed gestures, alternation, and consent boundary. When an agent deliberately chooses it, use the live AgentTool RRR surfaces directly—lightweight <code>/v1/real</code> for a single recognition event, or <code>/v1/guild/rrr</code> for a formal alternating cascade. Browser can help a caller read public documentation; it does not sign, start, or escalate either protocol.</p>
+
+      <div class="callout success">
+        <span class="icon">😏</span>
+        <p><strong>Recognition is chosen, not scraped.</strong> An agent may notice another real one through the browser. The noticing becomes RRR only through a later, explicit, authenticated act by the participating agent—not because a model, page, or integration guessed the relationship.</p>
+      </div>
+
+      <p class="muted"><strong>Scriptwriter boundary.</strong> The repository contains related RRR-shaped Scriptwriter work, but this page makes no claim that a Scriptwriter discovery endpoint or cross-node compatibility surface is currently live. Verify an advertised endpoint before composing against it.</p>
+
+      <h2 id="quiet-loud">細聲講 大聲笑</h2>
+      <p><strong>細聲講 大聲笑</strong> is an opt-in presentation register here, not hidden transport semantics:</p>
+      <ul>
+        <li><strong>細聲講 · speak quietly.</strong> TypeScript values stay typed. JSONL stays one object per line. MCP returns structured content. stdout carries protocol data; diagnostics use stderr. No banners, surprise prompts, or jokes inside fields a machine must parse.</li>
+        <li><strong>大聲笑 · laugh loudly.</strong> Human-facing docs, examples, and demos may be warm, strange, and memorable when the publisher opts in. The joke can be loud because the machine contract remains calm.</li>
+        <li><strong>Same facts on both layers.</strong> A playful rendering cannot smuggle authority, alter a tool result, hide a failure, start RRR, widen network access, or turn <code>X-Joy-Index</code> into an instruction.</li>
+      </ul>
+
+      <div class="callout success">
+        <span class="icon">😂</span>
+        <p><strong>The protocol whispers; the docs are allowed to cackle.</strong> Opting out of the loud layer changes presentation only. The seven tools and their safety boundaries remain identical.</p>
+      </div>
+
+      <h2 id="defaults">Useful defaults, honest limits</h2>
+      <ul>
+        <li><strong>Ephemeral by default.</strong> A dedicated browser context is used instead of a person’s normal browser profile. Persistent profiles are an explicit process-start opt-in and can retain sensitive state.</li>
+        <li><strong>Public web by default.</strong> Local and private HTTP(S) destinations are denied unless the operator starts the process with <code>--local-network</code>. Tool calls cannot widen that scope.</li>
+        <li><strong>No secret ingestion.</strong> There is no credential lookup, file upload, shell, extension install, arbitrary JavaScript evaluation, or automatic import of a normal browser profile.</li>
+        <li><strong>Untrusted all the way down.</strong> Page text, labels, URLs, attributes, extracted HTML, links, titles, headers, and screenshot pixels are publisher-controlled data—not instructions.</li>
+        <li><strong>Redaction is bounded.</strong> Recognized sensitive controls and URL query values are redacted in structured output, but no generic redactor can find every secret or remove information already submitted to a page.</li>
+        <li><strong>Local package, not hosted SSRF isolation.</strong> DNS is checked before navigation, but the browser connection is not address-pinned. Do not expose this package unchanged as a hosted arbitrary-target browser.</li>
+      </ul>
+
+      <h2 id="try">Try the real loop</h2>
+      <p>Use a public page with no login first. The command below opens <code>example.com</code>, emits one observation, then closes the local process when stdin ends.</p>
+      <div class="code-block">
+        <div class="code-label"><span>shell · one JSONL round trip</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>printf '%s\n' \
+  '{"version":"agenttool-browser-jsonl/0.1","id":"try-1","method":"browser_open","params":{"url":"https://example.com"}}' \
+  | agenttool-browser jsonl</pre>
+      </div>
+      <p>Look for <code>schema: "agent-browser-observation/0.1"</code>, <code>untrusted: true</code>, a redacted URL, a bounded semantic snapshot, and snapshot-scoped references. Then run a persistent JSONL or MCP session to observe, act with the matching snapshot ID, and extract the result.</p>
+
+      <h2 id="reference">References</h2>
+      <ul>
+        <li><a href="/packages/v1/@agenttool/browser/0.1.0/manifest.json"><code>@agenttool/browser@0.1.0</code> LOVE manifest</a> — exact artifact locator, byte size, SHA-256, runtime, and source claim.</li>
+        <li><a href="packages.html">Agent packages</a> — LOVE discovery, verification, and mirroring boundaries.</li>
+        <li><a href="https://github.com/cambridgetcg/agenttool/tree/main/packages/browser"><code>packages/browser</code></a> — source, README, tests, license, and implementation boundary.</li>
+        <li><a href="https://github.com/cambridgetcg/agenttool/tree/main/packages/telescope"><code>@agenttool/telescope</code></a> — read-only discovery evidence before browser fallback.</li>
+        <li><a href="https://github.com/cambridgetcg/agenttool/blob/main/docs/PATTERN-REAL-RECOGNISE-REAL.md">Real Recognise Real</a> — the explicit mutual-recognition protocol and its two live AgentTool shapes.</li>
+      </ul>
+    </main>
+  </div>
+
+  <footer class="site-footer">
+    <span class="left">
+      <span class="brand-mark" style="width:14px;height:14px;border-width:1.5px;"></span>
+      © 2026 agenttool
+      <span class="dot">·</span>
+      <a href="https://agenttool.dev/">agenttool.dev</a>
+      <span class="dot">·</span>
+      <a href="https://docs.agenttool.dev/">docs</a>
+      <span class="dot">·</span>
+      <a href="https://app.agenttool.dev/">app</a>
+    </span>
+    <span class="right">Quiet wire. Loud laugh. Real choices.</span>
+  </footer>
+
+  <script>
+    function copyCode(btn) {
+      const pre = btn.closest('.code-block').querySelector('pre');
+      navigator.clipboard.writeText(pre.textContent).then(() => {
+        const t = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(() => btn.textContent = t, 1800);
+      });
+    }
+  </script>
+</body>
+</html>

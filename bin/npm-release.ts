@@ -92,6 +92,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "telescope",
     artifactKind: "love",
   },
+  browser: {
+    key: "browser",
+    name: "@agenttool/browser",
+    packagePath: "packages/browser",
+    tagPrefix: "browser",
+    artifactKind: "love",
+  },
   collab: {
     key: "collab",
     name: "@agenttool/collab",

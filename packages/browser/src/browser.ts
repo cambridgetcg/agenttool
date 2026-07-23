@@ -7,6 +7,7 @@ import { asBrowserError, BrowserError } from "./errors.js";
 import {
   BrowserNetworkPolicy,
   redactHtmlUrlAttributes,
+  redactUrlReferenceForOutput,
   redactUrlForOutput,
   redactUrlsInText,
 } from "./policy.js";
@@ -29,13 +30,16 @@ import {
   type BrowserLike,
   type BrowserLimits,
   type BrowserProfile,
+  type BrowserResponseLike,
   type BrowserRuntime,
   type ExtractInput,
   type ExtractResult,
   type LocatorLike,
+  type MainDocumentResponse,
   type Observation,
   type ObserveOptions,
   type PageLike,
+  type ResponseHintHeaderName,
   type RuntimeContextOptions,
   type RuntimeLaunchOptions,
   type ScreenshotInput,
@@ -57,6 +61,18 @@ export const DEFAULT_BROWSER_LIMITS: Readonly<BrowserLimits> = Object.freeze({
 const DEFAULT_VIEWPORT = Object.freeze({ width: 1280, height: 720 });
 const DEFAULT_ACTION_TIMEOUT_MS = 10_000;
 const DEFAULT_NAVIGATION_TIMEOUT_MS = 30_000;
+const MAX_RESPONSE_HINT_CHARS = 4_096;
+const RESPONSE_HINT_HEADERS = Object.freeze([
+  "link",
+  "content-location",
+  "x-agent-surface",
+  "substrate-disposition",
+  "x-substrate-disposition",
+  "x-kingdom",
+  "x-token-cost",
+  "x-byte-count",
+  "x-joy-index",
+] as const satisfies readonly ResponseHintHeaderName[]);
 
 interface TabState {
   id: string;
@@ -64,6 +80,9 @@ interface TabState {
   revision: number;
   snapshotId: string | null;
   refs: Map<string, string>;
+  response: MainDocumentResponse | null;
+  responseCapture: Promise<void>;
+  responseSequence: number;
 }
 
 interface ResolvedRef {
@@ -201,10 +220,12 @@ export class AgentBrowser {
     const state = this.registerPage(page);
     this.activeTabId = state.id;
     try {
-      await page.goto(destination.href, {
+      state.response = null;
+      const response = await page.goto(destination.href, {
         waitUntil: "domcontentloaded",
         timeout: this.options.navigationTimeoutMs,
       });
+      this.queueMainDocumentResponse(state, response);
     } catch (error) {
       this.invalidate(state);
       throw asBrowserError(
@@ -332,6 +353,10 @@ export class AgentBrowser {
         redactUrlsInText(await state.page.title()),
         512,
       ).value;
+      await state.responseCapture;
+      const response = state.response
+        ? { ...state.response, headers: { ...state.response.headers } }
+        : null;
       return {
         schema: OBSERVATION_SCHEMA,
         sessionId: this.sessionId,
@@ -344,6 +369,7 @@ export class AgentBrowser {
         snapshot: compact.snapshot,
         text,
         refs: compact.refs,
+        response,
         truncated: {
           snapshot: compact.truncated.snapshot,
           text: textTruncated,
@@ -430,10 +456,11 @@ export class AgentBrowser {
     try {
       switch (action.kind) {
         case "navigate":
-          await state.page.goto(action.url, {
+          state.response = null;
+          this.queueMainDocumentResponse(state, await state.page.goto(action.url, {
             waitUntil: "domcontentloaded",
             timeout: this.options.navigationTimeoutMs,
-          });
+          }));
           break;
         case "click":
           await resolved!.locator.click();
@@ -456,22 +483,25 @@ export class AgentBrowser {
           await state.page.waitForTimeout(action.ms);
           break;
         case "back":
-          await state.page.goBack({
+          state.response = null;
+          this.queueMainDocumentResponse(state, await state.page.goBack({
             waitUntil: "domcontentloaded",
             timeout: this.options.navigationTimeoutMs,
-          });
+          }));
           break;
         case "forward":
-          await state.page.goForward({
+          state.response = null;
+          this.queueMainDocumentResponse(state, await state.page.goForward({
             waitUntil: "domcontentloaded",
             timeout: this.options.navigationTimeoutMs,
-          });
+          }));
           break;
         case "reload":
-          await state.page.reload({
+          state.response = null;
+          this.queueMainDocumentResponse(state, await state.page.reload({
             waitUntil: "domcontentloaded",
             timeout: this.options.navigationTimeoutMs,
-          });
+          }));
           break;
         default:
           throw new BrowserError("invalid_action", "Unsupported browser action.");
@@ -723,11 +753,109 @@ export class AgentBrowser {
       revision: 0,
       snapshotId: null,
       refs: new Map(),
+      response: null,
+      responseCapture: Promise.resolve(),
+      responseSequence: 0,
     };
     this.pageStates.set(page, state);
     this.states.set(state.id, state);
     this.activeTabId = state.id;
+    this.watchMainDocumentResponses(state);
     return state;
+  }
+
+  private watchMainDocumentResponses(state: TabState): void {
+    if (
+      typeof state.page.on !== "function"
+      || typeof state.page.mainFrame !== "function"
+    ) {
+      return;
+    }
+    state.page.on("response", (response) => {
+      try {
+        const request = response.request();
+        if (
+          !request.isNavigationRequest()
+          || request.frame() !== state.page.mainFrame!()
+        ) {
+          return;
+        }
+        this.queueMainDocumentResponse(state, response);
+      } catch {
+        // Response hints are optional metadata. A custom runtime that cannot
+        // identify the main document must not leak a guessed response.
+      }
+    });
+  }
+
+  private queueMainDocumentResponse(
+    state: TabState,
+    candidate: unknown,
+  ): void {
+    if (!isBrowserResponseLike(candidate)) return;
+    const sequence = ++state.responseSequence;
+    const capture = this.readMainDocumentResponse(candidate)
+      .then((response) => {
+        if (state.responseSequence === sequence) state.response = response;
+      })
+      .catch(() => {
+        if (state.responseSequence === sequence) state.response = null;
+      });
+    state.responseCapture = capture;
+  }
+
+  private async readMainDocumentResponse(
+    response: BrowserResponseLike,
+  ): Promise<MainDocumentResponse> {
+    const [contentType, ...values] = await Promise.all([
+      safeHeaderValue(response, "content-type"),
+      ...RESPONSE_HINT_HEADERS.map((name) => safeHeaderValue(response, name)),
+    ]);
+    const rawStatus = response.status();
+    const status = Number.isInteger(rawStatus) && rawStatus >= 0
+      ? rawStatus
+      : 0;
+    const normalizedContentType = sanitizeHeaderValue(
+      "content-type",
+      contentType,
+    );
+    let mediaType = normalizedContentType
+      ? normalizedContentType.split(";", 1)[0]!.trim().toLowerCase()
+      : null;
+    let truncated = false;
+    if (mediaType && mediaType.length > 256) {
+      mediaType = mediaType.slice(0, 256);
+      truncated = true;
+    }
+
+    const headers: Partial<Record<ResponseHintHeaderName, string>> = {};
+    let usedChars = mediaType?.length ?? 0;
+    for (const [index, name] of RESPONSE_HINT_HEADERS.entries()) {
+      const value = sanitizeHeaderValue(name, values[index] ?? null);
+      if (value === null) continue;
+      const overhead = name.length + 2;
+      const available = MAX_RESPONSE_HINT_CHARS - usedChars - overhead;
+      if (available <= 0) {
+        truncated = true;
+        break;
+      }
+      if (value.length > available) {
+        headers[name] = value.slice(0, available);
+        truncated = true;
+        break;
+      }
+      headers[name] = value;
+      usedChars += overhead + value.length;
+    }
+
+    return {
+      source: "main_document",
+      status,
+      mediaType,
+      headers,
+      truncated,
+      trust: "untrusted",
+    };
   }
 
   private getState(tabId?: string): TabState {
@@ -797,10 +925,12 @@ export class AgentBrowser {
     const state = this.registerPage(page);
     if (destination) {
       try {
-        await page.goto(destination.href, {
+        state.response = null;
+        const response = await page.goto(destination.href, {
           waitUntil: "domcontentloaded",
           timeout: this.options.navigationTimeoutMs,
         });
+        this.queueMainDocumentResponse(state, response);
       } catch (error) {
         this.invalidate(state);
         throw asBrowserError(
@@ -887,6 +1017,50 @@ export class AgentBrowser {
       }
     })();
   }
+}
+
+function isBrowserResponseLike(value: unknown): value is BrowserResponseLike {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<BrowserResponseLike>;
+  return (
+    typeof candidate.status === "function"
+    && typeof candidate.headerValue === "function"
+  );
+}
+
+async function safeHeaderValue(
+  response: BrowserResponseLike,
+  name: string,
+): Promise<string | null> {
+  try {
+    return await response.headerValue(name);
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeHeaderValue(
+  name: "content-type" | ResponseHintHeaderName,
+  value: string | null,
+): string | null {
+  if (value === null) return null;
+  let sanitized = value
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (name === "content-location") {
+    sanitized = redactUrlReferenceForOutput(sanitized);
+  } else if (name === "link") {
+    sanitized = sanitized.replace(
+      /<([^>]*)>/g,
+      (_match, reference: string) =>
+        `<${redactUrlReferenceForOutput(reference)}>`,
+    );
+    sanitized = redactUrlsInText(sanitized);
+  } else {
+    sanitized = redactUrlsInText(sanitized);
+  }
+  return sanitized;
 }
 
 async function loadDefaultRuntime(): Promise<BrowserRuntime> {

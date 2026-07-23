@@ -111,6 +111,13 @@ export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
     releaseTag: "telescope-v0.1.0",
     buildCommands: [["bun", "run", "ci"]],
   },
+  {
+    name: "@agenttool/browser",
+    version: "0.1.0",
+    packagePath: "packages/browser",
+    releaseTag: "browser-v0.1.0",
+    buildCommands: [["bun", "run", "ci"]],
+  },
 ] as const;
 
 export interface PackageJson {

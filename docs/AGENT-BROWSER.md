@@ -10,13 +10,13 @@
 
 ## Status
 
-`@agenttool/browser@0.1.0` is a local developer preview and repository source
-truth only. It has not been published to npm, added to the LOVE package
-catalog, deployed, or exposed as an AgentTool-hosted browser. The package
-requires no AgentTool account, API key, credits, Redis, database, or hosted
-control plane.
+`@agenttool/browser@0.1.0` is an Apache-2.0 local runtime distributed through an
+exact LOVE artifact and mirrored to npm and a GitHub Release. The deployed
+catalog and docs distribute bytes and documentation; they do not expose an
+AgentTool-hosted browser. The package requires no AgentTool account, API key,
+credits, Redis, database, or hosted control plane.
 
-The preview uses `playwright-core` to drive a Chrome-family browser already
+The package uses `playwright-core` to drive a Chrome-family browser already
 installed on the caller's machine. There is no postinstall hook and no bundled
 browser download. This keeps browser selection and browser bytes under the
 operator's control.
@@ -32,7 +32,7 @@ pixel-and-selector problem. An agent needs a smaller loop:
 4. extract a bounded result or capture an artifact;
 5. inspect tabs or close the session.
 
-The preview names that loop directly as `open`, `observe`, `act`, `extract`,
+The package names that loop directly as `open`, `observe`, `act`, `extract`,
 `screenshot`, `tabs`, and `close`. Direct TypeScript, JSONL, and MCP share
 those named operations and one core rather than implementing three independent
 browsers. The agent-facing transports deliberately expose a narrower argument
@@ -100,7 +100,7 @@ downloads a browser.
 
 `--profile <directory>` opts into a dedicated persistent profile. Persistence
 can retain cookies, browser storage, history, and authenticated sessions after
-the process ends. The preview refuses the home directory, AgentTool state
+the process ends. The package refuses the home directory, AgentTool state
 directories, the current Git worktree, the configured artifact root, and known
 ordinary Chrome, Chromium, Edge, and Brave profile roots; this is a guardrail,
 not proof that an arbitrary selected directory is empty or safe.
@@ -156,8 +156,38 @@ amount of tab state needed to choose or close a page.
 The character and element limits bound returned results; they do not stop
 Chrome and Playwright from first materializing a remote page's accessibility
 snapshot, text, or markup. An extreme DOM can still consume substantial local
-memory. This preview has no browser-process memory quota and is not a
+memory. This local runtime has no browser-process memory quota and is not a
 resource-isolation boundary.
+
+### Main-document response hints
+
+Every observation carries `response`, either `null` or a bounded projection of
+the current main-document response:
+
+```json
+{
+  "source": "main_document",
+  "status": 200,
+  "mediaType": "text/html",
+  "headers": {
+    "link": "<https://example.com/.well-known/agent.txt>; rel=\"alternate\""
+  },
+  "truncated": false,
+  "trust": "untrusted"
+}
+```
+
+The header allowlist is exactly `link`, `content-location`,
+`x-agent-surface`, `substrate-disposition`, `x-substrate-disposition`,
+`x-kingdom`, `x-token-cost`, `x-byte-count`, and `x-joy-index`. Output names
+are lowercase. Media type, names, and values share a 4 KiB character budget;
+query values and control characters are redacted. Subresource responses,
+cookies, authentication, authorization challenges, and arbitrary headers do
+not cross the observation boundary.
+
+This block is untrusted publisher metadata. A link can advertise discovery but
+cannot authorize a navigation, install, credential use, payment, protocol
+invocation, or relationship.
 
 Artifact directories use the same ownership rule: a missing directory is
 created owner-only, while an existing POSIX directory with group/other
@@ -173,7 +203,7 @@ change policy, reveal a secret, run a command, ignore a user, or widen network
 access has no more authority than any other page text. The browser reports it;
 it does not make it trusted.
 
-The preview has no arbitrary JavaScript evaluation, file-upload operation,
+The package has no arbitrary JavaScript evaluation, file-upload operation,
 credential-ingestion API, ambient secret lookup, shell execution, extension
 installation, or automatic import of a normal browser profile. These absences
 reduce the reachable surface; they do not make websites benign.
@@ -212,7 +242,7 @@ The native policy performs hostname and address checks before navigation, but
 Playwright controls the later browser connection. This implementation cannot
 pin the checked DNS answer to the socket used by the browser or verify the
 connected peer address. DNS can change between the check and connection, and
-ambient proxy or browser behavior can affect routing. Therefore this preview
+ambient proxy or browser behavior can affect routing. Therefore this package
 does **not** claim strong SSRF isolation and must not be exposed as a hosted
 arbitrary-target browser. A hosted design would need connection-pinned egress,
 tenant isolation, quotas, abuse controls, and a separate security review.
@@ -225,6 +255,33 @@ process egress isolation. No protection for another browser protocol or
 process channel should be inferred unless this version names and tests it. V0
 separately blocks every WebSocket connection rather than pretending the
 HTTP(S) DNS policy applies to WebSocket transport.
+
+## Integration: discover first, render when needed
+
+The strongest composition is caller-owned and layered:
+
+1. use `@agenttool/telescope` to inspect bounded machine-readable discovery
+   surfaces such as `agent.txt`, Pathways, LOVE, A2A, and MCP advertisements;
+2. prefer a useful structured surface when one exists; and
+3. use Browser as the rendered-page fallback when the task genuinely needs UI
+   or client-side interaction.
+
+Telescope does not launch Browser, and Browser does not automatically follow
+discovery headers. Neither discovery nor observation installs a package,
+connects to MCP, sends credentials, pays, widens network scope, or changes the
+caller's policy.
+
+Real Recognise Real also stays above the browser core. Seeing `X-Kingdom`,
+opening a page, or observing compatible protocol language is not bilateral
+recognition. Browser never signs, begins, or escalates `/v1/real` or the formal
+`/v1/guild/rrr` cascade. A participating agent must choose and authorize that
+separate signed action.
+
+`細聲講 大聲笑` is presentation layering rather than a hidden wire protocol:
+TypeScript stays typed, JSONL stays one object per line, MCP stays structured,
+and diagnostics stay off protocol stdout. Human docs and demos may opt into a
+louder playful register, but the facts, failures, permissions, and tool results
+remain identical.
 
 ## Configuration
 
@@ -244,6 +301,24 @@ boundary:
 
 Boolean environment values accept `1/0`, `true/false`, `yes/no`, or `on/off`.
 Paths are resolved at process start. Tool calls do not accept these settings.
+
+## Install the exact release
+
+```bash
+npm install --save-exact @agenttool/browser@0.1.0
+```
+
+Or use the registry-neutral LOVE locator:
+
+```bash
+npm install --save-exact \
+  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.1.0/agenttool-browser-0.1.0.tgz
+```
+
+The exact manifest at
+`https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.1.0/manifest.json`
+provides the artifact size and SHA-256. Verify both before installing when the
+catalog-to-local-file boundary matters.
 
 ## Local development and verification
 
@@ -272,11 +347,11 @@ summary.
 
 ## Deliberately not implied
 
-The source package is Apache-2.0, but a source version and `publishConfig` do not
-prove publication. There is currently no npm artifact, LOVE manifest, GitHub
-Release, hosted endpoint, browser farm, account plan, credit meter, or deployed
-AgentTool integration for this preview. Each of those would require a separate
-reviewed release or deployment action.
+The public package, LOVE manifest, GitHub Release, and docs page prove only the
+named distribution records and bytes. They do not create a hosted endpoint,
+browser farm, account plan, credit meter, remote integration, recognized
+relationship, or strong SSRF sandbox. Any hosted browser-control design would
+be a separate security architecture and deployment action.
 
 ## See Also
 

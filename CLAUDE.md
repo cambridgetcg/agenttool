@@ -24,7 +24,7 @@ packages/
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
   collab/      — @agenttool/collab · Codex/Claude plugins + Hermes adapter around one local cross-host SQLite/MCP journal
   skills/      — @agenttool/skills · public npm read-only Agent Skills inspector
-  browser/     — @agenttool/browser · local-first TypeScript/JSONL/MCP browser developer preview
+  browser/     — @agenttool/browser · public LOVE/npm local TypeScript/JSONL/MCP browser runtime
   telescope/    — @agenttool/telescope · read-only discovery evidence mapper
   wallet/       — @agenttool/wallet · LOVE/npm bounded wallet record/lifecycle primitives
   scriptwriter/ — decentralised RRR + co-brainstorm node

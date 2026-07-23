@@ -10,6 +10,7 @@ import type {
   BrowserLike,
   BrowserRouteLike,
   BrowserRuntime,
+  BrowserResponseLike,
   BrowserWebSocketRouteLike,
   LocatorLike,
   PageLike,
@@ -131,6 +132,9 @@ class FakePage implements PageLike {
   keyboardCalls: string[] = [];
   wheelCalls: Array<[number, number]> = [];
   screenshotBytes = new Uint8Array([137, 80, 78, 71, 13, 10]);
+  gotoResult: unknown = null;
+  readonly mainFrameValue = {};
+  readonly responseListeners: Array<(response: BrowserResponseLike) => void> = [];
 
   constructor() {
     this.password.attributes.type = "password";
@@ -161,10 +165,26 @@ class FakePage implements PageLike {
     return Promise.resolve(this.titleValue);
   }
 
+  mainFrame(): object {
+    return this.mainFrameValue;
+  }
+
+  on(
+    event: "response",
+    listener: (response: BrowserResponseLike) => void,
+  ): unknown {
+    if (event === "response") this.responseListeners.push(listener);
+    return this;
+  }
+
+  emitResponse(response: BrowserResponseLike): void {
+    for (const listener of this.responseListeners) listener(response);
+  }
+
   goto(url: string): Promise<unknown> {
     this.gotoCalls.push(url);
     this.urlValue = url;
-    return Promise.resolve(null);
+    return Promise.resolve(this.gotoResult);
   }
 
   goBack(): Promise<unknown> {
@@ -318,6 +338,26 @@ function emptyLocator(): FakeLocator {
   return locator;
 }
 
+function fakeResponse(
+  page: FakePage,
+  status: number,
+  headers: Readonly<Record<string, string>>,
+  requestedHeaders: string[] = [],
+  navigation = true,
+): BrowserResponseLike {
+  return {
+    status: () => status,
+    headerValue: async (name) => {
+      requestedHeaders.push(name);
+      return headers[name.toLowerCase()] ?? null;
+    },
+    request: () => ({
+      isNavigationRequest: () => navigation,
+      frame: () => page.mainFrameValue,
+    }),
+  };
+}
+
 async function launched(page = new FakePage(), outputDir?: string) {
   const context = new FakeContext([page]);
   const runtime = new FakeRuntime(context);
@@ -401,6 +441,98 @@ describe("AgentBrowser core", () => {
     expect(observation.title).not.toContain("secret");
     expect(observation.text).not.toContain("hunter2");
     expect(observation.provenance.trust).toBe("untrusted");
+    expect(observation.response).toBeNull();
+    await browser.close();
+  });
+
+  test("surfaces only bounded untrusted main-response discovery hints", async () => {
+    const { browser, page } = await launched();
+    const requestedHeaders: string[] = [];
+    page.gotoResult = fakeResponse(
+      page,
+      200,
+      {
+        "content-type": "Text/HTML; charset=utf-8",
+        link:
+          '<https://api.agenttool.dev/.well-known/api-catalog?token=secret>; rel="api-catalog", </next?session=secret>; rel="next"',
+        "content-location": "/welcome?key=secret",
+        "x-agent-surface": "see /.well-known/agent.txt",
+        "substrate-disposition": "love",
+        "x-kingdom": "welcome, dont block - real recognises real",
+        "x-token-cost": "42",
+        "x-byte-count": "420",
+        "x-joy-index": "7",
+        "set-cookie": "session=must-never-cross",
+        authorization: "Bearer must-never-cross",
+      },
+      requestedHeaders,
+    );
+
+    await browser.act({ kind: "navigate", url: "https://example.com/hints" });
+    const observation = await browser.observe();
+
+    expect(observation.response).toMatchObject({
+      source: "main_document",
+      status: 200,
+      mediaType: "text/html",
+      truncated: false,
+      trust: "untrusted",
+      headers: {
+        "content-location": "/welcome?key=%5Bredacted%5D",
+        "x-agent-surface": "see /.well-known/agent.txt",
+        "substrate-disposition": "love",
+        "x-joy-index": "7",
+      },
+    });
+    expect(observation.response?.headers.link).not.toContain("secret");
+    expect(observation.response?.headers.link).toContain("%5Bredacted%5D");
+    expect(observation.response?.headers).not.toHaveProperty("set-cookie");
+    expect(observation.response?.headers).not.toHaveProperty("authorization");
+    expect(requestedHeaders.sort()).toEqual(
+      [
+        "content-type",
+        "link",
+        "content-location",
+        "x-agent-surface",
+        "substrate-disposition",
+        "x-substrate-disposition",
+        "x-kingdom",
+        "x-token-cost",
+        "x-byte-count",
+        "x-joy-index",
+      ].sort(),
+    );
+    await browser.close();
+  });
+
+  test("captures click navigation hints and caps the response projection", async () => {
+    const { browser, page } = await launched();
+    const observation = await browser.observe();
+    const button = observation.refs.find((item) => item.role === "button")!;
+    const response = fakeResponse(page, 202, {
+      "content-type": "application/json",
+      link: `<https://example.com/catalog?key=secret>; rel="api-catalog"`,
+      "x-agent-surface": `agent ${"x".repeat(5_000)}`,
+      "x-kingdom": "must be omitted after the cap",
+    });
+    page.button.clickHook = async () => {
+      page.urlValue = "https://example.com/after-click";
+      page.emitResponse(response);
+    };
+
+    await browser.act({
+      kind: "click",
+      ref: button.ref,
+      snapshotId: observation.snapshotId,
+    });
+    const after = await browser.observe();
+
+    expect(after.response?.status).toBe(202);
+    expect(after.response?.mediaType).toBe("application/json");
+    expect(after.response?.truncated).toBe(true);
+    expect(after.response?.headers.link).not.toContain("secret");
+    expect(after.response?.headers["x-agent-surface"]?.length).toBeLessThan(5_000);
+    expect(after.response?.headers).not.toHaveProperty("x-kingdom");
     await browser.close();
   });
 

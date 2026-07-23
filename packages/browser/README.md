@@ -2,9 +2,25 @@
 
 A small local browser surface for agents.
 
-`0.1.0` is a developer preview available from this repository's source only.
-It has not been published to npm, added to the LOVE package catalog, deployed,
-or exposed as a hosted AgentTool service.
+`0.1.0` is distributed as an exact LOVE package and mirrored to npm. It remains
+a local runtime: the docs deployment publishes package bytes and documentation,
+not a hosted browser-control service.
+
+```bash
+npm install --save-exact @agenttool/browser@0.1.0
+```
+
+Registry-neutral exact artifact:
+
+```bash
+npm install --save-exact \
+  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.1.0/agenttool-browser-0.1.0.tgz
+```
+
+The sibling
+[LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.1.0/manifest.json)
+names the artifact size and SHA-256. A URL install does not compare those
+values automatically; verify them first when that boundary matters.
 
 ## What it is
 
@@ -26,26 +42,20 @@ browser during install, build, tests, or CI.
 It requires no AgentTool account, API key, credits, Redis, database, or remote
 control plane.
 
-## Try the source
+## Try the package
 
 The runtime supports Node 20.19+ and Bun 1.3.5+. The full source gate uses both
 to verify that claim. Real local browsing additionally needs an installed
 Chrome-family browser.
 
 ```bash
-cd packages/browser
-bun install --frozen-lockfile
-bun run ci
-node dist/bin/agenttool-browser.js doctor
+agenttool-browser doctor
 ```
-
-The CI command uses fakes and fixtures and performs import-only Node/Bun
-smokes; it does not require or launch a real browser.
 
 Start the minimal JSONL process:
 
 ```bash
-node dist/bin/agenttool-browser.js jsonl
+agenttool-browser jsonl
 ```
 
 It speaks `agenttool-browser-jsonl/0.1`, one object per line:
@@ -57,12 +67,11 @@ It speaks `agenttool-browser-jsonl/0.1`, one object per line:
 Or start the local MCP server:
 
 ```bash
-node dist/bin/agenttool-browser.js mcp
+agenttool-browser mcp
 ```
 
 Both keep protocol traffic on stdout and operational diagnostics on stderr.
-Use `node dist/bin/agenttool-browser.js help` for the current command and
-options.
+Use `agenttool-browser help` for the current command and options.
 
 The JSONL methods and MCP tool names are `browser_open`, `browser_observe`,
 `browser_act`, `browser_extract`, `browser_screenshot`, `browser_tabs`, and
@@ -104,8 +113,53 @@ there is no raw script or DevTools action.
 
 Snapshot and extraction limits bound returned results, not the size of the
 remote DOM that Chrome and Playwright must first process. An extremely large
-page can still consume substantial browser/host memory; this local preview is
+page can still consume substantial browser/host memory; this local runtime is
 not a resource-quota sandbox.
+
+### Main-response discovery hints
+
+Every `Observation` includes `response`, either `null` or a bounded record for
+the current main document:
+
+```json
+{
+  "source": "main_document",
+  "status": 200,
+  "mediaType": "text/html",
+  "headers": {
+    "link": "<https://example.com/.well-known/agent.txt>; rel=\"alternate\""
+  },
+  "truncated": false,
+  "trust": "untrusted"
+}
+```
+
+Only nine lowercase discovery/disposition names can cross this boundary:
+`link`, `content-location`, `x-agent-surface`, `substrate-disposition`,
+`x-substrate-disposition`, `x-kingdom`, `x-token-cost`, `x-byte-count`, and
+`x-joy-index`. Media type plus those names and values share a 4 KiB character
+budget. Query values and control characters are redacted. Cookies,
+authentication, authorization challenges, and arbitrary response headers are
+never exposed.
+
+These are publisher-controlled hints, not identity, proof, recognition,
+permission, billing approval, or an instruction to follow a link.
+
+## Best integration seam
+
+Use [`@agenttool/telescope`](../telescope/README.md) first when an origin may
+already expose `agent.txt`, Pathways, LOVE, A2A, or MCP metadata. Prefer a
+useful structured surface; fall back to Browser only when the task genuinely
+needs the rendered page or client-side interaction. This composition stays in
+caller-owned orchestration—neither package silently invokes the other.
+
+Real Recognise Real remains a later explicit act. Opening or observing a page,
+including one that emits `X-Kingdom`, never starts `/v1/real` or
+`/v1/guild/rrr`, signs on the agent's behalf, or certifies a relationship.
+
+`細聲講 大聲笑` is a presentation rule, not hidden protocol state: JSONL/MCP
+stdout stays quiet and deterministic; playful human docs or demos are opt-in
+and cannot alter the same underlying facts or widen authority.
 
 ## Safe defaults
 
@@ -127,7 +181,7 @@ Select another installed channel with `--channel`, or an exact executable with
 Persistent state is opt-in:
 
 ```bash
-node dist/bin/agenttool-browser.js jsonl \
+agenttool-browser jsonl \
   --profile "$HOME/.local/share/agenttool/browser/profiles/work"
 ```
 
@@ -193,7 +247,7 @@ unrecognized carriers such as `srcset`, meta refresh, CSS `url()`, or malformed
 markup, browser storage, canvas/image content, or screenshot pixels. It cannot
 undo data already submitted to a site.
 
-The preview intentionally has no:
+The package intentionally has no:
 
 - arbitrary JavaScript evaluation;
 - file-upload operation;

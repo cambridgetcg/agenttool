@@ -66,6 +66,17 @@ export interface BrowserRequestLike {
   url(): string;
 }
 
+export interface BrowserNavigationRequestLike {
+  isNavigationRequest(): boolean;
+  frame(): object;
+}
+
+export interface BrowserResponseLike {
+  status(): number;
+  headerValue(name: string): Promise<string | null>;
+  request(): BrowserNavigationRequestLike;
+}
+
 export interface BrowserRouteLike {
   request(): BrowserRequestLike;
   continue(): Promise<void>;
@@ -113,6 +124,11 @@ export interface MouseLike {
 export interface PageLike {
   url(): string;
   title(): Promise<string>;
+  mainFrame?(): object;
+  on?(
+    event: "response",
+    listener: (response: BrowserResponseLike) => void,
+  ): unknown;
   goto(
     url: string,
     options?: { waitUntil?: "domcontentloaded"; timeout?: number },
@@ -186,6 +202,30 @@ export interface SnapshotRef {
   secret: boolean;
 }
 
+export type ResponseHintHeaderName =
+  | "link"
+  | "content-location"
+  | "x-agent-surface"
+  | "substrate-disposition"
+  | "x-substrate-disposition"
+  | "x-kingdom"
+  | "x-token-cost"
+  | "x-byte-count"
+  | "x-joy-index";
+
+/**
+ * A deliberately narrow projection of the current main-document response.
+ * Values are untrusted page metadata, not recognition, proof, or permission.
+ */
+export interface MainDocumentResponse {
+  source: "main_document";
+  status: number;
+  mediaType: string | null;
+  headers: Partial<Record<ResponseHintHeaderName, string>>;
+  truncated: boolean;
+  trust: "untrusted";
+}
+
 export interface Observation {
   schema: typeof OBSERVATION_SCHEMA;
   sessionId: string;
@@ -198,6 +238,7 @@ export interface Observation {
   snapshot: string;
   text: string | null;
   refs: SnapshotRef[];
+  response: MainDocumentResponse | null;
   truncated: {
     snapshot: boolean;
     text: boolean;

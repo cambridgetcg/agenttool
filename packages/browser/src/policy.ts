@@ -180,30 +180,13 @@ export function redactHtmlUrlAttributes(input: string): string {
           ? encodedValue[0]!
           : "";
       const value = quote ? encodedValue.slice(1, -1) : encodedValue;
-      return `${prefix}${quote}${redactUrlReference(value)}${quote}`;
+      return `${prefix}${quote}${redactUrlReferenceForOutput(value)}${quote}`;
     },
   );
 }
 
-export function classifyIpAddress(address: string): DestinationClass {
-  const normalized = address.toLowerCase().split("%", 1)[0]!;
-  if (isIP(normalized) === 4) return classifyIpv4(normalized);
-  if (isIP(normalized) === 6) return classifyIpv6(normalized);
-  return "reserved";
-}
-
-export function isPrivateOrReservedAddress(address: string): boolean {
-  return classifyIpAddress(address) !== "public";
-}
-
-function normalizeHostname(hostname: string): string {
-  return hostname
-    .replace(/^\[|\]$/g, "")
-    .replace(/\.$/, "")
-    .toLowerCase();
-}
-
-function redactUrlReference(input: string): string {
+/** Redact query values while preserving an absolute, protocol-relative, or relative reference. */
+export function redactUrlReferenceForOutput(input: string): string {
   if (/^https?:\/\//i.test(input)) return redactUrlForOutput(input);
   if (input.startsWith("//")) {
     try {
@@ -226,6 +209,24 @@ function redactUrlReference(input: string): string {
     `${input.slice(0, queryStart)}?${redacted.toString()}`
     + (fragmentStart < 0 ? "" : input.slice(fragmentStart))
   );
+}
+
+export function classifyIpAddress(address: string): DestinationClass {
+  const normalized = address.toLowerCase().split("%", 1)[0]!;
+  if (isIP(normalized) === 4) return classifyIpv4(normalized);
+  if (isIP(normalized) === 6) return classifyIpv6(normalized);
+  return "reserved";
+}
+
+export function isPrivateOrReservedAddress(address: string): boolean {
+  return classifyIpAddress(address) !== "public";
+}
+
+function normalizeHostname(hostname: string): string {
+  return hostname
+    .replace(/^\[|\]$/g, "")
+    .replace(/\.$/, "")
+    .toLowerCase();
 }
 
 function classifySpecialHostname(hostname: string): DestinationClass | null {

@@ -11,6 +11,7 @@ export {
   isPrivateOrReservedAddress,
   parseBrowserUrl,
   redactHtmlUrlAttributes,
+  redactUrlReferenceForOutput,
   redactUrlForOutput,
   redactUrlsInText,
 } from "./policy.js";
