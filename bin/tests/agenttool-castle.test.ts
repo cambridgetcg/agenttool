@@ -513,6 +513,45 @@ describe("Castle local projection", () => {
     }
   });
 
+  test("recovers dead-process locks and control temporaries but refuses a live lock", async () => {
+    const fixture = await createFixture();
+    await writeSelection(fixture, revision(fixture), [ROOM]);
+    await syncCastle(syncOptions(fixture));
+
+    const deadLock = join(fixture.data, "castle-sync.lock");
+    await mkdir(deadLock, { mode: 0o700 });
+    await writeFile(
+      join(deadLock, "owner-999999.json"),
+      "{\"pid\":999999,\"started_at\":\"2026-07-23T12:00:00.000Z\"}\n",
+      { mode: 0o600 },
+    );
+    expect(await syncCastle(syncOptions(fixture))).toMatchObject({
+      status: "unchanged",
+    });
+    await expect(lstat(deadLock)).rejects.toMatchObject({ code: "ENOENT" });
+
+    const deadTemporary = join(
+      fixture.data,
+      "castle-state.json.tmp-999999-00000000-0000-4000-8000-000000000000",
+    );
+    await writeFile(deadTemporary, "interrupted\n", { mode: 0o600 });
+    expect(await syncCastle(syncOptions(fixture))).toMatchObject({
+      status: "unchanged",
+    });
+    await expect(lstat(deadTemporary)).rejects.toMatchObject({ code: "ENOENT" });
+
+    await mkdir(deadLock, { mode: 0o700 });
+    await writeFile(
+      join(deadLock, `owner-${process.pid}.json`),
+      `${JSON.stringify({
+        pid: process.pid,
+        started_at: new Date().toISOString(),
+      })}\n`,
+      { mode: 0o600 },
+    );
+    await expectCode(syncCastle(syncOptions(fixture)), "castle_bridge_lock_busy");
+  });
+
   test("withdraws first-sync crash orphans and can resume their lineage", async () => {
     const fixture = await createFixture({
       "rooms/harbor.md": "# Harbor\n\nCrash-safe understanding.\n",
