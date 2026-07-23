@@ -40,6 +40,10 @@ describe("MCP surface", () => {
       "collab_handoff_respond",
       "collab_journal_verify",
       "collab_next",
+      "collab_session_heartbeat",
+      "collab_session_join",
+      "collab_session_leave",
+      "collab_session_list",
       "collab_task_block",
       "collab_task_claim",
       "collab_task_complete",
@@ -61,6 +65,7 @@ describe("MCP surface", () => {
     const readOnly = [
       "collab_events_since",
       "collab_journal_verify",
+      "collab_session_list",
       "collab_task_get",
       "collab_task_list",
       "collab_workspace_status",
@@ -94,8 +99,12 @@ describe("MCP surface", () => {
     expect(instructions).toContain("observations, inferences, proposals, or authorised decisions");
     expect(instructions).toContain("advisory coordination lease");
     expect(instructions).toContain("Completion is actor-reported");
+    expect(instructions).toContain("use the returned actor_key");
+    expect(instructions).toContain("never renews or releases a task lease");
     expect(tools.collab_task_complete.description).toContain("not review or acceptance");
     expect(tools.collab_handoff_offer.description).toContain("keeps the coordination lease");
+    expect(tools.collab_session_join.description).toContain("does not authenticate");
+    expect(tools.collab_session_heartbeat.description).toContain("never renews a task lease");
   });
 
   test("runs workspace → task → claim → next through tool handlers", async () => {
@@ -138,6 +147,55 @@ describe("MCP surface", () => {
 
     expect(result.isError).toBe(true);
     expect(result.structuredContent.error).toBe("task_not_found");
+  });
+
+  test("joins distinct host sessions and uses their actor keys on existing tools", async () => {
+    const { root, server } = node();
+    const opened = await callTool(server, "collab_workspace_open", {
+      root_path: root,
+      actor: "root",
+    });
+    const workspaceId = opened.structuredContent.workspace.id;
+    const codex = await callTool(server, "collab_session_join", {
+      workspace_id: workspaceId,
+      client_instance_id: "codex-process",
+      actor_label: "worker",
+      runtime_kind: "codex",
+      declared_capabilities: ["edit"],
+      ttl_seconds: 30,
+    });
+    const hermes = await callTool(server, "collab_session_join", {
+      workspace_id: workspaceId,
+      client_instance_id: "hermes-process",
+      actor_label: "worker",
+      runtime_kind: "hermes",
+      declared_capabilities: ["review"],
+      ttl_seconds: 30,
+    });
+    expect(codex.structuredContent.session.actor_key)
+      .not.toBe(hermes.structuredContent.session.actor_key);
+
+    const listed = await callTool(server, "collab_session_list", {
+      workspace_id: workspaceId,
+      presence: "live",
+    });
+    expect(listed.structuredContent.sessions).toHaveLength(2);
+
+    const created = await callTool(server, "collab_task_create", {
+      workspace_id: workspaceId,
+      actor: "root",
+      idempotency_key: "create-session-task",
+      title: "Session task",
+    });
+    const claimed = await callTool(server, "collab_task_claim", {
+      workspace_id: workspaceId,
+      task_id: created.structuredContent.task.id,
+      actor: codex.structuredContent.session.actor_key,
+      idempotency_key: "claim-session-task",
+      expected_version: created.structuredContent.task.version,
+    });
+    expect(claimed.structuredContent.task.assignee)
+      .toBe(codex.structuredContent.session.actor_key);
   });
 
   test("verifies the full journal and labels the verification scope", async () => {

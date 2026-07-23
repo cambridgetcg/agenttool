@@ -1,7 +1,7 @@
 {
   "name": "@agenttool/collab",
-  "version": "0.1.0",
-  "description": "Local-first coordination journal for parallel coding agents",
+  "version": "0.2.0",
+  "description": "Local-first coordination journal for simultaneous cross-model agents",
   "author": "AgentTool contributors",
   "homepage": "https://github.com/cambridgetcg/agenttool/tree/main/packages/collab#readme",
   "repository": {
@@ -27,6 +27,7 @@
     "src",
     "bin",
     "dist",
+    "integrations",
     "scripts",
     "skills",
     ".codex-plugin",
@@ -64,6 +65,7 @@
     "claude-code",
     "codex",
     "collaboration",
+    "hermes-agent",
     "local-first",
     "mcp",
     "sqlite"

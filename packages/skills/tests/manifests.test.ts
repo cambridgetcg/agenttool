@@ -125,6 +125,9 @@ test("accepts AgentTool Collab as a read-only integration fixture", async () => 
   const collab = join(import.meta.dir, "..", "..", "collab");
   const report = await inspectLocalSkills(collab);
   expect(report.valid).toBe(true);
-  expect(report.skills.map((skill) => skill.name)).toEqual(["coordinate-agent-work"]);
+  expect(report.skills.map((skill) => skill.name).sort()).toEqual([
+    "coordinate-agent-work",
+    "coordinate-agent-work-hermes",
+  ]);
   expect(report.manifests.map((manifest) => manifest.kind)).toEqual(["claude", "codex"]);
 });

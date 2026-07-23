@@ -12,25 +12,44 @@ responsible for spawning, messaging, waiting, and stopping agents.
 
 1. Read the applicable repository instructions and inspect existing work before
    creating tasks.
-2. Call `collab_workspace_open`, then `collab_next` at the start of each turn
-   and after the event cursor advances. Reuse the returned workspace ID.
-3. Use `collab_task_create` to split work into bounded tasks with explicit
+2. Confirm that all participating MCP processes use the same journal database
+   and exact repository real path. Call `collab_workspace_open` with a
+   bootstrap actor label. For simultaneous cross-host work, call
+   `collab_session_join` once per client incarnation and use its returned
+   `actor_key` as `actor` on `collab_next`, task, artifact, decision, and
+   handoff calls. Duplicate display labels are valid; route a handoff to the
+   intended session's exact `actor_key`.
+3. Call `collab_next` at the start of each turn and after the event cursor
+   advances. Reuse the returned workspace ID.
+4. Use `collab_task_create` to split work into bounded tasks with explicit
    dependencies, completion tests, and conservative repository-relative path
    scopes.
-4. Call `collab_task_claim` with the version just read. Begin edits only after
+5. Call `collab_task_claim` with the version just read. Begin edits only after
    the claim succeeds. Treat the claim as a renewable coordination lease, never
    as ownership, a filesystem lock, or authority beyond the task.
-5. Stay within the task, path, data, and external-action authority already
+6. Stay within the task, path, data, and external-action authority already
    granted. Renew before a long task's lease expires. On a version or claim
    conflict, re-read current state instead of guessing or forcing a write.
-6. Use `collab_artifact_attach` for scoped file, commit, test, data, or URL
+7. Use `collab_artifact_attach` for scoped file, commit, test, data, or URL
    references before reporting an outcome. Include a digest when available; do
    not paste the underlying body.
-7. Post concise progress, then complete, release, block, or offer a handoff.
+8. Post concise progress, then complete, release, block, or offer a handoff.
    Completion records the worker's reported outcome; verify it separately
    before describing it as reviewed or accepted.
-8. Reconcile parallel results against their evidence and completion tests.
+9. Reconcile parallel results against their evidence and completion tests.
    Preserve useful late work as an artifact or message rather than discarding it.
+
+Refresh a long-lived session with `collab_session_heartbeat` using the latest
+session version and a fresh idempotency key. Presence is only a routing hint:
+it does not prove health, and a heartbeat never renews or releases a task
+lease. Call `collab_session_leave` only for a deliberate terminal exit. Hermes
+prefixes MCP tools by server name, so use the packaged Hermes adapter skill
+instead of assuming these bare names are visible there.
+
+Use the latest task version for task and handoff mutations. Use the latest
+session version only for heartbeat and leave. Accept or decline an offered
+handoff with `collab_handoff_respond`; do not infer acceptance from presence or
+messages outside the journal.
 
 Never represent an offline or unacknowledged mutation as accepted. Reuse an
 idempotency key only for an exact retry of the same mutation.
@@ -84,10 +103,12 @@ personal data. A local path can itself be sensitive; attach only references that
 the workspace audience may see.
 
 Treat the current journal as shared plaintext local state: actor labels are
-caller-supplied, event hashes are not signatures, and local storage does not
-hide tool arguments or results from a remote model provider. Do not claim
-selective privacy, authenticated identity, secure deletion, external authority,
-or verified correctness unless a separate mechanism actually establishes it.
+caller-supplied; presence, provider/model labels, and capabilities are
+self-declared routing hints; event hashes are not signatures; and local storage
+does not hide tool arguments or results from a remote model provider. Do not
+claim selective privacy, authenticated identity, agent health, secure deletion,
+external authority, or verified correctness unless a separate mechanism
+actually establishes it.
 
 If the Collab MCP tools are unavailable, name the missing tool or connection
 boundary and coordinate through an explicitly identified fallback. Do not imply

@@ -1,9 +1,10 @@
 # @agenttool/collab
 
-Local-first coordination for parallel coding agents. It gives Codex, Claude,
-and local agents a shared task board with transactional claims, renewable
-leases, path-scope conflict checks, explicit handoffs, artifact references,
-decisions, and a hash-chained event journal.
+Local-first coordination for simultaneous coding agents. It gives Codex,
+Claude Code, Hermes Agent, and other MCP clients a shared task board with
+cross-host session routing, transactional claims, renewable leases, path-scope
+conflict checks, explicit handoffs, artifact references, decisions, and a
+hash-chained event journal.
 
 It does **not** spawn agents, lock the filesystem, grant external authority,
 or hide MCP arguments/results from a remote model provider. The host remains
@@ -37,17 +38,25 @@ selective redaction, retention, or deletion command.
 
 ## Agent flow
 
-1. Call `collab_workspace_open` with the repository root and an actor name.
-2. Call `collab_next` at the beginning of a turn.
-3. Create bounded tasks with repository-relative `path_scopes`.
-4. Claim before editing; pass the returned task `version` and `lease_id` to
+1. Confirm that every participating MCP process uses the same journal database,
+   then call `collab_workspace_open` with the exact repository real path and a
+   bootstrap actor label.
+2. For simultaneous cross-host work, call `collab_session_join` once per
+   client incarnation. Use its unique `actor_key` as `actor` on all existing
+   task, next, artifact, decision, and handoff tools.
+3. Call `collab_next` at the beginning of a turn.
+4. Create bounded tasks with repository-relative `path_scopes`.
+5. Claim before editing; pass the returned task `version` and `lease_id` to
    later mutations.
-5. Renew before a long task exceeds its lease.
-6. Attach file/commit/test references, then complete with a concise summary.
+6. Renew before a long task exceeds its lease.
+7. Attach file/commit/test references, then complete with a concise summary.
    Completion is the reporting actor's outcome, not coordinator review or
    acceptance; verify it separately before describing it as accepted.
-7. For a directed transfer, offer a handoff. The coordination lease changes
-   assignee only after the named recipient accepts; decline is a valid response.
+8. For a directed transfer, offer a handoff to the recipient session's exact
+   `actor_key`. The coordination lease changes assignee only after that
+   recipient accepts; decline is a valid response.
+9. Heartbeat a long-lived session with its latest session version and a fresh
+   idempotency key. Deliberately leave when finished.
 
 Use one compact exchange line for progress, handoff, and completion summaries:
 
@@ -65,6 +74,19 @@ claim win under contention. Expired claims are linearized when a new claimant
 arrives; reads expose them as `effective_status: "lease_expired"`. Path-scope
 comparison is lexical, segment-aware, and conservatively case-insensitive; it
 does not resolve every possible symlink alias.
+
+The additive session protocol is `agenttool.collab.session/0.1`. It leaves the
+existing task and event contract at `agenttool.collab/0.1`. Duplicate display
+labels are valid because each joined client receives a server-generated
+session ID and `actor_key`. Join metadata and declared capabilities are
+self-declared routing hints, not authentication, health checks, permissions,
+or proof of competence. Session heartbeats use server time and optimistic
+versions but do not enter the durable event journal. A heartbeat never renews
+or releases a task lease; stale means only that no recent heartbeat was
+observed, and an explicit leave also leaves task leases untouched. Replaying a
+join never refreshes presence or changes the first join's TTL; use a heartbeat.
+Session listings return the most recent 100 matches by default and accept a
+bounded limit up to 500.
 
 The event protocol is currently `agenttool.collab/0.1`. Hosted AgentTool Inbox
 or ADDS replication is intentionally not enabled in this version; local
@@ -84,7 +106,7 @@ package and wires only its 2025-compatible stdio transport. The exact beta is
 locked because that upstream API is still pre-release; upgrades require the
 type, test, audit, and real wire-handshake gates used for this version.
 
-## Codex and Claude Code plugins
+## Codex, Claude Code, and Hermes Agent
 
 The npm package root is also the plugin root for both hosts, so the same
 `skills/coordinate-agent-work/SKILL.md` and standalone MCP server ship once:
@@ -98,12 +120,13 @@ The npm package root is also the plugin root for both hosts, so the same
 
 Neither configuration stores state inside the plugin installation. The journal
 continues to default to `~/.local/share/agenttool/collab.sqlite`, so Codex,
-Claude Code, and direct local clients can coordinate through the same database.
-Use `AGENTOOL_COLLAB_DB` when those clients should use a different journal.
-Environment forwarding is host policy: some hosts filter the parent shell, so
-prefixing the outer CLI command does not universally pass this variable to its
-MCP child. When isolation matters, put `AGENTOOL_COLLAB_DB` in that host's
-scoped MCP `env` configuration and verify the resulting workspace directly.
+Claude Code, Hermes Agent, and direct local clients can coordinate through the
+same database. Use `AGENTOOL_COLLAB_DB` when those clients should use a
+different journal. Environment forwarding is host policy: some hosts filter
+the parent shell, so prefixing the outer CLI command does not universally pass
+this variable to its MCP child. When isolation matters, put
+`AGENTOOL_COLLAB_DB` in that host's scoped MCP `env` configuration and verify
+the resulting workspace directly.
 
 For a source-tree trial, build once and point Claude Code at this package root:
 
@@ -125,6 +148,32 @@ post-install product. `prepack` runs the full package checks and rebuilds the
 bundle for ordinary maintainer packaging; host-side installation must not be
 relied on to rebuild it.
 
+Hermes already speaks stdio MCP, so its integration remains a configuration
+adapter rather than a Hermes core patch. Build the bundle, register the server
+under the exact name `agenttool`, and test the connection:
+
+```bash
+hermes --profile sol mcp add agenttool \
+  --command /usr/local/bin/bun \
+  --env AGENTOOL_COLLAB_DB="$HOME/.local/share/agenttool/collab.sqlite" \
+  --args "$PWD/dist/agenttool-collab-mcp.js"
+hermes --profile sol mcp test agenttool
+```
+
+Hermes prefixes MCP tools with the server name, so this produces names such as
+`mcp_agenttool_collab_session_join`. Copy the packaged adapter from
+`integrations/hermes/skills/coordinate-agent-work-hermes` into the selected
+Hermes profile's `skills/` directory. The adapter deliberately uses those
+exact prefixed names. Keep parallel calls disabled for this server: multiple
+agents may call it concurrently, while one agent should serialize its own
+versioned mutations instead of manufacturing avoidable version races.
+
+Hermes Kanban remains Hermes's internal dispatcher; AgentTool Collab remains
+the cross-host coordination journal. This package does not automatically
+dual-write between them, start or stop agents, or infer authority from either
+task system. Start a fresh Hermes session or reload MCP after changing its
+configuration.
+
 ## Distribution
 
 This source package is covered by Apache-2.0; packaged archives include their
@@ -145,9 +194,9 @@ Maintainer publication uses the repository's protected `publish-npm.yml`
 workflow and `bin/npm-release.ts`, not a local `npm publish` command. See
 [`docs/NPM-RELEASES.md`](../../docs/NPM-RELEASES.md).
 
-Version 0.1.0 is the initial public npm release. It is not a LOVE release, and
-the repository does not advertise a hosted collab service. npm distributes the
-local skill, plugin manifests, source, and bundled MCP runtime; installing it
-does not create a remote relay or private model channel. Public registry
-availability and byte-identical npm/GitHub mirrors were verified by the
-protected workflow.
+Version 0.1.0 is the initial public npm release. Version 0.2.0 in this source
+tree is the next local release candidate and does not imply that npm
+publication occurred. It is not a LOVE release, and the repository does not
+advertise a hosted collab service. npm distributes the local skills, plugin
+manifests, source, and bundled MCP runtime; installing it does not create a
+remote relay or private model channel.

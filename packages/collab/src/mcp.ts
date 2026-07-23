@@ -10,7 +10,11 @@ const workspaceId = z.string().min(1).describe("Workspace ID returned by collab_
 const taskId = z.string().min(1).describe("Task ID");
 const leaseId = z.string().min(1).describe("Lease ID returned by collab_task_claim or accepted handoff");
 const expectedVersion = z.number().int().positive().describe("Task version last read by the caller");
+const sessionExpectedVersion = z.number().int().positive().describe("Session version last read by the caller");
 const ttlSeconds = z.number().int().min(30).max(3600).optional().describe("Lease duration; default 900 seconds, maximum 3600");
+const presenceTtlSeconds = z.number().int().min(30).max(3600).optional()
+  .describe("Presence freshness window; default 120 seconds, maximum 3600");
+const sessionId = z.string().min(1).max(200).describe("Server-generated collaboration session ID");
 
 const localReadOnly = {
   readOnlyHint: true,
@@ -37,12 +41,15 @@ const localClockAwareMutation = {
 
 export function buildCollabMcpServer(store: CollabStore): McpServer {
   const server = new McpServer(
-    { name: "agenttool-collab", version: "0.1.0" },
+    { name: "agenttool-collab", version: "0.2.0" },
     {
       capabilities: { tools: {} },
       instructions:
         "Local-first coordination journal for honest exchange among parallel coding agents. Start with " +
-        "collab_workspace_open, then collab_next. Claim before editing overlapping path scopes and renew " +
+        "collab_workspace_open. For cross-host work, call collab_session_join and use the returned actor_key " +
+        "as actor on task, next, and handoff tools; otherwise actor remains a caller-supplied legacy label. " +
+        "Heartbeat presence is a self-declared routing hint and never renews or releases a task lease. Then " +
+        "call collab_next. Claim before editing overlapping path scopes and renew " +
         "long-running work. A claim is an advisory coordination lease, not ownership, a filesystem lock, " +
         "or an authority grant. Classify exchanged claims as observations, inferences, proposals, or " +
         "authorised decisions, and report outcome, evidence, confidence, limits, and a refusable next action. " +
@@ -78,6 +85,91 @@ export function buildCollabMcpServer(store: CollabStore): McpServer {
       inputSchema: { workspace_id: workspaceId },
     },
     async ({ workspace_id }) => call(() => store.workspaceStatus(workspace_id)),
+  );
+
+  server.registerTool(
+    "collab_session_join",
+    {
+      title: "Join one cross-host collaboration session",
+      description:
+        "Create or replay one self-declared process/session presence and return its unique actor_key. " +
+        "A replay never refreshes presence or changes the first join's TTL; use heartbeat for that. " +
+        "The session does not authenticate a person, model, provider, or account.",
+      annotations: localRetrySafeMutation,
+      inputSchema: {
+        workspace_id: workspaceId,
+        client_instance_id: z.string().min(1).max(200)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)
+          .describe("Caller-generated retry identity for this process/session incarnation"),
+        actor_label: z.string().min(1).max(200)
+          .describe("Non-unique human-facing label; duplicate labels are valid"),
+        runtime_kind: z.string().min(1).max(64)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)
+          .describe("Self-declared host kind such as codex, claude-code, hermes, or custom"),
+        provider_label: z.string().min(1).max(100).optional()
+          .describe("Optional self-declared provider hint; never an identity proof"),
+        model_label: z.string().min(1).max(200).optional()
+          .describe("Optional self-declared model hint; never an identity proof"),
+        declared_capabilities: z.array(
+          z.string().min(1).max(100).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+        ).max(32).optional()
+          .describe("Symbolic routing hints only; they grant no permission or authority"),
+        ttl_seconds: presenceTtlSeconds,
+      },
+    },
+    async (input) => call(() => ({ session: store.joinSession(input) })),
+  );
+
+  server.registerTool(
+    "collab_session_list",
+    {
+      title: "List cross-host collaboration sessions",
+      description:
+        "List the most recently joined live, stale, or explicitly left self-declared sessions. " +
+        "Stale means only that no recent heartbeat was observed.",
+      annotations: localReadOnly,
+      inputSchema: {
+        workspace_id: workspaceId,
+        presence: z.enum(["live", "stale", "left"]).optional(),
+        limit: z.number().int().min(1).max(500).optional()
+          .describe("Maximum sessions to return; default 100, maximum 500"),
+      },
+    },
+    async ({ workspace_id, presence, limit }) =>
+      call(() => ({ sessions: store.listSessions(workspace_id, presence, limit) })),
+  );
+
+  server.registerTool(
+    "collab_session_heartbeat",
+    {
+      title: "Refresh one session presence",
+      description:
+        "Refresh self-declared presence using server time. This never renews a task lease, releases path scopes, or proves the agent is healthy or attentive.",
+      annotations: localRetrySafeMutation,
+      inputSchema: {
+        session_id: sessionId,
+        idempotency_key: key,
+        expected_version: sessionExpectedVersion,
+        ttl_seconds: presenceTtlSeconds,
+      },
+    },
+    async (input) => call(() => ({ session: store.heartbeatSession(input) })),
+  );
+
+  server.registerTool(
+    "collab_session_leave",
+    {
+      title: "End one session presence",
+      description:
+        "Mark one session incarnation as deliberately left. This is terminal for that session and does not release or reassign its task leases.",
+      annotations: localRetrySafeMutation,
+      inputSchema: {
+        session_id: sessionId,
+        idempotency_key: key,
+        expected_version: sessionExpectedVersion,
+      },
+    },
+    async (input) => call(() => ({ session: store.leaveSession(input) })),
   );
 
   server.registerTool(
