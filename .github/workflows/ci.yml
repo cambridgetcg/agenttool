@@ -125,9 +125,9 @@ jobs:
           package_root="$install_dir/node_modules/@agenttool/skills"
           cli="$package_root/dist/bin.js"
           test -x "$install_dir/node_modules/.bin/agenttool-skill"
-          test "$("$install_dir/node_modules/.bin/agenttool-skill" --version)" = "0.2.0"
-          test "$(node "$cli" --version)" = "0.2.0"
-          test "$(bun "$cli" --version)" = "0.2.0"
+          test "$("$install_dir/node_modules/.bin/agenttool-skill" --version)" = "0.2.1"
+          test "$(node "$cli" --version)" = "0.2.1"
+          test "$(bun "$cli" --version)" = "0.2.1"
           node "$cli" validate "$package_root/skills/use-agentcred-safely" >"$install_dir/report.json"
           node --input-type=module --eval '
             import { readFileSync } from "node:fs";
@@ -194,6 +194,36 @@ jobs:
               ) process.exit(1);
             ' "$report_path" "$skill_name"
           done
+          (cd "$install_dir" && node --input-type=module --eval '
+            import { readFileSync } from "node:fs";
+            import { join } from "node:path";
+            import { parse } from "yaml";
+            const packageRoot = process.argv[1];
+            const names = [
+              "use-agentcred-safely",
+              "capability-conductor",
+              "learn-by-contact",
+              "nen-contract-mantle",
+              "nen-dependency-perimeter",
+              "nen-concealed-trace",
+              "nen-critical-path-forge",
+              "nen-smoke-squad",
+              "nen-verification-ledger",
+              "nen-godspeed-loop",
+              "nen-vow-forge",
+            ];
+            for (const name of names) {
+              const sidecar = parse(readFileSync(
+                join(packageRoot, "skills", name, "agents", "openai.yaml"),
+                "utf8",
+              ));
+              if (sidecar.policy?.allow_implicit_invocation !== false) {
+                process.exit(1);
+              }
+            }
+          ' "$package_root")
+          test ! -e "$package_root/.codex-plugin/plugin.json"
+          test ! -e "$package_root/.claude-plugin/plugin.json"
       - name: Smoke packed Telescope under Node and Bun
         working-directory: packages/telescope
         shell: bash

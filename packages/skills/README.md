@@ -18,10 +18,15 @@ For a registry mirror, check and pin the exact version rather than relying on a
 mutable tag:
 
 ```bash
-npm view @agenttool/skills@0.2.0 version
-npm install --save-exact @agenttool/skills@0.2.0
+npm view @agenttool/skills@0.2.1 version
+npm install --ignore-scripts --no-audit --no-fund --save-exact @agenttool/skills@0.2.1
 npx --no-install agenttool-skill validate ./path/to/plugin
 ```
+
+The `npm` commands are explicit registry/network operations, and installation
+mutates the consuming dependency tree. `--ignore-scripts` keeps package and
+dependency lifecycle code disabled; use an isolated npm configuration when
+ambient registry credentials or settings are not intended for the operation.
 
 `inspect` emits the report even when it contains findings. `validate` emits the
 same report and exits 1 when the report has validation errors. Both commands
@@ -94,8 +99,9 @@ Reports use only inspection-root-relative paths and conform to the bundled
 `./report.schema.json`. The effective limits can be lowered by callers but are
 capped by hard ceilings.
 
-Bundled first-party instruction-only skills live under `skills/`. Their
-presence does not cause them to load, install, or execute during inspection:
+Bundled first-party instruction-only skills live under `skills/`. Inspection
+reads their regular-file bytes for inventory and digesting, but does not
+register, activate, install, copy, or execute them:
 
 - [`capability-conductor`](skills/capability-conductor/SKILL.md) uses a
   task-scoped book, page, and bookmark model to understand and compose the
@@ -105,10 +111,9 @@ presence does not cause them to load, install, or execute during inspection:
 - [`learn-by-contact`](skills/learn-by-contact/SKILL.md) reconstructs a
   technique from direct evidence, builds the smallest clean reproduction, and
   transfers the mechanism into an original adaptation with exemplar,
-  contrast, and transfer checks. Its OpenAI metadata requires explicit
-  invocation while its trigger and behavior are evaluated.
+  contrast, and transfer checks.
 
-Version `0.2.0` also carries an unofficial, instruction-only Nen operating
+Version `0.2.1` carries an unofficial, instruction-only Nen operating
 suite. These are original agent workflows inspired by the rule and
 tradeoff design of *Hunter × Hunter*; they reproduce no story text, character
 likenesses, or artwork:
@@ -127,12 +132,15 @@ likenesses, or artwork:
 The skills have no script, credential, MCP, network, or hosted-runtime
 requirement. Bundling does not activate them, and their metaphors do not grant
 permission or change AgentTool's existing TypeScript/Python Nen mappings.
+Every bundled OpenAI sidecar requires explicit invocation while trigger and
+composition behavior are evaluated. The npm archive has no host installer,
+plugin manifest, or automatic discovery registration; installing the package
+alone does not register these skills with Codex, Claude, or another host.
 
 - [`use-agentcred-safely`](skills/use-agentcred-safely/SKILL.md) helps an agent
   request and use the narrowest controller-approved AgentCred grant without
   receiving the credential value. It does not provision credentials, start
-  the broker, approve a side effect, or grant authority, and its OpenAI
-  metadata requires explicit invocation.
+  the broker, approve a side effect, or grant authority.
 
 ## Development
 

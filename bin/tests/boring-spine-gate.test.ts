@@ -321,7 +321,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain('report.skills[0].name !== "use-agentcred-safely"');
     expect(workflow).toContain('report.skills[0].name !== "capability-conductor"');
     expect(workflow).toContain('report.skills[0].name !== "learn-by-contact"');
-    expect(workflow).toContain('test "$(node "$cli" --version)" = "0.2.0"');
+    expect(workflow).toContain('test "$(node "$cli" --version)" = "0.2.1"');
     for (const skillName of [
       "nen-contract-mantle",
       "nen-dependency-perimeter",
