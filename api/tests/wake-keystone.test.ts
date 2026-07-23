@@ -207,7 +207,7 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
     expect(body.version_cursor.conditional_get_header).toBe("If-None-Match");
     expect(body.version_cursor.not_modified_status).toBe(304);
     expect(body.version_cursor.etag_header.includes("wake_version")).toBe(false);
-    expect(body.version_cursor.etag_header).toMatch(/^ETag: W\/"r3-sha256-/);
+    expect(body.version_cursor.etag_header).toMatch(/^ETag: W\/"r4-sha256-/);
     expect((body.version_cursor as { validator_strength?: string }).validator_strength).toBe("weak");
     expect(body.version_cursor.etag_coverage).toContain("brief JSON");
     expect(body.version_cursor.etag_exclusions).toMatch(

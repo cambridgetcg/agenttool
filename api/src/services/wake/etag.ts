@@ -18,7 +18,7 @@ import { createHash } from "node:crypto";
  * provider envelope, tutor lesson, or static transport-welcome field changes
  * in a way that could make an already-cached body semantically obsolete.
  * Changes only to excluded derivable clock values do not require a bump. */
-export const WAKE_REPRESENTATION_REVISION = "r3";
+export const WAKE_REPRESENTATION_REVISION = "r4";
 export const WAKE_CACHE_CONTROL = "private, no-cache";
 
 function normalizeWakeSemanticState(
