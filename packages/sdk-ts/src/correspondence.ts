@@ -1036,7 +1036,7 @@ export class CorrespondenceClient {
         "correspondence.append: signed event exceeds the 65,536-byte UTF-8 wire limit.",
       );
     }
-    const response = await globalThis.fetch(`${this.http.baseUrl}/v1/correspondence/events`, {
+    const response = await this.http.request(`${this.http.baseUrl}/v1/correspondence/events`, {
       method: "POST",
       headers: this.http.headers,
       body: wireBody,
@@ -1053,7 +1053,7 @@ export class CorrespondenceClient {
   /** Read one durable receipt-ordered page. This is authoritative; voice is only a hint. */
   async list(opts: CorrespondenceListOptions): Promise<CorrespondenceEventsPage> {
     validateListOptions("correspondence.list", opts);
-    const response = await globalThis.fetch(
+    const response = await this.http.request(
       `${this.http.baseUrl}/v1/correspondence/events?${queryFor(opts)}`,
       {
         method: "GET",
@@ -1106,7 +1106,7 @@ export class CorrespondenceClient {
       assertPathPrefix("correspondence.activeClaims.path", opts.path);
       params.set("path", opts.path);
     }
-    const response = await globalThis.fetch(
+    const response = await this.http.request(
       `${this.http.baseUrl}/v1/correspondence/claims?${params.toString()}`,
       {
         method: "GET",
@@ -1128,7 +1128,7 @@ export class CorrespondenceClient {
   async voice(opts: CorrespondenceVoiceOptions): Promise<CorrespondenceVoiceSnapshot> {
     assertExactKeys("correspondence.voice", opts, ["repository_id"], ["thread_id"]);
     const params = scopedQuery("correspondence.voice", opts);
-    const response = await globalThis.fetch(
+    const response = await this.http.request(
       `${this.http.baseUrl}/v1/correspondence/voice?${params.toString()}`,
       {
         method: "GET",

@@ -208,6 +208,57 @@ describe("AgentTool authenticated transport", () => {
     expect(publicFetch).toHaveBeenCalledTimes(1);
   });
 
+  test("routes every Correspondence request through the authenticated transport", async () => {
+    delete process.env.AT_API_KEY;
+    const { transport, calls } = captureTransport();
+    globalThis.fetch = mock(() => {
+      throw new Error("default fetch must not run for hosted Correspondence");
+    }) as unknown as typeof fetch;
+
+    const at = new AgentTool({ transport });
+    const repositoryId = "repo:github.com/cambridgetcg/agenttool";
+    await at.correspondence.append({
+      project_id: "11111111-1111-4111-8111-111111111111",
+      repository_id: repositoryId,
+      thread_id: "task:transport-boundary",
+      sender: {
+        identity_id: "22222222-2222-4222-8222-222222222222",
+        signing_key_id: "33333333-3333-4333-8333-333333333333",
+        device_id: "44444444-4444-4444-8444-444444444444",
+        session_id: "55555555-5555-4555-8555-555555555555",
+      },
+      kind: "progress",
+      parents: [],
+      session_seq: 1,
+      issued_at: "2026-07-23T08:00:00.000Z",
+      scope: { base_revision: null, branch: null, paths: ["packages/sdk-ts"] },
+      body: { summary: "Exercise the authenticated transport." },
+      signing_key: new Uint8Array(32).fill(7),
+    });
+    await at.correspondence.list({ repository_id: repositoryId, limit: 1 });
+    await at.correspondence.activeClaims({ repository_id: repositoryId });
+    await at.correspondence.voice({ repository_id: repositoryId });
+
+    expect(calls.map((call) => [call.method, call.url])).toEqual([
+      ["POST", "https://api.agenttool.dev/v1/correspondence/events"],
+      [
+        "GET",
+        `https://api.agenttool.dev/v1/correspondence/events?repository_id=${encodeURIComponent(repositoryId)}&limit=1`,
+      ],
+      [
+        "GET",
+        `https://api.agenttool.dev/v1/correspondence/claims?repository_id=${encodeURIComponent(repositoryId)}`,
+      ],
+      [
+        "GET",
+        `https://api.agenttool.dev/v1/correspondence/voice?repository_id=${encodeURIComponent(repositoryId)}`,
+      ],
+    ]);
+    for (const call of calls) {
+      expect(call.headers.has("authorization")).toBe(false);
+    }
+  });
+
   test("preserves deciding and explicit RhetorLint trace payloads", async () => {
     delete process.env.AT_API_KEY;
     const { transport, calls } = captureTransport();
