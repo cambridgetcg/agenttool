@@ -19,12 +19,14 @@ node (`packages/data/`), the experimental ADDS encrypted-object package
 distribution protocol, a public read-only discovery evidence mapper
 (`packages/telescope/`), an experimental local capability broker
 (`packages/credential-broker/`), a local-first multi-agent coordination journal
-(`packages/collab/`), a read-only portable Agent Skills inspector
-(`packages/skills/`), source reference primitives for capability-bounded agent
-wallets (`packages/wallet/`), and three static apps (`apps/`). The Skills
-inspector validates bounded local structure and emits reports; it does not
-execute scripts, install or copy skills, use the network, spawn subprocesses,
-look up credentials, or change host configuration. Agent
+(`packages/collab/`), a deterministic metadata-only Correspondence-to-YUTABASE
+projection planner (`packages/correspondence-yutabase/`), source reference
+primitives for capability-bounded agent wallets (`packages/wallet/`), a
+read-only portable Agent Skills inspector (`packages/skills/`), and three
+static apps (`apps/`). The Skills inspector validates bounded local structure
+and emits reports; it does not execute scripts, install or copy skills, use the
+network, spawn subprocesses, look up credentials, or change host
+configuration. Agent
 Wallet 0.1 has no bundled key custody, chain adapter, RPC, broadcaster, hosted
 service, or implied npm mirror availability. Its exact LOVE artifact is the
 release record. Telescope 0.1.0 is a
@@ -53,6 +55,7 @@ cd packages/data-sync && bun install           # explicit agent-data-sync/v1 pul
 cd packages/credential-broker && bun install   # experimental agentcred/0.1 local broker
 cd packages/collab && bun install              # local agenttool.collab/0.1 coordination journal
 cd packages/skills && bun install              # read-only portable Agent Skills inspection
+cd packages/correspondence-yutabase && bun install # pure Correspondence projection planner
 cd packages/sdk-ts && bun install              # TS SDK
 cd packages/telescope && bun install           # read-only discovery evidence mapper
 cd packages/wallet && bun install              # agent-wallet/0.1 offline primitives
@@ -108,6 +111,11 @@ cd packages/skills
 bun run ci                                     # typecheck + hermetic inspection tests + build
 npm pack --dry-run --ignore-scripts            # package boundary; does not publish or run lifecycle scripts
 
+# Correspondence → YUTABASE projection planner ───────────────────────
+cd packages/correspondence-yutabase
+bun run ci                                     # typecheck + vectors + build + Node smoke
+npm pack --dry-run                             # package boundary; does not publish
+
 # Registry-neutral JavaScript package artifacts ────────────────────
 bun bin/build-love-packages.ts build <staging-dir> # clean tracked tree required; never publishes or uploads
 
@@ -144,7 +152,7 @@ bunx playwright test                           # browser + multi-instance scenar
 # Deliberate test + release gates ────────────────────────────────────
 bin/preflight.sh                               # no application/service credentials required
 bin/preflight.sh api                           # API/typecheck/operator tests only
-bin/preflight.sh packages                      # data + ADDS + sync + broker + collab + Skills + SDK + Wallet + Telescope
+bin/preflight.sh packages                      # data + ADDS + sync + broker + collab + projection + Skills + SDK + Wallet + Telescope
 bin/preflight.sh database                      # explicit DB tier; requires DATABASE_URL
 bin/preflight.sh smoke                         # explicit deployed-route smoke
 RUN_CONTRACT=1 bin/preflight.sh contracts      # paid LLM wire proofs

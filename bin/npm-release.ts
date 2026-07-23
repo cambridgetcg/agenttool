@@ -99,6 +99,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "collab",
     artifactKind: "pack",
   },
+  "correspondence-yutabase": {
+    key: "correspondence-yutabase",
+    name: "@agenttool/correspondence-yutabase",
+    packagePath: "packages/correspondence-yutabase",
+    tagPrefix: "correspondence-yutabase",
+    artifactKind: "pack",
+  },
   skills: {
     key: "skills",
     name: "@agenttool/skills",
@@ -268,6 +275,18 @@ export function releaseSpec(key: string): ReleaseSpec {
 export function expectedTag(spec: ReleaseSpec, version: string): string {
   if (!SEMVER.test(version)) fail(`invalid package version: ${version}`);
   return `${spec.tagPrefix}-v${version}`;
+}
+
+export function isPrereleaseVersion(version: string): boolean {
+  if (!SEMVER.test(version)) fail(`invalid package version: ${version}`);
+  return version.includes("-");
+}
+
+export function validateNpmTagForVersion(version: string, npmTag: string): void {
+  if (!SAFE_NPM_TAG.test(npmTag) || SEMVER.test(npmTag)) fail(`unsafe npm dist-tag: ${npmTag}`);
+  if (isPrereleaseVersion(version) && npmTag !== "next") {
+    fail(`prerelease ${version} requires npm dist-tag next`);
+  }
 }
 
 export function packedFilename(name: string, version: string): string {
@@ -787,7 +806,7 @@ async function createGitHubRelease(receipt: PreparedReceipt, token: string): Pro
       name: `${receipt.package.name}@${receipt.package.version}`,
       body: "Exact npm publication artifact mirror. Registry identity is recorded by the protected publish-npm workflow.",
       draft: false,
-      prerelease: false,
+      prerelease: isPrereleaseVersion(receipt.package.version),
       generate_release_notes: false,
       make_latest: "false",
     }),
@@ -874,11 +893,11 @@ async function publish(
   npmTag: string,
 ): Promise<PreparedReceipt> {
   ensureWorkflowContext();
-  if (!SAFE_NPM_TAG.test(npmTag) || SEMVER.test(npmTag)) fail(`unsafe npm dist-tag: ${npmTag}`);
   if (authentication !== "bootstrap" && authentication !== "trusted") fail("authentication must be bootstrap or trusted");
   await ensurePinnedTools();
   const absoluteReceiptPath = resolve(receiptPath);
   const receipt = await readReleaseReceipt(absoluteReceiptPath);
+  validateNpmTagForVersion(receipt.package.version, npmTag);
   const { artifactPath } = await validateReceiptAgainstCheckout(receipt, absoluteReceiptPath);
 
   const state = await registryState(receipt.package.name, receipt.package.version);
