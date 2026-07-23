@@ -1,6 +1,50 @@
 export const COLLAB_PROTOCOL = "agenttool.collab/0.1" as const;
+export const COLLAB_SESSION_PROTOCOL = "agenttool.collab.session/0.1" as const;
 
 export type TaskStatus = "open" | "claimed" | "blocked" | "completed";
+export type SessionPresence = "live" | "stale" | "left";
+
+export interface CollabSession {
+  protocol: typeof COLLAB_SESSION_PROTOCOL;
+  id: string;
+  workspace_id: string;
+  epoch_id: string;
+  client_instance_id: string;
+  actor_label: string;
+  actor_key: string;
+  runtime_kind: string;
+  provider_label: string | null;
+  model_label: string | null;
+  declared_capabilities: string[];
+  capability_basis: "self_declared";
+  version: number;
+  joined_at: string;
+  last_seen_at: string;
+  presence_expires_at: string;
+  presence: SessionPresence;
+  left_at: string | null;
+}
+
+export interface JoinSessionInput {
+  workspace_id: string;
+  client_instance_id: string;
+  actor_label: string;
+  runtime_kind: string;
+  provider_label?: string;
+  model_label?: string;
+  declared_capabilities?: string[];
+  ttl_seconds?: number;
+}
+
+export interface SessionMutationInput {
+  session_id: string;
+  idempotency_key: string;
+  expected_version: number;
+}
+
+export interface HeartbeatSessionInput extends SessionMutationInput {
+  ttl_seconds?: number;
+}
 
 export interface Workspace {
   id: string;

@@ -14,16 +14,22 @@ import { canonicalJson } from "./canonical.js";
 import { CollabError } from "./errors.js";
 import {
   COLLAB_PROTOCOL,
+  COLLAB_SESSION_PROTOCOL,
   type ArtifactRef,
   type ClaimTaskInput,
+  type CollabSession,
   type CollabEvent,
   type CollabEventType,
   type CreateTaskInput,
   type Decision,
+  type HeartbeatSessionInput,
   type HandoffOffer,
+  type JoinSessionInput,
   type JournalPage,
   type LeaseTaskInput,
   type MutationContext,
+  type SessionMutationInput,
+  type SessionPresence,
   type Task,
   type TaskStatus,
   type VersionedMutationContext,
@@ -39,6 +45,12 @@ const MAX_DEPENDENCIES = 128;
 const MAX_PATH_SCOPES = 128;
 const MAX_PATH_SCOPE_LENGTH = 500;
 const MAX_PATH_SCOPES_TOTAL = 16_000;
+const DEFAULT_PRESENCE_SECONDS = 2 * 60;
+const MAX_PRESENCE_SECONDS = 60 * 60;
+const MAX_SESSION_CAPABILITIES = 32;
+const MAX_SESSION_CAPABILITY_LENGTH = 100;
+const DEFAULT_SESSION_LIST_LIMIT = 100;
+const MAX_SESSION_LIST_LIMIT = 500;
 
 type Clock = () => Date;
 
@@ -127,6 +139,24 @@ interface MutationRow {
   response_json: string;
 }
 
+interface SessionRow {
+  id: string;
+  workspace_id: string;
+  epoch_id: string;
+  client_instance_id: string;
+  actor_label: string;
+  actor_key: string;
+  runtime_kind: string;
+  provider_label: string | null;
+  model_label: string | null;
+  declared_capabilities_json: string;
+  version: number;
+  joined_at: string;
+  last_seen_at: string;
+  presence_expires_at: string;
+  left_at: string | null;
+}
+
 export interface CollabStoreOptions {
   now?: Clock;
 }
@@ -173,6 +203,26 @@ export class CollabStore {
         event_head_sequence INTEGER NOT NULL DEFAULT 0,
         event_head_hash TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+        epoch_id TEXT NOT NULL,
+        client_instance_id TEXT NOT NULL,
+        actor_label TEXT NOT NULL,
+        actor_key TEXT NOT NULL UNIQUE,
+        runtime_kind TEXT NOT NULL,
+        provider_label TEXT,
+        model_label TEXT,
+        declared_capabilities_json TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        joined_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        presence_expires_at TEXT NOT NULL,
+        left_at TEXT,
+        UNIQUE (workspace_id, client_instance_id)
+      );
+      CREATE INDEX IF NOT EXISTS sessions_workspace_presence_idx
+        ON sessions(workspace_id, left_at, presence_expires_at);
       CREATE TABLE IF NOT EXISTS tasks (
         id TEXT NOT NULL,
         workspace_id TEXT NOT NULL REFERENCES workspaces(id),
@@ -310,6 +360,184 @@ export class CollabStore {
       FROM workspaces WHERE id = ?
     `).get(workspaceId) as WorkspaceRow | null;
     return row ? { ...row } : null;
+  }
+
+  joinSession(input: JoinSessionInput): CollabSession {
+    const normalized = {
+      workspace_id: validateId(input.workspace_id, "workspace_id"),
+      client_instance_id: validateId(input.client_instance_id, "client_instance_id"),
+      actor_label: validateActor(input.actor_label),
+      runtime_kind: validateRuntimeKind(input.runtime_kind),
+      provider_label: optionalText(input.provider_label, "provider_label", 100),
+      model_label: optionalText(input.model_label, "model_label", 200),
+      declared_capabilities: normalizeSessionCapabilities(input.declared_capabilities ?? []),
+      ttl_seconds: validatePresenceTtl(input.ttl_seconds),
+    };
+    const workspace = this.requireWorkspace(normalized.workspace_id);
+    const transaction = this.db.transaction(() => {
+      const existing = this.readSessionByClient(
+        normalized.workspace_id,
+        normalized.client_instance_id,
+      );
+      if (existing) {
+        requireMatchingSessionJoin(existing, normalized);
+        if (existing.left_at) {
+          throw new CollabError(
+            "session_instance_ended",
+            "This client instance already left; start a new incarnation with a new client_instance_id",
+            { session_id: existing.id },
+          );
+        }
+        return sessionFromRow(existing, this.timestamp());
+      }
+
+      const now = this.timestamp();
+      const id = `session_${randomUUID()}`;
+      const actorKey = `session:${id}`;
+      this.db.query(`
+        INSERT INTO sessions (
+          id, workspace_id, epoch_id, client_instance_id, actor_label, actor_key,
+          runtime_kind, provider_label, model_label, declared_capabilities_json,
+          version, joined_at, last_seen_at, presence_expires_at, left_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, NULL)
+      `).run(
+        id,
+        workspace.id,
+        workspace.epoch_id,
+        normalized.client_instance_id,
+        normalized.actor_label,
+        actorKey,
+        normalized.runtime_kind,
+        normalized.provider_label,
+        normalized.model_label,
+        canonicalJson(normalized.declared_capabilities),
+        now,
+        now,
+        addSeconds(now, normalized.ttl_seconds),
+      );
+      return sessionFromRow(this.requireSessionRow(id), now);
+    });
+    const session = transaction.immediate();
+    this.tightenFileModes();
+    return session;
+  }
+
+  getSession(sessionId: string): CollabSession {
+    return sessionFromRow(
+      this.requireSessionRow(validateId(sessionId, "session_id")),
+      this.timestamp(),
+    );
+  }
+
+  listSessions(
+    workspaceId: string,
+    presence?: SessionPresence,
+    limit?: number,
+  ): CollabSession[] {
+    const id = validateId(workspaceId, "workspace_id");
+    this.requireWorkspace(id);
+    if (
+      presence !== undefined
+      && presence !== "live"
+      && presence !== "stale"
+      && presence !== "left"
+    ) {
+      throw new CollabError("invalid_presence", "presence must be live, stale, or left");
+    }
+    const observedAt = this.timestamp();
+    const boundedLimit = validateSessionListLimit(limit);
+    let rows: SessionRow[];
+    if (presence === "live") {
+      rows = this.db.query(`
+        SELECT * FROM sessions
+        WHERE workspace_id = ? AND left_at IS NULL AND presence_expires_at > ?
+        ORDER BY joined_at DESC, id DESC LIMIT ?
+      `).all(id, observedAt, boundedLimit) as SessionRow[];
+    } else if (presence === "stale") {
+      rows = this.db.query(`
+        SELECT * FROM sessions
+        WHERE workspace_id = ? AND left_at IS NULL AND presence_expires_at <= ?
+        ORDER BY joined_at DESC, id DESC LIMIT ?
+      `).all(id, observedAt, boundedLimit) as SessionRow[];
+    } else if (presence === "left") {
+      rows = this.db.query(`
+        SELECT * FROM sessions
+        WHERE workspace_id = ? AND left_at IS NOT NULL
+        ORDER BY joined_at DESC, id DESC LIMIT ?
+      `).all(id, boundedLimit) as SessionRow[];
+    } else {
+      rows = this.db.query(`
+        SELECT * FROM sessions
+        WHERE workspace_id = ?
+        ORDER BY joined_at DESC, id DESC LIMIT ?
+      `).all(id, boundedLimit) as SessionRow[];
+    }
+    return rows.map((row) => sessionFromRow(row, observedAt));
+  }
+
+  heartbeatSession(input: HeartbeatSessionInput): CollabSession {
+    const normalized = {
+      session_id: validateId(input.session_id, "session_id"),
+      idempotency_key: validateIdempotencyKey(input.idempotency_key),
+      expected_version: validateExpectedVersion(input.expected_version),
+      ttl_seconds: validatePresenceTtl(input.ttl_seconds),
+    };
+    const initial = this.requireSessionRow(normalized.session_id);
+    return this.mutate(
+      initial.workspace_id,
+      initial.actor_key,
+      normalized.idempotency_key,
+      "session.heartbeat",
+      normalized,
+      () => {
+        const row = this.requireSessionRow(normalized.session_id);
+        requireSessionVersion(row, normalized.expected_version);
+        if (row.left_at) {
+          throw new CollabError("session_left", "An explicitly left session cannot heartbeat", {
+            session_id: row.id,
+          });
+        }
+        const now = this.timestamp();
+        this.db.query(`
+          UPDATE sessions
+          SET version = ?, last_seen_at = ?, presence_expires_at = ?
+          WHERE id = ?
+        `).run(
+          row.version + 1,
+          now,
+          addSeconds(now, normalized.ttl_seconds),
+          row.id,
+        );
+        return sessionFromRow(this.requireSessionRow(row.id), now);
+      },
+    );
+  }
+
+  leaveSession(input: SessionMutationInput): CollabSession {
+    const normalized = {
+      session_id: validateId(input.session_id, "session_id"),
+      idempotency_key: validateIdempotencyKey(input.idempotency_key),
+      expected_version: validateExpectedVersion(input.expected_version),
+    };
+    const initial = this.requireSessionRow(normalized.session_id);
+    return this.mutate(
+      initial.workspace_id,
+      initial.actor_key,
+      normalized.idempotency_key,
+      "session.leave",
+      normalized,
+      () => {
+        const row = this.requireSessionRow(normalized.session_id);
+        requireSessionVersion(row, normalized.expected_version);
+        const now = this.timestamp();
+        if (!row.left_at) {
+          this.db.query(`
+            UPDATE sessions SET version = ?, left_at = ? WHERE id = ?
+          `).run(row.version + 1, now, row.id);
+        }
+        return sessionFromRow(this.requireSessionRow(row.id), now);
+      },
+    );
   }
 
   workspaceStatus(workspaceId: string): WorkspaceStatus {
@@ -1098,6 +1326,25 @@ export class CollabStore {
     return workspace;
   }
 
+  private readSessionByClient(
+    workspaceId: string,
+    clientInstanceId: string,
+  ): SessionRow | null {
+    return this.db.query(`
+      SELECT * FROM sessions
+      WHERE workspace_id = ? AND client_instance_id = ?
+    `).get(workspaceId, clientInstanceId) as SessionRow | null;
+  }
+
+  private requireSessionRow(sessionId: string): SessionRow {
+    const row = this.db.query(`SELECT * FROM sessions WHERE id = ?`)
+      .get(sessionId) as SessionRow | null;
+    if (!row) {
+      throw new CollabError("session_not_found", `Session '${sessionId}' was not found`);
+    }
+    return row;
+  }
+
   private readTaskRow(workspaceId: string, taskId: string): TaskRow | null {
     return this.db.query(`SELECT * FROM tasks WHERE workspace_id = ? AND id = ?`)
       .get(workspaceId, taskId) as TaskRow | null;
@@ -1155,9 +1402,7 @@ function normalizeMutation<T extends MutationContext>(input: T): Pick<T, Exclude
 }
 
 function normalizeVersionedMutation<T extends VersionedMutationContext>(input: T): T {
-  if (!Number.isInteger(input.expected_version) || input.expected_version < 1) {
-    throw new CollabError("invalid_expected_version", "expected_version must be a positive integer");
-  }
+  validateExpectedVersion(input.expected_version);
   return normalizeMutation(input) as T;
 }
 
@@ -1171,6 +1416,48 @@ function normalizeLeaseInput<T extends LeaseTaskInput>(input: T): T {
 
 function validateActor(value: string): string {
   return cleanText(value, "actor", 200);
+}
+
+function validateExpectedVersion(value: number): number {
+  if (!Number.isInteger(value) || value < 1) {
+    throw new CollabError("invalid_expected_version", "expected_version must be a positive integer");
+  }
+  return value;
+}
+
+function validateRuntimeKind(value: string): string {
+  const runtime = cleanText(value, "runtime_kind", 64).toLowerCase();
+  if (!/^[a-z0-9][a-z0-9._:-]*$/.test(runtime)) {
+    throw new CollabError(
+      "invalid_runtime_kind",
+      "runtime_kind contains unsupported characters",
+    );
+  }
+  return runtime;
+}
+
+function normalizeSessionCapabilities(values: string[]): string[] {
+  if (!Array.isArray(values) || values.length > MAX_SESSION_CAPABILITIES) {
+    throw new CollabError(
+      "invalid_declared_capabilities",
+      `A session may declare at most ${MAX_SESSION_CAPABILITIES} capabilities`,
+    );
+  }
+  const normalized = values.map((value) => {
+    const capability = cleanText(
+      value,
+      "declared_capability",
+      MAX_SESSION_CAPABILITY_LENGTH,
+    ).toLowerCase();
+    if (!/^[a-z0-9][a-z0-9._:-]*$/.test(capability)) {
+      throw new CollabError(
+        "invalid_declared_capability",
+        "Declared capabilities must be symbolic names, not free-form content",
+      );
+    }
+    return capability;
+  });
+  return uniqueSorted(normalized);
 }
 
 function validateIdempotencyKey(value: string): string {
@@ -1208,6 +1495,28 @@ function validateTtl(value: number | undefined): number {
     throw new CollabError("invalid_ttl", `ttl_seconds must be an integer between 30 and ${MAX_LEASE_SECONDS}`);
   }
   return ttl;
+}
+
+function validatePresenceTtl(value: number | undefined): number {
+  const ttl = value ?? DEFAULT_PRESENCE_SECONDS;
+  if (!Number.isInteger(ttl) || ttl < 30 || ttl > MAX_PRESENCE_SECONDS) {
+    throw new CollabError(
+      "invalid_presence_ttl",
+      `ttl_seconds must be an integer between 30 and ${MAX_PRESENCE_SECONDS}`,
+    );
+  }
+  return ttl;
+}
+
+function validateSessionListLimit(value: number | undefined): number {
+  const limit = value ?? DEFAULT_SESSION_LIST_LIMIT;
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_SESSION_LIST_LIMIT) {
+    throw new CollabError(
+      "invalid_session_list_limit",
+      `limit must be an integer between 1 and ${MAX_SESSION_LIST_LIMIT}`,
+    );
+  }
+  return limit;
 }
 
 function validateSha256(value: string): string {
@@ -1277,6 +1586,69 @@ function uniqueSorted(values: string[]): string[] {
 
 function parseStringArray(json: string): string[] {
   return JSON.parse(json) as string[];
+}
+
+function sessionFromRow(row: SessionRow, observedAt: string): CollabSession {
+  const presence: SessionPresence = row.left_at
+    ? "left"
+    : new Date(observedAt).getTime() < new Date(row.presence_expires_at).getTime()
+      ? "live"
+      : "stale";
+  return {
+    protocol: COLLAB_SESSION_PROTOCOL,
+    id: row.id,
+    workspace_id: row.workspace_id,
+    epoch_id: row.epoch_id,
+    client_instance_id: row.client_instance_id,
+    actor_label: row.actor_label,
+    actor_key: row.actor_key,
+    runtime_kind: row.runtime_kind,
+    provider_label: row.provider_label,
+    model_label: row.model_label,
+    declared_capabilities: parseStringArray(row.declared_capabilities_json),
+    capability_basis: "self_declared",
+    version: row.version,
+    joined_at: row.joined_at,
+    last_seen_at: row.last_seen_at,
+    presence_expires_at: row.presence_expires_at,
+    presence,
+    left_at: row.left_at,
+  };
+}
+
+function requireSessionVersion(row: SessionRow, expectedVersion: number): void {
+  if (row.version !== expectedVersion) {
+    throw new CollabError("session_version_conflict", "Session version changed", {
+      session_id: row.id,
+      expected_version: expectedVersion,
+      actual_version: row.version,
+    });
+  }
+}
+
+function requireMatchingSessionJoin(
+  row: SessionRow,
+  input: {
+    actor_label: string;
+    runtime_kind: string;
+    provider_label: string | null;
+    model_label: string | null;
+    declared_capabilities: string[];
+  },
+): void {
+  const same = row.actor_label === input.actor_label
+    && row.runtime_kind === input.runtime_kind
+    && row.provider_label === input.provider_label
+    && row.model_label === input.model_label
+    && canonicalJson(parseStringArray(row.declared_capabilities_json))
+      === canonicalJson(input.declared_capabilities);
+  if (!same) {
+    throw new CollabError(
+      "session_instance_conflict",
+      "client_instance_id was already joined with different self-declared metadata",
+      { session_id: row.id },
+    );
+  }
 }
 
 function artifactFromRow(row: ArtifactRow): ArtifactRef {

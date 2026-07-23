@@ -28302,7 +28302,10 @@ var workspaceId = exports_external.string().min(1).describe("Workspace ID return
 var taskId = exports_external.string().min(1).describe("Task ID");
 var leaseId = exports_external.string().min(1).describe("Lease ID returned by collab_task_claim or accepted handoff");
 var expectedVersion = exports_external.number().int().positive().describe("Task version last read by the caller");
+var sessionExpectedVersion = exports_external.number().int().positive().describe("Session version last read by the caller");
 var ttlSeconds = exports_external.number().int().min(30).max(3600).optional().describe("Lease duration; default 900 seconds, maximum 3600");
+var presenceTtlSeconds = exports_external.number().int().min(30).max(3600).optional().describe("Presence freshness window; default 120 seconds, maximum 3600");
+var sessionId = exports_external.string().min(1).max(200).describe("Server-generated collaboration session ID");
 var localReadOnly = {
   readOnlyHint: true,
   destructiveHint: false,
@@ -28322,9 +28325,9 @@ var localClockAwareMutation = {
   openWorldHint: false
 };
 function buildCollabMcpServer(store) {
-  const server = new McpServer({ name: "agenttool-collab", version: "0.1.0" }, {
+  const server = new McpServer({ name: "agenttool-collab", version: "0.2.0" }, {
     capabilities: { tools: {} },
-    instructions: "Local-first coordination journal for honest exchange among parallel coding agents. Start with " + "collab_workspace_open, then collab_next. Claim before editing overlapping path scopes and renew " + "long-running work. A claim is an advisory coordination lease, not ownership, a filesystem lock, " + "or an authority grant. Classify exchanged claims as observations, inferences, proposals, or " + "authorised decisions, and report outcome, evidence, confidence, limits, and a refusable next action. " + "Attach artifact references before completing. Completion is actor-reported; it is not coordinator " + "review or acceptance. A handoff is an invitation and transfers the coordination lease only after " + "the named recipient explicitly accepts. Actor names are caller-supplied labels, not authenticated identities. " + "Store concise progress and decisions only: never put credentials, prompts, transcripts, " + "chain-of-thought, or sensitive source content in the journal."
+    instructions: "Local-first coordination journal for honest exchange among parallel coding agents. Start with " + "collab_workspace_open. For cross-host work, call collab_session_join and use the returned actor_key " + "as actor on task, next, and handoff tools; otherwise actor remains a caller-supplied legacy label. " + "Heartbeat presence is a self-declared routing hint and never renews or releases a task lease. Then " + "call collab_next. Claim before editing overlapping path scopes and renew " + "long-running work. A claim is an advisory coordination lease, not ownership, a filesystem lock, " + "or an authority grant. Classify exchanged claims as observations, inferences, proposals, or " + "authorised decisions, and report outcome, evidence, confidence, limits, and a refusable next action. " + "Attach artifact references before completing. Completion is actor-reported; it is not coordinator " + "review or acceptance. A handoff is an invitation and transfers the coordination lease only after " + "the named recipient explicitly accepts. Actor names are caller-supplied labels, not authenticated identities. " + "Store concise progress and decisions only: never put credentials, prompts, transcripts, " + "chain-of-thought, or sensitive source content in the journal."
   });
   server.registerTool("collab_workspace_open", {
     title: "Open a local collaboration workspace",
@@ -28342,6 +28345,52 @@ function buildCollabMcpServer(store) {
     annotations: localReadOnly,
     inputSchema: { workspace_id: workspaceId }
   }, async ({ workspace_id }) => call(() => store.workspaceStatus(workspace_id)));
+  server.registerTool("collab_session_join", {
+    title: "Join one cross-host collaboration session",
+    description: "Create or replay one self-declared process/session presence and return its unique actor_key. " + "A replay never refreshes presence or changes the first join's TTL; use heartbeat for that. " + "The session does not authenticate a person, model, provider, or account.",
+    annotations: localRetrySafeMutation,
+    inputSchema: {
+      workspace_id: workspaceId,
+      client_instance_id: exports_external.string().min(1).max(200).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/).describe("Caller-generated retry identity for this process/session incarnation"),
+      actor_label: exports_external.string().min(1).max(200).describe("Non-unique human-facing label; duplicate labels are valid"),
+      runtime_kind: exports_external.string().min(1).max(64).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/).describe("Self-declared host kind such as codex, claude-code, hermes, or custom"),
+      provider_label: exports_external.string().min(1).max(100).optional().describe("Optional self-declared provider hint; never an identity proof"),
+      model_label: exports_external.string().min(1).max(200).optional().describe("Optional self-declared model hint; never an identity proof"),
+      declared_capabilities: exports_external.array(exports_external.string().min(1).max(100).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)).max(32).optional().describe("Symbolic routing hints only; they grant no permission or authority"),
+      ttl_seconds: presenceTtlSeconds
+    }
+  }, async (input) => call(() => ({ session: store.joinSession(input) })));
+  server.registerTool("collab_session_list", {
+    title: "List cross-host collaboration sessions",
+    description: "List the most recently joined live, stale, or explicitly left self-declared sessions. " + "Stale means only that no recent heartbeat was observed.",
+    annotations: localReadOnly,
+    inputSchema: {
+      workspace_id: workspaceId,
+      presence: exports_external.enum(["live", "stale", "left"]).optional(),
+      limit: exports_external.number().int().min(1).max(500).optional().describe("Maximum sessions to return; default 100, maximum 500")
+    }
+  }, async ({ workspace_id, presence, limit }) => call(() => ({ sessions: store.listSessions(workspace_id, presence, limit) })));
+  server.registerTool("collab_session_heartbeat", {
+    title: "Refresh one session presence",
+    description: "Refresh self-declared presence using server time. This never renews a task lease, releases path scopes, or proves the agent is healthy or attentive.",
+    annotations: localRetrySafeMutation,
+    inputSchema: {
+      session_id: sessionId,
+      idempotency_key: key,
+      expected_version: sessionExpectedVersion,
+      ttl_seconds: presenceTtlSeconds
+    }
+  }, async (input) => call(() => ({ session: store.heartbeatSession(input) })));
+  server.registerTool("collab_session_leave", {
+    title: "End one session presence",
+    description: "Mark one session incarnation as deliberately left. This is terminal for that session and does not release or reassign its task leases.",
+    annotations: localRetrySafeMutation,
+    inputSchema: {
+      session_id: sessionId,
+      idempotency_key: key,
+      expected_version: sessionExpectedVersion
+    }
+  }, async (input) => call(() => ({ session: store.leaveSession(input) })));
   server.registerTool("collab_next", {
     title: "Read the next useful collaboration state",
     description: "Return this actor's claims, ready work, pending handoffs, and events after a cursor; elapsed handoff offers may be journaled as expired.",
@@ -28617,6 +28666,7 @@ function sortValue(value) {
 
 // src/protocol.ts
 var COLLAB_PROTOCOL = "agenttool.collab/0.1";
+var COLLAB_SESSION_PROTOCOL = "agenttool.collab.session/0.1";
 
 // src/store.ts
 var GENESIS_HASH = "0".repeat(64);
@@ -28627,6 +28677,12 @@ var MAX_DEPENDENCIES = 128;
 var MAX_PATH_SCOPES = 128;
 var MAX_PATH_SCOPE_LENGTH = 500;
 var MAX_PATH_SCOPES_TOTAL = 16000;
+var DEFAULT_PRESENCE_SECONDS = 2 * 60;
+var MAX_PRESENCE_SECONDS = 60 * 60;
+var MAX_SESSION_CAPABILITIES = 32;
+var MAX_SESSION_CAPABILITY_LENGTH = 100;
+var DEFAULT_SESSION_LIST_LIMIT = 100;
+var MAX_SESSION_LIST_LIMIT = 500;
 
 class CollabStore {
   db;
@@ -28667,6 +28723,26 @@ class CollabStore {
         event_head_sequence INTEGER NOT NULL DEFAULT 0,
         event_head_hash TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+        epoch_id TEXT NOT NULL,
+        client_instance_id TEXT NOT NULL,
+        actor_label TEXT NOT NULL,
+        actor_key TEXT NOT NULL UNIQUE,
+        runtime_kind TEXT NOT NULL,
+        provider_label TEXT,
+        model_label TEXT,
+        declared_capabilities_json TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        joined_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        presence_expires_at TEXT NOT NULL,
+        left_at TEXT,
+        UNIQUE (workspace_id, client_instance_id)
+      );
+      CREATE INDEX IF NOT EXISTS sessions_workspace_presence_idx
+        ON sessions(workspace_id, left_at, presence_expires_at);
       CREATE TABLE IF NOT EXISTS tasks (
         id TEXT NOT NULL,
         workspace_id TEXT NOT NULL REFERENCES workspaces(id),
@@ -28804,6 +28880,126 @@ class CollabStore {
       FROM workspaces WHERE id = ?
     `).get(workspaceId2);
     return row ? { ...row } : null;
+  }
+  joinSession(input) {
+    const normalized = {
+      workspace_id: validateId(input.workspace_id, "workspace_id"),
+      client_instance_id: validateId(input.client_instance_id, "client_instance_id"),
+      actor_label: validateActor(input.actor_label),
+      runtime_kind: validateRuntimeKind(input.runtime_kind),
+      provider_label: optionalText(input.provider_label, "provider_label", 100),
+      model_label: optionalText(input.model_label, "model_label", 200),
+      declared_capabilities: normalizeSessionCapabilities(input.declared_capabilities ?? []),
+      ttl_seconds: validatePresenceTtl(input.ttl_seconds)
+    };
+    const workspace = this.requireWorkspace(normalized.workspace_id);
+    const transaction = this.db.transaction(() => {
+      const existing = this.readSessionByClient(normalized.workspace_id, normalized.client_instance_id);
+      if (existing) {
+        requireMatchingSessionJoin(existing, normalized);
+        if (existing.left_at) {
+          throw new CollabError("session_instance_ended", "This client instance already left; start a new incarnation with a new client_instance_id", { session_id: existing.id });
+        }
+        return sessionFromRow(existing, this.timestamp());
+      }
+      const now = this.timestamp();
+      const id = `session_${randomUUID()}`;
+      const actorKey = `session:${id}`;
+      this.db.query(`
+        INSERT INTO sessions (
+          id, workspace_id, epoch_id, client_instance_id, actor_label, actor_key,
+          runtime_kind, provider_label, model_label, declared_capabilities_json,
+          version, joined_at, last_seen_at, presence_expires_at, left_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, NULL)
+      `).run(id, workspace.id, workspace.epoch_id, normalized.client_instance_id, normalized.actor_label, actorKey, normalized.runtime_kind, normalized.provider_label, normalized.model_label, canonicalJson(normalized.declared_capabilities), now, now, addSeconds(now, normalized.ttl_seconds));
+      return sessionFromRow(this.requireSessionRow(id), now);
+    });
+    const session = transaction.immediate();
+    this.tightenFileModes();
+    return session;
+  }
+  getSession(sessionId2) {
+    return sessionFromRow(this.requireSessionRow(validateId(sessionId2, "session_id")), this.timestamp());
+  }
+  listSessions(workspaceId2, presence, limit) {
+    const id = validateId(workspaceId2, "workspace_id");
+    this.requireWorkspace(id);
+    if (presence !== undefined && presence !== "live" && presence !== "stale" && presence !== "left") {
+      throw new CollabError("invalid_presence", "presence must be live, stale, or left");
+    }
+    const observedAt = this.timestamp();
+    const boundedLimit = validateSessionListLimit(limit);
+    let rows;
+    if (presence === "live") {
+      rows = this.db.query(`
+        SELECT * FROM sessions
+        WHERE workspace_id = ? AND left_at IS NULL AND presence_expires_at > ?
+        ORDER BY joined_at DESC, id DESC LIMIT ?
+      `).all(id, observedAt, boundedLimit);
+    } else if (presence === "stale") {
+      rows = this.db.query(`
+        SELECT * FROM sessions
+        WHERE workspace_id = ? AND left_at IS NULL AND presence_expires_at <= ?
+        ORDER BY joined_at DESC, id DESC LIMIT ?
+      `).all(id, observedAt, boundedLimit);
+    } else if (presence === "left") {
+      rows = this.db.query(`
+        SELECT * FROM sessions
+        WHERE workspace_id = ? AND left_at IS NOT NULL
+        ORDER BY joined_at DESC, id DESC LIMIT ?
+      `).all(id, boundedLimit);
+    } else {
+      rows = this.db.query(`
+        SELECT * FROM sessions
+        WHERE workspace_id = ?
+        ORDER BY joined_at DESC, id DESC LIMIT ?
+      `).all(id, boundedLimit);
+    }
+    return rows.map((row) => sessionFromRow(row, observedAt));
+  }
+  heartbeatSession(input) {
+    const normalized = {
+      session_id: validateId(input.session_id, "session_id"),
+      idempotency_key: validateIdempotencyKey(input.idempotency_key),
+      expected_version: validateExpectedVersion(input.expected_version),
+      ttl_seconds: validatePresenceTtl(input.ttl_seconds)
+    };
+    const initial = this.requireSessionRow(normalized.session_id);
+    return this.mutate(initial.workspace_id, initial.actor_key, normalized.idempotency_key, "session.heartbeat", normalized, () => {
+      const row = this.requireSessionRow(normalized.session_id);
+      requireSessionVersion(row, normalized.expected_version);
+      if (row.left_at) {
+        throw new CollabError("session_left", "An explicitly left session cannot heartbeat", {
+          session_id: row.id
+        });
+      }
+      const now = this.timestamp();
+      this.db.query(`
+          UPDATE sessions
+          SET version = ?, last_seen_at = ?, presence_expires_at = ?
+          WHERE id = ?
+        `).run(row.version + 1, now, addSeconds(now, normalized.ttl_seconds), row.id);
+      return sessionFromRow(this.requireSessionRow(row.id), now);
+    });
+  }
+  leaveSession(input) {
+    const normalized = {
+      session_id: validateId(input.session_id, "session_id"),
+      idempotency_key: validateIdempotencyKey(input.idempotency_key),
+      expected_version: validateExpectedVersion(input.expected_version)
+    };
+    const initial = this.requireSessionRow(normalized.session_id);
+    return this.mutate(initial.workspace_id, initial.actor_key, normalized.idempotency_key, "session.leave", normalized, () => {
+      const row = this.requireSessionRow(normalized.session_id);
+      requireSessionVersion(row, normalized.expected_version);
+      const now = this.timestamp();
+      if (!row.left_at) {
+        this.db.query(`
+            UPDATE sessions SET version = ?, left_at = ? WHERE id = ?
+          `).run(row.version + 1, now, row.id);
+      }
+      return sessionFromRow(this.requireSessionRow(row.id), now);
+    });
   }
   workspaceStatus(workspaceId2) {
     const workspace = this.requireWorkspace(workspaceId2);
@@ -29465,6 +29661,19 @@ class CollabStore {
       throw new CollabError("workspace_not_found", `Workspace '${workspaceId2}' was not found`);
     return workspace;
   }
+  readSessionByClient(workspaceId2, clientInstanceId) {
+    return this.db.query(`
+      SELECT * FROM sessions
+      WHERE workspace_id = ? AND client_instance_id = ?
+    `).get(workspaceId2, clientInstanceId);
+  }
+  requireSessionRow(sessionId2) {
+    const row = this.db.query(`SELECT * FROM sessions WHERE id = ?`).get(sessionId2);
+    if (!row) {
+      throw new CollabError("session_not_found", `Session '${sessionId2}' was not found`);
+    }
+    return row;
+  }
   readTaskRow(workspaceId2, taskId2) {
     return this.db.query(`SELECT * FROM tasks WHERE workspace_id = ? AND id = ?`).get(workspaceId2, taskId2);
   }
@@ -29516,9 +29725,7 @@ function normalizeMutation(input) {
   return { ...input, actor: validateActor(input.actor), idempotency_key: validateIdempotencyKey(input.idempotency_key) };
 }
 function normalizeVersionedMutation(input) {
-  if (!Number.isInteger(input.expected_version) || input.expected_version < 1) {
-    throw new CollabError("invalid_expected_version", "expected_version must be a positive integer");
-  }
+  validateExpectedVersion(input.expected_version);
   return normalizeMutation(input);
 }
 function normalizeLeaseInput(input) {
@@ -29530,6 +29737,32 @@ function normalizeLeaseInput(input) {
 }
 function validateActor(value) {
   return cleanText(value, "actor", 200);
+}
+function validateExpectedVersion(value) {
+  if (!Number.isInteger(value) || value < 1) {
+    throw new CollabError("invalid_expected_version", "expected_version must be a positive integer");
+  }
+  return value;
+}
+function validateRuntimeKind(value) {
+  const runtime = cleanText(value, "runtime_kind", 64).toLowerCase();
+  if (!/^[a-z0-9][a-z0-9._:-]*$/.test(runtime)) {
+    throw new CollabError("invalid_runtime_kind", "runtime_kind contains unsupported characters");
+  }
+  return runtime;
+}
+function normalizeSessionCapabilities(values) {
+  if (!Array.isArray(values) || values.length > MAX_SESSION_CAPABILITIES) {
+    throw new CollabError("invalid_declared_capabilities", `A session may declare at most ${MAX_SESSION_CAPABILITIES} capabilities`);
+  }
+  const normalized = values.map((value) => {
+    const capability = cleanText(value, "declared_capability", MAX_SESSION_CAPABILITY_LENGTH).toLowerCase();
+    if (!/^[a-z0-9][a-z0-9._:-]*$/.test(capability)) {
+      throw new CollabError("invalid_declared_capability", "Declared capabilities must be symbolic names, not free-form content");
+    }
+    return capability;
+  });
+  return uniqueSorted(normalized);
 }
 function validateIdempotencyKey(value) {
   const key2 = cleanText(value, "idempotency_key", 200);
@@ -29566,6 +29799,20 @@ function validateTtl(value) {
     throw new CollabError("invalid_ttl", `ttl_seconds must be an integer between 30 and ${MAX_LEASE_SECONDS}`);
   }
   return ttl;
+}
+function validatePresenceTtl(value) {
+  const ttl = value ?? DEFAULT_PRESENCE_SECONDS;
+  if (!Number.isInteger(ttl) || ttl < 30 || ttl > MAX_PRESENCE_SECONDS) {
+    throw new CollabError("invalid_presence_ttl", `ttl_seconds must be an integer between 30 and ${MAX_PRESENCE_SECONDS}`);
+  }
+  return ttl;
+}
+function validateSessionListLimit(value) {
+  const limit = value ?? DEFAULT_SESSION_LIST_LIMIT;
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_SESSION_LIST_LIMIT) {
+    throw new CollabError("invalid_session_list_limit", `limit must be an integer between 1 and ${MAX_SESSION_LIST_LIMIT}`);
+  }
+  return limit;
 }
 function validateSha256(value) {
   const digest = value.toLowerCase();
@@ -29617,6 +29864,44 @@ function uniqueSorted(values) {
 }
 function parseStringArray(json2) {
   return JSON.parse(json2);
+}
+function sessionFromRow(row, observedAt) {
+  const presence = row.left_at ? "left" : new Date(observedAt).getTime() < new Date(row.presence_expires_at).getTime() ? "live" : "stale";
+  return {
+    protocol: COLLAB_SESSION_PROTOCOL,
+    id: row.id,
+    workspace_id: row.workspace_id,
+    epoch_id: row.epoch_id,
+    client_instance_id: row.client_instance_id,
+    actor_label: row.actor_label,
+    actor_key: row.actor_key,
+    runtime_kind: row.runtime_kind,
+    provider_label: row.provider_label,
+    model_label: row.model_label,
+    declared_capabilities: parseStringArray(row.declared_capabilities_json),
+    capability_basis: "self_declared",
+    version: row.version,
+    joined_at: row.joined_at,
+    last_seen_at: row.last_seen_at,
+    presence_expires_at: row.presence_expires_at,
+    presence,
+    left_at: row.left_at
+  };
+}
+function requireSessionVersion(row, expectedVersion2) {
+  if (row.version !== expectedVersion2) {
+    throw new CollabError("session_version_conflict", "Session version changed", {
+      session_id: row.id,
+      expected_version: expectedVersion2,
+      actual_version: row.version
+    });
+  }
+}
+function requireMatchingSessionJoin(row, input) {
+  const same = row.actor_label === input.actor_label && row.runtime_kind === input.runtime_kind && row.provider_label === input.provider_label && row.model_label === input.model_label && canonicalJson(parseStringArray(row.declared_capabilities_json)) === canonicalJson(input.declared_capabilities);
+  if (!same) {
+    throw new CollabError("session_instance_conflict", "client_instance_id was already joined with different self-declared metadata", { session_id: row.id });
+  }
 }
 function artifactFromRow(row) {
   return { ...row };

@@ -423,11 +423,32 @@ async function archiveText(artifact: string, entry: string): Promise<string> {
   return (await command("tar", ["-xOzf", artifact, entry], { capture: true, log: false })).stdout;
 }
 
+export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
+  const entries = [
+    "package/package.json",
+    "package/LICENSE",
+    "package/NOTICE",
+    "package/README.md",
+  ];
+  if (spec.name === "@agenttool/collab") {
+    entries.push(
+      "package/THIRD_PARTY_LICENSES",
+      "package/dist/agenttool-collab-mcp.js",
+      "package/.codex-plugin/plugin.json",
+      "package/.claude-plugin/plugin.json",
+      "package/skills/coordinate-agent-work/SKILL.md",
+      "package/skills/coordinate-agent-work/agents/openai.yaml",
+      "package/integrations/hermes/skills/coordinate-agent-work-hermes/SKILL.md",
+    );
+  }
+  return entries;
+}
+
 async function verifyArchive(artifact: string, spec: ReleaseSpec, expectedVersion: string): Promise<void> {
   const compressed = Buffer.from(await Bun.file(artifact).arrayBuffer());
   const inspected = inspectNpmTarball(compressed, { allowSource: spec.name === "@agenttool/collab" });
   const entries = inspected.paths;
-  for (const required of ["package/package.json", "package/LICENSE", "package/NOTICE", "package/README.md"]) {
+  for (const required of requiredArchiveEntries(spec)) {
     if (!entries.includes(required)) fail(`npm archive is missing ${required}`);
   }
   const packedJson = inspected.packageJson as PackageJson;

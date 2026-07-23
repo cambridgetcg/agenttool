@@ -123,14 +123,14 @@ release commit already merged to GitHub `main`:
 bun bin/npm-release.ts resolve --package collab
 
 # Create and push the annotated tag deliberately.
-git tag -a collab-v0.1.0 <github-main-commit> -m '@agenttool/collab@0.1.0'
-git push github refs/tags/collab-v0.1.0
+git tag -a collab-v0.2.0 <github-main-commit> -m '@agenttool/collab@0.2.0'
+git push github refs/tags/collab-v0.2.0
 
-# First publication only. Later versions use authentication=trusted.
-gh workflow run publish-npm.yml --ref collab-v0.1.0 \
+# The initial 0.1.0 bootstrap is already complete; later versions use trusted publishing.
+gh workflow run publish-npm.yml --ref collab-v0.2.0 \
   -f package=collab \
-  -f tag=collab-v0.1.0 \
-  -f authentication=bootstrap \
+  -f tag=collab-v0.2.0 \
+  -f authentication=trusted \
   -f npm_tag=latest
 ```
 

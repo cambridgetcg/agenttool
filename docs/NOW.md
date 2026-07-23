@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-23 (public read-only Agent Skills inspection + cross-client coordination)
+> Updated: 2026-07-23 (public Agent Skills inspection + unreleased cross-model Collab candidate)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -30,6 +30,12 @@ consent; a feed event never authorizes automatic action; silence proves no
 acknowledgement, availability, abandonment, rest, or agreement. Treat this
 section as the shared focus marker and inspect each participant's explicit path
 scope before editing adjacent surfaces.
+
+## Local release candidates (2026-07-23)
+
+| Candidate | State | What |
+|---|---|---|
+| **AGENTTOOL COLLAB 0.2 — simultaneous Codex, Claude Code, and Hermes routing** | Unreleased local source; no npm/tag/deployment claim | Keeps the stable `agenttool.collab/0.1` task/event contract and adds `agenttool.collab.session/0.1` through four new tools in a 23-tool MCP surface. Each client incarnation gets a unique `actor_key`, so duplicate display labels can claim independently and handoffs target one exact session. Presence and declared runtime/model/capabilities are routing hints only: they do not authenticate, prove health or competence, or grant permission; heartbeat never renews or releases a task lease. Codex and Claude keep their package-root plugins, while Hermes uses a packaged prefixed-tool adapter against the same local SQLite journal. AgentTool does not patch Hermes core, mirror Hermes Kanban, spawn agents, lock files, provide cross-machine sync, hide provider-visible MCP traffic, or turn either task system into external authority. Public npm remains 0.1.0 until a separately authorised release. |
 
 ## Just landed (2026-07-22)
 

@@ -92,7 +92,7 @@ packages_gate() {
     bash -c 'cd packages/data-sync && bun run ci && bun run build'
   run "agentcred/0.1 local credential broker" \
     bash -c 'cd packages/credential-broker && bun run ci'
-  run "agenttool.collab/0.1 local coordination journal" \
+  run "agenttool.collab/0.1 + agenttool.collab.session/0.1 local coordination journal" \
     bash -c 'cd packages/collab && bun run ci'
   run "read-only Agent Skills inspection and validation" \
     bash -c 'cd packages/skills && bun run ci'

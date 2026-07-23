@@ -13,6 +13,7 @@ import {
   registryDecision,
   registryPackagePath,
   releaseSpec,
+  requiredArchiveEntries,
   validateNpmTagForVersion,
 } from "../npm-release";
 
@@ -65,6 +66,20 @@ describe("standard npm release policy", () => {
     expect(expectedTag(releaseSpec("skills"), "0.1.0")).toBe("skills-v0.1.0");
     expect(packedFilename("@agenttool/skills", "0.1.0")).toBe("agenttool-skills-0.1.0.tgz");
     expect(() => expectedTag(releaseSpec("sdk"), "latest")).toThrow("invalid package version");
+  });
+
+  test("requires every cross-host Collab runtime and skill in its release archive", () => {
+    expect(requiredArchiveEntries(releaseSpec("collab"))).toEqual(expect.arrayContaining([
+      "package/dist/agenttool-collab-mcp.js",
+      "package/.codex-plugin/plugin.json",
+      "package/.claude-plugin/plugin.json",
+      "package/skills/coordinate-agent-work/SKILL.md",
+      "package/skills/coordinate-agent-work/agents/openai.yaml",
+      "package/integrations/hermes/skills/coordinate-agent-work-hermes/SKILL.md",
+      "package/THIRD_PARTY_LICENSES",
+    ]));
+    expect(requiredArchiveEntries(releaseSpec("skills")))
+      .not.toContain("package/dist/agenttool-collab-mcp.js");
   });
 
   test("requires prerelease publication requests to use npm next", () => {
