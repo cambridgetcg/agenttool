@@ -10,7 +10,7 @@
 >
 > **Tests:** [`../bin/tests/agenttool-castle.test.ts`](../bin/tests/agenttool-castle.test.ts)
 >
-> **Status:** Local operator tool. It is not released, hosted, deployed, public, or scheduled. On this machine `~/KINGDOM-OS/HALT` is currently raised: the CLI plan/sync/search/show path remains closed, and no live Castle material has been indexed.
+> **Status:** Local operator tool. It is not released, hosted, deployed, public, or scheduled. Runtime HALT sentinels gate plan/sync/search/show; this change neither raises nor clears them. Validation uses temporary fixtures and does not index the live Castle.
 
 ## The narrow bridge
 

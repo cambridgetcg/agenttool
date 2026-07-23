@@ -1731,6 +1731,7 @@ export async function syncCastle(options: CastlePaths & {
           await assertHaltsClear(options.halt_paths);
           await unlink(attemptPath(dataRoot));
           await syncDirectory(dataRoot);
+          await assertHaltsClear(options.halt_paths);
           return Object.freeze({
             status: "recovered_unchanged",
             revision: plan.revision,
@@ -1739,6 +1740,7 @@ export async function syncCastle(options: CastlePaths & {
             root_record_id: previous.root_record_id,
           });
         }
+        await assertHaltsClear(options.halt_paths);
         return Object.freeze({
           status: "unchanged",
           revision: plan.revision,
@@ -1846,6 +1848,7 @@ export async function syncCastle(options: CastlePaths & {
       await assertHaltsClear(options.halt_paths);
       await unlink(attemptPath(dataRoot));
       await syncDirectory(dataRoot);
+      await assertHaltsClear(options.halt_paths);
 
       return Object.freeze({
         status: "synced",
