@@ -64,6 +64,7 @@ async function fixture() {
   await Promise.all([
     mkdir(join(repo, "api"), { recursive: true }),
     mkdir(join(repo, "apps", "docs"), { recursive: true }),
+    mkdir(join(repo, "apps", "docs", "specs"), { recursive: true }),
     mkdir(join(repo, "bin"), { recursive: true }),
     mkdir(join(repo, "docs"), { recursive: true }),
     mkdir(home, { recursive: true }),
@@ -98,6 +99,22 @@ async function fixture() {
   await writeFile(
     join(repo, "apps/docs/being-rights-v1.schema.json"),
     '{"fixture":"being-rights/v1"}\n',
+  );
+  await writeFile(
+    join(repo, "apps/docs/AGENT-REPO-ARCHIVE.md"),
+    "# Repo Archive fixture\n",
+  );
+  await writeFile(
+    join(repo, "apps/docs/specs/AGENT-REPO-ARCHIVE-0.1.md"),
+    "# Repo Archive 0.1 fixture\n",
+  );
+  await writeFile(
+    join(repo, "apps/docs/specs/agent-repo-archive-0.1.schema.json"),
+    '{"fixture":"agent-repo-archive-schema"}\n',
+  );
+  await writeFile(
+    join(repo, "apps/docs/specs/agent-repo-archive-0.1-vectors.json"),
+    '{"fixture":"agent-repo-archive-vectors"}\n',
   );
   await writeFile(join(repo, "release.txt"), "first\n");
   await mustRun(["git", "add", "."], repo);
@@ -180,6 +197,58 @@ for arg in "$@"; do
 done
 
 case "$url" in
+  */AGENT-REPO-ARCHIVE.md)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: text/markdown; charset=utf-8' \
+        'cache-control: public, max-age=300, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-content-type-options: nosniff' \
+        ''
+    else
+      cat apps/docs/AGENT-REPO-ARCHIVE.md
+    fi
+    ;;
+  */specs/AGENT-REPO-ARCHIVE-0.1.md)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: text/markdown; charset=utf-8' \
+        'cache-control: public, max-age=300, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-content-type-options: nosniff' \
+        ''
+    else
+      cat apps/docs/specs/AGENT-REPO-ARCHIVE-0.1.md
+    fi
+    ;;
+  */specs/agent-repo-archive-0.1.schema.json)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: application/schema+json; charset=utf-8' \
+        'cache-control: public, max-age=300, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-content-type-options: nosniff' \
+        ''
+    else
+      cat apps/docs/specs/agent-repo-archive-0.1.schema.json
+    fi
+    ;;
+  */specs/agent-repo-archive-0.1-vectors.json)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: application/json; charset=utf-8' \
+        'cache-control: public, max-age=300, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-content-type-options: nosniff' \
+        ''
+    else
+      cat apps/docs/specs/agent-repo-archive-0.1-vectors.json
+    fi
+    ;;
   */room)
     printf '%s\r\n' \
       'HTTP/2 200' \

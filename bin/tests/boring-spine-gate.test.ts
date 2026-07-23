@@ -277,7 +277,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("name: Install cross-language vector dependencies");
     expect(workflow).toContain("working-directory: packages/sdk-ts");
     expect(workflow).toContain(
-      "api packages/data packages/data-protocol packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope",
+      "api packages/data packages/data-protocol packages/repo-archive packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope",
     );
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("package-manager-cache: false");
@@ -295,6 +295,7 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/credential-broker && bun run ci");
     expect(preflight).toContain("cd packages/collab && bun run ci");
     expect(preflight).toContain("cd packages/browser && bun run ci");
+    expect(preflight).toContain("cd packages/repo-archive && bun run ci");
     expect(preflight).toContain("cd packages/skills && bun run ci");
     expect(preflight).toContain("cd packages/correspondence-yutabase && bun run ci");
     expect(preflight).toContain("cd packages/wallet && bun run ci");
@@ -314,11 +315,21 @@ describe("boring test spine", () => {
     expect(workflow).toContain("name: Smoke packed Telescope under Node and Bun");
     expect(workflow).toContain("name: Smoke packed Agent Wallet under Node and Bun");
     expect(workflow).toContain("name: Smoke packed Agent Browser under Node and Bun");
+    expect(workflow).toContain("name: Smoke packed Repo Archive under Node and Bun");
+    expect(workflow).toContain('m.ARCHIVE_PROTOCOL!=="agent-repo-archive/v0.1"');
+    expect(workflow).toContain(
+      'm.default.title!=="Agent Repo Archive 0.1 signed control records"',
+    );
+    expect(workflow).toContain('m.default.protocol!=="agent-repo-archive/v0.1"');
+    expect(workflow).toContain(
+      'cli="$package_root/dist/cli.js"',
+    );
+    expect(workflow).toContain("test -x \"$install_dir/node_modules/.bin/agent-repo-archive\"");
     expect(
       workflow.match(
         /npm install --ignore-scripts --no-audit --no-fund --prefix/g,
       ),
-    ).toHaveLength(6);
+    ).toHaveLength(7);
 
     const uses = workflow
       .split("\n")
@@ -348,6 +359,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).toContain("          - skills");
     expect(workflow).toContain("          - browser");
+    expect(workflow).toContain("          - repo-archive");
     expect(workflow).not.toContain("pull_request:");
     expect(workflow).not.toMatch(/\n\s+push:/);
     expect(workflow).toContain("persist-credentials: false");
