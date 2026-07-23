@@ -47,8 +47,9 @@ Every document must satisfy all of these conditions:
 - It is a regular `100644` blob in one full 40- or 64-hex Git commit.
   Symbolic links, submodules, the live working tree, and untracked files do not
   qualify.
-- It is exact UTF-8 Markdown, at most 256 KiB, without terminal control
-  characters. The whole selection is at most 2,048 documents and 16 MiB.
+- It is exact UTF-8 Markdown, at most 256 KiB, without C0/C1 terminal
+  controls (ordinary tab/LF and CRLF line endings remain allowed; a bare CR
+  does not). The whole selection is at most 2,048 documents and 16 MiB.
 - It does not trip the bridge's narrow private-key/token canary. That small
   regular-expression check is not data-loss prevention and cannot establish
   that a document is safe to share.
@@ -137,8 +138,9 @@ The CLI checks both:
 Any filesystem object at either path—including a dangling symbolic link—is a
 raised halt. Sync requires a non-empty halt list, checks before source reads
 and destination creation, and rechecks around each mutation stage. Search and
-show also require and check a halt. A halt does not kill a write already inside
-one operating-system call; the durable attempt and pending files make the next
+show check again before returning content, and plan checks again after its Git
+reads before printing a summary. A halt does not kill work already inside one
+operating-system call; the durable attempt and pending files make the next
 invocation stop normal reads until recovery completes.
 
 Sync uses a no-wait local lock. A second live process is refused. Only a lock

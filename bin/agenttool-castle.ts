@@ -77,6 +77,9 @@ const SAFE_PATH_RE = /^(rooms|words)\/[a-z0-9][a-z0-9._-]*\.md$/;
 const SAFE_LOGICAL_ID_RE = /^castle:(?:room|word|generated-room):[a-z0-9][a-z0-9._-]*$/;
 const GENERATED_ROOM_RE =
   /^rooms\/(?:playful-gathering-|understanding-|cross-pollination-).+\.md$/;
+const SINGLE_LINE_CONTROL_RE = /[\u0000-\u001f\u007f-\u009f]/;
+const MARKDOWN_TERMINAL_CONTROL_RE =
+  /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]|\r(?!\n)/;
 const PRIVATE_MARKERS: readonly RegExp[] = Object.freeze([
   /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY-----/,
   /\bgithub_pat_[A-Za-z0-9_]{20,}\b/,
@@ -210,7 +213,7 @@ function requireString(value: unknown, code: string, maximum = 500): string {
     || value.trim() !== value
     || value.length === 0
     || value.length > maximum
-    || /[\u0000-\u001f\u007f]/.test(value)
+    || SINGLE_LINE_CONTROL_RE.test(value)
   ) fail(code);
   return value;
 }
@@ -594,7 +597,7 @@ function extractTitle(text: string, path: string): string {
   const match = /^#\s+(.+)$/m.exec(text);
   const fallback = posix.basename(path, ".md").replaceAll("-", " ");
   const value = (match?.[1] ?? fallback)
-    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, " ")
     .trim();
   return [...value].slice(0, 200).join("") || fallback;
 }
@@ -630,7 +633,7 @@ function selectedLinks(
 }
 
 function assertNoPrivateMarker(text: string): void {
-  if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(text)) {
+  if (MARKDOWN_TERMINAL_CONTROL_RE.test(text)) {
     fail("selected_document_contains_control_character");
   }
   if (PRIVATE_MARKERS.some((pattern) => pattern.test(text))) {
@@ -1943,6 +1946,7 @@ export async function searchCastle(options: {
         ...(hit.score !== undefined ? { score: hit.score } : {}),
       }];
     });
+    await assertHaltsClear(options.halt_paths);
     return Object.freeze({
       schema: "castle-agenttool-search/v1",
       query,
@@ -1979,7 +1983,9 @@ export async function showCastle(options: {
       fail("state_current_record_missing_or_mismatched");
     }
     const bytes = await node.readContent(record);
-    return decodeUtf8(bytes, "stored_document_not_utf8");
+    const text = decodeUtf8(bytes, "stored_document_not_utf8");
+    await assertHaltsClear(options.halt_paths);
+    return text;
   } finally {
     node.close();
   }
@@ -2240,10 +2246,12 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   switch (args.command) {
     case "plan": {
       await assertHaltsClear(haltPaths);
-      result = planSummary(await buildCastlePlan({
+      const plan = await buildCastlePlan({
         castle_root: args.castle_root,
         selection_path: args.selection_path!,
-      }));
+      });
+      await assertHaltsClear(haltPaths);
+      result = planSummary(plan);
       break;
     }
     case "sync":

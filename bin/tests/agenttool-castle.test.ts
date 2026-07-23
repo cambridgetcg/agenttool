@@ -262,6 +262,27 @@ describe("Castle committed-snapshot plan", () => {
       selection_path: fixture.selection,
     }), "selected_document_contains_sensitive_marker");
 
+    await writeFile(
+      join(fixture.castle, "words/c1-control.md"),
+      "# C1 control\n\nunsafe\u009b31mterminal text\n",
+    );
+    await writeFile(
+      join(fixture.castle, "words/bare-cr.md"),
+      "# Bare CR\n\nunsafe\rterminal text\n",
+    );
+    const controlRevision = await commit(fixture, "add terminal control canaries");
+    for (const path of ["words/c1-control.md", "words/bare-cr.md"]) {
+      await writeSelection(fixture, controlRevision, [{
+        path,
+        logical_id: `castle:word:${path.slice("words/".length, -".md".length)}`,
+        kind: "word",
+      }]);
+      await expectCode(buildCastlePlan({
+        castle_root: fixture.castle,
+        selection_path: fixture.selection,
+      }), "selected_document_contains_control_character");
+    }
+
     git(fixture.castle, ["config", "extensions.partialClone", "origin"]);
     await expectCode(buildCastlePlan({
       castle_root: fixture.castle,
