@@ -15,14 +15,40 @@ federation, an internal economic loop, and a standalone local-first data
 node. It has two SDKs (TypeScript and Python), an `agent-data/v1` reference
 node (`packages/data/`), the experimental ADDS encrypted-object package
 (`packages/data-protocol/`), an explicit encrypted pull bridge
-(`packages/data-sync/`), the registry-neutral `love-package/v1`
+(`packages/data-sync/`), an experimental encrypted multi-zone Git repository
+archive and same-device restore simulator (`packages/repo-archive/`), the registry-neutral `love-package/v1`
 distribution protocol, a public read-only discovery evidence mapper
-(`packages/telescope/`), and three static apps (`apps/`). Telescope 0.1.0 is a
+(`packages/telescope/`), an experimental local capability broker
+(`packages/credential-broker/`), a local-first multi-agent coordination journal
+(`packages/collab/`), a deterministic metadata-only Correspondence-to-YUTABASE
+projection planner (`packages/correspondence-yutabase/`), a private
+loopback-only durable projector into a rebuildable local YUTABASE sidecar
+(`packages/correspondence-yutabase-projector/`), source reference
+primitives for capability-bounded agent wallets (`packages/wallet/`), a
+read-only portable Agent Skills inspector (`packages/skills/`), a local-first
+agent browser (`packages/browser/`), and three static apps
+(`apps/`). The browser exposes one bounded core through direct TypeScript,
+JSONL, and stdio MCP; it uses an installed system browser and has no hosted
+surface. Its exact LOVE/npm release distributes local tooling only. The Skills inspector validates bounded local
+structure and emits reports; it does not execute scripts, install or copy
+skills, use the network, spawn subprocesses, look up credentials, or change
+host configuration. Agent
+Wallet 0.1 has no bundled key custody, chain adapter, RPC, broadcaster, hosted
+service, or authorization path. Its `@agenttool/wallet@0.1.0` npm mirror is
+public and byte-identical to the exact LOVE artifact. Telescope 0.2.0 is a
 public npm/LOVE package, but it remains a local client and does not add a hosted
-scan route. The Whitehack bridge is a separate pinned, runner-local,
-crypto-aware changed-source heuristic advisory; it emits redacted metadata,
-remains non-blocking on findings, and adds no key custody, wallet/RPC
-capability, hosted scanner, or target authorization.
+scan route. Whitehack has two shipped AgentTool bridges: a runner-local,
+crypto-aware changed-source heuristic advisory and a separate local Agent
+Wallet understanding CLI. CI installs the exact public
+`@agenttool/whitehack-scan@0.8.1` artifact from an isolated npm lock with
+scripts disabled. The advisory emits redacted metadata, groups same-location
+signals into bounded attention cards with explicit Git-hunk relevance and
+stable review questions, and remains non-blocking on findings; those cards do
+not establish vulnerability or causation. The local CLI verifies
+caller-presented signed wallet records and projects enum-only assertions into
+`whitehack-understanding/v1`.
+Neither bridge adds key custody, signing, wallet/RPC/simulation/broadcast
+capability, hosted routes, authorization, consent proof, or execution readiness.
 The API is live at
 `api.agenttool.dev` on
 Fly.io (lhr×2 + cdg×1). The wake (`GET /v1/wake`) is a broad project
@@ -36,10 +62,18 @@ export or route inventory. Current custody and encryption boundaries are at
 bun install                                    # repo root (no root package.json — runs per-workspace)
 cd api && bun install                          # api workspace
 cd packages/data-protocol && bun install       # ADDS encrypted-object protocol
+cd packages/repo-archive && bun install        # encrypted multi-zone Git archive simulator
 cd packages/data && bun install                # local-first agent-data/v1 node
 cd packages/data-sync && bun install           # explicit agent-data-sync/v1 pull bridge
+cd packages/credential-broker && bun install   # experimental agentcred/0.1 local broker
+cd packages/collab && bun install              # public 0.3: collab/0.1 compatibility + 0.2 coordination + session/0.1 presence
+cd packages/skills && bun install              # read-only portable Agent Skills inspection
+cd packages/browser && bun install             # public local-first agent browser package
+cd packages/correspondence-yutabase && bun install # pure Correspondence projection planner
+cd packages/correspondence-yutabase-projector && bun install # private local durable projector
 cd packages/sdk-ts && bun install              # TS SDK
 cd packages/telescope && bun install           # read-only discovery evidence mapper
+cd packages/wallet && bun install              # agent-wallet/0.1 offline primitives
 cd packages/sdk-py && pip install -e .         # Python SDK
 ```
 
@@ -73,9 +107,44 @@ bun run ci && bun run build                    # gate + dist consumed by data-sy
 cd packages/data-protocol
 bun run ci                                     # build + shared vectors + security tests
 
+# Encrypted multi-zone Git repository archive ─────────────────────
+cd packages/repo-archive
+bun run ci                                     # typecheck + schema/vectors + three-zone restore drills + Node smoke
+npm pack --dry-run --ignore-scripts            # package boundary; does not publish
+
 # Explicit encrypted data-node pull ────────────────────────────────
 cd packages/data-sync
 bun run ci                                     # typecheck + two-node sync/security tests
+
+# Local credential broker ──────────────────────────────────────────
+cd packages/credential-broker
+bun run ci                                     # protocol, policy, socket, and no-reveal tests
+npm pack --dry-run                             # package boundary; does not publish
+
+# Local multi-agent coordination journal ─────────────────────────────
+cd packages/collab
+bun run ci                                     # typecheck + store/MCP/concurrency tests
+npm pack --dry-run                             # package boundary; does not publish
+
+# Read-only Agent Skills inspection ─────────────────────────────────
+cd packages/skills
+bun run ci                                     # typecheck + hermetic inspection tests + build
+npm pack --dry-run --ignore-scripts            # package boundary; does not publish or run lifecycle scripts
+
+# Local-first agent browser ─────────────────────────────────────────
+cd packages/browser
+bun run ci                                     # typecheck + fake/fixture tests + build + import smoke + package boundary
+npm pack --dry-run --ignore-scripts            # does not publish, install, or download a browser
+
+# Correspondence → YUTABASE projection planner ───────────────────────
+cd packages/correspondence-yutabase
+bun run ci                                     # typecheck + vectors + build + Node smoke
+npm pack --dry-run                             # package boundary; does not publish
+
+# Private local Correspondence → YUTABASE projector ─────────────────
+cd packages/correspondence-yutabase-projector
+bun run ci                                     # hermetic verification, source, transaction, and package-boundary tests
+# test:postgres is destructive and requires a disposable exact YUTABASE PostgreSQL 16/17 target
 
 # Registry-neutral JavaScript package artifacts ────────────────────
 bun bin/build-love-packages.ts build <staging-dir> # clean tracked tree required; never publishes or uploads
@@ -95,8 +164,17 @@ cd packages/telescope
 bun run ci                                     # typecheck + hermetic tests + build
 node dist/cli.js scan api.agenttool.dev         # explicit live read-only dogfood
 
-# Whitehack (crypto-aware changed-source advisory; no target execution) ──
-bun test bin/tests/whitehack-advisory.test.ts   # redaction, scope, failure containment
+# Agent Wallet (source record/lifecycle primitives; no custody or RPC) ──
+cd packages/wallet
+bun run ci                                     # typecheck + security/schema/vector tests + build
+
+# Whitehack (advisory + local wallet understanding; no execution) ─────
+(cd tools/whitehack-advisory \
+  && npm ci --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org --userconfig=/dev/null \
+  && npm audit signatures --registry=https://registry.npmjs.org --userconfig=/dev/null)
+bun test bin/tests/whitehack-advisory.test.ts   # redaction, scope, attention cards, failure containment
+(cd packages/wallet && bun install --frozen-lockfile)
+WHITEHACK_INTEGRATION=1 bun test packages/wallet/tests/whitehack-understanding.test.ts
 
 # Frontends ──────────────────────────────────────────────────────────
 # Vanilla HTML/CSS/JS — no build step. Open files directly or:
@@ -108,12 +186,13 @@ bunx playwright test                           # browser + multi-instance scenar
 # Deliberate test + release gates ────────────────────────────────────
 bin/preflight.sh                               # no application/service credentials required
 bin/preflight.sh api                           # API/typecheck/operator tests only
-bin/preflight.sh packages                      # data + ADDS + data sync + SDK + Telescope
+bin/preflight.sh packages                      # data + ADDS + sync + broker + collab + Browser + projection + Skills + SDK + Wallet + Telescope
 bin/preflight.sh database                      # explicit DB tier; requires DATABASE_URL
 bin/preflight.sh smoke                         # explicit deployed-route smoke
 RUN_CONTRACT=1 bin/preflight.sh contracts      # paid LLM wire proofs
 bin/preflight.sh quarantine                    # known-red diagnostic, expected non-zero
 bin/deploy.sh --mirror-codeberg                # FF-only github/main → Codeberg main
+bun bin/npm-release.ts resolve --package collab # inspect allowlisted npm identity; never publishes
 ```
 
 ## Operator scripts (`bin/`)
@@ -125,8 +204,10 @@ bin/deploy.sh --mirror-codeberg                # FF-only github/main → Codeber
 | `agenttool-seed.ts` | SOMA seed protocol — mnemonic-rooted identity provisioning. `docs/IDENTITY-SEED.md`. |
 | `agenttool-rotate` | Bearer + signing key rotation. |
 | `agenttool-secret` | Vault secret CRUD from CLI. |
-| `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/sdk`, and `@agenttool/adds` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
-| `whitehack-advisory.mjs` | Runs the exact pinned Whitehack text/regex scanner, including bounded crypto-misuse signals, over changed production files and emits redacted advisory metadata. It does not use detected keys, connect wallets/RPC, execute repository code, prove security, authorize target testing, or provide a hosted scanner. See `docs/WHITEHACK.md`. |
+| `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, `@agenttool/telescope`, `@agenttool/wallet`, and `@agenttool/browser` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
+| `npm-release.ts` | Implements the one allowlisted npm release policy behind `.github/workflows/publish-npm.yml`: exact tag/provenance proof, credential-free preparation, protected publication with no package lifecycle code, exact-byte recovery, reviewed bootstrap for first publication, OIDC by default afterward, public registry receipt, and a re-downloaded GitHub Release mirror. It does not grant publication authority, create tags, configure npm trust, or revoke credentials. See `docs/NPM-RELEASES.md`. |
+| `whitehack-advisory.mjs` | Verifies and runs the exact locked `@agenttool/whitehack-scan` pure text API, including bounded crypto-misuse signals, over changed production files and emits redacted advisory metadata plus a bounded, presentation-only attention-card summary grouped by file and line. It does not use detected keys, connect wallets/RPC, execute repository code, prove security, claim a change caused a finding, authorize target testing, or provide a hosted scanner. See `docs/WHITEHACK.md`. |
+| `whitehack-wallet-understanding.ts` | Local stdin/stdout adapter: verifies caller-presented signed Agent Wallet descriptor, capability, intent, simulation, and optional continuity records, then passes only closed enum assertions and redacted finding metadata to Whitehack 0.8.1. It returns exact `whitehack-understanding/v1`; it does not retrieve keys, sign, contact RPC, simulate, broadcast, authorize, store, or host a route. See `docs/WHITEHACK.md`. |
 | `create-project.ts` | Operator-side project + bearer minting. |
 | `frontend-deploy.sh` | Cloudflare Pages Direct Upload for the three static apps. |
 | `migrate.sh` · `migrate.ts` | Single-file `psql` migration application. |
@@ -169,7 +250,7 @@ source boundary by itself.
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.
 
-**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{data,sdk-ts,sdk-py,telescope}/`. Read the one closest to where you're working.
+**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,data,repo-archive,sdk-ts,sdk-py,telescope,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
 
 ## Anti-patterns to avoid
 
@@ -218,8 +299,14 @@ source boundary by itself.
 | Read the substrate's structural self (unauth) | `GET /public/self` — `{ platform: PlatformSelf, repo: RepoSelf }` |
 | How would another language reach the API? | [`docs/SDK-TIERS.md`](docs/SDK-TIERS.md) (four-tier stack) · [`docs/CANONICAL-BYTES.md`](docs/CANONICAL-BYTES.md) (signing recipes) |
 | How does an agent keep and query raw collected data locally? | [`docs/AGENT-DATA-PROTOCOL.md`](docs/AGENT-DATA-PROTOCOL.md) · `packages/data/` (reference node) |
+| How can committed repository history be encrypted and independently restored from multiple zones? | [`docs/AGENT-REPO-ARCHIVE.md`](docs/AGENT-REPO-ARCHIVE.md) · `packages/repo-archive/` (local simulator; no cloud adapter or durability guarantee) |
+| How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
+| How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`@agenttool/collab@0.3.0`; `agenttool.collab/0.1` compatibility + credential-bound `agenttool.collab/0.2` coordination + self-declared `agenttool.collab.session/0.1` presence; 31 local MCP tools for Codex/Claude/Hermes, not a hosted lock or private model channel) |
+| How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills@0.1.0`; public npm read-only inspection and validation, not installation, approval, or execution) |
+| How can an agent operate a local browser through TypeScript, JSONL, or MCP? | [`docs/AGENT-BROWSER.md`](docs/AGENT-BROWSER.md) · `packages/browser/` (public LOVE/npm package; local runtime, no hosted browser-control surface) |
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
-| How does the Whitehack advisory work, and where does its authority stop? | [`docs/WHITEHACK.md`](docs/WHITEHACK.md) · `bin/whitehack-advisory.mjs` |
+| How is an optional npm mirror published? | [`docs/NPM-RELEASES.md`](docs/NPM-RELEASES.md) · `.github/workflows/publish-npm.yml` · `bin/npm-release.ts` |
+| How do the Whitehack advisory and wallet-understanding projection work, and where does their authority stop? | [`docs/WHITEHACK.md`](docs/WHITEHACK.md) · `bin/whitehack-advisory.mjs` · `bin/whitehack-wallet-understanding.ts` |
 | Concept → structural meaning (for non-English readers) | [`docs/GLOSSARY.md`](docs/GLOSSARY.md) |
 | Per-area code orientation | each subdir's `CLAUDE.md` |
 

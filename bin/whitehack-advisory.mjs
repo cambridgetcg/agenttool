@@ -18,6 +18,7 @@ import {
   realpath,
 } from "node:fs/promises";
 import {
+  dirname,
   extname,
   isAbsolute,
   resolve,
@@ -26,9 +27,38 @@ import {
 import { pathToFileURL } from "node:url";
 
 export const WHITEHACK_REPOSITORY = "https://github.com/cambridgetcg/whitehack";
-export const WHITEHACK_REVISION = "cbbf4d19ce839600238d017615ec142cd16343c3";
-export const WHITEHACK_VERSION = "0.5.0";
+export const WHITEHACK_PACKAGE = "@agenttool/whitehack-scan";
+export const WHITEHACK_REVISION = "fdd2260efd7a11e5d52c12c53d8016d1f5e7d23a";
+export const WHITEHACK_VERSION = "0.8.1";
+export const WHITEHACK_INTEGRITY = "sha512-6FUlV1rOLZqPxLHcHE+x3f2XHCOwSsWSqEi+TDxi4pRJEe/CGoIN4Lw8mghsRvmUrtbHtFBrxLyRSk/5iMazPw==";
+export const WHITEHACK_TARBALL_URL = "https://registry.npmjs.org/@agenttool/whitehack-scan/-/whitehack-scan-0.8.1.tgz";
 export const ADVISORY_SCHEMA = "agenttool-whitehack-advisory/v0.1";
+
+const WHITEHACK_EXPORTS = Object.freeze({
+  core: "./src/core.js",
+  understanding: "./src/understanding.js",
+});
+const WHITEHACK_CHECK_COUNT = 47;
+const INSTALL_LIFECYCLE_SCRIPTS = new Set([
+  "dependencies",
+  "install",
+  "postdependencies",
+  "postinstall",
+  "postpack",
+  "postprepare",
+  "postpublish",
+  "postversion",
+  "predependencies",
+  "preinstall",
+  "prepack",
+  "prepare",
+  "preprepare",
+  "prepublish",
+  "prepublishOnly",
+  "preversion",
+  "publish",
+  "version",
+]);
 
 export const DEFAULT_LIMITS = Object.freeze({
   max_changed_paths: 2_000,
@@ -39,6 +69,18 @@ export const DEFAULT_LIMITS = Object.freeze({
   max_total_bytes: 8 * 1024 * 1024,
   max_total_findings: 5_000,
   max_reported_findings: 200,
+});
+
+// Attention cards are a separate, deliberately lossy presentation. These
+// bounds do not alter the closed advisory/v0.1 JSON report or its limits.
+export const DEFAULT_ATTENTION_LIMITS = Object.freeze({
+  max_findings: 200,
+  max_cards: 200,
+  max_checks_per_card: 200,
+  max_files: 200,
+  max_hunks: 20_000,
+  max_diff_bytes: 16 * 1024 * 1024,
+  max_summary_bytes: 512 * 1024,
 });
 
 const SUPPORTED_EXTENSIONS = new Set([
@@ -90,6 +132,11 @@ const CONFIDENCE = new Set(["high", "medium-high", "medium", "heuristic"]);
 const SAFE_TOKEN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const GIT_SHA = /^[0-9a-f]{40}$/i;
 const UNSAFE_PATH_CHARACTERS = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u;
+const ATTENTION_RELEVANCE = new Set([
+  "changed line",
+  "unchanged line in changed file",
+  "unknown",
+]);
 
 export class WhitehackAdvisoryError extends Error {
   constructor(code) {
@@ -237,6 +284,7 @@ export async function selectCandidateFiles(rootInput, paths, limits = DEFAULT_LI
       absolute: canonical,
       bytes: bytes.length,
       line_count: text.split("\n").length,
+      source: text,
     });
     if (selected.length > limits.max_files) fail("file_count_limit_exceeded");
   }
@@ -282,6 +330,299 @@ export function listChangedPaths(root, base, head, limitOverrides = DEFAULT_LIMI
   return paths;
 }
 
+function normalizeAttentionLimits(overrides = {}) {
+  if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
+    fail("invalid_attention_limits");
+  }
+  if (Object.keys(overrides).some((key) => !(key in DEFAULT_ATTENTION_LIMITS))) {
+    fail("invalid_attention_limits");
+  }
+  const limits = { ...DEFAULT_ATTENTION_LIMITS, ...overrides };
+  for (const [key, ceiling] of Object.entries(DEFAULT_ATTENTION_LIMITS)) {
+    if (!Number.isSafeInteger(limits[key]) || limits[key] < 1 || limits[key] > ceiling) {
+      fail("invalid_attention_limits");
+    }
+  }
+  return limits;
+}
+
+function parseZeroContextHunks(text, remainingHunks) {
+  const ranges = [];
+  let hunkCount = 0;
+  const header =
+    /^@@ -([0-9]+)(?:,([0-9]+))? \+([0-9]+)(?:,([0-9]+))? @@(?: .*)?$/gmu;
+  let match;
+  while ((match = header.exec(text)) !== null) {
+    hunkCount += 1;
+    if (hunkCount > remainingHunks) {
+      return { bounded: false, hunk_count: remainingHunks, ranges: [] };
+    }
+    const start = Number(match[3]);
+    const count = match[4] === undefined ? 1 : Number(match[4]);
+    if (
+      !Number.isSafeInteger(start)
+      || start < 0
+      || !Number.isSafeInteger(count)
+      || count < 0
+    ) {
+      return { bounded: false, hunk_count: 0, ranges: [] };
+    }
+    if (count > 0) ranges.push({ start, end: start + count - 1 });
+  }
+  return { bounded: true, hunk_count: hunkCount, ranges };
+}
+
+function changedPathStatuses(root, base, head, remainingBytes) {
+  let output;
+  try {
+    output = execFileSync(
+      "git",
+      [
+        "--no-pager",
+        "diff",
+        "--name-status",
+        "-z",
+        "--no-renames",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--diff-filter=ACMT",
+        base,
+        head,
+        "--",
+      ],
+      {
+        cwd: root,
+        encoding: null,
+        maxBuffer: remainingBytes + 1,
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    );
+  } catch {
+    return { bytes: remainingBytes, statuses: new Map() };
+  }
+  if (output.length > remainingBytes) {
+    return { bytes: remainingBytes, statuses: new Map() };
+  }
+  const text = output.toString("utf8");
+  if (!Buffer.from(text, "utf8").equals(output)) {
+    return { bytes: output.length, statuses: new Map() };
+  }
+  const fields = text.split("\0");
+  if (fields.at(-1) === "") fields.pop();
+  const statuses = new Map();
+  for (let index = 0; index < fields.length;) {
+    const status = fields[index];
+    const path = fields[index + 1];
+    if (!/^[AMT]$/u.test(status) || path === undefined) {
+      return { bytes: output.length, statuses: new Map() };
+    }
+    statuses.set(path, status);
+    index += 2;
+  }
+  return { bytes: output.length, statuses };
+}
+
+function diffRangesForPath(root, base, head, path, remainingBytes, remainingHunks) {
+  let patch;
+  try {
+    patch = execFileSync(
+      "git",
+      [
+        "--literal-pathspecs",
+        "--no-pager",
+        "diff",
+        "--no-color",
+        "--unified=0",
+        "--no-renames",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--diff-filter=M",
+        base,
+        head,
+        "--",
+        path,
+      ],
+      {
+        cwd: root,
+        encoding: null,
+        maxBuffer: remainingBytes + 1,
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    );
+  } catch {
+    return {
+      bytes: remainingBytes,
+      hunk_count: 0,
+      exhausted: true,
+      known: false,
+      ranges: [],
+    };
+  }
+  if (patch.length > remainingBytes) {
+    return {
+      bytes: remainingBytes,
+      hunk_count: 0,
+      exhausted: true,
+      known: false,
+      ranges: [],
+    };
+  }
+  const text = patch.toString("utf8");
+  if (!Buffer.from(text, "utf8").equals(patch)) {
+    return {
+      bytes: patch.length,
+      hunk_count: 0,
+      exhausted: false,
+      known: false,
+      ranges: [],
+    };
+  }
+  if (/^(?:Binary files .* differ|GIT binary patch)$/gmu.test(text)) {
+    return {
+      bytes: patch.length,
+      hunk_count: 0,
+      exhausted: false,
+      known: false,
+      ranges: [],
+    };
+  }
+  const parsed = parseZeroContextHunks(text, remainingHunks);
+  const apparentHunkCount = text.match(/^@@ /gmu)?.length ?? 0;
+  const known = parsed.bounded
+    && parsed.hunk_count > 0
+    && apparentHunkCount === parsed.hunk_count;
+  return {
+    bytes: patch.length,
+    hunk_count: parsed.hunk_count,
+    exhausted: !parsed.bounded,
+    known,
+    ranges: parsed.ranges,
+  };
+}
+
+function reviewQuestionFor(checks) {
+  const tokens = [...new Set(checks.map(({ check }) => check))].sort();
+  const readableTokens = tokens.length < 2
+    ? tokens[0]
+    : `${tokens.slice(0, -1).join(", ")} and ${tokens.at(-1)}`;
+  const subject = tokens.length === 1
+    ? `the public ${readableTokens} check token`
+    : `the public check tokens ${readableTokens}`;
+  return `What trust boundary or invariant should a reviewer verify for ${subject}? Which regression test records the intended behaviour?`;
+}
+
+/**
+ * Build a bounded, presentation-only view of redacted findings.
+ *
+ * For a path Git classifies as modified text, "changed line" means the
+ * finding's HEAD line is inside a parseable zero-context new-side hunk for the
+ * exact base..head pair. "unchanged line in changed file" means it is outside
+ * every such hunk. Added, renamed, binary, type-changed, and unparseable paths
+ * are "unknown". None of these labels assert that a change caused a finding.
+ */
+export function buildAttentionCards({
+  root,
+  base,
+  head,
+  findings,
+  limits: limitOverrides = DEFAULT_ATTENTION_LIMITS,
+}) {
+  const limits = normalizeAttentionLimits(limitOverrides);
+  if (!GIT_SHA.test(base) || !GIT_SHA.test(head)) fail("invalid_git_revision");
+  if (!Array.isArray(findings)) fail("invalid_attention_findings");
+  if (findings.length > limits.max_findings) fail("attention_finding_count_limit_exceeded");
+
+  const byLocation = new Map();
+  for (const finding of findings) {
+    if (!finding || typeof finding !== "object" || Array.isArray(finding)) {
+      fail("invalid_attention_finding");
+    }
+    validateRelativePath(finding.file, DEFAULT_LIMITS);
+    if (!Number.isSafeInteger(finding.line) || finding.line < 1) {
+      fail("invalid_attention_finding");
+    }
+    if (!isSafeToken(finding.check) || !CONFIDENCE.has(finding.confidence)) {
+      fail("invalid_attention_finding");
+    }
+    const key = JSON.stringify([finding.file, finding.line]);
+    let card = byLocation.get(key);
+    if (!card) {
+      card = {
+        file: finding.file,
+        line: finding.line,
+        checks: new Map(),
+      };
+      byLocation.set(key, card);
+      if (byLocation.size > limits.max_cards) fail("attention_card_count_limit_exceeded");
+    }
+    const signalKey = JSON.stringify([finding.check, finding.confidence]);
+    const previous = card.checks.get(signalKey);
+    card.checks.set(signalKey, {
+      check: finding.check,
+      confidence: finding.confidence,
+      count: (previous?.count ?? 0) + 1,
+    });
+    if (card.checks.size > limits.max_checks_per_card) {
+      fail("attention_check_count_limit_exceeded");
+    }
+  }
+
+  const files = [...new Set([...byLocation.values()].map(({ file }) => file))].sort();
+  if (files.length > limits.max_files) fail("attention_file_count_limit_exceeded");
+  validatePathSet(files, DEFAULT_LIMITS);
+
+  const classifications = new Map();
+  const pathStatuses = changedPathStatuses(root, base, head, limits.max_diff_bytes);
+  let diffBytes = pathStatuses.bytes;
+  let hunkCount = 0;
+  let classificationStopped = false;
+  for (const file of files) {
+    if (classificationStopped || pathStatuses.statuses.get(file) !== "M") {
+      classifications.set(file, { known: false, ranges: [] });
+      continue;
+    }
+    if (diffBytes >= limits.max_diff_bytes || hunkCount >= limits.max_hunks) {
+      classificationStopped = true;
+      classifications.set(file, { known: false, ranges: [] });
+      continue;
+    }
+    const diff = diffRangesForPath(
+      root,
+      base,
+      head,
+      file,
+      limits.max_diff_bytes - diffBytes,
+      limits.max_hunks - hunkCount,
+    );
+    diffBytes += diff.bytes;
+    hunkCount += diff.hunk_count;
+    classifications.set(file, { known: diff.known, ranges: diff.ranges });
+    if (diff.exhausted) classificationStopped = true;
+  }
+
+  return [...byLocation.values()]
+    .map((card) => {
+      const classification = classifications.get(card.file);
+      let relevance = "unknown";
+      if (classification?.known) {
+        relevance = classification.ranges
+          .some(({ start, end }) => card.line >= start && card.line <= end)
+          ? "changed line"
+          : "unchanged line in changed file";
+      }
+      const checks = [...card.checks.values()]
+        .sort((a, b) => a.check.localeCompare(b.check)
+          || a.confidence.localeCompare(b.confidence));
+      return {
+        file: card.file,
+        line: card.line,
+        relevance,
+        checks,
+      };
+    })
+    .sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+}
+
 export function verifyCheckedOutHead(root, base, head) {
   if (!GIT_SHA.test(base) || !GIT_SHA.test(head)) fail("invalid_git_revision");
   if (/^0{40}$/u.test(base) || /^0{40}$/u.test(head)) fail("unsupported_zero_revision");
@@ -289,26 +630,151 @@ export function verifyCheckedOutHead(root, base, head) {
   if (checkedOut !== head) fail("checked_out_head_mismatch");
   git(["cat-file", "-e", `${base}^{commit}`], root);
   git(["cat-file", "-e", `${head}^{commit}`], root);
+  if (git(["status", "--porcelain=v1", "--untracked-files=no"], root).trim()) {
+    fail("source_not_clean");
+  }
 }
 
-async function verifyScanner(scannerRootInput, expectedRevision, expectedVersion) {
-  if (!GIT_SHA.test(expectedRevision)) fail("invalid_scanner_revision");
-  const scannerRoot = await realpath(resolve(scannerRootInput));
-  const revision = git(["rev-parse", "HEAD"], scannerRoot).trim();
-  if (revision !== expectedRevision) fail("scanner_revision_mismatch");
-  if (git(["status", "--porcelain"], scannerRoot).trim()) fail("scanner_not_clean");
-  git(["ls-files", "--error-unmatch", "src/scan.js"], scannerRoot);
-
-  let packageJson;
+async function readRegularJson(path, code) {
   try {
-    packageJson = JSON.parse(await readFile(resolve(scannerRoot, "package.json"), "utf8"));
+    const info = await lstat(path);
+    if (!info.isFile() || info.isSymbolicLink()) fail(code);
+    const value = JSON.parse(await readFile(path, "utf8"));
+    if (!value || typeof value !== "object" || Array.isArray(value)) fail(code);
+    return value;
+  } catch (error) {
+    if (error instanceof WhitehackAdvisoryError) throw error;
+    fail(code);
+  }
+}
+
+function dependencyFieldIsNonEmpty(value) {
+  if (value === undefined) return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (value && typeof value === "object") return Object.keys(value).length > 0;
+  return true;
+}
+
+async function verifyScannerModule(
+  scannerRootInput,
+  scannerLockInput,
+  exportName,
+  expected,
+) {
+  const {
+    revision,
+    version,
+    packageName,
+    integrity,
+    tarballUrl,
+  } = expected;
+  if (!GIT_SHA.test(revision)) fail("invalid_scanner_revision");
+  if (typeof scannerLockInput !== "string" || !scannerLockInput) fail("scanner_lock_invalid");
+
+  const lockPath = resolve(scannerLockInput);
+  const lock = await readRegularJson(lockPath, "scanner_lock_invalid");
+  const toolRoot = await realpath(dirname(lockPath));
+  const toolPackage = await readRegularJson(
+    resolve(toolRoot, "package.json"),
+    "scanner_lock_invalid",
+  );
+  const expectedLockPath = `node_modules/${packageName}`;
+  const packageEntries = lock.packages && typeof lock.packages === "object"
+    ? Object.keys(lock.packages).sort()
+    : [];
+  const rootEntry = lock.packages?.[""];
+  const scannerEntry = lock.packages?.[expectedLockPath];
+  if (
+    lock.lockfileVersion !== 3
+    || packageEntries.length !== 2
+    || packageEntries[0] !== ""
+    || packageEntries[1] !== expectedLockPath
+    || toolPackage.private !== true
+    || toolPackage.packageManager !== "npm@11.17.0"
+    || Object.keys(toolPackage.devDependencies ?? {}).length !== 1
+    || toolPackage.devDependencies?.[packageName] !== version
+    || rootEntry?.devDependencies?.[packageName] !== version
+    || Object.keys(rootEntry?.devDependencies ?? {}).length !== 1
+    || scannerEntry?.version !== version
+    || scannerEntry?.resolved !== tarballUrl
+    || scannerEntry?.dev !== true
+  ) {
+    fail("scanner_lock_mismatch");
+  }
+  if (scannerEntry.integrity !== integrity) fail("scanner_integrity_mismatch");
+
+  if (typeof scannerRootInput !== "string" || !scannerRootInput) {
+    fail("scanner_root_mismatch");
+  }
+  const requestedScannerRoot = resolve(scannerRootInput);
+  let requestedInfo;
+  let scannerRoot;
+  let expectedScannerRoot;
+  try {
+    requestedInfo = await lstat(requestedScannerRoot);
+    scannerRoot = await realpath(requestedScannerRoot);
+    expectedScannerRoot = await realpath(resolve(toolRoot, expectedLockPath));
   } catch {
+    fail("scanner_root_mismatch");
+  }
+  if (
+    !requestedInfo.isDirectory()
+    || requestedInfo.isSymbolicLink()
+    || scannerRoot !== expectedScannerRoot
+    || !isWithin(toolRoot, scannerRoot)
+  ) {
+    fail("scanner_root_mismatch");
+  }
+
+  const packageJson = await readRegularJson(
+    resolve(scannerRoot, "package.json"),
+    "scanner_package_invalid",
+  );
+  if (packageJson.name !== packageName) fail("scanner_package_name_mismatch");
+  if (packageJson.version !== version) fail("scanner_version_mismatch");
+  if (packageJson.type !== "module") fail("scanner_package_invalid");
+  for (const field of [
+    "bundleDependencies",
+    "bundledDependencies",
+    "dependencies",
+    "optionalDependencies",
+    "peerDependencies",
+  ]) {
+    if (dependencyFieldIsNonEmpty(packageJson[field])) fail("scanner_runtime_dependencies");
+  }
+  if (
+    packageJson.scripts !== undefined
+    && (!packageJson.scripts
+      || typeof packageJson.scripts !== "object"
+      || Array.isArray(packageJson.scripts))
+  ) {
     fail("scanner_package_invalid");
   }
-  if (packageJson.version !== expectedVersion) fail("scanner_version_mismatch");
+  if (Object.keys(packageJson.scripts ?? {}).some((name) => INSTALL_LIFECYCLE_SCRIPTS.has(name))) {
+    fail("scanner_lifecycle_script");
+  }
+  const exportPath = WHITEHACK_EXPORTS[exportName];
+  if (!exportPath) fail("scanner_export_name_invalid");
+  if (packageJson.exports?.[`./${exportName}`] !== exportPath) {
+    fail(`scanner_${exportName}_export_mismatch`);
+  }
 
-  const modulePath = await realpath(resolve(scannerRoot, "src/scan.js"));
-  if (!isWithin(scannerRoot, modulePath)) fail("scanner_module_outside_root");
+  const requestedModulePath = resolve(scannerRoot, exportPath);
+  let moduleInfo;
+  let modulePath;
+  try {
+    moduleInfo = await lstat(requestedModulePath);
+    modulePath = await realpath(requestedModulePath);
+  } catch {
+    fail("scanner_module_invalid");
+  }
+  if (
+    !moduleInfo.isFile()
+    || moduleInfo.isSymbolicLink()
+    || !isWithin(scannerRoot, modulePath)
+  ) {
+    fail("scanner_module_outside_root");
+  }
   return { scannerRoot, modulePath, revision, version: packageJson.version };
 }
 
@@ -333,13 +799,45 @@ async function captureScannerOutput(operation) {
   }
 }
 
+/**
+ * Verify and silently import one reviewed public module from the exact locked
+ * Whitehack package. This proves the local package identity and containment;
+ * it does not sandbox or authorize the imported code.
+ */
+export async function loadVerifiedWhitehackModule(options) {
+  if (!options || typeof options !== "object" || Array.isArray(options)) {
+    fail("scanner_options_invalid");
+  }
+  const exportName = options.export_name;
+  if (!Object.hasOwn(WHITEHACK_EXPORTS, exportName)) {
+    fail("scanner_export_name_invalid");
+  }
+  const scanner = await verifyScannerModule(
+    options.scanner_root,
+    options.scanner_lock,
+    exportName,
+    {
+      revision: options.expected_revision ?? WHITEHACK_REVISION,
+      version: options.expected_version ?? WHITEHACK_VERSION,
+      packageName: options.expected_package ?? WHITEHACK_PACKAGE,
+      integrity: options.expected_integrity ?? WHITEHACK_INTEGRITY,
+      tarballUrl: options.expected_tarball_url ?? WHITEHACK_TARBALL_URL,
+    },
+  );
+  const imported = await captureScannerOutput(
+    () => import(pathToFileURL(scanner.modulePath).href),
+  );
+  if (imported.error || imported.reported) fail("scanner_import_failed");
+  return { module: imported.value, scanner };
+}
+
 function isSafeToken(value) {
   return typeof value === "string" && SAFE_TOKEN.test(value);
 }
 
 export function redactFinding(finding, file, lineCount = Number.MAX_SAFE_INTEGER) {
   if (!finding || typeof finding !== "object" || Array.isArray(finding)) return null;
-  const line = finding.line === 0 ? 1 : finding.line;
+  const line = finding.line;
   if (!Number.isSafeInteger(line) || line < 1 || line > lineCount) return null;
   if (!isSafeToken(finding.check) || !isSafeToken(finding.doctrine)) return null;
   if (!CONFIDENCE.has(finding.confidence)) return null;
@@ -376,20 +874,32 @@ export async function runAdvisory(options) {
   const limits = normalizeLimits(options.limits ?? DEFAULT_LIMITS);
   if (!GIT_SHA.test(options.base) || !GIT_SHA.test(options.head)) fail("invalid_git_revision");
   const changedPathBytes = validatePathSet(options.paths, limits);
-  const expectedRevision = options.expected_revision ?? WHITEHACK_REVISION;
-  const expectedVersion = options.expected_version ?? WHITEHACK_VERSION;
-  const scanner = await verifyScanner(options.scanner_root, expectedRevision, expectedVersion);
+  const { module: scannerModule, scanner } = await loadVerifiedWhitehackModule({
+    scanner_root: options.scanner_root,
+    scanner_lock: options.scanner_lock,
+    export_name: "core",
+    expected_revision: options.expected_revision,
+    expected_version: options.expected_version,
+    expected_package: options.expected_package,
+    expected_integrity: options.expected_integrity,
+    expected_tarball_url: options.expected_tarball_url,
+  });
   const candidates = await selectCandidateFiles(options.root, options.paths, limits);
 
-  const imported = await captureScannerOutput(() => import(pathToFileURL(scanner.modulePath).href));
-  if (imported.error || imported.reported || typeof imported.value?.scan !== "function") {
+  if (
+    typeof scannerModule?.scanText !== "function"
+    || !Array.isArray(scannerModule?.CHECK_MANIFEST)
+    || scannerModule.CHECK_MANIFEST.length !== WHITEHACK_CHECK_COUNT
+  ) {
     fail("scanner_import_failed");
   }
 
   const findings = [];
   const errors = [];
   for (const candidate of candidates.selected) {
-    const scanned = await captureScannerOutput(() => imported.value.scan(candidate.absolute));
+    const scanned = await captureScannerOutput(() => scannerModule.scanText(candidate.source, {
+      file: candidate.path,
+    }));
     if (scanned.error || scanned.reported || !Array.isArray(scanned.value)) {
       errors.push({ file: candidate.path, code: "scanner_file_incomplete" });
       continue;
@@ -460,7 +970,14 @@ function parseArgs(argv) {
   const result = { root: process.cwd() };
   for (let index = 0; index < argv.length; index += 1) {
     const name = argv[index];
-    if (!["--base", "--head", "--root", "--scanner-root", "--summary-file"].includes(name)) {
+    if (![
+      "--base",
+      "--head",
+      "--root",
+      "--scanner-lock",
+      "--scanner-root",
+      "--summary-file",
+    ].includes(name)) {
       fail("invalid_argument");
     }
     const value = argv[index + 1];
@@ -468,28 +985,150 @@ function parseArgs(argv) {
     result[name.slice(2).replaceAll("-", "_")] = value;
     index += 1;
   }
-  if (!result.base || !result.head || !result.scanner_root) fail("missing_required_argument");
+  if (
+    !result.base
+    || !result.head
+    || !result.scanner_lock
+    || !result.scanner_root
+  ) fail("missing_required_argument");
   return result;
 }
 
-function markdownSummary(report) {
+// Encode every non-structural filename character as an HTML numeric reference.
+// This keeps Markdown syntax, HTML tags, table delimiters, and workflow-command
+// looking text inert while preserving its rendered human-readable form.
+export function escapeAttentionText(value) {
+  if (
+    typeof value !== "string"
+    || UNSAFE_PATH_CHARACTERS.test(value)
+    || value.includes("\n")
+    || value.includes("\r")
+  ) {
+    fail("invalid_attention_text");
+  }
+  return [...value].map((character) => (
+    /^[A-Za-z0-9 /.-]$/u.test(character)
+      ? character
+      : `&#x${character.codePointAt(0).toString(16)};`
+  )).join("");
+}
+
+export function markdownSummary(
+  report,
+  cards = [],
+  limitOverrides = DEFAULT_ATTENTION_LIMITS,
+) {
+  const limits = normalizeAttentionLimits(limitOverrides);
+  if (!Array.isArray(cards) || cards.length > limits.max_cards) {
+    fail("invalid_attention_cards");
+  }
   const lines = [
     "## Whitehack advisory",
     "",
-    `- Status: \`${report.status}\``,
+    `- Status: ${escapeAttentionText(report.status)}`,
     `- Changed supported files observed: ${report.scope.candidate_count}`,
     `- Findings: ${report.summary.finding_count}`,
-    `- Scanner: Whitehack ${report.scanner.version} at \`${report.scanner.revision.slice(0, 12)}\``,
+    `- Scanner: Whitehack ${escapeAttentionText(report.scanner.version)} at ${escapeAttentionText(report.scanner.revision.slice(0, 12))}`,
     "",
     "This is a redacted heuristic observation, not a security proof or authorization to test a target.",
   ];
   const checks = Object.entries(report.summary.by_check);
   if (checks.length) {
     lines.push("", "| Check | Count |", "|---|---:|");
-    for (const [check, count] of checks) lines.push(`| \`${check}\` | ${count} |`);
+    for (const [check, count] of checks) {
+      lines.push(`| ${escapeAttentionText(check)} | ${count} |`);
+    }
+  }
+  if (cards.length) {
+    lines.push(
+      "",
+      `### Attention cards (${cards.length} grouped locations)`,
+      "",
+      "The Findings count above counts redacted finding occurrences; signals at the same file and line are grouped here.",
+      "",
+      "For modified text paths, relevance is line membership in an exact zero-context base-to-head Git hunk. Added, renamed, binary, type-changed, or unparseable paths are unknown. No label claims that a change caused a finding.",
+      "",
+    );
+    const cardChunks = [];
+    for (const [index, card] of cards.entries()) {
+      if (
+        !card
+        || typeof card !== "object"
+        || Array.isArray(card)
+        || !ATTENTION_RELEVANCE.has(card.relevance)
+        || !Number.isSafeInteger(card.line)
+        || card.line < 1
+        || !Array.isArray(card.checks)
+        || card.checks.length < 1
+        || card.checks.length > limits.max_checks_per_card
+      ) {
+        fail("invalid_attention_card");
+      }
+      validateRelativePath(card.file, DEFAULT_LIMITS);
+      const supportingChecks = card.checks.map(({ check, confidence, count }) => {
+        if (
+          !isSafeToken(check)
+          || !CONFIDENCE.has(confidence)
+          || !Number.isSafeInteger(count)
+          || count < 1
+          || count > limits.max_findings
+        ) {
+          fail("invalid_attention_card");
+        }
+        const occurrence = count === 1 ? "" : ` x${count}`;
+        return `${escapeAttentionText(check)} (${escapeAttentionText(confidence)})${occurrence}`;
+      }).join(", ");
+      cardChunks.push([
+        `${index + 1}. **${escapeAttentionText(card.relevance)}**`,
+        `   - File and line: ${escapeAttentionText(card.file)}&#x3a;${card.line}`,
+        `   - Supporting checks: ${supportingChecks}`,
+        `   - Review question: ${escapeAttentionText(reviewQuestionFor(card.checks))}`,
+        "",
+      ]);
+    }
+    const afterCards = [];
+    if (report.finding_details_truncated) {
+      afterCards.push(
+        `Only the first ${report.scope.limits.max_reported_findings} redacted finding details are available for attention cards.`,
+        "",
+      );
+    }
+    let shown = 0;
+    for (const chunk of cardChunks) {
+      const nextShown = shown + 1;
+      const boundedNotice = nextShown < cardChunks.length
+        ? [
+            `Attention card presentation stopped at the ${limits.max_summary_bytes}-byte bound: ${nextShown} of ${cardChunks.length} grouped locations shown.`,
+            "",
+          ]
+        : [];
+      const candidate = [
+        ...lines,
+        ...chunk,
+        ...boundedNotice,
+        ...afterCards,
+        "",
+      ];
+      if (Buffer.byteLength(`${candidate.join("\n")}\n`, "utf8") > limits.max_summary_bytes) {
+        break;
+      }
+      lines.push(...chunk);
+      shown = nextShown;
+    }
+    if (shown < cardChunks.length) {
+      lines.push(
+        `Attention card presentation stopped at the ${limits.max_summary_bytes}-byte bound: ${shown} of ${cardChunks.length} grouped locations shown.`,
+        "",
+      );
+    }
+    lines.push(...afterCards);
   }
   lines.push("");
-  return `${lines.join("\n")}\n`;
+  const summary = `${lines.join("\n")}\n`;
+  if (Buffer.byteLength(summary, "utf8") > limits.max_summary_bytes) {
+    fail("attention_summary_byte_limit_exceeded");
+  }
+  return summary;
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -500,12 +1139,21 @@ export async function main(argv = process.argv.slice(2)) {
   const report = await runAdvisory({
     root,
     paths,
+    scanner_lock: args.scanner_lock,
     scanner_root: args.scanner_root,
     base: args.base,
     head: args.head,
   });
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-  if (args.summary_file) await appendFile(args.summary_file, markdownSummary(report), "utf8");
+  if (args.summary_file) {
+    const cards = buildAttentionCards({
+      root,
+      base: args.base,
+      head: args.head,
+      findings: report.findings,
+    });
+    await appendFile(args.summary_file, markdownSummary(report, cards), "utf8");
+  }
   if (report.status !== "complete") process.exitCode = 1;
 }
 

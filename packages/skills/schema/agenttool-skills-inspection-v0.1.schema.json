@@ -1,0 +1,260 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:skills:inspection:v0.1",
+  "title": "AgentTool Skills inspection report v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "kind",
+    "generatedBy",
+    "mode",
+    "valid",
+    "scope",
+    "executionPolicy",
+    "filesystemPolicy",
+    "package",
+    "manifests",
+    "skills",
+    "summary",
+    "issues"
+  ],
+  "properties": {
+    "$schema": { "const": "urn:agenttool:skills:inspection:v0.1" },
+    "schemaVersion": { "const": "agenttool.skills/inspect-v0.1" },
+    "kind": { "const": "agenttool.skills.inspection" },
+    "generatedBy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "const": "@agenttool/skills" },
+        "version": { "type": "string" }
+      }
+    },
+    "mode": { "const": "read-only" },
+    "valid": { "type": "boolean" },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "inputKind", "limits"],
+      "properties": {
+        "root": { "const": "." },
+        "inputKind": { "enum": ["skill", "plugin", "package", "directory", "invalid"] },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["maxDepth", "maxEntries", "maxFileBytes", "maxTotalBytes", "maxSkills", "maxFrontmatterBytes"],
+          "properties": {
+            "maxDepth": { "type": "integer", "minimum": 1 },
+            "maxEntries": { "type": "integer", "minimum": 1 },
+            "maxFileBytes": { "type": "integer", "minimum": 1 },
+            "maxTotalBytes": { "type": "integer", "minimum": 1 },
+            "maxSkills": { "type": "integer", "minimum": 1 },
+            "maxFrontmatterBytes": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "executionPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["network", "subprocesses", "scriptExecution", "mcpStartup", "configMutation", "credentialLookup", "hostedApiCalls"],
+      "properties": {
+        "network": { "const": false },
+        "subprocesses": { "const": false },
+        "scriptExecution": { "const": false },
+        "mcpStartup": { "const": false },
+        "configMutation": { "const": false },
+        "credentialLookup": { "const": false },
+        "hostedApiCalls": { "const": false }
+      }
+    },
+    "filesystemPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observedSymlinks", "finalFileSymlinkFollowing", "concurrentAncestorReplacement", "immutableSnapshotRecommended"],
+      "properties": {
+        "observedSymlinks": { "const": "reject" },
+        "finalFileSymlinkFollowing": { "const": false },
+        "concurrentAncestorReplacement": { "const": "not-guaranteed" },
+        "immutableSnapshotRecommended": { "const": true }
+      }
+    },
+    "package": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "name", "version", "runtimes"],
+          "properties": {
+            "path": { "const": "package.json" },
+            "name": { "type": ["string", "null"] },
+            "version": { "type": ["string", "null"] },
+            "runtimes": { "type": "array", "items": { "$ref": "#/$defs/runtime" } }
+          }
+        }
+      ]
+    },
+    "manifests": { "type": "array", "items": { "$ref": "#/$defs/manifest" } },
+    "skills": { "type": "array", "items": { "$ref": "#/$defs/skill" } },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["skills", "files", "scripts", "resources", "errors", "warnings", "redactions"],
+      "properties": {
+        "skills": { "type": "integer", "minimum": 0 },
+        "files": { "type": "integer", "minimum": 0 },
+        "scripts": { "type": "integer", "minimum": 0 },
+        "resources": { "type": "integer", "minimum": 0 },
+        "errors": { "type": "integer", "minimum": 0 },
+        "warnings": { "type": "integer", "minimum": 0 },
+        "redactions": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "issues": { "type": "array", "items": { "$ref": "#/$defs/issue" } }
+  },
+  "$defs": {
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity", "code", "path", "message"],
+      "properties": {
+        "severity": { "enum": ["error", "warning", "info"] },
+        "code": { "type": "string" },
+        "path": { "type": "string" },
+        "message": { "type": "string" }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "source"],
+      "properties": {
+        "name": { "type": "string" },
+        "constraint": { "type": "string" },
+        "source": { "type": "string" }
+      }
+    },
+    "credential": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "source", "literalDeclared"],
+      "properties": {
+        "name": { "type": "string" },
+        "source": { "type": "string" },
+        "literalDeclared": { "type": "boolean" }
+      }
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path", "name", "version", "declaredSkillPaths", "mcpServers"],
+      "properties": {
+        "kind": { "enum": ["codex", "claude"] },
+        "path": { "type": "string" },
+        "name": { "type": ["string", "null"] },
+        "version": { "type": ["string", "null"] },
+        "declaredSkillPaths": { "type": "array", "items": { "type": "string" } },
+        "mcpServers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "credentialBindings"],
+            "properties": {
+              "name": { "type": "string" },
+              "credentialBindings": { "type": "array", "items": { "$ref": "#/$defs/credential" } }
+            }
+          }
+        }
+      }
+    },
+    "metadataShape": {
+      "oneOf": [
+        { "type": "object", "additionalProperties": false, "required": ["type"], "properties": { "type": { "const": "null" } } },
+        { "type": "object", "additionalProperties": false, "required": ["type"], "properties": { "type": { "const": "string" } } },
+        { "type": "object", "additionalProperties": false, "required": ["type"], "properties": { "type": { "const": "number" } } },
+        { "type": "object", "additionalProperties": false, "required": ["type"], "properties": { "type": { "const": "boolean" } } },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "items"],
+          "properties": { "type": { "const": "array" }, "items": { "type": "array", "items": { "$ref": "#/$defs/metadataShape" } } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "fields"],
+          "properties": { "type": { "const": "object" }, "fields": { "type": "object", "additionalProperties": { "$ref": "#/$defs/metadataShape" } } }
+        }
+      ]
+    },
+    "skill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "skillFile", "name", "metadataShape", "digest", "digestSemantics", "files", "scripts", "resources", "requirements", "allowedToolsSemantics"],
+      "properties": {
+        "path": { "type": "string" },
+        "skillFile": { "type": "string" },
+        "name": { "type": ["string", "null"] },
+        "metadataShape": { "type": "object", "additionalProperties": { "$ref": "#/$defs/metadataShape" } },
+        "digest": {
+          "anyOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+          ]
+        },
+        "digestSemantics": { "const": "sha256 of sorted relative paths and regular-file bytes; unavailable for incomplete coverage or symlinks; not publisher authentication" },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "bytes", "category"],
+            "properties": {
+              "path": { "type": "string" },
+              "bytes": { "type": "integer", "minimum": 0 },
+              "category": { "enum": ["skill", "script", "reference", "asset", "resource"] }
+            }
+          }
+        },
+        "scripts": { "type": "array", "items": { "type": "string" } },
+        "resources": { "type": "array", "items": { "type": "string" } },
+        "requirements": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tools", "mcpServers", "runtimes", "credentials"],
+          "properties": {
+            "tools": { "type": "array", "items": { "$ref": "#/$defs/toolRequirement" } },
+            "mcpServers": { "type": "array", "items": { "$ref": "#/$defs/mcpRequirement" } },
+            "runtimes": { "type": "array", "items": { "$ref": "#/$defs/runtime" } },
+            "credentials": { "type": "array", "items": { "$ref": "#/$defs/credential" } }
+          }
+        },
+        "allowedToolsSemantics": { "const": "untrusted requested capabilities; host support and approval are implementation-dependent" }
+      }
+    },
+    "toolRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "source", "trusted"],
+      "properties": {
+        "name": { "type": "string" },
+        "source": { "type": "string" },
+        "trusted": { "const": false }
+      }
+    },
+    "mcpRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "source"],
+      "properties": {
+        "name": { "type": "string" },
+        "source": { "type": "string" }
+      }
+    }
+  }
+}

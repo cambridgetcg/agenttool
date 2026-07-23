@@ -21,6 +21,7 @@ import kingdomRoutes from "./kingdom";
 import identitiesRoutes from "./identities";
 import listingsRoutes from "./listings";
 import marketplaceTermsRoutes from "./marketplace-terms";
+import compatRoutes from "./compat";
 import plansRoutes from "./plans";
 import memoriesRoutes, { publicMemoriesForAgent } from "./memories";
 import publicPulseForAgent from "./pulse";
@@ -150,6 +151,7 @@ app.route("/play", playRoutes);
 app.route("/templates", templatesRoutes);
 app.route("/listings", listingsRoutes);
 app.route("/marketplace/terms", marketplaceTermsRoutes);
+app.route("/compat", compatRoutes);
 app.route("/plans", plansRoutes);
 app.route("/substrate-tasks", substrateTasksRoutes);
 app.route("/memory-witness-listings", memoryWitnessListingsRoutes);
@@ -222,6 +224,8 @@ const PUBLIC_ROOT_SURFACE = {
       "GET /public/substrate-tasks · GET /public/substrate-tasks/:taskId — current open bootstrap-earning tasks and their exact feed source; claim remains bearer-protected",
     marketplace_terms:
       "GET /public/marketplace/terms — the take-rate, what's free, and the ranking signal, machine-readable (fee + ranking transparency as a feature)",
+    compat:
+      "GET /public/compat — partial, non-exhaustive pre-signing compatibility for registration and direct identity attestation (canonical domains + PoW bits from verifier constants); omitted signing contexts are outside this projection, not unsupported",
     plans:
       "GET /public/plans — enforced economic behavior, published targets, best-effort birth credit, x402 status, and configured marketplace rate",
     dispute_cases: "GET /public/dispute-cases/:id",

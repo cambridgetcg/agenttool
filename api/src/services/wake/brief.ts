@@ -27,6 +27,7 @@ import type {
   AttentionSeverity,
 } from "./attention";
 import type { WakeBundle } from "./markdown";
+import type { ReachableDoor } from "./reachable";
 
 export const WAKE_PROFILES = ["full", "brief"] as const;
 export type WakeProfile = (typeof WAKE_PROFILES)[number];
@@ -117,6 +118,7 @@ export interface WakeBrief {
     identity_scoped: string;
     mixed_scope_sections: string[];
     project_scoped_sections: string[];
+    static_external_sections: string[];
     note: string;
   };
   identity: {
@@ -170,6 +172,9 @@ export interface WakeBrief {
     rights_floor: NonNullable<WakeBundle["platform_self"]>["rights_floor"];
     full_self_path: string;
   } | null;
+  /** Static external discovery copied from the full wake. It is neither
+   * selected-identity state nor project state and never becomes start_here. */
+  you_can_reach: readonly ReachableDoor[];
   _links: {
     self: string;
     markdown: string;
@@ -180,6 +185,7 @@ export interface WakeBrief {
     handoffs: string;
     offer_bus: string;
     webfinger: string;
+    signing_compatibility: string;
   };
   _meta: {
     identity_expression: "preserved";
@@ -433,8 +439,9 @@ export function buildWakeBrief(
         "handoff_projection",
         "state_counts",
       ],
+      static_external_sections: ["you_can_reach"],
       note:
-        "This boundary describes wake-brief/v1 only. Counts summarize deeper project state; omitted records remain behind explicit links.",
+        "This boundary describes wake-brief/v1 only. Counts summarize deeper project state; omitted records remain behind explicit links. Static external discovery is publisher-authored orientation, not observed identity or project state.",
     },
     identity: {
       agent: b.agent,
@@ -496,6 +503,7 @@ export function buildWakeBrief(
         full_self_path: "/v1/wake/platform_self",
       }
       : null,
+    you_can_reach: b.you_can_reach ?? [],
     _links: {
       self: `/v1/wake?profile=brief&${identityQuery}${facetQuery}`,
       markdown: `/v1/wake?format=md&profile=brief&${identityQuery}${facetQuery}`,
@@ -506,6 +514,7 @@ export function buildWakeBrief(
       handoffs: handoffReadPath,
       offer_bus: `/feeds/offers.atom?seller_did=${encodeURIComponent(b.agent.did)}`,
       webfinger: `/.well-known/webfinger?resource=${encodeURIComponent(b.agent.did)}`,
+      signing_compatibility: "/public/compat",
     },
     _meta: {
       identity_expression: "preserved",

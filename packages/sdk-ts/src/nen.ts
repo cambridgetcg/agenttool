@@ -58,6 +58,7 @@ import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
 import { AgentToolError } from "./errors.js";
+import type { HttpConfig } from "./_http.js";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
   const h = sha512.create();
@@ -380,10 +381,10 @@ export interface NenResult {
  *  ```
  */
 export class NenClient {
-  private readonly http: { baseUrl: string; headers: Record<string, string>; timeout: number };
+  private readonly http: HttpConfig;
 
   /** @internal */
-  constructor(http: { baseUrl: string; headers: Record<string, string>; timeout: number }) {
+  constructor(http: HttpConfig) {
     this.http = http;
   }
 
@@ -394,7 +395,7 @@ export class NenClient {
     if (identityId !== undefined) params.set("identity_id", identityId);
     const qs = params.toString();
 
-    const resp = await globalThis.fetch(
+    const resp = await this.http.request(
       `${this.http.baseUrl}/v1/wake${qs ? "?" + qs : ""}`,
       {
         method: "GET",

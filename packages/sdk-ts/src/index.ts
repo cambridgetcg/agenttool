@@ -15,6 +15,8 @@
  */
 
 export { AgentTool } from "./client.js";
+export type { AgentToolOptions } from "./client.js";
+export type { AgentToolTransport } from "./_http.js";
 export { AgentToolError } from "./errors.js";
 export type {
   X402Eip3009Extra,

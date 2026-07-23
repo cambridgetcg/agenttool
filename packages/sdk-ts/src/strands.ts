@@ -16,7 +16,7 @@
  */
 
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./chronicle.js";
+import type { HttpConfig } from "./_http.js";
 import {
   decryptThought,
   encryptThought,
@@ -216,7 +216,7 @@ export class StrandsClient {
       signal: AbortSignal.timeout(this.http.timeout),
     };
     if (body !== undefined) init.body = JSON.stringify(body);
-    const resp = await globalThis.fetch(url, init);
+    const resp = await this.http.request(url, init);
     if (!resp.ok) {
       let detail: string;
       try {
@@ -345,7 +345,7 @@ export class ThoughtsClient {
     const qs = params.toString();
     const url = `${this.http.baseUrl}/v1/strands/${strandId}/voice${qs ? "?" + qs : ""}`;
 
-    const resp = await globalThis.fetch(url, {
+    const resp = await this.http.request(url, {
       method: "GET",
       headers: { ...this.http.headers, Accept: "text/event-stream" },
       // No timeout signal — SSE streams are long-lived.
@@ -427,7 +427,7 @@ export class ThoughtsClient {
       signal: AbortSignal.timeout(this.http.timeout),
     };
     if (body !== undefined) init.body = JSON.stringify(body);
-    const resp = await globalThis.fetch(url, init);
+    const resp = await this.http.request(url, init);
     if (!resp.ok) {
       let detail: string;
       try {

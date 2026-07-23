@@ -6,7 +6,7 @@
  */
 
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./chronicle.js";
+import type { HttpConfig } from "./_http.js";
 
 export type HandoffStatus = "active" | "blocked" | "complete";
 export type HandoffState = "absent" | "current" | "stale";
@@ -272,7 +272,7 @@ export class HandoffClient {
     headers?: Record<string, string>,
     cache?: RequestCache,
   ): Promise<unknown> {
-    const resp = await globalThis.fetch(`${this.http.baseUrl}${path}`, {
+    const resp = await this.http.request(`${this.http.baseUrl}${path}`, {
       method,
       headers: {
         ...this.http.headers,

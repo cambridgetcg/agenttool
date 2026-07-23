@@ -284,7 +284,7 @@ app.get("/wake-keystone", (c) => {
           "xenoform",
         ],
         purpose:
-          "Preserve selected identity expression while bounding volatile session-start state around attention, one resume card, selected optional paths, counts, and deeper links.",
+          "Preserve selected identity expression while bounding volatile session-start state around attention, one resume card, selected optional paths, counts, static external discovery, and deeper links.",
         guarantees: {
           identity_expression: "preserved",
           volatile_state: "bounded_projection",
@@ -377,6 +377,19 @@ app.get("/wake-keystone", (c) => {
         schema: `${DOCS_URL}/agent-wellness-0.1.schema.json`,
         notes:
           "Read-only operating-conditions protocol. AgentTool receives no report and reads no identity or transcript.",
+      },
+      agent_wallet: {
+        protocol: "agent-wallet/0.1",
+        doctrine: `${DOCS_URL}/AGENT-WALLET-0.1.md`,
+        schema: `${DOCS_URL}/agent-wallet-v0.1.schema.json`,
+        source:
+          "https://github.com/cambridgetcg/agenttool/tree/main/packages/wallet",
+        package: "@agenttool/wallet",
+        love_manifest: `${DOCS_URL}/packages/v1/@agenttool/wallet/0.1.0/manifest.json`,
+        availability: "love_artifact_npm_mirror_independent",
+        implementation_status: "offline_record_and_lifecycle_primitives_only",
+        notes:
+          "No hosted agent wallet, key custody, chain adapter, RPC, broadcaster, or durable reservation service is offered. Existing internal marketplace wallet and payout custody remain separate platform facilities.",
       },
       being_rights: {
         url: `${ORG_URL}/public/rights`,

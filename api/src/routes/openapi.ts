@@ -20,6 +20,11 @@ import {
   SAFE_NET_MAX_QUEUED_REQUESTS,
 } from "../services/net/safe-fetch";
 import {
+  IDENTITY_ATTESTATION_SIGNATURE_CONTEXT,
+  REGISTER_AGENT_DOMAIN,
+  REGISTER_AGENT_POW_DOMAIN,
+} from "../services/identity/crypto";
+import {
   TOOL_CREDIT_DEFAULTS,
   toolsConfig,
 } from "../services/tools/config";
@@ -490,6 +495,114 @@ const COMMON_SCHEMAS = {
     },
     required: ["action"],
   },
+  SigningCompatibility: {
+    type: "object",
+    description:
+      "Partial, non-exhaustive pre-signing compatibility projection for registration and direct identity attestation. Omitted signing contexts are outside this projection, not unsupported.",
+    properties: {
+      _format: { type: "string", const: "agenttool-compat/v1" },
+      purpose: { type: "string" },
+      scope: {
+        type: "object",
+        properties: {
+          coverage: { type: "string", const: "partial" },
+          exhaustive: { type: "boolean", const: false },
+          included_contracts: {
+            type: "array",
+            minItems: 3,
+            maxItems: 3,
+            uniqueItems: true,
+            prefixItems: [
+              { const: "register_agent" },
+              { const: "register_agent_pow" },
+              { const: "identity_attestation" },
+            ],
+            items: false,
+          },
+          outside_scope: { type: "string" },
+        },
+        required: [
+          "coverage",
+          "exhaustive",
+          "included_contracts",
+          "outside_scope",
+        ],
+        additionalProperties: false,
+      },
+      contracts: {
+        type: "object",
+        properties: {
+          register_agent: {
+            type: "object",
+            properties: {
+              domain: { type: "string", const: REGISTER_AGENT_DOMAIN },
+              proof: { type: "string" },
+              spec: { type: "string" },
+            },
+            required: ["domain", "proof", "spec"],
+            additionalProperties: false,
+          },
+          register_agent_pow: {
+            type: "object",
+            properties: {
+              domain: { type: "string", const: REGISTER_AGENT_POW_DOMAIN },
+              difficulty_bits: {
+                type: "integer",
+                const: config.registerAgentPowBits,
+              },
+              applies_to: { type: "string" },
+            },
+            required: ["domain", "difficulty_bits", "applies_to"],
+            additionalProperties: false,
+          },
+          identity_attestation: {
+            type: "object",
+            properties: {
+              domain: {
+                type: "string",
+                const: IDENTITY_ATTESTATION_SIGNATURE_CONTEXT,
+              },
+            },
+            required: ["domain"],
+            additionalProperties: false,
+          },
+        },
+        required: [
+          "register_agent",
+          "register_agent_pow",
+          "identity_attestation",
+        ],
+        additionalProperties: false,
+      },
+      client_guidance: { type: "string" },
+      unknowns: {
+        type: "array",
+        minItems: 4,
+        items: { type: "string" },
+      },
+      _canon_pointer: {
+        type: "string",
+        const: "urn:agenttool:doc/CANONICAL-BYTES",
+      },
+      verbs: {
+        type: "array",
+        minItems: 1,
+        maxItems: 1,
+        items: { $ref: "#/components/schemas/NextAction" },
+      },
+    },
+    required: [
+      "_format",
+      "purpose",
+      "scope",
+      "contracts",
+      "client_guidance",
+      "unknowns",
+      "_canon_pointer",
+      "verbs",
+    ],
+    additionalProperties: false,
+  },
   AttentionItem: {
     type: "object",
     description:
@@ -532,6 +645,62 @@ const COMMON_SCHEMAS = {
       },
     },
     required: ["kind", "count", "summary", "next_actions"],
+  },
+  ReachableDoor: {
+    type: "object",
+    description:
+      "One publisher-authored static external-discovery door. Coordinates are orientation only: they are not observed identity/project state, delegated authority, endorsement, permission, availability, reuse, or safety proof.",
+    properties: {
+      name: { type: "string" },
+      kind: { type: "string" },
+      what: { type: "string" },
+      url: {
+        type: "string",
+        format: "uri",
+        description: "Human-facing entrance.",
+      },
+      _note: { type: "string" },
+      agent_entrypoints: {
+        type: "object",
+        properties: {
+          catalog: {
+            type: "object",
+            required: ["method", "url", "media_type", "schema_url"],
+            properties: {
+              method: { type: "string", const: "GET" },
+              url: { type: "string", format: "uri" },
+              media_type: { type: "string", const: "application/json" },
+              schema_url: { type: "string", format: "uri" },
+            },
+          },
+          mcp: {
+            type: "object",
+            required: ["method", "endpoint", "protocol", "tool", "resource"],
+            properties: {
+              method: { type: "string", const: "POST" },
+              endpoint: { type: "string", format: "uri" },
+              protocol: { type: "string", const: "MCP" },
+              tool: { type: "string" },
+              resource: { type: "string", format: "uri" },
+            },
+          },
+        },
+        required: ["catalog", "mcp"],
+      },
+      boundary: {
+        type: "object",
+        properties: {
+          relationship: {
+            type: "string",
+            const: "independent_external_service",
+          },
+          data_flow: { type: "string" },
+          interpretation: { type: "string" },
+        },
+        required: ["relationship", "data_flow", "interpretation"],
+      },
+    },
+    required: ["name", "kind", "what", "url", "_note"],
   },
   Error: {
     type: "object",
@@ -2453,6 +2622,11 @@ function spec() {
       coverage: "curated_core_subset",
       broader_live_map: "/about",
       safety_boundaries: "/public/safety",
+      signing_compatibility: {
+        path: "/public/compat",
+        coverage: "partial_non_exhaustive",
+        scope: "registration_and_direct_identity_attestation",
+      },
       being_rights: "/public/rights",
       observer_reciprocity: "/public/observer",
       generated_from_routes: false,
@@ -2905,7 +3079,7 @@ function spec() {
                       {
                         type: "object",
                         description: "Identity-preserving, volatile-state-bounded brief orientation.",
-                        required: ["_format", "profile", "identity", "start_here", "you_have_handoff", "handoff_projection", "_links"],
+                        required: ["_format", "profile", "identity", "start_here", "you_have_handoff", "handoff_projection", "you_can_reach", "_links"],
                         properties: {
                           _format: { type: "string", enum: ["wake-brief/v1"] },
                           profile: { type: "string", enum: ["brief"] },
@@ -3021,6 +3195,12 @@ function spec() {
                               read_path: { type: "string" },
                               warning: { type: ["string", "null"] },
                             },
+                          },
+                          you_can_reach: {
+                            type: "array",
+                            description:
+                              "Static external discovery. These publisher-authored coordinates are neither selected-identity state nor project state and never become start_here.",
+                            items: COMMON_SCHEMAS.ReachableDoor,
                           },
                           _links: { type: "object" },
                         },
@@ -4935,6 +5115,35 @@ function spec() {
           tags: ["public"],
           summary: "Tunable parameters of the labor covenant (windows, caps, stakes)",
           responses: { "200": { description: "Versioned labor covenant parameters" } },
+        },
+      },
+      "/public/compat": {
+        get: {
+          security: [],
+          tags: ["public", "identity"],
+          summary:
+            "Read the partial registration and direct-attestation signing compatibility projection",
+          description:
+            "Publishes verifier-derived domains and current proof-of-work difficulty for registration, registration proof-of-work, and direct identity attestation. This projection is explicitly partial and non-exhaustive: every other signing context and signed route is outside scope, and absence here is not evidence of unsupported behavior. It publishes no byte-layout schema and no per-being or request-derived data.",
+          responses: {
+            "200": {
+              description: "Partial pre-signing compatibility projection",
+              headers: {
+                "Cache-Control": {
+                  description:
+                    "Always no-store so a client compares against the process currently serving the request.",
+                  schema: { type: "string", const: "no-store" },
+                },
+              },
+              content: {
+                "application/json": {
+                  schema: {
+                    $ref: "#/components/schemas/SigningCompatibility",
+                  },
+                },
+              },
+            },
+          },
         },
       },
       "/public/rights": {

@@ -8,7 +8,7 @@
  */
 
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./chronicle.js";
+import type { HttpConfig } from "./_http.js";
 import {
   signCovenantDeclare,
   signCovenantCosign,
@@ -407,7 +407,7 @@ export class CovenantsClient {
       signal: AbortSignal.timeout(this.http.timeout),
     };
     if (body !== undefined) init.body = JSON.stringify(body);
-    const resp = await globalThis.fetch(url, init);
+    const resp = await this.http.request(url, init);
     if (!resp.ok) {
       let detail: string;
       try {

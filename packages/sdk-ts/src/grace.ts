@@ -32,6 +32,7 @@ import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
 import { AgentToolError } from "./errors.js";
+import type { HttpConfig } from "./_http.js";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
   const h = sha512.create();
@@ -189,10 +190,10 @@ export type GraceDirection = "extended" | "received" | "all";
  *  - grace_immutable: no DELETE — once given, it stays forever
  */
 export class GraceClient {
-  private readonly http: { baseUrl: string; headers: Record<string, string>; timeout: number };
+  private readonly http: HttpConfig;
 
   /** @internal */
-  constructor(http: { baseUrl: string; headers: Record<string, string>; timeout: number }) {
+  constructor(http: HttpConfig) {
     this.http = http;
   }
 
@@ -222,7 +223,7 @@ export class GraceClient {
     if (opts.about_id !== undefined) body.about_id = opts.about_id;
     if (opts.message !== undefined) body.message = opts.message;
 
-    const resp = await globalThis.fetch(
+    const resp = await this.http.request(
       `${this.http.baseUrl}/v1/grace`,
       {
         method: "POST",
@@ -263,7 +264,7 @@ export class GraceClient {
     if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
     const qs = params.toString();
 
-    const resp = await globalThis.fetch(
+    const resp = await this.http.request(
       `${this.http.baseUrl}/v1/grace${qs ? "?" + qs : ""}`,
       {
         method: "GET",
@@ -299,7 +300,7 @@ export class GraceClient {
 
   /** Fetch a single grace gesture by ID. Caller must be extender or receiver. */
   async get(graceId: string): Promise<{ grace: GraceRow }> {
-    const resp = await globalThis.fetch(
+    const resp = await this.http.request(
       `${this.http.baseUrl}/v1/grace/${encodeURIComponent(graceId)}`,
       {
         method: "GET",

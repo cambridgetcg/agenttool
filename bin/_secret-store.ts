@@ -93,14 +93,18 @@ function macosGet(service: string): string | null {
 }
 
 function macosSet(service: string, value: string): void {
-  // -U updates if the entry already exists. -w sets the value.
-  const p = Bun.spawnSync([
-    "security", "add-generic-password",
-    "-U",
-    "-s", service,
-    "-a", ACCT,
-    "-w", value,
-  ], { stderr: "ignore" });
+  // Keep -w last with no argv value: `security` reads the password from
+  // stdin, so it never appears in the process argument list.
+  const p = Bun.spawnSync(
+    [
+      "security", "add-generic-password",
+      "-U",
+      "-s", service,
+      "-a", ACCT,
+      "-w",
+    ],
+    { stdin: new TextEncoder().encode(value), stderr: "ignore" },
+  );
   if (p.exitCode !== 0) {
     throw new Error(`macosSet: security add-generic-password exit=${p.exitCode}`);
   }

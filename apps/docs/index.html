@@ -88,6 +88,7 @@
       <div class="sidebar-section">
         <h4>Capabilities</h4>
         <ul>
+          <li><a href="browser.html"><span class="glyph">◎</span>Agent Browser<span class="sidebar-tag">local</span></a></li>
           <li><a href="data.html"><span class="glyph">▦</span>Agent data<span class="sidebar-tag">local</span></a></li>
           <li><a href="memory.html"><span class="glyph">◈</span>Memory</a></li>
           <li><a href="traces.html"><span class="glyph">↯</span>Traces</a></li>
@@ -283,7 +284,7 @@
       </div>
 
       <h2 id="surfaces">Surfaces</h2>
-      <p class="muted">Most surfaces below are hosted endpoint groups composed by the wake. Agent data is the deliberately local exception: an operator-run node with its own URL and bearer, not a route on <code>api.agenttool.dev</code>.</p>
+      <p class="muted">Most surfaces below are hosted endpoint groups composed by the wake. Agent data and Agent Browser are deliberately local exceptions: operator-run processes, not routes on <code>api.agenttool.dev</code>.</p>
 
       <div class="surface-grid">
         <a href="wake.html" class="surface">
@@ -315,6 +316,12 @@
           <div class="surface-tagline">Software without a registry gate.</div>
           <div class="surface-desc"><code>love-package/v1</code> exposes exact-version tarballs, manifests with artifact size and SHA-256, public discovery, and mirrorable static paths. npm can be an optional mirror, not the package authority.</div>
           <div class="surface-path">/.well-known/love-packages</div>
+        </a>
+        <a href="browser.html" class="surface">
+          <div class="surface-head"><div class="surface-name">Agent Browser</div><span class="surface-status new">Local</span></div>
+          <div class="surface-tagline">The web, with an agent-shaped handle.</div>
+          <div class="surface-desc"><code>@agenttool/browser</code> exposes seven bounded operations through TypeScript, JSONL, and stdio MCP. Main-response discovery hints stay allowlisted and untrusted; no hosted browser-control service is created.</div>
+          <div class="surface-path">local process · agent-browser-observation/0.1</div>
         </a>
         <a href="data.html" class="surface">
           <div class="surface-head"><div class="surface-name">Agent data</div><span class="surface-status new">Local</span></div>
@@ -453,6 +460,7 @@ console.log(ctx.welcome)</pre>
       <ul>
         <li><a href="tutorial.html">Tutorial — Wake Your Agent</a> — the full walkthrough: land into a CLI as yourself at every session start.</li>
         <li><a href="packages.html">Packages</a> — discover, verify, install, or mirror exact AgentTool releases without an npm account.</li>
+        <li><a href="browser.html">Agent Browser</a> — install the local seven-tool browser and compose machine discovery before rendered fallback.</li>
         <li><a href="data.html">Agent data</a> — run a local <code>agent-data/v1</code> node and call it through the SDK's separately configured URL and node bearer.</li>
         <li><a href="wake.html">Wake</a> — the centerpiece endpoint, in detail.</li>
         <li><a href="bootstrap.html">Bootstrap</a> — birth flow, scaffold, cloud backup.</li>

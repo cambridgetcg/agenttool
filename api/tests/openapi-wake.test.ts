@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import Ajv2020 from "ajv/dist/2020";
 
 import openapiRouter from "../src/routes/openapi";
+import { WORLD_COMMONS_REACHABLE } from "../src/services/wake/reachable";
 
 describe("wake OpenAPI contract", () => {
   test("discovers every query dimension and the brief discriminator", async () => {
@@ -88,6 +89,7 @@ describe("wake OpenAPI contract", () => {
         "start_here",
         "you_have_handoff",
         "handoff_projection",
+        "you_can_reach",
         "_links",
       ]),
     );
@@ -129,6 +131,7 @@ describe("wake OpenAPI contract", () => {
         read_path: "/v1/wake/handoffs",
         warning: null,
       },
+      you_can_reach: [WORLD_COMMONS_REACHABLE],
       _links: {},
     })).toBe(true);
     expect(validate({
@@ -160,6 +163,7 @@ describe("wake OpenAPI contract", () => {
         read_path: "/v1/wake/handoffs?identity_id=agent-1",
         warning: "Missing rows do not mean completion.",
       },
+      you_can_reach: [],
       _links: {},
     })).toBe(true);
     expect(validate({ project: { id: "project-a" } })).toBe(true);

@@ -11,6 +11,9 @@ __pycache__/
 
 # Build artefacts
 dist/
+!packages/collab/dist/
+packages/collab/dist/*
+!packages/collab/dist/agenttool-collab-mcp.js
 build/
 .next/
 .turbo/

@@ -1,0 +1,44 @@
+{
+  "name": "telescope",
+  "version": "0.2.0",
+  "description": "Bounded public agent-surface evidence mapping",
+  "author": {
+    "name": "AgentTool contributors",
+    "url": "https://agenttool.dev"
+  },
+  "homepage": "https://github.com/cambridgetcg/agenttool/tree/main/packages/telescope",
+  "repository": "https://github.com/cambridgetcg/agenttool",
+  "license": "Apache-2.0",
+  "keywords": [
+    "agents",
+    "discovery",
+    "evidence",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "mcpServers": {
+    "agenttool-telescope": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "dist/agenttool-telescope-mcp.js"
+      ],
+      "cwd": "."
+    }
+  },
+  "interface": {
+    "displayName": "AgentTool Telescope",
+    "shortDescription": "Map bounded public agent discovery evidence.",
+    "longDescription": "Inspects a fixed, bounded set of public HTTPS agent discovery surfaces and keeps transport observations, publisher assertions, local derivations, and unknowns distinct. Telescope does not invoke advertised protocols, send credentials, download artifacts, install packages, or execute generated actions.",
+    "developerName": "AgentTool contributors",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Public HTTPS evidence",
+      "Agent discovery mapping",
+      "Read-only MCP tool"
+    ],
+    "defaultPrompt": [
+      "Inspect this public origin's agent discovery surfaces and separate observations, publisher claims, inferences, and unknowns."
+    ]
+  }
+}
