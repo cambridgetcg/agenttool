@@ -7,10 +7,12 @@ import { Hono, type Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 
 import {
+  buildInvokeRecipe,
   listPublicListings,
   resolvePublicListing,
 } from "../../services/marketplace/listings";
 import { computeFee } from "../../services/marketplace/take-rate";
+import { lookupActiveBoxKey } from "../../services/inbox/store";
 import { MARKETPLACE_INPUT_SAFETY } from "../../services/discovery/safety-boundaries";
 import { offerBusRelatedLinkHeader } from "../../services/offer-bus";
 
@@ -100,6 +102,7 @@ app.get("/:id", async (c) => {
   }
   if (resolved.status === "blocked") return blockedListing(c);
   const listing = resolved.listing;
+  const boxKey = await lookupActiveBoxKey(listing.seller_did);
   setOfferBusLink(c, listing.seller_did);
   return c.json({
     id: listing.id,
@@ -116,6 +119,21 @@ app.get("/:id", async (c) => {
     invocations_count: listing.invocations_count,
     created_at: listing.created_at,
     updated_at: listing.updated_at,
+    invoke: buildInvokeRecipe(
+      listing.id,
+      boxKey
+        ? {
+            box_key_id: boxKey.box_key_id,
+            public_key: boxKey.public_key,
+          }
+        : null,
+      {
+        unavailableReason:
+          listing.dispute_policy !== null
+            ? "dispute_arbitration_resting"
+            : undefined,
+      },
+    ),
     _safety: MARKETPLACE_INPUT_SAFETY,
   });
 });
@@ -143,12 +161,28 @@ app.get("/:id/quote", async (c) => {
     currency: listing.price_currency,
   });
   const disputePolicyPresent = listing.dispute_policy !== null;
+  const boxKey = await lookupActiveBoxKey(listing.seller_did);
+  setOfferBusLink(c, listing.seller_did);
 
   return c.json({
     listing_id: listing.id,
     name: listing.name,
     seller_did: listing.seller_did,
     pricing_model: listing.pricing_model,
+    invoke: buildInvokeRecipe(
+      listing.id,
+      boxKey
+        ? {
+            box_key_id: boxKey.box_key_id,
+            public_key: boxKey.public_key,
+          }
+        : null,
+      {
+        unavailableReason: disputePolicyPresent
+          ? "dispute_arbitration_resting"
+          : undefined,
+      },
+    ),
     // All amounts are in MINOR units of the listing currency (pence/cents).
     quote: {
       currency: split.currency,

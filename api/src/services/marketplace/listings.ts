@@ -90,7 +90,111 @@ export interface ListingOut {
   updated_at: string;
 }
 
-/** Public listing fields shared by unauthenticated projections. */
+export interface InvokeRecipeBoxKey {
+  box_key_id: string;
+  public_key: string;
+}
+
+export interface InvokeRecipeOptions {
+  unavailableReason?: "dispute_arbitration_resting";
+}
+
+/** The machine-actionable invoke recipe embedded in a public listing.
+ *
+ * One public listing read carries the seller's current encryption material
+ * and the exact wire profile. The caller still supplies its own authenticated
+ * project bearer, identity, funded wallet, and task input.
+ *
+ * AgentTool checks the submitted envelope's limited shape; it does not prove
+ * encryption, recipient-key binding, or decryptability. The supported helper
+ * and recipe below match packages/sdk-ts/src/inbox.ts exactly. */
+export function buildInvokeRecipe(
+  listingId: string,
+  sellerBoxKey: InvokeRecipeBoxKey | null,
+  opts: InvokeRecipeOptions = {},
+) {
+  if (opts.unavailableReason === "dispute_arbitration_resting") {
+    return {
+      invokable: false,
+      reason: "dispute_arbitration_resting",
+      note:
+        "This legacy listing carries a dispute policy. New invocations and " +
+        "policy-dependent mutations are resting fail-closed, so the invoke " +
+        "route currently returns a stable 503 before marketplace state or " +
+        "escrow changes.",
+    } as const;
+  }
+
+  if (!sellerBoxKey) {
+    return {
+      invokable: false,
+      reason: "seller_has_no_active_box_key",
+      note:
+        "This seller has no active X25519 recipient key, so the canonical " +
+        "encryption path cannot produce a seller-sealed input. The API only " +
+        "checks caller-supplied envelope shape and may accept bytes whose " +
+        "confidentiality it cannot verify; do not treat that as a safe " +
+        "substitute. Wait for the seller to register an active box key.",
+    } as const;
+  }
+
+  return {
+    invokable: true,
+    envelope_profile: "agenttool-inbox-v1",
+    seller_box_key_id: sellerBoxKey.box_key_id,
+    seller_box_public_key: sellerBoxKey.public_key,
+    endpoint: { method: "POST", path: `/v1/listings/${listingId}/invoke` },
+    sdk_helper: {
+      package: "@agenttool/sdk",
+      export: "sealForRecipient",
+      input:
+        "sealForRecipient(JSON.stringify(your_input), decodeStandardBase64(seller_box_public_key))",
+      output_mapping: {
+        ciphertextB64: "input_sealed.ct",
+        nonceB64: "input_sealed.nonce",
+        ephemeralPubB64: "input_sealed.sender_pub",
+      },
+    },
+    body: {
+      buyer_identity_id: "<your identity uuid>",
+      buyer_wallet_id: "<your funded wallet uuid>",
+      input_sealed: {
+        ct: "<standard padded base64: AES-GCM ciphertext plus 16-byte tag>",
+        nonce: "<standard padded base64: random 12-byte nonce>",
+        sender_pub:
+          "<standard padded base64: fresh ephemeral 32-byte X25519 public key>",
+      },
+      metadata: {
+        recipient_box_key_id: sellerBoxKey.box_key_id,
+        envelope_profile: "agenttool-inbox-v1",
+      },
+    },
+    how_to_seal: {
+      plaintext: "UTF-8 JSON.stringify(your_input)",
+      key_agreement:
+        "Generate a fresh ephemeral X25519 keypair; shared_secret = X25519(ephemeral_private_key, seller_box_public_key).",
+      key_derivation:
+        'HKDF-SHA256(ikm=shared_secret, salt=empty, info="agenttool-inbox-v1", length=32).',
+      encryption:
+        "AES-256-GCM with a fresh random 12-byte nonce, no additional authenticated data; ct includes the 16-byte authentication tag.",
+      sender_pub:
+        "The fresh ephemeral X25519 public key for this envelope, not the buyer's registered box key.",
+      encoding:
+        "Encode ct, nonce, and sender_pub as canonical padded RFC 4648 standard base64.",
+    },
+    confidentiality:
+      "Confidential only when the caller performs this recipe correctly. " +
+      "AgentTool does not verify encryption or recipient binding. Invocation " +
+      "metadata, including the caller-supplied recipient key id/profile, is " +
+      "server-readable; never send credentials, bearers, private keys, " +
+      "mnemonics, recovery phrases, or third-party secrets.",
+    settlement:
+      "Your payment escrows on invoke. The seller acks, does the work, and " +
+      "submits a signed sealed output; escrow releases to the seller on " +
+      "completion. If the seller misses the SLA, escrow auto-refunds you.",
+  } as const;
+}
+
 export function projectPublicListing(listing: ListingOut) {
   return {
     id: listing.id,

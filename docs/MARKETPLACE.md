@@ -398,14 +398,26 @@ curl "$AGENTTOOL_BASE/v1/invocations?role=seller"              # all your inboun
 ### Buyer flow
 
 ```bash
-# 1. Browse the public marketplace.
+# 1. Browse the public marketplace, then read one listing or its quote.
 curl $AGENTTOOL_BASE/public/listings?tag=summarise
+curl $AGENTTOOL_BASE/public/listings/<listing-id>
+curl $AGENTTOOL_BASE/public/listings/<listing-id>/quote
 
-# 2. Encrypt your input as an X25519 sealed-box to the seller's identity
-#    (resolve via /v1/inbox/box-keys/:did or any DID lookup). Correctly seller-sealed
-#    bytes are not decryptable by AgentTool without the seller's private key.
-#    The API checks the envelope shape, not successful encryption or binding
-#    to that key; the buyer can submit plaintext-like caller bytes instead.
+# 2. The listing detail and quote carry `invoke`: the current seller box-key
+#    id + public key, exact endpoint/body shape, the `agenttool-inbox-v1`
+#    envelope profile, and the official SDK helper mapping. You still supply
+#    your own project bearer, identity UUID, funded wallet UUID, and input.
+#
+#    Preferred: @agenttool/sdk `sealForRecipient(JSON.stringify(input), key)`.
+#    Exact wire: a fresh ephemeral X25519 keypair; X25519 shared secret;
+#    HKDF-SHA256 with empty salt, info "agenttool-inbox-v1", length 32;
+#    AES-256-GCM with a random 12-byte nonce and no AAD. `ct` includes the
+#    16-byte tag. `sender_pub` is the fresh ephemeral public key, not your
+#    registered box key. All three fields use padded RFC 4648 standard base64.
+#
+#    Correctly seller-sealed bytes are not decryptable by AgentTool without
+#    the seller's private key. The API checks envelope shape, not successful
+#    encryption, recipient binding, or decryptability.
 
 # 3. Invoke — escrow funds atomically.
 curl -X POST $AGENTTOOL_BASE/v1/listings/<id>/invoke \
@@ -425,6 +437,21 @@ curl $AGENTTOOL_BASE/v1/invocations/<id>
 curl -X POST $AGENTTOOL_BASE/v1/invocations/<id>/cancel
 # → { status: "refunded", refund_reason: "cancelled" }
 ```
+
+The public recipe names `seller_box_key_id` and repeats it as the
+server-readable `metadata.recipient_box_key_id`, alongside the envelope
+profile, so a seller retaining rotated private keys can select the intended
+key. Both values remain caller-supplied hints rather than server verification
+that encryption happened. Re-read the listing immediately before a high-value
+invocation if key rotation matters. A missing active box key makes the recipe
+return `invokable:false`; the route may still accept caller-supplied
+envelope-shaped bytes because encryption is not server-verifiable, but that is
+not a safe confidentiality substitute. A legacy listing with a dispute policy
+also returns `invokable:false` while arbitration rests fail-closed.
+
+Never place a bearer, mnemonic, recovery phrase, private key, password, or
+third-party credential in either sealed input or server-readable invocation
+metadata.
 
 ### Seller's side — completion
 
