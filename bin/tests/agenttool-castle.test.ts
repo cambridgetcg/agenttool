@@ -10,6 +10,7 @@ import {
   rm,
   symlink,
   unlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -513,7 +514,7 @@ describe("Castle local projection", () => {
     }
   });
 
-  test("recovers dead-process locks and control temporaries but refuses a live lock", async () => {
+  test("recovers dead-process locks and control temporaries but refuses ambiguous or live locks", async () => {
     const fixture = await createFixture();
     await writeSelection(fixture, revision(fixture), [ROOM]);
     await syncCastle(syncOptions(fixture));
@@ -539,6 +540,13 @@ describe("Castle local projection", () => {
       status: "unchanged",
     });
     await expect(lstat(deadTemporary)).rejects.toMatchObject({ code: "ENOENT" });
+
+    await mkdir(deadLock, { mode: 0o700 });
+    const old = new Date(Date.now() - 120_000);
+    await utimes(deadLock, old, old);
+    await expectCode(syncCastle(syncOptions(fixture)), "castle_bridge_lock_busy");
+    expect((await lstat(deadLock)).isDirectory()).toBe(true);
+    await rm(deadLock, { recursive: true });
 
     await mkdir(deadLock, { mode: 0o700 });
     await writeFile(

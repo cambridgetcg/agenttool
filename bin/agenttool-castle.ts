@@ -69,6 +69,7 @@ const PENDING_FILE = "castle-pending.json";
 const OWNER_FILE = "castle-owner.json";
 const ATTEMPT_FILE = "castle-attempt.json";
 const LOCK_DIRECTORY = "castle-sync.lock";
+const MAX_LOCK_OWNER_BYTES = 1024;
 const RECORD_ID_RE = /^rec_[0-9a-f]{64}$/;
 const SHA256_RE = /^[0-9a-f]{64}$/;
 const COMMIT_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
@@ -1276,15 +1277,31 @@ async function withCastleLock<T>(root: string, work: () => Promise<T>): Promise<
 
 async function removeStaleLock(root: string, lock: string): Promise<boolean> {
   const entries = await readdir(lock).catch(() => []);
-  if (entries.length === 0) {
-    const info = await lstat(lock).catch(() => null);
-    if (!info || Date.now() - info.mtimeMs < 60_000) return false;
-  } else {
-    if (entries.length !== 1) return false;
-    const match = /^owner-(\d+)\.json$/.exec(entries[0]!);
-    if (!match || processIsRunning(Number(match[1]))) return false;
-    await unlink(join(lock, entries[0]!)).catch(() => undefined);
+  if (entries.length !== 1) return false;
+  const entry = entries[0]!;
+  const match = /^owner-(\d+)\.json$/.exec(entry);
+  if (!match) return false;
+  const pid = Number(match[1]);
+  if (processIsRunning(pid)) return false;
+
+  const owner = join(lock, entry);
+  try {
+    const bytes = await readRegularFileNoFollow(
+      owner,
+      MAX_LOCK_OWNER_BYTES,
+      "castle_bridge_lock_owner",
+    );
+    const value = JSON.parse(decodeUtf8(bytes, "castle_bridge_lock_owner_not_utf8"));
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const object = value as Record<string, unknown>;
+    if (!hasExactKeys(object, ["pid", "started_at"])) return false;
+    if (object.pid !== pid || typeof object.started_at !== "string") return false;
+    if (new Date(object.started_at).toISOString() !== object.started_at) return false;
+    await unlink(owner);
+  } catch {
+    return false;
   }
+
   try {
     await rmdir(lock);
     await syncDirectory(root);
