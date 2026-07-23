@@ -58,7 +58,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for workspace in api packages/data packages/data-protocol packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope; do
+          for workspace in api packages/data packages/data-protocol packages/repo-archive packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope; do
             (cd "$workspace" && bun install --frozen-lockfile)
           done
       - name: Build local data-sync peers

@@ -1,0 +1,79 @@
+{
+  "name": "@agenttool/repo-archive",
+  "version": "0.1.0-dev.0",
+  "description": "Local-first encrypted multi-zone Git repository archive protocol and simulator",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./schema.json": {
+      "default": "./schema/agent-repo-archive-v0.1.schema.json"
+    },
+    "./vectors.json": {
+      "default": "./vectors/agent-repo-archive-v0.1-vectors.json"
+    }
+  },
+  "bin": {
+    "agent-repo-archive": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "schema",
+    "vectors",
+    "README.md",
+    "CLAUDE.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20.19.0",
+    "bun": ">=1.3.5"
+  },
+  "scripts": {
+    "clean": "node --eval \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "bun run clean && tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "smoke:node": "node scripts/smoke-node.mjs",
+    "ci": "bun run typecheck && bun test && bun run build && bun run smoke:node",
+    "prepack": "bun run ci"
+  },
+  "peerDependencies": {
+    "@agenttool/adds": "^0.2.1"
+  },
+  "dependencies": {
+    "@noble/ed25519": "^2.2.3",
+    "@noble/hashes": "^2.0.1"
+  },
+  "devDependencies": {
+    "@agenttool/adds": "file:../data-protocol",
+    "@types/bun": "^1.2.0",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "typescript": "^5.7.0"
+  },
+  "keywords": [
+    "agents",
+    "backup",
+    "content-addressed",
+    "decentralised",
+    "encrypted",
+    "git",
+    "multi-zone",
+    "storage"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "directory": "packages/repo-archive"
+  },
+  "homepage": "https://docs.agenttool.dev/data"
+}

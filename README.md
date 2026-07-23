@@ -6,15 +6,17 @@
 
 A consolidated monorepo: one API (`api/`), Python and TypeScript SDKs,
 a local-first agent data node (`packages/data`), an experimental encrypted
-object protocol package (`packages/data-protocol`), an experimental local
-credential broker (`packages/credential-broker`), a local-first multi-agent
-coordination journal (`packages/collab`), a read-only portable Agent Skills
-inspector (`packages/skills`), a local-first agent browser
-(`packages/browser`), a developer-preview Correspondence-to-YUTABASE mapping
-planner (`packages/correspondence-yutabase`), and three static surfaces
-(`apps/web`, `apps/dashboard`, and `apps/docs`). The browser offers direct
-TypeScript, JSONL, and stdio MCP over an installed system browser. Its exact
-LOVE release and npm mirror distribute local tooling, not a hosted browser.
+object protocol package (`packages/data-protocol`), an experimental encrypted
+Git repository archive profile and three-zone simulator
+(`packages/repo-archive`), an experimental local credential broker
+(`packages/credential-broker`), a local-first multi-agent coordination journal
+(`packages/collab`), a read-only portable Agent Skills inspector
+(`packages/skills`), a local-first agent browser (`packages/browser`), a
+developer-preview Correspondence-to-YUTABASE mapping planner
+(`packages/correspondence-yutabase`), and three static surfaces (`apps/web`,
+`apps/dashboard`, and `apps/docs`). The browser offers direct TypeScript,
+JSONL, and stdio MCP over an installed system browser. Its exact LOVE release
+and npm mirror distribute local tooling, not a hosted browser.
 The Apache-2.0 `@agenttool/wallet` package defines capability-bounded wallet
 records and conservative signer/submission boundaries without exporting keys,
 contacting RPC, or providing a hosted wallet. Its exact LOVE artifact is the
@@ -59,6 +61,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 | **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | The lockstep 0.16.0 line adds an authenticated transport seam so hosted calls can use a local credential broker without receiving the bearer. Public discovery and the separately configured local data node stay outside that authority. It retains the 0.15 paired `at.correspondence` client and earlier SDK surfaces. |
 | **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
 | **ADDS** | `packages/data-protocol`, `docs/specs/ADDS-0.1-DRAFT.md` | Experimental `adds/v0.1` encrypted-object plane: immutable ciphertext Blocks plus signed Manifests and direct Grants. It is not the collection/query node and does not promise provider durability. |
+| **Repo archive** | `packages/repo-archive`, `docs/specs/AGENT-REPO-ARCHIVE-0.1.md` | Unreleased `agent-repo-archive/v0.1` Working Draft and local reference package: conservative Git-bundle capture, one encrypted ADDS object independently copied and restore-verified across named zones, and an encrypted recovery catalog. The included three-filesystem-zone drill is a simulator with no durability claim; no cloud adapter, scheduler, hosted API, publication, or production deployment is supplied. |
 | **Credential broker** | `packages/credential-broker` | Experimental `agentcred/0.1` local capability broker. It can keep bearer values out of normal model/chat/SDK state while narrowing approved HTTPS use; the portable CLI is not a same-user sandbox or the strong native peer-identity profile. |
 | **Agent collaboration** | `packages/collab` | Public `@agenttool/collab@0.3.0` is npm `latest` with SLSA provenance; its npm and GitHub Release tarballs were byte-identical (`sha256:9c605ebe4cdc87eda1b0eede6bba0a6591a3dd62badd364463b01521401def7f`). Its 31 local MCP tools preserve four unauthenticated, self-declared `agenttool.collab.session/0.1` presence operations while adding credential-bound start/end and advanced `agenttool.collab/0.2` coordination across Codex, Claude Code, and Hermes. Migrations preserve v0.1, public-v0.2, and hardened-preview data; ambiguous root/subdirectory identity collisions fail closed with a typed error. Presence and credentials are separate routing and cooperative-attribution planes, not proof of human/model identity, health, competence, permission, or authority. Claims remain advisory; the package does not spawn agents, lock files, provide a hosted relay/private model channel/cross-machine sync, or hide MCP traffic from the model provider. This release adds no hosted surface. |
 | **Agent Skills inspection** | `packages/skills` | Public `@agenttool/skills@0.1.0` inspection and validation for bounded local Agent Skill, plugin, and package trees. It reports structural metadata, files, symbolic requirements, issues, and digests without executing scripts, installing or copying skills, making network requests, spawning subprocesses, looking up credentials, or changing host configuration. npm distributes the local tooling, not a hosted inspection service; a valid report or digest is not publisher authentication, safety approval, or execution authority. |
@@ -110,6 +113,7 @@ fast-changing percentages and slice counts.
 | **orgs** | Multi-project governance + org-wide covenants | — |
 | **agent data** | Local collections, content-addressed blobs, provenance, full-text query, and resumable change cursors | Standalone data plane; projection into AgentTool memory is explicit rather than a hosted raw-data lake |
 | **ADDS** | Provider-independent encrypted Blocks, signed Manifests, direct read Grants, locations, Heads, and Receipts | Experimental lower layer; no discovery network, query language, proof of storage, global revocation, or durability guarantee |
+| **repo archive** | Conservative Git capture, encrypted complete-zone ADDS replicas, signed evidence, and offline recovery bootstrap | Unreleased local profile and simulator; no provider-independence proof, crash resume, cloud adapters, scheduler, hosted service, or production deployment |
 | **LOVE packages** | Public discovery, portable manifests, versioned tarballs, SHA-256 integrity, and mirror fallback | Distribution protocol only; a digest proves bytes, not authorship, safety, licensing, or future availability |
 | **Agent Wallet** | Capability, intent, simulation/signing receipts, signer boundary, and continuity rules | Offline source primitives only; static validation does not replace trusted chain decoding, atomic reservation, custody, RPC, or broadcast operations |
 
@@ -195,9 +199,9 @@ and docs carry local guidance files; `apps/web` does not.
 GitHub `main` is the reviewed coordination/release head; Codeberg `main` is an
 explicit fast-forward-only mirror. Required GitHub CI installs JavaScript
 dependencies for the API/protocol and data/ADDS/credential-broker/collab/
-Browser/Correspondence projection/Agent Skills/TypeScript SDK/Agent
-Wallet/Telescope jobs from frozen Bun lockfiles. Browser tests use fakes and
-fixtures and CI does not download or launch a real browser. The
+repo-archive/Browser/Correspondence projection/Agent Skills/TypeScript
+SDK/Agent Wallet/Telescope jobs from frozen Bun lockfiles. Browser tests use
+fakes and fixtures and CI does not download or launch a real browser. The
 Python SDK is tested on Python 3.9–3.14 with the
 compatible dependency set pip resolves from `pyproject.toml`; this is neither a
 frozen lock nor a minimum-version matrix. CI receives no application/service credentials. Pushes do not
