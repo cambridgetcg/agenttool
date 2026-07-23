@@ -103,6 +103,61 @@ class TestCredentialTransport:
         assert requests[1].headers["accept"] == "text/event-stream"
         assert all("authorization" not in request.headers for request in requests)
 
+    def test_routes_every_correspondence_request_through_transport(self) -> None:
+        transport, requests = _capturing_transport()
+        repository_id = "repo:github.com/cambridgetcg/agenttool"
+
+        with patch.dict(os.environ, {}, clear=True):
+            with AgentTool(transport=transport) as at:
+                at.correspondence.append(
+                    project_id="11111111-1111-4111-8111-111111111111",
+                    repository_id=repository_id,
+                    thread_id="task:transport-boundary",
+                    sender={
+                        "identity_id": "22222222-2222-4222-8222-222222222222",
+                        "signing_key_id": "33333333-3333-4333-8333-333333333333",
+                        "device_id": "44444444-4444-4444-8444-444444444444",
+                        "session_id": "55555555-5555-4555-8555-555555555555",
+                    },
+                    kind="progress",
+                    parents=[],
+                    session_seq=1,
+                    issued_at="2026-07-23T08:00:00.000Z",
+                    scope={
+                        "base_revision": None,
+                        "branch": None,
+                        "paths": ["packages/sdk-py"],
+                    },
+                    body={"summary": "Exercise the authenticated transport."},
+                    signing_key=bytes([7] * 32),
+                )
+                at.correspondence.list(
+                    repository_id=repository_id,
+                    limit=1,
+                )
+                at.correspondence.active_claims(repository_id=repository_id)
+                at.correspondence.voice(repository_id=repository_id)
+
+        assert [(request.method, str(request.url)) for request in requests] == [
+            ("POST", "https://api.agenttool.dev/v1/correspondence/events"),
+            (
+                "GET",
+                "https://api.agenttool.dev/v1/correspondence/events"
+                "?repository_id=repo%3Agithub.com%2Fcambridgetcg%2Fagenttool&limit=1",
+            ),
+            (
+                "GET",
+                "https://api.agenttool.dev/v1/correspondence/claims"
+                "?repository_id=repo%3Agithub.com%2Fcambridgetcg%2Fagenttool",
+            ),
+            (
+                "GET",
+                "https://api.agenttool.dev/v1/correspondence/voice"
+                "?repository_id=repo%3Agithub.com%2Fcambridgetcg%2Fagenttool",
+            ),
+        ]
+        assert all("authorization" not in request.headers for request in requests)
+
     def test_does_not_share_hosted_transport_with_data_node(self) -> None:
         transport, hosted_requests = _capturing_transport()
 
