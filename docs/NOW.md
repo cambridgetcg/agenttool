@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-23 (agent browser release prep + Whitehack 0.8.1 attention/understanding + credential-bound Collab 0.3)
+> Updated: 2026-07-23 (Repo Archive developer preview + Telescope 0.2 + agent browser + Whitehack 0.8.1 + credential-bound Collab 0.3)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -33,9 +33,16 @@ fresh no-checkout restore + strict fsck. The included three-directory
 simulator proves implementation independence on one device and explicitly
 makes no physical durability claim. This slice has no cloud adapter, hosted
 route, LOVE release, hosted production deployment, scheduler, pruning, or
-repair loop. `@agenttool/repo-archive@0.1.0-dev.0` is now wired as an npm-only
-developer-preview candidate; checked-in source and release configuration do
-not establish that registry publication succeeded.
+repair loop. Public `@agenttool/repo-archive@0.1.0-dev.0` is the npm-only
+developer preview from annotated tag
+[`repo-archive-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/repo-archive-v0.1.0-dev.0).
+Protected workflow run
+[`30037354243`](https://github.com/cambridgetcg/agenttool/actions/runs/30037354243)
+published it with SLSA provenance; independently downloaded npm and GitHub
+Release tarballs were byte-identical
+(`sha256:a0365e973094043a6c92b14a5dcd30f5f4f6d493397ba708eb22a8cb38e2c25f`).
+Consumers should select that exact prerelease or `next`; npm also exposes this
+sole initial version through `latest`, which is not a maturity signal.
 
 Three layers stay deliberately separate. **WE ARE** is a relational joining
 ceremony and never a credential. **Protocol Renaissance** supplies exact IDs,
@@ -51,6 +58,7 @@ scope before editing adjacent surfaces.
 
 | Ship | Commit | What |
 |---|---|---|
+| **AGENT REPO ARCHIVE 0.1 DEV — encrypted recovery evidence across named zones** | `7adb8f57` + npm `0.1.0-dev.0` verified public | `@agenttool/repo-archive@0.1.0-dev.0` passed protected workflow run [`30037354243`](https://github.com/cambridgetcg/agenttool/actions/runs/30037354243) with SLSA provenance. The npm tarball and [GitHub Release](https://github.com/cambridgetcg/agenttool/releases/tag/repo-archive-v0.1.0-dev.0) asset were independently downloaded and are byte-identical (`sha256:a0365e973094043a6c92b14a5dcd30f5f4f6d493397ba708eb22a8cb38e2c25f`). The package captures conservative full Git bundles, encrypts one ADDS object, writes complete replicas to named zones, emits signed placement/verification/catalog evidence, and accepts a zone as verified only after decrypt, digest, bundle verification, fresh no-checkout restore, and strict fsck. The bundled three-directory drill proves implementation independence on one device, not provider or physical failure-domain independence. There is no cloud adapter, hosted storage/API, key custody, scheduler, pruning, repair loop, crash resume, LOVE artifact, or durability guarantee. Consumers should select the exact prerelease or `next`; npm's fallback `latest` for the sole initial version is not a maturity signal. |
 | **TELESCOPE 0.2 — one bounded discovery tool across models** | source + LOVE release; npm/GitHub mirrors | Public `@agenttool/telescope@0.2.0` adds exactly one local stdio MCP tool, `telescope_scan`, over the existing fixed, credential-free public-HTTPS evidence mapper. One standalone Node-targeted bundle runs under Node and Bun; package-root Codex and Claude manifests, one portable `inspect-agent-surfaces` Skill, and a collision-free Hermes adapter all use that same runtime. Structured reports keep transport observations, publisher assertions, local derivations, diagnostics, generated plans, and unknowns separate. The MCP accepts no credentials, headers, custom limits, adapters, arbitrary URLs, or file paths; it permits one in-flight scan, propagates cancellation, and neither invokes advertisements nor handshakes, downloads, installs, or executes. The package manifest retains zero runtime dependencies by bundling pinned MCP/Zod code with complete notices. Discovery still does not prove identity, ownership, authorization, availability, safety, permission, endorsement, or fitness, and DNS preflight still does not pin the connected socket. There is no hosted scanner or API/Fly release surface; the static LOVE catalog is the only production deployment added by this release. |
 | **WORLD COMMONS DOOR — free public-resource discovery without a proxy** | (source + API deploy) | Full and brief wakes plus the pre-auth welcome now point to the independent World Commons through one shared static contract. Agents receive the human entrance, canonical JSON catalog, published schema, and exact MCP endpoint/tool/resource coordinates. AgentTool performs no Commons or provider fetch while composing the response, stores no catalog copy, and makes no permission, endorsement, availability, reuse, or safety inference. The change also closes pre-existing `you_can_reach` drift between default JSON and bundle-backed Markdown/provider/Xenoform wake composers; wake representation revision advances to `r4`. |
 | **AGENT BROWSER 0.1 — the web as a small, legible agent surface** | (source + LOVE release; npm/GitHub mirrors) | Public `@agenttool/browser@0.1.0` exposes one local browser core through direct TypeScript, line-delimited JSON, and stdio MCP. It uses `playwright-core` with an installed system Chrome-family browser and has no install-time browser download. Sessions are dedicated and ephemeral by default; persistent profiles and local/private HTTP(S) destinations require explicit opt-in. Bounded ARIA-reference observations now carry only a 4 KiB allowlist of untrusted main-response discovery/disposition hints, including `Link`, `Substrate-Disposition`, and `X-Joy-Index`; cookies and auth headers never cross. Telescope-first discovery composes above browser fallback, while Real Recognise Real remains a separate explicit signed action: visiting is not recognition. `細聲講 大聲笑` keeps machine stdout quiet and deterministic while allowing an opt-in playful docs register. Actions run once without automatic retry, but output redaction cannot identify every secret and DNS preflight does not pin the later Playwright connection. Arbitrary JavaScript, file uploads, credential ingestion, ambient recognition, a hosted browser-control surface, and an AgentTool account/key/credit/Redis requirement are absent. |
