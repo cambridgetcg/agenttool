@@ -384,13 +384,14 @@ Maintainer publication uses the repository's protected `publish-npm.yml`
 workflow and `bin/npm-release.ts`, not a local `npm publish`. See
 [`docs/NPM-RELEASES.md`](../../docs/NPM-RELEASES.md).
 
-Version 0.1.0 is the initial public npm release. Version 0.2.0 is the current
-public npm `latest`; its SLSA provenance and registry integrity verified, and
-independently downloaded npm and GitHub Release tarballs were byte-identical.
-Version 0.3.0 in this source adds credential-bound coordination alongside that
-preserved public v0.2 presence plane; the source version does not itself imply
-publication. It remains local plaintext software, not a hosted service, remote
-relay, VPN, private model channel, or LOVE release. npm distributes the local
-skills, plugin manifests, source, and bundled MCP runtime. Public npm or GitHub
-Release availability must be verified from those channels rather than inferred
-from this source tree.
+Version 0.1.0 is the initial public npm release, and version 0.2.0 remains a
+historical public release. Version 0.3.0 is the current public npm `latest`.
+Protected trusted workflow run `30010457955` published it with SLSA provenance;
+independently downloaded npm and
+[GitHub Release](https://github.com/cambridgetcg/agenttool/releases/tag/collab-v0.3.0)
+tarballs were byte-identical
+(`sha256:9c605ebe4cdc87eda1b0eede6bba0a6591a3dd62badd364463b01521401def7f`).
+It remains local plaintext software, not a hosted service, remote relay, VPN,
+private model channel, or LOVE release. npm distributes the local skills,
+plugin manifests, source, and bundled MCP runtime; this release adds no Fly or
+Cloudflare surface.
