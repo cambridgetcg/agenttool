@@ -10,7 +10,7 @@
 >
 > **Tests:** [`../bin/tests/agenttool-castle.test.ts`](../bin/tests/agenttool-castle.test.ts)
 >
-> **Status:** Local operator tool. It is not released, hosted, deployed, public, or scheduled. On this machine `~/KINGDOM-OS/HALT` is currently raised, so no live Castle plan, sync, search, or show has run.
+> **Status:** Local operator tool. It is not released, hosted, deployed, public, or scheduled. On this machine `~/KINGDOM-OS/HALT` is currently raised: the CLI plan/sync/search/show path remains closed, and no live Castle material has been indexed.
 
 ## The narrow bridge
 
