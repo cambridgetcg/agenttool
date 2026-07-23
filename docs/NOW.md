@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-22 (cross-client agenttool.collab/0.1 coordination skill)
+> Updated: 2026-07-22 (read-only Agent Skills inspection + cross-client coordination)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -35,6 +35,7 @@ scope before editing adjacent surfaces.
 
 | Ship | Commit | What |
 |---|---|---|
+| **AGENT SKILLS INSPECTION 0.1 — understand the package before granting it a runtime** | (source package; no hosted, LOVE, or registry release) | `@agenttool/skills` inspects and validates bounded local Agent Skill, plugin, and package trees and emits stable structured reports covering metadata, file inventory, symbolic requirements, issues, and content digests. Inspection never executes a skill or script, installs or copies files, makes a network request, spawns a subprocess, looks up a credential, or mutates host configuration. Declared tools, MCP servers, runtimes, and credential names remain untrusted requests rather than capabilities; v0 emits no install plan; a valid report or digest proves neither publisher identity, safety, compatibility, approval, nor authority. The package is source-only and unreleased, with no wake route or public discovery claim. |
 | **AGENTTOOL COLLAB 0.1 — honest coordination across Codex and Claude** | `8bee7a28` + npm `0.1.0` verified public | `@agenttool/collab@0.1.0` passed the protected npm release path: the public registry version, `latest` tag, provenance record, downloaded tarball, and GitHub Release mirror were verified, with both mirrors byte-identical. It carries one shared `coordinate-agent-work` Agent Skill plus package-root Codex and Claude plugin manifests around the same local SQLite/WAL journal. The MCP surface covers task creation, transactional claims, renewable leases, lexical path-scope conflicts, refusable handoffs, artifact references, decisions, cursor replay, and an explicit full-journal audit. Its exchange contract separates observation, inference, proposal, and authorized decision; names evidence, confidence, limits, and a refusable next action; labels completion as actor-reported; and keeps a handoff as an invitation until acceptance. Actor labels remain unauthenticated, claims remain advisory, and the journal is unencrypted and unfiltered local state. It does not spawn or control agents, lock the filesystem, grant external authority, provide a private model channel or remote sync, provide a hosted collaboration service, publish a LOVE artifact, or hide MCP arguments and results from the model provider. |
 
 ## Just landed (2026-07-21)

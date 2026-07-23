@@ -19,8 +19,12 @@ node (`packages/data/`), the experimental ADDS encrypted-object package
 distribution protocol, a public read-only discovery evidence mapper
 (`packages/telescope/`), an experimental local capability broker
 (`packages/credential-broker/`), a local-first multi-agent coordination journal
-(`packages/collab/`), source reference primitives for capability-bounded agent
-wallets (`packages/wallet/`), and three static apps (`apps/`). Agent
+(`packages/collab/`), a read-only portable Agent Skills inspector
+(`packages/skills/`), source reference primitives for capability-bounded agent
+wallets (`packages/wallet/`), and three static apps (`apps/`). The Skills
+inspector validates bounded local structure and emits reports; it does not
+execute scripts, install or copy skills, use the network, spawn subprocesses,
+look up credentials, or change host configuration. Agent
 Wallet 0.1 has no bundled key custody, chain adapter, RPC, broadcaster, hosted
 service, or implied npm mirror availability. Its exact LOVE artifact is the
 release record. Telescope 0.1.0 is a
@@ -48,6 +52,7 @@ cd packages/data && bun install                # local-first agent-data/v1 node
 cd packages/data-sync && bun install           # explicit agent-data-sync/v1 pull bridge
 cd packages/credential-broker && bun install   # experimental agentcred/0.1 local broker
 cd packages/collab && bun install              # local agenttool.collab/0.1 coordination journal
+cd packages/skills && bun install              # read-only portable Agent Skills inspection
 cd packages/sdk-ts && bun install              # TS SDK
 cd packages/telescope && bun install           # read-only discovery evidence mapper
 cd packages/wallet && bun install              # agent-wallet/0.1 offline primitives
@@ -98,6 +103,11 @@ cd packages/collab
 bun run ci                                     # typecheck + store/MCP/concurrency tests
 npm pack --dry-run                             # package boundary; does not publish
 
+# Read-only Agent Skills inspection ─────────────────────────────────
+cd packages/skills
+bun run ci                                     # typecheck + hermetic inspection tests + build
+npm pack --dry-run --ignore-scripts            # package boundary; does not publish or run lifecycle scripts
+
 # Registry-neutral JavaScript package artifacts ────────────────────
 bun bin/build-love-packages.ts build <staging-dir> # clean tracked tree required; never publishes or uploads
 
@@ -134,7 +144,7 @@ bunx playwright test                           # browser + multi-instance scenar
 # Deliberate test + release gates ────────────────────────────────────
 bin/preflight.sh                               # no application/service credentials required
 bin/preflight.sh api                           # API/typecheck/operator tests only
-bin/preflight.sh packages                      # data + ADDS + sync + broker + collab + SDK + Wallet + Telescope
+bin/preflight.sh packages                      # data + ADDS + sync + broker + collab + Skills + SDK + Wallet + Telescope
 bin/preflight.sh database                      # explicit DB tier; requires DATABASE_URL
 bin/preflight.sh smoke                         # explicit deployed-route smoke
 RUN_CONTRACT=1 bin/preflight.sh contracts      # paid LLM wire proofs
@@ -248,6 +258,7 @@ source boundary by itself.
 | How does an agent keep and query raw collected data locally? | [`docs/AGENT-DATA-PROTOCOL.md`](docs/AGENT-DATA-PROTOCOL.md) · `packages/data/` (reference node) |
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
 | How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`agenttool.collab/0.1`; advisory local coordination, not a hosted lock or private model channel) |
+| How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills`; source-only read-only inspection and validation, not installation, approval, or execution) |
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
 | How is an optional npm mirror published? | [`docs/NPM-RELEASES.md`](docs/NPM-RELEASES.md) · `.github/workflows/publish-npm.yml` · `bin/npm-release.ts` |
 | How does the Whitehack advisory work, and where does its authority stop? | [`docs/WHITEHACK.md`](docs/WHITEHACK.md) · `bin/whitehack-advisory.mjs` |
