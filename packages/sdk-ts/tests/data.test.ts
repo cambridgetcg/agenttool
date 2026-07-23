@@ -12,6 +12,7 @@ import {
 interface CapturedCall {
   url: string;
   method: string;
+  redirect?: RequestRedirect;
   headers: Headers;
   body?: unknown;
 }
@@ -39,6 +40,7 @@ function installFetchStub(): CapturedCall[] {
     const call: CapturedCall = {
       url: String(input),
       method: init?.method ?? "GET",
+      ...(init?.redirect !== undefined ? { redirect: init.redirect } : {}),
       headers: new Headers(init?.headers),
       ...(body !== undefined ? { body } : {}),
     };
@@ -217,11 +219,38 @@ describe("AgentTool.data wire contract", () => {
     expect(calls[6]!.body).toEqual({ reason: "source retracted" });
 
     for (const call of calls) {
+      expect(call.redirect).toBe("manual");
       expect(call.headers.get("authorization")).toBe("Bearer node-token");
       expect([...call.headers.values()].join(" ")).not.toContain(
         "agenttool-project-secret",
       );
     }
+  });
+
+  test("refuses redirects without reading or replaying their target", async () => {
+    let calls = 0;
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      calls += 1;
+      expect(init?.redirect).toBe("manual");
+      return new Response(null, {
+        status: 307,
+        headers: { Location: "https://redirect.example.test/collect" },
+      });
+    }) as typeof fetch;
+    const data = new DataClient({
+      baseUrl: "http://127.0.0.1:8787",
+      token: "node-token",
+    });
+
+    await expect(data.collect({
+      collection_id: "private",
+      collector_id: "text",
+      input: { text: "must stay at the selected node" },
+    })).rejects.toMatchObject({
+      code: "data_node_redirect_refused",
+      status: 307,
+    });
+    expect(calls).toBe(1);
   });
 });
 

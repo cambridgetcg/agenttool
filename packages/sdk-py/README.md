@@ -530,6 +530,12 @@ data-only use with no AgentTool account, instantiate the exported
 `DataClient(base_url, token=...)` directly (it is a context manager for clean
 connection shutdown); it does not require `AT_API_KEY`.
 
+Repository source refuses every HTTP redirect on this separate data-node
+transport and reports `data_node_redirect_refused`; neither its bearer nor a
+collection body is replayed to a redirect target. The immutable 0.16.0 release
+predates that fix, so consumers must wait for and pin a later SDK release
+before relying on redirect refusal outside a source checkout.
+
 ## Error handling — guidance, not punishment
 
 Error shapes are route-specific. The memory client maps common authentication,

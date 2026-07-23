@@ -204,6 +204,31 @@ describe("Castle committed-snapshot plan", () => {
     );
   });
 
+  test("keeps truncated headings valid for durable state", async () => {
+    const fixture = await createFixture({
+      "words/long-title.md": `# ${"a".repeat(199)} tail\n\nA bounded title.\n`,
+    });
+    const selectedRevision = revision(fixture);
+    const selected = {
+      path: "words/long-title.md",
+      logical_id: "castle:word:long-title",
+      kind: "word",
+    } as const;
+    await writeSelection(fixture, selectedRevision, [selected]);
+
+    const plan = await buildCastlePlan({
+      castle_root: fixture.castle,
+      selection_path: fixture.selection,
+    });
+    expect(plan.documents[0]!.title.length).toBe(199);
+    expect(plan.documents[0]!.title.trim()).toBe(plan.documents[0]!.title);
+
+    await expect(syncCastle(syncOptions(fixture))).resolves.toMatchObject({
+      status: "synced",
+      active_records: 1,
+    });
+  });
+
   test("rejects unsafe declarations, non-UTF-8 blobs, Git symlinks, and partial clones", async () => {
     const fixture = await createFixture();
     const firstRevision = revision(fixture);

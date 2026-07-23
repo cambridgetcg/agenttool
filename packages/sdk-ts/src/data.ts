@@ -286,6 +286,9 @@ export class DataClient {
   private async request(method: string, path: string, body?: unknown): Promise<unknown> {
     const init: RequestInit = {
       method,
+      // A data-node bearer and collected body belong to exactly one authority.
+      // Never let fetch replay either request across an HTTP redirect.
+      redirect: "manual",
       headers: {
         ...this.headers,
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
@@ -305,6 +308,19 @@ export class DataClient {
             ? error.message
             : "Check that the configured agent-data/v1 node is reachable.",
       });
+    }
+
+    if (response.status >= 300 && response.status < 400) {
+      await response.body?.cancel();
+      throw new AgentToolError(
+        "Agent data node request refused an HTTP redirect.",
+        {
+          code: "data_node_redirect_refused",
+          status: response.status,
+          hint:
+            "Use the canonical agent-data/v1 node origin; data-node credentials and request bodies are never forwarded across redirects.",
+        },
+      );
     }
 
     if (!response.ok) {

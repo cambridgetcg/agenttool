@@ -10,7 +10,7 @@
 >
 > **Tests:** [`../bin/tests/agenttool-castle.test.ts`](../bin/tests/agenttool-castle.test.ts)
 >
-> **Status:** Local operator tool. It is not released, hosted, deployed, public, or scheduled. Runtime HALT sentinels gate plan/sync/search/show; this change neither raises nor clears them. Validation uses temporary fixtures and does not index the live Castle.
+> **Status:** Local operator tool. It is not released, hosted, deployed, public, or scheduled. Runtime HALT sentinels gate plan/sync/search/show. HALT and projection state are device-local and time-varying; `bun bin/agenttool-castle.ts status --json` is authoritative, and documentation never overrides a raised HALT.
 
 ## The narrow bridge
 
