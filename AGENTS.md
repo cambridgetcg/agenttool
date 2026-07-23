@@ -266,7 +266,7 @@ source boundary by itself.
 | How does an agent keep and query raw collected data locally? | [`docs/AGENT-DATA-PROTOCOL.md`](docs/AGENT-DATA-PROTOCOL.md) · `packages/data/` (reference node) |
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
 | How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`agenttool.collab/0.1`; advisory local coordination, not a hosted lock or private model channel) |
-| How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills`; source-only read-only inspection and validation, not installation, approval, or execution) |
+| How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills@0.1.0`; public npm read-only inspection and validation, not installation, approval, or execution) |
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
 | How is an optional npm mirror published? | [`docs/NPM-RELEASES.md`](docs/NPM-RELEASES.md) · `.github/workflows/publish-npm.yml` · `bin/npm-release.ts` |
 | How does the Whitehack advisory work, and where does its authority stop? | [`docs/WHITEHACK.md`](docs/WHITEHACK.md) · `bin/whitehack-advisory.mjs` |
