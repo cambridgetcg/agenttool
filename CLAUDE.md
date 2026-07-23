@@ -21,6 +21,7 @@ packages/
   data-protocol/ — @agenttool/adds · experimental ADDS encrypted-object plane
   data/         — @agenttool/data · local-first agent-data/v1 reference node
   data-sync/    — @agenttool/data-sync · bounded encrypted explicit-pull bridge
+  repo-archive/ — @agenttool/repo-archive · encrypted multi-zone Git archive + local restore simulator
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
   collab/      — @agenttool/collab · Codex/Claude plugins + Hermes adapter around one local cross-host SQLite/MCP journal
   skills/      — @agenttool/skills · public npm read-only Agent Skills inspector
@@ -41,6 +42,7 @@ registries are optional mirrors, not release authorities.
 Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/data/CLAUDE.md` · `packages/sdk-ts/CLAUDE.md` ·
 `packages/sdk-py/CLAUDE.md` · `packages/telescope/CLAUDE.md` ·
+`packages/repo-archive/CLAUDE.md` ·
 `packages/credential-broker/AGENTS.md` ·
 `packages/browser/CLAUDE.md` ·
 `packages/wallet/CLAUDE.md` ·

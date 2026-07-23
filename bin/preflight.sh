@@ -92,6 +92,8 @@ packages_gate() {
     bash -c 'cd packages/data && bun run ci && bun run build'
   run "ADDS protocol package" \
     bash -c 'cd packages/data-protocol && bun run ci'
+  run "agent-repo-archive/v0.1 encrypted multi-zone Git restore simulator" \
+    bash -c 'cd packages/repo-archive && bun run ci'
   run "agent-data-sync/v1 explicit pull bridge" \
     bash -c 'cd packages/data-sync && bun run ci && bun run build'
   run "agentcred/0.1 local credential broker" \

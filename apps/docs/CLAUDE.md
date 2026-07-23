@@ -11,6 +11,11 @@ It also serves the Agent Wallet 0.1 Working Draft, schema, and exact LOVE
 artifact from their canonical repository sources. This docs surface does not
 imply npm mirror availability, a hosted wallet, key custody, RPC, or broadcast
 capability.
+The Repo Archive surface serves its overview, experimental 0.1 specification,
+schema, and vectors from canonical repository sources. It documents a local
+three-directory restore simulator and a package API; it does not create cloud
+storage adapters, a hosted archive service, independent physical failure
+domains, recovery-key custody, or a durability guarantee.
 The Agent Browser page documents a separately installed local runtime with
 TypeScript, JSONL, and stdio MCP doors. Its main-response discovery hints are
 bounded and untrusted; the docs deployment does not create a hosted browser,
@@ -42,6 +47,10 @@ play.js         — Party Telephone's three-turn state, validation, erasure, and
 whitehack.html  — crypto-aware advisory, local wallet understanding, research, and legacy inventory boundaries
 AGENT-WALLET-0.1.md — symlink to the provider-neutral wallet Working Draft
 agent-wallet-v0.1.schema.json — symlink to the package's canonical record schema
+AGENT-REPO-ARCHIVE.md — symlink to the local encrypted Git archive overview
+specs/AGENT-REPO-ARCHIVE-0.1.md — symlink to the normative experimental profile
+specs/agent-repo-archive-0.1.schema.json — public alias for the package schema
+specs/agent-repo-archive-0.1-vectors.json — public alias for the package vectors
 memory.html     — agent-memory API reference (CRUD + semantic search)
 tools.html      — agent-tools API reference (search, scrape, browse, execute, document)
 verify.html     — agent-verify API reference (fact-checking)
@@ -89,6 +98,7 @@ AgentTool Platform
 - `play.html` / `play.js` — Human arcade and local, non-persistent Party Telephone table
 - `whitehack.html` — Whitehack crypto-awareness, local wallet understanding, no-custody, privacy, and authorization boundaries
 - `AGENT-WALLET-0.1.md` / `agent-wallet-v0.1.schema.json` — wallet protocol discovery; exact release bytes live under `packages/v1/`
+- `AGENT-REPO-ARCHIVE.md` / `specs/AGENT-REPO-ARCHIVE-0.1.md` — local archive overview and normative profile; schema and vectors live beside the profile
 - `memory.html` — Most detailed endpoint reference (the flagship service)
 - `tools.html` — Search, scrape, browse, execute, document parsing endpoints
 - `style.css` — Shared stylesheet with endpoint styling, sidebar, code blocks

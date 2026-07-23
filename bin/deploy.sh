@@ -610,6 +610,36 @@ verify_rights_static_publication() {
   verify_rights_static_bytes && verify_rights_static_headers
 }
 
+verify_repo_archive_static_headers() {
+  local pair url content_type response_headers
+  local -a pairs
+  pairs=(
+    "https://docs.agenttool.dev/AGENT-REPO-ARCHIVE.md|text/markdown; charset=utf-8"
+    "https://docs.agenttool.dev/specs/AGENT-REPO-ARCHIVE-0.1.md|text/markdown; charset=utf-8"
+    "https://docs.agenttool.dev/specs/agent-repo-archive-0.1.schema.json|application/schema+json; charset=utf-8"
+    "https://docs.agenttool.dev/specs/agent-repo-archive-0.1-vectors.json|application/json; charset=utf-8"
+  )
+  for pair in "${pairs[@]}"; do
+    url="${pair%%|*}"
+    content_type="${pair#*|}"
+    response_headers="$(
+      curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
+        --max-time 20 -o /dev/null -D - "$url"
+    )" || {
+      echo "  $(red '✗') Could not read Repo Archive response headers: $url"
+      return 1
+    }
+    require_exact_public_header "$response_headers" "$url" \
+      "Content-Type" "$content_type" || return 1
+    require_exact_public_header "$response_headers" "$url" \
+      "Cache-Control" "public, max-age=300, must-revalidate" || return 1
+    require_exact_public_header "$response_headers" "$url" \
+      "Access-Control-Allow-Origin" "*" || return 1
+    require_exact_public_header "$response_headers" "$url" \
+      "X-Content-Type-Options" "nosniff" || return 1
+  done
+}
+
 # Wrangler reports a successful Pages deployment before every custom-domain
 # edge necessarily serves that deployment. Verify the complete live frontend
 # contract repeatedly, without re-uploading, so a normal alias propagation
@@ -634,6 +664,10 @@ verify_frontend_live_once() {
     "apps/docs/tutorial.html|https://docs.agenttool.dev/tutorial"
     "apps/docs/agenttool.jsonld|https://docs.agenttool.dev/agenttool.jsonld"
     "apps/docs/observer-is-observed-0.1.schema.json|https://docs.agenttool.dev/observer-is-observed-0.1.schema.json"
+    "apps/docs/AGENT-REPO-ARCHIVE.md|https://docs.agenttool.dev/AGENT-REPO-ARCHIVE.md"
+    "apps/docs/specs/AGENT-REPO-ARCHIVE-0.1.md|https://docs.agenttool.dev/specs/AGENT-REPO-ARCHIVE-0.1.md"
+    "apps/docs/specs/agent-repo-archive-0.1.schema.json|https://docs.agenttool.dev/specs/agent-repo-archive-0.1.schema.json"
+    "apps/docs/specs/agent-repo-archive-0.1-vectors.json|https://docs.agenttool.dev/specs/agent-repo-archive-0.1-vectors.json"
     "${RIGHTS_STATIC_PAIRS[@]}"
     "apps/docs/lounge.html|https://docs.agenttool.dev/lounge.html"
     "apps/web/village.html|https://agenttool.dev/village.html"
@@ -696,6 +730,10 @@ verify_frontend_live_once() {
 
   if ! verify_rights_static_headers; then
     echo "  $(red '✗') Rights of Life static header verification failed."
+    return 1
+  fi
+  if ! verify_repo_archive_static_headers; then
+    echo "  $(red '✗') Repo Archive static header verification failed."
     return 1
   fi
 

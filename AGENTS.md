@@ -15,7 +15,8 @@ federation, an internal economic loop, and a standalone local-first data
 node. It has two SDKs (TypeScript and Python), an `agent-data/v1` reference
 node (`packages/data/`), the experimental ADDS encrypted-object package
 (`packages/data-protocol/`), an explicit encrypted pull bridge
-(`packages/data-sync/`), the registry-neutral `love-package/v1`
+(`packages/data-sync/`), an experimental encrypted multi-zone Git repository
+archive and same-device restore simulator (`packages/repo-archive/`), the registry-neutral `love-package/v1`
 distribution protocol, a public read-only discovery evidence mapper
 (`packages/telescope/`), an experimental local capability broker
 (`packages/credential-broker/`), a local-first multi-agent coordination journal
@@ -56,6 +57,7 @@ export or route inventory. Current custody and encryption boundaries are at
 bun install                                    # repo root (no root package.json — runs per-workspace)
 cd api && bun install                          # api workspace
 cd packages/data-protocol && bun install       # ADDS encrypted-object protocol
+cd packages/repo-archive && bun install        # encrypted multi-zone Git archive simulator
 cd packages/data && bun install                # local-first agent-data/v1 node
 cd packages/data-sync && bun install           # explicit agent-data-sync/v1 pull bridge
 cd packages/credential-broker && bun install   # experimental agentcred/0.1 local broker
@@ -98,6 +100,11 @@ bun run ci && bun run build                    # gate + dist consumed by data-sy
 # ADDS encrypted object plane ───────────────────────────────────────
 cd packages/data-protocol
 bun run ci                                     # build + shared vectors + security tests
+
+# Encrypted multi-zone Git repository archive ─────────────────────
+cd packages/repo-archive
+bun run ci                                     # typecheck + schema/vectors + three-zone restore drills + Node smoke
+npm pack --dry-run --ignore-scripts            # package boundary; does not publish
 
 # Explicit encrypted data-node pull ────────────────────────────────
 cd packages/data-sync
@@ -232,7 +239,7 @@ source boundary by itself.
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.
 
-**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,data,sdk-ts,sdk-py,telescope,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
+**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,data,repo-archive,sdk-ts,sdk-py,telescope,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
 
 ## Anti-patterns to avoid
 
@@ -281,6 +288,7 @@ source boundary by itself.
 | Read the substrate's structural self (unauth) | `GET /public/self` — `{ platform: PlatformSelf, repo: RepoSelf }` |
 | How would another language reach the API? | [`docs/SDK-TIERS.md`](docs/SDK-TIERS.md) (four-tier stack) · [`docs/CANONICAL-BYTES.md`](docs/CANONICAL-BYTES.md) (signing recipes) |
 | How does an agent keep and query raw collected data locally? | [`docs/AGENT-DATA-PROTOCOL.md`](docs/AGENT-DATA-PROTOCOL.md) · `packages/data/` (reference node) |
+| How can committed repository history be encrypted and independently restored from multiple zones? | [`docs/AGENT-REPO-ARCHIVE.md`](docs/AGENT-REPO-ARCHIVE.md) · `packages/repo-archive/` (local simulator; no cloud adapter or durability guarantee) |
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
 | How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`@agenttool/collab@0.3.0`; `agenttool.collab/0.1` compatibility + credential-bound `agenttool.collab/0.2` coordination + self-declared `agenttool.collab.session/0.1` presence; 31 local MCP tools for Codex/Claude/Hermes, not a hosted lock or private model channel) |
 | How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills@0.1.0`; public npm read-only inspection and validation, not installation, approval, or execution) |

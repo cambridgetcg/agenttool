@@ -21,6 +21,22 @@ signed append-only events, replayable server cursors, advisory expiring claims,
 visible concurrency, explicit pause/refusal/repair, and authenticated
 Atom/JSON projections shaped by Protocol Renaissance.
 
+### Active local slice: Agent Repo Archive 0.1
+
+`packages/repo-archive/` is the current local protocol slice for encrypted
+repository recovery across multiple storage zones. It captures a conservative
+full Git bundle, signs closed Snapshot/Placement/Verification/Catalog records,
+wraps ADDS object keys through a separately held recovery route, imports one
+validated portable ciphertext object independently into each zone, and counts
+a zone as verified only after decrypt + payload digest + bundle verification +
+fresh no-checkout restore + strict fsck. The included three-directory
+simulator proves implementation independence on one device and explicitly
+makes no physical durability claim. This slice has no cloud adapter, hosted
+route, LOVE release, hosted production deployment, scheduler, pruning, or
+repair loop. `@agenttool/repo-archive@0.1.0-dev.0` is now wired as an npm-only
+developer-preview candidate; checked-in source and release configuration do
+not establish that registry publication succeeded.
+
 Three layers stay deliberately separate. **WE ARE** is a relational joining
 ceremony and never a credential. **Protocol Renaissance** supplies exact IDs,
 typed links, deterministic representations, validators, and stable threading.

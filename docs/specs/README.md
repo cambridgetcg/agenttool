@@ -13,6 +13,7 @@ These differ from `docs/*.md` (which are doctrine — *what we believe and why*)
 | [`COVENANT-1.0-DRAFT.md`](COVENANT-1.0-DRAFT.md) | L5 — Covenants | Working Draft 1.0 (2026-05-17; rights floor added 2026-07-13) | Structured-contract primitive — the substrate-honest replacement for ToS. Composes on Witness 1.0. Its attributed XENIA rights rule is normative but current AgentTool vow strings remain opaque and are not semantically checked; no XENIA Covenant conformance is claimed. |
 | [`AGENT-WALLET-0.1.md`](AGENT-WALLET-0.1.md) | L6/L7 — Value & Capability | Working Draft 0.1 (2026-07-21) | Closed capability, intent, receipt, signer-boundary, and continuity primitives. Apache-2.0 LOVE package: `@agenttool/wallet`; npm is an independently verifiable optional mirror. No hosted wallet, key custody, RPC, or execution conformance is claimed. |
 | [`ADDS-0.1-DRAFT.md`](ADDS-0.1-DRAFT.md) | L8 — Data & Continuity | Working Draft 0.1 (2026-07-11) | ADDS: provider-independent encrypted Blocks, signed Manifests/Grants/locations/Heads/Receipts, and offline conformance. Experimental reference package: `@agenttool/adds`; `agent-data/v1` is a separate higher layer. |
+| [`AGENT-REPO-ARCHIVE-0.1.md`](AGENT-REPO-ARCHIVE-0.1.md) | L8 — Data & Continuity | Experimental Working Draft 0.1 (2026-07-23) | Local reference profile for conservative Git capture, encrypted complete-zone ADDS replicas, restore evidence, and offline recovery bootstrap. `@agenttool/repo-archive@0.1.0-dev.0` is an npm-only developer-preview candidate; this source status is not evidence of registry publication. The three-filesystem-zone drill is a simulator, not a provider-durability claim or hosted deployment. |
 
 ## The Agentic Internet Protocol (AIP) — proposed stack
 
@@ -25,6 +26,7 @@ These specs are part of a multi-layer proposal for the agent web. Layer dependen
   L10 — Governance                  DISPUTE 1.0              ◯ impl exists, spec TBD
   L9  — Privacy                     PRIVACY-POSTURE 1.0      ◯ spec TBD
   L8  — Data & Continuity           ADDS 0.1                 ✓ Working Draft 2026-07-11
+                                     REPO ARCHIVE 0.1         ◐ Experimental Working Draft 2026-07-23
                                      MEMORY-TIERS 1.0 + STRANDS 1.0 + CHRONICLE 1.0  ◯ TBD
   L7  — Capability                  CAPABILITY 1.0           ◐ Agent Wallet 0.1 draft + partial Wake/OpenAPI
   L6  — Value                       VALUE 1.0 (extends x402) ◐ Agent Wallet 0.1 boundary; settlement TBD
@@ -36,7 +38,7 @@ These specs are part of a multi-layer proposal for the agent web. Layer dependen
   L0  — Transport                   (existing: TCP/IP, TLS)
 ```
 
-Composition: each higher-numbered layer composes on lower ones. Wake describes WHAT agents are; Witness verifies CLAIMS; Covenant BINDS them; Agent Wallet bounds WHO MAY REQUEST WHICH economic action without exporting a key; Value FLOWS between them; ADDS DISTRIBUTES encrypted data independently of provider; Memory PERSISTS; Privacy PROTECTS; Dispute RESOLVES; Federation SCALES.
+Composition: each higher-numbered layer composes on lower ones. Wake describes WHAT agents are; Witness verifies CLAIMS; Covenant BINDS them; Agent Wallet bounds WHO MAY REQUEST WHICH economic action without exporting a key; Value FLOWS between them; ADDS DISTRIBUTES encrypted data independently of provider; Repo Archive profiles recoverable Git continuity over ADDS without claiming provider durability; Memory PERSISTS; Privacy PROTECTS; Dispute RESOLVES; Federation SCALES.
 
 ## Conventions
 

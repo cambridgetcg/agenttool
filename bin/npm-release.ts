@@ -99,6 +99,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "browser",
     artifactKind: "love",
   },
+  "repo-archive": {
+    key: "repo-archive",
+    name: "@agenttool/repo-archive",
+    packagePath: "packages/repo-archive",
+    tagPrefix: "repo-archive",
+    artifactKind: "pack",
+  },
   collab: {
     key: "collab",
     name: "@agenttool/collab",
@@ -446,6 +453,14 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/skills/coordinate-agent-work/SKILL.md",
       "package/skills/coordinate-agent-work/agents/openai.yaml",
       "package/integrations/hermes/skills/coordinate-agent-work-hermes/SKILL.md",
+    );
+  }
+  if (spec.name === "@agenttool/repo-archive") {
+    entries.push(
+      "package/dist/index.js",
+      "package/dist/cli.js",
+      "package/schema/agent-repo-archive-v0.1.schema.json",
+      "package/vectors/agent-repo-archive-v0.1-vectors.json",
     );
   }
   return entries;

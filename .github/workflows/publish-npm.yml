@@ -16,6 +16,7 @@ on:
           - wallet
           - telescope
           - browser
+          - repo-archive
           - collab
           - correspondence-yutabase
           - skills

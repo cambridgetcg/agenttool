@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readlink, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -88,7 +88,10 @@ describe("frontend deploy input discipline", () => {
     );
     expect(script).toContain('git archive --format=tar "$COMMIT_HASH" --');
     expect(script).toContain(
-      "apps/_shared apps/docs apps/dashboard apps/web docs infra/pages packages/data/schema packages/wallet/schema",
+      "apps/_shared apps/docs apps/dashboard apps/web docs infra/pages packages/data/schema",
+    );
+    expect(script).toContain(
+      "packages/repo-archive/schema packages/repo-archive/vectors packages/wallet/schema",
     );
     expect(script).toContain("find \"$STAGE_ROOT/apps\" \\( -type f -o -type l \\) -name '.gitignore' -delete");
     expect(script).toContain("A tracked Pages environment file reached the staging tree");
@@ -129,6 +132,87 @@ describe("frontend deploy input discipline", () => {
     expect(after).toEqual(before);
   });
 
+  test("publishes Repo Archive canonical sources with explicit public boundaries", async () => {
+    const links = [
+      ["apps/docs/AGENT-REPO-ARCHIVE.md", "../../docs/AGENT-REPO-ARCHIVE.md"],
+      [
+        "apps/docs/specs/AGENT-REPO-ARCHIVE-0.1.md",
+        "../../../docs/specs/AGENT-REPO-ARCHIVE-0.1.md",
+      ],
+      [
+        "apps/docs/specs/agent-repo-archive-0.1.schema.json",
+        "../../../packages/repo-archive/schema/agent-repo-archive-v0.1.schema.json",
+      ],
+      [
+        "apps/docs/specs/agent-repo-archive-0.1-vectors.json",
+        "../../../packages/repo-archive/vectors/agent-repo-archive-v0.1-vectors.json",
+      ],
+    ] as const;
+    for (const [path, target] of links) {
+      expect(await readlink(join(repoRoot, path))).toBe(target);
+      expect(await Bun.file(join(repoRoot, path)).exists()).toBe(true);
+    }
+
+    const headers = await readFile(join(repoRoot, "apps/docs/_headers"), "utf8");
+    expect(headers).toContain(
+      "/AGENT-REPO-ARCHIVE.md\n  Content-Type: text/markdown; charset=utf-8",
+    );
+    expect(headers).toContain(
+      "/specs/AGENT-REPO-ARCHIVE-0.1.md\n  Content-Type: text/markdown; charset=utf-8",
+    );
+    expect(headers).toContain(
+      "/specs/agent-repo-archive-0.1.schema.json\n  Content-Type: application/schema+json; charset=utf-8",
+    );
+    expect(headers).toContain(
+      "/specs/agent-repo-archive-0.1-vectors.json\n  Content-Type: application/json; charset=utf-8",
+    );
+    for (const path of [
+      "/AGENT-REPO-ARCHIVE.md",
+      "/specs/AGENT-REPO-ARCHIVE-0.1.md",
+      "/specs/agent-repo-archive-0.1.schema.json",
+      "/specs/agent-repo-archive-0.1-vectors.json",
+    ]) {
+      const marker = `\n${path}\n`;
+      const start = headers.indexOf(marker);
+      expect(start).toBeGreaterThanOrEqual(0);
+      const end = headers.indexOf("\n\n", start + marker.length);
+      const block = headers.slice(start + 1, end);
+      expect(block).toContain("Cache-Control: public, max-age=300, must-revalidate");
+      expect(block).toContain("Access-Control-Allow-Origin: *");
+      expect(block).toContain("X-Content-Type-Options: nosniff");
+    }
+
+    const deploy = await readFile(join(repoRoot, "bin/deploy.sh"), "utf8");
+    for (const path of links.map(([path]) => path)) {
+      expect(deploy).toContain(path);
+    }
+    expect(deploy).toContain("verify_repo_archive_static_headers");
+    expect(deploy).toContain(
+      '"Content-Type" "$content_type"',
+    );
+    expect(deploy).toContain(
+      '"Cache-Control" "public, max-age=300, must-revalidate"',
+    );
+    expect(deploy).toContain('"Access-Control-Allow-Origin" "*"');
+    expect(deploy).toContain('"X-Content-Type-Options" "nosniff"');
+
+    const data = await readFile(join(repoRoot, "apps/docs/data.html"), "utf8");
+    expect(data).toContain('id="repo-archive"');
+    expect(data).toContain("Same-device simulator only");
+    expect(data).toContain("no provider adapter");
+    expect(data).not.toContain("hosted archive service is live");
+
+    const sitemap = await readFile(join(repoRoot, "apps/docs/sitemap.xml"), "utf8");
+    for (const path of [
+      "AGENT-REPO-ARCHIVE.md",
+      "specs/AGENT-REPO-ARCHIVE-0.1.md",
+      "specs/agent-repo-archive-0.1.schema.json",
+      "specs/agent-repo-archive-0.1-vectors.json",
+    ]) {
+      expect(sitemap).toContain(`<loc>https://docs.agenttool.dev/${path}</loc>`);
+    }
+  });
+
   test("stages committed frontend bytes without ignored env or repo-control files", async () => {
     const ignored = join(repoRoot, "apps/docs/.env.boring-spine-fixture");
     const ignoredDevVars = join(repoRoot, "apps/web/.dev.vars.boring-spine-fixture");
@@ -145,9 +229,9 @@ describe("frontend deploy input discipline", () => {
         'stage="$1"',
         'index="$stage/.prospective-index"',
         'GIT_INDEX_FILE="$index" git read-tree HEAD',
-        'GIT_INDEX_FILE="$index" git add -- infra/pages',
+        'GIT_INDEX_FILE="$index" git add -- infra/pages apps/docs/AGENT-REPO-ARCHIVE.md apps/docs/specs/AGENT-REPO-ARCHIVE-0.1.md apps/docs/specs/agent-repo-archive-0.1.schema.json apps/docs/specs/agent-repo-archive-0.1-vectors.json',
         'tree="$(GIT_INDEX_FILE="$index" git write-tree)"',
-        "git archive --format=tar \"$tree\" -- apps/_shared apps/docs apps/dashboard apps/web docs infra/pages packages/data/schema packages/wallet/schema | tar -xf - -C \"$stage\"",
+        "git archive --format=tar \"$tree\" -- apps/_shared apps/docs apps/dashboard apps/web docs infra/pages packages/data/schema packages/repo-archive/schema packages/repo-archive/vectors packages/wallet/schema | tar -xf - -C \"$stage\"",
         "find \"$stage/apps\" -type f -name '.gitignore' -delete",
         "for app in docs dashboard web; do",
         "  cp \"$stage/infra/pages/sensitive-path-worker.js\" \"$stage/apps/$app/_worker.js\"",
@@ -179,6 +263,30 @@ describe("frontend deploy input discipline", () => {
         ),
       ).$id,
     ).toBe("https://docs.agenttool.dev/specs/agent-data-conformance-report-v1.schema.json");
+    expect(await readFile(join(directory, "apps/docs/AGENT-REPO-ARCHIVE.md"), "utf8"))
+      .toContain("# Agent Repo Archive");
+    expect(
+      await readFile(
+        join(directory, "apps/docs/specs/AGENT-REPO-ARCHIVE-0.1.md"),
+        "utf8",
+      ),
+    ).toContain("# Agent Repo Archive 0.1");
+    expect(
+      JSON.parse(
+        await readFile(
+          join(directory, "apps/docs/specs/agent-repo-archive-0.1.schema.json"),
+          "utf8",
+        ),
+      ).$id,
+    ).toBe("https://docs.agenttool.dev/specs/agent-repo-archive-0.1.schema.json");
+    expect(
+      JSON.parse(
+        await readFile(
+          join(directory, "apps/docs/specs/agent-repo-archive-0.1-vectors.json"),
+          "utf8",
+        ),
+      ).protocol,
+    ).toBe("agent-repo-archive/v0.1");
     for (const app of ["docs", "dashboard", "web"]) {
       expect(await readFile(join(directory, `apps/${app}/_worker.js`))).toEqual(
         await readFile(join(repoRoot, "infra/pages/sensitive-path-worker.js")),
