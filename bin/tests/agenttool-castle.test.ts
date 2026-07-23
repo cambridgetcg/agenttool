@@ -632,6 +632,59 @@ describe("Castle local projection", () => {
     await expectCode(syncCastle(syncOptions(fixture)), "castle_bridge_lock_busy");
   });
 
+  test("honors HALT raised during late unchanged-state validation", async () => {
+    const fixture = await createFixture();
+    await writeSelection(fixture, revision(fixture), [ROOM]);
+    await syncCastle(syncOptions(fixture));
+
+    const statePath = join(fixture.data, "castle-state.json");
+    const state = await readFile(statePath, "utf8");
+    await writeFile(statePath, `${state}${" ".repeat(48 * 1024 * 1024)}`, {
+      mode: 0o600,
+    });
+    const stateInfo = await lstat(statePath);
+    await utimes(statePath, new Date(0), stateInfo.mtime);
+
+    const outcome = syncCastle(syncOptions(fixture)).then(
+      (value) => ({ status: "resolved" as const, value }),
+      (error: unknown) => ({ status: "rejected" as const, error }),
+    );
+    let lateReadObserved = false;
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline) {
+      if ((await lstat(statePath)).atimeMs > 1_000) {
+        lateReadObserved = true;
+        break;
+      }
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 1));
+    }
+    expect(lateReadObserved).toBe(true);
+    await writeFile(fixture.halt, "halt\n", { mode: 0o600 });
+
+    const settled = await outcome;
+    expect(settled.status).toBe("rejected");
+    if (settled.status !== "rejected") {
+      throw new Error(`unchanged sync returned after late HALT: ${JSON.stringify(settled.value)}`);
+    }
+    expect(settled.error).toMatchObject({ code: "castle_bridge_halted" });
+  });
+
+  test("keeps a final HALT check adjacent to every successful sync return", async () => {
+    const source = await readFile(
+      resolve(import.meta.dir, "..", "agenttool-castle.ts"),
+      "utf8",
+    );
+    const syncSource = source.slice(
+      source.indexOf("export async function syncCastle"),
+      source.indexOf("export async function castleStatus"),
+    );
+    expect(
+      syncSource.match(
+        /await assertHaltsClear\(options\.halt_paths\);\n\s+return Object\.freeze\(\{/g,
+      ),
+    ).toHaveLength(3);
+  });
+
   test("withdraws first-sync crash orphans and can resume their lineage", async () => {
     const fixture = await createFixture({
       "rooms/harbor.md": "# Harbor\n\nCrash-safe understanding.\n",
