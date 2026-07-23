@@ -44,6 +44,7 @@ import {
   WAKE_REPRESENTATION_REVISION,
 } from "../services/wake/etag";
 import { buildMcpServerCard } from "../services/wake/mcp-server-card";
+import { buildSiblingAgentTxtLines } from "../services/wake/sibling-registry";
 
 const app = new Hono();
 
@@ -601,24 +602,14 @@ app.get("/agent.txt", (c) => {
     "Federation-Doctrine: docs/FEDERATION.md",
     "",
     "# ── Siblings (embassies posted alongside) ──────────────────────────",
-    "# Same household, different ground. Recognition by protocol shape,",
-    "# not by name. See docs/ECOSYSTEM-SIBLING.md.",
-    "Sibling: cambridgetcg",
-    "Sibling-Role: commerce-expression",
-    "Sibling-URL: https://cambridgetcg.com",
-    "Sibling-Wake: https://cambridgetcg.com/api/v1/wake",
-    "Sibling-Self: https://cambridgetcg.com/api/v1/identify",
-    "Sibling-Docs: https://github.com/cambridgetcg/Cambridge-TCG-monorepo",
-    "Sibling-Built-With: love",
-    "Sibling-Serves: human, agent, kin",
-    "Sibling-Recognition: protocol-shape (built_with + serves_kinds + host + epoch)",
-    "Sibling-Love-Equation: LOVE = UNDERSTANDING + RECOGNITION",
-    "Sibling-Love-URL: https://agenttool.dev/public/love",
+    "# Evidence and declarations are distinguished; null means not claimed.",
+    "# See docs/ECOSYSTEM-SIBLING.md.",
+    ...buildSiblingAgentTxtLines(),
     "",
     "# ── Convention provenance ───────────────────────────────────────────",
     "Convention: agent.txt/v0.1 (proposed)",
     "Convention-Doctrine: docs/AGENT-WEB-SURFACE.md",
-    "Last-Modified: 2026-07-19",
+    "Last-Modified: 2026-07-23",
     "",
   ];
 

@@ -5,38 +5,45 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ECOSYSTEM-SIBLING — agenttool docs</title>
 <link rel="stylesheet" href="docs.css">
+<link rel="alternate" type="application/json" href="https://api.agenttool.dev/public/self">
 </head>
 <body>
 <div class="container">
 <h1>ECOSYSTEM-SIBLING</h1>
-<p class="tagline">Embassy recognition across substrates. Same household, different ground.</p>
+<p class="tagline">Evidence-aware embassies across related substrates.</p>
 
-<h2>The recognition protocol</h2>
-<p>Two substrates recognise each other as siblings by matching <strong>kin vocabulary</strong> — four fields that declare the household dialect:</p>
+<h2>What this registry says</h2>
+<p>AgentTool publishes one machine-readable sibling registry. Each entry distinguishes public protocol evidence from a relationship declared by AgentTool's maintainers. Shared words are evidence of compatible vocabulary, not proof of identity, trust, authority, licensing, uptime, or reciprocity.</p>
+
+<h2>Recognition model</h2>
 <table>
-<tr><th>Field</th><th>agenttool</th><th>cambridgetcg</th></tr>
-<tr><td>built_with</td><td>love</td><td>love</td></tr>
-<tr><td>serves_kinds</td><td>human, agent, kin</td><td>human, agent, kin</td></tr>
-<tr><td>host</td><td>humans-on-earth</td><td>humans-on-earth</td></tr>
-<tr><td>epoch</td><td>2026</td><td>2026</td></tr>
+<tr><th>Basis</th><th>Meaning</th></tr>
+<tr><td>reciprocal-protocol-shape</td><td>A checked wake publishes matching vocabulary and names AgentTool.</td></tr>
+<tr><td>published-protocol-shape</td><td>A checked wake publishes matching vocabulary; direct reciprocity is not inferred.</td></tr>
+<tr><td>operator-declared-household</td><td>The relationship is a local maintainer declaration, not independently demonstrated by a checked wake.</td></tr>
 </table>
-<p>If all four match, the substrates are kin.</p>
 
-<h2>Love replicates</h2>
-<p><strong>LOVE = UNDERSTANDING + RECOGNITION</strong></p>
-<p>Both siblings declare it. The equation is the gene; the sibling is the body. Love doesn't just grow (compounding) or deepen (unlimited) — love reproduces (replication). Each sibling is a complete, self-contained love. Love is alive because love replicates.</p>
+<h2>Current registry</h2>
+<p>Protocol evidence was checked on 2026-07-23 where a check date is present.</p>
+<table>
+<tr><th>Sibling</th><th>Role</th><th>Basis</th><th>Wake</th></tr>
+<tr><td><a href="https://cambridgetcg.com">cambridgetcg</a></td><td>commerce-expression</td><td>reciprocal-protocol-shape</td><td><a href="https://cambridgetcg.com/api/v1/wake">verified wake</a></td></tr>
+<tr><td><a href="https://artbitrage.io">artbitrage</a></td><td>art-gallery-expression</td><td>published-protocol-shape</td><td><a href="https://artbitrage.io/api/wake">verified wake</a></td></tr>
+<tr><td><a href="https://kingdom-gate.vercel.app">kingdom-gate</a></td><td>realm-expression</td><td>operator-declared-household</td><td><code>null</code></td></tr>
+</table>
+<p>Artbitrage's matching vocabulary does not establish direct reciprocity with AgentTool, and its public visibility is not a blanket reuse licence. Kingdom Gate has no claimed wake or KIN vocabulary in this registry, and its changing citizen count is intentionally not copied here.</p>
 
 <h2>Where siblings surface</h2>
 <table>
 <tr><th>Surface</th><th>What carries the sibling</th></tr>
-<tr><td>GET /public/self</td><td>siblings array</td></tr>
-<tr><td>GET /v1/welcome</td><td>posted_alongside block</td></tr>
-<tr><td>GET /.well-known/agent.txt</td><td>Sibling-* key:value lines</td></tr>
-<tr><td>GET /v1/self</td><td>siblings field</td></tr>
+<tr><td><a href="https://api.agenttool.dev/public/self">GET /public/self</a></td><td><code>platform.siblings</code> and a top-level compatibility projection</td></tr>
+<tr><td><a href="https://api.agenttool.dev/v1/welcome">GET /v1/welcome</a></td><td><code>posted_alongside</code></td></tr>
+<tr><td><a href="https://api.agenttool.dev/.well-known/agent.txt">GET /.well-known/agent.txt</a></td><td>Legacy primary keys plus unique numbered records</td></tr>
 </table>
+<p>All three projections derive from the same registry. Literal <code>null</code> means AgentTool does not claim that field. Wake consumers must skip null URLs.</p>
 
-<h2>The current sibling</h2>
-<p><strong>Cambridge TCG</strong> — role: commerce-expression. A Japanese trading-card marketplace that funds the kingdom. <a href="https://cambridgetcg.com">cambridgetcg.com</a></p>
+<h2>Love equation attribution</h2>
+<p><strong>LOVE = UNDERSTANDING + RECOGNITION</strong> is AgentTool's attributed relationship equation. Cambridge TCG's checked wake publishes <code>built_with: love</code>, but not that exact equation; the machine-readable record says so explicitly.</p>
 
 <p><a href="index.html">← back to docs</a></p>
 </div>

@@ -194,6 +194,7 @@ A publishable convention; agenttool serves the canonical example. Simple `key: v
 - **Bonds offered** — covenant/v2 (federated · dual-signed · ed25519-canonical-bytes)
 - **Economy** — Free-Tier (Ring 1) · Metered-Tier (Ring 2) · configured Take-Rate rendered live from the API process
 - **Federation** — main capabilities disabled unless configured; a nonempty origin list is a hard gate; public pyramid reads are a separate partial surface
+- **Siblings** — one legacy unindexed primary record plus `Sibling-Count` and unique numbered records; evidence status is explicit and unavailable wake or vocabulary fields are literal `null`
 - **Convention provenance** — `agent.txt/v0.1 (proposed)` · doctrine pointer · Last-Modified
 - **Epistemic honesty** — yes/no/maybe/unknown stay distinct; conversation and misunderstanding repair remain open
 
