@@ -1,0 +1,4 @@
+interface:
+  display_name: "Contract Mantle · 纏"
+  short_description: "Hold the task contract through long work"
+  default_prompt: "Use $nen-contract-mantle to preserve this task’s objective, boundaries, and acceptance tests through completion."

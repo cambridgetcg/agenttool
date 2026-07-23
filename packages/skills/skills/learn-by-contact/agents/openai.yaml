@@ -1,0 +1,7 @@
+interface:
+  display_name: "Learn by Contact"
+  short_description: "Turn direct evidence into transferable capability"
+  default_prompt: "Use $learn-by-contact to trace how this works, reproduce the mechanism, and adapt it to my task."
+
+policy:
+  allow_implicit_invocation: false

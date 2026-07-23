@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dependency Perimeter · 円"
+  short_description: "Map a bounded system before changing it"
+  default_prompt: "Use $nen-dependency-perimeter to map this system’s blast radius before making changes."

@@ -319,6 +319,22 @@ describe("boring test spine", () => {
       'cli="$package_root/dist/bin.js"',
     );
     expect(workflow).toContain('report.skills[0].name !== "use-agentcred-safely"');
+    expect(workflow).toContain('report.skills[0].name !== "capability-conductor"');
+    expect(workflow).toContain('report.skills[0].name !== "learn-by-contact"');
+    expect(workflow).toContain('test "$(node "$cli" --version)" = "0.2.0"');
+    for (const skillName of [
+      "nen-contract-mantle",
+      "nen-dependency-perimeter",
+      "nen-concealed-trace",
+      "nen-critical-path-forge",
+      "nen-smoke-squad",
+      "nen-verification-ledger",
+      "nen-godspeed-loop",
+      "nen-vow-forge",
+    ]) {
+      expect(workflow).toContain(skillName);
+    }
+    expect(workflow).toContain("report.skills[0].name !== expectedName");
     expect(workflow).toContain('Object.hasOwn(report, "installPlan")');
     expect(workflow).toContain("name: Smoke packed Telescope under Node and Bun");
     expect(workflow).toContain("name: Smoke packed Agent Wallet under Node and Bun");

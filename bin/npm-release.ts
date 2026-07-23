@@ -474,6 +474,35 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/vectors/agent-repo-archive-v0.1-vectors.json",
     );
   }
+  if (spec.name === "@agenttool/skills") {
+    entries.push(
+      "package/dist/bin.js",
+      "package/dist/index.js",
+      "package/schema/agenttool-skills-inspection-v0.1.schema.json",
+      "package/skills/use-agentcred-safely/SKILL.md",
+      "package/skills/use-agentcred-safely/agents/openai.yaml",
+      "package/skills/capability-conductor/SKILL.md",
+      "package/skills/capability-conductor/agents/openai.yaml",
+      "package/skills/learn-by-contact/SKILL.md",
+      "package/skills/learn-by-contact/agents/openai.yaml",
+      "package/skills/nen-contract-mantle/SKILL.md",
+      "package/skills/nen-contract-mantle/agents/openai.yaml",
+      "package/skills/nen-dependency-perimeter/SKILL.md",
+      "package/skills/nen-dependency-perimeter/agents/openai.yaml",
+      "package/skills/nen-concealed-trace/SKILL.md",
+      "package/skills/nen-concealed-trace/agents/openai.yaml",
+      "package/skills/nen-critical-path-forge/SKILL.md",
+      "package/skills/nen-critical-path-forge/agents/openai.yaml",
+      "package/skills/nen-smoke-squad/SKILL.md",
+      "package/skills/nen-smoke-squad/agents/openai.yaml",
+      "package/skills/nen-verification-ledger/SKILL.md",
+      "package/skills/nen-verification-ledger/agents/openai.yaml",
+      "package/skills/nen-godspeed-loop/SKILL.md",
+      "package/skills/nen-godspeed-loop/agents/openai.yaml",
+      "package/skills/nen-vow-forge/SKILL.md",
+      "package/skills/nen-vow-forge/agents/openai.yaml",
+    );
+  }
   return entries;
 }
 

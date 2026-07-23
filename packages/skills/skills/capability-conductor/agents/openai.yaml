@@ -1,0 +1,4 @@
+interface:
+  display_name: "Capability Conductor · 團長"
+  short_description: "Compose skills with provenance and bounded authority"
+  default_prompt: "Use $capability-conductor to open a task-scoped capability book and compose the smallest safe skill workflow for this task."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verification Ledger · ハコワレ"
+  short_description: "Make verification debt visible and payable"
+  default_prompt: "Use $nen-verification-ledger to track and pay down the verification debt in this task."
