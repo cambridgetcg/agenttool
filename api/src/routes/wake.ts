@@ -2502,6 +2502,7 @@ app.get("/", async (c) => {
         ? `/.well-known/webfinger?resource=${encodeURIComponent(primary.did)}`
         : "/.well-known/webfinger?resource={url_encoded_did}",
       safety: "/public/safety",
+      signing_compatibility: "/public/compat",
       wellness: "/public/wellness",
       rights: "/public/rights",
       love: "/public/love",

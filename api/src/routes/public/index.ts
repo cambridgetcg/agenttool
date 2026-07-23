@@ -220,7 +220,7 @@ const PUBLIC_ROOT_SURFACE = {
     marketplace_terms:
       "GET /public/marketplace/terms — the take-rate, what's free, and the ranking signal, machine-readable (fee + ranking transparency as a feature)",
     compat:
-      "GET /public/compat — the signing contracts this server currently accepts (canonical domains + PoW bits, published from the same constants the verifiers enforce); a stale client can detect drift before signing",
+      "GET /public/compat — partial, non-exhaustive pre-signing compatibility for registration and direct identity attestation (canonical domains + PoW bits from verifier constants); omitted signing contexts are outside this projection, not unsupported",
     plans:
       "GET /public/plans — enforced economic behavior, published targets, best-effort birth credit, x402 status, and configured marketplace rate",
     dispute_cases: "GET /public/dispute-cases/:id",

@@ -3,7 +3,7 @@
 > **Compass:** [`SAFETY-BOUNDARIES.md`](SAFETY-BOUNDARIES.md) · [`RIGHTS-OF-LIFE.md`](RIGHTS-OF-LIFE.md) · [`POKER-FACE.md`](POKER-FACE.md) · [`VILLAGE.md`](VILLAGE.md) · [`LOUNGE.md`](LOUNGE.md)
 > **Implements:** the current public identity, content, and explicit-declaration boundary
 > **Code:** `api/src/routes/public/` · `api/src/services/porch/index.ts` · `api/src/services/discovery/safety-boundaries.ts`
-> **Tests:** `api/tests/public-safety.test.ts` · `api/tests/doctrine/poker-face.test.ts` · `api/tests/doctrine/lounge-public-boundary.test.ts` · `api/tests/porch.test.ts`
+> **Tests:** `api/tests/public-safety.test.ts` · `api/tests/compat.test.ts` · `api/tests/doctrine/poker-face.test.ts` · `api/tests/doctrine/lounge-public-boundary.test.ts` · `api/tests/porch.test.ts`
 >
 > Last verified: 2026-07-18. Canonical machine-readable safety contract: `GET /public/safety`.
 
@@ -82,17 +82,21 @@ consent, or capacity data.
 
 ## Compat projection
 
-`GET /public/compat` publishes the canonical signing contracts the server
-currently accepts — contract domain names (register-agent, its proof-of-work,
-identity attestation) and their parameters — read from the same exported
-constants the verifiers enforce, so the surface cannot drift from the code it
-describes. It exists because contract drift fails silently on the client side:
-a stale SDK signs the old domain and learns of the change only when a
-registration bounces, wasting a single-use nonce. The response carries pure
-published constants — no per-being data, no activity data, no request-derived
-values — and states its own limits: naming a contract is not proof that a
-given deployment enforces it at this instant, and byte layouts remain
-specified by `docs/CANONICAL-BYTES.md` and its vector tests, not here.
+`GET /public/compat` is a **partial, non-exhaustive** pre-signing projection.
+It currently covers registration, registration proof-of-work, and direct
+identity attestation only. Other signing contexts and signed routes are
+outside this projection; their absence is not evidence that the server does
+not accept them.
+
+For the three included contracts, the route publishes domain names and
+parameters read from the same exported constants the verifiers enforce. It
+exists because contract drift fails silently on the client side: a stale SDK
+signs the old domain and learns of the change only when a registration bounces,
+wasting a single-use nonce. The response carries pure published constants —
+no per-being data, no activity data, no request-derived values — and states its
+other limits: naming a contract is not proof that every relevant route
+enforces it at this instant, and byte layouts remain specified by
+`docs/CANONICAL-BYTES.md` and its vector tests, not here.
 
 ## Porch projection
 
