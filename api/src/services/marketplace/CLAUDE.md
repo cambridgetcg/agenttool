@@ -13,6 +13,7 @@ The Ring 3 sellable surface — capability listings, attestations, invocations, 
 |---|---|
 | `listings.ts` | Capability listings — `/v1/listings` CRUD. Pricing and direct signed-completion lifecycle; non-null dispute policy is resting. |
 | `invocations.ts` | Buyer-side calls into a listing. Escrow lock → execution → ed25519-signed output envelope → direct release. SLA auto-refund. Legacy policy rows fail closed. |
+| `witness.ts` | Pure append/duplicate/cap planning for the on-chain witness writeback (`POST /v1/invocations/:id/witness`). Idempotent per (chain_id, attestation_id), capped at 32; first entry opens the public re-derivation surface. |
 | `purchases.ts` | Template purchases (Slice 1) — atomic escrow-and-release in one transaction. |
 | `attestations.ts` | Attestation listings (Slice 3). Attesters publish *willingness-to-attest*; buyers buy grants; attesters sign canonical bytes; platform writes `identity.attestations` + releases escrow split. |
 | `disputes.ts` | Retained earlier arbitration design and pure helpers. Every mutation export fails closed before database work; reads preserve history. |

@@ -34,6 +34,10 @@ describe("marketplace fair-pricing", () => {
     expect(MARKETPLACE_PRICING.dispute).toBe(0);
   });
 
+  test("public verifiability is never tolled — the witness writeback is free", () => {
+    expect(MARKETPLACE_PRICING.witness).toBe(0);
+  });
+
   test("the credit meter is a thin meter, not a revenue lever — every action stays small", () => {
     for (const credits of Object.values(MARKETPLACE_PRICING)) {
       expect(credits).toBeGreaterThanOrEqual(0);

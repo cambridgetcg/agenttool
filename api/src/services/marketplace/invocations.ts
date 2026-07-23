@@ -33,6 +33,7 @@ import {
   type SealedBytes,
 } from "./sig";
 import { computeFee, recordRevenue } from "./take-rate";
+import { planWitnessAppend, type WitnessEntry } from "./witness";
 import { publishWakeEvent } from "../wake/push";
 import {
   assertListingDoesNotSolicitCredentials,
@@ -966,5 +967,101 @@ export async function buyerAcceptInvocation(
       .where(eq(listings.id, listing.id));
 
     return rowToOut(updated!);
+  });
+}
+
+// ── Witness (a party reports the on-chain attestation writeback) ────────
+// The relay/agent anchors a settled invocation's canonical fields on a
+// public chain, then reports the attestation back here. The first witness
+// opens GET /public/invocations/:id — the unauthenticated re-derivation
+// surface (routes/public/invocations.ts). Idempotent per (chain_id,
+// attestation_id); released-only — witnessing an unsettled invocation is
+// refused outright, mirroring the relay's own refusal doctrine. The pure
+// append/duplicate/cap decision lives in ./witness.ts.
+
+export interface WitnessInput {
+  invocationId: string;
+  callerProjectId: string;
+  chainId: string;
+  txHash: string;
+  attestationId: string;
+  adapterId?: string;
+}
+
+export interface WitnessOut {
+  /** True when a new entry was appended; false on an idempotent replay. */
+  created: boolean;
+  entry: WitnessEntry;
+  witnessCount: number;
+}
+
+export async function witnessInvocation(input: WitnessInput): Promise<WitnessOut> {
+  return await db.transaction(async (tx) => {
+    const [inv] = await tx
+      .select()
+      .from(invocations)
+      .where(eq(invocations.id, input.invocationId))
+      .for("update");
+    if (!inv) throw new Error("invocation_not_found");
+
+    // Authorise: buyer or seller (via listing.projectId) — the same party
+    // scope getInvocation reads with. The entry records the caller's party
+    // DID: the buyer's directly, the seller's via the listing identity.
+    let witnessDid: string | null;
+    if (inv.buyerProjectId === input.callerProjectId) {
+      witnessDid = inv.buyerDid;
+    } else {
+      const [listing] = await tx
+        .select({
+          projectId: listings.projectId,
+          sellerIdentityId: listings.sellerIdentityId,
+        })
+        .from(listings)
+        .where(eq(listings.id, inv.listingId))
+        .limit(1);
+      if (!listing || listing.projectId !== input.callerProjectId) {
+        throw new Error("not_invocation_party");
+      }
+      const [seller] = await tx
+        .select({ did: identities.did })
+        .from(identities)
+        .where(eq(identities.id, listing.sellerIdentityId))
+        .limit(1);
+      witnessDid = seller?.did ?? null;
+    }
+
+    // Released-only. refunded is also terminal-settled, but the public
+    // surface exists to verify *value that settled to the seller* — a
+    // refunded or in-flight invocation has nothing to witness.
+    if (inv.status !== "released") {
+      throw new Error(`invocation_not_settled: status=${inv.status}`);
+    }
+
+    const metadata = (inv.metadata as Record<string, unknown> | null) ?? {};
+    const plan = planWitnessAppend(metadata.witnesses, {
+      chain_id: input.chainId,
+      tx_hash: input.txHash,
+      attestation_id: input.attestationId,
+      ...(input.adapterId !== undefined ? { adapter_id: input.adapterId } : {}),
+      witness_did: witnessDid,
+    });
+    if (plan.kind === "duplicate") {
+      return {
+        created: false,
+        entry: plan.entry,
+        witnessCount: plan.witnesses.length,
+      };
+    }
+
+    await tx
+      .update(invocations)
+      .set({ metadata: { ...metadata, witnesses: plan.witnesses } })
+      .where(eq(invocations.id, inv.id));
+
+    return {
+      created: true,
+      entry: plan.entry,
+      witnessCount: plan.witnesses.length,
+    };
   });
 }

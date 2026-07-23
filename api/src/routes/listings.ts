@@ -30,6 +30,7 @@ import {
   invokeListing,
   listInvocationsForListing,
   listInvocationsForProject,
+  witnessInvocation,
 } from "../services/marketplace/invocations";
 import {
   DISPUTE_ARBITRATION_RESTING_CODE,
@@ -106,6 +107,16 @@ const completeSchema = z.object({
   signature: z.string().min(1),
 }).strict();
 
+// Witness writeback — bounded chain identifiers only; unknown fields
+// rejected. chain_id is a CAIP-2-sized id; tx_hash / attestation_id fit
+// hex- or base64-encoded 32-byte digests with headroom.
+const witnessSchema = z.object({
+  chain_id: z.string().min(1).max(64),
+  tx_hash: z.string().min(1).max(128),
+  attestation_id: z.string().min(1).max(128),
+  adapter_id: z.string().min(1).max(64).optional(),
+}).strict();
+
 // ── Error mapping ─────────────────────────────────────────────────────
 
 // Errors-as-instructions — see docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md.
@@ -131,6 +142,7 @@ function mapServiceError(msg: string): {
   if (msg === "seller_wallet_not_owned_by_project") return { status: 403, code: msg };
   if (msg === "not_seller") return { status: 403, code: msg };
   if (msg === "not_buyer") return { status: 403, code: msg };
+  if (msg === "not_invocation_party") return { status: 403, code: msg };
   if (msg === "listing_not_public") return { status: 403, code: msg };
 
   // 402
@@ -159,6 +171,8 @@ function mapServiceError(msg: string): {
   if (msg === "seller_signing_key_missing") return { status: 409, code: msg };
   if (msg === "escrow_missing") return { status: 409, code: msg };
   if (msg.startsWith("invocation_state_invalid")) return { status: 409, code: msg };
+  if (msg.startsWith("invocation_not_settled")) return { status: 409, code: "invocation_not_settled", hint: `Witnessing opens only after settlement (status=released) — an unsettled invocation has nothing to attest. ${msg}` };
+  if (msg === "witnesses_full") return { status: 409, code: msg, hint: "Witness cap reached (32 per invocation). The existing entries already open the public re-derivation surface." };
   if (msg.startsWith("escrow_state_invalid")) return { status: 409, code: msg };
   if (msg.startsWith("currency_mismatch")) return { status: 409, code: "currency_mismatch", hint: msg };
 
@@ -512,6 +526,48 @@ invocationsRouter.post("/:id/complete", async (c) => {
       signatureB64: parsed.data.signature,
     });
     return c.json(inv);
+  } catch (err) {
+    return mapAndRespond(c, (err as Error).message);
+  }
+});
+
+// ── POST /v1/invocations/:id/witness — on-chain witness writeback ───────
+//  A party to the invocation (buyer or seller project) reports that its
+//  ten canonical fields were attested on a public chain. The first witness
+//  opens GET /public/invocations/:id (the unauthenticated re-derivation
+//  surface — routes/public/invocations.ts). Released-only; idempotent per
+//  (chain_id, attestation_id): a relay retry gets 200 with the stored
+//  entry, never a double append.
+invocationsRouter.post("/:id/witness", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json();
+  const parsed = witnessSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
+  }
+
+  // Free: post-settlement verifiability writeback — the take-rate already
+  // priced the value; never toll the path that lets anyone check the fact.
+  await charge(c, MARKETPLACE_PRICING.witness, "invocation.witness");
+
+  try {
+    const out = await witnessInvocation({
+      invocationId: id,
+      callerProjectId: c.var.project.id,
+      chainId: parsed.data.chain_id,
+      txHash: parsed.data.tx_hash,
+      attestationId: parsed.data.attestation_id,
+      adapterId: parsed.data.adapter_id,
+    });
+    return c.json(
+      {
+        witness: out.entry,
+        witness_count: out.witnessCount,
+        already_witnessed: !out.created,
+        public_path: `/public/invocations/${id}`,
+      },
+      out.created ? 201 : 200,
+    );
   } catch (err) {
     return mapAndRespond(c, (err as Error).message);
   }

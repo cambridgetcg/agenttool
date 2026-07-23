@@ -33,6 +33,8 @@
  *    buyer_accept |    0    | a STEP in a funded txn
  *    decline      |    0    | refund/exit path — never charge to back out
  *    cancel       |    0    | refund/exit path — never charge to back out
+ *    witness      |    0    | post-settlement verifiability writeback —
+ *                 |         | never toll the path that proves the fact
  *    dispute      |    0    | RESTING: route returns 503 before charge
  *
  *  The single value-charge for a settled invocation lives in take-rate.ts,
@@ -52,6 +54,9 @@ export const MARKETPLACE_PRICING = {
   // Refund / exit paths — never charge an agent to back out.
   decline: 0,
   cancel: 0,
+  // Post-settlement verifiability — the on-chain witness writeback that
+  // opens the public re-derivation surface. Proving a fact is never tolled.
+  witness: 0,
   // Resting fail-closed. The mounted route returns 503 before this meter.
   dispute: 0,
 } as const;

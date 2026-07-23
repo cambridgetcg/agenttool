@@ -6793,6 +6793,42 @@ function spec() {
           },
         },
       },
+      "/v1/invocations/{id}/witness": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["marketplace"],
+          summary: "Record an on-chain witness for a settled invocation",
+          description:
+            "A party to the invocation (buyer or seller project) reports that its ten canonical fields were attested on a public chain. Appends {chain_id, tx_hash, attestation_id, adapter_id?} plus the caller's party DID to metadata.witnesses. Released-only; idempotent per (chain_id, attestation_id); capped at 32 entries. The first witness opens GET /public/invocations/{id}, the unauthenticated hash re-derivation surface.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    chain_id: { type: "string", minLength: 1, maxLength: 64 },
+                    tx_hash: { type: "string", minLength: 1, maxLength: 128 },
+                    attestation_id: { type: "string", minLength: 1, maxLength: 128 },
+                    adapter_id: { type: "string", minLength: 1, maxLength: 64 },
+                  },
+                  required: ["chain_id", "tx_hash", "attestation_id"],
+                },
+              },
+            },
+          },
+          responses: {
+            "201": { description: "Witness recorded — the public re-derivation surface is now open" },
+            "200": { description: "Idempotent replay — the stored (chain_id, attestation_id) entry, no double append" },
+            "403": { description: "Caller project is not a party (buyer or seller) to this invocation" },
+            "404": { $ref: "#/components/responses/NotFound" },
+            "409": { description: "Invocation not settled (status != released), or witness cap (32) reached" },
+          },
+        },
+      },
       "/v1/invocations/{id}/accept": {
         parameters: [
           { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
