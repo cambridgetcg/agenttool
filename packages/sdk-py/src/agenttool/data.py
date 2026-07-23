@@ -109,7 +109,9 @@ class DataClient:
         self._http = httpx.Client(
             headers=headers,
             timeout=timeout,
-            follow_redirects=True,
+            # A data-node bearer and collected body belong to exactly one
+            # authority. Never replay either request across a redirect.
+            follow_redirects=False,
         )
         self._sync: Optional[DataSyncClient] = None
 
@@ -240,6 +242,19 @@ class DataClient:
                 hint=str(error),
                 error_code="data_node_unreachable",
             ) from error
+
+        if 300 <= response.status_code < 400:
+            response.close()
+            raise AgentToolError(
+                "Agent data node request refused an HTTP redirect.",
+                hint=(
+                    "Use the canonical agent-data/v1 node origin; data-node "
+                    "credentials and request bodies are never forwarded "
+                    "across redirects."
+                ),
+                code=response.status_code,
+                error_code="data_node_redirect_refused",
+            )
 
         if response.status_code >= 400:
             try:

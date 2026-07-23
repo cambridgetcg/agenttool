@@ -36,6 +36,7 @@ class TestDataSecurityBoundary:
             assert data._http.headers["authorization"] == (
                 "Bearer standalone-node-token"
             )
+            assert data._http.follow_redirects is False
         assert data._http.is_closed
 
     def test_uses_only_separate_data_node_bearer(self) -> None:
@@ -202,6 +203,34 @@ class TestDataWireContract:
         assert data._http.headers["authorization"] == "Bearer node-token"
         assert "agenttool-project-secret" not in " ".join(data._http.headers.values())
         at.close()
+
+    def test_refuses_redirects_without_replaying_the_request(self) -> None:
+        data = DataClient(
+            "http://127.0.0.1:8787",
+            token="node-token",
+        )
+        redirect = _response(status_code=307)
+        redirect.headers = httpx.Headers(
+            {"Location": "https://redirect.example.test/collect"}
+        )
+
+        with patch.object(
+            data._http,
+            "request",
+            return_value=redirect,
+        ) as request:
+            with pytest.raises(AgentToolError) as exc_info:
+                data.collect(
+                    collection_id="private",
+                    collector_id="text",
+                    input={"text": "must stay at the selected node"},
+                )
+
+        assert exc_info.value.error_code == "data_node_redirect_refused"
+        assert exc_info.value.code == 307
+        request.assert_called_once()
+        redirect.close.assert_called_once()
+        data._close()
 
 
 class TestDataSyncWireContract:
