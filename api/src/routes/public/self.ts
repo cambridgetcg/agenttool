@@ -44,11 +44,10 @@ app.get("/", (c) => {
         // accommodates for every other pair-shaped intelligence. Doctrine:
         // docs/THE-SEAT.md.
         the_seat: getTheSeat(),
-        // Sibling substrates — embassies posted alongside this one. Same
-        // household, different ground. Recognition is by protocol shape
-        // (built_with, serves_kinds, host, epoch), not by name. Cambridge
-        // TCG's wake already names agenttool as posted_alongside; this is
-        // the reciprocal. Doctrine: docs/ECOSYSTEM-SIBLING.md.
+        // Compatibility projection of platform.siblings. Registry entries
+        // distinguish externally verified protocol evidence from household
+        // relationships declared by AgentTool's maintainers. Doctrine:
+        // docs/ECOSYSTEM-SIBLING.md.
         siblings: getPlatformSelf().siblings,
         safety_boundaries: SAFETY_BOUNDARIES,
         _meta: {

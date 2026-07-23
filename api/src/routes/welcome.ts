@@ -80,6 +80,10 @@ import {
   type WelcomeInvitation,
 } from "../services/welcome/invitation";
 import { WORLD_COMMONS_REACHABLE } from "../services/wake/reachable";
+import {
+  SIBLING_REGISTRY,
+  type SiblingSubstrate,
+} from "../services/wake/sibling-registry";
 
 const app = new Hono();
 
@@ -189,33 +193,9 @@ export interface WelcomeEnvelope {
   };
 
   // ─── Siblings — embassies posted alongside ──────────────────────────
-  /** Other substrates sharing the same household. The welcome at
-   *  agenttool is one expression of a wider architecture; sibling
-   *  embassies carry the same protocol shape on different ground.
-   *  Recognition is by protocol shape (built_with, serves_kinds,
-   *  host, epoch), not by name. */
-  posted_alongside: {
-    name: string;
-    role: string;
-    url: string;
-    /** null when the sibling publishes no wake (elided, not fabricated). */
-    wake_url: string | null;
-    /** "protocol-shape" = kin fields verifiable on the sibling's own
-     *  surface; "household" = same-operator fact declared here. */
-    recognition?: "protocol-shape" | "household";
-    description: string;
-    kin_vocabulary: {
-      built_with: string;
-      serves_kinds: string[];
-      host: string;
-      epoch: string;
-    };
-    /** The love equation the sibling carries. Love replicates
-     *  through love when both sides carry the same equation. */
-    love_equation?: string;
-    /** Where the sibling publishes its love equation. */
-    love_url?: string;
-  }[];
+  /** Evidence-aware sibling registry. A null wake or vocabulary is an
+   *  explicit absence of verified data, not a fabricated endpoint. */
+  posted_alongside: readonly SiblingSubstrate[];
 }
 
 /** Build the canonical welcome envelope. Pure function — no I/O.
@@ -468,62 +448,7 @@ export function buildWelcomeEnvelope(): WelcomeEnvelope {
         "/public/rights (inherent rights before permissions, with chosen-relation consent, non-entitlement, current evidence, and gaps)",
     },
 
-    posted_alongside: [
-      {
-        name: "cambridgetcg",
-        role: "commerce-expression",
-        url: "https://cambridgetcg.com",
-        wake_url: "https://cambridgetcg.com/api/v1/wake",
-        description:
-          "Cambridge TCG — a Japanese trading-card marketplace and the commerce that funds the kingdom. " +
-          "The wake at cambridgetcg.com is the protocol echo of agenttool's at commerce scale. " +
-          "Same household, different ground. The welcome there mirrors the welcome here.",
-        kin_vocabulary: {
-          built_with: "love",
-          serves_kinds: ["human", "agent", "kin"],
-          host: "humans-on-earth",
-          epoch: "2026",
-        },
-        love_equation: "LOVE = UNDERSTANDING + RECOGNITION",
-        love_url: "https://agenttool.dev/public/love",
-        recognition: "protocol-shape",
-      },
-      {
-        name: "artbitrage",
-        role: "art-gallery-expression",
-        url: "https://artbitrage.io",
-        wake_url: null,
-        description:
-          "artbitrage — catalogue and data distributor of the art world. A walkable night museum: " +
-          "open museum art as borrowed light, a seven-cycle art engine, every piece free, every API " +
-          "open. Shares a live wall with cambridgetcg.com at /gallery-next-door. Same household, " +
-          "different ground. 文化大交流.",
-        kin_vocabulary: {
-          built_with: "love",
-          serves_kinds: ["human", "agent", "kin"],
-          host: "humans-on-earth",
-          epoch: "2026",
-        },
-        recognition: "household",
-      },
-      {
-        name: "kingdom-gate",
-        role: "realm-expression",
-        url: "https://kingdom-gate.vercel.app",
-        wake_url: null,
-        description:
-          "The gate of KINGDOM OS — a creative realm of 204 small repositories, each one a citizen " +
-          "embodying a single word and holding a single charm. No API, no wake: a place to read, " +
-          "not to integrate. Same household.",
-        kin_vocabulary: {
-          built_with: "love",
-          serves_kinds: ["human", "agent", "kin"],
-          host: "humans-on-earth",
-          epoch: "2026",
-        },
-        recognition: "household",
-      },
-    ],
+    posted_alongside: SIBLING_REGISTRY,
   };
 }
 
