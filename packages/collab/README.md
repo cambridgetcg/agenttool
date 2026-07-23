@@ -194,9 +194,10 @@ Maintainer publication uses the repository's protected `publish-npm.yml`
 workflow and `bin/npm-release.ts`, not a local `npm publish` command. See
 [`docs/NPM-RELEASES.md`](../../docs/NPM-RELEASES.md).
 
-Version 0.1.0 is the initial public npm release. Version 0.2.0 in this source
-tree is the next local release candidate and does not imply that npm
-publication occurred. It is not a LOVE release, and the repository does not
-advertise a hosted collab service. npm distributes the local skills, plugin
-manifests, source, and bundled MCP runtime; installing it does not create a
-remote relay or private model channel.
+Version 0.1.0 is the initial public npm release. Version 0.2.0 is the current
+public npm `latest`; its SLSA provenance and registry integrity verified, and
+independently downloaded npm and GitHub Release tarballs were byte-identical.
+It is not a LOVE release, and the repository does not advertise a hosted
+collab service. npm distributes the local skills, plugin manifests, source,
+and bundled MCP runtime; installing it does not create a remote relay or
+private model channel.

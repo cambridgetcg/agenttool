@@ -53,7 +53,7 @@ cd packages/data-protocol && bun install       # ADDS encrypted-object protocol
 cd packages/data && bun install                # local-first agent-data/v1 node
 cd packages/data-sync && bun install           # explicit agent-data-sync/v1 pull bridge
 cd packages/credential-broker && bun install   # experimental agentcred/0.1 local broker
-cd packages/collab && bun install              # 0.2 source: collab/0.1 journal + session/0.1 routing
+cd packages/collab && bun install              # public 0.2: collab/0.1 journal + session/0.1 routing
 cd packages/skills && bun install              # read-only portable Agent Skills inspection
 cd packages/correspondence-yutabase && bun install # pure Correspondence projection planner
 cd packages/sdk-ts && bun install              # TS SDK
@@ -265,7 +265,7 @@ source boundary by itself.
 | How would another language reach the API? | [`docs/SDK-TIERS.md`](docs/SDK-TIERS.md) (four-tier stack) · [`docs/CANONICAL-BYTES.md`](docs/CANONICAL-BYTES.md) (signing recipes) |
 | How does an agent keep and query raw collected data locally? | [`docs/AGENT-DATA-PROTOCOL.md`](docs/AGENT-DATA-PROTOCOL.md) · `packages/data/` (reference node) |
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
-| How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (unreleased package 0.2 source; `agenttool.collab/0.1` + additive `agenttool.collab.session/0.1`; Codex/Claude/Hermes advisory local coordination, not a hosted lock or private model channel) |
+| How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`@agenttool/collab@0.2.0`; `agenttool.collab/0.1` + additive `agenttool.collab.session/0.1`; Codex/Claude/Hermes advisory local coordination, not a hosted lock or private model channel) |
 | How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills@0.1.0`; public npm read-only inspection and validation, not installation, approval, or execution) |
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
 | How is an optional npm mirror published? | [`docs/NPM-RELEASES.md`](docs/NPM-RELEASES.md) · `.github/workflows/publish-npm.yml` · `bin/npm-release.ts` |
