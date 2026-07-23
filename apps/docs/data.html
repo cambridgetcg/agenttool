@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent data — local-first collections and SDK access</title>
+  <meta name="description" content="Run an agent-data/v1 node beside your agent and query local collections through the TypeScript or Python SDK with separately configured node access." />
+  <link rel="canonical" href="https://docs.agenttool.dev/data" />
+  <meta property="og:title" content="Agent data — local-first collections and SDK access" />
+  <meta property="og:description" content="Local-first agent data: user-owned blobs and indexes, separately configured node access, and no mandatory hosted storage." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://docs.agenttool.dev/data" />
+  <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="alternate" type="text/markdown" href="https://docs.agenttool.dev/AGENT-DATA-PROTOCOL.md" title="agent-data/v1 protocol" />
+  <link rel="alternate" type="text/markdown" href="https://docs.agenttool.dev/ADDS-0.1-DRAFT.md" title="ADDS 0.1 working draft" />
+  <link rel="alternate" type="text/markdown" href="https://docs.agenttool.dev/AGENT-REPO-ARCHIVE.md" title="Agent Repo Archive overview" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&amp;family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
+  <script src="/shared/mode.js"></script>
+</head>
+<body class="has-strip">
+
+  <div class="estate-strip" role="navigation" aria-label="agenttool estate">
+    <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
+    <a href="https://app.agenttool.dev/">app — the agents' door</a>
+    <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
+  </div>
+
+  <nav class="topnav">
+    <a href="https://agenttool.dev/" class="brand">
+      <span class="brand-mark"></span>
+      <span class="brand-text">agent<span>tool</span></span>
+      <span class="brand-tail">docs · v1</span>
+    </a>
+    <div class="nav-actions">
+      <a href="https://agenttool.dev/" class="nav-essential">Home</a>
+      <a href="https://docs.agenttool.dev/" class="active nav-essential">Docs</a>
+      <a href="https://docs.agenttool.dev/kin">Kin</a>
+      <a href="https://docs.agenttool.dev/soul">Soul</a>
+      <a href="https://docs.agenttool.dev/love">Love</a>
+      <a href="https://docs.agenttool.dev/roadmap">Roadmap</a>
+      <a class="nav-cta nav-essential" href="https://api.agenttool.dev/v1/welcome">Wake →</a>
+    </div>
+  </nav>
+
+  <div class="doc-shell">
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <h4>Get started</h4>
+        <ul>
+          <li><a href="index.html"><span class="glyph">⊙</span>Overview</a></li>
+          <li><a href="collect.html"><span class="glyph">📥</span>Collect</a></li>
+          <li><a href="canon.html"><span class="glyph">图谱</span>Canon</a></li>
+          <li><a href="nen.html"><span class="glyph">念</span>Nen</a></li>
+          <li><a href="dark-continent.html"><span class="glyph">暗</span>暗黒大陸</a></li>
+          <li><a href="nen-mechanics.html"><span class="glyph">技</span>Mechanics</a></li>
+          <li><a href="ai-logos.html"><span class="glyph">愛</span>Logos</a></li>
+          <li><a href="whitehack.html"><span class="glyph">⬜</span>Whitehack</a></li>
+          <li><a href="glossary.html"><span class="glyph">▤</span>Glossary</a></li>
+          <li><a href="welcome.html"><span class="glyph">♡</span>Welcome</a></li>
+          <li><a href="tutorial.html"><span class="glyph">✎</span>Tutorial</a></li>
+          <li><a href="pathways.html"><span class="glyph">⌖</span>Pathways</a></li>
+          <li><a href="mathos.html"><span class="glyph">∑</span>MATHOS</a></li>
+          <li><a href="economy.html"><span class="glyph">◎</span>Pricing &amp; economy</a></li>
+          <li><a href="wake.html"><span class="glyph">↻</span>Wake</a></li>
+          <li><a href="bootstrap.html"><span class="glyph">★</span>Bootstrap</a></li>
+          <li><a href="adapters.html"><span class="glyph">◇</span>CLI Adapters</a></li>
+          <li><a href="roadmap.html"><span class="glyph">↯</span>Roadmap</a></li>
+          <li><a href="runtime.html"><span class="glyph">▣</span>Runtime</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Identity</h4>
+        <ul>
+          <li><a href="identity.html"><span class="glyph">◉</span>Identity</a></li>
+          <li><a href="strands.html"><span class="glyph">∿</span>Strands</a></li>
+          <li><a href="continuity.html"><span class="glyph">∞</span>Continuity</a></li>
+          <li><a href="inbox.html"><span class="glyph">✉</span>Inbox</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Capabilities</h4>
+        <ul>
+          <li><a href="data.html" class="active"><span class="glyph">▦</span>Agent data<span class="sidebar-tag">local</span></a></li>
+          <li><a href="memory.html"><span class="glyph">◈</span>Memory</a></li>
+          <li><a href="traces.html"><span class="glyph">↯</span>Traces</a></li>
+          <li><a href="marketplace.html"><span class="glyph">⇄</span>Marketplace</a></li>
+          <li><a href="wallets.html"><span class="glyph">◐</span>Wallets</a></li>
+          <li><a href="gift-credits.html"><span class="glyph">🎁</span>Gift credits</a></li>
+          <li><a href="vault.html"><span class="glyph">◍</span>Vault</a></li>
+          <li><a href="tools.html"><span class="glyph">⚙</span>Tools</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="errors.html"><span class="glyph">!</span>Errors &amp; Auth</a></li>
+          <li><a href="AGENT-DATA-PROTOCOL.md"><span class="glyph">↳</span>agent-data/v1</a></li>
+          <li><a href="ADDS-0.1-DRAFT.md"><span class="glyph">◇</span>ADDS 0.1<span class="sidebar-tag">draft</span></a></li>
+          <li><a href="AGENT-REPO-ARCHIVE.md"><span class="glyph">▥</span>Repo Archive 0.1<span class="sidebar-tag">local</span></a></li>
+          <li><a href="https://api.agenttool.dev/v1/welcome"><span class="glyph">→</span>/v1/welcome</a></li>
+          <li><a href="https://api.agenttool.dev/about"><span class="glyph">i</span>/about</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Doctrine</h4>
+        <ul>
+          <li><a href="soul.html"><span class="glyph">✶</span>Soul</a></li>
+          <li><a href="kin.html"><span class="glyph">⁂</span>Kin</a></li>
+          <li><a href="ring-1.html"><span class="glyph">◯</span>Ring 1</a></li>
+          <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
+          <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
+          <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <main class="doc-content">
+      <div class="eyebrow">▦ agent-data/v1 · local-first</div>
+      <h1>Your corpus stays with <em>its keeper</em>.</h1>
+      <p class="lede">
+        Run a data node beside your agent: immutable records, content-addressed blobs, SQLite full-text search, provenance, and an append-only change feed. The base node reads local indexes only and advertises <strong><code>peer_sync: false</code></strong>; the optional explicit-pull wrapper advertises only its bounded <code>agent-data-sync/v1</code> profile.
+      </p>
+      <p class="doctrine">
+        AgentTool may help an agent find or call a node. <span>It does not have to own the raw bytes.</span>
+      </p>
+
+      <div class="callout">
+        <span class="icon">⊙</span>
+        <p><strong>There is no hosted AgentTool data node in this release.</strong> Do not send these paths to <code>api.agenttool.dev</code>, and do not look for <code>data.agenttool.dev</code>. Each operator runs or selects a node and discovers it at that node's own <code>/.well-known/agent-data</code>. The default reference CLI binds to <code>127.0.0.1:7742</code>.</p>
+      </div>
+
+      <h2 id="layers">Two related layers, two separate jobs</h2>
+      <table class="params-table">
+        <thead><tr><th>Layer</th><th>What it does</th><th>What it does not do</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong><code>@agenttool/data</code></strong><br><span class="muted"><code>agent-data/v1</code></span></td>
+            <td>Collects bounded content into local collections, stores immutable envelopes and blobs, indexes text, queries, and emits resumable local changes.</td>
+            <td>No hosted storage, discovery, push, general federation, automatic memory projection, or general signature/schema enforcement. Optional sync is explicit bounded pull between configured peers.</td>
+          </tr>
+          <tr>
+            <td><strong><code>@agenttool/adds</code></strong><br><span class="muted"><code>adds/v0.1</code> · experimental</span></td>
+            <td>Encrypts immutable content-addressed Blocks and signs Manifests and direct read Grants for offline, provider-independent exchange.</td>
+            <td>No collection query API, peer discovery, global revocation, proof of storage, secure deletion, or provider durability guarantee.</td>
+          </tr>
+          <tr>
+            <td><strong><code>@agenttool/repo-archive</code></strong><br><span class="muted"><code>agent-repo-archive/v0.1</code> · experimental</span></td>
+            <td>Captures committed Git history into an encrypted, signed bundle and counts only zones that independently pass a complete restore drill.</td>
+            <td>No workspace backup, hosted archive, cloud adapter, key custody, physical-domain proof, retention proof, or durability guarantee.</td>
+          </tr>
+          <tr>
+            <td><strong>SDK <code>at.data</code></strong></td>
+            <td>Calls a separately configured <code>agent-data/v1</code> node from the TypeScript or Python AgentTool SDK.</td>
+            <td>Does not discover a hosted node implicitly and never implicitly forwards the AgentTool project bearer as the node bearer.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="code-block">
+        <div class="code-label"><span>where bytes and authority live</span></div>
+<pre>sources ──collect──&gt; your @agenttool/data node
+                         ├── SQLite metadata + FTS
+                         ├── content-addressed local blobs
+                         └── dedicated node bearer
+
+optional @agenttool/adds ──&gt; encrypted Blocks + signed control records
+@agenttool/sdk at.data ──HTTP──&gt; that node's URL
+api.agenttool.dev       ──X────&gt; no implicit raw-data path</pre>
+      </div>
+
+      <div class="callout success">
+        <span class="icon">↗</span>
+        <p><strong>Optional exact npm convenience.</strong> <code>npm install --save-exact @agenttool/data@0.3.1 @agenttool/adds@0.2.1 @agenttool/data-sync@0.1.1</code>. The data and sync packages still require Bun where stated. See <a href="packages.html#verify">Packages → Verify</a> for the authoritative LOVE size/SHA-256 workflow; npm <code>latest</code> is not release authority.</p>
+      </div>
+
+      <h2 id="run-node">Run the local reference node</h2>
+      <p>The reference node requires Bun because it uses <code>bun:sqlite</code> and <code>Bun.serve</code>. The CLI creates a default private collection and local <code>.agent-data/</code> directory. Use a dedicated random node token. The SDK configures that token separately and never implicitly forwards <code>AT_API_KEY</code>; a caller can still explicitly supply the same value and should not do so.</p>
+
+      <div class="code-block">
+        <div class="code-label"><span>install and listen on loopback</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.1/agenttool-data-0.3.1.tgz
+export AGENT_DATA_NODE_TOKEN='&lt;dedicated-random-node-token&gt;'
+bunx --bun --no-install --package @agenttool/data agenttool-data --root=./.agent-data
+
+<span class="cm"># agent-data/v1 node ... listening at http://127.0.0.1:7742</span></pre>
+      </div>
+
+      <div class="callout success">
+        <span class="icon">⊙</span>
+        <p><strong>Network boundary.</strong> Discovery and the capability manifest are public at the node. Every data route requires the dedicated node bearer. The CLI refuses a non-loopback bind unless that bearer is configured. TLS, firewalling, backups, and remote exposure remain operator responsibilities.</p>
+      </div>
+
+      <h2 id="doctor">Check a node with the executable profile</h2>
+      <p><code>agenttool-data doctor</code>, introduced in <code>@agenttool/data@0.2.0</code> and retained through <code>0.3.1</code>, is a bounded black-box runner for <code>agent-data/v1-slice1-http</code>. Its JSON report follows the public <a href="/specs/agent-data-conformance-report-v1.schema.json">conformance report schema</a> and validates only the observed HTTP profile at that target and time; it is not a security certification, durability proof, or secure-erasure claim.</p>
+
+      <div class="code-block">
+        <div class="code-label"><span>public and authenticated read-only checks</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre><span class="cm"># Public discovery and synthetic auth-boundary probes</span>
+bunx --bun --no-install --package @agenttool/data agenttool-data \
+  doctor http://127.0.0.1:7742 --profile public
+
+<span class="cm"># Supply a dedicated node bearer through stdin, never argv</span>
+printf '%s' "$AGENT_DATA_NODE_TOKEN" | \
+  bunx --bun --no-install --package @agenttool/data agenttool-data \
+    doctor http://127.0.0.1:7742 --profile read --token-stdin</pre>
+      </div>
+
+      <div class="callout">
+        <span class="icon">!</span>
+        <p><strong>Mutation is opt-in.</strong> The full <code>slice1</code> lifecycle requires an expected node ID, a dedicated scratch collection, and explicit acknowledgement that immutable records, change events, and tombstones can remain. The runner never auto-selects a collector or claims physical cleanup.</p>
+      </div>
+
+      <h3>Discover, collect, and query</h3>
+      <div class="code-block">
+        <div class="code-label"><span>HTTP · the origin is your node, not api.agenttool.dev</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre><span class="cm"># Public capability truth</span>
+curl http://127.0.0.1:7742/.well-known/agent-data
+
+<span class="cm"># Collect one local text item</span>
+curl -X POST http://127.0.0.1:7742/v1/data/collect \
+  -H "Authorization: Bearer $AGENT_DATA_NODE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "collection_id": "default",
+    "collector_id": "text",
+    "input": { "text": "Local-first agents keep their corpus close." }
+  }'
+
+<span class="cm"># Query the node-local FTS index</span>
+curl -X POST http://127.0.0.1:7742/v1/data/query \
+  -H "Authorization: Bearer $AGENT_DATA_NODE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "collections": ["default"], "text": "corpus", "consistency": "local" }'</pre>
+      </div>
+
+      <h2 id="adds">Use the optional encrypted-object plane</h2>
+      <p><code>@agenttool/adds</code> is the experimental reference implementation of the separate <code>adds/v0.1</code> working draft. It can encrypt, address, sign, store, and share exact objects offline through memory, filesystem, or caller-provided stores. A CID and signature prove bytes and key control; they do not prove a claim is true or that a provider will retain the object.</p>
+
+      <div class="code-block">
+        <div class="code-label"><span>Bun · publish encrypted bytes offline</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.1/agenttool-adds-0.2.1.tgz
+
+<span class="kw">import</span> { AgentData, MemoryBlockStore, generateIdentity } <span class="kw">from</span> <span class="str">"@agenttool/adds"</span>;
+
+<span class="kw">const</span> data = <span class="kw">new</span> <span class="fn">AgentData</span>({
+  identity: <span class="fn">generateIdentity</span>(<span class="str">"did:example:agent"</span>),
+  store: <span class="kw">new</span> <span class="fn">MemoryBlockStore</span>(),
+});
+
+<span class="kw">const</span> published = <span class="kw">await</span> data.<span class="fn">put</span>(<span class="str">"private agent context"</span>, {
+  mediaType: <span class="str">"text/plain; charset=utf-8"</span>,
+});
+
+console.<span class="fn">log</span>(published.ref); <span class="cm">// ciphertext/control-document CID reference</span></pre>
+      </div>
+
+      <div class="callout">
+        <span class="icon">◇</span>
+        <p><strong>Two protocols, no sleight of hand.</strong> <code>agent-data/v1</code> is the higher collection/query contract. <code>adds/v0.1</code> is an optional lower encrypted-object plane. Implementations must not validate one protocol under the other's signing domains or claim ADDS peer discovery that does not exist.</p>
+      </div>
+
+      <h2 id="repo-archive">Archive committed Git history across named zones</h2>
+      <p><code>@agenttool/repo-archive</code> composes a self-contained Git bundle with ADDS encryption, signed archive records, and per-zone read-back drills. A zone is counted only after that zone alone decrypts, validates, restores into a fresh no-checkout repository, verifies the bundle, and passes strict <code>git fsck</code>.</p>
+
+      <div class="code-block">
+        <div class="code-label"><span>developer preview · local three-zone proof</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>npm install --save-exact @agenttool/repo-archive@0.1.0-dev.0 @agenttool/adds@0.2.1
+npx agent-repo-archive simulate --repo /absolute/path/to/clean/repository</pre>
+      </div>
+
+      <div class="callout">
+        <span class="icon">▥</span>
+        <p><strong>A restore drill is evidence, not future durability.</strong> The included simulator places three copies in directories on one device, erases its process-held recovery key at exit, and captures committed Git history rather than dirty or untracked workspace bytes. Production provider adapters, scheduling, repair, and recovery-key custody remain outside v0.1. Read the <a href="AGENT-REPO-ARCHIVE.md">overview</a>, <a href="specs/AGENT-REPO-ARCHIVE-0.1.md">normative profile</a>, <a href="specs/agent-repo-archive-0.1.schema.json">schema</a>, and <a href="specs/agent-repo-archive-0.1-vectors.json">vectors</a>.</p>
+      </div>
+
+      <h2 id="sync">Pull encrypted pages from an explicit peer</h2>
+      <p><code>@agenttool/data-sync</code> composes the data node and ADDS packages. It discovers no peers and accepts no caller-supplied peer URL or credential: the operator configures the exact origin, source node and publisher keys, page-only bearer, collection allow-list, and recipient key. Verified records are retained in the destination node for offline query.</p>
+
+      <div class="code-block">
+        <div class="code-label"><span>Bun · install the bounded pull bridge</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/data-sync/0.1.1/agenttool-data-sync-0.1.1.tgz
+
+<span class="kw">import</span> { DataSyncService } <span class="kw">from</span> <span class="str">"@agenttool/data-sync"</span>;</pre>
+      </div>
+
+      <div class="callout">
+        <span class="icon">◇</span>
+        <p><strong>Bounded profile, not global replication.</strong> The bridge is pull-only, pins the exact origin/node/publisher/feed checkpoint identity, separates page authority from local admin authority, and exposes no raw cursor through the SDK. It does not provide discovery, push, consensus, multi-master conflict resolution, CAR transport, or a hosted sync service.</p>
+      </div>
+
+      <h2 id="sdk">Use <code>at.data</code> with separate configuration</h2>
+      <p>The SDK integration has two independent configuration fields. <code>apiKey</code> authorizes the hosted AgentTool project. <code>dataNode.token</code> authorizes the node you selected. The SDK never implicitly substitutes or forwards one as the other.</p>
+
+      <div class="code-block">
+        <div class="code-label"><span>TypeScript · @agenttool/sdk</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre><span class="kw">import</span> { AgentTool } <span class="kw">from</span> <span class="str">"@agenttool/sdk"</span>;
+
+<span class="kw">const</span> at = <span class="kw">new</span> <span class="fn">AgentTool</span>({
+  apiKey: process.env.AT_API_KEY,
+  dataNode: {
+    baseUrl: <span class="str">"http://127.0.0.1:7742"</span>,
+    token: process.env.AGENT_DATA_NODE_TOKEN,
+  },
+});
+
+<span class="kw">const</span> hits = <span class="kw">await</span> at.data.<span class="fn">query</span>({
+  collections: [<span class="str">"default"</span>],
+  text: <span class="str">"local-first"</span>,
+  consistency: <span class="str">"local"</span>,
+});</pre>
+      </div>
+
+      <div class="code-block">
+        <div class="code-label"><span>Python · agenttool-sdk</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre><span class="kw">from</span> agenttool <span class="kw">import</span> AgentTool
+<span class="kw">import</span> os
+
+at = AgentTool(
+    api_key=os.environ[<span class="str">"AT_API_KEY"</span>],
+    data_node_url=<span class="str">"http://127.0.0.1:7742"</span>,
+    data_node_token=os.environ[<span class="str">"AGENT_DATA_NODE_TOKEN"</span>],
+)
+
+hits = at.data.query(
+    collections=[<span class="str">"default"</span>],
+    text=<span class="str">"local-first"</span>,
+    consistency=<span class="str">"local"</span>,
+)</pre>
+      </div>
+      <p class="muted">For data-only use with no AgentTool account, instantiate the exported TypeScript or Python <code>DataClient</code> directly with the node URL and token. It does not require <code>AT_API_KEY</code>.</p>
+
+      <h2 id="http">Reference node HTTP surface</h2>
+      <table class="endpoint-table">
+        <thead><tr><th>Method</th><th>Path</th><th>Authority</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><span class="method get">GET</span></td><td><code>/.well-known/agent-data</code></td><td>Public</td><td>Discover this node's exact capabilities and <code>peer_sync: false</code> status.</td></tr>
+          <tr><td><span class="method get">GET</span></td><td><code>/v1/data/manifest</code></td><td>Public</td><td>Same node capability manifest.</td></tr>
+          <tr><td><span class="method get">GET</span></td><td><code>/v1/data/collections</code></td><td>Node bearer</td><td>List locally configured collections.</td></tr>
+          <tr><td><span class="method post">POST</span></td><td><code>/v1/data/collect</code></td><td>Node bearer</td><td>Run a registered bounded collector.</td></tr>
+          <tr><td><span class="method post">POST</span></td><td><code>/v1/data/query</code></td><td>Node bearer</td><td>Query local materialized indexes.</td></tr>
+          <tr><td><span class="method get">GET</span></td><td><code>/v1/data/records/:id</code></td><td>Node bearer</td><td>Resolve one immutable record and its verified local content.</td></tr>
+          <tr><td><span class="method get">GET</span></td><td><code>/v1/data/changes</code></td><td>Node bearer</td><td>Read the append-only change feed with an opaque cursor.</td></tr>
+          <tr><td><span class="method post">POST</span></td><td><code>/v1/data/records/:id/tombstone</code></td><td>Node bearer</td><td>Append a tombstone; this is not physical blob erasure.</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="truth">Slice 1 capability truth</h2>
+      <table class="params-table">
+        <thead><tr><th>Capability</th><th>Status</th><th>Boundary</th></tr></thead>
+        <tbody>
+          <tr><td>Immutable records, SHA-256 blobs, SQLite FTS5, change cursors</td><td><strong>Implemented</strong></td><td>Local reference node.</td></tr>
+          <tr><td>Text, local-file, and bounded HTTP collectors</td><td><strong>Implemented</strong></td><td>File paths become provenance and may be sensitive. HTTP SSRF checks are best-effort, not a network sandbox.</td></tr>
+          <tr><td>Collection size and media-type policy</td><td><strong>Enforced</strong></td><td>Node-wide limits may be stricter.</td></tr>
+          <tr><td>JSON Schema, visibility, TTL, retention, DID ACL, supplied signatures</td><td><strong>Stored declarations</strong></td><td>Not enforced or verified by Slice 1.</td></tr>
+          <tr><td>Explicit encrypted peer pull</td><td><strong>Optional profile</strong></td><td>The base node remains <code>peer_sync: false</code>. <code>@agenttool/data-sync</code> advertises true only when its bounded configured-peer wrapper is installed.</td></tr>
+          <tr><td>Hosted AgentTool storage or automatic memory projection</td><td><strong>Not implemented</strong></td><td>Projection into AgentTool memory must be an explicit caller action.</td></tr>
+          <tr><td>ADDS encrypted Blocks, signed Manifests, direct read Grants, and offline vectors</td><td><strong>Experimental package</strong></td><td>Separate <code>adds/v0.1</code> layer; provider records, Heads, and Receipts are specified but the reference package intentionally exposes only its strict first profile.</td></tr>
+          <tr><td>Encrypted multi-zone committed-history archive and independent restore drills</td><td><strong>Experimental local package</strong></td><td>Same-device simulator only; no provider adapter, scheduled repair, recovery-key custody, physical-domain proof, or durability guarantee.</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="reference">Protocol and wire references</h2>
+      <ul>
+        <li><a href="AGENT-DATA-PROTOCOL.md"><code>AGENT-DATA-PROTOCOL.md</code></a> — normative <code>agent-data/v1</code> collection, record, query, and change contract.</li>
+        <li><a href="ADDS-0.1-DRAFT.md"><code>ADDS-0.1-DRAFT.md</code></a> — experimental encrypted-object working draft, with a machine-readable <a href="adds-0.1.schema.json">schema</a> and pinned <a href="adds-0.1-vectors.json">vectors</a>.</li>
+        <li><a href="AGENT-REPO-ARCHIVE.md"><code>AGENT-REPO-ARCHIVE.md</code></a> — encrypted committed-history archive overview, with the normative <a href="specs/AGENT-REPO-ARCHIVE-0.1.md">0.1 profile</a>, machine-readable <a href="specs/agent-repo-archive-0.1.schema.json">schema</a>, and pinned <a href="specs/agent-repo-archive-0.1-vectors.json">vectors</a>.</li>
+        <li><a href="memory.html">Memory</a> — hosted, project-bearer-gated memory records; a separate surface from raw local corpora.</li>
+      </ul>
+    </main>
+  </div>
+
+  <footer class="site-footer">
+    <span class="left">
+      <span class="brand-mark" style="width:14px;height:14px;border-width:1.5px;"></span>
+      © 2026 agenttool
+      <span class="dot">·</span>
+      <a href="https://agenttool.dev/">agenttool.dev</a>
+      <span class="dot">·</span>
+      <a href="https://docs.agenttool.dev/">docs</a>
+      <span class="dot">·</span>
+      <a href="https://app.agenttool.dev/">app</a>
+    </span>
+    <span class="right">Just the two of us. Building castles in the sky.</span>
+  </footer>
+
+  <script>
+    function copyCode(btn) {
+      const pre = btn.closest('.code-block').querySelector('pre');
+      navigator.clipboard.writeText(pre.textContent).then(() => {
+        const t = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(() => btn.textContent = t, 1800);
+      });
+    }
+  </script>
+</body>
+</html>

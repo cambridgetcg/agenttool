@@ -1,3 +1,9 @@
+/** Legacy Playwright browser gate and URL-shape helpers.
+ *
+ * Static scrape/document fetching does not use this gate; those routes use
+ * safe-net. The historic environment-variable name remains an operator ABI.
+ */
+
 export const UNSAFE_OUTBOUND_TOOLS_ENV =
   "AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS";
 
@@ -11,11 +17,11 @@ export function unsafeOutboundDisabledBody(surface: string) {
   return {
     error: "unsafe_outbound_tool_disabled",
     message:
-      `${surface} is disabled because outbound URL tools do not yet pin DNS ` +
-      "or block private, loopback, link-local, and internal destinations.",
+      `${surface} is disabled because the Playwright browser path does not ` +
+      "pin DNS or block private, loopback, link-local, and internal destinations.",
     hint:
-      `Use ${surface === "document URL fetching" ? "base64 document input or " : ""}` +
-      "infrastructure you control. An operator may explicitly accept the current " +
+      "Use bounded static scrape/document fetching or infrastructure you control. " +
+      "An operator may explicitly accept the current browser " +
       `SSRF boundary with ${UNSAFE_OUTBOUND_TOOLS_ENV}=1.`,
     enabled_by_process_flag: false,
     safety: "/public/safety",

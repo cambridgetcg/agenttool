@@ -273,9 +273,13 @@ describe("public identity paths", () => {
           expect(statement).toContain("eq(identities.id, i.id)");
           continue;
         }
-        expect(statement).toMatch(
-          /mutableIdentityPredicate\(|eq\(identities\.status,/,
-        );
+        if (statement.includes("and(...updatePredicates)")) {
+          expect(source).toMatch(
+            /const updatePredicates = \[[\s\S]*?eq\(identities\.status, identity\.status\)[\s\S]*?\];/,
+          );
+          continue;
+        }
+        expect(statement).toMatch(/mutableIdentityPredicate\(|eq\(identities\.status,/);
       }
 
       if (/UPDATE\s+identity\.identities/i.test(source)) {

@@ -1,0 +1,73 @@
+{
+  "name": "@agenttool/collab",
+  "version": "0.3.0",
+  "description": "Local-first presence and credential-bound coordination for coding agents",
+  "author": "AgentTool contributors",
+  "homepage": "https://github.com/cambridgetcg/agenttool/tree/main/packages/collab#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "directory": "packages/collab"
+  },
+  "bugs": {
+    "url": "https://github.com/cambridgetcg/agenttool/issues"
+  },
+  "type": "module",
+  "main": "src/index.ts",
+  "module": "src/index.ts",
+  "bin": {
+    "agenttool-collab-mcp": "./dist/agenttool-collab-mcp.js"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./protocol": "./src/protocol.ts",
+    "./mcp": "./src/mcp.ts"
+  },
+  "files": [
+    "src",
+    "bin",
+    "dist",
+    "scripts",
+    "skills",
+    "integrations",
+    ".codex-plugin",
+    ".claude-plugin",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "THIRD_PARTY_LICENSES"
+  ],
+  "scripts": {
+    "build:mcp": "bun scripts/build-mcp-bundle.ts",
+    "check:mcp-bundle": "bun scripts/check-mcp-bundle.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "ci": "bun run typecheck && bun test && bun run check:mcp-bundle",
+    "prepack": "bun run build:mcp && bun run ci"
+  },
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "bun": ">=1.3"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0-beta.5",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.7.0"
+  },
+  "keywords": [
+    "agents",
+    "claude-code",
+    "codex",
+    "collaboration",
+    "hermes-agent",
+    "local-first",
+    "mcp",
+    "sqlite"
+  ]
+}

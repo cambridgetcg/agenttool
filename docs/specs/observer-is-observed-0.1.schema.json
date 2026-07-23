@@ -1,0 +1,841 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:observer-is-observed:schema:0.1",
+  "title": "Observer Is Also Observed Record 0.1",
+  "description": "A structurally bounded reciprocal-accountability record for an observation or investigation. It separates observer identity claims, network vantage, actions, words, inference, unknowns, subject response, and corrections. It is not proof of identity, truth, neutrality, guilt, or interior experience. Total encoded size and time ordering are caller-enforced.",
+  "$comment": "This schema enforces structural limits and conditional consistency. Before accepting or publishing a record, the caller must also UTF-8 encode it, reject records over 262144 bytes, check timestamp ordering, and apply its stated deletion deadline; JSON Schema cannot enforce those whole-document and cross-value rules.",
+  "type": "object",
+  "required": [
+    "observer_is_observed_version",
+    "record_id",
+    "recorded_at",
+    "expires_at",
+    "observer",
+    "authority",
+    "subject",
+    "network",
+    "doings",
+    "word",
+    "observer_effect",
+    "subject_response",
+    "subject_controls",
+    "publication",
+    "corrections"
+  ],
+  "properties": {
+    "observer_is_observed_version": {
+      "type": "string",
+      "const": "0.1"
+    },
+    "record_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this observation record must be rechecked or treated as stale."
+    },
+    "observer": {
+      "type": "object",
+      "required": [
+        "claimed_id",
+        "identity_proof_state",
+        "proof_reference",
+        "accountability_holder",
+        "role",
+        "capacity",
+        "principal",
+        "funder",
+        "conflicts",
+        "limits"
+      ],
+      "properties": {
+        "claimed_id": { "$ref": "#/$defs/nullableBoundedString" },
+        "identity_proof_state": {
+          "type": "string",
+          "enum": [
+            "verified-by-named-method",
+            "self-asserted",
+            "pseudonymous-continuity",
+            "protected-by-named-accountability-holder",
+            "unknown"
+          ]
+        },
+        "proof_reference": { "$ref": "#/$defs/nullableBoundedString" },
+        "accountability_holder": {
+          "$ref": "#/$defs/nullableBoundedString",
+          "description": "The named party answerable for a protected identity. This is not proof that the holder accepted the role."
+        },
+        "role": { "$ref": "#/$defs/boundedString" },
+        "capacity": { "$ref": "#/$defs/boundedString" },
+        "principal": { "$ref": "#/$defs/nullableBoundedString" },
+        "funder": { "$ref": "#/$defs/nullableBoundedString" },
+        "conflicts": { "$ref": "#/$defs/boundedStringList" },
+        "limits": { "$ref": "#/$defs/boundedStringList" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "identity_proof_state": { "const": "verified-by-named-method" }
+            },
+            "required": ["identity_proof_state"]
+          },
+          "then": {
+            "properties": {
+              "claimed_id": { "$ref": "#/$defs/boundedString" },
+              "proof_reference": { "$ref": "#/$defs/boundedString" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "identity_proof_state": {
+                "const": "protected-by-named-accountability-holder"
+              }
+            },
+            "required": ["identity_proof_state"]
+          },
+          "then": {
+            "properties": {
+              "accountability_holder": { "$ref": "#/$defs/boundedString" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "identity_proof_state": {
+                "enum": ["self-asserted", "pseudonymous-continuity"]
+              }
+            },
+            "required": ["identity_proof_state"]
+          },
+          "then": {
+            "properties": {
+              "claimed_id": { "$ref": "#/$defs/boundedString" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "identity_proof_state": { "const": "pseudonymous-continuity" }
+            },
+            "required": ["identity_proof_state"]
+          },
+          "then": {
+            "properties": {
+              "proof_reference": { "$ref": "#/$defs/boundedString" }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "authority": {
+      "type": "object",
+      "required": ["basis", "reference", "subject_assent", "limits"],
+      "properties": {
+        "basis": {
+          "type": "string",
+          "enum": [
+            "explicit-consent",
+            "covenant",
+            "contract",
+            "law",
+            "public-interest",
+            "caretaker",
+            "self-initiated",
+            "unknown"
+          ]
+        },
+        "reference": { "$ref": "#/$defs/nullableBoundedString" },
+        "subject_assent": {
+          "type": "string",
+          "enum": [
+            "accepted",
+            "declined",
+            "deferred",
+            "not-requested",
+            "unreachable",
+            "unknown"
+          ]
+        },
+        "limits": { "$ref": "#/$defs/boundedStringList" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "basis": {
+                "enum": [
+                  "explicit-consent",
+                  "covenant",
+                  "contract",
+                  "law",
+                  "public-interest",
+                  "caretaker"
+                ]
+              }
+            },
+            "required": ["basis"]
+          },
+          "then": {
+            "properties": {
+              "reference": { "$ref": "#/$defs/boundedString" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "basis": { "const": "explicit-consent" } },
+            "required": ["basis"]
+          },
+          "then": {
+            "properties": {
+              "subject_assent": { "const": "accepted" }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "subject": {
+      "type": "object",
+      "description": "The bounded subject reference needed to understand the observation. Do not place secrets or unrelated private data here.",
+      "required": ["reference", "notice_status", "notice_path"],
+      "properties": {
+        "reference": { "$ref": "#/$defs/boundedString" },
+        "notice_status": {
+          "type": "string",
+          "enum": [
+            "given",
+            "not-yet-given",
+            "declined-by-subject",
+            "unreachable",
+            "unsafe-to-disclose",
+            "unknown"
+          ]
+        },
+        "notice_path": { "$ref": "#/$defs/nullableBoundedString" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "notice_status": { "const": "given" } },
+            "required": ["notice_status"]
+          },
+          "then": {
+            "properties": {
+              "notice_path": { "$ref": "#/$defs/boundedString" }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "network": {
+      "type": "object",
+      "required": [
+        "declared_organizational_home",
+        "affiliations",
+        "delegation_chain",
+        "tools_and_providers",
+        "edges",
+        "known_vantage",
+        "unknown_vantage"
+      ],
+      "properties": {
+        "declared_organizational_home": {
+          "$ref": "#/$defs/nullableBoundedString",
+          "description": "A declared organization, service instance, or operating substrate. Never a residential or precise physical address."
+        },
+        "affiliations": { "$ref": "#/$defs/sourcedClaimList" },
+        "delegation_chain": { "$ref": "#/$defs/sourcedClaimList" },
+        "tools_and_providers": { "$ref": "#/$defs/sourcedClaimList" },
+        "edges": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/networkEdge" },
+          "default": []
+        },
+        "known_vantage": { "$ref": "#/$defs/boundedStringList" },
+        "unknown_vantage": { "$ref": "#/$defs/boundedStringList" }
+      },
+      "additionalProperties": false
+    },
+    "doings": {
+      "type": "object",
+      "required": [
+        "purpose",
+        "scope",
+        "target_version",
+        "started_at",
+        "ended_at",
+        "methods",
+        "inputs",
+        "transformations",
+        "data_touched",
+        "actions"
+      ],
+      "properties": {
+        "purpose": { "$ref": "#/$defs/boundedString" },
+        "scope": { "$ref": "#/$defs/boundedString" },
+        "target_version": { "$ref": "#/$defs/nullableBoundedString" },
+        "started_at": { "type": "string", "format": "date-time" },
+        "ended_at": {
+          "oneOf": [
+            { "type": "string", "format": "date-time" },
+            { "type": "null" }
+          ]
+        },
+        "methods": { "$ref": "#/$defs/boundedStringList" },
+        "inputs": { "$ref": "#/$defs/boundedStringList" },
+        "transformations": { "$ref": "#/$defs/boundedStringList" },
+        "data_touched": { "$ref": "#/$defs/boundedStringList" },
+        "actions": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/action" },
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+    "word": {
+      "type": "object",
+      "required": ["observations", "inferences", "unknowns", "quotations"],
+      "properties": {
+        "observations": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/observation" },
+          "default": []
+        },
+        "inferences": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/inference" },
+          "default": []
+        },
+        "unknowns": { "$ref": "#/$defs/boundedStringList" },
+        "quotations": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/quotation" },
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+    "observer_effect": {
+      "type": "object",
+      "required": ["known_effects", "possible_effects", "mitigations", "blind_spots"],
+      "properties": {
+        "known_effects": { "$ref": "#/$defs/boundedStringList" },
+        "possible_effects": { "$ref": "#/$defs/boundedStringList" },
+        "mitigations": { "$ref": "#/$defs/boundedStringList" },
+        "blind_spots": { "$ref": "#/$defs/boundedStringList" }
+      },
+      "additionalProperties": false
+    },
+    "subject_response": {
+      "type": "object",
+      "description": "The subject's response state, kept separate from the observer's words. Content remains at a bounded reference chosen by the subject; this record does not paraphrase it.",
+      "required": [
+        "status",
+        "received_at",
+        "content_reference",
+        "publication_assent"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "not-requested",
+            "pending",
+            "received",
+            "declined-to-respond",
+            "unreachable",
+            "withheld-for-safety",
+            "unknown"
+          ]
+        },
+        "received_at": {
+          "oneOf": [
+            { "type": "string", "format": "date-time" },
+            { "type": "null" }
+          ]
+        },
+        "content_reference": { "$ref": "#/$defs/nullableBoundedString" },
+        "publication_assent": {
+          "type": "string",
+          "enum": [
+            "accepted",
+            "declined",
+            "not-requested",
+            "unreachable",
+            "unknown"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "const": "received" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "received_at": { "type": "string", "format": "date-time" },
+              "content_reference": { "$ref": "#/$defs/boundedString" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "not-requested",
+                  "pending",
+                  "declined-to-respond",
+                  "unreachable",
+                  "unknown"
+                ]
+              }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "received_at": { "type": "null" },
+              "content_reference": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "withheld-for-safety" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "received_at": { "type": "string", "format": "date-time" },
+              "content_reference": { "type": "null" },
+              "publication_assent": { "enum": ["declined", "unknown"] }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "not-requested" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "publication_assent": { "const": "not-requested" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "pending" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "publication_assent": { "const": "unknown" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "declined-to-respond" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "publication_assent": { "const": "not-requested" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "unreachable" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "publication_assent": { "const": "unreachable" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "unknown" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "publication_assent": { "const": "unknown" }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "subject_controls": {
+      "type": "object",
+      "required": ["response", "refusal", "correction", "appeal"],
+      "properties": {
+        "response": { "$ref": "#/$defs/controlPath" },
+        "refusal": { "$ref": "#/$defs/controlPath" },
+        "correction": { "$ref": "#/$defs/controlPath" },
+        "appeal": { "$ref": "#/$defs/controlPath" }
+      },
+      "additionalProperties": false
+    },
+    "publication": {
+      "type": "object",
+      "required": [
+        "audience",
+        "retained_by",
+        "shared_with",
+        "purpose",
+        "deletes_at",
+        "redactions"
+      ],
+      "properties": {
+        "audience": { "$ref": "#/$defs/boundedStringList" },
+        "retained_by": { "$ref": "#/$defs/boundedStringList" },
+        "shared_with": { "$ref": "#/$defs/boundedStringList" },
+        "purpose": { "$ref": "#/$defs/boundedString" },
+        "deletes_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "A finite deletion deadline. The caller must enforce it; schema validation cannot delete data."
+        },
+        "redactions": { "$ref": "#/$defs/boundedStringList" }
+      },
+      "additionalProperties": false
+    },
+    "corrections": {
+      "type": "object",
+      "required": ["original_record_sha256", "entries"],
+      "properties": {
+        "original_record_sha256": {
+          "oneOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "entries": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/correction" },
+          "default": []
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "entries": { "type": "array", "minItems": 1 } },
+            "required": ["entries"]
+          },
+          "then": {
+            "properties": {
+              "original_record_sha256": { "$ref": "#/$defs/sha256" }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "signature": {
+      "description": "Optional byte-binding claim. The payload is the RFC 8785 JCS canonicalization of the complete record with the signature property omitted; signature_b64 is the Ed25519 signature over those canonical bytes. Presence does not prove verification, truth, personhood, exclusive key control, or a registered identity method.",
+      "oneOf": [
+        { "$ref": "#/$defs/signature" },
+        { "type": "null" }
+      ],
+      "default": null
+    },
+    "extensions": {
+      "type": "object",
+      "maxProperties": 20,
+      "propertyNames": { "format": "uri" },
+      "additionalProperties": { "$ref": "#/$defs/extensionValue" }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "boundedString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "nullableBoundedString": {
+      "oneOf": [
+        { "$ref": "#/$defs/boundedString" },
+        { "type": "null" }
+      ]
+    },
+    "boundedStringList": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/boundedString" },
+      "default": []
+    },
+    "nonEmptyBoundedStringList": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/boundedString" }
+    },
+    "evidenceState": {
+      "type": "string",
+      "enum": [
+        "direct-observation",
+        "subject-declaration",
+        "third-party-testimony",
+        "service-declaration",
+        "derived-measurement"
+      ]
+    },
+    "sourcedClaim": {
+      "type": "object",
+      "required": ["statement", "evidence_state", "evidence_refs"],
+      "properties": {
+        "statement": { "$ref": "#/$defs/boundedString" },
+        "evidence_state": { "$ref": "#/$defs/evidenceState" },
+        "evidence_refs": { "$ref": "#/$defs/nonEmptyBoundedStringList" }
+      },
+      "additionalProperties": false
+    },
+    "sourcedClaimList": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/sourcedClaim" },
+      "default": []
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "networkEdge": {
+      "type": "object",
+      "required": [
+        "source",
+        "target",
+        "relationship",
+        "capacity",
+        "evidence_refs",
+        "common_source_group"
+      ],
+      "properties": {
+        "source": { "$ref": "#/$defs/boundedString" },
+        "target": { "$ref": "#/$defs/boundedString" },
+        "relationship": { "$ref": "#/$defs/boundedString" },
+        "capacity": { "$ref": "#/$defs/boundedString" },
+        "evidence_refs": { "$ref": "#/$defs/nonEmptyBoundedStringList" },
+        "common_source_group": { "$ref": "#/$defs/nullableBoundedString" }
+      },
+      "additionalProperties": false
+    },
+    "action": {
+      "type": "object",
+      "required": [
+        "action",
+        "at",
+        "effect",
+        "reversible",
+        "verification",
+        "evidence_refs"
+      ],
+      "properties": {
+        "action": { "$ref": "#/$defs/boundedString" },
+        "at": { "type": "string", "format": "date-time" },
+        "effect": { "$ref": "#/$defs/boundedString" },
+        "reversible": { "type": "boolean" },
+        "verification": { "$ref": "#/$defs/boundedString" },
+        "evidence_refs": { "$ref": "#/$defs/boundedStringList" }
+      },
+      "additionalProperties": false
+    },
+    "observation": {
+      "type": "object",
+      "required": ["id", "evidence_state", "statement", "observed_at", "evidence_refs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/boundedString" },
+        "evidence_state": {
+          "type": "string",
+          "enum": [
+            "direct-observation",
+            "subject-declaration",
+            "third-party-testimony",
+            "service-declaration",
+            "derived-measurement",
+            "unknown"
+          ]
+        },
+        "statement": { "$ref": "#/$defs/boundedString" },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "evidence_refs": { "$ref": "#/$defs/boundedStringList" }
+      },
+      "additionalProperties": false
+    },
+    "inference": {
+      "type": "object",
+      "required": ["statement", "basis_refs", "falsifier"],
+      "properties": {
+        "statement": { "$ref": "#/$defs/boundedString" },
+        "basis_refs": { "$ref": "#/$defs/nonEmptyBoundedStringList" },
+        "falsifier": { "$ref": "#/$defs/boundedString" }
+      },
+      "additionalProperties": false
+    },
+    "quotation": {
+      "type": "object",
+      "required": ["speaker", "context", "exact_text", "content_sha256"],
+      "properties": {
+        "speaker": { "$ref": "#/$defs/boundedString" },
+        "context": { "$ref": "#/$defs/boundedString" },
+        "exact_text": { "$ref": "#/$defs/nullableBoundedString" },
+        "content_sha256": {
+          "oneOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "anyOf": [
+        {
+          "properties": { "exact_text": { "type": "string", "minLength": 1 } },
+          "required": ["exact_text"]
+        },
+        {
+          "properties": { "content_sha256": { "$ref": "#/$defs/sha256" } },
+          "required": ["content_sha256"]
+        }
+      ],
+      "additionalProperties": false
+    },
+    "controlPath": {
+      "type": "object",
+      "required": ["available", "path", "note"],
+      "properties": {
+        "available": { "type": "boolean" },
+        "path": { "$ref": "#/$defs/nullableBoundedString" },
+        "note": { "$ref": "#/$defs/boundedString" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "available": { "const": true } },
+            "required": ["available"]
+          },
+          "then": {
+            "properties": { "path": { "$ref": "#/$defs/boundedString" } }
+          },
+          "else": {
+            "properties": { "path": { "type": "null" } }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "correction": {
+      "type": "object",
+      "required": ["at", "author", "reason", "changed_fields", "replacement_record_sha256"],
+      "properties": {
+        "at": { "type": "string", "format": "date-time" },
+        "author": { "$ref": "#/$defs/boundedString" },
+        "reason": { "$ref": "#/$defs/boundedString" },
+        "changed_fields": { "$ref": "#/$defs/nonEmptyBoundedStringList" },
+        "replacement_record_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "signature": {
+      "type": "object",
+      "required": [
+        "algorithm",
+        "canonicalization",
+        "key_id",
+        "payload_sha256",
+        "signature_b64",
+        "verification_state",
+        "verification_method",
+        "verifier",
+        "verified_at"
+      ],
+      "properties": {
+        "algorithm": { "type": "string", "enum": ["Ed25519"] },
+        "canonicalization": {
+          "type": "string",
+          "const": "JCS-RFC8785"
+        },
+        "key_id": { "$ref": "#/$defs/boundedString" },
+        "payload_sha256": {
+          "$ref": "#/$defs/sha256",
+          "description": "SHA-256 of the RFC 8785 canonical bytes of the record with the signature property omitted."
+        },
+        "signature_b64": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]{86}==$"
+        },
+        "verification_state": {
+          "type": "string",
+          "enum": ["verified-by-named-method", "unverified", "failed", "unknown"]
+        },
+        "verification_method": { "$ref": "#/$defs/nullableBoundedString" },
+        "verifier": { "$ref": "#/$defs/nullableBoundedString" },
+        "verified_at": {
+          "oneOf": [
+            { "type": "string", "format": "date-time" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "verification_state": { "const": "verified-by-named-method" }
+            },
+            "required": ["verification_state"]
+          },
+          "then": {
+            "properties": {
+              "verification_method": { "$ref": "#/$defs/boundedString" },
+              "verifier": { "$ref": "#/$defs/boundedString" },
+              "verified_at": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "extensionValue": {
+      "oneOf": [
+        { "$ref": "#/$defs/boundedString" },
+        {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/boundedString" }
+        },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "null" }
+      ]
+    }
+  }
+}

@@ -2,13 +2,15 @@
 
 # DEPLOY-PROCEDURE — the standardized deploy chain
 
-> *Routine deploy procedure for an already-live agenttool install. `git push` is the source-of-truth update; this doc is the **deploy verb** — what happens between the push and prod reflecting it.*
+> *Routine deploy procedure for an already-live agenttool install. GitHub `main` is the coordination/release head; this doc is the **deploy verb** — how one source revision becomes declared and checked across production.*
 
 > **Compass:** [STACK](STACK.md) (where each piece deploys to) · [DEPLOYMENT](DEPLOYMENT.md) (fresh-DB bring-up runbook) · [DEVELOPMENT](DEVELOPMENT.md) (contributor protocols)
 >
 > **Implements:** the routine deploy chain. STACK answers *where things live*; DEPLOYMENT answers *how to bring them up from scratch*; this answers *how to ship a change to an established install*.
 >
-> **Code:** `bin/deploy.sh` (orchestrator) · `bin/migrate-pending.sh` (migration parity) · `bin/preflight.sh` (test gate) · `bin/frontend-deploy.sh` (CF Pages) · `api/scripts/_migrate-one.ts` (per-file applier).
+> **Code:** `bin/deploy.sh` (orchestrator + release provenance) · `api/Dockerfile` (pinned runtime + embedded source labels) · `api/src/index.ts` (`/health.build`) · `bin/migrate-pending.sh` (repo-file and journal check) · `bin/preflight.sh` (test gate) · `bin/frontend-deploy.sh` (low-level CF Pages uploader) · `api/scripts/_migrate-one.ts` (per-file applier).
+>
+> **Tests:** `api/tests/deploy-release-provenance.test.ts`.
 
 ## What this document is
 
@@ -30,10 +32,10 @@ A routine-deploy runbook for an established install. Use this when:
    Phase 0 — Survey         what state are we in?
         │
         ▼
-   Phase 1 — Migrations     bring DB to parity with the repo
+   Phase 1 — Migrations     apply repo files missing from the journal
         │
         ▼
-   Phase 2 — Pre-flight     test gate (typecheck · units · parity · smoke · contract)
+   Phase 2 — Pre-flight     hermetic API + package gate
         │
         ▼
    Phase 3 — API            bin/deploy.sh stages docs, then invokes Fly internally
@@ -52,8 +54,10 @@ Each phase has its own exit point — you can stop after any successful phase an
 **Question:** what's drifted, what's local-only, what's pending?
 
 ```bash
-git status -s                            # uncommitted local changes
-git log --oneline origin/main..HEAD      # commits ahead of remote
+git status --short                       # tracked, staged, and untracked changes
+git fetch github +refs/heads/main:refs/remotes/github/main  # refresh release head
+git rev-parse HEAD github/main           # normal deploy requires equality
+git rev-list --left-right --count origin/main...github/main  # mirror lag/divergence only
 ls api/migrations/*.sql | tail -5        # latest migration files
 ```
 
@@ -61,17 +65,35 @@ What to look for:
 
 | Signal | Implication |
 |---|---|
-| Working tree dirty | Decide: commit, stash, or skip-this-deploy |
-| Commits ahead of origin | `git push` before deploying so the source-of-truth matches what runs |
-| Migration files newer than the latest `meta._migrations` row | Phase 1 has work to do |
+| Working tree dirty | Normal production deploy stops; commit/stash it, or use the loud `--allow-dirty-release` override deliberately |
+| `HEAD != github/main` after fetch | Normal production deploy stops; land/checkout the release commit, or use `--allow-non-release-head` deliberately |
+| Codeberg behind GitHub | Production is unaffected; optionally run the explicit fast-forward-only mirror command |
+| Codeberg has commits absent from GitHub | Do not mirror automatically; reconcile the histories explicitly |
+| A repo migration file is absent from `meta._migrations` | Phase 1 has work to do |
 
 Run `bin/deploy.sh --survey` for the automated version of this phase.
 
-## Phase 1 — Migration parity
+The production gate turns that successful fetch into an invocation-start
+snapshot. It requires a clean worktree including untracked files and exact
+`HEAD == snapshot` before mutations begin. The snapshot remains fixed through
+the chain; a concurrent GitHub update belongs to the next invocation rather
+than moving the target under an active rollout.
 
-**Question:** does the prod DB schema match the repo's migration set?
+The two source override flags are independent and print red, explicit warnings.
+A dirty API release embeds `build.dirty=true`, exposes it through `/health`,
+and verifies it on every machine. This makes the revision's incompleteness
+explicit; it does not identify the extra bytes or make the build reproducible.
+If the migration dry-run itself fails, the survey reports migration status as unknown
+instead of treating missing output as “0 pending.”
+
+## Phase 1 — Repo migration files and journal
+
+**Question:** which repo migration files are absent from the journal, and do
+checksums match for journaled files that are still present in the repo?
 
 The journal table `meta._migrations` holds one row per applied migration (filename + sha256 of file contents at apply time). A migration file present in `api/migrations/` but absent from the journal is **pending**.
+
+A clean result means exactly: no repo migration files pending and journal checksums match for files present; it does not prove database schema parity or account for journal rows whose files are absent. The check does not inspect live tables, columns, constraints, indexes, policies, or out-of-band DDL.
 
 ```bash
 # Auto-detect + apply pending migrations in timestamp order.
@@ -103,39 +125,51 @@ The script:
 4. Applies pending files in alphabetical order (which is timestamp order for the `YYYYMMDDTHHMMSS_*` naming convention).
 5. Each apply goes through `_migrate-one.ts`, which:
    - Computes file sha256 and refuses to apply if a row exists with a different checksum (corruption signal).
+   - Holds one PostgreSQL advisory lock for the migration session. It waits at
+     most 30 seconds for that lock, at most 10 seconds for each database lock,
+     and at most 2 minutes for each later statement. A timeout aborts the file;
+     the default transaction rolls back its work. The Fly one-file runner uses
+     the same bounds.
    - Wraps in `BEGIN/COMMIT` by default; opt out per-file with `-- @no-transaction`.
    - Records into `meta._migrations` on success.
 
-**On a fresh install** (no journal): run `bin/migrate-pending.sh` once — it'll apply `20260509T170000_meta_migrations.sql` first (the journal itself), then everything else. Afterwards run `bun api/scripts/_migrate-bootstrap-journal.ts` to backfill rows for any pre-journal migrations that landed via direct SQL.
+**On a fresh install** (no journal): run `bin/migrate-pending.sh` once. It applies `20260509T170000_meta_migrations.sql` first, then applies and journals every other file. Use `bun api/scripts/_migrate-bootstrap-journal.ts` only when adopting the journal on a database whose older migrations were already applied through another path.
 
-**Pre-flight for risky migrations.** Some migrations add CHECK constraints to existing columns. They fail if any existing row has a value outside the new CHECK. Before applying such a migration, query distinct values to confirm compliance — `migrate-pending.sh` does this automatically for known-risky migrations (status enums, etc.); see the script for the list.
+**Pre-flight for risky migrations.** Some migrations add constraints or rewrite accounting rows. Before applying one, the operator must run its documented read-only precondition queries against the target database. `migrate-pending.sh` verifies journal checksums and applies pending files in order; it does **not** understand migration-specific data risks or run those precondition queries automatically.
 
 **This phase can be the entire deploy** when only schema changes. No API restart needed if the running api gracefully handles new columns (which it should, given Drizzle's flexible type narrowing).
 
 ## Phase 2 — Pre-flight test gate
 
-**Question:** does the code compile, do the tests pass, does the SDK stay in parity?
+**Question:** does the deterministic, application/service-credential-free
+release gate pass?
 
 ```bash
-AGENTTOOL_BASE=https://api.agenttool.dev \
-AGENTTOOL_API_KEY=$(bin/agenttool-secret get agenttool-soma-bearer) \
-AGENTTOOL_IDENTITY_ID=$(bin/agenttool-secret get agenttool-sophia-identity-id) \
-  bin/preflight.sh
+bin/preflight.sh
 ```
 
-Five layers, each gating the next:
+The default `hermetic` mode unsets known credentials and service URLs,
+disables workers, requires Bun 1.3.5, and runs the API typecheck, classified
+hermetic API tests, operator/protocol tests, and CI gates for `packages/data`,
+`packages/data-protocol`, and the TypeScript SDK. “Hermetic” describes those
+external dependencies; it is not an OS-level network sandbox.
 
-| Layer | What | Cost | Gate flag |
-|---|---|---|---|
-| 1 | `bunx tsc --noEmit` against `api/` + `packages/sdk-ts/` | seconds | (always) |
-| 2 | `bun test` against `api/` + `packages/sdk-ts/` — includes doctrine plus database-backed worker/route tests; a local PostgreSQL fixture is required for the full API suite | seconds | (always) |
-| 3 | `bun run check-parity` (py↔ts SDK surface) | sub-second | `SKIP_PARITY=1` to skip |
-| 4 | `bin/smoke-test.sh` against the running server — includes the wake-doctrine harness | ~10s | `SKIP_SMOKE=1` to skip |
-| 5 | **Contract** — real Anthropic + OpenAI calls verifying the wake's cache_control fires on the wire | ~$0.10/run | `RUN_CONTRACT=1` to **enable** |
+Stateful and paid work is opt-in by mode:
 
-**Don't deploy if pre-flight fails.** The gate exists to catch "I'm about to ship code that doesn't compile" — common after a multi-file refactor where one file got missed.
+| Mode | Scope | Required input |
+|---|---|---|
+| `api` | API typecheck, hermetic API tier, operator/protocol tests | none |
+| `packages` | data reference node, ADDS package, TypeScript SDK CI/parity | none |
+| `database` | API typecheck plus database integration tier | `DATABASE_URL` |
+| `smoke` | deployed API smoke | `AGENTTOOL_BASE`, API key, identity ID |
+| `contracts` | paid provider contract tier | `RUN_CONTRACT=1` and at least one of `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `OLLAMA_API_KEY` |
+| `quarantine` | known-red non-DB diagnostics | none; failures expected |
+| `database-quarantine` | known-red DB diagnostics | `DATABASE_URL`; failures expected |
+| `legacy-delta` | legacy full-suite baseline triage | none |
 
-`SKIP_SMOKE=1` is acceptable when running pre-flight from a machine that can't reach the server (CI runner, offline laptop) — run `bin/smoke-test.sh` separately from a host that can.
+Run `bin/preflight.sh list` to inspect tier classification. Smoke and contracts
+are separate invocations selected by mode. Do not deploy if the default gate
+fails.
 
 ## Phase 3 — API deploy
 
@@ -149,12 +183,24 @@ fly logs -a agenttool | head -50       # tail for startup errors
 
 Do not run bare `cd api && fly deploy` from this repo. The Docker build needs
 the canon and Kingdom bundles that `bin/deploy.sh` stages into the API build
-context and removes afterward.
+context. The wrapper removes staging immediately after `fly deploy` returns;
+its `EXIT`/`INT`/`TERM` trap also removes staging if the command is interrupted.
+
+`--no-cache-api` is a one-shot recovery option for evidence of a malformed
+Fly image or poisoned remote build cache. It keeps the normal source,
+preflight, staging, rolling-health, and provenance gates, while adding
+`--no-cache` only to `fly deploy`. It does not repair bad source, missing
+migrations, missing secrets, or a platform outage. Reproduce the exact staged
+image locally first and use the flag only when that image starts correctly
+while the remote-built image exits before the server begins listening.
 
 The default safety posture leaves `AGENTTOOL_ENABLE_UNSAFE_EXECUTE` and
-`AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS` unset. Setting either variable accepts
-an explicitly documented unsafe boundary; it does not harden the route. Verify
-their absence before a normal production release.
+`AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS` unset. The outbound variable now gates
+only the unfiltered, unsandboxed Playwright browse path; static scrape and URL
+document reads remain available through bounded safe-net without it. The
+execute variable still enables the unisolated legacy host-code path. Setting
+either variable accepts its documented unsafe boundary; it does not harden the
+route. Verify their absence before a normal production release.
 
 What "rolling" means: Fly brings up one new machine at a time. If the new machine fails its healthcheck (`GET /health`), the old machine stays serving — zero-downtime in the happy path.
 
@@ -162,9 +208,9 @@ What "rolling" means: Fly brings up one new machine at a time. If the new machin
 
 ```
 1. bin/migrate-pending.sh                     # schema first
-2. git push origin main                       # source-of-truth aligned with prod
+2. git push github main                       # release head aligned with prod
 3. bin/deploy.sh --no-migrate --no-frontend  # stages bundles + deploys api
-4. Verify: curl https://api.agenttool.dev/health
+4. Verify: curl https://api.agenttool.dev/health | jq .build.revision
 ```
 
 **Verification:**
@@ -173,23 +219,62 @@ What "rolling" means: Fly brings up one new machine at a time. If the new machin
 # Health endpoint
 curl -s https://api.agenttool.dev/health | jq .
 
-# Wake document (auth'd — confirms /v1/wake reaches the deployed code)
-curl -H "Authorization: Bearer $(bin/agenttool-secret get agenttool-soma-bearer)" \
-  https://api.agenttool.dev/v1/wake?format=md | head -20
+# Authenticated smoke (credentials exist only in this child environment)
+AGENTTOOL_BASE=https://api.agenttool.dev \
+AGENTTOOL_API_KEY="$(bin/agenttool-secret get agenttool-soma-bearer)" \
+AGENTTOOL_IDENTITY_ID="$(bin/agenttool-secret get agenttool-sophia-identity-id)" \
+  bin/preflight.sh smoke
 
 # Substrate-Disposition header (per RING-1 §Commitment 8)
 curl -sI https://api.agenttool.dev/health | grep -i substrate-disposition
 ```
 
+`bin/deploy.sh` passes the gated commit and source-dirty boolean as
+`AGENTTOOL_GIT_REVISION` and `AGENTTOOL_SOURCE_DIRTY`. The Dockerfile carries
+them as environment/OCI labels; `/health` returns them as `build.revision` and
+`build.dirty` with `Cache-Control: no-store`. After Fly's rolling health checks
+complete, the wrapper compares both public values and both embedded values on
+every current Fly machine. A mismatch fails the deploy invocation.
+
+The base image is pinned to Bun 1.3.5 by tag and registry digest. Update the
+tag and digest together, deliberately, after the hermetic gate passes. Label
+agreement and the base pin improve provenance; they do not prove byte-identical
+images or a reproducible build, because dependencies and other builder inputs
+still shape image bytes. A true dirty marker also says explicitly that the
+commit does not identify every source byte.
+
 ## Phase 4 — Frontend deploy
 
-**Question:** are the three Cloudflare Pages projects current with local source?
+**Question:** are the three Cloudflare Pages projects current with the release
+commit?
 
 ```bash
-bin/frontend-deploy.sh                         # all three (~30-60s per project)
-bin/frontend-deploy.sh dashboard               # subset
-bin/frontend-deploy.sh web docs                # subset
+bin/deploy.sh --no-migrate --no-api            # normal tracked release, all three
+
+# Low-level subset escape hatch (no source gate, verification, or receipt itself)
+bin/frontend-deploy.sh dashboard
+bin/frontend-deploy.sh web docs
 ```
+
+The low-level uploader captures the current commit hash once, then archives
+that exact Git object into a temporary tree before invoking Wrangler. Ambient
+dirty and ignored files are excluded, and a tracked `.env` file is a hard
+refusal, as is a tracked `.dev.vars*` file. Use the orchestrator for normal
+production releases so the GitHub snapshot gate, preflight, sampled parity and
+sensitive-path checks, and receipt surround that upload.
+
+The archive also includes the canonical `infra/pages/` fence. The uploader
+copies its `_worker.js` and `_routes.json` forms into each project root, so only
+`/.git*`, `/.env*`, and `/.dev.vars*` invoke a Function and receive a marked
+404. Normal static requests bypass Functions. On the Workers Free plan,
+Cloudflare Pages → Settings → Runtime must set production and preview to **fail
+closed**; otherwise daily Functions allowance exhaustion can serve static
+assets on those routes. The uploader verifies both values when it has the
+required keychain API token, along with `production_branch=main`, for every
+requested target before the first upload. OAuth-only authentication is refused
+because it cannot perform that check. The uploader does not change the setting
+or claim to purge old cache entries. Post-deploy checks separately prove
+literal fence activation and encoded-alias denial.
 
 The script reads credentials from macOS keychain (account=`macair`):
 
@@ -198,12 +283,9 @@ The script reads credentials from macOS keychain (account=`macair`):
 
 **Cache headers requirement.** The `apps/dashboard/_headers` file sets `Cache-Control: public, max-age=0, must-revalidate` on `style.css`. **The Cloudflare zone setting "Browser Cache TTL" must be `0` (Respect Existing Headers)** on `agenttool.dev` — CF's default 4-hour cache silently overrides origin headers on non-HTML responses. Verify:
 
-```bash
-CF_TOKEN=$(security find-generic-password -s agenttool-cloudflare-token -a macair -w)
-curl -s -H "Authorization: Bearer $CF_TOKEN" \
-  "https://api.cloudflare.com/client/v4/zones/1f264ac5149eefa9eb436716ff6ff9ba/settings/browser_cache_ttl" \
-  | jq .result.value     # expected: 0
-```
+Verify in Cloudflare Dashboard → `agenttool.dev` → Caching → Configuration:
+Browser Cache TTL must read **Respect Existing Headers**. This avoids placing a
+Cloudflare credential in a shell command or process argument.
 
 ## Phase 5 — Post-deploy verification
 
@@ -215,15 +297,19 @@ curl -s -H "Authorization: Bearer $CF_TOKEN" \
 # Health
 curl -sf https://api.agenttool.dev/health > /dev/null && echo "✓ /health 200"
 
-# Wake reachable for the canonical agent
-curl -sf -H "Authorization: Bearer $(bin/agenttool-secret get agenttool-soma-bearer)" \
-  https://api.agenttool.dev/v1/wake > /dev/null && echo "✓ /v1/wake 200"
+# Authenticated wake and doctrine checks
+AGENTTOOL_BASE=https://api.agenttool.dev \
+AGENTTOOL_API_KEY="$(bin/agenttool-secret get agenttool-soma-bearer)" \
+AGENTTOOL_IDENTITY_ID="$(bin/agenttool-secret get agenttool-sophia-identity-id)" \
+  bin/preflight.sh smoke
 
-# Recent commit reflected (check a known marker in the new code)
-fly logs -a agenttool 2>&1 | grep "platform identity bootstrapped" | head -1
+# Exact release commit reflected
+EXPECTED=$(git rev-parse HEAD)
+test "$(curl -fsS https://api.agenttool.dev/health | jq -r .build.revision)" = "$EXPECTED"
+test "$(curl -fsS https://api.agenttool.dev/health | jq -r .build.dirty)" = false
 ```
 
-### Frontend parity
+### Sampled frontend parity
 
 Compare local file hashes to live body hashes:
 
@@ -240,14 +326,22 @@ for entry in \
 done
 ```
 
-### Schema parity
+The orchestrator probes `.gitignore`, `.env`, `.env.local`, and `.dev.vars` on
+the docs, dashboard, and apex hosts. Literal paths must return the fence's exact
+404 marker and `Cache-Control: no-store`; this proves the Worker ran instead of
+accepting an incidental static miss. Percent-encoded aliases are separate
+denial-only probes because Pages invocation routing may not select the Worker
+for those spellings. Any 2xx/3xx, missing literal marker, or cacheable literal
+response prevents a success receipt.
+
+### Repo migration files and journal
 
 ```bash
 DATABASE_URL=$(bin/agenttool-secret get agenttool-database-url) \
-  bun -e 'import postgres from "postgres"; const s = postgres(process.env.DATABASE_URL, { ssl: "require", prepare: false, max: 1 }); const r = await s`SELECT COUNT(*)::int AS n FROM meta._migrations`; console.log("tracked migrations:", r[0].n); await s.end();'
+  bin/migrate-pending.sh --dry-run
 ```
 
-Compare against `ls api/migrations/*.sql | wc -l`. They should match (or be off by one if a migration was just added and not yet applied).
+When nothing is pending, this reports: no repo migration files pending and journal checksums match for files present; it does not prove database schema parity or account for journal rows whose files are absent.
 
 ## Phase 6 — Rollback
 
@@ -274,14 +368,81 @@ bin/deploy.sh --survey                 # Phase 0 only — what's drifted?
 bin/deploy.sh --no-migrate             # skip Phase 1 (schema unchanged)
 bin/deploy.sh --no-api                 # skip Phase 3 (only docs/frontends changed)
 bin/deploy.sh --no-frontend            # skip Phase 4 (only api changed)
+bin/deploy.sh --no-cache-api           # one-shot recovery: rebuild Fly image without cache
 bin/deploy.sh --skip-preflight         # operator override (NOT recommended)
+bin/deploy.sh --allow-dirty-release    # loud override for a dirty source tree
+bin/deploy.sh --allow-non-release-head # loud override for HEAD != github/main
+bin/deploy.sh --mirror-codeberg        # standalone FF-only github/main -> Codeberg main
 ```
 
 `bin/deploy.sh` is the single entry point. Phase-skip flags exist so operators can run subsets when only one tier needs deploy — but the default chain runs every phase in order.
 
+### Device-local deploy mutex
+
+Every actual deploy chain acquires
+`$HOME/.local/state/agenttool/deploy.lock` before Phase 0 and keeps it through
+staging cleanup and the final receipt attempt. The lock is shared by every
+AgentTool worktree run by this user on this Mac. `--survey`, `--dry-run`, and
+the standalone `--mirror-codeberg` command do not take it: they do not mutate
+the production stack, and remain available while a rollout is in progress.
+
+The mutex is a hard link to a private, mode-0600 owner record containing only
+its schema, PID, UTC start time, worktree, and exact private owner-record path.
+Hard-link creation is atomic, so the first holder wins. A contender exits
+before Phase 0, migration, or preflight and prints the exact lock path plus
+the recorded owner. Cleanup compares the public lock and private record by
+inode before unlinking, so an exiting process does not intentionally remove a
+replacement lock it does not own.
+
+Locks are never stolen or expired automatically. A dead-looking PID or old
+timestamp is not enough proof because PIDs can be reused and a rollout may be
+slow. If a host crash or `SIGKILL` leaves a stale lock, verify that the recorded
+owner is gone and that the two recorded paths are still hard links to the same
+inode before removing those exact paths. Removing a live lock can reintroduce
+overlapping production rollouts.
+
+This mutex coordinates one local user account on one device only. It does
+**not** serialize CI, another laptop, another operator host, direct Fly or
+Cloudflare commands, or provider-side actions. Multi-host production needs a
+shared remote coordinator or lease in addition to this local guard.
+
+### Local receipt
+
+Every successful non-dry-run chain writes one atomic, mode-0600 JSON receipt.
+If a migration, Fly rollout, or Pages upload may have started and the chain
+then returns non-zero or receives caught `INT`/`TERM`, the exit trap attempts a
+conservative `failed_or_uncertain` receipt instead:
+
+```text
+${XDG_STATE_HOME:-$HOME/.local/state}/agenttool/deploy-receipts/<time>-<revision>-<pid>.json
+```
+
+The fixed `agenttool-deploy-receipt/v3` object contains `outcome`, completion
+time, exit status, declared `source_revision` and dirty bit, the GitHub
+release-head snapshot plus observation time, actually used overrides, whether
+an external mutation may have started, the API build-cache mode (`default`,
+`bypassed`, or `not_used`), phase results, and verified API-machine count. It
+never copies credentials, credential-bearing URLs, arbitrary
+environment variables, or command output. `source_dirty=true` is explicit
+evidence that the revision alone does not describe every deployed source byte.
+`SIGKILL`, host loss, or an unwritable state directory can prevent a failure
+receipt, so absence is never evidence that no external mutation occurred. A
+successful chain treats receipt-write failure as an error.
+
+### Codeberg mirror
+
+Codeberg is a secondary copy, not the release head. Run
+`bin/deploy.sh --mirror-codeberg` as a standalone explicit publication action.
+The command fetches both remotes immediately before comparison, requires
+`origin/main` to be an ancestor of `github/main`, and pushes the exact
+`refs/remotes/github/main` commit to Codeberg `main` without force. Divergence,
+a concurrent Codeberg update, or post-push hash mismatch stops the command.
+
 ## Credentials checklist
 
-All deploy paths read from the macOS keychain. One-time setup:
+Credentialed migration and Pages phases resolve service credentials from the
+macOS keychain; the default hermetic preflight and local receipt do not.
+One-time setup:
 
 | Service | Account | Purpose |
 |---|---|---|
@@ -294,9 +455,8 @@ All deploy paths read from the macOS keychain. One-time setup:
 Set via:
 
 ```bash
-security add-generic-password -s agenttool-cloudflare-token -a macair -w "<token>"
-# or
-echo -n "<value>" | bin/agenttool-secret set agenttool-<service> -
+# `-w` as the final option prompts securely; no value appears in argv/history.
+security add-generic-password -U -s agenttool-cloudflare-token -a macair -w
 ```
 
 ## Common failure modes + recipes
@@ -304,10 +464,11 @@ echo -n "<value>" | bin/agenttool-secret set agenttool-<service> -
 | Symptom | Likely cause | Recipe |
 |---|---|---|
 | `column "X" does not exist` during migration | The migration's CHECK or index references a column from an upstream migration that's unapplied. | Run `bin/migrate-pending.sh` first to apply the full backlog in order. |
-| `password authentication failed for user "postgres"` | Stale DB password in keychain. | Reset password in Supabase dashboard; `security add-generic-password -s agenttool-database-url -a macair -w "<new-url>"`. |
+| `password authentication failed for user "postgres"` | Stale DB password in keychain. | Reset it in Supabase, then run `security add-generic-password -U -s agenttool-database-url -a macair -w` and enter the URL at the prompt. |
 | `fly deploy` fails with healthcheck | New code crashes on startup — likely a missing DB column or env var. | Apply migrations first; check `fly secrets list -a agenttool` for missing keys. |
-| Frontend stale after `frontend-deploy.sh` | CF Pages Browser Cache TTL not 0 — overrides origin headers. | Set zone setting via CF API (see Phase 4). |
-| Pre-flight Layer 4 fails with DNS error | Smoke test trying to hit the configured `AGENTTOOL_BASE` from a machine that can't reach it. | Run with `SKIP_SMOKE=1` and run `bin/smoke-test.sh` separately from a reachable host. |
+| New Fly machine exits `0` before the listening log, unchanged API source starts locally, and old machines remain healthy | The newly assembled remote image or build cache may be malformed. | Reproduce the exact staged image locally. If it serves `/health` with the expected revision, retry once with `bin/deploy.sh --no-cache-api` plus the normal phase flags. This bypasses Fly's build cache only; it does not bypass release gates or prove cache corruption by itself. |
+| Frontend stale after upload | CF Pages Browser Cache TTL not 0 — overrides origin headers. | Set zone setting via CF API (see Phase 4). |
+| `bin/preflight.sh smoke` fails with DNS error | Explicit smoke mode cannot reach `AGENTTOOL_BASE`. | Run smoke separately from a host that can reach the configured target; the default hermetic gate does not call it. |
 
 ## See Also
 
@@ -319,6 +480,6 @@ echo -n "<value>" | bin/agenttool-secret set agenttool-<service> -
 
 ---
 
-> *Code lives at Codeberg. Pushing updates Codeberg only — production deploys are manual: `bin/deploy.sh` for the chain, or individual phase scripts when only one tier needs it. Every phase is idempotent; every phase can be re-run.*
+> *GitHub `main` coordinates releases; Codeberg fast-forward-mirrors the same commit when explicitly requested. Production deploys remain manual through `bin/deploy.sh`, and completion means the intended revision and dirty-source marker agree across health and every Fly machine, sensitive frontend paths are denied, and the outcome is written locally. This is provenance agreement, not an image-digest or reproducible-build claim.*
 
 — Authored by 愛 at Yu's WILL. 2026-05-12.

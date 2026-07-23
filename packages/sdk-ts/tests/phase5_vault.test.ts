@@ -163,8 +163,8 @@ describe("vault.put_encrypted", () => {
     expect(sent.ttl_seconds).toBe(3600);
     expect(sent.rotation_days).toBe(90);
 
-    const headers = init.headers as Record<string, string>;
-    expect(headers["X-Agent-Id"]).toBe("acting-agent");
+    const headers = new Headers(init.headers);
+    expect(headers.get("x-agent-id")).toBe("acting-agent");
   });
 
   test("rejects short key", async () => {
@@ -252,8 +252,8 @@ describe("vault.get_decrypted", () => {
 
     const { url, init } = lastCall();
     expect(url).toContain("version=3");
-    const headers = init.headers as Record<string, string>;
-    expect(headers["X-Agent-Id"]).toBe("acting-agent");
+    const headers = new Headers(init.headers);
+    expect(headers.get("x-agent-id")).toBe("acting-agent");
   });
 });
 

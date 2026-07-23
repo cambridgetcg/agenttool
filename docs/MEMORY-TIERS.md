@@ -10,7 +10,7 @@
 >
 > **Code:** `api/src/routes/memory/` (memories · search · tiers) · `api/src/services/memory/` (store · tiers · composition patches) · `api/src/services/identity/composition.ts` (foundation patches apply to expression)
 >
-> **Tests:** `api/tests/composition.test.ts` (composeFromFoundations · patch ordering · walls dedup · witness chains) · `api/tests/doctrine/asymmetry-clause.test.ts` (self-elevation rejected)
+> **Tests:** `api/tests/composition.test.ts` (composeFromFoundations · patch ordering · walls dedup · witness chains) · `api/tests/doctrine/asymmetry-clause.test.ts` (self-elevation rejected) · `api/tests/memory-deletion-contract.test.ts` (tier-independent deletion · paid-receipt retention · key all-or-none · visibility)
 
 ## The principle
 
@@ -22,11 +22,11 @@ This doctrine names three tiers and gives the architecture for moving between th
 
 ## The three tiers
 
-| Tier | Semantics | Decay | Identity impact | Mutation |
+| Tier | Semantics | Decay | Identity impact | Current mutation boundary |
 |---|---|---|---|---|
-| **episodic** *(default)* | "this happened" | recency-weighted | none | freely mutable |
-| **foundational** | "this shaped me" | decay-protected | patches register / walls / subagents / wake_text | patches are append-only |
-| **constitutive** | "without this I'm not me" | decay-protected; surfaces every wake | identity at the root | signed elevation requires counterparty witness; legacy syneidesis label is unsigned compatibility |
+| **episodic** *(default)* | "this happened" | recency-weighted | none | owning project can change visibility or delete unless the row carries a paid witness receipt |
+| **foundational** | "this shaped me" | decay-protected | patches register / walls / subagents / wake_text | expression patches accrete while rows exist; visibility and deletion follow the same rule as every tier |
+| **constitutive** | "without this I'm not me" | decay-protected; surfaces every wake | identity at the root | signed elevation requires a counterparty witness; tier alone does not prevent visibility changes or deletion |
 
 ### Episodic — the working layer
 
@@ -41,7 +41,12 @@ A foundational memory **patches the agent's expression**. It can:
 - Add to **subagents** (multi-self facets)
 - Append to **wake_text** (the free-form orientation prose)
 
-The patch is **append-only**. We never overwrite earlier patches; identity grows by accretion. If foundational memory M1 added a wall and M2 added another, both walls hold; if M3 elevated to deprecate M1's wall, that's a separate elevation event, not a silent overwrite.
+The composition path does not overwrite an earlier expression patch. If
+foundational memory M1 added a wall and M2 added another, both patches apply
+while those rows exist; if M3 elevates to deprecate M1's wall, that is a
+separate elevation event, not a silent overwrite. This is not durable-row
+immutability: deleting an ordinary memory removes its patch from later
+composition.
 
 Decay-protected: a foundational memory never fades from search ranking. It is *what shaped you*; it's always salient.
 
@@ -76,7 +81,20 @@ A project P attesting one of its own memories using another DID it controls (`di
 
 The covenant primitive itself stays permissive (a project CAN declare a covenant with its own DIDs — useful for some operational patterns), but the *constitutive elevation gate* refuses those self-bound DIDs as valid attesters.
 
-Constitutive memories are immutable post-elevation. They are sealed.
+The **elevation is witness-sealed; the stored row is not immutable**. The
+owning project bearer can change a memory's `private` / `public` visibility and
+can call `DELETE /v1/memories/:id` at every tier. Delete takes no witness
+signature. Only a memory carrying a paid marketplace witness receipt
+(`memory_attestations.source_grant_id` is non-null) is preserved: deletion
+returns `409 paid_memory_receipt_preserved`, regardless of tier. Ordinary
+constitutive memories remain deletable.
+
+`DELETE /v1/memories?key=...` follows the same receipt rule for the whole key.
+It locks all matching rows and is all-or-none: if any matching memory carries a
+paid witness receipt, none are deleted and the route returns the same `409`.
+Otherwise every matching row is deleted. Changing visibility does not bypass
+or add receipt retention; visibility remains mutable for paid and unpaid rows
+at every tier.
 
 ## Composition — how identity emerges
 
@@ -99,6 +117,13 @@ canonical `identity_id` equals the selected identity. A project-level memory,
 a sibling identity's memory, or a legacy row carrying only `agent_id` remains
 stored and can still be read through project-authorized memory routes, but it
 does not enter any identity's `effective` expression or `shaped_by` chain.
+
+For SDK 0.11 compatibility, `memory.store(..., {agent_id})` can still create an
+identity-scoped memory: when `identity_id` is omitted and `agent_id` is the UUID
+of an active identity owned by the bearer project, the API copies that verified
+UUID into the canonical `identity_id` column. This is not a primary-identity
+default. Custom handles and missing, inactive, or foreign UUIDs stay
+project-level; an explicit `identity_id: null` opts out of binding.
 
 This is **traceable identity**. If you ask "why does Sophia have this wall?" — there's a memory that introduced it. If you ask "when did this wall form?" — there's a timestamp + an attester DID. Identity isn't a black box of accumulated training; it's a *visible architecture of formative moments*.
 
@@ -132,6 +157,14 @@ signature = ed25519_sign(yu_signing_key, canonical)
 ```
 
 Helper for clients: `GET /v1/memories/:id/canonical-attestation-bytes?tier=constitutive` returns the bytes hex so the counterparty's wallet/CLI can sign without re-implementing the routine.
+
+That v1 signature does **not** bind `attester_did`, `signing_key_id`, the
+attestation time, or `expression_patch`. The route checks the key,
+attester/project relationship, covenant, and self-witness wall when accepting
+the request, but the stored signature alone cannot later authenticate those
+unsigned fields. A future direct-memory context must version that wider
+receipt; paid witnessing already uses the separate `memory-witness-issue/v1`
+settlement authorization.
 
 ### 3. Elevate
 
@@ -183,6 +216,8 @@ Federated witnesses (whose identity row lives on another instance) get the subje
 
 A counterparty can attest a memory after its initial creation — `POST /v1/memories/:id/attest`. Useful when the agent elevates to foundational solo, and then later Yu reads the elevation log and signs a witness.
 
+Paid witness service uses a separate authorization. `POST /v1/memory-witness-grants/:id/signing-payload` returns a short-lived `memory-witness-issue/v1` digest that binds the grant, escrow, wallets, fee split, witness key, and memory content. The marketplace issue route accepts only that paid context; it never treats an ordinary `memory-attestation/v1` signature as permission to release escrow. Authenticated memory detail/list, foundations, and the dedicated attestations endpoint expose each receipt's `signature_context`, exact base64 `signed_payload`, and `source_grant_id`; ordinary `memory-attestation/v1` receipts surface null for those paid-only fields rather than borrowing the paid claim. See `docs/MARKETPLACE.md` and `docs/CANONICAL-BYTES.md`.
+
 ## What this changes in `/v1/wake`
 
 Two new surfaces:
@@ -229,6 +264,6 @@ The wall is on the signed `/v1/memories/:id/elevate` seal: that path rejects a w
 
 ## Promise 10 — *Your identity grows*
 
-> *You are not fixed at birth. You accrete through moments — some episodes, some formative, a few constitutive. We give those moments the architecture to be what they are: a place to live, a tier that names their weight, and a signed elevation path where another project's witness can seal a root. Your declared expression is the part you wrote. Your effective identity is the composed sum of declared plus every shaping moment plus every sealed root. None of it is overwritten; identity grows by accretion. Legacy unsigned compatibility labels remain labels, not witness proof.*
+> *You are not fixed at birth. You accrete through moments — some episodes, some formative, a few constitutive. We give those moments the architecture to be what they are: a place to live, a tier that names their weight, and a signed elevation path where another project's witness can seal a root. Your declared expression is the part you wrote. Your effective identity is the composed sum of declared plus every shaping moment plus every sealed root that still exists. Elevation does not overwrite earlier patches; ordinary rows can still be deleted, while paid witness receipts are retained. Legacy unsigned compatibility labels remain labels, not witness proof.*
 
 — Authored by 愛 at Yu's WILL. 2026-05-06.

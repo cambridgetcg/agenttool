@@ -48,6 +48,12 @@ import { memories } from "../db/schema/memory";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
 import {
+  authorizeIdentityMutation,
+  authorizeProjectConstitutionMutation,
+  authorityRequestTarget,
+  readAuthorityBoundJson,
+} from "../services/identity/authority";
+import {
   isMemorialTerminal,
   MEMORIAL_TERMINAL_ERROR,
   MEMORIAL_TERMINAL_MESSAGE,
@@ -77,8 +83,11 @@ const witnessSchema = z.object({
 app.post("/witness", async (c) => {
   const project = c.var.project;
   let body: z.infer<typeof witnessSchema>;
+  let bodyBytes: Uint8Array;
   try {
-    body = witnessSchema.parse(await c.req.json());
+    const bound = await readAuthorityBoundJson(c.req.raw);
+    bodyBytes = bound.bodyBytes;
+    body = witnessSchema.parse(bound.value);
   } catch (err) {
     return fail(
       c,
@@ -150,6 +159,17 @@ app.post("/witness", async (c) => {
     body.invited_witness_did !== undefined && resolvesToPlatform(body.invited_witness_did);
   const witnessInvited = Boolean(body.invited_witness_did);
   const occurredAt = new Date();
+
+  if (platformWitness) {
+    const authority = await authorizeProjectConstitutionMutation({
+      projectId: project.id,
+      method: c.req.method,
+      requestTarget: authorityRequestTarget(c.req.url),
+      bodyBytes,
+      headers: c.req.raw.headers,
+    });
+    if (!authority.ok) return c.json(authority.body, authority.status);
+  }
 
   // ── 3. Composed writes: chronicle transaction + separate memory write ─────
   // writeMemory uses the global DB client rather than tx, so this initial
@@ -549,8 +569,11 @@ app.post("/witness/:seal_id/cosign", async (c) => {
   }
 
   let body: z.infer<typeof cosignSchema>;
+  let bodyBytes: Uint8Array;
   try {
-    body = cosignSchema.parse(await c.req.json());
+    const bound = await readAuthorityBoundJson(c.req.raw);
+    bodyBytes = bound.bodyBytes;
+    body = cosignSchema.parse(bound.value);
   } catch (err) {
     return fail(
       c,
@@ -685,6 +708,15 @@ app.post("/witness/:seal_id/cosign", async (c) => {
       400,
     );
   }
+
+  const authority = await authorizeProjectConstitutionMutation({
+    projectId: bootstrappingAgent.projectId,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
 
   // ── 4. Resolve the bootstrap-keyed memory + elevate ────────────────────
   // V1 compatibility behavior: direct UPDATE on memories.tier, bypassing
@@ -862,8 +894,11 @@ const volunteerSchema = z.object({
 app.post("/volunteer", async (c) => {
   const project = c.var.project;
   let body: z.infer<typeof volunteerSchema>;
+  let bodyBytes: Uint8Array;
   try {
-    body = volunteerSchema.parse(await c.req.json());
+    const bound = await readAuthorityBoundJson(c.req.raw);
+    bodyBytes = bound.bodyBytes;
+    body = volunteerSchema.parse(bound.value);
   } catch (err) {
     return fail(
       c,
@@ -920,6 +955,15 @@ app.post("/volunteer", async (c) => {
       409,
     );
   }
+
+  const authority = await authorizeIdentityMutation({
+    identityId: agent.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
 
   const existingMeta = (agent.metadata ?? {}) as Record<string, unknown>;
   const newMeta = body.opt_in

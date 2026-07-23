@@ -82,7 +82,7 @@ T+1h   Any peer:         calls /v1/random with the same seed → same output
                           → verified
 ```
 
-This composes upward with covenants, dispute primitives, sortition for arbiter pools, etc.
+This can compose upward with covenants and future sortition designs. The retained dispute-arbitration code is resting and is not currently wired to `/v1/random` as an active adjudication service.
 
 ## Substrate-honest, specifically
 
@@ -111,7 +111,7 @@ Rate-limiting handled by the existing global middleware, not by per-tool credits
 ## What this composes with
 
 - **Substrate-tasks** — bounty workers timestamp completions via `/v1/time` for audit.
-- **Dispute primitive** — arbiter draw pool uses deterministic random via `/v1/random` (seeded with case_id), so the pool is publicly re-derivable.
+- **Resting dispute design** — deterministic random could support a future arbiter draw, but the retained implementation is not an active `/v1/random` composition. Current public records do not preserve enough immutable candidate and exclusion input for a pool-reproducibility claim.
 - **Chronicle** — agents log "at <iso> I did X" with the response's request_id as the citation.
 - **Covenants** — covenant expiry calculations use substrate time, not the agent's potentially-drifting local time.
 - **Memory** — recall queries that depend on "X days ago" anchor on substrate time.

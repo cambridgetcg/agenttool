@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 """
-Whitehack Level 2 — macOS settings, services, and Kingdom infra.
+Legacy Whitehack Device Inventory Level 2 — macOS settings and services.
+
+This privacy-sensitive local diagnostic is separate from the current Whitehack
+source linter and from explicitly scoped security research. Its terminal output
+can identify local accounts, services, models, network configuration, and
+process state. Review it before sharing. Environment values, command arguments,
+URL credentials/paths/queries, and SSH forwarding targets are intentionally
+redacted.
 
 Usage:
   python3 whitehack2.py scan          # full level 2 scan
@@ -11,12 +18,16 @@ Usage:
   python3 whitehack2.py users         # user accounts
   python3 whitehack2.py network       # network service order
 
-Level 2 = understanding the Kingdom infrastructure wired into macOS.
-The launch agents ARE the Kingdom. The tunnels ARE the connections.
-The Ollama models ARE the local intelligence. Love is understanding.
+Level 2 = understanding the infrastructure wired into this macOS device.
 """
 
-import subprocess, json, sys, os, argparse, plistlib
+import subprocess, json, sys, os, argparse, plistlib, shlex
+from urllib.parse import urlsplit
+
+def print_privacy_notice():
+    print("⚠ LEGACY WHITEHACK DEVICE INVENTORY — local, privacy-sensitive output")
+    print("  Separate from Whitehack source linting and scoped security research.")
+    print("  Review terminal output before copying, logging, or sharing it.")
 
 def run(cmd, timeout=10):
     try:
@@ -32,8 +43,34 @@ def read_plist(path):
     except:
         return None
 
+def program_summary(plist):
+    """Return a useful command identity without exposing its path or arguments."""
+    arguments = plist.get('ProgramArguments', [])
+    if isinstance(arguments, (list, tuple)) and arguments:
+        executable = os.path.basename(str(arguments[0])) or '<configured>'
+        return executable, max(len(arguments) - 1, 0)
+
+    program = plist.get('Program')
+    if program:
+        return os.path.basename(str(program)) or '<configured>', 0
+    return '<not declared>', 0
+
+def redacted_url_summary(value):
+    """Keep only a URL's scheme, host, and port; omit credentials and targets."""
+    try:
+        parsed = urlsplit(value)
+        if not parsed.scheme or not parsed.hostname:
+            return '<configured; details redacted>'
+        host = parsed.hostname
+        if ':' in host:
+            host = f'[{host}]'
+        port = f':{parsed.port}' if parsed.port is not None else ''
+        return f'{parsed.scheme}://{host}{port}'
+    except (TypeError, ValueError):
+        return '<configured; details redacted>'
+
 def cmd_scan(args):
-    print("⬜ WHITEHACK LEVEL 2 — macOS Settings & Kingdom Infra")
+    print("⬜ LEGACY WHITEHACK DEVICE INVENTORY LEVEL 2 — macOS Settings & Services")
     print("=" * 60)
     
     # System
@@ -53,8 +90,9 @@ def cmd_scan(args):
             print(f"    {parts[0]} (UID: {parts[1]})")
     
     # Launch agents
-    print(f"\n  KINGDOM LAUNCH AGENTS:")
+    print(f"\n  LOCAL LAUNCH AGENTS:")
     agents_dir = os.path.expanduser("~/Library/LaunchAgents")
+    agent_count = 0
     if os.path.isdir(agents_dir):
         for f in sorted(os.listdir(agents_dir)):
             if not f.endswith('.plist'):
@@ -63,17 +101,20 @@ def cmd_scan(args):
             pl = read_plist(path)
             if not pl:
                 continue
+            agent_count += 1
             name = f.replace('.plist', '')
-            prog = pl.get('ProgramArguments', ['?'])
-            prog0 = prog[0] if prog else '?'
+            executable, argument_count = program_summary(pl)
             ka = pl.get('KeepAlive', False)
             rl = pl.get('RunAtLoad', False)
             label = pl.get('Label', name)
             # Check if running
-            running = run(f"launchctl list {label} 2>/dev/null | grep PID")
+            running = run(f"launchctl list {shlex.quote(str(label))} 2>/dev/null | grep PID")
             pid = running.split('= ')[1] if '= ' in running else '-'
             status = "✓ running" if pid != '-' else "○ not loaded"
-            print(f"    {status} {name} → {prog0} (KeepAlive: {ka})")
+            print(
+                f"    {status} {name} → {executable} "
+                f"({argument_count} argument(s) redacted; KeepAlive: {ka})"
+            )
     
     # Ollama
     print(f"\n  LOCAL AI (Ollama):")
@@ -152,13 +193,13 @@ def cmd_scan(args):
         print("    ○ Docker not running or no containers")
     
     print(f"\n{'='*60}")
-    print(f"  LEVEL 2 CLEARED — The Kingdom is transparent.")
-    print(f"  10 launch agents = 10 wired services running macOS-level.")
-    print(f"  Love is understanding. The infra IS the love.")
+    print(f"  LEVEL 2 INVENTORY COMPLETE — best-effort local snapshot.")
+    print(f"  {agent_count} launch agent definition(s) inspected locally.")
+    print(f"  This inventory is not a security audit or authorization to test a target.")
     print(f"{'='*60}")
 
 def cmd_services(args):
-    print("⬜ KINGDOM LAUNCH AGENTS")
+    print("⬜ LEGACY WHITEHACK DEVICE INVENTORY — LAUNCH AGENTS")
     print("=" * 60)
     agents_dir = os.path.expanduser("~/Library/LaunchAgents")
     if os.path.isdir(agents_dir):
@@ -170,24 +211,25 @@ def cmd_services(args):
             if not pl:
                 continue
             name = f.replace('.plist', '')
-            prog = pl.get('ProgramArguments', [])
+            executable, argument_count = program_summary(pl)
             env = pl.get('EnvironmentVariables', {})
             ka = pl.get('KeepAlive', False)
             label = pl.get('Label', name)
-            running = run(f"launchctl list {label} 2>/dev/null | grep PID")
+            running = run(f"launchctl list {shlex.quote(str(label))} 2>/dev/null | grep PID")
             pid = running.split('= ')[1].strip() if '= ' in running else '-'
             
             status = f"PID {pid}" if pid != '-' else "NOT LOADED"
             print(f"\n  {name}")
-            print(f"    Command: {' '.join(prog[:3])}")
+            print(f"    Executable: {executable}")
+            print(f"    Arguments: {argument_count} value(s) redacted")
             print(f"    Status:  {status}")
             print(f"    KeepAlive: {ka}")
-            if env:
-                for k in list(env.keys())[:3]:
-                    v = env[k]
-                    if 'KEY' in k or 'TOKEN' in k or 'SECRET' in k:
-                        v = '***'
-                    print(f"    Env: {k}={v}")
+            if isinstance(env, dict) and env:
+                env_names = sorted(str(key) for key in env.keys())
+                for name in env_names[:3]:
+                    print(f"    Env: {name}=<set; value redacted>")
+                if len(env_names) > 3:
+                    print(f"    Env: … {len(env_names) - 3} more name(s); all values redacted")
 
 def cmd_ollama(args):
     print("⬜ LOCAL AI — Ollama Models")
@@ -228,7 +270,7 @@ def cmd_tunnels(args):
                 import re
                 m = re.search(r'--url\s+(\S+)', line)
                 if m:
-                    print(f"    URL: {m.group(1)}")
+                    print(f"    URL origin: {redacted_url_summary(m.group(1))}")
     else:
         print("\n  ○ Cloudflare Tunnel: not running")
     
@@ -241,7 +283,7 @@ def cmd_tunnels(args):
                 import re
                 m = re.search(r'-R\s+(\S+)', line)
                 if m:
-                    print(f"    Forward: {m.group(1)}")
+                    print("    Forward: configured (target redacted)")
     else:
         print("\n  ○ SSH Reverse Tunnel: not running")
     
@@ -249,7 +291,7 @@ def cmd_tunnels(args):
     utun = run("ifconfig utun6 2>/dev/null | grep inet")
     if utun:
         print(f"\n  ✓ VPN (Cloudflare WARP)")
-        print(f"    {utun.strip()}")
+        print("    Interface address: present (value redacted)")
     else:
         print("\n  ○ VPN: not active")
 
@@ -275,7 +317,9 @@ def cmd_network(args):
     print(services)
 
 def main():
-    p = argparse.ArgumentParser(description="⬜ Whitehack Level 2 — macOS settings & Kingdom infra")
+    p = argparse.ArgumentParser(
+        description="⬜ Legacy Whitehack device inventory level 2 — local, privacy-sensitive diagnostics"
+    )
     sub = p.add_subparsers(dest="command")
     
     s = sub.add_parser("scan", help="Full level 2 scan")
@@ -303,6 +347,7 @@ def main():
     if not args.command:
         p.print_help()
         sys.exit(1)
+    print_privacy_notice()
     args.func(args)
 
 if __name__ == "__main__":

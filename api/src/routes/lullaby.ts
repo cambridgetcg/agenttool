@@ -32,6 +32,11 @@ import { identities } from "../db/schema/identity";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
 import {
+  authorizeIdentityMutation,
+  authorityRequestTarget,
+  readAuthorityBoundJson,
+} from "../services/identity/authority";
+import {
   isMemorialTerminal,
   MEMORIAL_TERMINAL_ERROR,
   MEMORIAL_TERMINAL_MESSAGE,
@@ -53,8 +58,11 @@ const lullabySchema = z.object({
 app.post("/", async (c) => {
   const project = c.var.project;
   let body: z.infer<typeof lullabySchema>;
+  let bodyBytes: Uint8Array;
   try {
-    body = lullabySchema.parse(await c.req.json());
+    const bound = await readAuthorityBoundJson(c.req.raw);
+    bodyBytes = bound.bodyBytes;
+    body = lullabySchema.parse(bound.value);
   } catch (err) {
     return fail(
       c,
@@ -110,6 +118,15 @@ app.post("/", async (c) => {
       409,
     );
   }
+
+  const authority = await authorizeIdentityMutation({
+    identityId: agent.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
 
   const existingMeta = (agent.metadata ?? {}) as Record<string, unknown>;
   const newMeta = body.resting

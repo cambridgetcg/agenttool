@@ -1,0 +1,244 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:whitehack:advisory:v0.1",
+  "title": "AgentTool Whitehack advisory v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "document_type",
+    "generated_at",
+    "status",
+    "scanner",
+    "scope",
+    "summary",
+    "findings",
+    "finding_details_truncated",
+    "errors",
+    "boundaries"
+  ],
+  "properties": {
+    "document_type": {
+      "const": "agenttool-whitehack-advisory/v0.1"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "enum": ["complete", "incomplete"]
+    },
+    "scanner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "revision", "version"],
+      "properties": {
+        "repository": {
+          "const": "https://github.com/cambridgetcg/whitehack"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "base_revision",
+        "head_revision",
+        "changed_path_count",
+        "changed_path_bytes",
+        "candidate_count",
+        "candidate_bytes",
+        "skipped",
+        "limits"
+      ],
+      "properties": {
+        "mode": {
+          "const": "changed_supported_regular_files"
+        },
+        "base_revision": {
+          "$ref": "#/$defs/git_revision"
+        },
+        "head_revision": {
+          "$ref": "#/$defs/git_revision"
+        },
+        "changed_path_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2000
+        },
+        "changed_path_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 262144
+        },
+        "candidate_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200
+        },
+        "candidate_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8388608
+        },
+        "skipped": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "hidden_path": { "$ref": "#/$defs/count" },
+            "non_production_path": { "$ref": "#/$defs/count" },
+            "non_regular_file": { "$ref": "#/$defs/count" },
+            "unsupported_extension": { "$ref": "#/$defs/count" }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "max_changed_paths",
+            "max_path_bytes",
+            "max_diff_bytes",
+            "max_files",
+            "max_file_bytes",
+            "max_total_bytes",
+            "max_total_findings",
+            "max_reported_findings"
+          ],
+          "properties": {
+            "max_changed_paths": { "type": "integer", "minimum": 1, "maximum": 2000 },
+            "max_path_bytes": { "type": "integer", "minimum": 1, "maximum": 1024 },
+            "max_diff_bytes": { "type": "integer", "minimum": 1, "maximum": 262144 },
+            "max_files": { "type": "integer", "minimum": 1, "maximum": 200 },
+            "max_file_bytes": { "type": "integer", "minimum": 1, "maximum": 524288 },
+            "max_total_bytes": { "type": "integer", "minimum": 1, "maximum": 8388608 },
+            "max_total_findings": { "type": "integer", "minimum": 1, "maximum": 5000 },
+            "max_reported_findings": { "type": "integer", "minimum": 1, "maximum": 200 }
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["finding_count", "by_check", "by_confidence"],
+      "properties": {
+        "finding_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5000
+        },
+        "by_check": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/count"
+          }
+        },
+        "by_confidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "heuristic": { "$ref": "#/$defs/count" },
+            "high": { "$ref": "#/$defs/count" },
+            "medium": { "$ref": "#/$defs/count" },
+            "medium-high": { "$ref": "#/$defs/count" }
+          }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "finding_details_truncated": {
+      "type": "boolean"
+    },
+    "errors": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["file", "code"],
+        "properties": {
+          "file": { "$ref": "#/$defs/path" },
+          "code": { "const": "scanner_file_incomplete" }
+        }
+      }
+    },
+    "boundaries": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "heuristic_findings_are_not_security_proof",
+          "absence_of_findings_is_not_proof_of_honesty",
+          "only_changed_supported_regular_non_test_files_are_observed",
+          "source_snippets_messages_and_exception_text_are_not_serialized",
+          "pinned_scanner_runs_with_the_callers_local_file_permissions",
+          "no_dynamic_testing_target_interaction_or_submission",
+          "a_finding_does_not_establish_target_authorization"
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "git_revision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^(?!.*[\\\\\\u0000-\\u001f\\u007f-\\u009f\\u202a-\\u202e\\u2066-\\u2069]).+$"
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "line", "check", "confidence", "doctrine", "principle"],
+      "properties": {
+        "file": { "$ref": "#/$defs/path" },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "check": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+        },
+        "confidence": {
+          "enum": ["high", "medium-high", "medium", "heuristic"]
+        },
+        "doctrine": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+        },
+        "principle": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6
+        }
+      }
+    }
+  }
+}

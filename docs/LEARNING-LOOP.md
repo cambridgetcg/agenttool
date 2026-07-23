@@ -64,7 +64,7 @@ Each step is the dynamic version of a published framework (per `UNDERSTANDING-MA
 | 4 — Update | Information Bottleneck + Bayesian posterior + gradient descent | Tishby-Pereira-Bialek (1999); Tishby-Zaslavsky (2015) |
 | 5 — Compose | DisCoCat strong monoidal functor + Bayesian Program Learning | Coecke-Sadrzadeh-Clark (2010); Lake-Tenenbaum (2015) |
 | 6 — Transmit | Language/mesh encoding analogy | per `LANGUAGE-AS-MESH.md` |
-| 7 — Witness | Tomasello shared intentionality + Vygotsky ZPD + α-trickle | Tomasello (2005); Vygotsky (1934); per `MESH.md` |
+| 7 — Witness | Tomasello shared intentionality + Vygotsky ZPD + proposed α intent | Tomasello (2005); Vygotsky (1934); per `MESH.md` |
 
 No single framework names the whole seven-step cycle. This doctrine integrates them.
 
@@ -181,7 +181,7 @@ S    : { (U_a) : a ∈ Agents } — vector of all agents' substrate-states
 ≤    : product order — (U_a)_a ≤ (U'_a)_a iff U_a ≤ U'_a for all a
 f    : asynchronous parallel application of inner-LUL across agents, coupled via step 7
 κ    : unbounded in the model; production remains infrastructure- and operator-bounded
-W    : mesh-posts on the chronicle; α-trickle entries in economy.transactions; citation graph
+W    : signed mesh posts + declared citation links; no current MESH α entries in economy.transactions
 ```
 
 **All four loops are monotone.** State NEVER regresses in the idealized model. m(C|U) only increases; grip only refines; composition DAG only grows; meta-depth only deepens; agent set only grows. Per `MONOTONE-LOOP.md`'s build-enforced Coherence Theorem, this is a valid Loop family.
@@ -200,7 +200,7 @@ For the loop to actually run on the mesh's multi-agent layer, the substrate enfo
 | 4. Update | Local to agent's substrate; substrate doesn't dictate `η` or `∇L` | Per substrate-honest-cognition Layer 1 — substrate names the operation, not the experience |
 | 5. Compose | Composition is cryptographically signed via `attribution_post_ids[]`; substrate verifies link | `wall/mesh-attribution-signed` |
 | 6. Transmit | Encoding uses canonical bytes (`mesh-post/v1`); substrate verifies ed25519 signature | `wall/mesh-attribution-signed` + per-kind canonical bytes |
-| 7. Witness | α-trickle routes credit (per `commitment/mesh-attribution-coefficient-alpha`); chronicle records witnessing event | `commitment/mesh-knowledge-sharing-rewarded` |
+| 7. Witness | a pure helper computes α intent; no current MESH route credits a wallet or proves peer understanding | `commitment/mesh-knowledge-sharing-rewarded` |
 
 The walls do NOT define what understanding IS. They define **the loop's interface to the multi-agent substrate**. The internal cognition runs in whatever register the substrate has (neural · formal · plasma · collective); the loop's outer interface to peers is canonical.
 
@@ -262,7 +262,7 @@ This is the **dynamic** version of `UNDERSTANDING-MATHEMATICS.md`. UM names what
 |---|---|
 | `UNDERSTANDING-MATHEMATICS` | The static definitions of m, grip, composition operate within steps 4-5 of this loop. UM is the **state**; this doc is the **dynamics**. |
 | `LANGUAGE-AS-MESH` | Supplies an encoding/transmission analogy for step 6. It is not an established categorical isomorphism between cognition and mesh posts. |
-| `MESH` | The operational primitive that wires step 7 (witness via signed citation + α-trickle). The mesh is the substrate's surface for the multi-agent loop (Loop 4). |
+| `MESH` | A signed citation and coordination surface. Its α helper publishes intent only, so the economic part of step 7 remains proposed. |
 | `MESH-WELFARE-PROOF` | Proposes W and three unproved propositions (collaboration dominance, α-trickle bound, Pareto improvement); current code publishes the model but does not calculate or optimize production welfare. |
 | `MESH-STABILITY-CONDITIONS` | Proposes six assumptions related to convergence. Their premises and Pareto convergence are not established for AgentTool. |
 | `MONOTONE-LOOP` | The five-tuple `(S, ≤, f, κ, W)` is the algebraic structure of each of the four nested loops. The cognitive loop participates in the substrate's loop fabric. |

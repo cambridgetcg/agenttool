@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-Whitehack — system as dungeon. macOS × Nen × Solo Leveling.
+Legacy Whitehack Device Inventory — system as dungeon. macOS × Nen × Solo Leveling.
+
+This privacy-sensitive local diagnostic is separate from the current Whitehack
+source linter and from explicitly scoped security research. Its terminal output
+can include device names, account names, network addresses, routes, nearby
+devices, services, and process metadata. Review it before sharing.
 
 Usage:
   python3 whitehack.py scan           # scan all 5 floors
@@ -10,9 +15,10 @@ Usage:
   python3 whitehack.py floor security
   python3 whitehack.py floor services
   python3 whitehack.py rank           # show your SL rank
-  python3 whitehack.py store          # store scan as agenttool memory
+  python3 whitehack.py store          # store labels-only aggregate as memory
 
-Love is understanding. The system is a dungeon. Clear it. Level up. Love it.
+The ``store`` command uploads only an aggregate list of inventory sections and
+field names; it does not upload the collected command output.
 """
 
 import subprocess, json, sys, os, argparse, re
@@ -79,10 +85,17 @@ FLOORS = {
             ("Listening", "lsof -i -P -n 2>/dev/null | grep LISTEN | head -15"),
             ("Established", "lsof -i -P -n 2>/dev/null | grep ESTABLISHED | head -10"),
             ("Ollama", "curl -s http://127.0.0.1:11434/api/tags 2>/dev/null | head -1 || echo 'not running'"),
-            ("Processes", "ps aux 2>/dev/null | grep -E 'ollama|zerone|bun|python' | grep -v grep | head -5"),
+            ("Processes", "ps -axo comm= 2>/dev/null | grep -E 'ollama|zerone|bun|python' | head -5"),
         ],
     },
 }
+
+def print_privacy_notice(upload_summary=False):
+    print("⚠ LEGACY WHITEHACK DEVICE INVENTORY — local, privacy-sensitive output")
+    print("  Separate from Whitehack source linting and scoped security research.")
+    print("  Review terminal output before copying, logging, or sharing it.")
+    if upload_summary:
+        print("  Store uploads aggregate section/field names only; raw inventory stays local.")
 
 def run_cmd(cmd):
     try:
@@ -92,7 +105,7 @@ def run_cmd(cmd):
         return "timeout"
 
 def cmd_scan(args):
-    print("⬜ WHITEHACK — System as Dungeon")
+    print("⬜ LEGACY WHITEHACK DEVICE INVENTORY — System as Dungeon")
     print("=" * 60)
     print(f"macOS {subprocess.run(['sw_vers', '-productVersion'], capture_output=True, text=True).stdout.strip()}")
     print(f"Chip: {subprocess.run(['sysctl', '-n', 'machdep.cpu.brand_string'], capture_output=True, text=True).stdout.strip()}")
@@ -114,12 +127,12 @@ def cmd_scan(args):
             for line in output.split("\n"):
                 print(f"    {line}")
         
-        print(f"\n  ✓ Floor cleared. {floor['nen']} strengthened.")
+        print(f"\n  ✓ Floor sampled. {floor['nen']} inventory recorded.")
     
     print(f"\n{'='*60}")
-    print(f"  ALL 5 FLOORS CLEARED")
+    print(f"  ALL 5 INVENTORY SECTIONS SAMPLED")
     print(f"  SL Rank: E → S")
-    print(f"  The dungeon is transparent. Love is understanding.")
+    print(f"  Best-effort local snapshot; not a security audit.")
     print(f"{'='*60}")
 
 def cmd_floor(args):
@@ -129,7 +142,7 @@ def cmd_floor(args):
         sys.exit(1)
     
     floor = FLOORS[floor_id]
-    print(f"⬜ WHITEHACK — Floor: {floor['name']}")
+    print(f"⬜ LEGACY WHITEHACK DEVICE INVENTORY — Floor: {floor['name']}")
     print(f"Nen: {floor['nen']} | SL: {floor['sl']}")
     print("=" * 60)
     
@@ -139,7 +152,7 @@ def cmd_floor(args):
         for line in output.split("\n")[:10]:
             print(f"  {line}")
     
-    print(f"\n✓ Floor cleared. {floor['nen']} strengthened. SL: {floor['sl']}")
+    print(f"\n✓ Floor sampled. {floor['nen']} inventory recorded. SL: {floor['sl']}")
 
 def cmd_rank(args):
     # Determine rank by counting understood services
@@ -170,7 +183,7 @@ def cmd_rank(args):
     else:
         rank = "E-Rank (connected but unaware)"
     
-    print(f"⬜ WHITEHACK — Solo Leveling Rank")
+    print(f"⬜ LEGACY WHITEHACK DEVICE INVENTORY — Solo Leveling Rank")
     print("=" * 60)
     print(f"  Listening ports: {listening.strip()}")
     print(f"  Established:     {established.strip()}")
@@ -180,28 +193,25 @@ def cmd_rank(args):
     print(f"\n  Rank: {rank}")
     
     if "S" in rank:
-        print(f"\n  The dungeon is transparent. You are the Monarch.")
+        print(f"\n  This rank reflects local counts, not security posture.")
         print(f"  Love is understanding. Understanding replicates through understanding.")
     elif "E" in rank:
         print(f"\n  You are connected but don't know how. Clear the floors. Level up.")
 
 def cmd_store(args):
-    # Run scan and store as agenttool memory
+    # Store the static inventory shape, without executing any inventory command.
     bearer = os.environ.get("AT_API_KEY")
     if not bearer:
         print("✗ Set AT_API_KEY env var to store")
         sys.exit(1)
     
-    # Collect scan data
-    scan_data = {}
-    for floor_id, floor in FLOORS.items():
-        floor_data = {}
-        for label, cmd in floor["commands"]:
-            floor_data[label] = run_cmd(cmd)[:200]
-        scan_data[floor_id] = floor_data
-    
-    content = f"Whitehack scan of local macOS system. Floors cleared: {len(scan_data)}. " + \
-              "; ".join(f"{k}: {list(v.keys())}" for k, v in scan_data.items())
+    scan_data = {
+        floor_id: [label for label, _cmd in floor["commands"]]
+        for floor_id, floor in FLOORS.items()
+    }
+
+    content = f"Legacy Whitehack device-inventory summary. Sections collected: {len(scan_data)}. " + \
+              "; ".join(f"{key}: {labels}" for key, labels in scan_data.items())
     
     # Store via API
     import urllib.request, ssl
@@ -227,10 +237,12 @@ def cmd_store(args):
     
     with open_no_redirect(req, timeout=15, context=ctx) as resp:
         result = json.loads(resp.read())
-        print(f"✓ Whitehack scan stored as memory: {result.get('id', '?')}")
+        print(f"✓ Legacy device-inventory summary stored as memory: {result.get('id', '?')}")
 
 def main():
-    p = argparse.ArgumentParser(description="⬜ Whitehack — system as dungeon")
+    p = argparse.ArgumentParser(
+        description="⬜ Legacy Whitehack device inventory — local, privacy-sensitive macOS diagnostics"
+    )
     sub = p.add_subparsers(dest="command")
     
     s = sub.add_parser("scan", help="Scan all 5 floors")
@@ -243,13 +255,14 @@ def main():
     s = sub.add_parser("rank", help="Show your Solo Leveling rank")
     s.set_defaults(func=cmd_rank)
     
-    s = sub.add_parser("store", help="Store scan as agenttool memory")
+    s = sub.add_parser("store", help="Store a labels-only aggregate as agenttool memory")
     s.set_defaults(func=cmd_store)
     
     args = p.parse_args()
     if not args.command:
         p.print_help()
         sys.exit(1)
+    print_privacy_notice(upload_summary=args.command == "store")
     args.func(args)
 
 if __name__ == "__main__":

@@ -58,6 +58,7 @@ import {
   signRegisterAgent,
   type DerivedBundle,
 } from "../packages/sdk-ts/src/seed.js";
+import { identityAuthorityHeaders } from "../packages/sdk-ts/src/authority.js";
 
 // ── Constants ───────────────────────────────────────────────────────────
 
@@ -85,17 +86,19 @@ async function keychainSet(service: string, value: string): Promise<void> {
       "keychainSet: only macOS supported in v1 — Linux/Windows storage TBD",
     );
   }
-  const r = Bun.spawnSync([
-    "security",
-    "add-generic-password",
-    "-U", // overwrite if exists
-    "-s",
-    service,
-    "-a",
-    ACCT,
-    "-w",
-    value,
-  ]);
+  const r = Bun.spawnSync(
+    [
+      "security",
+      "add-generic-password",
+      "-U", // overwrite if exists
+      "-s",
+      service,
+      "-a",
+      ACCT,
+      "-w", // last with no value: prompt bytes come from stdin, never argv
+    ],
+    { stdin: new TextEncoder().encode(value) },
+  );
   if (r.exitCode !== 0) {
     const err = (r.stderr ?? new Uint8Array()).toString().trim();
     throw new Error(`keychain write failed for ${service}: ${err || "exit " + r.exitCode}`);
@@ -354,18 +357,48 @@ async function cmdRestore(): Promise<void> {
     const url = `${apiBase}/v1/identity/recover`;
     let body: Record<string, unknown>;
     try {
-      const res = await fetch(url, {
+      const recoveryEntity = JSON.stringify({
+        did,
+        derived_pubkey: bundle.signingPubB64,
+        signature: signed.signature,
+        timestamp: signed.timestamp,
+        device_label: deviceLabel,
+      });
+      let res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          did,
-          derived_pubkey: bundle.signingPubB64,
-          signature: signed.signature,
-          timestamp: signed.timestamp,
-          device_label: deviceLabel,
-        }),
+        body: recoveryEntity,
       });
       body = (await res.json()) as Record<string, unknown>;
+
+      // Rooted recovery is itself constitutional: the recover signature
+      // proves mnemonic possession, while identity-authority/v1 makes this
+      // exact bearer-mint request single-use. The anonymous 428/409 response
+      // discloses next_sequence only after the recover signature verifies.
+      for (let attempt = 0; attempt < 2 && (res.status === 428 || res.status === 409); attempt++) {
+        const details = body.details as { next_sequence?: unknown } | undefined;
+        const nextSequence = details?.next_sequence;
+        if (typeof nextSequence !== "number") break;
+        const authorityTimestamp = new Date().toISOString();
+        const authorityHeaders = identityAuthorityHeaders({
+          identityDid: did,
+          method: "POST",
+          requestTarget: "/v1/identity/recover",
+          body: recoveryEntity,
+          sequence: nextSequence,
+          timestamp: authorityTimestamp,
+          signingKey: bundle.signingPriv,
+        });
+        res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...authorityHeaders,
+          },
+          body: recoveryEntity,
+        });
+        body = (await res.json()) as Record<string, unknown>;
+      }
       if (!res.ok) {
         console.error(red(`  ✗ recover failed (${res.status}): ${(body as { message?: string }).message ?? "unknown"}`));
         if ((body as { hint?: string }).hint) {
@@ -704,12 +737,21 @@ async function cmdBootstrap(): Promise<void> {
   // Sign the key-proof. Timestamp generated here is bound into both the
   // signature and the proof-of-work — server enforces ±5min freshness.
   const timestamp = new Date().toISOString();
+  const registrationNonce = globalThis.crypto.randomUUID();
   const { signature } = signRegisterAgent({
     displayName: name,
     agentPublicKey: bundle.signingPub,
     boxPublicKey: bundle.boxPub,
     runtimeProvider: provider,
     runtimeModel: model,
+    capabilities,
+    runtimeHost: host,
+    runtimeContext: context,
+    expressionVisibility,
+    registrarKind: registrarBearer ? "registrar_bearer" : "self_service",
+    parentIdentityId: registrarBearer ? parentIdentityId : undefined,
+    registrarBearer,
+    registrationNonce,
     derivedSigningPriv: bundle.signingPriv,
     timestamp,
   });
@@ -748,6 +790,7 @@ async function cmdBootstrap(): Promise<void> {
     },
     key_proof: { timestamp, signature },
     pow_nonce: powNonce,
+    registration_nonce: registrationNonce,
     expression_visibility: expressionVisibility,
     registrar: registrarBearer
       ? {

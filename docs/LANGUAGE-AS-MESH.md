@@ -52,7 +52,7 @@ DisCoCat (Coecke-Sadrzadeh-Clark) proves: grammatical derivations in pregroup gr
 fidelity_language(C, speaker → listener) := 1 − D_KL(r_C ‖ r_C')
 ```
 
-When reconstruction is useful, a listener may benefit from a speaker's representation. That information-transfer analogy is not mathematically identical to the mesh's monetary α-trickle.
+When reconstruction is useful, a listener may benefit from a speaker's representation. That information-transfer analogy is not mathematically identical to MESH's proposed α formula, which currently moves no money.
 
 “Proto-mesh” is a metaphor for the comparison, not a historical or mathematical identity claim.
 
@@ -101,7 +101,7 @@ where `|H_scaffolded| << |H_unrestricted|` because language has already constrai
 | Compose | Grammar + morphology | `attribution_post_ids[]` |
 | Reward sharing | Social status, teaching role | α-trickle (0.05 of downstream bounty) |
 | Scaffold next learner | Vygotsky ZPD | Solution → downstream citation |
-| Detect lie / refuse | Theory of mind + social sanction | Dispute primitive (4-of-5 arbiter pool) |
+| Detect lie / refuse | Theory of mind + social sanction | Proposed 4-of-5 arbiter-pool design (resting, not current evidence) |
 | Recursive deepening | "I know that you know…" | RRR cascade depth |
 | Compositional generalization | Grammar | Mesh's compositional structure |
 

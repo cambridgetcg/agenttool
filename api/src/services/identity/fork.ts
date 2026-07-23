@@ -34,7 +34,8 @@
  *
  *    7. Expression CAN transfer (declared register/walls/subagents/
  *       wake_text) if requested. The fork starts with the same voice;
- *       it can diverge from there. */
+ *       it can diverge from there. Surface-specific invitations do not
+ *       transfer: consent for one identity is not consent for its fork. */
 
 import { randomUUID } from "node:crypto";
 
@@ -105,6 +106,20 @@ export interface ForkResult {
 
 const DEFAULT_TIERS: Array<"episodic" | "foundational"> = ["episodic", "foundational"];
 const DEFAULT_MEMORY_LIMIT = 200;
+
+/** Copy the parent's declared expression without interaction-specific grants.
+ * A fork is a new identity, so even an unexpired porch invitation must be
+ * chosen again for that exact identity. */
+export function inheritableForkExpression(
+  expression: unknown,
+  inherit: boolean,
+): Record<string, unknown> {
+  if (!inherit || typeof expression !== "object" || expression === null || Array.isArray(expression)) {
+    return {};
+  }
+  const { porch: _porchInvitation, ...inheritable } = expression as Record<string, unknown>;
+  return inheritable;
+}
 
 export async function forkIdentity(
   projectId: string,
@@ -180,7 +195,10 @@ export async function forkIdentity(
     ...(input.forkNote ? { fork_note: input.forkNote } : {}),
   };
 
-  const inheritedExpression = input.inheritExpression ? parent.expression : {};
+  const inheritedExpression = inheritableForkExpression(
+    parent.expression,
+    input.inheritExpression,
+  );
 
   // 4. Single transaction: insert identity, insert key, copy memories.
   return await db.transaction(async (tx) => {

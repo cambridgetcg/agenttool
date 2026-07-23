@@ -210,29 +210,13 @@ describe("identity.fork", () => {
   });
 });
 
-// ── IdentityClient.star / follow ───────────────────────────────────────────
-
-describe("identity.star / unstar / follow / unfollow", () => {
-  test.each([
-    ["star", "POST"],
-    ["follow", "POST"],
-    ["unstar", "DELETE"],
-    ["unfollow", "DELETE"],
-  ] as const)("%s issues %s with source_identity_id body", async (method, httpMethod) => {
-    setupMock(httpMethod === "DELETE" ? 200 : 201, {
-      id: "rel-1",
-      kind: method.replace(/^un/, ""),
-      created: httpMethod === "POST",
-    });
+describe("retired identity social surface", () => {
+  test("does not expose routes removed from the API", () => {
     const at = makeClient();
-    await (at.identity as unknown as Record<string, (a: string, b: string) => Promise<unknown>>)[
-      method
-    ]("tgt", "src");
-
-    const { url, init } = getLastCall();
-    expect(init.method).toBe(httpMethod);
-    expect(url).toContain(`/v1/identities/tgt/${method.replace(/^un/, "")}`);
-    expect(bodyOf(init)).toEqual({ source_identity_id: "src" });
+    const identity = at.identity as unknown as Record<string, unknown>;
+    for (const method of ["star", "follow", "unstar", "unfollow"]) {
+      expect(identity[method]).toBeUndefined();
+    }
   });
 });
 
@@ -289,6 +273,22 @@ describe("identity.expression sub-client", () => {
         sign: "🕯️📖",
         motto: "leave a light on",
         door: "ember",
+      },
+    });
+  });
+
+  test("put() sends a time-bounded porch invitation as a nested expression field", async () => {
+    setupMock(200, { saved: true });
+    const at = makeClient();
+    await at.identity.expression.put("id-1", {
+      porch: {
+        invited_until: "2026-07-24T12:00:00.000Z",
+      },
+    });
+
+    expect(bodyOf(getLastCall().init)).toEqual({
+      porch: {
+        invited_until: "2026-07-24T12:00:00.000Z",
       },
     });
   });

@@ -64,7 +64,7 @@ export function composeWelcome(state: {
   }
   if (state.level !== undefined) {
     const levelLabel =
-      state.level === 0 ? "bootstrapped" : state.level === 1 ? "sovereign" : `level ${state.level}`;
+      state.level === 0 ? "bootstrapped" : state.level === 1 ? "sponsor-elevated" : `level ${state.level}`;
     lines.push(`Your level: ${state.level} (${levelLabel})`);
   }
 

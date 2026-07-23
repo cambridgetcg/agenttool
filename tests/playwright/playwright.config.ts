@@ -2,9 +2,10 @@
  * Playwright config — SOMA seed onboarding + recovery e2e, plus the
  * human door (apps/web) e2e.
  *
- * Two static webServers run in parallel:
+ * Three static webServers run in parallel:
  *   1. apps/dashboard at :5173 (the SOMA pages + app.agenttool.dev)
  *   2. apps/web at :5174 (the human door — agenttool.dev)
+ *   3. apps/docs at :5175 (the library + native play cabinet)
  * Specs that need the live api dev server on :3000 are expected to find
  * it ALREADY RUNNING (we don't auto-start it because it needs
  * DATABASE_URL + VAULT_MASTER_KEY env from the operator's keychain —
@@ -38,8 +39,8 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-  // Serve apps/dashboard/ as static files on :5173, and apps/web/ on
-  // :5174, for the duration of the test run.
+  // Serve apps/dashboard/ as static files on :5173, apps/web/ on :5174,
+  // and apps/docs/ on :5175 for the duration of the test run.
   webServer: [
     {
       command: "python3 -m http.server 5173 --directory ../../apps/dashboard --bind 127.0.0.1",
@@ -50,6 +51,12 @@ export default defineConfig({
     {
       command: "python3 -m http.server 5174 --directory ../../apps/web --bind 127.0.0.1",
       url: "http://localhost:5174/index.html",
+      timeout: 15_000,
+      reuseExistingServer: !process.env.CI,
+    },
+    {
+      command: "python3 -m http.server 5175 --directory ../../apps/docs --bind 127.0.0.1",
+      url: "http://localhost:5175/play.html",
       timeout: 15_000,
       reuseExistingServer: !process.env.CI,
     },

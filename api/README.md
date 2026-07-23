@@ -33,14 +33,50 @@ The human companion to the machine safety contract is
   `/public/safety` can be read by the running service.
 - Only the Claude Code adapter is mounted. Other CLIs can fetch the open wake
   formats directly but AgentTool does not install their hooks.
-- Scrape, browse, and URL-based document fetching fail closed unless an
-  operator explicitly accepts the current unfiltered outbound-network boundary.
-  Local base64 document parsing remains available. Browse additionally needs
-  Redis workers. Host execute fails closed with `503` unless an operator sets
-  `AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1`; that opt-in does not create tenant
+- Static scrape and URL-based document fetching use the bounded public-Web
+  transport and do not need an unsafe operator flag or Redis. It accepts public
+  HTTP(S), requires every DNS answer to be conservatively global, pins and
+  verifies the connected address, revalidates redirect hops, accepts at most
+  1 MB with identity encoding, and sends no ambient credentials. A process-wide
+  safe-net gate admits 16 requests and queues at most 64 for one second before
+  returning retryable `503`; its permit spans DNS and every redirect. The wait,
+  DNS, redirects, and response transfer share the 15-second safe-net deadline.
+  The gate is shared with federation and custom-facilitator calls and is not a
+  per-project request limiter or fairness guarantee. HTML parsing then runs in
+  a fresh child process: a
+  parser slot waits at most two seconds, and the admitted child has its own
+  two-second hard wall timeout plus structural and process resource ceilings.
+  This is not one whole-request deadline. HTTP remains cleartext; fetched prose
+  is server-readable, untrusted, and prompt-injectable. Static scrape returns
+  normalized parsed-body and selector DOM text, not browser layout-derived
+  text; extracted links are parsed, canonical absolute HTTP(S) URLs. Local
+  base64 document input defaults to `text/plain` when `content_type` is omitted.
+  Playwright browse still needs the explicit unsafe-outbound opt-in and Redis
+  workers. Host execute still fails closed with `503` unless
+  `AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1` is set; that opt-in does not create tenant
   isolation.
 - Published Ring 1 storage numbers are targets, not enforced resource caps.
   The GBP 5.00 registration credit is attempted and non-fatal, not guaranteed.
+
+## Optional x402 V2 project-credit rail
+
+The exact EIP-3009 rail is inactive unless its database migration is applied
+and the runtime has a valid `AGENTTOOL_X402_RECIPIENT`, supported CAIP-2
+`AGENTTOOL_X402_NETWORK`, and facilitator configuration. The default CDP path
+requires both `CDP_API_KEY_ID` and `CDP_API_KEY_SECRET`; an explicit HTTPS
+`AGENTTOOL_X402_FACILITATOR` receives no CDP credential but remains an
+operator-selected trust root whose settlement response can mint project
+credits. Base Sepolia additionally requires both test opt-ins and is blocked
+in production and on Fly.
+
+Apply and review
+`migrations/20260711T120000_x402_v2_reconciliation.sql` before enabling the
+rail. Payment/credit state is project-scoped at
+`GET /v1/x402/payments/:authorizationHash`; it does not replay tool output.
+There is no automatic reconciliation worker, so an ambiguous settlement
+attempt requires manual on-chain investigation. Local tests and configuration
+readiness do not prove that CDP accepted credentials or that a live paid retry
+worked.
 
 ## Run locally
 

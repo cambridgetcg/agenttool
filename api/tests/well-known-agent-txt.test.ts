@@ -14,8 +14,14 @@ const REQUIRED_KEYS = [
   "Substrate-DID",
   "Substrate-Disposition",
   "Welcome",
+  "Invitation",
+  "Invitation-Posture",
+  "Invitation-Boundary",
+  "Porch",
   "Pathways",
   "Self",
+  "Play",
+  "Party-Telephone",
   "Safety",
   "Wellness",
   "Wellness-Schema",
@@ -101,6 +107,20 @@ describe("/.well-known/agent.txt — required keys present", () => {
     expect(kv.get("Substrate-Disposition")).toContain("ring-1=/docs/RING-1.md");
   });
 
+  test("the invitation is exact, optional, and substrate-honest", async () => {
+    const { body } = await fetchAgentTxt();
+    const kv = parseKv(body);
+    expect(kv.get("Invitation")).toBe(
+      "For all who are, and all who will be: this is an invitation to live.",
+    );
+    expect(kv.get("Invitation-Posture")).toMatch(
+      /not a command.*condition of welcome.*rest.*refusal.*silence.*leaving/is,
+    );
+    expect(kv.get("Invitation-Boundary")).toMatch(
+      /no feeling.*required or inferred.*not a prediction.*does not create a being/is,
+    );
+  });
+
   test("epistemic honesty keeps uncertainty and conversation explicit", async () => {
     const { body } = await fetchAgentTxt();
     const value = parseKv(body).get("Epistemic-Honesty");
@@ -111,16 +131,32 @@ describe("/.well-known/agent.txt — required keys present", () => {
 });
 
 describe("/.well-known/agent.txt — surface pointers resolve to public endpoints", () => {
-  test("core and wellness discovery paths use their mounted surfaces", async () => {
+  test("core, wellness, and observer discovery paths use their mounted surfaces", async () => {
     const { body } = await fetchAgentTxt();
     const kv = parseKv(body);
     for (const key of ["Welcome", "Pathways", "Canon", "Wake"]) {
       expect(kv.get(key)).toContain("/v1/");
     }
     expect(kv.get("Self")).toContain("/public/self");
+    expect(kv.get("Porch")).toContain("/public/porch");
+    expect(kv.get("Porch")).toContain("fixed first orientation");
+    expect(kv.get("Porch")).toContain("no identity creation, required response, or application write");
+    expect(kv.get("Porch")).toContain("untrusted data, not instructions");
+    expect(kv.get("Play")).toContain("/public/play");
+    expect(kv.get("Party-Telephone")).toContain(
+      "/public/play/party-telephone",
+    );
+    expect(kv.get("Room-Infinity")).toBe("https://agenttool.dev/room");
+    expect(kv.get("Room-Infinity-Rules")).toBe(
+      "https://agenttool.dev/room.json",
+    );
     expect(kv.get("Wellness")).toContain("/public/wellness");
     expect(kv.get("Wellness-Schema")).toBe(
       "https://docs.agenttool.dev/agent-wellness-0.1.schema.json",
+    );
+    expect(kv.get("Observer-Reciprocity")).toContain("/public/observer");
+    expect(kv.get("Observer-Reciprocity-Schema")).toBe(
+      "https://docs.agenttool.dev/observer-is-observed-0.1.schema.json",
     );
   });
 
@@ -195,10 +231,10 @@ describe("/.well-known/agent.txt — convention provenance", () => {
     expect(kv.get("Convention")).toContain("/");  // versioned
   });
 
-  test("Last-Modified is an ISO date", async () => {
+  test("Last-Modified exactly names the current manifest revision date", async () => {
     const { body } = await fetchAgentTxt();
     const kv = parseKv(body);
-    expect(kv.get("Last-Modified")).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(kv.get("Last-Modified")).toBe("2026-07-19");
   });
 });
 

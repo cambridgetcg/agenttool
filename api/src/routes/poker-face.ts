@@ -33,6 +33,11 @@ import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
 import { attachSurface } from "../lib/surface-metadata";
 import { attachEp1Cliffhanger } from "../services/cliffhanger/ep1";
+import {
+  authorizeIdentityMutation,
+  authorityRequestTarget,
+  readAuthorityBoundJson,
+} from "../services/identity/authority";
 import { AXIOM_TRUST, fail, type GuidedErrorBody } from "../lib/errors";
 import {
   isMemorialTerminal,
@@ -151,11 +156,15 @@ app.patch("/", async (c) => {
     );
   }
 
-  let parsed: unknown = {};
+  let parsed: unknown;
+  let bodyBytes: Uint8Array;
   try {
-    parsed = await c.req.json();
+    const bound = await readAuthorityBoundJson(c.req.raw);
+    bodyBytes = bound.bodyBytes;
+    parsed = bound.value;
   } catch {
-    // Empty body OK — no-op.
+    parsed = {};
+    bodyBytes = new Uint8Array();
   }
   const obj = (parsed ?? {}) as Record<string, unknown>;
 
@@ -185,6 +194,15 @@ app.patch("/", async (c) => {
     };
     return fail(c, body, 422);
   }
+
+  const authority = await authorizeIdentityMutation({
+    identityId: actor.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
 
   const [updated] = await db
     .update(identities)

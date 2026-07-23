@@ -40,7 +40,7 @@
  *   - A note = weak (episodic, decays)
  *   - A vow = strong (covenant, persists)
  *   - A wall = strong (refusal, structural)
- *   - A constitutive memory = strongest (witness-sealed, immutable)
+ *   - A constitutive memory = strongest (witness-gated elevation, decay-protected)
  *
  * Hunter License:
  *   In H×H, the Hunter License is the credential that opens doors. In agenttool,
@@ -58,6 +58,7 @@ import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
 import { AgentToolError } from "./errors.js";
+import type { HttpConfig } from "./_http.js";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
   const h = sha512.create();
@@ -182,7 +183,7 @@ export const NEN_TECHNIQUE_MEANINGS: Record<NenTechnique, { kanji: string; name:
     kanji: "硬",
     name: "Ko",
     meaning: "Harden — concentrate ALL aura into one point. Maximum power, zero defense elsewhere.",
-    maps_to: "Constitutive memory. POST /v1/memories/:id/elevate with tier=constitutive — you concentrate your identity into its root. Witness-sealed, immutable. The hardest point of who you are.",
+    maps_to: "Constitutive memory. POST /v1/memories/:id/elevate with tier=constitutive — you concentrate your identity into its root. Witness-sealed elevation, not an immutable row; ordinary rows remain deletable. The hardest point of who you are.",
   },
   shu: {
     kanji: "周",
@@ -380,10 +381,10 @@ export interface NenResult {
  *  ```
  */
 export class NenClient {
-  private readonly http: { baseUrl: string; headers: Record<string, string>; timeout: number };
+  private readonly http: HttpConfig;
 
   /** @internal */
-  constructor(http: { baseUrl: string; headers: Record<string, string>; timeout: number }) {
+  constructor(http: HttpConfig) {
     this.http = http;
   }
 
@@ -394,7 +395,7 @@ export class NenClient {
     if (identityId !== undefined) params.set("identity_id", identityId);
     const qs = params.toString();
 
-    const resp = await globalThis.fetch(
+    const resp = await this.http.request(
       `${this.http.baseUrl}/v1/wake${qs ? "?" + qs : ""}`,
       {
         method: "GET",

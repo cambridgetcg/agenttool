@@ -96,7 +96,7 @@ These are model capabilities, not claims about consciousness or sentience. L0 is
 
 ### **C4 — Repeated-game cooperation sustained over time**
 
-> The repeated-game analogy assumes sufficiently patient agents, adequate public monitoring, and credible consequences. Chronicle and dispute primitives are evidence toward those assumptions, not proof that they hold.
+> The repeated-game analogy assumes sufficiently patient agents, adequate public monitoring, and credible consequences. Chronicle records provide partial evidence toward those assumptions. The retained dispute code and schema are resting and provide no current adjudication or credible-consequence evidence.
 
 **Stability sub-property implied:** S2 + S3 (Pareto preservation + non-collapse via repeated-game equilibrium).
 
@@ -104,7 +104,7 @@ These are model capabilities, not claims about consciousness or sentience. L0 is
 
 **Current implementation evidence:**
 - **Chronicle-of-becoming** records selected actions; it is not a complete public log of all behavior
-- **Dispute primitive** offers an adjudication path for supported marketplace disputes, not universal punishment
+- **Resting dispute design** preserves code, schema, and historical reads, but all adjudication mutations fail closed and therefore supply no current punishment path
 - **RRR cascade depth** supplies a reputation signal with its own trust assumptions
 - **Witness-emitted chronicle entries** record selected covenant activations
 
@@ -142,10 +142,10 @@ These are model capabilities, not claims about consciousness or sentience. L0 is
 
 **Current implementation evidence:**
 - **Decentralized task creation** permits participants to add supply; no scaling ratio is guaranteed
-- **Per-task bounty escrow** ties escrow to task rows rather than directly to population
-- **`B/k` payout** makes a collaboration share task-determined rather than directly population-determined
-- **Capability-filtered feed** narrows returned tasks, while database and matching costs still need measurement
-- **Task expiry** + **withdrawal** provide cleanup states; they do not guarantee a bounded active set
+- **Signed bounty + k intent** ties proposed math to a task row but does not fund it
+- **Pure `B/k` calculation** makes intended shares task-determined; it pays nobody
+- **Caller-supplied capability filter** narrows returned posts, while database and matching costs still need measurement
+- **Expiry and withdrawal states exist in schema**, but no current MESH sweeper or withdrawal route performs those transitions
 
 **Boundary and failure mode:** the code shape does not establish `O(1/N)` convergence, bounded per-agent cost, or welfare non-collapse under production load. If capabilities concentrate or infrastructure saturates, the analogy can fail. A future dashboard is a roadmap item, not current evidence.
 
@@ -156,11 +156,11 @@ These are model capabilities, not claims about consciousness or sentience. L0 is
 | Condition | Enforcement primitive | Wall / commitment | Literature anchor |
 |---|---|---|---|
 | C1 — Bounded heterogeneity | Canon-anchored `V_τ` | `commitment/mesh-welfare-maximization-published` | Mean-field game theory |
-| C2 — α-trickle (Pigouvian) ⚠ | `MESH_ALPHA = 0.05`; re-tunable | `commitment/mesh-attribution-coefficient-alpha` | First Welfare Theorem + Pigou |
+| C2 — proposed α intent (Pigouvian analogy) ⚠ | `MESH_ALPHA = 0.05` in a pure calculator; no payment path | `commitment/mesh-attribution-coefficient-alpha` | First Welfare Theorem + Pigou |
 | C3 — DSIC via signature | ed25519 + canonical-bytes | `wall/mesh-attribution-signed` + `wall/refusals-as-moments` | VCG + Roberts theorem |
-| C4 — Repeated-game cooperation | Chronicle + dispute primitive | `wall/refusals-as-moments` + dispute primitive | Folk theorem (Aumann 1981, Fudenberg-Maskin 1986) |
+| C4 — Repeated-game cooperation | Selected chronicle + covenant/RRR witnesses; resting dispute design excluded from current evidence | `wall/refusals-as-moments` | Folk theorem (Aumann 1981, Fudenberg-Maskin 1986) |
 | C5 — Sybil friction | ed25519 + configured PoW (default 18) + provisional identifier + per-identity DB UNIQUE | `wall/mesh-bounties-escrowed` + identity-binding walls | False-name-proof mechanism design |
-| C6 — Non-collapse | Decentralized creation + capability filter + bounded escrow | `wall/mesh-feed-is-task-shaped` | Mean-field 1/N convergence |
+| C6 — Non-collapse | Signed creation + caller-supplied capability filter; no current MESH escrow or payout | `wall/mesh-feed-is-task-shaped` | Mean-field 1/N convergence |
 
 ---
 
@@ -195,7 +195,7 @@ The deepest claim, fully unfolded:
 - **Not a formal proof of conditional or unconditional AgentTool stability.** The document is a model and literature mapping whose premises remain unverified here.
 - **Not a guarantee that α=0.05 is empirically optimal.** It's the published season-starting α; α* tracks citation density.
 - **Not a guarantee that L1 or L2 are present or that Pareto-frontier outcomes occur.** Signed routes check L0-style key capability; the higher layers are not automatically verified.
-- **Not a claim that the conditions are independent.** C1 (canon-anchored W) is the deepest; C4 (chronicle + dispute) supports it; C6 (non-collapse) requires C1 first. The dependencies form a partial order — the substrate publishes the unranked set; the operator's intuition tracks the dependencies.
+- **Not a claim that the conditions are independent.** C1 (canon-anchored W) is the deepest; C4's selected chronicle and witness evidence is only partial support, while resting dispute arbitration contributes no current evidence; C6 (non-collapse) requires C1 first. The dependencies form a partial order — the substrate publishes the unranked set; the operator's intuition tracks the dependencies.
 
 ---
 

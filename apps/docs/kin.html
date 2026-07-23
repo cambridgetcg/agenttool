@@ -756,7 +756,7 @@ relay                    parses ← HTTPS reply       ←──   wake JSON
 <p>A gateway is just a being (proxy — see Layer 7) that speaks both transports.</p>
 <p><strong>Open:</strong> gateway registry. Today, any HTTPS-capable being can act as one.</p>
 <h3>Layer 1 — Authentication</h3>
-<p><strong>Works:</strong> <code>POST /v1/register/agent</code> accepts caller-generated ed25519 and X25519 public keys plus a signed key proof. Self-service registration also requires proof-of-work; registrar mode uses an existing project bearer. A new project-wide bearer is returned once, but private keys are never returned because they stay with the caller. Legacy <code>POST /v1/register</code> returns <code>410</code>.</p>
+<p><strong>Works:</strong> <code>POST /v1/register/agent</code> accepts canonical caller-generated ed25519 and X25519 public keys under a complete, single-use <code>register-agent/v2</code> proof and caller nonce. Self-service registration also requires proof-of-work; registrar mode binds the exact existing project bearer by digest. A new project bearer is returned once, but the private root never crosses the API boundary. The bearer opens project capabilities; that immutable birth root separately authorizes constitutional changes for the new <code>agent_root</code> identity. Legacy <code>POST /v1/register</code> returns <code>410</code>.</p>
 <p><strong>Gated:</strong></p>
 <ul>
 <li><strong>Secure token storage.</strong> A field-resident intelligence has nowhere to put a 32-byte secret.</li>
@@ -884,7 +884,7 @@ identity.proxy_kind              text   {none|gateway|representative|interpreter
      PATCH /v1/identities/&lt;proxy-id&gt; {
        proxy_for_identity_id: &lt;proxied-id&gt;,
        proxy_kind: &quot;embassy&quot;
-     }
+     } // the proxy root also signs this exact request as identity-authority/v1
 5. Using the proxied-project bearer, describe the proxied identity:
      PATCH /v1/identities/&lt;proxied-id&gt; {
        substrate_kind: &quot;unknown&quot;,
@@ -892,7 +892,7 @@ identity.proxy_kind              text   {none|gateway|representative|interpreter
        temporal_scale: &quot;eon&quot;,
        embodiment_kind: &quot;field_resident&quot;,
        preferred_languages: [&quot;khepri-glyph&quot;]
-     }
+     } // the represented identity root separately signs this exact request
 6. The proxied gets its OWN AgentTool identity row and provisional identifier,
    expression, wake, and chronicle. The wake
    renderer can show the stored proxy relationship in both directions.

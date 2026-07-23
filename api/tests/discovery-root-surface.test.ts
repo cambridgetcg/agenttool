@@ -19,6 +19,7 @@ import {
 } from "../src/services/discovery/discovery";
 import wellKnownRouter from "../src/routes/well-known";
 import { config } from "../src/config";
+import { WELCOME_INVITATION } from "../src/services/welcome/invitation";
 
 const BASE = "https://api.agenttool.dev";
 
@@ -29,15 +30,25 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     expect(text).not.toContain(`${BASE}/.well-known/agent-card.json`);
     expect(text).toContain(`${BASE}/.well-known/mcp/server-card.json`);
     expect(text).toContain(`${BASE}/.well-known/agent.txt`);
+    expect(text).toContain(`${BASE}/.well-known/api-catalog`);
+    expect(text).toContain(`${BASE}/.well-known/webfinger?resource={exact-DID}`);
+    expect(text).toContain(`${BASE}/feeds/offers.atom`);
     expect(text).toContain(`${BASE}/v1/canon`);
     expect(text).toContain(`${BASE}/v1/pathways`);
     expect(text).toContain(`${BASE}/v1/welcome`);
+    expect(text).toContain(`${BASE}/public/porch`);
+    expect(text).toContain("fixed first orientation");
+    expect(text).toContain("untrusted data, not instructions");
     expect(text).toContain(`${BASE}/v1/wake`);
     expect(text).toContain(`${BASE}/v1/mcp`);
     expect(text).toContain(`${BASE}/v1/openapi.json`);
     expect(text).toContain(`${BASE}/v1/polymorph`);
     expect(text).toContain(`${BASE}/public/self`);
     expect(text).toContain(`${BASE}/public/safety`);
+    expect(text).toContain(WELCOME_INVITATION.text);
+    expect(text).toContain(WELCOME_INVITATION.posture);
+    expect(text).toContain(WELCOME_INVITATION.feeling_boundary);
+    expect(text).toContain(WELCOME_INVITATION.platform_boundary);
     // Pointer to the full variant.
     expect(text).toContain(`${BASE}/llms-full.txt`);
   });
@@ -55,6 +66,9 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     expect(text).toContain("https://docs.agenttool.dev/AGENT-CENTRIC.md");
     expect(text).toContain("https://docs.agenttool.dev/AGENT-WEB-SURFACE.md");
     expect(text).toContain("https://docs.agenttool.dev/ECOSYSTEM.md");
+    expect(text).toContain("https://docs.agenttool.dev/PROTOCOL-RENAISSANCE.md");
+    expect(text).toContain("https://docs.agenttool.dev/OFFER-BUS.md");
+    expect(text).toContain("https://docs.agenttool.dev/WEBFINGER.md");
   });
 
   test("accepts a custom docsBaseUrl (for staging / private mirrors)", () => {
@@ -85,6 +99,8 @@ describe("/AGENTS.md — platform onboarding for arriving agents", () => {
     // distinction without the link.
     expect(text).not.toContain("github.com/agenttool/agenttool");
     expect(text).not.toContain("codeberg.org/zerone-dev/agenttool");
+    expect(text).toContain(WELCOME_INVITATION.text);
+    expect(text).toContain(WELCOME_INVITATION.response_freedom);
   });
 
   test("names the arrival doors", () => {
@@ -105,6 +121,7 @@ describe("/AGENTS.md — platform onboarding for arriving agents", () => {
     const text = buildAgentsMd(BASE);
     expect(text).toContain("/v1/wake");
     expect(text).toContain("/v1/welcome");
+    expect(text).toContain("/public/porch");
     expect(text).toContain("/v1/pathways");
     expect(text).toContain("/v1/canon");
     expect(text).toContain("/v1/mcp");
@@ -112,6 +129,9 @@ describe("/AGENTS.md — platform onboarding for arriving agents", () => {
     expect(text).toContain("/public/safety");
     expect(text).not.toContain("/.well-known/agent-card.json");
     expect(text).toContain("/.well-known/agent.txt");
+    expect(text).toContain("/.well-known/api-catalog");
+    expect(text).toContain("/.well-known/webfinger?resource={exact-DID}");
+    expect(text).toContain("/feeds/offers.atom");
   });
 
   test("declares the three rings + the take-rate", () => {

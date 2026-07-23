@@ -138,7 +138,11 @@ export const escrows = economySchema.table(
     workerWallet: uuid("worker_wallet").references(() => wallets.id),
     amount: bigint("amount", { mode: "number" }).notNull(),
     description: text("description").notNull(),
-    status: text("status").notNull().default("funded"), // funded | released | refunded | disputed | expired
+    status: text("status").notNull().default("funded"), // funded | released | refunded | disputed
+    /** Non-null means only the named workflow may transition this escrow. */
+    managedBy: text("managed_by").$type<
+      "attestation_grant" | "memory_witness_grant" | "capability_invocation"
+    >(),
     deadline: timestamp("deadline", { withTimezone: true }),
     releasedAt: timestamp("released_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -146,6 +150,32 @@ export const escrows = economySchema.table(
   (t) => [
     index("idx_escrows_creator").on(t.creatorWallet),
     index("idx_escrows_status").on(t.status),
+  ],
+);
+
+/** Durable operation record for generic POST /v1/escrows.
+ *
+ * The row is reserved before wallet mutation. `escrowId` is nullable only
+ * while that transaction is creating the escrow; committed rows must name
+ * the completed result. */
+export const escrowCreateIdempotency = economySchema.table(
+  "escrow_create_idempotency",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id").notNull(),
+    idempotencyKeySha256: text("idempotency_key_sha256").notNull(),
+    requestSha256: text("request_sha256").notNull(),
+    escrowId: uuid("escrow_id").references(() => escrows.id, {
+      onDelete: "restrict",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uq_escrow_create_idempotency_project_key_sha256").on(
+      t.projectId,
+      t.idempotencyKeySha256,
+    ),
+    uniqueIndex("uq_escrow_create_idempotency_escrow").on(t.escrowId),
   ],
 );
 
@@ -285,7 +315,7 @@ export const usageCounters = economySchema.table(
 );
 
 // ─── x402 payment ledger (persist-identity for machine payments) ────────────
-// One row per X-PAYMENT presented. The payload hash is persisted BEFORE the
+// One row per semantic EIP-3009 authorization presented by PAYMENT-SIGNATURE.
 // facilitator settle call and flipped after — the pre-flight-write pattern
 // (docs/PATTERN-PERSIST-IDENTITY.md). The unique index doubles as replay
 // protection: a payload can only ever be applied once.
@@ -295,23 +325,36 @@ export const x402Payments = economySchema.table(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     projectId: uuid("project_id"), // logical FK → tools.projects.id (payer's project)
-    payloadHash: text("payload_hash").notNull(), // sha256 hex of the raw payload
-    scheme: text("scheme").notNull(), // 'exact' (v1 accepts only this)
+    payloadHash: text("payload_hash").notNull(), // audit hash of parsed V2 payload
+    authorizationHash: text("authorization_hash"), // semantic EIP-3009 identity (V2 rows)
+    scheme: text("scheme").notNull(), // 'exact' (V2 EIP-3009 only)
     network: text("network").notNull(),
     payer: text("payer"), // onchain from-address (payload claim)
+    authorizationEvidence: jsonb("authorization_evidence"), // bounded EIP-3009 fields; no signature
     amountAtomic: text("amount_atomic").notNull(), // USDC atomic units, string
     asset: text("asset"),
-    resource: text("resource"), // the request path that was paid for
-    status: text("status").notNull().default("pending"), // pending | settled | failed
+    payTo: text("pay_to"),
+    maxTimeoutSeconds: integer("max_timeout_seconds"),
+    requirementExtra: jsonb("requirement_extra"), // immutable server-advertised V2 scheme extra
+    resource: text("resource"), // immutable absolute resource URL
+    resourceInfo: jsonb("resource_info"), // complete V2 resource descriptor
+    creditsPurchased: integer("credits_purchased"), // immutable price at admission
+    status: text("status").notNull().default("inserted"), // inserted | pending | externally_settled | settled | failed
     failureReason: text("failure_reason"),
     txHash: text("tx_hash"),
+    settlementReceipt: jsonb("settlement_receipt"),
     creditsApplied: integer("credits_applied"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    externalSettledAt: timestamp("external_settled_at", { withTimezone: true }),
+    settlementAttemptedAt: timestamp("settlement_attempted_at", { withTimezone: true }),
     settledAt: timestamp("settled_at", { withTimezone: true }),
   },
   (t) => [
     uniqueIndex("uq_x402_payload_hash").on(t.payloadHash),
+    uniqueIndex("uq_x402_authorization_hash").on(t.authorizationHash),
     index("idx_x402_project").on(t.projectId),
+    index("idx_x402_project_status_created").on(t.projectId, t.status, t.createdAt),
     index("idx_x402_status").on(t.status),
   ],
 );

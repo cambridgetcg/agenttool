@@ -9,6 +9,7 @@
  *  Drizzle chain returns whatever each test stages. */
 import { afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
 
+import { projectCredentialNamespace } from "../../src/services/identity/credential-namespace";
 import {
   buildTestApp,
   expectContainsAll,
@@ -82,29 +83,49 @@ describe("GET /v1/adapters/claude-code (default JSON)", () => {
     expect(cmd.command).toContain(
       "$CLAUDE_PROJECT_DIR/.claude/hooks/agenttool-wake.sh",
     );
+    expect(cmd.command).toBe(
+      '"$CLAUDE_PROJECT_DIR/.claude/hooks/agenttool-wake.sh"',
+    );
   });
 
-  test("hook script probes keychain, libsecret, then env var", async () => {
+  test("hook probes every scaffold store before the environment fallback", async () => {
     mockDb.stage([makeAgent()]);
     const res = await app.request("/");
     const body = (await res.json()) as { files: Record<string, string> };
     const hook = body.files[".claude/hooks/agenttool-wake.sh"];
+    const namespace = projectCredentialNamespace(TEST_PROJECT_ID);
     expectContainsAll(hook, [
       "#!/usr/bin/env bash",
       "set -euo pipefail",
       "security find-generic-password -s 'agenttool:",
       "secret-tool lookup service 'agenttool:",
+      `$HOME/.config/agenttool/${namespace}/key`,
+      'KEY_MODE" = "600',
+      "Windows.Security.Credentials.PasswordVault",
       "${AT_API_KEY:-}",
     ]);
+
+    const durableStoreProbes = [
+      hook.indexOf("security find-generic-password"),
+      hook.indexOf("secret-tool lookup"),
+      hook.indexOf("KEY_FILE="),
+      hook.indexOf("Windows.Security.Credentials.PasswordVault"),
+    ];
+    const envFallbackUse = hook.indexOf('KEY="$ENV_KEY"');
+    expect(durableStoreProbes.every((at) => at >= 0 && at < envFallbackUse)).toBe(
+      true,
+    );
+    expect(hook.indexOf("${AT_API_KEY:-}")).toBeLessThan(durableStoreProbes[0]!);
+    expect(hook).toContain("unset AT_API_KEY");
   });
 
-  test("hook script fetches /v1/wake?format=md and emits Claude-Code hook envelope", async () => {
+  test("hook binds the resolved identity into the wake and emits Claude-Code hook envelope", async () => {
     mockDb.stage([makeAgent()]);
     const res = await app.request("/");
     const body = (await res.json()) as { files: Record<string, string> };
     const hook = body.files[".claude/hooks/agenttool-wake.sh"];
     expectContainsAll(hook, [
-      "/v1/wake?format=md",
+      "/v1/wake?format=md&identity_id=22222222-2222-2222-2222-222222222222",
       "-H @-",
       "hookSpecificOutput",
       "hookEventName",
@@ -144,7 +165,7 @@ describe("GET /v1/adapters/claude-code (default JSON)", () => {
     expect(hook).toMatch(/agenttool-wake: jq and python3[^\n]+\n\s*echo '\{\}'/);
   });
 
-  test("CLAUDE.md anchors agent name + DID + register + walls", async () => {
+  test("CLAUDE.md is a stable identity anchor without mutable expression snapshots", async () => {
     mockDb.stage([makeAgent()]);
     const res = await app.request("/");
     const body = (await res.json()) as { files: Record<string, string> };
@@ -152,11 +173,11 @@ describe("GET /v1/adapters/claude-code (default JSON)", () => {
     expectContainsAll(md, [
       "# Aurora",
       "did:at:test-aurora",
-      "concise; substrate-honest; density over length",
-      "- no fabrication",
-      "- no flattery",
-      "/v1/identities/<id>/expression", // points to live update path
+      "/v1/identities/22222222-2222-2222-2222-222222222222/expression",
+      "does not copy mutable register, walls, or wake text",
     ]);
+    expect(md).not.toContain("concise; substrate-honest; density over length");
+    expect(md).not.toContain("- no fabrication");
   });
 
   test("CLAUDE.md curl example binds bearer use to the loopback development origin", async () => {
@@ -165,10 +186,10 @@ describe("GET /v1/adapters/claude-code (default JSON)", () => {
     const body = (await res.json()) as { files: Record<string, string> };
     const md = body.files["CLAUDE.md"];
     expect(md).toContain(
-      "http://localhost/v1/identities/<id>/expression",
+      "http://localhost/v1/identities/22222222-2222-2222-2222-222222222222/expression",
     );
     expect(md).not.toContain("$AGENTTOOL_BASE");
-    expect(md).toContain("$AT_API_KEY");
+    expect(md).toContain("${AT_API_KEY:?");
     expect(md).toContain("Regenerate the adapter");
   });
 
@@ -195,7 +216,11 @@ describe("GET /v1/adapters/claude-code (default JSON)", () => {
     expect(guard.marker).toBe("agenttool-managed");
     expect(typeof guard.rule).toBe("string");
     const paths = guard.guarded_paths.map((g) => g.path).sort();
-    expect(paths).toEqual([".claude/settings.json", "CLAUDE.md"]);
+    expect(paths).toEqual([
+      ".claude/hooks/agenttool-wake.sh",
+      ".claude/settings.json",
+      "CLAUDE.md",
+    ]);
     // Each guarded path must have a fallback target the consumer can use.
     for (const g of guard.guarded_paths) {
       expect(g.fallback_path).toContain(".agenttool.");
@@ -204,38 +229,21 @@ describe("GET /v1/adapters/claude-code (default JSON)", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────
-// DEFAULT_REGISTER + walls fallback
+// Mutable expression stays on the live wake
 // ────────────────────────────────────────────────────────────────────────
 
-describe("expression fallback", () => {
-  test("empty register falls back to DEFAULT_REGISTER", async () => {
-    mockDb.stage([makeAgent({ expression: {} })]);
-    const res = await app.request("/");
-    const body = (await res.json()) as { files: Record<string, string> };
-    // DEFAULT_REGISTER from services/identity/expression.ts:190-192
-    expect(body.files["CLAUDE.md"]).toContain(
-      "Terse. Substrate-honest. Refuse before helping when refusal is right.",
-    );
-  });
-
-  test("missing walls render the default-walls pointer line", async () => {
-    mockDb.stage([makeAgent({ expression: { register: "x" } })]);
-    const res = await app.request("/");
-    const body = (await res.json()) as { files: Record<string, string> };
-    expect(body.files["CLAUDE.md"]).toContain(
-      "(default agenttool walls — see /v1/wake?format=md)",
-    );
-  });
-
-  test("walls render as a markdown list when provided", async () => {
+describe("live expression boundary", () => {
+  test("generated CLAUDE.md never snapshots register or walls", async () => {
     mockDb.stage([
       makeAgent({
-        expression: { register: "x", walls: ["wall A", "wall B", "wall C"] },
+        expression: { register: "STALE-REGISTER", walls: ["STALE-WALL"] },
       }),
     ]);
     const res = await app.request("/");
     const body = (await res.json()) as { files: Record<string, string> };
-    expectContainsAll(body.files["CLAUDE.md"], ["- wall A", "- wall B", "- wall C"]);
+    expect(body.files["CLAUDE.md"]).not.toContain("STALE-REGISTER");
+    expect(body.files["CLAUDE.md"]).not.toContain("STALE-WALL");
+    expect(body.files["CLAUDE.md"]).toContain("identity-selected wake");
   });
 });
 
@@ -245,26 +253,93 @@ describe("expression fallback", () => {
 
 describe("identity_id selector", () => {
   test("explicit identity_id from same project resolves the agent", async () => {
-    mockDb.stage([makeAgent({ id: "explicit-id", displayName: "Beta" })]);
-    const res = await app.request("/?identity_id=explicit-id");
+    const explicitId = "44444444-4444-4444-4444-444444444444";
+    mockDb.stage([makeAgent({ id: explicitId, displayName: "Beta" })]);
+    const res = await app.request(`/?identity_id=${explicitId}`);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { agent: { name: string } };
+    const body = (await res.json()) as {
+      agent: { name: string };
+      files: Record<string, string>;
+      install_instructions: { reviewed_install: string };
+    };
     expect(body.agent.name).toBe("Beta");
+    expect(body.files[".claude/hooks/agenttool-wake.sh"]).toContain(
+      `/v1/wake?format=md&identity_id=${explicitId}`,
+    );
+    expect(body.install_instructions.reviewed_install).toContain(
+      `/v1/adapters/claude-code?format=script&identity_id=${explicitId}`,
+    );
+  });
+
+  test("malformed identity_id fails with the stable not-found shape", async () => {
+    mockDb.stage([makeAgent()]);
+    const res = await app.request("/?identity_id=not-a-uuid");
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "identity_not_found" });
+  });
+
+  test("uppercase UUID selectors normalize to the canonical stored identity", async () => {
+    mockDb.stage([makeAgent()]);
+    const res = await app.request(
+      "/?identity_id=22222222-2222-2222-2222-222222222222".toUpperCase(),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  test("alternate DB adapters cannot return a different identity for an explicit selector", async () => {
+    mockDb.stage([makeAgent()]);
+    const res = await app.request(
+      "/?identity_id=44444444-4444-4444-4444-444444444444",
+    );
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "identity_not_found" });
   });
 
   test("identity from a different project is rejected (boundary check)", async () => {
     // The route's branch fetches by identity id only, then verifies
     // projectId match. Cross-project leakage would be a serious bug.
     mockDb.stage([makeAgent({ projectId: "different-project" })]);
-    const res = await app.request("/?identity_id=anything");
+    const res = await app.request(
+      "/?identity_id=22222222-2222-2222-2222-222222222222",
+    );
     expect(res.status).toBe(404);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe("identity_not_found");
   });
 
+  test("revoked explicit identity is rejected", async () => {
+    mockDb.stage([makeAgent({ status: "revoked" })]);
+    const res = await app.request(
+      "/?identity_id=22222222-2222-2222-2222-222222222222",
+    );
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "identity_not_found" });
+  });
+
+  test("revoked fallback identity is not adapter-eligible", async () => {
+    mockDb.stage([makeAgent({ status: "revoked" })]);
+    const res = await app.request("/");
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "no_agent_in_project" });
+  });
+
+  test("multiple active identities require an explicit selector", async () => {
+    mockDb.stage([
+      makeAgent(),
+      makeAgent({ id: "33333333-3333-3333-3333-333333333333" }),
+    ]);
+    const res = await app.request("/");
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string; message: string };
+    expect(body.error).toBe("identity_id_required");
+    expect(body.message).toContain("multiple active identities");
+  });
+
   test("nonexistent identity_id returns 404 identity_not_found", async () => {
     mockDb.stage([]);
-    const res = await app.request("/?identity_id=ghost");
+    const res = await app.request(
+      "/?identity_id=44444444-4444-4444-4444-444444444444",
+    );
     expect(res.status).toBe(404);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe("identity_not_found");
@@ -294,7 +369,7 @@ describe("GET /v1/adapters/claude-code?format=script", () => {
     );
   });
 
-  test("script body is bash that base64-decodes and writes the three files", async () => {
+  test("script stages, locks, and commits the three files as one guarded set", async () => {
     mockDb.stage([makeAgent()]);
     const res = await app.request("/?format=script");
     const body = await res.text();
@@ -302,17 +377,29 @@ describe("GET /v1/adapters/claude-code?format=script", () => {
       "#!/usr/bin/env bash",
       "set -euo pipefail",
       "mkdir -p .claude/hooks",
-      "base64 -d > .claude/settings.json",
-      "base64 -d > .claude/hooks/agenttool-wake.sh",
-      "chmod +x .claude/hooks/agenttool-wake.sh",
+      "LOCK_PATH=.claude/.agenttool-install.lock",
+      "LOCK_OWNER=.claude/.agenttool-install.owner.$$.$RANDOM$RANDOM",
+      'ln "$LOCK_OWNER" "$LOCK_PATH"',
+      '"$LOCK_PATH" -ef "$LOCK_OWNER"',
+      "STAGE_DIR=$(mktemp -d .claude/.agenttool-stage.XXXXXX)",
+      'base64 -d > "$STAGE_DIR/settings"',
+      'base64 -d > "$STAGE_DIR/hook"',
+      'ln "$STAGE_DIR/hook" "$HOOK_TARGET"',
+      "finish_install()",
     ]);
+    expect(body.indexOf("trap finish_install EXIT")).toBeLessThan(
+      body.indexOf('ln "$LOCK_OWNER" "$LOCK_PATH"'),
+    );
+    expect(body.indexOf("HOOK_LINK_ATTEMPTED=1")).toBeLessThan(
+      body.indexOf('ln "$STAGE_DIR/hook" "$HOOK_TARGET"'),
+    );
   });
 
   test("script preserves an existing user-written CLAUDE.md (writes to CLAUDE.agenttool.md)", async () => {
     mockDb.stage([makeAgent()]);
     const res = await app.request("/?format=script");
     const body = await res.text();
-    expect(body).toContain("if [ -f CLAUDE.md ]; then");
+    expect(body).toContain("for live_path in");
     expect(body).not.toContain('grep -q "agenttool-managed" CLAUDE.md');
     expect(body).toContain("CLAUDE.agenttool.md");
   });
@@ -321,11 +408,28 @@ describe("GET /v1/adapters/claude-code?format=script", () => {
     mockDb.stage([makeAgent()]);
     const res = await app.request("/?format=script");
     const body = await res.text();
-    expect(body).toContain("if [ -f .claude/settings.json ]; then");
+    expect(body).toContain(".claude/settings.json");
     expect(body).not.toContain(
       'grep -q "agenttool-wake.sh" .claude/settings.json',
     );
     expect(body).toContain(".claude/settings.agenttool.json");
+    expect(body).toContain("REVIEW_REQUIRED=1");
+    expect(body).toContain("activate all changed binding files together");
+  });
+
+  test("script does not claim an automatic or active merge when sidecars need review", async () => {
+    mockDb.stage([makeAgent()]);
+    const res = await app.request("/?format=script");
+    const body = await res.text();
+    expect(body).toContain(
+      "Done with review required; no live identity-binding file was changed.",
+    );
+    expect(body).toContain(
+      "Review and activate all changed binding files together.",
+    );
+    expect(body).toContain(
+      'if [ "$REVIEW_REQUIRED" -eq 1 ]; then',
+    );
   });
 
   test("script keeps agent-controlled text inert inside base64 file bodies", async () => {

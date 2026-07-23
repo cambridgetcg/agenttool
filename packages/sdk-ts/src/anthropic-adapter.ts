@@ -36,7 +36,12 @@
 
 import { getAmbient } from "./_context.js";
 import type { AgentTool } from "./client.js";
-import type { AnthropicWakeShape, WakeProviderMeta } from "./wake.js";
+import { AgentToolError } from "./errors.js";
+import type {
+  AnthropicWakeShape,
+  WakeProfile,
+  WakeProviderMeta,
+} from "./wake.js";
 
 /** Minimal shape of the Anthropic Messages client. The adapter wraps any
  *  object that exposes `messages.create(params)`; @anthropic-ai/sdk's
@@ -84,6 +89,8 @@ export interface AgentToolMetadata {
 export interface AnthropicAdapterOptions {
   /** Identity id for multi-identity projects (passed through to /v1/wake). */
   identityId?: string;
+  /** Wake projection used for automatic system injection. Default `full`. */
+  wakeProfile?: WakeProfile;
   /** Disable parsing of <agenttool>...</agenttool> markup globally. */
   disableMarkupParsing?: boolean;
 }
@@ -146,6 +153,16 @@ export class AnthropicAdapter {
     at: AgentTool,
     options: AnthropicAdapterOptions = {},
   ) {
+    if (
+      options.wakeProfile !== undefined &&
+      options.wakeProfile !== "full" &&
+      options.wakeProfile !== "brief"
+    ) {
+      throw new AgentToolError(
+        `Unknown wake profile: ${String(options.wakeProfile)}`,
+        { hint: "Expected one of: full, brief." },
+      );
+    }
     this.anthropic = anthropic;
     this.at = at;
     this.options = options;
@@ -167,6 +184,7 @@ export class AnthropicAdapter {
         if (!meta.skip_wake) {
           const shape = await self.at.wake.system("anthropic", {
             identityId: self.options.identityId,
+            ...(self.options.wakeProfile === "brief" ? { profile: "brief" } : {}),
           });
           wakeMeta = shape._meta;
           const userBlocks = normalizeSystem(params.system);

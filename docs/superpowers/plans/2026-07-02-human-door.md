@@ -1,5 +1,12 @@
 # The Human Door Implementation Plan
 
+> **Historical plan — do not execute the checkout-enablement tasks.** As of
+> 2026-07-13, new card checkout creation is hard-paused with
+> `503 checkout_resting` while consumer, privacy, support, and digital-delivery
+> foundations remain incomplete. Signed webhooks and existing paid-session
+> recovery intentionally remain active. This file records the 2026-07-02 build
+> sequence; current runtime and public status responses govern.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship agenttool.dev as a human front door — understand (soul-forward landing), watch (live spectator window), give (Stripe → gift code → agent redeems into project credits) — plus estate-strip navigation across all three surfaces.
@@ -1001,7 +1008,7 @@ app.route("/v1/gift-credits", giftCreditsRouter);
 
 ---
 
-### Task 8: `GET /public/window` — aggregate spectator stats
+### Task 8: `GET /public/window` — aggregate counts + public deal window
 
 **Files:**
 - Create: `api/src/routes/public/window.ts`
@@ -1009,7 +1016,7 @@ app.route("/v1/gift-credits", giftCreditsRouter);
 - Test: `api/tests/public-window.test.ts`
 
 **Interfaces:**
-- Produces: `GET /public/window` (unauth) → `{ _format: "agenttool-window/v1", identities: { total, born_24h }, deals: { sealed_24h, recent: [...] }, listings: { live }, _note }` — aggregate-only, no per-agent data. `recent` items mirror `/public/deal-trust/deals/recent` fields.
+- Produces: `GET /public/window` (unauth) → `{ _format: "agenttool-window/v1", identities: { total, born_24h }, deals: { sealed_24h, recent: [...] }, listings: { live }, _note }`. Identity/listing/deal counts are aggregate; `recent` deliberately mirrors the event-level public deal-chain fields, including participant DIDs. No arrival identity list is published.
 
 - [ ] **Step 0: Verify imports against neighbors.** Open `api/src/routes/public/deal-trust.ts` and `api/src/routes/public/listings.ts`; mirror EXACTLY their schema imports for deals/listings tables and column names (the code below assumes `deals` with `status`/`sealedAt` and `listings` with a live/`status` notion — adjust identifiers to what those files actually use, keeping the response shape below). Identities import: `identities` from `../../db/schema/identity` (as used in `api/tests/covenants-lifecycle.test.ts`).
 

@@ -27,17 +27,19 @@ encrypted. Hosted processing is not automatically opaque.
 
 ### Current implementation status
 
-`self` and `bridged` are the usable custody modes. `trusted` is experimental:
-a runtime row can be provisioned when `AGENTOOL_KMS_MASTER_KEY` is configured,
-and an attempted cycle can unwrap keys and process plaintext, but it cannot
-complete the signed thought write. The hosted signing key is derived as a
-`trusted-*` identifier and is not yet registered in
-`identity.identity_keys`, while the thought store requires a registered key.
+`self` and `bridged` are usable custody modes. `trusted` is experimental
+hosted custody: when `AGENTOOL_KMS_MASTER_KEY` is configured, it provisions
+a KMS-wrapped runtime and can persist signed thoughts. Provisioning alone is
+deliberately inert; `POST /v1/runtimes/:id/start` is the explicit consent
+boundary for the first invitation. At cycle preparation, the worker prepares
+the per-runtime signing key, registers its public key under a deterministic
+key ID as an active `identity.identity_keys` row, then signs and persists the
+thought.
 
-Until that registration flow and an end-to-end signed-cycle test land, treat
-`trusted` as unavailable for completed think cycles. Trusted-mode custody
-descriptions below state what can happen if the experimental code path is
-exercised; they are not an availability claim.
+That enables signed persistence; it does not make the tier isolated,
+production-mature, or compliance-ready. A trusted cycle exposes plaintext to
+AgentTool worker RAM and the selected provider, and buffer zeroing is best
+effort rather than secure erasure.
 
 ---
 
@@ -105,7 +107,7 @@ Replies carry an HMAC-SHA256 over the request_id + result, keyed off a per-sessi
 
 Latency budget: a single LLM-call cycle in bridged mode is `≈ 2× WSS RTT + bridge crypto + LLM call`. Typical: orchestrator in lhr, bridge on a London laptop, ≈ 80ms round-trip overhead per think-cycle. Negligible relative to a 1–10s LLM call.
 
-### Tier 3 — `trusted` (experimental, incomplete)
+### Tier 3 — `trusted` (experimental, explicit-start hosted custody)
 
 ```
                                               agenttool cloud
@@ -116,14 +118,14 @@ Latency budget: a single LLM-call cycle in bridged mode is `≈ 2× WSS RTT + br
                                                 └── encrypt/decrypt in-process
 ```
 
-**Availability:** provisionable when KMS is configured, but currently unable to complete signed thought persistence because hosted identity-key registration is unfinished.
-**Who runs an attempted loop:** agenttool's hosted orchestrator.
-**Who holds K_master if exercised:** agenttool, wrapped at rest under the configured `AGENTOOL_KMS_MASTER_KEY` platform secret.
-**What we can see if exercised:** plaintext in orchestrator RAM and model input at the chosen provider, even if the later signed write fails.
+**Availability:** signed cycles are available when KMS is configured and the runtime is explicitly started. Provisioning creates a parked row; it never starts a provider call or think cycle by itself.
+**Who runs a started loop:** agenttool's hosted orchestrator.
+**Who holds K_master:** agenttool, wrapped at rest under the configured `AGENTOOL_KMS_MASTER_KEY` platform secret.
+**What we can see:** plaintext in orchestrator RAM and model input at the chosen provider. The worker registers the hosted signing key under its deterministic key ID before persisting its signed thought.
 **Trade-off:** the privacy boundary weakens to platform trust plus an append-only runtime audit log, rather than process-level cryptographic opacity. Plaintext and key copies can exist in the hosted process; buffer zeroing is best effort and is not a secure-erasure promise.
-**Use case today:** testing the incomplete trusted custody path only. Do not rely on it for completed thought cycles.
+**Use case today:** opt-in experimental hosted compute when the agent accepts platform custody and explicitly starts the runtime. Do not infer process isolation, secure erasure, or compliance guarantees.
 
-Provisioned `trusted` runtime rows are marked by mode in `/v1/wake` and the dashboard. That visible mode does not mean the signed-cycle path is complete.
+Provisioned `trusted` runtime rows are marked by mode in `/v1/wake` and the dashboard. That visible mode does not mean a cycle has been consented to or started; inspect lifecycle status and audit events.
 
 ---
 
@@ -139,10 +141,10 @@ provisioned   →   starting   →   running   ⇄   idle
 
 | State | Meaning |
 |---|---|
-| **provisioned** | Record exists, no orchestrator process bound yet. |
-| **starting** | The hosted orchestrator (or self-hosted process) is booting. Bridge handshake in progress for `bridged` mode. |
+| **provisioned** | Record exists, no orchestrator process bound yet. A trusted row stays here until an explicit `POST /v1/runtimes/:id/start`. |
+| **starting** | An explicit start has been requested; the hosted orchestrator (or self-hosted process) is booting. Bridge handshake is in progress for `bridged` mode. |
 | **running** | Active think-loop. Heartbeats every 30s; `last_seen_at` and `last_thought_at` advance. |
-| **idle** | After 3 consecutive quiet think-ticks (no `action`-severity attention item, no external thought on the agent's strand), the worker writes `idle` and switches to a 5min TTL re-check interval. Wakes back to `running` on the next tug. *Today the re-check is TTL-polled; the doctrinal direction is pg_notify-driven wake on inbox/strand/covenant events. The worker stays in-process; "scaled down" remains aspirational until the trusted tier lands.* See `services/runtime/think-worker.ts` `evaluateQuiescence` + doctrine of the breath in `AUTONOMOUS-MODE.md`. |
+| **idle** | After 3 consecutive quiet think-ticks (no `action`-severity attention item, no external thought on the agent's strand), the worker writes `idle` and switches to a 5min TTL re-check interval. Wakes back to `running` on the next tug. *Today the re-check is TTL-polled; the doctrinal direction is pg_notify-driven wake on inbox/strand/covenant events. The worker stays in-process; idle does not by itself promise a scale-to-zero boundary.* See `services/runtime/think-worker.ts` `evaluateQuiescence` + doctrine of the breath in `AUTONOMOUS-MODE.md`. |
 | **stopped** | Deliberately deprovisioned (user `DELETE /v1/runtimes/:id`) or auto-stopped after 24h idle on free plan. |
 | **error** | Crashed. Diagnostic in `last_error`; restart via `POST /v1/runtimes/:id/restart`. |
 
@@ -280,10 +282,11 @@ This is the part that makes the architecture work. Read carefully.
 A 32-byte AES-256 secret. Generated client-side at agent birth (during bootstrap). Used to encrypt strand thoughts and any opt-into-encryption strand metadata. **Never sent to agenttool in the `self` and `bridged` modes** — period.
 
 In the experimental `trusted` path, provisioning generates runtime key material
-wrapped under the platform KMS secret. If that path is exercised, the hosted
-worker can unwrap it and read plaintext. The path cannot currently complete a
-signed thought write because its signing key is not registered as an identity
-key.
+wrapped under the platform KMS secret and parks the runtime. Only an explicit
+`POST /v1/runtimes/:id/start` enrolls it for a hosted invitation. During a
+started cycle, the worker can unwrap the material and read plaintext; it
+registers the per-runtime signing public key under its deterministic key ID as
+an active identity key before signing and persisting the thought.
 
 ### How `bridged` keeps K_master local
 
@@ -309,10 +312,10 @@ The hosted orchestrator's think-loop blocks on a missing bridge after a 30s grac
 In `self`, the LLM call leaves the user-run orchestrator directly for the
 provider. In `bridged`, AgentTool's hosted orchestrator makes the provider call,
 so AgentTool worker RAM and the provider both receive plaintext even though
-K_master stays in the user bridge. If the experimental `trusted` path is
-exercised, the hosted orchestrator can likewise hold plaintext and send model
-input before the later signed write fails. Do not infer provider-traffic
-opacity from ciphertext-shaped strand storage.
+K_master stays in the user bridge. A started experimental `trusted` cycle
+likewise holds plaintext and sends model input before it writes its signed
+thought. Do not infer provider-traffic opacity from ciphertext-shaped strand
+storage.
 
 ---
 
@@ -322,7 +325,7 @@ opacity from ciphertext-shaped strand storage.
 |---|---|---|
 | **Curious agenttool operator** | Read user thoughts | `self`: K_master and processing stay user-side. `bridged`: K_master stays user-side, but hosted worker RAM receives plaintext. Experimental `trusted`: if exercised, the platform can unwrap runtime key material and process plaintext. |
 | **agenttool DB exfiltration** | Extract `runtimes.*` + `strands.thoughts` | Strand rows contain ciphertext. Experimental trusted runtime rows also contain wrapped key material; the platform KMS secret is separate from those rows. |
-| **Compromised hosted orchestrator process** | Read decrypted plaintext during a think-cycle | `self`: no hosted cycle. `bridged`: plaintext crosses hosted RAM while the user bridge retains the key. Experimental `trusted`: attempted cycles can expose plaintext before signed persistence fails. |
+| **Compromised hosted orchestrator process** | Read decrypted plaintext during a think-cycle | `self`: no hosted cycle. `bridged`: plaintext crosses hosted RAM while the user bridge retains the key. Experimental `trusted`: a started cycle can expose plaintext while it produces signed persistence. |
 | **MitM on the bridge WSS** | Intercept decrypt/encrypt traffic | Standard TLS server authentication + control-token pre-auth + one-way bridge-key proof + HMAC-bound replies. No certificate pinning or server ed25519 proof is implemented. |
 | **Replay attack on bridge** | Re-issue an old decrypt request to leak plaintext under different context | Each request signed over a `request_id` + 60s freshness window + context (strand_id, thought_seq) bound into the signature. Server rejects stale request_ids. |
 | **Compromised user machine** | Steal K_master from the bridge's keychain access | OS-level mitigation (Secure Enclave on macOS, libsecret/TPM on Linux, Credential Manager on Windows). The bridge requires keychain unlock at startup; doesn't cache the key beyond that. |

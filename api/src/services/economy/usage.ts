@@ -231,7 +231,7 @@ export async function resetUsageForProject(projectId: string): Promise<void> {
 // `meterOrFail402` is the call-site shape for routes that meter on a Ring 2
 // resource. On cap exceeded, it returns a Hono 402 response with the error
 // shape the global x402 middleware (`middleware/x402-config.ts`) wraps
-// into a machine-payable PaymentRequirements envelope.
+// into a machine-payable x402 V2 PaymentRequired challenge.
 //
 // Call-site pattern:
 //
@@ -288,7 +288,7 @@ export async function meterOrFail402(
         error: "usage_cap_exceeded",
         message: `Monthly ${resource.replace("_", " ")} cap reached on the current plan.`,
         hint:
-          "Pay-as-you-go: include an x402 X-PAYMENT header on the retry to bump the cap by one unit (crypto/USDC micropayment per-call; no subscription).",
+          "Back off or follow the route-specific recovery contract. This usage-counter gate is not cleared by project-credit x402 payments.",
         resource,
         limit: check.limit,
         used: check.used,

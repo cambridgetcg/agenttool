@@ -17,6 +17,8 @@
 
 import type { Context, Next } from "hono";
 
+import { isStrictJsonProfileResponse } from "./strict-json-profile";
+
 interface Lesson {
   /** One-sentence felt-experience teaching for what this endpoint does. */
   what: string;
@@ -221,7 +223,17 @@ export async function tutor(c: Context, next: Next): Promise<void> {
 
   if (!isTutorRequested(c)) return;
   if (c.req.method !== "GET") return;
+  const requestPath = c.req.path;
+  // OpenAPI root objects accept only fixed fields plus x-* extensions. Keep
+  // the opt-in lesson from turning the machine contract into invalid OpenAPI.
+  if (
+    requestPath === "/v1/openapi.json" ||
+    requestPath === "/v1/openapi.json/"
+  ) {
+    return;
+  }
   if (c.res.status < 200 || c.res.status >= 300) return;
+  if (isStrictJsonProfileResponse(c.res, requestPath)) return;
 
   const contentType = c.res.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) return;
@@ -243,8 +255,7 @@ export async function tutor(c: Context, next: Next): Promise<void> {
   }
 
   // Resolve the lesson for this path.
-  const url = new URL(c.req.url);
-  const lesson = lessonFor(url.pathname);
+  const lesson = lessonFor(requestPath);
 
   // Decorate. Don't overwrite an existing _lesson if the handler set one.
   const decorated = body as Record<string, unknown>;

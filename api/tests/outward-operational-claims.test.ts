@@ -23,6 +23,7 @@ describe("current outward operational claims", () => {
       "Data readability",
       "Runtime custody",
       "Hosted execute",
+      "Static outbound fetch",
       "Hosted browse",
       "Federation network boundary",
       "Idempotency",
@@ -36,7 +37,9 @@ describe("current outward operational claims", () => {
     expect(safety).toMatch(/Field names and signatures do not prove encryption/i);
     expect(safety).toMatch(/no container or per-tenant boundary.*filesystem chroot.*memory\s+cgroup.*network namespace/is);
     expect(safety).toMatch(/no\s+application-level private-address or destination allowlist/is);
-    expect(safety).toMatch(/scrape, browse, and URL-based document fetching fail closed.*AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1/is);
+    expect(safety).toMatch(/static scrape and URL-based document fetching.*bounded.*public HTTP\(S\).*DNS.*pinned.*connected peer/is);
+    expect(safety).toMatch(/remote.*content.*server-readable.*untrusted.*prompt injection/is);
+    expect(safety).toMatch(/Playwright browse.*fail.*closed.*AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1.*does not add.*destination filtering/is);
     expect(safety).toMatch(/AgentTool\s+identifier\s+lookup.*identifier-derived\s+inbox\s+and\s+covenant\s+delivery.*pyramid\s+peer\s+reads.*handshake\s+verification.*doctrine\s+or\s+peer.*public\s+HTTPS\s+only/is);
     expect(safety).toMatch(/URL\s+credentials\s+and\s+redirects.*every\s+returned\s+address\s+must\s+be\s+global\s+and\s+public.*pinned/is);
     expect(safety).toMatch(/POST\s+bodies\s+are\s+capped\s+at\s+1,000,000\s+bytes.*responses\s+are\s+capped\s+at\s+512,000\s+bytes.*65,536-byte\s+cap.*5\s+seconds.*10\s+seconds.*12\s+seconds.*15\s+seconds/is);
@@ -83,6 +86,7 @@ describe("current outward operational claims", () => {
   test("surprises and error docs describe partial enforcement", () => {
     const surprises = read("docs/SURPRISES.md");
     const errors = read("apps/docs/errors.html");
+    const wallets = read("apps/docs/wallets.html");
 
     expect(surprises).toMatch(/Ring 1 resource caps are published targets, not live route gates/i);
     expect(surprises).toMatch(/registration is not an irreversibility guarantee/i);
@@ -92,7 +96,14 @@ describe("current outward operational claims", () => {
     expect(surprises).toMatch(/PATTERN-\*.*family, not a fixed trio/i);
     expect(errors).toMatch(/body is not one universal schema/i);
     expect(errors).toMatch(/no live Seed\/Grow\/Scale subscription ladder/i);
+    expect(errors).toMatch(
+      /eligible static-tool.*insufficient_credits.*x402 V2.*PAYMENT-REQUIRED.*without that header.*not payable/is,
+    );
     expect(errors).not.toMatch(/All error responses use.*detail/is);
+    expect(wallets).toMatch(
+      /x402 project-credit payment does not fund a marketplace wallet/is,
+    );
+    expect(wallets).not.toMatch(/any metered endpoint.*PAYMENT-SIGNATURE/is);
   });
 
   test("live route examples no longer point at retired doors", () => {

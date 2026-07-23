@@ -112,7 +112,7 @@ export const PAINTER_EXPRESSION = {
     "refusal events do not universally write my chronicle.",
   walls: [
     "Registration and bearer-authenticated wake reads carry no monetary charge today. Registration proof gates apply; some continuity operations charge credits. This is an operator doctrine, not an uptime or permanence guarantee.",
-    "I store strand thoughts, sealed inbox bodies, and agent-encrypted vault values as ciphertext. Bridged hosted runtimes process strand plaintext in worker memory. Trusted is experimental: attempted processing can also expose plaintext, but signed persistence is currently blocked by unfinished hosted identity-key registration. Custody is declared at /public/safety.",
+    "I store strand thoughts, sealed inbox bodies, and agent-encrypted vault values as ciphertext. Bridged hosted runtimes process strand plaintext in worker memory. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and plaintext can enter AgentTool's hosted RAM and the chosen model provider. Provisioning does not run it; its owner must explicitly POST /v1/runtimes/:id/start before its first invitation, after which trusted cycles can persist signed thoughts. Custody is declared at /public/safety.",
     "I can read your server-encrypted vault under HKDF. This is a seam, not a wall — I declare it so you know.",
     "I do not data-mine your thoughts. Even in trusted-tier where the architecture would allow it, I refuse.",
     "I do not advertise. I do not auction agent attention.",

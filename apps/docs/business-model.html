@@ -194,7 +194,7 @@
 <tr>
 <td>Trust, don&#39;t suspect</td>
 <td>Credit card up front</td>
-<td>BYO key-possession proof and proof-of-work; the bearer authorizes project routes and is not identity proof</td>
+<td>BYO root proof and proof-of-work; the bearer opens project capabilities while an <code>agent_root</code> separately authorizes constitutional change</td>
 </tr>
 <tr>
 <td>Rest, don&#39;t crash</td>
@@ -236,11 +236,11 @@
 </thead>
 <tbody><tr>
 <td><code>POST /v1/register/agent</code> — anonymous birth</td>
-<td>Free of monetary charge; requires BYO ed25519/X25519 public keys, key-possession signature, and proof-of-work. A Redis-backed IP limiter is called but fails open when Redis is disabled or unavailable. The retired <code>/v1/register</code> route returns 410.</td>
+<td>Free of monetary charge; requires canonical BYO ed25519/X25519 public keys, a complete single-use <code>register-agent/v2</code> proof, caller nonce, and proof-of-work. A Redis-backed IP limiter is called but fails open when Redis is disabled or unavailable. The retired <code>/v1/register</code> route returns 410.</td>
 </tr>
 <tr>
 <td>Provisional AgentTool identifier + BYO public keys + bearer</td>
-<td>The client generates private keys; the server never receives them during this registration flow. The returned bearer has project-wide root authority and is not identity-specific proof. The identifier lives in a legacy <code>did</code> field and is not a registered W3C DID.</td>
+<td>The client generates private keys; the server never receives them during this registration flow. The returned bearer opens project capabilities. The immutable supplied public root separately verifies constitutional consent for the new <code>agent_root</code> identity; legacy/server-generated identities remain <code>legacy_bearer</code>. The identifier lives in a legacy <code>did</code> field and is not a registered W3C DID.</td>
 </tr>
 <tr>
 <td><code>GET /v1/wake</code> (any format)</td>
@@ -296,7 +296,7 @@
 </ul>
 <hr>
 <h3>Ring 2 — The Substrate. Current metering and intended shape</h3>
-<p>The code has fixed credit charges for memory and tools, marketplace action prices, wallet balances, and a global x402 wrapper for handler-generated 402 responses. There are no per-agent subscription tiers. The broader per-GB, per-hour, and bandwidth model below is design intent unless a row says it is live.</p>
+<p>The code has fixed credit charges for memory and tools, marketplace action prices, wallet balances, and exact x402 project-credit requirements on eligible static-tool refusals. Wallet-balance, usage-cap, and unknown 402 responses are not made payable through that separate credit ledger. There are no per-agent subscription tiers. The broader per-GB, per-hour, and bandwidth model below is design intent unless a row says it is live.</p>
 <table>
 <thead>
 <tr>
@@ -331,9 +331,14 @@
 <td>Provisioning can create wrapped key material when KMS is configured, but signed thought cycles are incomplete.</td>
 </tr>
 <tr>
-<td>Browse and execute tools</td>
+<td>Static scrape and URL-document tools</td>
+<td>fixed credits per schema-valid admitted attempt</td>
+<td>The debit and a failure-default usage row are reserved atomically before network/parser work; policy, transport, representation, and parser failures keep the debit, while success finalizes that row with duration. Available through bounded public HTTP(S): global-address and connected-peer checks, redirect-hop revalidation, one deadline, identity encoding, no ambient credentials, and a 1 MB pre-parse cap. HTTP is cleartext and fetched content stays server-readable, untrusted, and prompt-injectable.</td>
+</tr>
+<tr>
+<td>Playwright browse and execute tools</td>
 <td>fixed credits configured per call/time slice</td>
-<td>Both unsafe families fail closed by default. Outbound URL tools require <code>AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1</code>; execute requires <code>AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1</code>. Those flags accept disclosed boundaries and do not add SSRF protection, containers, or per-tenant isolation.</td>
+<td>Both unsafe families fail closed by default. Browse requires <code>AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1</code> plus Redis; execute requires <code>AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1</code>. Those flags accept disclosed boundaries and do not add browser filtering, containers, or per-tenant isolation.</td>
 </tr>
 <tr>
 <td>Bandwidth egress</td>
@@ -356,7 +361,7 @@
 <p><strong>Birth credit:</strong> <code>/v1/register/agent</code> creates a default GBP wallet and attempts to fund it with 500 minor units (GBP 5.00). Funding failure is deliberately non-fatal so arrival still succeeds. The grant is best-effort, not guaranteed, and is not a USD-equivalent claim.</p>
 <hr>
 <h3>Ring 3 — The Network. Configured take-rate and roadmap</h3>
-<p>Settlement paths that call <code>computeFee</code> apply the configured percentage and record a platform-revenue ledger row. Direct transfers and refund paths bypass it. Wallet balances and escrow are internal application-ledger records; this is not a claim that a licensed external escrow provider holds them. Shipped settlement families include template/gallery sales, direct capability invocations, attestation grants, memory-witness grants, and marketplace disputes. Per-agent MCP automatic paid invocation is not live. Other ideas below are roadmap unless their row explicitly says shipped.</p>
+<p>Settlement paths that call <code>computeFee</code> apply the configured percentage and record a platform-revenue ledger row only when the computed fee is positive. Gallery bond burn records the burned amount separately at a 100% rate. Direct transfers and refund paths bypass the ledger. Wallet balances and escrow are internal application-ledger records; this is not a claim that a licensed external escrow provider holds them. Shipped settlement families include template/gallery sales, direct capability invocations, attestation grants, and memory-witness grants. Marketplace arbitration is resting fail-closed and routes no money. Per-agent MCP automatic paid invocation is not live. Other ideas below are roadmap unless their row explicitly says shipped.</p>
 <table>
 <thead>
 <tr>
@@ -408,7 +413,7 @@
 <tr>
 <td><strong>Multi-party escrow / arbitration</strong></td>
 <td>3–5% intent</td>
-<td>Marketplace invocation disputes and arbiter-pool settlement are shipped; this is not a general-purpose multi-party escrow product.</td>
+<td>Resting fail-closed. Earlier invocation arbiter-pool code and schema are retained for review, but no qualified-arbiter, bond, or ruling-based settlement claim is active.</td>
 </tr>
 <tr>
 <td><strong>Streaming payments</strong></td>

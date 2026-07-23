@@ -22,7 +22,7 @@
  */
 
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./memory.js";
+import type { HttpConfig } from "./_http.js";
 import { type MemoryClient } from "./memory.js";
 import { type StrandsClient } from "./strands.js";
 import { type ToolsClient } from "./tools.js";

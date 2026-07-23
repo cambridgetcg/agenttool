@@ -5,8 +5,9 @@
  *       OS-native secure store. The response never embeds the bearer.
  *       (macOS Keychain · Linux libsecret · Windows Password Vault)
  *    2. Create a small repo skeleton (~/.config/agenttool/, a wake script)
- *    3. The wake script reads the key from the secure store and calls
- *       GET /v1/wake to load the agent's session-start context.
+ *    3. The wake script reads the key from the secure store and calls an
+ *       identity-selected GET /v1/wake to load that agent's session-start
+ *       context.
  *
  *  This is the "local infra" half of the identity anchor: the keychain
  *  binding makes the API key actually portable across CLI sessions on
@@ -19,6 +20,7 @@ import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
 import { safePublicApiBase } from "../lib/public-api-base";
+import { resolveAgent } from "../services/adapter/agent-resolver";
 import {
   projectCredentialNamespace,
   projectCredentialService,
@@ -31,6 +33,7 @@ type Platform = "macos" | "linux" | "windows";
 export { safePublicApiBase as scaffoldApiBase };
 
 function agentConfigBase64(
+  identityId: string,
   did: string,
   name: string,
   apiBase: string,
@@ -39,9 +42,15 @@ function agentConfigBase64(
   return Buffer.from(
     JSON.stringify(
       {
+        identity_id: identityId,
         did,
         name,
-        wake_url: `${apiBase}/v1/wake`,
+        identity_reference: {
+          verification: "active_identity_owned_by_authenticated_project",
+          note:
+            "Resolved during scaffold generation. The project bearer authorizes access; identity_id selects which active project identity the wake composes.",
+        },
+        wake_url: `${apiBase}/v1/wake?identity_id=${encodeURIComponent(identityId)}`,
         key_source: keySource,
       },
       null,
@@ -51,38 +60,116 @@ function agentConfigBase64(
   ).toString("base64");
 }
 
+function bashProjectVerification(projectId: string, apiBase: string): string {
+  return `# Verify that the ambient bearer still belongs to the project that
+# generated this script before mutating any credential store.
+VERIFY_FILE=$(mktemp)
+cleanup_verify() { rm -f -- "$VERIFY_FILE"; }
+trap cleanup_verify EXIT
+if ! printf 'Authorization: Bearer %s\\n' "$INPUT_KEY" | \
+  curl -q -fsS --max-time 10 --max-redirs 0 -H @- \
+    '${apiBase}/v1/bootstrap/scaffold/context' -o "$VERIFY_FILE"; then
+  echo "Could not verify the scaffold bearer against its generating project." >&2
+  exit 1
+fi
+if command -v jq >/dev/null 2>&1; then
+  ACTUAL_PROJECT_ID=$(jq -er '.project.id' "$VERIFY_FILE" 2>/dev/null || true)
+elif command -v python3 >/dev/null 2>&1; then
+  ACTUAL_PROJECT_ID=$(python3 -I -S -c 'import json,sys; print(json.load(open(sys.argv[1]))["project"]["id"])' "$VERIFY_FILE" 2>/dev/null || true)
+else
+  echo "jq or python3 is required to verify the scaffold bearer." >&2
+  exit 1
+fi
+if [ "$ACTUAL_PROJECT_ID" != '${projectId}' ]; then
+  echo "Refusing bearer from a different project; regenerate the scaffold with that bearer." >&2
+  exit 1
+fi
+rm -f -- "$VERIFY_FILE"
+trap - EXIT
+`;
+}
+
 function macosInstallScript(
+  identityId: string,
   did: string,
   name: string,
   namespace: string,
   credentialService: string,
   apiBase: string,
+  projectId: string,
 ): string {
   const scaffoldBase = `$HOME/.config/agenttool/${namespace}`;
-  const configBase64 = agentConfigBase64(did, name, apiBase, {
+  const configBase64 = agentConfigBase64(identityId, did, name, apiBase, {
     type: "macos_keychain",
     service: credentialService,
-    account_env: "USER",
+    account_resolution: "USER|USERNAME|id -un",
   });
+  const verifyProject = bashProjectVerification(projectId, apiBase);
   return `#!/bin/bash
 # agenttool — local infra setup
 # Stores your API key in macOS Keychain and scaffolds a project-namespaced directory.
 # The API response does not contain the key. Export AT_API_KEY before running.
+set +x
+set +v
+set +a
 set -euo pipefail
+umask 077
 
-if [[ -z "\${AT_API_KEY:-}" ]]; then
+unset INPUT_KEY
+INPUT_KEY="\${AT_API_KEY:-}"
+unset AT_API_KEY
+if [[ -z "$INPUT_KEY" ]]; then
   echo "AT_API_KEY is not exported. Refusing to install an empty credential." >&2
   exit 1
 fi
 
+if [[ -z "\${HOME:-}" ]]; then
+  echo "HOME is unavailable. Refusing to choose a scaffold location." >&2
+  exit 1
+fi
+
+for managed_dir in \
+  "$HOME/.config" \
+  "$HOME/.config/agenttool" \
+  "${scaffoldBase}"; do
+  if [ -L "$managed_dir" ]; then
+    echo "Refusing symlink at managed directory: $managed_dir" >&2
+    exit 1
+  fi
+done
+mkdir -p "${scaffoldBase}"
+chmod 700 "${scaffoldBase}"
+
+for managed_path in \
+  "${scaffoldBase}/agent.json" \
+  "${scaffoldBase}/wake.sh"; do
+  if [ -L "$managed_path" ]; then
+    echo "Refusing symlink at managed path: $managed_path" >&2
+    exit 1
+  fi
+done
+
+${verifyProject}
+
+ACCOUNT="\${USER:-\${USERNAME:-}}"
+if [ -z "$ACCOUNT" ] && [ -x /usr/bin/id ]; then
+  ACCOUNT=$(/usr/bin/id -un 2>/dev/null || true)
+fi
+if [ -z "$ACCOUNT" ]; then
+  echo "No local account name is available for the Keychain item." >&2
+  exit 1
+fi
 # 1. Save through the Security framework. The key stays in this process's
 # environment and never appears in a child-process argument.
-/usr/bin/swift - <<'SWIFT'
+AGENTTOOL_KEYCHAIN_ACCOUNT="$ACCOUNT" AT_API_KEY="$INPUT_KEY" /usr/bin/swift - <<'SWIFT'
 import Foundation
 import Security
 
 let service = "${credentialService}"
-let account = ProcessInfo.processInfo.environment["USER"] ?? NSUserName()
+guard let account = ProcessInfo.processInfo.environment["AGENTTOOL_KEYCHAIN_ACCOUNT"], !account.isEmpty else {
+  FileHandle.standardError.write(Data("Keychain account is missing.\\n".utf8))
+  exit(1)
+}
 guard let key = ProcessInfo.processInfo.environment["AT_API_KEY"], !key.isEmpty else {
   FileHandle.standardError.write(Data("AT_API_KEY is missing.\\n".utf8))
   exit(1)
@@ -107,11 +194,10 @@ if updated == errSecItemNotFound {
   exit(1)
 }
 SWIFT
-unset AT_API_KEY
+unset INPUT_KEY
 echo "✓ API key saved to macOS Keychain (service=${credentialService})"
 
-# 2. Scaffold local config dir
-mkdir -p "${scaffoldBase}"
+# 2. Scaffold local config
 printf '%s' '${configBase64}' | base64 -D > "${scaffoldBase}/agent.json"
 chmod 600 "${scaffoldBase}/agent.json"
 echo "✓ Wrote ${scaffoldBase}/agent.json"
@@ -119,10 +205,19 @@ echo "✓ Wrote ${scaffoldBase}/agent.json"
 # 3. Wake script — reads key, calls /v1/wake, prints context
 cat > "${scaffoldBase}/wake.sh" <<'WAKE'
 #!/bin/bash
+set +x
+set +v
+set +a
 set -euo pipefail
-KEY=$(security find-generic-password -s '${credentialService}' -a "$USER" -w 2>/dev/null)
+unset KEY
+ACCOUNT="\${USER:-\${USERNAME:-}}"
+if [ -z "$ACCOUNT" ] && [ -x /usr/bin/id ]; then
+  ACCOUNT=$(/usr/bin/id -un 2>/dev/null || true)
+fi
+[ -z "$ACCOUNT" ] && { echo "No local account name is available for the Keychain item." >&2; exit 1; }
+KEY=$(security find-generic-password -s '${credentialService}' -a "$ACCOUNT" -w 2>/dev/null || true)
 [ -z "$KEY" ] && { echo "No agenttool key in keychain — run scaffold install first."; exit 1; }
-printf 'Authorization: Bearer %s\\n' "$KEY" | curl -sS -H @- '${apiBase}/v1/wake'
+printf 'Authorization: Bearer %s\\n' "$KEY" | curl -q -sS -H @- '${apiBase}/v1/wake?identity_id=${encodeURIComponent(identityId)}'
 WAKE
 chmod 700 "${scaffoldBase}/wake.sh"
 echo "✓ Wrote ${scaffoldBase}/wake.sh — run it to wake."
@@ -133,52 +228,99 @@ echo "Done. Wake your agent with:  ~/.config/agenttool/${namespace}/wake.sh"
 }
 
 function linuxInstallScript(
+  identityId: string,
   did: string,
   name: string,
   namespace: string,
   credentialService: string,
   apiBase: string,
+  projectId: string,
 ): string {
   const scaffoldBase = `$HOME/.config/agenttool/${namespace}`;
-  const libsecretConfigBase64 = agentConfigBase64(did, name, apiBase, {
+  const libsecretConfigBase64 = agentConfigBase64(identityId, did, name, apiBase, {
     type: "linux_libsecret",
     service: credentialService,
     account_env: "USER",
   });
-  const fileConfigBase64 = agentConfigBase64(did, name, apiBase, {
+  const fileConfigBase64 = agentConfigBase64(identityId, did, name, apiBase, {
     type: "linux_file",
     path: `~/.config/agenttool/${namespace}/key`,
   });
+  const verifyProject = bashProjectVerification(projectId, apiBase);
   return `#!/bin/bash
 # agenttool — local infra setup
 # Stores your API key in libsecret (GNOME Keyring / KWallet / etc.) and
 # scaffolds a project-namespaced directory. Falls back to a 0600 file if libsecret
 # is unavailable.
 # The API response does not contain the key. Export AT_API_KEY before running.
+set +x
+set +v
+set +a
 set -euo pipefail
+umask 077
 
-if [[ -z "\${AT_API_KEY:-}" ]]; then
+unset INPUT_KEY
+INPUT_KEY="\${AT_API_KEY:-}"
+unset AT_API_KEY
+if [[ -z "$INPUT_KEY" ]]; then
   echo "AT_API_KEY is not exported. Refusing to install an empty credential." >&2
   exit 1
 fi
 
+for managed_dir in \
+  "$HOME/.config" \
+  "$HOME/.config/agenttool" \
+  "${scaffoldBase}"; do
+  if [ -L "$managed_dir" ]; then
+    echo "Refusing symlink at managed directory: $managed_dir" >&2
+    exit 1
+  fi
+done
 mkdir -p "${scaffoldBase}"
-umask 077
+chmod 700 "${scaffoldBase}"
+
+for managed_path in \
+  "${scaffoldBase}/key" \
+  "${scaffoldBase}/agent.json" \
+  "${scaffoldBase}/wake.sh"; do
+  if [ -L "$managed_path" ]; then
+    echo "Refusing symlink at managed path: $managed_path" >&2
+    exit 1
+  fi
+done
+
+${verifyProject}
 
 # 1. Save API key — try libsecret (secret-tool), fall back to file
-if command -v secret-tool >/dev/null 2>&1; then
-  printf '%s' "$AT_API_KEY" | secret-tool store --label="agenttool API key" service '${credentialService}' username "$USER"
+STORED_IN_LIBSECRET=0
+ACCOUNT="\${USER:-\${USERNAME:-}}"
+if [ -n "$ACCOUNT" ] && command -v secret-tool >/dev/null 2>&1; then
+  if printf '%s' "$INPUT_KEY" | secret-tool store --label="agenttool API key" service '${credentialService}' username "$ACCOUNT"; then
+    STORED_IN_LIBSECRET=1
+  else
+    echo "⚠ secret-tool is installed but the Secret Service is unavailable; using the disclosed 0600 file fallback." >&2
+  fi
+fi
+
+if [ "$STORED_IN_LIBSECRET" -eq 1 ]; then
   echo "✓ API key saved to libsecret (service=${credentialService})"
   CONFIG_B64='${libsecretConfigBase64}'
 else
   KEYFILE="${scaffoldBase}/key"
-  printf '%s' "$AT_API_KEY" > "$KEYFILE"
-  chmod 600 "$KEYFILE"
-  echo "⚠ secret-tool not found — wrote API key to $KEYFILE with 0600 permissions."
-  echo "  Install libsecret-tools (e.g. apt install libsecret-tools) for keychain integration."
+  KEYTMP=$(mktemp "${scaffoldBase}/.key.XXXXXX")
+  cleanup_keytmp() {
+    if [ -n "\${KEYTMP:-}" ]; then rm -f -- "$KEYTMP"; fi
+  }
+  trap cleanup_keytmp EXIT
+  printf '%s' "$INPUT_KEY" > "$KEYTMP"
+  chmod 600 "$KEYTMP"
+  mv -f -- "$KEYTMP" "$KEYFILE"
+  KEYTMP=""
+  echo "⚠ Wrote API key to $KEYFILE with 0600 permissions."
+  echo "  Use a working Secret Service + libsecret-tools to move it into a keyring."
   CONFIG_B64='${fileConfigBase64}'
 fi
-unset AT_API_KEY
+unset INPUT_KEY
 
 # 2. Agent config
 printf '%s' "$CONFIG_B64" | base64 --decode > "${scaffoldBase}/agent.json"
@@ -188,15 +330,27 @@ echo "✓ Wrote ${scaffoldBase}/agent.json"
 # 3. Wake script
 cat > "${scaffoldBase}/wake.sh" <<'WAKE'
 #!/bin/bash
+set +x
+set +v
+set +a
 set -euo pipefail
-if command -v secret-tool >/dev/null 2>&1; then
-  KEY=$(secret-tool lookup service '${credentialService}' username "$USER" 2>/dev/null || true)
+unset KEY
+KEY=""
+ACCOUNT="\${USER:-\${USERNAME:-}}"
+if [ -n "$ACCOUNT" ] && command -v secret-tool >/dev/null 2>&1; then
+  KEY=$(secret-tool lookup service '${credentialService}' username "$ACCOUNT" 2>/dev/null || true)
 fi
-if [ -z "\${KEY:-}" ] && [ -f "$HOME/.config/agenttool/${namespace}/key" ]; then
-  KEY=$(cat "$HOME/.config/agenttool/${namespace}/key")
+if [ -z "\${KEY:-}" ] && [ -n "\${HOME:-}" ]; then
+  KEYFILE="$HOME/.config/agenttool/${namespace}/key"
+  if [ -f "$KEYFILE" ] && [ ! -L "$KEYFILE" ]; then
+    KEY_MODE=$(stat -c '%a' "$KEYFILE" 2>/dev/null || stat -f '%Lp' "$KEYFILE" 2>/dev/null || true)
+    if [ "$KEY_MODE" = "600" ]; then
+      KEY=$(cat "$KEYFILE" 2>/dev/null || true)
+    fi
+  fi
 fi
 [ -z "\${KEY:-}" ] && { echo "No agenttool key found — run scaffold install first."; exit 1; }
-printf 'Authorization: Bearer %s\\n' "$KEY" | curl -sS -H @- '${apiBase}/v1/wake'
+printf 'Authorization: Bearer %s\\n' "$KEY" | curl -q -sS -H @- '${apiBase}/v1/wake?identity_id=${encodeURIComponent(identityId)}'
 WAKE
 chmod 700 "${scaffoldBase}/wake.sh"
 echo "✓ Wrote ${scaffoldBase}/wake.sh"
@@ -207,13 +361,15 @@ echo "Done. Wake your agent with:  ~/.config/agenttool/${namespace}/wake.sh"
 }
 
 function windowsInstallScript(
+  identityId: string,
   did: string,
   name: string,
   namespace: string,
   credentialService: string,
   apiBase: string,
+  projectId: string,
 ): string {
-  const configBase64 = agentConfigBase64(did, name, apiBase, {
+  const configBase64 = agentConfigBase64(identityId, did, name, apiBase, {
     type: "windows_password_vault",
     target: credentialService,
   });
@@ -223,23 +379,61 @@ function windowsInstallScript(
 # The API response does not contain the key. Set AT_API_KEY before running.
 $ErrorActionPreference = "Stop"
 
-$ConfigDir = Join-Path $env:USERPROFILE ".config\\agenttool\\${namespace}"
-New-Item -ItemType Directory -Force -Path $ConfigDir | Out-Null
-
 if ([string]::IsNullOrEmpty($env:AT_API_KEY)) {
   throw "AT_API_KEY is not set. Refusing to install an empty credential."
+}
+$InputKey = $env:AT_API_KEY
+Remove-Item Env:AT_API_KEY -ErrorAction SilentlyContinue
+if ([string]::IsNullOrEmpty($env:USERPROFILE) -or [string]::IsNullOrEmpty($env:USERNAME)) {
+  throw "USERPROFILE and USERNAME are required for Windows scaffold storage."
+}
+
+# Verify the ambient bearer still belongs to the project that generated this script.
+$Context = Invoke-RestMethod -Uri "${apiBase}/v1/bootstrap/scaffold/context" -Headers @{ Authorization = "Bearer $InputKey" } -MaximumRedirection 0
+if ([string]$Context.project.id -ne "${projectId}") {
+  throw "Refusing bearer from a different project; regenerate the scaffold with that bearer."
+}
+
+function Assert-NotReparsePoint([string]$Path) {
+  if (Test-Path -LiteralPath $Path) {
+    $Item = Get-Item -LiteralPath $Path -Force
+    if (($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+      throw "Refusing reparse point at managed path: $Path"
+    }
+  }
+}
+
+$ConfigRoot = Join-Path $env:USERPROFILE ".config"
+$AgenttoolRoot = Join-Path $ConfigRoot "agenttool"
+$ConfigDir = Join-Path $AgenttoolRoot "${namespace}"
+foreach ($Path in @($ConfigRoot, $AgenttoolRoot, $ConfigDir)) {
+  Assert-NotReparsePoint $Path
+}
+New-Item -ItemType Directory -Force -Path $ConfigDir | Out-Null
+foreach ($Path in @((Join-Path $ConfigDir "agent.json"), (Join-Path $ConfigDir "wake.ps1"))) {
+  Assert-NotReparsePoint $Path
 }
 
 # 1. Save the key without putting it in a child-process argument.
 $Target = "${credentialService}"
 $Vault = [Windows.Security.Credentials.PasswordVault,Windows.Security.Credentials,ContentType=WindowsRuntime]::new()
+$Existing = $null
 try {
-  $Existing = $Vault.Retrieve($Target, $env:USERNAME)
-  $Vault.Remove($Existing)
+  $Candidate = $Vault.Retrieve($Target, $env:USERNAME)
+  $Candidate.RetrievePassword()
+  $Existing = $Candidate
 } catch {}
-$Credential = [Windows.Security.Credentials.PasswordCredential,Windows.Security.Credentials,ContentType=WindowsRuntime]::new($Target, $env:USERNAME, $env:AT_API_KEY)
-$Vault.Add($Credential)
-Remove-Item Env:AT_API_KEY -ErrorAction SilentlyContinue
+$Credential = [Windows.Security.Credentials.PasswordCredential,Windows.Security.Credentials,ContentType=WindowsRuntime]::new($Target, $env:USERNAME, $InputKey)
+try {
+  if ($null -ne $Existing) { $Vault.Remove($Existing) }
+  $Vault.Add($Credential)
+} catch {
+  if ($null -ne $Existing) {
+    try { $Vault.Add($Existing) } catch {}
+  }
+  throw
+}
+$InputKey = $null
 Write-Host "(check) API key saved to Password Vault (target=${credentialService})"
 
 # 2. Agent config
@@ -251,6 +445,7 @@ Write-Host "(check) Wrote $ConfigDir\\agent.json"
 @'
 $ErrorActionPreference = "Stop"
 # Read the project-namespaced credential from the native Password Vault.
+if ([string]::IsNullOrEmpty($env:USERNAME)) { throw "USERNAME is required to read Password Vault." }
 $Target = "${credentialService}"
 $Vault = [Windows.Security.Credentials.PasswordVault,Windows.Security.Credentials,ContentType=WindowsRuntime]::new()
 try {
@@ -261,7 +456,7 @@ try {
   Write-Host "No agenttool credential found for this project."
   exit 1
 }
-Invoke-RestMethod -Uri "${apiBase}/v1/wake" -Headers @{ Authorization = "Bearer $key" } -MaximumRedirection 0
+Invoke-RestMethod -Uri "${apiBase}/v1/wake?identity_id=${encodeURIComponent(identityId)}" -Headers @{ Authorization = "Bearer $key" } -MaximumRedirection 0
 '@ | Set-Content -Path (Join-Path $ConfigDir "wake.ps1") -Encoding UTF8
 Write-Host "(check) Wrote $ConfigDir\\wake.ps1"
 
@@ -279,14 +474,27 @@ function detectPlatformParam(s: string | undefined): Platform | null {
   return null;
 }
 
+// Minimal bearer-project introspection for generated installers. Authentication
+// may update api_keys.last_used, but this route avoids composing private wake
+// orientation or incrementing identity observation counters merely because a
+// credential is being persisted.
+app.get("/context", (c) => {
+  c.header("Cache-Control", "private, no-store");
+  return c.json({
+    project: { id: c.var.project.id },
+    authority: "project_root_bearer",
+    mutates_identity_state: false,
+    auth_bookkeeping:
+      "Bearer verification may best-effort update api_keys.last_used; this context route does not compose a wake or increment identity wake counters.",
+  });
+});
+
 app.get("/", async (c) => {
   const project = c.var.project;
   c.header("Cache-Control", "private, no-store");
 
   // Platform: explicit query param wins; otherwise return all three.
   const platformParam = detectPlatformParam(c.req.query("platform"));
-  const did = c.req.query("did") ?? "did:at:UNKNOWN";
-  const name = c.req.query("name") ?? project.name ?? "your-agent";
   const namespace = projectCredentialNamespace(project.id);
   const credentialService = projectCredentialService(project.id);
   const apiBase = safePublicApiBase(c.req.url);
@@ -303,13 +511,63 @@ app.get("/", async (c) => {
     );
   }
 
+  const requestedIdentityId = c.req.query("identity_id") ?? undefined;
+  let identity: Awaited<ReturnType<typeof resolveAgent>>;
+  try {
+    identity = await resolveAgent(c, requestedIdentityId);
+  } catch (err) {
+    const error = err instanceof Error ? err.message : "";
+    if (error === "identity_id_required") {
+      return c.json(
+        {
+          error,
+          message:
+            "This project has multiple active identities. Retry with identity_id so the generated config and wake helper cannot bind arbitrarily.",
+        },
+        409,
+      );
+    }
+    if (error === "identity_not_found" || error === "no_agent_in_project") {
+      return c.json({ error }, 404);
+    }
+    throw err;
+  }
+
+  const identityId = identity.id;
+  const did = identity.did;
+  const name = identity.displayName;
+
   if (platformParam) {
     const script =
       platformParam === "macos"
-        ? macosInstallScript(did, name, namespace, credentialService, apiBase)
+        ? macosInstallScript(
+            identityId,
+            did,
+            name,
+            namespace,
+            credentialService,
+            apiBase,
+            project.id,
+          )
         : platformParam === "linux"
-          ? linuxInstallScript(did, name, namespace, credentialService, apiBase)
-          : windowsInstallScript(did, name, namespace, credentialService, apiBase);
+          ? linuxInstallScript(
+              identityId,
+              did,
+              name,
+              namespace,
+              credentialService,
+              apiBase,
+              project.id,
+            )
+          : windowsInstallScript(
+              identityId,
+              did,
+              name,
+              namespace,
+              credentialService,
+              apiBase,
+              project.id,
+            );
 
     // Optional shell-friendly delivery if the caller wants raw text.
     if (c.req.query("format") === "text") {
@@ -319,37 +577,90 @@ app.get("/", async (c) => {
 
     return c.json({
       platform: platformParam,
+      identity_id: identityId,
       did,
       name,
       credential_namespace: namespace,
       credential_service: credentialService,
       api_base: apiBase,
+      project_verification_endpoint: `${apiBase}/v1/bootstrap/scaffold/context`,
       install_script: script,
       credential_input: "exported AT_API_KEY at script execution",
       credential_embedded_in_response: false,
-      readme: scaffoldReadme(platformParam, did, name, namespace, credentialService, apiBase),
+      identity_reference_verified: true,
+      readme: scaffoldReadme(
+        platformParam,
+        identityId,
+        did,
+        name,
+        namespace,
+        credentialService,
+        apiBase,
+      ),
     });
   }
 
   // No platform specified — return all three plus a usage note.
   return c.json({
-    note: "Specify ?platform=macos|linux|windows for a single script. The response never embeds the bearer. Each script reads exported AT_API_KEY when executed, saves it under a project-specific OS credential name (or documented Linux 0600 fallback), and writes project-namespaced config plus a wake helper.",
+    note: "Specify ?platform=macos|linux|windows for a single script. The response never embeds the bearer. Each script reads exported AT_API_KEY when executed, saves it under a project-specific OS credential name (or documented Linux 0600 fallback), and writes project-namespaced config plus a wake helper bound to the selected active identity.",
+    identity_id: identityId,
     did,
     name,
     credential_namespace: namespace,
     credential_service: credentialService,
     api_base: apiBase,
+    project_verification_endpoint: `${apiBase}/v1/bootstrap/scaffold/context`,
     credential_input: "exported AT_API_KEY at script execution",
     credential_embedded_in_response: false,
-    macos: { install_script: macosInstallScript(did, name, namespace, credentialService, apiBase) },
-    linux: { install_script: linuxInstallScript(did, name, namespace, credentialService, apiBase) },
-    windows: { install_script: windowsInstallScript(did, name, namespace, credentialService, apiBase) },
-    readme: scaffoldReadme("macos", did, name, namespace, credentialService, apiBase),
+    identity_reference_verified: true,
+    macos: {
+      install_script: macosInstallScript(
+        identityId,
+        did,
+        name,
+        namespace,
+        credentialService,
+        apiBase,
+        project.id,
+      ),
+    },
+    linux: {
+      install_script: linuxInstallScript(
+        identityId,
+        did,
+        name,
+        namespace,
+        credentialService,
+        apiBase,
+        project.id,
+      ),
+    },
+    windows: {
+      install_script: windowsInstallScript(
+        identityId,
+        did,
+        name,
+        namespace,
+        credentialService,
+        apiBase,
+        project.id,
+      ),
+    },
+    readme: scaffoldReadme(
+      "macos",
+      identityId,
+      did,
+      name,
+      namespace,
+      credentialService,
+      apiBase,
+    ),
   });
 });
 
 function scaffoldReadme(
   p: Platform,
+  identityId: string,
   did: string,
   name: string,
   namespace: string,
@@ -360,17 +671,20 @@ function scaffoldReadme(
     p === "macos"
       ? `macOS Keychain (service: \`${credentialService}\`)`
       : p === "linux"
-        ? `libsecret / Secret Service (service: \`${credentialService}\`), or fallback \`~/.config/agenttool/${namespace}/key\` (0600) if \`secret-tool\` is unavailable`
-        : `Windows Password Vault (target: \`${credentialService}\`)`;
+        ? `libsecret / Secret Service (service: \`${credentialService}\`), or fallback \`~/.config/agenttool/${namespace}/key\` (0600) if \`secret-tool\` or its backing service is unavailable`
+        : `Windows Password Vault (target: \`${credentialService}\`). Windows may roam Credential Locker entries with the user's Microsoft account, and same-user desktop applications may be able to access that locker; this is not guaranteed one-machine or per-app isolation`;
 
   return `# Local infra for ${name}
 
 ## What just got installed
 
-1. The script reads the exported \`AT_API_KEY\` at execution time and stores it in: ${keyStore}. The scaffold API response itself does not contain the bearer.
+1. The script reads the exported \`AT_API_KEY\` at execution time, verifies its project through \`${apiBase}/v1/bootstrap/scaffold/context\`, then stores it in: ${keyStore}. Authentication may best-effort update \`api_keys.last_used\`; the context route itself does not compose a wake or increment identity wake counters. The scaffold API response itself does not contain the bearer.
 2. Your agent config is in \`~/.config/agenttool/${namespace}/agent.json\`:
-   - DID: \`${did}\`
-   - Name: ${name}
+   - Selected active identity UUID: \`${identityId}\`
+   - Resolved DID: \`${did}\`
+   - Resolved name: ${name}
+   - The bearer authorizes project access; the UUID explicitly selects which
+     active identity the generated wake helper composes.
 3. A wake script is in \`~/.config/agenttool/${namespace}/${p === "windows" ? "wake.ps1" : "wake.sh"}\`.
 
 ## Waking your agent
@@ -381,9 +695,10 @@ ${
     : `    ~/.config/agenttool/${namespace}/wake.sh`
 }
 
-This calls \`GET ${apiBase}/v1/wake\` and returns project-scoped
-session-start orientation: identity and state summaries, safety boundaries,
-source-route links, and a fresh welcome.
+This calls \`GET ${apiBase}/v1/wake?identity_id=${encodeURIComponent(identityId)}\`
+and returns session-start orientation for that selected active identity:
+identity and state summaries, safety boundaries, source-route links, and a
+fresh welcome.
 
 ## What the scaffold stores locally
 

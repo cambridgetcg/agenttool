@@ -9,6 +9,8 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import wellKnownRouter from "../src/routes/well-known";
 
@@ -52,13 +54,51 @@ describe("/.well-known/* — MCP + native discovery", () => {
     expect(text).toContain("AGENT-WELLNESS");
   });
 
+  test("GET /love-packages returns public registry-neutral discovery", async () => {
+    const { status, body, contentType } = await get("/love-packages");
+    expect(status).toBe(200);
+    expect(contentType ?? "").toContain("application/json");
+    const discovery = await body.json();
+    expect(discovery).toEqual({
+      protocol: "love-package/v1",
+      doctrine: "https://docs.agenttool.dev/LOVE-PACKAGE-PROTOCOL.md",
+      index_url: "https://docs.agenttool.dev/packages/v1/index.json",
+      access: "public_read",
+      registry_role: "mirror_index_not_authority",
+      registry_mirrors: [
+        {
+          ecosystem: "npm",
+          registry_url: "https://registry.npmjs.org/",
+          authority: false,
+        },
+      ],
+    });
+    expect(discovery).toEqual(
+      JSON.parse(
+        readFileSync(
+          join(import.meta.dir, "../../apps/docs/.well-known/love-packages"),
+          "utf8",
+        ),
+      ),
+    );
+    const npm = discovery.registry_mirrors[0];
+    expect(npm.authority).toBe(false);
+    expect(npm.registry_url).toMatch(/^https:\/\//);
+    expect(npm).not.toHaveProperty("latest");
+    expect(npm).not.toHaveProperty("tag");
+    expect(npm).not.toHaveProperty("dist_tag");
+    expect(npm).not.toHaveProperty("version");
+  });
+
   test("GET / returns the well-known index", async () => {
     const { status, body } = await get("/");
     expect(status).toBe(200);
     const idx = await body.json();
     expect(idx.endpoints).toEqual(
       expect.arrayContaining([
+        "/.well-known/webfinger?resource={exact-DID}",
         "/.well-known/mcp/server-card.json",
+        "/.well-known/love-packages",
         "/.well-known/llms.txt",
         "/.well-known/pyramid",
       ]),

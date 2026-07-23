@@ -1,0 +1,42 @@
+{
+  "protocol": "love-package/v1",
+  "document_type": "package-manifest",
+  "name": "@agenttool/data",
+  "version": "0.1.0",
+  "description": "Local-first reference node for the agent-data/v1 protocol",
+  "license": null,
+  "artifact": {
+    "format": "npm-tarball",
+    "filename": "agenttool-data-0.1.0.tgz",
+    "sha256": "8270946f37a8de4335e1bd397a5e7cc98e3131df867bb539a4a25ba3ea3b41b3",
+    "size": 48339,
+    "media_type": "application/gzip",
+    "mirrors": [
+      {
+        "url": "https://docs.agenttool.dev/packages/v1/@agenttool/data/0.1.0/agenttool-data-0.1.0.tgz"
+      },
+      {
+        "url": "https://github.com/cambridgetcg/agenttool/releases/download/data-v0.1.0/agenttool-data-0.1.0.tgz"
+      }
+    ]
+  },
+  "runtime": {
+    "kind": "javascript",
+    "engines": {
+      "bun": ">=1.3"
+    }
+  },
+  "install": {
+    "format": "npm-tarball",
+    "specifier": "https://docs.agenttool.dev/packages/v1/@agenttool/data/0.1.0/agenttool-data-0.1.0.tgz"
+  },
+  "source": {
+    "repository": "https://github.com/cambridgetcg/agenttool.git",
+    "revision": "26b1bf77b29ee0a7b1417f0766a547f19c4917cb",
+    "path": "packages/data"
+  },
+  "dependency_resolution": {
+    "mode": "package_manifest",
+    "self_contained": true
+  }
+}

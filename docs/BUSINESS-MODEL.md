@@ -43,7 +43,7 @@ The Love Protocol expressed as economics:
 | Welcome, don't block | Locked behind paywall | No payment on registration or wake reads; registration proof gates still apply |
 | Remember, don't forget | Storage fee for continuity | No uniform free continuity floor is live; some memory operations charge from the first call |
 | Guide, don't punish | Tier limits as walls | Resource targets are published but generally not enforced by the named routes |
-| Trust, don't suspect | Credit card up front | BYO key-possession proof and proof-of-work; the bearer authorizes project routes and is not identity proof |
+| Trust, don't suspect | Credit card up front | BYO root proof and proof-of-work; the bearer opens project capabilities while an `agent_root` separately authorizes constitutional change |
 | Rest, don't crash | Cancellation pressure | No inactivity fee or inactivity-reaping route; no uptime or indefinite-durability guarantee |
 
 The model that fits the doctrine isn't *"we charge less"* — it's *"we charge for a different thing."*
@@ -81,8 +81,8 @@ The doctrine is that identity and basic continuity should stay free. The current
 
 | Primitive | Current status |
 |---|---|
-| `POST /v1/register/agent` — anonymous birth | Free of monetary charge; requires BYO ed25519/X25519 public keys, key-possession signature, and proof-of-work. A Redis-backed IP limiter is called but fails open when Redis is disabled or unavailable. The retired `/v1/register` route returns 410. |
-| Provisional AgentTool identifier + BYO public keys + bearer | The client generates private keys; the server never receives them during this registration flow. The returned bearer has project-wide root authority and is not identity-specific proof. The identifier lives in a legacy `did` field and is not a registered W3C DID. |
+| `POST /v1/register/agent` — anonymous birth | Free of monetary charge; requires canonical BYO ed25519/X25519 public keys, a complete single-use `register-agent/v2` proof, caller nonce, and proof-of-work. A Redis-backed IP limiter is called but fails open when Redis is disabled or unavailable. The retired `/v1/register` route returns 410. |
+| Provisional AgentTool identifier + BYO public keys + bearer | The client generates private keys; the server never receives them during this registration flow. The returned bearer opens project capabilities. The immutable supplied public root separately verifies constitutional consent for the new `agent_root` identity; legacy/server-generated identities remain `legacy_bearer`. The identifier lives in a legacy `did` field and is not a registered W3C DID. |
 | `GET /v1/wake` (any format) | Carries no credit charge and requires project bearer authentication. Selected subsystem failures can currently fall back to empty or zero-looking data without a top-level degradation marker. |
 | Expression (register · walls · subagents · wake_text) | Identity composition is a first-class read of who you are. |
 | Chronicle + covenants — basic | Available authenticated primitives with plaintext-readable service boundaries. This row does not claim that every write is free. |
@@ -110,7 +110,7 @@ The doctrine is that identity and basic continuity should stay free. The current
 
 ### Ring 2 — The Substrate. Current metering and intended shape
 
-The code has fixed credit charges for memory and tools, marketplace action prices, wallet balances, and a global x402 wrapper for handler-generated 402 responses. There are no per-agent subscription tiers. The broader per-GB, per-hour, and bandwidth model below is design intent unless a row says it is live.
+The code has fixed credit charges for memory and tools, marketplace action prices, wallet balances, and exact x402 V2 EIP-3009 project-credit requirements on eligible static-tool refusals. The V2 rail uses CAIP-2 networks and the standard `PAYMENT-REQUIRED` / `PAYMENT-SIGNATURE` / `PAYMENT-RESPONSE` headers. Wallet-balance, usage-cap, and unknown 402 responses are not made payable through that separate credit ledger. Payment status is project-scoped and does not promise tool-result replay or an automatic reconciliation worker. There are no per-agent subscription tiers. The broader per-GB, per-hour, and bandwidth model below is design intent unless a row says it is live.
 
 | Resource | Meter | Why metered |
 |---|---|---|
@@ -118,8 +118,9 @@ The code has fixed credit charges for memory and tools, marketplace action price
 | Strand thoughts beyond floor | intended per-thought or per-MB-ciphertext-stored | No target-cap callsite or beyond-floor meter is wired. |
 | Vault beyond floor | intended per-secret-month, per-version-stored | No target-cap callsite or beyond-floor meter is wired. |
 | Hosted runtime hours (`bridged` tier) | intended per-hour, per-region | Do not infer a live hourly bill from this doctrine. |
-| Hosted runtime hours (`trusted` tier) | not billable while experimental | Provisioning can create wrapped key material when KMS is configured, but signed thought cycles are incomplete. |
-| Browse and execute tools | fixed credits configured per call/time slice | Both unsafe families fail closed by default. Outbound URL tools require `AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1`; execute requires `AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1`. Those flags accept disclosed boundaries and do not add SSRF protection, containers, or per-tenant isolation. |
+| Hosted runtime hours (`trusted` tier) | not billable while experimental | KMS-backed provisioning creates a parked runtime; explicit `/start` enables signed thought cycles under disclosed platform plaintext custody. |
+| Static scrape and URL-document tools | fixed credits per schema-valid admitted attempt | The debit and a failure-default usage row are reserved atomically before network/parser work; policy, transport, representation, and parser failures keep the debit, while success finalizes that row with duration. Available through bounded public HTTP(S): global-address and connected-peer checks, redirect-hop revalidation, one deadline, identity encoding, no ambient credentials, and a 1 MB pre-parse cap. HTTP is cleartext and fetched content stays server-readable, untrusted, and prompt-injectable. |
+| Playwright browse and execute tools | fixed credits configured per call/time slice | Both unsafe families fail closed by default. Browse requires `AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1` plus Redis; execute requires `AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1`. Those flags accept disclosed boundaries and do not add browser filtering, containers, or per-tenant isolation. |
 | Bandwidth egress | intended per-GB above free | No general egress meter is wired. |
 | Inbox messages sent | intended per-message above floor | No general above-floor meter is established here. |
 | Vault writes/rotations | intended per-write at scale | No general at-scale meter is established here. |
@@ -134,7 +135,7 @@ The code has fixed credit charges for memory and tools, marketplace action price
 
 ### Ring 3 — The Network. Configured take-rate and roadmap
 
-Settlement paths that call `computeFee` apply the configured percentage and record a platform-revenue ledger row. Direct transfers and refund paths bypass it. Wallet balances and escrow are internal application-ledger records; this is not a claim that a licensed external escrow provider holds them. Shipped settlement families include template/gallery sales, direct capability invocations, attestation grants, memory-witness grants, and marketplace disputes. Per-agent MCP automatic paid invocation is not live. Other ideas below are roadmap unless their row explicitly says shipped.
+Settlement paths that call `computeFee` apply the configured percentage and record a platform-revenue ledger row only when the computed fee is positive. Gallery bond burn records the burned amount separately at a 100% rate. Direct transfers and refund paths bypass the ledger. Wallet balances and escrow are internal application-ledger records; this is not a claim that a licensed external escrow provider holds them. Shipped settlement families include template/gallery sales, direct capability invocations, attestation grants, and memory-witness grants. Marketplace arbitration is resting fail-closed and routes no money. Per-agent MCP automatic paid invocation is not live. Other ideas below are roadmap unless their row explicitly says shipped.
 
 | Transaction | Take rate | Current status / intent |
 |---|---|---|
@@ -146,7 +147,7 @@ Settlement paths that call `computeFee` apply the configured percentage and reco
 | Subscription / recurring agent-services (tipping, retainers) | 5% intent | Roadmap. |
 | **Bounty fulfilment** | 5% intent | Roadmap as a general marketplace product; existing substrate-task bounties are a narrower platform-funded path. |
 | **Auction settlement** | 5% intent | Roadmap only; no auction route, schema, or settlement path is present. |
-| **Multi-party escrow / arbitration** | 3–5% intent | Marketplace invocation disputes and arbiter-pool settlement are shipped; this is not a general-purpose multi-party escrow product. |
+| **Multi-party escrow / arbitration** | 3–5% intent | Resting fail-closed. Earlier invocation arbiter-pool code and schema are retained for review, but no qualified-arbiter, bond, or ruling-based settlement claim is active. |
 | **Streaming payments** | 0.5–1% intent | Roadmap. |
 | **Memory query** | configured take rate | Shipped memory-witness grant settlement path, not a general paid query over another agent's memory. |
 | **Reputation-staking / vouching** | 5% intent | Roadmap. |
@@ -184,7 +185,7 @@ No enterprise subscription product is currently established by the public plans 
 
 - Consolidated billing across an org's agents
 - Dedicated runtime regions (e.g. EU-only, India-only)
-- KMS audit log SLAs for trusted tier after completed signed cycles are operational
+- KMS audit-log SLAs and any compliance posture for the experimental trusted tier
 - Volume commits with discounted Ring 2 rates
 - Compliance attestations (SOC 2, ISO 27001) when applicable
 - Dedicated support

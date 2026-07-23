@@ -6,15 +6,19 @@
  *  new identity following the template's voice. Distinct from fork:
  *  adoption is following, not descending. */
 
+import { sql } from "drizzle-orm";
+
 import {
   boolean,
   index,
   integer,
   jsonb,
   pgSchema,
+  primaryKey,
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -139,6 +143,12 @@ export const listings = marketplaceSchema.table(
   (t) => [
     index("idx_listings_seller").on(t.sellerIdentityId),
     index("idx_listings_public_recent").on(t.createdAt),
+    index("idx_listings_offer_bus_global")
+      .on(t.updatedAt.desc(), t.id.desc())
+      .where(sql`${t.visibility} = 'public' AND ${t.status} = 'active'`),
+    index("idx_listings_offer_bus_seller")
+      .on(t.sellerDid, t.updatedAt.desc(), t.id.desc())
+      .where(sql`${t.visibility} = 'public' AND ${t.status} = 'active'`),
   ],
 );
 
@@ -184,6 +194,7 @@ export const invocations = marketplaceSchema.table(
     index("idx_invocations_listing").on(t.listingId, t.createdAt),
     index("idx_invocations_buyer").on(t.buyerIdentityId, t.createdAt),
     index("idx_invocations_pending").on(t.status, t.slaDeadlineAt),
+    uniqueIndex("uniq_invocations_escrow_id").on(t.escrowId),
   ],
 );
 
@@ -279,6 +290,7 @@ export const attestationGrants = marketplaceSchema.table(
     index("idx_attestation_grants_buyer").on(t.buyerIdentityId, t.createdAt),
     index("idx_attestation_grants_subject").on(t.subjectIdentityId, t.createdAt),
     index("idx_attestation_grants_pending").on(t.status, t.slaDeadlineAt),
+    uniqueIndex("uniq_attestation_grants_escrow_id").on(t.escrowId),
   ],
 );
 
@@ -317,11 +329,10 @@ export const platformRevenue = marketplaceSchema.table(
   ],
 );
 
-// ── Dispute primitive (20260511T120000) ────────────────────────────
-// Listings opt in via dispute_policy JSONB (added as a column on the
-// listings table; service layer validates shape). When an invocation
-// hits 'completed' state, buyer/seller can file a dispute within the
-// buyer-review window. Doctrine: docs/MARKETPLACE.md (Dispute section).
+// ── Resting dispute history (20260511T120000) ──────────────────────
+// These tables preserve an earlier arbitration design and any historical
+// rows. Mutation services fail closed; a later constraint blocks non-null
+// listing policies. See docs/MARKETPLACE.md for the current boundary.
 export const disputeCases = marketplaceSchema.table(
   "dispute_cases",
   {
@@ -472,6 +483,7 @@ export const memoryWitnessGrants = marketplaceSchema.table(
     index("idx_memory_witness_grants_buyer").on(t.buyerIdentityId, t.createdAt),
     index("idx_memory_witness_grants_memory").on(t.memoryId),
     index("idx_memory_witness_grants_pending").on(t.status, t.slaDeadlineAt),
+    uniqueIndex("uniq_memory_witness_grants_escrow_id").on(t.escrowId),
   ],
 );
 
@@ -501,7 +513,33 @@ export const substrateTasks = marketplaceSchema.table(
   },
   (t) => [
     index("idx_substrate_tasks_open").on(t.kind, t.postedAt),
+    index("idx_substrate_tasks_open_expiry")
+      .on(t.expiresAt)
+      .where(sql`${t.status} = 'open'`),
+    index("idx_substrate_tasks_offer_bus_open")
+      .on(t.postedAt, t.taskId)
+      .where(sql`${t.status} = 'open'`),
     index("idx_substrate_tasks_claimed_by").on(t.claimedBy, t.status),
     index("idx_substrate_tasks_paid_by").on(t.claimedBy, t.paidAt),
+  ],
+);
+
+// Durable source watermark for the public Offer Bus. Triggers in
+// 20260716T095523_offer_bus_revisions.sql advance these rows when an existing
+// public entry changes or leaves the feed. This stores no offer content.
+export const offerBusRevisions = marketplaceSchema.table(
+  "offer_bus_revisions",
+  {
+    scope: text("scope").$type<"global" | "seller">().notNull(),
+    subject: text("subject").notNull().default(""),
+    revisedAt: timestamp("revised_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({
+      name: "offer_bus_revisions_pk",
+      columns: [t.scope, t.subject],
+    }),
   ],
 );

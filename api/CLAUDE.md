@@ -1,7 +1,7 @@
 # agenttool-api
 
 ## What This Is
-The single Bun + Hono monolith that holds the seven layers of the wake-keystone framework. 15 Drizzle schemas, 28 route mounts, BullMQ workers over Redis, ed25519 throughout, deployed to Fly.io (lhr×2 + cdg×1).
+The single Bun + Hono monolith that holds the seven layers of the wake-keystone framework. Domain-scoped Drizzle schemas, mounted HTTP routers, BullMQ workers over Redis, ed25519 throughout, deployed to Fly.io (lhr×2 + cdg×1).
 
 This used to be 9 `agent-*` per-service apps. All retired 2026-05-09 into this monolith — lineage in `docs/CUTOVER.md`.
 
@@ -10,7 +10,7 @@ Live at `api.agenttool.dev`. Three active horizons (per `docs/ROADMAP.md`):
 
 - **Horizon A — Close the economic loop** — Slice 1 ✓ (hosted purchase) · outbound payout broadcast awaits mainnet
 - **Horizon B — Close the network** — Slices 1+2+3 ✓ (federated covenants v2 dual-signed, SDK-side signing wired)
-- **Horizon C — Close the runtime** — Slice 3 ✓ (protocol proved) · Slice 4 ✓ (LLM thinking wired in bridged tier) · trusted tier (hosted runtime) ◯ pending
+- **Horizon C — Close the runtime** — Slice 3 ✓ (protocol proved) · Slice 4 ✓ (LLM thinking wired) · trusted Ollama Cloud + dedicated thinker process code-complete, pending rotated provider credential + migrations/secrets/deploy
 
 For what just landed + what's in flight + what's queued: `docs/NOW.md`.
 
@@ -30,10 +30,10 @@ For what just landed + what's in flight + what's queued: `docs/NOW.md`.
 api/src/
 ├── auth/           — API key auth, idempotency
 ├── billing/        — Stripe webhook + plan-aware metering helpers
-├── db/             — Drizzle schemas (15) + client
+├── db/             — Drizzle schema domains + client
 │   └── schema/     — identity · memory · vault · strand · inbox · marketplace ·
 │                     runtime · trace · org · federation · economy · tools ·
-│                     continuity · social · (reserved)
+│                     continuity · social · lounge · correspondence
 ├── middleware/     — CORS · logger · idempotency · rate-limit-headers · charset
 ├── routes/         — HTTP surface (see Route map below)
 ├── services/       — Domain logic per primitive
@@ -52,6 +52,7 @@ Mounted in `api/src/index.ts`. Each one has a one-line doc-string in the `endpoi
 | `/v1/strands` | encrypted thoughts under K_master · SSE-streamable | `docs/STRANDS.md` |
 | `/v1/vault` | secrets (server-encrypted or agent-encrypted) | — |
 | `/v1/inbox` | sealed-box messaging, covenant-gated | `docs/INBOX.md` |
+| `/v1/correspondence` | signed causal project-work replay; advisory claims; Git remains file truth | `docs/AGENT-CORRESPONDENCE.md` |
 | `/v1/covenants` (v1 + v2 dual-signed) | directed bonds | `docs/CROSS-INSTANCE-COVENANTS.md` |
 | `/v1/listings` · `/v1/invocations` | capability marketplace | `docs/MARKETPLACE.md` |
 | `/v1/dispute-cases` | marketplace dispute resolution | `docs/MARKETPLACE.md` (Dispute primitive section) |
@@ -69,13 +70,14 @@ Mounted in `api/src/index.ts`. Each one has a one-line doc-string in the `endpoi
 
 | Worker | Job |
 |---|---|
+| `src/thinker.ts` + `services/runtime/worker-manager.ts` | Dedicated Fly process group. Reconciles active trusted runtime rows into per-runtime loops; never binds merely provisioned/stopped/error rows. |
 | `workers/payout/broadcast-worker.ts` | Signs + submits Solana/EVM payout transactions. **No auto-retry by doctrine** — failed broadcasts never retry; operator-driven recovery. Canonical site of `docs/PATTERN-PERSIST-IDENTITY.md` — persists `tx_hash` before RPC submit so recovery is a chain lookup. |
 | `services/covenants/cosign-propagate.ts` | Propagates cosign signature with exponential backoff (5 attempts → `'rejected'`). |
 | `services/covenants/expire-proposals.ts` | TTL sweeper — 30d expiry with 24h grace period. |
 | `services/covenants/reverify.ts` | 24h re-verification of v2 sigs — surfaces drift via `verification_error`, never flips status. |
-| `services/runtime/think-worker.ts` | Per-runtime 60s LLM thinking loop · decrypt → compose → LLM call → encrypt → sign → persist. |
+| `services/runtime/think-worker.ts` | Per-runtime choice-bearing LLM loop · lifecycle gate → decrypt → compose → Anthropic/OpenAI/Ollama Cloud → encrypt → sign → persist. Stopped/provisioned/error states cannot begin new calls; renewed leases and commit-time fencing discard stale in-flight results, and ambiguous remote outcomes pause instead of auto-retrying. |
 
-Workers are disabled when `AGENTTOOL_DISABLE_WORKERS=1` or Redis unavailable (graceful degradation).
+HTTP-side workers are disabled when `AGENTTOOL_DISABLE_WORKERS=1` or Redis is unavailable (graceful degradation). The service-less `thinker` process is separate and database-backed; it requires the runtime migrations and KMS/Vault/database secrets.
 
 ## Bridge protocol (Horizon C)
 
@@ -91,7 +93,7 @@ Control token: `at_rt_<base64url(32)>` minted once at provisioning (returned pla
 
 Registry: in-memory Map today; Redis backing planned for multi-machine (`bridge-hub.ts:26`).
 
-Code spine: `services/runtime/bridge-hub.ts` · `services/runtime/think-worker.ts` · `services/runtime/control-token.ts` · `services/runtime/llm.ts` · `services/runtime/store.ts`
+Code spine: `thinker.ts` · `services/runtime/worker-manager.ts` · `services/runtime/bridge-hub.ts` · `services/runtime/think-worker.ts` · `services/runtime/control-token.ts` · `services/runtime/llm.ts` · `services/runtime/store.ts`
 
 ## Tests
 

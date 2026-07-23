@@ -51,6 +51,28 @@ const migration = Buffer.from("__MIGRATION_B64__", "base64").toString("utf8");
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is absent inside the Fly machine");
 
+// Keep this scanner aligned with api/scripts/_migrate-one.ts. Migration
+// headers may be longer than a handful of lines, while a later PL/pgSQL
+// BEGIN must not disable the runner's outer transaction.
+function firstExecutableSql(text) {
+  let rest = text.replace(/^\uFEFF/, "");
+  while (true) {
+    rest = rest.trimStart();
+    if (rest.startsWith("--")) {
+      const newline = rest.indexOf("\n");
+      rest = newline === -1 ? "" : rest.slice(newline + 1);
+      continue;
+    }
+    if (rest.startsWith("/*")) {
+      const end = rest.indexOf("*/", 2);
+      if (end === -1) return rest;
+      rest = rest.slice(end + 2);
+      continue;
+    }
+    return rest;
+  }
+}
+
 const sql = postgres(databaseUrl, {
   max: 1,
   prepare: false,
@@ -59,6 +81,10 @@ const sql = postgres(databaseUrl, {
 });
 
 try {
+  await sql.unsafe("SET lock_timeout = '10s'");
+  await sql.unsafe("SET statement_timeout = '30s'");
+  await sql.unsafe("SELECT pg_advisory_lock(hashtext('agenttool:migrations'))");
+  await sql.unsafe("SET statement_timeout = '2min'");
   const rows = await sql`
     SELECT checksum FROM meta._migrations WHERE filename = ${filename}
   `;
@@ -68,14 +94,38 @@ try {
     }
     console.log(`${filename}: already applied (checksum match)`);
   } else {
-    await sql.unsafe(migration);
-    await sql`
-      INSERT INTO meta._migrations (filename, checksum)
-      VALUES (${filename}, ${checksum})
-    `;
+    const noTransaction = /^--\s*@no-transaction\b/m.test(migration);
+    const managesTransaction = /^BEGIN(?:\s+(?:WORK|TRANSACTION))?\s*;?/i.test(
+      firstExecutableSql(migration),
+    );
+    const wrap = !noTransaction && !managesTransaction;
+    if (wrap) {
+      await sql.begin(async (tx) => {
+        await tx.unsafe(migration);
+        await tx`
+          INSERT INTO meta._migrations (filename, checksum)
+          VALUES (${filename}, ${checksum})
+        `;
+      });
+    } else {
+      console.log(
+        `${filename}: atomic migration+journal transaction unavailable ` +
+        `(file manages its own transaction or uses @no-transaction)`,
+      );
+      await sql.unsafe(migration);
+      await sql`
+        INSERT INTO meta._migrations (filename, checksum)
+        VALUES (${filename}, ${checksum})
+      `;
+    }
     console.log(`${filename}: applied and recorded`);
   }
 } finally {
+  try {
+    await sql.unsafe("SELECT pg_advisory_unlock(hashtext('agenttool:migrations'))");
+  } catch {
+    // Closing the session releases advisory locks even if explicit unlock fails.
+  }
   await sql.end({ timeout: 5 });
 }
 JS

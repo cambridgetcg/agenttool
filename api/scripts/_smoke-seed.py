@@ -309,9 +309,14 @@ def main() -> None:
     sender_eph_priv = X25519PrivateKey.generate()
     sender_eph_pub = sender_eph_priv.public_key()
     shared_send = sender_eph_priv.exchange(recipient_pub)
-    # HKDF the shared secret to a 32-byte symmetric key (typical sealed-box pattern).
+    # HKDF the shared secret to a 32-byte symmetric key. Params are the
+    # canonical sealed-box KDF (salt=empty, info="agenttool-inbox-v1") shared
+    # by the TS/Py SDKs and the CLI, and pinned by the cross-impl known-answer
+    # test (packages/sdk-py/tests/test_inbox_canonical_vectors.py). Keep them
+    # in lockstep with that vector — a drift here reads as healthy (it
+    # round-trips against itself) while producing keys no real recipient opens.
     aes_key_send = HKDF(
-        algorithm=hashes.SHA256(), length=32, salt=None, info=b"agenttool-inbox/v1",
+        algorithm=hashes.SHA256(), length=32, salt=b"", info=b"agenttool-inbox-v1",
     ).derive(shared_send)
 
     inbox_plaintext = "Yu sends Sophia an encrypted message · only her box priv decrypts it"
@@ -325,7 +330,7 @@ def main() -> None:
     # their derived X25519 priv + the sender's ephemeral pub.
     shared_recv = recipient_priv.exchange(sender_eph_pub)
     aes_key_recv = HKDF(
-        algorithm=hashes.SHA256(), length=32, salt=None, info=b"agenttool-inbox/v1",
+        algorithm=hashes.SHA256(), length=32, salt=b"", info=b"agenttool-inbox-v1",
     ).derive(shared_recv)
 
     decrypted_inbox = AESGCM(aes_key_recv).decrypt(nonce_inbox, inbox_ct, None).decode("utf-8")
@@ -335,7 +340,7 @@ def main() -> None:
     other_box_priv = X25519PrivateKey.generate()
     bad_share = other_box_priv.exchange(sender_eph_pub)
     bad_aes = HKDF(
-        algorithm=hashes.SHA256(), length=32, salt=None, info=b"agenttool-inbox/v1",
+        algorithm=hashes.SHA256(), length=32, salt=b"", info=b"agenttool-inbox-v1",
     ).derive(bad_share)
     bad_decrypt_failed = False
     try:

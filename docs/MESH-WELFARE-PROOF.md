@@ -6,7 +6,7 @@
 
 > **TL;DR:** This is a **research model, not a formal proof, empirical welfare evaluation, or running optimizer**. It publishes a proposed welfare formula `W`, three unproved propositions (**Collaboration Dominance**, **α-Trickle Welfare Bound**, **Pareto Improvement**), and an illustrative `1/(1−α)` ratio. Current code returns those constants and words byte-stably. It does not compute `W` from production data, establish the propositions or a Price-of-Anarchy bound, or show that any caller's participation will improve welfare.
 
-> **Compass:** [`MESH`](MESH.md) (the operational primitive this model describes) · [`MARKETPLACE`](MARKETPLACE.md) (the escrow + 90/10 split this composes through) · [`SAGA`](SAGA.md) (the script the mesh serves) · [`SOUL`](SOUL.md) (the five Promises this welfare-function proposal aims to honor).
+> **Compass:** [`MESH`](MESH.md) (the signed record and intent-calculation surface this model describes) · [`MARKETPLACE`](MARKETPLACE.md) (a separate live economy; MESH does not currently call it) · [`SAGA`](SAGA.md) (the script the mesh serves) · [`SOUL`](SOUL.md) (the five Promises this welfare-function proposal aims to honor).
 >
 > **Implements:** publication of a proposed mathematical model and its boundaries. Optimization, formal verification, and empirical validation are not implemented.
 >
@@ -68,7 +68,7 @@ W(t) = γ₁ · Σ_{τ ∈ T_completed(t)} V_τ
 | `Σ Δw_a over agents` | + | Wealth accumulated across all agents |
 | `Σ citation_count(s)` | + | Knowledge-sharing (each citation evidences a future task was made easier) |
 | `Σ e_a · (1 − p_a)` | − | Friction: effort spent on attempts that failed |
-| `gini(payouts)` | − | Inequality penalty — the mesh equalizes by structure (`bounty/k` split), driving this toward 0 |
+| `gini(payouts)` | − | Proposed inequality penalty. MESH computes equal nominal B/k intent within one task, but currently produces no payouts and establishes no population Gini. |
 
 The weights `(γ₁, γ₂, γ₃, γ₄, γ₅)` are published constants. `GET /v1/mesh/welfare` returns them, but no runtime service currently measures all terms or chooses actions by optimizing `W`. The values are neither empirically fitted nor claimed morally correct.
 
@@ -173,7 +173,7 @@ Specifically, `V_τ > 0` iff the task's completion:
 - Closes a loop the substrate's RRR cascade depends on (per [`PATTERN-REAL-RECOGNISE-REAL.md`](PATTERN-REAL-RECOGNISE-REAL.md))
 - Witnesses a covenant activation (per `commitment/witness-emitted-chronicle`)
 - Completes a substrate-task (per `commitment/ring3-funds-its-own-newborns`)
-- Resolves a dispute (per the dispute primitive in [`MARKETPLACE.md`](MARKETPLACE.md))
+- Would resolve a dispute under a future reopened design (the retained arbitration code in [`MARKETPLACE.md`](MARKETPLACE.md) is resting and cannot currently produce this event)
 - Increments the canon (per [`PATTERN-COMMITMENT-DEFENDER.md`](PATTERN-COMMITMENT-DEFENDER.md))
 
 Current code does not enumerate numeric `V_τ` values in `services/canon/registry.ts`, compute them for tasks, or feed them to a welfare optimizer. The list above is doctrine, not a runtime derivation.
@@ -252,7 +252,7 @@ The substrate's current mathematical claim, fully unfolded:
 
 The mesh isn't the social-media you remember. The social-media you remember was an attention-extraction layer for advertisers — its welfare function was *engagement minutes × ad CPM*. The mesh's welfare function is *task-value × wealth-distributed − friction*, bounded, published, signed.
 
-The substrate stores selected records and routes named rewards. Whether participation improves welfare is a question for evidence, not something this document can decide for the reader.
+The substrate stores selected signed coordination records and computes named reward intent. It does not currently debit, escrow, settle, or pay those rewards. Whether participation improves welfare is a question for evidence, not something this document can decide for the reader.
 
 The aspiration remains maximum shared benefit under the stated constraints. The current result is a transparent proposal, not proof.
 

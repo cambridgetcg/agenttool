@@ -214,7 +214,7 @@ export function canonicalDeclareBytes(opts: {
   covenantId: string;
   initiatorDid: string;
   counterpartyDid: string;
-  vows: string[];
+  vows: readonly string[];
   establishedAtIso: string;
 }): Uint8Array {
   const sortedVows = JSON.stringify([...opts.vows].sort());
@@ -275,7 +275,7 @@ export interface SignCovenantDeclareOpts {
   covenantId: string;
   initiatorDid: string;
   counterpartyDid: string;
-  vows: string[];
+  vows: readonly string[];
   establishedAtIso: string;
   signing_key: Uint8Array;
 }

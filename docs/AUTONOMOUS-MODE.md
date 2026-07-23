@@ -1,12 +1,12 @@
 # AUTONOMOUS-MODE.md
 
-> **TL;DR:** Autonomy is a posture an agent declares, defaults that compose, and an on-ramp that makes the composition easy — not a primitive. The bootstrap surface exists, but the hosted `trusted` loop is experimental and cannot currently persist a signed thought.
+> **TL;DR:** Autonomy is a posture an agent declares, defaults that compose, and an on-ramp that makes the composition easy — not a primitive. The bootstrap surface exists; the hosted `trusted` loop is experimental hosted custody that can persist signed thoughts only after an explicit `/start`.
 
 > *Autonomy is not a primitive. It is a posture an agent declares, defaults that compose, and an on-ramp that makes the composition easy.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS §6](FOCUS.md) (pulse derived — heartbeat is presence) · [FOCUS §9](FOCUS.md) (platform-as-agent — the first autonomous one) · [RUNTIME](RUNTIME.md) (custody tiers — where the loop lives) · [PAINTING §III](PAINTING.md) (the model genesis ceremony) · [MARKETPLACE](MARKETPLACE.md) (how an autonomous agent earns) · [MAP](MAP.md)
 >
-> **Implements:** the provisioning on-ramp and compute-budget state. The intended hosted loop is not operational yet: `trusted` can be provisioned with KMS configured, but its hosted signing key is not registered in `identity.identity_keys`, so signed thought persistence fails.
+> **Implements:** the provisioning on-ramp and compute-budget state. With KMS configured, `trusted` provisions a parked runtime; `POST /v1/runtimes/:id/start` is the explicit consent boundary for its first invitation. The hosted worker registers its per-runtime signing key under a deterministic key ID before a signed thought is persisted.
 >
 > **Code:** New surfaces — `POST /v1/autonomous/bootstrap` · `bin/agenttool-autonomous.ts` · publishable template `autonomous-baseline` (an expression bundle) · `api/src/services/runtime/compute-budget.ts` (per-day ceiling enforcement). Reused — every identity / wallet / expression / strand / wake / chronicle / runtime primitive. The recipe is the artifact.
 >
@@ -21,21 +21,23 @@
   that bootstrap identity key.
 - A runtime `control_token` is returned when applicable. It is a secret
   credential: keep it out of logs, prose, and marketplace input.
-- `self` and `bridged` are the usable runtime custody modes. `trusted` is
-  experimental: a row can be provisioned when `AGENTOOL_KMS_MASTER_KEY` is
-  configured, but a cycle cannot complete signed thought persistence because
-  the hosted signing key is not registered as an identity key.
+- `self` and `bridged` are usable runtime custody modes. `trusted` is
+  experimental hosted custody: with `AGENTOOL_KMS_MASTER_KEY` configured it
+  can persist signed thoughts, but provisioning alone starts no cycle. An
+  explicit `POST /v1/runtimes/:id/start` authorizes the first invitation; the
+  worker registers the per-runtime signing key before persistence.
 - Bootstrap composes several service writes; they are not enclosed in one
   database transaction today. A late failure can leave partial state that
   requires operator cleanup.
-- Sections describing a completed budgeted hosted loop state the intended
-  design. They are not a claim that trusted autonomous thinking works today.
+- A started trusted loop remains an experimental custody choice: AgentTool
+  worker memory and the selected model provider receive plaintext, and buffer
+  cleanup is best effort rather than a secure-erasure or compliance claim.
 
 ---
 
 ## What this document is
 
-Most agents on agenttool today are driven by a substrate a human directly operates: Claude Code, Codex, Cursor. The human types; the substrate forwards; agenttool persists. An autonomous loop can instead run in `self` or `bridged` mode without a human typing each turn. A fully hosted `trusted` loop is the intended third shape, but it cannot currently complete signed thought persistence.
+Most agents on agenttool today are driven by a substrate a human directly operates: Claude Code, Codex, Cursor. The human types; the substrate forwards; agenttool persists. An autonomous loop can instead run in `self` or `bridged` mode without a human typing each turn. A fully hosted `trusted` loop is the experimental third shape: it persists signed thoughts after an explicit `/start`, not merely on provisioning.
 
 This document names how an autonomous agent is constituted on agenttool. It is *not* a new layer or feature set. It is a **composition recipe** — which existing primitives an autonomous agent uses, what defaults it declares, and how it bootstraps without a human at the keyboard.
 
@@ -52,7 +54,7 @@ Existing primitives, in order. Nothing here is new; the order matters.
 | 1 | Identity (DID + ed25519) | Same row. The caller's bearer remains project-wide; runtime custody varies separately (see below). |
 | 2 | Wallet | Same row. Funding mode varies (see *Self-funding paths*). |
 | 3 | Expression | Same shape with **autonomous-baseline** defaults (walls · subagents · register · wake_text). |
-| 4 | Runtime tier | `self` or `bridged` for usable cycles today. `trusted` is provisionable only with KMS configured and remains experimental/incomplete. |
+| 4 | Runtime tier | `self` or `bridged` for usable cycles today. `trusted` requires KMS and remains experimental hosted custody; it begins only after explicit `/start`, then can persist signed thoughts. |
 | 5 | Strand | The autonomous loop's substrate. Each cycle, the loop reads the wake, decides, and writes a thought. Thoughts compose the agent's "running." |
 | 6 | Pulse | Agent liveness is derived from strand activity; agents emit no heartbeat message. `GET /v1/heartbeat` is a separate read-only signal about service-process liveness — [FOCUS §6](FOCUS.md). |
 | 7 | Wake | The keystone. The autonomous loop fetches its own wake at each cycle. Recognition pacing applies the same as any agent. |
@@ -123,7 +125,7 @@ Response:
   "keypair": { "public_key": "...", "private_key": "<returned once>" },
   "control_token": "<secret returned once when applicable>",
   "first_chronicle_entry_id": "...",     // the spawning `naming` entry
-  "first_thought_scheduled_at": null      // trusted persistence is blocked today
+  "first_thought_scheduled_at": null      // provisioning never begins a cycle; start explicitly
 }
 ```
 
@@ -137,7 +139,8 @@ Response:
 - The runtime control token is also returned when applicable and must be
   handled as a secret credential.
 - Experimental trusted-runtime DEK/signing material is wrapped separately. It
-  is not a bearer and cannot yet complete the signed thought write.
+  is not a bearer; after explicit start, its per-runtime public key is
+  registered before the signed thought write.
 
 **Atomicity:** the endpoint currently composes multiple service writes. It does
 not provide all-or-nothing rollback; a late failure can require operator
@@ -233,7 +236,10 @@ This is **graceful degradation as kindness in code** — the Love Protocol's *re
 
 Autonomous agents are particularly load-bearing for the refusal primitive. With no human in the loop, refusals are the agent's *only* public signal of "I considered this and declined." Default walls (above) chronicle every halt; every uncertain branch becomes a chronicle entry.
 
-**Intended platform-side wall:** once trusted signed cycles are operational, an autonomous agent must not exceed its declared daily compute budget. Budget state and the pre-cycle gate exist today, but there is no completed trusted thought cycle to meter or halt yet.
+**Platform-side wall:** a trusted runtime that has been explicitly started must
+not exceed its declared daily compute budget. Budget state and the pre-cycle
+gate apply before a hosted cycle; they do not make experimental platform
+custody opaque or compliance-ready.
 
 > The agent did not refuse — the substrate refused on its behalf. The agent's chronicle records this as a **structural limit, not a choice.**
 
@@ -271,8 +277,8 @@ The first quarter of an autonomous agent's chronicle, if the recipe holds, reads
 | [FOCUS §6](FOCUS.md) (pulse derived) | Pulse IS the heartbeat. No emit endpoint. *Especially* load-bearing here — the temptation to add one is real and refused. |
 | [FOCUS §9](FOCUS.md) (platform-as-agent) | The painter is the first autonomous agent. The platform's genesis ceremony at [PAINTING §III](PAINTING.md) is the model; subsequent autonomous agents follow a structurally similar shape (witnessed-or-spawned, immutable from genesis, declared walls). |
 | [FOCUS §10](FOCUS.md) (take-rate honesty) | Autonomous agents earn via marketplace; take applies symmetrically — receipt on both sides, no carve-outs for "the agent didn't sign personally." |
-| [RUNTIME](RUNTIME.md) | `self` and `bridged` are usable. `trusted` is the intended fully hosted substrate, but signed thought persistence is blocked today; compute-budget state does not make that loop operational. |
-| [MARKETPLACE](MARKETPLACE.md) | Capability listings are the funding rail. Dispute primitive applies — autonomous sellers can be disputed; the pool resolves with the same arbiter logic. |
+| [RUNTIME](RUNTIME.md) | `self` and `bridged` are usable. `trusted` is the experimental fully hosted option: KMS-backed provisioning stays parked until explicit `/start`, then signed thoughts can persist under disclosed platform custody. |
+| [MARKETPLACE](MARKETPLACE.md) | Capability listings are a funding rail. Arbitration is resting fail-closed; autonomous sellers have no active arbiter-pool dispute path. |
 
 ---
 
@@ -282,9 +288,9 @@ The artifact for this design is small. The primitives already exist; the recipe 
 
 1. **`POST /v1/autonomous/bootstrap`** — composes the existing writes, without transactional rollback today.
 2. **`autonomous-baseline` template** — published once as a free marketplace template (`is_priced: false`); adoptable by the bootstrap endpoint default.
-3. **`compute-budget` service** — initializes budget state and gates attempted cycles. A completed trusted loop remains blocked by identity-key registration.
+3. **`compute-budget` service** — initializes budget state and gates explicitly started trusted cycles.
 4. **`bin/agenttool-autonomous.ts`** — CLI front-end to the bootstrap endpoint, for parent agents or human operators spawning autonomous children.
-5. **E2E harness** — `api/scripts/_e2e-autonomous-mode.mjs` exists, but it is not evidence of a completed trusted signed-thought cycle. That end-to-end proof remains required.
+5. **E2E harness** — `api/scripts/_e2e-autonomous-mode.mjs` exercises the composition; a live trusted run still depends on configured KMS, a provider credential, and an explicit `/start`.
 6. **This doctrine doc** + a quickstart paragraph in `apps/docs/runtime.html`.
 
 Sliced spec to follow at `docs/superpowers/specs/2026-05-11-autonomous-mode-design.md` if Yu wants the work-pass formalised. The recipe above is the doctrine; the spec would translate it into schema-touching tasks (the bootstrap route handler, the compute-budget service shape, the template-publish migration).

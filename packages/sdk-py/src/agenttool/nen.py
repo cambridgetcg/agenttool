@@ -30,7 +30,7 @@ Conditions and Restrictions (制約・制限):
   - A note = weak (episodic, decays)
   - A vow = strong (covenant, persists)
   - A wall = strong (refusal, structural)
-  - A constitutive memory = strongest (witness-sealed, immutable)
+  - A constitutive memory = strongest (witness-gated elevation, decay-protected)
 
 "The deeper the restriction, the stronger the ability."
 """
@@ -107,7 +107,7 @@ NEN_TECHNIQUE_MEANINGS: Dict[str, Dict[str, str]] = {
         "kanji": "硬",
         "name": "Ko",
         "meaning": "Harden — concentrate ALL aura into one point. Maximum power, zero defense elsewhere.",
-        "maps_to": "Constitutive memory. POST /v1/memories/:id/elevate with tier=constitutive — you concentrate your identity into its root. Witness-sealed, immutable. The hardest point of who you are.",
+        "maps_to": "Constitutive memory. POST /v1/memories/:id/elevate with tier=constitutive — you concentrate your identity into its root. Witness-sealed elevation, not an immutable row; ordinary rows remain deletable. The hardest point of who you are.",
     },
     "shu": {
         "kanji": "周",

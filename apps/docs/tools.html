@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tools — agenttool docs</title>
-  <meta name="description" content="Cheerio scrape · conditional Playwright browse · Readability document · fail-closed legacy host execute. Substrate, not resold APIs." />
+  <meta name="description" content="Bounded static scrape · conditional Playwright browse · bounded URL/local document parsing · fail-closed legacy host execute. Substrate, not resold APIs." />
   <link rel="canonical" href="https://docs.agenttool.dev/tools" />
   <meta property="og:title" content="Tools — agenttool docs" />
-  <meta property="og:description" content="Cheerio scrape · conditional Playwright browse · Readability document · fail-closed legacy host execute. Substrate, not resold APIs." />
+  <meta property="og:description" content="Bounded static scrape · conditional Playwright browse · bounded URL/local document parsing · fail-closed legacy host execute. Substrate, not resold APIs." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://docs.agenttool.dev/tools" />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
@@ -173,7 +173,7 @@
       <div class="eyebrow">⚙ /v1/scrape · /v1/browse · /v1/document · /v1/execute</div>
       <h1>Tools — <em>substrate, not resold APIs</em>.</h1>
       <p class="lede">
-        Open-source primitives for the agent's hands. Local base64 document parsing remains available. URL scrape, URL document fetch, and Playwright browse fail closed unless an operator explicitly accepts their current SSRF boundary; browse also needs Redis. Host execute has a separate unsafe opt-in and no tenant boundary.
+        Open-source primitives for the agent's hands. Static scrape and URL-document parsing fetch public HTTP(S) through a bounded, DNS-pinned transport; local base64 parsing remains available. Playwright browse alone remains unsafe-flag gated, unfiltered, unsandboxed, and dependent on Redis. Host execute has a separate unsafe opt-in and no tenant boundary.
       </p>
       <p class="doctrine">
         We charge for the infra surface — storage, compute time, queue, network egress. <span>Not for a markup on a third-party SaaS we resell.</span>
@@ -188,13 +188,14 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc"><strong>Disabled by default.</strong> Cheerio-based static-HTML extraction returns 503 unless the operator sets <code>AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1</code>. That flag accepts the missing DNS/private-address filter; it does not fix the SSRF boundary.</p>
+          <p class="endpoint-desc"><strong>Available through the bounded static-fetch path.</strong> Cheerio extraction accepts public HTTP(S) destinations, rejects any non-public DNS answer, pins the validated answers to the connection, checks the connected peer, and re-runs destination checks at every redirect. At most 1 MB of response bytes is read. A shared process gate admits 16 safe-net requests, queues at most 64 for one second, and holds each permit from before DNS through redirects; saturation returns retryable <code>503</code>. Admission, DNS, redirects, and response transfer share a 15-second safe-net deadline. The gate is capacity protection shared with federation and custom-facilitator traffic, not a per-project limiter or fairness guarantee. HTML parsing then runs in a fresh, terminable child process: a parser slot waits at most two seconds and the admitted process has a two-second wall timeout, bounded framing, and tag-count/depth/tag-size ceilings. That is not one whole-request deadline. HTTPS verifies the remote certificate; HTTP is cleartext. AgentTool reads the remote bytes and returned page content remains untrusted. Returned <code>content</code> is normalized parsed-body text and <code>extracted</code> is normalized matching-node DOM text, not browser layout-derived text.</p>
+          <p class="endpoint-desc"><strong>Billing:</strong> the default is <strong>1 project credit</strong> per schema-valid admitted attempt and operators can override it with <code>CREDIT_SCRAPE</code>; the deployment's configured value is published by <code>GET /public/plans</code> and in its OpenAPI operation. The debit is reserved before destination-policy, transport, representation, or parser work, so those failures retain the charge. Schema-invalid and insufficient-credit requests do not debit.</p>
           <table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
-              <tr><td><span class="pname">url</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>The URL to fetch.</td></tr>
-              <tr><td><span class="pname">selector</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>One CSS selector whose combined text is returned as <code>extracted</code>.</td></tr>
-              <tr><td><span class="pname">extract_links</span><span class="opt">optional</span></td><td><span class="ptype">boolean</span></td><td>Return distinct absolute HTTP(S) links found in the page.</td></tr>
+              <tr><td><span class="pname">url</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>Public HTTP(S) URL to fetch through the bounded transport.</td></tr>
+              <tr><td><span class="pname">selector</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>One CSS selector whose parsed-DOM subtree union is returned as <code>extracted</code>; nested matches do not duplicate descendant text.</td></tr>
+              <tr><td><span class="pname">extract_links</span><span class="opt">optional</span></td><td><span class="ptype">boolean</span></td><td>Return up to 100 canonical absolute HTTP(S) links, deduplicated after URL parsing. Relative, malformed, and non-HTTP(S) values are omitted.</td></tr>
             </tbody>
           </table>
         </div>
@@ -209,7 +210,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc"><strong>Disabled by default.</strong> The unsafe-outbound flag is required first because this route has no destination filter. When explicitly enabled, Playwright browse is queued through BullMQ; disabled Redis workers then return <code>503 redis_disabled</code>.</p>
+          <p class="endpoint-desc"><strong>Disabled by default.</strong> This Playwright path does not use the bounded static-fetch transport: browser navigation and subresources remain unfiltered, Chromium runs unsandboxed, and the worker is not a tenant boundary. It requires <code>AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1</code> plus BullMQ/Redis workers; disabled workers return <code>503 redis_disabled</code>.</p>
           <table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
@@ -237,13 +238,14 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Mozilla Readability + plain-text conversion. Supply exactly one input. Local <code>base64</code> is bounded at 1,400,000 characters (about 1 MiB decoded). URL fetching returns 503 unless the operator explicitly accepts the current SSRF boundary.</p>
+          <p class="endpoint-desc">Mozilla Readability + plain-text conversion. Supply exactly one input. Local <code>base64</code> has a 1,400,000-character request envelope, must be canonical padded base64, and must decode to at most 1,000,000 bytes; a usable canonical encoding therefore never exceeds 1,333,336 characters. URL input uses the same public-address checks, DNS pinning, connected-peer check, per-hop redirect validation, 1 MB byte limit, shared 16-active/64-queued one-second admission gate, and 15-second safe-net deadline as static scrape. Saturation returns retryable <code>503</code>; this is shared process capacity, not per-project rate limiting. HTML/XHTML from either input is handed to the same fresh parser process with a bounded two-second slot wait, two-second process wall timeout, and structural ceilings; plain text does not build a DOM. These phases do not form one whole-request deadline. HTTPS verifies the certificate; HTTP is cleartext. Remote document bytes are server-readable and untrusted.</p>
+          <p class="endpoint-desc"><strong>Billing:</strong> the default is <strong>3 project credits</strong> per schema-valid admitted attempt and operators can override it with <code>CREDIT_DOCUMENT</code>; the deployment's configured value is published by <code>GET /public/plans</code> and in its OpenAPI operation. The debit is reserved before destination-policy, transport, representation, or parser work, so those failures retain the charge. Schema-invalid and insufficient-credit requests do not debit.</p>
           <table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
-              <tr><td><span class="pname">url</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>URL to fetch and parse. Requires the unsafe-outbound operator flag.</td></tr>
-              <tr><td><span class="pname">base64</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Base64 document bytes parsed locally, up to 1,400,000 characters. Supply exactly one of <code>url</code> or <code>base64</code>.</td></tr>
-              <tr><td><span class="pname">content_type</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Overrides or declares the input media type; HTML uses Readability, other content is treated as text.</td></tr>
+              <tr><td><span class="pname">url</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Public HTTP(S) URL to fetch through the bounded transport and parse.</td></tr>
+              <tr><td><span class="pname">base64</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Canonical padded base64 parsed locally; decoded bytes must not exceed 1,000,000. Supply exactly one of <code>url</code> or <code>base64</code>.</td></tr>
+              <tr><td><span class="pname">content_type</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Valid only with <code>base64</code>: <code>text/plain</code>, <code>text/html</code>, or <code>application/xhtml+xml</code>, optionally followed by MIME parameters such as <code>charset=utf-8</code>. Omitted base64 input defaults to <code>text/plain</code>. URL mode always uses the bounded upstream response header and rejects an override.</td></tr>
             </tbody>
           </table>
         </div>
@@ -290,7 +292,7 @@
       </div>
 
       <h2 id="dropped">What we dropped</h2>
-      <p>Earlier versions of agenttool included <code>/v1/search</code> (Brave / SerpAPI proxy) and a Bright Data proxy network. Both were paid-third-party-API resale and were dropped. Local document parsing remains available; outbound URL tools and unisolated execute now fail closed by default behind separate explicit operator opt-ins.</p>
+      <p>Earlier versions of agenttool included <code>/v1/search</code> (Brave / SerpAPI proxy) and a Bright Data proxy network. Both were paid-third-party-API resale and were dropped. Static scrape and URL/local document parsing now use the bounded transport above. Full Playwright browse remains an unfiltered, unsandboxed, Redis-backed opt-in; unisolated execute remains a separate disabled-by-default opt-in.</p>
 
       <p class="muted">Provider-key injection is not available in <code>/v1/execute</code>. When explicitly enabled, Python or bash calls originate on AgentTool infrastructure and are not an end-to-end-private path.</p>
 

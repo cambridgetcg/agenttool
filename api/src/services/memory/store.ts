@@ -2,10 +2,11 @@
  *  them, run cosine similarity, and serve results. No LLM compute on our
  *  side. See docs/IDENTITY-ANCHOR.md promise 6. */
 
-import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { memories } from "../../db/schema/memory";
+import { identities } from "../../db/schema/identity";
+import { memories, memoryAttestations } from "../../db/schema/memory";
 import { likePattern, normalizeSearchQuery } from "../../lib/search-query";
 import { publishWakeEvent } from "../wake/push";
 
@@ -83,9 +84,108 @@ export interface MemorySearchResult extends MemoryOut {
   score: number;
 }
 
+export class PaidMemoryReceiptProtectedError extends Error {
+  constructor() {
+    super("paid_memory_receipt_preserved");
+    this.name = "PaidMemoryReceiptProtectedError";
+  }
+}
+
+/** Refuses caller-selected identity bindings outside the bearer project. */
+export class MemoryIdentityBoundaryError extends Error {
+  constructor() {
+    super("memory_identity_not_found_or_not_owned");
+    this.name = "MemoryIdentityBoundaryError";
+  }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 const VALID_TYPES = ["episodic", "semantic", "procedural", "working"] as const;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Resolve an identity binding against the bearer project's active identities.
+ *
+ *  SDK v0.11 writes through legacy `agent_id`. Missing, inactive, or foreign
+ *  legacy UUIDs remain project-level for compatibility and are cleared from
+ *  the legacy column so they cannot impersonate another identity in old
+ *  readers; arbitrary handles do not trigger a lookup. Explicit
+ *  `identity_id: null` opts out, while any
+ *  explicit non-null selector must pass the ownership wall or is refused. */
+export interface MemoryIdentityBinding {
+  identityId: string | null;
+  persistedAgentId: string | null;
+}
+
+/** The Drizzle surface shared by the root client and an open transaction. */
+export type MemoryWriteDatabase = Pick<typeof db, "select" | "insert">;
+
+export interface MemoryIdentityResolutionOptions {
+  database?: MemoryWriteDatabase;
+  /**
+   * Hold a row lock through the caller's transaction so identity revocation
+   * cannot race a memory insert that relies on the active lifecycle state.
+   */
+  lockActiveIdentity?: boolean;
+}
+
+export async function resolveMemoryIdentityBinding(
+  projectId: string,
+  data: Pick<MemoryCreate, "agent_id" | "identity_id">,
+  options: MemoryIdentityResolutionOptions = {},
+): Promise<MemoryIdentityBinding> {
+  if (data.identity_id === null) {
+    return {
+      identityId: null,
+      persistedAgentId:
+        data.agent_id && !UUID_RE.test(data.agent_id) ? data.agent_id : null,
+    };
+  }
+
+  const explicit = data.identity_id !== undefined;
+  const requestedId = explicit ? data.identity_id : data.agent_id;
+  if (!requestedId || !UUID_RE.test(requestedId)) {
+    if (explicit) throw new MemoryIdentityBoundaryError();
+    return {
+      identityId: null,
+      persistedAgentId: data.agent_id || null,
+    };
+  }
+
+  const database = options.database ?? db;
+  const query = database
+    .select({
+      id: identities.id,
+      projectId: identities.projectId,
+      status: identities.status,
+    })
+    .from(identities)
+    .where(
+      and(
+        eq(identities.id, requestedId),
+        eq(identities.projectId, projectId),
+        eq(identities.status, "active"),
+      ),
+    );
+  const [candidate] = options.lockActiveIdentity
+    ? await query.for("share").limit(1)
+    : await query.limit(1);
+
+  // Keep the ownership/lifecycle wall explicit even though the SQL predicate
+  // already enforces it. This makes the compatibility rule visible at the
+  // service boundary and safe under alternate DB adapters in tests/tools.
+  if (
+    !candidate ||
+    candidate.projectId !== projectId ||
+    candidate.status !== "active" ||
+    candidate.id.toLowerCase() !== requestedId.toLowerCase()
+  ) {
+    if (explicit) throw new MemoryIdentityBoundaryError();
+    return { identityId: null, persistedAgentId: null };
+  }
+  return { identityId: candidate.id, persistedAgentId: candidate.id };
+}
 
 /** Format a JS number[] as pgvector's wire format: '[0.1,0.2,...]' */
 function formatVector(values: number[]): string {
@@ -113,9 +213,32 @@ function rowToOut(row: typeof memories.$inferSelect): MemoryOut {
 
 // ─── Operations ───────────────────────────────────────────────────────────
 
+export interface MemoryWriteOptions {
+  binding?: MemoryIdentityBinding;
+  database?: MemoryWriteDatabase;
+  /** Defer the wake event until an outer transaction has committed. */
+  publishWake?: boolean;
+}
+
+/** Publish the best-effort memory wake event after durable commit. */
+export function publishMemoryWriteEvent(
+  identityId: string | null,
+  memoryId: string,
+  data: Pick<MemoryCreate, "type" | "key">,
+): void {
+  if (!identityId) return;
+  void publishWakeEvent({
+    identity_id: identityId,
+    key: "memory",
+    kind: "added",
+    context: { memory_id: memoryId, type: data.type, key: data.key ?? null },
+  });
+}
+
 export async function write(
   projectId: string,
   data: MemoryCreate,
+  options: MemoryWriteOptions = {},
 ): Promise<{ id: string; created_at: string }> {
   if (!VALID_TYPES.includes(data.type)) {
     throw new Error(`invalid memory type: ${data.type}`);
@@ -142,12 +265,22 @@ export async function write(
     ? sql`${formatVector(data.embedding)}::vector`
     : sql`NULL`;
 
-  const inserted = await db
+  const database = options.database ?? db;
+  const binding =
+    options.binding ?? await resolveMemoryIdentityBinding(projectId, data, {
+      database,
+    });
+  const { identityId, persistedAgentId } = binding;
+  // Old consumers still select by memories.agent_id. Canonicalize a verified
+  // UUID to the owned identity and clear every unresolved UUID; otherwise an
+  // attacker could write a foreign identity UUID into their own project and
+  // have an unscoped legacy reader mistake it for the victim's memory.
+  const inserted = await database
     .insert(memories)
     .values({
       projectId,
-      agentId: data.agent_id ?? null,
-      identityId: data.identity_id ?? null,
+      agentId: persistedAgentId,
+      identityId,
       type: data.type,
       key: data.key ?? null,
       content: data.content,
@@ -163,13 +296,8 @@ export async function write(
   // Wake voice — emit memory.added on the affected identity. Project-
   // level memories (no identity_id) don't surface in any specific agent's
   // wake.memory, so they don't fire. Doctrine: docs/WAKE.md.
-  if (data.identity_id) {
-    void publishWakeEvent({
-      identity_id: data.identity_id,
-      key: "memory",
-      kind: "added",
-      context: { memory_id: row.id, type: data.type, key: data.key ?? null },
-    });
+  if (options.publishWake !== false) {
+    publishMemoryWriteEvent(identityId, row.id, data);
   }
 
   return { id: row.id, created_at: row.createdAt.toISOString() };
@@ -242,6 +370,66 @@ export async function listRecent(
     .limit(Math.min(opts.limit ?? 20, 100));
 
   return rows.map(rowToOut);
+}
+
+/** Rank a candidate pool for the wake surface: tier-aware rerankScore
+ *  (same curve as recall — score=1, importance × timeless-tier recency),
+ *  then exact-content dedupe keeping the highest-ranked copy. Pure;
+ *  exported for tests. */
+export function rankForWake(
+  rows: MemoryOut[],
+  limit: number,
+  nowMs: number,
+): MemoryOut[] {
+  const scored = rows.map((m) => ({
+    m,
+    s: rerankScore({
+      score: 1,
+      importance: m.importance,
+      tier: m.tier,
+      ageDays: (nowMs - Date.parse(m.created_at)) / 86_400_000,
+    }),
+  }));
+  scored.sort((a, b) => b.s - a.s);
+  const seen = new Set<string>();
+  const out: MemoryOut[] = [];
+  for (const { m } of scored) {
+    const key = m.content.replace(/\s+/g, " ").trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(m);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** Wake-surface memory selection. `listRecent` is pure recency — a burst
+ *  of low-importance episodic writes floods the window while timeless
+ *  foundational/constitutive roots (which don't decay) sink out of it.
+ *  Here the pool is recency PLUS both timeless tiers regardless of age,
+ *  ranked by the same tier-aware curve recall uses, with exact-duplicate
+ *  content collapsed. */
+export async function listForWake(
+  projectId: string,
+  opts: { limit?: number; excludeIds?: Iterable<string> } = {},
+): Promise<MemoryOut[]> {
+  const limit = Math.min(opts.limit ?? 20, 100);
+  // Exclusions (e.g. memories already rendered in shaped_by) are applied
+  // to the CANDIDATE POOL, before ranking and the limit — filtering the
+  // already-limited result would let excluded roots eat ranking slots
+  // and under-fill (or empty) the window.
+  const exclude = new Set(opts.excludeIds ?? []);
+  const [recent, foundational, constitutive] = await Promise.all([
+    listRecent(projectId, { limit: Math.min(limit * 3, 100) }),
+    listRecent(projectId, { tier: "foundational", limit: 50 }),
+    listRecent(projectId, { tier: "constitutive", limit: 50 }),
+  ]);
+  const byId = new Map<string, MemoryOut>();
+  for (const m of [...recent, ...foundational, ...constitutive]) {
+    if (exclude.has(m.id)) continue;
+    byId.set(m.id, m);
+  }
+  return rankForWake([...byId.values()], limit, Date.now());
 }
 
 export async function search(
@@ -448,22 +636,67 @@ export async function deleteById(
   projectId: string,
   memoryId: string,
 ): Promise<{ deleted: number }> {
-  const result = await db
-    .delete(memories)
-    .where(and(eq(memories.id, memoryId), eq(memories.projectId, projectId)))
-    .returning({ id: memories.id });
-  return { deleted: result.length };
+  return db.transaction(async (tx) => {
+    const [memory] = await tx
+      .select({ id: memories.id })
+      .from(memories)
+      .where(and(eq(memories.id, memoryId), eq(memories.projectId, projectId)))
+      .for("update")
+      .limit(1);
+    if (!memory) return { deleted: 0 };
+
+    const [paidReceipt] = await tx
+      .select({ id: memoryAttestations.id })
+      .from(memoryAttestations)
+      .where(
+        and(
+          eq(memoryAttestations.memoryId, memory.id),
+          isNotNull(memoryAttestations.sourceGrantId),
+        ),
+      )
+      .limit(1);
+    if (paidReceipt) throw new PaidMemoryReceiptProtectedError();
+
+    const result = await tx
+      .delete(memories)
+      .where(eq(memories.id, memory.id))
+      .returning({ id: memories.id });
+    return { deleted: result.length };
+  });
 }
 
 export async function deleteByKey(
   projectId: string,
   key: string,
 ): Promise<{ deleted: number }> {
-  const result = await db
-    .delete(memories)
-    .where(and(eq(memories.projectId, projectId), eq(memories.key, key)))
-    .returning({ id: memories.id });
-  return { deleted: result.length };
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .select({ id: memories.id })
+      .from(memories)
+      .where(and(eq(memories.projectId, projectId), eq(memories.key, key)))
+      .orderBy(memories.id)
+      .for("update");
+    if (rows.length === 0) return { deleted: 0 };
+
+    const ids = rows.map((row) => row.id);
+    const [paidReceipt] = await tx
+      .select({ id: memoryAttestations.id })
+      .from(memoryAttestations)
+      .where(
+        and(
+          inArray(memoryAttestations.memoryId, ids),
+          isNotNull(memoryAttestations.sourceGrantId),
+        ),
+      )
+      .limit(1);
+    if (paidReceipt) throw new PaidMemoryReceiptProtectedError();
+
+    const result = await tx
+      .delete(memories)
+      .where(inArray(memories.id, ids))
+      .returning({ id: memories.id });
+    return { deleted: result.length };
+  });
 }
 
 export async function countMemories(projectId: string): Promise<number> {

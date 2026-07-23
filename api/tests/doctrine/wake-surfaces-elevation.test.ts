@@ -63,7 +63,7 @@ describe("Wake surfaces elevation state", () => {
   test("Level-1 origin renders Level + sponsor + elevated_at in markdown", () => {
     const md = renderWakeMarkdown(withLevel1Origin(baseBundle()));
     expect(md).toMatch(/Level:\s+\*\*1\*\*/);
-    expect(md).toContain("sponsorship-staked");
+    expect(md).toContain("project-authorized signed sponsor elevation");
     expect(md).toContain("did:at:sponsor-xyz");
     // ISO date slice from elevated_at — "2026-05-10".
     expect(md).toContain("2026-05-10");
@@ -81,7 +81,7 @@ describe("Wake surfaces elevation state", () => {
     // must remain stable.
     const md = renderWakeMarkdown(baseBundle());
     expect(md).not.toContain("Level:");
-    expect(md).not.toContain("sponsorship-staked");
+    expect(md).not.toContain("project-authorized signed sponsor elevation");
   });
 
   test("WakeBundle type contract: origin carries level + sponsor_did + elevated_at", () => {

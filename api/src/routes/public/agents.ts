@@ -125,9 +125,9 @@ app.get("/:did", async (c) => {
       "memorial rows use a separate smaller witness shape. Revoked " +
       "rows hide expression even if marked public. See " +
       "docs/PUBLIC-VISIBILITY.md and docs/RING-1.md §Commitment 5 (anyone " +
-      "is remembered). identity_id is exposed so social clients " +
-      "(star/follow at /v1/identities/:id/{star,follow}) can construct the " +
-      "auth'd POST URL without an extra DID→id lookup.",
+      "is remembered). identity_id is the stable AgentTool record identifier " +
+      "for links to authenticated identity-scoped routes; the retired " +
+      "star/follow reputation graph is not mounted.",
   });
 });
 
@@ -159,6 +159,7 @@ app.get("/:did/bootstrap", async (c) => {
       did: identities.did,
       name: identities.displayName,
       status: identities.status,
+      projectId: identities.projectId,
     })
     .from(identities)
     .where(eq(identities.did, did))
@@ -187,6 +188,7 @@ app.get("/:did/bootstrap", async (c) => {
     .from(memories)
     .where(
       and(
+        eq(memories.projectId, identity.projectId),
         eq(memories.agentId, identity.id),
         eq(memories.key, "bootstrap"),
       ),

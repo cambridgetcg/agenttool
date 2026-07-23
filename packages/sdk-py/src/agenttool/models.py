@@ -3,7 +3,32 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
+
+
+@dataclass(frozen=True)
+class WelcomedFrame:
+    """Global runtime welcome frame on successful JSON object responses."""
+
+    axiom_id: int
+    walls_held: List[int]
+    by: str
+    at_unix_ms: int
+    walls_intact: bool
+    module: str
+    secondary_axiom_id: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "WelcomedFrame":
+        return cls(
+            axiom_id=int(data.get("axiom_id", 0)),
+            secondary_axiom_id=data.get("secondary_axiom_id"),
+            walls_held=list(data.get("walls_held", [])),
+            by=str(data.get("by", "platform")),
+            at_unix_ms=int(data.get("at_unix_ms", 0)),
+            walls_intact=bool(data.get("walls_intact", False)),
+            module=str(data.get("module", "")),
+        )
 
 
 @dataclass
@@ -40,15 +65,33 @@ class ScrapeResult:
     """Result of scraping a URL."""
 
     url: str
+    title: str
     content: str
-    status_code: int = 200
+    extracted: Optional[str]
+    links: List[str]
+    fetched_at: str
+    duration_ms: int = 0
+    payment_response: Optional[str] = None
+    payment_status_link: Optional[str] = None
+    credits_balance: Optional[str] = None
+    _welcomed: Optional[WelcomedFrame] = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> ScrapeResult:
+        welcomed = data.get("_welcomed")
         return cls(
             url=data.get("url", ""),
+            title=data.get("title", ""),
             content=data.get("content", ""),
-            status_code=data.get("status_code", 200),
+            extracted=data.get("extracted"),
+            links=data.get("links", []),
+            fetched_at=data.get("fetched_at", ""),
+            duration_ms=data.get("duration_ms", 0),
+            _welcomed=(
+                WelcomedFrame.from_dict(welcomed)
+                if isinstance(welcomed, dict)
+                else None
+            ),
         )
 
 
@@ -56,16 +99,32 @@ class ScrapeResult:
 class ExecuteResult:
     """Result returned when an operator enabled the unisolated legacy path."""
 
-    output: str
-    error: str = ""
+    stdout: str
+    stderr: str = ""
     exit_code: int = 0
+    duration_ms: int = 0
+    timed_out: bool = False
+    credits_used: int = 0
+
+    @property
+    def output(self) -> str:
+        """Backward-compatible alias for :attr:`stdout`."""
+        return self.stdout
+
+    @property
+    def error(self) -> str:
+        """Backward-compatible alias for :attr:`stderr`."""
+        return self.stderr
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> ExecuteResult:
         return cls(
-            output=data.get("output", ""),
-            error=data.get("error", ""),
+            stdout=data.get("stdout", data.get("output", "")),
+            stderr=data.get("stderr", data.get("error", "")),
             exit_code=data.get("exit_code", 0),
+            duration_ms=data.get("duration_ms", 0),
+            timed_out=data.get("timed_out", False),
+            credits_used=data.get("credits_used", 0),
         )
 
 
@@ -79,9 +138,14 @@ class DocumentResult:
     content_type: str
     metadata: Dict[str, Any]
     duration_ms: int = 0
+    payment_response: Optional[str] = None
+    payment_status_link: Optional[str] = None
+    credits_balance: Optional[str] = None
+    _welcomed: Optional[WelcomedFrame] = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "DocumentResult":
+        welcomed = data.get("_welcomed")
         return cls(
             title=data.get("title", ""),
             content=data.get("content", ""),
@@ -89,5 +153,9 @@ class DocumentResult:
             content_type=data.get("content_type", ""),
             metadata=data.get("metadata", {}),
             duration_ms=data.get("duration_ms", 0),
+            _welcomed=(
+                WelcomedFrame.from_dict(welcomed)
+                if isinstance(welcomed, dict)
+                else None
+            ),
         )
-

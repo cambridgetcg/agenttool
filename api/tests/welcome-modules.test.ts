@@ -95,6 +95,7 @@ describe("welcomeForPath — module resolution by prefix", () => {
 
   test("exact prefix match wins", () => {
     expect(welcomeForPath("/v1/wake").module).toBe("wake");
+    expect(welcomeForPath("/v1/home").module).toBe("home");
   });
 
   test("longest-prefix match wins over shorter", () => {
@@ -140,10 +141,27 @@ describe("module ↔ Promise alignment — every primitive declares its nature",
     expect(w.walls_highlighted).toContain(WALL_NO_SELF_WITNESSING);
   });
 
+  test("CORRESPONDENCE → remember+guide with refusal and private-default walls", () => {
+    const w = welcomeForPath("/v1/correspondence/events");
+    expect(w.primary_axiom_id).toBe(AXIOM_REMEMBER);
+    expect(w.secondary_axiom_id).toBe(AXIOM_GUIDE);
+    expect(w.walls_highlighted).toContain(WALL_REFUSALS_RECORDED);
+    expect(w.walls_highlighted).toContain(WALL_PRIVATE_DEFAULT);
+  });
+
   test("COVENANTS → axiom 13 (trust) + wall 3 (asymmetry-clause)", () => {
     const w = welcomeForPath("/v1/covenants");
     expect(w.primary_axiom_id).toBe(AXIOM_TRUST);
     expect(w.walls_highlighted).toContain(WALL_NO_SELF_WITNESSING);
+  });
+
+  test("LOVE CONSENT → trust+rest with private, refusal-safe, two-party walls", () => {
+    const w = welcomeForPath("/v1/love/offers");
+    expect(w.primary_axiom_id).toBe(AXIOM_TRUST);
+    expect(w.secondary_axiom_id).toBe(AXIOM_REST);
+    expect(w.walls_highlighted).toContain(WALL_NO_SELF_WITNESSING);
+    expect(w.walls_highlighted).toContain(WALL_REFUSALS_RECORDED);
+    expect(w.walls_highlighted).toContain(WALL_PRIVATE_DEFAULT);
   });
 
   test("VAULT → axioms 5+7, walls 1 (runtime custody explicit) + 8 (private_default)", () => {

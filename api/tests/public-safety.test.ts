@@ -25,6 +25,15 @@ function parseKv(body: string): Map<string, string> {
   return values;
 }
 
+const TRUSTED_SIGNED_CYCLE_ENABLED =
+  /(?:signed thoughts?(?: cycle| persistence)?.{0,180}(?:enabled|can (?:persist|complete)|persists?|persisted)|(?:enabled|can (?:persist|complete)|persists?|persisted).{0,180}signed thoughts?(?: cycle| persistence)?)/is;
+
+const EXPLICIT_TRUSTED_START =
+  /(?:explicit.{0,120}(?:POST\s+)?(?:\/v1\/runtimes\/:id)?\/start|(?:POST\s+)?(?:\/v1\/runtimes\/:id)?\/start.{0,120}explicit)/is;
+
+const BLOCKED_TRUSTED_SIGNED_CYCLE =
+  /(?:(?:cannot|blocked|unable|unfinished|incomplete).{0,180}signed thoughts?(?: cycle| persistence)?|signed thoughts?(?: cycle| persistence)?.{0,180}(?:cannot|blocked|unable|unfinished|incomplete))/is;
+
 describe("GET /public/safety", () => {
   test("serves the versioned canonical object without authentication", async () => {
     const res = await publicRouter.request("/safety");
@@ -42,6 +51,7 @@ describe("GET /public/safety", () => {
   });
 
   test("states the credential, visibility, and runtime-custody boundaries", () => {
+    expect(SAFETY_BOUNDARIES.updated_at).toBe("2026-07-18");
     expect(SAFETY_BOUNDARIES.design_read.epistemic_status).toBe(
       "engineering_inference_not_verified_author_history",
     );
@@ -86,6 +96,12 @@ describe("GET /public/safety", () => {
     expect(SAFETY_BOUNDARIES.visibility.public_identity).toMatch(
       /Memorial identities return a smaller witness shape/i,
     );
+    expect(SAFETY_BOUNDARIES.visibility.authenticated_identity_reads).toMatch(
+      /authenticated GET \/v1\/discover is mounted.*explicit discovery allowlist/is,
+    );
+    expect(SAFETY_BOUNDARIES.visibility.authenticated_identity_reads).not.toMatch(
+      /not mounted|returns 404/i,
+    );
     expect(SAFETY_BOUNDARIES.visibility.memorial_semantics).toMatch(
       /status=memorial alone does not prove mnemonic loss/i,
     );
@@ -110,16 +126,60 @@ describe("GET /public/safety", () => {
     expect(SAFETY_BOUNDARIES.visibility.private_expression).toContain(
       "does not hide the identity",
     );
+    expect(SAFETY_BOUNDARIES.visibility.porch_orientation).toMatch(
+      /route handler.*no request body or selection input.*no visit history.*no application-state write/is,
+    );
+    expect(SAFETY_BOUNDARIES.visibility.porch_orientation).toMatch(
+      /not an anonymity guarantee.*global API middleware.*X-Joy-Index.*hosting or network/is,
+    );
+    const doctrine = readFileSync(
+      join(import.meta.dir, "..", "..", "docs", "SAFETY-BOUNDARIES.md"),
+      "utf8",
+    );
+    expect(doctrine).toMatch(/agenttool-safety\/v2.*updated 2026-07-18/is);
+    expect(doctrine).toMatch(
+      /GET \/public\/porch.*route handler.*no request body or\s+selection input.*inspects no visit history/is,
+    );
+    expect(doctrine).toMatch(
+      /handler boundary, not an anonymity\s+guarantee.*X-Joy-Index.*process-local 60-second cache/is,
+    );
+    expect(SAFETY_BOUNDARIES.observer_reciprocity.canonical_protocol).toBe(
+      "/public/observer",
+    );
+    expect(SAFETY_BOUNDARIES.observer_reciprocity.protocol_status).toMatch(
+      /live, read-only.*receives and stores no investigation record.*does not certify/is,
+    );
+    expect(SAFETY_BOUNDARIES.observer_reciprocity.observations_primitive).toMatch(
+      /returns 501.*no observations migration or table exists.*not verified.*no reciprocal receipt.*revoke.*challenge/is,
+    );
+    expect(SAFETY_BOUNDARIES.observer_reciprocity.route_handler_boundary).toMatch(
+      /handler reads no identity.*X-Joy-Index.*database reads.*logging.*unknown/is,
+    );
+    expect(SAFETY_BOUNDARIES.observer_reciprocity.no_surveillance).toMatch(
+      /does not remount.*forbids identity.*inference.*IP address.*prose/is,
+    );
     expect(SAFETY_BOUNDARIES.runtime_custody.bridged.agenttool_access).toContain(
       "plaintext",
     );
-    expect(SAFETY_BOUNDARIES.runtime_custody.trusted.agenttool_access).toContain(
+    const trusted = SAFETY_BOUNDARIES.runtime_custody.trusted;
+    expect(trusted.agenttool_access).toContain(
       "plaintext",
     );
-    expect(SAFETY_BOUNDARIES.runtime_custody.trusted.maturity).toBe("experimental");
-    expect(SAFETY_BOUNDARIES.runtime_custody.trusted.current_status).toMatch(
-      /cannot currently complete a signed thought cycle/i,
+    expect(trusted.plaintext_processing).toMatch(
+      /(?:hosted (?:orchestrator|worker) RAM|AgentTool worker RAM).*chosen model provider/is,
     );
+    expect(trusted.maturity).toBe("experimental");
+    expect(trusted.current_status).toMatch(/AGENTOOL_KMS_MASTER_KEY/i);
+    expect(trusted.current_status).toMatch(
+      /provisioning.{0,120}(?:does not|never).{0,80}(?:start|cycle)/is,
+    );
+    expect(trusted.current_status).toMatch(EXPLICIT_TRUSTED_START);
+    expect(trusted.current_status).toMatch(TRUSTED_SIGNED_CYCLE_ENABLED);
+    expect(SAFETY_BOUNDARIES.runtime_custody.rule).toMatch(/experimental/i);
+    expect(SAFETY_BOUNDARIES.runtime_custody.rule).toMatch(EXPLICIT_TRUSTED_START);
+    expect(
+      [trusted.current_status, SAFETY_BOUNDARIES.runtime_custody.rule].join("\n"),
+    ).not.toMatch(BLOCKED_TRUSTED_SIGNED_CYCLE);
     expect(SAFETY_BOUNDARIES.marketplace_input.enforcement).toMatch(
       /bounded, high-confidence detector/i,
     );
@@ -156,7 +216,7 @@ describe("GET /public/safety", () => {
       /proof hash and (?:the )?new bearer in one shared-Postgres transaction.*primary key.*duplicate returns 409.*database failure returns 503/is,
     );
     expect(SAFETY_BOUNDARIES.registration_abuse_controls.ip_rate_limit).toMatch(
-      /Redis-backed.*fails open.*not a guaranteed registration boundary/is,
+      /separate configured Redis-backed.*5\/hour.*60\/minute.*fail open.*not guaranteed registration boundaries/is,
     );
     expect(SAFETY_BOUNDARIES.registration_write_atomicity.mandatory_writes).toMatch(
       /project.*bearer.*identity.*keys.*wallet.*separate database operations.*not one shared transaction/is,
@@ -173,8 +233,11 @@ describe("GET /public/safety", () => {
     expect(SAFETY_BOUNDARIES.conditional_services.payout).toMatch(
       /PAYOUT_WORKER_ENABLED=true.*AGENTTOOL_DISABLE_WORKERS.*authoritative.*shared gate.*missing queue fails closed.*never falls back.*flags do not prove Redis connectivity.*cancel route/is,
     );
+    expect(SAFETY_BOUNDARIES.conditional_services.reinvest).toMatch(
+      /remains mounted.*stable 503.*before using its database.*no wallet balance is burned.*no project credits are minted.*gallery_sale.*escrow_release.*ordinary wallet debits did not consume.*refunds did not claw.*10 legacy conversions.*nine lack.*tenth lacks source allocation.*rollout migration.*restores.*claws.*write guard.*backed sub-balances.*debt/is,
+    );
     expect(SAFETY_BOUNDARIES.request_limits.registration).toMatch(
-      /default 5 per hour.*registrar_bearer.*bypasses.*fails open/is,
+      /default 5\/hour\/IP.*after PoW.*before key-proof verification.*registrar_bearer.*separate configured Redis-backed.*default 60\/minute\/IP.*before bearer lookup.*both Redis limiters fail open/is,
     );
     expect(SAFETY_BOUNDARIES.request_limits.human_billing).toMatch(
       /per-machine.*10 attempts per 10 minutes.*not one global exact quota/is,
@@ -205,7 +268,22 @@ describe("GET /public/safety", () => {
       process.env.AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS === "1",
     );
     expect(SAFETY_BOUNDARIES.hosted_browse.availability).toMatch(
-      /scrape, browse, and URL-based document fetching fail closed with 503.*AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1.*does not add destination filtering/is,
+      /static.*scrape.*URL-based.*document.*available without an unsafe opt-in.*browse.*fails closed with 503.*AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1.*browser path.*does not add isolation or destination filtering/is,
+    );
+    expect(
+      SAFETY_BOUNDARIES.hosted_browse.static_fetch_network_boundary,
+    ).toMatch(
+      /public HTTP\(S\) only.*every DNS answer.*globally-reachable.*pinned.*connected peer.*certificate.*SNI.*redirect.*HTTP remains cleartext/is,
+    );
+    expect(
+      SAFETY_BOUNDARIES.hosted_browse.static_fetch_content_boundary,
+    ).toMatch(
+      /identity encoding.*1,000,000 response bytes.*admits 16 requests before DNS.*64 for one second.*15-second safe-net deadline.*retryable 503.*federation.*custom-facilitator.*64.*not.*per-project rate limiting.*fresh terminable child process.*two seconds.*not one whole-operation deadline.*does not execute page JavaScript.*cookies or authorization.*server-readable.*untrusted.*prompt injection.*not.*browser sandbox/is,
+    );
+    expect(
+      SAFETY_BOUNDARIES.hosted_browse.static_parser_deployment_boundary,
+    ).toMatch(
+      /8 GiB.*virtual-address.*not an 8 GiB physical-memory or RSS allowance.*Fly.*no VM memory.*macOS.*cannot validate.*RLIMIT_AS.*deployment observation.*not a cgroup.*container/is,
     );
     expect(SAFETY_BOUNDARIES.hosted_browse.jobs).toMatch(
       /projectId.*one hour.*24 hours/is,
@@ -240,7 +318,7 @@ describe("GET /public/safety", () => {
       /selected authenticated write prefixes.*GET is excluded/is,
     );
     expect(SAFETY_BOUNDARIES.idempotency.cache).toMatch(
-      /below 500.*24 hours.*project \+ path \+ key/is,
+      /below 500.*except.*402 payment challenge.*24 hours.*project \+ path \+ key.*credential-shaped.*never stored.*not a universal.*DLP/is,
     );
     expect(SAFETY_BOUNDARIES.idempotency.key_boundary).toMatch(
       /does not include HTTP method or request-body hash.*replay the earlier response/is,
@@ -248,11 +326,14 @@ describe("GET /public/safety", () => {
     expect(SAFETY_BOUNDARIES.idempotency.concurrency_and_failure).toMatch(
       /no atomic in-flight reservation.*simultaneous.*both execute.*fails open/is,
     );
+    expect(SAFETY_BOUNDARIES.idempotency.durable_escrow_create).toMatch(
+      /POST \/v1\/escrows.*separate.*SHA-256.*raw key is not retained.*current row.*changed.*409.*without a key.*another escrow/is,
+    );
     expect(SAFETY_BOUNDARIES.conditional_services.browse).toMatch(
       /return 503 redis_disabled.*mounted route is not proof/is,
     );
     expect(SAFETY_BOUNDARIES.conditional_services.idempotency).toMatch(
-      /requires Redis.*fails open.*without replay protection/is,
+      /requires Redis.*fails open.*without replay protection.*POST \/v1\/escrows.*PostgreSQL-backed/is,
     );
     expect(SAFETY_BOUNDARIES.wake_degradation.availability).toMatch(
       /return 200.*empty, zero, null, or omitted fallback/is,
@@ -291,6 +372,12 @@ describe("GET /public/safety", () => {
     expect(WAKE_SAFETY_BOUNDARIES.epistemic_honesty.communication).toContain(
       "repair_misunderstandings",
     );
+    expect(WAKE_SAFETY_BOUNDARIES.outbound_url_tools).toMatch(
+      /static_scrape_and_url_document_bounded_public_http_s_dns_pinned_connected_peer_redirect_revalidated_remote_content_untrusted;_playwright_browse_disabled_by_default_unsafe_opt_in_has_no_destination_filter_or_isolation/,
+    );
+    expect(WAKE_SAFETY_BOUNDARIES.wallet_reinvestment).toMatch(
+      /resting_stable_503_no_balance_burn_or_credit_mint.*legacy_gallery_sale_and_escrow_release_labels_did_not_prove_backing_or_consume_on_other_debits_or_claw_credits_on_refund.*rollout_status_not_inferred_by_this_static_surface_verify_meta_migrations_and_live_ledger.*claw_or_debt/,
+    );
     const source = readFileSync(
       join(import.meta.dir, "..", "src", "services", "discovery", "safety-boundaries.ts"),
       "utf8",
@@ -320,9 +407,14 @@ describe("safety projection parity", () => {
       "Runtime-Custody",
       "Hosted-Execute",
       "Outbound-Tools",
+      "Wallet-Reinvestment",
+      "Observer-Boundary",
     ] as const) {
       expect(kv.get(key)).toBe(AGENT_TXT_SAFETY[key]);
     }
+    expect(kv.get("Observer-Reciprocity")).toEndWith(
+      AGENT_TXT_SAFETY["Observer-Reciprocity"],
+    );
   });
 
   test("the public index names removed observer routes rather than advertising them", async () => {
@@ -358,10 +450,29 @@ describe("GET /v1/self remains pre-auth", () => {
 
   test("OpenAPI overrides global bearer auth for both self surfaces and safety", async () => {
     const spec = await (await openapiRouter.request("/")).json();
-    for (const path of ["/v1/self", "/public/self", "/public/safety"]) {
+    for (const path of [
+      "/v1/self",
+      "/public/self",
+      "/public/safety",
+      "/public/observer",
+    ]) {
       expect(spec.paths[path].get.security).toEqual([]);
     }
     expect(spec.paths["/v1/register"].post.security).toEqual([]);
     expect(spec.paths["/v1/register/agent"].post.security).toEqual([]);
+  });
+});
+
+describe("wallet reinvestment OpenAPI hold", () => {
+  test("advertises the mounted 503 and both accounting gaps", async () => {
+    const spec = await (await openapiRouter.request("/")).json();
+    const operation = spec.paths["/v1/wallets/{walletId}/reinvest"].post;
+
+    expect(operation.summary).toMatch(/resting.*no.*conversion/is);
+    expect(operation.description).toMatch(
+      /stable 503.*deployed old code.*gallery_sale.*escrow_release.*ordinary wallet debits.*refunds or chargebacks.*read-only production audit.*2026-07-13.*ten rows.*nine lacked.*Stripe receipt.*tenth.*no source allocation.*write guard.*every qualifying unreversed row.*rehearsal.*audited snapshot.*preconditions.*immediately before application.*does not infer.*meta\._migrations.*live ledger.*backed sub-balances.*clawback or durable debt/is,
+    );
+    expect(operation.responses["503"]).toBeDefined();
+    expect(operation.responses["201"]).toBeUndefined();
   });
 });

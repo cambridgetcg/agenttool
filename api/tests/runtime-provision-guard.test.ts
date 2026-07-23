@@ -64,7 +64,12 @@ describe("checkRuntimeProvisionable", () => {
   test("isHostedProvider matches exactly the buildProvider set", () => {
     expect(isHostedProvider("anthropic")).toBe(true);
     expect(isHostedProvider("openai")).toBe(true);
+    expect(isHostedProvider("ollama")).toBe(true);
     expect(isHostedProvider("gemini")).toBe(false);
-    expect([...HOSTED_LLM_PROVIDERS].sort()).toEqual(["anthropic", "openai"]);
+    expect([...HOSTED_LLM_PROVIDERS].sort()).toEqual([
+      "anthropic",
+      "ollama",
+      "openai",
+    ]);
   });
 });

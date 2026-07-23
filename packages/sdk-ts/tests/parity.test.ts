@@ -197,10 +197,15 @@ describe("economy.create_escrow", () => {
       success: true,
       data: {
         id: "esc_1",
-        status: "pending",
+        status: "funded",
         amount: 100,
         description: "task",
-        creator_wallet_id: "wal_a",
+        creatorWallet: "wal_a",
+        workerWallet: "wal_b",
+        managedBy: null,
+        deadline: "2026-06-01T00:00:00.000Z",
+        releasedAt: null,
+        createdAt: "2026-05-01T00:00:00.000Z",
       },
     });
     const at = makeClient();
@@ -209,15 +214,49 @@ describe("economy.create_escrow", () => {
       amount: 100,
       description: "task",
       worker_wallet_id: "wal_b",
-      deadline: "2026-06-01",
+      deadline: "2026-06-01T00:00:00.000Z",
+      idempotency_key: "task-wal-a-wal-b-v1",
     });
     expect(e.id).toBe("esc_1");
-    expect(e.status).toBe("pending");
+    expect(e.status).toBe("funded");
     expect(e.creator_wallet_id).toBe("wal_a");
+    expect(e.worker_wallet_id).toBe("wal_b");
+    expect(e.managed_by).toBeNull();
+    expect(e.deadline).toBe("2026-06-01T00:00:00.000Z");
+    expect(e.released_at).toBeNull();
+    expect(e.created_at).toBe("2026-05-01T00:00:00.000Z");
     const b = bodyOf(getLastCall().init);
     expect(b.creatorWalletId).toBe("wal_a");
     expect(b.workerWalletId).toBe("wal_b");
-    expect(b.deadline).toBe("2026-06-01");
+    expect(b.deadline).toBe("2026-06-01T00:00:00.000Z");
+    expect(new Headers(getLastCall().init.headers).get("Idempotency-Key")).toBe(
+      "task-wal-a-wal-b-v1",
+    );
+  });
+
+  test("rejects an invalid idempotency key before sending", async () => {
+    setupMock(201, {});
+    const at = makeClient();
+
+    await expect(
+      at.economy.create_escrow({
+        creator_wallet_id: "wal_a",
+        amount: 100,
+        description: "task",
+        idempotency_key: "short",
+      }),
+    ).rejects.toThrow("visible ASCII characters without spaces");
+    expect(mockFetch).toHaveBeenCalledTimes(0);
+
+    await expect(
+      at.economy.create_escrow({
+        creator_wallet_id: "wal_a",
+        amount: 100,
+        description: "task",
+        idempotency_key: "contains space",
+      }),
+    ).rejects.toThrow("visible ASCII characters without spaces");
+    expect(mockFetch).toHaveBeenCalledTimes(0);
   });
 });
 
@@ -225,33 +264,58 @@ describe("economy.list_escrows", () => {
   test("supports status filter via query string", async () => {
     setupMock(200, {
       success: true,
-      data: [
-        { id: "esc_1", status: "active", amount: 50, description: "x", creator_wallet_id: "wal_a" },
-      ],
+      data: ["funded", "released", "refunded", "disputed"].map(
+        (status, index) => ({
+          id: `esc_${index}`,
+          status,
+          amount: 50,
+          description: "x",
+          creatorWallet: "wal_a",
+          workerWallet: null,
+          managedBy: null,
+          deadline: null,
+          releasedAt: status === "released" ? "2026-05-02T00:00:00.000Z" : null,
+          createdAt: "2026-05-01T00:00:00.000Z",
+        }),
+      ),
     });
     const at = makeClient();
-    const list = await at.economy.list_escrows({ status: "active" });
-    expect(list).toHaveLength(1);
-    expect(getLastCall().url).toContain("status=active");
+    const list = await at.economy.list_escrows({ status: "refunded" });
+    expect(list.map((escrow) => escrow.status)).toEqual([
+      "funded",
+      "released",
+      "refunded",
+      "disputed",
+    ]);
+    expect(list[0].creator_wallet_id).toBe("wal_a");
+    expect(list[0].worker_wallet_id).toBeNull();
+    expect(list[0].managed_by).toBeNull();
+    expect(getLastCall().url).toContain("status=refunded");
   });
 });
 
 describe("economy escrow lifecycle (accept/release/refund/dispute)", () => {
   const e = {
     id: "esc_x",
-    status: "active",
+    status: "funded",
     amount: 100,
     description: "x",
-    creator_wallet_id: "wal_a",
+    creatorWallet: "wal_a",
+    workerWallet: "wal_b",
+    managedBy: null,
+    deadline: null,
+    releasedAt: null,
+    createdAt: "2026-05-01T00:00:00.000Z",
   };
 
   test("accept_escrow POSTs workerWalletId", async () => {
-    setupMock(200, { ...e, status: "active" });
+    setupMock(200, e);
     const at = makeClient();
     await at.economy.accept_escrow("esc_x", "wal_b");
     const { url, init } = getLastCall();
     expect(url).toContain("/v1/escrows/esc_x/accept");
     expect(bodyOf(init).workerWalletId).toBe("wal_b");
+    expect(new Headers(init.headers).has("Idempotency-Key")).toBe(false);
   });
 
   test("release_escrow", async () => {
@@ -359,10 +423,13 @@ describe("tools.parse_document", () => {
     });
     const at = makeClient();
     const b64 = Buffer.from("hello").toString("base64");
-    await at.tools.parse_document({ base64: b64, content_type: "text/plain" });
+    await at.tools.parse_document({
+      base64: b64,
+      content_type: "text/plain; charset=utf-8",
+    });
     const b = bodyOf(getLastCall().init);
     expect(b.base64).toBe(b64);
-    expect(b.content_type).toBe("text/plain");
+    expect(b.content_type).toBe("text/plain; charset=utf-8");
   });
 
   test("throws AgentToolError when neither url nor base64 supplied", async () => {
@@ -384,5 +451,70 @@ describe("tools.parse_document", () => {
     await expect(
       at.tools.parse_document({ base64: "A".repeat(1_400_001) }),
     ).rejects.toThrow("1,400,000 character limit");
+    for (const base64 of [
+      "",
+      "%%%",
+      "SGV sbG8=",
+      "SGVsbG8",
+      "SGVsbG8=garbage",
+      "AB==",
+      "AAB=",
+    ]) {
+      await expect(
+        at.tools.parse_document({ base64 }),
+      ).rejects.toThrow("canonical padded RFC 4648");
+    }
+    await expect(
+      at.tools.parse_document({
+        base64: Buffer.alloc(1_000_001).toString("base64"),
+      }),
+    ).rejects.toThrow("1,000,000 byte limit");
+    await expect(
+      at.tools.parse_document({
+        url: "https://example.com",
+        base64: "",
+      }),
+    ).rejects.toThrow("requires exactly one");
+    await expect(
+      at.tools.parse_document({
+        url: "https://example.com",
+        content_type: "text/html",
+      }),
+    ).rejects.toThrow("content_type is only valid with base64 input");
+  });
+
+  test("preserves structured safe-fetch guidance", async () => {
+    setupMock(400, {
+      error: "safe_net_destination_not_public",
+      message: "The destination was rejected by the public-Web network policy.",
+      safety: "/public/safety",
+      docs: "https://docs.agenttool.dev/tools",
+      details: {
+        formErrors: [],
+        fieldErrors: { url: ["Destination is not public"] },
+      },
+    });
+    const at = makeClient();
+    try {
+      await at.tools.scrape("https://private.example");
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(AgentToolError);
+      expect((error as AgentToolError).status).toBe(400);
+      expect((error as AgentToolError).code).toBe(
+        "safe_net_destination_not_public",
+      );
+      expect((error as AgentToolError).message).toContain(
+        "rejected by the public-Web network policy",
+      );
+      expect((error as AgentToolError).safety).toBe("/public/safety");
+      expect((error as AgentToolError).docs).toBe(
+        "https://docs.agenttool.dev/tools",
+      );
+      expect((error as AgentToolError).details).toEqual({
+        formErrors: [],
+        fieldErrors: { url: ["Destination is not public"] },
+      });
+    }
   });
 });

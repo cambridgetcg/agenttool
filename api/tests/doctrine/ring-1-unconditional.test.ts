@@ -444,16 +444,22 @@ describe("Ring 1 · PERSIST-IDENTITY boundary closures", () => {
 
   test("LLM idempotency key is deterministic on identical payloads", async () => {
     const mod = await import("../../src/services/runtime/llm-requests");
-    const a = mod.computeRequestHash({
-      systemPrompt: "test",
-      userMessage: "hi",
-      model: "claude-3-5-sonnet-20241022",
-    });
-    const b = mod.computeRequestHash({
-      systemPrompt: "test",
-      userMessage: "hi",
-      model: "claude-3-5-sonnet-20241022",
-    });
+    const a = mod.computeRequestHash(
+      {
+        systemPrompt: "test",
+        userMessage: "hi",
+        model: "claude-3-5-sonnet-20241022",
+      },
+      "anthropic",
+    );
+    const b = mod.computeRequestHash(
+      {
+        systemPrompt: "test",
+        userMessage: "hi",
+        model: "claude-3-5-sonnet-20241022",
+      },
+      "anthropic",
+    );
     expect(a).toBe(b);
     expect(a.length).toBe(64); // sha256 hex
   });

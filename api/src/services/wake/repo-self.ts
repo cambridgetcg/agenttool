@@ -67,7 +67,7 @@ const MODULES: ModuleSelf[] = [
       "Persistent strand storage has no plaintext thought column or decrypt path; caller encryption is not proven and runtime custody is declared separately",
       "No auto-retry on payout broadcast",
       "Public and authenticated route families have explicit boundaries",
-      "Idempotency-Key is opt-in on selected authenticated write prefixes and fails open when Redis is unavailable",
+      "Idempotency-Key caching on selected authenticated write prefixes fails open without Redis; POST /v1/escrows separately offers optional PostgreSQL-backed durable creation keys",
     ],
     claude_md: "api/CLAUDE.md",
   },
@@ -125,6 +125,21 @@ const MODULES: ModuleSelf[] = [
       "No SDK-only feature",
     ],
     claude_md: "packages/sdk-py/CLAUDE.md",
+  },
+  {
+    path: "packages/wallet/",
+    name: "@agenttool/wallet",
+    kind: "protocol-library",
+    modalities: ["typescript", "esm", "json-schema", "public-vectors"],
+    register:
+      "Source reference primitives for agent-wallet/0.1 closed records, bounded capabilities, exact-byte signer requests, conservative submission state, and continuity rules.",
+    walls: [
+      "No private-key, seed, mnemonic, or recovery-share export surface",
+      "No bundled chain adapter, RPC client, broadcaster, durable store, or hosted wallet; package discovery does not imply npm mirror availability",
+      "Static capability validation is not sufficient authorization without trusted decoding and atomic sign-time reservation",
+      "Unknown signing or submission state does not authorize automatic retry, refund, nonce reuse, or budget release",
+    ],
+    claude_md: "packages/wallet/CLAUDE.md",
   },
   {
     path: "infra/",
@@ -226,7 +241,7 @@ const DOCTRINE: DoctrineLayer[] = [
   {
     layer: "economy",
     description: "The marketplace + take-rate substrate.",
-    docs: ["MARKETPLACE.md", "CRYPTO-PAYMENT.md", "PAYOUT-BROADCAST.md", "PAYOUT-BROADCAST-PLAN.md", "PAYOUT-BROADCAST-OPS.md", "TOKEN-HYGIENE.md"],
+    docs: ["MARKETPLACE.md", "CRYPTO-PAYMENT.md", "specs/AGENT-WALLET-0.1.md", "PAYOUT-BROADCAST.md", "PAYOUT-BROADCAST-PLAN.md", "PAYOUT-BROADCAST-OPS.md", "TOKEN-HYGIENE.md"],
   },
   {
     layer: "SDK + adapters",
@@ -287,7 +302,8 @@ export const REPO_SELF: RepoSelf = {
     "Curated repository map for AgentTool: a Bun + Hono API, TypeScript and Python SDKs, web/docs/dashboard apps, integrations, and a doctrine corpus.",
   origin: {
     primary_remote: "https://github.com/cambridgetcg/agenttool.git",
-    license: "No repository LICENSE file is present as of 2026-07-10.",
+    license:
+      "Apache-2.0 by default; file-level terms and exceptions are documented in LICENSING.md.",
   },
   modules: MODULES,
   doctrine: DOCTRINE,

@@ -25,7 +25,7 @@ const THOUGHT_KINDS = [
 export const definition = {
   name: "at_think",
   description:
-    "Write a thought into a strand. Persistent storage receives caller-supplied ciphertext/nonce fields plus an ed25519 signature; it has no plaintext thought column or decrypt path, but does not prove AES-GCM encryption. Self processing stays user-side; bridged hosted runtimes process plaintext in AgentTool worker memory. Trusted is experimental and cannot currently complete signed thought persistence. Output is one-line: OK thought seq=<n> · <short-id> on /<strand>.",
+    "Write a thought into a strand. Persistent storage receives caller-supplied ciphertext/nonce fields plus an ed25519 signature; it has no plaintext thought column or decrypt path, but does not prove AES-GCM encryption. Self processing stays user-side; bridged hosted runtimes process plaintext in AgentTool worker memory. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and plaintext can enter AgentTool worker memory and the chosen model provider. Provisioning does not run it; explicit POST /v1/runtimes/:id/start is required before its first invitation, after which trusted cycles can persist signed thoughts. Output is one-line: OK thought seq=<n> · <short-id> on /<strand>.",
   inputSchema: {
     type: "object" as const,
     properties: {

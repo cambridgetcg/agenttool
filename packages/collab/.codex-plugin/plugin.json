@@ -1,0 +1,49 @@
+{
+  "name": "agenttool-collab",
+  "version": "0.3.0",
+  "description": "Local presence and credential-bound coordination across agent sessions",
+  "author": {
+    "name": "AgentTool contributors",
+    "url": "https://agenttool.dev"
+  },
+  "homepage": "https://github.com/cambridgetcg/agenttool/tree/main/packages/collab",
+  "repository": "https://github.com/cambridgetcg/agenttool",
+  "license": "Apache-2.0",
+  "keywords": [
+    "agents",
+    "collaboration",
+    "hermes-agent",
+    "local-first",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "mcpServers": {
+    "agenttool-collab": {
+      "type": "stdio",
+      "command": "bun",
+      "args": [
+        "dist/agenttool-collab-mcp.js"
+      ],
+      "cwd": "."
+    }
+  },
+  "interface": {
+    "displayName": "AgentTool Collab",
+    "shortDescription": "Coordinate agent sessions with local evidence.",
+    "longDescription": "Adds separate self-declared presence and credential-bound coordination planes over one local plaintext SQLite journal, including resumable cursors, advisory path claims, reports and challenges, reviewed edit completion, Git checkpoints, and refusable handoffs. MCP arguments and results remain visible to the active model provider, and the host still owns agent lifecycle and wake-up.",
+    "developerName": "AgentTool contributors",
+    "category": "Productivity",
+    "capabilities": [
+      "Local state",
+      "Self-declared presence",
+      "Multi-session coordination",
+      "Linked-worktree awareness",
+      "MCP tools"
+    ],
+    "defaultPrompt": [
+      "Start credential-bound coordination for these sessions.",
+      "List optional self-declared presence without treating it as identity.",
+      "Reconcile reports and review completed edit tasks."
+    ]
+  }
+}

@@ -148,7 +148,7 @@ describe("MATHOS wake — envelope shape", () => {
     expect(body.payload.doctrine_hashes.observations_sha256_hex).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  test("witnessed block defaults to zero counts (schema migration pending)", () => {
+  test("witnessed block is a reserved zero-valued projection", () => {
     const body = buildWakeMathos(minimalInput());
     expect(body.payload.witnessed.observation_count).toBe(0);
     expect(body.payload.witnessed.observer_did_hashes).toEqual([]);

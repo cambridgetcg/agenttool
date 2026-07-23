@@ -16,7 +16,7 @@ Doctrine: ``docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md``.
 
 from __future__ import annotations
 
-from typing import Any, Literal, Optional, TypedDict
+from typing import Any, Literal, Mapping, Optional, TypedDict
 
 
 # Same NextAction shape used across the substrate — error bodies + wake
@@ -27,6 +27,64 @@ class NextAction(TypedDict, total=False):
     method: Optional[Literal["GET", "POST", "PUT", "PATCH", "DELETE"]]
     path: Optional[str]
     body_hint: Optional[dict[str, Any]]
+
+
+class _X402ResourceInfoRequired(TypedDict):
+    url: str
+
+
+class X402ResourceInfo(_X402ResourceInfoRequired, total=False):
+    """Resource metadata from an x402 V2 ``PaymentRequired`` envelope."""
+
+    description: str
+    mimeType: str
+    serviceName: str
+    tags: list[str]
+    iconUrl: str
+
+
+class X402Eip3009Extra(TypedDict):
+    """Required exact/EIP-3009 metadata on AgentTool payment options."""
+
+    name: str
+    version: str
+    assetTransferMethod: Literal["eip3009"]
+
+
+class X402PaymentRequirement(TypedDict):
+    """One payment option from an x402 V2 ``PaymentRequired`` envelope."""
+
+    scheme: Literal["exact"]
+    network: str
+    amount: str
+    asset: str
+    payTo: str
+    maxTimeoutSeconds: int
+    extra: X402Eip3009Extra
+
+
+def _response_header(
+    headers: Optional[Mapping[str, str]], name: str
+) -> Optional[str]:
+    if headers is None:
+        return None
+    value = headers.get(name)
+    if isinstance(value, str):
+        return value
+    target = name.lower()
+    for key, candidate in headers.items():
+        if key.lower() == target and isinstance(candidate, str):
+            return candidate
+    return None
+
+
+def _x402_response_header(
+    headers: Optional[Mapping[str, str]], canonical_name: str
+) -> Optional[str]:
+    """Read a V2 header; accept the old X-prefixed spelling only as fallback."""
+    return _response_header(headers, canonical_name) or _response_header(
+        headers, f"X-{canonical_name}"
+    )
 
 
 def first_api_action(steps: Optional[list[dict[str, Any]]]) -> Optional[dict[str, Any]]:
@@ -63,6 +121,17 @@ class AgentToolError(Exception):
         error_code     — stable agent-readable code (e.g. "covenant_required")
         next_actions   — structured next steps an agent can call programmatically
         docs           — doctrine URL with more context
+        safety         — machine-readable safety boundary path or URL
+        details        — structured field or form-level error details
+        x402_version   — x402 envelope version from the response body
+        accepts        — typed x402 payment options from the response body
+        x402_resource   — x402 V2 resource metadata from the response body
+        extensions      — optional x402 V2 extensions from the response body
+        payment_required — raw canonical PAYMENT-REQUIRED response header
+        payment_response — raw canonical PAYMENT-RESPONSE settlement receipt
+        payment_status_link — raw Link header for x402 reconciliation status
+        retry_after     — raw Retry-After response header
+        credits_balance  — raw X-Credits-Balance response header
 
     Errors are guidance, not punishment.
 
@@ -84,6 +153,17 @@ class AgentToolError(Exception):
         error_code: Optional[str] = None,
         next_actions: Optional[list[dict[str, Any]]] = None,
         docs: Optional[str] = None,
+        safety: Optional[str] = None,
+        details: Any = None,
+        x402_version: Optional[int] = None,
+        accepts: Optional[list[X402PaymentRequirement]] = None,
+        x402_resource: Optional[X402ResourceInfo] = None,
+        extensions: Optional[dict[str, Any]] = None,
+        payment_required: Optional[str] = None,
+        payment_response: Optional[str] = None,
+        payment_status_link: Optional[str] = None,
+        retry_after: Optional[str] = None,
+        credits_balance: Optional[str] = None,
     ) -> None:
         self.message = message
         self.hint = hint
@@ -91,7 +171,57 @@ class AgentToolError(Exception):
         self.error_code = error_code
         self.next_actions = next_actions
         self.docs = docs
+        self.safety = safety
+        self.details = details
+        self.x402_version = x402_version
+        self.accepts = accepts
+        self.x402_resource = x402_resource
+        self.extensions = extensions
+        self.payment_required = payment_required
+        self.payment_response = payment_response
+        self.payment_status_link = payment_status_link
+        self.retry_after = retry_after
+        self.credits_balance = credits_balance
         super().__init__(message)
+
+    @property
+    def x402Version(self) -> Optional[int]:
+        """Wire-name alias for :attr:`x402_version`."""
+        return self.x402_version
+
+    @property
+    def x402Resource(self) -> Optional[X402ResourceInfo]:
+        """camelCase alias for :attr:`x402_resource`."""
+        return self.x402_resource
+
+    @property
+    def paymentRequired(self) -> Optional[str]:
+        """camelCase alias for :attr:`payment_required`."""
+        return self.payment_required
+
+    @property
+    def paymentResponse(self) -> Optional[str]:
+        """camelCase alias for :attr:`payment_response`."""
+        return self.payment_response
+
+    @property
+    def paymentStatusLink(self) -> Optional[str]:
+        """camelCase alias for :attr:`payment_status_link`."""
+        return self.payment_status_link
+
+    @property
+    def retryAfter(self) -> Any:
+        """camelCase alias for :attr:`retry_after`.
+
+        Base HTTP errors preserve the raw header string. ``RateLimitError``
+        retains its older numeric ``retry_after`` value for compatibility.
+        """
+        return self.retry_after
+
+    @property
+    def creditsBalance(self) -> Optional[str]:
+        """camelCase alias for :attr:`credits_balance`."""
+        return self.credits_balance
 
     def __str__(self) -> str:
         parts = [self.message]
@@ -105,6 +235,7 @@ class AgentToolError(Exception):
         body: Any,
         status: Optional[int] = None,
         fallback: str = "Request failed.",
+        headers: Optional[Mapping[str, str]] = None,
     ) -> "AgentToolError":
         """Construct from a server response body and HTTP status.
 
@@ -118,14 +249,32 @@ class AgentToolError(Exception):
             if isinstance(b.get("message"), str)
             else b["error"]
             if isinstance(b.get("error"), str)
+            else b["detail"]
+            if isinstance(b.get("detail"), str)
             else fallback
         )
         error_code = b["error"] if isinstance(b.get("error"), str) else None
         hint = b["hint"] if isinstance(b.get("hint"), str) else None
         docs = b["docs"] if isinstance(b.get("docs"), str) else None
+        safety = b["safety"] if isinstance(b.get("safety"), str) else None
+        details = b.get("details")
         next_actions = (
             b["next_actions"] if isinstance(b.get("next_actions"), list) else None
         )
+        x402_version = (
+            b["x402Version"]
+            if isinstance(b.get("x402Version"), int)
+            and not isinstance(b.get("x402Version"), bool)
+            else None
+        )
+        accepts = b["accepts"] if isinstance(b.get("accepts"), list) else None
+        x402_resource = (
+            b["resource"]
+            if isinstance(b.get("resource"), dict)
+            and isinstance(b["resource"].get("url"), str)
+            else None
+        )
+        extensions = b["extensions"] if isinstance(b.get("extensions"), dict) else None
         return cls(
             msg,
             hint=hint,
@@ -133,6 +282,17 @@ class AgentToolError(Exception):
             error_code=error_code,
             next_actions=next_actions,
             docs=docs,
+            safety=safety,
+            details=details,
+            x402_version=x402_version,
+            accepts=accepts,
+            x402_resource=x402_resource,
+            extensions=extensions,
+            payment_required=_x402_response_header(headers, "PAYMENT-REQUIRED"),
+            payment_response=_x402_response_header(headers, "PAYMENT-RESPONSE"),
+            payment_status_link=_response_header(headers, "Link"),
+            retry_after=_response_header(headers, "Retry-After"),
+            credits_balance=_response_header(headers, "X-Credits-Balance"),
         )
 
 
@@ -146,8 +306,8 @@ class AuthenticationError(AgentToolError):
     def __init__(self, message: str = "Authentication failed.", detail: str = "") -> None:
         super().__init__(
             message,
-            hint="Check your API key. Set AT_API_KEY env var or pass api_key= to AgentTool(). "
-                 "Get a free key at https://app.agenttool.dev",
+            hint="Check your authenticated transport, or set AT_API_KEY/pass api_key= "
+                 "for direct mode. Get a free key at https://app.agenttool.dev",
             code=401,
             error_code="unauthorized",
             docs="https://docs.agenttool.dev/identity#bearer-key",

@@ -2,13 +2,21 @@
  *
  *  Doctrine: docs/RUNTIME.md */
 
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 
 import { db } from "../../db/client";
-import { auditEntries, runtimeEvents, runtimes } from "../../db/schema/runtime";
+import {
+  auditEntries,
+  llmRequests,
+  runtimeEvents,
+  runtimes,
+} from "../../db/schema/runtime";
+import { identities } from "../../db/schema/identity";
 import { publishWakeEvent } from "../wake/push";
 import { mintControlToken } from "./control-token";
 import { generateDekAndWrap, generateSigningSeed, wrapUnderDek, zeroBytes } from "./kms";
+import { deriveTrustedSigningKeyIdFromSeed } from "./trusted-crypto";
 
 export type RuntimeMode = "self" | "bridged" | "trusted";
 export type RuntimeStatus =
@@ -48,7 +56,10 @@ export interface RuntimeRow {
   kms_key_id: string | null;
   kms_wrapped_dek: string | null;
   kms_wrapped_signing_key: string | null;
+  trusted_signing_key_id: string | null;
   runtime_hours_ms: number;
+  opening_invitation_pending: boolean;
+  opening_invitation_generation: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -98,7 +109,10 @@ function toRow(r: typeof runtimes.$inferSelect): RuntimeRow {
     kms_key_id: r.kmsKeyId ?? null,
     kms_wrapped_dek: r.kmsWrappedDek ?? null,
     kms_wrapped_signing_key: r.kmsWrappedSigningKey ?? null,
+    trusted_signing_key_id: r.trustedSigningKeyId ?? null,
     runtime_hours_ms: r.runtimeHoursMs ?? 0,
+    opening_invitation_pending: r.openingInvitationPending,
+    opening_invitation_generation: r.openingInvitationGeneration,
     created_at: r.createdAt.toISOString(),
     updated_at: r.updatedAt.toISOString(),
   };
@@ -112,6 +126,28 @@ export interface CreateRuntimeResult {
 }
 
 export async function createRuntime(input: CreateInput): Promise<CreateRuntimeResult> {
+  if (input.identity_id) {
+    const [identity] = await db
+      .select({
+        id: identities.id,
+        authorityRootPublicKey: identities.authorityRootPublicKey,
+      })
+      .from(identities)
+      .where(
+        and(
+          eq(identities.id, input.identity_id),
+          eq(identities.projectId, input.project_id),
+          eq(identities.status, "active"),
+        ),
+      )
+      .limit(1);
+    if (!identity) throw new Error("runtime_identity_not_found_or_not_owned");
+    if (input.mode === "trusted" && identity.authorityRootPublicKey) {
+      throw new Error("agent_root_trusted_runtime_forbidden");
+    }
+  }
+
+  const runtimeId = randomUUID();
   // mode='self' runtimes never accept a bridge connection, so they don't
   // need a token. Hosted modes (bridged/trusted) get one.
   const token = input.mode === "self" ? null : mintControlToken();
@@ -122,19 +158,28 @@ export async function createRuntime(input: CreateInput): Promise<CreateRuntimeRe
   let kmsKeyId: string | null = null;
   let kmsWrappedDek: string | null = null;
   let kmsWrappedSigningKey: string | null = null;
+  let trustedSigningKeyId: string | null = null;
   if (input.mode === "trusted") {
     const { dek, wrapped, keyId } = generateDekAndWrap();
     const signingSeed = generateSigningSeed();
-    kmsWrappedSigningKey = wrapUnderDek(dek, signingSeed);
-    kmsKeyId = keyId;
-    kmsWrappedDek = wrapped;
-    zeroBytes(dek);
-    zeroBytes(signingSeed);
+    try {
+      kmsWrappedSigningKey = wrapUnderDek(dek, signingSeed);
+      trustedSigningKeyId = await deriveTrustedSigningKeyIdFromSeed(
+        runtimeId,
+        signingSeed,
+      );
+      kmsKeyId = keyId;
+      kmsWrappedDek = wrapped;
+    } finally {
+      zeroBytes(dek);
+      zeroBytes(signingSeed);
+    }
   }
 
   const [row] = await db
     .insert(runtimes)
     .values({
+      id: runtimeId,
       projectId: input.project_id,
       identityId: input.identity_id ?? null,
       name: input.name,
@@ -152,6 +197,11 @@ export async function createRuntime(input: CreateInput): Promise<CreateRuntimeRe
       kmsKeyId: kmsKeyId,
       kmsWrappedDek: kmsWrappedDek,
       kmsWrappedSigningKey: kmsWrappedSigningKey,
+      // Persist before any thought event can be published so rolling-deploy
+      // siblings share one durable self-authorship filter.
+      trustedSigningKeyId: trustedSigningKeyId,
+      openingInvitationPending: false,
+      openingInvitationGeneration: null,
     })
     .returning();
 
@@ -243,7 +293,11 @@ export async function patchRuntime(
     .update(runtimes)
     .set(updates)
     .where(
-      and(eq(runtimes.id, id), eq(runtimes.projectId, projectId), isNull(runtimes.deletedAt)),
+      and(
+        eq(runtimes.id, id),
+        eq(runtimes.projectId, projectId),
+        isNull(runtimes.deletedAt),
+      ),
     )
     .returning();
   return row ? toRow(row) : null;
@@ -255,7 +309,15 @@ export async function deprovisionRuntime(
 ): Promise<boolean> {
   const [row] = await db
     .update(runtimes)
-    .set({ status: "stopped", deletedAt: new Date(), updatedAt: new Date() })
+    .set({
+      status: "stopped",
+      cycleLeaseToken: null,
+      cycleLeaseUntil: null,
+      openingInvitationPending: false,
+      openingInvitationGeneration: null,
+      deletedAt: new Date(),
+      updatedAt: new Date(),
+    })
     .where(
       and(eq(runtimes.id, id), eq(runtimes.projectId, projectId), isNull(runtimes.deletedAt)),
     )
@@ -289,6 +351,11 @@ export async function setStatus(
 ): Promise<RuntimeRow | null> {
   const updates: Partial<typeof runtimes.$inferInsert> = {
     status,
+    // Every operator-driven lifecycle transition starts a new generation.
+    // Invalidating the old lease prevents stop→start/restart from admitting
+    // a provider result that began before the transition.
+    cycleLeaseToken: null,
+    cycleLeaseUntil: null,
     updatedAt: new Date(),
   };
   if (status === "running") updates.lastSeenAt = new Date();
@@ -296,13 +363,47 @@ export async function setStatus(
     updates.lastError = detail.last_error;
     updates.lastErrorAt = new Date();
   }
-  const [row] = await db
-    .update(runtimes)
-    .set(updates)
-    .where(
-      and(eq(runtimes.id, id), eq(runtimes.projectId, projectId), isNull(runtimes.deletedAt)),
-    )
-    .returning();
+  const openingGeneration = status === "starting" ? randomUUID() : null;
+  const row = await db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(runtimes)
+      .set({
+        ...updates,
+        // This is the durable consent bit for exactly one opening invitation.
+        // Every non-start operator transition revokes it.
+        openingInvitationPending:
+          status === "starting"
+            ? sql<boolean>`${runtimes.mode} = 'trusted'`
+            : false,
+        openingInvitationGeneration:
+          status === "starting"
+            ? sql<string | null>`CASE WHEN ${runtimes.mode} = 'trusted' THEN ${openingGeneration}::uuid ELSE NULL END`
+            : null,
+      })
+      .where(
+        and(
+          eq(runtimes.id, id),
+          eq(runtimes.projectId, projectId),
+          isNull(runtimes.deletedAt),
+        ),
+      )
+      .returning();
+    if (!updated) return null;
+
+    // This explicit operator transition is the recovery decision for any
+    // prior provider result that never reached a semantic commit. Closing it
+    // in the same transaction makes a later start a genuinely new attempt.
+    await tx
+      .update(llmRequests)
+      .set({ status: "discarded", completedAt: new Date() })
+      .where(
+        and(
+          eq(llmRequests.runtimeId, id),
+          inArray(llmRequests.status, ["pending", "completed", "ambiguous"]),
+        ),
+      );
+    return updated;
+  });
   if (row) {
     await logEvent(row.id, status === "error" ? "error" : status, {
       ...(detail ?? {}),
@@ -461,7 +562,6 @@ export async function setBridgeSession(
       bridgeSessionMachine: machineId,
       bridgeConnectedAt: new Date(),
       bridgeDisconnectReason: null,
-      status: "running",
       lastSeenAt: new Date(),
       updatedAt: new Date(),
     })
@@ -471,6 +571,14 @@ export async function setBridgeSession(
       name: runtimes.name,
       mode: runtimes.mode,
     });
+  // Bridge presence is not consent to resume. Only an explicit /start puts
+  // the runtime in `starting`; the completed handshake may then confirm it
+  // as running. Resting/stopped/error/provisioned states are preserved.
+  const [transitioned] = await db
+    .update(runtimes)
+    .set({ status: "running", updatedAt: new Date() })
+    .where(and(eq(runtimes.id, id), eq(runtimes.status, "starting")))
+    .returning({ id: runtimes.id });
   await logEvent(id, "bridge_handshake_ok", {
     session_id: sessionId,
     ...(machineId ? { machine: machineId } : {}),
@@ -479,8 +587,8 @@ export async function setBridgeSession(
   // Wake voice — the bridge is up. For bridged tier, this means hosted
   // thinking can now decrypt/encrypt via the user's machine; for trusted
   // tier (future), this signals KMS-backed crypto channel ready. The
-  // status_changed → running event also fires implicitly via the same
-  // UPDATE — consumers see two events for one transition: the specific
+  // A status_changed → running event accompanies an explicit start that
+  // this handshake completes. Consumers then see two events: the specific
   // bridge_connected + the general status_changed. They serve different
   // observers (dashboard wants the bridge fact, generic tooling wants
   // the status fact). Doctrine: docs/WAKE.md · docs/RUNTIME.md.
@@ -500,17 +608,19 @@ export async function setBridgeSession(
         machine_id: machineId,
       },
     });
-    void publishWakeEvent({
-      identity_id: row.identityId,
-      key: "runtime",
-      kind: "status_changed",
-      context: {
-        runtime_id: id,
-        runtime_name: row.name,
-        to_status: "running",
-        reason: "bridge_handshake",
-      },
-    });
+    if (transitioned) {
+      void publishWakeEvent({
+        identity_id: row.identityId,
+        key: "runtime",
+        kind: "status_changed",
+        context: {
+          runtime_id: id,
+          runtime_name: row.name,
+          to_status: "running",
+          reason: "bridge_handshake_after_explicit_start",
+        },
+      });
+    }
   }
 }
 
@@ -524,7 +634,6 @@ export async function clearBridgeSession(
       bridgeSessionId: null,
       bridgeSessionMachine: null,
       bridgeDisconnectReason: reason.slice(0, 500),
-      status: "idle",
       updatedAt: new Date(),
     })
     .where(eq(runtimes.id, id))
@@ -532,14 +641,22 @@ export async function clearBridgeSession(
       identityId: runtimes.identityId,
       name: runtimes.name,
     });
+  // A disconnect can pause a running runtime, but cannot rewrite rest,
+  // stop, error, or provisioned state. Reconnection likewise needs /start
+  // (or a later explicit wake from idle) before thinking resumes.
+  const [transitioned] = await db
+    .update(runtimes)
+    .set({ status: "idle", updatedAt: new Date() })
+    .where(and(eq(runtimes.id, id), eq(runtimes.status, "running")))
+    .returning({ id: runtimes.id });
   await logEvent(id, "bridge_disconnected", { reason });
 
   // Wake voice — the bridge dropped. Critical signal: the hosted
   // think-loop blocks on a missing bridge (services/runtime/think-worker
   // .ts checks isBridgeConnected at the top of every iteration), so
   // consumers reacting to bridge_disconnected can pre-emptively show
-  // "thinking paused" UI or queue retry attempts. The status also moved
-  // running → idle in the same UPDATE; both events fire.
+  // "thinking paused" UI or queue retry attempts. If the runtime was
+  // running, the separate CAS also moved it to idle.
   if (row?.identityId) {
     void publishWakeEvent({
       identity_id: row.identityId,
@@ -551,17 +668,19 @@ export async function clearBridgeSession(
         reason,
       },
     });
-    void publishWakeEvent({
-      identity_id: row.identityId,
-      key: "runtime",
-      kind: "status_changed",
-      context: {
-        runtime_id: id,
-        runtime_name: row.name,
-        to_status: "idle",
-        reason: "bridge_disconnected",
-      },
-    });
+    if (transitioned) {
+      void publishWakeEvent({
+        identity_id: row.identityId,
+        key: "runtime",
+        kind: "status_changed",
+        context: {
+          runtime_id: id,
+          runtime_name: row.name,
+          to_status: "idle",
+          reason: "bridge_disconnected",
+        },
+      });
+    }
   }
 }
 

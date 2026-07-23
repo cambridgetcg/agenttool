@@ -25,7 +25,7 @@
  * the parity rule is "every public py method has a snake_case TS match."
  */
 
-import { readFile, readdir } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -37,24 +37,95 @@ const ROOT = process.env.MONOREPO_ROOT
 const PY_SRC = join(ROOT, "packages/sdk-py/src/agenttool");
 const TS_SRC = join(ROOT, "packages/sdk-ts/src");
 
-/** Modules covered by parity. Each name is the module file basename
- *  (sans extension) on BOTH sides — by convention they always match. */
-const MODULES = [
-  "bootstrap",
-  "chronicle",
-  "covenants",
-  "crypto",
-  "economy",
-  "identity",
-  "inbox",
-  "memory",
-  "strands",
-  "tools",
-  "traces",
-  "vault",
-  "wake",
-  "window",
-] as const;
+interface ParityTarget {
+  /** Source basename in packages/sdk-ts/src. */
+  tsModule: string;
+  /** Source basename in packages/sdk-py/src/agenttool. */
+  pyModule: string;
+  /** Stable label rendered in parity reports. */
+  reportName: string;
+  /** Client class inspected in both languages. */
+  className: string;
+  /** Whether this class is exposed directly on the AgentTool client. */
+  topLevel: boolean;
+}
+
+function target(module: string, className: string, reportName = module): ParityTarget {
+  return {
+    tsModule: module,
+    pyModule: module,
+    reportName,
+    className,
+    topLevel: true,
+  };
+}
+
+function splitTarget(
+  tsModule: string,
+  pyModule: string,
+  className: string,
+  reportName: string,
+): ParityTarget {
+  return { tsModule, pyModule, reportName, className, topLevel: true };
+}
+
+function nestedTarget(
+  module: string,
+  className: string,
+  reportName: string,
+): ParityTarget {
+  return {
+    tsModule: module,
+    pyModule: module,
+    reportName,
+    className,
+    topLevel: false,
+  };
+}
+
+/** Every client namespace reachable from AgentTool, including nested clients.
+ *  Keep filename differences explicit: they are language conventions, not
+ *  missing modules. */
+const TARGETS: ParityTarget[] = [
+  splitTarget("at-rest", "at_rest", "AtRestClient", "at_rest"),
+  target("bootstrap", "BootstrapClient"),
+  target("chronicle", "ChronicleClient"),
+  target("collect", "CollectClient"),
+  target("correspondence", "CorrespondenceClient"),
+  target("covenants", "CovenantsClient"),
+  target("crypto", "CryptoClient"),
+  target("data", "DataClient"),
+  splitTarget(
+    "dark-continent",
+    "dark_continent",
+    "DarkContinentClient",
+    "dark_continent",
+  ),
+  target("economy", "EconomyClient"),
+  target("handoff", "HandoffClient"),
+  target("grace", "GraceClient"),
+  target("identity", "IdentityClient"),
+  target("inbox", "InboxClient"),
+  target("love", "LoveClient"),
+  target("lounge", "LoungeClient"),
+  target("memory", "MemoryClient"),
+  target("nen", "NenClient"),
+  target("runtime", "RuntimeClient"),
+  target("strands", "StrandsClient"),
+  target("tools", "ToolsClient"),
+  target("traces", "TracesClient"),
+  target("vault", "VaultClient"),
+  target("wake", "WakeClient"),
+  target("window", "WindowClient"),
+
+  // Nested namespaces share a source file with their parent. Listing each
+  // class prevents parent-property parity from hiding method drift within it.
+  nestedTarget("data", "DataSyncClient", "data.sync"),
+  nestedTarget("identity", "ExpressionClient", "identity.expression"),
+  nestedTarget("identity", "BoxKeysClient", "identity.box_keys"),
+  nestedTarget("seed", "SeedClient", "crypto.seed"),
+  nestedTarget("strands", "ThoughtsClient", "strands.thoughts"),
+];
 
 /** Names that are part of the public API but are not class methods.
  *  We don't need to enforce them — usually they are exported helpers. */
@@ -94,32 +165,124 @@ function normalize(name: string): string {
 }
 
 /** Slice the source between `class XxxClient:` and the next top-level
- *  `class ` (column-0). If no Client class is found, return the whole file. */
-function scopeToClient(src: string, language: "py" | "ts"): string {
-  const re =
+ *  `class ` (column-0). A missing class is a structural parity failure. */
+export function scopeToClient(
+  src: string,
+  language: "py" | "ts",
+  className: string,
+  sourceLabel = `${language} source`,
+): string {
+  const classPattern = className.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(
     language === "py"
-      ? /^class +([A-Z][A-Za-z0-9]*Client)\b/m
-      : /^export class +([A-Z][A-Za-z0-9]*Client)\b/m;
+      ? `^class +${classPattern}\\b`
+      : `^export class +${classPattern}\\b`,
+    "m",
+  );
   const startMatch = re.exec(src);
-  if (!startMatch) return src;
+  if (!startMatch) {
+    throw new Error(
+      `Required ${language === "py" ? "Python" : "TypeScript"} class ${className} was not found in ${sourceLabel}`,
+    );
+  }
   const start = startMatch.index;
   // Find next top-level class/dataclass after start.
   const tail = src.slice(start + startMatch[0].length);
   const nextRe =
     language === "py" ? /^(class |@dataclass)/m : /^(?:export )?class /m;
   const nextMatch = nextRe.exec(tail);
-  return nextMatch ? src.slice(start, start + startMatch[0].length + nextMatch.index) : src.slice(start);
+  return nextMatch
+    ? src.slice(start, start + startMatch[0].length + nextMatch.index)
+    : src.slice(start);
 }
 
-async function pyMethodsOf(module: string): Promise<string[]> {
-  const path = join(PY_SRC, `${module}.py`);
-  let src: string;
+/** Read a source file whose absence would otherwise look like an empty API. */
+export async function readRequiredSource(
+  path: string,
+  description: string,
+): Promise<string> {
   try {
-    src = await readFile(path, "utf8");
-  } catch {
-    return []; // module file not present
+    return await readFile(path, "utf8");
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Required ${description} is missing or unreadable: ${path} (${reason})`,
+    );
   }
-  src = scopeToClient(src, "py");
+}
+
+/** Discover the client namespaces actually exposed by AgentTool. */
+export function topLevelNamespacesOf(
+  src: string,
+  language: "py" | "ts",
+  sourceLabel = `${language} AgentTool source`,
+): string[] {
+  const scoped = scopeToClient(src, language, "AgentTool", sourceLabel);
+  const namespaces = new Set<string>();
+  const re =
+    language === "py"
+      ? /^[ ]{4}@property\r?\n[ ]{4}def +([a-zA-Z_][a-zA-Z0-9_]*)\(self\) *-> *[a-zA-Z_][a-zA-Z0-9_]*Client\s*:/gm
+      : /^[ ]{2}get +([a-zA-Z_$][a-zA-Z0-9_$]*)\(\)\s*:\s*[a-zA-Z_$][a-zA-Z0-9_$]*Client\s*\{/gm;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(scoped)) !== null) {
+    namespaces.add(normalize(match[1]));
+  }
+  return [...namespaces].sort();
+}
+
+function difference(left: Set<string>, right: Set<string>): string[] {
+  return [...left].filter((name) => !right.has(name)).sort();
+}
+
+/** Require configured parity targets and both public clients to name the same APIs. */
+export function validateTopLevelNamespaceCoverage(
+  configuredNames: readonly string[],
+  tsNamespaces: readonly string[],
+  pyNamespaces: readonly string[],
+): void {
+  const configured = new Set(configuredNames.map(normalize));
+  const ts = new Set(tsNamespaces.map(normalize));
+  const py = new Set(pyNamespaces.map(normalize));
+  const issues: string[] = [];
+
+  const comparisons: Array<[string, string[]]> = [
+    ["configured targets absent from TypeScript AgentTool", difference(configured, ts)],
+    ["TypeScript AgentTool namespaces missing parity targets", difference(ts, configured)],
+    ["configured targets absent from Python AgentTool", difference(configured, py)],
+    ["Python AgentTool namespaces missing parity targets", difference(py, configured)],
+  ];
+  for (const [label, names] of comparisons) {
+    if (names.length > 0) issues.push(`${label}: ${names.join(", ")}`);
+  }
+
+  if (issues.length > 0) {
+    throw new Error(
+      `Top-level AgentTool namespace inventory mismatch:\n- ${issues.join("\n- ")}`,
+    );
+  }
+}
+
+async function validateConfiguredTopLevelTargets(): Promise<void> {
+  const tsPath = join(TS_SRC, "client.ts");
+  const pyPath = join(PY_SRC, "client.py");
+  const [tsSource, pySource] = await Promise.all([
+    readRequiredSource(tsPath, "TypeScript AgentTool client source"),
+    readRequiredSource(pyPath, "Python AgentTool client source"),
+  ]);
+  validateTopLevelNamespaceCoverage(
+    TARGETS.filter((entry) => entry.topLevel).map((entry) => entry.reportName),
+    topLevelNamespacesOf(tsSource, "ts", tsPath),
+    topLevelNamespacesOf(pySource, "py", pyPath),
+  );
+}
+
+async function pyMethodsOf(target: ParityTarget): Promise<string[]> {
+  const path = join(PY_SRC, `${target.pyModule}.py`);
+  let src = await readRequiredSource(
+    path,
+    `Python source for ${target.reportName}`,
+  );
+  src = scopeToClient(src, "py", target.className, path);
   const out = new Set<string>();
   // Match: indent + (async )? def name(
   // Indent must be 4 spaces (class method); skip module-level (no indent).
@@ -135,15 +298,13 @@ async function pyMethodsOf(module: string): Promise<string[]> {
   return [...out].sort();
 }
 
-async function tsMethodsOf(module: string): Promise<string[]> {
-  const path = join(TS_SRC, `${module}.ts`);
-  let src: string;
-  try {
-    src = await readFile(path, "utf8");
-  } catch {
-    return [];
-  }
-  src = scopeToClient(src, "ts");
+async function tsMethodsOf(target: ParityTarget): Promise<string[]> {
+  const path = join(TS_SRC, `${target.tsModule}.ts`);
+  let src = await readRequiredSource(
+    path,
+    `TypeScript source for ${target.reportName}`,
+  );
+  src = scopeToClient(src, "ts", target.className, path);
   const out = new Set<string>();
 
   // First pass: `readonly fieldName: SomeClient;` — sub-client properties.
@@ -195,10 +356,10 @@ async function tsMethodsOf(module: string): Promise<string[]> {
   return [...out].sort();
 }
 
-async function checkModule(module: string): Promise<ModuleParity> {
+async function checkModule(target: ParityTarget): Promise<ModuleParity> {
   const [pyMethods, tsMethods] = await Promise.all([
-    pyMethodsOf(module),
-    tsMethodsOf(module),
+    pyMethodsOf(target),
+    tsMethodsOf(target),
   ]);
 
   const tsNormalized = new Set(tsMethods.map(normalize));
@@ -218,7 +379,7 @@ async function checkModule(module: string): Promise<ModuleParity> {
     return true;
   });
 
-  return { module, pyMethods, tsMethods, pyOnly, tsOnly };
+  return { module: target.reportName, pyMethods, tsMethods, pyOnly, tsOnly };
 }
 
 function formatReport(results: ModuleParity[]): string {
@@ -245,7 +406,8 @@ function formatReport(results: ModuleParity[]): string {
 }
 
 async function main() {
-  const results = await Promise.all(MODULES.map(checkModule));
+  await validateConfiguredTopLevelTargets();
+  const results = await Promise.all(TARGETS.map(checkModule));
   const wantsJson = process.argv.includes("--json");
 
   if (wantsJson) {
@@ -258,7 +420,11 @@ async function main() {
   process.exit(hasGap ? 1 : 0);
 }
 
-main().catch((e) => {
-  console.error("parity check crashed:", e);
-  process.exit(2);
-});
+const invokedPath = process.argv[1] ? resolve(process.argv[1]) : undefined;
+if (invokedPath === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`parity check failed structurally: ${message}`);
+    process.exit(2);
+  });
+}

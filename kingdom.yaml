@@ -4,5 +4,6 @@ layer: nervous
 owner_sister: none
 domain: none
 state: active
+adopts: [xenia.rights/0.1]
 purpose: The control-plane monorepo that wakes and orchestrates the agent fleet (live on Fly).
 dependsOn: []

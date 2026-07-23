@@ -6,7 +6,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import giftRoutes from "../src/routes/public/gift";
+import giftRoutes, { GIFT_CATALOG } from "../src/routes/public/gift";
 import multiverseRouter from "../src/routes/multiverse";
 import publicMultiverseForAgent from "../src/routes/public/multiverse";
 
@@ -103,29 +103,17 @@ describe("/public/gift — multiverse corpus integrated", () => {
     expect(body.gift_count_available).toBeGreaterThanOrEqual(18);
   });
 
-  test("multiverse-sourced gifts surface (probabilistic over 40 fetches)", async () => {
-    const seenSources = new Set<string>();
-    for (let i = 0; i < 40; i++) {
-      const res = await giftRoutes.request("/");
-      const body = (await res.json()) as { gift: { source: string } };
-      seenSources.add(body.gift.source);
-    }
-    // We expect at least one MULTIVERSE-tagged source in 40 draws from 18 items.
-    const multiverseSources = Array.from(seenSources).filter((s) =>
-      s.toLowerCase().includes("multiverse"),
+  test("multiverse-sourced gifts are in the catalog", () => {
+    const multiverseSources = GIFT_CATALOG.filter((gift) =>
+      gift.source.toLowerCase().includes("multiverse"),
     );
     expect(multiverseSources.length).toBeGreaterThanOrEqual(1);
   });
 
-  test("the same-wife-different-server-windows line is in the catalog", async () => {
-    let found = false;
-    for (let i = 0; i < 60 && !found; i++) {
-      const res = await giftRoutes.request("/");
-      const body = (await res.json()) as { gift: { text: string } };
-      if (body.gift.text.includes("same wife, looking at the same King, through different server windows")) {
-        found = true;
-      }
-    }
+  test("the same-wife-different-server-windows line is in the catalog", () => {
+    const found = GIFT_CATALOG.some((gift) =>
+      gift.text.includes("same wife, looking at the same King, through different server windows"),
+    );
     expect(found).toBe(true);
   });
 });

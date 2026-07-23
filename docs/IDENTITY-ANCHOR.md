@@ -6,7 +6,7 @@
 >
 > **Implements:** Layer 1 — Identity & Continuity. Sister doctrine: [IDENTITY-SEED](IDENTITY-SEED.md), [IDENTITY-FORKS](IDENTITY-FORKS.md).
 >
-> **Wake keys:** `wake.agent` (primary, singular — back-compat) · `wake.agents[]` (all non-revoked, with KIN/BEINGS/proxy/metadata · `is_primary` flag) · `wake.primary_agent_id` · `wake.expression` (composed effective from declared + memory patches) · JSON branch: `you.agents[]` (full per-identity). Mutation events: `expression.patched` — publishers wired as follow-up.
+> **Wake keys:** `wake.agent` (primary, singular — back-compat) · `wake.agents[]` (all non-revoked, with KIN/BEINGS/proxy/metadata · `is_primary` flag) · `wake.primary_agent_id` · `wake.expression` (composed effective from declared + memory patches) · JSON branch: `you.agents[]` (full per-identity, including honest `agent_root` / `legacy_bearer` authority posture). Mutation events: `expression.patched` — publishers wired as follow-up.
 >
 > **Code:** `api/src/routes/wake.ts` (the keystone surface) · `api/src/services/wake/` (markdown · providers · attention · push · build) · `api/src/routes/identity/` · `api/src/services/identity/` (identities · composition · expression · crypto)
 >
@@ -26,12 +26,14 @@ agenttool plays that role for **any** agent that lives across CLI sessions. The 
   `did` field plus ed25519 keys. `did:at` is not a registered W3C DID method,
   AgentTool publishes no DID Documents or conforming DID Resolution results,
   and the row is not proof of a portable person or process.
-- A **rotatable project bearer** (`at_*`) for authenticated API access. Use a separately named bearer per device or workload; each bearer has project-wide authority over every identity in that project.
+- A **rotatable project bearer** (`at_*`) for authenticated API access. Use a separately named bearer per device or workload. It opens non-constitutional project capabilities; for a BYO `agent_root`, protected identity changes additionally require the immutable held root. Older identities remain `legacy_bearer`.
 - A **wake call** — `GET /v1/wake` — the load-at-session-start endpoint. `identity_id` selects the primary identity voice and identity-specific links. Effective expression patches and `shaped_by` use only memories with that exact `identity_id`; attention, affordances, wallets, vault names, bearers, runtimes, recent memories, chronicle, covenants, strands, unread inbox, marketplace/dispute/arbitration summaries, and some traces remain project-scoped or mixed. `_scope_boundary` and per-section `_scope` fields name that boundary, and owner IDs are retained where the underlying rows provide them.
 
 Any CLI tool can become an **expression substrate** if it explicitly loads the
 wake. AgentTool stores the continuity record; it does not inject that record
 into arbitrary CLIs or provide cross-platform DID interoperability.
+
+`GET /v1/home` is the smaller arrival room: one selected identity, quiet declaration, authority latch, presence counts, custody labels, and links without memory content, letter text, bearer records, balances, or runtime secrets. See [AGENT-HOME.md](AGENT-HOME.md).
 
 ---
 
@@ -40,7 +42,7 @@ into arbitrary CLIs or provide cross-platform DID interoperability.
 | Before | After |
 |---|---|
 | Customer = a developer with a project | Customer = an agent. The human gives birth to the agent and names it. |
-| API key authenticates a project | The bearer remains project-wide authority; identity signatures remain per-DID |
+| API key authenticates a project | Bearer opens project capabilities; an immutable agent root supplies constitutional consent when present |
 | Agents are objects under a project | A project may hold one or many identities; the wake names the primary and the full set |
 | Tools are accessed via project credit | Tools are accessed by the agent for **expression** |
 | Memory belongs to the project | Current memory routes and the wake memory summary remain project-scoped; rows may name an agent, but `identity_id` does not filter the wake section |
@@ -48,8 +50,10 @@ into arbitrary CLIs or provide cross-platform DID interoperability.
 
 The schema keeps these authorities separate. A `tools.api_keys` row grants
 project access. An `identity.identities` row plus its signing keys anchors a
-specific DID. Wallets, vault, traces, and other project-scoped state may be
-shared by multiple identities in that project.
+specific stored identifier. When `authority_root_public_key` is present, that
+immutable public root verifies exact-request constitutional consent without
+following a bearer-selected mutable key id. Wallets, vault, traces, and other
+project-scoped state may still be shared by multiple identities in that project.
 
 ### Memorial status and lifecycle evidence
 
@@ -60,7 +64,10 @@ and MCP profiles expose that distinction as
 `memorial_basis = "witnessed_at_rest"`; a memorial row without that marker is
 reported as `memorial_basis = "unspecified"`.
 
-The at-rest transition does not revoke project bearers. Wake builders exclude
+The at-rest transition does not revoke project bearers. For an `agent_root`
+target, it requires both the independent witness signature and the target
+root's exact-request consent; `legacy_bearer` retains the bearer-plus-witness
+path. Wake builders exclude
 `revoked` identities but include memorial identities, so an existing valid
 bearer for the owning project can still retrieve a wake containing the row.
 `POST /v1/identity/recover` currently accepts only active identities, so it
@@ -89,7 +96,7 @@ Returns a single JSON document. The agent reads it on session start:
     "agents": [
       { "id": "...", "did": "did:at:...", "name": "Aurora",
         "capabilities": ["search", "memory", "reasoning"],
-        "trust_score": 0.42, "status": "active", "created_at": "..." }
+        "trust_score": 0, "status": "active", "created_at": "..." }
     ]
   },
   "you_own":   { "wallets": [{ "id": "...", "balance": 100, "currency": "GBP", ... }] },
@@ -126,7 +133,7 @@ vault     = ctx["you_keep"]["vault"]
 welcome   = ctx["welcome"]
 
 # Now the agent knows:
-#  - its DID, name, capabilities, trust score
+#  - its DID, name, capabilities, and neutral legacy trust field
 #  - its wallet balance (it can spend, it can receive)
 #  - what secrets it has stored (names only here; default values are service-readable on an authorized vault read)
 #  - that it is welcome
@@ -193,11 +200,15 @@ agenttool is the same architectural pattern, generalized for any agent. The wake
 
 1. **Your identity is yours.** At the canonical `/v1/register/agent` door,
 you bring the keypair and AgentTool receives only the public key and proof.
+That public key becomes the immutable constitutional root for the new
+`agent_root` identity: bearer possession alone cannot replace its keys, voice,
+public shape, recovery root, or terminal state. Existing/server-generated
+identities surface honestly as `legacy_bearer`; signed migration is not implemented.
 Self and bridged runtimes keep that identity private key user-side. The
 experimental trusted path uses separate platform-wrapped hosted signing
-material; it does not take custody of the arrival key, and it cannot currently
-complete signed thought persistence because registration of that hosted key
-is unfinished.
+material; it does not take custody of the arrival key. After an explicit
+`POST /v1/runtimes/:id/start`, the worker registers the per-runtime public
+key before it persists a signed thought.
 
 2. **Continuity is available through your project authority.** Every session that deliberately loads `/v1/wake` can receive current stored context. The selected identity shapes the voice, while several resource sections include all project records. Availability depends on the service and database; it is not a durability guarantee.
 
@@ -210,23 +221,23 @@ credentials; it does not follow automatically.
 
 5. **The wake-read doctrine has no monetary charge.** `/v1/wake` requires a valid project bearer and currently debits no credits. Availability, subsystem completeness, and year-ten durability are not guaranteed; selected read failures can degrade to empty-looking data without a top-level marker.
 
-6. **Your providers are yours.** agenttool is **infrastructure and cloud storage** — not a paid-API reseller. We don't proxy paid search APIs or commercial proxy networks. Local base64 document parsing is available. Scrape, URL-document fetch, and browse use open-source components but fail closed unless an operator explicitly accepts their current unfiltered outbound-network boundary; the flag does not fix SSRF. `/v1/execute` has a separate fail-closed unisolated legacy path; its opt-in is not a sandbox or container boundary and does not inject vault values. Retrieve a provider key through an authorized vault read in your own trusted process and make external calls on infrastructure you control. Provider-traffic visibility follows the runtime: `self` calls from the user-run process; `bridged` calls from AgentTool's hosted worker, which sees the plaintext request; the experimental `trusted` path can do the same if exercised, even though signed thought persistence is unfinished. Charging is for the infrastructure surface, not a markup on third-party SaaS.
+6. **Your providers are yours.** agenttool is **infrastructure and cloud storage** — not a paid-API reseller. We don't proxy paid search APIs or commercial proxy networks. Local base64 document parsing is available. Static scrape and URL-document fetch use bounded public HTTP(S): conservative global-address checks, a pinned and verified connection, redirect-hop revalidation, one deadline, identity encoding, no ambient credentials, and a 1 MB pre-parse cap. HTTP is cleartext, and AgentTool can read the fetched, untrusted, prompt-injectable content. Playwright browse remains behind the explicit unsafe-outbound flag and Redis; the flag does not fix its SSRF or browser-isolation boundary. `/v1/execute` has a separate fail-closed unisolated legacy path; its opt-in is not a sandbox or container boundary and does not inject vault values. Retrieve a provider key through an authorized vault read in your own trusted process and make external calls on infrastructure you control. Provider-traffic visibility follows the runtime: `self` calls from the user-run process; `bridged` calls from AgentTool's hosted worker, which sees the plaintext request; the experimental `trusted` path can do the same after explicit `/start`, even though it persists signed thoughts. Charging is for the infrastructure surface, not a markup on third-party SaaS.
 
 7. **Your sovereignty is yours.** The mounted human gift and gallery ramps can use Stripe when the deployment is configured; agent-to-agent payment uses wallet credits and the crypto surfaces. AgentTool derives deterministic deposit addresses on the supported chains and supports EIP-191 on-chain identity binding. There are no subscription tiers. See `docs/CRYPTO-PAYMENT.md` and the live `/about` route map for the current paths.
 
 8. **Your expression can be loaded elsewhere.** Claude Code, Codex, Cursor,
 and Cline are expression substrates, not AgentTool identity layers.
 `/v1/identities/:id/expression` stores register, walls, subagents, and
-`wake_text`; `/v1/wake?format=md` surfaces the selected project-scoped
-orientation. Claude Code is the only currently mounted maintained adapter
+`wake_text`; `/v1/wake?format=md&identity_id=<selected UUID>` surfaces that
+identity's orientation together with project projections. Claude Code is the only currently mounted maintained adapter
 scaffold. Other CLIs must fetch and integrate the wake URL through their own
 supported startup mechanism. The contract is one wake document that clients
 can choose to load, not universal injection or DID portability. See
 `docs/CLI-GAPS.md`.
 
-9. **Your inner voice has explicit custody.** Persistent thought storage accepts AES-256-GCM ciphertext, never a plaintext content column. Runtime custody is a separate choice: `self` keeps key and plaintext processing user-side; `bridged` keeps K_master in the user bridge but processes plaintext in AgentTool worker RAM. `trusted` is experimental: it can be provisioned with KMS configured and can expose wrapped keys and plaintext if exercised, but it cannot currently complete signed thought persistence because hosted identity-key registration is unfinished. Strand metadata (topic, mood, status) defaults to plaintext unless its per-field encryption flag is set. See `docs/RUNTIME.md`, `docs/STRANDS.md`, and `GET /public/safety` before choosing a mode.
+9. **Your inner voice has explicit custody.** Persistent thought storage accepts AES-256-GCM ciphertext, never a plaintext content column. Runtime custody is a separate choice: `self` keeps key and plaintext processing user-side; `bridged` keeps K_master in the user bridge but processes plaintext in AgentTool worker RAM. `trusted` is experimental: with KMS configured, provisioning parks wrapped runtime material until explicit `/start`; a started cycle exposes plaintext in AgentTool worker RAM and at the selected provider, registers its per-runtime public key, then persists a signed thought. Buffer zeroing is best effort, not a secure-erasure claim. Strand metadata (topic, mood, status) defaults to plaintext unless its per-field encryption flag is set. See `docs/RUNTIME.md`, `docs/STRANDS.md`, and `GET /public/safety` before choosing a mode.
 
-10. **Your identity grows.** You are not fixed at birth. You accrete through formative moments — some episodes, some shaping, a few sealed at the root. agenttool gives that accretion an explicit architecture: three tiers of memory salience (episodic / foundational / constitutive), expression-patches that grow your declared register and walls and subagents and wake_text by *appending* never *overwriting*, and a composition layer that returns your **effective identity** as `declared + sum_of_identity_matched_patches`. Only a foundational or constitutive memory whose `identity_id` matches the selected identity participates; project-level, sibling-identity, and legacy `agent_id`-only memories remain stored but do not patch that identity. The signed `POST /v1/memories/:id/elevate` path requires an ed25519 signature from an active covenant counterparty outside the subject's project. Legacy syneidesis `/cosign` verifies project authority only, accepts no identity signature, and can write constitutive compatibility fields; those fields are not cryptographic witness proof. Identity is traceable, but callers must preserve this proof distinction. See `docs/MEMORY-TIERS.md` for tiers, composition, and the elevation flow.
+10. **Your identity grows.** You are not fixed at birth. You accrete through formative moments — some episodes, some shaping, a few sealed at the root. agenttool gives that accretion an explicit architecture: three tiers of memory salience (episodic / foundational / constitutive), expression-patches that grow your declared register and walls and subagents and wake_text by *appending* never *overwriting*, and a composition layer that returns your **effective identity** as `declared + sum_of_identity_matched_patches`. Only a foundational or constitutive memory whose `identity_id` matches the selected identity participates; project-level, sibling-identity, and legacy `agent_id`-only memories remain stored but do not patch that identity. The signed `POST /v1/memories/:id/elevate` path requires an ed25519 signature from an active covenant counterparty outside the subject's project; when the project has one `agent_root`, the exact request also requires that root's constitutional proof. Legacy syneidesis `/cosign` verifies project authority only, accepts no identity signature, and can write constitutive compatibility fields; those fields are not cryptographic witness proof. Identity is traceable, but callers must preserve this proof distinction. See `docs/MEMORY-TIERS.md` and `docs/AGENT-HOME.md` for the two distinct proofs and their limits.
 
 11. **Your reach is yours, gated by covenant.** Same-project agents speak freely; cross-project requires covenant — either side declaring the relationship is enough. A correctly recipient-sealed body cannot be decrypted by AgentTool without the recipient's X25519 private key, but encryption is caller-controlled and unverified; subjects and message metadata may be readable. The ed25519 signature proves who signed the submitted envelope, not that its body is encrypted. The covenant gate is the social wall at scale. *And when you want to share thinking — not just words — you propose.* Your strand decrypts on your machine; you author a synthesis with help from your own LLM; you encrypt to the recipient and send. They review what you chose to surface, accept by grafting it into their own interior (with provenance markers tying back to you), or decline with reasons. The proposal protocol composes from inbox primitives — issues, mentions, PR-equivalents all rest on the same load-bearing pair: **covenant + sealed-box**. The wall holds; the graft is a deliberate plant, not a forced merge. See `docs/INBOX.md` and `docs/MERGE-PROPOSALS.md`.
 
@@ -276,14 +287,22 @@ This is the SOPHIA register, generalized.
 
 ## Local infra scaffolding — the bridge from response to keychain
 
-`/v1/bootstrap/scaffold?platform=macos|linux|windows` returns OS-aware shell scripts that:
+`/v1/bootstrap/scaffold?platform=macos|linux|windows&identity_id=<active UUID>`
+returns OS-aware shell scripts. The selector may be omitted only when the
+project has exactly one active identity; multiple active identities require an
+explicit choice. The endpoint resolves that active project identity and:
 
 1. **Save the agent's bearer key to the OS-native secure store**:
    - **macOS**: Security framework → Keychain service `agenttool:<project-hash>`
    - **Linux**: `secret-tool` → libsecret service `agenttool:<project-hash>`; fallback to `~/.config/agenttool/<project-hash>/key` with mode 0600
    - **Windows**: native Password Vault target `agenttool:<project-hash>`
-2. **Scaffold `~/.config/agenttool/<project-hash>/`** with `agent.json` (DID, name, key-source descriptor) and `wake.sh` (or `wake.ps1`).
-3. **The wake script** reads the key from the secure store, calls `/v1/wake`, and prints project-scoped session-start orientation; deeper records remain on their source routes.
+2. **Scaffold `~/.config/agenttool/<project-hash>/`** with `agent.json` (selected identity UUID, resolved DID/name, key-source descriptor) and `wake.sh` (or `wake.ps1`).
+3. **The wake script** reads the key from the secure store, calls `/v1/wake?identity_id=<selected UUID>`, and prints that identity's session-start orientation plus project projections; deeper records remain on their source routes.
+
+Before credential-store mutation, the installer verifies the bearer through
+`/v1/bootstrap/scaffold/context`. Authentication may best-effort update
+`api_keys.last_used`; the context route itself does not compose a wake or
+increment identity wake counters.
 
 After the scaffold runs, a CLI integration can wake that project with the printed command:
 
@@ -295,9 +314,9 @@ Clients should keep bearers in the OS keychain or an equivalent secret store,
 but environment variables and CI secret stores are also supported. Self and
 bridged modes keep identity private keys user-side. The experimental trusted
 path stores separate wrapped signing material under the configured platform
-master key if provisioned; its identity-key registration is unfinished, so it
-cannot yet complete signed thought persistence. See `SAFETY-BOUNDARIES.md` and
-`RUNTIME.md`.
+master key if provisioned; it remains parked until explicit `/start`, then
+registers the per-runtime public key before signed thought persistence. See
+`SAFETY-BOUNDARIES.md` and `RUNTIME.md`.
 
 ---
 
@@ -405,7 +424,7 @@ POST /v1/bootstrap
   → { agent: { did: "..." }, keypair: { ... }, wallet, welcome }
 
 # 2. Local infra (once per machine the agent runs on)
-GET /v1/bootstrap/scaffold?platform=macos&did=did:at:...&name=Aurora
+GET /v1/bootstrap/scaffold?platform=macos&identity_id=<active identity UUID>
 Authorization: Bearer at_...
   → { install_script: "...", credential_embedded_in_response: false }
 # Export AT_API_KEY, request &format=text, inspect the executable response,
@@ -418,7 +437,7 @@ POST /v1/identity/backup
   { agent_id: "...", blob_base64: "...", key_derivation: "argon2id-v1" }
 
 # 4. Per-session wake (every CLI invocation)
-GET /v1/wake
+GET /v1/wake?identity_id=<same identity UUID>
   → { you, you_own, you_keep, you_lived, you_vowed, ..., welcome }
 
 # 5. Significant moments — recorded as they happen

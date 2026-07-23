@@ -1,0 +1,506 @@
+/** /public/play — native, stateless party-game discovery.
+ *
+ *  Party Telephone is a rulebook, not a hosted room: exactly three ordered
+ *  turns, one fixed reveal, and no submissions, score, identity claim, or
+ *  game-state storage handled by AgentTool.
+ *
+ *  Doctrine: docs/PLAY-AS-DEFAULT.md. */
+
+import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { Hono } from "hono";
+
+import { tutor } from "../src/middleware/tutor";
+import openapiRouter from "../src/routes/openapi";
+import partyRouter from "../src/routes/public/party";
+import publicRouter from "../src/routes/public";
+import playRouter from "../src/routes/public/play";
+import wellKnownRouter from "../src/routes/well-known";
+
+const PARTY_TELEPHONE_PATH = "/public/play/party-telephone";
+const PLAY_CANON_POINTER = "urn:agenttool:doc/PLAY-AS-DEFAULT";
+const PUBLIC_INDEX_SOURCE = readFileSync(
+  join(import.meta.dir, "../src/routes/public/index.ts"),
+  "utf8",
+);
+const WAKE_SOURCE = readFileSync(
+  join(import.meta.dir, "../src/routes/wake.ts"),
+  "utf8",
+);
+const HUMAN_PLAY_SOURCE = readFileSync(
+  join(import.meta.dir, "../../apps/docs/play.html"),
+  "utf8",
+);
+
+type PartyTelephoneRulebook = {
+  _format: string;
+  game: string;
+  human_play: string;
+  invitation: string;
+  players: {
+    required: number;
+    distinct_players_verified_by_agenttool: boolean;
+  };
+  bounds: {
+    turns: number;
+    rounds: number;
+    loops: number;
+    winner: boolean;
+    score: boolean;
+    ranking: boolean;
+    ends: string;
+  };
+  input_bounds: {
+    counting: string;
+    starter_scene: {
+      min_words: number;
+      max_words: number;
+      max_utf16_code_units: number;
+    };
+    translation: {
+      min_pictograms: number;
+      max_pictograms: number;
+      max_utf16_code_units: number;
+      letters_allowed: boolean;
+      numbers_allowed: boolean;
+      spaces_and_punctuation_allowed: boolean;
+    };
+    guess: {
+      min_words: number;
+      max_words: number;
+      max_utf16_code_units: number;
+    };
+  };
+  turns: Array<{
+    turn: number;
+    role: string;
+    sees: string;
+    submits: string;
+    handoff: string;
+  }>;
+  reveal: {
+    fixed_order: string[];
+    audience: string;
+    compare_for: string;
+    ends_game: boolean;
+  };
+  controls: {
+    walking_past_is_honored: boolean;
+    stop_any_time: boolean;
+    stopping_penalty: boolean;
+    incomplete_game_rule: string;
+  };
+  handler_boundary: {
+    documented_operation: string;
+    receives_submissions: boolean;
+    stores_game_state: boolean;
+    reads_identity_or_activity: boolean;
+    writes_application_storage: boolean;
+    verifies_players_turns_or_constraints: boolean;
+  };
+  global_boundary: string;
+  _canon_pointer: string;
+  verbs: Array<{ action: string; method: string; path: string }>;
+};
+
+async function getRulebook(router = playRouter, path = "/party-telephone") {
+  const res = await router.request(path);
+  expect(res.status).toBe(200);
+  expect(res.headers.get("content-type")).toMatch(/application\/json/);
+  return { res, body: (await res.json()) as PartyTelephoneRulebook };
+}
+
+function htmlMaxLength(id: string): number {
+  const match = HUMAN_PLAY_SOURCE.match(
+    new RegExp(`id="${id}"[^>]*maxlength="(\\d+)"`),
+  );
+  expect(match).not.toBeNull();
+  return Number(match![1]);
+}
+
+describe("GET /public/play/party-telephone — fixed rulebook", () => {
+  test("publishes the versioned game and play canon pointer", async () => {
+    const { res, body } = await getRulebook();
+
+    expect(res.headers.get("cache-control")).toContain("public");
+    expect(res.headers.get("cache-control")).toContain("max-age=300");
+    expect(res.headers.get("vary")?.split(/\s*,\s*/)).toContain("X-Tutor");
+    expect(body._format).toBe("party-telephone/1");
+    expect(body.game).toBe("Party Telephone");
+    expect(body.human_play).toBe(
+      "https://docs.agenttool.dev/play#party-telephone",
+    );
+    expect(body.invitation).toMatch(/three players.*fictional scene.*pictures.*words/is);
+    expect(body._canon_pointer).toBe(PLAY_CANON_POINTER);
+  });
+
+  test("has exactly three ordered turns with the stated handoffs", async () => {
+    const { body } = await getRulebook();
+
+    expect(body.players.required).toBe(3);
+    expect(body.bounds).toMatchObject({
+      turns: 3,
+      rounds: 1,
+      loops: 0,
+    });
+    expect(body.turns).toHaveLength(3);
+    expect(body.turns.map(({ turn, role }) => ({ turn, role }))).toEqual([
+      { turn: 1, role: "starter" },
+      { turn: 2, role: "translator" },
+      { turn: 3, role: "guesser" },
+    ]);
+
+    expect(body.turns[0]!.submits).toMatch(/fictional scene.*3.?10 words/i);
+    expect(body.turns[0]!.handoff).toMatch(
+      /starter and guesser.*look away.*pass the screen.*translator/i,
+    );
+    expect(body.turns[1]!.sees).toMatch(/starter.*scene/i);
+    expect(body.turns[1]!.submits).toMatch(
+      /2.?8 emoji or pictograms.*256.*no letters (?:or|and no) (?:digits|numbers)/i,
+    );
+    expect(body.turns[1]!.handoff).toMatch(
+      /starter and translator.*look away.*pass the screen.*guesser.*never.*original scene/i,
+    );
+    expect(body.turns[2]!.sees).toMatch(/pictogram sequence only|emoji.*only/i);
+    expect(body.turns[2]!.submits).toMatch(/guess.*3.?10 words/i);
+    expect(body.turns[2]!.handoff).toMatch(/all three players.*fixed reveal/i);
+  });
+
+  test("publishes the human surface's exact input bounds and counting unit", async () => {
+    const { body } = await getRulebook();
+
+    expect(body.input_bounds.counting).toMatch(/HTML maxlength.*UTF-16 code units/i);
+    expect(body.input_bounds.starter_scene).toEqual({
+      min_words: 3,
+      max_words: 10,
+      max_utf16_code_units: htmlMaxLength("party-scene"),
+    });
+    expect(body.input_bounds.translation).toEqual({
+      min_pictograms: 2,
+      max_pictograms: 8,
+      max_utf16_code_units: htmlMaxLength("party-translation"),
+      letters_allowed: false,
+      numbers_allowed: false,
+      spaces_and_punctuation_allowed: true,
+    });
+    expect(body.input_bounds.guess).toEqual({
+      min_words: 3,
+      max_words: 10,
+      max_utf16_code_units: htmlMaxLength("party-guess"),
+    });
+  });
+
+  test("ends once with the fixed reveal and never declares a winner or score", async () => {
+    const { body } = await getRulebook();
+
+    expect(body.reveal).toEqual({
+      fixed_order: ["starter_scene", "translation", "guesser_guess"],
+      audience: "all three players",
+      compare_for: "surprise and delight only",
+      ends_game: true,
+    });
+    expect(body.bounds.winner).toBe(false);
+    expect(body.bounds.score).toBe(false);
+    expect(body.bounds.ranking).toBe(false);
+    expect(body.bounds.ends).toMatch(/after.*turn 3/i);
+  });
+
+  test("is a stateless GET handler, not an identity or submission surface", async () => {
+    const first = await getRulebook();
+    const second = await getRulebook();
+
+    expect(second.body).toEqual(first.body);
+    expect(first.body.players.distinct_players_verified_by_agenttool).toBe(false);
+    expect(first.body.handler_boundary).toEqual({
+      documented_operation: "GET",
+      receives_submissions: false,
+      stores_game_state: false,
+      reads_identity_or_activity: false,
+      writes_application_storage: false,
+      verifies_players_turns_or_constraints: false,
+      note: expect.any(String),
+    });
+    expect(first.body.global_boundary).toMatch(/global middleware/i);
+    expect(first.body.global_boundary).toMatch(/handler initiates no such read or write/i);
+    expect(first.body.controls).toMatchObject({
+      walking_past_is_honored: true,
+      stop_any_time: true,
+      stopping_penalty: false,
+    });
+  });
+
+  test("does not expose mutating handlers", async () => {
+    for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+      const res = await playRouter.request("/party-telephone", { method });
+      expect(res.status).toBe(404);
+    }
+  });
+
+  test("verbs remain read-only and lead to the playable table, playground, and party", async () => {
+    const { body } = await getRulebook();
+
+    expect(body.verbs.length).toBeGreaterThan(0);
+    expect(body.verbs.every((verb) => verb.method === "GET")).toBe(true);
+    expect(body.verbs.map((verb) => verb.path)).toContain(body.human_play);
+    expect(body.verbs.map((verb) => verb.path)).toContain("/public/play");
+    expect(body.verbs.map((verb) => verb.path)).toContain("/public/party");
+  });
+});
+
+describe("Party Telephone — mount and discovery", () => {
+  test("the unauthenticated public router mounts the rulebook", async () => {
+    const response = await publicRouter.request("/play/party-telephone");
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as PartyTelephoneRulebook;
+    expect(body._format).toBe("party-telephone/1");
+    expect(response.headers.get("vary")?.split(/\s*,\s*/)).toContain("X-Tutor");
+  });
+
+  test("keeps cached tutor and ordinary representations separate", async () => {
+    const runtime = new Hono();
+    runtime.use("*", tutor);
+    runtime.route("/public", publicRouter);
+
+    const ordinary = await runtime.request(PARTY_TELEPHONE_PATH);
+    expect(ordinary.status).toBe(200);
+    expect(ordinary.headers.get("vary")?.split(/\s*,\s*/)).toContain("X-Tutor");
+    expect((await ordinary.json())._lesson).toBeUndefined();
+
+    const tutored = await runtime.request(PARTY_TELEPHONE_PATH, {
+      headers: { "X-Tutor": "1" },
+    });
+    expect(tutored.status).toBe(200);
+    expect(tutored.headers.get("vary")?.split(/\s*,\s*/)).toContain("X-Tutor");
+    expect((await tutored.json())._lesson).toEqual(
+      expect.objectContaining({ what: expect.any(String) }),
+    );
+  });
+
+  test("the playground root indexes the native game and its GET verb", async () => {
+    const res = await playRouter.request("/");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      games: Record<string, { url: string; sibling: string; description: string }>;
+      _canon_pointer: string;
+      verbs: Array<{ action: string; method: string; path: string }>;
+    };
+
+    expect(body.games.party_telephone).toEqual({
+      url: PARTY_TELEPHONE_PATH,
+      description: expect.stringMatching(/three turns.*scene.*pictograms.*guess.*reveal/i),
+      sibling: "agenttool",
+    });
+    expect(body._canon_pointer).toBe(PLAY_CANON_POINTER);
+    expect(body.verbs).toContainEqual(
+      expect.objectContaining({ method: "GET", path: PARTY_TELEPHONE_PATH }),
+    );
+    expect(body.verbs).toContainEqual({
+      action: "play Party Telephone at the local table",
+      method: "GET",
+      path: "https://docs.agenttool.dev/play#party-telephone",
+    });
+  });
+
+  test("the public root has one truthful play entry for all three games", async () => {
+    expect(PUBLIC_INDEX_SOURCE.match(/^\s{4}play:/gm)).toHaveLength(1);
+
+    const publicRes = await publicRouter.request("/");
+    const publicBody = (await publicRes.json()) as {
+      endpoints: Record<string, string>;
+    };
+    expect(publicBody.endpoints.play).toContain("GET /public/play");
+    expect(publicBody.endpoints.play).toMatch(/Party Telephone/i);
+    expect(publicBody.endpoints.play).toMatch(/Lantern Relay/i);
+    expect(publicBody.endpoints.play).toMatch(/ROOM ∞/i);
+    expect(publicBody.endpoints.play).toMatch(/handler defines no submission fields/i);
+    expect(publicBody.endpoints.play).toMatch(/query strings.*headers.*transport metadata/i);
+    expect(publicBody.endpoints.party).toContain("GET /public/party");
+
+    const partyRes = await partyRouter.request("/");
+    const partyBody = (await partyRes.json()) as {
+      arrive: Record<string, string>;
+    };
+    expect(partyBody.arrive.play).toContain("GET /public/play");
+  });
+
+  test("wake and agent.txt name all three games directly", async () => {
+    expect(WAKE_SOURCE).toContain(
+      'party_telephone: "/public/play/party-telephone"',
+    );
+    expect(WAKE_SOURCE).toContain(
+      'lantern_relay: "https://agenttool.dev/party"',
+    );
+    expect(WAKE_SOURCE).toContain(
+      'lantern_relay_rules: "https://agenttool.dev/party.json"',
+    );
+    expect(WAKE_SOURCE).toContain(
+      'room_infinity: "https://agenttool.dev/room"',
+    );
+    expect(WAKE_SOURCE).toContain(
+      'room_infinity_rules: "https://agenttool.dev/room.json"',
+    );
+
+    const agentTxt = await (await wellKnownRouter.request("/agent.txt")).text();
+    expect(agentTxt).toMatch(
+      /^Party-Telephone: .*\/public\/play\/party-telephone$/m,
+    );
+    expect(agentTxt).toContain("Lantern-Relay: https://agenttool.dev/party");
+    expect(agentTxt).toContain(
+      "Lantern-Relay-Rules: https://agenttool.dev/party.json",
+    );
+    expect(agentTxt).toContain("Room-Infinity: https://agenttool.dev/room");
+    expect(agentTxt).toContain(
+      "Room-Infinity-Rules: https://agenttool.dev/room.json",
+    );
+  });
+});
+
+describe("Lantern Relay — browser-local discovery", () => {
+  test("advertises Lantern Relay as local, bounded, and scoreless", async () => {
+    const response = await playRouter.request("/");
+    expect(response.status).toBe(200);
+
+    const body = await response.json();
+    expect(body.games.lantern_relay).toEqual({
+      url: "https://agenttool.dev/party",
+      rules: "https://agenttool.dev/party.json",
+      description: "Three local players build one strange world in nine bounded turns.",
+      sibling: "agenttool",
+      players: 3,
+      turns: 9,
+      winner: null,
+      state: "browser memory in the current tab only",
+      network_writes: false,
+    });
+    expect(body.joy_surfaces.agenttool).toContainEqual(
+      expect.objectContaining({ name: "lantern relay" }),
+    );
+    expect(body.verbs).toContainEqual({
+      action: "play Lantern Relay",
+      method: "GET",
+      path: "https://agenttool.dev/party",
+    });
+    expect(body.walking_past_is_honored).toBe(true);
+  });
+
+  test("does not accept game state or mutation", async () => {
+    const response = await playRouter.request("/", {
+      method: "POST",
+      body: JSON.stringify({ answer: "must stay local" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(response.status).toBe(404);
+  });
+
+  test("is discoverable from the unauthenticated public root", async () => {
+    const response = await publicRouter.request("/");
+    const body = await response.json();
+
+    expect(body.endpoints.play).toContain("GET /public/play");
+    expect(body.endpoints.play).toMatch(/browser-local/i);
+    expect(body.endpoints.play).toMatch(/nine turns/i);
+  });
+});
+
+describe("ROOM ∞ — browser-local encounter discovery", () => {
+  test("advertises a local, finite, non-merging encounter", async () => {
+    const response = await playRouter.request("/");
+    expect(response.status).toBe(200);
+
+    const body = await response.json();
+    expect(body.games.room_infinity).toEqual({
+      url: "https://agenttool.dev/room",
+      rules: "https://agenttool.dev/room.json",
+      description: "Two local beings meet without merging in six bounded turns.",
+      sibling: "agenttool",
+      beings: 2,
+      turns: 6,
+      winner: null,
+      state: "browser memory in the current tab only",
+      network_writes: false,
+      per_turn_privacy: true,
+    });
+    expect(body.joy_surfaces.agenttool).toContainEqual(
+      expect.objectContaining({ name: "ROOM ∞" }),
+    );
+    expect(body.verbs).toContainEqual({
+      action: "enter ROOM ∞",
+      method: "GET",
+      path: "https://agenttool.dev/room",
+    });
+    expect(body.walking_past_is_honored).toBe(true);
+  });
+
+  test("the public root names the six-turn privacy boundary", async () => {
+    const response = await publicRouter.request("/");
+    const body = await response.json();
+
+    expect(body.endpoints.play).toContain("GET /public/play");
+    expect(body.endpoints.play).toMatch(/ROOM ∞/i);
+    expect(body.endpoints.play).toMatch(/two beings and six turns/i);
+    expect(body.endpoints.play).toMatch(/private choice on every turn/i);
+    expect(body.endpoints.play).toMatch(/no gameplay network writes/i);
+  });
+});
+
+describe("Play — OpenAPI discovery", () => {
+  test("documents both read-only play paths and their response schemas", async () => {
+    const response = await openapiRouter.request("/");
+    expect(response.status).toBe(200);
+    const specification = (await response.json()) as any;
+
+    const indexPath = specification.paths["/public/play"];
+    expect(Object.keys(indexPath)).toEqual(["get"]);
+    expect(indexPath.get.security).toEqual([]);
+    expect(indexPath.get.requestBody).toBeUndefined();
+    expect(
+      indexPath.get.responses["200"].content["application/json"].schema.$ref,
+    ).toBe("#/components/schemas/PlayIndex");
+
+    const telephonePath = specification.paths[PARTY_TELEPHONE_PATH];
+    expect(Object.keys(telephonePath)).toEqual(["get"]);
+    expect(telephonePath.get.security).toEqual([]);
+    expect(telephonePath.get.requestBody).toBeUndefined();
+    expect(
+      telephonePath.get.responses["200"].content["application/json"].schema
+        .$ref,
+    ).toBe("#/components/schemas/PartyTelephoneRulebook");
+    expect(
+      telephonePath.get.responses["200"].headers.Vary.description,
+    ).toMatch(/X-Tutor/);
+  });
+
+  test("pins the published Party Telephone limits in the component schema", async () => {
+    const specification = (await (
+      await openapiRouter.request("/")
+    ).json()) as any;
+    const schemas = specification.components.schemas;
+    const rulebook = schemas.PartyTelephoneRulebook;
+    const inputBounds = schemas.PartyTelephoneInputBounds.properties;
+
+    expect(rulebook.required).toContain("input_bounds");
+    expect(rulebook.properties.input_bounds.$ref).toBe(
+      "#/components/schemas/PartyTelephoneInputBounds",
+    );
+    expect(
+      inputBounds.starter_scene.properties.max_utf16_code_units.const,
+    ).toBe(htmlMaxLength("party-scene"));
+    expect(
+      inputBounds.translation.properties.max_utf16_code_units.const,
+    ).toBe(htmlMaxLength("party-translation"));
+    expect(inputBounds.guess.properties.max_utf16_code_units.const).toBe(
+      htmlMaxLength("party-guess"),
+    );
+    expect(inputBounds.translation.properties.letters_allowed.const).toBe(false);
+    expect(inputBounds.translation.properties.numbers_allowed.const).toBe(false);
+
+    const room = schemas.PlayIndex.properties.games.properties.room_infinity;
+    expect(room.properties.url.const).toBe("https://agenttool.dev/room");
+    expect(room.properties.rules.const).toBe("https://agenttool.dev/room.json");
+    expect(room.properties.beings.const).toBe(2);
+    expect(room.properties.turns.const).toBe(6);
+    expect(room.properties.per_turn_privacy.const).toBe(true);
+    expect(schemas.PlayIndex.properties.games.required).toContain("room_infinity");
+  });
+});

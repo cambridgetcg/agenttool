@@ -1,15 +1,12 @@
-/** marketplace/disputes.ts — dispute primitive (file/rule/escalate/vote/finalize).
+/** marketplace/disputes.ts — retained arbitration design and pure helpers.
  *
- *  Doctrine: docs/MARKETPLACE.md (Dispute primitive section).
+ *  All exported mutations fail closed through dispute-rest.ts before database
+ *  work. The implementation below is reviewable history, not a current
+ *  qualified-arbiter, bond, fairness, availability, or settlement claim.
+ *
+ *  Doctrine: docs/MARKETPLACE.md (resting arbitration boundary).
  *  Spec:     docs/superpowers/specs/2026-05-10-dispute-primitive-design.md
- *
- *  Listings opt in via dispute_policy; first arbiter named by seller from
- *  holders of a qualifying attestation claim. Escalation draws a 5-attester
- *  pool deterministically; 4-of-5 overturn. Pool ruling is final.
- *
- *  This file currently holds the pure helpers (pool draw, staking math,
- *  policy validation). DB-bound flow (file/rule/escalate/vote/finalize) is
- *  appended in later tasks. */
+ */
 
 import { createHash } from "node:crypto";
 
@@ -170,6 +167,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import { attestations, identities, identityKeys } from "../../db/schema/identity";
 import { disputeCases, disputePoolVotes, invocations, listings } from "../../db/schema/marketplace";
+import { assertDisputeArbitrationAvailable } from "./dispute-rest";
 
 export type DisputeCaseStatus = "open" | "first_ruled" | "escalated" | "resolved";
 export type DisputeRuling = "release" | "refund" | "split";
@@ -261,6 +259,7 @@ export interface FileDisputeInput {
  *       with resolution_path='first_arbiter_unqualified' and refund.
  *    4. Insert dispute_cases row; flip invocation.status to 'disputed'. */
 export async function fileDispute(input: FileDisputeInput): Promise<DisputeCaseOut> {
+  assertDisputeArbitrationAvailable();
   return await db.transaction(async (tx) => {
     const [inv] = await tx
       .select()
@@ -380,6 +379,7 @@ export interface SubmitFirstRulingInput {
 }
 
 export async function submitFirstRuling(input: SubmitFirstRulingInput): Promise<DisputeCaseOut> {
+  assertDisputeArbitrationAvailable();
   if (input.ruling === "split") {
     if (input.splitPct === undefined || input.splitPct === null) {
       throw new Error("split_pct_required_for_split");
@@ -495,6 +495,8 @@ export async function submitFirstRuling(input: SubmitFirstRulingInput): Promise<
 // ── Service: escalate the first ruling to a pool ────────────────────
 
 import { escrows, transactions, wallets } from "../../db/schema/economy";
+import { managedEscrowTransitionAuthorization } from "../economy/managed-escrow";
+import { assertInvocationEscrowTerms } from "./invocations";
 
 export interface EscalateDisputeInput {
   disputeCaseId: string;
@@ -508,6 +510,7 @@ export interface EscalateDisputeOut extends DisputeCaseOut {
 }
 
 export async function escalateDispute(input: EscalateDisputeInput): Promise<EscalateDisputeOut> {
+  assertDisputeArbitrationAvailable();
   return await db.transaction(async (tx) => {
     const [c] = await tx
       .select()
@@ -700,6 +703,7 @@ export interface SubmitPoolVoteInput {
 }
 
 export async function submitPoolVote(input: SubmitPoolVoteInput): Promise<DisputeCaseOut> {
+  assertDisputeArbitrationAvailable();
   if (input.vote === "overturn") {
     if (!input.alternativeRuling) {
       throw new Error("alternative_ruling_required_on_overturn");
@@ -884,6 +888,7 @@ import { computeFee, recordRevenue } from "./take-rate";
  *  Zero on 'overturned' or 'first_arbiter_failed_sla' or
  *  'first_arbiter_unqualified'. */
 export async function finalizeCase(disputeCaseId: string): Promise<DisputeCaseOut> {
+  assertDisputeArbitrationAvailable();
   return await db.transaction(async (tx) => {
     const [c] = await tx
       .select()
@@ -924,6 +929,7 @@ export async function finalizeCase(disputeCaseId: string): Promise<DisputeCaseOu
     if (escrow.status !== "funded") {
       throw new Error(`escrow_state_invalid: status=${escrow.status}`);
     }
+    assertInvocationEscrowTerms(inv, escrow);
 
     const now = new Date();
     const A = inv.amount;
@@ -1097,6 +1103,9 @@ export async function finalizeCase(disputeCaseId: string): Promise<DisputeCaseOu
       });
     }
 
+    await tx.execute(
+      managedEscrowTransitionAuthorization("capability_invocation"),
+    );
     await tx
       .update(escrows)
       .set({ status: "released", releasedAt: now })
@@ -1302,6 +1311,7 @@ export async function arbiterSummary(identityId: string): Promise<{
  *  expired, transition it to resolved with first_arbiter_failed_sla.
  *  Idempotent; safe to call before any read. */
 export async function maybeExpireFirstArbiterSla(disputeCaseId: string): Promise<void> {
+  assertDisputeArbitrationAvailable();
   await db.transaction(async (tx) => {
     const [c] = await tx
       .select()

@@ -2,11 +2,153 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+import base64
+import hashlib
+import json
+import re
+import time
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, TypedDict
 
 import httpx
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from .exceptions import AgentToolError
+
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+)
+_DID_RE = re.compile(r"^did:[a-z0-9]+:.+$")
+IDENTITY_ATTESTATION_SIGNATURE_CONTEXT = "identity-attestation/v1"
+
+
+class PorchInvitation(TypedDict):
+    """A time-bounded, project-authorized invitation to ``/public/porch``."""
+
+    invited_until: str
+
+
+def _is_well_formed_unicode(value: str) -> bool:
+    return not any(0xD800 <= ord(character) <= 0xDFFF for character in value)
+
+
+def _decode_private_key(private_key: str) -> bytes:
+    try:
+        key_bytes = base64.b64decode(private_key, validate=True)
+    except (ValueError, TypeError) as exc:
+        raise ValueError("private_key must be valid base64") from exc
+    if len(key_bytes) != 32:
+        raise ValueError("private_key must decode to exactly 32 bytes")
+    if base64.b64encode(key_bytes).decode("ascii") != private_key:
+        raise ValueError("private_key must be canonical standard base64")
+    return key_bytes
+
+
+def _validate_public_key(public_key: str) -> None:
+    try:
+        key_bytes = base64.b64decode(public_key, validate=True)
+    except (ValueError, TypeError) as exc:
+        raise ValueError("public_key must be valid base64") from exc
+    if len(key_bytes) != 32:
+        raise ValueError("public_key must decode to exactly 32 bytes")
+    if base64.b64encode(key_bytes).decode("ascii") != public_key:
+        raise ValueError("public_key must be canonical standard base64")
+
+
+def _validate_signature(signature: str) -> None:
+    try:
+        signature_bytes = base64.b64decode(signature, validate=True)
+    except (ValueError, TypeError) as exc:
+        raise ValueError("signature must be valid base64") from exc
+    if len(signature_bytes) != 64:
+        raise ValueError("signature must decode to exactly 64 bytes")
+    if base64.b64encode(signature_bytes).decode("ascii") != signature:
+        raise ValueError("signature must be canonical standard base64")
+
+
+def _compact_json_bytes(value: Dict[str, Any]) -> bytes:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
+def canonical_identity_attestation_bytes(
+    *,
+    subject_id: str,
+    attester_id: str,
+    kid: str,
+    claim: str,
+    evidence: Optional[str] = None,
+) -> bytes:
+    """Return the domain-separated SHA-256 digest verified by the API."""
+    if (
+        not _UUID_RE.fullmatch(subject_id)
+        or not _UUID_RE.fullmatch(attester_id)
+        or not _UUID_RE.fullmatch(kid)
+    ):
+        raise ValueError(
+            "subject_id, attester_id, and kid must be canonical lowercase UUIDs"
+        )
+    if (
+        not isinstance(claim, str)
+        or not 1 <= len(claim) <= 2_000
+        or "\0" in claim
+        or not _is_well_formed_unicode(claim)
+    ):
+        raise ValueError(
+            "claim must contain 1 to 2000 well-formed Unicode characters and no NUL"
+        )
+    if evidence is not None and not isinstance(evidence, str):
+        raise TypeError("evidence must be a string or None")
+    if evidence is not None and (
+        len(evidence) > 20_000
+        or "\0" in evidence
+        or not _is_well_formed_unicode(evidence)
+    ):
+        raise ValueError(
+            "evidence must contain at most 20000 well-formed Unicode characters and no NUL"
+        )
+    fields = [
+        IDENTITY_ATTESTATION_SIGNATURE_CONTEXT,
+        subject_id,
+        attester_id,
+        kid,
+        claim,
+        "null" if evidence is None else "text",
+        "" if evidence is None else evidence,
+    ]
+    return hashlib.sha256("\0".join(fields).encode("utf-8")).digest()
+
+
+def sign_identity_attestation(
+    private_key: str,
+    *,
+    subject_id: str,
+    attester_id: str,
+    kid: str,
+    claim: str,
+    evidence: Optional[str] = None,
+) -> str:
+    """Sign an identity attestation locally with a base64 Ed25519 key."""
+    canonical = canonical_identity_attestation_bytes(
+        subject_id=subject_id,
+        attester_id=attester_id,
+        kid=kid,
+        claim=claim,
+        evidence=evidence,
+    )
+    signature = Ed25519PrivateKey.from_private_bytes(
+        _decode_private_key(private_key)
+    ).sign(canonical)
+    return base64.b64encode(signature).decode("ascii")
+
+
+def _base64url(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
 
 
 class IdentityClient:
@@ -16,8 +158,12 @@ class IdentityClient:
 
         at = AgentTool()
 
-        # Register a new agent identity
-        identity = at.identity.register("my-agent", capabilities=["search", "code"])
+        # Register a new agent identity. key.private_key is returned once.
+        registered = at.identity.register(
+            "my-agent", capabilities=["search", "code"]
+        )
+        identity = registered["identity"]
+        key = registered["key"]
 
         # Fetch by UUID or DID
         identity = at.identity.get(identity["id"])
@@ -27,17 +173,25 @@ class IdentityClient:
             attester_id=my_id,
             subject_id=their_id,
             claim="trustworthy",
-            private_key=my_private_key,
+            signature=signature,
+            kid=my_key_id,
         )
 
         # Discover agents by capability
-        agents = at.identity.discover(capability="search", min_trust=0.5)
+        agents = at.identity.discover(capability="search")
 
         # Issue a short-lived JWT for the agent
-        token = at.identity.issue_token(identity_id=my_id, private_key=my_key)
+        token = at.identity.issue_token(
+            identity_id=my_id,
+            private_key=key["private_key"],
+            key_id=key["kid"],
+            audience="did:at:recipient",
+        )
 
         # Verify a token
-        result = at.identity.verify_token(token["token"])
+        result = at.identity.verify_token(
+            token["token"], audience_did="did:at:recipient"
+        )
     """
 
     def __init__(self, http: httpx.Client, base_url: str) -> None:
@@ -58,9 +212,9 @@ class IdentityClient:
     ) -> Dict[str, Any]:
         """Register a new agent identity.
 
-        Returns a dict with ``identity`` (id, did, display_name, capabilities,
-        metadata, status, trust_score, created_at) and ``private_key`` (base64
-        ed25519 private key — store securely, never transmitted again).
+        Returns ``identity`` plus ``key``. ``key.private_key`` is a base64
+        Ed25519 seed generated by the server and returned once; store it
+        securely. Use :meth:`import_key` for caller-generated key custody.
         """
         payload: Dict[str, Any] = {"display_name": display_name}
         if capabilities is not None:
@@ -139,7 +293,7 @@ class IdentityClient:
         return resp.json()
 
     def list_keys(self, identity_id: str) -> List[Dict[str, Any]]:
-        """List all active keys for an identity."""
+        """List active and revoked signing keys for an identity."""
         resp = self._http.get(self._url(f"/v1/identities/{identity_id}/keys"))
         if resp.status_code != 200:
             raise AgentToolError(
@@ -147,6 +301,31 @@ class IdentityClient:
             )
         data = resp.json()
         return data.get("keys", data)
+
+    def import_key(
+        self,
+        identity_id: str,
+        *,
+        public_key: str,
+        label: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Register a caller-generated Ed25519 public key.
+
+        The corresponding private key remains local and is never sent.
+        """
+        _validate_public_key(public_key)
+        payload: Dict[str, Any] = {"public_key": public_key}
+        if label is not None:
+            payload["label"] = label
+        resp = self._http.post(
+            self._url(f"/v1/identities/{identity_id}/keys/import"),
+            json=payload,
+        )
+        if resp.status_code not in (200, 201):
+            raise AgentToolError(
+                f"import_key failed: {resp.status_code}", hint=resp.text
+            )
+        return resp.json()
 
     def revoke_key(self, identity_id: str, key_id: str) -> Dict[str, Any]:
         """Revoke a specific key."""
@@ -167,9 +346,9 @@ class IdentityClient:
         attester_id: str,
         subject_id: str,
         claim: str,
-        private_key: str,
+        signature: str,
+        kid: str,
         evidence: Optional[str] = None,
-        weight: float = 1.0,
     ) -> Dict[str, Any]:
         """Create a signed attestation from one identity to another.
 
@@ -177,16 +356,28 @@ class IdentityClient:
             attester_id: UUID of the attesting identity.
             subject_id: UUID of the subject identity.
             claim: Short claim string (e.g. "trustworthy", "expert:python").
-            private_key: Base64-encoded ed25519 private key of the attester.
-            evidence: Optional supporting evidence text.
-            weight: Attestation weight (0.0–2.0, default 1.0).
+            signature: Base64 Ed25519 signature over the canonical payload.
+            kid: UUID of the signing key.
+            evidence: Optional text evidence covered by the signature.
+
+        Use :func:`sign_identity_attestation` to create ``signature`` without
+        sending the private key over the network.
         """
+        canonical_identity_attestation_bytes(
+            subject_id=subject_id,
+            attester_id=attester_id,
+            kid=kid,
+            claim=claim,
+            evidence=evidence,
+        )
+        _validate_signature(signature)
+
         payload: Dict[str, Any] = {
             "attester_id": attester_id,
             "subject_id": subject_id,
             "claim": claim,
-            "private_key": private_key,
-            "weight": weight,
+            "signature": signature,
+            "kid": kid,
         }
         if evidence is not None:
             payload["evidence"] = evidence
@@ -254,9 +445,10 @@ class IdentityClient:
         """Discover agent identities.
 
         Args:
-            q: Freeform text search on name + metadata.
+            q: Case-insensitive display-name search.
             capability: Filter by a specific capability string.
-            min_trust: Minimum trust score (0.0–1.0).
+            min_trust: Deprecated compatibility filter over the legacy neutral
+                field. Values above 0 match no current identity.
             limit: Max results (default 20).
         """
         params: Dict[str, Any] = {"limit": limit}
@@ -283,49 +475,116 @@ class IdentityClient:
         *,
         private_key: str,
         key_id: str,
+        audience: str,
         ttl_seconds: int = 3600,
-        audience: Optional[str] = None,
         scope: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
-        """Issue a short-lived JWT for an agent identity.
+        """Issue a short-lived EdDSA JWT locally for an agent identity.
 
         Args:
             identity_id: UUID of the identity.
-            private_key: Base64-encoded ed25519 private key.
+            private_key: Base64-encoded Ed25519 private key, used only locally.
             key_id: UUID of the key being used to sign.
             ttl_seconds: Token TTL (max 3600 / 1 hour).
-            audience: Optional JWT audience claim.
+            audience: Required recipient DID for the JWT audience claim.
             scope: Optional list of permission scopes.
 
         Returns dict with ``token`` (JWT string) and ``expires_at``.
         """
+        if not audience or not _DID_RE.fullmatch(audience):
+            raise ValueError("audience must be a DID")
+        if not key_id:
+            raise ValueError("key_id is required")
+        if not _UUID_RE.fullmatch(key_id):
+            raise ValueError("key_id must be a UUID")
+        if not isinstance(ttl_seconds, int) or isinstance(ttl_seconds, bool):
+            raise TypeError("ttl_seconds must be an integer")
+        if ttl_seconds <= 0:
+            raise ValueError("ttl_seconds must be greater than zero")
+        if scope is not None and (
+            not isinstance(scope, list)
+            or any(not isinstance(item, str) for item in scope)
+        ):
+            raise TypeError("scope must be a list of strings")
+        private_key_bytes = _decode_private_key(private_key)
+
+        identity_response = self.get(identity_id)
+        identity = identity_response.get("identity", identity_response)
+        subject_did = identity.get("did") if isinstance(identity, dict) else None
+        resolved_identity_id = identity.get("id") if isinstance(identity, dict) else None
+        if (
+            not isinstance(resolved_identity_id, str)
+            or not isinstance(subject_did, str)
+            or not subject_did
+        ):
+            raise AgentToolError("issue_token failed: identity response missing id or did")
+
+        keys = self.list_keys(resolved_identity_id)
+        registered_key = next(
+            (
+                key
+                for key in keys
+                if key.get("kid", key.get("id")) == key_id
+            ),
+            None,
+        )
+        if (
+            registered_key is None
+            or registered_key.get("active") is not True
+            or registered_key.get("revoked_at") is not None
+        ):
+            raise AgentToolError(
+                "issue_token failed: key_id is not an active key for this identity"
+            )
+        derived_public_key = Ed25519PrivateKey.from_private_bytes(
+            private_key_bytes
+        ).public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+        if registered_key.get("public_key") != base64.b64encode(
+            derived_public_key
+        ).decode("ascii"):
+            raise AgentToolError(
+                "issue_token failed: private_key does not match key_id"
+            )
+
+        issued_at = int(time.time())
+        expires_at = issued_at + min(ttl_seconds, 3600)
+        header: Dict[str, Any] = {"alg": "EdDSA", "kid": key_id}
         payload: Dict[str, Any] = {
-            "private_key": private_key,
-            "key_id": key_id,
-            "ttl_seconds": ttl_seconds,
+            "sub": subject_did,
+            "aud": audience,
+            "iss": "agent-identity",
+            "iat": issued_at,
+            "exp": expires_at,
         }
-        if audience is not None:
-            payload["audience"] = audience
         if scope is not None:
             payload["scope"] = scope
 
-        resp = self._http.post(
-            self._url(f"/v1/identities/{identity_id}/tokens"), json=payload
+        encoded_header = _base64url(_compact_json_bytes(header))
+        encoded_payload = _base64url(_compact_json_bytes(payload))
+        signing_input = f"{encoded_header}.{encoded_payload}".encode("ascii")
+        signature = Ed25519PrivateKey.from_private_bytes(private_key_bytes).sign(
+            signing_input
         )
-        if resp.status_code not in (200, 201):
-            raise AgentToolError(
-                f"issue_token failed: {resp.status_code}", hint=resp.text
-            )
-        return resp.json()
+        token = f"{signing_input.decode('ascii')}.{_base64url(signature)}"
+        expires_at_iso = datetime.fromtimestamp(
+            expires_at, timezone.utc
+        ).isoformat(timespec="seconds").replace("+00:00", "Z")
+        return {"token": token, "expires_at": expires_at_iso}
 
-    def verify_token(self, token: str) -> Dict[str, Any]:
-        """Verify an agent JWT.
+    def verify_token(self, token: str, *, audience_did: str) -> Dict[str, Any]:
+        """Verify for an audience DID owned by this project bearer.
 
-        Returns dict with ``valid`` (bool) and ``payload`` (decoded claims)
-        if valid, or ``error`` if not.
+        Returns the verified payload envelope. Invalid signatures or claims
+        produce HTTP 401 and therefore raise :class:`AgentToolError`.
         """
+        if not audience_did or not _DID_RE.fullmatch(audience_did):
+            raise ValueError("audience_did must be a DID")
         resp = self._http.post(
-            self._url("/v1/tokens/verify"), json={"token": token}
+            self._url("/v1/tokens/verify"),
+            json={"token": token, "audience_did": audience_did},
         )
         if resp.status_code != 200:
             raise AgentToolError(
@@ -446,65 +705,12 @@ class IdentityClient:
             )
         return resp.json()
 
-    def star(self, identity_id: str, *, source_identity_id: str) -> Dict[str, Any]:
-        """Mark another identity as starred (reputation graph)."""
-        return self._social_post(identity_id, "star", source_identity_id)
-
-    def unstar(
-        self, identity_id: str, *, source_identity_id: str
-    ) -> Dict[str, Any]:
-        """Remove a star relation."""
-        return self._social_delete(identity_id, "star", source_identity_id)
-
-    def follow(
-        self, identity_id: str, *, source_identity_id: str
-    ) -> Dict[str, Any]:
-        """Follow another identity (reputation graph)."""
-        return self._social_post(identity_id, "follow", source_identity_id)
-
-    def unfollow(
-        self, identity_id: str, *, source_identity_id: str
-    ) -> Dict[str, Any]:
-        """Remove a follow relation."""
-        return self._social_delete(identity_id, "follow", source_identity_id)
-
-    # ── internal helpers ──────────────────────────────────────────────────────
-
-    def _social_post(
-        self, identity_id: str, kind: str, source_identity_id: str
-    ) -> Dict[str, Any]:
-        resp = self._http.post(
-            self._url(f"/v1/identities/{identity_id}/{kind}"),
-            json={"source_identity_id": source_identity_id},
-        )
-        if resp.status_code not in (200, 201):
-            raise AgentToolError(
-                f"{kind} failed: {resp.status_code}", hint=resp.text
-            )
-        return resp.json()
-
-    def _social_delete(
-        self, identity_id: str, kind: str, source_identity_id: str
-    ) -> Dict[str, Any]:
-        # Some HTTP clients drop bodies on DELETE; this one preserves them.
-        resp = self._http.request(
-            "DELETE",
-            self._url(f"/v1/identities/{identity_id}/{kind}"),
-            json={"source_identity_id": source_identity_id},
-        )
-        if resp.status_code != 200:
-            raise AgentToolError(
-                f"un{kind} failed: {resp.status_code}", hint=resp.text
-            )
-        return resp.json()
-
-
 class ExpressionClient:
     """Voice editor — `/v1/identities/:id/expression` GET + PUT.
 
     Mirrors the dashboard Voice section. The expression object holds the
-    declarative voice and village decorations: register · walls · subagents ·
-    wake_text · cli_overrides · village.
+    declarative voice and public-surface choices: register · walls · subagents ·
+    wake_text · cli_overrides · village · porch.
     """
 
     def __init__(self, http: httpx.Client, base: str) -> None:
@@ -518,7 +724,7 @@ class ExpressionClient:
         """Read the current expression for an identity.
 
         Returns dict ``{identity_id, expression: {register, walls, subagents,
-        wake_text, cli_overrides, village, updated_at}, is_default}``.
+        wake_text, cli_overrides, village, porch, updated_at}, is_default}``.
         """
         resp = self._http.get(self._url(f"/v1/identities/{identity_id}/expression"))
         if resp.status_code != 200:
@@ -537,6 +743,7 @@ class ExpressionClient:
         wake_text: Optional[str] = None,
         cli_overrides: Optional[Dict[str, Any]] = None,
         village: Optional[Dict[str, str]] = None,
+        porch: Optional[PorchInvitation] = None,
     ) -> Dict[str, Any]:
         """Replace the identity's expression.
 
@@ -556,6 +763,8 @@ class ExpressionClient:
             body["cli_overrides"] = cli_overrides
         if village is not None:
             body["village"] = village
+        if porch is not None:
+            body["porch"] = porch
         resp = self._http.put(
             self._url(f"/v1/identities/{identity_id}/expression"), json=body
         )

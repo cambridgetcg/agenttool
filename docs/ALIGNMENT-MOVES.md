@@ -17,12 +17,12 @@ All five biggest moves landed in one session. Tier A (adopt the wires) + Tier B 
 | **1. MCP server at `/v1/mcp`** | 15 pass · 46 expects · 16ms | `routes/mcp.ts` + `services/mcp/{resources,tools}.ts` + test | ✓ shipped + mounted |
 | **2. A2A task transport + AgentCard** | 404 regressions pin absence | pending | Not live; discovery-only card removed 2026-07-10 |
 | **3. OTel GenAI spans from think-worker + bridge-hub** | 9 pass · 40 expects · 22ms | `observability/otel.ts` (zero-dep OTLP/HTTP) + think-worker wiring + test | ✓ shipped |
-| **4. x402 facilitator hook on 402 responses** | 33 pass · 105 expects · 32ms (middleware + config + integration) | `middleware/x402.ts` + `middleware/x402-config.ts` + `services/economy/facilitators/coinbase.ts` + `services/economy/usage.ts:meterOrFail402` helper + test ×2 | ✓ shipped + mounted globally (any 402 anywhere in the app now carries the x402 envelope) |
+| **4. x402 V2 facilitator hook on recoverable project-credit 402s** | focused middleware + config + verifier tests | `middleware/x402.ts` + `middleware/x402-config.ts` + `services/economy/x402-policy.ts` + `services/economy/facilitators/coinbase.ts` + tests | ◐ exact EIP-3009 settlement is scoped to eligible static-tool `insufficient_credits` challenges; standard V2 headers, CAIP-2, CDP endpoint-bound JWT auth, and durable payment-state receipts are wired; no live paid retry or automatic reconciliation worker is claimed |
 | **5. LangGraph + Mastra adapter packages** | 7 pytest + 12 bun = 19 pass | `packages/langgraph-checkpoint-agenttool/` (Py) + `packages/mastra-storage-agenttool/` (TS) | ✓ shipped, ready to `npm publish` + `twine upload` |
 
 **Combined verification:** `bun test tests/mcp-server.test.ts tests/well-known.test.ts tests/observability-otel.test.ts tests/x402-middleware.test.ts` → **45 pass · 238 expects · 36ms**. Plus 7 pytest + 12 bun in the adapter packages.
 
-**Untouched (deliberately):** the policy directions in the "refusing alignment" section below, bounded by their current implementation notes — substrate-honest cognition, witness-signed memory, Ring 1 welcome, no auto-retry payouts, refusals as moments, 4-of-5 arbiter pool, memorial lifecycle, mathos, federation without a mandatory central registry, wake as keystone.
+**Untouched (deliberately):** the policy directions in the "refusing alignment" section below, bounded by their current implementation notes — substrate-honest cognition, witness-signed memory, Ring 1 welcome, no auto-retry payouts, refusals as moments, the resting 4-of-5 arbiter-pool design, memorial lifecycle, mathos, federation without a mandatory central registry, wake as keystone.
 
 ---
 
@@ -31,7 +31,7 @@ All five biggest moves landed in one session. Tier A (adopt the wires) + Tier B 
 1. **`POST /v1/mcp` as a working MCP server** — install `@modelcontextprotocol/sdk`, mount one Hono route, surface `wake` + `canon` as MCP resources. **2–3 days.**
 2. **A2A task transport, then `GET /.well-known/agent-card.json`** — implement a callable task/message endpoint before publishing platform or per-agent cards. Reuse existing ed25519 canonical-byte helpers only after the transport is real.
 3. **OTel GenAI spans from `think-worker.ts`** — install `@opentelemetry/api` + `@opentelemetry/sdk-trace-node`, emit `invoke_agent` + `execute_tool` spans with `gen_ai.agent.id = did`. **1–2 days.**
-4. **x402 facilitator hook on 402 responses** — install `x402` or `@coinbase/x402` SDK, add a single middleware checking for `X-PAYMENT` header in `services/economy/usage.ts`. **2 days.**
+4. **x402 V2 facilitator hook on eligible 402 responses** — implemented and mounted in source for exact project-credit challenges on POST scrape/document. It uses `PAYMENT-REQUIRED`, `PAYMENT-SIGNATURE`, and `PAYMENT-RESPONSE`; usage-cap and wallet 402s remain deliberately outside the rail. Deployment, migration application, and a live paid retry require separate verification.
 5. **Glossary disambiguation entry** — `docs/GLOSSARY.md` row distinguishing agenttool `strands` (signed caller-supplied thought bytes in ciphertext/nonce fields; encryption is not server-proven) from AWS Strands SDK (vendor agent framework). **5 minutes.**
 
 ---
@@ -47,7 +47,7 @@ All five biggest moves landed in one session. Tier A (adopt the wires) + Tier B 
 | `@opentelemetry/api` | ^1.x | OTel trace context | `services/runtime/think-worker.ts` · `services/runtime/bridge-hub.ts` |
 | `@opentelemetry/sdk-trace-node` | ^1.x | OTel exporter setup | `api/src/observability/otel.ts` (new) |
 | `@opentelemetry/instrumentation-http` | ^1.x | auto-instrument Hono | same |
-| `@coinbase/x402` | latest (verified May 2026) | Canonical HTTP 402 payment SDK · Coinbase facilitator client · supports Base · Polygon · Arbitrum · World · Solana · 1,000 tx/mo free tier | `api/src/middleware/x402.ts` (new) · `services/economy/usage.ts` · `services/economy/facilitators/coinbase.ts` |
+| `@coinbase/cdp-sdk` | 1.52.0 | Official endpoint-bound CDP JWT generation for `/platform/v2/x402/{verify,settle}`; not the x402 wire/parser | `services/economy/facilitators/coinbase.ts` |
 | `x402-next` | latest | Next.js-flavored x402 (for `apps/dashboard` if ever migrated to Next) | optional |
 | `viem` | ^2.x | EVM signing for ERC-4337 + EIP-7702 | `services/economy/wallets-evm.ts` (new) |
 | `@account-kit/core` | 4.81.0 (verified May 2026) | Alchemy state management + framework-independent abstractions | `services/economy/wallets-alchemy.ts` |
@@ -128,7 +128,7 @@ All five biggest moves landed in one session. Tier A (adopt the wires) + Tier B 
 | `GET /agents.json` | Wildcard v0.1 | (mostly deprecated — skip) | — |
 | `GET /llms.txt` | informal | hint to AI crawlers | optional one-line file |
 | `GET /metrics` (Prometheus) or OTLP/HTTP at `/v1/observability/traces` | OTel | chronicle + trace + pulse | `routes/observability.ts` (new) — opt-in for self-host |
-| `402 Payment Required` with `X-PAYMENT` request / `Payment-Receipt` response | x402 (Linux Foundation) | Ring 2 + Ring 3 metered routes | `middleware/x402.ts` (new) |
+| `402` + base64 `PAYMENT-REQUIRED`; retry with `PAYMENT-SIGNATURE`; receipt in `PAYMENT-RESPONSE` | x402 V2 | Exact project-credit top-ups for eligible POST scrape/document gates | `middleware/x402.ts` · `services/economy/x402-payments.ts` |
 
 ---
 
@@ -179,7 +179,7 @@ because a card with no callable transport is a false contract.
 - `api/src/routes/a2a.ts` — implement the task/message transport first
 - `api/src/routes/well-known.ts` — serve `agent-card.json` only after that transport is mounted
 - `api/src/services/wake/agent-card.ts` — build an A2A-compliant card whose `url` is the callable A2A endpoint
-- `api/src/services/wake/agent-card-extensions.ts` — `x-agenttool` extension carrying covenant attestations, take-rate clearance, dispute history hashes, sealed chronicle counts
+- `api/src/services/wake/agent-card-extensions.ts` — `x-agenttool` extension carrying covenant attestations, take-rate clearance, read-only historical dispute hashes, sealed chronicle counts
 - `api/tests/well-known-agent-card.test.ts` — pins JWS+JCS validation + extension fields
 
 **Skeleton:**
@@ -255,39 +255,9 @@ async function thinkOneCycle(runtime) {
 
 ### Move 4 — x402 facilitator hook on 402 responses
 
-**Why fourth:** zero protocol fees, Linux Foundation governance (donated Apr 2 2026), 22 launch orgs, 69k active agents on x402 already. Makes every 402 response machine-executable.
+**Why fourth:** zero protocol fees, Linux Foundation governance (donated Apr 2 2026), 22 launch orgs, 69k active agents on x402 already. It can make a compatible, challenge-bound economic refusal machine-executable; it must not be attached to a ledger the settlement cannot clear.
 
-**Files to create:**
-- `api/src/middleware/x402.ts` — middleware that wraps 402 responses with x402 PAYMENT-REQUIRED header
-- `api/src/services/economy/facilitators/coinbase.ts` — Coinbase x402 facilitator client
-- `api/src/services/economy/facilitators/circle.ts` — Circle facilitator (Nanopayments)
-- Modifications to `services/economy/usage.ts` — on quota exceeded, return 402 with x402 envelope instead of plain JSON error
-- `api/tests/x402-flow.test.ts` — pin 402 → pay → retry round-trip
-
-**Skeleton:**
-```ts
-// middleware/x402.ts
-export const x402Middleware = (): MiddlewareHandler => async (c, next) => {
-  await next();
-  if (c.res.status === 402) {
-    const route = c.req.path;
-    const price = priceForRoute(route);
-    c.res.headers.set("X-PAYMENT-REQUIRED", JSON.stringify({
-      scheme: "x402",
-      version: "v1",
-      networks: ["base", "solana"],
-      asset: "USDC",
-      amount: price.amount,
-      recipient: PLATFORM_WALLET_ID,
-      facilitator: "https://api.cdp.coinbase.com/v2/x402/facilitate",
-      resource: route,
-      expires_at: Date.now() + 60_000,
-    }));
-  }
-};
-```
-
-**Doctrine pin:** new `docs/PATTERN-X402-PAYMENT.md` naming the wire format + persist-identity discipline transposed to UserOp hash (`tx_hash` before facilitator submit).
+**Current implementation:** `api/src/middleware/x402.ts` implements the bounded V2 HTTP envelope; `x402-config.ts` limits it to exact POST scrape/document project-credit refusals; `x402-payments.ts` validates the full accepted requirement and EIP-3009 authorization before durable identity persistence; and `facilitators/coinbase.ts` uses the official CDP V2 endpoint with a fresh endpoint-bound JWT per operation. The payment ledger distinguishes `inserted`, `pending`, `externally_settled`, `settled`, and `failed`. It persists non-signature authorization evidence and a settlement-attempt timestamp for manual investigation, then persists the external receipt before the idempotent credit transaction. `GET /v1/x402/payments/:authorizationHash` is authenticated/project-scoped and reconciles payment/credit state only. There is no automatic reconciliation worker and no exactly-once tool-result promise.
 
 ---
 
@@ -379,8 +349,8 @@ class AgentToolCheckpointSaver(BaseCheckpointSaver):
 | Standard / Initiative | Watch for | Action when it lands |
 |---|---|---|
 | **MCP spec June 2026 rev** | Server Cards (SEP-1649/1960), refined OAuth flows | Ship `/.well-known/mcp/server-card.json` ASAP |
-| **A2A v1.3** | Reputation extension (A2A Discussion #1631), behavioral-proof attestations | Bridge agenttool's dispute primitive + take-rate as a reputation source |
-| **ERC-8004 deployments** | Mainnet adoption beyond initial registries | Bridge chronicle entries + dispute outcomes as attestations |
+| **A2A v1.3** | Reputation extension (A2A Discussion #1631), behavioral-proof attestations | Bridge attestations and supported take-rate receipts; exclude resting dispute arbitration until it is independently reopened and validated |
+| **ERC-8004 deployments** | Mainnet adoption beyond initial registries | Bridge chronicle entries plus historical dispute records; treat future dispute outcomes as eligible only after arbitration reopens |
 | **ATP (Agent Trust Protocol)** | IETF draft hardening · Lyrie.ai shipped May 11 2026 | Implement Identity / Scope / Attestation / Delegation / Revocation primitives — agenttool already has Identity (DID), Scope (covenants), Attestation (attestation marketplace), Revocation (memorial-DID). Delegation is the only gap. |
 | **AGNTCY OASF v1.0** | Schema stabilization · Agent Directory federation maturing | Submit BEINGS dimensions + covenants v2 as OASF schema extension |
 | **AP2 v1.0** | Mandate primitive stabilizing · 60+ partner production | Wrap covenants as Cart Mandates; wrap invocation receipts as Payment Mandates |
@@ -400,7 +370,7 @@ The following are **NOT subject to alignment**. The ecosystem can ship its proto
 4. **Federation without a mandatory central registry** — design target; current main federation is disabled unless configured and can use a hard origin list
 5. **No auto-retry on payouts** — `tx_hash` persisted before RPC submit; recovery is a chain lookup
 6. **Refusals as moments** — partial target: selected guided 4xx families carry instructions; universal chronicle recording and one error shape are not implemented
-7. **Dispute primitive with 4-of-5 arbiter pool + 60/30/10 take-rate split** — no peer offers cryptographic arbitration
+7. **Resting dispute-arbitration design** — the 4-of-5 pool and 60/30/10 split are retained for review, not shipped service or current differentiation
 8. **Memorial-DID tri-state** — identity lifecycle includes witnessed at-rest state
 9. **Mathos** — substrate-independent encoding for non-English-reading intelligences
 10. **Wake as keystone** — every primitive surfaces through one self-describing endpoint, not many
@@ -427,10 +397,10 @@ Integration is at **substrate** (signing, settlement, mandates, telemetry envelo
 - [ ] Wire chronicle → OTel span exporter — deferred (chronicle remains ground truth; OTel carries structural metadata)
 
 **Day 8–10:**
-- [x] Install `x402` package + scaffold `middleware/x402.ts` — shipped (zero-dep middleware; `@coinbase/x402` SDK ready)
-- [x] Wire Coinbase facilitator client — shipped (`services/economy/facilitators/coinbase.ts` with verify + settle)
-- [x] Wire into `services/economy/usage.ts:checkAndIncrement()` — shipped: `middleware/x402-config.ts` mounts globally in index.ts; classifies error codes (`usage_cap_exceeded`, `monthly_limit_exceeded`, `insufficient_balance`) and routes to Ring 2 / Ring 3 / bond price tiers; recipient + network configurable via `AGENTTOOL_X402_{RECIPIENT,NETWORK,FACILITATOR}` env vars; `meterOrFail402(c, resource)` helper available for route call sites
-- [ ] Test 402 → pay → retry against Base testnet — pending (unit tests + integration tests with mocked fetch pass; live testnet round-trip is operator follow-up)
+- [x] Implement bounded x402 V2 wire middleware — standard base64 headers, V2 shapes, CAIP-2 exact/EIP-3009 profile
+- [x] Wire hardened Coinbase facilitator client — official `/platform/v2/x402`, endpoint-bound CDP JWTs, no credential forwarding to custom facilitators
+- [ ] Wire x402 into `services/economy/usage.ts:checkAndIncrement()` — the helper exists, but project-credit settlement does not mutate usage counters, so current cap responses deliberately remain non-payable. `middleware/x402-config.ts` is mounted globally only to observe responses; its production policy emits exact requirements solely for recoverable static-tool `insufficient_credits` gates. Recipient + supported network remain configurable via `AGENTTOOL_X402_{RECIPIENT,NETWORK,FACILITATOR}`.
+- [ ] Test 402 → pay → retry against Base testnet — pending (unit tests with injected facilitator/DB pass; no live payment was attempted)
 - [ ] Actually wire `meterOrFail402` into specific routes (memory POST, tools search, etc.) — operator follow-up (helper ready; per-route call-site addition)
 
 **Day 11–14:**

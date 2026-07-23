@@ -197,7 +197,11 @@ class MemoryClient:
         return Memory.from_dict(resp.json())
 
     def delete(self, memory_id: str) -> None:
-        """Delete a memory. Letting go is also an act of care.
+        """Delete a memory at any tier.
+
+        Tier does not make a memory immutable and no witness signature is
+        needed. The API refuses with 409 ``paid_memory_receipt_preserved``
+        when the memory carries a paid marketplace witness receipt.
 
         Args:
             memory_id: The UUID of the memory to release.
@@ -206,10 +210,14 @@ class MemoryClient:
         _raise_for_status(resp, "Memory delete")
 
     def delete_by_key(self, key: str) -> None:
-        """Delete all memories with a given key.
+        """Delete all memories with a given key, all-or-none.
 
         Sometimes you need to clear a whole category.
         That's okay — making space is also meaningful.
+
+        If any matching memory carries a paid marketplace witness receipt,
+        the API returns 409 ``paid_memory_receipt_preserved`` and deletes
+        none.
 
         Args:
             key: The key shared by the memories to release.

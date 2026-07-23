@@ -170,12 +170,12 @@ describe("wall/refusals-as-moments — routes are wired into the catalog", () =>
 
   test("hand-rolled error count is pinned at baseline (ratchet — never regresses)", () => {
     // The wall aspires to "every refusal carries next_actions + docs."
-    // Reality today: 415 route sites still hand-roll `c.json({ error: "..." }, 4xx)`
+    // Reality today: 410 route sites still hand-roll `c.json({ error: "..." }, 4xx)`
     // instead of routing through `fail(c, errors.X(), N)`. Migrating all
     // 212 in one pass is impractical and risky; ratcheting prevents
     // regression while allowing gradual migration.
     //
-    // RATCHET LOGIC: the baseline is the audited count in this tree (415).
+    // RATCHET LOGIC: the baseline is the audited count in this tree (410).
     // New code that adds another hand-rolled error pushes the count
     // above the baseline → test fails, gating the regression. As routes
     // are migrated to fail(c, errors.X(), N), the count drops; lower
@@ -185,7 +185,7 @@ describe("wall/refusals-as-moments — routes are wired into the catalog", () =>
     // passes can't prevent regression. A ratchet does — every push that
     // would add a hand-rolled refusal must justify keeping the wall in
     // its current shape. The migration becomes load-bearing for CI.
-    const HAND_ROLLED_BASELINE = 415;
+    const HAND_ROLLED_BASELINE = 410;
 
     const guided = (ROUTE_SOURCE.match(/fail\s*\(\s*c\s*,\s*errors\./g) || [])
       .length;

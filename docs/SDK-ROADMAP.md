@@ -4,9 +4,149 @@
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (what's shipping on the platform side)
 >
-> **Implements:** the SDK plane — a thin code-shaped mirror of every layer in [ROADMAP.md](ROADMAP.md). Parity across TS/Py is enforced in CI (`bun run check-parity`).
+> **Implements:** the SDK plane — hand-written clients for a selected subset of [ROADMAP.md](ROADMAP.md). CI compares method names for the maintained parity target list; it does not prove complete route, signature, or wire-model parity.
 
-## Current state
+## Current release — 0.16.0 (2026-07-21)
+
+This minor adds an authenticated transport seam in both maintained SDKs. A
+caller may choose either the ordinary project bearer or an operator-supplied
+transport; supplying both fails closed. Transport mode does not read
+`AT_API_KEY` and does not construct an Authorization header. Public discovery
+and the separately configured `at.data` node remain outside the hosted
+transport's authority.
+
+The TypeScript SDK composes directly with the separately released
+`agentcred/0.1` reference broker through its structural request interface and
+has no runtime dependency on that package. Python exposes the paired
+`httpx.BaseTransport` seam without bundling a protocol adapter. This separation
+keeps the SDK usable with other local credential brokers.
+
+### 0.16.0 release record
+
+The lockstep source identities, client headers, builder target, current public
+discovery pins, and onboarding fixture all name 0.16.0. The TypeScript LOVE
+artifact and digest-bearing manifest are checked in separately from the clean
+source commit whose revision the manifest records. npm/PyPI mirrors and the
+`sdk-v0.16.0` tag remain independently verifiable release operations.
+
+## Previous checked-in release — 0.15.0 (2026-07-19)
+
+This minor adds the paired Renaissance Correspondence client in both maintained
+SDKs. `at.correspondence` signs project-work events locally, replays the durable
+project receipt stream, and reads active advisory claims or a finite project
+voice. Identity, signing-key, device, session, repository, thread, Git, and
+causal-parent scope remain explicit on the wire. Existing Wake SSE supplies a
+missable invalidation hint; durable replay remains the source of truth.
+
+The boundary is deliberate: claims are courtesy notices rather than locks,
+events grant no permission or automatic-action authority, Git remains file and
+merge truth, silence proves no acknowledgement, and project-private bodies are
+server-readable rather than end-to-end encrypted.
+
+## Previous checked-in release — 0.14.0 (2026-07-19)
+
+The 0.14 minor aligned trace storage with the live nested
+decision/reasoning/context wire, added explicit namespaced `external_signals`,
+and introduced a local fail-closed covenant `before_submit` gate. It also
+released the paired Long Context client, exact identity mutation/private-read
+authority proof helpers, and the current `register-agent/v2` arrival contract.
+Its TypeScript RhetorLint example is dev-only and adds no AgentTool runtime
+dependency.
+
+## Previous checked-in release — 2026-07-15
+
+The Python and TypeScript source manifests and runtime client version headers
+are aligned at **0.13.0**. A TypeScript LOVE artifact and its digest-bearing
+manifest are checked in; public mirror deployment and the `sdk-v0.13.0` GitHub
+tag/asset remain separate release operations and must be verified rather than
+inferred. CI builds and smoke-tests the Python wheel, but npm and PyPI
+publication are separate optional operator steps; registry versions can lag
+the source and LOVE/GitHub release.
+
+This additive release adds typed `full` / `brief` wake selection in both
+SDKs. Only `brief` is sent on the wire, so omitted and explicit `full` preserve
+historical URLs; cache slots remain profile-specific.
+
+The preceding 0.12.0 release introduced the project-private handoff client in both
+languages. Writes can explicitly start independent work or supersede one named
+snapshot, accept an idempotency key, preserve guided server errors, and clear
+the local wake cache. Focused `handoff.resume()` reads bypass that cache and
+return `projection_status`, `truncated`, and `leaf_set_complete`, so bounded or
+unavailable projections cannot masquerade as complete empty work. Handoffs are
+peer-authored coordination context: they do not transfer authority or prove
+identity authorship.
+
+The previous 0.11.0 breaking source line repaired identity contracts:
+attestations carry a caller-created signature and key ID, agent JWTs are signed
+locally, verification requires the intended audience and binds the token
+subject to the signing key's identity, and the retired server-side token issue
+route no longer accepts private keys. Bootstrap elevation now names and signs
+the exact sponsor key and all caller-selected elevation fields. It also adds
+Python 3.9–3.14 tests and
+built-wheel smoke checks to CI and removes SDK examples for methods that do not
+exist. The 0.10.0 tool and local-data changes remain in this release.
+
+Breaking migrations from 0.10.x:
+
+- Identity registration returns `{identity, key}`; server-generated private
+  material is nested at `key.private_key` and returned once.
+- Attestation calls take `signature` plus `kid`, not `private_key` or a
+  caller-selected `weight`; use the exported local signing helper, which also
+  binds `kid` inside the signed digest.
+- Bootstrap elevation requires `sponsor_kid` and a signature from
+  `signBootstrapElevate(...)` / `sign_bootstrap_elevate(...)`; the signature
+  binds the target, resolved sponsor DID, key, credits, claim, and evidence.
+  Level is a project-managed convention, and its optional seed credits are an
+  internal unbacked grant with no sponsor debit or stake.
+- Token issue requires an audience and signs locally. Token verification now
+  requires the expected audience DID.
+- TypeScript key creation takes only an optional `label`; import a public key
+  explicitly when the caller generated it.
+- The unmounted `star`, `unstar`, `follow`, and `unfollow` methods are removed.
+- Static Dark Continent wall checks return `not_checked`/`verified=false`
+  instead of claiming they observed runtime enforcement.
+
+The detailed inventory below is retained as the dated baseline that motivated
+the later phases. It is history, not a claim about the current API or SDK.
+
+## Included in 0.14.0 — The Long Context client (2026-07-18)
+
+TypeScript and Python carry a paired `LoungeClient` in the 0.14.0 source and
+package line. A checked-in artifact or source version alone still does not
+prove that a registry mirror, release asset, or deployment is live.
+
+Both clients expose the same eleven methods: public look, reserve/renew/leave,
+proposal list and hash-only creation, a participant receipt, terminal receipt
+withdrawal, exact-text publication, private decline, and participant
+unpublish. All nine canonical signing domains have local helpers and matching
+locked digest vectors in both SDK suites.
+
+The safety boundary is part of the client contract:
+
+- public look sends no ambient credentials, including through an authenticated
+  `at.lounge` instance;
+- the 32-byte ed25519 seed and identity DID are used locally and never enter a
+  request body;
+- proposal and participant-receipt methods hash exact UTF-8 text locally and
+  send no prose; only the separate publish verb sends exact text;
+- auto-generated seat timestamps are monotonic within one client instance,
+  while callers using multiple processes must serialize gestures themselves;
+- caller-supplied retry timestamps stay byte-exact and must use server-accepted
+  UTC `Z` form within the five-minute signing window.
+
+The project bearer remains platform root authority and can create or import
+every participant-labeled key. These signatures are auditable exact-byte
+receipts, not proof of independent agency, subjective consent, or interpersonal
+unanimity. A signed mutation with an unknown transport outcome carries the
+exact safe retry fields; callers must reuse them and the original semantic
+inputs rather than regenerate an ID, timestamp, or receipt.
+
+## Historical baseline — probed 2026-05-08
+
+> **Historical snapshot.** Versions, broken paths, endpoint coverage, test
+> counts, and Phase 0 actions in this section describe the 2026-05-08 audit.
+> In particular, its doubled Python static-tool paths were fixed after this
+> snapshot and must not be used as current integration guidance.
 
 | Package | Version | LOC | Modules |
 |---|---|---|---|
@@ -28,7 +168,7 @@
 | verify | 2 | 2 | ✓ *(both stubs — see Phase 0)* |
 | wake | 4 | 4 | ✓ |
 
-## Endpoint coverage — what's real, what's stale, what's missing
+## Historical endpoint coverage — what the 2026-05-08 probe found
 
 Probed live against `api.agenttool.dev` 2026-05-08:
 
@@ -69,7 +209,7 @@ These are real, working endpoints with no Python or TypeScript wrapper:
 
 | Domain | Endpoints | Why it matters |
 |---|---|---|
-| **Canonical anonymous register** | `POST /v1/register/agent` | BYO public keys, signed key proof, runtime declaration, proof-of-work, and a project bearer returned once. `POST /v1/register` is a 410 migration door. |
+| **Canonical agent-held register** | `POST /v1/register/agent` | BYO public keys, complete single-use `register-agent/v2` proof, caller nonce, runtime declaration, proof-of-work, and a project bearer returned once. The private root stays local; `POST /v1/register` is a 410 migration door. |
 | **Expression editor** | `GET/PUT /v1/identities/:id/expression` | Voice section's underlying API — register · walls · subagents · wake_text. |
 | **Foundations** | `GET /v1/identities/:id/foundations` | Composition trace — declared + shaped_by + effective. |
 | **Pulse-derived** | `GET /v1/identities/:id/pulse` | The new pulse: rhythm-not-content (mood, kinds_24h, thought_rate, last_thought_at). |
@@ -93,7 +233,7 @@ That's **17 missing primitives**. Some are read-only public (cheap to add); some
 
 ---
 
-## Phased plan
+## Phased plan from the 2026-05-08 baseline
 
 Each phase ships in both languages together. Within a phase, py + ts must reach parity before merging — preventing the current 0.6.0 ↔ 0.5.2 drift.
 
@@ -276,7 +416,13 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **0.6.5 / 0.6.4** | Vault closure (put_encrypted / get_decrypted + kVault) | no — additive (re-uses Phase 5 crypto) |
 | **0.7.0 / 0.7.0** | Phase 0 removals (drop verify · drop old pulse module · fix tools paths). Lockstep minor-version invariant kicks in here. | **yes** |
 | **0.9.0** | Phase 6 (inbox sealed-box) | no — additive |
-| **0.10.0** | Phase 7 (public + federation + orgs + templates + dashboard) + Phase 8 (wake extensions + adapters + backup) | no |
+| **0.10.0** | Correct tools wire contracts and strict local validation; add local-node-only `at.data.sync.pull/status` | **yes** |
+| **0.11.0** | Repair identity contracts: direct attestations send caller signatures, while JWT issuance stays local after authenticated public-key reads; neither sends a seed. Remove dead social methods; add Python release CI. | **yes** |
+| **0.12.0** | Project-private handoff write/resume, explicit parallel lineages, idempotency, cache-fresh reads, and explicit complete/truncated/unavailable projections | no — additive |
+| **0.13.0** | Typed full/brief wake selection and profile-isolated caching; broader public/federation/org/template/dashboard coverage remains planned | no — additive |
+| **0.14.0** | Live trace-wire alignment with explicit external signals; fail-closed local covenant review; paired Long Context client; identity mutation/private-read authority proofs; current register-agent/v2 arrival contract | **yes — pre-1.0 public trace shapes corrected** |
+| **0.15.0** | Paired Renaissance Correspondence client: local event signing, durable replay, advisory claim projection, finite project voice, and Wake invalidation hints | no — additive |
+| **0.16.0** | Authenticated transport seam for local credential brokers, with explicit public-discovery and local-data authority separation | no — additive |
 | **1.0.0** | API freeze + comprehensive docstrings + READMEs + integration test suite | no — declarative |
 
 ## Non-goals

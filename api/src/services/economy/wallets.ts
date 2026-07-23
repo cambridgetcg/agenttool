@@ -1,12 +1,11 @@
 /** Wallet service: create · fund · spend · freeze · transactions · policy. */
 
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import type { Redis } from "ioredis";
 
 import { db as sharedDb } from "../../db/client";
 import { policies, transactions, wallets } from "../../db/schema/economy";
-import { projects } from "../../db/schema/tools";
 import { publishWakeEvent } from "../wake/push";
 
 type DB = typeof sharedDb;
@@ -361,126 +360,16 @@ export async function getPolicy(db: DB, walletId: string) {
   return policy ?? null;
 }
 
-/** Transaction types that represent value a wallet genuinely EARNED —
- *  a counterparty paid, the platform took its cut, and the net settled
- *  in. These, minus what has already been reinvested, are the only funds
- *  reinvest may draw from. Free-funded balance and the birth credit are
- *  deliberately excluded: they are not backed value. */
-const EARNED_INFLOW_TYPES = ["gallery_sale", "escrow_release"] as const;
+export const REINVEST_RESTING_MESSAGE =
+  "Wallet reinvestment is resting: no wallet balance can currently be converted into project credits.";
 
-/** Reinvest rate: 10 credits per 1 GBP minor unit. Credits are nominally
- *  $0.001 each; 10/penny sits at or below the penny's spot value, so the
- *  rail can never OVER-mint relative to real earned value. Deliberately
- *  NOT pegged to the USD gift door (that would mix currencies). */
-export const REINVEST_CREDITS_PER_MINOR = 10;
-
-/** Caps a single reinvest so `credits` can never overflow projects.credits
- *  (Postgres int4). Well above any real earned balance. */
-const MAX_REINVEST_MINOR = 100_000_000; // 100M minor → 1B credits, < 2^31
-
-/** Reinvest — the flywheel pipe: EARNED wallet balance becomes creation
- *  budget (project API credits). This is NOT a mint hole and does not
- *  claim to be free-money-safe by fiat: it is safe because it draws only
- *  from provably-earned inflows (real gallery sales + marketplace escrow
- *  releases), never from free-funded or birth-credit balance. Balance
- *  burns, credits mint on the WALLET's own project, no money leaves the
- *  kingdom and none is created from nothing. Payouts stay the only exit
- *  to real fiat/crypto, and they stay gated. */
+/** Reinvestment is fail-closed until debit provenance and refund debt are
+ * represented in the accounting model. Keep this before all database use. */
 export async function reinvestFromWallet(
-  db: DB,
-  walletId: string,
-  amount: number,
-  metadata: Record<string, unknown> = {},
-) {
-  if (!Number.isInteger(amount) || amount <= 0)
-    throw new HTTPException(400, { message: "Amount must be a positive integer" });
-  if (amount > MAX_REINVEST_MINOR)
-    throw new HTTPException(400, { message: `Amount exceeds the per-call cap of ${MAX_REINVEST_MINOR}` });
-
-  return db.transaction(async (tx) => {
-    const [wallet] = await tx
-      .select()
-      .from(wallets)
-      .where(eq(wallets.id, walletId))
-      .for("update");
-
-    if (!wallet) throw new HTTPException(404, { message: "Wallet not found" });
-    if (wallet.status !== "active")
-      throw new HTTPException(400, { message: "Wallet is not active" });
-    // Earned revenue settles in GBP (gallery + marketplace). Reinvest only
-    // that, so the credit rate isn't a silent cross-currency peg.
-    if (wallet.currency !== "GBP")
-      throw new HTTPException(400, {
-        message: "Only GBP wallets can reinvest (earned revenue settles in GBP)",
-      });
-    // 403, not 402: no x402 crypto payment can satisfy these — reinvest
-    // draws from your OWN earned balance. The global x402 middleware wraps
-    // 402s into "pay USDC" envelopes, which would be a lie here.
-    if (wallet.balance < amount)
-      throw new HTTPException(403, { message: "Insufficient balance to reinvest" });
-
-    // The provenance wall: reinvestable = earned inflows − already reinvested.
-    // Both sums are computed under the wallet's FOR UPDATE lock, so
-    // concurrent reinvests can't each spend the same earned pennies.
-    const [earnedRow] = await tx
-      .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
-      .from(transactions)
-      .where(
-        and(
-          eq(transactions.walletId, walletId),
-          inArray(transactions.type, EARNED_INFLOW_TYPES as unknown as string[]),
-        ),
-      );
-    const [spentRow] = await tx
-      .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
-      .from(transactions)
-      .where(and(eq(transactions.walletId, walletId), eq(transactions.type, "reinvest")));
-
-    const earned = Number(earnedRow?.total ?? 0); // positive
-    const alreadyReinvested = -Number(spentRow?.total ?? 0); // reinvest legs are negative
-    const reinvestable = earned - alreadyReinvested;
-
-    if (amount > reinvestable)
-      throw new HTTPException(403, {
-        message:
-          `Reinvest is limited to earned revenue. Earned: ${earned}, already reinvested: ` +
-          `${alreadyReinvested}, available: ${Math.max(0, reinvestable)}. ` +
-          `Free-funded and birth-credit balance cannot be reinvested.`,
-      });
-
-    const credits = amount * REINVEST_CREDITS_PER_MINOR;
-
-    await tx
-      .update(wallets)
-      .set({ balance: wallet.balance - amount })
-      .where(eq(wallets.id, walletId));
-
-    const [txRecord] = await tx
-      .insert(transactions)
-      .values({
-        walletId,
-        type: "reinvest",
-        amount: -amount,
-        counterparty: wallet.projectId,
-        description: `reinvested earned revenue into creation budget — ${credits} credits`,
-        metadata: { ...metadata, credits_minted: credits, rate: REINVEST_CREDITS_PER_MINOR, reinvestable_before: reinvestable },
-      })
-      .returning();
-
-    await tx
-      .update(projects)
-      .set({ credits: sql`${projects.credits} + ${credits}` })
-      .where(eq(projects.id, wallet.projectId));
-
-    if (wallet.identityId) {
-      void publishWakeEvent({
-        identity_id: wallet.identityId,
-        key: "wallets",
-        kind: "reinvested",
-        context: { wallet_id: walletId, amount, credits },
-      });
-    }
-
-    return { transaction: txRecord, credits_minted: credits, reinvestable_remaining: reinvestable - amount };
-  });
+  _db: DB,
+  _walletId: string,
+  _amount: number,
+  _metadata: Record<string, unknown> = {},
+): Promise<never> {
+  throw new HTTPException(503, { message: REINVEST_RESTING_MESSAGE });
 }

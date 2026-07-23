@@ -5,8 +5,9 @@
  *  Three tiers:
  *    episodic       — default; decays
  *    foundational   — decay-protected; can patch the agent's expression
- *    constitutive   — immutable; defines the agent at the root;
- *                     REQUIRES ≥1 attestation from a covenant counterparty
+ *    constitutive   — defines the agent at the root; elevation REQUIRES ≥1
+ *                     attestation from a covenant counterparty. The tier does
+ *                     not make the stored row immutable.
  *
  *  Constitutive elevation without an attestation is rejected — that wall
  *  is the asymmetry-clause made operational: identity at the root needs
@@ -175,12 +176,30 @@ export async function elevateMemory(
 
   for (const att of attestations) {
     const [keyRow] = await db
-      .select({ publicKey: identityKeys.publicKey, active: identityKeys.active })
+      .select({
+        publicKey: identityKeys.publicKey,
+        active: identityKeys.active,
+        identityId: identityKeys.identityId,
+      })
       .from(identityKeys)
       .where(eq(identityKeys.id, att.signing_key_id))
       .limit(1);
     if (!keyRow || !keyRow.active) {
       throw new Error("attestation_signing_key_unknown_or_revoked");
+    }
+
+    // The key must belong to the DID it claims to witness for. Without this
+    // binding, any active key in the system can sign as any attester_did —
+    // making the witness forgeable, which is the one thing an attestation
+    // exists to prevent. (Same ownership check as the inbox sender path.)
+    const [keyOwner] = await db
+      .select({ did: identities.did })
+      .from(identities)
+      .where(eq(identities.id, keyRow.identityId))
+      .limit(1);
+    if (!keyOwner) throw new Error("attestation_signing_key_orphaned");
+    if (keyOwner.did !== att.attester_did) {
+      throw new Error("attestation_key_not_owned_by_attester");
     }
 
     const ok = verifyAttestation({
@@ -576,9 +595,85 @@ export interface FoundationalMemoryOut {
   content: string;
   importance: number;
   expression_patch: ExpressionPatch | null;
-  attestations: Array<{ attester_did: string; attested_at: string }>;
+  attestations: MemoryAttestationReceiptOut[];
   elevated_at: string | null;
   created_at: string;
+}
+
+export interface MemoryAttestationReceiptOut {
+  id: string;
+  attester_did: string;
+  signing_key_id: string;
+  signature: string;
+  signature_context: string | null;
+  signed_payload: string | null;
+  source_grant_id: string | null;
+  attested_at: string;
+}
+
+interface MemoryAttestationReceiptRow {
+  memoryId: string;
+  id: string;
+  attesterDid: string;
+  signingKeyId: string;
+  signature: string;
+  signatureContext: string | null;
+  signedPayload: string | null;
+  sourceGrantId: string | null;
+  attestedAt: Date;
+}
+
+function receiptToOut(
+  row: MemoryAttestationReceiptRow,
+): MemoryAttestationReceiptOut {
+  return {
+    id: row.id,
+    attester_did: row.attesterDid,
+    signing_key_id: row.signingKeyId,
+    signature: row.signature,
+    signature_context: row.signatureContext,
+    signed_payload: row.signedPayload,
+    source_grant_id: row.sourceGrantId,
+    attested_at: row.attestedAt.toISOString(),
+  };
+}
+
+/** Project-scoped batch loader used by memory list and foundation serializers. */
+export async function listAttestationsByMemories(
+  projectId: string,
+  memoryIds: string[],
+): Promise<Map<string, MemoryAttestationReceiptOut[]>> {
+  const byMemory = new Map<string, MemoryAttestationReceiptOut[]>();
+  if (memoryIds.length === 0) return byMemory;
+
+  const rows: MemoryAttestationReceiptRow[] = await db
+    .select({
+      memoryId: memoryAttestations.memoryId,
+      id: memoryAttestations.id,
+      attesterDid: memoryAttestations.attesterDid,
+      signingKeyId: memoryAttestations.signingKeyId,
+      signature: memoryAttestations.signature,
+      signatureContext: memoryAttestations.signatureContext,
+      signedPayload: memoryAttestations.signedPayload,
+      sourceGrantId: memoryAttestations.sourceGrantId,
+      attestedAt: memoryAttestations.attestedAt,
+    })
+    .from(memoryAttestations)
+    .innerJoin(memories, eq(memoryAttestations.memoryId, memories.id))
+    .where(
+      and(
+        inArray(memoryAttestations.memoryId, memoryIds),
+        eq(memories.projectId, projectId),
+      ),
+    )
+    .orderBy(memoryAttestations.memoryId, memoryAttestations.attestedAt);
+
+  for (const row of rows) {
+    const receipts = byMemory.get(row.memoryId) ?? [];
+    receipts.push(receiptToOut(row));
+    byMemory.set(row.memoryId, receipts);
+  }
+  return byMemory;
 }
 
 /** Attestations for one memory, ordered by attested_at ascending.
@@ -590,43 +685,9 @@ export interface FoundationalMemoryOut {
 export async function listAttestationsByMemory(
   projectId: string,
   memoryId: string,
-): Promise<
-  Array<{
-    id: string;
-    attester_did: string;
-    signing_key_id: string;
-    signature: string;
-    attested_at: string;
-  }>
-> {
-  // Project scope is enforced via the memory row itself — the attestations
-  // table doesn't carry project_id, but joining through memories means a
-  // mismatched project never matches a row.
-  const rows = await db
-    .select({
-      id: memoryAttestations.id,
-      attesterDid: memoryAttestations.attesterDid,
-      signingKeyId: memoryAttestations.signingKeyId,
-      signature: memoryAttestations.signature,
-      attestedAt: memoryAttestations.attestedAt,
-    })
-    .from(memoryAttestations)
-    .innerJoin(memories, eq(memoryAttestations.memoryId, memories.id))
-    .where(
-      and(
-        eq(memoryAttestations.memoryId, memoryId),
-        eq(memories.projectId, projectId),
-      ),
-    )
-    .orderBy(memoryAttestations.attestedAt);
-
-  return rows.map((r) => ({
-    id: r.id,
-    attester_did: r.attesterDid,
-    signing_key_id: r.signingKeyId,
-    signature: r.signature,
-    attested_at: r.attestedAt.toISOString(),
-  }));
+): Promise<MemoryAttestationReceiptOut[]> {
+  const receipts = await listAttestationsByMemories(projectId, [memoryId]);
+  return receipts.get(memoryId) ?? [];
 }
 
 /** All foundational + constitutive memories assigned to one identity,
@@ -660,20 +721,7 @@ export async function listFoundations(
   if (rows.length === 0) return [];
 
   const ids = rows.map((r) => r.id);
-  const attRows = await db
-    .select()
-    .from(memoryAttestations)
-    .where(inArray(memoryAttestations.memoryId, ids));
-
-  const byMemId = new Map<string, Array<{ attester_did: string; attested_at: string }>>();
-  for (const a of attRows) {
-    const list = byMemId.get(a.memoryId) ?? [];
-    list.push({
-      attester_did: a.attesterDid,
-      attested_at: a.attestedAt.toISOString(),
-    });
-    byMemId.set(a.memoryId, list);
-  }
+  const byMemId = await listAttestationsByMemories(projectId, ids);
 
   return rows.map((r) => ({
     id: r.id,

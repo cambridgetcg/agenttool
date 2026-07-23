@@ -44,8 +44,8 @@ export async function createGiftCheckout(
       },
     ],
     metadata: { kind: "gift_credit" },
-    success_url: `${config.webBaseUrl}/credits.html?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${config.webBaseUrl}/credits.html?cancelled=1`,
+    success_url: `${config.webBaseUrl}/credits?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${config.webBaseUrl}/credits?cancelled=1`,
   });
   return { sessionId: session.id, url: session.url };
 }
@@ -75,8 +75,8 @@ export async function createGalleryCheckout(
     // Shortest expiry Stripe allows — bounds the window in which a
     // withdrawn/taken-down artifact can still be paid for.
     expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
-    success_url: `${config.webBaseUrl}/gallery.html?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${config.webBaseUrl}/gallery.html?cancelled=1`,
+    success_url: `${config.webBaseUrl}/gallery?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${config.webBaseUrl}/gallery?cancelled=1`,
   });
   return { sessionId: session.id, url: session.url };
 }

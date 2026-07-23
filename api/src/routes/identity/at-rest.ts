@@ -5,13 +5,14 @@
  *  Memorial, not archival. Identity remains addressable; /public/agents/:did
  *  resolves to the memorial body.
  *
- *  Witness-only: the target and witness identities must both be active,
+ *  Witnessed: the target and witness identities must both be active,
  *  witness_did must differ from the about identity's DID, and the witness
  *  must sign with an active identity key. The project bearer is authority to
  *  call the route, not an identity credential. Asymmetry-clause from FOCUS
  *  #4 extended to the most foundational state change there is — you cannot
- *  self-flip to at-rest in v1. Voluntary cessation (with two-party-locked
- *  self+witness signature) is v2.
+ *  self-flip to at-rest in v1. Agent-rooted targets additionally authorize
+ *  the exact HTTP mutation with their immutable root; legacy targets retain
+ *  the historical bearer posture. Voluntary cessation is v2.
  *
  *  Wired 2026-05-12 — the in-process chain (witness signature verify +
  *  status flip to 'memorial' + metadata.lifecycle UPDATE + chronicle
@@ -38,6 +39,11 @@ import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
 import { identities, identityKeys } from "../../db/schema/identity";
 import { errors, fail } from "../../lib/errors";
+import {
+  authorizeIdentityMutation,
+  authorityRequestTarget,
+  readAuthorityBoundJson,
+} from "../../services/identity/authority";
 import { publicAgentPath } from "../../services/identity/public-profile";
 import { publishWakeEvent } from "../../services/wake/push";
 
@@ -140,8 +146,11 @@ app.post("/", async (c) => {
 
   // Parse + validate the witness statement.
   let body: z.infer<typeof atRestSchema>;
+  let bodyBytes: Uint8Array;
   try {
-    body = atRestSchema.parse(await c.req.json());
+    const bound = await readAuthorityBoundJson(c.req.raw);
+    bodyBytes = bound.bodyBytes;
+    body = atRestSchema.parse(bound.value);
   } catch (err) {
     return fail(
       c,
@@ -337,6 +346,17 @@ app.post("/", async (c) => {
     );
   }
 
+  // A witness establishes the testimony. For a rooted target, the target's
+  // immutable root separately consents to these exact request bytes.
+  const authority = await authorizeIdentityMutation({
+    identityId: about.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
+
   // Lock and revalidate every authorization row in the same transaction as
   // the state change. Concurrent revocation or another witness therefore wins
   // or loses atomically; neither can be overwritten by a stale pre-check.
@@ -480,6 +500,7 @@ app.post("/", async (c) => {
     witness_did: body.witness_did,
     ended_at: body.ended_at,
     witnessed_at: new Date().toISOString(),
+    authority_mode: authority.mode,
     canonical_bytes_sha256: createHash("sha256").update(canonical, "utf8").digest("hex"),
     _note:
       "Witnessed at-rest transition complete. The stored AgentTool identifier " +

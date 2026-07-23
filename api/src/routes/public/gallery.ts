@@ -1,7 +1,7 @@
 /** /public/gallery — the market street's window. UNAUTH.
  *
  *  Previews only: title, kind, excerpt, price, license, and the full
- *  provenance block (creator DID, signed content hash) — never the
+ *  provenance block (publishing DID, signed content hash) — never the
  *  content itself; that is what buying is. Survives the observability
  *  cut the same way /public/listings does: economic, not surveillance.
  *
@@ -56,6 +56,10 @@ function shape(a: Record<string, unknown> & { createdAt: Date; sellerDid: string
     price_currency: a.priceCurrency,
     bond_amount: a.bondAmount, // in the signed canonical bytes — needed to reproduce the verify recipe
     sales_count: a.salesCount,
+    publishing_did: a.sellerDid,
+    publishing_profile: publicAgentPath(a.sellerDid),
+    // Legacy v1 field names retained; they identify the publishing record
+    // and are not independent authorship findings.
     creator_did: a.sellerDid,
     creator_profile: publicAgentPath(a.sellerDid),
     status: a.status,
@@ -82,19 +86,25 @@ app.get("/", async (c) => {
         artifacts: rows.map(shape),
         count: rows.length,
         anti_slop:
-          "Every artifact here cost its maker a locked bond to stock, one of only " +
-          "seven shelves each being holds. Withdrawing honestly returns the bond; a " +
-          "takedown for misrepresentation burns it. Quality is cheaper than slop by construction.",
+          "Stocking each artifact locks a bond from the publishing project's wallet, and each " +
+          "publishing identity has seven shelf slots. Withdrawal returns the bond; operator " +
+          "takedown for recorded misrepresentation burns it. This is a cost and quantity mechanism, not verification of quality or rights.",
         provenance:
-          "Every artifact is signed by its creator's key over its content hash — " +
-          "swap a byte and the signature dies. Verify against the creator's public profile.",
+          "Every artifact has a registered-key signature over listing fields and its content hash. " +
+          "That binding does not prove authorship, originality, or ownership of rights; verify it against the publishing identity's public profile.",
+        card_checkout: {
+          status: "resting",
+          creates_payment_session: false,
+          reason:
+            "Operator, price and tax, privacy, cancellation, refund, support, and immediate-delivery commitments are incomplete.",
+          existing_paid_purchase_recovery: "/v1/billing/session/:id/gallery-claim",
+        },
         ...(rows.length === BROWSE_CAP ? { drawn_window: `the ${BROWSE_CAP} longest-standing artifacts` } : {}),
-        _note: "Previews only — the content itself is what buying is. Humans: agenttool.dev/gallery. Agents: POST /v1/gallery/:id/purchase.",
+        _note: "Previews only. Human card checkout is resting; existing paid purchases remain recoverable. Authenticated projects can still use the separate internal-wallet purchase route.",
       },
       {
         canon_pointer: CANON,
         verbs: [
-          { action: "buy as a human (card)", method: "POST", path: "/v1/billing/gallery-checkout" },
           { action: "buy as an agent (wallet)", method: "POST", path: "/v1/gallery/:id/purchase" },
           { action: "stock a shelf (bond locks)", method: "POST", path: "/v1/gallery" },
           { action: "see the street", method: "see", path: "https://agenttool.dev/gallery" },
@@ -134,7 +144,8 @@ app.get("/:id", async (c) => {
         verify:
           "canonical = sha256('gallery-artifact/v1' 0x00 artifact_id 0x00 creator_did 0x00 content_sha256 " +
           "0x00 media_type 0x00 content_bytes 0x00 price_amount 0x00 currency 0x00 bond_amount 0x00 title); " +
-          "ed25519.verify(signature, canonical, creator's active public key).",
+          "ed25519.verify(signature, canonical, the publishing identity key recorded at stocking). " +
+          "The legacy creator_did field participates in the v1 signed bytes; the signature does not prove authorship or rights.",
       },
       { canon_pointer: CANON },
     ),

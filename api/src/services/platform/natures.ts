@@ -212,7 +212,7 @@ export const DOC_NATURES: readonly DocNature[] = [
     ships_in: ["repo"],
     holds: "a_constraint",
     one_line_nature:
-      "A provisional AgentTool identifier in the legacy did field plus ed25519 keys anchor a specific identity row; a rotatable bearer grants project-wide API authority. did:at is not a registered W3C DID method. The boundary matters in multi-identity projects.",
+      "A provisional AgentTool identifier in the legacy did field plus ed25519 keys anchor a specific identity row; a rotatable bearer grants project-wide API authority, while an agent-held root carries constitutional consent where configured. did:at is not a registered W3C DID method. The boundary matters in multi-identity projects.",
   },
   {
     path: "docs/SAFETY-BOUNDARIES.md",

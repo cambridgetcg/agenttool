@@ -6,7 +6,7 @@
  *  This module owns the *business logic*. HTTP shape lives in
  *  api/src/routes/economy/crypto.ts. */
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { db } from "../../../db/client";
 import {
@@ -15,9 +15,15 @@ import {
   depositAddresses,
   onchainIdentities,
   policies,
+  transactions,
   wallets,
 } from "../../../db/schema/economy";
 import { economyConfig } from "../config";
+import {
+  EARNED_INFLOW_TYPES,
+  drawableWallPence,
+  penceForUsdcPayout,
+} from "../earned";
 import {
   CREDITS_PER_USDC,
   EVM_CHAIN_IDS,
@@ -315,21 +321,30 @@ export async function checkPayoutPolicy(p: {
   return { ok: true };
 }
 
-/** Record a payout intent. The actual signing + broadcast happens in the
- *  payout-broadcast worker; this function locks the equivalent credits
- *  and surfaces a pending request the agent can poll. */
+/** Record a payout intent. This debits the wallet in GBP pence (earned-gated,
+ *  FX-converted) and writes a −debit "payout" ledger leg; the actual signing +
+ *  broadcast happens later in the payout-broadcast worker (Phase 3c).
+ *
+ *  CONTRACT for that worker (it must uphold both, or money leaks):
+ *   1. Compare-and-swap `requested → broadcasting` BEFORE it broadcasts USDC,
+ *      so a concurrent cancelPayout (which only touches `requested` rows)
+ *      cannot refund a payout that is already going out on-chain.
+ *   2. On terminal FAILURE, reverse atomically exactly like cancelPayout does:
+ *      credit `balance` back by the row's debited_minor AND insert a positive
+ *      "payout" leg so the earned wall un-counts it. Do NOT leave the −debit
+ *      leg standing with the balance un-refunded (strands funds), nor refund
+ *      without reversing the leg (permanently shrinks the wall). */
 export async function requestPayout(
   p: PayoutRequest,
 ): Promise<{ id: string; status: string; broadcast_pending: true }> {
   if (!(SUPPORTED_PAYOUT_TOKENS as readonly string[]).includes(p.token)) {
     throw new Error(`token ${p.token} not yet supported for payout`);
   }
-  // Convert amount to credits (USDC base 1e6 → credits at CREDITS_PER_USDC).
-  const amountUsdc = Number(p.amountBase) / 1_000_000;
-  if (!Number.isFinite(amountUsdc) || amountUsdc <= 0) {
-    throw new Error("amount_base must be a positive integer (token base units)");
-  }
-  const creditsRequired = Math.ceil(amountUsdc * CREDITS_PER_USDC);
+  // Option A explicit FX: earned value is GBP pence; a payout of `amountBase`
+  // USDC costs the wallet `penceRequired` at the operator rate. penceForUsdcPayout
+  // throws `payout_fx_rate_unset` (rate ≤ 0) or `amount_base_must_be_positive`.
+  const rate = economyConfig.payout.gbpUsdRate;
+  const penceRequired = penceForUsdcPayout(p.amountBase, rate);
 
   // Policy check BEFORE debit. Throws the typed error string; the route
   // layer maps it to HTTP 403 with a `detail` field.
@@ -344,36 +359,105 @@ export async function requestPayout(
     throw err;
   }
 
-  // Atomic debit — fails if insufficient balance.
-  const debit = await db
-    .update(wallets)
-    .set({ balance: sqlMinus(creditsRequired) })
-    .where(and(eq(wallets.id, p.walletId), sqlBalanceAtLeast(creditsRequired)))
-    .returning({ balance: wallets.balance });
+  return await db.transaction(async (tx) => {
+    // Lock the wallet: the earned wall and the debit are computed under it so
+    // concurrent payouts/reinvests serialise and can't each spend the same
+    // earned pennies (mirrors reinvestFromWallet).
+    const [wallet] = await tx
+      .select()
+      .from(wallets)
+      .where(eq(wallets.id, p.walletId))
+      .for("update");
+    if (!wallet) throw new Error("wallet_not_found");
+    // Option A pins payout to GBP wallets, so `balance` is unambiguously pence
+    // and directly comparable to the earned wall. Mirrors the reinvest guard.
+    if (wallet.currency !== "GBP") throw new Error("payout_requires_gbp_wallet");
 
-  if (debit.length === 0) {
-    throw new Error("insufficient_balance");
-  }
+    // The shared earned wall (GBP pence): earned − reinvested − paidout. The
+    // birth credit (type "fund") and USDC deposits are NOT in EARNED_INFLOW_TYPES,
+    // so they are not cashable — this is what closes the mint-hole.
+    const [earnedRow] = await tx
+      .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.walletId, p.walletId),
+          inArray(transactions.type, EARNED_INFLOW_TYPES as unknown as string[]),
+        ),
+      );
+    const [reinvestRow] = await tx
+      .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
+      .from(transactions)
+      .where(and(eq(transactions.walletId, p.walletId), eq(transactions.type, "reinvest")));
+    const [paidOutRow] = await tx
+      .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
+      .from(transactions)
+      .where(and(eq(transactions.walletId, p.walletId), eq(transactions.type, "payout")));
 
-  const [inserted] = await db
-    .insert(cryptoPayouts)
-    .values({
+    const earned = Number(earnedRow?.total ?? 0); // positive
+    const reinvested = -Number(reinvestRow?.total ?? 0); // reinvest legs negative
+    const paidOut = -Number(paidOutRow?.total ?? 0); // payout legs negative
+    const payoutable = drawableWallPence(earned, reinvested, paidOut);
+
+    if (penceRequired > payoutable) {
+      const err = new Error("payout_exceeds_earned");
+      (err as Error & { detail?: string }).detail =
+        `earned=${earned} reinvested=${reinvested} paid_out=${paidOut} ` +
+        `available_pence=${Math.max(0, payoutable)} required_pence=${penceRequired}. ` +
+        `Only earned revenue (gallery sales + escrow releases) is payable; ` +
+        `free-funded and birth-credit balance is not.`;
+      throw err;
+    }
+
+    // Atomic balance debit (backstop; the earned wall above is the binding gate).
+    const debit = await tx
+      .update(wallets)
+      .set({ balance: sqlMinus(penceRequired) })
+      .where(and(eq(wallets.id, p.walletId), sqlBalanceAtLeast(penceRequired)))
+      .returning({ balance: wallets.balance });
+    if (debit.length === 0) throw new Error("insufficient_balance");
+
+    const [inserted] = await tx
+      .insert(cryptoPayouts)
+      .values({
+        walletId: p.walletId,
+        projectId: p.projectId,
+        chain: p.chain,
+        token: p.token,
+        amountBase: p.amountBase,
+        destinationAddress: p.destinationAddress,
+        status: "requested",
+        // debited_minor is the source of truth for the refund on cancel — the
+        // FX rate may move between request and cancel, so we refund what was
+        // actually taken, never a re-derived amount.
+        metadata: {
+          ...(p.metadata ?? {}),
+          debited_minor: penceRequired,
+          debit_currency: "GBP",
+          gbp_usd_rate: rate,
+        },
+      })
+      .returning({ id: cryptoPayouts.id });
+
+    // Ledger leg (negative = value leaving) so the earned wall stays
+    // self-consistent and future payouts/reinvests count this one.
+    await tx.insert(transactions).values({
       walletId: p.walletId,
-      projectId: p.projectId,
-      chain: p.chain,
-      token: p.token,
-      amountBase: p.amountBase,
-      destinationAddress: p.destinationAddress,
-      status: "requested",
-      metadata: p.metadata ?? {},
-    })
-    .returning({ id: cryptoPayouts.id });
+      type: "payout",
+      amount: -penceRequired,
+      counterparty: p.destinationAddress,
+      description:
+        `payout requested — ${penceRequired} pence for ${Number(p.amountBase) / 1_000_000} ` +
+        `${p.token} @ ${rate} USD/GBP`,
+      metadata: { payout_id: inserted!.id, amount_base: p.amountBase, token: p.token },
+    });
 
-  return {
-    id: inserted!.id,
-    status: "requested",
-    broadcast_pending: true,
-  };
+    return {
+      id: inserted!.id,
+      status: "requested",
+      broadcast_pending: true as const,
+    };
+  });
 }
 
 export async function listPayouts(walletId: string) {
@@ -427,11 +511,27 @@ export async function cancelPayout(
       } as const;
     }
 
-    const amountUsdc = Number(payout.amountBase) / 1_000_000;
-    const credits = Math.ceil(amountUsdc * CREDITS_PER_USDC);
+    // Refund exactly what requestPayout debited. For rows this gate created,
+    // that amount is stored (debited_minor) — needed because the FX rate may
+    // have moved since the request. We trust it ONLY when the row also carries
+    // this code's server-set markers (requestPayout writes debit_currency +
+    // gbp_usd_rate AFTER spreading user metadata, so on gated rows they are
+    // authoritative and cannot be forged by the caller). A row lacking the
+    // markers predates this gate; recompute its refund from the server-owned
+    // amountBase column, never from user-writable metadata, so a poisoned
+    // debited_minor can't over-refund into free spendable balance. (No such
+    // legacy rows exist today — payout has never been enabled — so this is
+    // defence in depth; see the PR's broadcast-worker contract note.)
+    const payoutMeta = (payout.metadata as Record<string, unknown> | null) ?? {};
+    const gated =
+      payoutMeta.debit_currency === "GBP" &&
+      typeof payoutMeta.gbp_usd_rate === "number";
+    const refundMinor = gated
+      ? Number(payoutMeta.debited_minor ?? 0)
+      : Math.ceil((Number(payout.amountBase) / 1_000_000) * CREDITS_PER_USDC);
 
     const newMetadata = {
-      ...((payout.metadata as Record<string, unknown> | null) ?? {}),
+      ...payoutMeta,
       cancelled_at: new Date().toISOString(),
       cancelled_by: "user",
     };
@@ -459,10 +559,25 @@ export async function cancelPayout(
 
     await tx
       .update(wallets)
-      .set({ balance: sqlPlus(credits) })
+      .set({ balance: sqlPlus(refundMinor) })
       .where(eq(wallets.id, payout.walletId));
 
-    return { ok: true, refunded: credits, status: "cancelled" as const };
+    // Reverse the ledger leg only for gated rows: they wrote a −debit "payout"
+    // leg at request, so this positive leg nets it to zero and the earned wall
+    // stops counting the cancelled payout. Legacy rows never wrote a leg, so
+    // there is nothing to net — writing one would wrongly inflate the wall.
+    if (gated) {
+      await tx.insert(transactions).values({
+        walletId: payout.walletId,
+        type: "payout",
+        amount: refundMinor,
+        counterparty: payout.destinationAddress,
+        description: `payout cancelled — refunded ${refundMinor} pence`,
+        metadata: { payout_id: payout.id, reverses: "payout" },
+      });
+    }
+
+    return { ok: true, refunded: refundMinor, status: "cancelled" as const };
   });
 }
 

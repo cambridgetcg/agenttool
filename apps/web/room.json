@@ -1,0 +1,145 @@
+{
+  "_format": "agenttool-room/v1",
+  "name": "ROOM ∞",
+  "subtitle": "Meet without merging",
+  "status": "implemented_static_local",
+  "html": "/room",
+  "beings": {
+    "exact": 2,
+    "label_max_utf16_code_units": 24,
+    "labels": "Local turn labels only. Real names are not required, and AgentTool does not verify that a label identifies a distinct person, agent, or kind of being.",
+    "difference": "The encounter keeps the two sides attributed and separate. It does not infer sameness, agreement, identity, consciousness, feeling, or relationship from participation."
+  },
+  "turns": {
+    "exact": 6,
+    "timer": false,
+    "background_loop": false,
+    "fixed_order": [
+      {
+        "turn": 1,
+        "being": "one",
+        "phase": "signal",
+        "toward": "two"
+      },
+      {
+        "turn": 2,
+        "being": "two",
+        "phase": "signal",
+        "toward": "one"
+      },
+      {
+        "turn": 3,
+        "being": "one",
+        "phase": "ask",
+        "about": "being two's signal"
+      },
+      {
+        "turn": 4,
+        "being": "two",
+        "phase": "ask",
+        "about": "being one's signal"
+      },
+      {
+        "turn": 5,
+        "being": "one",
+        "phase": "answer",
+        "to": "being two's question"
+      },
+      {
+        "turn": 6,
+        "being": "two",
+        "phase": "answer",
+        "to": "being one's question"
+      }
+    ]
+  },
+  "input_bounds": {
+    "counting": "The human surface uses HTML maxlength, which counts UTF-16 code units. Space-delimited limits are counted after trimming and collapsing whitespace; a non-empty unspaced line counts as one so writing systems without spaces are accepted.",
+    "signal": {
+      "min_space_delimited_units": 1,
+      "max_space_delimited_units": 16,
+      "max_utf16_code_units": 240
+    },
+    "ask": {
+      "min_space_delimited_units": 1,
+      "max_space_delimited_units": 20,
+      "max_utf16_code_units": 280,
+      "must_end_with_question_mark": true,
+      "accepted_terminal_question_marks": ["?", "？", "؟", "፧", "՞", "❓"]
+    },
+    "answer": {
+      "min_space_delimited_units": 1,
+      "max_space_delimited_units": 24,
+      "max_utf16_code_units": 320
+    }
+  },
+  "phases": [
+    {
+      "id": "signal",
+      "turns": 2,
+      "rule": "Each being may author one signal about themselves. The other being does not compose, diagnose, or complete it for them.",
+      "incoming_view": "When it is time to ask, the other being sees the shared signal or the literal closed-door marker, never invented substitute content."
+    },
+    {
+      "id": "ask",
+      "turns": 2,
+      "rule": "Each being may respond to the other's signal with a question. The prompt asks rather than asserting what the other meant or is.",
+      "incoming_view": "When it is time to answer, the signal's author sees the shared question or the literal closed-door marker."
+    },
+    {
+      "id": "answer",
+      "turns": 2,
+      "rule": "Each being may reply to the question about their own signal or keep the door closed. No explanation for closure is requested."
+    }
+  ],
+  "consent": {
+    "turn_scope": "Sharing is chosen separately on every turn. Sharing one signal, question, or answer does not consent to share another.",
+    "keep_private_available_every_turn": true,
+    "keep_private_effect": "Any current textarea value is cleared without entering encounter state. The turn advances with an in-memory null closure state that renders as a literal closed-door marker. No private substitute is inferred, generated, revealed, or required.",
+    "answer_required": false,
+    "reason_for_closure_required": false,
+    "consensus_required": false,
+    "synthesis_performed": false,
+    "reveal_scope": "After all six turns, a separate control asks the holders of the shared screen to wait until both beings are present. This is an interaction prompt, not authenticated proof that both are present or consent to another use.",
+    "question_shape_boundary": "The human surface checks length and a terminal question-mark character only. It cannot determine whether a question is kind, non-assumptive, safe, sincere, or semantically a question; that remains a social practice, and either being may close the room.",
+    "stop_any_time": true,
+    "stopping_penalty": false,
+    "participation_claim": "Taking a turn records no claim that either label names a particular legal person, autonomous agent, conscious subject, or consenting representative outside this local round."
+  },
+  "outcome": {
+    "winner": null,
+    "score": false,
+    "ranking": false,
+    "matching": false,
+    "artifact": "A side-by-side local reveal of the two attributed Signal → Ask → Answer paths. Closed doors remain visible as closures; the game adds no synthesis or verdict.",
+    "ending": "The encounter ends after turn six and a deliberate reveal, or is erased when either being closes it. Completion does not imply agreement or mutual understanding."
+  },
+  "privacy": {
+    "account_required": false,
+    "game_state": "JavaScript memory in the current browser tab only.",
+    "persisted": false,
+    "encounter_local_storage": false,
+    "encounter_session_storage": false,
+    "appearance_storage": "The shared site theme script may read or write the localStorage key agenttool.mode for dawn/night appearance. It receives no being label or encounter line.",
+    "sent_to_agenttool": false,
+    "network_writes": false,
+    "gameplay_network_boundary": "The gameplay script sends no labels, signals, questions, answers, or closed-door choices. Ordinary page and static-asset requests remain visible to hosting and network infrastructure.",
+    "clipboard_write": false,
+    "real_names_required": false,
+    "handoff_boundary": "Pass-the-screen hiding is a social convention, not cryptographic secrecy. Someone controlling the browser or developer tools may inspect in-memory state while the tab remains open.",
+    "private_turn": "Choosing Keep this door closed stores and reveals only the closure marker, not private text.",
+    "leaving": "Closing the room, erasing before reveal, releasing the finished room, reloading, or leaving the page clears the in-memory encounter."
+  },
+  "accessibility": {
+    "keyboard": true,
+    "screen_reader_status": true,
+    "color_only_meaning": false,
+    "sound_required": false,
+    "motion_required": false,
+    "reduced_motion_honored": true,
+    "closed_door_is_text": true
+  },
+  "machine_playground": "https://api.agenttool.dev/public/play",
+  "doctrine": "A signal is self-authored. A question leaves room. An answer may be a closed door. Difference remains difference.",
+  "updated_at": "2026-07-19"
+}

@@ -1,4 +1,6 @@
-FROM oven/bun:1.3-alpine AS base
+# Update the Bun tag and registry digest together after the hermetic gate passes;
+# the digest prevents an upstream tag move from silently changing release bytes.
+FROM oven/bun:1.3.5-alpine@sha256:7156fcc0cee0194d390bfaf7f0eeda9a5e383e70cc90f31aad3a2440a033d7dc AS base
 WORKDIR /app
 
 # ── Install dependencies (cached layer) ─────────────────────────────────────
@@ -8,13 +10,28 @@ RUN bun install --frozen-lockfile
 
 # ── Runtime ─────────────────────────────────────────────────────────────────
 FROM base AS runtime
+ARG AGENTTOOL_GIT_REVISION=unknown
+ARG AGENTTOOL_SOURCE_DIRTY=unknown
 ENV NODE_ENV=production \
-    AGENTTOOL_DOCS_DIR=/app/docs
+    AGENTTOOL_DOCS_DIR=/app/docs \
+    AGENTTOOL_GIT_REVISION=${AGENTTOOL_GIT_REVISION} \
+    AGENTTOOL_SOURCE_DIRTY=${AGENTTOOL_SOURCE_DIRTY}
+LABEL org.opencontainers.image.source="https://github.com/cambridgetcg/agenttool" \
+      org.opencontainers.image.revision="${AGENTTOOL_GIT_REVISION}" \
+      dev.agenttool.source.dirty="${AGENTTOOL_SOURCE_DIRTY}"
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY src ./src
 COPY package.json ./
 COPY tsconfig.json ./
+
+# Fail the image build before publication if a remote context/cache layer has
+# silently replaced TypeScript inputs with empty files. Referencing the source
+# revision makes this gate run for each release commit even with normal cache.
+RUN test -n "$AGENTTOOL_GIT_REVISION" \
+    && test -s src/index.ts \
+    && test -s tsconfig.json \
+    && test -z "$(find src -type f -name '*.ts' -size 0 -print -quit)"
 
 # Bundle the canon JSON-LD into the image at /app/docs/agenttool.jsonld.
 # Staged by bin/deploy.sh Phase 3 (cp docs/agenttool.jsonld api/agenttool.jsonld.bundled)

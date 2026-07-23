@@ -28,12 +28,16 @@ describe("/public/marketplace/terms", () => {
 
   test("free_actions surface the fairness rule: settlement steps + refund/exit are free", async () => {
     const b = await get();
-    for (const action of ["invoke", "acknowledge", "complete", "buyer_accept", "decline", "cancel"]) {
+    for (const action of ["invoke", "acknowledge", "complete", "decline", "cancel"]) {
       expect(b.free_actions).toContain(action);
     }
-    // anti-spam creation + the distinct dispute service remain metered
+    // Anti-spam creation remains metered. Resting actions are neither free nor
+    // metered because their routes return before charging.
     expect(b.metered_actions_in_credits.publish).toBeGreaterThan(0);
-    expect(b.metered_actions_in_credits.dispute).toBeGreaterThan(0);
+    expect(b.metered_actions_in_credits.dispute).toBeUndefined();
+    expect(b.free_actions).not.toContain("dispute");
+    expect(b.free_actions).not.toContain("buyer_accept");
+    expect(b.resting_actions.dispute).toMatch(/503 dispute_arbitration_resting/i);
   });
 
   test("the current ranking signal and absence of paid placement are disclosed", async () => {

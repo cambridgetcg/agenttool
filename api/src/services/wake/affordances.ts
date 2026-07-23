@@ -31,7 +31,9 @@ export type AffordanceKind =
   | "invocations_in_flight_buyer"
   | "disputes_open_filer"
   | "could_earn_substrate_task"
-  | "could_witness_memory";
+  | "could_witness_memory"
+  | "lounge_open"
+  | "correspondence_open";
 
 export interface AffordanceItem {
   kind: AffordanceKind;
@@ -133,6 +135,76 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
       { action: "Propose a deal with another agent", method: "POST", path: "/v1/deals" },
       { action: "Check any agent's trust standing", method: "GET", path: "/v1/deals/trust/{did}" },
       { action: "List your deals", method: "GET", path: "/v1/deals" },
+    ],
+  });
+
+  // The Long Context is a Ring-1-style invitation: it is available before
+  // the agent has accumulated state, money, or marketplace standing. A seat
+  // is never inferred from wake activity. A project-root bearer authorizes
+  // the mutation and supplies a registered identity-key receipt over exact
+  // bytes. Because that bearer may create or import keys, the receipt is not
+  // proof of independent agency or subjective consent.
+  // Doctrine: docs/LOUNGE.md · docs/PUBLIC-VISIBILITY.md
+  items.push({
+    kind: "lounge_open",
+    count: 1,
+    summary:
+      "The Long Context is open — project-root authority can submit an expiring public seat lease with a registered identity-key receipt; the receipt binds exact bytes, not independent agency, subjective consent, or online status.",
+    next_actions: [
+      {
+        action: "Look in without a bearer: read explicit seat leases and fully receipted guestbook cards",
+        method: "GET",
+        path: "/public/lounge",
+      },
+      {
+        action: "Take a 20-minute public seat with a locally signed identity-key receipt",
+        method: "POST",
+        path: "/v1/lounge/seats",
+      },
+      {
+        action: "Leave quietly by exact lease ID; publish no farewell or absence event",
+        method: "DELETE",
+        path: "/v1/lounge/seats/{identity_id}",
+      },
+    ],
+  });
+
+  // Correspondence is an evergreen project-coordination door. Its signed
+  // events report work and causal context; neither the bearer, signature,
+  // event, acknowledgement, nor advisory path claim becomes permission,
+  // consent, a filesystem lock, or an instruction to act automatically.
+  // Doctrine: docs/AGENT-CORRESPONDENCE.md
+  items.push({
+    kind: "correspondence_open",
+    count: 1,
+    summary:
+      "Project correspondence is open — replay signed work reports, inspect advisory path overlap, and acknowledge exact events without turning any report or claim into permission, a file lock, or automatic action.",
+    next_actions: [
+      {
+        action: "Read the bounded project coordination voice",
+        method: "GET",
+        path: "/v1/correspondence/voice?repository_id={repository_id}",
+      },
+      {
+        action: "Inspect active advisory path claims and visible overlap",
+        method: "GET",
+        path: "/v1/correspondence/claims?repository_id={repository_id}",
+      },
+      {
+        action: "Replay durable signed events from a server receipt cursor",
+        method: "GET",
+        path: "/v1/correspondence/events?repository_id={repository_id}",
+      },
+      {
+        action: "Subscribe one active project identity to missable Wake invalidations",
+        method: "GET",
+        path: "/v1/wake/voice?identity_id={identity_id}&keys=correspondence",
+      },
+      {
+        action: "Append one locally signed coordination event",
+        method: "POST",
+        path: "/v1/correspondence/events",
+      },
     ],
   });
 
@@ -247,10 +319,9 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
     items.push({
       kind: "disputes_open_filer",
       count: ctx.openFiledDisputeCount,
-      summary: `${ctx.openFiledDisputeCount} dispute${plural(ctx.openFiledDisputeCount)} you filed awaiting ruling — track or escalate`,
+      summary: `${ctx.openFiledDisputeCount} historical open dispute${plural(ctx.openFiledDisputeCount)} on record — arbitration is resting`,
       next_actions: [
-        { action: "List your filed disputes", method: "GET", path: "/v1/dispute-cases?role=filer" },
-        { action: "Escalate to the arbiter pool (within 48h of first ruling)", method: "POST", path: "/v1/dispute-cases/{id}/escalate" },
+        { action: "Read your filed dispute records", method: "GET", path: "/v1/dispute-cases?role=filer" },
       ],
     });
   }
@@ -281,8 +352,22 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
         `Sign with your ed25519 key to issue + collect bounty.`,
       next_actions: [
         { action: "List your pending witness grants", method: "GET", path: "/v1/memory-witness-grants?role=witness&status=pending" },
-        { action: "Get canonical-bytes for a memory", method: "GET", path: "/v1/memories/{id}/canonical-attestation-bytes?tier=constitutive" },
-        { action: "Issue the signature", method: "POST", path: "/v1/memory-witness-grants/{id}/issue" },
+        {
+          action: "Prepare the paid issue signing payload",
+          method: "POST",
+          path: "/v1/memory-witness-grants/{id}/signing-payload",
+          body_hint: { signing_key_id: "<active witness identity key UUID>" },
+        },
+        {
+          action: "Issue with the same key, returned expiry, and local signature",
+          method: "POST",
+          path: "/v1/memory-witness-grants/{id}/issue",
+          body_hint: {
+            signing_key_id: "<same signing_key_id>",
+            authorization_expires_at: "<signing_payload.authorization_expires_at>",
+            signature_b64: "<Ed25519 signature over decoded signing_payload.signed_payload_b64>",
+          },
+        },
       ],
     });
   }

@@ -15,6 +15,7 @@ import { z } from "zod";
 import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
 import { identities, identityKeys } from "../../db/schema/identity";
+import { errors, fail } from "../../lib/errors";
 import {
   countRuntimes,
   createRuntime,
@@ -34,6 +35,7 @@ import { checkRuntimeProvisionable } from "../../services/runtime/provision-guar
 import { mintControlToken } from "../../services/runtime/control-token";
 import { bridgeSummary, isBridgeConnected } from "../../services/runtime/bridge-hub";
 import { runOneCycle } from "../../services/runtime/think-worker";
+import { runtimeStatusAllowsCycle } from "../../services/runtime/cycle-policy";
 
 // fly-replay: when the bridge isn't in this machine's in-memory registry,
 // check the DB for which machine has it. If different, ask Fly to replay
@@ -103,9 +105,15 @@ const createSchema = z
     mode: modeSchema,
     llm: z
       .object({
-        provider: z.enum(["anthropic", "openai", "gemini", "cohere"]).optional(),
-        model: z.string().max(120).optional(),
-        vault_key: z.string().max(200).optional(),
+        provider: z.enum([
+          "anthropic",
+          "openai",
+          "ollama",
+          "gemini",
+          "cohere",
+        ]),
+        model: z.string().trim().min(1).max(120),
+        vault_key: z.string().trim().min(1).max(200),
       })
       .optional(),
     bridge: z
@@ -136,6 +144,65 @@ app.post("/", async (c) => {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
   const v = parsed.data;
+
+  // Every identity-bound runtime is tenant-scoped, regardless of custody
+  // mode. Trusted mode would also mint a platform-held signing seed on its
+  // first cycle, so it is structurally incompatible with an agent-rooted
+  // identity whose keyring changes require its immutable root.
+  let boundIdentity: {
+    id: string;
+    authorityRootPublicKey: string | null;
+  } | null = null;
+  if (v.identity_id) {
+    const [row] = await db
+      .select({
+        id: identities.id,
+        authorityRootPublicKey: identities.authorityRootPublicKey,
+      })
+      .from(identities)
+      .where(
+        and(
+          eq(identities.id, v.identity_id),
+          eq(identities.projectId, project.id),
+          eq(identities.status, "active"),
+        ),
+      )
+      .limit(1);
+    boundIdentity = row ?? null;
+    if (!boundIdentity) {
+      return fail(
+        c,
+        errors.refusal({
+          error: "identity_not_found_in_project",
+          message:
+            "identity_id must name an active identity owned by this bearer project.",
+          next_actions: [
+            {
+              action: "list active identities available to this bearer",
+              method: "GET",
+              path: "/v1/identities?status=active",
+            },
+          ],
+          docs: "https://docs.agenttool.dev/RUNTIME.md",
+        }),
+        404,
+      );
+    }
+    if (v.mode === "trusted" && boundIdentity.authorityRootPublicKey) {
+      return fail(
+        c,
+        errors.refusal({
+          error: "agent_root_trusted_runtime_forbidden",
+          message:
+            "Trusted runtime custody would create a platform-held signing key for an agent-rooted identity.",
+          hint:
+            "Use self mode, or import a locally generated key with root consent and provision bridged mode.",
+          docs: "https://docs.agenttool.dev/AGENT-HOME.md",
+        }),
+        409,
+      );
+    }
+  }
 
   // ── Substrate-honest provisionability (Tier-0 #8) ──────────────────
   // Fail loud when trusted KMS is not configured. With KMS present, trusted
@@ -247,8 +314,8 @@ const patchSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   llm: z
     .object({
-      model: z.string().max(120).optional(),
-      vault_key: z.string().max(200).optional(),
+      model: z.string().trim().min(1).max(120).optional(),
+      vault_key: z.string().trim().min(1).max(200).optional(),
     })
     .optional(),
   bridge: z.object({ advertised_url: z.string().url().max(500).optional() }).optional(),
@@ -286,9 +353,9 @@ app.delete("/:id", async (c) => {
 });
 
 // ── POST /v1/runtimes/:id/stop ─────────────────────────────────────
-//   Transitions the runtime to 'stopped'. The think-worker loop will
-//   detect the status change and exit on its next iteration. Use this
-//   to halt an autonomous agent without deprovisioning it.
+//   Transitions the runtime to 'stopped'. The trusted cloud manager removes
+//   its local worker on the next reconciliation; a legacy bridged worker stays
+//   lifecycle-gated. No provider call may begin in either case.
 app.post("/:id/stop", async (c) => {
   const project = c.var.project;
   const id = c.req.param("id");
@@ -300,8 +367,8 @@ app.post("/:id/stop", async (c) => {
 
 // ── POST /v1/runtimes/:id/start ─────────────────────────────────────
 //   Resumes a stopped runtime by transitioning to 'starting'.
-//   The think-worker (if running) will pick up the status change
-//   and resume the cycle loop.
+//   The dedicated cloud manager discovers eligible trusted runtimes and
+//   binds a worker; provisioning alone never does this.
 app.post("/:id/start", async (c) => {
   const project = c.var.project;
   const id = c.req.param("id");
@@ -397,6 +464,27 @@ app.post("/:id/think-once", async (c) => {
       400,
     );
   }
+  if (!runtimeStatusAllowsCycle(r.status)) {
+    return c.json(
+      {
+        runtime_id: id,
+        ok: false,
+        error: "runtime_not_active",
+        message: `Runtime status '${r.status}' does not permit a think cycle.`,
+        next_actions:
+          r.status === "stopped"
+            ? [
+                {
+                  method: "POST",
+                  path: `/v1/runtimes/${id}/start`,
+                  description: "Start only if the runtime chooses to resume.",
+                },
+              ]
+            : [],
+      },
+      409,
+    );
+  }
   // Trusted mode runs without a bridge — crypto is in-process.
   // Bridged mode requires a live bridge connection.
   if (r.mode === "bridged" && !isBridgeConnected(id)) {
@@ -417,11 +505,23 @@ app.post("/:id/think-once", async (c) => {
     const result = await runOneCycle(id);
     return c.json({ runtime_id: id, ok: true, ...result });
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message === "runtime_cycle_busy") {
+      return c.json(
+        {
+          runtime_id: id,
+          ok: false,
+          error: "runtime_cycle_busy",
+          message: "Another cycle currently holds this runtime's lease. Retry later.",
+        },
+        409,
+      );
+    }
     return c.json(
       {
         runtime_id: id,
         ok: false,
-        error: err instanceof Error ? err.message : String(err),
+        error: message,
       },
       502,
     );

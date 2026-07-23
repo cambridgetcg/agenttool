@@ -28,6 +28,16 @@ const SERVICE_PATH = join(
   "memory-witness.ts",
 );
 const SOURCE = readFileSync(SERVICE_PATH, "utf8");
+const MIGRATION = readFileSync(
+  join(
+    __dirname,
+    "..",
+    "..",
+    "migrations",
+    "20260713T120000_attestation_receipt_integrity.sql",
+  ),
+  "utf8",
+);
 
 describe("wall/witness-as-service-not-self — structural pin", () => {
   test("createGrant explicitly checks listing.projectId !== buyer.projectId", () => {
@@ -64,9 +74,77 @@ describe("wall/witness-as-service-not-self — structural pin", () => {
     // matches listing.witnessIdentityId. Without this check, any agent
     // with a key could "issue" any grant.
     expect(
-      /keyRow\.identityId\s*!==\s*listing\.witnessIdentityId/.test(SOURCE),
-      "issueGrant must compare keyRow.identityId !== listing.witnessIdentityId — the signing key must belong to the witness identity, not just any active key",
+      /key\.identityId\s*!==\s*witnessIdentity\.id/.test(SOURCE),
+      "issueGrant must compare key.identityId !== witnessIdentity.id — the signing key must belong to the locked current witness identity, not just any active key",
     ).toBe(true);
+  });
+
+  test("paid issue has a distinct domain and rechecks signed state under locks", () => {
+    expect(SOURCE).toContain("MEMORY_WITNESS_ISSUE_SIGNATURE_CONTEXT");
+    expect(SOURCE).not.toContain("canonicalAttestationBytes");
+    expect(SOURCE).toContain('for("update")');
+    expect(SOURCE).toContain("verifyMemoryWitnessIssue");
+    expect(SOURCE).toContain("authorizationExpiresAt");
+  });
+
+  test("paid preparation and issue lock current identities and both wallets", () => {
+    expect(SOURCE).toContain("loadLockedSigningState");
+    expect(SOURCE).toContain("const identityIds = [grant.buyerIdentityId, listing.witnessIdentityId].sort()");
+    expect(SOURCE).toContain(".where(inArray(identities.id, identityIds))");
+    expect(SOURCE).toContain('buyerIdentity.status !== "active"');
+    expect(SOURCE).toContain('witnessIdentity.status !== "active"');
+    expect(SOURCE).toContain("buyerIdentity.did !== grant.buyerDid");
+    expect(SOURCE).toContain("witnessIdentity.did !== listing.witnessDid");
+    expect(SOURCE).toContain("const walletIds = [grant.buyerWalletId, listing.witnessWalletId].sort()");
+    expect(SOURCE).toContain(".where(inArray(wallets.id, walletIds))");
+    expect(SOURCE).toContain('buyerWallet.status !== "active"');
+    expect(SOURCE).toContain('witnessWallet.status !== "active"');
+  });
+
+  test("settlement proves conditional wallet credit and escrow release", () => {
+    expect(SOURCE).toContain("const [creditedWallet]");
+    expect(SOURCE).toContain("if (!creditedWallet)");
+    expect(SOURCE).toContain("const [releasedEscrow]");
+    expect(SOURCE).toContain("if (!releasedEscrow)");
+    expect(SOURCE).toContain("eq(escrows.creatorWallet, grant.buyerWalletId)");
+    expect(SOURCE).toContain("eq(escrows.workerWallet, witnessWallet.id)");
+    expect(SOURCE).toContain("eq(escrows.amount, grant.amount)");
+  });
+
+  test("authorization freshness is checked after settlement locks are acquired", () => {
+    const issueSource = SOURCE.slice(SOURCE.indexOf("export async function issueGrant("));
+    const lockedState = issueSource.indexOf("const state = await loadLockedSigningState");
+    const checkedAt = issueSource.indexOf("const now = new Date()");
+    const expiryCheck = issueSource.indexOf(
+      "validateMemoryWitnessAuthorizationExpiry(",
+      checkedAt,
+    );
+    expect(lockedState).toBeGreaterThanOrEqual(0);
+    expect(checkedAt).toBeGreaterThan(lockedState);
+    expect(expiryCheck).toBeGreaterThan(checkedAt);
+  });
+
+  test("paid receipt keeps context, digest, source grant, and replay wall", () => {
+    expect(SOURCE).toContain("signatureContext: MEMORY_WITNESS_ISSUE_SIGNATURE_CONTEXT");
+    expect(SOURCE).toContain("signedPayload:");
+    expect(SOURCE).toContain("sourceGrantId: grant.id");
+    expect(SOURCE).toContain("replayKey");
+    expect(SOURCE).toContain("attestation_replay");
+    expect(SOURCE).toContain("current = candidate.cause");
+    for (const column of [
+      "signature_context",
+      "signed_payload",
+      "source_grant_id",
+      "replay_key",
+    ]) {
+      expect(MIGRATION).toContain(column);
+    }
+    expect(MIGRATION).toContain("uniq_memory_attestations_replay_key");
+  });
+
+  test("unrepresentable challenge fields return a stable refusal", () => {
+    expect(SOURCE).toContain('"signing_payload_invalid"');
+    expect(SOURCE).toContain("Current grant fields cannot be represented");
   });
 
   test("issueGrant runs through the recordRevenue (take-rate) path", () => {

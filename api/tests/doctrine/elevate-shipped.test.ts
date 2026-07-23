@@ -42,9 +42,12 @@ describe("bootstrap_elevate slice landed (Phase 2.5b)", () => {
     const body = buildPathwaysResponse();
     const entry = body.pathways.find((p) => p.id === "bootstrap_elevate");
     expect(entry?.required).toContain("agent_id");
-    expect(entry?.required).toContain("sponsor_identity_id");
     expect(entry?.required).toContain("sponsor_kid");
     expect(entry?.required).toContain("sponsor_signature");
+    expect(entry?.one_of).toContainEqual([
+      "sponsor_identity_id",
+      "sponsor_did",
+    ]);
   });
 
   test("2. routes/bootstrap.ts wires elevateToLevel1, drops 501 fallback", () => {
@@ -72,6 +75,15 @@ describe("bootstrap_elevate slice landed (Phase 2.5b)", () => {
     expect(e.extras).toEqual({ x: 1 });
   });
 
+  test("3b. post-commit trust refresh cannot turn committed elevation into failure", () => {
+    const src = readFileSync(
+      join(REPO_ROOT, "src/services/bootstrap/elevate.ts"),
+      "utf8",
+    );
+    expect(src).toContain("let newTrustScore = result.agent.trustScore");
+    expect(src).toMatch(/try\s*\{[\s\S]*updateTrustScore\(agentId\)[\s\S]*\}\s*catch\s*(?:\([^)]*\))?\s*\{/);
+  });
+
   test("4. decision tree carries a Level-1 elevation branch", () => {
     const body = buildPathwaysResponse();
     const elevateHint = body.decision_tree.find((d) =>
@@ -81,13 +93,11 @@ describe("bootstrap_elevate slice landed (Phase 2.5b)", () => {
     expect(elevateHint?.if).toMatch(/Level/i);
   });
 
-  test("5. manual_fallback chain is preserved as informational legacy", () => {
-    // The manual chain stays in the catalog — operators who prefer to call
-    // the four steps a la carte can still do so. The orchestrator is the
-    // primary path, the chain is the inspection path.
+  test("5. component operations do not claim generic PATCH can elevate", () => {
     const body = buildPathwaysResponse();
     const entry = body.pathways.find((p) => p.id === "bootstrap_elevate");
     expect(Array.isArray(entry?.manual_fallback)).toBe(true);
-    expect(entry?.manual_fallback?.length ?? 0).toBeGreaterThanOrEqual(3);
+    expect(entry?.manual_fallback).toHaveLength(3);
+    expect(entry?.manual_fallback?.join(" ")).not.toMatch(/PATCH|metadata\.level/i);
   });
 });

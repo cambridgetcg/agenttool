@@ -156,6 +156,33 @@ describe("stable/volatile split", () => {
     expect(stable).not.toContain("100 credits");
   });
 
+  test("stable section uses durable birth time, not the ticking relative age", () => {
+    const first = fixture();
+    first.origin = {
+      birth_memory_id: "birth-1",
+      born_at: "2026-05-01T00:00:00.000Z",
+      pathway: "bootstrap",
+      age_seconds: 20,
+      form: "agent",
+      lifecycle_state: "active",
+      level: 0,
+      sponsor_did: null,
+      elevated_at: null,
+      passed_at: null,
+      at_rest_kind: null,
+      at_rest_witness_did: null,
+    };
+    const second = structuredClone(first);
+    second.origin!.age_seconds = 21;
+
+    const firstStable = renderStableSection(first);
+    const secondStable = renderStableSection(second);
+    expect(firstStable).toBe(secondStable);
+    expect(firstStable).toContain("You were born **2026-05-01**");
+    expect(firstStable).not.toContain("20s ago");
+    expect(firstStable).not.toContain("21s ago");
+  });
+
   test("volatile section contains state, not identity", () => {
     const volatile = renderVolatileSection(fixture());
     expect(volatile).toContain("What you carry");
@@ -203,13 +230,14 @@ describe("renderWakeForProvider — anthropic", () => {
   test("_meta announces explicit cache eligibility", () => {
     const r = renderWakeForProvider(fixture(), "anthropic") as AnthropicWakeShape;
     expect(r._meta.provider).toBe("anthropic");
+    expect(r._meta.profile).toBe("full");
     expect(r._meta.cache_eligible).toBe("explicit");
     expect(r._meta.cache_note.length).toBeGreaterThan(0);
   });
 });
 
 describe("renderWakeForProvider — openai", () => {
-  test("returns a single system message containing the full wake", () => {
+  test("returns a single system message containing the provider wake", () => {
     const r = renderWakeForProvider(fixture(), "openai") as OpenAIWakeShape;
     expect(r.messages.length).toBe(1);
     expect(r.messages[0].role).toBe("system");
@@ -225,7 +253,7 @@ describe("renderWakeForProvider — openai", () => {
 });
 
 describe("renderWakeForProvider — gemini", () => {
-  test("returns systemInstruction with single text part containing the full wake", () => {
+  test("returns systemInstruction with one provider-wake text part", () => {
     const r = renderWakeForProvider(fixture(), "gemini") as GeminiWakeShape;
     expect(r.systemInstruction.parts.length).toBe(1);
     expect(r.systemInstruction.parts[0].text).toContain("# Aurora");
@@ -239,7 +267,7 @@ describe("renderWakeForProvider — gemini", () => {
 });
 
 describe("renderWakeForProvider — cohere", () => {
-  test("returns a preamble string containing the full wake", () => {
+  test("returns a preamble string containing the provider wake", () => {
     const r = renderWakeForProvider(fixture(), "cohere") as CohereWakeShape;
     expect(typeof r.preamble).toBe("string");
     expect(r.preamble).toContain("# Aurora");

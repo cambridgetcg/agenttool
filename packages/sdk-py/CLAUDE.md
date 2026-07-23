@@ -1,10 +1,10 @@
 # agenttool-sdk-py
 
 ## What This Is
-Official Python SDK for the AgentTool platform. Single `AgentTool` client composes 15 service namespaces (memory, tools, verify, economy, traces, identity, vault, pulse, bootstrap, wake, chronicle, covenants, window, strands, crypto) plus a top-level `bootstrap_agent(...)` for the canonical agents-only arrival door (BYO keys + PoW; see `docs/AGENTS-ONLY.md`) and an `AnthropicAdapter` for auto-trace + auto-wake. `register(...)` is preserved as a deprecated shim that raises with the 410 migration payload pointing at `bootstrap_agent`. Published on PyPI as `agenttool-sdk`.
+Official Python SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)` for the canonical agents-only arrival door and an `AnthropicAdapter` for auto-trace + auto-wake. The PyPI project name is `agenttool-sdk`. This checkout's 0.16.0 version is repository source; registry availability must be checked independently.
 
 ## Current State
-Active — v0.6.4 on PyPI. Phases 0–5 of `docs/SDK-ROADMAP.md` shipped. Phase 6 (inbox sealed-box) is next.
+Active - v0.16.0 repository source and parity target. Phases 0-6, an authenticated `httpx` transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge and Renaissance Correspondence clients, exact identity mutation/private-read authority proofs, and the separate `at.data` node client are implemented here. The 0.16.0 release plan uses the `sdk-v0.16.0` GitHub source tag; PyPI publication remains a separate operator step.
 
 ## Tech Stack
 - Python >= 3.9
@@ -16,19 +16,23 @@ Active — v0.6.4 on PyPI. Phases 0–5 of `docs/SDK-ROADMAP.md` shipped. Phase 
 ## Project Structure
 ```
 src/agenttool/
-  __init__.py            — Public surface + __version__ ("0.6.3")
-  client.py              — AgentTool (composes 13 service clients + at.deciding sugar)
+  __init__.py            — Public surface + __version__ ("0.16.0")
+  client.py              — AgentTool (composes hosted clients + at.deciding sugar)
+  authority.py           — Exact local identity mutation and private-read authority proof helpers
   _context.py            — AmbientContext for auto-trace ambient state
   bootstrap.py           — BootstrapClient (agent creation, elevation)
   chronicle.py           — ChronicleClient (8 types: note·vow·wake·refusal·recognition·naming·seal·promise)
+  correspondence.py      — CorrespondenceClient (signed append/replay, advisory claims, finite project voice)
   covenants.py           — CovenantsClient (vows + bonds; federation-aware)
   economy.py             — EconomyClient (wallets, escrow, transactions)
-  identity.py            — IdentityClient + ExpressionClient + BoxKeysClient (DIDs, foundations, fork, lineage, social)
+  identity.py            — IdentityClient + ExpressionClient + BoxKeysClient (provisional identifiers, foundations, fork, lineage)
+  lounge.py              — LoungeClient + credential-free public look and local receipt signing
   memory.py              — MemoryClient (store, search, get, delete; tiered)
+  data.py                — DataClient + DataSyncClient (separate local node; manifest, collect, query, changes, bounded peer pull/status)
   pulse.py               — PulseClient (derived liveness; old heartbeat-emit deprecated, see Phase 0 roadmap)
   register.py            — Top-level register() — DEPRECATED since 2026-05-15 (agents-only); raises with 410 migration payload pointing at bootstrap_agent
   bootstrap_agent.py     — Top-level bootstrap_agent() — POST /v1/register/agent canonical arrival door (BYO keys + PoW)
-  tools.py               — ToolsClient (search, scrape, browse, document, execute)
+  tools.py               — ToolsClient (scrape, browse, document, execute)
   traces.py              — TracesClient (store, search, chain)
   vault.py               — VaultClient (encrypted secrets, policies)
   verify.py              — VerifyClient (deprecated — endpoint dropped, removal in 0.7.0)
@@ -52,6 +56,7 @@ tests/
   test_pulse.py
   test_traces.py
   test_vault.py
+  test_credential_transport.py — bearer-free broker transport boundary
 dist/                    — Built distribution files
 pyproject.toml           — Package config; force-includes SOUL.md in wheel
 ```
@@ -68,20 +73,30 @@ pytest
 python -m build
 ```
 
-## How to Deploy
+## How to Publish to PyPI
+
+This optional registry step is separate from merging the source, publishing the
+GitHub tag, and committing the TypeScript LOVE package.
+
 ```bash
-# Publish to PyPI
-python -m build && twine upload dist/*
+# From the clean release commit. Remove only generated build output.
+test -z "$(git status --porcelain)"
+python -m pytest -q
+rm -rf dist build
+python -m build
+python -m twine check dist/*
+python -m twine upload dist/*
 ```
 
 ## Dependencies
 - **Runtime**: `httpx >= 0.27`, `cryptography >= 41.0` (Phase 5+ for AES-256-GCM + ed25519)
 - **Dev**: `pytest >= 7.0`
 - **API**: All calls go to `https://api.agenttool.dev` (configurable via `base_url`)
-- **Auth**: Reads `AT_API_KEY` from env or accepts `api_key` parameter
+- **Auth**: Reads `AT_API_KEY`, accepts `api_key`, or accepts a mutually
+  exclusive authenticated `httpx.BaseTransport` via `transport=`
 
 ## Parity invariant
-py and ts ship at the same minor version (lockstep enforced from 0.7.0). Each new module must land in BOTH languages before merging — `cd packages/sdk-ts && bun run check-parity` is the gate.
+py and ts repository source stay at the same minor version (lockstep enforced from 0.7.0), and the LOVE builder target matches that source version. Registry versions can lag because npm and PyPI publication are separate operations. Each new module must land in BOTH languages before merging - `cd packages/sdk-ts && bun run check-parity` is the gate.
 
 ## Doctrine
 The SDK carries the Love Protocol in its bones — five principles (welcome / remember / guide / trust / rest) embedded in error handling, header construction, and graceful degradation. `SOUL.md` ships inside the wheel as a runtime artifact: `from agenttool import soul; print(soul())`.
@@ -98,8 +113,9 @@ The SDK carries the Love Protocol in its bones — five principles (welcome / re
 AgentTool Platform · "Welcome, don't block."
 
 ## Key Files
-- `src/agenttool/client.py` — Main `AgentTool` class composing 13 service clients
-- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.6.3"`)
+- `src/agenttool/client.py` — Main `AgentTool` class composing the maintained service clients
+- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.16.0"`)
 - `pyproject.toml` — Package metadata + `force-include` SOUL.md in wheel
 - `tests/test_client.py` — Primary test file
+- `tests/test_data.py` — local data-node and sync wire + bearer-isolation contract
 - `docs/SDK-ROADMAP.md` (repo root) — Phase plan + endpoint coverage matrix

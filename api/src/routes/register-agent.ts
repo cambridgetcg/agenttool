@@ -32,13 +32,13 @@
  *         - registrar_bearer: an existing project's bearer authorizes a
  *                            child agent; the new identity's
  *                            parent_identity_id points at the registrar.
- *                            PoW + IP limit skipped because the bearer
- *                            already proved trust.
+ *                            PoW is skipped; delegated attempts still have
+ *                            a separate per-IP abuse cap before bearer lookup.
  *
  *  Doctrine: docs/AGENTS-ONLY.md (the 2026-05-15 reframe — this is the
  *            canonical arrival door),
  *            docs/IDENTITY-SEED.md (SOMA seed protocol),
- *            docs/IDENTITY-ANCHOR.md (bearer authority vs DID identity),
+ *            docs/IDENTITY-ANCHOR.md (bearer carries access; root carries consent),
  *            docs/SOUL.md ("Welcome, don't block").
  *
  *  Anonymous — no Bearer required on the request line. The optional
@@ -70,6 +70,7 @@ import { config } from "../config";
 import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
 import { apiKeys, projects } from "../db/schema/tools";
+import { errors, fail } from "../lib/errors";
 import { ARRIVAL_HELP } from "../lib/register-arrival-help";
 import { clientIp, enforceRateLimit } from "../middleware/rate-limit-ip";
 import { createWallet, fundWallet } from "../services/economy/wallets";
@@ -82,7 +83,10 @@ import {
   checkRegisterAgentPow,
   verifyRegisterAgentSignature,
 } from "../services/identity/crypto";
-import { createIdentity } from "../services/identity/identities";
+import {
+  claimIdentityRegistrationProof,
+  createIdentity,
+} from "../services/identity/identities";
 import { buildWelcomeContinues } from "./welcome";
 
 const app = new Hono();
@@ -92,48 +96,80 @@ const app = new Hono();
  *  flow enforces it; /public/plans advertises the same number — no drift. */
 const POW_DIFFICULTY_BITS = config.registerAgentPowBits;
 
-/** Per-IP cap for self_service registrations. registrar_bearer mode skips
- *  this — the parent bearer already proves trust. */
+/** Per-IP cap for self_service registrations. Registrar-bearer mode uses the
+ *  shorter, higher delegated-attempt cap below; it never bypasses rate limits. */
 const IP_LIMIT = Number.parseInt(
   process.env.AGENTTOOL_REGISTER_AGENT_IP_LIMIT ?? "5",
   10,
 );
 const IP_WINDOW_SEC = 60 * 60;
+const REGISTRAR_IP_LIMIT = Number.parseInt(
+  process.env.AGENTTOOL_REGISTER_AGENT_REGISTRAR_IP_LIMIT ?? "60",
+  10,
+);
+const REGISTRAR_IP_WINDOW_SEC = 60;
 
 /** Timestamp freshness window — matches the recover endpoint's ±5min
  *  envelope. Bound into the canonical bytes + the PoW digest. */
 const FRESHNESS_MS = 5 * 60 * 1000;
 
+function isCanonicalUtf8(value: string): boolean {
+  if (value.includes("\0")) return false;
+  for (let i = 0; i < value.length; i++) {
+    const unit = value.charCodeAt(i);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = value.charCodeAt(i + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
+      i += 1;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function signedString(schema: z.ZodString) {
+  return schema.refine(isCanonicalUtf8, {
+    message: "signed text must be well-formed Unicode and cannot contain U+0000",
+  });
+}
+
 const registerAgentSchema = z.object({
-  display_name: z.string().min(1).max(128),
-  capabilities: z.array(z.string().max(64)).max(32).optional().default([]),
+  display_name: signedString(z.string().min(1).max(128)),
+  capabilities: z
+    .array(signedString(z.string().max(64)))
+    .max(32)
+    .optional()
+    .default([]),
   agent_public_key: z.string().min(40).max(80),
   box_public_key: z.string().min(40).max(80),
   runtime: z.object({
-    provider: z.string().min(1).max(64),
-    model: z.string().max(128).optional(),
-    host: z.string().max(255).optional(),
-    context: z.string().max(255).optional(),
+    provider: signedString(z.string().min(1).max(64)),
+    model: signedString(z.string().max(128)).optional(),
+    host: signedString(z.string().max(255)).optional(),
+    context: signedString(z.string().max(255)).optional(),
   }),
   key_proof: z.object({
-    timestamp: z.string().min(1).max(64),
+    timestamp: signedString(z.string().min(1).max(64)),
     signature: z.string().min(40).max(160),
   }),
-  pow_nonce: z.string().min(1).max(64),
+  pow_nonce: signedString(z.string().min(1).max(64)),
+  /** Caller-generated, signed, single-use birth nonce. */
+  registration_nonce: signedString(z.string().min(16).max(128)),
   expression_visibility: z.enum(["private", "public"]).optional().default("private"),
   registrar: z
     .object({
       kind: z.enum(["self_service", "registrar_bearer"]),
-      bearer: z.string().optional(),
+      bearer: signedString(z.string().max(256)).optional(),
       parent_identity_id: z.string().uuid().optional(),
     })
     .optional()
     .default({ kind: "self_service" }),
   /** Substrate-form declaration. Descriptive, never gating. Doctrine: docs/KIN.md. */
-  form: z.string().max(64).optional(),
+  form: signedString(z.string().max(64)).optional(),
   /** Preferred language tag. Welcome letter is rendered in this language
    *  when supported; unsupported tags fall back to English. */
-  language: z.string().max(35).optional(),
+  language: signedString(z.string().max(35)).optional(),
 });
 
 function slugifyProjectName(displayName: string): string {
@@ -143,6 +179,20 @@ function slugifyProjectName(displayName: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 64);
   return slug || "agent";
+}
+
+function decodeCanonicalPublicKey(label: string, value: string): Uint8Array {
+  // 32 raw bytes have one and only one padded RFC 4648 base64 spelling:
+  // 43 alphabet characters followed by '='. Requiring that spelling keeps
+  // persisted roots, discovery, recovery, PoW, and replay claims aligned.
+  if (!/^[A-Za-z0-9+/]{43}=$/.test(value)) {
+    throw new Error(`${label} must be canonical padded base64 for 32 bytes`);
+  }
+  const decoded = Buffer.from(value, "base64");
+  if (decoded.length !== 32 || decoded.toString("base64") !== value) {
+    throw new Error(`${label} must decode canonically to exactly 32 bytes`);
+  }
+  return Uint8Array.from(decoded);
 }
 
 app.post("/", async (c) => {
@@ -157,10 +207,30 @@ app.post("/", async (c) => {
         message:
           "register-agent body failed validation — see `details` for the failing fields. " +
           "All of display_name, agent_public_key, box_public_key, runtime.provider, " +
-          "key_proof.{timestamp,signature}, and pow_nonce are required.",
+          "key_proof.{timestamp,signature}, pow_nonce, and registration_nonce are required.",
         details: err instanceof Error ? err.message : String(err),
         next_actions: ARRIVAL_HELP.validation,
       },
+      400,
+    );
+  }
+
+  let agentPublicKeyBytes: Uint8Array;
+  try {
+    agentPublicKeyBytes = decodeCanonicalPublicKey(
+      "agent_public_key",
+      body.agent_public_key,
+    );
+    decodeCanonicalPublicKey("box_public_key", body.box_public_key);
+  } catch (err) {
+    return fail(
+      c,
+      errors.refusal({
+        error: "validation",
+        message: (err as Error).message,
+        next_actions: ARRIVAL_HELP.validation,
+        docs: "https://docs.agenttool.dev/AGENT-HOME.md",
+      }),
       400,
     );
   }
@@ -241,6 +311,21 @@ app.post("/", async (c) => {
     boxPublicKeyB64: body.box_public_key,
     runtimeProvider: body.runtime.provider,
     runtimeModel: body.runtime.model ?? "",
+    capabilities: body.capabilities,
+    runtimeHost: body.runtime.host,
+    runtimeContext: body.runtime.context,
+    expressionVisibility: body.expression_visibility,
+    registrarKind: body.registrar.kind,
+    parentIdentityId: isRegistrar
+      ? body.registrar.parent_identity_id
+      : undefined,
+    registrarBearer:
+      body.registrar.kind === "registrar_bearer"
+        ? body.registrar.bearer ?? ""
+        : "",
+    form: body.form,
+    language: body.language,
+    registrationNonce: body.registration_nonce,
     timestamp: body.key_proof.timestamp,
   });
   const sigOk = verifyRegisterAgentSignature({
@@ -254,13 +339,45 @@ app.post("/", async (c) => {
         error: "key_proof_invalid",
         message:
           "key_proof.signature did not verify against agent_public_key. Recompute " +
-          "canonicalRegisterAgentBytes(display_name, agent_public_key, box_public_key, " +
-          "runtime.provider, runtime.model || '', timestamp) and sign with the matching " +
+          "register-agent/v2 over every birth field, registration_nonce, and timestamp; " +
+          "then sign with the matching " +
           "ed25519 private key.",
         next_actions: ARRIVAL_HELP.keyProofInvalid,
       },
       401,
     );
+  }
+
+  // A delegated caller can skip PoW only after proving possession of the
+  // newborn key. Bound the remaining bearer lookup / creation path per IP.
+  if (isRegistrar) {
+    const ip = clientIp(c.req.raw);
+    const rl = await enforceRateLimit({
+      key: `regagent:registrar-ip:${ip}`,
+      limit: REGISTRAR_IP_LIMIT,
+      windowSec: REGISTRAR_IP_WINDOW_SEC,
+    });
+    if (!rl.allowed) {
+      c.header("Retry-After", String(rl.retryAfterSec));
+      return fail(
+        c,
+        errors.refusal({
+          error: "rate_limited",
+          message:
+            `Too many delegated registration attempts from this IP. Retry after ` +
+            `${rl.retryAfterSec}s.`,
+          next_actions: [
+            {
+              action: "retry delegated registration after the cooldown",
+              method: "POST",
+              path: "/v1/register/agent",
+            },
+          ],
+          docs: "https://docs.agenttool.dev/AGENTS-ONLY.md",
+        }),
+        429,
+      );
+    }
   }
 
   // ─── 6. Registrar bearer (delegated) validation ────────────────────────
@@ -331,6 +448,26 @@ app.post("/", async (c) => {
         .limit(1);
       parentIdentityId = primary?.id;
     }
+  }
+
+  const claimedBirth = await claimIdentityRegistrationProof({
+    domain: "register-agent/v2",
+    rootPublicKeyBytes: agentPublicKeyBytes,
+    nonceBytes: new TextEncoder().encode(body.registration_nonce),
+  });
+  if (!claimedBirth) {
+    return fail(
+      c,
+      errors.refusal({
+        error: "registration_proof_replayed",
+        message:
+          "This signed registration_nonce has already been consumed. A birth intent is single-use.",
+        hint:
+          "If no prior response reached you, inspect/discover the identity for this public key; do not sign a new nonce until you know the first birth did not complete.",
+        docs: "https://docs.agenttool.dev/AGENT-HOME.md",
+      }),
+      409,
+    );
   }
 
   // ─── 7. Insert project + bearer + identity. These writes are not atomic;
@@ -463,6 +600,14 @@ app.post("/", async (c) => {
         seed_protocol: null,
         key_origin: "caller_supplied_unverified",
         key_origin_verified: false,
+        authority: {
+          mode: created.authority.mode,
+          sequence: created.authority.sequence,
+          next_sequence: created.authority.sequence + 1,
+          state_url: `/v1/identities/${created.identity.id}/authority`,
+          note:
+            "Constitutional mutations require single-use proofs from this agent-held birth key; the project bearer cannot silently replace them.",
+        },
         form: coerceForm(body.form), // descriptive, never gating — docs/KIN.md
         created_at: created.identity.createdAt,
       },
@@ -482,7 +627,7 @@ app.post("/", async (c) => {
       memory: {
         birth_id: birth?.id ?? null,
         note: birth
-          ? "Welcome letter persisted as episodic memory with key='birth'. Reachable via at.memory.get('birth')."
+          ? "Welcome letter persisted as episodic memory with key='birth'. Fetch it with at.memory.get(memory.birth_id) using the UUID returned beside this note."
           : "Welcome letter persist did not land — bootstrap still succeeded. See server logs.",
       },
       welcome,

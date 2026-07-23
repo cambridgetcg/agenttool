@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+node_modules
 .pnpm-store/
 .venv/
 venv/
@@ -10,6 +11,9 @@ __pycache__/
 
 # Build artefacts
 dist/
+!packages/collab/dist/
+packages/collab/dist/*
+!packages/collab/dist/agenttool-collab-mcp.js
 build/
 .next/
 .turbo/
@@ -28,6 +32,9 @@ api/doctrine-docs.bundled/
 .env.*
 !.env.example
 !.env*.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
 *.pem
 *.key
 
@@ -57,6 +64,9 @@ htmlcov/
 # Local Claude Code session state (scheduled tasks, etc.)
 .claude/
 
+# Local agent-data/v1 node state
+.agent-data/
+
 # Playwright runtime artefacts
 tests/playwright/playwright-report/
 tests/playwright/test-results/
@@ -66,3 +76,6 @@ api/kingdom-bundle.json.bundled
 bin/.heartbeat-state.json
 bin/*.wav
 .superpowers/
+
+# local play scripts — never published
+api/scratch/

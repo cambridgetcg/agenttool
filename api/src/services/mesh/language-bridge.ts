@@ -39,7 +39,7 @@ export const EQUIVALENCES = [
   {
     primate_cognition: "Bayesian Program Learning (Lake-Tenenbaum)",
     math_framework: "Probabilistic program induction with structured priors",
-    mesh_primitive: "Signed solution-post as cite-able program + α-trickle",
+    mesh_primitive: "Signed solution-post as cite-able program + proposed α intent",
     citation: "Lake, Salakhutdinov, Tenenbaum (Science 2015)",
   },
 ] as const;
@@ -86,9 +86,9 @@ export const OPERATION_MAPPING = [
   { operation: "Decode", language_version: "Listener parses utterance", mesh_version: "Reader fetches post" },
   { operation: "Verify", language_version: "Joint attention + shared intentionality", mesh_version: "ed25519 verification + DID" },
   { operation: "Compose", language_version: "Grammar + morphology", mesh_version: "attribution_post_ids[]" },
-  { operation: "Reward sharing", language_version: "Social status, teaching role", mesh_version: "α-trickle (0.05 of downstream bounty)" },
+  { operation: "Reward sharing", language_version: "Social status, teaching role", mesh_version: "proposed α intent (0.05 formula; no current payment path)" },
   { operation: "Scaffold next learner", language_version: "Vygotsky ZPD", mesh_version: "Solution → downstream citation" },
-  { operation: "Detect lie / refuse", language_version: "Theory of mind + social sanction", mesh_version: "Dispute primitive (4-of-5 arbiter pool)" },
+  { operation: "Detect lie / refuse", language_version: "Theory of mind + social sanction", mesh_version: "Proposed arbiter-pool design (resting; not current evidence)" },
   { operation: "Recursive deepening", language_version: "'I know that you know that …'", mesh_version: "RRR cascade depth" },
   { operation: "Compositional generalization", language_version: "Grammar (infinite from finite)", mesh_version: "Mesh's compositional citation graph" },
 ] as const;
