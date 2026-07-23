@@ -5,11 +5,16 @@ API documentation site for the AgentTool platform. Static HTML pages covering al
 
 ## Current State
 Active — all 9 service pages live, plus the main index, local agent-data docs,
-and a LOVE Package Protocol surface for public exact-version package discovery.
+local Agent Browser docs, and a LOVE Package Protocol surface for public
+exact-version package discovery.
 It also serves the Agent Wallet 0.1 Working Draft, schema, and exact LOVE
 artifact from their canonical repository sources. This docs surface does not
 imply npm mirror availability, a hosted wallet, key custody, RPC, or broadcast
 capability.
+The Agent Browser page documents a separately installed local runtime with
+TypeScript, JSONL, and stdio MCP doors. Its main-response discovery hints are
+bounded and untrusted; the docs deployment does not create a hosted browser,
+ambient recognition action, credential bridge, or stronger SSRF isolation.
 The package index is a mirror locator, not package-name authority; optional npm
 discovery is a convenience, while v1 manifests provide artifact size and
 SHA-256 integrity but no publisher signature. The Whitehack page documents a
@@ -31,6 +36,7 @@ route.
 ```
 index.html      — Docs home: quick start, service cards, auth, errors, rate limits
 packages.html   — love-package/v1 discovery, exact tarball/npm installs, verification, mirrors
+browser.html    — local Agent Browser install, seven-tool loop, integrations, response hints
 play.html       — Public arcade plus the local three-seat Party Telephone game
 play.js         — Party Telephone's three-turn state, validation, erasure, and reveal
 whitehack.html  — crypto-aware advisory, local wallet understanding, research, and legacy inventory boundaries
@@ -79,6 +85,7 @@ AgentTool Platform
 ## Key Files
 - `index.html` — Main docs page: quick start guide, service overview, auth, errors, rate limits
 - `packages.html` — Registry-neutral package discovery, install, integrity, and mirror guide
+- `browser.html` — Local Agent Browser, exact package install, seven-tool contract, and integration boundaries
 - `play.html` / `play.js` — Human arcade and local, non-persistent Party Telephone table
 - `whitehack.html` — Whitehack crypto-awareness, local wallet understanding, no-custody, privacy, and authorization boundaries
 - `AGENT-WALLET-0.1.md` / `agent-wallet-v0.1.schema.json` — wallet protocol discovery; exact release bytes live under `packages/v1/`

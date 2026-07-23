@@ -18,9 +18,10 @@ import {
 } from "../npm-release";
 
 describe("standard npm release policy", () => {
-  test("allowlists the ten established public packages", () => {
+  test("allowlists the eleven established public packages", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
+      "browser",
       "collab",
       "correspondence-yutabase",
       "credential-broker",
@@ -46,6 +47,11 @@ describe("standard npm release policy", () => {
       packagePath: "packages/skills",
       artifactKind: "pack",
     });
+    expect(releaseSpec("browser")).toMatchObject({
+      name: "@agenttool/browser",
+      packagePath: "packages/browser",
+      artifactKind: "love",
+    });
     expect(releaseSpec("data-sync")).toMatchObject({
       gateScripts: ["ci", "build"],
       prerequisites: [
@@ -65,6 +71,8 @@ describe("standard npm release policy", () => {
     );
     expect(expectedTag(releaseSpec("skills"), "0.1.0")).toBe("skills-v0.1.0");
     expect(packedFilename("@agenttool/skills", "0.1.0")).toBe("agenttool-skills-0.1.0.tgz");
+    expect(expectedTag(releaseSpec("browser"), "0.1.0")).toBe("browser-v0.1.0");
+    expect(packedFilename("@agenttool/browser", "0.1.0")).toBe("agenttool-browser-0.1.0.tgz");
     expect(() => expectedTag(releaseSpec("sdk"), "latest")).toThrow("invalid package version");
   });
 

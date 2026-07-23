@@ -15,6 +15,7 @@ on:
           - sdk
           - wallet
           - telescope
+          - browser
           - collab
           - correspondence-yutabase
           - skills

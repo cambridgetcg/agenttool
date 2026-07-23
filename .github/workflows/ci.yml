@@ -58,7 +58,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for workspace in api packages/data packages/data-protocol packages/credential-broker packages/collab packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope; do
+          for workspace in api packages/data packages/data-protocol packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope; do
             (cd "$workspace" && bun install --frozen-lockfile)
           done
       - name: Build local data-sync peers
@@ -70,7 +70,7 @@ jobs:
       - name: Install data-sync dependencies from lockfile
         working-directory: packages/data-sync
         run: bun install --frozen-lockfile
-      - name: Run hermetic data, ADDS, sync, broker, collab, projection, Skills, SDK, Wallet, and Telescope gate
+      - name: Run hermetic data, ADDS, sync, broker, collab, Browser, projection, Skills, SDK, Wallet, and Telescope gate
         run: bash bin/preflight.sh packages
       - name: Smoke the packed TypeScript SDK under Node and Bun
         working-directory: packages/sdk-ts
@@ -176,6 +176,22 @@ jobs:
           vectors_smoke='import("@agenttool/wallet/vectors.json",{with:{type:"json"}}).then(m=>{if(m.default.protocol!=="agent-wallet/0.1"||m.default.records.length!==6)process.exit(1)})'
           (cd "$install_dir" && node -e "$schema_smoke" && node -e "$vectors_smoke")
           (cd "$install_dir" && bun -e "$schema_smoke" && bun -e "$vectors_smoke")
+      - name: Smoke packed Agent Browser under Node and Bun
+        working-directory: packages/browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
+          smoke='import("@agenttool/browser").then(m=>{if(typeof m.AgentBrowser!=="function"||typeof m.buildBrowserMcpServer!=="function"||m.OBSERVATION_SCHEMA!=="agent-browser-observation/0.1")process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke")
+          (cd "$install_dir" && bun -e "$smoke")
+          cli="$install_dir/node_modules/@agenttool/browser/dist/bin/agenttool-browser.js"
+          test -x "$install_dir/node_modules/.bin/agenttool-browser"
+          node "$cli" help | grep -q '^agenttool-browser 0.1.0$'
+          bun "$cli" help | grep -q '^agenttool-browser 0.1.0$'
       - name: Verify the checked-in LOVE package registry
         run: bun bin/build-love-packages.ts verify apps/docs
 
