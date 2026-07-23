@@ -227,30 +227,46 @@ describe("AgentTool.data wire contract", () => {
     }
   });
 
-  test("refuses redirects without reading or replaying their target", async () => {
-    let calls = 0;
-    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
-      calls += 1;
-      expect(init?.redirect).toBe("manual");
-      return new Response(null, {
-        status: 307,
-        headers: { Location: "https://redirect.example.test/collect" },
+  test("refuses same- and cross-origin redirects even when cleanup fails", async () => {
+    for (const { location, status } of [
+      { location: "http://127.0.0.1:8787/moved", status: 301 },
+      { location: "https://redirect.example.test/collect", status: 307 },
+    ]) {
+      let calls = 0;
+      let cancellations = 0;
+      globalThis.fetch = (async (
+        _input: RequestInfo | URL,
+        init?: RequestInit,
+      ) => {
+        calls += 1;
+        expect(init?.redirect).toBe("manual");
+        return {
+          status,
+          headers: new Headers({ Location: location }),
+          body: {
+            cancel: async () => {
+              cancellations += 1;
+              throw new Error("synthetic redirect cleanup failure");
+            },
+          },
+        } as unknown as Response;
+      }) as typeof fetch;
+      const data = new DataClient({
+        baseUrl: "http://127.0.0.1:8787",
+        token: "node-token",
       });
-    }) as typeof fetch;
-    const data = new DataClient({
-      baseUrl: "http://127.0.0.1:8787",
-      token: "node-token",
-    });
 
-    await expect(data.collect({
-      collection_id: "private",
-      collector_id: "text",
-      input: { text: "must stay at the selected node" },
-    })).rejects.toMatchObject({
-      code: "data_node_redirect_refused",
-      status: 307,
-    });
-    expect(calls).toBe(1);
+      await expect(data.collect({
+        collection_id: "private",
+        collector_id: "text",
+        input: { text: "must stay at the selected node" },
+      })).rejects.toMatchObject({
+        code: "data_node_redirect_refused",
+        status,
+      });
+      expect(calls).toBe(1);
+      expect(cancellations).toBe(1);
+    }
   });
 });
 
@@ -411,6 +427,38 @@ describe("AgentTool.data.sync wire and authority contract", () => {
       peer_id: "peer-a",
       collection_id: "research",
     });
+  });
+
+  test("keeps redirect refusal stable through the sync facade", async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return new Response(null, {
+        status: 308,
+        headers: { Location: "https://peer-secret.example.test/pull" },
+      });
+    }) as typeof fetch;
+    const data = new DataClient({
+      baseUrl: "http://local-data.test",
+      token: "local-node-token",
+    });
+
+    try {
+      await data.sync.pull({ peer_id: "peer-a", collection_id: "research" });
+      throw new Error("expected sync redirect to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(AgentToolError);
+      expect((error as AgentToolError).code).toBe(
+        "data_node_redirect_refused",
+      );
+      expect((error as AgentToolError).status).toBe(308);
+      expect((error as AgentToolError).message).toBe(
+        "Agent data sync request failed.",
+      );
+      expect(String(error)).not.toContain("local-node-token");
+      expect(String(error)).not.toContain("peer-secret.example.test");
+    }
+    expect(calls).toBe(1);
   });
 
   test("maps local transport failures without echoing transport diagnostics", async () => {

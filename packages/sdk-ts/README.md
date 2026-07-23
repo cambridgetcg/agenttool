@@ -498,11 +498,12 @@ parameter, uses only the local data-node transport, and exposes
 with no AgentTool account, import `DataClient` directly and construct it with
 `{ baseUrl, token? }`; it does not require `AT_API_KEY`.
 
-Repository source refuses every HTTP redirect on this separate data-node
-transport and reports `data_node_redirect_refused`; neither its bearer nor a
-collection body is replayed to a redirect target. The immutable 0.16.0 release
-predates that fix, so consumers must wait for and pin a later SDK release
-before relying on redirect refusal outside a source checkout.
+On the package's declared Node and Bun runtimes, repository source refuses
+every HTTP redirect on this separate data-node transport and reports
+`data_node_redirect_refused`; neither its bearer nor a request body is replayed
+to a redirect target. The immutable 0.16.0 release predates that fix, so
+consumers must wait for and pin a later SDK release before relying on redirect
+refusal outside a source checkout.
 
 ## Integration example — RhetorLint covenant mirror
 

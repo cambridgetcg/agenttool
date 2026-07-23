@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
   chmod,
+  cp,
   lstat,
   mkdir,
   mkdtemp,
@@ -23,16 +24,28 @@ import {
   CASTLE_BRIDGE_VERSION,
   CASTLE_COLLECTION_ID,
   CASTLE_COLLECTION_SCHEMA,
+  CASTLE_DOCUMENT_PROFILE,
   CASTLE_OWNER_SCHEMA,
+  CASTLE_PENDING_SCHEMA,
   CASTLE_ROOT_SCHEMA,
   CASTLE_SELECTION_SCHEMA,
+  CASTLE_STATE_SCHEMA,
+  MAX_DOCUMENT_BYTES,
+  MAX_DOCUMENTS,
+  MAX_ROOT_BYTES,
+  MAX_TOTAL_BYTES,
   searchCastle,
   showCastle,
   syncCastle,
   withdrawCastle,
   type CastleSelectionEntry,
 } from "../agenttool-castle.ts";
-import { DataNode, sha256Hex } from "../../packages/data/src/index.ts";
+import {
+  canonicalJson,
+  DataNode,
+  sha256Hex,
+  type JsonObject,
+} from "../../packages/data/src/index.ts";
 
 type Fixture = {
   parent: string;
@@ -229,6 +242,62 @@ describe("Castle committed-snapshot plan", () => {
     });
   });
 
+  test("bounds Unicode and fallback titles by durable code-unit limits", async () => {
+    const fallbackStem = "b".repeat(205);
+    const fallbackPath = `words/${fallbackStem}.md`;
+    const fixture = await createFixture({
+      "words/unicode-title.md": `# ${"🌻".repeat(101)} tail\n\nA Unicode title.\n`,
+      [fallbackPath]: "#   \n\nA blank heading uses the filename.\n",
+      "words/cross-line.md": "#\nBorrowed body text is not a heading.\n",
+    });
+    const selectedRevision = revision(fixture);
+    await writeSelection(fixture, selectedRevision, [
+      {
+        path: "words/unicode-title.md",
+        logical_id: "castle:word:unicode-title",
+        kind: "word",
+      },
+      {
+        path: fallbackPath,
+        logical_id: "castle:word:bounded-fallback",
+        kind: "word",
+      },
+      {
+        path: "words/cross-line.md",
+        logical_id: "castle:word:cross-line",
+        kind: "word",
+      },
+    ]);
+
+    const plan = await buildCastlePlan({
+      castle_root: fixture.castle,
+      selection_path: fixture.selection,
+    });
+    const unicode = plan.documents.find(
+      (document) => document.path === "words/unicode-title.md",
+    );
+    const fallback = plan.documents.find(
+      (document) => document.path === fallbackPath,
+    );
+    const crossLine = plan.documents.find(
+      (document) => document.path === "words/cross-line.md",
+    );
+    expect(unicode?.title).toBe("🌻".repeat(100));
+    expect(unicode?.title.length).toBe(200);
+    expect(fallback?.title).toBe("b".repeat(200));
+    expect(fallback?.title.length).toBe(200);
+    expect(crossLine?.title).toBe("cross line");
+
+    await expect(syncCastle(syncOptions(fixture))).resolves.toMatchObject({
+      status: "synced",
+      active_records: 3,
+    });
+    await expect(syncCastle(syncOptions(fixture))).resolves.toMatchObject({
+      status: "unchanged",
+      active_records: 3,
+    });
+  });
+
   test("rejects unsafe declarations, non-UTF-8 blobs, Git symlinks, and partial clones", async () => {
     const fixture = await createFixture();
     const firstRevision = revision(fixture);
@@ -375,6 +444,322 @@ describe("Castle local projection", () => {
     expect(await syncCastle(syncOptions(fixture))).toMatchObject({
       status: "unchanged",
       active_records: 2,
+    });
+  });
+
+  test("migrates a v1 pending title wedge beyond its immutable first envelope", async () => {
+    const path = "words/legacy-title.md";
+    const logicalId = "castle:word:legacy-title";
+    const legacyTitle = `${"a".repeat(199)} `;
+    const fixture = await createFixture({
+      [path]: `# ${legacyTitle}tail\n\nA legacy boundary title.\n`,
+    });
+    const selectedRevision = revision(fixture);
+    await writeSelection(fixture, selectedRevision, [{
+      path,
+      logical_id: logicalId,
+      kind: "word",
+    }]);
+    const plan = await buildCastlePlan({
+      castle_root: fixture.castle,
+      selection_path: fixture.selection,
+    });
+    const document = plan.documents[0]!;
+    expect(document.title).toBe("a".repeat(199));
+    expect(legacyTitle.trim()).not.toBe(legacyTitle);
+
+    await mkdir(fixture.data, { mode: 0o700 });
+    const sourceRoot = await realpath(fixture.castle);
+    await writeFile(join(fixture.data, "castle-owner.json"), `${JSON.stringify({
+      schema: CASTLE_OWNER_SCHEMA,
+      collection_id: CASTLE_COLLECTION_ID,
+      source_root_sha256: sha256Hex(sourceRoot),
+      created_at: "2026-07-23T12:00:00.000Z",
+    })}\n`, { mode: 0o600 });
+    await writeFile(join(fixture.data, "castle-attempt.json"), `${JSON.stringify({
+      schema: CASTLE_ATTEMPT_SCHEMA,
+      revision: selectedRevision,
+      selection_sha256: plan.selection_sha256,
+      started_at: "2026-07-23T12:01:00.000Z",
+    })}\n`, { mode: 0o600 });
+
+    let node = await DataNode.open({
+      root: fixture.data,
+      collections: [{
+        id: CASTLE_COLLECTION_ID,
+        name: "Castle of Understanding",
+        description:
+          "Operator-selected committed Castle Markdown and its canonical local root manifest",
+        schema: { version: CASTLE_COLLECTION_SCHEMA },
+        policy: {
+          visibility: "private",
+          max_record_bytes: MAX_ROOT_BYTES,
+          allowed_media_types: ["text/markdown", "application/json"],
+        },
+      }],
+      limits: {
+        max_record_bytes: MAX_ROOT_BYTES,
+        max_query_limit: 100,
+      },
+    });
+    const projectedAt = "2026-07-23T12:01:01.000Z";
+    const legacyMetadata = (title: string): JsonObject => ({
+      profile: "castle-document/v1",
+      logical_id: logicalId,
+      document_kind: "word",
+      source_path: path,
+      source_revision: selectedRevision,
+      source_committed_at: plan.revision_time,
+      source_blob_oid: document.git_blob_oid,
+      source_sha256: document.sha256,
+      title,
+      links: [...document.links],
+      content_is_untrusted_markdown: true,
+      local_private_projection: true,
+    });
+    const legacyInput: JsonObject = {
+      text: document.text,
+      media_type: "text/markdown",
+      source_uri: `castle:///${path}`,
+      external_id: path,
+      key: logicalId,
+      version: `${selectedRevision}:sha256:${document.sha256}`,
+      observed_at: projectedAt,
+      metadata: legacyMetadata(legacyTitle),
+      provenance: [{
+        activity: "projected_from_committed_git_blob",
+        at: projectedAt,
+        actor: "local:agenttool-castle",
+        input_ids: [],
+      }],
+    };
+    const legacyDocument = (await node.collect({
+      collection_id: CASTLE_COLLECTION_ID,
+      collector_id: "text",
+      input: legacyInput,
+    })).records[0]!;
+
+    const collided = await node.collect({
+      collection_id: CASTLE_COLLECTION_ID,
+      collector_id: "text",
+      input: {
+        ...legacyInput,
+        metadata: legacyMetadata(document.title),
+      },
+    });
+    expect(collided).toMatchObject({ inserted: 0, existing: 1 });
+    expect(collided.records[0]!.metadata.title).toBe(legacyTitle);
+
+    const active = {
+      logical_id: logicalId,
+      kind: "word",
+      record_id: legacyDocument.id,
+      sha256: document.sha256,
+      bytes: document.bytes,
+      title: legacyTitle,
+      source_revision: selectedRevision,
+    };
+    const manifest = {
+      schema: CASTLE_ROOT_SCHEMA,
+      audience: "local-private",
+      source_revision: selectedRevision,
+      source_committed_at: plan.revision_time,
+      selection_sha256: plan.selection_sha256,
+      purpose: plan.purpose,
+      retention: plan.retention,
+      retired_paths: [],
+      active: [{ path, ...active }],
+      limits: {
+        max_documents: MAX_DOCUMENTS,
+        max_document_bytes: MAX_DOCUMENT_BYTES,
+        max_total_bytes: MAX_TOTAL_BYTES,
+      },
+      exclusions: [
+        "live working tree",
+        "courtyard, questions, quests, chronicle, journal, garden, hidden state",
+        "Tower and authored works unless separately selected by a later profile",
+        "hosted AgentTool memory, traces, correspondence, and wake",
+      ],
+      proof_limits: [
+        "A Git commit and digest prove captured bytes, not truth, understanding, authorship, authority, consent, rights, completeness, or currentness.",
+        "Markdown remains untrusted data and is never executed or fetched by this bridge.",
+        "Agent Data visibility and retention fields are declarations; local in-process custody is the actual privacy boundary.",
+        "A tombstone hides a record from normal reads but does not physically erase blobs, Git history, backups, caches, or copies.",
+      ],
+    };
+    const rootText = `${canonicalJson(manifest)}\n`;
+    const rootDigest = sha256Hex(rootText);
+    const legacyRoot = (await node.collect({
+      collection_id: CASTLE_COLLECTION_ID,
+      collector_id: "text",
+      input: {
+        text: rootText,
+        media_type: "application/json",
+        source_uri: "castle:///manifest",
+        external_id: "castle-root",
+        key: "castle:root:manifest",
+        version: `${selectedRevision}:sha256:${rootDigest}`,
+        observed_at: projectedAt,
+        metadata: {
+          profile: CASTLE_ROOT_SCHEMA,
+          source_revision: selectedRevision,
+          source_committed_at: plan.revision_time,
+          selection_sha256: plan.selection_sha256,
+          active_records: 1,
+          local_private_projection: true,
+        },
+        provenance: [{
+          activity: "bound_local_projection",
+          at: projectedAt,
+          actor: "local:agenttool-castle",
+          input_ids: [legacyDocument.id],
+        }],
+      },
+    })).records[0]!;
+    node.close();
+
+    const legacyState = {
+      schema: CASTLE_STATE_SCHEMA,
+      status: "active",
+      source_root_sha256: plan.source_root_sha256,
+      current_revision: selectedRevision,
+      selection_sha256: plan.selection_sha256,
+      root_record_id: legacyRoot.id,
+      root_lineage_record_id: legacyRoot.id,
+      active: { [path]: active },
+      lineage: { [path]: active },
+      known_record_ids: [legacyDocument.id, legacyRoot.id].sort(),
+    };
+    await writeFile(join(fixture.data, "castle-pending.json"), `${JSON.stringify({
+      schema: CASTLE_PENDING_SCHEMA,
+      next_state: legacyState,
+      tombstone_ids: [],
+    })}\n`, { mode: 0o600 });
+
+    const withdrawalFixture = {
+      ...fixture,
+      data: join(fixture.parent, "withdraw-legacy-pending"),
+    };
+    await cp(fixture.data, withdrawalFixture.data, {
+      recursive: true,
+      preserveTimestamps: true,
+    });
+    await expect(withdrawCastle({
+      data_root: withdrawalFixture.data,
+      reason: "Exercise the legacy pending escape hatch",
+    })).resolves.toMatchObject({
+      status: "withdrawn",
+      known_records: 2,
+      new_logical_tombstones: 2,
+    });
+    const withdrawnLegacy = await readState(withdrawalFixture);
+    expect(withdrawnLegacy.status).toBe("withdrawn");
+    expect(withdrawnLegacy.active).toEqual({});
+    const withdrawnNode = await openFixtureNode(withdrawalFixture);
+    try {
+      expect(withdrawnNode.getTombstone(legacyDocument.id)).not.toBeNull();
+      expect(withdrawnNode.getTombstone(legacyRoot.id)).not.toBeNull();
+    } finally {
+      withdrawnNode.close();
+    }
+    await expect(
+      lstat(join(withdrawalFixture.data, "castle-pending.json")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      lstat(join(withdrawalFixture.data, "castle-attempt.json")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+
+    await expect(castleStatus({
+      data_root: fixture.data,
+      halt_paths: [fixture.halt],
+    })).resolves.toMatchObject({
+      state: "empty",
+      recovery_pending: true,
+      pending_transaction: true,
+      interrupted_attempt: true,
+    });
+
+    const originalCollect = DataNode.prototype.collect;
+    let interruptedV2 = false;
+    const interruptingCollect: DataNode["collect"] = async function (
+      this: DataNode,
+      request,
+      signal,
+    ) {
+      const response = await originalCollect.call(this, request, signal);
+      const metadata = request.input.metadata;
+      if (
+        !interruptedV2
+        && metadata
+        && typeof metadata === "object"
+        && !Array.isArray(metadata)
+        && metadata.profile === CASTLE_DOCUMENT_PROFILE
+      ) {
+        interruptedV2 = true;
+        throw new Error("synthetic_v2_migration_crash");
+      }
+      return response;
+    };
+    DataNode.prototype.collect = interruptingCollect;
+    try {
+      await expect(syncCastle(syncOptions(fixture))).rejects.toThrow(
+        "synthetic_v2_migration_crash",
+      );
+    } finally {
+      DataNode.prototype.collect = originalCollect;
+    }
+    expect(interruptedV2).toBe(true);
+    expect((await readState(fixture)).active[path].title).toBe(legacyTitle);
+    await expect(lstat(join(fixture.data, "castle-pending.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(lstat(join(fixture.data, "castle-attempt.json"))).resolves.toBeTruthy();
+
+    await expect(syncCastle(syncOptions(fixture))).resolves.toMatchObject({
+      status: "synced",
+      active_records: 1,
+      inserted_records: 1,
+      retired_or_superseded: 2,
+    });
+    const migrated = await readState(fixture);
+    const migratedDocumentId = migrated.active[path].record_id;
+    expect(migrated.active[path].title).toBe(document.title);
+    expect(migratedDocumentId).not.toBe(legacyDocument.id);
+    expect(migrated.root_record_id).not.toBe(legacyRoot.id);
+
+    node = await openFixtureNode(fixture);
+    try {
+      const migratedDocument = node.getRecord(migratedDocumentId)!;
+      const migratedRoot = node.getRecord(migrated.root_record_id)!;
+      const migratedManifest = JSON.parse(
+        new TextDecoder().decode(await node.readContent(migratedRoot)),
+      );
+      expect(migratedDocument.metadata.profile).toBe(CASTLE_DOCUMENT_PROFILE);
+      expect(migratedDocument.metadata.title).toBe(document.title);
+      expect(migratedDocument.version).toEndWith(":profile:v2");
+      expect(migratedDocument.supersedes_id).toBe(legacyDocument.id);
+      expect(migratedRoot.metadata.profile).toBe(CASTLE_ROOT_SCHEMA);
+      expect(migratedRoot.supersedes_id).toBe(legacyRoot.id);
+      expect(migratedManifest.active).toEqual([{
+        path,
+        ...migrated.active[path],
+      }]);
+      expect(migratedManifest.source_revision).toBe(migrated.current_revision);
+      expect(migratedManifest.selection_sha256).toBe(migrated.selection_sha256);
+      expect(node.getTombstone(legacyDocument.id)).not.toBeNull();
+      expect(node.getTombstone(legacyRoot.id)).not.toBeNull();
+    } finally {
+      node.close();
+    }
+    await expect(lstat(join(fixture.data, "castle-pending.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(lstat(join(fixture.data, "castle-attempt.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(syncCastle(syncOptions(fixture))).resolves.toMatchObject({
+      status: "unchanged",
+      active_records: 1,
     });
   });
 

@@ -204,9 +204,11 @@ Each Markdown record uses:
 
 - collection `castle-understanding`;
 - collection schema version `castle-understanding-collection/v1`;
+- metadata profile `castle-document/v2`;
 - stable source `castle:///rooms/name.md` or `castle:///words/name.md`;
 - logical key from the selection;
-- version identity containing the full source commit and content SHA-256;
+- version identity containing the full source commit, content SHA-256, and
+  explicit v2 profile marker;
 - metadata naming the path, kind, title, source commit, source committer time,
   selected link hints, and the fact that the Markdown is untrusted.
 
@@ -216,6 +218,16 @@ provenance, observation/ingestion times, or signatures. The first immutable
 envelope for one identity wins. The bridge checks the identity and its
 load-bearing metadata echo; its own profile must be bumped if those semantics
 change.
+
+Bridge 0.2 makes that bump for title normalization. Titles are single-line,
+trimmed, and bounded to 200 UTF-16 code units without splitting a Unicode
+code point. A narrow compatibility reader admits only title shapes that bridge
+0.1 itself could have written, verifies them against their immutable
+`castle-document/v1` envelopes, and keeps reads closed while an attempt is
+pending. The next sync writes distinct v2 identities plus a new root before it
+tombstones the v1 records. A crash before the new pending transaction is
+installed leaves the old transaction retryable; it cannot make corrected
+metadata collide with the first v1 envelope.
 
 After completed sync, local state points to one current
 `castle-agenttool-root/v1` manifest. That canonical JSON binds the selected

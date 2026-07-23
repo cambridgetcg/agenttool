@@ -942,11 +942,11 @@ Therefore:
   project bearer. The clients never copy the AgentTool bearer implicitly, but
   they cannot prevent a caller from explicitly supplying the same value.
 
-Repository SDK source refuses every HTTP redirect on the data-node transport
-before response parsing, so a bearer or request body is not replayed to a
-redirect target. The immutable 0.16.0 SDK artifacts predate that behavior; a
-later released version must be selected before an external consumer relies on
-this guarantee.
+On the declared Node, Bun, and Python runtimes, repository SDK source refuses
+every HTTP redirect on the data-node transport before response parsing, so a
+bearer or request body is not replayed to a redirect target. The immutable
+0.16.0 SDK artifacts predate that behavior; a later released version must be
+selected before an external consumer relies on this guarantee.
 
 The Slice 1 file collector resolves a caller-supplied path and has no per-path
 allow-list. The HTTP collector bounds schemes, URL credentials, redirects,

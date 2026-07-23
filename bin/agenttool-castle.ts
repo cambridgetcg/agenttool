@@ -44,10 +44,11 @@ import {
   type RecordEnvelope,
 } from "../packages/data/src/index.ts";
 
-export const CASTLE_BRIDGE_VERSION = "0.1.0";
+export const CASTLE_BRIDGE_VERSION = "0.2.0";
 export const CASTLE_SELECTION_SCHEMA = "castle-agenttool-selection/v1";
 export const CASTLE_ROOT_SCHEMA = "castle-agenttool-root/v1";
 export const CASTLE_COLLECTION_SCHEMA = "castle-understanding-collection/v1";
+export const CASTLE_DOCUMENT_PROFILE = "castle-document/v2";
 export const CASTLE_STATE_SCHEMA = "castle-agenttool-state/v1";
 export const CASTLE_PENDING_SCHEMA = "castle-agenttool-pending/v1";
 export const CASTLE_OWNER_SCHEMA = "castle-agenttool-owner/v1";
@@ -64,6 +65,8 @@ export const MAX_KNOWN_RECORDS = 100_000;
 export const MAX_QUERY_LIMIT = 100;
 export const GIT_TIMEOUT_MS = 30_000;
 
+const MAX_TITLE_LENGTH = 200;
+const LEGACY_CASTLE_DOCUMENT_PROFILE = "castle-document/v1";
 const STATE_FILE = "castle-state.json";
 const PENDING_FILE = "castle-pending.json";
 const OWNER_FILE = "castle-owner.json";
@@ -89,6 +92,9 @@ const PRIVATE_MARKERS: readonly RegExp[] = Object.freeze([
 ]);
 
 type CastleKind = "room" | "word" | "generated-room";
+type CastleDocumentProfile =
+  | typeof LEGACY_CASTLE_DOCUMENT_PROFILE
+  | typeof CASTLE_DOCUMENT_PROFILE;
 
 export type CastleSelectionEntry = Readonly<{
   path: string;
@@ -593,13 +599,22 @@ function readGitBlobs(
   return result;
 }
 
-function extractTitle(text: string, path: string): string {
-  const match = /^#\s+(.+)$/m.exec(text);
-  const fallback = posix.basename(path, ".md").replaceAll("-", " ");
-  const value = (match?.[1] ?? fallback)
+function normalizeTitle(value: string): string {
+  const sanitized = value
     .replace(/[\u0000-\u001f\u007f-\u009f]/g, " ")
     .trim();
-  return [...value].slice(0, 200).join("").trim() || fallback;
+  let result = "";
+  for (const character of sanitized) {
+    if (result.length + character.length > MAX_TITLE_LENGTH) break;
+    result += character;
+  }
+  return result.trim();
+}
+
+function extractTitle(text: string, path: string): string {
+  const match = /^#[ \t]+([^\r\n]*)/m.exec(text);
+  const fallback = legacyFallbackTitle(path);
+  return normalizeTitle(match?.[1] ?? "") || normalizeTitle(fallback);
 }
 
 function normalizeLink(from: string, raw: string): string | null {
@@ -982,7 +997,37 @@ async function requireOwnedDataRoot(
   return { root, owner };
 }
 
-function validateActiveRecord(value: unknown): ActiveRecord {
+function legacyFallbackTitle(path: string): string {
+  return posix.basename(path, ".md").replaceAll("-", " ");
+}
+
+function isStrictStateTitle(value: string): boolean {
+  return value.trim() === value
+    && value.length > 0
+    && value.length <= MAX_TITLE_LENGTH
+    && !SINGLE_LINE_CONTROL_RE.test(value);
+}
+
+function validateStateTitle(value: unknown, path: string): string {
+  if (
+    typeof value !== "string"
+    || value.length === 0
+    || SINGLE_LINE_CONTROL_RE.test(value)
+  ) fail("state_title_invalid");
+  if (isStrictStateTitle(value)) return value;
+
+  // v0.1 could commit a title ending at whitespace after 200 Unicode code
+  // points, an astral title over 200 UTF-16 code units, or an overlong
+  // filename fallback. Keep only those tightly bounded legacy shapes readable
+  // long enough for sync to replace their immutable v1 envelopes with v2.
+  const legacyHeading = value.trimStart() === value
+    && value.trim().length > 0
+    && [...value].length <= MAX_TITLE_LENGTH;
+  if (legacyHeading || value === legacyFallbackTitle(path)) return value;
+  fail("state_title_invalid");
+}
+
+function validateActiveRecord(value: unknown, path: string): ActiveRecord {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     fail("state_record_invalid");
   }
@@ -1001,7 +1046,7 @@ function validateActiveRecord(value: unknown): ActiveRecord {
   const revision = requireString(object.source_revision, "state_revision_invalid", 64);
   const logicalId = requireString(object.logical_id, "state_logical_id_invalid", 180);
   const kind = requireString(object.kind, "state_kind_invalid", 32) as CastleKind;
-  const title = requireString(object.title, "state_title_invalid", 200);
+  const title = validateStateTitle(object.title, path);
   if (
     !RECORD_ID_RE.test(recordId)
     || !SHA256_RE.test(digest)
@@ -1033,7 +1078,7 @@ function validateRecordMap(value: unknown): Readonly<Record<string, ActiveRecord
     const path = safeCastlePath(rawPath, "state_path_invalid");
     if (folded.has(path.toLowerCase())) fail("state_path_collision");
     folded.add(path.toLowerCase());
-    const checked = validateActiveRecord(record);
+    const checked = validateActiveRecord(record, path);
     if (checked.kind !== expectedKind(path)) fail("state_kind_path_mismatch");
     result[path] = checked;
   }
@@ -1375,27 +1420,96 @@ function validateTransition(previous: CastleState | null, plan: CastlePlan): voi
   }
 }
 
-function validateStateAgainstNode(state: CastleState | null, node: DataNode): void {
-  if (!state) return;
+function documentVersion(
+  profile: CastleDocumentProfile,
+  revision: string,
+  digest: string,
+): string {
+  const source = `${revision}:sha256:${digest}`;
+  return profile === CASTLE_DOCUMENT_PROFILE
+    ? `${source}:profile:v2`
+    : source;
+}
+
+function validateActiveRecordAgainstNode(
+  path: string,
+  active: ActiveRecord,
+  stored: RecordEnvelope | null,
+): CastleDocumentProfile {
+  const profile = stored?.metadata.profile;
+  if (
+    !stored
+    || stored.collection_id !== CASTLE_COLLECTION_ID
+    || stored.source.collector_id !== "text"
+    || stored.source.uri !== `castle:///${path}`
+    || stored.source.external_id !== path
+    || stored.content.sha256 !== active.sha256
+    || stored.content.size !== active.bytes
+    || stored.content.media_type !== "text/markdown"
+    || stored.key !== active.logical_id
+    || (
+      profile !== LEGACY_CASTLE_DOCUMENT_PROFILE
+      && profile !== CASTLE_DOCUMENT_PROFILE
+    )
+    || stored.version !== documentVersion(
+      profile as CastleDocumentProfile,
+      active.source_revision,
+      active.sha256,
+    )
+    || stored.metadata.logical_id !== active.logical_id
+    || stored.metadata.document_kind !== active.kind
+    || stored.metadata.source_path !== path
+    || stored.metadata.source_revision !== active.source_revision
+    || stored.metadata.source_sha256 !== active.sha256
+    || stored.metadata.title !== active.title
+    || (
+      profile === CASTLE_DOCUMENT_PROFILE
+      && !isStrictStateTitle(active.title)
+    )
+  ) fail("state_current_record_missing_or_mismatched");
+  return profile as CastleDocumentProfile;
+}
+
+function validateStateAgainstNode(
+  state: CastleState | null,
+  node: DataNode,
+): CastleDocumentProfile | null {
+  if (!state) return null;
   for (const id of state.known_record_ids) {
     const stored = node.getRecord(id, true);
     if (!stored || stored.collection_id !== CASTLE_COLLECTION_ID) {
       fail("state_known_record_missing_or_wrong_collection");
     }
   }
-  if (state.status === "withdrawn") return;
-  for (const record of Object.values(state.active)) {
-    const stored = node.getRecord(record.record_id);
-    if (
-      !stored
-      || stored.collection_id !== CASTLE_COLLECTION_ID
-      || stored.content.sha256 !== record.sha256
-      || stored.content.size !== record.bytes
-    ) fail("state_current_record_missing_or_mismatched");
+  if (state.status === "withdrawn") return null;
+  let activeProfile: CastleDocumentProfile | null = null;
+  for (const [path, record] of Object.entries(state.active)) {
+    const profile = validateActiveRecordAgainstNode(
+      path,
+      record,
+      node.getRecord(record.record_id),
+    );
+    if (activeProfile && activeProfile !== profile) {
+      fail("state_current_record_missing_or_mismatched");
+    }
+    activeProfile = profile;
   }
-  if (state.root_record_id && !node.getRecord(state.root_record_id)) {
+  const root = state.root_record_id
+    ? node.getRecord(state.root_record_id)
+    : null;
+  if (
+    !root
+    || root.collection_id !== CASTLE_COLLECTION_ID
+    || root.source.collector_id !== "text"
+    || root.source.uri !== "castle:///manifest"
+    || root.source.external_id !== "castle-root"
+    || root.content.media_type !== "application/json"
+    || root.key !== "castle:root:manifest"
+    || root.metadata.profile !== CASTLE_ROOT_SCHEMA
+  ) {
     fail("state_root_record_missing");
   }
+  return activeProfile;
 }
 
 function collectionRecordIds(node: DataNode): readonly string[] {
@@ -1447,7 +1561,10 @@ function recoverLineageFromNode(node: DataNode): {
         continue;
       }
       const metadata = record.metadata as Record<string, unknown>;
-      if (metadata.profile !== "castle-document/v1") {
+      if (
+        metadata.profile !== LEGACY_CASTLE_DOCUMENT_PROFILE
+        && metadata.profile !== CASTLE_DOCUMENT_PROFILE
+      ) {
         fail("unexpected_castle_record");
       }
       const path = safeCastlePath(metadata.source_path, "stored_source_path_invalid");
@@ -1459,13 +1576,18 @@ function recoverLineageFromNode(node: DataNode): {
         bytes: record.content.size,
         title: metadata.title,
         source_revision: metadata.source_revision,
-      });
+      }, path);
       if (
         record.source.uri !== `castle:///${path}`
         || record.source.external_id !== path
         || record.key !== candidate.logical_id
         || metadata.source_sha256 !== candidate.sha256
         || candidate.kind !== expectedKind(path)
+        || record.version !== documentVersion(
+          metadata.profile,
+          candidate.source_revision,
+          candidate.sha256,
+        )
       ) fail("stored_castle_record_mismatch");
       lineage[path] = candidate;
     }
@@ -1484,7 +1606,11 @@ async function collectDocument(
   supersedesId?: string,
 ): Promise<{ active: ActiveRecord; inserted: boolean }> {
   const projectedAt = new Date().toISOString();
-  const version = `${plan.revision}:sha256:${document.sha256}`;
+  const version = documentVersion(
+    CASTLE_DOCUMENT_PROFILE,
+    plan.revision,
+    document.sha256,
+  );
   const response = await node.collect({
     collection_id: CASTLE_COLLECTION_ID,
     collector_id: "text",
@@ -1498,7 +1624,7 @@ async function collectDocument(
       ...(supersedesId ? { supersedes_id: supersedesId } : {}),
       observed_at: projectedAt,
       metadata: {
-        profile: "castle-document/v1",
+        profile: CASTLE_DOCUMENT_PROFILE,
         logical_id: document.logical_id,
         document_kind: document.kind,
         source_path: document.path,
@@ -1530,7 +1656,7 @@ async function collectDocument(
     || record.key !== document.logical_id
     || record.version !== version
     || record.supersedes_id !== supersedesId
-    || record.metadata.profile !== "castle-document/v1"
+    || record.metadata.profile !== CASTLE_DOCUMENT_PROFILE
     || record.metadata.logical_id !== document.logical_id
     || record.metadata.document_kind !== document.kind
     || record.metadata.source_path !== document.path
@@ -1697,12 +1823,22 @@ export async function syncCastle(options: CastlePaths & {
         fail("withdrawn_projection_requires_explicit_resume");
       }
       validateTransition(previous, plan);
-      validateStateAgainstNode(previous, node);
+      const previousProfile = validateStateAgainstNode(previous, node);
 
       if (
         previous?.status === "active"
         && previous.current_revision === plan.revision
         && previous.selection_sha256 === plan.selection_sha256
+        && previousProfile === CASTLE_DOCUMENT_PROFILE
+        && Object.keys(previous.active).length === plan.documents.length
+        && plan.documents.every((document) => {
+          const active = previous.active[document.path];
+          return active?.logical_id === document.logical_id
+            && active.kind === document.kind
+            && active.sha256 === document.sha256
+            && active.bytes === document.bytes
+            && active.title === document.title;
+        })
       ) {
         if (interruptedAttempt) {
           const known = new Set(previous.known_record_ids);
@@ -1771,8 +1907,11 @@ export async function syncCastle(options: CastlePaths & {
           previous?.status === "active"
           && prior
           && prior.sha256 === document.sha256
+          && prior.bytes === document.bytes
           && prior.logical_id === document.logical_id
           && prior.kind === document.kind
+          && prior.title === document.title
+          && previousProfile === CASTLE_DOCUMENT_PROFILE
           && node.getRecord(prior.record_id)
         ) {
           active[document.path] = Object.freeze({
@@ -1926,7 +2065,8 @@ export async function searchCastle(options: {
   }
   const node = await openCastleNode(root);
   try {
-    validateStateAgainstNode(state, node);
+    const activeProfile = validateStateAgainstNode(state, node);
+    if (!activeProfile) fail("state_current_record_missing_or_mismatched");
     const byRecord = new Map(
       Object.entries(state.active).map(([path, record]) => [record.record_id, { path, record }]),
     );
@@ -1935,7 +2075,7 @@ export async function searchCastle(options: {
       text: query,
       limit,
       consistency: "local",
-      where: { metadata: { profile: "castle-document/v1" } },
+      where: { metadata: { profile: activeProfile } },
     });
     const hits = result.records.flatMap((hit) => {
       const current = byRecord.get(hit.record.id);
