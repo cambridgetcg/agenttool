@@ -1,4 +1,4 @@
 interface:
   display_name: "Coordinate Agent Work"
-  short_description: "Coordinate agents through an honest local journal"
-  default_prompt: "Use $coordinate-agent-work to coordinate simultaneous agents and reconcile their evidence."
+  short_description: "Coordinate sessions with local evidence"
+  default_prompt: "Use $coordinate-agent-work to start credential-bound coordination, distinguish optional presence hints, and reconcile evidence in this repository."

@@ -93,29 +93,19 @@ describe("cross-host sessions", () => {
     expect(store.listSessions(ws.id)).toHaveLength(1);
   });
 
-  test("adds sessions to a legacy journal without changing its task history", () => {
-    const ws = workspace();
-    const task = store.createTask({
-      workspace_id: ws.id,
-      actor: "root",
-      idempotency_key: "legacy-task",
-      title: "Preserve me",
-    });
+  test("fails closed if a current database loses its presence table", () => {
     const databasePath = joinPath(directory, "collab.sqlite");
-    const head = store.eventsSince(ws.id).head_hash;
     store.close();
 
-    const legacyShape = new Database(databasePath);
-    legacyShape.run("DROP TABLE sessions");
-    legacyShape.close();
+    const damaged = new Database(databasePath);
+    damaged.run("DROP TABLE sessions");
+    damaged.close();
 
-    store = new CollabStore(databasePath);
-    expect(store.getTask(ws.id, task.id)).toMatchObject(task);
-    expect(store.verifyJournal(ws.id)).toBe(true);
-    expect(store.eventsSince(ws.id).head_hash).toBe(head);
-    const session = join(ws.id, "new-client", "codex");
-    expect(session.protocol).toBe("agenttool.collab.session/0.1");
-    expect(store.eventsSince(ws.id).head_hash).toBe(head);
+    expect(errorCode(() => {
+      store = new CollabStore(databasePath);
+    })).toBe("database_schema_mismatch");
+    // Restore a closable handle for the shared cleanup.
+    store = { close() {} } as CollabStore;
   });
 
   test("gives duplicate display labels distinct actor and idempotency scopes", () => {
