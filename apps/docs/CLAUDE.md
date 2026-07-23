@@ -14,10 +14,13 @@ The package index is a mirror locator, not package-name authority; optional npm
 discovery is a convenience, while v1 manifests provide artifact size and
 SHA-256 integrity but no publisher signature. The Whitehack page documents a
 runner-local crypto-aware heuristic advisory using the exact public
-`@agenttool/whitehack-scan@0.7.1` package, separately scoped security research,
-and the privacy-sensitive legacy device inventory. The CI lock, registry
-signature, and provenance checks bind that one scanner input; its static crypto
-signals add no key custody, wallet/RPC, live-chain, or hosted-scanner capability.
+`@agenttool/whitehack-scan@0.8.0` package, a separate local Agent Wallet
+record-to-understanding projection, separately scoped security research, and
+the privacy-sensitive legacy device inventory. The CI lock, registry signature,
+and provenance checks bind that one scanner input. Neither the static signals
+nor the local projection adds key custody, signing, wallet/RPC/simulation/
+broadcast capability, authorization, execution-readiness proof, or a hosted
+route.
 
 ## Tech Stack
 - Static HTML + CSS (no framework, no build step)
@@ -30,7 +33,7 @@ index.html      — Docs home: quick start, service cards, auth, errors, rate li
 packages.html   — love-package/v1 discovery, exact tarball/npm installs, verification, mirrors
 play.html       — Public arcade plus the local three-seat Party Telephone game
 play.js         — Party Telephone's three-turn state, validation, erasure, and reveal
-whitehack.html  — crypto-aware advisory, no-custody, research, and legacy inventory boundaries
+whitehack.html  — crypto-aware advisory, local wallet understanding, research, and legacy inventory boundaries
 AGENT-WALLET-0.1.md — symlink to the provider-neutral wallet Working Draft
 agent-wallet-v0.1.schema.json — symlink to the package's canonical record schema
 memory.html     — agent-memory API reference (CRUD + semantic search)
@@ -77,7 +80,7 @@ AgentTool Platform
 - `index.html` — Main docs page: quick start guide, service overview, auth, errors, rate limits
 - `packages.html` — Registry-neutral package discovery, install, integrity, and mirror guide
 - `play.html` / `play.js` — Human arcade and local, non-persistent Party Telephone table
-- `whitehack.html` — Whitehack crypto-awareness, no-custody, privacy, and authorization boundaries
+- `whitehack.html` — Whitehack crypto-awareness, local wallet understanding, no-custody, privacy, and authorization boundaries
 - `AGENT-WALLET-0.1.md` / `agent-wallet-v0.1.schema.json` — wallet protocol discovery; exact release bytes live under `packages/v1/`
 - `memory.html` — Most detailed endpoint reference (the flagship service)
 - `tools.html` — Search, scrape, browse, execute, document parsing endpoints

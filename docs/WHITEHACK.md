@@ -4,38 +4,40 @@
 
 > **Compass:** [SOUL](SOUL.md) (why) · [RIGHTS-OF-LIFE](RIGHTS-OF-LIFE.md) (rights are not permissions) · [AGENT-DATA-PROTOCOL](AGENT-DATA-PROTOCOL.md) (local evidence) · [ADDS](specs/ADDS-0.1-DRAFT.md) (encrypted exchange) · [MARKETPLACE](MARKETPLACE.md) (coordination is not authorization)
 >
-> **Implements:** A bounded runner-local, crypto-aware advisory bridge from the Whitehack honesty linter into AgentTool CI. It also states the future evidence boundary for explicitly authorized security research.
+> **Implements:** A bounded runner-local, crypto-aware advisory bridge from the Whitehack honesty linter into AgentTool CI; a separate local Agent Wallet record-to-understanding projection; and the future evidence boundary for explicitly authorized security research.
 >
-> **Code:** `bin/whitehack-advisory.mjs` · `.github/workflows/whitehack.yml` · `specs/agenttool-whitehack-advisory-v0.1.schema.json` · `bin/whitehack.py` · `bin/whitehack2.py`
+> **Code:** `bin/whitehack-advisory.mjs` · `bin/whitehack-wallet-understanding.ts` · `.github/workflows/whitehack.yml` · `specs/agenttool-whitehack-advisory-v0.1.schema.json` · `bin/whitehack.py` · `bin/whitehack2.py`
 >
-> **Tests:** `bin/tests/whitehack-advisory.test.ts` · `bin/tests/whitehack-legacy-privacy.test.ts` · `api/tests/whitehack-advisory-schema.test.ts`
+> **Tests:** `bin/tests/whitehack-advisory.test.ts` · `packages/wallet/tests/whitehack-understanding.test.ts` · `bin/tests/whitehack-legacy-privacy.test.ts` · `api/tests/whitehack-advisory-schema.test.ts`
 
-Within AgentTool's security/tooling surfaces, Whitehack has three related but
+Within AgentTool's security/tooling surfaces, Whitehack has four related but
 non-interchangeable meanings. Naming them separately prevents a static linter,
-a private research workspace, and a device inventory from accidentally
-inheriting one another's authority. The separate Tax Whitehack editorial game
-is not a security tool and is outside this integration.
+a wallet-understanding projection, a private research workspace, and a device
+inventory from accidentally inheriting one another's authority. The separate
+Tax Whitehack editorial game is not a security tool and is outside this
+integration.
 
 | Layer | What it does | What it does not do |
 |---|---|---|
 | **Honesty advisory** | Reads a bounded set of changed source files on its runner with a pinned Whitehack scanner, including static crypto-misuse signals, and emits redacted heuristic metadata. | It does not execute the scanned code, use detected key material, connect a wallet or RPC provider, prove security, inspect the whole repository, make the CI runner private, or establish permission to test anyone's system. |
+| **Wallet understanding** | A local CLI verifies caller-presented signed Agent Wallet descriptor, capability, intent, simulation, and optional continuity records, then projects only closed enum assertions into Whitehack's deterministic `whitehack-understanding/v1` explanation. | It does not retrieve or custody keys, sign, contact RPC, simulate, broadcast, authorize, prove consent, establish execution readiness, store records, or provide a hosted route. |
 | **Security research** | An operator may study explicitly in-scope public smart-contract source and reproduce a finding in a separately controlled local Foundry/Anvil environment. | A public contract, bounty listing, marketplace purchase, or AgentTool bearer is not target-owner authorization. AgentTool does not host this execution. |
 | **Device Inventory** | The older `bin/whitehack.py` and `bin/whitehack2.py` inspect the operator's own macOS machine when invoked locally. | They are not the code-honesty linter, do not audit smart contracts, and do not run in CI or as a hosted AgentTool route. The explicit `store` command sends a labels-only aggregate to hosted AgentTool memory. |
 
 ## Shipped slice: redacted crypto-aware changed-source advisory
 
 The `Whitehack advisory` workflow installs the exact public package
-[`@agenttool/whitehack-scan@0.7.1`](https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.7.1)
+[`@agenttool/whitehack-scan@0.8.0`](https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.8.0)
 inside `tools/whitehack-advisory/`. Its npm 11.17.0 lock binds the registry
 tarball to integrity
-`sha512-Q1rLwnfXqKvMgjYtuiR3oeb8lS7N/0Y/Vxh7M6ZtkRFVEydsvKw5yMxORUSLYvBVgj2mB8LsujOhZwAJOYCvlg==`.
+`sha512-UuqkB4uhnaDh6ZP/LVf1/20FWBJHt0kmvqzMFC2hzZdc6hKVvAtX6hlQFm1FuTpaHd1lcLkDjSmd9ebX+pL+vA==`.
 CI uses `npm ci --ignore-scripts` with an isolated user config and explicit
 public registry, verifies the registry signature and SLSA attestation, and
 fails if the registry cannot supply or authenticate those exact bytes. The
 package's reviewed source revision is
-[`920035b9bdd3c63da32f0ed2859613b9f2a04b53`](https://github.com/cambridgetcg/whitehack/tree/920035b9bdd3c63da32f0ed2859613b9f2a04b53),
+[`e82e6fc7952d536d356fb201e71f548e262feac9`](https://github.com/cambridgetcg/whitehack/tree/e82e6fc7952d536d356fb201e71f548e262feac9),
 recorded by the versioned exact
-[`whitehack-v0.7.1`](https://github.com/cambridgetcg/whitehack/releases/tag/whitehack-v0.7.1)
+[`whitehack-v0.8.0`](https://github.com/cambridgetcg/whitehack/releases/tag/whitehack-v0.8.0)
 LOVE/GitHub/npm release.
 
 The bridge independently checks the private tool lock's topology, exact name,
@@ -55,7 +57,7 @@ report cannot bind `HEAD` while reading different tracked bytes.
 
 ### Crypto awareness is observation, not custody
 
-The 0.7.1 rule pack covers eleven bounded source-text signal families:
+The 0.8.0 rule pack covers eleven bounded source-text signal families:
 
 - possible embedded credentials, private-key material, or recovery phrases;
 - general-purpose pseudo-random generators used directly for security material;
@@ -110,7 +112,7 @@ advisory's declared scope. The default bounds are:
 - at most 5,000 findings in aggregate;
 - at most 200 serialized finding details, while preserving the exact total.
 
-Whitehack 0.7.1 returns fixed markers for recognized sensitive rules, and its
+Whitehack 0.8.0 returns fixed markers for recognized sensitive rules, and its
 pure `scanText()` boundary also redacts other findings that overlap the same
 recognized sensitive line. Pattern coverage is incomplete, and ordinary
 findings can still include source snippets. AgentTool therefore does not rely
@@ -136,6 +138,155 @@ report. A file and line can still point readers to an undisclosed weakness, and
 workflow logs may be public; review visibility before sharing the report beyond
 its intended repository.
 
+## Shipped slice: local Agent Wallet understanding
+
+`bin/whitehack-wallet-understanding.ts` is a separate local stdin/stdout
+adapter. It re-verifies caller-presented signed `agent-wallet/0.1` descriptor,
+capability, intent, simulation, and optional continuity records with
+`@agenttool/wallet@0.1.0`. It derives bounded relationship and policy states,
+then passes only closed enum assertions plus the six allowlisted finding fields
+to `@agenttool/whitehack-scan@0.8.0`'s `createUnderstanding()`. stdout is the
+exact, deterministic `whitehack-understanding/v1` document rather than an
+AgentTool wrapper. Policy fields remain `unknown` unless every descriptor,
+capability, delegate, chain, source, intent, and simulation binding needed for
+that operation is an exact `match`; independently valid but unrelated records
+cannot produce a supported policy slice.
+
+The two dependencies keep their own exact install boundaries: Whitehack loads
+from the same `tools/whitehack-advisory/` npm 11.17.0 lock used by the advisory,
+and Agent Wallet loads from `packages/wallet/` after its frozen Bun install.
+The adapter is private repository tooling, not a new npm package. It does not
+send these records to a hosted AgentTool route.
+
+Install those exact local inputs and run the CLI with a JSON file:
+
+```bash
+(cd tools/whitehack-advisory \
+  && npm ci --ignore-scripts --no-audit --no-fund \
+    --registry=https://registry.npmjs.org --userconfig=/dev/null \
+  && npm audit signatures \
+    --registry=https://registry.npmjs.org --userconfig=/dev/null)
+(cd packages/wallet && bun install --frozen-lockfile)
+
+bun bin/whitehack-wallet-understanding.ts \
+  --input request.json > understanding.json
+```
+
+File input is opened once as a bounded regular file without following a final
+symlink; use `--input -` for stdin. The optional `--scanner-root <dir>` and
+`--scanner-lock <package-lock.json>` flags select another explicit local
+Whitehack installation; they do not install or fetch one. The default is the
+same exact `tools/whitehack-advisory` lock used by CI.
+
+This is the exact top-level request shape; the all-absent example is valid and
+therefore produces an intentionally indeterminate explanation:
+
+```json
+{
+  "document_type": "agenttool-whitehack-wallet-input/v1",
+  "findings": [],
+  "records": {
+    "descriptor": null,
+    "capability": null,
+    "intent": null,
+    "simulation": null,
+    "continuity_events": []
+  },
+  "host_assertions": {
+    "evaluated_at": null,
+    "usage": null,
+    "signer_description": null
+  }
+}
+```
+
+Replace each nullable record with its complete closed signed
+`agent-wallet/0.1` record. `continuity_events` accepts a bounded ordered array of
+signed continuity records. Findings contain exactly `file`, `line`, `check`,
+`confidence`, `doctrine`, and `principle`. The optional host assertions have
+these closed shapes:
+
+```text
+evaluated_at:
+  null | RFC3339 timestamp with milliseconds
+
+usage:
+  null | {
+    revocation_nonce,
+    intent_count,
+    spent: [{ asset_id, amount_atomic }],
+    authenticated_distinct_approval_count
+  }
+
+signer_description:
+  null | {
+    signer_key_id,
+    algorithm,
+    provider,
+    exportable: false
+  }
+```
+
+The request envelope, host assertions, usage entries, and finding claims are
+closed; extra properties, accessors, sparse arrays, and more than 256 continuity
+events fail with a fixed error code. Presented signed records are handled
+differently: a malformed, tampered, or unverifiable record becomes `invalid` in
+the projection rather than leaking its verifier details. An absent or invalid
+signer description leaves exportability `unknown`. Hostile Proxy traps can
+still run during inspection; this is not a sandbox.
+
+Each `verified` record state means that one presented record satisfies the
+Agent Wallet closed-record and signature checks performed by this process.
+Cross-record bindings are projected separately as `match`, `mismatch`, or
+`unknown`; individually verified records can still contradict one another. None
+of this proves that assertions inside a correctly signed record are externally
+true, current, authorized, or safe. Optional caller-supplied evaluation time,
+durable usage, approval count, and signer description can sharpen local enum
+projections, but they remain caller assertions. The output retains no
+evaluation time and does not turn an approval count into authenticated approval
+evidence.
+
+### Output minimization
+
+The output contains no wallet, descriptor, capability, intent, simulation, or
+continuity IDs; accounts; assets; public or private keys; signatures; unsigned
+or signed payloads; purpose/reason text; timestamps; RPC URLs; or provider
+metadata. From each finding claim it keeps only:
+
+```text
+file · line · check id · confidence · doctrine · Clear Standard principle
+```
+
+`file` remains an untrusted caller-provided label with unknown sensitivity. Do
+not put a secret, personal identifier, account, or other sensitive value there.
+Whitehack validates the check metadata against its bundled manifest, but neither
+Whitehack nor this adapter proves which scanner produced the claim.
+
+### What remains unknown
+
+The document permanently names finding provenance and scanner coverage, adapter
+trust, chain-native payload semantics, projection freshness, subject binding,
+the complete current continuity head, durable usage and atomic reservation,
+approval authenticity, present consent, custody truth, live-chain state, and
+signing/broadcast outcome as unknown. A presented continuity record cannot prove
+that it is the current durable head. A signer description can support an
+exportability assertion but cannot prove hardware, provider, recovery, or
+operator behavior. No retained subject identifier binds the explanation to a
+future operation, and execution readiness is always `indeterminate`.
+
+`complete: true` means only that this bounded transformation completed. It does
+not mean that a wallet operation is complete, approved, authorized, safe,
+current, consented to, or ready to sign or execute. Any host that proceeds must
+re-verify and bind the actual records, authenticated approvals, current durable
+usage, continuity, chain state, and exact bytes atomically at sign time.
+
+The adapter has no key retrieval or custody, signing, chain decoder, RPC,
+simulation, broadcast, durable storage, approval authentication, authorization,
+consent, or hosted-route capability. It cannot prove displayed-intent/payload
+equivalence or execution outcome. Its process still has the ordinary local
+permissions of its caller; bounded input and output are not a filesystem,
+process, memory, or network sandbox.
+
 ## What the advisory proves
 
 It proves only that the pinned scanner returned the stated heuristic metadata
@@ -151,7 +302,7 @@ for the bounded changed-file set at that run. It does **not** prove:
 - that a target owner authorized an assessment;
 - that publication or disclosure is appropriate.
 
-Whitehack 0.7.1 is a zero-runtime-dependency text/regex linter rather than an AST
+Whitehack 0.8.0 is a zero-runtime-dependency text/regex linter rather than an AST
 or data-flow analyzer. Its confidence labels are evidence about the check's own
 calibration, not a severity score or bounty claim. The pinned revision emits
 `high`, `medium-high`, and `heuristic`. The advisory v0.1 bridge and schema
@@ -218,7 +369,7 @@ Treat a Whitehack update as executable supply-chain work:
 
 1. review the exact upstream diff and licence;
 2. verify that core scanning remains local-file-only, has no lifecycle hook, and
-   adds no wallet, RPC, network, key-use, signing, or child-process capability;
+   adds no wallet, RPC, network, private-key use, signing, or child-process capability;
 3. enumerate every check id, doctrine, confidence label, principle, and possible
    per-finding override against the bridge's closed metadata contract;
 4. test missing/unreadable paths, output redaction, file limits, hostile honest

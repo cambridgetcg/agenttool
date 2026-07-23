@@ -22,14 +22,14 @@ packages/
   data/         — @agenttool/data · local-first agent-data/v1 reference node
   data-sync/    — @agenttool/data-sync · bounded encrypted explicit-pull bridge
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
-  collab/      — @agenttool/collab · shared Codex/Claude skill + local SQLite/MCP coordination journal
+  collab/      — @agenttool/collab · Codex/Claude plugins + Hermes adapter around one local cross-host SQLite/MCP journal
   skills/      — @agenttool/skills · public npm read-only Agent Skills inspector
   browser/     — @agenttool/browser · local-first TypeScript/JSONL/MCP browser developer preview
   telescope/    — @agenttool/telescope · read-only discovery evidence mapper
-  wallet/       — @agenttool/wallet · LOVE-released bounded wallet record/lifecycle primitives
+  wallet/       — @agenttool/wallet · LOVE/npm bounded wallet record/lifecycle primitives
   scriptwriter/ — decentralised RRR + co-brainstorm node
 infra/          — Fly.io deploy configs
-bin/            — operator scripts · agenttool-bridge.ts · agenttool-think.ts · exact locked crypto-aware Whitehack advisory
+bin/            — operator scripts · agenttool-bridge.ts · agenttool-think.ts · locked Whitehack advisory + local wallet-understanding CLI
 docs/           — notes & design docs (see docs/MAP.md)
 tests/          — Playwright e2e
 ```

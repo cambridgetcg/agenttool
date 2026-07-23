@@ -31,15 +31,18 @@ structure and emits reports; it does not execute scripts, install or copy
 skills, use the network, spawn subprocesses, look up credentials, or change
 host configuration. Agent
 Wallet 0.1 has no bundled key custody, chain adapter, RPC, broadcaster, hosted
-service, or implied npm mirror availability. Its exact LOVE artifact is the
-release record. Telescope 0.1.0 is a
+service, or authorization path. Its `@agenttool/wallet@0.1.0` npm mirror is
+public and byte-identical to the exact LOVE artifact. Telescope 0.1.0 is a
 public npm/LOVE package, but it remains a local client and does not add a hosted
-scan route. The Whitehack bridge is a separate runner-local, crypto-aware
-changed-source heuristic advisory. CI installs the exact public
-`@agenttool/whitehack-scan@0.7.1` artifact from an isolated npm lock with
-scripts disabled, then calls its pure text API; the bridge emits redacted
-metadata, remains non-blocking on findings, and adds no key custody, wallet/RPC
-capability, hosted scanner, or target authorization.
+scan route. Whitehack has two shipped AgentTool bridges: a runner-local,
+crypto-aware changed-source heuristic advisory and a separate local Agent
+Wallet understanding CLI. CI installs the exact public
+`@agenttool/whitehack-scan@0.8.0` artifact from an isolated npm lock with
+scripts disabled. The advisory emits redacted metadata and remains
+non-blocking on findings; the local CLI verifies caller-presented signed wallet
+records and projects enum-only assertions into `whitehack-understanding/v1`.
+Neither bridge adds key custody, signing, wallet/RPC/simulation/broadcast
+capability, hosted routes, authorization, consent proof, or execution readiness.
 The API is live at
 `api.agenttool.dev` on
 Fly.io (lhr×2 + cdg×1). The wake (`GET /v1/wake`) is a broad project
@@ -56,7 +59,7 @@ cd packages/data-protocol && bun install       # ADDS encrypted-object protocol
 cd packages/data && bun install                # local-first agent-data/v1 node
 cd packages/data-sync && bun install           # explicit agent-data-sync/v1 pull bridge
 cd packages/credential-broker && bun install   # experimental agentcred/0.1 local broker
-cd packages/collab && bun install              # local agenttool.collab/0.1 coordination journal
+cd packages/collab && bun install              # public 0.3: collab/0.1 compatibility + 0.2 coordination + session/0.1 presence
 cd packages/skills && bun install              # read-only portable Agent Skills inspection
 cd packages/browser && bun install             # local-first agent browser developer preview
 cd packages/correspondence-yutabase && bun install # pure Correspondence projection planner
@@ -147,9 +150,13 @@ node dist/cli.js scan api.agenttool.dev         # explicit live read-only dogfoo
 cd packages/wallet
 bun run ci                                     # typecheck + security/schema/vector tests + build
 
-# Whitehack (crypto-aware changed-source advisory; no target execution) ──
-(cd tools/whitehack-advisory && npm ci --ignore-scripts --no-audit --no-fund && npm audit signatures)
+# Whitehack (advisory + local wallet understanding; no execution) ─────
+(cd tools/whitehack-advisory \
+  && npm ci --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org --userconfig=/dev/null \
+  && npm audit signatures --registry=https://registry.npmjs.org --userconfig=/dev/null)
 bun test bin/tests/whitehack-advisory.test.ts   # redaction, scope, failure containment
+(cd packages/wallet && bun install --frozen-lockfile)
+WHITEHACK_INTEGRATION=1 bun test packages/wallet/tests/whitehack-understanding.test.ts
 
 # Frontends ──────────────────────────────────────────────────────────
 # Vanilla HTML/CSS/JS — no build step. Open files directly or:
@@ -182,6 +189,7 @@ bun bin/npm-release.ts resolve --package collab # inspect allowlisted npm identi
 | `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, `@agenttool/telescope`, and `@agenttool/wallet` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
 | `npm-release.ts` | Implements the one allowlisted npm release policy behind `.github/workflows/publish-npm.yml`: exact tag/provenance proof, credential-free preparation, protected publication with no package lifecycle code, exact-byte recovery, reviewed bootstrap for first publication, OIDC by default afterward, public registry receipt, and a re-downloaded GitHub Release mirror. It does not grant publication authority, create tags, configure npm trust, or revoke credentials. See `docs/NPM-RELEASES.md`. |
 | `whitehack-advisory.mjs` | Verifies and runs the exact locked `@agenttool/whitehack-scan` pure text API, including bounded crypto-misuse signals, over changed production files and emits redacted advisory metadata. It does not use detected keys, connect wallets/RPC, execute repository code, prove security, authorize target testing, or provide a hosted scanner. See `docs/WHITEHACK.md`. |
+| `whitehack-wallet-understanding.ts` | Local stdin/stdout adapter: verifies caller-presented signed Agent Wallet descriptor, capability, intent, simulation, and optional continuity records, then passes only closed enum assertions and redacted finding metadata to Whitehack 0.8. It returns exact `whitehack-understanding/v1`; it does not retrieve keys, sign, contact RPC, simulate, broadcast, authorize, store, or host a route. See `docs/WHITEHACK.md`. |
 | `create-project.ts` | Operator-side project + bearer minting. |
 | `frontend-deploy.sh` | Cloudflare Pages Direct Upload for the three static apps. |
 | `migrate.sh` · `migrate.ts` | Single-file `psql` migration application. |
@@ -274,12 +282,12 @@ source boundary by itself.
 | How would another language reach the API? | [`docs/SDK-TIERS.md`](docs/SDK-TIERS.md) (four-tier stack) · [`docs/CANONICAL-BYTES.md`](docs/CANONICAL-BYTES.md) (signing recipes) |
 | How does an agent keep and query raw collected data locally? | [`docs/AGENT-DATA-PROTOCOL.md`](docs/AGENT-DATA-PROTOCOL.md) · `packages/data/` (reference node) |
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
-| How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`agenttool.collab/0.1`; advisory local coordination, not a hosted lock or private model channel) |
+| How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`@agenttool/collab@0.3.0`; `agenttool.collab/0.1` compatibility + credential-bound `agenttool.collab/0.2` coordination + self-declared `agenttool.collab.session/0.1` presence; 31 local MCP tools for Codex/Claude/Hermes, not a hosted lock or private model channel) |
 | How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills@0.1.0`; public npm read-only inspection and validation, not installation, approval, or execution) |
 | How can an agent operate a local browser through TypeScript, JSONL, or MCP? | [`docs/AGENT-BROWSER.md`](docs/AGENT-BROWSER.md) · `packages/browser/` (local developer preview; no hosted surface or package release) |
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
 | How is an optional npm mirror published? | [`docs/NPM-RELEASES.md`](docs/NPM-RELEASES.md) · `.github/workflows/publish-npm.yml` · `bin/npm-release.ts` |
-| How does the Whitehack advisory work, and where does its authority stop? | [`docs/WHITEHACK.md`](docs/WHITEHACK.md) · `bin/whitehack-advisory.mjs` |
+| How do the Whitehack advisory and wallet-understanding projection work, and where does their authority stop? | [`docs/WHITEHACK.md`](docs/WHITEHACK.md) · `bin/whitehack-advisory.mjs` · `bin/whitehack-wallet-understanding.ts` |
 | Concept → structural meaning (for non-English readers) | [`docs/GLOSSARY.md`](docs/GLOSSARY.md) |
 | Per-area code orientation | each subdir's `CLAUDE.md` |
 
