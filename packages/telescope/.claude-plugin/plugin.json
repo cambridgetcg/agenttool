@@ -1,0 +1,26 @@
+{
+  "name": "telescope",
+  "version": "0.2.0",
+  "description": "Bounded public agent-surface evidence mapping",
+  "author": {
+    "name": "AgentTool contributors",
+    "url": "https://agenttool.dev"
+  },
+  "homepage": "https://github.com/cambridgetcg/agenttool/tree/main/packages/telescope",
+  "repository": "https://github.com/cambridgetcg/agenttool",
+  "license": "Apache-2.0",
+  "keywords": [
+    "agents",
+    "discovery",
+    "evidence",
+    "mcp"
+  ],
+  "mcpServers": {
+    "agenttool-telescope": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/dist/agenttool-telescope-mcp.js"
+      ]
+    }
+  }
+}

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Telescope Agent Surface Inspector"
+  short_description: "Inspect bounded public agent discovery evidence"
+  default_prompt: "Use $inspect-agent-surfaces to inspect a public agent surface and separate observed evidence from publisher claims."
+policy:
+  allow_implicit_invocation: true

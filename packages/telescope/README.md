@@ -7,17 +7,18 @@ of discovery GETs, and reports what was observed separately from what the
 publisher claims. It can reconstruct exact npm and LOVE install/verification
 commands from validated fields. It never executes those commands.
 
-The `0.1.0` release is distributed as an exact `love-package/v1` artifact and
-may be mirrored through GitHub Releases and npm. The LOVE manifest records the
-expected byte size and SHA-256; each mirror can be independently absent, so
-query the exact version instead of inferring availability from source or a
-mutable dist-tag. Telescope remains a local client—there is no hosted
-arbitrary-target scan route.
+The immutable `0.2.0` release is distributed as an exact `love-package/v1`
+artifact and may be mirrored through GitHub Releases and npm. The earlier
+`0.1.0` bytes remain available through their exact manifest. Each LOVE
+manifest records the expected byte size and SHA-256; each optional mirror can
+be independently absent, so query the exact version instead of inferring
+availability from source or a mutable dist-tag. Telescope remains a local
+client—there is no hosted arbitrary-target scan route.
 
 Install an exact registry mirror when convenience matters:
 
 ```bash
-npm install --save-exact @agenttool/telescope@0.1.0
+npm install --save-exact @agenttool/telescope@0.2.0
 ```
 
 Or use the release manifest and immutable LOVE tarball from
@@ -53,6 +54,46 @@ agenttool-telescope verify-package ./package.tgz \
 Exit `0` means a scan found at least one valid core surface, or a local file
 matched. Exit `1` means a scan was inconclusive, a verification mismatched, or
 a requested local operation failed. Exit `2` is invalid usage or target input.
+
+## MCP and Agent Skill
+
+Version `0.2.0` adds one bundled local stdio MCP tool:
+
+```text
+telescope_scan({ target })
+```
+
+It delegates to the same bounded `inspectTarget` operation and accepts no
+caller-supplied headers, credentials, limits, adapters, paths, or arbitrary
+URLs. One process permits one in-flight scan without queueing or automatic
+retry. Cancellation from the MCP client reaches the scan deadline boundary.
+Each result carries the canonical Telescope report schema plus an explicit
+warning that remote claims and generated actions are untrusted data and were
+not executed.
+
+The package ships:
+
+- a Codex plugin at `.codex-plugin/plugin.json`;
+- a Claude plugin at `.claude-plugin/plugin.json`;
+- the portable `inspect-agent-surfaces` Agent Skill;
+- a Hermes adapter for an MCP server named `agenttool-telescope`.
+
+Both plugin manifests run the same standalone Node-targeted bundle:
+
+```bash
+node dist/agenttool-telescope-mcp.js
+```
+
+Bun can run that bundle too. The MCP intentionally does not expose
+`verify`/`verify-package` or any other model-selected local-file path. Those
+operations remain explicit SDK/CLI surfaces until a host-approved filesystem
+root policy exists. They prove point-in-time bytes or archive identity against
+an independently supplied expectation, not publisher identity, authorization,
+or safety.
+
+There are no MCP resources or prompts in this release. Interpretation and
+workflow belong in the portable Skill; the library and report schema remain
+the implementation truth.
 
 ## What it observes
 
@@ -195,7 +236,7 @@ secrets because Telescope cannot universally classify secret-looking content.
 
 ## DNS-AID and PKARR
 
-Both are extension seams in the 0.1 release, not bundled protocol
+Both remain extension seams in the `0.2.0` source, not bundled protocol
 implementations:
 
 - Core Node/Bun DNS lookup does not establish DNSSEC validation, and DNS-AID is
@@ -218,12 +259,15 @@ bun install --frozen-lockfile
 bun run typecheck
 bun test
 bun run build
+bun run check:mcp-bundle
 npm pack --ignore-scripts --dry-run
 ```
 
-The package has no runtime dependencies or install lifecycle scripts. Unit
-tests inject all network behavior; live scanning is a separate dogfood check.
-The report schema is exported as
+The package manifest has no runtime dependencies or install lifecycle scripts.
+The standalone MCP executable bundles its pinned MCP and Zod implementation;
+their exact notices are in `THIRD_PARTY_LICENSES`. Unit tests inject all
+network behavior; live scanning is a separate dogfood check. The report schema
+is exported as
 `@agenttool/telescope/report.schema.json` for tooling that needs the exact
 bundled JSON Schema.
 
