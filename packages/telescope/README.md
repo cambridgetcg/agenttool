@@ -7,19 +7,18 @@ of discovery GETs, and reports what was observed separately from what the
 publisher claims. It can reconstruct exact npm and LOVE install/verification
 commands from validated fields. It never executes those commands.
 
-The immutable `0.1.0` release is distributed as an exact `love-package/v1`
-artifact and may be mirrored through GitHub Releases and npm. This source tree
-targets `0.2.0`; its release inventory must not advertise that version until
-the exact artifact is published. The LOVE manifest records the expected byte
-size and SHA-256; each mirror can be independently absent, so query the exact
-version instead of inferring availability from source or a mutable dist-tag.
-Telescope remains a local client—there is no hosted arbitrary-target scan
-route.
+The immutable `0.2.0` release is distributed as an exact `love-package/v1`
+artifact and may be mirrored through GitHub Releases and npm. The earlier
+`0.1.0` bytes remain available through their exact manifest. Each LOVE
+manifest records the expected byte size and SHA-256; each optional mirror can
+be independently absent, so query the exact version instead of inferring
+availability from source or a mutable dist-tag. Telescope remains a local
+client—there is no hosted arbitrary-target scan route.
 
 Install an exact registry mirror when convenience matters:
 
 ```bash
-npm install --save-exact @agenttool/telescope@0.1.0
+npm install --save-exact @agenttool/telescope@0.2.0
 ```
 
 Or use the release manifest and immutable LOVE tarball from

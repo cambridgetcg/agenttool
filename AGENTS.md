@@ -33,7 +33,7 @@ skills, use the network, spawn subprocesses, look up credentials, or change
 host configuration. Agent
 Wallet 0.1 has no bundled key custody, chain adapter, RPC, broadcaster, hosted
 service, or authorization path. Its `@agenttool/wallet@0.1.0` npm mirror is
-public and byte-identical to the exact LOVE artifact. Telescope 0.1.0 is a
+public and byte-identical to the exact LOVE artifact. Telescope 0.2.0 is a
 public npm/LOVE package, but it remains a local client and does not add a hosted
 scan route. Whitehack has two shipped AgentTool bridges: a runner-local,
 crypto-aware changed-source heuristic advisory and a separate local Agent
