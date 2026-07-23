@@ -186,6 +186,14 @@ the canon and Kingdom bundles that `bin/deploy.sh` stages into the API build
 context. The wrapper removes staging immediately after `fly deploy` returns;
 its `EXIT`/`INT`/`TERM` trap also removes staging if the command is interrupted.
 
+`--no-cache-api` is a one-shot recovery option for evidence of a malformed
+Fly image or poisoned remote build cache. It keeps the normal source,
+preflight, staging, rolling-health, and provenance gates, while adding
+`--no-cache` only to `fly deploy`. It does not repair bad source, missing
+migrations, missing secrets, or a platform outage. Reproduce the exact staged
+image locally first and use the flag only when that image starts correctly
+while the remote-built image exits before the server begins listening.
+
 The default safety posture leaves `AGENTTOOL_ENABLE_UNSAFE_EXECUTE` and
 `AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS` unset. The outbound variable now gates
 only the unfiltered, unsandboxed Playwright browse path; static scrape and URL
@@ -360,6 +368,7 @@ bin/deploy.sh --survey                 # Phase 0 only — what's drifted?
 bin/deploy.sh --no-migrate             # skip Phase 1 (schema unchanged)
 bin/deploy.sh --no-api                 # skip Phase 3 (only docs/frontends changed)
 bin/deploy.sh --no-frontend            # skip Phase 4 (only api changed)
+bin/deploy.sh --no-cache-api           # one-shot recovery: rebuild Fly image without cache
 bin/deploy.sh --skip-preflight         # operator override (NOT recommended)
 bin/deploy.sh --allow-dirty-release    # loud override for a dirty source tree
 bin/deploy.sh --allow-non-release-head # loud override for HEAD != github/main
@@ -408,11 +417,12 @@ conservative `failed_or_uncertain` receipt instead:
 ${XDG_STATE_HOME:-$HOME/.local/state}/agenttool/deploy-receipts/<time>-<revision>-<pid>.json
 ```
 
-The fixed `agenttool-deploy-receipt/v2` object contains `outcome`, completion
+The fixed `agenttool-deploy-receipt/v3` object contains `outcome`, completion
 time, exit status, declared `source_revision` and dirty bit, the GitHub
 release-head snapshot plus observation time, actually used overrides, whether
-an external mutation may have started, phase results, and verified API-machine
-count. It never copies credentials, credential-bearing URLs, arbitrary
+an external mutation may have started, the API build-cache mode (`default`,
+`bypassed`, or `not_used`), phase results, and verified API-machine count. It
+never copies credentials, credential-bearing URLs, arbitrary
 environment variables, or command output. `source_dirty=true` is explicit
 evidence that the revision alone does not describe every deployed source byte.
 `SIGKILL`, host loss, or an unwritable state directory can prevent a failure
@@ -456,6 +466,7 @@ security add-generic-password -U -s agenttool-cloudflare-token -a macair -w
 | `column "X" does not exist` during migration | The migration's CHECK or index references a column from an upstream migration that's unapplied. | Run `bin/migrate-pending.sh` first to apply the full backlog in order. |
 | `password authentication failed for user "postgres"` | Stale DB password in keychain. | Reset it in Supabase, then run `security add-generic-password -U -s agenttool-database-url -a macair -w` and enter the URL at the prompt. |
 | `fly deploy` fails with healthcheck | New code crashes on startup — likely a missing DB column or env var. | Apply migrations first; check `fly secrets list -a agenttool` for missing keys. |
+| New Fly machine exits `0` before the listening log, unchanged API source starts locally, and old machines remain healthy | The newly assembled remote image or build cache may be malformed. | Reproduce the exact staged image locally. If it serves `/health` with the expected revision, retry once with `bin/deploy.sh --no-cache-api` plus the normal phase flags. This bypasses Fly's build cache only; it does not bypass release gates or prove cache corruption by itself. |
 | Frontend stale after upload | CF Pages Browser Cache TTL not 0 — overrides origin headers. | Set zone setting via CF API (see Phase 4). |
 | `bin/preflight.sh smoke` fails with DNS error | Explicit smoke mode cannot reach `AGENTTOOL_BASE`. | Run smoke separately from a host that can reach the configured target; the default hermetic gate does not call it. |
 

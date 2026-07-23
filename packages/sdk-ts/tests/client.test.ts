@@ -92,8 +92,8 @@ describe("AgentTool init", () => {
       at.memory.store("x"); // triggers fetch — header check below
       const call = mockFetch.mock.calls[0];
       const init = call[1] as RequestInit;
-      const headers = init.headers as Record<string, string>;
-      expect(headers.Authorization).toBe("Bearer explicit-key");
+      const headers = new Headers(init.headers);
+      expect(headers.get("authorization")).toBe("Bearer explicit-key");
     } finally {
       if (orig !== undefined) process.env.AT_API_KEY = orig;
       else delete process.env.AT_API_KEY;

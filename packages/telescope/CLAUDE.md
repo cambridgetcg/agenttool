@@ -17,6 +17,20 @@ npm pack --ignore-scripts --dry-run
 
 - Keep the core at zero runtime dependencies and compatible with Node 20.19+
   and Bun 1.3.5+.
+- Keep MCP local stdio only and backed by the core `inspectTarget` operation.
+  The public MCP surface is exactly `telescope_scan({ target })`: no arbitrary
+  headers, credentials, limits, adapters, paths, verifier tools, resources, or
+  prompts.
+- Keep one in-flight scan per MCP process, propagate client cancellation, and
+  never queue or automatically retry uncertain external reads. Tool input must
+  reject unknown fields.
+- MCP success returns the canonical report as structured content and
+  terminal/bidi-safe parse-equivalent JSON after a fixed untrusted-data
+  warning. Semantic target errors are bounded; unexpected errors never expose
+  messages, stacks, targets, environment details, credentials, or paths.
+- Build one standalone Node-targeted MCP bundle, run it under both supported
+  Node and Bun, and byte-compare the checked-in bundle. Keep all actually
+  bundled third-party names, versions, notices, and license text complete.
 - Default scanning is bounded public HTTPS GET only. Never read ambient bearer,
   cookie, npm, or project credentials.
 - DNS preflight is not socket pinning. Do not describe the native-fetch client
@@ -55,8 +69,10 @@ npm pack --ignore-scripts --dry-run
   rather than echoed as actionable URLs.
 - Keep the report schema, TypeScript report type, formatter, and tests aligned.
 - Keep the package version, `TOOL_VERSION`, User-Agent, tests, LOVE inventory,
-  and release tag aligned. Published version bytes are immutable: never rebuild
-  or replace an existing manifest/tarball under the same name and version.
+  plugin manifests, MCP server identity, and release tag aligned. The report
+  protocol remains `agenttool-telescope/v0.1` until that schema itself changes.
+  Published version bytes are immutable: never rebuild or replace an existing
+  manifest/tarball under the same name and version.
 - External publication and deploy remain explicit operator actions. The
   package implementation does not add a hosted scan route or own production
   egress merely because its local client is publicly distributed.
@@ -67,5 +83,7 @@ Hermetic tests inject fetch and DNS. Cover target policy, mixed DNS answers,
 manual redirects, byte/deadline budgets, duplicate `agent.txt`, exact Pathways
 selection, ignored `latest`, invalid manifests, MCP/A2A advertisement boundaries,
 shell-safe reconstruction, deterministic report ordering, CLI exits, and packed
-Node/Bun import/help. Live dogfood is evidence about one observation time, not a
-replacement for fixtures.
+Node/Bun import/help. MCP tests also cover strict input, canonical output schema,
+safe dual output, one-scan concurrency, cancellation, sanitized failures,
+cross-host manifests, and Node/Bun stdio handshakes. Live dogfood is evidence
+about one observation time, not a replacement for fixtures.

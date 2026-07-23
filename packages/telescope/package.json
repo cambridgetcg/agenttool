@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/telescope",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Read-only evidence mapper for agent discovery surfaces",
   "license": "Apache-2.0",
   "type": "module",
@@ -16,15 +16,21 @@
     }
   },
   "bin": {
-    "agenttool-telescope": "dist/cli.js"
+    "agenttool-telescope": "dist/cli.js",
+    "agenttool-telescope-mcp": "dist/agenttool-telescope-mcp.js"
   },
   "files": [
     "dist",
     "schema",
+    "skills",
+    "integrations",
+    ".codex-plugin",
+    ".claude-plugin",
     "README.md",
     "CLAUDE.md",
     "LICENSE",
-    "NOTICE"
+    "NOTICE",
+    "THIRD_PARTY_LICENSES"
   ],
   "publishConfig": {
     "access": "public"
@@ -35,21 +41,28 @@
   },
   "scripts": {
     "clean": "node --eval \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
-    "build": "bun run clean && tsc",
-    "typecheck": "tsc --noEmit",
+    "build:mcp": "bun scripts/build-mcp-bundle.ts",
+    "check:mcp-bundle": "bun scripts/check-mcp-bundle.ts",
+    "build": "bun run clean && tsc && bun run build:mcp",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.mcp.json",
     "test": "bun test",
-    "ci": "bun run typecheck && bun test && bun run build",
+    "ci": "bun run typecheck && bun run build && bun test && bun run check:mcp-bundle",
     "prepack": "bun run ci"
   },
   "devDependencies": {
+    "@modelcontextprotocol/server": "2.0.0-beta.5",
     "@types/bun": "^1.2.0",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "zod": "^4.4.3"
   },
   "keywords": [
     "agents",
+    "claude-code",
+    "codex",
     "discovery",
+    "hermes-agent",
     "mcp",
     "a2a",
     "love-protocol",

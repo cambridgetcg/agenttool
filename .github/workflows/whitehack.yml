@@ -23,21 +23,45 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Check out AgentTool history
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Check out the reviewed Whitehack scanner
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Set up Node 24.18.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          repository: cambridgetcg/whitehack
-          ref: cbbf4d19ce839600238d017615ec142cd16343c3
-          path: .whitehack-tool
-          persist-credentials: false
-      - name: Set up Node 20.19.0
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+          node-version: 24.18.0
+          package-manager-cache: false
+      - name: Pin npm 11.17.0
+        run: |
+          npm install --global npm@11.17.0 --ignore-scripts --no-audit --no-fund \
+            --registry=https://registry.npmjs.org --userconfig=/dev/null
+          test "$(npm --version)" = "11.17.0"
+      - name: Install the exact Whitehack scanner
+        working-directory: tools/whitehack-advisory
+        run: >-
+          npm ci --ignore-scripts --no-audit --no-fund
+          --registry=https://registry.npmjs.org --userconfig=/dev/null
+      - name: Verify npm package signatures
+        working-directory: tools/whitehack-advisory
+        run: >-
+          npm audit signatures
+          --registry=https://registry.npmjs.org --userconfig=/dev/null
+      - name: Set up Bun 1.3.5
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          node-version: 20.19.0
+          bun-version: 1.3.5
+      - name: Install Agent Wallet frozen dependencies
+        working-directory: packages/wallet
+        run: bun install --frozen-lockfile
+      - name: Test the verified Whitehack module loader
+        env:
+          WHITEHACK_INTEGRATION: "1"
+        run: bun test bin/tests/whitehack-advisory.test.ts
+      - name: Test the Agent Wallet understanding projection
+        env:
+          WHITEHACK_INTEGRATION: "1"
+        run: bun test packages/wallet/tests/whitehack-understanding.test.ts
       - name: Observe changed supported production files
         env:
           WHITEHACK_EVENT_NAME: ${{ github.event_name }}
@@ -58,7 +82,8 @@ jobs:
           fi
           set +e
           timeout --signal=TERM --kill-after=5s 120s node bin/whitehack-advisory.mjs \
-            --scanner-root .whitehack-tool \
+            --scanner-root tools/whitehack-advisory/node_modules/@agenttool/whitehack-scan \
+            --scanner-lock tools/whitehack-advisory/package-lock.json \
             --base "$WHITEHACK_BASE_SHA" \
             --head "$WHITEHACK_HEAD_SHA" \
             --summary-file "$GITHUB_STEP_SUMMARY"

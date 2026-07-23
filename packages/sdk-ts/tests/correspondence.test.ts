@@ -416,6 +416,9 @@ describe("CorrespondenceClient", () => {
     const wire = JSON.parse(init.body as string) as Record<string, unknown>;
     expect(url).toBe("https://example.test/v1/correspondence/events");
     expect(init.method).toBe("POST");
+    expect(new Headers(init.headers).get("Authorization")).toBe(
+      "Bearer project-secret",
+    );
     expect(new Headers(init.headers).get("Idempotency-Key")).toBeNull();
     expect(wire).not.toHaveProperty("signing_key");
     expect(JSON.stringify(wire)).not.toContain(Buffer.from(SIGNING_KEY).toString("base64"));

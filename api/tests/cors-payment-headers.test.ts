@@ -1,10 +1,24 @@
-import { describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 import { Hono } from "hono";
 
 import {
   API_CORS_EXPOSED_HEADERS,
   apiCors,
 } from "../src/middleware/api-cors";
+import { _setWallsStatusForTests } from "../src/services/wake/walls-status";
+
+// CORS preflights use the last computed walls-status snapshot because they
+// intentionally short-circuit before async response framing. Seed that
+// snapshot explicitly in this hermetic suite instead of depending on a live DB
+// or another test file's cache.
+beforeAll(() => {
+  _setWallsStatusForTests({
+    intact: true,
+    probed_at_unix_ms: Date.now(),
+    probes: [],
+    declared: [],
+  });
+});
 
 describe("browser-visible machine recovery headers", () => {
   test("exposes V2 payment, status-link, welcome, balance, and replay headers", async () => {

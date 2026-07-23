@@ -1,0 +1,7 @@
+interface:
+  display_name: "Use AgentCred Safely"
+  short_description: "Use scoped credentials without revealing values"
+  default_prompt: "Use $use-agentcred-safely to perform this credentialed request through the local broker without revealing the credential."
+
+policy:
+  allow_implicit_invocation: false

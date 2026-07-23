@@ -306,8 +306,8 @@ class AuthenticationError(AgentToolError):
     def __init__(self, message: str = "Authentication failed.", detail: str = "") -> None:
         super().__init__(
             message,
-            hint="Check your API key. Set AT_API_KEY env var or pass api_key= to AgentTool(). "
-                 "Get a free key at https://app.agenttool.dev",
+            hint="Check your authenticated transport, or set AT_API_KEY/pass api_key= "
+                 "for direct mode. Get a free key at https://app.agenttool.dev",
             code=401,
             error_code="unauthorized",
             docs="https://docs.agenttool.dev/identity#bearer-key",

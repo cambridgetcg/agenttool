@@ -34,7 +34,7 @@ import { hkdf } from "@noble/hashes/hkdf.js";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./memory.js";
+import type { HttpConfig } from "./_http.js";
 
 // Wire sha512 sync into @noble/ed25519 for sign() — mirrors crypto.ts.
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
@@ -621,7 +621,7 @@ export class InboxClient {
 
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     try {
-      const resp = await globalThis.fetch(url, {
+      const resp = await this.http.request(url, {
         method: "GET",
         headers: { ...this.http.headers, Accept: "text/event-stream" },
         signal: controller.signal,
@@ -684,7 +684,7 @@ export class InboxClient {
       signal: AbortSignal.timeout(this.http.timeout),
     };
     if (body !== undefined) init.body = JSON.stringify(body);
-    const res = await globalThis.fetch(`${this.http.baseUrl}${path}`, init);
+    const res = await this.http.request(`${this.http.baseUrl}${path}`, init);
     if (res.status >= 400) {
       let detail = res.statusText;
       try {

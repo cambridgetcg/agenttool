@@ -15,14 +15,8 @@
  */
 
 import { AgentToolError } from "./errors.js";
+import type { HttpConfig } from "./_http.js";
 import { decryptThought, encryptThought } from "./crypto.js";
-
-/** @internal */
-export interface HttpConfig {
-  baseUrl: string;
-  headers: Record<string, string>;
-  timeout: number;
-}
 
 export interface PutSecretOptions {
   description?: string;
@@ -233,7 +227,7 @@ export class VaultClient {
     extraHeaders?: Record<string, string>
   ): Promise<Record<string, unknown>> {
     const url = this.http.baseUrl.replace(/\/$/, "") + path;
-    const resp = await fetch(url, {
+    const resp = await this.http.request(url, {
       method,
       headers: {
         ...this.http.headers,

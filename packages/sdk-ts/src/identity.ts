@@ -6,6 +6,7 @@ import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
 import { AgentToolError } from "./errors.js";
+import type { HttpConfig } from "./_http.js";
 
 // Required by @noble/ed25519's synchronous sign(). This is the same wiring
 // used by the rest of the SDK's local signing helpers.
@@ -113,13 +114,6 @@ function validateSignature(value: string, operation: string): void {
   } catch {
     throw new AgentToolError(`${operation}: signature must encode exactly 64 bytes.`);
   }
-}
-
-/** @internal */
-export interface HttpConfig {
-  baseUrl: string;
-  headers: Record<string, string>;
-  timeout: number;
 }
 
 export interface RegisterIdentityOptions {
@@ -639,7 +633,7 @@ export class IdentityClient {
     body?: unknown
   ): Promise<Record<string, unknown>> {
     const url = this.http.baseUrl.replace(/\/$/, "") + path;
-    const resp = await fetch(url, {
+    const resp = await this.http.request(url, {
       method,
       headers: {
         ...this.http.headers,
@@ -699,7 +693,7 @@ export class ExpressionClient {
     body?: unknown,
   ): Promise<Record<string, unknown>> {
     const url = this.http.baseUrl.replace(/\/$/, "") + path;
-    const resp = await fetch(url, {
+    const resp = await this.http.request(url, {
       method,
       headers: {
         ...this.http.headers,
@@ -760,7 +754,7 @@ export class BoxKeysClient {
     body?: unknown,
   ): Promise<Record<string, unknown>> {
     const url = this.http.baseUrl.replace(/\/$/, "") + path;
-    const resp = await fetch(url, {
+    const resp = await this.http.request(url, {
       method,
       headers: {
         ...this.http.headers,

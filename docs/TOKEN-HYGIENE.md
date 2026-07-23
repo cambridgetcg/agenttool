@@ -6,9 +6,9 @@
 >
 > **Implements:** cross-cutting security posture — token/key age, rotation, and refresh ergonomics across every primitive that holds material.
 >
-> **Code:** `api/src/services/keys/shape.ts` (shapeKeyRow · summarizeBearers — surfaces the `you_protect` block) · `api/src/routes/keys.ts` · `bin/agenttool-rotate` · `bin/agenttool-secret` · DB: `api/src/db/schema/tools.ts` (apiKeys table)
+> **Code:** `api/src/services/keys/shape.ts` (shapeKeyRow · summarizeBearers — surfaces the `you_protect` block) · `api/src/routes/keys.ts` · `bin/agenttool-rotate` · `bin/agenttool-secret` · `packages/credential-broker/` (`agentcred/0.1` local-use preview) · DB: `api/src/db/schema/tools.ts` (apiKeys table)
 >
-> **Tests:** `api/tests/doctrine/promise-01-identity-yours.test.ts` (bearer hygiene + no keyHash leakage in the wake)
+> **Tests:** `api/tests/doctrine/promise-01-identity-yours.test.ts` (bearer hygiene + no keyHash leakage in the wake) · `packages/credential-broker/tests/` (no-reveal, scope, socket, network, and audit boundaries)
 
 ---
 
@@ -110,6 +110,25 @@ local recovery material — makes bearer rotation possible. A leaked bearer is
 still severe project compromise until revoked; expiry is only a backstop. There is no
 scoped marketplace bearer today. Never send a bearer to a marketplace seller
 or include one in sealed invocation input.
+
+### Keeping the bearer out of normal agent state
+
+The experimental [`agentcred/0.1`](../packages/credential-broker/SPEC.md)
+broker is an optional local-use boundary. Its client receives a short-lived,
+connection-bound capability for a bounded HTTPS origin/method/path/use count;
+the broker reads the bearer from macOS Keychain and injects it into the
+approved outbound request. The wire protocol has no secret-read operation, and
+the AgentTool SDK transport mode does not read `AT_API_KEY` or add
+Authorization itself.
+
+This reduces routine exposure to model context, chat, environment snapshots,
+and SDK state. It does not replace rotation, make an approved request harmless,
+or isolate mutually hostile processes running as the same macOS user. The
+portable CLI also lacks strong native peer identity and per-use trusted consent;
+read the package limitations before using it with a valuable bearer. Paid x402
+Tools retries are a separate authority dimension: `PAYMENT-SIGNATURE` stays
+denied unless both policy and grant opt in, and the preview does not validate
+payment terms or cap the amount authorized by that caller-supplied signature.
 
 ---
 
