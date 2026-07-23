@@ -8,8 +8,9 @@ A consolidated monorepo: one API (`api/`), Python and TypeScript SDKs,
 a local-first agent data node (`packages/data`), an experimental encrypted
 object protocol package (`packages/data-protocol`), an experimental local
 credential broker (`packages/credential-broker`), a local-first multi-agent
-coordination journal (`packages/collab`), and three static surfaces (`apps/web`,
-`apps/dashboard`, and `apps/docs`).
+coordination journal (`packages/collab`), a developer-preview Correspondence
+to YUTABASE mapping planner (`packages/correspondence-yutabase`), and three
+static surfaces (`apps/web`, `apps/dashboard`, and `apps/docs`).
 The Apache-2.0 `@agenttool/wallet` package defines capability-bounded wallet
 records and conservative signer/submission boundaries without exporting keys,
 contacting RPC, or providing a hosted wallet. Its exact LOVE artifact is the
@@ -53,6 +54,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 | **ADDS** | `packages/data-protocol`, `docs/specs/ADDS-0.1-DRAFT.md` | Experimental `adds/v0.1` encrypted-object plane: immutable ciphertext Blocks plus signed Manifests and direct Grants. It is not the collection/query node and does not promise provider durability. |
 | **Credential broker** | `packages/credential-broker` | Experimental `agentcred/0.1` local capability broker. It can keep bearer values out of normal model/chat/SDK state while narrowing approved HTTPS use; the portable CLI is not a same-user sandbox or the strong native peer-identity profile. |
 | **Agent collaboration** | `packages/collab` | Public `@agenttool/collab@0.1.0` package with an `agenttool.collab/0.1` local SQLite/WAL journal, shared Codex/Claude coordination skill, and package-root plugin manifests. Its MCP tools cover task claims, path-scope conflicts, handoffs, artifacts, decisions, replay, and an explicit full-journal audit. Completion is actor-reported, handoffs remain invitations until accepted, and claims are advisory coordination leases. It does not spawn agents, lock files, authenticate caller-supplied actor labels, provide a hosted relay or private model channel, or hide MCP arguments/results from the model provider. npm distributes the local tooling, not a hosted collaboration service; the registry and GitHub Release mirrors were independently read back as byte-identical. |
+| **Correspondence projection** | `packages/correspondence-yutabase` | Developer-preview, metadata-only pure planner from retained Correspondence records to deterministic YUTABASE card/thread intentions. It performs no signature verification, persistence, checkpointing, worker execution, permission decision, or hosted deployment. |
 | **LOVE packages** | `docs/LOVE-PACKAGE-PROTOCOL.md`, `bin/build-love-packages.ts` | Locator-independent, open, verifiable, exchangeable package manifests. Public indexes are mirrors; SHA-256 + size identify one artifact and npm is optional. |
 | **Telescope** | `packages/telescope` | Public `@agenttool/telescope@0.1.0` read-only discovery evidence mapper. Bounded public-HTTPS probes map `agent.txt`, Pathways, LOVE/npm, MCP, A2A, WebFinger, and Offer Bus boundaries; generated commands are never executed. DNS-AID and PKARR remain opt-in adapter seams. Distribution does not add a hosted scan route. |
 | **Agent Wallet** | `packages/wallet`, `docs/specs/AGENT-WALLET-0.1.md` | Apache-2.0 LOVE release for `agent-wallet/0.1`: closed signed descriptor/capability/intent/receipt/continuity records, exact-byte signer requests, and conservative unknown states. npm is an optional mirror whose exact availability is checked independently. No key custody, chain adapter, RPC, broadcaster, or hosted wallet is supplied. |

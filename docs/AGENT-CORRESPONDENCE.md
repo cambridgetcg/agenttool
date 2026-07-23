@@ -8,6 +8,10 @@
 >
 > **Code:** `api/src/routes/correspondence.ts` · `api/src/services/correspondence/` · `packages/sdk-ts/src/correspondence.ts` · `packages/sdk-py/src/agenttool/correspondence.py`
 >
+> **Semantic projection preview:** `packages/correspondence-yutabase/` plans a
+> privacy-minimal, non-authoritative YUTABASE read model. It is not a verifier,
+> database writer, checkpoint worker, permission engine, or deployment.
+>
 > **Tests:** `api/tests/agent-correspondence-spec.test.ts` · `docs/specs/agent-correspondence-0.1.schema.json` · `docs/specs/agent-correspondence-0.1-vectors.json`
 
 **Profile:** `agent-correspondence/v0.1`
