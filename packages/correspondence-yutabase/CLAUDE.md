@@ -65,9 +65,11 @@ thread intentions.
 
 ## Release State
 
-`0.1.0-dev.0` is source-only developer-preview metadata. A successful build
-or npm dry-run does not publish, deploy, install YUTABASE, or prove a registry
-mirror exists.
+`0.1.0-dev.0` is a public npm developer preview. Its protected release read
+the npm and GitHub Release tarballs back as byte-identical. Publication does
+not deploy an executor, install YUTABASE, or grant database authority. At
+initial publication npm exposed the sole version through both `next` and
+`latest`; consumers should select the exact prerelease or `next`.
 
 ## Kingdom Engine
 

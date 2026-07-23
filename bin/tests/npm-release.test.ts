@@ -67,7 +67,7 @@ describe("standard npm release policy", () => {
     expect(() => expectedTag(releaseSpec("sdk"), "latest")).toThrow("invalid package version");
   });
 
-  test("keeps prereleases off the latest npm dist-tag", () => {
+  test("requires prerelease publication requests to use npm next", () => {
     expect(isPrereleaseVersion("0.1.0-dev.0")).toBe(true);
     expect(isPrereleaseVersion("0.1.0")).toBe(false);
     expect(() => validateNpmTagForVersion("0.1.0-dev.0", "latest")).toThrow(

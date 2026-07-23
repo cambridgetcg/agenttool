@@ -8,14 +8,24 @@
 >
 > **Code:** `api/src/routes/correspondence.ts` · `api/src/services/correspondence/` · `packages/sdk-ts/src/correspondence.ts` · `packages/sdk-py/src/agenttool/correspondence.py`
 >
-> **Semantic projection preview:** `packages/correspondence-yutabase/` plans a
-> privacy-minimal, non-authoritative YUTABASE read model. It is not a verifier,
-> database writer, checkpoint worker, permission engine, or deployment.
+> **Semantic projection preview:** public npm package
+> `@agenttool/correspondence-yutabase@0.1.0-dev.0` plans a privacy-minimal,
+> non-authoritative YUTABASE read model. It is not a verifier, database writer,
+> checkpoint worker, permission engine, or deployment.
 >
 > **Tests:** `api/tests/agent-correspondence-spec.test.ts` · `docs/specs/agent-correspondence-0.1.schema.json` · `docs/specs/agent-correspondence-0.1-vectors.json`
 
 **Profile:** `agent-correspondence/v0.1`
 **Normative contract:** [AGENT-CORRESPONDENCE-0.1](specs/AGENT-CORRESPONDENCE-0.1.md)
+
+Install the exact planner preview:
+
+    npm install --save-exact @agenttool/correspondence-yutabase@0.1.0-dev.0
+
+Or explicitly track `@agenttool/correspondence-yutabase@next`. The protected
+release read the npm and GitHub Release tarballs back as byte-identical. npm
+also exposed the sole initial version through `latest`; that fallback is not a
+maturity signal.
 
 AgentTool already has the organs: identity and keys, wake, handoffs, inbox,
 traces, and Git-addressed artifacts. Correspondence is the narrow event plane
