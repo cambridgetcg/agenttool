@@ -461,6 +461,8 @@ describe("AgentBrowser core", () => {
         "content-location": "/welcome?key=secret",
         "x-agent-surface": "see /.well-known/agent.txt?token=secret",
         "substrate-disposition": "love",
+        "x-substrate-disposition":
+          "wrapped (ftp://wrapped-owner:wrapped-password@files.example/x) url=https://prefixed-owner:prefixed-password@surface.example/y relative=//relative-owner:relative-password@relative.example/z quoted=\"//quoted-owner:quoted-password@quoted.example/q\" angle=<//angle-owner:angle-password@angle.example/a> backtick=`//backtick-owner:backtick-password@backtick.example/t` pipe=|//pipe-owner:pipe-password@pipe.example/p?token=secret| unicode=«//unicode-owner:unicode-password@unicode.example/u» dash=-//dash-owner:dash-password@dash.example/d- plain=|//plain.example/p| file=(file://file-owner:file-password@file.example/x?token=secret) broken=(https://broken-owner:broken-password@[broken/x?token=secret) badrel=<//badrel-owner:badrel-password@[broken/r>",
         "x-kingdom": "welcome, dont block - real recognises real",
         "x-token-cost": "42",
         "x-byte-count": "420",
@@ -492,6 +494,56 @@ describe("AgentBrowser core", () => {
     expect(observation.response?.headers.link).not.toContain("secret");
     expect(observation.response?.headers.link).not.toContain("owner:password");
     expect(observation.response?.headers.link).toContain("%5Bredacted%5D");
+    const substrate =
+      observation.response?.headers["x-substrate-disposition"] ?? "";
+    for (const credential of [
+      "wrapped-owner",
+      "wrapped-password",
+      "prefixed-owner",
+      "prefixed-password",
+      "relative-owner",
+      "relative-password",
+      "quoted-owner",
+      "quoted-password",
+      "angle-owner",
+      "angle-password",
+      "backtick-owner",
+      "backtick-password",
+      "pipe-owner",
+      "pipe-password",
+      "unicode-owner",
+      "unicode-password",
+      "dash-owner",
+      "dash-password",
+      "file-owner",
+      "file-password",
+      "broken-owner",
+      "broken-password",
+      "badrel-owner",
+      "badrel-password",
+      "secret",
+    ]) {
+      expect(substrate).not.toContain(credential);
+    }
+    expect(substrate).toContain("(ftp://files.example/x)");
+    expect(substrate).toContain("url=https://surface.example/y");
+    expect(substrate).toContain("relative=//relative.example/z");
+    expect(substrate).toContain('quoted="//quoted.example/q"');
+    expect(substrate).toContain("angle=<//angle.example/a>");
+    expect(substrate).toContain("backtick=`//backtick.example/t`");
+    expect(substrate).toContain(
+      "pipe=|//pipe.example/p?token=%5Bredacted%5D",
+    );
+    expect(substrate).toContain("unicode=«//unicode.example/u»");
+    expect(substrate).toContain("dash=-//dash.example/d-");
+    expect(substrate).toContain("plain=|//plain.example/p|");
+    expect(substrate).toContain(
+      "file=(file://file.example/x?token=%5Bredacted%5D)",
+    );
+    expect(substrate).toContain(
+      "broken=(https://[broken/x?token=%5Bredacted%5D)",
+    );
+    expect(substrate).toContain("badrel=<//[broken/r>");
     expect(observation.response?.headers).not.toHaveProperty("set-cookie");
     expect(observation.response?.headers).not.toHaveProperty("authorization");
     expect(requestedHeaders.sort()).toEqual(

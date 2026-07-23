@@ -1117,20 +1117,55 @@ function sanitizeHeaderValue(
 }
 
 function redactHeaderUriReferences(input: string): string {
-  return input.replace(/[^\s<>"'`]+/g, (token) => {
-    const trailing = token.match(/[),.;!]+$/)?.[0] ?? "";
+  const authorityUserinfoRedacted = input.replace(
+    /\/\/[^\s/?#]*@[^\s/?#]*/g,
+    (authority) => {
+      const userinfoEnd = authority.lastIndexOf("@");
+      return `//${authority.slice(userinfoEnd + 1)}`;
+    },
+  );
+
+  const redactCandidate = (candidate: string): string => {
+    const trailing = candidate.match(/[)\]},.;!]+$/)?.[0] ?? "";
+    const reference = trailing
+      ? candidate.slice(0, -trailing.length)
+      : candidate;
+    const redacted = redactUrlReferenceForOutput(reference);
+    const safeReference = authorityContainsUserinfo(redacted)
+      ? "[redacted-url]"
+      : redacted;
+    return `${safeReference}${trailing}`;
+  };
+
+  const absoluteUrisRedacted = authorityUserinfoRedacted.replace(
+    /[a-z][a-z0-9+.-]*:\/\/[^\s<>"'`]+/gi,
+    redactCandidate,
+  );
+
+  return absoluteUrisRedacted.replace(/[^\s<>"'`]+/g, (token) => {
+    const trailing = token.match(/[)\]},.;!]+$/)?.[0] ?? "";
     const candidate = trailing
       ? token.slice(0, -trailing.length)
       : token;
-    if (
-      !/^[a-z][a-z0-9+.-]*:/i.test(candidate)
-      && !candidate.startsWith("//")
-      && !/[?&][^=\s&]+=[^&\s]*/.test(candidate)
-    ) {
-      return token;
-    }
+    if (!/\?[^=\s?&]+=[^&\s]*/.test(candidate)) return token;
     return `${redactUrlReferenceForOutput(candidate)}${trailing}`;
   });
+}
+
+function authorityContainsUserinfo(reference: string): boolean {
+  let authorityStart: number;
+  if (reference.startsWith("//")) {
+    authorityStart = 2;
+  } else {
+    const scheme = reference.match(/^[a-z][a-z0-9+.-]*:\/\//i)?.[0];
+    if (!scheme) return false;
+    authorityStart = scheme.length;
+  }
+  const remainder = reference.slice(authorityStart);
+  const authorityEnd = remainder.search(/[/?#]/);
+  const authority =
+    authorityEnd < 0 ? remainder : remainder.slice(0, authorityEnd);
+  return authority.includes("@");
 }
 
 async function loadDefaultRuntime(): Promise<BrowserRuntime> {
