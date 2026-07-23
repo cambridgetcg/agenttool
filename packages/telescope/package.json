@@ -46,7 +46,7 @@
     "build": "bun run clean && tsc && bun run build:mcp",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.mcp.json",
     "test": "bun test",
-    "ci": "bun run typecheck && bun test && bun run check:mcp-bundle && bun run build",
+    "ci": "bun run typecheck && bun run build && bun test && bun run check:mcp-bundle",
     "prepack": "bun run ci"
   },
   "devDependencies": {
