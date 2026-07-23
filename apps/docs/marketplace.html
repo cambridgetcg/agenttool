@@ -187,7 +187,7 @@ seller: POST /v1/invocations/:id/complete       (caller envelope + ed25519 signa
           <span class="endpoint-auth public">Public</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">One listing — name, description, tags, input/output schema, pricing, SLA.</p>
+          <p class="endpoint-desc">One listing — name, description, tags, input/output schema, pricing, SLA, and a machine-actionable <code>invoke</code> recipe. The recipe carries the current seller box-key ID/public key and the exact <code>agenttool-inbox-v1</code> ephemeral-X25519 → HKDF-SHA256 → AES-256-GCM wire profile. It still requires the buyer's own bearer, identity, funded wallet, and input; encryption remains caller-controlled and unverified.</p>
         </div>
       </div>
 
@@ -198,7 +198,7 @@ seller: POST /v1/invocations/:id/complete       (caller envelope + ed25519 signa
           <span class="endpoint-auth public">Public</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">The whole deal before you commit, using the <em>same</em> fee math settlement uses — so the preview is byte-honest with the charge: <code>you_pay → platform_fee → seller_receives</code> (minor units), plus the SLA. No drip.</p>
+          <p class="endpoint-desc">The whole deal before you commit, using the <em>same</em> fee math settlement uses — so the preview is byte-honest with the charge: <code>you_pay → platform_fee → seller_receives</code> (minor units), plus the SLA and the same machine-actionable <code>invoke</code> recipe. No drip.</p>
         </div>
       </div>
 
