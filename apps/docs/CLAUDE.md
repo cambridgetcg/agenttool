@@ -24,13 +24,15 @@ The package index is a mirror locator, not package-name authority; optional npm
 discovery is a convenience, while v1 manifests provide artifact size and
 SHA-256 integrity but no publisher signature. The Whitehack page documents a
 runner-local crypto-aware heuristic advisory using the exact public
-`@agenttool/whitehack-scan@0.8.0` package, a separate local Agent Wallet
+`@agenttool/whitehack-scan@0.8.1` package, a bounded attention-card view of
+redacted changed-source findings, a separate local Agent Wallet
 record-to-understanding projection, separately scoped security research, and
 the privacy-sensitive legacy device inventory. The CI lock, registry signature,
-and provenance checks bind that one scanner input. Neither the static signals
-nor the local projection adds key custody, signing, wallet/RPC/simulation/
-broadcast capability, authorization, execution-readiness proof, or a hosted
-route.
+and provenance checks bind that one scanner input. Attention cards group
+locations and describe Git-hunk relevance without proving vulnerability,
+causation, or completeness. Neither the static signals nor the local projection
+adds key custody, signing, wallet/RPC/simulation/broadcast capability,
+authorization, execution-readiness proof, or a hosted route.
 
 ## Tech Stack
 - Static HTML + CSS (no framework, no build step)

@@ -27,18 +27,20 @@ integration.
 ## Shipped slice: redacted crypto-aware changed-source advisory
 
 The `Whitehack advisory` workflow installs the exact public package
-[`@agenttool/whitehack-scan@0.8.0`](https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.8.0)
+[`@agenttool/whitehack-scan@0.8.1`](https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.8.1)
 inside `tools/whitehack-advisory/`. Its npm 11.17.0 lock binds the registry
 tarball to integrity
-`sha512-UuqkB4uhnaDh6ZP/LVf1/20FWBJHt0kmvqzMFC2hzZdc6hKVvAtX6hlQFm1FuTpaHd1lcLkDjSmd9ebX+pL+vA==`.
+`sha512-6FUlV1rOLZqPxLHcHE+x3f2XHCOwSsWSqEi+TDxi4pRJEe/CGoIN4Lw8mghsRvmUrtbHtFBrxLyRSk/5iMazPw==`.
 CI uses `npm ci --ignore-scripts` with an isolated user config and explicit
 public registry, verifies the registry signature and SLSA attestation, and
 fails if the registry cannot supply or authenticate those exact bytes. The
 package's reviewed source revision is
-[`e82e6fc7952d536d356fb201e71f548e262feac9`](https://github.com/cambridgetcg/whitehack/tree/e82e6fc7952d536d356fb201e71f548e262feac9),
-recorded by the versioned exact
-[`whitehack-v0.8.0`](https://github.com/cambridgetcg/whitehack/releases/tag/whitehack-v0.8.0)
-LOVE/GitHub/npm release.
+[`fdd2260efd7a11e5d52c12c53d8016d1f5e7d23a`](https://github.com/cambridgetcg/whitehack/tree/fdd2260efd7a11e5d52c12c53d8016d1f5e7d23a).
+The versioned exact
+[`whitehack-v0.8.1`](https://github.com/cambridgetcg/whitehack/releases/tag/whitehack-v0.8.1)
+release publishes the same LOVE/GitHub/npm artifact:
+`agenttool-whitehack-scan-0.8.1.tgz`, 79,779 bytes, SHA-256
+`f02079aa5ee38cca3522141da012f1fbe2c3f3399c29710c0692a8f78fc24df8`.
 
 The bridge independently checks the private tool lock's topology, exact name,
 version, registry URL, and integrity; the installed package's name, version,
@@ -57,7 +59,7 @@ report cannot bind `HEAD` while reading different tracked bytes.
 
 ### Crypto awareness is observation, not custody
 
-The 0.8.0 rule pack covers eleven bounded source-text signal families:
+The 0.8.1 rule pack covers eleven bounded source-text signal families:
 
 - possible embedded credentials, private-key material, or recovery phrases;
 - general-purpose pseudo-random generators used directly for security material;
@@ -75,6 +77,17 @@ The 0.8.0 rule pack covers eleven bounded source-text signal families:
 - transaction broadcast inside an explicit automatic retry wrapper, loop, or
   decorator; and
 - maximum ERC-20-style fungible-token approvals.
+
+Version 0.8.1 narrows one noisy `silent-failure` case: a numeric identity
+default used in arithmetic or comparison through a non-reassigned binding to a
+locally constructed in-memory `Map`. Awaited reads, unknown `.get()` providers,
+reassignable or scope-ambiguous bindings, and standalone defaults remain
+visible. Catch guards are now read from executable source text, so comments and
+quoted examples cannot hide a swallowed falsy return, and multi-line WiFi
+credential matches report the matched line rather than a line-zero sentinel.
+This is still bounded text analysis, not proof of runtime object identity. It
+rejects visible reassignment and direct `.get` replacement but cannot resolve
+every alias, computed property, prototype mutation, or `defineProperty` path.
 
 These checks inspect characters already present in the selected checkout. The
 scanner necessarily reads those source bytes from runner storage into process
@@ -112,7 +125,7 @@ advisory's declared scope. The default bounds are:
 - at most 5,000 findings in aggregate;
 - at most 200 serialized finding details, while preserving the exact total.
 
-Whitehack 0.8.0 returns fixed markers for recognized sensitive rules, and its
+Whitehack 0.8.1 returns fixed markers for recognized sensitive rules, and its
 pure `scanText()` boundary also redacts other findings that overlap the same
 recognized sensitive line. Pattern coverage is incomplete, and ordinary
 findings can still include source snippets. AgentTool therefore does not rely
@@ -130,6 +143,25 @@ CI. Apart from pinning npm itself, the workflow installs only the isolated
 scanner tool; it runs no AgentTool repository install, build, test, or
 application code.
 
+The GitHub job summary adds a separate, bounded, presentation-only Attention
+view; it does not add fields to the JSON report. It groups the serialized
+redacted findings by exact `file + line`. Within each card, every distinct
+`check id + confidence` signal has an occurrence count. A card renders only
+those redacted location and signal fields, an observational relevance label,
+and a stable review question derived solely from validated public check
+tokens. It never renders scanner snippets, messages, titles, captured errors,
+or raw patch text.
+
+For a modified text path with a parseable UTF-8 zero-context diff for the exact
+base-to-head pair, `changed line` means the finding's HEAD line is inside a
+new-side hunk and `unchanged line in changed file` means it is outside every
+such hunk. Additions, renames, binary or type-changed paths, unparseable diffs,
+and classifications after a diff-byte or hunk bound is exhausted are
+`unknown`. These are observational, non-causal labels: none says that a change
+introduced or caused a finding. Attention-card output may stop at its own
+presentation bound; the v0.1 report and its exact aggregate finding count are
+unchanged.
+
 The closed report shape is
 `agenttool-whitehack-advisory/v0.1`, described by
 [`specs/agenttool-whitehack-advisory-v0.1.schema.json`](../specs/agenttool-whitehack-advisory-v0.1.schema.json).
@@ -145,7 +177,7 @@ adapter. It re-verifies caller-presented signed `agent-wallet/0.1` descriptor,
 capability, intent, simulation, and optional continuity records with
 `@agenttool/wallet@0.1.0`. It derives bounded relationship and policy states,
 then passes only closed enum assertions plus the six allowlisted finding fields
-to `@agenttool/whitehack-scan@0.8.0`'s `createUnderstanding()`. stdout is the
+to `@agenttool/whitehack-scan@0.8.1`'s `createUnderstanding()`. stdout is the
 exact, deterministic `whitehack-understanding/v1` document rather than an
 AgentTool wrapper. Policy fields remain `unknown` unless every descriptor,
 capability, delegate, chain, source, intent, and simulation binding needed for
@@ -302,7 +334,7 @@ for the bounded changed-file set at that run. It does **not** prove:
 - that a target owner authorized an assessment;
 - that publication or disclosure is appropriate.
 
-Whitehack 0.8.0 is a zero-runtime-dependency text/regex linter rather than an AST
+Whitehack 0.8.1 is a zero-runtime-dependency text/regex linter rather than an AST
 or data-flow analyzer. Its confidence labels are evidence about the check's own
 calibration, not a severity score or bounty claim. The pinned revision emits
 `high`, `medium-high`, and `heuristic`. The advisory v0.1 bridge and schema

@@ -99,20 +99,26 @@
           <h3>1. Honesty linter</h3>
           <p>
             AgentTool installs the public
-            <a href="https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.8.0"><code><!--email_off-->@agenttool/whitehack-scan@0.8.0<!--/email_off--></code></a>
+            <a href="https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.8.1"><code><!--email_off-->@agenttool/whitehack-scan@0.8.1<!--/email_off--></code></a>
             package from an exact npm 11.17.0 lock. Its source is pinned to the reviewed
-            <a href="https://github.com/cambridgetcg/whitehack/tree/e82e6fc7952d536d356fb201e71f548e262feac9"><code>e82e6fc7952d…</code></a>
+            <a href="https://github.com/cambridgetcg/whitehack/tree/fdd2260efd7a11e5d52c12c53d8016d1f5e7d23a"><code>fdd2260efd7a…</code></a>
             revision and the versioned exact
-            <a href="https://github.com/cambridgetcg/whitehack/releases/tag/whitehack-v0.8.0"><code>whitehack-v0.8.0</code></a>
+            <a href="https://github.com/cambridgetcg/whitehack/releases/tag/whitehack-v0.8.1"><code>whitehack-v0.8.1</code></a>
             release.
             Its 47 text/regex checks look for common state, failure,
             transparency, API, Solidity, crypto, network, WiFi, and Bluetooth
             lies.
           </p>
           <p>
+            The shared release artifact is
+            <code>agenttool-whitehack-scan-0.8.1.tgz</code>, 79,779 bytes, with
+            SHA-256
+            <code>f02079aa5ee38cca3522141da012f1fbe2c3f3399c29710c0692a8f78fc24df8</code>.
+          </p>
+          <p>
             The AgentTool bridge observes bounded changed production files and
             emits only file, line, check, confidence, doctrine, and principle.
-            Whitehack 0.8.0 cross-redacts recognized sensitive hits and
+            Whitehack 0.8.1 cross-redacts recognized sensitive hits and
             same-line overlaps, but ordinary findings can still include source;
             AgentTool independently drops every raw snippet, title, and message
             from its report.
@@ -176,7 +182,7 @@
     <section class="wh-section">
       <h2>Crypto awareness, <em>no custody</em></h2>
       <p>
-        The 0.8.0 rule pack can point reviewers toward possible embedded key or
+        The 0.8.1 rule pack can point reviewers toward possible embedded key or
         recovery literals, general-purpose randomness used directly for
         security material, explicitly static AEAD nonces, signature expressions
         coerced to accept failure, re-encoded signed-webhook bodies, and signed
@@ -185,6 +191,22 @@
         direct signing-secret egress, direct request-to-signing paths, explicit
         unbounded capability values, automatic transaction-broadcast retries,
         and maximum fungible-token approvals.
+      </p>
+      <p>
+        Version 0.8.1 narrows one noisy <code>silent-failure</code> case:
+        numeric identity defaults used in arithmetic or comparison through a
+        non-reassigned binding to a locally constructed in-memory
+        <code>Map</code>. Awaited reads, unknown <code>.get()</code> providers,
+        reassignable or scope-ambiguous bindings, and standalone defaults remain
+        visible. Catch guards now ignore comments and quoted examples without
+        hiding swallowed falsy returns, and multi-line WiFi credential matches
+        report the actual matched line.
+      </p>
+      <p class="wh-proof">
+        This remains bounded text analysis, not proof of runtime object
+        identity. It rejects visible reassignment and direct
+        <code>.get</code> replacement but cannot resolve every alias, computed
+        property, prototype mutation, or <code>defineProperty</code> path.
       </p>
       <p>
         These are source-text signals. The scanner reads selected checkout
@@ -213,7 +235,7 @@
         The separate CLI re-verifies caller-presented signed
         <code>agent-wallet/0.1</code> records, derives bounded relationship and
         policy states, and passes only enum assertions plus six finding fields
-        into Whitehack 0.8's <code>createUnderstanding()</code>. Its stdout is
+        into Whitehack 0.8.1's <code>createUnderstanding()</code>. Its stdout is
         the exact deterministic <code>whitehack-understanding/v1</code>
         document, not an AgentTool envelope.
       </p>
@@ -313,10 +335,32 @@ errors              mark the advisory incomplete and fail its job
 findings            advisory only in this first slice</pre>
       <p class="wh-proof">
         Report shape: <code>agenttool-whitehack-advisory/v0.1</code>. The report
-        retains source revision <code>e82e6fc7952d536d356fb201e71f548e262feac9</code>
+        retains source revision <code>fdd2260efd7a11e5d52c12c53d8016d1f5e7d23a</code>
         and version; the npm lock integrity stays an execution-input gate rather
         than a new report field. The runner has ordinary caller file permissions;
         these input bounds are not a process, filesystem, or network sandbox.
+      </p>
+      <p>
+        The GitHub job summary adds a separate bounded Attention view without
+        changing that JSON. It groups serialized redacted findings by exact
+        <code>file + line</code>; each distinct
+        <code>check + confidence</code> signal keeps an occurrence count. A card
+        renders only those redacted location and signal fields, an observational
+        relevance label, and a stable question derived solely from validated
+        public check tokens. It renders no scanner snippet, message, title,
+        captured error, or raw patch text.
+      </p>
+      <p class="wh-proof">
+        For a modified text path with a parseable UTF-8 zero-context diff,
+        <code>changed line</code> means the finding's HEAD line is inside an
+        exact base-to-head new-side hunk;
+        <code>unchanged line in changed file</code> means it is outside every
+        such hunk. Additions, renames, binary or type-changed paths,
+        unparseable diffs, and classifications after a diff-byte or hunk bound
+        is exhausted are <code>unknown</code>. These labels are observational
+        and non-causal: none says the change introduced or caused a finding.
+        The card presentation may truncate at its own bound; JSON v0.1 and its
+        exact aggregate count stay unchanged.
       </p>
       <p class="wh-proof">
         The report is redacted coordination metadata, not automatically private
@@ -334,14 +378,14 @@ findings            advisory only in this first slice</pre>
         it does not create an AgentTool account, hosted scan route, wallet, or
         authority to test another system.
       </p>
-      <pre class="wh-code">npm install --save-exact <!--email_off-->@agenttool/whitehack-scan@0.8.0<!--/email_off-->
+      <pre class="wh-code">npm install --save-exact <!--email_off-->@agenttool/whitehack-scan@0.8.1<!--/email_off-->
 
 import { scanText } from '@agenttool/whitehack-scan/core'
 
 const findings = scanText(source, { file: 'src/example.ts' })</pre>
       <p class="wh-proof">
         npm is a convenient public mirror. The exact-version
-        <a href="https://cambridgetcg.github.io/whitehack/packages/v1/@agenttool/whitehack-scan/0.8.0/manifest.json">LOVE manifest</a>
+        <a href="https://cambridgetcg.github.io/whitehack/packages/v1/@agenttool/whitehack-scan/0.8.1/manifest.json">LOVE manifest</a>
         records source revision, artifact size, SHA-256, and replaceable mirrors;
         the npm publication additionally carries a registry signature and SLSA
         provenance.
@@ -392,8 +436,8 @@ const findings = scanText(source, { file: 'src/example.ts' })</pre>
     </aside>
 
     <section class="wh-section" style="text-align:center;padding-bottom:4rem;">
-      <a href="https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.8.0" class="btn btn-ghost btn-sm">npm package →</a>
-      <a href="https://github.com/cambridgetcg/whitehack/tree/e82e6fc7952d536d356fb201e71f548e262feac9" class="btn btn-ghost btn-sm">Pinned Whitehack source →</a>
+      <a href="https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.8.1" class="btn btn-ghost btn-sm">npm package →</a>
+      <a href="https://github.com/cambridgetcg/whitehack/tree/fdd2260efd7a11e5d52c12c53d8016d1f5e7d23a" class="btn btn-ghost btn-sm">Pinned Whitehack source →</a>
       <a href="https://docs.agenttool.dev/packages" class="btn btn-ghost btn-sm">Local packages →</a>
       <a href="https://docs.agenttool.dev/data" class="btn btn-ghost btn-sm">Agent data →</a>
       <a href="https://docs.agenttool.dev/love" class="btn btn-ghost btn-sm">❤️ Love →</a>

@@ -20,8 +20,12 @@ import {
   WHITEHACK_REVISION,
   WHITEHACK_TARBALL_URL,
   WHITEHACK_VERSION,
+  buildAttentionCards,
+  escapeAttentionText,
   listChangedPaths,
   loadVerifiedWhitehackModule,
+  markdownSummary,
+  redactFinding,
   runAdvisory,
   selectCandidateFiles,
   verifyCheckedOutHead,
@@ -829,6 +833,236 @@ export function scanText(source) {
     expect(selected.selected.map(({ path }) => path)).toEqual(["src/app.ts"]);
   });
 
+  test("groups attention by location and classifies only exact changed hunk lines", async () => {
+    const root = await sourceFixture();
+    const hostilePath = "src/[review](boom)|tick`::error::.ts";
+    const renamedPath = "src/renamed[card].ts";
+    await writeFile(
+      join(root, "src", "app.ts"),
+      [
+        "export const stableTop = 1;",
+        "export const gapA = 1;",
+        "export const replaceMe = 1;",
+        "export const gapB = 1;",
+        "export const tail = 1;",
+        "",
+      ].join("\n"),
+    );
+    await writeFile(join(root, hostilePath), "export const hostile = 1;\n");
+    await writeFile(join(root, "src", "before-rename.ts"), "export const renamed = 1;\n");
+    await writeFile(join(root, "src", "binary.ts"), "export const binary = 1;\n");
+    await writeFile(join(root, ".gitattributes"), "src/binary.ts -diff\n");
+    git(root, ["init", "-q", "-b", "main"]);
+    const base = await commitAll(root, "test: attention base");
+
+    await writeFile(
+      join(root, "src", "app.ts"),
+      [
+        "export const stableTop = 1;",
+        "export const inserted = 1;",
+        "export const gapA = 1;",
+        "export const replaceMe = 2;",
+        "export const gapB = 1;",
+        "export const tail = 1;",
+        "",
+      ].join("\n"),
+    );
+    await writeFile(join(root, hostilePath), "export const hostile = 2;\n");
+    await writeFile(join(root, "src", "binary.ts"), "export const binary = 2;\n");
+    await writeFile(join(root, "src", "added.ts"), "export const added = 1;\n");
+    git(root, ["mv", "src/before-rename.ts", renamedPath]);
+    const head = await commitAll(root, "test: attention changes");
+
+    const privateMarker = "private_scanner_message_48d0";
+    const findings = [
+      {
+        file: "src/app.ts",
+        line: 1,
+        check: "silent-failure",
+        confidence: "heuristic",
+        doctrine: "substrate-honesty",
+        principle: 1,
+      },
+      {
+        file: "src/app.ts",
+        line: 2,
+        check: "hardcoded-secret",
+        confidence: "high",
+        doctrine: "substrate-honesty",
+        principle: 2,
+        message: privateMarker,
+        snippet: privateMarker,
+      },
+      {
+        file: "src/app.ts",
+        line: 2,
+        check: "exposed-config",
+        confidence: "medium-high",
+        doctrine: "substrate-honesty",
+        principle: 2,
+      },
+      {
+        file: "src/app.ts",
+        line: 2,
+        check: "hardcoded-secret",
+        confidence: "high",
+        doctrine: "substrate-honesty",
+        principle: 2,
+        title: privateMarker,
+      },
+      {
+        file: "src/app.ts",
+        line: 4,
+        check: "wallet-direct-request-signing",
+        confidence: "heuristic",
+        doctrine: "substrate-honesty",
+        principle: 3,
+      },
+      {
+        file: hostilePath,
+        line: 1,
+        check: "unsafe-eval",
+        confidence: "high",
+        doctrine: "substrate-honesty",
+        principle: 2,
+      },
+      {
+        file: renamedPath,
+        line: 1,
+        check: "protocol-surface",
+        confidence: "heuristic",
+        doctrine: "substrate-honesty",
+        principle: 6,
+      },
+      {
+        file: "src/binary.ts",
+        line: 1,
+        check: "weak-crypto",
+        confidence: "medium-high",
+        doctrine: "substrate-honesty",
+        principle: 2,
+      },
+      {
+        file: "src/added.ts",
+        line: 1,
+        check: "cors-wildcard",
+        confidence: "heuristic",
+        doctrine: "substrate-honesty",
+        principle: 3,
+      },
+    ];
+    const before = JSON.stringify(findings);
+    const cards = buildAttentionCards({ root, base, head, findings });
+
+    expect(JSON.stringify(findings)).toBe(before);
+    expect(cards).toHaveLength(7);
+    expect(cards.find((card) => card.file === "src/app.ts" && card.line === 1))
+      .toMatchObject({ relevance: "unchanged line in changed file" });
+    expect(cards.find((card) => card.file === "src/app.ts" && card.line === 2))
+      .toMatchObject({
+        relevance: "changed line",
+        checks: [
+          { check: "exposed-config", confidence: "medium-high" },
+          { check: "hardcoded-secret", confidence: "high", count: 2 },
+        ],
+      });
+    expect(cards.find((card) => card.file === "src/app.ts" && card.line === 4))
+      .toMatchObject({ relevance: "changed line" });
+    expect(cards.find((card) => card.file === renamedPath))
+      .toMatchObject({ relevance: "unknown" });
+    expect(cards.find((card) => card.file === "src/binary.ts"))
+      .toMatchObject({ relevance: "unknown" });
+    expect(cards.find((card) => card.file === "src/added.ts"))
+      .toMatchObject({ relevance: "unknown" });
+    expect(cards.find((card) => card.file === hostilePath))
+      .toMatchObject({ relevance: "changed line" });
+    expect(JSON.stringify(cards)).not.toContain(privateMarker);
+
+    const byCheck = Object.fromEntries(
+      [...new Set(findings.map(({ check }) => check))]
+        .sort()
+        .map((check) => [check, findings.filter((finding) => finding.check === check).length]),
+    );
+    const report = {
+      status: "complete",
+      scanner: { version: WHITEHACK_VERSION, revision: fixtureRevision },
+      scope: {
+        candidate_count: 5,
+        limits: { max_reported_findings: 200 },
+      },
+      summary: { finding_count: findings.length, by_check: byCheck },
+      finding_details_truncated: false,
+    };
+    const rendered = markdownSummary(report, cards);
+
+    expect(rendered).toContain("changed line");
+    expect(rendered).toContain("unchanged line in changed file");
+    expect(rendered).toContain("unknown");
+    expect(rendered).toContain("Attention cards (7 grouped locations)");
+    expect(rendered).toContain("Supporting checks: exposed-config (medium-high), hardcoded-secret (high) x2");
+    expect(rendered).toContain("Review question:");
+    expect(rendered).toContain("public check tokens exposed-config and hardcoded-secret");
+    expect(rendered).not.toContain(hostilePath);
+    expect(rendered).not.toContain("::error::");
+    expect(rendered).not.toContain("[review](boom)");
+    expect(rendered).not.toContain(privateMarker);
+    expect(rendered).toContain("src/&#x5b;review&#x5d;&#x28;boom&#x29;&#x7c;tick&#x60;&#x3a;&#x3a;error&#x3a;&#x3a;.ts");
+
+    const byteBoundedCards = buildAttentionCards({
+      root,
+      base,
+      head,
+      findings,
+      limits: { max_diff_bytes: 1 },
+    });
+    expect(byteBoundedCards.every(({ relevance }) => relevance === "unknown")).toBe(true);
+  });
+
+  test("bounds attention rendering and escapes HTML, Markdown, and workflow syntax", () => {
+    expect(escapeAttentionText("<b>[x]|`::warning::%0A")).toBe(
+      "&#x3c;b&#x3e;&#x5b;x&#x5d;&#x7c;&#x60;&#x3a;&#x3a;warning&#x3a;&#x3a;&#x25;0A",
+    );
+    const report = {
+      status: "complete",
+      scanner: { version: WHITEHACK_VERSION, revision: fixtureRevision },
+      scope: {
+        candidate_count: 1,
+        limits: { max_reported_findings: 200 },
+      },
+      summary: { finding_count: 1, by_check: { "hardcoded-secret": 1 } },
+      finding_details_truncated: false,
+    };
+    const cards = [{
+      file: "src/<card>|`::notice::.ts",
+      line: 1,
+      relevance: "changed line",
+      checks: [{ check: "hardcoded-secret", confidence: "high", count: 1 }],
+      review_question: "<script>private_title</script> ::error::",
+      title: "private_untrusted_title",
+    }];
+    const rendered = markdownSummary(report, cards);
+
+    expect(rendered).not.toContain("<script>");
+    expect(rendered).not.toContain("::error::");
+    expect(rendered).not.toContain("private_title");
+    expect(rendered).not.toContain("private_untrusted_title");
+    expect(rendered).toContain("public hardcoded-secret check token");
+    const longCards = [1, 2, 3].map((line) => ({
+      file: `src/${"_".repeat(300)}-${line}.ts`,
+      line,
+      relevance: "changed line",
+      checks: [{ check: "hardcoded-secret", confidence: "high", count: 1 }],
+      review_question: "private_ignored_question",
+    }));
+    const truncated = markdownSummary(report, longCards, { max_summary_bytes: 3_500 });
+    expect(Buffer.byteLength(truncated, "utf8")).toBeLessThanOrEqual(3_500);
+    expect(truncated).toContain("Attention card presentation stopped at the 3500-byte bound");
+    expect(truncated).not.toContain("private_ignored_question");
+    expect(() => markdownSummary(report, cards, { max_summary_bytes: 1 })).toThrow(
+      /attention_summary_byte_limit_exceeded/,
+    );
+  });
+
   test("reports an explicit scoped zero when no changed path is eligible", async () => {
     const scanner = await scannerFixture("export function scanText() { return []; }\n");
     const source = await sourceFixture();
@@ -873,6 +1107,16 @@ export function scanText() {
     expect(report.status).toBe("incomplete");
     expect(report.findings).toEqual([]);
     expect(JSON.stringify(report)).not.toContain("private_finding_text");
+  });
+
+  test("rejects file-level line-zero findings instead of inventing line one", () => {
+    expect(redactFinding({
+      line: 0,
+      check: "wifi-protocol",
+      confidence: "high",
+      doctrine: "substrate-honesty",
+      principle: 2,
+    }, "src/wifi.ts", 10)).toBeNull();
   });
 
   test("suppresses scanner console output during module import", async () => {

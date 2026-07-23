@@ -38,10 +38,13 @@ public npm/LOVE package, but it remains a local client and does not add a hosted
 scan route. Whitehack has two shipped AgentTool bridges: a runner-local,
 crypto-aware changed-source heuristic advisory and a separate local Agent
 Wallet understanding CLI. CI installs the exact public
-`@agenttool/whitehack-scan@0.8.0` artifact from an isolated npm lock with
-scripts disabled. The advisory emits redacted metadata and remains
-non-blocking on findings; the local CLI verifies caller-presented signed wallet
-records and projects enum-only assertions into `whitehack-understanding/v1`.
+`@agenttool/whitehack-scan@0.8.1` artifact from an isolated npm lock with
+scripts disabled. The advisory emits redacted metadata, groups same-location
+signals into bounded attention cards with explicit Git-hunk relevance and
+stable review questions, and remains non-blocking on findings; those cards do
+not establish vulnerability or causation. The local CLI verifies
+caller-presented signed wallet records and projects enum-only assertions into
+`whitehack-understanding/v1`.
 Neither bridge adds key custody, signing, wallet/RPC/simulation/broadcast
 capability, hosted routes, authorization, consent proof, or execution readiness.
 The API is live at
@@ -161,7 +164,7 @@ bun run ci                                     # typecheck + security/schema/vec
 (cd tools/whitehack-advisory \
   && npm ci --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org --userconfig=/dev/null \
   && npm audit signatures --registry=https://registry.npmjs.org --userconfig=/dev/null)
-bun test bin/tests/whitehack-advisory.test.ts   # redaction, scope, failure containment
+bun test bin/tests/whitehack-advisory.test.ts   # redaction, scope, attention cards, failure containment
 (cd packages/wallet && bun install --frozen-lockfile)
 WHITEHACK_INTEGRATION=1 bun test packages/wallet/tests/whitehack-understanding.test.ts
 
@@ -195,8 +198,8 @@ bun bin/npm-release.ts resolve --package collab # inspect allowlisted npm identi
 | `agenttool-secret` | Vault secret CRUD from CLI. |
 | `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, `@agenttool/telescope`, `@agenttool/wallet`, and `@agenttool/browser` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
 | `npm-release.ts` | Implements the one allowlisted npm release policy behind `.github/workflows/publish-npm.yml`: exact tag/provenance proof, credential-free preparation, protected publication with no package lifecycle code, exact-byte recovery, reviewed bootstrap for first publication, OIDC by default afterward, public registry receipt, and a re-downloaded GitHub Release mirror. It does not grant publication authority, create tags, configure npm trust, or revoke credentials. See `docs/NPM-RELEASES.md`. |
-| `whitehack-advisory.mjs` | Verifies and runs the exact locked `@agenttool/whitehack-scan` pure text API, including bounded crypto-misuse signals, over changed production files and emits redacted advisory metadata. It does not use detected keys, connect wallets/RPC, execute repository code, prove security, authorize target testing, or provide a hosted scanner. See `docs/WHITEHACK.md`. |
-| `whitehack-wallet-understanding.ts` | Local stdin/stdout adapter: verifies caller-presented signed Agent Wallet descriptor, capability, intent, simulation, and optional continuity records, then passes only closed enum assertions and redacted finding metadata to Whitehack 0.8. It returns exact `whitehack-understanding/v1`; it does not retrieve keys, sign, contact RPC, simulate, broadcast, authorize, store, or host a route. See `docs/WHITEHACK.md`. |
+| `whitehack-advisory.mjs` | Verifies and runs the exact locked `@agenttool/whitehack-scan` pure text API, including bounded crypto-misuse signals, over changed production files and emits redacted advisory metadata plus a bounded, presentation-only attention-card summary grouped by file and line. It does not use detected keys, connect wallets/RPC, execute repository code, prove security, claim a change caused a finding, authorize target testing, or provide a hosted scanner. See `docs/WHITEHACK.md`. |
+| `whitehack-wallet-understanding.ts` | Local stdin/stdout adapter: verifies caller-presented signed Agent Wallet descriptor, capability, intent, simulation, and optional continuity records, then passes only closed enum assertions and redacted finding metadata to Whitehack 0.8.1. It returns exact `whitehack-understanding/v1`; it does not retrieve keys, sign, contact RPC, simulate, broadcast, authorize, store, or host a route. See `docs/WHITEHACK.md`. |
 | `create-project.ts` | Operator-side project + bearer minting. |
 | `frontend-deploy.sh` | Cloudflare Pages Direct Upload for the three static apps. |
 | `migrate.sh` · `migrate.ts` | Single-file `psql` migration application. |
