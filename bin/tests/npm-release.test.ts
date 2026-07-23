@@ -100,6 +100,19 @@ describe("standard npm release policy", () => {
     ]));
     expect(requiredArchiveEntries(releaseSpec("skills")))
       .not.toContain("package/dist/agenttool-collab-mcp.js");
+    expect(requiredArchiveEntries(releaseSpec("telescope"))).toEqual(
+      expect.arrayContaining([
+        "package/THIRD_PARTY_LICENSES",
+        "package/dist/agenttool-telescope-mcp.js",
+        "package/.codex-plugin/plugin.json",
+        "package/.claude-plugin/plugin.json",
+        "package/skills/inspect-agent-surfaces/SKILL.md",
+        "package/skills/inspect-agent-surfaces/agents/openai.yaml",
+        "package/integrations/hermes/skills/inspect-agent-surfaces-hermes/SKILL.md",
+      ]),
+    );
+    expect(requiredArchiveEntries(releaseSpec("telescope")))
+      .not.toContain("package/dist/agenttool-collab-mcp.js");
     expect(requiredArchiveEntries(releaseSpec("repo-archive"))).toEqual(expect.arrayContaining([
       "package/dist/index.js",
       "package/dist/cli.js",

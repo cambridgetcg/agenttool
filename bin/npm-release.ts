@@ -455,6 +455,17 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/integrations/hermes/skills/coordinate-agent-work-hermes/SKILL.md",
     );
   }
+  if (spec.name === "@agenttool/telescope") {
+    entries.push(
+      "package/THIRD_PARTY_LICENSES",
+      "package/dist/agenttool-telescope-mcp.js",
+      "package/.codex-plugin/plugin.json",
+      "package/.claude-plugin/plugin.json",
+      "package/skills/inspect-agent-surfaces/SKILL.md",
+      "package/skills/inspect-agent-surfaces/agents/openai.yaml",
+      "package/integrations/hermes/skills/inspect-agent-surfaces-hermes/SKILL.md",
+    );
+  }
   if (spec.name === "@agenttool/repo-archive") {
     entries.push(
       "package/dist/index.js",
