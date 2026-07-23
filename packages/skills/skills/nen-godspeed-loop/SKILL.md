@@ -77,5 +77,6 @@ irreversible effect retryable.
 
 This is an original agent workflow inspired by Godspeed's distinction between
 preprogrammed reactions and consciously directed movement. See the
-[Hunterpedia ability index](https://hunterxhunter.fandom.com/wiki/Killua_Zoldyck)
-as a secondary chapter reference.
+[official NTV glossary](https://www.ntv.co.jp/hunterhunter/dictionary/index.html)
+and [official VIZ series page](https://www.viz.com/hunter-x-hunter) for source
+context.

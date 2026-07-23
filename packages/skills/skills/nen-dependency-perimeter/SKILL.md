@@ -74,4 +74,7 @@ noisy inventory is not understanding; name the unseen exterior.
 This is an original agent workflow inspired by En: a deliberately bounded,
 costly sensing field rather than omniscience. AgentTool's SDK has its own
 platform-specific Nen mapping; this skill defines only an operating technique.
-See [VIZ chapter 94](https://www.viz.com/shonenjump/hunter-x-hunter-chapter-94/chapter/5063).
+See the
+[official NTV glossary](https://www.ntv.co.jp/hunterhunter/dictionary/index.html)
+and [official VIZ series page](https://www.viz.com/hunter-x-hunter) for source
+context.

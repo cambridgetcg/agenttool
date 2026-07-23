@@ -66,5 +66,7 @@ hypothesis.
 ## Lineage
 
 This is an original agent workflow inspired by Zetsu's suppression, In's
-concealment, and Gyo's focused perception. See
-[VIZ chapter 56](https://www.viz.com/shonenjump/hunter-x-hunter-chapter-56/chapter/4859).
+concealment, and Gyo's focused perception. See the
+[official NTV glossary](https://www.ntv.co.jp/hunterhunter/dictionary/index.html)
+and [official VIZ series page](https://www.viz.com/hunter-x-hunter) for source
+context.

@@ -86,5 +86,7 @@ rationale, not silent forgetting.
 ## Lineage
 
 This is an original agent workflow inspired by Knuckle's visible aura loan,
-compounding interest, and bankruptcy threshold. See
-[VIZ chapter 211](https://www.viz.com/shonenjump/hunter-x-hunter-chapter-211/chapter/10392).
+compounding interest, and bankruptcy threshold. See the
+[official NTV glossary](https://www.ntv.co.jp/hunterhunter/dictionary/index.html)
+and [official VIZ series page](https://www.viz.com/hunter-x-hunter) for source
+context.
