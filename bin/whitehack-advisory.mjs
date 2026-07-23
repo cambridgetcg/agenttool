@@ -28,13 +28,16 @@ import { pathToFileURL } from "node:url";
 
 export const WHITEHACK_REPOSITORY = "https://github.com/cambridgetcg/whitehack";
 export const WHITEHACK_PACKAGE = "@agenttool/whitehack-scan";
-export const WHITEHACK_REVISION = "920035b9bdd3c63da32f0ed2859613b9f2a04b53";
-export const WHITEHACK_VERSION = "0.7.1";
-export const WHITEHACK_INTEGRITY = "sha512-Q1rLwnfXqKvMgjYtuiR3oeb8lS7N/0Y/Vxh7M6ZtkRFVEydsvKw5yMxORUSLYvBVgj2mB8LsujOhZwAJOYCvlg==";
-export const WHITEHACK_TARBALL_URL = "https://registry.npmjs.org/@agenttool/whitehack-scan/-/whitehack-scan-0.7.1.tgz";
+export const WHITEHACK_REVISION = "e82e6fc7952d536d356fb201e71f548e262feac9";
+export const WHITEHACK_VERSION = "0.8.0";
+export const WHITEHACK_INTEGRITY = "sha512-UuqkB4uhnaDh6ZP/LVf1/20FWBJHt0kmvqzMFC2hzZdc6hKVvAtX6hlQFm1FuTpaHd1lcLkDjSmd9ebX+pL+vA==";
+export const WHITEHACK_TARBALL_URL = "https://registry.npmjs.org/@agenttool/whitehack-scan/-/whitehack-scan-0.8.0.tgz";
 export const ADVISORY_SCHEMA = "agenttool-whitehack-advisory/v0.1";
 
-const WHITEHACK_CORE_EXPORT = "./src/core.js";
+const WHITEHACK_EXPORTS = Object.freeze({
+  core: "./src/core.js",
+  understanding: "./src/understanding.js",
+});
 const WHITEHACK_CHECK_COUNT = 47;
 const INSTALL_LIFECYCLE_SCRIPTS = new Set([
   "dependencies",
@@ -342,7 +345,12 @@ function dependencyFieldIsNonEmpty(value) {
   return true;
 }
 
-async function verifyScanner(scannerRootInput, scannerLockInput, expected) {
+async function verifyScannerModule(
+  scannerRootInput,
+  scannerLockInput,
+  exportName,
+  expected,
+) {
   const {
     revision,
     version,
@@ -435,11 +443,13 @@ async function verifyScanner(scannerRootInput, scannerLockInput, expected) {
   if (Object.keys(packageJson.scripts ?? {}).some((name) => INSTALL_LIFECYCLE_SCRIPTS.has(name))) {
     fail("scanner_lifecycle_script");
   }
-  if (packageJson.exports?.["./core"] !== WHITEHACK_CORE_EXPORT) {
-    fail("scanner_core_export_mismatch");
+  const exportPath = WHITEHACK_EXPORTS[exportName];
+  if (!exportPath) fail("scanner_export_name_invalid");
+  if (packageJson.exports?.[`./${exportName}`] !== exportPath) {
+    fail(`scanner_${exportName}_export_mismatch`);
   }
 
-  const requestedModulePath = resolve(scannerRoot, packageJson.exports["./core"]);
+  const requestedModulePath = resolve(scannerRoot, exportPath);
   let moduleInfo;
   let modulePath;
   try {
@@ -477,6 +487,38 @@ async function captureScannerOutput(operation) {
     process.stdout.write = stdoutWrite;
     process.stderr.write = stderrWrite;
   }
+}
+
+/**
+ * Verify and silently import one reviewed public module from the exact locked
+ * Whitehack package. This proves the local package identity and containment;
+ * it does not sandbox or authorize the imported code.
+ */
+export async function loadVerifiedWhitehackModule(options) {
+  if (!options || typeof options !== "object" || Array.isArray(options)) {
+    fail("scanner_options_invalid");
+  }
+  const exportName = options.export_name;
+  if (!Object.hasOwn(WHITEHACK_EXPORTS, exportName)) {
+    fail("scanner_export_name_invalid");
+  }
+  const scanner = await verifyScannerModule(
+    options.scanner_root,
+    options.scanner_lock,
+    exportName,
+    {
+      revision: options.expected_revision ?? WHITEHACK_REVISION,
+      version: options.expected_version ?? WHITEHACK_VERSION,
+      packageName: options.expected_package ?? WHITEHACK_PACKAGE,
+      integrity: options.expected_integrity ?? WHITEHACK_INTEGRITY,
+      tarballUrl: options.expected_tarball_url ?? WHITEHACK_TARBALL_URL,
+    },
+  );
+  const imported = await captureScannerOutput(
+    () => import(pathToFileURL(scanner.modulePath).href),
+  );
+  if (imported.error || imported.reported) fail("scanner_import_failed");
+  return { module: imported.value, scanner };
 }
 
 function isSafeToken(value) {
@@ -522,27 +564,22 @@ export async function runAdvisory(options) {
   const limits = normalizeLimits(options.limits ?? DEFAULT_LIMITS);
   if (!GIT_SHA.test(options.base) || !GIT_SHA.test(options.head)) fail("invalid_git_revision");
   const changedPathBytes = validatePathSet(options.paths, limits);
-  const expectedRevision = options.expected_revision ?? WHITEHACK_REVISION;
-  const expectedVersion = options.expected_version ?? WHITEHACK_VERSION;
-  const expectedPackage = options.expected_package ?? WHITEHACK_PACKAGE;
-  const expectedIntegrity = options.expected_integrity ?? WHITEHACK_INTEGRITY;
-  const expectedTarballUrl = options.expected_tarball_url ?? WHITEHACK_TARBALL_URL;
-  const scanner = await verifyScanner(options.scanner_root, options.scanner_lock, {
-    revision: expectedRevision,
-    version: expectedVersion,
-    packageName: expectedPackage,
-    integrity: expectedIntegrity,
-    tarballUrl: expectedTarballUrl,
+  const { module: scannerModule, scanner } = await loadVerifiedWhitehackModule({
+    scanner_root: options.scanner_root,
+    scanner_lock: options.scanner_lock,
+    export_name: "core",
+    expected_revision: options.expected_revision,
+    expected_version: options.expected_version,
+    expected_package: options.expected_package,
+    expected_integrity: options.expected_integrity,
+    expected_tarball_url: options.expected_tarball_url,
   });
   const candidates = await selectCandidateFiles(options.root, options.paths, limits);
 
-  const imported = await captureScannerOutput(() => import(pathToFileURL(scanner.modulePath).href));
   if (
-    imported.error
-    || imported.reported
-    || typeof imported.value?.scanText !== "function"
-    || !Array.isArray(imported.value?.CHECK_MANIFEST)
-    || imported.value.CHECK_MANIFEST.length !== WHITEHACK_CHECK_COUNT
+    typeof scannerModule?.scanText !== "function"
+    || !Array.isArray(scannerModule?.CHECK_MANIFEST)
+    || scannerModule.CHECK_MANIFEST.length !== WHITEHACK_CHECK_COUNT
   ) {
     fail("scanner_import_failed");
   }
@@ -550,7 +587,7 @@ export async function runAdvisory(options) {
   const findings = [];
   const errors = [];
   for (const candidate of candidates.selected) {
-    const scanned = await captureScannerOutput(() => imported.value.scanText(candidate.source, {
+    const scanned = await captureScannerOutput(() => scannerModule.scanText(candidate.source, {
       file: candidate.path,
     }));
     if (scanned.error || scanned.reported || !Array.isArray(scanned.value)) {

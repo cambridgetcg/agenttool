@@ -24,9 +24,10 @@ agent-controlled wallet. It is a Working Draft. Version 0.1 standardises:
 7. an exact-byte, non-exportable signer boundary; and
 8. conservative signing and submission lifecycle rules.
 
-The TypeScript package is an offline source reference for those primitives. It
-is not currently published to npm and AgentTool does not claim a hosted Agent
-Wallet service.
+The TypeScript package is an offline source reference for those primitives.
+Version `0.1.0` is distributed through the checked `love-package/v1` artifact
+and a byte-identical, independently verifiable optional public npm mirror.
+Neither distribution creates, or claims, a hosted Agent Wallet service.
 
 Version 0.1 does **not** define key generation, mnemonic handling, secret
 storage, account recovery ceremonies, chain-specific transaction encoding,
