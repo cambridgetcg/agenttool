@@ -10,7 +10,7 @@
 # Usage:
 #   bin/preflight.sh                 # api + packages, hermetic
 #   bin/preflight.sh api             # API/protocol hermetic gate
-#   bin/preflight.sh packages        # data + ADDS + sync + broker + collab + Browser + projection + Skills + TypeScript SDK + Wallet + Telescope gate
+#   bin/preflight.sh packages        # data + ADDS + sync + archive + broker + collab + Browser + projection + local projector + Skills + TypeScript SDK + Wallet + Telescope gate
 #   bin/preflight.sh database        # requires DATABASE_URL
 #   bin/preflight.sh smoke           # requires smoke-test environment
 #   RUN_CONTRACT=1 bin/preflight.sh contracts  # requires provider key(s)
@@ -66,6 +66,10 @@ sanitize_hermetic_env() {
     AGENTOOL_BROWSER_PROFILE_DIR AGENTOOL_BROWSER_CHANNEL \
     AGENTOOL_BROWSER_EXECUTABLE AGENTOOL_BROWSER_OUTPUT_DIR \
     AGENT_DATA_NODE_TOKEN AGENT_DATA_NODE_URL AT_API_KEY \
+    AGENTTOOL_YUTABASE_TARGET_URL AGENTTOOL_YUTABASE_CLAIMANT \
+    AGENTTOOL_YUTABASE_SOURCE_URL AGENTTOOL_YUTABASE_SOURCE_TOKEN \
+    AGENTTOOL_YUTABASE_PROJECT_ID AGENTTOOL_YUTABASE_REPOSITORY_ID \
+    AGENTTOOL_YUTABASE_TEST_DATABASE_URL \
     ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT \
     DATABASE_URL DATABASE_SESSION_URL POSTGRES_URL REDIS_URL \
     OTEL_EXPORTER_OTLP_ENDPOINT OTEL_EXPORTER_OTLP_TRACES_ENDPOINT \
@@ -106,6 +110,8 @@ packages_gate() {
     bash -c 'cd packages/skills && bun run ci'
   run "Correspondence to YUTABASE pure projection planner" \
     bash -c 'cd packages/correspondence-yutabase && bun run ci'
+  run "private local Correspondence to YUTABASE durable projector" \
+    bash -c 'cd packages/correspondence-yutabase-projector && bun run ci'
   run "TypeScript SDK, Python surface parity, build, and tests" \
     bash -c 'cd packages/sdk-ts && bun run ci'
   run "Agent Wallet record, policy, lifecycle, and vector primitives" \

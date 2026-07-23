@@ -26,6 +26,8 @@ packages/
   collab/      — @agenttool/collab · Codex/Claude plugins + Hermes adapter around one local cross-host SQLite/MCP journal
   skills/      — @agenttool/skills · public npm read-only Agent Skills inspector
   browser/     — @agenttool/browser · public LOVE/npm local TypeScript/JSONL/MCP browser runtime
+  correspondence-yutabase/ — pure deterministic Correspondence → YUTABASE planner
+  correspondence-yutabase-projector/ — private loopback-only verified local PostgreSQL sidecar
   telescope/    — @agenttool/telescope · read-only discovery evidence mapper
   wallet/       — @agenttool/wallet · LOVE/npm bounded wallet record/lifecycle primitives
   scriptwriter/ — decentralised RRR + co-brainstorm node
@@ -45,6 +47,8 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/repo-archive/CLAUDE.md` ·
 `packages/credential-broker/AGENTS.md` ·
 `packages/browser/CLAUDE.md` ·
+`packages/correspondence-yutabase/CLAUDE.md` ·
+`packages/correspondence-yutabase-projector/CLAUDE.md` ·
 `packages/wallet/CLAUDE.md` ·
 `infra/CLAUDE.md`.
 
