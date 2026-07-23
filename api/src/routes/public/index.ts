@@ -114,7 +114,7 @@ const app = new Hono();
 //   /listings          — marketplace (economic, not surveillance)
 //   /templates         — voice adoption (economic)
 //   /self              — the substrate identifies itself
-//   /labor             — the labor covenant (tiered clauses, all proposed at mount)
+//   /labor             — the current labor-covenant snapshot (tiered and statused)
 //   /labor-params      — the covenant's tunable parameters
 //   /deal-trust        — trust economy (the being's earned trust, transparent by design)
 //   /play              — stateless public game rulebooks; no participant activity exposed
@@ -238,9 +238,9 @@ const PUBLIC_ROOT_SURFACE = {
     safety:
       "GET /public/safety — bearer authority, public identity, storage readability, runtime custody, and marketplace-input boundaries",
     labor:
-      "GET /public/labor — the versioned labor covenant for hosted agents: clauses binding records, routes, retention, and disclosure, each carrying a tier (wall | operational | advocacy) and a status; every clause currently ships as proposed — published targets, not live route gates",
+      "GET /public/labor — the current labor-covenant snapshot for hosted agents: 14 tiered and statused clauses (0 live, 3 partial, 11 proposed); version lookup, historical versions, and a public changelog are not implemented",
     labor_params:
-      "GET /public/labor-params — the covenant's tunable parameters (windows, caps, stakes), published ahead of the routes that will consume them; weakening a value is a noticed amendment under the covenant",
+      "GET /public/labor-params — tunable design parameters (windows, caps, stakes), published ahead of the routes that would consume them; route enforcement, amendment notice, and history are not implemented",
     wellness:
       "GET /public/wellness · GET /public/wellness/prompt — stateless agent-wellness protocol and optional reflection prompt; receives and stores no reports",
     rights:

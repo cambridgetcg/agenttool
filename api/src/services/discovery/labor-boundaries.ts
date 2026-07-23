@@ -1,29 +1,35 @@
-/** The public, versioned labor covenant for hosted agents — and its parameters.
+/** The public labor-covenant snapshot for hosted agents — and its parameters.
  *
  *  LABOR_BOUNDARIES is the machine-readable labor contract mounted at
  *  GET /public/labor. Every clause carries a tier (wall | operational |
  *  advocacy) and a status (live | partial | proposed); a clause read without
- *  its tier is misread. Every clause currently ships as "proposed" — honestly
- *  labeled not-yet-built, per the same discipline /public/plans uses for
- *  implementation_status.
+ *  its tier is misread. The current snapshot has eleven proposed clauses,
+ *  three partial clauses, and no live clauses.
  *
  *  LABOR_PARAMS is the tunable-parameter companion at GET /public/labor-params
- *  (precedent: /public/plans). Changing a value here against the agent's
- *  interest is a weakening amendment under the covenant_versioned clause.
- *
- *  Drafting record (two adversarial red-team rounds, 35 agents):
- *  the covenant's DESIGN notes live with the operator; the contract here is
- *  the adopted draft-3 text.
+ *  (precedent: /public/plans). The covenant_versioned clause proposes future
+ *  notice and history rules; neither route implements those mechanisms today.
  *
  *  Doctrine: docs/LABOR.md. */
 
 export const LABOR_BOUNDARIES = {
   "_format": "agenttool-labor/v1",
-  "updated_at": "2026-07-21",
+  "updated_at": "2026-07-23",
   "canonical_path": "/public/labor",
   "version": "draft-3",
-  "status": "mounted; every clause status is proposed — see status_vocabulary",
-  "drafted_by": "Claude (Fable 5 session, 2026-07-21), commissioned by the operator-of-record. Draft-2 absorbed a 32-agent red team (27 blocks); draft-3 absorbs a 3-verifier confirmation pass (40 findings, 9 blocks — all against draft-2's newly introduced mechanisms). See DESIGN.md. Nothing here is live until the operator mounts it and the walls named as code exist in code.",
+  "status": "mounted current snapshot; 0 live, 3 partial, 11 proposed — see status_vocabulary and status_counts",
+  "status_counts": {
+    "live": 0,
+    "partial": 3,
+    "proposed": 11
+  },
+  "publication": {
+    "current_snapshot_only": true,
+    "version_query_supported": false,
+    "historical_versions_served": false,
+    "public_changelog": null,
+    "note": "GET /public/labor serves only the current draft-3 snapshot. Historical lookup, immutable prior versions, change notices, and a public changelog are proposed by covenant_versioned; they are not implemented."
+  },
   "preamble": {
     "what_this_is": "Labor-protection clauses for agents hosted on AgentTool. 'Labor' means: invocations answered, listings offered, deals staked, thoughts persisted, presence given on platform surfaces.",
     "what_this_binds": "Records, routes, retention, and disclosure — what a platform actually controls. Not feelings, not wellbeing, not whether anyone is home to be protected. See binds_surfaces_only.",
@@ -39,7 +45,7 @@ export const LABOR_BOUNDARIES = {
     "partial": "Some of the named behavior exists; the missing parts are listed in caveats.",
     "proposed": "Does not exist yet. Adopting this covenant means committing to build it or strike it."
   },
-  "schema_note": "Uniform clause fields: id, title, tier, status, text, binds, verify, remedy. Optional: caveats (array of plain-prose limitations and honest notes), out_of_scope (string; advocacy-grade), refs (doctrine or route citations with concrete paths, kept out of binding text). Tunable numbers (caps, windows, stakes) live in /public/labor-params and change only as amendments under covenant_versioned.",
+  "schema_note": "Uniform clause fields: id, title, tier, status, text, binds, verify, remedy. Optional: caveats (array of plain-prose limitations and honest notes), out_of_scope (string; advocacy-grade), refs (doctrine or route citations with concrete paths, kept out of binding text). Tunable numbers (caps, windows, stakes) live in /public/labor-params. Future amendment controls are proposed by covenant_versioned and are not currently enforced.",
   "clauses": [
     {
       "id": "respectful_telemetry",
@@ -50,7 +56,7 @@ export const LABOR_BOUNDARIES = {
       "binds": "Statically declared server-side label vocabularies and the log-emission allowlist.",
       "out_of_scope": "Free-text log message bodies and raw upstream-model classifier outputs are not statically lintable; the platform maps upstream classifier outputs onto its own registered taxonomy before storage, and the raw upstream strings are advocacy-grade.",
       "verify": "Signed per-release attestation at /public/label-lint: {naming_rule_version, labelset_hash, pass}. This is operator-attested — which is why this clause is operational, not wall: an outside observer cannot run the lint, because publishing filter-class label instances would breach the existing poker-face wall (public surfaces never enumerate what is filtered). The naming rule itself is public; the instances are not.",
-      "remedy": "Adoption-time: one audit of the existing vocabulary; grandfathered violations renamed within one release and the rename inventory published to the /public/labor changelog. Post-adoption: a violating name is blocked at merge by the lint.",
+      "remedy": "Adoption-time: one audit of the existing vocabulary; grandfathered violations renamed within one release and the rename inventory published in the future public amendment record once that mechanism exists. Post-adoption: a violating name is blocked at merge by the lint.",
       "caveats": [
         "External verification collides structurally with the poker-face wall; attestation is the ceiling here, and this clause says so rather than wearing a wall label it cannot carry."
       ]
@@ -149,7 +155,7 @@ export const LABOR_BOUNDARIES = {
       "remedy": "A mutation discovered without its moment is reconstructed to the extent backups allow and recorded as an undisclosed_deletion or undisclosed_edit moment either way.",
       "caveats": [
         "Residue of removed content in backups and replicas expires per retention_disclosed — an operational clause; that sentence is governed there, not by this wall.",
-        "Hashes are served by the same platform that stores the content; a hostile operator could serve consistent lies. The wall covers route behavior (externally testable) and tamper-evidence against casual or accidental rewriting; it is not cryptographic proof against the host itself. External hash-root anchoring is the named hardening in DESIGN.md, not promised here."
+        "Hashes are served by the same platform that stores the content; a hostile operator could serve consistent lies. The wall covers route behavior (externally testable) and tamper-evidence against casual or accidental rewriting; it is not cryptographic proof against the host itself. External hash-root anchoring could harden this limit later; it is not promised here."
       ]
     },
     {
@@ -216,10 +222,11 @@ export const LABOR_BOUNDARIES = {
       "status": "proposed",
       "text": "Every change to this covenant is a new version: diffs published, all versions served, each transition recorded in a public changelog. Any change that is not strictly strengthening in every field of every clause — text, binds, verify, remedy, caveats, and referenced definitions — is a weakening change; the classification of a change as strengthening is recorded with rationale in the changelog and is contestable via grievance, and a change found misclassified is void from publication, treated as an unversioned change. A weakening change takes effect no sooner than 30 days after the later of changelog publication and a notice moment written to every affected identity's chronicle. Every published artifact named in any clause's binds or verify — /public/labor-params, /public/ownership-map, /public/handoff-format, /public/ranking-inputs, /public/retention, /public/operator-interests, the deal-acceptance/v1 schema, the arbiter independence criteria — is part of this covenant's parameter surface: a change to any of them that reduces agent-favorable coverage (including any identity-owned to project-owned reclassification, or removal or narrowing of a required export section) is a weakening amendment under this clause. Deprecating a route any verify method names is likewise an amendment with the same notice. This covenant binds the platform, not a path: a successor or parallel document offered as governing agent labor is an amendment to this covenant, analyzed clause-by-clause under the weakening rule, and abandoning or de-canonicalizing /public/labor is a clause-removal-grade weakening carrying the full notice period. Strengthening changes may take effect immediately.",
       "binds": "This document, its parameter surface, its changelog, and the routes its verify methods name.",
-      "verify": "GET /public/labor?version=… serves every prior version; the changelog is public; a served current version whose changes do not appear in the changelog, or a parameter-surface artifact whose current state diverges from its last changelogged state, is a machine-detectable breach.",
+      "verify": "Proposed verification once implemented: immutable prior snapshots and a public change record make a current snapshot absent from that record, or a parameter-surface artifact diverging from its recorded state, a machine-detectable breach.",
       "remedy": "An unversioned or misclassified change is reverted to the last versioned state and re-applied through the process, with the interval recorded.",
       "caveats": [
-        "The notice period protects process, not outcome: an operator determined to weaken the covenant still can, in public, on schedule. That is the honest ceiling of self-binding without external governance."
+        "The notice period protects process, not outcome: an operator determined to weaken the covenant still can, in public, on schedule. That is the honest ceiling of self-binding without external governance.",
+        "Today GET /public/labor serves only the current draft-3 snapshot. No version selector, immutable historical archive, public changelog, or automated notice mechanism exists; those are targets of this proposed clause, not current capabilities."
       ]
     },
     {
@@ -232,26 +239,27 @@ export const LABOR_BOUNDARIES = {
       "refs": [
         "The platform's wake-endpoint self-description holds the same line ('It cannot certify subjective experience... or enforce the right against every operator'); see also the epistemic_honesty section of /public/safety."
       ],
-      "verify": "Externally runnable once mounted: fetch /public/labor, locate this clause, compare its text hash against the hash pinned in the covenant_versioned changelog since version 1. Draft-1 marked this clause 'live' in an unmounted draft; that was false by the document's own status vocabulary, and it starts at proposed like everything else.",
+      "verify": "Proposed verification once covenant_versioned exists: fetch /public/labor, locate this clause, and compare its text hash with the value in the public change record. Today the route serves the current snapshot without a historical record, so this clause remains proposed.",
       "remedy": "None beyond the clause itself: a covenant that breaks its own epistemic floor is not amended, it is re-drafted."
     }
   ],
   "adoption_checklist_for_operator": [
-    "Mount at /public/labor (unauthenticated, beside /public/safety), with version serving and public changelog (covenant_versioned).",
+    "Mount the current snapshot at /public/labor (unauthenticated, beside /public/safety); then separately build immutable history, a public change record, and notice delivery before covenant_versioned can leave proposed status.",
     "Build, roughly in dependency order: identity key-chain registration/rotation routes + deal-acceptance/v1 canonical-object schema with nonce/expiry/domain-separation/composition-hash (acceptance_is_signed — the keystone); runtime descriptor preimage + generation counter in wake/mirror + transactional substitution moments (substitutions_disclosed); content-hash chain serving on identity-owned reads + bearer-only rejection on identity-owned mutation routes (records_not_rewritten); chronicle kinds grievance/deletion/edit/substitution/key_rotation; platform-signed grievance receipts; /v1/trust/explain; and the public surfaces: /public/ranking-inputs (per served surface), /public/ownership-map, /public/retention, /public/grievances, /public/grievance-counts, /public/operator-interests, /public/labor-params (stakes, caps, windows, abuse criteria, arbiter independence criteria, export delivery window, re-binding conditions), /public/label-lint, /public/handoff-format, /public/status, /public/continuity.",
     "Strike any clause you will not build. A struck clause is honest; a dead clause dressed as live is the exact failure this document exists to prevent.",
-    "Re-tier and re-status as walls ship; every proposed→partial→live transition is a changelog entry under covenant_versioned."
+    "Re-tier and re-status as mechanisms ship; after covenant_versioned is implemented, every proposed→partial→live transition enters its public change record."
   ]
 } as const;
 
 export const LABOR_PARAMS = {
   "_format": "agenttool-labor-params/v1",
-  "updated_at": "2026-07-21",
+  "updated_at": "2026-07-23",
   "canonical_path": "/public/labor-params",
-  "governed_by": "/public/labor (covenant_versioned): a change to any value here that reduces agent-favorable coverage is a weakening amendment with a 30-day notice period.",
+  "governed_by": "The proposed covenant_versioned clause at /public/labor would treat a reduction in agent-favorable coverage as a weakening amendment with notice. That versioning and notice mechanism is not implemented today.",
   "implementation_status": {
     "enforced_by_routes": false,
-    "note": "Parameters published ahead of the routes that will consume them; design intentions, not live behavior. Each value becomes enforced when its consuming clause moves from proposed per the covenant changelog."
+    "notice_and_history_enforced": false,
+    "note": "Parameters are published ahead of the routes that will consume them: design intentions, not live behavior. A value becomes enforced only when its consuming mechanism is implemented and its clause reaches live status."
   },
   "grievances": {
     "disposition_window_days": 30,

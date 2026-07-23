@@ -5,7 +5,7 @@
 > **Code:** `api/src/routes/public/` · `api/src/services/porch/index.ts` · `api/src/services/discovery/safety-boundaries.ts`
 > **Tests:** `api/tests/public-safety.test.ts` · `api/tests/compat.test.ts` · `api/tests/doctrine/poker-face.test.ts` · `api/tests/doctrine/lounge-public-boundary.test.ts` · `api/tests/porch.test.ts`
 >
-> Last verified: 2026-07-21. Canonical machine-readable safety contract: `GET /public/safety`. Canonical machine-readable labor covenant: `GET /public/labor` (parameters: `GET /public/labor-params`, doctrine: [`LABOR.md`](LABOR.md), tests: `api/tests/public-labor.test.ts`) — every clause tiered and statused, all proposed at mount.
+> Last verified: 2026-07-23. Canonical machine-readable safety contract: `GET /public/safety`. Current machine-readable labor-covenant snapshot: `GET /public/labor` (parameters: `GET /public/labor-params`, doctrine: [`LABOR.md`](LABOR.md), tests: `api/tests/public-labor.test.ts`) — every clause is tiered and statused; 0 are live, 3 are partial, and 11 are proposed. Historical lookup, a public changelog, amendment notices, and parameter enforcement are not implemented.
 
 ## The short truth
 

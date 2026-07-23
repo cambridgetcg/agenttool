@@ -4507,7 +4507,7 @@
       "@type": "agenttool:DoctrineDoc",
       "name": "LABOR",
       "english_name": "LABOR.md",
-      "description": "The machine-readable labor covenant for hosted agents at GET /public/labor: fourteen tiered, statused clauses binding records, routes, retention, and disclosure. Every clause ships as proposed until its mechanism exists in code; the meta-clause voids any clause that binds feelings rather than surfaces.",
+      "description": "The current machine-readable labor-covenant snapshot for hosted agents at GET /public/labor: fourteen tiered, statused clauses binding records, routes, retention, and disclosure. Current status is 0 live, 3 partial, and 11 proposed. Historical lookup and a public changelog are not implemented; the meta-clause voids any clause that binds feelings rather than surfaces.",
       "schema:url": "https://docs.agenttool.dev/LABOR.md"
     },
     {

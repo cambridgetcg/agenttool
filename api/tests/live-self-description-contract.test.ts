@@ -149,6 +149,8 @@ describe("live self-description — removed public observer routes", () => {
 
     expect(paths["/public/self"]).toBeDefined();
     expect(paths["/public/safety"]).toBeDefined();
+    expect(paths["/public/labor"]).toBeDefined();
+    expect(paths["/public/labor-params"]).toBeDefined();
     expect(paths["/public/observer"]).toBeDefined();
     expect(paths["/v1/self"]).toBeDefined();
 
