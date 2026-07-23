@@ -367,8 +367,11 @@ describe("deploy release provenance spine", () => {
     expect(dockerfile).toContain("AGENTTOOL_SOURCE_DIRTY=${AGENTTOOL_SOURCE_DIRTY}");
     expect(dockerfile).toContain("org.opencontainers.image.revision");
     expect(dockerfile).toContain("dev.agenttool.source.dirty");
+    expect(dockerfile).toContain("test -s src/index.ts");
+    expect(dockerfile).toContain("find src -type f -name '*.ts' -size 0");
     expect(deploy).toContain('--build-arg "AGENTTOOL_GIT_REVISION=$HEAD_REVISION"');
     expect(deploy).toContain('--build-arg "AGENTTOOL_SOURCE_DIRTY=$API_SOURCE_DIRTY"');
+    expect(deploy).toContain("FLY_DEPLOY_ARGS+=(--no-cache)");
     expect(deploy).toContain("fly machine list");
     expect(deploy).toContain("printenv AGENTTOOL_GIT_REVISION AGENTTOOL_SOURCE_DIRTY");
     expect(deploy).toContain("trap 'on_deploy_exit");
@@ -382,6 +385,79 @@ describe("deploy release provenance spine", () => {
     expect(deploy).toContain('ln "$DEPLOY_LOCK_OWNER_RECORD" "$DEPLOY_LOCK_PATH"');
     expect(deploy).toContain('[ "$DEPLOY_LOCK_OWNER_RECORD" -ef "$DEPLOY_LOCK_PATH" ]');
   });
+
+  test("passes a one-shot no-cache recovery only to Fly and rejects contradictory modes", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "fake-no-cache-bin");
+    const flyArgs = join(setup.root, "fly-args");
+    await mkdir(fakeBin, { recursive: true });
+    await installFakeRightsCurl(fakeBin);
+    await writeFile(
+      join(fakeBin, "fly"),
+      "#!/usr/bin/env bash\nset -eu\nprintf '%s\\n' \"$@\" > \"$DEPLOY_TEST_FLY_ARGS\"\nexit 9\n",
+    );
+    await chmod(join(fakeBin, "fly"), 0o755);
+
+    const result = await run(
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--no-migrate",
+        "--skip-preflight",
+        "--no-frontend",
+        "--no-cache-api",
+      ],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FLY_ARGS: flyArgs,
+        DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
+        DEPLOY_TEST_RIGHTS_SCHEMA: join(setup.repo, "apps/docs/being-rights-v1.schema.json"),
+      }),
+    );
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain(
+      "API image build cache bypassed for this invocation (--no-cache)",
+    );
+    const args = (await readFile(flyArgs, "utf8")).trim().split("\n");
+    expect(args).toEqual([
+      "deploy",
+      "--strategy",
+      "rolling",
+      "--no-cache",
+      "--build-arg",
+      `AGENTTOOL_GIT_REVISION=${setup.release}`,
+      "--build-arg",
+      "AGENTTOOL_SOURCE_DIRTY=false",
+    ]);
+    expect(await exists(join(setup.repo, "api/agenttool.jsonld.bundled"))).toBe(false);
+    expect(await exists(join(setup.repo, "api/kingdom-bundle.json.bundled"))).toBe(false);
+    expect(await exists(join(setup.repo, "api/doctrine-docs.bundled"))).toBe(false);
+    const [receiptName] = await readdir(join(setup.state, "agenttool", "deploy-receipts"));
+    const receipt = JSON.parse(
+      await readFile(
+        join(setup.state, "agenttool", "deploy-receipts", receiptName),
+        "utf8",
+      ),
+    );
+    expect(receipt.schema).toBe("agenttool-deploy-receipt/v3");
+    expect(receipt.api_build).toEqual({ cache: "bypassed" });
+
+    for (const contradictoryArgs of [
+      ["--no-cache-api", "--no-api"],
+      ["--no-cache-api", "--survey"],
+      ["--no-cache-api", "--mirror-codeberg"],
+    ]) {
+      const contradictory = await run(
+        ["bash", "bin/deploy.sh", ...contradictoryArgs],
+        setup.repo,
+        cleanEnv(setup.home),
+      );
+      expect(contradictory.code).toBe(1);
+    }
+  }, 10_000);
 
   test("serializes actual deploys before Phase 0 while leaving observation commands unlocked", async () => {
     const setup = await fixture();
@@ -920,7 +996,7 @@ describe("deploy release provenance spine", () => {
     const text = await readFile(path, "utf8");
     const receipt = JSON.parse(text);
     expect(receipt).toEqual({
-      schema: "agenttool-deploy-receipt/v2",
+      schema: "agenttool-deploy-receipt/v3",
       outcome: "succeeded",
       completed_at: expect.any(String),
       exit_status: 0,
@@ -934,6 +1010,7 @@ describe("deploy release provenance spine", () => {
       },
       source_overrides: { dirty: false, non_release_head: false },
       external_mutation_started: false,
+      api_build: { cache: "not_used" },
       phases: { migrations: "skipped", preflight: "skipped", api: "skipped", frontends: "skipped" },
       verified_api_machines: 0,
     });

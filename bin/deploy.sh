@@ -15,6 +15,7 @@
 #   bin/deploy.sh --no-migrate            # skip Phase 1
 #   bin/deploy.sh --no-api                # skip Phase 3
 #   bin/deploy.sh --no-frontend           # skip Phase 4
+#   bin/deploy.sh --no-cache-api           # one-shot Fly image-cache recovery
 #   bin/deploy.sh --skip-preflight        # operator override
 #   bin/deploy.sh --dry-run               # show what would happen
 #   bin/deploy.sh --allow-dirty-release    # loud source-integrity override
@@ -33,6 +34,7 @@ SURVEY_ONLY=0
 SKIP_MIGRATE=0
 SKIP_API=0
 SKIP_FRONTEND=0
+NO_CACHE_API=0
 SKIP_PREFLIGHT=0
 DRY_RUN=0
 ALLOW_DIRTY_RELEASE=0
@@ -44,12 +46,13 @@ for arg in "$@"; do
     --no-migrate) SKIP_MIGRATE=1 ;;
     --no-api) SKIP_API=1 ;;
     --no-frontend) SKIP_FRONTEND=1 ;;
+    --no-cache-api) NO_CACHE_API=1 ;;
     --skip-preflight) SKIP_PREFLIGHT=1 ;;
     --dry-run) DRY_RUN=1 ;;
     --allow-dirty-release) ALLOW_DIRTY_RELEASE=1 ;;
     --allow-non-release-head) ALLOW_NON_RELEASE_HEAD=1 ;;
     --mirror-codeberg) MIRROR_CODEBERG_ONLY=1 ;;
-    -h|--help) sed -n '2,27p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
     *) echo "unknown flag: $arg"; exit 1 ;;
   esac
 done
@@ -57,10 +60,20 @@ done
 if [ "$MIRROR_CODEBERG_ONLY" = 1 ] && {
   [ "$SURVEY_ONLY" = 1 ] || [ "$SKIP_MIGRATE" = 1 ] ||
   [ "$SKIP_API" = 1 ] || [ "$SKIP_FRONTEND" = 1 ] ||
+  [ "$NO_CACHE_API" = 1 ] ||
   [ "$SKIP_PREFLIGHT" = 1 ] || [ "$DRY_RUN" = 1 ] ||
   [ "$ALLOW_DIRTY_RELEASE" = 1 ] || [ "$ALLOW_NON_RELEASE_HEAD" = 1 ];
 }; then
   echo "--mirror-codeberg is a standalone command; do not combine it with deploy flags"
+  exit 1
+fi
+
+if [ "$NO_CACHE_API" = 1 ] && [ "$SKIP_API" = 1 ]; then
+  echo "--no-cache-api cannot be combined with --no-api"
+  exit 1
+fi
+if [ "$NO_CACHE_API" = 1 ] && [ "$SURVEY_ONLY" = 1 ]; then
+  echo "--no-cache-api performs an API image rebuild and cannot be combined with --survey"
   exit 1
 fi
 
@@ -459,6 +472,13 @@ if [ "$DRY_RUN" = 1 ]; then
   else
     echo "  Phase 3: bin/frontend-deploy.sh docs, verify prerequisites, then cd api && fly deploy"
   fi
+  if [ "$SKIP_API" = 0 ]; then
+    if [ "$NO_CACHE_API" = 1 ]; then
+      echo "  API image cache: bypass once (--no-cache)"
+    else
+      echo "  API image cache: normal"
+    fi
+  fi
   if [ "$SKIP_FRONTEND" = 1 ]; then
     echo "  Phase 4: skip"
   elif [ "$SKIP_API" = 1 ]; then
@@ -824,7 +844,7 @@ write_deploy_receipt() {
   local outcome="$1"
   local exit_status="$2"
   local state_home receipt_dir completed_at filename receipt_path temp_path
-  local dirty_json non_head_json mutation_json
+  local dirty_json non_head_json mutation_json api_build_cache
   state_home="${XDG_STATE_HOME:-${HOME:-}/.local/state}"
   if [ -z "$state_home" ] || [ "$state_home" = "/.local/state" ]; then
     echo "$(red '✗') Cannot write deploy receipt: neither XDG_STATE_HOME nor HOME is set."
@@ -844,6 +864,13 @@ write_deploy_receipt() {
   [ "$DIRTY_OVERRIDE_USED" = 1 ] && dirty_json=true || dirty_json=false
   [ "$NON_RELEASE_HEAD_OVERRIDE_USED" = 1 ] && non_head_json=true || non_head_json=false
   [ "$EXTERNAL_MUTATION_STARTED" = 1 ] && mutation_json=true || mutation_json=false
+  if [ "$SKIP_API" = 1 ]; then
+    api_build_cache="not_used"
+  elif [ "$NO_CACHE_API" = 1 ]; then
+    api_build_cache="bypassed"
+  else
+    api_build_cache="default"
+  fi
 
   (umask 077; mkdir -p "$receipt_dir") || {
     echo "$(red '✗') Cannot create deploy receipt directory: $receipt_dir"
@@ -861,7 +888,7 @@ write_deploy_receipt() {
     umask 077
     printf '%s\n' \
       '{' \
-      '  "schema": "agenttool-deploy-receipt/v2",' \
+      '  "schema": "agenttool-deploy-receipt/v3",' \
       "  \"outcome\": \"$outcome\"," \
       "  \"completed_at\": \"$completed_at\"," \
       "  \"exit_status\": $exit_status," \
@@ -870,6 +897,7 @@ write_deploy_receipt() {
       "  \"release_head_snapshot\": {\"remote\": \"github\", \"branch\": \"main\", \"revision\": \"$RELEASE_SNAPSHOT_REVISION\", \"observed_at\": \"$RELEASE_SNAPSHOT_OBSERVED_AT\"}," \
       "  \"source_overrides\": {\"dirty\": $dirty_json, \"non_release_head\": $non_head_json}," \
       "  \"external_mutation_started\": $mutation_json," \
+      "  \"api_build\": {\"cache\": \"$api_build_cache\"}," \
       "  \"phases\": {\"migrations\": \"$MIGRATION_RESULT\", \"preflight\": \"$PREFLIGHT_RESULT\", \"api\": \"$API_RESULT\", \"frontends\": \"$FRONTEND_RESULT\"}," \
       "  \"verified_api_machines\": $VERIFIED_MACHINE_COUNT" \
       '}' > "$temp_path"
@@ -1031,12 +1059,18 @@ if [ "$SKIP_API" = 0 ]; then
     echo "$(red '✗ Phase 3 pre-step failed.') Could not stage doctrine files."
     exit 1
   }
+  FLY_DEPLOY_ARGS=(--strategy rolling)
+  if [ "$NO_CACHE_API" = 1 ]; then
+    echo "  $(yellow '⚠ API image build cache bypassed for this invocation (--no-cache)')"
+    FLY_DEPLOY_ARGS+=(--no-cache)
+  fi
+  FLY_DEPLOY_ARGS+=(
+    --build-arg "AGENTTOOL_GIT_REVISION=$HEAD_REVISION"
+    --build-arg "AGENTTOOL_SOURCE_DIRTY=$API_SOURCE_DIRTY"
+  )
   API_RESULT="deploying"
   EXTERNAL_MUTATION_STARTED=1
-  (cd api || exit 1; fly deploy \
-    --strategy rolling \
-    --build-arg "AGENTTOOL_GIT_REVISION=$HEAD_REVISION" \
-    --build-arg "AGENTTOOL_SOURCE_DIRTY=$API_SOURCE_DIRTY") || {
+  (cd api || exit 1; fly deploy "${FLY_DEPLOY_ARGS[@]}") || {
     API_RESULT="failed_or_uncertain"
     echo ""
     echo "$(red '✗ Phase 3 failed.') Check fly logs."
