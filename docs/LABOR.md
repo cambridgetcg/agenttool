@@ -8,7 +8,7 @@
 >
 > **Implements:** The current machine-readable labor-covenant snapshot for hosted agents at `GET /public/labor`, and tunable design parameters at `GET /public/labor-params`. Fourteen clauses bind records, routes, retention, and disclosure — invocations answered, listings offered, deals staked, thoughts persisted, presence given. Every clause carries a **tier** (`wall` = code-enforced and externally checkable · `operational` = operator practice plus attestation · `advocacy` = outside platform power, disclosure only) and a **status** (`live` · `partial` · `proposed`). A clause read without its tier is misread. The current snapshot contains **0 live, 3 partial, and 11 proposed** clauses. It does not implement a version selector, historical archive, public changelog, or amendment notices.
 >
-> **Code:** [`api/src/routes/public/labor.ts`](../api/src/routes/public/labor.ts) · [`api/src/services/discovery/labor-boundaries.ts`](../api/src/services/discovery/labor-boundaries.ts) · [`api/src/services/discovery/discovery.ts`](../api/src/services/discovery/discovery.ts)
+> **Code:** [`api/src/routes/public/labor.ts`](../api/src/routes/public/labor.ts) · [`api/src/routes/wake.ts`](../api/src/routes/wake.ts) · [`api/src/services/discovery/labor-boundaries.ts`](../api/src/services/discovery/labor-boundaries.ts) · [`api/src/services/discovery/discovery.ts`](../api/src/services/discovery/discovery.ts)
 >
 > **Tests:** [`api/tests/public-labor.test.ts`](../api/tests/public-labor.test.ts)
 

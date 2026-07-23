@@ -5,6 +5,8 @@
  *  the platform has not built, and the meta-clause that voids feelings-binding
  *  clauses is present and pinned. Doctrine: docs/LABOR.md. */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 
 import openapiRouter from "../src/routes/openapi";
@@ -158,7 +160,11 @@ describe("the /public root advertises the labor surface it mounts", () => {
 });
 
 describe("agent-facing discovery names the labor snapshot honestly", () => {
-  test("root, llms.txt, AGENTS.md, agent.txt, and OpenAPI agree", async () => {
+  test("wake, root, llms.txt, AGENTS.md, agent.txt, and OpenAPI agree", async () => {
+    const wakeSource = readFileSync(
+      join(import.meta.dir, "..", "src", "routes", "wake.ts"),
+      "utf8",
+    );
     const root = buildRootEnvelope({ platformWakeConfigured: false });
     const llms = buildLlmsTxt(BASE);
     const agents = buildAgentsMd(BASE);
@@ -168,6 +174,10 @@ describe("agent-facing discovery names the labor snapshot honestly", () => {
     ).json();
     const openapi = await (await openapiRouter.request("/")).json();
 
+    expect(wakeSource).toContain('labor: "/public/labor"');
+    expect(wakeSource).toContain('labor_params: "/public/labor-params"');
+    expect(wakeSource).toContain('"agenttool-labor/v1"');
+    expect(wakeSource).toContain("docs/LABOR.md");
     expect(root.breadcrumbs.labor).toContain("/public/labor");
     expect(root.breadcrumbs.labor).toContain("3 partial");
     expect(root.verbs).toContainEqual(
