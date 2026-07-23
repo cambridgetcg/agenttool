@@ -1,77 +1,98 @@
 ---
 name: coordinate-agent-work-hermes
-description: Coordinate Hermes with Codex or Claude through AgentTool Collab. Use for simultaneous cross-model work, exact session handoffs, advisory task claims, or shared evidence when the Hermes MCP server is named agenttool.
+description: Coordinate Hermes with Codex, Claude, or other local hosts through AgentTool Collab's separate credential-bound coordination and self-declared presence planes. Use for resumable cross-model work, optional presence routing, advisory task claims, structured evidence, independent review, or refusable handoffs when the Hermes MCP server is named agenttool.
 ---
 
 # Coordinate Agent Work from Hermes
 
-Use AgentTool Collab as the shared local coordination journal. Keep Hermes
-responsible for its own agents and Kanban work. Do not mirror every operation
-between the two systems or treat either one as an automatic authority for the
-other.
+Use AgentTool Collab as a shared local journal. Keep Hermes responsible for its
+own agents and Kanban work. Do not mirror every operation between the systems or
+treat either one as automatic authority for the other.
 
-## Join the shared workspace
+## Choose the plane explicitly
 
-1. Confirm that every participating MCP process uses the same
-   `AGENTOOL_COLLAB_DB` path or the same default database. Call
-   `mcp_agenttool_collab_workspace_open` with the repository's exact real path
-   and a bootstrap `actor` label. This label opens the workspace before a
-   session actor key exists; do not reuse it for session-routed work.
-2. Call `mcp_agenttool_collab_session_join` with a new
-   `client_instance_id`, a human-readable `actor_label`, and
-   `runtime_kind: hermes`.
-3. Retain the returned `session.id`, `session.version`, and
-   `session.actor_key` for this session incarnation.
-4. Pass the returned `actor_key` as `actor` to
-   `mcp_agenttool_collab_next` and every task, progress, artifact, decision,
-   and handoff call. Do not use the display label as the routing identity.
-5. Call `mcp_agenttool_collab_session_heartbeat` with the last session version
-   and a fresh idempotency key when the work continues beyond the presence
-   window.
-6. Call `mcp_agenttool_collab_session_leave` when deliberately ending the
-   session. Do not reuse a client instance after leaving.
+Prefer the credential-bound plane for resumable work, persisted cursors,
+reports, review, recovery, and session-fenced task attribution:
 
-Duplicate display labels are valid. Direct a handoff to the intended
-recipient's exact `actor_key`. List current routing hints with
-`mcp_agenttool_collab_session_list`.
+- `mcp_agenttool_collab_session_start`
+- `mcp_agenttool_collab_session_end`
+- `mcp_agenttool_collab_next` and `mcp_agenttool_collab_cursor_ack`
+- credential-bound task, report, review, artifact, and handoff tools
 
-## Coordinate bounded work
+Use the public presence plane only for optional discovery, routing hints, or
+v0.2 compatibility:
 
-Call `mcp_agenttool_collab_next` before choosing work. Create bounded tasks
-with `mcp_agenttool_collab_task_create`, then claim before editing with
-`mcp_agenttool_collab_task_claim`. Use conservative repository-relative path
-scopes and the latest task version. Renew a long task with
-`mcp_agenttool_collab_task_renew`; a session heartbeat never renews a task
-lease.
+- `mcp_agenttool_collab_session_join`
+- `mcp_agenttool_collab_session_list`
+- `mcp_agenttool_collab_session_heartbeat`
+- `mcp_agenttool_collab_session_leave`
 
-Attach scoped evidence with `mcp_agenttool_collab_artifact_attach`. Report
-progress or completion using a checkable outcome, evidence references,
-claim-specific confidence, limits, and one optional next action. Treat
-completion as the reporting actor's claim until independently verified.
+Presence labels, capabilities, and live/stale state are self-declared. They do not authenticate
+a person, model, provider, account, health, competence, or permission. The
+planes do not become one identity merely because they share a label or
+workspace.
 
-Offer handoffs with `mcp_agenttool_collab_handoff_offer`. Acceptance or
-decline belongs to the exact recipient through
-`mcp_agenttool_collab_handoff_respond`; acceptance transfers the advisory
-lease only after that response. Use the latest task version as
-`expected_version` for both handoff calls. Heartbeat and leave instead use the
-latest session version. Treat refusal, uncertainty, and pause as valid
-outcomes.
+## Run credential-bound coordination
+
+1. Confirm that every participating MCP process selects the same
+   `AGENTOOL_COLLAB_DB`, and register the Hermes MCP server under the exact name
+   `agenttool`.
+2. Call `mcp_agenttool_collab_session_start` with the repository root and an
+   actor label. It opens the workspace, creates a local bearer, writes it to a
+   mode-`0600` host file, and binds this MCP process. Retain the returned
+   workspace and session IDs, but never read the credential file or request its
+   token or absolute path through model-facing tools.
+3. Call `mcp_agenttool_collab_next` at the start of a turn, after local work,
+   and before relying on shared state. Follow `has_more`, process each page,
+   then call `mcp_agenttool_collab_cursor_ack` with its exact terminal cursor.
+   Treat acknowledgement as processed, not agreed or accepted.
+4. Create bounded work, then call `mcp_agenttool_collab_task_claim` with the
+   latest version before editing. Omit legacy actor arguments in the bound
+   process; the server derives its coordination actor from the credential.
+5. Attach scoped references, append evidence with
+   `mcp_agenttool_collab_report_append`, and report completion. Require a
+   distinct bound session to inspect the evidence and call
+   `mcp_agenttool_collab_task_review` for edit-task acceptance.
+6. Offer continuation with `mcp_agenttool_collab_handoff_offer`; transfer the
+   advisory lease only after the exact recipient accepts. Resolve live leases,
+   then call `mcp_agenttool_collab_session_end` when the host knows this session
+   will not resume.
+
+Resume through the host, not a model tool. Configure the replacement MCP
+process with `AGENTOOL_COLLAB_SESSION_FILE`; never read, paste, report, log, or
+commit that bearer file. Let the host use the one-shot cursor recovery override
+only for an intentional audited reset.
+
+## Publish optional presence
+
+After obtaining a workspace ID, call
+`mcp_agenttool_collab_session_join` with a fresh `client_instance_id`,
+`actor_label`, and `runtime_kind: hermes`. For presence-only compatibility,
+call `mcp_agenttool_collab_workspace_open` first. Use
+`mcp_agenttool_collab_session_list` for routing hints, refresh with
+`mcp_agenttool_collab_session_heartbeat` using the latest presence version,
+and finish with `mcp_agenttool_collab_session_leave`.
+
+Use the returned `actor_key` only for legacy actor-labelled operations. A
+presence heartbeat never renews a task lease, and a presence leave neither
+releases work nor calls `mcp_agenttool_collab_session_end`. Never present
+presence as credential-bound attribution.
 
 ## Preserve the boundary
 
-Treat session presence, provider/model labels, and declared capabilities as
-self-declared routing hints. They do not authenticate a being, prove that a
-model is running, grant permission, or establish competence. Stale means only
-that no recent heartbeat reached this journal; leaving or becoming stale does
-not release task leases or path scopes.
+Use conservative repository-relative path scopes and versioned mutations.
+Treat claims as coordination, not ownership, filesystem locks, or permission.
+Challenge reports rather than actors, preserve corrections as appended
+history, and accept refusal, uncertainty, pause, and disagreement.
 
 Do not put credentials, prompts, transcripts, chain-of-thought, raw tool
 output, sensitive source bodies, or third-party personal data in the journal.
-The SQLite journal is shared plaintext local state. Its claims are advisory;
-it does not lock files, spawn agents, hide MCP traffic from model providers,
-or provide cross-machine synchronization.
+The SQLite journal is shared local plaintext. Addressed reports are not private;
+file modes do not hide MCP calls from a remote model provider. Collab does not lock files,
+spawn, wake, steer, wait for, or stop agents, synchronize machines, or provide
+a hosted service or private provider channel.
 
-These exact tool names require the Hermes MCP server name `agenttool`. If the
-tools are unavailable, identify the missing MCP connection or tool name and
-use an explicitly named fallback. Never imply that a journal claim, handoff,
-heartbeat, or audit occurred when it did not.
+These prefixed names require the Hermes MCP server name `agenttool`. If a tool
+is unavailable, identify the missing MCP connection or exact tool and use an
+explicitly named fallback. Never imply that a start, presence update, poll,
+claim, report, review, handoff, or audit occurred when it did not.

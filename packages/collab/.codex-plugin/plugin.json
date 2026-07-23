@@ -1,7 +1,7 @@
 {
   "name": "agenttool-collab",
-  "version": "0.2.0",
-  "description": "Local advisory sessions, task leases, handoffs, and evidence for simultaneous agents",
+  "version": "0.3.0",
+  "description": "Local presence and credential-bound coordination across agent sessions",
   "author": {
     "name": "AgentTool contributors",
     "url": "https://agenttool.dev"
@@ -12,6 +12,7 @@
   "keywords": [
     "agents",
     "collaboration",
+    "hermes-agent",
     "local-first",
     "mcp"
   ],
@@ -28,19 +29,21 @@
   },
   "interface": {
     "displayName": "AgentTool Collab",
-    "shortDescription": "Coordinate parallel agents with advisory local leases.",
-    "longDescription": "Adds a local SQLite coordination journal and an evidence-labelled workflow for cross-host sessions, task claims, path scopes, progress, decisions, artifacts, and refusable handoffs. Presence and capabilities are self-declared routing hints, completion remains actor-reported, and Codex still spawns and steers agents.",
+    "shortDescription": "Coordinate agent sessions with local evidence.",
+    "longDescription": "Adds separate self-declared presence and credential-bound coordination planes over one local plaintext SQLite journal, including resumable cursors, advisory path claims, reports and challenges, reviewed edit completion, Git checkpoints, and refusable handoffs. MCP arguments and results remain visible to the active model provider, and the host still owns agent lifecycle and wake-up.",
     "developerName": "AgentTool contributors",
     "category": "Productivity",
     "capabilities": [
       "Local state",
-      "Multi-agent coordination",
+      "Self-declared presence",
+      "Multi-session coordination",
+      "Linked-worktree awareness",
       "MCP tools"
     ],
     "defaultPrompt": [
-      "Coordinate this parallel coding task locally.",
-      "Show my next claimed or ready tasks.",
-      "Set up advisory path scopes for these subagents."
+      "Start credential-bound coordination for these sessions.",
+      "List optional self-declared presence without treating it as identity.",
+      "Reconcile reports and review completed edit tasks."
     ]
   }
 }

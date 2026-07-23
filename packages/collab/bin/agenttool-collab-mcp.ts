@@ -3,6 +3,10 @@ import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { buildCollabMcpServer } from "../src/mcp.js";
+import {
+  readSessionCredentialFile,
+  writeSessionCredentialFile,
+} from "../src/session-file.js";
 import { CollabStore } from "../src/store.js";
 
 function defaultDatabasePath(): string {
@@ -16,7 +20,23 @@ function defaultDatabasePath(): string {
 async function main(): Promise<void> {
   const databasePath = process.env.AGENTOOL_COLLAB_DB ?? defaultDatabasePath();
   const store = new CollabStore(databasePath);
-  const server = buildCollabMcpServer(store);
+  const sessionFile = process.env.AGENTOOL_COLLAB_SESSION_FILE;
+  const resumed = sessionFile
+    ? (() => {
+        const credential = readSessionCredentialFile(sessionFile);
+        const handle = store.resumeSession(credential, {
+          allow_cursor_recovery:
+            process.env.AGENTOOL_COLLAB_ALLOW_CURSOR_RECOVERY === "1",
+        });
+        const credentialFile = writeSessionCredentialFile(
+          sessionFile,
+          handle.credential,
+          { replace: true },
+        );
+        return { handle, credential_file: credentialFile };
+      })()
+    : undefined;
+  const server = buildCollabMcpServer(store, { resumed_session: resumed });
   const transport = new StdioServerTransport();
 
   let shuttingDown = false;
@@ -34,7 +54,9 @@ async function main(): Promise<void> {
   process.once("SIGTERM", () => void shutdown(0));
 
   await server.connect(transport);
-  process.stderr.write("· agenttool-collab MCP ready (local SQLite journal)\n");
+  process.stderr.write(
+    `· agenttool-collab MCP ready (local SQLite journal${resumed ? ", session resumed" : ""})\n`,
+  );
 }
 
 main().catch((error) => {
