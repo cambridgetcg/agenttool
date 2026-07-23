@@ -14,6 +14,15 @@ After a package artifact is deliberately installed, the equivalent binary is
 `agenttool-skill`. This source record does not claim current registry
 availability.
 
+For a registry mirror, check and pin the exact version rather than relying on a
+mutable tag:
+
+```bash
+npm view @agenttool/skills@0.1.0 version
+npm install --save-exact @agenttool/skills@0.1.0
+npx --no-install agenttool-skill validate ./path/to/plugin
+```
+
 `inspect` emits the report even when it contains findings. `validate` emits the
 same report and exits 1 when the report has validation errors. Both commands
 accept local paths only.

@@ -303,13 +303,19 @@ describe("boring test spine", () => {
     );
     expect(workflow).toContain("test \"$cli_status\" -eq 2");
     expect(workflow).toContain("grep -q '^usage: agentcred serve --config '");
+    expect(workflow).toContain("name: Smoke packed Agent Skills under Node and Bun");
+    expect(workflow).toContain(
+      'cli="$package_root/dist/bin.js"',
+    );
+    expect(workflow).toContain('report.skills[0].name !== "use-agentcred-safely"');
+    expect(workflow).toContain('Object.hasOwn(report, "installPlan")');
     expect(workflow).toContain("name: Smoke packed Telescope under Node and Bun");
     expect(workflow).toContain("name: Smoke packed Agent Wallet under Node and Bun");
     expect(
       workflow.match(
         /npm install --ignore-scripts --no-audit --no-fund --prefix/g,
       ),
-    ).toHaveLength(4);
+    ).toHaveLength(5);
 
     const uses = workflow
       .split("\n")
@@ -337,6 +343,7 @@ describe("boring test spine", () => {
       "utf8",
     );
     expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("          - skills");
     expect(workflow).not.toContain("pull_request:");
     expect(workflow).not.toMatch(/\n\s+push:/);
     expect(workflow).toContain("persist-credentials: false");

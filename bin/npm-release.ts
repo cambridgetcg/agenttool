@@ -99,6 +99,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "collab",
     artifactKind: "pack",
   },
+  skills: {
+    key: "skills",
+    name: "@agenttool/skills",
+    packagePath: "packages/skills",
+    tagPrefix: "skills",
+    artifactKind: "pack",
+  },
 } as const satisfies Record<string, ReleaseSpec>;
 
 export type ReleaseKey = keyof typeof RELEASE_SPECS;
