@@ -1,0 +1,53 @@
+{
+  "$schema": "../docs/specs/agenttool-project-1.schema.json",
+  "schema": "agenttool.project/1",
+  "project_id": "kingdom-agenttool",
+  "repository": {
+    "key": "github:1261120431",
+    "provider": "github",
+    "provider_repository_id": "1261120431",
+    "display_name": "cambridgetcg/agenttool"
+  },
+  "github": {
+    "release_branch": "main",
+    "required_checks": [
+      "API and protocol",
+      "Data, ADDS, and SDK"
+    ]
+  },
+  "npm": {
+    "workflow": "publish-npm.yml",
+    "packages": {
+      "@agenttool/collab": {
+        "tag_prefix": "collab-v",
+        "release_key": "collab",
+        "path": "packages/collab"
+      }
+    }
+  },
+  "deployments": {
+    "api": {
+      "provider": "fly",
+      "environment": "production",
+      "resource_id": "agenttool"
+    },
+    "docs": {
+      "provider": "cloudflare-pages",
+      "environment": "production",
+      "resource_id": "agenttool-docs"
+    },
+    "dashboard": {
+      "provider": "cloudflare-pages",
+      "environment": "production",
+      "resource_id": "agenttool-dashboard"
+    },
+    "web": {
+      "provider": "cloudflare-pages",
+      "environment": "production",
+      "resource_id": "agenttool-web"
+    }
+  },
+  "vercel": {
+    "enabled": false
+  }
+}

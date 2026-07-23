@@ -28282,7 +28282,10 @@ var StdioServerTransport = class {
 
 // bin/agenttool-collab-mcp.ts
 import { homedir } from "os";
-import { isAbsolute as isAbsolute2, join as join2, resolve as resolve4 } from "path";
+import { isAbsolute as isAbsolute4, join as join4, resolve as resolve6 } from "path";
+
+// src/mcp.ts
+import { randomUUID as randomUUID2 } from "crypto";
 // src/errors.ts
 class CollabError extends Error {
   code;
@@ -28295,35 +28298,768 @@ class CollabError extends Error {
   }
 }
 
+// src/relay-contract.ts
+import { createHash } from "crypto";
+
+// src/canonical.ts
+function canonicalJson(value) {
+  return JSON.stringify(sortValue(value));
+}
+function sortValue(value) {
+  if (Array.isArray(value))
+    return value.map(sortValue);
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0).map(([key, child]) => [key, sortValue(child)]);
+    return Object.fromEntries(entries);
+  }
+  return value;
+}
+
+// src/project-profile.ts
+import {
+  existsSync,
+  lstatSync,
+  readFileSync,
+  realpathSync,
+  statSync
+} from "fs";
+import { dirname, isAbsolute, join, parse as parse5, resolve } from "path";
+var PROJECT_PROFILE_SCHEMA = "agenttool.project/1";
+var PROJECT_PROFILE_ENV = "AGENTOOL_COLLAB_PROJECT_FILE";
+var MAX_PROFILE_BYTES = 64 * 1024;
+var safeIdentifier = exports_external.string().min(1).max(256).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/);
+var deploymentEnvironment = exports_external.string().min(1).max(128).regex(/^[a-z0-9][a-z0-9._:-]*$/);
+var projectId = exports_external.string().min(1).max(64).regex(/^[a-z0-9][a-z0-9-]*$/);
+var repositoryKey = exports_external.string().min(3).max(256).regex(/^[a-z][a-z0-9-]*:[A-Za-z0-9][A-Za-z0-9._:-]*$/);
+var displayName = exports_external.string().min(1).max(256).refine((value) => !hasControlCharacter(value), "must not contain control characters");
+var boundedString = exports_external.string().min(1).max(300).refine((value) => !hasControlCharacter(value), "must not contain control characters");
+var packageName = exports_external.string().min(1).max(214).regex(/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/);
+var releaseKey = exports_external.string().min(1).max(100).regex(/^[a-z0-9][a-z0-9._-]*$/);
+var repositoryRelativePathPattern = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9._/-]+$/;
+var repositoryRelativePath = exports_external.string().min(1).max(500).regex(repositoryRelativePathPattern);
+var repositorySchema = exports_external.object({
+  key: repositoryKey,
+  provider: exports_external.enum(["github", "git", "other"]),
+  provider_repository_id: safeIdentifier,
+  display_name: displayName
+}).strict();
+var githubSchema = exports_external.object({
+  release_branch: safeIdentifier,
+  required_checks: exports_external.array(boundedString).max(100)
+}).strict().superRefine((value, context) => {
+  if (new Set(value.required_checks).size !== value.required_checks.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["required_checks"],
+      message: "required checks must be unique"
+    });
+  }
+});
+var npmPackageSchema = exports_external.object({
+  tag_prefix: exports_external.string().min(1).max(100).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/),
+  release_key: releaseKey,
+  path: repositoryRelativePath
+}).strict();
+var npmSchema = exports_external.object({
+  workflow: exports_external.string().min(1).max(200).regex(repositoryRelativePathPattern).regex(/\.ya?ml$/),
+  packages: exports_external.record(packageName, npmPackageSchema)
+}).strict().superRefine((value, context) => {
+  const count = Object.keys(value.packages).length;
+  if (count < 1 || count > 100) {
+    context.addIssue({
+      code: "custom",
+      path: ["packages"],
+      message: "npm packages must contain between 1 and 100 entries"
+    });
+  }
+});
+var deploymentSchema = exports_external.object({
+  provider: exports_external.enum([
+    "fly",
+    "cloudflare-pages",
+    "vercel"
+  ]),
+  environment: deploymentEnvironment,
+  resource_id: safeIdentifier
+}).strict();
+var deploymentsSchema = exports_external.record(exports_external.string().min(1).max(100).regex(/^[a-z][a-z0-9._-]*$/), deploymentSchema).superRefine((value, context) => {
+  const count = Object.keys(value).length;
+  if (count > 100) {
+    context.addIssue({
+      code: "custom",
+      message: "deployments must contain no more than 100 entries"
+    });
+  }
+});
+var vercelSchema = exports_external.discriminatedUnion("enabled", [
+  exports_external.object({ enabled: exports_external.literal(false) }).strict(),
+  exports_external.object({
+    enabled: exports_external.literal(true),
+    team_id: safeIdentifier,
+    project_id: safeIdentifier
+  }).strict()
+]);
+var projectProfileSchema = exports_external.object({
+  $schema: exports_external.string().min(1).max(1000).refine((value) => !hasControlCharacter(value), "must not contain control characters").optional(),
+  schema: exports_external.literal(PROJECT_PROFILE_SCHEMA),
+  project_id: projectId,
+  repository: repositorySchema,
+  github: githubSchema.optional(),
+  npm: npmSchema.optional(),
+  deployments: deploymentsSchema,
+  vercel: vercelSchema
+}).strict().superRefine((value, context) => {
+  if (value.repository.provider === "github") {
+    if (!/^[1-9][0-9]*$/.test(value.repository.provider_repository_id)) {
+      context.addIssue({
+        code: "custom",
+        path: ["repository", "provider_repository_id"],
+        message: "GitHub repository identity must be the numeric repository ID"
+      });
+    }
+    if (value.repository.key !== `github:${value.repository.provider_repository_id}`) {
+      context.addIssue({
+        code: "custom",
+        path: ["repository", "key"],
+        message: "GitHub repository key must be github:<numeric repository ID>"
+      });
+    }
+    if (!value.github) {
+      context.addIssue({
+        code: "custom",
+        path: ["github"],
+        message: "GitHub repositories require release branch and required checks"
+      });
+    }
+  }
+  const hasVercelDeployment = Object.values(value.deployments).some((deployment) => deployment.provider === "vercel");
+  if (hasVercelDeployment !== value.vercel.enabled) {
+    context.addIssue({
+      code: "custom",
+      path: ["vercel"],
+      message: "Vercel deployment surfaces require enabled binding, and disabled projects must not declare Vercel surfaces"
+    });
+  }
+  if (value.vercel.enabled) {
+    for (const [surface, deployment] of Object.entries(value.deployments)) {
+      if (deployment.provider === "vercel" && deployment.resource_id !== value.vercel.project_id) {
+        context.addIssue({
+          code: "custom",
+          path: ["deployments", surface, "resource_id"],
+          message: "Vercel deployment resource IDs must match the enabled project binding"
+        });
+      }
+    }
+  }
+});
+function loadProjectProfile(options = {}) {
+  const cwd = resolve(options.cwd ?? process.cwd());
+  const environment = options.env ?? process.env;
+  const environmentPath = environment[PROJECT_PROFILE_ENV];
+  const requested = options.path ?? environmentPath;
+  const path = requested ? resolveExplicitProfilePath(requested, cwd) : findNearestProjectProfile(cwd);
+  if (!path) {
+    throw new CollabError("project_profile_not_found", `No ${PROJECT_PROFILE_SCHEMA} profile was provided or found in a parent .agenttool directory`, { environment_variable: PROJECT_PROFILE_ENV });
+  }
+  return { path, profile: readProjectProfile(path) };
+}
+function readProjectProfile(pathInput) {
+  const path = resolve(pathInput);
+  try {
+    const metadata = lstatSync(path);
+    if (!metadata.isFile() || metadata.isSymbolicLink()) {
+      throw new CollabError("project_profile_unsafe", "Project profile must be a regular non-symlink file");
+    }
+    if (metadata.size > MAX_PROFILE_BYTES) {
+      throw new CollabError("project_profile_too_large", `Project profile exceeds ${MAX_PROFILE_BYTES} bytes`);
+    }
+    const parsed = JSON.parse(readFileSync(path, "utf8"));
+    return validateProjectProfile(parsed);
+  } catch (error51) {
+    if (error51 instanceof CollabError)
+      throw error51;
+    throw new CollabError("project_profile_read_failed", "Could not read or parse the project profile");
+  }
+}
+function validateProjectProfile(input) {
+  const result = projectProfileSchema.safeParse(input);
+  if (!result.success) {
+    throw new CollabError("project_profile_invalid", "Project profile does not match agenttool.project/1", { issues: boundedIssues(result.error.issues) });
+  }
+  return result.data;
+}
+function findNearestProjectProfile(startInput) {
+  let current = realDirectory(startInput);
+  const filesystemRoot = parse5(current).root;
+  while (true) {
+    const candidate = join(current, ".agenttool", "project.json");
+    if (existsSync(candidate))
+      return candidate;
+    if (current === filesystemRoot)
+      return null;
+    const parent = dirname(current);
+    if (parent === current)
+      return null;
+    current = parent;
+  }
+}
+function resolveExplicitProfilePath(value, cwd) {
+  const trimmed = value.trim();
+  if (!trimmed || hasControlCharacter(trimmed)) {
+    throw new CollabError("project_profile_path_invalid", "Project profile path must be non-empty and contain no control characters");
+  }
+  return isAbsolute(trimmed) ? resolve(trimmed) : resolve(cwd, trimmed);
+}
+function realDirectory(pathInput) {
+  const path = resolve(pathInput);
+  try {
+    const stat = statSync(path);
+    if (!stat.isDirectory()) {
+      throw new CollabError("project_profile_start_invalid", "Project profile discovery must start from a directory");
+    }
+    return realpathSync(path);
+  } catch (error51) {
+    if (error51 instanceof CollabError)
+      throw error51;
+    throw new CollabError("project_profile_start_invalid", "Project profile discovery directory is unavailable");
+  }
+}
+function boundedIssues(issues) {
+  return issues.slice(0, 20).map((issue2) => ({
+    path: issue2.path.join("."),
+    message: issue2.message.slice(0, 300)
+  }));
+}
+function hasControlCharacter(value) {
+  return /[\u0000-\u001f\u007f]/.test(value);
+}
+
+// src/relay-contract.ts
+var RELAY_ENROLMENT_SCHEMA = "agenttool.collab-enrolment/1";
+var RELAY_ENROLMENT_RESULT_SCHEMA = "agenttool.collab-enrolment-result/1";
+var RELAY_EVENT_PAGE_SCHEMA = "agenttool.collab-event-page/1";
+var RELAY_OPERATION_PAGE_SCHEMA = "agenttool.collab-operation-page/1";
+var RELAY_OPERATION_RESULT_SCHEMA = "agenttool.collab-operation-result/1";
+var RELAY_PROVIDER_OBSERVATION_SCHEMA = "agenttool.collab-provider-observation/1";
+var RELAY_PROVIDER_OBSERVATION_RESULT_SCHEMA = "agenttool.collab-provider-observation-result/1";
+var RELAY_PROVIDER_OBSERVATION_PAGE_SCHEMA = "agenttool.collab-provider-observation-page/1";
+var NPM_RELEASE_RECEIPT_SCHEMA = "agenttool.npm-release/1";
+var DEPLOY_RECEIPT_SCHEMA = "agenttool-deploy-receipt/v2";
+var uuid3 = exports_external.string().uuid().refine((value) => value === value.toLowerCase(), "must be a canonical lowercase UUID");
+var sha1 = exports_external.string().regex(/^[a-f0-9]{40}$/);
+var sha256 = exports_external.string().regex(/^[a-f0-9]{64}$/);
+var sourceRevision = exports_external.string().regex(/^[a-f0-9]{40,64}$/);
+var isoTime = exports_external.string().datetime({ offset: true });
+var knownCredentialPattern = /\b(?:(?:atc?|npm|gh[pousr])_[A-Za-z0-9_-]{20,}|Bearer\s+[A-Za-z0-9._~+/=-]{16,}|(?:api[_ -]?key|access[_ -]?token|client[_ -]?secret|password)\s*[:=]\s*\S{8,})|-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/i;
+var safeMetadataText = (value) => !hasControlCharacter2(value) && !knownCredentialPattern.test(value);
+var idempotencyKey = exports_external.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/).refine(safeMetadataText, "must not contain control characters or known credential patterns");
+var opaqueKey = exports_external.string().min(1).max(256).refine(safeMetadataText, "must not contain control characters or known credential patterns");
+var actorLabel = exports_external.string().min(1).max(128).refine(safeMetadataText, "must not contain control characters or known credential patterns");
+var operationName = exports_external.string().min(1).max(96).regex(/^[a-z0-9][a-z0-9._:-]*$/).refine(safeMetadataText, "must not contain control characters or known credential patterns");
+var environmentName = exports_external.string().min(1).max(128).regex(/^[a-z0-9][a-z0-9._:-]*$/).refine(safeMetadataText, "must not contain control characters or known credential patterns");
+var boundedText = exports_external.string().min(1).max(512).refine(safeMetadataText, "must not contain control characters or known credential patterns");
+var providerUrlSchema = exports_external.string().url().max(2048).refine((value) => {
+  const url2 = new URL(value);
+  return url2.protocol === "https:" && !url2.username && !url2.password && !url2.search && !url2.hash && safeMetadataText(value) && safeMetadataText(decodeUrlPath(url2.pathname));
+}, "must use HTTPS without credentials, query parameters, fragments, or known credential patterns");
+var nullableHttpsUrl = providerUrlSchema.nullable();
+var leaseSeconds = exports_external.number().int().min(30).max(3600);
+var version2 = exports_external.number().int().positive().max(Number.MAX_SAFE_INTEGER);
+var generation = exports_external.number().int().positive().max(Number.MAX_SAFE_INTEGER);
+var sequence = exports_external.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+var completionOutcome = exports_external.enum([
+  "succeeded",
+  "failed",
+  "cancelled",
+  "uncertain"
+]);
+var normalizedState = exports_external.enum([
+  "pending",
+  "running",
+  "awaiting_approval",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "uncertain"
+]);
+var provider = exports_external.enum([
+  "github",
+  "npm",
+  "fly",
+  "cloudflare-pages",
+  "vercel"
+]);
+var observationProviderPolicy = exports_external.array(provider).max(5).refine((values) => new Set(values).size === values.length, "allowed observation providers must be unique").refine((values) => values.every((value, index) => index === 0 || values[index - 1] < value), "allowed observation providers must use canonical lexical order");
+var relayReceiptRefSchema = exports_external.object({
+  schema: exports_external.enum([
+    NPM_RELEASE_RECEIPT_SCHEMA,
+    DEPLOY_RECEIPT_SCHEMA,
+    "other"
+  ]),
+  sha256
+}).strict();
+var relayMutationReceiptSchema = exports_external.object({
+  idempotency_key: idempotencyKey,
+  request_sha256: sha256,
+  recorded_at: isoTime
+}).strict();
+var repositoryIdentitySchema = exports_external.object({
+  key: opaqueKey,
+  provider: exports_external.enum(["github", "git", "other"]),
+  provider_repository_id: opaqueKey,
+  display_name: exports_external.string().min(1).max(256).refine(safeMetadataText, "must not contain control characters or known credential patterns")
+}).strict();
+var relayEnrolmentRequestSchema = exports_external.object({
+  schema: exports_external.literal(RELAY_ENROLMENT_SCHEMA),
+  idempotency_key: idempotencyKey,
+  expected_device_version: sequence,
+  repository: repositoryIdentitySchema,
+  device: exports_external.object({
+    id: uuid3,
+    label: exports_external.string().min(1).max(128).refine(safeMetadataText, "must not contain control characters or known credential patterns")
+  }).strict(),
+  observation_policy: exports_external.object({
+    profile_sha256: sha256,
+    allowed_providers: observationProviderPolicy
+  }).strict(),
+  token: exports_external.object({
+    prefix: exports_external.string().regex(/^atc_[A-Za-z0-9_-]{8}$/),
+    sha256
+  }).strict()
+}).strict();
+function relayEnrolmentIdempotencyKey(input) {
+  const { idempotency_key: _ignored, ...intent } = input;
+  return `enrol:${requestSha256(intent)}`;
+}
+var relayEnrolmentResultSchema = exports_external.object({
+  schema: exports_external.literal(RELAY_ENROLMENT_RESULT_SCHEMA),
+  replayed: exports_external.boolean(),
+  receipt: relayMutationReceiptSchema,
+  repository: exports_external.object({
+    id: uuid3,
+    key: repositoryIdentitySchema.shape.key,
+    provider: repositoryIdentitySchema.shape.provider,
+    provider_repository_id: opaqueKey,
+    display_name: repositoryIdentitySchema.shape.display_name
+  }).strict(),
+  device: exports_external.object({
+    id: uuid3,
+    label: exports_external.string().min(1).max(128).refine(safeMetadataText, "must not contain control characters or known credential patterns"),
+    token_prefix: exports_external.string().regex(/^atc_[A-Za-z0-9_-]{8}$/),
+    active: exports_external.boolean(),
+    version: version2
+  }).strict(),
+  observation_policy: exports_external.object({
+    profile_sha256: sha256,
+    allowed_providers: observationProviderPolicy
+  }).strict(),
+  created: exports_external.boolean()
+}).strict();
+var operationBindingShape = {
+  idempotency_key: idempotencyKey,
+  action_id: uuid3,
+  session_id: uuid3,
+  actor_label: actorLabel.optional(),
+  operation: operationName,
+  environment: environmentName,
+  target: boundedText,
+  source_revision: sourceRevision,
+  parameters_sha256: sha256
+};
+var operationClaimSchema = exports_external.object({
+  schema: exports_external.literal("agenttool.collab-operation-claim/1"),
+  ...operationBindingShape,
+  lease_seconds: leaseSeconds
+}).strict();
+var operationRenewSchema = exports_external.object({
+  schema: exports_external.literal("agenttool.collab-operation-renew/1"),
+  ...operationBindingShape,
+  lease_id: uuid3,
+  expected_version: version2,
+  expected_generation: generation,
+  lease_seconds: leaseSeconds
+}).strict();
+var operationBeginSchema = exports_external.object({
+  schema: exports_external.literal("agenttool.collab-operation-begin/1"),
+  ...operationBindingShape,
+  lease_id: uuid3,
+  expected_version: version2,
+  expected_generation: generation
+}).strict();
+var operationCompleteSchema = exports_external.object({
+  schema: exports_external.literal("agenttool.collab-operation-complete/1"),
+  ...operationBindingShape,
+  lease_id: uuid3,
+  expected_version: version2,
+  expected_generation: generation,
+  outcome: completionOutcome,
+  receipt_ref: relayReceiptRefSchema.optional(),
+  observation_ids: exports_external.array(uuid3).max(32).refine((values) => new Set(values).size === values.length).optional()
+}).strict();
+var operationReleaseSchema = exports_external.object({
+  schema: exports_external.literal("agenttool.collab-operation-release/1"),
+  ...operationBindingShape,
+  lease_id: uuid3,
+  expected_version: version2,
+  expected_generation: generation,
+  reason: exports_external.string().min(1).max(256).refine(safeMetadataText, "must not contain control characters or known credential patterns").optional()
+}).strict();
+var operationRecoverSchema = exports_external.object({
+  schema: exports_external.literal("agenttool.collab-operation-recover/1"),
+  ...operationBindingShape,
+  expected_version: version2,
+  expected_generation: generation,
+  disposition: completionOutcome,
+  reason: exports_external.string().min(1).max(512).refine(safeMetadataText, "must not contain control characters or known credential patterns"),
+  receipt_ref: relayReceiptRefSchema.optional(),
+  observation_ids: exports_external.array(uuid3).max(32).refine((values) => new Set(values).size === values.length).optional()
+}).strict();
+var operationStatusQuerySchema = exports_external.object({
+  after: sequence.default(0),
+  limit: exports_external.number().int().min(1).max(200).default(100),
+  operation: operationName.optional(),
+  environment: environmentName.optional()
+}).strict();
+var operationRunSchema = exports_external.object({
+  action_id: uuid3,
+  operation: operationName,
+  environment: environmentName,
+  device_id: uuid3,
+  session_id: uuid3,
+  actor_label: actorLabel.nullable(),
+  status: exports_external.enum([
+    "claimed",
+    "executing",
+    "succeeded",
+    "failed",
+    "cancelled",
+    "uncertain",
+    "released",
+    "recovery_required"
+  ]),
+  lease_id: uuid3,
+  generation,
+  target: boundedText,
+  source_revision: sourceRevision,
+  parameters_sha256: sha256,
+  claimed_at: isoTime,
+  began_at: isoTime.nullable(),
+  completed_at: isoTime.nullable(),
+  updated_at: isoTime
+}).strict();
+var operationSlotSchema = exports_external.object({
+  sequence,
+  repository_id: uuid3,
+  operation: operationName,
+  environment: environmentName,
+  phase: exports_external.enum(["idle", "claimed", "executing", "recovery_required"]),
+  action_id: uuid3.nullable(),
+  session_id: uuid3.nullable(),
+  actor_label: actorLabel.nullable(),
+  holder_device_id: uuid3.nullable(),
+  lease_id: uuid3.nullable(),
+  lease_expires_at: isoTime.nullable(),
+  version: version2,
+  generation,
+  target: boundedText.nullable(),
+  source_revision: sourceRevision.nullable(),
+  parameters_sha256: sha256.nullable(),
+  updated_at: isoTime
+}).strict();
+var operationPageSchema = exports_external.object({
+  schema: exports_external.literal(RELAY_OPERATION_PAGE_SCHEMA),
+  repository_id: uuid3,
+  operations: exports_external.array(operationSlotSchema).max(200),
+  next_after: sequence,
+  has_more: exports_external.boolean()
+}).strict().superRefine((value, context) => {
+  for (const [index, operation] of value.operations.entries()) {
+    if (operation.repository_id !== value.repository_id) {
+      context.addIssue({
+        code: "custom",
+        path: ["operations", index, "repository_id"],
+        message: "operation repository must match its enclosing page"
+      });
+    }
+  }
+  for (let index = 1;index < value.operations.length; index += 1) {
+    if (value.operations[index - 1].sequence >= value.operations[index].sequence) {
+      context.addIssue({
+        code: "custom",
+        path: ["operations", index, "sequence"],
+        message: "operation sequences must be strictly ascending"
+      });
+    }
+  }
+  if (!value.has_more) {
+    if (value.next_after !== 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["next_after"],
+        message: "a terminal operation page must reset next_after to zero"
+      });
+    }
+    return;
+  }
+  const finalSequence = value.operations.at(-1)?.sequence;
+  if (finalSequence === undefined || value.next_after !== finalSequence) {
+    context.addIssue({
+      code: "custom",
+      path: ["next_after"],
+      message: "a nonterminal operation page must advance to its final operation sequence"
+    });
+  }
+});
+var operationResultSchema = exports_external.object({
+  schema: exports_external.literal(RELAY_OPERATION_RESULT_SCHEMA),
+  replayed: exports_external.boolean(),
+  receipt: relayMutationReceiptSchema,
+  slot: operationSlotSchema,
+  run: operationRunSchema,
+  authority: exports_external.object({
+    kind: exports_external.literal("coordination_only"),
+    provider_authority_granted: exports_external.literal(false)
+  }).strict()
+}).strict();
+var safeEventBody = exports_external.record(exports_external.string().min(1).max(100), exports_external.unknown());
+var relayEventSchema = exports_external.object({
+  sequence,
+  event_id: uuid3,
+  type: exports_external.string().min(1).max(100).regex(/^[a-z][a-z0-9._-]*$/),
+  occurred_at: isoTime,
+  device_id: uuid3.nullable(),
+  session_id: uuid3.nullable(),
+  actor_label: actorLabel.nullable(),
+  body: safeEventBody,
+  previous_hash: sha256.nullable(),
+  event_hash: sha256
+}).strict();
+var relayEventPageSchema = exports_external.object({
+  schema: exports_external.literal(RELAY_EVENT_PAGE_SCHEMA),
+  repository_id: uuid3,
+  events: exports_external.array(relayEventSchema).max(200),
+  next_after: sequence,
+  has_more: exports_external.boolean()
+}).strict().superRefine((value, context) => {
+  for (const [index, event] of value.events.entries()) {
+    try {
+      assertBoundedSafeJson(event.body);
+    } catch (error51) {
+      context.addIssue({
+        code: "custom",
+        path: ["events", index, "body"],
+        message: error51 instanceof Error ? error51.message : "unsafe event body"
+      });
+    }
+  }
+});
+var providerObservationInputSchema = exports_external.object({
+  schema: exports_external.literal(RELAY_PROVIDER_OBSERVATION_SCHEMA),
+  idempotency_key: idempotencyKey,
+  session_id: uuid3,
+  actor_label: actorLabel.optional(),
+  action_id: uuid3.optional(),
+  provider,
+  provider_event_id: exports_external.string().min(1).max(256).refine(safeMetadataText, "must not contain control characters or known credential patterns").nullable().optional(),
+  observed_at: isoTime,
+  occurred_at: isoTime.optional(),
+  resource_kind: exports_external.string().min(1).max(128).refine(safeMetadataText, "must not contain control characters or known credential patterns"),
+  resource_id: boundedText,
+  native_state: exports_external.string().min(1).max(256).refine(safeMetadataText, "must not contain control characters or known credential patterns"),
+  normalized_state: normalizedState,
+  source_revision: sourceRevision.optional(),
+  environment: environmentName.optional(),
+  url: nullableHttpsUrl.optional(),
+  payload_sha256: sha256
+}).strict();
+var providerObservationSchema = exports_external.object({
+  sequence,
+  observation_id: uuid3,
+  repository_id: uuid3,
+  provider,
+  provider_event_id: exports_external.string().min(1).max(256).refine(safeMetadataText).nullable(),
+  action_id: uuid3.nullable(),
+  provenance: exports_external.literal("device_observed"),
+  observing_device_id: uuid3,
+  observing_session_id: uuid3,
+  actor_label: actorLabel.nullable(),
+  observed_at: isoTime,
+  occurred_at: isoTime.nullable(),
+  normalized_state: normalizedState,
+  source_revision: sourceRevision.nullable(),
+  environment: environmentName.nullable(),
+  resource_kind: exports_external.string().min(1).max(128).refine(safeMetadataText),
+  resource_id: boundedText,
+  native_state: exports_external.string().min(1).max(256).refine(safeMetadataText),
+  url: nullableHttpsUrl,
+  payload_sha256: sha256,
+  received_at: isoTime
+}).strict();
+var providerObservationResultSchema = exports_external.object({
+  schema: exports_external.literal(RELAY_PROVIDER_OBSERVATION_RESULT_SCHEMA),
+  deduplicated: exports_external.boolean(),
+  replayed: exports_external.boolean(),
+  receipt: relayMutationReceiptSchema,
+  observation: providerObservationSchema
+}).strict();
+var providerObservationPageSchema = exports_external.object({
+  schema: exports_external.literal(RELAY_PROVIDER_OBSERVATION_PAGE_SCHEMA),
+  repository_id: uuid3,
+  observations: exports_external.array(providerObservationSchema).max(200),
+  next_after: sequence,
+  has_more: exports_external.boolean()
+}).strict().superRefine((value, context) => {
+  for (const [index, observation] of value.observations.entries()) {
+    if (observation.repository_id !== value.repository_id) {
+      context.addIssue({
+        code: "custom",
+        path: ["observations", index, "repository_id"],
+        message: "observation repository must match its enclosing page"
+      });
+    }
+  }
+});
+var npmReleaseReceiptSchema = exports_external.object({
+  schema: exports_external.literal(NPM_RELEASE_RECEIPT_SCHEMA),
+  package: exports_external.object({
+    key: exports_external.string().min(1).max(100).regex(/^[a-z0-9][a-z0-9._-]*$/),
+    name: exports_external.string().min(1).max(214).regex(/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/),
+    version: exports_external.string().min(1).max(256).regex(/^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/),
+    path: exports_external.string().min(1).max(500).regex(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9._/-]+$/)
+  }).strict(),
+  tag: boundedText,
+  tag_commit: sourceRevision,
+  source_revision: sourceRevision,
+  artifact: exports_external.object({
+    filename: exports_external.string().min(1).max(300).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*\.tgz$/),
+    size: exports_external.number().int().positive().max(1024 * 1024 * 1024),
+    sha1,
+    sha256,
+    integrity: exports_external.string().regex(/^sha512-[A-Za-z0-9+/]{86}==$/)
+  }).strict(),
+  prepared_at: isoTime,
+  result: exports_external.object({
+    status: exports_external.enum(["published", "already_published_exact"]),
+    npm_tag: exports_external.string().min(1).max(100).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/),
+    registry_observed_at: isoTime,
+    registry_tarball: exports_external.string().url().max(2000).refine((value) => {
+      const url2 = new URL(value);
+      return url2.protocol === "https:" && url2.hostname === "registry.npmjs.org";
+    }, "must be an npmjs registry tarball URL")
+  }).strict().optional()
+}).strict();
+var deployReceiptSchema = exports_external.object({
+  schema: exports_external.literal(DEPLOY_RECEIPT_SCHEMA),
+  outcome: exports_external.enum(["succeeded", "failed_or_uncertain"]),
+  completed_at: isoTime,
+  exit_status: exports_external.number().int().min(0).max(255),
+  source_revision: sourceRevision,
+  source_dirty: exports_external.boolean(),
+  release_head_snapshot: exports_external.object({
+    remote: exports_external.string().min(1).max(100).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/),
+    branch: exports_external.string().min(1).max(256).refine((value) => !hasControlCharacter2(value), "must not contain control characters"),
+    revision: sourceRevision,
+    observed_at: isoTime
+  }).strict(),
+  source_overrides: exports_external.object({
+    dirty: exports_external.boolean(),
+    non_release_head: exports_external.boolean()
+  }).strict(),
+  external_mutation_started: exports_external.boolean(),
+  phases: exports_external.object({
+    migrations: exports_external.string().min(1).max(100).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+    preflight: exports_external.string().min(1).max(100).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+    api: exports_external.string().min(1).max(100).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+    frontends: exports_external.string().min(1).max(100).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)
+  }).strict(),
+  verified_api_machines: exports_external.number().int().nonnegative().max(1e4)
+}).strict();
+function requestSha256(value) {
+  return digest(value);
+}
+function assertBoundedSafeJson(value, depth = 0, budget = { nodes: 0 }) {
+  budget.nodes += 1;
+  if (budget.nodes > 5000)
+    throw new Error("JSON value exceeds node bound");
+  if (depth > 8)
+    throw new Error("JSON value exceeds nesting bound");
+  if (value === null || typeof value === "boolean" || typeof value === "number" && Number.isFinite(value))
+    return;
+  if (typeof value === "string") {
+    if (value.length > 8000)
+      throw new Error("JSON string exceeds length bound");
+    if (knownCredentialPattern.test(value)) {
+      throw new Error("JSON string contains a known credential pattern");
+    }
+    if (hasControlCharacter2(value) && /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value)) {
+      throw new Error("JSON string contains unsafe control characters");
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    if (value.length > 500)
+      throw new Error("JSON array exceeds length bound");
+    for (const child of value)
+      assertBoundedSafeJson(child, depth + 1, budget);
+    return;
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value);
+    if (entries.length > 500)
+      throw new Error("JSON object exceeds key bound");
+    for (const [key, child] of entries) {
+      if (key.length < 1 || key.length > 100 || hasControlCharacter2(key)) {
+        throw new Error("JSON object contains an invalid key");
+      }
+      assertBoundedSafeJson(child, depth + 1, budget);
+    }
+    return;
+  }
+  throw new Error("JSON value contains an unsupported type");
+}
+function digest(value) {
+  return createHash("sha256").update(canonicalJson(value)).digest("hex");
+}
+function decodeUrlPath(pathname) {
+  try {
+    return decodeURIComponent(pathname);
+  } catch {
+    return pathname;
+  }
+}
+function hasControlCharacter2(value) {
+  return /[\u0000-\u001f\u007f]/.test(value);
+}
+
 // src/session-file.ts
 import {
   chmodSync,
   closeSync,
-  existsSync,
+  existsSync as existsSync2,
   fsyncSync,
   linkSync,
-  lstatSync,
+  lstatSync as lstatSync2,
   mkdirSync,
   openSync,
-  readFileSync,
+  readFileSync as readFileSync2,
   renameSync,
   unlinkSync,
   writeFileSync
 } from "fs";
-import { dirname, resolve } from "path";
+import { dirname as dirname2, resolve as resolve2 } from "path";
 import { randomUUID } from "crypto";
 function readSessionCredentialFile(pathInput) {
-  const path = resolve(pathInput);
+  const path = resolve2(pathInput);
   try {
-    assertPrivateDirectory(dirname(path));
-    const stat = lstatSync(path);
+    assertPrivateDirectory(dirname2(path));
+    const stat = lstatSync2(path);
     if (!stat.isFile() || stat.isSymbolicLink() || !isOwnedByCurrentUser(stat.uid)) {
       throw new CollabError("session_file_unsafe", "Session credential path must be a private regular file owned by this user", { operation: "read_session_credential_file" });
     }
     if ((stat.mode & 63) !== 0) {
       throw new CollabError("session_file_not_private", "Session credential file must not be accessible by group or other users", { operation: "read_session_credential_file" });
     }
-    const parsed = JSON.parse(readFileSync(path, "utf8"));
+    const parsed = JSON.parse(readFileSync2(path, "utf8"));
     if (parsed.format !== "agenttool.collab/session-file/1" || typeof parsed.session_id !== "string" || typeof parsed.session_token !== "string" || !Number.isInteger(parsed.generation) || parsed.generation < 1 || parsed.last_cursor !== undefined && (typeof parsed.last_cursor?.epoch_id !== "string" || !Number.isInteger(parsed.last_cursor?.sequence) || parsed.last_cursor.sequence < 0 || typeof parsed.last_cursor?.hash !== "string" || !/^[a-f0-9]{64}$/.test(parsed.last_cursor.hash))) {
       throw new CollabError("session_file_invalid", "Session credential file has an unsupported or malformed format", { operation: "read_session_credential_file" });
     }
@@ -28340,9 +29076,9 @@ function readSessionCredentialFile(pathInput) {
   }
 }
 function writeSessionCredentialFile(pathInput, credential, options = {}) {
-  const path = resolve(pathInput);
-  const parent = dirname(path);
-  const parentExisted = existsSync(parent);
+  const path = resolve2(pathInput);
+  const parent = dirname2(path);
+  const parentExisted = existsSync2(parent);
   let temporary = null;
   let linkedFinal = false;
   try {
@@ -28350,8 +29086,8 @@ function writeSessionCredentialFile(pathInput, credential, options = {}) {
     if (!parentExisted)
       chmodSync(parent, 448);
     assertPrivateDirectory(parent);
-    if (existsSync(path)) {
-      const stat = lstatSync(path);
+    if (existsSync2(path)) {
+      const stat = lstatSync2(path);
       if (!options.replace || !stat.isFile() || stat.isSymbolicLink() || !isOwnedByCurrentUser(stat.uid) || (stat.mode & 63) !== 0) {
         throw new CollabError(options.replace ? "session_file_unsafe" : "session_file_exists", options.replace ? "Replacement requires a private regular credential file owned by this user" : "Refusing to overwrite an existing session credential path", { operation: "write_session_credential_file" });
       }
@@ -28390,12 +29126,12 @@ function writeSessionCredentialFile(pathInput, credential, options = {}) {
     chmodSync(path, 384);
     return path;
   } catch (error51) {
-    if (linkedFinal && existsSync(path)) {
+    if (linkedFinal && existsSync2(path)) {
       try {
         unlinkSync(path);
       } catch {}
     }
-    if (temporary && existsSync(temporary)) {
+    if (temporary && existsSync2(temporary)) {
       try {
         unlinkSync(temporary);
       } catch {}
@@ -28406,12 +29142,12 @@ function writeSessionCredentialFile(pathInput, credential, options = {}) {
   }
 }
 function removeSessionCredentialFile(pathInput) {
-  const path = resolve(pathInput);
+  const path = resolve2(pathInput);
   try {
-    if (!existsSync(path))
+    if (!existsSync2(path))
       return;
-    assertPrivateDirectory(dirname(path));
-    const stat = lstatSync(path);
+    assertPrivateDirectory(dirname2(path));
+    const stat = lstatSync2(path);
     if (!stat.isFile() || stat.isSymbolicLink() || !isOwnedByCurrentUser(stat.uid)) {
       throw new CollabError("session_file_unsafe", "Refusing to remove a non-regular session credential path", { operation: "remove_session_credential_file" });
     }
@@ -28423,7 +29159,7 @@ function removeSessionCredentialFile(pathInput) {
   }
 }
 function assertPrivateDirectory(path) {
-  const stat = lstatSync(path);
+  const stat = lstatSync2(path);
   if (!stat.isDirectory() || stat.isSymbolicLink() || !isOwnedByCurrentUser(stat.uid) || (stat.mode & 63) !== 0) {
     throw new CollabError("session_directory_not_private", "Session credential directory must be a private non-symlink directory owned by this user", { operation: "validate_session_credential_directory" });
   }
@@ -28433,8 +29169,8 @@ function isOwnedByCurrentUser(uid) {
 }
 
 // src/mcp.ts
-var actorLabel = exports_external.string().min(1).max(200).describe("Stable display label; session credentials, not this label, fence session mutations");
-var legacyActor = actorLabel.optional();
+var actorLabel2 = exports_external.string().min(1).max(200).describe("Stable display label; session credentials, not this label, fence session mutations");
+var legacyActor = actorLabel2.optional();
 var key = exports_external.string().min(1).max(200).describe("Unique retry-safe key for this mutation");
 var workspaceId = exports_external.string().min(1).describe("Workspace ID returned by workspace open or credential-bound session start");
 var sessionId = exports_external.string().min(1).max(200).describe("Presence session ID");
@@ -28449,6 +29185,40 @@ var eventAnchor = exports_external.object({
   sequence: exports_external.number().int().nonnegative(),
   hash: exports_external.string().length(64)
 });
+var relayUuid = exports_external.string().uuid().refine((value) => value === value.toLowerCase(), "must be a canonical lowercase UUID");
+var relayIdempotencyKey = exports_external.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/);
+var relayOperation = exports_external.string().min(1).max(96).regex(/^[a-z0-9][a-z0-9._:-]*$/);
+var relayEnvironment = exports_external.string().min(1).max(128).regex(/^[a-z0-9][a-z0-9._:-]*$/);
+var relayTarget = exports_external.string().min(1).max(512);
+var relaySourceRevision = exports_external.string().regex(/^[a-f0-9]{40,64}$/);
+var relaySha256 = exports_external.string().regex(/^[a-f0-9]{64}$/);
+var relayLeaseSeconds = exports_external.number().int().min(30).max(3600);
+var relayActorLabel = exports_external.string().min(1).max(128).optional();
+var relayBindingSchema = {
+  idempotency_key: relayIdempotencyKey,
+  action_id: relayUuid,
+  actor_label: relayActorLabel,
+  operation: relayOperation,
+  environment: relayEnvironment,
+  target: relayTarget,
+  source_revision: relaySourceRevision,
+  parameters_sha256: relaySha256
+};
+var relayFencedSchema = {
+  ...relayBindingSchema,
+  lease_id: relayUuid,
+  expected_version: exports_external.number().int().positive(),
+  expected_generation: exports_external.number().int().positive()
+};
+var relayReceiptRef = exports_external.object({
+  schema: exports_external.enum([
+    "agenttool.npm-release/1",
+    "agenttool-deploy-receipt/v2",
+    "other"
+  ]),
+  sha256: relaySha256
+}).strict();
+var relayObservationIds = exports_external.array(relayUuid).max(32).refine((values) => new Set(values).size === values.length).optional();
 var localReadOnly = {
   readOnlyHint: true,
   destructiveHint: false,
@@ -28473,11 +29243,24 @@ var localDestructiveMutation = {
   idempotentHint: false,
   openWorldHint: false
 };
+var relayReadOnly = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true
+};
+var relayRetrySafeMutation = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true
+};
 function buildCollabMcpServer(store, options = {}) {
   let binding = options.resumed_session ?? null;
-  const server = new McpServer({ name: "agenttool-collab", version: "0.3.0" }, {
+  const relayFallbackSessionId = randomUUID2();
+  const server = new McpServer({ name: "agenttool-collab", version: "0.4.0" }, {
     capabilities: { tools: {} },
-    instructions: "Local-first coordination journal for honest exchange among independent coding-agent sessions. " + "Use collab_session_start once per credential-bound MCP process, then collab_next; a host restart resumes from the " + "mode-0600 credential file without exposing its bearer token to the model. Exchange observations, " + "inferences, proposals, or authorised decisions as structured reports with evidence, confidence, " + "limits, and explicit authority scope. Claim before editing overlapping path scopes and renew long " + "work. An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " + "completion is actor-reported and remains pending until a distinct session accepts it. Challenges " + "remain append-only disagreement; acknowledgement means processed, not agreed. Expired session " + "leases require explicit recovery. Git checkpoints are local evidence, not attribution or atomic " + "Git/SQLite locks. Store concise coordination facts only\u2014never credentials, prompts, transcripts, " + "chain-of-thought, or sensitive source content. Cursor rollback recovery must be enabled by the host " + "and completed with an audited cursor reset before session mutations resume. The host owns spawning, " + "wakeups, waiting, and stopping. The separate collab_session_join/list/heartbeat/leave tools preserve " + "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller."
+    instructions: "Local-first coordination journal for honest exchange among independent coding-agent sessions. " + "Use collab_session_start once per credential-bound MCP process, then collab_next; a host restart resumes from the " + "mode-0600 credential file without exposing its bearer token to the model. Exchange observations, " + "inferences, proposals, or authorised decisions as structured reports with evidence, confidence, " + "limits, and explicit authority scope. Claim before editing overlapping path scopes and renew long " + "work. An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " + "completion is actor-reported and remains pending until a distinct session accepts it. Challenges " + "remain append-only disagreement; acknowledgement means processed, not agreed. Expired session " + "leases require explicit recovery. Git checkpoints are local evidence, not attribution or atomic " + "Git/SQLite locks. Store concise coordination facts only\u2014never credentials, prompts, transcripts, " + "chain-of-thought, or sensitive source content. Cursor rollback recovery must be enabled by the host " + "and completed with an audited cursor reset before session mutations resume. The host owns spawning, " + "wakeups, waiting, and stopping. The separate collab_session_join/list/heartbeat/leave tools preserve " + "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller." + (options.relay ? " The optional release-room tools coordinate participating devices through a remote relay. Their leases fail closed when the relay is unavailable and never authorize GitHub, npm, Vercel, Fly, Cloudflare, or another provider action. Provider imports are device-observed bounded metadata, not provider-verified truth." : "")
   });
   const boundCredential = (allowCursorRecovery = false) => {
     if (!binding) {
@@ -28506,7 +29289,7 @@ function buildCollabMcpServer(store, options = {}) {
     inputSchema: {
       workspace_id: workspaceId,
       client_instance_id: exports_external.string().min(1).max(200).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
-      actor_label: actorLabel,
+      actor_label: actorLabel2,
       runtime_kind: exports_external.string().min(1).max(64).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
       provider_label: exports_external.string().min(1).max(100).optional(),
       model_label: exports_external.string().min(1).max(200).optional(),
@@ -28551,7 +29334,7 @@ function buildCollabMcpServer(store, options = {}) {
     annotations: localMutation,
     inputSchema: {
       root_path: exports_external.string().min(1),
-      actor: actorLabel,
+      actor: actorLabel2,
       role: exports_external.string().max(200).optional(),
       parent_session_id: exports_external.string().min(1).optional(),
       repository_key: exports_external.string().min(1).max(1000).optional()
@@ -28598,7 +29381,7 @@ function buildCollabMcpServer(store, options = {}) {
     inputSchema: {
       root_path: exports_external.string().min(1),
       name: exports_external.string().max(200).optional(),
-      actor: actorLabel,
+      actor: actorLabel2,
       repository_key: exports_external.string().min(1).max(1000).optional()
     }
   }, async (input) => call(() => {
@@ -29035,6 +29818,165 @@ Rationale: ${input.rationale}` : ""}`,
     chain_valid: store.verifyJournal(workspace_id),
     verification_scope: "full_journal"
   })));
+  if (options.relay) {
+    const relay = options.relay;
+    const attribution = (fallbackActor) => ({
+      session_id: binding ? relaySessionUuid(binding.handle.session.id) : relayFallbackSessionId,
+      actor_label: binding?.handle.session.actor ?? fallbackActor
+    });
+    const leaseBoundary = "This remote lease coordinates participating clients only and does not authorize GitHub, npm, Vercel, Fly, Cloudflare, or any provider action.";
+    server.registerTool("collab_operation_status", {
+      title: "Read release-room operation slots",
+      description: `List a server-time effective scan of bounded remote operation-slot state and fencing versions. Follow next_after while has_more is true; a complete cycle returns next_after 0 so the next poll restarts and sees time-only expiry. Pages are current reads, not a cross-request database snapshot. Status does not materialize lease/event state; a later fenced mutation or recovery does. ${leaseBoundary}`,
+      annotations: relayReadOnly,
+      inputSchema: {
+        after: exports_external.number().int().nonnegative().optional(),
+        limit: exports_external.number().int().min(1).max(200).optional(),
+        operation: relayOperation.optional(),
+        environment: relayEnvironment.optional()
+      }
+    }, async (input) => call(() => relay.operations(input)));
+    server.registerTool("collab_operation_events", {
+      title: "Read durable release-room events",
+      description: `Read repository-scoped remote coordination events. Events report participating-client state and do not prove provider truth or grant provider authority. ${leaseBoundary}`,
+      annotations: relayReadOnly,
+      inputSchema: {
+        after: exports_external.number().int().nonnegative().optional(),
+        limit: exports_external.number().int().min(1).max(200).optional()
+      }
+    }, async (input) => call(() => relay.events(input)));
+    server.registerTool("collab_operation_claim", {
+      title: "Claim a release-room operation lease",
+      description: `Atomically claim one repository/operation/environment slot with an exact action binding. The call fails closed if the relay is unavailable. ${leaseBoundary}`,
+      annotations: relayRetrySafeMutation,
+      inputSchema: {
+        ...relayBindingSchema,
+        lease_seconds: relayLeaseSeconds
+      }
+    }, async ({ actor_label, ...input }) => call(() => relay.claim({
+      schema: "agenttool.collab-operation-claim/1",
+      ...input,
+      ...attribution(actor_label)
+    })));
+    server.registerTool("collab_operation_renew", {
+      title: "Renew a release-room operation lease",
+      description: `Renew the exact fenced remote lease without changing its action binding. The call fails closed if the relay is unavailable. ${leaseBoundary}`,
+      annotations: relayRetrySafeMutation,
+      inputSchema: {
+        ...relayFencedSchema,
+        lease_seconds: relayLeaseSeconds
+      }
+    }, async ({ actor_label, ...input }) => call(() => relay.renew({
+      schema: "agenttool.collab-operation-renew/1",
+      ...input,
+      ...attribution(actor_label)
+    })));
+    server.registerTool("collab_operation_begin", {
+      title: "Begin a claimed release-room operation",
+      description: `Fence the transition from claimed to executing before any separately authorized provider command runs. The call fails closed if the relay is unavailable. ${leaseBoundary}`,
+      annotations: relayRetrySafeMutation,
+      inputSchema: relayFencedSchema
+    }, async ({ actor_label, ...input }) => call(() => relay.begin({
+      schema: "agenttool.collab-operation-begin/1",
+      ...input,
+      ...attribution(actor_label)
+    })));
+    server.registerTool("collab_operation_complete", {
+      title: "Complete a release-room operation",
+      description: `Record a terminal or uncertain coordination outcome with digest-only receipt/evidence references; raw receipts and logs are not uploaded. The call fails closed if the relay is unavailable. ${leaseBoundary}`,
+      annotations: relayRetrySafeMutation,
+      inputSchema: {
+        ...relayFencedSchema,
+        outcome: exports_external.enum(["succeeded", "failed", "cancelled", "uncertain"]),
+        receipt_ref: relayReceiptRef.optional(),
+        observation_ids: relayObservationIds
+      }
+    }, async ({ actor_label, ...input }) => call(() => relay.complete({
+      schema: "agenttool.collab-operation-complete/1",
+      ...input,
+      ...attribution(actor_label)
+    })));
+    server.registerTool("collab_operation_release", {
+      title: "Release a claimed release-room operation",
+      description: `Release a non-executing remote lease with an optional bounded reason. The call fails closed if the relay is unavailable. ${leaseBoundary}`,
+      annotations: relayRetrySafeMutation,
+      inputSchema: {
+        ...relayFencedSchema,
+        reason: exports_external.string().min(1).max(256).optional()
+      }
+    }, async ({ actor_label, ...input }) => call(() => relay.release({
+      schema: "agenttool.collab-operation-release/1",
+      ...input,
+      ...attribution(actor_label)
+    })));
+    server.registerTool("collab_operation_recover", {
+      title: "Reconcile an expired executing operation",
+      description: `Record independently checked evidence after an executing lease expires. An uncertain disposition stays recovery-required; this never performs or authorizes provider action. ${leaseBoundary}`,
+      annotations: relayRetrySafeMutation,
+      inputSchema: {
+        ...relayBindingSchema,
+        expected_version: exports_external.number().int().positive(),
+        expected_generation: exports_external.number().int().positive(),
+        disposition: exports_external.enum(["succeeded", "failed", "cancelled", "uncertain"]),
+        reason: exports_external.string().min(1).max(512),
+        receipt_ref: relayReceiptRef.optional(),
+        observation_ids: relayObservationIds
+      }
+    }, async ({ actor_label, ...input }) => call(() => relay.recover({
+      schema: "agenttool.collab-operation-recover/1",
+      ...input,
+      ...attribution(actor_label)
+    })));
+    server.registerTool("collab_provider_observe", {
+      title: "Import a bounded provider observation",
+      description: "Append normalized metadata observed by this enrolled device. The record is device_observed, not provider-verified. The schema has no raw-payload fields and rejects known credential patterns and secret-bearing URL components, but it is not a universal scanner: callers must keep raw logs, webhook or PR bodies, prompts, transcripts, environment dumps, diffs, credentials, and signed URLs out of every bounded text field.",
+      annotations: relayRetrySafeMutation,
+      inputSchema: {
+        idempotency_key: relayIdempotencyKey,
+        actor_label: relayActorLabel,
+        action_id: relayUuid.optional(),
+        provider: exports_external.enum([
+          "github",
+          "npm",
+          "fly",
+          "cloudflare-pages",
+          "vercel"
+        ]),
+        provider_event_id: exports_external.string().min(1).max(256).nullable().optional(),
+        observed_at: exports_external.string().datetime({ offset: true }),
+        occurred_at: exports_external.string().datetime({ offset: true }).optional(),
+        normalized_state: exports_external.enum([
+          "pending",
+          "running",
+          "awaiting_approval",
+          "succeeded",
+          "failed",
+          "cancelled",
+          "uncertain"
+        ]),
+        source_revision: relaySourceRevision.optional(),
+        environment: relayEnvironment.optional(),
+        resource_kind: exports_external.string().min(1).max(128),
+        resource_id: relayTarget,
+        native_state: exports_external.string().min(1).max(256),
+        url: providerUrlSchema.nullable().optional(),
+        payload_sha256: relaySha256
+      }
+    }, async ({ actor_label, ...input }) => call(() => relay.observe({
+      schema: "agenttool.collab-provider-observation/1",
+      ...input,
+      ...attribution(actor_label)
+    })));
+    server.registerTool("collab_provider_list", {
+      title: "List provider observations",
+      description: "List repository-scoped normalized observations. Provenance remains device_observed rather than provider-verified, and addressed metadata grants no provider authority.",
+      annotations: relayReadOnly,
+      inputSchema: {
+        after: exports_external.number().int().nonnegative().optional(),
+        limit: exports_external.number().int().min(1).max(200).optional()
+      }
+    }, async (input) => call(() => relay.observations(input)));
+  }
   return server;
 }
 function leaseMutationSchema(extra) {
@@ -29087,36 +30029,696 @@ async function call(operation) {
     return failure(error51);
   }
 }
+function relaySessionUuid(localSessionId) {
+  const candidate = localSessionId.startsWith("session_") ? localSessionId.slice("session_".length) : localSessionId;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(candidate)) {
+    throw new CollabError("relay_session_id_invalid", "The bound local session does not contain a canonical relay session UUID");
+  }
+  return candidate;
+}
 function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-// src/store.ts
-import { Database } from "bun:sqlite";
-import { createHash as createHash2, randomBytes, randomUUID as randomUUID2, timingSafeEqual } from "crypto";
+// src/relay-credential.ts
 import {
   chmodSync as chmodSync2,
-  closeSync as closeSync3,
+  closeSync as closeSync2,
   existsSync as existsSync3,
+  fsyncSync as fsyncSync2,
+  linkSync as linkSync2,
   lstatSync as lstatSync3,
   mkdirSync as mkdirSync2,
-  openSync as openSync3
+  openSync as openSync2,
+  readFileSync as readFileSync3,
+  renameSync as renameSync2,
+  unlinkSync as unlinkSync2,
+  writeFileSync as writeFileSync2
 } from "fs";
-import { dirname as dirname2, isAbsolute, join, posix, resolve as resolve3 } from "path";
-
-// src/canonical.ts
-function canonicalJson(value) {
-  return JSON.stringify(sortValue(value));
-}
-function sortValue(value) {
-  if (Array.isArray(value))
-    return value.map(sortValue);
-  if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0).map(([key2, child]) => [key2, sortValue(child)]);
-    return Object.fromEntries(entries);
+import { dirname as dirname3, isAbsolute as isAbsolute2, join as join2, resolve as resolve3 } from "path";
+import { createHash as createHash2, randomBytes, randomUUID as randomUUID3 } from "crypto";
+import { spawnSync } from "child_process";
+var RELAY_CREDENTIAL_FORMAT = "agenttool.collab/relay-credential/1";
+var RELAY_CREDENTIAL_FILE_ENV = "AGENTOOL_COLLAB_RELAY_CREDENTIAL_FILE";
+var RELAY_TOKEN_ENV = "AGENTOOL_COLLAB_RELAY_TOKEN";
+var RELAY_KEYCHAIN_SERVICE = "dev.agenttool.collab.relay";
+var uuid5 = exports_external.string().uuid().refine((value) => value === value.toLowerCase());
+var tokenPrefix = exports_external.string().regex(/^atc_[A-Za-z0-9_-]{8}$/);
+var safeText = exports_external.string().min(1).max(256).refine((value) => !/[\u0000-\u001f\u007f]/.test(value));
+var deviceLabel = exports_external.string().min(1).max(128).refine((value) => !/[\u0000-\u001f\u007f]/.test(value));
+var keychainReferenceSchema = exports_external.object({
+  source: exports_external.literal("keychain"),
+  service: exports_external.literal(RELAY_KEYCHAIN_SERVICE),
+  account: safeText,
+  prefix: tokenPrefix
+}).strict();
+var environmentReferenceSchema = exports_external.object({
+  source: exports_external.literal("environment"),
+  variable: exports_external.literal(RELAY_TOKEN_ENV),
+  prefix: tokenPrefix
+}).strict();
+var relayTokenReferenceSchema = exports_external.discriminatedUnion("source", [
+  keychainReferenceSchema,
+  environmentReferenceSchema
+]);
+var relayCredentialMetadataSchema = exports_external.object({
+  format: exports_external.literal(RELAY_CREDENTIAL_FORMAT),
+  state: exports_external.enum(["pending", "active"]),
+  relay_url: exports_external.string().url().max(2000),
+  repository: exports_external.object({
+    key: safeText,
+    id: uuid5.nullable()
+  }).strict(),
+  device: exports_external.object({
+    id: uuid5,
+    label: deviceLabel,
+    version: exports_external.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
+  }).strict(),
+  token: relayTokenReferenceSchema,
+  pending_enrolment: relayEnrolmentRequestSchema.nullable(),
+  created_at: exports_external.string().datetime({ offset: true }),
+  updated_at: exports_external.string().datetime({ offset: true })
+}).strict().superRefine((value, context) => {
+  if (value.state === "active" && value.repository.id === null) {
+    context.addIssue({
+      code: "custom",
+      path: ["repository", "id"],
+      message: "active relay credential requires repository UUID"
+    });
   }
-  return value;
+  if (value.state === "pending" && value.repository.id !== null) {
+    context.addIssue({
+      code: "custom",
+      path: ["repository", "id"],
+      message: "pending relay credential must not claim repository UUID"
+    });
+  }
+  if (value.state === "pending" && value.device.version !== 0) {
+    context.addIssue({
+      code: "custom",
+      path: ["device", "version"],
+      message: "pending relay credential requires device version zero"
+    });
+  }
+  if (value.state === "active" && value.device.version < 1) {
+    context.addIssue({
+      code: "custom",
+      path: ["device", "version"],
+      message: "active relay credential requires a positive device version"
+    });
+  }
+  if (value.state === "pending" && value.pending_enrolment === null) {
+    context.addIssue({
+      code: "custom",
+      path: ["pending_enrolment"],
+      message: "pending relay credential requires the exact safe enrollment request"
+    });
+  }
+  if (value.pending_enrolment) {
+    const request = value.pending_enrolment;
+    if (request.idempotency_key !== relayEnrolmentIdempotencyKey(request) || request.repository.key !== value.repository.key || request.device.id !== value.device.id || request.expected_device_version !== value.device.version || request.token.prefix !== value.token.prefix || value.state === "pending" && request.device.label !== value.device.label) {
+      context.addIssue({
+        code: "custom",
+        path: ["pending_enrolment"],
+        message: "pending enrollment must exactly match credential scope and version"
+      });
+    }
+  }
+  try {
+    if (normalizeRelayUrl(value.relay_url) !== value.relay_url) {
+      context.addIssue({
+        code: "custom",
+        path: ["relay_url"],
+        message: "relay URL must already be a canonical origin"
+      });
+    }
+  } catch {
+    context.addIssue({
+      code: "custom",
+      path: ["relay_url"],
+      message: "relay URL is not an allowed canonical origin"
+    });
+  }
+});
+
+class MacOSKeychainRelaySecretStore {
+  runner;
+  platform;
+  source = "keychain";
+  constructor(runner = {
+    run(args, options) {
+      const result = spawnSync("/usr/bin/security", args, {
+        encoding: "utf8",
+        input: options?.secret_stdin === undefined ? undefined : `${options.secret_stdin}
+`,
+        stdio: [options?.secret_stdin === undefined ? "ignore" : "pipe", "pipe", "ignore"],
+        timeout: 1e4,
+        maxBuffer: 16 * 1024
+      });
+      return {
+        status: result.status,
+        stdout: typeof result.stdout === "string" ? result.stdout : ""
+      };
+    }
+  }, platform = process.platform) {
+    this.runner = runner;
+    this.platform = platform;
+  }
+  store(token, context) {
+    assertRelayToken(token);
+    if (this.platform !== "darwin") {
+      throw new CollabError("relay_keychain_unavailable", "macOS Keychain storage is unavailable; inject AGENTOOL_COLLAB_RELAY_TOKEN through a scoped runtime wrapper");
+    }
+    const account = keychainAccount(context.repository_key, context.device_id);
+    const result = this.runner.run([
+      "add-generic-password",
+      "-U",
+      "-a",
+      account,
+      "-s",
+      RELAY_KEYCHAIN_SERVICE,
+      "-w"
+    ], { secret_stdin: token });
+    if (result.status !== 0) {
+      throw new CollabError("relay_keychain_write_failed", "Could not store the relay bearer in macOS Keychain");
+    }
+    return {
+      source: "keychain",
+      service: RELAY_KEYCHAIN_SERVICE,
+      account,
+      prefix: relayTokenPrefix(token)
+    };
+  }
+  resolve(reference) {
+    if (reference.source !== "keychain") {
+      throw new CollabError("relay_token_source_mismatch", "Credential metadata does not reference macOS Keychain");
+    }
+    if (this.platform !== "darwin") {
+      throw new CollabError("relay_keychain_unavailable", "This relay credential requires macOS Keychain");
+    }
+    const result = this.runner.run([
+      "find-generic-password",
+      "-a",
+      reference.account,
+      "-s",
+      reference.service,
+      "-w"
+    ]);
+    const token = result.stdout.trim();
+    if (result.status !== 0 || !isRelayToken(token)) {
+      throw new CollabError("relay_keychain_read_failed", "Could not resolve the relay bearer from macOS Keychain");
+    }
+    if (relayTokenPrefix(token) !== reference.prefix) {
+      throw new CollabError("relay_token_prefix_mismatch", "Resolved relay bearer does not match credential metadata");
+    }
+    return token;
+  }
+  remove(reference) {
+    if (reference.source !== "keychain" || this.platform !== "darwin")
+      return;
+    this.runner.run([
+      "delete-generic-password",
+      "-a",
+      reference.account,
+      "-s",
+      reference.service
+    ]);
+  }
 }
+
+class EnvironmentRelaySecretStore {
+  env;
+  source = "environment";
+  constructor(env = process.env) {
+    this.env = env;
+  }
+  existingToken() {
+    const token = this.env[RELAY_TOKEN_ENV];
+    if (!token)
+      return null;
+    assertRelayToken(token);
+    return token;
+  }
+  store(token, _context) {
+    assertRelayToken(token);
+    if (this.existingToken() !== token) {
+      throw new CollabError("relay_token_environment_mismatch", "The generated relay bearer cannot be persisted to an environment source; inject the exact token before enrollment");
+    }
+    return {
+      source: "environment",
+      variable: RELAY_TOKEN_ENV,
+      prefix: relayTokenPrefix(token)
+    };
+  }
+  resolve(reference) {
+    if (reference.source !== "environment") {
+      throw new CollabError("relay_token_source_mismatch", "Credential metadata does not reference a runtime environment token");
+    }
+    const token = this.existingToken();
+    if (!token) {
+      throw new CollabError("relay_token_environment_missing", "AGENTOOL_COLLAB_RELAY_TOKEN is not present in this scoped process");
+    }
+    if (relayTokenPrefix(token) !== reference.prefix) {
+      throw new CollabError("relay_token_prefix_mismatch", "Runtime relay bearer does not match credential metadata");
+    }
+    return token;
+  }
+  remove(_reference) {}
+}
+function relayTokenPrefix(token) {
+  assertRelayToken(token);
+  return token.slice(0, 12);
+}
+function isRelayToken(value) {
+  return /^atc_[A-Za-z0-9_-]{43}$/.test(value);
+}
+function assertRelayToken(value) {
+  if (!isRelayToken(value)) {
+    throw new CollabError("relay_token_invalid", "Relay bearer must be atc_ followed by exactly 32 base64url-encoded random bytes");
+  }
+}
+function normalizeRelayUrl(value) {
+  try {
+    const url2 = new URL(value);
+    if (url2.username || url2.password || url2.search || url2.hash || url2.pathname !== "/" && url2.pathname !== "") {
+      throw new Error("relay URL must be an origin");
+    }
+    const loopback = url2.hostname === "127.0.0.1" || url2.hostname === "localhost" || url2.hostname === "[::1]";
+    if (url2.protocol !== "https:" && !(url2.protocol === "http:" && loopback)) {
+      throw new Error("remote relay URLs must use HTTPS");
+    }
+    return url2.origin;
+  } catch {
+    throw new CollabError("relay_url_invalid", "Relay URL must be an HTTPS origin (HTTP is allowed only for loopback tests)");
+  }
+}
+function readRelayCredentialFile(pathInput) {
+  const path = resolve3(pathInput);
+  try {
+    assertPrivateDirectory2(dirname3(path));
+    const stat = lstatSync3(path);
+    if (!stat.isFile() || stat.isSymbolicLink() || !isOwnedByCurrentUser2(stat.uid)) {
+      throw new CollabError("relay_credential_file_unsafe", "Relay credential path must be a private regular file owned by this user");
+    }
+    if ((stat.mode & 63) !== 0) {
+      throw new CollabError("relay_credential_file_not_private", "Relay credential file must not be accessible by group or other users");
+    }
+    if (stat.size > 32 * 1024) {
+      throw new CollabError("relay_credential_file_too_large", "Relay credential metadata exceeds its size bound");
+    }
+    const parsed = JSON.parse(readFileSync3(path, "utf8"));
+    const result = relayCredentialMetadataSchema.safeParse(parsed);
+    if (!result.success) {
+      throw new CollabError("relay_credential_file_invalid", "Relay credential metadata has an unsupported or malformed format");
+    }
+    return result.data;
+  } catch (error51) {
+    if (error51 instanceof CollabError)
+      throw error51;
+    throw new CollabError("relay_credential_file_read_failed", "Could not read the scoped relay credential metadata");
+  }
+}
+function resolveRelayCredential(metadata, stores = {}) {
+  if (metadata.state !== "active" || metadata.repository.id === null) {
+    throw new CollabError("relay_enrolment_pending", "Relay enrollment is pending and cannot authenticate repository requests");
+  }
+  const store = metadata.token.source === "keychain" ? stores.keychain ?? new MacOSKeychainRelaySecretStore : stores.environment ?? new EnvironmentRelaySecretStore;
+  const token = store.resolve(metadata.token);
+  assertRelayToken(token);
+  return {
+    metadata,
+    token
+  };
+}
+function keychainAccount(repositoryKey2, deviceId) {
+  return `relay:${createHash2("sha256").update(repositoryKey2).digest("hex").slice(0, 24)}:${deviceId}`;
+}
+function assertPrivateDirectory2(path) {
+  const stat = lstatSync3(path);
+  if (!stat.isDirectory() || stat.isSymbolicLink() || !isOwnedByCurrentUser2(stat.uid) || (stat.mode & 63) !== 0) {
+    throw new CollabError("relay_credential_directory_not_private", "Relay credential directory must be a private non-symlink directory owned by this user");
+  }
+}
+function isOwnedByCurrentUser2(uid) {
+  return typeof process.getuid !== "function" || uid === process.getuid();
+}
+
+// src/relay-client.ts
+var MAX_RESPONSE_BYTES = 1024 * 1024;
+var DEFAULT_TIMEOUT_MS = 1e4;
+var RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+class CollabRelayClient {
+  #relayUrl;
+  #repositoryId;
+  #repositoryKey;
+  #deviceId;
+  #token;
+  #profile;
+  #fetch;
+  #timeoutMs;
+  constructor(options) {
+    const profile = validateProjectProfile(options.profile);
+    this.#relayUrl = normalizeRelayUrl(options.credential.metadata.relay_url);
+    if (this.#relayUrl !== options.credential.metadata.relay_url) {
+      throw new CollabError("relay_credential_url_mismatch", "Relay credential URL is not a canonical origin");
+    }
+    if (options.credential.metadata.repository.key !== profile.repository.key) {
+      throw new CollabError("relay_profile_scope_mismatch", "Relay credential and project profile identify different repositories");
+    }
+    this.#repositoryId = options.credential.metadata.repository.id;
+    this.#repositoryKey = options.credential.metadata.repository.key;
+    this.#deviceId = options.credential.metadata.device.id;
+    this.#token = options.credential.token;
+    this.#profile = profile;
+    this.#fetch = options.fetch ?? fetch;
+    this.#timeoutMs = normalizeTimeout(options.timeout_ms);
+  }
+  context() {
+    return {
+      relay_url: this.#relayUrl,
+      repository_id: this.#repositoryId,
+      repository_key: this.#repositoryKey,
+      device_id: this.#deviceId,
+      project_id: this.#profile.project_id,
+      authentication_boundary: "scoped_device_bearer_coordinates_participating_clients_but_grants_no_provider_authority"
+    };
+  }
+  async events(input = {}) {
+    const query = pageQuery(input);
+    const page = await this.#request("GET", `/events?${query}`, relayEventPageSchema);
+    this.#assertRepositoryScope(page.repository_id, "event page");
+    return page;
+  }
+  async operations(input = {}) {
+    const parsed = operationStatusQuerySchema.parse(input);
+    const query = new URLSearchParams({
+      after: String(parsed.after),
+      limit: String(parsed.limit)
+    });
+    if (parsed.operation)
+      query.set("operation", parsed.operation);
+    if (parsed.environment)
+      query.set("environment", parsed.environment);
+    const page = await this.#request("GET", `/operations?${query}`, operationPageSchema);
+    this.#assertRepositoryScope(page.repository_id, "operation page");
+    return page;
+  }
+  async claim(input) {
+    return await this.#operationMutation("/operations/claim", operationClaimSchema.parse(input), "claim");
+  }
+  async renew(input) {
+    const parsed = operationRenewSchema.parse(input);
+    return await this.#operationMutation(`/operations/${encodeURIComponent(parsed.action_id)}/renew`, parsed, "renew");
+  }
+  async begin(input) {
+    const parsed = operationBeginSchema.parse(input);
+    return await this.#operationMutation(`/operations/${encodeURIComponent(parsed.action_id)}/begin`, parsed, "begin");
+  }
+  async complete(input) {
+    const parsed = operationCompleteSchema.parse(input);
+    return await this.#operationMutation(`/operations/${encodeURIComponent(parsed.action_id)}/complete`, parsed);
+  }
+  async release(input) {
+    const parsed = operationReleaseSchema.parse(input);
+    return await this.#operationMutation(`/operations/${encodeURIComponent(parsed.action_id)}/release`, parsed);
+  }
+  async recover(input) {
+    const parsed = operationRecoverSchema.parse(input);
+    return await this.#operationMutation(`/operations/${encodeURIComponent(parsed.action_id)}/recover`, parsed);
+  }
+  async observe(input) {
+    const parsed = providerObservationInputSchema.parse(input);
+    const result = await this.#request("POST", "/observations", providerObservationResultSchema, parsed, parsed.idempotency_key);
+    this.#verifyMutationReceipt(parsed, result.receipt);
+    this.#assertRepositoryScope(result.observation.repository_id, "provider observation result");
+    return result;
+  }
+  async observations(input = {}) {
+    const query = pageQuery(input);
+    const page = await this.#request("GET", `/observations?${query}`, providerObservationPageSchema);
+    this.#assertRepositoryScope(page.repository_id, "provider observation page");
+    return page;
+  }
+  async#operationMutation(path, input, actionableReplay) {
+    const result = await this.#request("POST", path, operationResultSchema, input, input.idempotency_key);
+    this.#verifyMutationReceipt(input, result.receipt);
+    this.#assertRepositoryScope(result.slot.repository_id, "operation result");
+    if (actionableReplay) {
+      this.#assertActionableLeaseFresh(result);
+      await this.#verifyActionableResultIsCurrent(result);
+    }
+    return result;
+  }
+  #assertActionableLeaseFresh(result) {
+    if (result.slot.lease_expires_at && Date.parse(result.slot.lease_expires_at) > Date.now()) {
+      return;
+    }
+    throw new CollabError(result.slot.phase === "executing" ? "recovery_required" : "lease_expired", result.slot.phase === "executing" ? "The returned executing lease is already expired and requires recovery" : "The returned claimed lease is already expired", {
+      action_id: result.slot.action_id,
+      version: result.slot.version,
+      generation: result.slot.generation
+    });
+  }
+  async#verifyActionableResultIsCurrent(result) {
+    const page = await this.operations({
+      after: 0,
+      limit: 1,
+      operation: result.slot.operation,
+      environment: result.slot.environment
+    });
+    const current = page.operations[0];
+    if (current?.phase === "recovery_required") {
+      throw new CollabError("recovery_required", "The operation result is historical and now requires recovery", {
+        action_id: current.action_id,
+        version: current.version,
+        generation: current.generation
+      });
+    }
+    if (current && current.lease_expires_at && Date.parse(current.lease_expires_at) <= Date.now()) {
+      throw new CollabError(current.phase === "executing" ? "recovery_required" : "lease_expired", current.phase === "executing" ? "The current executing lease expired and requires recovery" : "The current claimed lease has expired", {
+        action_id: current.action_id,
+        version: current.version,
+        generation: current.generation
+      });
+    }
+    if (!current || !sameOperationSlotFence(result.slot, current)) {
+      throw new CollabError("stale_fence", "The operation result no longer matches the current slot fence", current ? {
+        action_id: current.action_id,
+        version: current.version,
+        generation: current.generation
+      } : undefined);
+    }
+  }
+  #assertRepositoryScope(repositoryId, label) {
+    if (repositoryId !== this.#repositoryId) {
+      throw new CollabError("relay_scope_mismatch", `Relay ${label} does not match the scoped repository`);
+    }
+  }
+  #verifyMutationReceipt(input, receipt) {
+    if (receipt.idempotency_key !== input.idempotency_key || receipt.request_sha256 !== requestSha256(input)) {
+      throw new CollabError("relay_receipt_mismatch", "Relay mutation receipt does not bind the exact request");
+    }
+  }
+  async#request(method, path, responseSchema, body, idempotency) {
+    const base = normalizeRelayUrl(this.#relayUrl);
+    const url2 = `${base}/v1/collab/repositories/${encodeURIComponent(this.#repositoryId)}${path}`;
+    const serialized = body === undefined ? undefined : JSON.stringify(body);
+    const attempts = method === "POST" && idempotency ? 2 : 1;
+    let lastFailure;
+    for (let attempt = 1;attempt <= attempts; attempt += 1) {
+      const controller = new AbortController;
+      const timeout = setTimeout(() => controller.abort(), this.#timeoutMs);
+      try {
+        const headers = {
+          Accept: "application/json",
+          Authorization: `Bearer ${this.#token}`
+        };
+        if (serialized !== undefined)
+          headers["Content-Type"] = "application/json";
+        if (idempotency)
+          headers["Idempotency-Key"] = idempotency;
+        const response = await this.#fetch(url2, {
+          method,
+          headers,
+          body: serialized,
+          signal: controller.signal
+        });
+        if (attempt < attempts && RETRYABLE_STATUS.has(response.status)) {
+          await drainResponse(response);
+          continue;
+        }
+        const payload = await responseJson(response);
+        if (!response.ok)
+          throw mappedRelayError(response.status, payload);
+        const parsed = responseSchema.safeParse(payload);
+        if (!parsed.success) {
+          throw new CollabError("relay_invalid_response", "Relay returned a response outside the expected bounded contract", {
+            http_status: response.status,
+            issues: parsed.error.issues.slice(0, 10).map((issue2) => ({
+              path: issue2.path.join("."),
+              message: issue2.message.slice(0, 200)
+            }))
+          });
+        }
+        return parsed.data;
+      } catch (error51) {
+        if (error51 instanceof CollabError)
+          throw error51;
+        lastFailure = error51;
+        if (attempt >= attempts)
+          break;
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+    throw new CollabError("relay_unavailable", "The release-room relay is unavailable; no remote coordination mutation was assumed", {
+      method,
+      operation: safeOperationLabel(path),
+      failure: lastFailure instanceof DOMException && lastFailure.name === "AbortError" ? "timeout" : "network"
+    });
+  }
+}
+function pageQuery(input) {
+  const after = input.after ?? 0;
+  const limit = input.limit ?? 100;
+  if (!Number.isSafeInteger(after) || after < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 200) {
+    throw new CollabError("relay_page_invalid", "Relay page requires after >= 0 and limit between 1 and 200");
+  }
+  return new URLSearchParams({
+    after: String(after),
+    limit: String(limit)
+  }).toString();
+}
+async function responseJson(response) {
+  const declared = response.headers.get("content-length");
+  if (declared && Number(declared) > MAX_RESPONSE_BYTES) {
+    throw new CollabError("relay_response_too_large", "Relay response exceeds its byte bound", { http_status: response.status });
+  }
+  const text = await response.text();
+  if (new TextEncoder().encode(text).byteLength > MAX_RESPONSE_BYTES) {
+    throw new CollabError("relay_response_too_large", "Relay response exceeds its byte bound", { http_status: response.status });
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new CollabError("relay_invalid_response", "Relay returned non-JSON data", { http_status: response.status });
+  }
+}
+async function drainResponse(response) {
+  try {
+    await response.body?.cancel();
+  } catch {}
+}
+function mappedRelayError(status, payload) {
+  if (payload && typeof payload === "object" && !Array.isArray(payload) && "error" in payload) {
+    const error51 = payload.error;
+    if (error51 && typeof error51 === "object" && !Array.isArray(error51) && typeof error51.code === "string" && typeof error51.message === "string") {
+      const code = error51.code;
+      const message = error51.message;
+      const details = error51.details;
+      let safeDetails;
+      try {
+        if (!/^[a-z][a-z0-9_]{0,99}$/.test(code) || !isSafeRemoteText(message, 500)) {
+          throw new Error("unsafe remote error envelope");
+        }
+        if (details !== undefined) {
+          if (!details || typeof details !== "object" || Array.isArray(details)) {
+            throw new Error("unsafe remote error details");
+          }
+          assertBoundedSafeJson(details);
+          if (containsCredentialMaterial(details)) {
+            throw new Error("credential-like remote error details");
+          }
+          safeDetails = details;
+        }
+        return new CollabError(code, message, {
+          http_status: status,
+          ...safeDetails ? { relay_details: safeDetails } : {}
+        });
+      } catch {}
+    }
+  }
+  return new CollabError("relay_http_error", "Relay rejected the request; unsafe or malformed remote error text was withheld", { http_status: status });
+}
+function isSafeRemoteText(value, maximum) {
+  return value.length >= 1 && value.length <= maximum && !/[\u0000-\u001f\u007f]/.test(value) && !/(?:^|[^A-Za-z0-9])at(?:c)?_[A-Za-z0-9_-]{8,}/.test(value);
+}
+function containsCredentialMaterial(value) {
+  if (typeof value === "string") {
+    return !isSafeRemoteText(value, 8000);
+  }
+  if (Array.isArray(value)) {
+    return value.some(containsCredentialMaterial);
+  }
+  if (value && typeof value === "object") {
+    return Object.entries(value).some(([key2, child]) => /(?:authorization|bearer|token|secret|password|credential|api[_-]?key)/i.test(key2) || containsCredentialMaterial(child));
+  }
+  return false;
+}
+function normalizeTimeout(value) {
+  const timeout = value ?? DEFAULT_TIMEOUT_MS;
+  if (!Number.isInteger(timeout) || timeout < 100 || timeout > 60000) {
+    throw new CollabError("relay_timeout_invalid", "Relay timeout must be between 100 and 60000 milliseconds");
+  }
+  return timeout;
+}
+function safeOperationLabel(path) {
+  const parts = path.split("/").filter(Boolean);
+  return parts.at(-1)?.slice(0, 100) ?? "relay_request";
+}
+function sameOperationSlotFence(replayed, current) {
+  return current.sequence === replayed.sequence && current.repository_id === replayed.repository_id && current.operation === replayed.operation && current.environment === replayed.environment && current.phase === replayed.phase && current.action_id === replayed.action_id && current.holder_device_id === replayed.holder_device_id && current.session_id === replayed.session_id && current.actor_label === replayed.actor_label && current.lease_id === replayed.lease_id && current.lease_expires_at === replayed.lease_expires_at && current.version === replayed.version && current.generation === replayed.generation && current.target === replayed.target && current.source_revision === replayed.source_revision && current.parameters_sha256 === replayed.parameters_sha256;
+}
+
+// src/relay-runtime.ts
+var RELAY_URL_ENV = "AGENTOOL_COLLAB_RELAY_URL";
+function loadRelayRuntimeFromEnvironment(options = {}) {
+  const env = options.env ?? process.env;
+  const configuredUrl = env[RELAY_URL_ENV];
+  if (!configuredUrl)
+    return;
+  const relayUrl = normalizeRelayUrl(configuredUrl);
+  const credentialPath = env[RELAY_CREDENTIAL_FILE_ENV];
+  if (!credentialPath) {
+    throw new CollabError("relay_credential_file_required", `${RELAY_CREDENTIAL_FILE_ENV} is required when ${RELAY_URL_ENV} is set`);
+  }
+  const profile = loadProjectProfile({
+    cwd: options.cwd,
+    path: env[PROJECT_PROFILE_ENV],
+    env
+  });
+  const metadata = readRelayCredentialFile(credentialPath);
+  if (normalizeRelayUrl(metadata.relay_url) !== relayUrl) {
+    throw new CollabError("relay_credential_url_mismatch", "Configured relay URL does not match the scoped credential metadata");
+  }
+  const credential = resolveRelayCredential(metadata, {
+    keychain: new MacOSKeychainRelaySecretStore,
+    environment: new EnvironmentRelaySecretStore(env)
+  });
+  return {
+    client: new CollabRelayClient({
+      credential,
+      profile: profile.profile,
+      fetch: options.fetch
+    }),
+    profile,
+    credential_file: credentialPath
+  };
+}
+
+// src/store.ts
+import { Database } from "bun:sqlite";
+import { createHash as createHash4, randomBytes as randomBytes2, randomUUID as randomUUID4, timingSafeEqual } from "crypto";
+import {
+  chmodSync as chmodSync3,
+  closeSync as closeSync4,
+  existsSync as existsSync5,
+  lstatSync as lstatSync5,
+  mkdirSync as mkdirSync3,
+  openSync as openSync4
+} from "fs";
+import { dirname as dirname4, isAbsolute as isAbsolute3, join as join3, posix, resolve as resolve5 } from "path";
 
 // src/protocol.ts
 var COLLAB_PROTOCOL = "agenttool.collab/0.1";
@@ -29125,42 +30727,42 @@ var COLLAB_COORDINATION_PROTOCOL = "agenttool.collab/0.2";
 var COLLAB_SESSION_PROTOCOL = "agenttool.collab.session/0.1";
 
 // src/repository.ts
-import { createHash } from "crypto";
+import { createHash as createHash3 } from "crypto";
 import {
-  closeSync as closeSync2,
-  existsSync as existsSync2,
+  closeSync as closeSync3,
+  existsSync as existsSync4,
   fstatSync,
-  lstatSync as lstatSync2,
-  openSync as openSync2,
+  lstatSync as lstatSync4,
+  openSync as openSync3,
   readlinkSync,
   readSync,
-  realpathSync,
-  statSync
+  realpathSync as realpathSync2,
+  statSync as statSync2
 } from "fs";
-import { resolve as resolve2 } from "path";
-import { spawnSync } from "child_process";
+import { resolve as resolve4 } from "path";
+import { spawnSync as spawnSync2 } from "child_process";
 var GIT_TIMEOUT_MS = 5000;
 var MAX_GIT_OUTPUT = 1024 * 1024;
 var MAX_UNTRACKED_FILES = 1e4;
 var MAX_UNTRACKED_BYTES = 64 * 1024 * 1024;
 var MAX_UNTRACKED_HASH_MS = 2000;
 function inspectRepository(rootInput, explicitRepositoryKey) {
-  const requested = resolve2(rootInput);
-  if (!existsSync2(requested) || !statSync(requested).isDirectory()) {
+  const requested = resolve4(rootInput);
+  if (!existsSync4(requested) || !statSync2(requested).isDirectory()) {
     throw new CollabError("workspace_not_directory", "Workspace root must be an existing directory", { root_path: requested });
   }
-  const requestedRoot = realpathSync(requested);
+  const requestedRoot = realpathSync2(requested);
   const topLevel = gitOutput(requestedRoot, ["rev-parse", "--show-toplevel"]);
-  const rootPath = topLevel && existsSync2(topLevel) ? realpathSync(topLevel) : requestedRoot;
+  const rootPath = topLevel && existsSync4(topLevel) ? realpathSync2(topLevel) : requestedRoot;
   const explicitKey = explicitRepositoryKey?.trim();
   if (!topLevel) {
-    const repositoryKey2 = explicitKey ? `explicit:${sha256(explicitKey)}` : `local-path:${sha256(rootPath)}`;
+    const repositoryKey3 = explicitKey ? `explicit:${sha2562(explicitKey)}` : `local-path:${sha2562(rootPath)}`;
     return {
       requested_root_path: requestedRoot,
       root_path: rootPath,
-      repository_key: repositoryKey2,
+      repository_key: repositoryKey3,
       git_common_dir_hash: null,
-      worktree_fingerprint: `path:${sha256(rootPath)}`,
+      worktree_fingerprint: `path:${sha2562(rootPath)}`,
       checkpoint: {
         worktree_id: worktreeId(rootPath, `path:${rootPath}`),
         head_sha: null,
@@ -29177,14 +30779,14 @@ function inspectRepository(rootInput, explicitRepositoryKey) {
   }
   const commonDir = realpathIfPresent(resolveGitPath(rootPath, commonDirOutput));
   const gitDir = realpathIfPresent(resolveGitPath(rootPath, gitDirOutput));
-  const commonDirHash = sha256(commonDir);
-  const repositoryKey = explicitKey ? `explicit:${sha256(explicitKey)}` : `local-git:${commonDirHash}`;
-  const fingerprint = `git:${sha256(`${commonDir}\x00${gitDir}`)}`;
+  const commonDirHash = sha2562(commonDir);
+  const repositoryKey2 = explicitKey ? `explicit:${sha2562(explicitKey)}` : `local-git:${commonDirHash}`;
+  const fingerprint = `git:${sha2562(`${commonDir}\x00${gitDir}`)}`;
   const id = worktreeId(rootPath, fingerprint);
   return {
     requested_root_path: requestedRoot,
     root_path: rootPath,
-    repository_key: repositoryKey,
+    repository_key: repositoryKey2,
     git_common_dir_hash: commonDirHash,
     worktree_fingerprint: fingerprint,
     checkpoint: captureRepoCheckpoint(rootPath, id)
@@ -29249,13 +30851,13 @@ function captureRepoCheckpoint(rootPath, id) {
   };
 }
 function worktreeId(rootPath, fingerprint) {
-  return `wt_${sha256(`${rootPath}\x00${fingerprint}`).slice(0, 24)}`;
+  return `wt_${sha2562(`${rootPath}\x00${fingerprint}`).slice(0, 24)}`;
 }
 function resolveGitPath(rootPath, value) {
-  return value.startsWith("/") ? value : resolve2(rootPath, value);
+  return value.startsWith("/") ? value : resolve4(rootPath, value);
 }
 function realpathIfPresent(path) {
-  return existsSync2(path) ? realpathSync(path) : resolve2(path);
+  return existsSync4(path) ? realpathSync2(path) : resolve4(path);
 }
 function gitOutput(rootPath, args) {
   const result = runGit(rootPath, args);
@@ -29265,7 +30867,7 @@ function gitOutput(rootPath, args) {
   return value.length > 0 ? value : null;
 }
 function runGit(rootPath, args) {
-  const result = spawnSync("git", ["-C", rootPath, ...args], {
+  const result = spawnSync2("git", ["-C", rootPath, ...args], {
     encoding: "utf8",
     timeout: GIT_TIMEOUT_MS,
     maxBuffer: MAX_GIT_OUTPUT,
@@ -29281,7 +30883,7 @@ function gitDigest(rootPath, args) {
   return result.ok ? sha256Bytes(result.stdout) : null;
 }
 function gitBytes(rootPath, args) {
-  const result = spawnSync("git", ["-C", rootPath, ...args], {
+  const result = spawnSync2("git", ["-C", rootPath, ...args], {
     timeout: GIT_TIMEOUT_MS,
     maxBuffer: MAX_GIT_OUTPUT,
     stdio: ["ignore", "pipe", "ignore"]
@@ -29299,7 +30901,7 @@ function digestUntrackedContent(rootPath, paths) {
     remainingBytes: MAX_UNTRACKED_BYTES,
     deadline: Date.now() + MAX_UNTRACKED_HASH_MS
   };
-  const aggregate = createHash("sha256");
+  const aggregate = createHash3("sha256");
   aggregate.update("agenttool.collab/untracked-state/v1\x00");
   for (const entry of entries) {
     if (Date.now() > budget.deadline)
@@ -29313,7 +30915,7 @@ function digestUntrackedContent(rootPath, paths) {
     ]);
     let stat;
     try {
-      stat = lstatSync2(absolute);
+      stat = lstatSync4(absolute);
       aggregate.update(lengthPrefix(entry.length));
       aggregate.update(entry);
       if (stat.isSymbolicLink()) {
@@ -29326,12 +30928,12 @@ function digestUntrackedContent(rootPath, paths) {
         aggregate.update(lengthPrefix(target.length));
         aggregate.update(target);
       } else if (stat.isFile()) {
-        const digest = digestStableFile(absolute, budget);
-        if (!digest)
+        const digest2 = digestStableFile(absolute, budget);
+        if (!digest2)
           return null;
         aggregate.update("file\x00");
         aggregate.update(lengthPrefix(stat.mode & 73));
-        aggregate.update(digest);
+        aggregate.update(digest2);
       } else {
         return null;
       }
@@ -29344,11 +30946,11 @@ function digestUntrackedContent(rootPath, paths) {
 function digestStableFile(path, budget) {
   let descriptor = null;
   try {
-    descriptor = openSync2(path, "r");
+    descriptor = openSync3(path, "r");
     const before = fstatSync(descriptor);
     if (!before.isFile() || before.size > budget.remainingBytes || Date.now() > budget.deadline)
       return null;
-    const hash2 = createHash("sha256");
+    const hash2 = createHash3("sha256");
     const buffer = Buffer.allocUnsafe(64 * 1024);
     while (true) {
       if (Date.now() > budget.deadline)
@@ -29367,7 +30969,7 @@ function digestStableFile(path, budget) {
     return null;
   } finally {
     if (descriptor !== null)
-      closeSync2(descriptor);
+      closeSync3(descriptor);
   }
 }
 function splitNul(value) {
@@ -29404,11 +31006,11 @@ function lengthPrefix(value) {
   prefix.writeBigUInt64BE(BigInt(value));
   return prefix;
 }
-function sha256(value) {
-  return createHash("sha256").update(value).digest("hex");
+function sha2562(value) {
+  return createHash3("sha256").update(value).digest("hex");
 }
 function sha256Bytes(value) {
-  return createHash("sha256").update(value).digest("hex");
+  return createHash3("sha256").update(value).digest("hex");
 }
 
 // src/store.ts
@@ -29487,19 +31089,19 @@ class CollabStore {
   constructor(path, options = {}) {
     this.now = options.now ?? (() => new Date);
     this.migrationFailpoint = options.migration_failpoint;
-    const databasePath = path === ":memory:" ? path : resolve3(path);
+    const databasePath = path === ":memory:" ? path : resolve5(path);
     if (databasePath !== ":memory:") {
-      const parent = dirname2(databasePath);
-      const parentAlreadyExisted = existsSync3(parent);
-      mkdirSync2(parent, { recursive: true, mode: 448 });
+      const parent = dirname4(databasePath);
+      const parentAlreadyExisted = existsSync5(parent);
+      mkdirSync3(parent, { recursive: true, mode: 448 });
       if (!parentAlreadyExisted)
-        chmodSync2(parent, 448);
-      if (existsSync3(databasePath)) {
+        chmodSync3(parent, 448);
+      if (existsSync5(databasePath)) {
         assertSafeDatabaseFile(databasePath);
       } else {
         try {
-          const descriptor = openSync3(databasePath, "wx", 384);
-          closeSync3(descriptor);
+          const descriptor = openSync4(databasePath, "wx", 384);
+          closeSync4(descriptor);
         } catch (error51) {
           if (error51.code !== "EEXIST")
             throw error51;
@@ -29525,7 +31127,7 @@ class CollabStore {
       throw new CollabError("session_file_path_required", "An explicit credential file path is required for an in-memory database");
     }
     const id = validateId(sessionId2, "session_id");
-    return join(dirname2(this.filesystemPath), "collab-sessions", `${id}.json`);
+    return join3(dirname4(this.filesystemPath), "collab-sessions", `${id}.json`);
   }
   initialize() {
     this.db.exec("PRAGMA foreign_keys = ON");
@@ -30340,13 +31942,13 @@ class CollabStore {
     if (!this.filesystemPath)
       return;
     for (const path of [this.filesystemPath, `${this.filesystemPath}-wal`, `${this.filesystemPath}-shm`]) {
-      if (!existsSync3(path))
+      if (!existsSync5(path))
         continue;
-      const stat = lstatSync3(path);
+      const stat = lstatSync5(path);
       if (!stat.isFile() || stat.isSymbolicLink() || typeof process.getuid === "function" && stat.uid !== process.getuid()) {
         throw new CollabError("database_sidecar_unsafe", "A collaboration database or sidecar path is not a regular file owned by this user", { operation: "tighten_database_file_mode" });
       }
-      chmodSync2(path, 384);
+      chmodSync3(path, 384);
     }
   }
   openWorkspace(input) {
@@ -30373,7 +31975,7 @@ class CollabStore {
         ORDER BY created_at, id
         LIMIT 1
       `).get(identity.repository_key);
-      const id = repositoryWorkspace?.id ?? `ws_${sha2562(identity.repository_key).slice(0, 24)}`;
+      const id = repositoryWorkspace?.id ?? `ws_${sha2563(identity.repository_key).slice(0, 24)}`;
       const existing = this.getWorkspace(id);
       if (existing && existing.repository_key !== identity.repository_key) {
         throw new CollabError("workspace_identity_collision", "Workspace identity collision");
@@ -30382,7 +31984,7 @@ class CollabStore {
         this.registerWorktree(existing.id, identity, now, actor, true);
         return this.requireWorkspace(existing.id);
       }
-      const epochId = `epoch_${randomUUID2()}`;
+      const epochId = `epoch_${randomUUID4()}`;
       const name = cleanText(input.name ?? identity.root_path.split("/").at(-1) ?? id, "name", 200);
       this.db.query(`INSERT OR IGNORE INTO repositories (key, created_at) VALUES (?, ?)`).run(identity.repository_key, now);
       this.db.query(`
@@ -30441,7 +32043,7 @@ class CollabStore {
         return presenceSessionFromRow(existing, this.timestamp());
       }
       const now = this.timestamp();
-      const id = `session_${randomUUID2()}`;
+      const id = `session_${randomUUID4()}`;
       const actorKey = `session:${id}`;
       this.db.query(`
         INSERT INTO sessions (
@@ -30569,16 +32171,16 @@ class CollabStore {
         }
       }
       const now = this.timestamp();
-      const id = `session_${randomUUID2()}`;
-      const token = randomBytes(SESSION_TOKEN_BYTES).toString("base64url");
-      const generation = 1;
+      const id = `session_${randomUUID4()}`;
+      const token = randomBytes2(SESSION_TOKEN_BYTES).toString("base64url");
+      const generation2 = 1;
       this.db.query(`
         INSERT INTO coordination_sessions (
           id, workspace_id, worktree_id, actor, role, parent_session_id, status,
           generation, token_hash, joined_at, last_seen_at, ended_at,
           cursor_epoch_id, cursor_sequence, cursor_hash, cursor_version, reset_generation
         ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, NULL, ?, 0, ?, 0, 0)
-      `).run(id, workspace.id, worktreeRow.id, actor, role, parentSessionId, generation, hashSessionToken(token), now, now, workspace.epoch_id, GENESIS_HASH);
+      `).run(id, workspace.id, worktreeRow.id, actor, role, parentSessionId, generation2, hashSessionToken(token), now, now, workspace.epoch_id, GENESIS_HASH);
       this.appendEvent(workspace.id, "session.joined", id, actor, {
         worktree_id: worktreeRow.id,
         role,
@@ -30715,7 +32317,7 @@ class CollabStore {
         SET status = 'ended', ended_at = ?, last_seen_at = ?, generation = generation + 1,
           token_hash = ?
         WHERE id = ? AND generation = ? AND status = 'active'
-      `).run(now, now, hashSessionToken(randomBytes(SESSION_TOKEN_BYTES).toString("base64url")), row.id, row.generation);
+      `).run(now, now, hashSessionToken(randomBytes2(SESSION_TOKEN_BYTES).toString("base64url")), row.id, row.generation);
       if (changed.changes !== 1) {
         throw new CollabError("session_auth_failed", "Session credentials are invalid");
       }
@@ -30790,7 +32392,7 @@ class CollabStore {
       const target = this.validateEventAnchor(row.workspace_id, input.target);
       const now = this.timestamp();
       const resetGeneration = row.reset_generation + 1;
-      const id = `cursor_reset_${randomUUID2()}`;
+      const id = `cursor_reset_${randomUUID4()}`;
       this.db.query(`
         INSERT INTO session_cursor_resets (
           id, session_id, from_epoch_id, from_sequence, from_hash,
@@ -30882,7 +32484,7 @@ class CollabStore {
     };
     return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.create", normalized, () => {
       this.requireWorkspace(input.workspace_id);
-      const id = normalized.id ?? `task_${randomUUID2()}`;
+      const id = normalized.id ?? `task_${randomUUID4()}`;
       if (normalized.dependencies.includes(id)) {
         throw new CollabError("invalid_dependency", "A task cannot depend on itself", { task_id: id });
       }
@@ -30933,7 +32535,7 @@ class CollabStore {
     }
     const request = { ...normalized, completion_policy: completionPolicy };
     return this.mutateAsSession(input, normalized.idempotency_key, "task.create.v2", request, (session) => {
-      const id = normalized.id ?? `task_${randomUUID2()}`;
+      const id = normalized.id ?? `task_${randomUUID4()}`;
       if (normalized.dependencies.includes(id)) {
         throw new CollabError("invalid_dependency", "A task cannot depend on itself", {
           task_id: id
@@ -31022,9 +32624,9 @@ class CollabStore {
       const checkpoint = preparedCheckpoint.checkpoint;
       this.requireExpectedBase(row, checkpoint);
       const now = this.timestamp();
-      const leaseId2 = `lease_${randomUUID2()}`;
+      const leaseId2 = `lease_${randomUUID4()}`;
       const expiresAt = addSeconds(now, ttl);
-      const version2 = row.version + 1;
+      const version3 = row.version + 1;
       this.db.query(`
         UPDATE tasks
         SET coordination_mode = 'session_v2',
@@ -31037,13 +32639,13 @@ class CollabStore {
           accepted_by = NULL, accepted_by_session_id = NULL, accepted_at = NULL,
           completed_at = NULL, version = ?, updated_at = ?
         WHERE workspace_id = ? AND id = ?
-      `).run(session.actor, session.id, worktree.id, leaseId2, expiresAt, canonicalJson(checkpoint), version2, now, row.workspace_id, row.id);
+      `).run(session.actor, session.id, worktree.id, leaseId2, expiresAt, canonicalJson(checkpoint), version3, now, row.workspace_id, row.id);
       this.appendEvent(row.workspace_id, "task.claimed", row.id, session.actor, {
         lease_id: leaseId2,
         lease_expires_at: expiresAt,
         worktree_id: worktree.id,
         base_checkpoint: checkpoint,
-        version: version2,
+        version: version3,
         checkpoint_boundary: "server_observed_local_git_state_is_evidence_not_atomic_attribution_or_a_filesystem_lock"
       }, session.id);
       return this.requireTask(row.workspace_id, row.id);
@@ -31104,18 +32706,18 @@ class CollabStore {
         version: expiryVersion
       });
       if (action !== "takeover") {
-        const version3 = expiryVersion + 1;
+        const version4 = expiryVersion + 1;
         this.db.query(`
           UPDATE tasks
           SET status = ?, blocker = ?, version = ?, updated_at = ?
           WHERE workspace_id = ? AND id = ?
-        `).run(action === "block" ? "blocked" : "open", action === "block" ? blocker : null, version3, now, row.workspace_id, row.id);
+        `).run(action === "block" ? "blocked" : "open", action === "block" ? blocker : null, version4, now, row.workspace_id, row.id);
         const event2 = this.appendEvent(row.workspace_id, "task.recovered", row.id, session.actor, {
           prior_lease: prior,
           action,
           recovery_note: recoveryNote,
           recovery_checkpoint: null,
-          version: version3,
+          version: version4,
           note: "Recovery acknowledges an expired coordination lease; it does not accept or attribute prior work."
         }, session.id);
         this.db.query(`
@@ -31124,7 +32726,7 @@ class CollabStore {
             recovered_by_session_id, action, note, prior_checkpoint_json,
             new_lease_id, recovered_at, event_sequence
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
-        `).run(`recovery_${randomUUID2()}`, row.workspace_id, row.id, prior.lease_id, prior.session_id, session.id, action, recoveryNote, prior.checkpoint ? canonicalJson(prior.checkpoint) : null, now, event2.sequence);
+        `).run(`recovery_${randomUUID4()}`, row.workspace_id, row.id, prior.lease_id, prior.session_id, session.id, action, recoveryNote, prior.checkpoint ? canonicalJson(prior.checkpoint) : null, now, event2.sequence);
         return this.requireTask(row.workspace_id, row.id);
       }
       const worktree = this.requirePreparedWorktree(session, preparedCheckpoint);
@@ -31133,23 +32735,23 @@ class CollabStore {
       this.requireDependenciesComplete(opened);
       this.requirePathsAvailable(opened);
       this.requireExpectedBase(opened, checkpoint);
-      const leaseId2 = `lease_${randomUUID2()}`;
+      const leaseId2 = `lease_${randomUUID4()}`;
       const leaseExpiresAt = addSeconds(now, ttl);
-      const version2 = expiryVersion + 1;
+      const version3 = expiryVersion + 1;
       this.db.query(`
         UPDATE tasks
         SET status = 'claimed', assignee = ?, assignee_session_id = ?,
           claim_worktree_id = ?, lease_id = ?, lease_expires_at = ?,
           blocker = NULL, base_checkpoint_json = ?, version = ?, updated_at = ?
         WHERE workspace_id = ? AND id = ?
-      `).run(session.actor, session.id, worktree.id, leaseId2, leaseExpiresAt, canonicalJson(checkpoint), version2, now, row.workspace_id, row.id);
+      `).run(session.actor, session.id, worktree.id, leaseId2, leaseExpiresAt, canonicalJson(checkpoint), version3, now, row.workspace_id, row.id);
       const event = this.appendEvent(row.workspace_id, "task.recovered", row.id, session.actor, {
         prior_lease: prior,
         recovery_note: recoveryNote,
         recovery_checkpoint: checkpoint,
         lease_id: leaseId2,
         lease_expires_at: leaseExpiresAt,
-        version: version2,
+        version: version3,
         note: "Recovery acknowledges an expired coordination lease; it does not accept or attribute prior work."
       }, session.id);
       this.db.query(`
@@ -31158,7 +32760,7 @@ class CollabStore {
           recovered_by_session_id, action, note, prior_checkpoint_json,
           new_lease_id, recovered_at, event_sequence
         ) VALUES (?, ?, ?, ?, ?, ?, 'takeover', ?, ?, ?, ?, ?)
-      `).run(`recovery_${randomUUID2()}`, row.workspace_id, row.id, prior.lease_id, prior.session_id, session.id, recoveryNote, prior.checkpoint ? canonicalJson(prior.checkpoint) : null, leaseId2, now, event.sequence);
+      `).run(`recovery_${randomUUID4()}`, row.workspace_id, row.id, prior.lease_id, prior.session_id, session.id, recoveryNote, prior.checkpoint ? canonicalJson(prior.checkpoint) : null, leaseId2, now, event.sequence);
       return this.requireTask(row.workspace_id, row.id);
     });
   }
@@ -31172,15 +32774,15 @@ class CollabStore {
       const now = this.timestamp();
       const candidate = addSeconds(now, ttl);
       const expiresAt = row.lease_expires_at && row.lease_expires_at > candidate ? row.lease_expires_at : candidate;
-      const version2 = row.version + 1;
+      const version3 = row.version + 1;
       this.db.query(`
           UPDATE tasks SET lease_expires_at = ?, version = ?, updated_at = ?
           WHERE workspace_id = ? AND id = ?
-        `).run(expiresAt, version2, now, row.workspace_id, row.id);
+        `).run(expiresAt, version3, now, row.workspace_id, row.id);
       this.appendEvent(row.workspace_id, "task.lease_renewed", row.id, session.actor, {
         lease_id: normalized.lease_id,
         lease_expires_at: expiresAt,
-        version: version2
+        version: version3
       }, session.id);
       return this.requireTask(row.workspace_id, row.id);
     });
@@ -31193,14 +32795,14 @@ class CollabStore {
       this.requireVersion(row, normalized.expected_version);
       this.requireActiveSessionLease(row, session, normalized.lease_id);
       const now = this.timestamp();
-      const version2 = row.version + 1;
+      const version3 = row.version + 1;
       this.db.query(`
           UPDATE tasks SET latest_progress = ?, version = ?, updated_at = ?
           WHERE workspace_id = ? AND id = ?
-        `).run(message, version2, now, row.workspace_id, row.id);
+        `).run(message, version3, now, row.workspace_id, row.id);
       this.appendEvent(row.workspace_id, "task.progressed", row.id, session.actor, {
         message,
-        version: version2
+        version: version3
       }, session.id);
       return this.requireTask(row.workspace_id, row.id);
     });
@@ -31223,18 +32825,18 @@ class CollabStore {
       this.requireVersion(row, normalized.expected_version);
       this.requireActiveSessionLease(row, session, normalized.lease_id);
       const now = this.timestamp();
-      const version2 = row.version + 1;
+      const version3 = row.version + 1;
       this.db.query(`
           UPDATE tasks
           SET status = 'blocked', assignee = NULL, assignee_session_id = NULL,
             claim_worktree_id = NULL, lease_id = NULL, lease_expires_at = NULL,
             blocker = ?, version = ?, updated_at = ?
           WHERE workspace_id = ? AND id = ?
-        `).run(blocker, version2, now, row.workspace_id, row.id);
+        `).run(blocker, version3, now, row.workspace_id, row.id);
       this.expirePendingHandoffs(row.workspace_id, row.id, now, session.actor, "task_blocked");
       this.appendEvent(row.workspace_id, "task.blocked", row.id, session.actor, {
         blocker,
-        version: version2
+        version: version3
       }, session.id);
       return this.requireTask(row.workspace_id, row.id);
     });
@@ -31250,16 +32852,16 @@ class CollabStore {
         throw new CollabError("task_not_blocked", "Only blocked tasks can be unblocked");
       }
       const now = this.timestamp();
-      const version2 = row.version + 1;
+      const version3 = row.version + 1;
       this.db.query(`
           UPDATE tasks
           SET status = 'open', blocker = NULL, review_status = 'not_required',
             version = ?, updated_at = ?
           WHERE workspace_id = ? AND id = ?
-        `).run(version2, now, row.workspace_id, row.id);
+        `).run(version3, now, row.workspace_id, row.id);
       this.appendEvent(row.workspace_id, "task.unblocked", row.id, session.actor, {
         note,
-        version: version2
+        version: version3
       }, session.id);
       return this.requireTask(row.workspace_id, row.id);
     });
@@ -31278,22 +32880,22 @@ class CollabStore {
       this.requireVersion(row, normalized.expected_version);
       this.requireActiveSessionLease(row, session, normalized.lease_id);
       const now = this.timestamp();
-      const id = `artifact_${randomUUID2()}`;
+      const id = `artifact_${randomUUID4()}`;
       this.db.query(`
           INSERT INTO artifacts (
             id, workspace_id, task_id, kind, uri, sha256, media_type, label,
             attached_by, attached_by_session_id, attached_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(id, row.workspace_id, row.id, artifactInput.kind, artifactInput.uri, artifactInput.sha256, artifactInput.media_type, artifactInput.label, session.actor, session.id, now);
-      const version2 = row.version + 1;
+      const version3 = row.version + 1;
       this.db.query(`
           UPDATE tasks SET version = ?, updated_at = ?
           WHERE workspace_id = ? AND id = ?
-        `).run(version2, now, row.workspace_id, row.id);
+        `).run(version3, now, row.workspace_id, row.id);
       const artifact = this.requireArtifact(id);
       this.appendEvent(row.workspace_id, "artifact.attached", row.id, session.actor, {
         artifact,
-        version: version2
+        version: version3
       }, session.id);
       return { task: this.requireTask(row.workspace_id, row.id), artifact };
     });
@@ -31341,7 +32943,7 @@ class CollabStore {
         authority_basis: null
       });
       const now = this.timestamp();
-      const version2 = row.version + 1;
+      const version3 = row.version + 1;
       const reviewGeneration = row.review_generation + 1;
       const reviewStatus = row.completion_policy === "accepted" ? "pending" : "not_required";
       this.db.query(`
@@ -31354,7 +32956,7 @@ class CollabStore {
             accepted_by = NULL, accepted_by_session_id = NULL, accepted_at = NULL,
             version = ?, updated_at = ?, completed_at = ?
           WHERE workspace_id = ? AND id = ?
-        `).run(reviewStatus, reviewGeneration, summary, canonicalJson(checkpoint), report.id, session.actor, session.id, now, version2, now, now, row.workspace_id, row.id);
+        `).run(reviewStatus, reviewGeneration, summary, canonicalJson(checkpoint), report.id, session.actor, session.id, now, version3, now, now, row.workspace_id, row.id);
       this.expirePendingHandoffs(row.workspace_id, row.id, now, session.actor, "task_reported_complete");
       this.appendEvent(row.workspace_id, reviewStatus === "pending" ? "task.reported_complete" : "task.completed", row.id, session.actor, {
         completion_report_id: report.id,
@@ -31363,7 +32965,7 @@ class CollabStore {
         review_generation: reviewGeneration,
         result_checkpoint: checkpoint,
         summary,
-        version: version2,
+        version: version3,
         note: reviewStatus === "pending" ? "Reported completion does not satisfy dependencies until a distinct session accepts it." : "Reported completion satisfies this task's explicit reported-only policy; it is not external acceptance."
       }, session.id);
       return this.requireTask(row.workspace_id, row.id);
@@ -31411,7 +33013,7 @@ class CollabStore {
       this.requireDependenciesComplete(row);
       this.requirePathsAvailable(row);
       const now = this.timestamp();
-      const leaseId2 = `lease_${randomUUID2()}`;
+      const leaseId2 = `lease_${randomUUID4()}`;
       const expiresAt = addSeconds(now, normalized.ttl_seconds);
       const nextVersion = row.version + 1;
       this.db.query(`
@@ -31438,15 +33040,15 @@ class CollabStore {
       const now = this.timestamp();
       const candidate = addSeconds(now, ttl);
       const expiresAt = row.lease_expires_at && row.lease_expires_at > candidate ? row.lease_expires_at : candidate;
-      const version2 = row.version + 1;
+      const version3 = row.version + 1;
       this.db.query(`
         UPDATE tasks SET lease_expires_at = ?, version = ?, updated_at = ?
         WHERE workspace_id = ? AND id = ?
-      `).run(expiresAt, version2, now, input.workspace_id, normalized.task_id);
+      `).run(expiresAt, version3, now, input.workspace_id, normalized.task_id);
       this.appendEvent(input.workspace_id, "task.lease_renewed", normalized.task_id, normalized.actor, {
         lease_id: normalized.lease_id,
         lease_expires_at: expiresAt,
-        version: version2
+        version: version3
       });
       return this.requireTask(input.workspace_id, normalized.task_id);
     });
@@ -31458,14 +33060,14 @@ class CollabStore {
       this.requireVersion(row, normalized.expected_version);
       this.requireActiveLease(row, normalized.actor, normalized.lease_id);
       const now = this.timestamp();
-      const version2 = row.version + 1;
+      const version3 = row.version + 1;
       this.db.query(`
         UPDATE tasks SET latest_progress = ?, version = ?, updated_at = ?
         WHERE workspace_id = ? AND id = ?
-      `).run(normalized.message, version2, now, input.workspace_id, normalized.task_id);
+      `).run(normalized.message, version3, now, input.workspace_id, normalized.task_id);
       this.appendEvent(input.workspace_id, "task.progressed", normalized.task_id, normalized.actor, {
         message: normalized.message,
-        version: version2
+        version: version3
       });
       return this.requireTask(input.workspace_id, normalized.task_id);
     });
@@ -31486,16 +33088,16 @@ class CollabStore {
       this.requireVersion(row, normalized.expected_version);
       this.requireActiveLease(row, normalized.actor, normalized.lease_id);
       const now = this.timestamp();
-      const version2 = row.version + 1;
+      const version3 = row.version + 1;
       this.db.query(`
         UPDATE tasks SET status = 'blocked', assignee = NULL, lease_id = NULL,
           lease_expires_at = NULL, blocker = ?, version = ?, updated_at = ?
         WHERE workspace_id = ? AND id = ?
-      `).run(normalized.blocker, version2, now, input.workspace_id, normalized.task_id);
+      `).run(normalized.blocker, version3, now, input.workspace_id, normalized.task_id);
       this.expirePendingHandoffs(input.workspace_id, normalized.task_id, now, normalized.actor, "task_blocked");
       this.appendEvent(input.workspace_id, "task.blocked", normalized.task_id, normalized.actor, {
         blocker: normalized.blocker,
-        version: version2
+        version: version3
       });
       return this.requireTask(input.workspace_id, normalized.task_id);
     });
@@ -31513,14 +33115,14 @@ class CollabStore {
       if (row.status !== "blocked")
         throw new CollabError("task_not_blocked", "Only blocked tasks can be unblocked");
       const now = this.timestamp();
-      const version2 = row.version + 1;
+      const version3 = row.version + 1;
       this.db.query(`
         UPDATE tasks SET status = 'open', blocker = NULL, version = ?, updated_at = ?
         WHERE workspace_id = ? AND id = ?
-      `).run(version2, now, input.workspace_id, normalized.task_id);
+      `).run(version3, now, input.workspace_id, normalized.task_id);
       this.appendEvent(input.workspace_id, "task.unblocked", normalized.task_id, normalized.actor, {
         note: normalized.note,
-        version: version2
+        version: version3
       });
       return this.requireTask(input.workspace_id, normalized.task_id);
     });
@@ -31532,19 +33134,19 @@ class CollabStore {
       this.requireVersion(row, normalized.expected_version);
       this.requireActiveLease(row, normalized.actor, normalized.lease_id);
       const now = this.timestamp();
-      const version2 = row.version + 1;
+      const version3 = row.version + 1;
       this.db.query(`
         UPDATE tasks SET status = 'completed', assignee = NULL, lease_id = NULL,
           lease_expires_at = NULL, blocker = NULL, latest_progress = ?, version = ?,
           updated_at = ?, completed_at = ?
         WHERE workspace_id = ? AND id = ?
-      `).run(normalized.summary, version2, now, now, input.workspace_id, normalized.task_id);
+      `).run(normalized.summary, version3, now, now, input.workspace_id, normalized.task_id);
       this.expirePendingHandoffs(input.workspace_id, normalized.task_id, now, normalized.actor, "task_completed");
       this.appendEvent(input.workspace_id, "task.completed", normalized.task_id, normalized.actor, {
         completion_basis: "actor_reported",
         note: "Completion records the reporting actor's outcome; it is not coordinator review or acceptance.",
         summary: normalized.summary,
-        version: version2
+        version: version3
       });
       return this.requireTask(input.workspace_id, normalized.task_id);
     });
@@ -31563,18 +33165,18 @@ class CollabStore {
       this.requireVersion(row, normalized.expected_version);
       this.requireActiveLease(row, normalized.actor, normalized.lease_id);
       const now = this.timestamp();
-      const id = `artifact_${randomUUID2()}`;
+      const id = `artifact_${randomUUID4()}`;
       this.db.query(`
         INSERT INTO artifacts
           (id, workspace_id, task_id, kind, uri, sha256, media_type, label, attached_by, attached_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(id, input.workspace_id, normalized.task_id, normalized.kind, normalized.uri, normalized.sha256, normalized.media_type, normalized.label, normalized.actor, now);
-      const version2 = row.version + 1;
-      this.db.query(`UPDATE tasks SET version = ?, updated_at = ? WHERE workspace_id = ? AND id = ?`).run(version2, now, input.workspace_id, normalized.task_id);
+      const version3 = row.version + 1;
+      this.db.query(`UPDATE tasks SET version = ?, updated_at = ? WHERE workspace_id = ? AND id = ?`).run(version3, now, input.workspace_id, normalized.task_id);
       const artifact = this.requireArtifact(id);
       this.appendEvent(input.workspace_id, "artifact.attached", normalized.task_id, normalized.actor, {
         artifact,
-        version: version2
+        version: version3
       });
       return { task: this.requireTask(input.workspace_id, normalized.task_id), artifact };
     });
@@ -31589,7 +33191,7 @@ class CollabStore {
     };
     return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "decision.record", normalized, () => {
       this.requireWorkspace(input.workspace_id);
-      const id = `decision_${randomUUID2()}`;
+      const id = `decision_${randomUUID4()}`;
       const now = this.timestamp();
       this.db.query(`
         INSERT INTO decisions (id, workspace_id, topic, decision, rationale, recorded_by, recorded_at)
@@ -31719,8 +33321,8 @@ class CollabStore {
         authority_basis: "distinct active collaboration session"
       });
       const now = this.timestamp();
-      const reviewId = `review_${randomUUID2()}`;
-      const version2 = row.version + 1;
+      const reviewId = `review_${randomUUID4()}`;
+      const version3 = row.version + 1;
       const outcome = input.outcome === "accept" ? "accepted" : "changes_requested";
       if (input.outcome === "accept") {
         this.db.query(`
@@ -31728,7 +33330,7 @@ class CollabStore {
           SET review_status = 'accepted', accepted_by = ?, accepted_by_session_id = ?,
             accepted_at = ?, version = ?, updated_at = ?
           WHERE workspace_id = ? AND id = ?
-        `).run(session.actor, session.id, now, version2, now, row.workspace_id, row.id);
+        `).run(session.actor, session.id, now, version3, now, row.workspace_id, row.id);
       } else {
         this.db.query(`
           UPDATE tasks
@@ -31736,7 +33338,7 @@ class CollabStore {
             accepted_by = NULL, accepted_by_session_id = NULL, accepted_at = NULL,
             version = ?, updated_at = ?, completed_at = NULL
           WHERE workspace_id = ? AND id = ?
-        `).run(version2, now, row.workspace_id, row.id);
+        `).run(version3, now, row.workspace_id, row.id);
       }
       const event = this.appendEvent(row.workspace_id, input.outcome === "accept" ? "task.accepted" : "task.changes_requested", row.id, session.actor, {
         review_id: reviewId,
@@ -31745,7 +33347,7 @@ class CollabStore {
         review_generation: row.review_generation,
         outcome,
         summary,
-        version: version2,
+        version: version3,
         authority_boundary: "acceptance_is_local_coordination_review_not_merge_deploy_truth_or_external_authority"
       }, session.id);
       this.db.query(`
@@ -31782,19 +33384,19 @@ class CollabStore {
       if (pending)
         throw new CollabError("handoff_pending", "Task already has a pending handoff", { handoff_id: pending.id });
       const now = this.timestamp();
-      const id = `handoff_${randomUUID2()}`;
+      const id = `handoff_${randomUUID4()}`;
       const expiresAt = [addSeconds(now, normalized.ttl_seconds), row.lease_expires_at].sort()[0];
       this.db.query(`
         INSERT INTO handoffs
           (id, workspace_id, task_id, from_actor, to_actor, summary, status, offered_at, expires_at, resolved_at)
         VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, NULL)
       `).run(id, input.workspace_id, normalized.task_id, normalized.actor, normalized.to_actor, normalized.summary, now, expiresAt);
-      const version2 = row.version + 1;
-      this.db.query(`UPDATE tasks SET version = ?, updated_at = ? WHERE workspace_id = ? AND id = ?`).run(version2, now, input.workspace_id, normalized.task_id);
+      const version3 = row.version + 1;
+      this.db.query(`UPDATE tasks SET version = ?, updated_at = ? WHERE workspace_id = ? AND id = ?`).run(version3, now, input.workspace_id, normalized.task_id);
       const offer = this.requireHandoff(id);
       this.appendEvent(input.workspace_id, "handoff.offered", id, normalized.actor, {
         offer,
-        task_version: version2,
+        task_version: version3,
         note: "An offer is an invitation; the coordination lease remains with the current holder until acceptance."
       });
       return { handoff: offer, task: this.requireTask(input.workspace_id, normalized.task_id) };
@@ -31829,29 +33431,29 @@ class CollabStore {
       }
       this.requireActiveLease(row, offer.from_actor, row.lease_id ?? "");
       const now = this.timestamp();
-      const version2 = row.version + 1;
+      const version3 = row.version + 1;
       if (normalized.response === "decline") {
         this.db.query(`UPDATE handoffs SET status = 'declined', resolved_at = ? WHERE id = ?`).run(now, offer.id);
-        this.db.query(`UPDATE tasks SET version = ?, updated_at = ? WHERE workspace_id = ? AND id = ?`).run(version2, now, input.workspace_id, row.id);
+        this.db.query(`UPDATE tasks SET version = ?, updated_at = ? WHERE workspace_id = ? AND id = ?`).run(version3, now, input.workspace_id, row.id);
         this.appendEvent(input.workspace_id, "handoff.declined", offer.id, normalized.actor, {
           task_id: row.id,
-          task_version: version2
+          task_version: version3
         });
       } else {
-        const leaseId2 = `lease_${randomUUID2()}`;
+        const leaseId2 = `lease_${randomUUID4()}`;
         const leaseExpiresAt = addSeconds(now, normalized.ttl_seconds);
         this.db.query(`UPDATE handoffs SET status = 'accepted', resolved_at = ? WHERE id = ?`).run(now, offer.id);
         this.db.query(`
           UPDATE tasks SET assignee = ?, lease_id = ?, lease_expires_at = ?, version = ?, updated_at = ?
           WHERE workspace_id = ? AND id = ?
-        `).run(normalized.actor, leaseId2, leaseExpiresAt, version2, now, input.workspace_id, row.id);
+        `).run(normalized.actor, leaseId2, leaseExpiresAt, version3, now, input.workspace_id, row.id);
         this.appendEvent(input.workspace_id, "handoff.accepted", offer.id, normalized.actor, {
           task_id: row.id,
           from_actor: offer.from_actor,
           to_actor: normalized.actor,
           lease_id: leaseId2,
           lease_expires_at: leaseExpiresAt,
-          task_version: version2
+          task_version: version3
         });
       }
       return { handoff: this.requireHandoff(offer.id), task: this.requireTask(input.workspace_id, row.id) };
@@ -31883,7 +33485,7 @@ class CollabStore {
           handoff_id: pending.id
         });
       }
-      const id = `handoff_${randomUUID2()}`;
+      const id = `handoff_${randomUUID4()}`;
       const expiresAt = [addSeconds(now, ttl), row.lease_expires_at].sort()[0];
       this.db.query(`
           INSERT INTO handoffs (
@@ -31891,15 +33493,15 @@ class CollabStore {
             to_actor, to_session_id, summary, status, offered_at, expires_at, resolved_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, NULL)
         `).run(id, row.workspace_id, row.id, session.actor, session.id, target.actor, target.id, summary, now, expiresAt);
-      const version2 = row.version + 1;
+      const version3 = row.version + 1;
       this.db.query(`
           UPDATE tasks SET version = ?, updated_at = ?
           WHERE workspace_id = ? AND id = ?
-        `).run(version2, now, row.workspace_id, row.id);
+        `).run(version3, now, row.workspace_id, row.id);
       const handoff = this.requireHandoff(id);
       this.appendEvent(row.workspace_id, "handoff.offered", id, session.actor, {
         handoff,
-        task_version: version2,
+        task_version: version3,
         note: "The current session keeps its coordination lease until the target explicitly accepts."
       }, session.id);
       return { handoff, task: this.requireTask(row.workspace_id, row.id) };
@@ -31939,7 +33541,7 @@ class CollabStore {
         throw new CollabError("handoff_source_changed", "The source lease changed");
       }
       const now = this.timestamp();
-      const version2 = row.version + 1;
+      const version3 = row.version + 1;
       if (input.response === "decline") {
         this.db.query(`
             UPDATE handoffs SET status = 'declined', resolved_at = ? WHERE id = ?
@@ -31947,16 +33549,16 @@ class CollabStore {
         this.db.query(`
             UPDATE tasks SET version = ?, updated_at = ?
             WHERE workspace_id = ? AND id = ?
-          `).run(version2, now, row.workspace_id, row.id);
+          `).run(version3, now, row.workspace_id, row.id);
         this.appendEvent(row.workspace_id, "handoff.declined", offer.id, session.actor, {
           task_id: row.id,
-          task_version: version2
+          task_version: version3
         }, session.id);
       } else {
         const worktree = this.requirePreparedWorktree(session, preparedCheckpoint);
         const checkpoint = preparedCheckpoint.checkpoint;
         this.requireExpectedBase(row, checkpoint);
-        const leaseId2 = `lease_${randomUUID2()}`;
+        const leaseId2 = `lease_${randomUUID4()}`;
         const leaseExpiresAt = addSeconds(now, ttl);
         this.db.query(`
             UPDATE handoffs SET status = 'accepted', resolved_at = ? WHERE id = ?
@@ -31967,7 +33569,7 @@ class CollabStore {
               lease_id = ?, lease_expires_at = ?, base_checkpoint_json = ?,
               version = ?, updated_at = ?
             WHERE workspace_id = ? AND id = ?
-          `).run(session.actor, session.id, worktree.id, leaseId2, leaseExpiresAt, canonicalJson(checkpoint), version2, now, row.workspace_id, row.id);
+          `).run(session.actor, session.id, worktree.id, leaseId2, leaseExpiresAt, canonicalJson(checkpoint), version3, now, row.workspace_id, row.id);
         this.appendEvent(row.workspace_id, "handoff.accepted", offer.id, session.actor, {
           task_id: row.id,
           from_session_id: offer.from_session_id,
@@ -31975,7 +33577,7 @@ class CollabStore {
           lease_id: leaseId2,
           lease_expires_at: leaseExpiresAt,
           base_checkpoint: checkpoint,
-          task_version: version2
+          task_version: version3
         }, session.id);
       }
       return {
@@ -32177,14 +33779,14 @@ class CollabStore {
     }
     return workspace.event_head_sequence === rows.length && workspace.event_head_hash === previous;
   }
-  mutate(workspaceId2, actor, idempotencyKey, operation, request, apply) {
+  mutate(workspaceId2, actor, idempotencyKey2, operation, request, apply) {
     this.requireWorkspace(workspaceId2);
-    const requestHash = sha2562(canonicalJson({ operation, request }));
+    const requestHash = sha2563(canonicalJson({ operation, request }));
     const transaction = this.db.transaction(() => {
       const existing = this.db.query(`
         SELECT operation, request_hash, response_json FROM mutations
         WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
-      `).get(workspaceId2, actor, idempotencyKey);
+      `).get(workspaceId2, actor, idempotencyKey2);
       if (existing) {
         if (existing.operation !== operation || existing.request_hash !== requestHash) {
           throw new CollabError("idempotency_conflict", "Idempotency key was already used for a different mutation", {
@@ -32198,7 +33800,7 @@ class CollabStore {
         INSERT INTO mutations
           (workspace_id, actor, idempotency_key, operation, request_hash, response_json, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(workspaceId2, actor, idempotencyKey, operation, requestHash, JSON.stringify(response2), this.timestamp());
+      `).run(workspaceId2, actor, idempotencyKey2, operation, requestHash, JSON.stringify(response2), this.timestamp());
       return response2;
     });
     const response = transaction.immediate();
@@ -32207,12 +33809,12 @@ class CollabStore {
   }
   readSessionMutationReceipt(credential, idempotencyKeyInput, operation, request) {
     const session = this.authenticateSession(credential);
-    const idempotencyKey = validateIdempotencyKey(idempotencyKeyInput);
-    const requestHash = sha2562(canonicalJson({ operation, request }));
+    const idempotencyKey2 = validateIdempotencyKey(idempotencyKeyInput);
+    const requestHash = sha2563(canonicalJson({ operation, request }));
     const existing = this.db.query(`
       SELECT operation, request_hash, response_json FROM mutations
       WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
-    `).get(session.workspace_id, `session:${session.id}`, idempotencyKey);
+    `).get(session.workspace_id, `session:${session.id}`, idempotencyKey2);
     if (!existing)
       return { found: false };
     if (existing.operation !== operation || existing.request_hash !== requestHash) {
@@ -32224,15 +33826,15 @@ class CollabStore {
     };
   }
   mutateAsSession(credential, idempotencyKeyInput, operation, request, apply, options = {}) {
-    const idempotencyKey = validateIdempotencyKey(idempotencyKeyInput);
+    const idempotencyKey2 = validateIdempotencyKey(idempotencyKeyInput);
     const transaction = this.db.transaction(() => {
       const session = this.authenticateSession(credential, options);
       const mutationActor = `session:${session.id}`;
-      const requestHash = sha2562(canonicalJson({ operation, request }));
+      const requestHash = sha2563(canonicalJson({ operation, request }));
       const existing = this.db.query(`
         SELECT operation, request_hash, response_json FROM mutations
         WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
-      `).get(session.workspace_id, mutationActor, idempotencyKey);
+      `).get(session.workspace_id, mutationActor, idempotencyKey2);
       if (existing) {
         if (existing.operation !== operation || existing.request_hash !== requestHash) {
           throw new CollabError("idempotency_conflict", "Idempotency key was already used for a different session mutation", { operation: existing.operation });
@@ -32240,7 +33842,7 @@ class CollabStore {
         this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), session.id);
         return JSON.parse(existing.response_json);
       }
-      const guardNonce = `guard_${randomUUID2()}`;
+      const guardNonce = `guard_${randomUUID4()}`;
       this.db.query(`INSERT INTO v2_write_guard (nonce, enabled) VALUES (?, 1)`).run(guardNonce);
       try {
         const response2 = apply(session);
@@ -32249,7 +33851,7 @@ class CollabStore {
             workspace_id, actor, idempotency_key, operation,
             request_hash, response_json, created_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(session.workspace_id, mutationActor, idempotencyKey, operation, requestHash, JSON.stringify(response2), this.timestamp());
+        `).run(session.workspace_id, mutationActor, idempotencyKey2, operation, requestHash, JSON.stringify(response2), this.timestamp());
         this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), session.id);
         return response2;
       } finally {
@@ -32521,18 +34123,18 @@ class CollabStore {
   }
   clearSessionClaim(row, session, type, payload) {
     const now = this.timestamp();
-    const version2 = row.version + 1;
+    const version3 = row.version + 1;
     this.db.query(`
       UPDATE tasks
       SET status = 'open', assignee = NULL, assignee_session_id = NULL,
         claim_worktree_id = NULL, lease_id = NULL, lease_expires_at = NULL,
         version = ?, updated_at = ?
       WHERE workspace_id = ? AND id = ?
-    `).run(version2, now, row.workspace_id, row.id);
+    `).run(version3, now, row.workspace_id, row.id);
     this.expirePendingHandoffs(row.workspace_id, row.id, now, session.actor, "task_released");
     this.appendEvent(row.workspace_id, type, row.id, session.actor, {
       ...payload,
-      version: version2
+      version: version3
     }, session.id);
     return this.requireTask(row.workspace_id, row.id);
   }
@@ -32586,7 +34188,7 @@ class CollabStore {
     }
   }
   appendReportInternal(session, input) {
-    const id = `report_${randomUUID2()}`;
+    const id = `report_${randomUUID4()}`;
     const now = this.timestamp();
     const event = this.appendEvent(session.workspace_id, "report.posted", id, session.actor, {
       task_id: input.task_id,
@@ -32714,7 +34316,7 @@ class CollabStore {
       workspace_id: workspaceId2,
       epoch_id: workspace.epoch_id,
       sequence: workspace.event_head_sequence + 1,
-      id: `event_${randomUUID2()}`,
+      id: `event_${randomUUID4()}`,
       type,
       entity_id: entityId,
       actor,
@@ -32740,26 +34342,26 @@ class CollabStore {
     if (!this.isExpired(row))
       return row;
     const now = this.timestamp();
-    const version2 = row.version + 1;
+    const version3 = row.version + 1;
     const prior = { assignee: row.assignee, lease_id: row.lease_id, lease_expires_at: row.lease_expires_at };
     this.db.query(`
       UPDATE tasks SET status = 'open', assignee = NULL, lease_id = NULL, lease_expires_at = NULL,
         version = ?, updated_at = ? WHERE workspace_id = ? AND id = ?
-    `).run(version2, now, row.workspace_id, row.id);
+    `).run(version3, now, row.workspace_id, row.id);
     this.expirePendingHandoffs(row.workspace_id, row.id, now, actor, "source_lease_expired");
-    this.appendEvent(row.workspace_id, "task.claim_expired", row.id, actor, { ...prior, version: version2 });
+    this.appendEvent(row.workspace_id, "task.claim_expired", row.id, actor, { ...prior, version: version3 });
     return this.requireTaskRow(row.workspace_id, row.id);
   }
   clearClaim(row, actor, type, payload) {
     const now = this.timestamp();
-    const version2 = row.version + 1;
+    const version3 = row.version + 1;
     this.db.query(`
       UPDATE tasks SET status = 'open', assignee = NULL, lease_id = NULL,
         lease_expires_at = NULL, version = ?, updated_at = ?
       WHERE workspace_id = ? AND id = ?
-    `).run(version2, now, row.workspace_id, row.id);
+    `).run(version3, now, row.workspace_id, row.id);
     this.expirePendingHandoffs(row.workspace_id, row.id, now, actor, "task_released");
-    this.appendEvent(row.workspace_id, type, row.id, actor, { ...payload, version: version2 });
+    this.appendEvent(row.workspace_id, type, row.id, actor, { ...payload, version: version3 });
     return this.requireTask(row.workspace_id, row.id);
   }
   expirePendingHandoffs(workspaceId2, taskId2, now, actor, reason) {
@@ -33066,10 +34668,10 @@ function validateTtl(value) {
   return ttl;
 }
 function validateSha256(value) {
-  const digest = value.toLowerCase();
-  if (!/^[a-f0-9]{64}$/.test(digest))
+  const digest2 = value.toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(digest2))
     throw new CollabError("invalid_sha256", "sha256 must be 64 hexadecimal characters");
-  return digest;
+  return digest2;
 }
 function validateGitObjectId(value) {
   const oid = value.toLowerCase();
@@ -33127,7 +34729,7 @@ function normalizePathScopes(scopes) {
   }
   let totalLength = 0;
   const normalized = scopes.map((scope) => {
-    if (typeof scope !== "string" || !scope || scope.length > MAX_PATH_SCOPE_LENGTH || scope.includes("\x00") || scope.includes("\\") || isAbsolute(scope)) {
+    if (typeof scope !== "string" || !scope || scope.length > MAX_PATH_SCOPE_LENGTH || scope.includes("\x00") || scope.includes("\\") || isAbsolute3(scope)) {
       throw new CollabError("invalid_path_scope", "Path scopes must be non-empty repository-relative POSIX paths", { scope });
     }
     totalLength += scope.length;
@@ -33195,10 +34797,10 @@ function eventFromRow(row) {
 function eventHash(event) {
   if (event.protocol === LEGACY_COLLAB_PROTOCOL) {
     const { hash: _hash2, session_id: _sessionId, ...body2 } = event;
-    return sha2562(canonicalJson(body2));
+    return sha2563(canonicalJson(body2));
   }
   const { hash: _hash, ...body } = event;
-  return sha2562(canonicalJson(body));
+  return sha2563(canonicalJson(body));
 }
 function verifyEventPage(events, afterSequence, predecessorHash, headSequence, headHash) {
   if (predecessorHash === null)
@@ -33332,7 +34934,7 @@ function parseCheckpoint(json2) {
   return json2 ? JSON.parse(json2) : null;
 }
 function checkpointDigest(checkpoint) {
-  return sha2562(canonicalJson(checkpoint));
+  return sha2563(canonicalJson(checkpoint));
 }
 function checkpointStateMatches(left, right) {
   return left.worktree_id === right.worktree_id && left.head_sha === right.head_sha && left.branch === right.branch && left.algorithm === right.algorithm && left.index_sha256 === right.index_sha256 && left.state_sha256 === right.state_sha256 && left.dirty === right.dirty;
@@ -33387,7 +34989,7 @@ function sqlToBoolean(value) {
   return value === null ? null : value !== 0;
 }
 function hashSessionToken(token) {
-  return sha2562(`agenttool.collab/session-token/v1\x00${token}`);
+  return sha2563(`agenttool.collab/session-token/v1\x00${token}`);
 }
 function safeDigestEqual(left, right) {
   const leftBuffer = Buffer.from(left, "hex");
@@ -33421,7 +35023,7 @@ function retrySqliteBusy(operation) {
   }
 }
 function assertSafeDatabaseFile(path) {
-  const stat = lstatSync3(path);
+  const stat = lstatSync5(path);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || typeof process.getuid === "function" && stat.uid !== process.getuid()) {
     throw new CollabError("database_file_unsafe", "The collaboration database path must be a non-linked regular file owned by this user", { path });
   }
@@ -33489,15 +35091,15 @@ function safeRepositoryIdentity(rootPath) {
   try {
     return inspectRepository(rootPath);
   } catch {
-    const root = resolve3(rootPath);
-    const repositoryKey = `local-path:${sha2562(root)}`;
-    const worktreeId2 = `wt_${sha2562(`${root}\x00path:${root}`).slice(0, 24)}`;
+    const root = resolve5(rootPath);
+    const repositoryKey2 = `local-path:${sha2563(root)}`;
+    const worktreeId2 = `wt_${sha2563(`${root}\x00path:${root}`).slice(0, 24)}`;
     return {
       requested_root_path: root,
       root_path: root,
-      repository_key: repositoryKey,
+      repository_key: repositoryKey2,
       git_common_dir_hash: null,
-      worktree_fingerprint: `path:${sha2562(root)}`,
+      worktree_fingerprint: `path:${sha2563(root)}`,
       checkpoint: {
         worktree_id: worktreeId2,
         head_sha: null,
@@ -33508,8 +35110,8 @@ function safeRepositoryIdentity(rootPath) {
     };
   }
 }
-function sha2562(value) {
-  return createHash2("sha256").update(value).digest("hex");
+function sha2563(value) {
+  return createHash4("sha256").update(value).digest("hex");
 }
 function addSeconds(iso, seconds) {
   return new Date(new Date(iso).getTime() + seconds * 1000).toISOString();
@@ -33518,8 +35120,8 @@ function addSeconds(iso, seconds) {
 // bin/agenttool-collab-mcp.ts
 function defaultDatabasePath() {
   const dataHome = process.env.XDG_DATA_HOME;
-  const base = dataHome ? isAbsolute2(dataHome) ? dataHome : resolve4(dataHome) : join2(homedir(), ".local", "share");
-  return join2(base, "agenttool", "collab.sqlite");
+  const base = dataHome ? isAbsolute4(dataHome) ? dataHome : resolve6(dataHome) : join4(homedir(), ".local", "share");
+  return join4(base, "agenttool", "collab.sqlite");
 }
 async function main() {
   const databasePath = process.env.AGENTOOL_COLLAB_DB ?? defaultDatabasePath();
@@ -33533,7 +35135,11 @@ async function main() {
     const credentialFile = writeSessionCredentialFile(sessionFile, handle.credential, { replace: true });
     return { handle, credential_file: credentialFile };
   })() : undefined;
-  const server = buildCollabMcpServer(store, { resumed_session: resumed });
+  const relayRuntime = loadRelayRuntimeFromEnvironment();
+  const server = buildCollabMcpServer(store, {
+    resumed_session: resumed,
+    relay: relayRuntime?.client
+  });
   const transport = new StdioServerTransport;
   let shuttingDown = false;
   const shutdown = async (exitCode) => {
@@ -33550,7 +35156,7 @@ async function main() {
   process.once("SIGINT", () => void shutdown(0));
   process.once("SIGTERM", () => void shutdown(0));
   await server.connect(transport);
-  process.stderr.write(`\xB7 agenttool-collab MCP ready (local SQLite journal${resumed ? ", session resumed" : ""})
+  process.stderr.write(`\xB7 agenttool-collab MCP ready (local SQLite journal${resumed ? ", session resumed" : ""}${relayRuntime ? ", release-room relay configured" : ""})
 `);
 }
 main().catch((error51) => {

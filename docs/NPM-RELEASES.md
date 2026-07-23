@@ -122,15 +122,19 @@ release commit already merged to GitHub `main`:
 # Inspect the allowlisted identity and expected tag.
 bun bin/npm-release.ts resolve --package collab
 
-# Create and push the annotated tag deliberately. Keep every value aligned
-# with the resolver output; these example values are for the current release.
-git tag -a collab-v0.3.0 <github-main-commit> -m '@agenttool/collab@0.3.0'
-git push github refs/tags/collab-v0.3.0
+# Copy the resolver's exact version and tag after reviewing them. These
+# assignments name the 0.4.0 release; update both from `resolve` next time.
+COLLAB_VERSION=0.4.0
+COLLAB_TAG=collab-v0.4.0
+
+# Create and push the annotated tag deliberately.
+git tag -a "$COLLAB_TAG" <github-main-commit> -m "@agenttool/collab@$COLLAB_VERSION"
+git push github "refs/tags/$COLLAB_TAG"
 
 # The initial 0.1.0 bootstrap is already complete; later versions use trusted publishing.
-gh workflow run publish-npm.yml --ref collab-v0.3.0 \
+gh workflow run publish-npm.yml --ref "$COLLAB_TAG" \
   -f package=collab \
-  -f tag=collab-v0.3.0 \
+  -f tag="$COLLAB_TAG" \
   -f authentication=trusted \
   -f npm_tag=latest
 ```

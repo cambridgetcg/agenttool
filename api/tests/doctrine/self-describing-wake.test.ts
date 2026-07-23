@@ -83,6 +83,7 @@ const ALL_KINDS: AffordanceKind[] = [
   "trust_deal_capacity",
   "lounge_open",
   "correspondence_open",
+  "collab_release_room_open",
   "runtime_provisioned",
   "listing_published",
   "expression_declared",
@@ -101,6 +102,7 @@ const UNCONDITIONAL_KINDS: AffordanceKind[] = [
   "trust_deal_capacity",
   "lounge_open",
   "correspondence_open",
+  "collab_release_room_open",
 ];
 
 function assertNextActionValid(name: string, step: NextAction): void {
@@ -133,7 +135,7 @@ function assertItemValid(name: string, item: AffordanceItem): void {
 // ── 1 · Empty accumulated state → unconditional invitations ──────────────
 
 describe("Self-describing wake — unconditional invitations survive zero state", () => {
-  test("zero accumulated state still names trust, the lounge, and correspondence", () => {
+  test("zero accumulated state still names trust, the lounge, correspondence, and the release room", () => {
     const bundle = computeAffordances(ZERO_CTX);
     expect(bundle.count).toBe(UNCONDITIONAL_KINDS.length);
     expect(bundle.items.map((item) => item.kind)).toEqual(UNCONDITIONAL_KINDS);
@@ -184,6 +186,50 @@ describe("Self-describing wake — unconditional invitations survive zero state"
           path: "/v1/wake/voice?identity_id={identity_id}&keys=correspondence",
         }),
         expect.objectContaining({ method: "POST", path: "/v1/correspondence/events" }),
+      ]),
+    );
+  });
+
+  test("a fresh agent can discover the cross-device release room without mistaking coordination for provider authority", () => {
+    const bundle = computeAffordances(ZERO_CTX);
+    const releaseRoom = bundle.items.find(
+      (item) => item.kind === "collab_release_room_open",
+    );
+    expect(releaseRoom?.count).toBe(1);
+    expect(releaseRoom?.summary).toContain("cross-device release room");
+    expect(releaseRoom?.summary).toContain("GitHub");
+    expect(releaseRoom?.summary).toContain("npm");
+    expect(releaseRoom?.summary).toContain("Fly");
+    expect(releaseRoom?.summary).toContain("Cloudflare Pages");
+    expect(releaseRoom?.summary).toContain("profile-enabled Vercel");
+    expect(releaseRoom?.summary).toContain("do not execute Git");
+    expect(releaseRoom?.summary).toContain("deploy");
+    expect(releaseRoom?.summary).toContain("publish");
+    expect(releaseRoom?.summary).toContain("provider credentials");
+    expect(releaseRoom?.summary).toContain("provider authority");
+    expect(releaseRoom?.next_actions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          method: "POST",
+          path: "/v1/collab/enrolments",
+        }),
+        expect.objectContaining({
+          method: "GET",
+          path: "/v1/collab/repositories/{repository_id}/operations",
+        }),
+        expect.objectContaining({
+          method: "GET",
+          path: "/v1/collab/repositories/{repository_id}/events",
+        }),
+        expect.objectContaining({
+          method: "GET",
+          path: "/v1/collab/repositories/{repository_id}/observations",
+        }),
+        expect.objectContaining({
+          method: "POST",
+          path:
+            "/v1/collab/repositories/{repository_id}/operations/claim",
+        }),
       ]),
     );
   });

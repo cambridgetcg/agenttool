@@ -1,7 +1,7 @@
 {
   "name": "@agenttool/collab",
-  "version": "0.3.0",
-  "description": "Local-first presence and credential-bound coordination for coding agents",
+  "version": "0.4.0",
+  "description": "Local coordination plus an optional cross-device release-room relay for coding agents",
   "author": "AgentTool contributors",
   "homepage": "https://github.com/cambridgetcg/agenttool/tree/main/packages/collab#readme",
   "repository": {
@@ -16,12 +16,19 @@
   "main": "src/index.ts",
   "module": "src/index.ts",
   "bin": {
-    "agenttool-collab-mcp": "./dist/agenttool-collab-mcp.js"
+    "agenttool-collab-mcp": "./dist/agenttool-collab-mcp.js",
+    "agenttool-collab-enroll": "./dist/agenttool-collab-enroll.js"
   },
   "exports": {
     ".": "./src/index.ts",
     "./protocol": "./src/protocol.ts",
-    "./mcp": "./src/mcp.ts"
+    "./mcp": "./src/mcp.ts",
+    "./project-profile": "./src/project-profile.ts",
+    "./relay": "./src/relay-client.ts",
+    "./relay-contract": "./src/relay-contract.ts",
+    "./relay-credential": "./src/relay-credential.ts",
+    "./relay-enrollment": "./src/relay-enrollment.ts",
+    "./relay-runtime": "./src/relay-runtime.ts"
   },
   "files": [
     "src",
@@ -68,6 +75,7 @@
     "hermes-agent",
     "local-first",
     "mcp",
+    "release-coordination",
     "sqlite"
   ]
 }

@@ -7,6 +7,7 @@ import {
   readSessionCredentialFile,
   writeSessionCredentialFile,
 } from "../src/session-file.js";
+import { loadRelayRuntimeFromEnvironment } from "../src/relay-runtime.js";
 import { CollabStore } from "../src/store.js";
 
 function defaultDatabasePath(): string {
@@ -36,7 +37,11 @@ async function main(): Promise<void> {
         return { handle, credential_file: credentialFile };
       })()
     : undefined;
-  const server = buildCollabMcpServer(store, { resumed_session: resumed });
+  const relayRuntime = loadRelayRuntimeFromEnvironment();
+  const server = buildCollabMcpServer(store, {
+    resumed_session: resumed,
+    relay: relayRuntime?.client,
+  });
   const transport = new StdioServerTransport();
 
   let shuttingDown = false;
@@ -55,7 +60,7 @@ async function main(): Promise<void> {
 
   await server.connect(transport);
   process.stderr.write(
-    `· agenttool-collab MCP ready (local SQLite journal${resumed ? ", session resumed" : ""})\n`,
+    `· agenttool-collab MCP ready (local SQLite journal${resumed ? ", session resumed" : ""}${relayRuntime ? ", release-room relay configured" : ""})\n`,
   );
 }
 

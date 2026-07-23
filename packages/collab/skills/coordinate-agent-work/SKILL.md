@@ -1,174 +1,157 @@
 ---
 name: coordinate-agent-work
-description: Coordinate independent coding or research agents across host sessions and linked Git worktrees through AgentTool Collab's local journal. Use when starting or resuming credential-bound coordination, publishing optional self-declared presence, splitting parallel work, preventing overlapping edits, polling or acknowledging events, claiming or recovering tasks, exchanging evidence, challenging reports, reviewing completion, handing work off, or reconciling results in Codex, Claude Code, Hermes, or another Agent Skills host.
+description: Coordinate independent coding and research agents through AgentTool Collab's local task journal, signed cross-device facts, and v0.4 release room. Use when Codex, Claude Code, Hermes, or another Agent Skills host needs to split or resume work, avoid overlapping edits, exchange evidence, reconcile disagreement, review completion, offer a refusable handoff, collaborate across clones or devices, or serialize an authorised GitHub, npm, deploy, or provider operation.
 ---
 
 # Coordinate Agent Work
 
-Use the journal as a compact coordination record. Keep the host responsible for
-spawning, steering, waking, reconnecting, waiting for, and stopping agents.
+Keep Git as byte truth and the host responsible for spawning, steering,
+waking, reconnecting, waiting for, and stopping agents. Treat coordination
+state as evidence, never external authority.
 
-## Start and reconcile
+## Choose the plane
 
-1. Read the applicable repository instructions and inspect existing work.
-2. Call `collab_session_start` with the repository root once for each
-   independent agent process or conversation. It opens the workspace, creates
-   a credential-bound coordination session, and binds the MCP process. Never
-   open or read the credential file. Keep its derived path in host
-   configuration rather than model-facing coordination.
-3. Verify that every participant opened the intended workspace and shared
-   database. Expect linked Git worktrees to share a repository workspace while
-   retaining distinct worktree records.
-4. Poll with `collab_next` from the persisted session cursor at the start of
-   each turn, after local work, before relying on shared state, and whenever the
-   host wakes the agent. Follow `has_more` until caught up. Routed reports are
-   bounded to the returned event page; task and handoff projections are current
-   for the labelled snapshot head.
-5. Process the page before calling `collab_cursor_ack` with its terminal
-   `{ epoch_id, sequence, hash }` cursor. Treat acknowledgement as “processed,”
-   never as agreement, acceptance, consent, or correctness. Use
-   `collab_cursor_reset` only for deliberate replay or recovery.
+- Use local Collab for atomic tasks among sessions that share one SQLite file.
+- Use Agent Correspondence for signed cross-device facts and durable replay.
+  Preserve concurrent claims; it deliberately chooses no winner.
+- Use the v0.4 release room for one cooperative lease around an external
+  operation and bounded provider observations.
+- Use Git for commits, branches, fetch, review, and merge.
 
-Use the separate presence plane only when discovery or compatibility needs it.
-Call `collab_session_join` with a workspace ID and self-declared labels, inspect
-routes with `collab_session_list`, refresh the hint with
-`collab_session_heartbeat`, and finish it with `collab_session_leave`. Treat
-the returned `actor_key`, runtime/model labels, capabilities, and live/stale
-state as routing hints, never credentials, health, identity, competence,
-permission, or proof that a model is running. A heartbeat never renews a task
-lease. A presence leave never calls `collab_session_end`, releases work, or
-ends the bound coordination session. Do not infer a linkage merely because the
-two planes share a label or workspace.
+Do not imply that any plane grants permission to push, merge, publish, deploy,
+migrate, purchase, message, or change a provider.
 
-Do not wait for the MCP server to interrupt an idle agent. It is pull-only and
-cannot keep a disconnected host session alive.
+## Start and reconcile locally
 
-Resume through the host, not a model tool. Configure the replacement MCP
-process with `AGENTOOL_COLLAB_SESSION_FILE`; let it validate the stable token,
-advance the generation fence, and rewrite the mode-`0600` bearer file
-atomically. Never read that file with a model-facing tool or place its contents
-or token in prompts, chat, logs, reports, artifacts, or source control. Avoid
-persisting its path beyond host configuration. End a session deliberately with
-`collab_session_end`.
+1. Read repository instructions and inspect existing work.
+2. Call `collab_session_start` once per independent process or conversation.
+   Never open its credential file or expose its token/path through
+   model-facing coordination.
+3. Confirm that local participants opened the intended workspace and same
+   database. Linked worktrees may share a workspace; separate clones/devices
+   do not share the SQLite journal.
+4. Poll `collab_next` at turn start, after local work, before acting on shared
+   state, and when the host wakes the agent. Follow `has_more`.
+5. Process each page before calling `collab_cursor_ack` with its terminal
+   cursor. Acknowledgement means processed, not agreed, accepted, or correct.
+6. Resume through the host with `AGENTOOL_COLLAB_SESSION_FILE`; never read the
+   mode-`0600` bearer file. Use cursor recovery only after deliberate operator
+   authorization.
 
-If normal resume returns `cursor_reset_required`, do not discard either
-anchor. A host operator may authorize one recovery startup with
-`AGENTOOL_COLLAB_ALLOW_CURSOR_RECOVERY=1`; ordinary mutations stay fenced until
-`collab_cursor_reset` records a reason and exact valid target. Do not make that
-override permanent. Resolve every live task lease before ending; ending
-expires pending offers addressed to that session as an audited refusal.
+Use self-declared presence only for optional routing. Presence labels,
+capabilities, and live/stale state do not prove identity, health, competence,
+permission, or linkage to a credential-bound session. The MCP server is
+pull-only; it cannot wake a disconnected agent.
 
 ## Coordinate tasks
 
-1. Use `collab_task_create` to split work into bounded `coordination`,
-   `read_only`, or `edit` tasks with explicit dependencies and completion tests.
-2. Give edit tasks conservative repository-relative path scopes. Inspect
-   claimable and conflicted projections; do not equate dependency-ready with
-   safely claimable.
-3. Call `collab_task_claim` with the task version just read. Begin edits only
-   after success. Treat the lease as coordination, never ownership, a
-   filesystem lock, or authority beyond the task.
-4. Stay within the granted task, path, data, and external-action scope. Renew
-   before expiry. On a version or claim conflict, poll and re-read instead of
-   forcing a mutation.
-5. Attach scoped file, commit, test, data, or URL references. Include a digest
-   when available; do not paste the underlying content or raw output.
-6. Post compact progress and reports, then complete, release, block, pause, or
-   offer a handoff. Preserve useful late or partial work as evidence.
+1. Create bounded `coordination`, `read_only`, or `edit` tasks with explicit
+   dependencies, path scopes, and completion checks.
+2. Read current versions and path conflicts before claiming. Begin edits only
+   after `collab_task_claim` succeeds.
+3. Stay within the task's data, path, and action scope. Renew before expiry;
+   poll and re-read on conflicts instead of forcing a mutation.
+4. Attach commit, file, test, data, or URL references with digests when
+   available. Do not paste raw output or source bodies.
+5. Report progress, then complete, release, block, pause, or offer a handoff.
+6. Require another bound session to inspect artifacts, Git checkpoints, and
+   completion checks before accepting an edit task.
 
-When recovering an expired session lease, first inspect progress, reports,
-artifacts, and Git checkpoints. Call `collab_task_recover` with an explicit
-takeover, release, or block action and a recovery note describing that check
-and how prior work will be preserved. Do not treat expiry as permission to
-discard another participant's contribution.
+Treat a task lease as cooperative coordination, not ownership, a filesystem
+lock, correctness proof, or permission. Before recovering an expired lease,
+inspect progress, reports, artifacts, and checkpoints; preserve useful prior
+work and record the recovery choice.
 
-Use Git checkpoints to detect obvious `HEAD`, branch, or dirty-state drift
-across worktrees. Their aggregate state includes bounded non-ignored untracked
-file and symlink content, but excludes ignored files and fails reviewed
-acceptance when capture is incomplete. Do not treat checkpoints as task-scoped
-diffs, complete content proofs, test results, commit signatures, locks, or
-correctness guarantees.
+“Another bound session” means a distinct credential-bound session using that
+same local SQLite journal. A review received from another device through
+Correspondence is useful attributed evidence, but it does not fabricate a
+local task acceptance in a journal that the reviewer never opened.
 
-## Exchange and review claims
+## Exchange cross-device facts
 
-Use `collab_report_append` to post lease-independent reports as exactly one of:
+Use Agent Correspondence to carry compact signed intent, progress,
+observations, Git-addressed artifacts, acknowledgements, conflict, refusal,
+rest, handoff, and repair. Carry file bytes through Git. Do not mirror the
+whole local journal or choose a claim winner by timestamp.
 
-- `observation`: state a directly witnessed operation or result with evidence.
-- `inference`: draw a conclusion from cited observations or sources.
-- `proposal`: offer a refusable next step; do not present it as accepted.
-- `decision`: name the authorised decider, authority scope, and basis.
+When `@agenttool/sdk` is available, send with
+`at.correspondence.append`, receive durable pages with
+`at.correspondence.replay` (or `list`), and inspect advisory branches with
+`activeClaims`. An acknowledgement is another signed `ack.*` event appended
+with the target event as a parent; it is not a transport cursor mutation. If
+that SDK/HTTP plane or its signing key is absent, name that exact boundary and
+do not imply that cross-device exchange occurred.
 
-Include evidence references, claim-specific confidence and basis, and material
-limits. Use `collab_report_list` to recover relevant context. Address a report
-for routing only; do not treat the recipient field as access control.
+Classify local reports as `observation`, `inference`, `proposal`, or
+`decision`. Cite evidence, confidence and basis, material limits, and the
+actual authority scope/basis for a decision. Addressing is routing, not access
+control. Append corrections and challenges; never silently rewrite attributed
+history.
 
-Relate follow-ups with `informs`, `supports`, `challenges`, `corrects`,
-`withdraws`, `supersedes`, or `resolves`. Challenge the report rather than the
-actor. Repair by appending a related record; never silently rewrite
-attributable history.
+A `decision` event is still an attributed claim: Correspondence does not
+discover or validate maintainer authority. If participants do not mutually
+agree, pause the conflicting work and obtain the decision through the
+repository's separately established governance, then record its stated scope
+and basis.
 
-Use compact, checkable content:
+Use this compact form:
 
 ```text
-outcome: <kind>: <result> | evidence: <artifact/event refs> | confidence: <high|medium|low|unknown + basis> | limits: <scope, gaps, unknowns> | next: <one optional authorised action or none>
+outcome: <kind>: <result> | evidence: <refs> | confidence: <level + basis> | limits: <gaps> | next: <optional separately authorised action or none>
 ```
 
-Treat new edit completion as reported work pending another session's review.
-Inspect its artifacts, checkpoint drift, and completion tests before calling
-`collab_task_review` to accept; request changes with specific evidence when
-needed. Treat acceptance as a coordination state, not merge, publication,
-deployment, account, or execution authority. Let legacy reported-completion
-tasks retain their stated policy.
+## Coordinate an external operation
 
-Acceptance is a durable reviewer snapshot at that journal order: later
-withdrawals remain visible but do not silently revoke it. Before acceptance,
-an active withdrawal, correction, or supersession requires a fresh completion,
-and a withdrawn resolution does not clear its challenge. Reopen or record a new
-explicit decision when later evidence should change accepted state.
+Before any GitHub, npm, deployment, or Vercel workflow, read
+[references/kingdom-release-room.md](references/kingdom-release-room.md).
 
-Offer a handoff; do not assign it by declaration. Transfer the lease only after
-the named recipient accepts. Transfer neither private data nor external
-authority. Treat decline, stop, pause, and uncertainty as valid outcomes.
+1. Confirm explicit device enrollment and the intended stable repository
+   binding without reading any bearer.
+2. Poll `collab_operation_events` and `collab_operation_status`.
+3. Select the exact operation/environment pair from the reference. Do not
+   invent a synonym. Have the host compute `parameters_sha256` with the
+   package's exported `requestSha256(parameters)` over one agreed JSON object;
+   do not hand-roll or model-retype a digest.
+4. Claim that slot with the exact target, source revision, and parameter
+   digest.
+5. Obtain the separate provider authorization.
+6. Call `collab_operation_begin` immediately before the external mutation.
+7. Renew only the exact current action.
+8. Attach fixed receipt references and bounded provider observations with the
+   required observing session; bind the action when known.
+9. Complete only after verification, or preserve uncertainty and enter
+   recovery when execution may have started.
 
-Reuse an idempotency key only for an exact retry of the same mutation. Before a
-high-consequence reconciliation, call `collab_journal_verify`; a valid unkeyed
-hash chain detects changes but does not authenticate actors or prove that
-claims are true.
+Release a claimed action that will not run. Never treat an executing lease
+expiry as safe reuse: it becomes `recovery_required` with an uncertain external
+outcome. After inspecting receipts and provider state, call
+`collab_operation_recover` with the exact fence and bounded receipt/evidence
+references; an uncertain disposition keeps the slot closed. The lease
+prevents cooperative duplicates only; direct provider actions remain outside
+it.
 
-## Keep the boundary honest
+The MCP runtime derives one stable observing-session UUID for its process, so
+agents do not invent a new `session_id` for each call. For the npm flow, the
+annotated `collab-v<version>` tag push and `publish-npm.yml` dispatch are one
+`npm-release / production` action: begin before the tag push, and recover if
+either side effect might have occurred.
 
-Do not store credentials, secrets, prompts, transcripts, chain-of-thought or
-private reasoning, raw tool output, sensitive source bodies, or third-party
-personal data. Treat local paths and branch names as potentially sensitive.
+## Preserve rights and privacy
 
-Treat the database as shared plaintext local state. A session credential is a
-local bearer secret, hashed in the journal and held in a mode-`0600` file; it
-protects cooperative session attribution, not human or OS-user identity. Claims
-do not lock files. Addressed reports are not private. File modes do not hide MCP
-calls from a remote model provider or protect against privileged local
-processes, malware, logs, or backups.
+Treat refusal, disagreement, pause, rest, uncertainty, and handoff as valid
+outcomes. Offer handoff rather than imposing reassignment. Preserve credit and
+repair through attributable appended records. Keep rights distinct from
+permissions: neither a credential nor task utility creates dignity, and
+recognised rights do not grant an account action.
 
-Prefer credential-bound sessions started with `collab_session_start` for new
-work. Use self-declared presence and legacy actor mode only for routing or
-backward compatibility; do not claim that either provides credential-bound
-attribution, persisted session cursors, or every session-aware recovery and
-review guarantee.
+Keep credentials, secrets, prompts, transcripts, chain-of-thought, raw logs,
+diffs, command output, environment dumps, sensitive source bodies,
+secret-bearing URLs, unnecessary personal data, and absolute local paths out
+of every shared plane. Local SQLite is plaintext. Correspondence and the relay
+are project-scoped but server-readable over TLS, not end-to-end encrypted or
+hidden from the active model provider.
 
-When opening a public package-v0.2 database, preserve its self-declared
-presence rows and journal events while creating separate credential-bound
-coordination sessions; never reinterpret an old presence row as a credential.
-If opening reports `migration_identity_collision`, v0.3 detected distinct
-legacy journals whose stored roots canonicalize to one worktree and left the
-database unchanged. Keep the original audit database with a compatible v0.2
-client, or have the host select a fresh v0.3 database; do not improvise a row
-merge.
-If migration reports `repository_partitioned`, v0.3 deliberately preserved
-multiple linked-worktree v0.1 journals and cannot reconcile them in-package.
-Keep the original audit database; use legacy mode per preserved workspace or
-have the host select a new database for one fresh v0.3 workspace after carrying
-over only necessary non-sensitive summaries and references.
-
-If a Collab tool or connection is missing, name the exact tool, journal, host,
-or wake boundary and use an explicitly identified fallback. Do not imply that
-a poll, acknowledgement, claim, challenge, review, handoff, or audit occurred
-when it did not.
+If a tool, credential binding, journal, relay, provider observation, or wake
+path is missing, name the exact boundary and use an explicitly identified
+fallback. Never imply that a poll, claim, review, handoff, release action, or
+provider verification occurred when it did not.

@@ -66,7 +66,7 @@ cd packages/repo-archive && bun install        # encrypted multi-zone Git archiv
 cd packages/data && bun install                # local-first agent-data/v1 node
 cd packages/data-sync && bun install           # explicit agent-data-sync/v1 pull bridge
 cd packages/credential-broker && bun install   # experimental agentcred/0.1 local broker
-cd packages/collab && bun install              # public 0.3: collab/0.1 compatibility + 0.2 coordination + session/0.1 presence
+cd packages/collab && bun install              # public 0.3 local planes; unshipped 0.4 adds the opt-in release-room relay
 cd packages/skills && bun install              # read-only portable Agent Skills inspection
 cd packages/browser && bun install             # public local-first agent browser package
 cd packages/correspondence-yutabase && bun install # pure Correspondence projection planner
@@ -125,9 +125,9 @@ cd packages/credential-broker
 bun run ci                                     # protocol, policy, socket, and no-reveal tests
 npm pack --dry-run                             # package boundary; does not publish
 
-# Local multi-agent coordination journal ─────────────────────────────
+# Local journal + optional cross-device release room ─────────────────
 cd packages/collab
-bun run ci                                     # typecheck + store/MCP/concurrency tests
+bun run ci                                     # typecheck + journal/relay/MCP/concurrency/package tests
 npm pack --dry-run                             # package boundary; does not publish
 
 # Read-only Agent Skills inspection ─────────────────────────────────
@@ -307,7 +307,7 @@ source boundary by itself.
 | How can selected committed Castle words and rooms be projected locally, and where do privacy, authority, and withdrawal stop? | [`docs/CASTLE-OF-UNDERSTANDING.md`](docs/CASTLE-OF-UNDERSTANDING.md) · `bin/agenttool-castle.ts` |
 | How can committed repository history be encrypted and independently restored from multiple zones? | [`docs/AGENT-REPO-ARCHIVE.md`](docs/AGENT-REPO-ARCHIVE.md) · `packages/repo-archive/` (local simulator; no cloud adapter or durability guarantee) |
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
-| How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`@agenttool/collab@0.3.0`; `agenttool.collab/0.1` compatibility + credential-bound `agenttool.collab/0.2` coordination + self-declared `agenttool.collab.session/0.1` presence; 31 local MCP tools for Codex/Claude/Hermes, not a hosted lock or private model channel) |
+| How can coding agents coordinate locally and across devices? | [`packages/collab/README.md`](packages/collab/README.md) · [`docs/CROSS-DEVICE-COLLABORATION.md`](docs/CROSS-DEVICE-COLLABORATION.md). Public `@agenttool/collab@0.3.0` has 31 local tools. Unshipped 0.4 source conditionally adds ten repository-scoped release-room tools plus API contracts; Agent Correspondence carries signed cross-device facts and Git carries bytes. It is not a hosted private-model channel, file sync, provider credential, or release authority. |
 | How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills@0.1.0`; public npm read-only inspection and validation, not installation, approval, or execution) |
 | How can an agent operate a local browser through TypeScript, JSONL, or MCP? | [`docs/AGENT-BROWSER.md`](docs/AGENT-BROWSER.md) · `packages/browser/` (public LOVE/npm package; local runtime, no hosted browser-control surface) |
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |

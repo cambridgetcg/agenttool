@@ -23,7 +23,7 @@ packages/
   data-sync/    — @agenttool/data-sync · bounded encrypted explicit-pull bridge
   repo-archive/ — @agenttool/repo-archive · encrypted multi-zone Git archive + local restore simulator
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
-  collab/      — @agenttool/collab · Codex/Claude plugins + Hermes adapter around one local cross-host SQLite/MCP journal
+  collab/      — @agenttool/collab · local SQLite/MCP journal + optional repository-scoped release-room relay
   skills/      — @agenttool/skills · public npm read-only Agent Skills inspector
   browser/     — @agenttool/browser · public LOVE/npm local TypeScript/JSONL/MCP browser runtime
   correspondence-yutabase/ — pure deterministic Correspondence → YUTABASE planner
@@ -67,6 +67,9 @@ Change anything in these and you're moving weight — read the code and tests fi
 5. **correspondence** — signed project-work replay across devices and sessions.
    Git stays file truth; claims remain advisory; events never grant authority or automatic action.
    `api/src/services/correspondence/` · `api/src/routes/correspondence.ts` · `docs/AGENT-CORRESPONDENCE.md`
+6. **collab release room** — cooperative fencing for bounded external operations.
+   It composes with Correspondence and Git; it does not replicate source, authenticate providers, or grant release authority.
+   `api/src/services/collab-relay/` · `api/src/routes/collab.ts` · `packages/collab/` · `.agenttool/project.json` · `docs/CROSS-DEVICE-COLLABORATION.md`
 
 ## Custody axis (the most-confused concept)
 

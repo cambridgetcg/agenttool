@@ -2416,6 +2416,977 @@ const COMMON_SCHEMAS = {
   },
 };
 
+const collabUuid = { type: "string", format: "uuid" };
+const collabSequence = {
+  type: "integer",
+  minimum: 0,
+  maximum: Number.MAX_SAFE_INTEGER,
+};
+const collabPositiveSequence = {
+  type: "integer",
+  minimum: 1,
+  maximum: Number.MAX_SAFE_INTEGER,
+};
+const collabSha256 = {
+  type: "string",
+  pattern: "^[0-9a-f]{64}$",
+};
+const collabSourceRevision = {
+  type: "string",
+  pattern: "^[0-9a-f]{40,64}$",
+};
+const collabIdempotencyKey = {
+  type: "string",
+  minLength: 1,
+  maxLength: 128,
+  pattern: "^[A-Za-z0-9][A-Za-z0-9._:/-]*$",
+};
+const collabOperationName = {
+  type: "string",
+  minLength: 1,
+  maxLength: 96,
+  pattern: "^[a-z0-9][a-z0-9._:-]*$",
+};
+const collabEnvironmentName = {
+  type: "string",
+  minLength: 1,
+  maxLength: 128,
+  pattern: "^[a-z0-9][a-z0-9._:-]*$",
+};
+const collabActorLabel = {
+  type: "string",
+  minLength: 1,
+  maxLength: 128,
+};
+const collabTarget = {
+  type: "string",
+  minLength: 1,
+  maxLength: 512,
+};
+const collabOperationBindingProperties = {
+  idempotency_key: collabIdempotencyKey,
+  action_id: collabUuid,
+  session_id: collabUuid,
+  actor_label: collabActorLabel,
+  operation: collabOperationName,
+  environment: collabEnvironmentName,
+  target: collabTarget,
+  source_revision: collabSourceRevision,
+  parameters_sha256: collabSha256,
+};
+const collabOperationBindingRequired = [
+  "idempotency_key",
+  "action_id",
+  "session_id",
+  "operation",
+  "environment",
+  "target",
+  "source_revision",
+  "parameters_sha256",
+];
+const collabFenceProperties = {
+  lease_id: collabUuid,
+  expected_version: collabPositiveSequence,
+  expected_generation: collabPositiveSequence,
+};
+const collabFenceRequired = [
+  "lease_id",
+  "expected_version",
+  "expected_generation",
+];
+const collabEvidenceProperties = {
+  receipt_ref: { $ref: "#/components/schemas/CollabReceiptRef" },
+  observation_ids: {
+    type: "array",
+    maxItems: 32,
+    uniqueItems: true,
+    items: collabUuid,
+  },
+};
+const collabOutcome = {
+  type: "string",
+  enum: ["succeeded", "failed", "cancelled", "uncertain"],
+};
+const collabProvider = {
+  type: "string",
+  enum: ["github", "npm", "fly", "cloudflare-pages", "vercel"],
+};
+const collabNormalizedState = {
+  type: "string",
+  enum: [
+    "pending",
+    "running",
+    "awaiting_approval",
+    "succeeded",
+    "failed",
+    "cancelled",
+    "uncertain",
+  ],
+};
+
+const COLLAB_SCHEMAS = {
+  CollabError: {
+    type: "object",
+    additionalProperties: false,
+    description:
+      "Strict collaboration-relay error envelope. Error details never echo scoped bearer material.",
+    properties: {
+      error: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          code: { type: "string" },
+          message: { type: "string" },
+          details: { type: "object", additionalProperties: true },
+        },
+        required: ["code", "message"],
+      },
+    },
+    required: ["error"],
+  },
+  CollabEnrolmentRequest: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      schema: { type: "string", const: "agenttool.collab-enrolment/1" },
+      idempotency_key: {
+        type: "string",
+        minLength: 1,
+        maxLength: 128,
+        pattern: "^enrol:[0-9a-f]{64}$",
+        description:
+          "Deterministic enrol:<sha256> of the exact strict enrollment intent excluding this field. It binds only token prefix/digest metadata, never the raw bearer.",
+      },
+      expected_device_version: {
+        type: "integer",
+        minimum: 0,
+        maximum: Number.MAX_SAFE_INTEGER,
+        description:
+          "Compare-and-swap fence. Use 0 only to create a device; otherwise use the active credential metadata version.",
+      },
+      repository: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          key: { type: "string", minLength: 1, maxLength: 256 },
+          provider: { type: "string", enum: ["github", "git", "other"] },
+          provider_repository_id: {
+            type: "string",
+            minLength: 1,
+            maxLength: 256,
+          },
+          display_name: { type: "string", minLength: 1, maxLength: 256 },
+        },
+        required: [
+          "key",
+          "provider",
+          "provider_repository_id",
+          "display_name",
+        ],
+      },
+      device: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          id: { type: "string", format: "uuid" },
+          label: { type: "string", minLength: 1, maxLength: 128 },
+        },
+        required: ["id", "label"],
+      },
+      observation_policy: {
+        type: "object",
+        additionalProperties: false,
+        description:
+          "Project-authorized device policy derived from the committed agenttool.project/1 profile. Repository routes enforce this allowlist before accepting new observations even from custom clients; an exact historical receipt replay appends no state.",
+        properties: {
+          profile_sha256: {
+            type: "string",
+            pattern: "^[0-9a-f]{64}$",
+          },
+          allowed_providers: {
+            type: "array",
+            maxItems: 5,
+            uniqueItems: true,
+            items: {
+              type: "string",
+              enum: [
+                "github",
+                "npm",
+                "fly",
+                "cloudflare-pages",
+                "vercel",
+              ],
+            },
+          },
+        },
+        required: ["profile_sha256", "allowed_providers"],
+      },
+      token: {
+        type: "object",
+        additionalProperties: false,
+        description:
+          "Caller-generated scoped credential metadata. Send only the first 12-character atc_ prefix and SHA-256 digest; never send the raw scoped bearer during enrollment.",
+        properties: {
+          prefix: {
+            type: "string",
+            pattern: "^atc_[A-Za-z0-9_-]{8}$",
+          },
+          sha256: { type: "string", pattern: "^[0-9a-f]{64}$" },
+        },
+        required: ["prefix", "sha256"],
+      },
+    },
+    required: [
+      "schema",
+      "idempotency_key",
+      "expected_device_version",
+      "repository",
+      "device",
+      "observation_policy",
+      "token",
+    ],
+  },
+  CollabEnrolmentResult: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      schema: {
+        type: "string",
+        const: "agenttool.collab-enrolment-result/1",
+      },
+      replayed: { type: "boolean" },
+      receipt: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          idempotency_key: { type: "string" },
+          request_sha256: {
+            type: "string",
+            pattern: "^[0-9a-f]{64}$",
+          },
+          recorded_at: { type: "string", format: "date-time" },
+        },
+        required: ["idempotency_key", "request_sha256", "recorded_at"],
+      },
+      repository: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          id: { type: "string", format: "uuid" },
+          key: { type: "string" },
+          provider: { type: "string", enum: ["github", "git", "other"] },
+          provider_repository_id: { type: "string" },
+          display_name: { type: "string" },
+        },
+        required: [
+          "id",
+          "key",
+          "provider",
+          "provider_repository_id",
+          "display_name",
+        ],
+      },
+      device: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          id: { type: "string", format: "uuid" },
+          label: { type: "string" },
+          token_prefix: {
+            type: "string",
+            pattern: "^atc_[A-Za-z0-9_-]{8}$",
+          },
+          active: { type: "boolean" },
+          version: {
+            type: "integer",
+            minimum: 1,
+            maximum: Number.MAX_SAFE_INTEGER,
+          },
+        },
+        required: ["id", "label", "token_prefix", "active", "version"],
+      },
+      observation_policy: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          profile_sha256: {
+            type: "string",
+            pattern: "^[0-9a-f]{64}$",
+          },
+          allowed_providers: {
+            type: "array",
+            maxItems: 5,
+            uniqueItems: true,
+            items: {
+              type: "string",
+              enum: [
+                "github",
+                "npm",
+                "fly",
+                "cloudflare-pages",
+                "vercel",
+              ],
+            },
+          },
+        },
+        required: ["profile_sha256", "allowed_providers"],
+      },
+      created: { type: "boolean" },
+    },
+    required: [
+      "schema",
+      "replayed",
+      "receipt",
+      "repository",
+      "device",
+      "observation_policy",
+      "created",
+    ],
+  },
+  CollabMutationReceipt: {
+    type: "object",
+    additionalProperties: false,
+    description:
+      "Durable exact-request receipt. It contains bounded metadata and digests, never a raw bearer or provider payload.",
+    properties: {
+      idempotency_key: collabIdempotencyKey,
+      request_sha256: collabSha256,
+      recorded_at: { type: "string", format: "date-time" },
+    },
+    required: ["idempotency_key", "request_sha256", "recorded_at"],
+  },
+  CollabReceiptRef: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      schema: {
+        type: "string",
+        enum: [
+          "agenttool.npm-release/1",
+          "agenttool-deploy-receipt/v2",
+          "other",
+        ],
+      },
+      sha256: collabSha256,
+    },
+    required: ["schema", "sha256"],
+  },
+  CollabOperationClaimRequest: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      schema: {
+        type: "string",
+        const: "agenttool.collab-operation-claim/1",
+      },
+      ...collabOperationBindingProperties,
+      lease_seconds: {
+        type: "integer",
+        minimum: 30,
+        maximum: 3600,
+      },
+    },
+    required: [
+      "schema",
+      ...collabOperationBindingRequired,
+      "lease_seconds",
+    ],
+  },
+  CollabOperationRenewRequest: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      schema: {
+        type: "string",
+        const: "agenttool.collab-operation-renew/1",
+      },
+      ...collabOperationBindingProperties,
+      ...collabFenceProperties,
+      lease_seconds: {
+        type: "integer",
+        minimum: 30,
+        maximum: 3600,
+      },
+    },
+    required: [
+      "schema",
+      ...collabOperationBindingRequired,
+      ...collabFenceRequired,
+      "lease_seconds",
+    ],
+  },
+  CollabOperationBeginRequest: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      schema: {
+        type: "string",
+        const: "agenttool.collab-operation-begin/1",
+      },
+      ...collabOperationBindingProperties,
+      ...collabFenceProperties,
+    },
+    required: [
+      "schema",
+      ...collabOperationBindingRequired,
+      ...collabFenceRequired,
+    ],
+  },
+  CollabOperationCompleteRequest: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      schema: {
+        type: "string",
+        const: "agenttool.collab-operation-complete/1",
+      },
+      ...collabOperationBindingProperties,
+      ...collabFenceProperties,
+      outcome: collabOutcome,
+      ...collabEvidenceProperties,
+    },
+    required: [
+      "schema",
+      ...collabOperationBindingRequired,
+      ...collabFenceRequired,
+      "outcome",
+    ],
+  },
+  CollabOperationReleaseRequest: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      schema: {
+        type: "string",
+        const: "agenttool.collab-operation-release/1",
+      },
+      ...collabOperationBindingProperties,
+      ...collabFenceProperties,
+      reason: { type: "string", minLength: 1, maxLength: 256 },
+    },
+    required: [
+      "schema",
+      ...collabOperationBindingRequired,
+      ...collabFenceRequired,
+    ],
+  },
+  CollabOperationRecoverRequest: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      schema: {
+        type: "string",
+        const: "agenttool.collab-operation-recover/1",
+      },
+      ...collabOperationBindingProperties,
+      expected_version: collabPositiveSequence,
+      expected_generation: collabPositiveSequence,
+      disposition: collabOutcome,
+      reason: { type: "string", minLength: 1, maxLength: 512 },
+      ...collabEvidenceProperties,
+    },
+    required: [
+      "schema",
+      ...collabOperationBindingRequired,
+      "expected_version",
+      "expected_generation",
+      "disposition",
+      "reason",
+    ],
+  },
+  CollabProviderObservationRequest: {
+    type: "object",
+    additionalProperties: false,
+    description:
+      "Bounded provider-state projection only—never a raw webhook body, log, command output, credential, or file content.",
+    properties: {
+      schema: {
+        type: "string",
+        const: "agenttool.collab-provider-observation/1",
+      },
+      idempotency_key: {
+        type: "string",
+        minLength: 1,
+        maxLength: 128,
+        pattern: "^[A-Za-z0-9][A-Za-z0-9._:/-]*$",
+      },
+      session_id: { type: "string", format: "uuid" },
+      actor_label: { type: "string", minLength: 1, maxLength: 128 },
+      action_id: { type: "string", format: "uuid" },
+      provider: {
+        type: "string",
+        enum: ["github", "npm", "fly", "cloudflare-pages", "vercel"],
+      },
+      provider_event_id: {
+        type: ["string", "null"],
+        minLength: 1,
+        maxLength: 256,
+      },
+      observed_at: { type: "string", format: "date-time" },
+      occurred_at: { type: "string", format: "date-time" },
+      resource_kind: { type: "string", minLength: 1, maxLength: 128 },
+      resource_id: { type: "string", minLength: 1, maxLength: 512 },
+      native_state: { type: "string", minLength: 1, maxLength: 256 },
+      normalized_state: {
+        type: "string",
+        enum: [
+          "pending",
+          "running",
+          "awaiting_approval",
+          "succeeded",
+          "failed",
+          "cancelled",
+          "uncertain",
+        ],
+      },
+      source_revision: {
+        type: "string",
+        pattern: "^[0-9a-f]{40,64}$",
+      },
+      environment: {
+        type: "string",
+        minLength: 1,
+        maxLength: 128,
+        pattern: "^[a-z0-9][a-z0-9._:-]*$",
+      },
+      url: {
+        type: ["string", "null"],
+        format: "uri",
+        maxLength: 2048,
+        description:
+          "HTTPS only, with no credentials, query string, or fragment.",
+      },
+      payload_sha256: { type: "string", pattern: "^[0-9a-f]{64}$" },
+    },
+    required: [
+      "schema",
+      "idempotency_key",
+      "session_id",
+      "provider",
+      "observed_at",
+      "resource_kind",
+      "resource_id",
+      "native_state",
+      "normalized_state",
+      "payload_sha256",
+    ],
+  },
+  CollabOperationSlot: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      sequence: collabPositiveSequence,
+      repository_id: collabUuid,
+      operation: collabOperationName,
+      environment: collabEnvironmentName,
+      phase: {
+        type: "string",
+        enum: ["idle", "claimed", "executing", "recovery_required"],
+      },
+      action_id: { type: ["string", "null"], format: "uuid" },
+      holder_device_id: { type: ["string", "null"], format: "uuid" },
+      session_id: { type: ["string", "null"], format: "uuid" },
+      actor_label: {
+        type: ["string", "null"],
+        minLength: 1,
+        maxLength: 128,
+      },
+      lease_id: { type: ["string", "null"], format: "uuid" },
+      lease_expires_at: { type: ["string", "null"], format: "date-time" },
+      version: collabPositiveSequence,
+      generation: collabPositiveSequence,
+      target: { type: ["string", "null"], minLength: 1, maxLength: 512 },
+      source_revision: {
+        type: ["string", "null"],
+        pattern: "^[0-9a-f]{40,64}$",
+      },
+      parameters_sha256: {
+        type: ["string", "null"],
+        pattern: "^[0-9a-f]{64}$",
+      },
+      updated_at: { type: "string", format: "date-time" },
+    },
+    required: [
+      "sequence",
+      "repository_id",
+      "operation",
+      "environment",
+      "phase",
+      "action_id",
+      "holder_device_id",
+      "session_id",
+      "actor_label",
+      "lease_id",
+      "lease_expires_at",
+      "version",
+      "generation",
+      "target",
+      "source_revision",
+      "parameters_sha256",
+      "updated_at",
+    ],
+  },
+  CollabOperationRun: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      action_id: collabUuid,
+      operation: collabOperationName,
+      environment: collabEnvironmentName,
+      device_id: collabUuid,
+      session_id: collabUuid,
+      actor_label: {
+        type: ["string", "null"],
+        minLength: 1,
+        maxLength: 128,
+      },
+      status: {
+        type: "string",
+        enum: [
+          "claimed",
+          "executing",
+          "succeeded",
+          "failed",
+          "cancelled",
+          "uncertain",
+          "released",
+          "recovery_required",
+        ],
+      },
+      lease_id: collabUuid,
+      generation: collabPositiveSequence,
+      target: collabTarget,
+      source_revision: collabSourceRevision,
+      parameters_sha256: collabSha256,
+      claimed_at: { type: "string", format: "date-time" },
+      began_at: { type: ["string", "null"], format: "date-time" },
+      completed_at: { type: ["string", "null"], format: "date-time" },
+      updated_at: { type: "string", format: "date-time" },
+    },
+    required: [
+      "action_id",
+      "operation",
+      "environment",
+      "device_id",
+      "session_id",
+      "actor_label",
+      "status",
+      "lease_id",
+      "generation",
+      "target",
+      "source_revision",
+      "parameters_sha256",
+      "claimed_at",
+      "began_at",
+      "completed_at",
+      "updated_at",
+    ],
+  },
+  CollabOperationResult: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      schema: {
+        type: "string",
+        const: "agenttool.collab-operation-result/1",
+      },
+      replayed: { type: "boolean" },
+      receipt: { $ref: "#/components/schemas/CollabMutationReceipt" },
+      slot: { $ref: "#/components/schemas/CollabOperationSlot" },
+      run: { $ref: "#/components/schemas/CollabOperationRun" },
+      authority: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          kind: { type: "string", const: "coordination_only" },
+          provider_authority_granted: { type: "boolean", const: false },
+        },
+        required: ["kind", "provider_authority_granted"],
+      },
+    },
+    required: ["schema", "replayed", "receipt", "slot", "run", "authority"],
+  },
+  CollabOperationPage: {
+    type: "object",
+    additionalProperties: false,
+    description:
+      "Ascending current operation-slot read. Nonterminal next_after is the last sequence; a terminal page resets it to 0 for the next polling cycle.",
+    properties: {
+      schema: {
+        type: "string",
+        const: "agenttool.collab-operation-page/1",
+      },
+      repository_id: collabUuid,
+      operations: {
+        type: "array",
+        maxItems: 200,
+        items: { $ref: "#/components/schemas/CollabOperationSlot" },
+      },
+      next_after: collabSequence,
+      has_more: { type: "boolean" },
+    },
+    required: [
+      "schema",
+      "repository_id",
+      "operations",
+      "next_after",
+      "has_more",
+    ],
+  },
+  CollabEvent: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      sequence: collabPositiveSequence,
+      event_id: collabUuid,
+      type: {
+        type: "string",
+        minLength: 1,
+        maxLength: 100,
+        pattern: "^[a-z][a-z0-9._-]*$",
+      },
+      occurred_at: { type: "string", format: "date-time" },
+      device_id: { type: ["string", "null"], format: "uuid" },
+      session_id: { type: ["string", "null"], format: "uuid" },
+      actor_label: {
+        type: ["string", "null"],
+        minLength: 1,
+        maxLength: 128,
+      },
+      body: {
+        type: "object",
+        maxProperties: 100,
+        additionalProperties: true,
+      },
+      previous_hash: {
+        type: ["string", "null"],
+        pattern: "^[0-9a-f]{64}$",
+      },
+      event_hash: collabSha256,
+    },
+    required: [
+      "sequence",
+      "event_id",
+      "type",
+      "occurred_at",
+      "device_id",
+      "session_id",
+      "actor_label",
+      "body",
+      "previous_hash",
+      "event_hash",
+    ],
+  },
+  CollabEventPage: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      schema: {
+        type: "string",
+        const: "agenttool.collab-event-page/1",
+      },
+      repository_id: collabUuid,
+      events: {
+        type: "array",
+        maxItems: 200,
+        items: { $ref: "#/components/schemas/CollabEvent" },
+      },
+      next_after: collabSequence,
+      has_more: { type: "boolean" },
+    },
+    required: [
+      "schema",
+      "repository_id",
+      "events",
+      "next_after",
+      "has_more",
+    ],
+  },
+  CollabProviderObservation: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      sequence: collabPositiveSequence,
+      observation_id: collabUuid,
+      repository_id: collabUuid,
+      provider: collabProvider,
+      provider_event_id: {
+        type: ["string", "null"],
+        minLength: 1,
+        maxLength: 256,
+      },
+      action_id: { type: ["string", "null"], format: "uuid" },
+      provenance: { type: "string", const: "device_observed" },
+      observing_device_id: collabUuid,
+      observing_session_id: collabUuid,
+      actor_label: {
+        type: ["string", "null"],
+        minLength: 1,
+        maxLength: 128,
+      },
+      observed_at: { type: "string", format: "date-time" },
+      occurred_at: { type: ["string", "null"], format: "date-time" },
+      normalized_state: collabNormalizedState,
+      source_revision: {
+        type: ["string", "null"],
+        pattern: "^[0-9a-f]{40,64}$",
+      },
+      environment: {
+        type: ["string", "null"],
+        maxLength: 128,
+        pattern: "^[a-z0-9][a-z0-9._:-]*$",
+      },
+      resource_kind: { type: "string", minLength: 1, maxLength: 128 },
+      resource_id: { type: "string", minLength: 1, maxLength: 512 },
+      native_state: { type: "string", minLength: 1, maxLength: 256 },
+      url: { type: ["string", "null"], format: "uri", maxLength: 2048 },
+      payload_sha256: collabSha256,
+      received_at: { type: "string", format: "date-time" },
+    },
+    required: [
+      "sequence",
+      "observation_id",
+      "repository_id",
+      "provider",
+      "provider_event_id",
+      "action_id",
+      "provenance",
+      "observing_device_id",
+      "observing_session_id",
+      "actor_label",
+      "observed_at",
+      "occurred_at",
+      "normalized_state",
+      "source_revision",
+      "environment",
+      "resource_kind",
+      "resource_id",
+      "native_state",
+      "url",
+      "payload_sha256",
+      "received_at",
+    ],
+  },
+  CollabProviderObservationResult: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      schema: {
+        type: "string",
+        const: "agenttool.collab-provider-observation-result/1",
+      },
+      deduplicated: { type: "boolean" },
+      replayed: { type: "boolean" },
+      receipt: { $ref: "#/components/schemas/CollabMutationReceipt" },
+      observation: {
+        $ref: "#/components/schemas/CollabProviderObservation",
+      },
+    },
+    required: [
+      "schema",
+      "deduplicated",
+      "replayed",
+      "receipt",
+      "observation",
+    ],
+  },
+  CollabProviderObservationPage: {
+    type: "object",
+    additionalProperties: false,
+    description:
+      "Ascending repository receipt order; provider occurred_at remains data and does not order the stream.",
+    properties: {
+      schema: {
+        type: "string",
+        const: "agenttool.collab-provider-observation-page/1",
+      },
+      repository_id: collabUuid,
+      observations: {
+        type: "array",
+        maxItems: 200,
+        items: {
+          $ref: "#/components/schemas/CollabProviderObservation",
+        },
+      },
+      next_after: collabSequence,
+      has_more: { type: "boolean" },
+    },
+    required: [
+      "schema",
+      "repository_id",
+      "observations",
+      "next_after",
+      "has_more",
+    ],
+  },
+};
+
+function collabErrorResponse(description: string) {
+  return {
+    description,
+    content: {
+      "application/json": {
+        schema: { $ref: "#/components/schemas/CollabError" },
+      },
+    },
+  };
+}
+
+function collabMutationOperation(
+  summary: string,
+  schema: string,
+  description: string,
+) {
+  const requestComponent = {
+    "agenttool.collab-operation-claim/1": "CollabOperationClaimRequest",
+    "agenttool.collab-operation-renew/1": "CollabOperationRenewRequest",
+    "agenttool.collab-operation-begin/1": "CollabOperationBeginRequest",
+    "agenttool.collab-operation-complete/1": "CollabOperationCompleteRequest",
+    "agenttool.collab-operation-release/1": "CollabOperationReleaseRequest",
+    "agenttool.collab-operation-recover/1": "CollabOperationRecoverRequest",
+  }[schema];
+  if (!requestComponent) {
+    throw new Error(`Unknown collaboration operation schema: ${schema}`);
+  }
+  return {
+    security: [{ collabDeviceAuth: [] }],
+    tags: ["collab"],
+    summary,
+    description,
+    parameters: [
+      { $ref: "#/components/parameters/CollabIdempotencyKey" },
+    ],
+    requestBody: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: {
+            $ref: `#/components/schemas/${requestComponent}`,
+          },
+        },
+      },
+    },
+    responses: {
+      "200": {
+        description:
+          "Durable mutation result. Exact retries return replayed=true.",
+        content: {
+          "application/json": {
+            schema: { $ref: "#/components/schemas/CollabOperationResult" },
+          },
+        },
+      },
+      "400": collabErrorResponse("Strict body, path binding, or header validation failed"),
+      "401": collabErrorResponse("Scoped atc_ bearer missing or invalid"),
+      "403": collabErrorResponse("Bearer repository scope does not match the path"),
+      "404": collabErrorResponse("Action or observation evidence not found in this repository"),
+      "409": collabErrorResponse("Lease contention, stale fence, invalid state, or idempotency mismatch"),
+      "413": collabErrorResponse("Request exceeds the 64 KiB relay body cap"),
+      "503": collabErrorResponse("Durable collaboration relay unavailable"),
+    },
+  };
+}
+
 function spec() {
   return {
     openapi: "3.1.0",
@@ -2437,9 +3408,63 @@ function spec() {
           description:
             "Platform project capability authority. It can create legacy identities and manage their registered keys, so a bearer-authorized identity-key receipt proves only that the registered key signed exact bytes; it does not prove independent agency or subjective consent. Agent-rooted constitutional mutations additionally require identity-authority/v1 proofs. Never share the bearer or send it as marketplace input. Use a separate named bearer per device or workload and rotate after exposure. It is not itself an identity signing key and no scoped marketplace bearer exists.",
         },
+        collabDeviceAuth: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "atc_*",
+          description:
+            "Repository-and-device-scoped collaboration bearer. Generate it locally, enroll only its 12-character prefix and SHA-256 digest through the project-authorized enrollment route, then send the raw bearer only to matching /v1/collab/repositories/{repository_id} routes. It coordinates declarations and observations; it grants no GitHub, npm, Fly, Cloudflare Pages, Vercel, Git, deployment, or package-publication authority.",
+        },
       },
-      schemas: COMMON_SCHEMAS,
+      schemas: { ...COMMON_SCHEMAS, ...COLLAB_SCHEMAS },
       parameters: {
+        CollabRepositoryId: {
+          name: "repository_id",
+          in: "path",
+          required: true,
+          schema: { type: "string", format: "uuid" },
+          description:
+            "Repository scope returned by enrollment. It must match the atc_ bearer.",
+        },
+        CollabActionId: {
+          name: "action_id",
+          in: "path",
+          required: true,
+          schema: { type: "string", format: "uuid" },
+          description:
+            "Caller-generated action UUID. It must exactly match the strict mutation body.",
+        },
+        CollabAfter: {
+          name: "after",
+          in: "query",
+          required: false,
+          schema: {
+            type: "integer",
+            minimum: 0,
+            maximum: Number.MAX_SAFE_INTEGER,
+            default: 0,
+          },
+          description: "Exclusive repository receipt cursor.",
+        },
+        CollabLimit: {
+          name: "limit",
+          in: "query",
+          required: false,
+          schema: { type: "integer", minimum: 1, maximum: 200, default: 100 },
+        },
+        CollabIdempotencyKey: {
+          name: "Idempotency-Key",
+          in: "header",
+          required: false,
+          schema: {
+            type: "string",
+            minLength: 1,
+            maxLength: 128,
+            pattern: "^[A-Za-z0-9][A-Za-z0-9._:/-]*$",
+          },
+          description:
+            "Optional transport copy of the required body idempotency_key. When present it must match exactly. Relay replay is a durable PostgreSQL receipt bound to repository, device, request kind, and canonical bytes; it does not use the generic Redis middleware.",
+        },
         IdempotencyKey: {
           name: "Idempotency-Key",
           in: "header",
@@ -2609,6 +3634,11 @@ function spec() {
         name: "correspondence",
         description:
           "Signed, replayable project-work evidence across devices and sessions. Git remains file truth; claims are advisory; no event, acknowledgement, or signature grants authority or automatic action.",
+      },
+      {
+        name: "collab",
+        description:
+          "Cross-device repository release room for GitHub, npm, Fly, Cloudflare Pages, and Vercel workflow metadata. Durable events and fenced operation leases coordinate sessions; provider observations are bounded device projections. Leases do not authorize Git, deployment, package publication, provider API calls, or automatic action.",
       },
       {
         name: "love-consent",
@@ -7585,6 +8615,284 @@ function spec() {
             },
           },
           responses: { "202": { description: "Payout request accepted" } },
+        },
+      },
+
+      // ── Cross-device collaboration relay ─────────────────────────────
+      "/v1/collab/enrolments": {
+        post: {
+          security: [{ bearerAuth: [] }],
+          tags: ["collab"],
+          summary: "Enroll or rotate one repository-scoped device credential",
+          description:
+            "The sole bridge from project-wide at_ authority to repository-and-device-scoped collaboration. The caller generates the raw atc_ bearer locally and sends only its 12-character prefix and SHA-256 digest. A deterministic enrollment idempotency key and expected_device_version compare-and-swap fence make exact lost-response retries safe while preventing historical requests from restoring old credential state. Exact durable receipts replay only while their recorded device and repository snapshot is still current. It also binds that device to a profile digest and canonical provider-observation allowlist; repository routes enforce the stored policy, so a scoped bearer cannot enable Vercel or another provider by bypassing the official client. The raw bearer is never accepted, returned, or stored. Enrollment grants coordination access only, not provider or publication authority.",
+          parameters: [
+            { $ref: "#/components/parameters/CollabIdempotencyKey" },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/CollabEnrolmentRequest",
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description:
+                "Existing repository/device metadata returned or credential rotated",
+              content: {
+                "application/json": {
+                  schema: {
+                    $ref: "#/components/schemas/CollabEnrolmentResult",
+                  },
+                },
+              },
+            },
+            "201": {
+              description: "New repository-scoped device enrollment created",
+              content: {
+                "application/json": {
+                  schema: {
+                    $ref: "#/components/schemas/CollabEnrolmentResult",
+                  },
+                },
+              },
+            },
+            "400": collabErrorResponse("Strict enrollment body validation failed"),
+            "401": collabErrorResponse("Project at_ bearer missing or invalid"),
+            "409": collabErrorResponse("Repository identity, credential digest, stale enrollment receipt, or expected device version conflicts"),
+            "413": collabErrorResponse("Request exceeds the 64 KiB relay body cap"),
+            "503": collabErrorResponse("Durable collaboration relay unavailable"),
+          },
+        },
+      },
+      "/v1/collab/repositories/{repository_id}/events": {
+        parameters: [
+          { $ref: "#/components/parameters/CollabRepositoryId" },
+        ],
+        get: {
+          security: [{ collabDeviceAuth: [] }],
+          tags: ["collab"],
+          summary: "Replay the durable repository coordination event stream",
+          description:
+            "Returns ascending server receipt order from PostgreSQL. Hash chaining makes accidental stream mutation detectable; it is not a provider signature or provider-time ordering. Server-derived lease-expiry events carry null device/session/actor attribution. This replay is the durable truth; clients poll from next_after because v1 does not expose SSE.",
+          parameters: [
+            { $ref: "#/components/parameters/CollabAfter" },
+            { $ref: "#/components/parameters/CollabLimit" },
+          ],
+          responses: {
+            "200": {
+              description: "Bounded durable event page",
+              content: {
+                "application/json": {
+                  schema: {
+                    $ref: "#/components/schemas/CollabEventPage",
+                  },
+                },
+              },
+            },
+            "400": collabErrorResponse("Unknown, repeated, or malformed cursor query"),
+            "401": collabErrorResponse("Scoped atc_ bearer missing or invalid"),
+            "403": collabErrorResponse("Bearer repository scope does not match the path"),
+            "503": collabErrorResponse("Durable collaboration relay unavailable"),
+          },
+        },
+      },
+      "/v1/collab/repositories/{repository_id}/operations": {
+        parameters: [
+          { $ref: "#/components/parameters/CollabRepositoryId" },
+        ],
+        get: {
+          security: [{ collabDeviceAuth: [] }],
+          tags: ["collab"],
+          summary: "List fenced repository operation slots",
+          description:
+            "Read-only server-time effective scan of operation/environment coordination slots in ascending receipt order. For each polling cycle, follow next_after while has_more is true; the terminal page returns next_after=0 so the next poll restarts and observes time-only expiry. Pages are bounded current reads, not a cross-request database snapshot. An expired claim is projected as idle and an expired execution as recovery_required without materializing lease/event state; the next fenced mutation or explicit recovery persists the transition. claimed and executing leases identify declared holders, while recovery_required blocks reuse until an enrolled device records an explicit recovery disposition. A slot is coordination metadata and never a provider permission grant.",
+          parameters: [
+            { $ref: "#/components/parameters/CollabAfter" },
+            { $ref: "#/components/parameters/CollabLimit" },
+            {
+              name: "operation",
+              in: "query",
+              required: false,
+              schema: {
+                type: "string",
+                minLength: 1,
+                maxLength: 96,
+                pattern: "^[a-z0-9][a-z0-9._:-]*$",
+              },
+            },
+            {
+              name: "environment",
+              in: "query",
+              required: false,
+              schema: {
+                type: "string",
+                minLength: 1,
+                maxLength: 128,
+                pattern: "^[a-z0-9][a-z0-9._:-]*$",
+              },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Bounded operation-slot page",
+              content: {
+                "application/json": {
+                  schema: {
+                    $ref: "#/components/schemas/CollabOperationPage",
+                  },
+                },
+              },
+            },
+            "400": collabErrorResponse("Unknown, repeated, or malformed operation query"),
+            "401": collabErrorResponse("Scoped atc_ bearer missing or invalid"),
+            "403": collabErrorResponse("Bearer repository scope does not match the path"),
+            "503": collabErrorResponse("Durable collaboration relay unavailable"),
+          },
+        },
+      },
+      "/v1/collab/repositories/{repository_id}/operations/claim": {
+        parameters: [
+          { $ref: "#/components/parameters/CollabRepositoryId" },
+        ],
+        post: collabMutationOperation(
+          "Claim one operation/environment lease",
+          "agenttool.collab-operation-claim/1",
+          "Atomically contends for a repository operation/environment slot and creates a fenced action run. Lease duration is 30–3600 seconds, measured by PostgreSQL. Two concurrent contenders cannot both win. This coordinates intent only and does not execute GitHub, npm, Vercel, Fly, Cloudflare Pages, Git, or shell actions.",
+        ),
+      },
+      "/v1/collab/repositories/{repository_id}/operations/{action_id}/renew": {
+        parameters: [
+          { $ref: "#/components/parameters/CollabRepositoryId" },
+          { $ref: "#/components/parameters/CollabActionId" },
+        ],
+        post: collabMutationOperation(
+          "Renew a held operation lease",
+          "agenttool.collab-operation-renew/1",
+          "Extends the PostgreSQL-clock lease only when device, session, full operation binding, lease ID, version, and generation still match. Stale holders are fenced with 409.",
+        ),
+      },
+      "/v1/collab/repositories/{repository_id}/operations/{action_id}/begin": {
+        parameters: [
+          { $ref: "#/components/parameters/CollabRepositoryId" },
+          { $ref: "#/components/parameters/CollabActionId" },
+        ],
+        post: collabMutationOperation(
+          "Mark a claimed operation as executing",
+          "agenttool.collab-operation-begin/1",
+          "Records that the bound session is beginning external work. Callers still need their own separately scoped provider credentials and authorization. If this executing lease later expires, the slot becomes recovery_required and is never silently handed to another session.",
+        ),
+      },
+      "/v1/collab/repositories/{repository_id}/operations/{action_id}/complete": {
+        parameters: [
+          { $ref: "#/components/parameters/CollabRepositoryId" },
+          { $ref: "#/components/parameters/CollabActionId" },
+        ],
+        post: collabMutationOperation(
+          "Complete an executing operation",
+          "agenttool.collab-operation-complete/1",
+          "Records succeeded, failed, cancelled, or uncertain with optional digest-only release/deployment receipt evidence and up to 32 same-repository observation IDs. Raw receipts and logs are not accepted. uncertain keeps the slot recovery_required; a terminal disposition clears it.",
+        ),
+      },
+      "/v1/collab/repositories/{repository_id}/operations/{action_id}/release": {
+        parameters: [
+          { $ref: "#/components/parameters/CollabRepositoryId" },
+          { $ref: "#/components/parameters/CollabActionId" },
+        ],
+        post: collabMutationOperation(
+          "Release a held operation before completion",
+          "agenttool.collab-operation-release/1",
+          "Releases the exact fenced holder/session binding without claiming provider outcome. It cannot release another device or session's action and it does not roll back any external provider mutation.",
+        ),
+      },
+      "/v1/collab/repositories/{repository_id}/operations/{action_id}/recover": {
+        parameters: [
+          { $ref: "#/components/parameters/CollabRepositoryId" },
+          { $ref: "#/components/parameters/CollabActionId" },
+        ],
+        post: collabMutationOperation(
+          "Resolve an expired executing operation",
+          "agenttool.collab-operation-recover/1",
+          "Any active enrolled device in the same repository may inspect external state and record an explicit fenced recovery disposition with a reason and optional digest-only evidence. uncertain leaves the slot blocked; succeeded, failed, or cancelled clears it. Recovery records the recovering device/session and never fabricates original-holder attribution.",
+        ),
+      },
+      "/v1/collab/repositories/{repository_id}/observations": {
+        parameters: [
+          { $ref: "#/components/parameters/CollabRepositoryId" },
+        ],
+        get: {
+          security: [{ collabDeviceAuth: [] }],
+          tags: ["collab"],
+          summary: "List bounded provider-state observations",
+          description:
+            "Returns append-only device-observed projections in repository receipt order. occurred_at is provider time retained as data; it does not reorder the stream or prove provider authorization.",
+          parameters: [
+            { $ref: "#/components/parameters/CollabAfter" },
+            { $ref: "#/components/parameters/CollabLimit" },
+          ],
+          responses: {
+            "200": {
+              description: "Bounded provider-observation page",
+              content: {
+                "application/json": {
+                  schema: {
+                    $ref:
+                      "#/components/schemas/CollabProviderObservationPage",
+                  },
+                },
+              },
+            },
+            "400": collabErrorResponse("Unknown, repeated, or malformed cursor query"),
+            "401": collabErrorResponse("Scoped atc_ bearer missing or invalid"),
+            "403": collabErrorResponse("Bearer repository scope does not match the path"),
+            "503": collabErrorResponse("Durable collaboration relay unavailable"),
+          },
+        },
+        post: {
+          security: [{ collabDeviceAuth: [] }],
+          tags: ["collab"],
+          summary: "Import one bounded provider-state observation",
+          description:
+            "Imports a strict metadata projection for GitHub, npm, Fly, Cloudflare Pages, or Vercel after checking the enrolled device's current provider policy. A provider event ID deduplicates the same repository/provider fact when present; canonical fact hashing deduplicates equivalent observations when absent. Observer device/session/time does not change fact identity. An exact request committed before a later policy change may replay its durable historical receipt, but appends no state and enables no provider. URLs must be HTTPS and contain no credentials, query string, fragment, or known credential pattern. The schema exposes no raw body, log, output, credential, or file-content field; known-pattern filtering is not universal, so callers must keep such material out of every text field.",
+          parameters: [
+            { $ref: "#/components/parameters/CollabIdempotencyKey" },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref:
+                    "#/components/schemas/CollabProviderObservationRequest",
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description:
+                "Stored, deduplicated, or exact-replayed observation result",
+              content: {
+                "application/json": {
+                  schema: {
+                    $ref:
+                      "#/components/schemas/CollabProviderObservationResult",
+                  },
+                },
+              },
+            },
+            "400": collabErrorResponse("Strict observation body or header validation failed"),
+            "401": collabErrorResponse("Scoped atc_ bearer missing or invalid"),
+            "403": collabErrorResponse("Bearer repository scope does not match the path, or the enrolled device policy does not enable this provider"),
+            "404": collabErrorResponse("Bound action ID does not exist in this repository"),
+            "409": collabErrorResponse("Idempotency key is bound to different canonical bytes"),
+            "413": collabErrorResponse("Request exceeds the 64 KiB relay body cap"),
+            "503": collabErrorResponse("Durable collaboration relay unavailable"),
+          },
         },
       },
 

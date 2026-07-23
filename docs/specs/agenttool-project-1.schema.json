@@ -1,0 +1,386 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/cambridgetcg/agenttool/main/docs/specs/agenttool-project-1.schema.json",
+  "title": "AgentTool project profile 1",
+  "description": "A committed, non-secret project identity and release-surface profile. This schema enforces the portable structural boundary; consumers MUST also run the agenttool.project/1 semantic validator for cross-field repository and Vercel identity equalities.",
+  "$comment": "Draft 2020-12 cannot compare values held in two arbitrary instance locations. validateProjectProfile enforces repository.key = provider:provider_repository_id for GitHub and every Vercel deployment resource_id = vercel.project_id.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "project_id",
+    "repository",
+    "deployments",
+    "vercel"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+    },
+    "schema": {
+      "const": "agenttool.project/1"
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "key",
+        "provider_repository_id",
+        "display_name"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 256,
+          "pattern": "^[a-z][a-z0-9-]*:[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "provider": {
+          "enum": [
+            "github",
+            "git",
+            "other"
+          ]
+        },
+        "provider_repository_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "display_name": {
+          "type": "string",
+          "pattern": "^[^\\x00-\\x1F\\x7F]{1,256}$",
+          "maxLength": 256
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "provider": {
+                "const": "github"
+              }
+            },
+            "required": [
+              "provider"
+            ]
+          },
+          "then": {
+            "properties": {
+              "key": {
+                "pattern": "^github:[1-9][0-9]*$"
+              },
+              "provider_repository_id": {
+                "pattern": "^[1-9][0-9]*$"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "github": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "release_branch",
+        "required_checks"
+      ],
+      "properties": {
+        "release_branch": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "required_checks": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+          }
+        }
+      }
+    },
+    "npm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workflow",
+        "packages"
+      ],
+      "properties": {
+        "workflow": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*\\.ya?ml$",
+          "maxLength": 200
+        },
+        "packages": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 100,
+          "propertyNames": {
+            "maxLength": 214,
+            "pattern": "^(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "tag_prefix",
+              "release_key",
+              "path"
+            ],
+            "properties": {
+              "tag_prefix": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+              },
+              "release_key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]+$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "deployments": {
+      "type": "object",
+      "maxProperties": 100,
+      "propertyNames": {
+        "maxLength": 100,
+        "pattern": "^[a-z][a-z0-9._-]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "provider",
+          "environment",
+          "resource_id"
+        ],
+        "properties": {
+          "provider": {
+            "enum": [
+              "fly",
+              "cloudflare-pages",
+              "vercel"
+            ]
+          },
+          "environment": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z0-9][a-z0-9._:-]*$"
+          },
+          "resource_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          }
+        }
+      }
+    },
+    "vercel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "team_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "project_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "enabled": {
+                "const": false
+              }
+            },
+            "required": [
+              "enabled"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "team_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "project_id"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "enabled"
+            ]
+          },
+          "then": {
+            "required": [
+              "team_id",
+              "project_id"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "repository": {
+            "properties": {
+              "provider": {
+                "const": "github"
+              }
+            },
+            "required": [
+              "provider"
+            ]
+          }
+        },
+        "required": [
+          "repository"
+        ]
+      },
+      "then": {
+        "required": [
+          "github"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "vercel": {
+            "properties": {
+              "enabled": {
+                "const": false
+              }
+            },
+            "required": [
+              "enabled"
+            ]
+          }
+        },
+        "required": [
+          "vercel"
+        ]
+      },
+      "then": {
+        "properties": {
+          "deployments": {
+            "additionalProperties": {
+              "properties": {
+                "provider": {
+                  "enum": [
+                    "fly",
+                    "cloudflare-pages"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "vercel": {
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "enabled"
+            ]
+          }
+        },
+        "required": [
+          "vercel"
+        ]
+      },
+      "then": {
+        "not": {
+          "properties": {
+            "deployments": {
+              "additionalProperties": {
+                "properties": {
+                  "provider": {
+                    "not": {
+                      "const": "vercel"
+                    }
+                  }
+                },
+                "required": [
+                  "provider"
+                ]
+              }
+            }
+          },
+          "required": [
+            "deployments"
+          ]
+        }
+      }
+    }
+  ]
+}

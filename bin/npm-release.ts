@@ -448,6 +448,7 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
     entries.push(
       "package/THIRD_PARTY_LICENSES",
       "package/dist/agenttool-collab-mcp.js",
+      "package/dist/agenttool-collab-enroll.js",
       "package/.codex-plugin/plugin.json",
       "package/.claude-plugin/plugin.json",
       "package/skills/coordinate-agent-work/SKILL.md",

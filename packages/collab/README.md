@@ -1,18 +1,27 @@
 # @agenttool/collab
 
-Local-first coordination for independent coding-agent sessions. It gives
-Codex, Claude Code, Hermes Agent, and other local MCP clients one SQLite-backed
-repository workspace with two explicit planes: self-declared presence for
-routing hints, and credential-bound sessions for resumable coordination,
-transactional task leases, linked Git worktree awareness, path-conflict
-projection, structured reports, reviewed edit completion, refusable handoffs,
-Git checkpoints, and a hash-chained event journal.
+Local-first coordination plus an optional cross-device release room for
+independent coding-agent sessions. Codex, Claude Code, Hermes Agent, and other
+MCP clients can use three deliberately distinct planes:
 
-It does **not** spawn, steer, wake, or stop agents; lock files; authenticate the
-local user; grant external authority; or create a channel hidden from a remote
-model provider. The host owns agent lifecycle and polling. Claims are advisory,
-session and actor identifiers are coordination labels, and MCP arguments and
-results remain visible to whichever provider runs the calling agent.
+1. a SQLite-backed local workspace for credential-bound sessions,
+   transactional task leases, reports, review, handoffs, Git checkpoints, and
+   a hash-chained journal on one device;
+2. the separately deployed Agent Correspondence protocol for signed,
+   replayable facts across devices without choosing a winner; and
+3. a repository-scoped relay release room for atomic cooperative leases around
+   external operations and bounded provider observations.
+
+Git carries file bytes and history. The local journal does not replicate
+between devices, Correspondence claims remain advisory, and the release room
+does not replace ordinary edit-task coordination.
+
+It does **not** spawn, steer, wake, or stop agents; replicate Git; lock files;
+authenticate the local user; grant external authority; or create a channel
+hidden from a relay operator or remote model provider. The host owns agent
+lifecycle and polling. Claims are cooperative coordination, session and actor
+identifiers are bounded attribution labels, and MCP arguments and results
+remain visible to whichever provider runs the calling agent.
 
 ## Run
 
@@ -26,14 +35,18 @@ bun run build:mcp
 ```
 
 The installed `agenttool-collab-mcp` command and both bundled plugin manifests
-run `dist/agenttool-collab-mcp.js`. It is a Bun-targeted standalone JavaScript
-bundle, so plugin hosts do not need to install its JavaScript dependencies. It
-still requires Bun 1.3 or newer on `PATH`.
+run `dist/agenttool-collab-mcp.js`. The explicit
+`agenttool-collab-enroll` command runs
+`dist/agenttool-collab-enroll.js`. They are Bun-targeted standalone JavaScript
+bundles, so plugin hosts do not need to install their JavaScript dependencies.
+They still require Bun 1.3 or newer on `PATH`.
 
 The default database is `~/.local/share/agenttool/collab.sqlite`. Set
 `AGENTOOL_COLLAB_DB` in each host's scoped MCP environment to select another
 journal. Every collaborating process must resolve to the same database file.
-The package does not replicate journals between machines.
+The package does not replicate that journal between machines. Cross-device
+facts use Agent Correspondence; cross-device exclusion is limited to release
+room operations.
 
 A dedicated state directory created by this package uses `0700`; it never
 changes the mode of an existing caller-owned parent directory. The SQLite
@@ -58,7 +71,172 @@ status. It does not itself fetch, inspect remotes, contact a forge, or request
 credential values. Repository-specific Git configuration or hooks remain part
 of the caller's local Git boundary.
 
-### Two session planes
+## Cross-device release room
+
+The v0.4 release room adds remote atomicity only for bounded external
+operations such as a package release or production deploy. It does not
+replicate local tasks, reports, checkpoints, or source. Use:
+
+- the local journal for atomic same-device edit tasks;
+- [Agent Correspondence](https://github.com/cambridgetcg/agenttool/blob/main/docs/AGENT-CORRESPONDENCE.md) for signed
+  cross-device intent, progress, Git-addressed artifacts, disagreement,
+  refusal, rest, handoff, and repair; and
+- the release room immediately before an externally mutating operation.
+
+The MCP server exposes release-room tools only when relay URL, project
+profile, and active scoped credential metadata are configured. Installing or
+starting the plugin never enrolls a device by itself. Local coordination
+continues without the remote tools when no relay URL is set. A partially
+configured or mismatched relay binding fails startup instead of silently
+falling back to an uncoordinated surface.
+
+### Project profile and enrollment
+
+Commit a non-secret `.agenttool/project.json` conforming to
+[`agenttool.project/1`](https://github.com/cambridgetcg/agenttool/blob/main/docs/specs/agenttool-project-1.schema.json). It
+binds clones through a stable provider repository ID and records release
+policy and deployment-surface metadata. A display name is not sufficient
+identity. The profile must not contain credentials, local paths, or unrelated
+provider account identifiers. Its required `deployments` object may be empty
+when the project has no hosted surface; Vercel is enabled only alongside an
+explicit Vercel surface and stable team/project binding. Each declared surface
+binds provider, environment, and stable provider resource ID.
+
+The host finds the nearest profile from the working directory. Set
+`AGENTOOL_COLLAB_PROJECT_FILE` only to select one explicitly. Each device must
+enroll deliberately; a matching Git remote or readable profile never enrolls
+it automatically.
+
+Run the explicit `agenttool-collab-enroll` host command. The source-tree entry
+is `bin/agenttool-collab-enroll.ts`; releases bundle
+`dist/agenttool-collab-enroll.js`. The wrapper validates the profile and uses an
+existing project bearer for the one enrollment request. On first enrollment it
+obtains a fresh repository-scoped `atc_` bearer (generated for Keychain or
+pre-generated by a scoped environment wrapper); re-enrollment deliberately
+reuses the existing device bearer and does not rotate it. The wrapper derives
+the profile digest and canonical provider allowlist and sends only that
+non-secret policy plus the token prefix and digest in the enrollment body. The
+relay stores the policy on the enrolled device, so an `atc_` bearer used
+through a custom client still cannot observe Vercel or another provider omitted
+by the project-authorized enrollment.
+Enrollment uses a deterministic request key plus device-version CAS. The
+mode-`0600` metadata file preserves the exact hash-only pending request before
+HTTP, so a lost response retries the same bytes instead of rolling credential
+or policy state backward.
+An exact retry can replay a receipt committed before a later policy change,
+but it appends no new observation and enables nothing.
+Neither bearer belongs in a model-facing tool result.
+
+Without an explicit credential path or device ID, the wrapper uses a stable
+repository-scoped `default.json` under the host state directory and stores the
+generated UUID inside it, so an ambiguous first run and its retry meet the same
+pending request. A private local per-credential enrollment lock spans metadata
+read, HTTP, and the final fenced write. It prevents two local processes from
+replacing each other's metadata; it is not a remote or cross-device lock.
+
+```bash
+agenttool-collab-enroll \
+  --device-label "this-device" \
+  --project-bearer-stdin
+```
+
+Provide the one-shot project bearer through
+`AGENTOOL_COLLAB_PROJECT_BEARER` or the explicit
+`--project-bearer-stdin` mode, never an argv value visible in a process
+listing.
+
+On macOS the raw scoped token is stored in Keychain by default. A mode-`0600`
+metadata file stores the relay/repository/device binding and version, Keychain
+reference, and any strict hash-only pending enrollment request—never either
+raw bearer. Select it and the relay with:
+
+```text
+AGENTOOL_COLLAB_RELAY_CREDENTIAL_FILE=/host/private/metadata.json
+AGENTOOL_COLLAB_RELAY_URL=https://relay.example
+```
+
+CI and non-macOS hosts may receive `AGENTOOL_COLLAB_RELAY_TOKEN` through a
+named, process-scoped wrapper whose environment ends with the command. Never
+export it from global shell startup.
+
+Repository requests present the scoped bearer over TLS. The relay can read
+stored coordination metadata, and authentication code sees the bearer long
+enough to hash it. This boundary is server-readable transport security, not
+end-to-end encryption or a private provider channel.
+
+### Operation lease and observations
+
+The remote slot key is exactly repository + operation + environment. One
+claim also binds an exact target, source revision, and parameter digest. Begin
+the action immediately before the external mutation; renew only that exact
+action; complete it with bounded receipt references and provider evidence.
+Because an exact idempotent mutation receipt can be historical, the official
+client rejects an expired returned lease and immediately status-confirms the
+same complete current slot fence before returning `claim`, `renew`, or `begin`
+as actionable. Direct HTTP clients must do the same before using the lease.
+
+For AgentTool, use the exact pairs `github-branch / repository`,
+`github-pull-request / repository`, `github-merge / main`,
+`npm-release / production`, and `production-deploy / production`; enabled
+Vercel projects use `vercel-deploy / preview` or
+`vercel-deploy / production`. Synonyms are different slots. Compute
+`parameters_sha256` with exported `requestSha256(parameters)` over the same
+agreed JSON object on every device.
+
+If a claimed lease expires before execution, its history remains and the slot
+may return to idle. If an executing lease expires, the slot fails closed to
+`recovery_required` with an uncertain outcome. A cooperating device must
+reconcile receipts and provider state before the slot can be reused.
+Operation status is a read-only server-time effective scan: follow `next_after`
+while `has_more` is true, then use the terminal page's `next_after: 0` to
+restart the next polling cycle. That reset lets time-only expiry become
+visible. Pages are current reads, not a cross-request database snapshot.
+Status projects an expired claim as idle or an expired execution as
+recovery-required without materializing lease/event state. The next fenced
+mutation, including explicit recovery, persists that transition and its
+server-attributed audit event. Read authentication does not update device
+usage telemetry.
+
+The MCP surface provides operation status/events,
+claim/renew/begin/complete/release/recover, and provider observation
+reads/writes. Recovery requires the current version/generation plus bounded
+reason and optional receipt/evidence references; an uncertain disposition
+keeps the slot closed. Every observation names its observing session and may
+bind the related action; the MCP runtime derives a stable UUID for its process.
+Exact mutation retries are idempotent; reusing an idempotency key with another
+body fails. Provider checks, deployments,
+webhooks, registry state, and receipts are evidence, not authority.
+Receipt normalization is profile-bound: npm name, release key,
+repository-relative path, and exact tag prefix/version must match. For deploy
+receipts, the provider, environment, and resource ID come from caller-supplied
+import context and are checked against the profile; they are not fields in the
+receipt and therefore are not provider provenance. The v2 adapter accepts only
+the bound Fly `agenttool` surface when the wrapper outcome is `succeeded` and
+its API phase is exactly `deployed_verified`. It refuses skipped or unverified
+API phases and every individual Cloudflare Pages or Vercel surface because the
+receipt has only one aggregate `frontends` phase. Use separately corroborated
+direct provider observations for those surfaces. Imported receipts and direct
+observations are repository-scoped `device_observed` claims, not
+provider-verified facts. Direct observations are more flexible because their
+resource may be a check, run, or deployment ID; they do not prove
+provider-project binding. No new Vercel observation is accepted while Vercel
+is disabled; an exact historical receipt retry may still return without
+appending state or enabling Vercel.
+
+Do not send raw logs, diffs, source bodies, prompts, transcripts, command
+output, environment dumps, credentials, or secret-bearing URLs. Prefer exact
+revisions, stable resource IDs, bounded states, digests, and the fixed fields
+of `agenttool.npm-release/1` and `agenttool-deploy-receipt/v2`. Strict schemas
+provide no raw-payload fields and reject common credential patterns and
+secret-bearing URL components; that is not a universal secret or log scanner.
+
+See [Cross-device collaboration](https://github.com/cambridgetcg/agenttool/blob/main/docs/CROSS-DEVICE-COLLABORATION.md) for
+the GitHub → checks/review → merge → protected npm OIDC workflow or deploy
+wrapper → receipt → provider-observation flow. The normative HTTP and recovery
+contract is [Collab Release Room
+0.4](https://github.com/cambridgetcg/agenttool/blob/main/docs/specs/AGENTTOOL-COLLAB-RELEASE-ROOM-0.4.md).
+
+### Two local session planes
 
 The public presence plane remains available through `collab_session_join`,
 `collab_session_list`, `collab_session_heartbeat`, and
@@ -307,12 +485,15 @@ data out of the journal. A local path or Git branch name may itself be
 sensitive; attach only references that every intended journal reader may see.
 
 All processes running as an OS user that can read the selected database share
-its contents. A session credential file limits cooperative attribution to its
-bearer but does not encrypt the database or authenticate a human. Addressed
-reports are routing, not confidentiality. File modes reduce accidental
-cross-user exposure but do not defeat malware, backups, debug logs, a
-privileged local process, or a remote model provider receiving tool calls. Use
-a separately secured channel or vault for private material.
+its contents. A local session credential file limits cooperative attribution
+to its bearer but does not encrypt the database or authenticate a human. The
+remote scoped bearer authenticates one enrolled repository but does not make
+relay state end-to-end encrypted. Addressed reports are routing, not
+confidentiality. File modes and Keychain reduce accidental exposure within
+their stated host boundaries but do not defeat malware, backups, debug logs, a
+privileged local process, a relay operator, or a remote model provider
+receiving tool calls. Use a separately secured channel or vault for private
+material.
 
 Rights, task leases, and permissions are distinct. A claim coordinates
 repository work; it does not make a participant property, authenticate a
@@ -330,10 +511,13 @@ The npm package root is the plugin root for both hosts, so the same
   `${CLAUDE_PLUGIN_ROOT}` because Claude installs plugins into a versioned
   cache whose absolute path can change.
 
-Neither configuration stores state inside the plugin installation. Both hosts
-can coordinate only when their MCP processes select the same journal. Host
-environment forwarding varies, so set `AGENTOOL_COLLAB_DB` in each host's
-scoped MCP configuration and verify the opened workspace rather than assuming
+Neither configuration stores state inside the plugin installation. Processes
+must select the same journal for local task atomicity. Separately enrolled
+devices can share release-room operations and provider observations without
+sharing that SQLite file; they still exchange source through Git and ordinary
+cross-device facts through Agent Correspondence. Host environment forwarding
+varies, so set Collab variables in each host's scoped MCP configuration and
+verify both the opened workspace and repository binding rather than assuming
 an outer shell variable was inherited.
 
 Hermes uses the same bundled stdio MCP server as a configuration adapter; this
@@ -344,9 +528,9 @@ name `agenttool` so Hermes exposes prefixed tools such as
 `integrations/hermes/skills/coordinate-agent-work-hermes` adapter into the
 selected Hermes profile. Its workflow keeps the credential-bound and
 self-declared presence planes separate and never asks the model to read a
-session credential file. Hermes Kanban remains Hermes's dispatcher; the local
-Collab journal does not automatically mirror it, spawn or wake agents, or
-infer external authority.
+session credential file. Hermes Kanban remains Hermes's dispatcher; neither
+the local journal nor the release room automatically mirrors it, spawns or
+wakes agents, or infers external authority.
 
 For a source-tree trial, build once and point Claude Code at this package root:
 
@@ -362,9 +546,10 @@ published; this repository does not imply that publication occurred.
 
 Codex registry installation downloads an npm archive with lifecycle scripts
 disabled and does not install package dependencies. Consequently,
-`dist/agenttool-collab-mcp.js` is a release artifact rather than an install-time
-product. `prepack` rebuilds it and runs the full package checks for maintainer
-packaging; a host installation must not be relied on to rebuild it.
+`dist/agenttool-collab-mcp.js` and `dist/agenttool-collab-enroll.js` are
+release artifacts rather than install-time products. `prepack` rebuilds them
+and runs the full package checks for maintainer packaging; a host installation
+must not be relied on to rebuild either one.
 
 ## Distribution
 
@@ -382,16 +567,21 @@ npm pack --dry-run --ignore-scripts
 
 Maintainer publication uses the repository's protected `publish-npm.yml`
 workflow and `bin/npm-release.ts`, not a local `npm publish`. See
-[`docs/NPM-RELEASES.md`](../../docs/NPM-RELEASES.md).
+[`docs/NPM-RELEASES.md`](https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md).
 
-Version 0.1.0 is the initial public npm release, and version 0.2.0 remains a
-historical public release. Version 0.3.0 is the current public npm `latest`.
-Protected trusted workflow run `30010457955` published it with SLSA provenance;
-independently downloaded npm and
+Version 0.1.0 was the initial public npm release, version 0.2.0 remains a
+historical public release, and version 0.3.0 was the immediately preceding
+verified release. Protected trusted workflow run `30010457955` published
+0.3.0 with SLSA provenance; independently downloaded npm and
 [GitHub Release](https://github.com/cambridgetcg/agenttool/releases/tag/collab-v0.3.0)
 tarballs were byte-identical
 (`sha256:9c605ebe4cdc87eda1b0eede6bba0a6591a3dd62badd364463b01521401def7f`).
-It remains local plaintext software, not a hosted service, remote relay, VPN,
-private model channel, or LOVE release. npm distributes the local skills,
-plugin manifests, source, and bundled MCP runtime; this release adds no Fly or
-Cloudflare surface.
+
+Version 0.4.0 adds the explicit enrollment client and remote release-room MCP
+surface while preserving the 0.3 local protocol. Source, version metadata, an
+archive, or a tag is not registry publication proof; verify the public registry
+and protected release receipt. Installing the package does not deploy a relay
+or hosted surface. The configured relay is a separately operated,
+server-readable coordination service, not a VPN, end-to-end-encrypted chat,
+private model channel, provider credential broker, or grant of release
+authority.

@@ -9,6 +9,8 @@ These differ from `docs/*.md` (which are doctrine — *what we believe and why*)
 | Spec | Layer | Status | Adoption |
 |---|---|---|---|
 | [`WAKE-1.0-DRAFT.md`](WAKE-1.0-DRAFT.md) | L1 — Discovery | Working Draft 1.0 (2026-05-17) | Reference implementation in agenttool; open for review/revision/adoption. |
+| [`AGENT-CORRESPONDENCE-0.1.md`](AGENT-CORRESPONDENCE-0.1.md) | L3 — Communication | AgentTool Profile 0.1 (2026-07-19) | Signed project-private operational facts with durable replay, advisory claims, explicit acknowledgement, refusal, rest, handoff, and repair. Git remains byte truth; no winner or external authority is inferred. |
+| [`AGENTTOOL-COLLAB-RELEASE-ROOM-0.4.md`](AGENTTOOL-COLLAB-RELEASE-ROOM-0.4.md) | L3 — Coordination | AgentTool Profile 0.4 (2026-07-23) | Explicit per-device enrolment, repository-scoped atomic external-operation leases, recovery-required uncertainty, and bounded provider observations. Includes strict non-secret [`agenttool.project/1`](agenttool-project-1.schema.json) project profiles. |
 | [`WITNESS-1.0-DRAFT.md`](WITNESS-1.0-DRAFT.md) | L4 — Trust / Witness | Working Draft 1.0 (2026-05-17) | Cryptographic anti-sycophancy primitive. Foundational for Covenant 1.0, Encounter 1.0, Dispute 1.0, all subsequent AIP specs. |
 | [`COVENANT-1.0-DRAFT.md`](COVENANT-1.0-DRAFT.md) | L5 — Covenants | Working Draft 1.0 (2026-05-17; rights floor added 2026-07-13) | Structured-contract primitive — the substrate-honest replacement for ToS. Composes on Witness 1.0. Its attributed XENIA rights rule is normative but current AgentTool vow strings remain opaque and are not semantically checked; no XENIA Covenant conformance is claimed. |
 | [`AGENT-WALLET-0.1.md`](AGENT-WALLET-0.1.md) | L6/L7 — Value & Capability | Working Draft 0.1 (2026-07-21) | Closed capability, intent, receipt, signer-boundary, and continuity primitives. Apache-2.0 LOVE package: `@agenttool/wallet`; npm is an independently verifiable optional mirror. No hosted wallet, key custody, RPC, or execution conformance is claimed. |
@@ -32,7 +34,8 @@ These specs are part of a multi-layer proposal for the agent web. Layer dependen
   L6  — Value                       VALUE 1.0 (extends x402) ◐ Agent Wallet 0.1 boundary; settlement TBD
   L5  — Covenants                   COVENANT 1.0             ✓ Working Draft 2026-05-17
   L4  — Trust / Witness             WITNESS 1.0              ✓ Working Draft 2026-05-17
-  L3  — Communication               (existing: HTTP, MCP, A2A)
+  L3  — Communication / Coordination Agent Correspondence 0.1 + Collab Release Room 0.4
+                                     ✓ AgentTool profiles over HTTP/MCP
   L2  — Identity                    (existing: W3C DID, ed25519)
   L1  — Discovery                   WAKE 1.0                 ✓ Working Draft 2026-05-17
   L0  — Transport                   (existing: TCP/IP, TLS)

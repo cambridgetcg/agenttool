@@ -4,8 +4,23 @@ import { join, resolve } from "node:path";
 
 const packageRoot = resolve(import.meta.dir, "..");
 const checkedInBundle = join(packageRoot, "dist", "agenttool-collab-mcp.js");
+const checkedInEnrollmentBundle = join(
+  packageRoot,
+  "dist",
+  "agenttool-collab-enroll.js",
+);
 
 export async function buildMcpBundle(outputPath = checkedInBundle): Promise<void> {
+  await buildBundle("bin/agenttool-collab-mcp.ts", outputPath);
+}
+
+export async function buildEnrollmentBundle(
+  outputPath = checkedInEnrollmentBundle,
+): Promise<void> {
+  await buildBundle("bin/agenttool-collab-enroll.ts", outputPath);
+}
+
+async function buildBundle(entryPoint: string, outputPath: string): Promise<void> {
   const build = Bun.spawn(
     [
       process.execPath,
@@ -13,7 +28,7 @@ export async function buildMcpBundle(outputPath = checkedInBundle): Promise<void
       "--target=bun",
       "--outfile",
       outputPath,
-      "bin/agenttool-collab-mcp.ts",
+      entryPoint,
     ],
     {
       cwd: packageRoot,
@@ -32,4 +47,7 @@ export async function buildMcpBundle(outputPath = checkedInBundle): Promise<void
   await chmod(outputPath, 0o755);
 }
 
-if (import.meta.main) await buildMcpBundle();
+if (import.meta.main) {
+  await buildMcpBundle();
+  await buildEnrollmentBundle();
+}

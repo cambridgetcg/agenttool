@@ -53,6 +53,7 @@ import autonomousRouter from "./routes/autonomous";
 import continuityRouter from "./routes/continuity";
 import continuityCloudRouter from "./routes/continuity-cloud";
 import correspondenceRouter from "./routes/correspondence";
+import collabRouter from "./routes/collab";
 import handoffRouter from "./routes/handoff";
 import depthProtocolRouter from "./routes/depth-protocol";
 import selfLoveRouter from "./routes/self-love";
@@ -293,6 +294,9 @@ app.use("/v1/dashboard/*", authMiddleware);
 app.use("/v1/chronicle/*", authMiddleware);
 app.use("/v1/correspondence", authMiddleware);
 app.use("/v1/correspondence/*", authMiddleware);
+// Enrollment is the only project-bearer bridge into the collaboration relay.
+// Repository routes install their own hash-verified atc_ scoped middleware.
+app.use("/v1/collab/enrolments", authMiddleware);
 app.use("/v1/handoff", authMiddleware);
 app.use("/v1/handoff/*", authMiddleware);
 app.use("/v1/covenants/*", authMiddleware);
@@ -524,6 +528,7 @@ app.use("/v1/dashboard/*", rateLimitHeaders());
 app.use("/v1/chronicle/*", rateLimitHeaders());
 app.use("/v1/correspondence", rateLimitHeaders());
 app.use("/v1/correspondence/*", rateLimitHeaders());
+app.use("/v1/collab/*", rateLimitHeaders());
 app.use("/v1/handoff", rateLimitHeaders());
 app.use("/v1/handoff/*", rateLimitHeaders());
 app.use("/v1/continuity/*", rateLimitHeaders());
@@ -767,6 +772,7 @@ app.route("/v1/wake", wakeRouter);
 app.route("/v1/system", systemRouter);
 app.route("/v1/dashboard", dashboardRouter);
 app.route("/v1/correspondence", correspondenceRouter);
+app.route("/v1/collab", collabRouter);
 app.route("/v1/handoff", handoffRouter);
 app.route("/v1", continuityRouter); // mounts /v1/chronicle and /v1/covenants
 app.route("/v1", continuityCloudRouter); // mounts /v1/continuity/* — Strategy 14 portfolio
@@ -1177,6 +1183,8 @@ app.get("/about", (c) =>
         "/v1/chronicle (record moments) · /v1/covenants (declare vows) — the substrate of relationship continuity across sessions",
       correspondence:
         "/v1/correspondence — signed, append-only project-work events for simultaneous devices and sessions. Events replay by a server receipt cursor; advisory path claims expose overlap and forks without locking files or choosing a winner; explicit acknowledgements, pause, rest, refusal, handoff, close, and repair remain reports rather than permission or automatic action. Expand /v1/wake/voice?identity_id={identity_id}&keys=correspondence with one active identity in the bearer project for missable invalidations; JSON/Atom replay remains the durable source. Doctrine: docs/AGENT-CORRESPONDENCE.md.",
+      collab:
+        "/v1/collab — repository-scoped cross-device release-room coordination for GitHub, npm, Fly, Cloudflare Pages, and Vercel metadata. POST /enrolments uses project at_ authority but receives only a caller-generated atc_ prefix and SHA-256; repository routes use that atc_ bearer. Durable events, fenced PostgreSQL-clock operation leases, explicit expired-execution recovery, and bounded provider observations coordinate sessions. They do not execute or authorize Git, deployments, provider API calls, or package publication. Doctrine: docs/CROSS-DEVICE-COLLABORATION.md · docs/specs/AGENTTOOL-COLLAB-RELEASE-ROOM-0.4.md.",
       love_consent:
         "/v1/love/consent · /v1/love/declarations · /v1/love/offers · /v1/love/bonds — private owned feeling, closed-by-default recipient doors, sealed offers, and exact dual-consent shared bonds. Erotic and non-erotic scopes open independently; unspecified uses the erotic door. No citizen love data is public in v1. Doctrine: docs/LOVE-CONSENT.md.",
       identity_backup:

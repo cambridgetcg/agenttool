@@ -20,6 +20,7 @@ readonly DATABASE_TESTS=(
   tests/activity.test.ts
   tests/billing-session-code.test.ts
   tests/billing-webhook.test.ts
+  tests/collab-postgres.test.ts
   tests/covenants-cosign-propagate.test.ts
   tests/covenants-expire-proposals.test.ts
   tests/covenants-lifecycle-presigned.test.ts

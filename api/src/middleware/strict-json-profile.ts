@@ -14,6 +14,8 @@ export const STRICT_JSON_PROFILE_MEDIA_TYPES = new Set([
 
 const CORRESPONDENCE_EXACT_JSON_PATH =
   /^\/v1\/correspondence\/(?:events|claims|voice)\/?$/;
+const COLLAB_EXACT_JSON_PATH =
+  /^\/v1\/collab\/(?:enrolments|repositories\/[0-9a-f-]+\/(?:events|operations(?:\/(?:claim|[0-9a-f-]+\/(?:renew|begin|complete|release|recover)))?|observations))\/?$/;
 
 export function isStrictJsonProfileResponse(
   response: Response,
@@ -32,6 +34,9 @@ export function isStrictJsonProfileResponse(
   return (
     mediaType === "application/json" &&
     requestPath !== undefined &&
-    CORRESPONDENCE_EXACT_JSON_PATH.test(requestPath)
+    (
+      CORRESPONDENCE_EXACT_JSON_PATH.test(requestPath) ||
+      COLLAB_EXACT_JSON_PATH.test(requestPath)
+    )
   );
 }

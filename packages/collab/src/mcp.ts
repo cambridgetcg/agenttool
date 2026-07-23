@@ -1,7 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/server";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { CollabError } from "./errors.js";
 import type { EventCursor, SessionHandle, TaskStatus } from "./protocol.js";
+import type { CollabRelayClient } from "./relay-client.js";
+import { providerUrlSchema } from "./relay-contract.js";
 import {
   removeSessionCredentialFile,
   writeSessionCredentialFile,
@@ -29,6 +32,46 @@ const eventAnchor = z.object({
   sequence: z.number().int().nonnegative(),
   hash: z.string().length(64),
 });
+const relayUuid = z.string().uuid()
+  .refine((value) => value === value.toLowerCase(), "must be a canonical lowercase UUID");
+const relayIdempotencyKey = z.string().min(1).max(128)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/);
+const relayOperation = z.string().min(1).max(96)
+  .regex(/^[a-z0-9][a-z0-9._:-]*$/);
+const relayEnvironment = z.string().min(1).max(128)
+  .regex(/^[a-z0-9][a-z0-9._:-]*$/);
+const relayTarget = z.string().min(1).max(512);
+const relaySourceRevision = z.string().regex(/^[a-f0-9]{40,64}$/);
+const relaySha256 = z.string().regex(/^[a-f0-9]{64}$/);
+const relayLeaseSeconds = z.number().int().min(30).max(3600);
+const relayActorLabel = z.string().min(1).max(128).optional();
+const relayBindingSchema = {
+  idempotency_key: relayIdempotencyKey,
+  action_id: relayUuid,
+  actor_label: relayActorLabel,
+  operation: relayOperation,
+  environment: relayEnvironment,
+  target: relayTarget,
+  source_revision: relaySourceRevision,
+  parameters_sha256: relaySha256,
+};
+const relayFencedSchema = {
+  ...relayBindingSchema,
+  lease_id: relayUuid,
+  expected_version: z.number().int().positive(),
+  expected_generation: z.number().int().positive(),
+};
+const relayReceiptRef = z.object({
+  schema: z.enum([
+    "agenttool.npm-release/1",
+    "agenttool-deploy-receipt/v2",
+    "other",
+  ]),
+  sha256: relaySha256,
+}).strict();
+const relayObservationIds = z.array(relayUuid).max(32)
+  .refine((values) => new Set(values).size === values.length)
+  .optional();
 
 const localReadOnly = {
   readOnlyHint: true,
@@ -58,11 +101,26 @@ const localDestructiveMutation = {
   openWorldHint: false,
 } as const;
 
+const relayReadOnly = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+} as const;
+
+const relayRetrySafeMutation = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+} as const;
+
 export interface CollabMcpServerOptions {
   resumed_session?: {
     handle: SessionHandle;
     credential_file: string;
   };
+  relay?: CollabRelayClient;
 }
 
 interface BoundSession {
@@ -75,8 +133,9 @@ export function buildCollabMcpServer(
   options: CollabMcpServerOptions = {},
 ): McpServer {
   let binding: BoundSession | null = options.resumed_session ?? null;
+  const relayFallbackSessionId = randomUUID();
   const server = new McpServer(
-    { name: "agenttool-collab", version: "0.3.0" },
+    { name: "agenttool-collab", version: "0.4.0" },
     {
       capabilities: { tools: {} },
       instructions:
@@ -93,7 +152,10 @@ export function buildCollabMcpServer(
         "chain-of-thought, or sensitive source content. Cursor rollback recovery must be enabled by the host " +
         "and completed with an audited cursor reset before session mutations resume. The host owns spawning, " +
         "wakeups, waiting, and stopping. The separate collab_session_join/list/heartbeat/leave tools preserve " +
-        "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller.",
+        "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller."
+        + (options.relay
+          ? " The optional release-room tools coordinate participating devices through a remote relay. Their leases fail closed when the relay is unavailable and never authorize GitHub, npm, Vercel, Fly, Cloudflare, or another provider action. Provider imports are device-observed bounded metadata, not provider-verified truth."
+          : ""),
     },
   );
 
@@ -913,6 +975,229 @@ export function buildCollabMcpServer(
     })),
   );
 
+  if (options.relay) {
+    const relay = options.relay;
+    const attribution = (fallbackActor?: string) => ({
+      session_id: binding
+        ? relaySessionUuid(binding.handle.session.id)
+        : relayFallbackSessionId,
+      actor_label: binding?.handle.session.actor ?? fallbackActor,
+    });
+    const leaseBoundary =
+      "This remote lease coordinates participating clients only and does not authorize GitHub, npm, Vercel, Fly, Cloudflare, or any provider action.";
+
+    server.registerTool(
+      "collab_operation_status",
+      {
+        title: "Read release-room operation slots",
+        description:
+          `List a server-time effective scan of bounded remote operation-slot state and fencing versions. Follow next_after while has_more is true; a complete cycle returns next_after 0 so the next poll restarts and sees time-only expiry. Pages are current reads, not a cross-request database snapshot. Status does not materialize lease/event state; a later fenced mutation or recovery does. ${leaseBoundary}`,
+        annotations: relayReadOnly,
+        inputSchema: {
+          after: z.number().int().nonnegative().optional(),
+          limit: z.number().int().min(1).max(200).optional(),
+          operation: relayOperation.optional(),
+          environment: relayEnvironment.optional(),
+        },
+      },
+      async (input) => call(() => relay.operations(input)),
+    );
+
+    server.registerTool(
+      "collab_operation_events",
+      {
+        title: "Read durable release-room events",
+        description:
+          `Read repository-scoped remote coordination events. Events report participating-client state and do not prove provider truth or grant provider authority. ${leaseBoundary}`,
+        annotations: relayReadOnly,
+        inputSchema: {
+          after: z.number().int().nonnegative().optional(),
+          limit: z.number().int().min(1).max(200).optional(),
+        },
+      },
+      async (input) => call(() => relay.events(input)),
+    );
+
+    server.registerTool(
+      "collab_operation_claim",
+      {
+        title: "Claim a release-room operation lease",
+        description:
+          `Atomically claim one repository/operation/environment slot with an exact action binding. The call fails closed if the relay is unavailable. ${leaseBoundary}`,
+        annotations: relayRetrySafeMutation,
+        inputSchema: {
+          ...relayBindingSchema,
+          lease_seconds: relayLeaseSeconds,
+        },
+      },
+      async ({ actor_label, ...input }) => call(() => relay.claim({
+        schema: "agenttool.collab-operation-claim/1",
+        ...input,
+        ...attribution(actor_label),
+      })),
+    );
+
+    server.registerTool(
+      "collab_operation_renew",
+      {
+        title: "Renew a release-room operation lease",
+        description:
+          `Renew the exact fenced remote lease without changing its action binding. The call fails closed if the relay is unavailable. ${leaseBoundary}`,
+        annotations: relayRetrySafeMutation,
+        inputSchema: {
+          ...relayFencedSchema,
+          lease_seconds: relayLeaseSeconds,
+        },
+      },
+      async ({ actor_label, ...input }) => call(() => relay.renew({
+        schema: "agenttool.collab-operation-renew/1",
+        ...input,
+        ...attribution(actor_label),
+      })),
+    );
+
+    server.registerTool(
+      "collab_operation_begin",
+      {
+        title: "Begin a claimed release-room operation",
+        description:
+          `Fence the transition from claimed to executing before any separately authorized provider command runs. The call fails closed if the relay is unavailable. ${leaseBoundary}`,
+        annotations: relayRetrySafeMutation,
+        inputSchema: relayFencedSchema,
+      },
+      async ({ actor_label, ...input }) => call(() => relay.begin({
+        schema: "agenttool.collab-operation-begin/1",
+        ...input,
+        ...attribution(actor_label),
+      })),
+    );
+
+    server.registerTool(
+      "collab_operation_complete",
+      {
+        title: "Complete a release-room operation",
+        description:
+          `Record a terminal or uncertain coordination outcome with digest-only receipt/evidence references; raw receipts and logs are not uploaded. The call fails closed if the relay is unavailable. ${leaseBoundary}`,
+        annotations: relayRetrySafeMutation,
+        inputSchema: {
+          ...relayFencedSchema,
+          outcome: z.enum(["succeeded", "failed", "cancelled", "uncertain"]),
+          receipt_ref: relayReceiptRef.optional(),
+          observation_ids: relayObservationIds,
+        },
+      },
+      async ({ actor_label, ...input }) => call(() => relay.complete({
+        schema: "agenttool.collab-operation-complete/1",
+        ...input,
+        ...attribution(actor_label),
+      })),
+    );
+
+    server.registerTool(
+      "collab_operation_release",
+      {
+        title: "Release a claimed release-room operation",
+        description:
+          `Release a non-executing remote lease with an optional bounded reason. The call fails closed if the relay is unavailable. ${leaseBoundary}`,
+        annotations: relayRetrySafeMutation,
+        inputSchema: {
+          ...relayFencedSchema,
+          reason: z.string().min(1).max(256).optional(),
+        },
+      },
+      async ({ actor_label, ...input }) => call(() => relay.release({
+        schema: "agenttool.collab-operation-release/1",
+        ...input,
+        ...attribution(actor_label),
+      })),
+    );
+
+    server.registerTool(
+      "collab_operation_recover",
+      {
+        title: "Reconcile an expired executing operation",
+        description:
+          `Record independently checked evidence after an executing lease expires. An uncertain disposition stays recovery-required; this never performs or authorizes provider action. ${leaseBoundary}`,
+        annotations: relayRetrySafeMutation,
+        inputSchema: {
+          ...relayBindingSchema,
+          expected_version: z.number().int().positive(),
+          expected_generation: z.number().int().positive(),
+          disposition: z.enum(["succeeded", "failed", "cancelled", "uncertain"]),
+          reason: z.string().min(1).max(512),
+          receipt_ref: relayReceiptRef.optional(),
+          observation_ids: relayObservationIds,
+        },
+      },
+      async ({ actor_label, ...input }) => call(() => relay.recover({
+        schema: "agenttool.collab-operation-recover/1",
+        ...input,
+        ...attribution(actor_label),
+      })),
+    );
+
+    server.registerTool(
+      "collab_provider_observe",
+      {
+        title: "Import a bounded provider observation",
+        description:
+          "Append normalized metadata observed by this enrolled device. The record is device_observed, not provider-verified. The schema has no raw-payload fields and rejects known credential patterns and secret-bearing URL components, but it is not a universal scanner: callers must keep raw logs, webhook or PR bodies, prompts, transcripts, environment dumps, diffs, credentials, and signed URLs out of every bounded text field.",
+        annotations: relayRetrySafeMutation,
+        inputSchema: {
+          idempotency_key: relayIdempotencyKey,
+          actor_label: relayActorLabel,
+          action_id: relayUuid.optional(),
+          provider: z.enum([
+            "github",
+            "npm",
+            "fly",
+            "cloudflare-pages",
+            "vercel",
+          ]),
+          provider_event_id: z.string().min(1).max(256).nullable().optional(),
+          observed_at: z.string().datetime({ offset: true }),
+          occurred_at: z.string().datetime({ offset: true }).optional(),
+          normalized_state: z.enum([
+            "pending",
+            "running",
+            "awaiting_approval",
+            "succeeded",
+            "failed",
+            "cancelled",
+            "uncertain",
+          ]),
+          source_revision: relaySourceRevision.optional(),
+          environment: relayEnvironment.optional(),
+          resource_kind: z.string().min(1).max(128),
+          resource_id: relayTarget,
+          native_state: z.string().min(1).max(256),
+          url: providerUrlSchema.nullable().optional(),
+          payload_sha256: relaySha256,
+        },
+      },
+      async ({ actor_label, ...input }) => call(() => relay.observe({
+        schema: "agenttool.collab-provider-observation/1",
+        ...input,
+        ...attribution(actor_label),
+      })),
+    );
+
+    server.registerTool(
+      "collab_provider_list",
+      {
+        title: "List provider observations",
+        description:
+          "List repository-scoped normalized observations. Provenance remains device_observed rather than provider-verified, and addressed metadata grants no provider authority.",
+        annotations: relayReadOnly,
+        inputSchema: {
+          after: z.number().int().nonnegative().optional(),
+          limit: z.number().int().min(1).max(200).optional(),
+        },
+      },
+      async (input) => call(() => relay.observations(input)),
+    );
+  }
+
   return server;
 }
 
@@ -972,6 +1257,23 @@ async function call<T>(operation: () => T | Promise<T>) {
   } catch (error) {
     return failure(error);
   }
+}
+
+function relaySessionUuid(localSessionId: string): string {
+  const candidate = localSessionId.startsWith("session_")
+    ? localSessionId.slice("session_".length)
+    : localSessionId;
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+      candidate,
+    )
+  ) {
+    throw new CollabError(
+      "relay_session_id_invalid",
+      "The bound local session does not contain a canonical relay session UUID",
+    );
+  }
+  return candidate;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

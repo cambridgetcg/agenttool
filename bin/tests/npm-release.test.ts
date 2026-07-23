@@ -91,6 +91,7 @@ describe("standard npm release policy", () => {
   test("requires package-specific runtime and protocol artifacts", () => {
     expect(requiredArchiveEntries(releaseSpec("collab"))).toEqual(expect.arrayContaining([
       "package/dist/agenttool-collab-mcp.js",
+      "package/dist/agenttool-collab-enroll.js",
       "package/.codex-plugin/plugin.json",
       "package/.claude-plugin/plugin.json",
       "package/skills/coordinate-agent-work/SKILL.md",
@@ -100,6 +101,8 @@ describe("standard npm release policy", () => {
     ]));
     expect(requiredArchiveEntries(releaseSpec("skills")))
       .not.toContain("package/dist/agenttool-collab-mcp.js");
+    expect(requiredArchiveEntries(releaseSpec("skills")))
+      .not.toContain("package/dist/agenttool-collab-enroll.js");
     expect(requiredArchiveEntries(releaseSpec("telescope"))).toEqual(
       expect.arrayContaining([
         "package/THIRD_PARTY_LICENSES",

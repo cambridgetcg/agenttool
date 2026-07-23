@@ -14,7 +14,7 @@ describe("cross-host package", () => {
     const codex = await json(".codex-plugin/plugin.json");
     const claude = await json(".claude-plugin/plugin.json");
 
-    expect(packageManifest.version).toBe("0.3.0");
+    expect(packageManifest.version).toBe("0.4.0");
     expect(codex.version).toBe(packageManifest.version);
     expect(claude.version).toBe(packageManifest.version);
     expect(codex.skills).toBe("./skills/");
@@ -41,8 +41,18 @@ describe("cross-host package", () => {
     expect(files).toContain("dist");
     expect(files).toContain("THIRD_PARTY_LICENSES");
     expect(packageManifest.bin["agenttool-collab-mcp"]).toBe("./dist/agenttool-collab-mcp.js");
+    expect(packageManifest.bin["agenttool-collab-enroll"]).toBe("./dist/agenttool-collab-enroll.js");
+    expect(packageManifest.exports).toMatchObject({
+      "./project-profile": "./src/project-profile.ts",
+      "./relay": "./src/relay-client.ts",
+      "./relay-contract": "./src/relay-contract.ts",
+      "./relay-credential": "./src/relay-credential.ts",
+      "./relay-enrollment": "./src/relay-enrollment.ts",
+      "./relay-runtime": "./src/relay-runtime.ts",
+    });
     expect(packageManifest.keywords).toContain("hermes-agent");
     expect(statSync(join(packageRoot, "dist", "agenttool-collab-mcp.js")).mode & 0o111).not.toBe(0);
+    expect(statSync(join(packageRoot, "dist", "agenttool-collab-enroll.js")).mode & 0o111).not.toBe(0);
   });
 
   test("ships an explicit Hermes adapter for separate presence and secure planes", async () => {

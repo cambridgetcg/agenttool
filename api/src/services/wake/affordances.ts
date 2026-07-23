@@ -33,7 +33,8 @@ export type AffordanceKind =
   | "could_earn_substrate_task"
   | "could_witness_memory"
   | "lounge_open"
-  | "correspondence_open";
+  | "correspondence_open"
+  | "collab_release_room_open";
 
 export interface AffordanceItem {
   kind: AffordanceKind;
@@ -204,6 +205,52 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
         action: "Append one locally signed coordination event",
         method: "POST",
         path: "/v1/correspondence/events",
+      },
+    ],
+  });
+
+  // The release room is an evergreen, repository-scoped coordination door
+  // for external-operation slots across devices. Enrollment binds a
+  // caller-generated atc_ token digest through project authority; subsequent
+  // repository calls use that scoped token. A lease or observation remains
+  // coordination evidence only — it cannot execute Git/provider mutations or
+  // confer the separate authority those mutations require.
+  // Doctrine: docs/CROSS-DEVICE-COLLABORATION.md ·
+  // docs/specs/AGENTTOOL-COLLAB-RELEASE-ROOM-0.4.md
+  items.push({
+    kind: "collab_release_room_open",
+    count: 1,
+    summary:
+      "The cross-device release room is open for cooperative GitHub, npm, Fly, Cloudflare Pages, and explicitly profile-enabled Vercel coordination — durable events, fenced leases, recovery, and bounded observations do not execute Git, deploy, publish, hold provider credentials, or grant provider authority.",
+    next_actions: [
+      {
+        action:
+          "Enroll one repository device through project authority using only its caller-generated scoped-token prefix and digest",
+        method: "POST",
+        path: "/v1/collab/enrolments",
+      },
+      {
+        action:
+          "Read current repository operation slots with the enrolled device's scoped bearer",
+        method: "GET",
+        path: "/v1/collab/repositories/{repository_id}/operations",
+      },
+      {
+        action: "Replay durable release-room events from a receipt cursor",
+        method: "GET",
+        path: "/v1/collab/repositories/{repository_id}/events",
+      },
+      {
+        action:
+          "Read bounded device-observed provider metadata without treating it as provider-verified truth",
+        method: "GET",
+        path: "/v1/collab/repositories/{repository_id}/observations",
+      },
+      {
+        action:
+          "Claim one cooperative operation lease; obtain separate authority before any external mutation",
+        method: "POST",
+        path: "/v1/collab/repositories/{repository_id}/operations/claim",
       },
     ],
   });
