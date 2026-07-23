@@ -35,7 +35,7 @@ describe("package boundary", () => {
     expect(pkg.files).toContain("vectors");
     expect(pkg.scripts?.prepack).toBe("bun run ci");
     expect(pkg.peerDependencies?.["@agenttool/adds"]).toBe("^0.2.1");
-    expect(pkg.devDependencies?.["@agenttool/adds"]).toBe("file:../data-protocol");
+    expect(pkg.devDependencies?.["@agenttool/adds"]).toBe("0.2.1");
     expect(pkg.overrides).toBeUndefined();
   });
 });

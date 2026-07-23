@@ -18,7 +18,7 @@ import {
 } from "../npm-release";
 
 describe("standard npm release policy", () => {
-  test("allowlists the eleven established public packages", () => {
+  test("allowlists twelve reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "browser",
@@ -27,6 +27,7 @@ describe("standard npm release policy", () => {
       "credential-broker",
       "data",
       "data-sync",
+      "repo-archive",
       "sdk",
       "skills",
       "telescope",
@@ -52,6 +53,11 @@ describe("standard npm release policy", () => {
       packagePath: "packages/browser",
       artifactKind: "love",
     });
+    expect(releaseSpec("repo-archive")).toMatchObject({
+      name: "@agenttool/repo-archive",
+      packagePath: "packages/repo-archive",
+      artifactKind: "pack",
+    });
     expect(releaseSpec("data-sync")).toMatchObject({
       gateScripts: ["ci", "build"],
       prerequisites: [
@@ -73,10 +79,16 @@ describe("standard npm release policy", () => {
     expect(packedFilename("@agenttool/skills", "0.1.0")).toBe("agenttool-skills-0.1.0.tgz");
     expect(expectedTag(releaseSpec("browser"), "0.1.0")).toBe("browser-v0.1.0");
     expect(packedFilename("@agenttool/browser", "0.1.0")).toBe("agenttool-browser-0.1.0.tgz");
+    expect(expectedTag(releaseSpec("repo-archive"), "0.1.0-dev.0")).toBe(
+      "repo-archive-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/repo-archive", "0.1.0-dev.0")).toBe(
+      "agenttool-repo-archive-0.1.0-dev.0.tgz",
+    );
     expect(() => expectedTag(releaseSpec("sdk"), "latest")).toThrow("invalid package version");
   });
 
-  test("requires every cross-host Collab runtime and skill in its release archive", () => {
+  test("requires package-specific runtime and protocol artifacts", () => {
     expect(requiredArchiveEntries(releaseSpec("collab"))).toEqual(expect.arrayContaining([
       "package/dist/agenttool-collab-mcp.js",
       "package/.codex-plugin/plugin.json",
@@ -88,6 +100,12 @@ describe("standard npm release policy", () => {
     ]));
     expect(requiredArchiveEntries(releaseSpec("skills")))
       .not.toContain("package/dist/agenttool-collab-mcp.js");
+    expect(requiredArchiveEntries(releaseSpec("repo-archive"))).toEqual(expect.arrayContaining([
+      "package/dist/index.js",
+      "package/dist/cli.js",
+      "package/schema/agent-repo-archive-v0.1.schema.json",
+      "package/vectors/agent-repo-archive-v0.1-vectors.json",
+    ]));
   });
 
   test("requires prerelease publication requests to use npm next", () => {

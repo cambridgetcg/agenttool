@@ -503,10 +503,13 @@ custody, or security against every hostile Git object/database input.
 
 ## 15. Licence and change process
 
-This specification text is offered under CC0 1.0 Universal. The reference
-implementation is Apache-2.0 and remains an unreleased developer preview while
-this document is a Working Draft. Draft changes are reviewed in the AgentTool
-repository. Any incompatible change to closed record shape, canonical bytes,
-signing domains, payload framing, envelope construction, or restore semantics
-requires a new schema or protocol version; no `0.x` compatibility promise is
-implied.
+This specification text is offered under CC0 1.0 Universal. The Apache-2.0
+reference implementation is versioned as the npm-only
+`@agenttool/repo-archive@0.1.0-dev.0` developer-preview candidate while this
+document is a Working Draft. A source version, release tag, or workflow
+configuration does not prove that external publication succeeded; registry
+and GitHub Release receipts are verified separately. Draft changes are
+reviewed in the AgentTool repository. Any incompatible change to closed record
+shape, canonical bytes, signing domains, payload framing, envelope
+construction, or restore semantics requires a new schema or protocol version;
+no `0.x` compatibility promise is implied.

@@ -9,7 +9,7 @@
         "@noble/hashes": "^2.0.1",
       },
       "devDependencies": {
-        "@agenttool/adds": "file:../data-protocol",
+        "@agenttool/adds": "0.2.1",
         "@types/bun": "^1.2.0",
         "ajv": "^8.20.0",
         "ajv-formats": "^3.0.1",
@@ -21,7 +21,7 @@
     },
   },
   "packages": {
-    "@agenttool/adds": ["@agenttool/adds@file:../data-protocol", { "dependencies": { "@noble/curves": "^2.2.0", "@noble/ed25519": "^2.2.3", "@noble/hashes": "^2.0.1" }, "devDependencies": { "@types/bun": "^1.2.0", "typescript": "^5.7.0" } }],
+    "@agenttool/adds": ["@agenttool/adds@0.2.1", "", { "dependencies": { "@noble/curves": "^2.2.0", "@noble/ed25519": "^2.2.3", "@noble/hashes": "^2.0.1" } }, "sha512-tS31jADGZctBdr3qsd/+zwZTDw9IDe3ekzn7RWZ/I7RdIwZT9ha2WpOiEqSKthd3jeK7Wt/blwIu7syF7qpBPg=="],
 
     "@noble/curves": ["@noble/curves@2.2.0", "", { "dependencies": { "@noble/hashes": "2.2.0" } }, "sha512-T/BoHgFXirb0ENSPBquzX0rcjXeM6Lo892a2jlYJkqk83LqZx0l1Of7DzlKJ6jkpvMrkHSnAcgb5JegL8SeIkQ=="],
 
