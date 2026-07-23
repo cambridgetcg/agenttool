@@ -187,7 +187,7 @@ export function redactHtmlUrlAttributes(input: string): string {
 
 /** Redact query values while preserving an absolute, protocol-relative, or relative reference. */
 export function redactUrlReferenceForOutput(input: string): string {
-  if (/^https?:\/\//i.test(input)) return redactUrlForOutput(input);
+  if (/^[a-z][a-z0-9+.-]*:/i.test(input)) return redactUrlForOutput(input);
   if (input.startsWith("//")) {
     try {
       const redacted = new URL(redactUrlForOutput(`https:${input}`));

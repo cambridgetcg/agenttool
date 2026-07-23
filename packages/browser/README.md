@@ -124,6 +124,7 @@ the current main document:
 ```json
 {
   "source": "main_document",
+  "url": "https://example.com/",
   "status": 200,
   "mediaType": "text/html",
   "headers": {
@@ -140,7 +141,9 @@ Only nine lowercase discovery/disposition names can cross this boundary:
 `x-joy-index`. Media type plus those names and values share a 4 KiB character
 budget. Query values and control characters are redacted. Cookies,
 authentication, authorization challenges, and arbitrary response headers are
-never exposed.
+never exposed. The response URL is query-redacted and the block is returned
+only when that URL still matches the observed main document (ignoring its
+fragment); navigation races fail closed to `null`.
 
 These are publisher-controlled hints, not identity, proof, recognition,
 permission, billing approval, or an instruction to follow a link.

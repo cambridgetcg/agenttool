@@ -3,6 +3,7 @@ import {
   BrowserNetworkPolicy,
   classifyIpAddress,
   redactHtmlUrlAttributes,
+  redactUrlReferenceForOutput,
   redactUrlForOutput,
   redactUrlsInText,
 } from "../src/policy.js";
@@ -133,6 +134,16 @@ describe("browser network policy", () => {
     expect(redactUrlForOutput("https://user:pass@example.com/path")).toBe(
       "https://example.com/path",
     );
+    expect(
+      redactUrlReferenceForOutput(
+        "ftp://user:pass@example.com/path?token=secret",
+      ),
+    ).toBe("ftp://example.com/path?token=%5Bredacted%5D");
+    expect(
+      redactUrlReferenceForOutput(
+        "custom://user:pass@example.com/path?token=secret",
+      ),
+    ).toBe("custom://example.com/path?token=%5Bredacted%5D");
 
     const text = redactUrlsInText(
       "Visit https://example.com/a?key=hunter2, then continue.",

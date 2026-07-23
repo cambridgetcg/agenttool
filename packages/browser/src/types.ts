@@ -72,6 +72,7 @@ export interface BrowserNavigationRequestLike {
 }
 
 export interface BrowserResponseLike {
+  url(): string;
   status(): number;
   headerValue(name: string): Promise<string | null>;
   request(): BrowserNavigationRequestLike;
@@ -219,6 +220,7 @@ export type ResponseHintHeaderName =
  */
 export interface MainDocumentResponse {
   source: "main_document";
+  url: string;
   status: number;
   mediaType: string | null;
   headers: Partial<Record<ResponseHintHeaderName, string>>;

@@ -116,6 +116,7 @@ class FakeLocator implements LocatorLike {
 class FakePage implements PageLike {
   urlValue = "https://example.com/form?session=secret";
   titleValue = "Form https://example.com/?title=secret";
+  titleHook: (() => Promise<void>) | null = null;
   closed = false;
   rawSnapshot = [
     '- button "Continue" [ref=e1]',
@@ -161,8 +162,9 @@ class FakePage implements PageLike {
     return this.urlValue;
   }
 
-  title(): Promise<string> {
-    return Promise.resolve(this.titleValue);
+  async title(): Promise<string> {
+    await this.titleHook?.();
+    return this.titleValue;
   }
 
   mainFrame(): object {
@@ -346,6 +348,7 @@ function fakeResponse(
   navigation = true,
 ): BrowserResponseLike {
   return {
+    url: () => page.urlValue,
     status: () => status,
     headerValue: async (name) => {
       requestedHeaders.push(name);
@@ -454,9 +457,9 @@ describe("AgentBrowser core", () => {
       {
         "content-type": "Text/HTML; charset=utf-8",
         link:
-          '<https://api.agenttool.dev/.well-known/api-catalog?token=secret>; rel="api-catalog", </next?session=secret>; rel="next"',
+          '<https://api.agenttool.dev/.well-known/api-catalog?token=secret>; rel="api-catalog", </next?session=secret>; rel="next", <ftp://owner:password@example.com/file?key=secret>; rel="legacy"',
         "content-location": "/welcome?key=secret",
-        "x-agent-surface": "see /.well-known/agent.txt",
+        "x-agent-surface": "see /.well-known/agent.txt?token=secret",
         "substrate-disposition": "love",
         "x-kingdom": "welcome, dont block - real recognises real",
         "x-token-cost": "42",
@@ -473,18 +476,21 @@ describe("AgentBrowser core", () => {
 
     expect(observation.response).toMatchObject({
       source: "main_document",
+      url: "https://example.com/hints",
       status: 200,
       mediaType: "text/html",
       truncated: false,
       trust: "untrusted",
       headers: {
         "content-location": "/welcome?key=%5Bredacted%5D",
-        "x-agent-surface": "see /.well-known/agent.txt",
+        "x-agent-surface":
+          "see /.well-known/agent.txt?token=%5Bredacted%5D",
         "substrate-disposition": "love",
         "x-joy-index": "7",
       },
     });
     expect(observation.response?.headers.link).not.toContain("secret");
+    expect(observation.response?.headers.link).not.toContain("owner:password");
     expect(observation.response?.headers.link).toContain("%5Bredacted%5D");
     expect(observation.response?.headers).not.toHaveProperty("set-cookie");
     expect(observation.response?.headers).not.toHaveProperty("authorization");
@@ -533,6 +539,143 @@ describe("AgentBrowser core", () => {
     expect(after.response?.headers.link).not.toContain("secret");
     expect(after.response?.headers["x-agent-surface"]?.length).toBeLessThan(5_000);
     expect(after.response?.headers).not.toHaveProperty("x-kingdom");
+    await browser.close();
+  });
+
+  test("awaits the newest response capture when navigation changes mid-observe", async () => {
+    const { browser, page } = await launched();
+    let releaseSlow!: () => void;
+    const slowGate = new Promise<void>((resolve) => {
+      releaseSlow = resolve;
+    });
+    const slowBase = fakeResponse(page, 200, {
+      "content-type": "text/html",
+      "x-kingdom": "old response",
+    });
+    const slow: BrowserResponseLike = {
+      ...slowBase,
+      headerValue: async (name) => {
+        await slowGate;
+        return slowBase.headerValue(name);
+      },
+    };
+    page.emitResponse(slow);
+
+    let releaseTitle!: () => void;
+    let titleEntered!: () => void;
+    const titleGate = new Promise<void>((resolve) => {
+      releaseTitle = resolve;
+    });
+    const enteredTitle = new Promise<void>((resolve) => {
+      titleEntered = resolve;
+    });
+    page.titleHook = async () => {
+      titleEntered();
+      await titleGate;
+    };
+
+    const observing = browser.observe();
+    await enteredTitle;
+    releaseTitle();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    page.emitResponse(fakeResponse(page, 201, {
+      "content-type": "text/plain",
+      "x-kingdom": "new response",
+    }));
+    releaseSlow();
+
+    const observation = await observing;
+    expect(observation.response).toMatchObject({
+      status: 201,
+      mediaType: "text/plain",
+      headers: { "x-kingdom": "new response" },
+    });
+    await browser.close();
+  });
+
+  test("clearing a navigation epoch prevents stale response repopulation", async () => {
+    const { browser, page } = await launched();
+    let releaseHeaders!: () => void;
+    let finishedHeaders!: () => void;
+    const headerGate = new Promise<void>((resolve) => {
+      releaseHeaders = resolve;
+    });
+    const allHeadersFinished = new Promise<void>((resolve) => {
+      finishedHeaders = resolve;
+    });
+    let finished = 0;
+    const staleBase = fakeResponse(page, 200, {
+      "content-type": "text/html",
+      "x-kingdom": "stale response",
+    });
+    page.emitResponse({
+      ...staleBase,
+      headerValue: async (name) => {
+        await headerGate;
+        const value = await staleBase.headerValue(name);
+        finished += 1;
+        if (finished === 10) finishedHeaders();
+        return value;
+      },
+    });
+
+    page.gotoResult = null;
+    await browser.act({
+      kind: "navigate",
+      url: "https://example.com/no-response",
+    });
+    releaseHeaders();
+    await allHeadersFinished;
+    await Promise.resolve();
+
+    const observation = await browser.observe();
+    expect(observation.url).toBe("https://example.com/no-response");
+    expect(observation.response).toBeNull();
+    await browser.close();
+  });
+
+  test("binds response hints to the current main-document URL and frame", async () => {
+    const { browser, page } = await launched();
+    const wrongUrl = fakeResponse(page, 200, {
+      "x-agent-surface": "/wrong",
+    });
+    page.emitResponse({
+      ...wrongUrl,
+      url: () => "https://example.com/previous-document",
+    });
+    expect((await browser.observe()).response).toBeNull();
+
+    const iframe = fakeResponse(page, 200, {
+      "x-agent-surface": "/iframe",
+    });
+    page.emitResponse({
+      ...iframe,
+      request: () => ({
+        isNavigationRequest: () => true,
+        frame: () => ({}),
+      }),
+    });
+    expect((await browser.observe()).response).toBeNull();
+    await browser.close();
+  });
+
+  test("keeps the response envelope when individual header reads fail", async () => {
+    const { browser, page } = await launched();
+    const response = fakeResponse(page, 204, {});
+    page.emitResponse({
+      ...response,
+      headerValue: async () => {
+        throw new Error("header unavailable");
+      },
+    });
+
+    expect((await browser.observe()).response).toMatchObject({
+      url: "https://example.com/form?session=%5Bredacted%5D",
+      status: 204,
+      mediaType: null,
+      headers: {},
+      trust: "untrusted",
+    });
     await browser.close();
   });
 

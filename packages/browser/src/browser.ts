@@ -81,6 +81,7 @@ interface TabState {
   snapshotId: string | null;
   refs: Map<string, string>;
   response: MainDocumentResponse | null;
+  responseDocumentUrl: string | null;
   responseCapture: Promise<void>;
   responseSequence: number;
 }
@@ -220,7 +221,7 @@ export class AgentBrowser {
     const state = this.registerPage(page);
     this.activeTabId = state.id;
     try {
-      state.response = null;
+      this.clearMainDocumentResponse(state);
       const response = await page.goto(destination.href, {
         waitUntil: "domcontentloaded",
         timeout: this.options.navigationTimeoutMs,
@@ -347,16 +348,21 @@ export class AgentBrowser {
         text = bounded.value;
         textTruncated = bounded.truncated;
       }
-      const rawUrl = state.page.url();
-      const url = redactUrlForOutput(rawUrl);
       const title = boundText(
         redactUrlsInText(await state.page.title()),
         512,
       ).value;
-      await state.responseCapture;
-      const response = state.response
+      const responseStable = await this.awaitStableResponseCapture(state);
+      const responseSequence = state.responseSequence;
+      const rawUrl = state.page.url();
+      const url = redactUrlForOutput(rawUrl);
+      let response = responseStable
+        && state.response
+        && state.responseDocumentUrl
+        && sameDocumentUrl(state.responseDocumentUrl, rawUrl)
         ? { ...state.response, headers: { ...state.response.headers } }
         : null;
+      if (responseSequence !== state.responseSequence) response = null;
       return {
         schema: OBSERVATION_SCHEMA,
         sessionId: this.sessionId,
@@ -456,7 +462,7 @@ export class AgentBrowser {
     try {
       switch (action.kind) {
         case "navigate":
-          state.response = null;
+          this.clearMainDocumentResponse(state);
           this.queueMainDocumentResponse(state, await state.page.goto(action.url, {
             waitUntil: "domcontentloaded",
             timeout: this.options.navigationTimeoutMs,
@@ -483,21 +489,21 @@ export class AgentBrowser {
           await state.page.waitForTimeout(action.ms);
           break;
         case "back":
-          state.response = null;
+          this.clearMainDocumentResponse(state);
           this.queueMainDocumentResponse(state, await state.page.goBack({
             waitUntil: "domcontentloaded",
             timeout: this.options.navigationTimeoutMs,
           }));
           break;
         case "forward":
-          state.response = null;
+          this.clearMainDocumentResponse(state);
           this.queueMainDocumentResponse(state, await state.page.goForward({
             waitUntil: "domcontentloaded",
             timeout: this.options.navigationTimeoutMs,
           }));
           break;
         case "reload":
-          state.response = null;
+          this.clearMainDocumentResponse(state);
           this.queueMainDocumentResponse(state, await state.page.reload({
             waitUntil: "domcontentloaded",
             timeout: this.options.navigationTimeoutMs,
@@ -754,6 +760,7 @@ export class AgentBrowser {
       snapshotId: null,
       refs: new Map(),
       response: null,
+      responseDocumentUrl: null,
       responseCapture: Promise.resolve(),
       responseSequence: 0,
     };
@@ -793,19 +800,54 @@ export class AgentBrowser {
     candidate: unknown,
   ): void {
     if (!isBrowserResponseLike(candidate)) return;
+    let documentUrl: string;
+    try {
+      documentUrl = candidate.url();
+    } catch {
+      return;
+    }
     const sequence = ++state.responseSequence;
-    const capture = this.readMainDocumentResponse(candidate)
+    const capture = this.readMainDocumentResponse(candidate, documentUrl)
       .then((response) => {
-        if (state.responseSequence === sequence) state.response = response;
+        if (state.responseSequence === sequence) {
+          state.response = response;
+          state.responseDocumentUrl = documentUrl;
+        }
       })
       .catch(() => {
-        if (state.responseSequence === sequence) state.response = null;
+        if (state.responseSequence === sequence) {
+          state.response = null;
+          state.responseDocumentUrl = null;
+        }
       });
     state.responseCapture = capture;
   }
 
+  private clearMainDocumentResponse(state: TabState): void {
+    state.responseSequence += 1;
+    state.response = null;
+    state.responseDocumentUrl = null;
+    state.responseCapture = Promise.resolve();
+  }
+
+  private async awaitStableResponseCapture(state: TabState): Promise<boolean> {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const sequence = state.responseSequence;
+      const capture = state.responseCapture;
+      await capture;
+      if (
+        sequence === state.responseSequence
+        && capture === state.responseCapture
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private async readMainDocumentResponse(
     response: BrowserResponseLike,
+    documentUrl: string,
   ): Promise<MainDocumentResponse> {
     const [contentType, ...values] = await Promise.all([
       safeHeaderValue(response, "content-type"),
@@ -850,6 +892,7 @@ export class AgentBrowser {
 
     return {
       source: "main_document",
+      url: redactUrlForOutput(documentUrl),
       status,
       mediaType,
       headers,
@@ -925,7 +968,7 @@ export class AgentBrowser {
     const state = this.registerPage(page);
     if (destination) {
       try {
-        state.response = null;
+        this.clearMainDocumentResponse(state);
         const response = await page.goto(destination.href, {
           waitUntil: "domcontentloaded",
           timeout: this.options.navigationTimeoutMs,
@@ -1019,11 +1062,24 @@ export class AgentBrowser {
   }
 }
 
+function sameDocumentUrl(responseUrl: string, pageUrl: string): boolean {
+  try {
+    const response = new URL(responseUrl);
+    const page = new URL(pageUrl);
+    response.hash = "";
+    page.hash = "";
+    return response.href === page.href;
+  } catch {
+    return false;
+  }
+}
+
 function isBrowserResponseLike(value: unknown): value is BrowserResponseLike {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<BrowserResponseLike>;
   return (
-    typeof candidate.status === "function"
+    typeof candidate.url === "function"
+    && typeof candidate.status === "function"
     && typeof candidate.headerValue === "function"
   );
 }
@@ -1056,11 +1112,25 @@ function sanitizeHeaderValue(
       (_match, reference: string) =>
         `<${redactUrlReferenceForOutput(reference)}>`,
     );
-    sanitized = redactUrlsInText(sanitized);
-  } else {
-    sanitized = redactUrlsInText(sanitized);
   }
-  return sanitized;
+  return redactHeaderUriReferences(sanitized);
+}
+
+function redactHeaderUriReferences(input: string): string {
+  return input.replace(/[^\s<>"'`]+/g, (token) => {
+    const trailing = token.match(/[),.;!]+$/)?.[0] ?? "";
+    const candidate = trailing
+      ? token.slice(0, -trailing.length)
+      : token;
+    if (
+      !/^[a-z][a-z0-9+.-]*:/i.test(candidate)
+      && !candidate.startsWith("//")
+      && !/[?&][^=\s&]+=[^&\s]*/.test(candidate)
+    ) {
+      return token;
+    }
+    return `${redactUrlReferenceForOutput(candidate)}${trailing}`;
+  });
 }
 
 async function loadDefaultRuntime(): Promise<BrowserRuntime> {

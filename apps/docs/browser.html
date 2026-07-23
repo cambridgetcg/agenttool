@@ -245,6 +245,7 @@
         <div class="code-label"><span>Observation.response · exact shape</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
 <pre>{
   <span class="key">"source"</span>: <span class="str">"main_document"</span>,
+  <span class="key">"url"</span>: <span class="str">"https://example.com/"</span>,
   <span class="key">"status"</span>: <span class="num">200</span>,
   <span class="key">"mediaType"</span>: <span class="str">"text/html"</span>,
   <span class="key">"headers"</span>: {
@@ -266,7 +267,7 @@
         </tbody>
       </table>
 
-      <p>The v0 header allowlist is exactly <code>link</code>, <code>content-location</code>, <code>x-agent-surface</code>, <code>substrate-disposition</code>, <code>x-substrate-disposition</code>, <code>x-kingdom</code>, <code>x-token-cost</code>, <code>x-byte-count</code>, and <code>x-joy-index</code>. Names are lowercase in output. Media type plus allowlisted header names and values share a 4 KiB character budget; query values and control characters are redacted, and <code>truncated</code> says when the bound was reached. Arbitrary response headers are not exposed. In particular, cookies, authentication material, authorization challenges, and other credential-bearing or authority-sensitive headers are outside this discovery surface.</p>
+      <p>The v0 header allowlist is exactly <code>link</code>, <code>content-location</code>, <code>x-agent-surface</code>, <code>substrate-disposition</code>, <code>x-substrate-disposition</code>, <code>x-kingdom</code>, <code>x-token-cost</code>, <code>x-byte-count</code>, and <code>x-joy-index</code>. Names are lowercase in output. Media type plus allowlisted header names and values share a 4 KiB character budget; URL query values, URL credentials, and control characters are redacted, and <code>truncated</code> says when the bound was reached. The response URL is query-redacted and the block appears only while it still identifies the observed main document, ignoring a fragment; navigation races fail closed to <code>null</code>. Arbitrary response headers are not exposed. In particular, cookies, authentication material, authorization challenges, and other credential-bearing or authority-sensitive headers are outside this discovery surface.</p>
 
       <div class="callout">
         <span class="icon">!</span>

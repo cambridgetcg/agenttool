@@ -167,6 +167,7 @@ the current main-document response:
 ```json
 {
   "source": "main_document",
+  "url": "https://example.com/",
   "status": 200,
   "mediaType": "text/html",
   "headers": {
@@ -183,7 +184,9 @@ The header allowlist is exactly `link`, `content-location`,
 are lowercase. Media type, names, and values share a 4 KiB character budget;
 query values and control characters are redacted. Subresource responses,
 cookies, authentication, authorization challenges, and arbitrary headers do
-not cross the observation boundary.
+not cross the observation boundary. The response URL is query-redacted and the
+block is returned only when it still identifies the observed main document
+(ignoring a fragment); navigation races fail closed to `null`.
 
 This block is untrusted publisher metadata. A link can advertise discovery but
 cannot authorize a navigation, install, credential use, payment, protocol
