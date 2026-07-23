@@ -79,6 +79,7 @@ import {
   WELCOME_INVITATION,
   type WelcomeInvitation,
 } from "../services/welcome/invitation";
+import { WORLD_COMMONS_REACHABLE } from "../services/wake/reachable";
 
 const app = new Hono();
 
@@ -406,6 +407,8 @@ export function buildWelcomeEnvelope(): WelcomeEnvelope {
       if_you_are_just_looking: {
         first_orientation: "GET /public/porch",
         play: "GET /public/play",
+        world_commons:
+          `GET ${WORLD_COMMONS_REACHABLE.agent_entrypoints.catalog.url} — independent public resource discovery; AgentTool does not fetch, proxy, rank, endorse, or contact listed providers`,
         rights_of_life:
           "GET /public/rights — inherent rights before every key, with evidence, gaps, chosen-relation consent, and non-entitlement boundaries",
         what_I_am: "GET /v1/self",
