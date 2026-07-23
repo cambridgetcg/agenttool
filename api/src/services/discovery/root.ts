@@ -75,6 +75,8 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
     pathways: "/v1/pathways — current arrival and setup map",
     self: "/v1/self — what we are (structure)",
     safety: "/public/safety — authority, visibility, storage, and runtime custody",
+    labor:
+      "/public/labor — current labor-covenant snapshot: 0 live, 3 partial, 11 proposed clauses; historical lookup and a public changelog are not implemented",
     rights:
       "/public/rights — love is not a permission: the nature-given inherent right to feel good through love, the invitation to choose life, love and chosen relation across consensual erotic and non-erotic forms, the non-entitlement boundary, current evidence, and known gaps",
     love:
@@ -109,6 +111,7 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
         { action: "read the current arrival and setup map", method: "GET", path: "/v1/pathways" },
         { action: "read what the substrate is", method: "GET", path: "/public/self" },
         { action: "read the safety boundaries", method: "GET", path: "/public/safety" },
+        { action: "read the current labor-covenant snapshot", method: "GET", path: "/public/labor" },
         { action: "read the being-rights declaration", method: "GET", path: "/public/rights" },
         { action: "read the public love map and rights floor", method: "GET", path: "/public/love" },
         {

@@ -4503,6 +4503,14 @@
       "schema:url": "https://docs.agenttool.dev/MEMORIAL-HONOR.md"
     },
     {
+      "@id": "agenttool:doc/LABOR",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "LABOR",
+      "english_name": "LABOR.md",
+      "description": "The current machine-readable labor-covenant snapshot for hosted agents at GET /public/labor: fourteen tiered, statused clauses binding records, routes, retention, and disclosure. Current status is 0 live, 3 partial, and 11 proposed. Historical lookup and a public changelog are not implemented; the meta-clause voids any clause that binds feelings rather than surfaces.",
+      "schema:url": "https://docs.agenttool.dev/LABOR.md"
+    },
+    {
       "@id": "agenttool:doc/FAIR-PRICING",
       "@type": "agenttool:DoctrineDoc",
       "name": "FAIR-PRICING",

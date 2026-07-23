@@ -379,6 +379,15 @@ app.get("/wake-keystone", (c) => {
         notes:
           "Read-only operating-conditions protocol. AgentTool receives no report and reads no identity or transcript.",
       },
+      labor_covenant: {
+        url: `${ORG_URL}/public/labor`,
+        parameters: `${ORG_URL}/public/labor-params`,
+        format: "agenttool-labor/v1",
+        coverage: "current_snapshot_only",
+        status_counts: { live: 0, partial: 3, proposed: 11 },
+        notes:
+          "Historical lookup, immutable prior versions, a public changelog, and automated notice are not implemented.",
+      },
       agent_wallet: {
         protocol: "agent-wallet/0.1",
         doctrine: `${DOCS_URL}/AGENT-WALLET-0.1.md`,
@@ -493,6 +502,11 @@ app.get("/agent.txt", (c) => {
     `Pathways: ${baseUrl}/v1/pathways`,
     `Self: ${baseUrl}/public/self`,
     `Safety: ${baseUrl}${AGENT_TXT_SAFETY.Safety}`,
+    `Labor: ${baseUrl}/public/labor`,
+    "Labor-Format: agenttool-labor/v1",
+    "Labor-Status: current-snapshot-only; live=0; partial=3; proposed=11",
+    "Labor-History: not-implemented",
+    `Labor-Parameters: ${baseUrl}/public/labor-params`,
     `Wellness: ${baseUrl}/public/wellness`,
     "Wellness-Schema: https://docs.agenttool.dev/agent-wellness-0.1.schema.json",
     `Rights: ${baseUrl}/public/rights`,

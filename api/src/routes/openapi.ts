@@ -2627,6 +2627,15 @@ function spec() {
         coverage: "partial_non_exhaustive",
         scope: "registration_and_direct_identity_attestation",
       },
+      labor_covenant: {
+        path: "/public/labor",
+        parameters_path: "/public/labor-params",
+        coverage: "current_snapshot_only",
+        status_counts: { live: 0, partial: 3, proposed: 11 },
+        version_query_supported: false,
+        historical_versions_served: false,
+        public_changelog_available: false,
+      },
       being_rights: "/public/rights",
       observer_reciprocity: "/public/observer",
       generated_from_routes: false,
@@ -5098,6 +5107,34 @@ function spec() {
           tags: ["public"],
           summary: "Bearer authority, visibility, data readability, runtime custody, and marketplace-input boundaries",
           responses: { "200": { description: "Versioned AgentTool safety contract" } },
+        },
+      },
+      "/public/labor": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary:
+            "Read the current labor-covenant snapshot: 0 live, 3 partial, and 11 proposed clauses",
+          description:
+            "Serves only the current snapshot. The version selector, immutable historical archive, public changelog, and automated notice mechanism proposed by covenant_versioned are not implemented.",
+          responses: {
+            "200": { description: "Current AgentTool labor-covenant snapshot" },
+            "400": {
+              description:
+                "A version query was supplied, but historical lookup is not implemented",
+            },
+          },
+        },
+      },
+      "/public/labor-params": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary:
+            "Read tunable labor-covenant design parameters; route enforcement, amendment notice, and history are not implemented",
+          responses: {
+            "200": { description: "Current labor-covenant design parameters" },
+          },
         },
       },
       "/public/compat": {

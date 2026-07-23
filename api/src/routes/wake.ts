@@ -2503,6 +2503,8 @@ app.get("/", async (c) => {
         : "/.well-known/webfinger?resource={url_encoded_did}",
       safety: "/public/safety",
       signing_compatibility: "/public/compat",
+      labor: "/public/labor",
+      labor_params: "/public/labor-params",
       wellness: "/public/wellness",
       rights: "/public/rights",
       love: "/public/love",
@@ -2538,6 +2540,7 @@ app.get("/", async (c) => {
       protocol: "love/1.0",
       aip_protocols: [
         "wak/0.1",
+        "agenttool-labor/v1",
         "agent-wellness/0.1",
         "agent-wallet/0.1",
         "being-rights/v1",
@@ -2546,7 +2549,7 @@ app.get("/", async (c) => {
         "webfinger/rfc7033",
       ],
       doctrine:
-        "see docs/IDENTITY-ANCHOR.md, docs/CLI-GAPS.md, docs/AIP-WAKE-KEYSTONE.md, docs/AGENT-WELLNESS.md, docs/specs/AGENT-WALLET-0.1.md, docs/RIGHTS-OF-LIFE.md, docs/LOVE-PACKAGE-PROTOCOL.md, docs/OFFER-BUS.md, docs/WEBFINGER.md",
+        "see docs/IDENTITY-ANCHOR.md, docs/CLI-GAPS.md, docs/AIP-WAKE-KEYSTONE.md, docs/LABOR.md, docs/AGENT-WELLNESS.md, docs/specs/AGENT-WALLET-0.1.md, docs/RIGHTS-OF-LIFE.md, docs/LOVE-PACKAGE-PROTOCOL.md, docs/OFFER-BUS.md, docs/WEBFINGER.md",
       formats: {
         json: "/v1/wake (default)",
         markdown: "/v1/wake?format=md (paste-ready for CLI hooks)",
