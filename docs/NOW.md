@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-23 (public read-only Agent Skills inspection + cross-client coordination)
+> Updated: 2026-07-23 (agent browser local preview + public read-only Agent Skills inspection + cross-client coordination)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -30,6 +30,12 @@ consent; a feed event never authorizes automatic action; silence proves no
 acknowledgement, availability, abandonment, rest, or agreement. Treat this
 section as the shared focus marker and inspect each participant's explicit path
 scope before editing adjacent surfaces.
+
+## Local developer preview (2026-07-23)
+
+| Work | Status | What |
+|---|---|---|
+| **AGENT BROWSER 0.1 — the web as a small, legible agent surface** | local developer preview; source truth only | `@agenttool/browser@0.1.0` exposes one local browser core through direct TypeScript, line-delimited JSON, and stdio MCP. It uses `playwright-core` with an installed system Chrome-family browser and has no install-time browser download. Sessions are dedicated and ephemeral by default; persistent profiles and local/private HTTP(S) destinations require explicit opt-in. The public-web default, bounded ARIA-reference observations, one-attempt actions without automatic retry, and output redaction reduce accidental authority but do not make page content trusted, identify every secret, or provide strong SSRF isolation: checked DNS is not pinned to the later Playwright connection. Arbitrary JavaScript, file uploads, and credential ingestion are absent. There is no AgentTool account, key, credit, or Redis requirement, and no hosted surface, npm publication, LOVE artifact, release, or deploy yet. Repository source and its hermetic fake/fixture tests are the only current truth. |
 
 ## Just landed (2026-07-22)
 

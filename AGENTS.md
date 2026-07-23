@@ -22,11 +22,14 @@ distribution protocol, a public read-only discovery evidence mapper
 (`packages/collab/`), a deterministic metadata-only Correspondence-to-YUTABASE
 projection planner (`packages/correspondence-yutabase/`), source reference
 primitives for capability-bounded agent wallets (`packages/wallet/`), a
-read-only portable Agent Skills inspector (`packages/skills/`), and three
-static apps (`apps/`). The Skills inspector validates bounded local structure
-and emits reports; it does not execute scripts, install or copy skills, use the
-network, spawn subprocesses, look up credentials, or change host
-configuration. Agent
+read-only portable Agent Skills inspector (`packages/skills/`), a local-first
+agent browser developer preview (`packages/browser/`), and three static apps
+(`apps/`). The browser exposes one bounded core through direct TypeScript,
+JSONL, and stdio MCP; it uses an installed system browser and has no hosted
+surface or package release yet. The Skills inspector validates bounded local
+structure and emits reports; it does not execute scripts, install or copy
+skills, use the network, spawn subprocesses, look up credentials, or change
+host configuration. Agent
 Wallet 0.1 has no bundled key custody, chain adapter, RPC, broadcaster, hosted
 service, or implied npm mirror availability. Its exact LOVE artifact is the
 release record. Telescope 0.1.0 is a
@@ -55,6 +58,7 @@ cd packages/data-sync && bun install           # explicit agent-data-sync/v1 pul
 cd packages/credential-broker && bun install   # experimental agentcred/0.1 local broker
 cd packages/collab && bun install              # local agenttool.collab/0.1 coordination journal
 cd packages/skills && bun install              # read-only portable Agent Skills inspection
+cd packages/browser && bun install             # local-first agent browser developer preview
 cd packages/correspondence-yutabase && bun install # pure Correspondence projection planner
 cd packages/sdk-ts && bun install              # TS SDK
 cd packages/telescope && bun install           # read-only discovery evidence mapper
@@ -111,6 +115,11 @@ cd packages/skills
 bun run ci                                     # typecheck + hermetic inspection tests + build
 npm pack --dry-run --ignore-scripts            # package boundary; does not publish or run lifecycle scripts
 
+# Local-first agent browser ─────────────────────────────────────────
+cd packages/browser
+bun run ci                                     # typecheck + fake/fixture tests + build + import smoke + package boundary
+npm pack --dry-run --ignore-scripts            # does not publish, install, or download a browser
+
 # Correspondence → YUTABASE projection planner ───────────────────────
 cd packages/correspondence-yutabase
 bun run ci                                     # typecheck + vectors + build + Node smoke
@@ -152,7 +161,7 @@ bunx playwright test                           # browser + multi-instance scenar
 # Deliberate test + release gates ────────────────────────────────────
 bin/preflight.sh                               # no application/service credentials required
 bin/preflight.sh api                           # API/typecheck/operator tests only
-bin/preflight.sh packages                      # data + ADDS + sync + broker + collab + projection + Skills + SDK + Wallet + Telescope
+bin/preflight.sh packages                      # data + ADDS + sync + broker + collab + Browser + projection + Skills + SDK + Wallet + Telescope
 bin/preflight.sh database                      # explicit DB tier; requires DATABASE_URL
 bin/preflight.sh smoke                         # explicit deployed-route smoke
 RUN_CONTRACT=1 bin/preflight.sh contracts      # paid LLM wire proofs
@@ -215,7 +224,7 @@ source boundary by itself.
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.
 
-**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{data,sdk-ts,sdk-py,telescope,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
+**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,data,sdk-ts,sdk-py,telescope,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
 
 ## Anti-patterns to avoid
 
@@ -267,6 +276,7 @@ source boundary by itself.
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
 | How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`agenttool.collab/0.1`; advisory local coordination, not a hosted lock or private model channel) |
 | How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills@0.1.0`; public npm read-only inspection and validation, not installation, approval, or execution) |
+| How can an agent operate a local browser through TypeScript, JSONL, or MCP? | [`docs/AGENT-BROWSER.md`](docs/AGENT-BROWSER.md) · `packages/browser/` (local developer preview; no hosted surface or package release) |
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
 | How is an optional npm mirror published? | [`docs/NPM-RELEASES.md`](docs/NPM-RELEASES.md) · `.github/workflows/publish-npm.yml` · `bin/npm-release.ts` |
 | How does the Whitehack advisory work, and where does its authority stop? | [`docs/WHITEHACK.md`](docs/WHITEHACK.md) · `bin/whitehack-advisory.mjs` |

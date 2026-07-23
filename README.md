@@ -9,9 +9,12 @@ a local-first agent data node (`packages/data`), an experimental encrypted
 object protocol package (`packages/data-protocol`), an experimental local
 credential broker (`packages/credential-broker`), a local-first multi-agent
 coordination journal (`packages/collab`), a read-only portable Agent Skills
-inspector (`packages/skills`), a developer-preview Correspondence-to-YUTABASE
-mapping planner (`packages/correspondence-yutabase`), and three static surfaces
-(`apps/web`, `apps/dashboard`, and `apps/docs`).
+inspector (`packages/skills`), a local-first agent browser developer preview
+(`packages/browser`), a developer-preview Correspondence-to-YUTABASE mapping
+planner (`packages/correspondence-yutabase`), and three static surfaces
+(`apps/web`, `apps/dashboard`, and `apps/docs`). The browser offers direct
+TypeScript, JSONL, and stdio MCP over an installed system browser; it has no
+hosted surface or package release yet.
 The Apache-2.0 `@agenttool/wallet` package defines capability-bounded wallet
 records and conservative signer/submission boundaries without exporting keys,
 contacting RPC, or providing a hosted wallet. Its exact LOVE artifact is the
@@ -19,8 +22,11 @@ release record; npm remains an independently verifiable optional mirror.
 The public `@agenttool/telescope` CLI/library maps agent discovery evidence
 without invoking protocols or actions. It ships through LOVE/npm as a local
 client and is not exposed as a hosted arbitrary-target scanner.
-JavaScript artifacts are distributed through the registry-neutral
-`love-package/v1` protocol; npm is an optional mirror rather than a gate.
+Catalogued JavaScript release artifacts use the registry-neutral
+`love-package/v1` protocol; npm is an optional mirror rather than a gate where
+that release line says so.
+`@agenttool/browser@0.1.0` is currently repository source truth only and is
+not yet present in LOVE, npm, or a hosted AgentTool service.
 The apex worker sends API paths and machine-readable root requests to
 `api.agenttool.dev`, while ordinary browser pages come from the web app.
 MCP, wake, `agent.txt`, and `llms.txt` discovery are live; A2A task
@@ -56,6 +62,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 | **Credential broker** | `packages/credential-broker` | Experimental `agentcred/0.1` local capability broker. It can keep bearer values out of normal model/chat/SDK state while narrowing approved HTTPS use; the portable CLI is not a same-user sandbox or the strong native peer-identity profile. |
 | **Agent collaboration** | `packages/collab` | Public `@agenttool/collab@0.1.0` package with an `agenttool.collab/0.1` local SQLite/WAL journal, shared Codex/Claude coordination skill, and package-root plugin manifests. Its MCP tools cover task claims, path-scope conflicts, handoffs, artifacts, decisions, replay, and an explicit full-journal audit. Completion is actor-reported, handoffs remain invitations until accepted, and claims are advisory coordination leases. It does not spawn agents, lock files, authenticate caller-supplied actor labels, provide a hosted relay or private model channel, or hide MCP arguments/results from the model provider. npm distributes the local tooling, not a hosted collaboration service; the registry and GitHub Release mirrors were independently read back as byte-identical. |
 | **Agent Skills inspection** | `packages/skills` | Public `@agenttool/skills@0.1.0` inspection and validation for bounded local Agent Skill, plugin, and package trees. It reports structural metadata, files, symbolic requirements, issues, and digests without executing scripts, installing or copying skills, making network requests, spawning subprocesses, looking up credentials, or changing host configuration. npm distributes the local tooling, not a hosted inspection service; a valid report or digest is not publisher authentication, safety approval, or execution authority. |
+| **Agent browser** | `packages/browser`, `docs/AGENT-BROWSER.md` | Local `@agenttool/browser@0.1.0` developer preview with direct TypeScript, JSONL, and stdio MCP interfaces over one browser core. It launches an installed Chrome-family executable through `playwright-core`; installation and CI do not download a browser. Sessions are dedicated and ephemeral by default, public-web navigation is the default, actions run once without automatic retry, and page content remains untrusted. Persistent profiles and local-network access are explicit opt-ins. DNS preflight does not pin the later browser connection, so this is not strong SSRF isolation. This is source truth only: no hosted browser, npm publication, or LOVE artifact exists yet. |
 | **Correspondence projection** | `packages/correspondence-yutabase` | Public `@agenttool/correspondence-yutabase@0.1.0-dev.0` npm developer preview: a metadata-only pure planner from retained Correspondence records to deterministic YUTABASE card/thread intentions. Registry and GitHub Release tarballs were independently read back as byte-identical. It performs no signature verification, persistence, checkpointing, worker execution, permission decision, or hosted deployment. Consumers should select the exact prerelease or `next`; npm exposed the sole initial version through `latest` too, which is not a maturity signal. |
 | **LOVE packages** | `docs/LOVE-PACKAGE-PROTOCOL.md`, `bin/build-love-packages.ts` | Locator-independent, open, verifiable, exchangeable package manifests. Public indexes are mirrors; SHA-256 + size identify one artifact and npm is optional. |
 | **Telescope** | `packages/telescope` | Public `@agenttool/telescope@0.1.0` read-only discovery evidence mapper. Bounded public-HTTPS probes map `agent.txt`, Pathways, LOVE/npm, MCP, A2A, WebFinger, and Offer Bus boundaries; generated commands are never executed. DNS-AID and PKARR remain opt-in adapter seams. Distribution does not add a hosted scan route. |
@@ -142,6 +149,10 @@ broader parity, and registry release versions can lag independently.
 See [`docs/SDK-ROADMAP.md`](docs/SDK-ROADMAP.md) and
 [`docs/SDK-TIERS.md`](docs/SDK-TIERS.md).
 
+The separate `@agenttool/browser@0.1.0` developer preview is available only as
+repository source. Its package metadata is a local development boundary, not
+evidence of an npm or LOVE release, and it does not add a hosted browser API.
+
 AgentTool's default repository licence is Apache-2.0; see [`LICENSE`](LICENSE),
 [`NOTICE`](NOTICE), and the scope and exceptions in
 [`LICENSING.md`](LICENSING.md). The licensed LOVE package line is
@@ -184,8 +195,9 @@ and docs carry local guidance files; `apps/web` does not.
 GitHub `main` is the reviewed coordination/release head; Codeberg `main` is an
 explicit fast-forward-only mirror. Required GitHub CI installs JavaScript
 dependencies for the API/protocol and data/ADDS/credential-broker/collab/
-Correspondence projection/Agent Skills/TypeScript SDK/Agent Wallet/Telescope
-jobs from frozen Bun lockfiles. The
+Browser/Correspondence projection/Agent Skills/TypeScript SDK/Agent
+Wallet/Telescope jobs from frozen Bun lockfiles. Browser tests use fakes and
+fixtures and CI does not download or launch a real browser. The
 Python SDK is tested on Python 3.9–3.14 with the
 compatible dependency set pip resolves from `pyproject.toml`; this is neither a
 frozen lock nor a minimum-version matrix. CI receives no application/service credentials. Pushes do not
