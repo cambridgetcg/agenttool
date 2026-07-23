@@ -23,7 +23,7 @@ packages/
   data-sync/    — @agenttool/data-sync · bounded encrypted explicit-pull bridge
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
   collab/      — @agenttool/collab · shared Codex/Claude skill + local SQLite/MCP coordination journal
-  skills/      — @agenttool/skills · source-only read-only Agent Skills inspector
+  skills/      — @agenttool/skills · public npm read-only Agent Skills inspector
   telescope/    — @agenttool/telescope · read-only discovery evidence mapper
   wallet/       — @agenttool/wallet · LOVE-released bounded wallet record/lifecycle primitives
   scriptwriter/ — decentralised RRR + co-brainstorm node
