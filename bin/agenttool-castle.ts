@@ -11,7 +11,7 @@
  * Doctrine: docs/CASTLE-OF-UNDERSTANDING.md
  */
 import { spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
 import {
   lstat,
@@ -37,6 +37,7 @@ import {
 import { pathToFileURL } from "node:url";
 
 import {
+  AGENT_DATA_PROTOCOL,
   DataNode,
   canonicalJson,
   sha256Hex,
@@ -44,13 +45,15 @@ import {
   type RecordEnvelope,
 } from "../packages/data/src/index.ts";
 
-export const CASTLE_BRIDGE_VERSION = "0.1.0";
+export const CASTLE_BRIDGE_VERSION = "0.2.0";
 export const CASTLE_SELECTION_SCHEMA = "castle-agenttool-selection/v1";
 export const CASTLE_ROOT_SCHEMA = "castle-agenttool-root/v1";
 export const CASTLE_COLLECTION_SCHEMA = "castle-understanding-collection/v1";
+export const CASTLE_DOCUMENT_PROFILE = "castle-document/v2";
 export const CASTLE_STATE_SCHEMA = "castle-agenttool-state/v1";
 export const CASTLE_PENDING_SCHEMA = "castle-agenttool-pending/v1";
-export const CASTLE_OWNER_SCHEMA = "castle-agenttool-owner/v1";
+export const CASTLE_OWNER_SCHEMA = "castle-agenttool-owner/v2";
+export const CASTLE_FORMAT_SCHEMA = "castle-agenttool-format/v2";
 export const CASTLE_ATTEMPT_SCHEMA = "castle-agenttool-attempt/v1";
 export const CASTLE_COLLECTION_ID = "castle-understanding";
 export const MAX_SELECTION_BYTES = 1024 * 1024;
@@ -64,9 +67,13 @@ export const MAX_KNOWN_RECORDS = 100_000;
 export const MAX_QUERY_LIMIT = 100;
 export const GIT_TIMEOUT_MS = 30_000;
 
+const MAX_TITLE_LENGTH = 200;
+const LEGACY_CASTLE_DOCUMENT_PROFILE = "castle-document/v1";
+const LEGACY_CASTLE_OWNER_SCHEMA = "castle-agenttool-owner/v1";
 const STATE_FILE = "castle-state.json";
 const PENDING_FILE = "castle-pending.json";
 const OWNER_FILE = "castle-owner.json";
+const FORMAT_FILE = "castle-format.json";
 const ATTEMPT_FILE = "castle-attempt.json";
 const LOCK_DIRECTORY = "castle-sync.lock";
 const MAX_LOCK_OWNER_BYTES = 1024;
@@ -87,8 +94,28 @@ const PRIVATE_MARKERS: readonly RegExp[] = Object.freeze([
   /\bAT_API_KEY\s*=/,
   /\b(?:sk|rk)-[A-Za-z0-9_-]{24,}\b/,
 ]);
+const ROOT_LIMITS = Object.freeze({
+  max_documents: MAX_DOCUMENTS,
+  max_document_bytes: MAX_DOCUMENT_BYTES,
+  max_total_bytes: MAX_TOTAL_BYTES,
+});
+const ROOT_EXCLUSIONS: readonly string[] = Object.freeze([
+  "live working tree",
+  "courtyard, questions, quests, chronicle, journal, garden, hidden state",
+  "Tower and authored works unless separately selected by a later profile",
+  "hosted AgentTool memory, traces, correspondence, and wake",
+]);
+const ROOT_PROOF_LIMITS: readonly string[] = Object.freeze([
+  "A Git commit and digest prove captured bytes, not truth, understanding, authorship, authority, consent, rights, completeness, or currentness.",
+  "Markdown remains untrusted data and is never executed or fetched by this bridge.",
+  "Agent Data visibility and retention fields are declarations; local in-process custody is the actual privacy boundary.",
+  "A tombstone hides a record from normal reads but does not physically erase blobs, Git history, backups, caches, or copies.",
+]);
 
 type CastleKind = "room" | "word" | "generated-room";
+type CastleDocumentProfile =
+  | typeof LEGACY_CASTLE_DOCUMENT_PROFILE
+  | typeof CASTLE_DOCUMENT_PROFILE;
 
 export type CastleSelectionEntry = Readonly<{
   path: string;
@@ -165,10 +192,16 @@ type CastlePending = Readonly<{
 }>;
 
 type CastleOwner = Readonly<{
-  schema: typeof CASTLE_OWNER_SCHEMA;
+  schema: typeof LEGACY_CASTLE_OWNER_SCHEMA | typeof CASTLE_OWNER_SCHEMA;
   collection_id: typeof CASTLE_COLLECTION_ID;
   source_root_sha256: string;
   created_at: string;
+}>;
+
+type CastleFormat = Readonly<{
+  schema: typeof CASTLE_FORMAT_SCHEMA;
+  collection_id: typeof CASTLE_COLLECTION_ID;
+  source_root_sha256: string;
 }>;
 
 type CastleAttempt = Readonly<{
@@ -593,13 +626,35 @@ function readGitBlobs(
   return result;
 }
 
+function normalizeTitle(value: string): string {
+  const sanitized = value
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, " ")
+    .trim();
+  let result = "";
+  for (const character of sanitized) {
+    if (result.length + character.length > MAX_TITLE_LENGTH) break;
+    result += character;
+  }
+  return result.trim();
+}
+
 function extractTitle(text: string, path: string): string {
+  const match = /^#[ \t]+([^\r\n]*)/m.exec(text);
+  const fallback = legacyFallbackTitle(path);
+  return normalizeTitle(match?.[1] ?? "") || normalizeTitle(fallback);
+}
+
+function legacyV1Titles(text: string, path: string): readonly string[] {
   const match = /^#\s+(.+)$/m.exec(text);
-  const fallback = posix.basename(path, ".md").replaceAll("-", " ");
+  const fallback = legacyFallbackTitle(path);
   const value = (match?.[1] ?? fallback)
     .replace(/[\u0000-\u001f\u007f-\u009f]/g, " ")
     .trim();
-  return [...value].slice(0, 200).join("").trim() || fallback;
+  const sliced = [...value].slice(0, MAX_TITLE_LENGTH).join("");
+  return Object.freeze([...new Set([
+    sliced || fallback,
+    sliced.trim() || fallback,
+  ])]);
 }
 
 function normalizeLink(from: string, raw: string): string | null {
@@ -754,6 +809,10 @@ function ownerPath(root: string): string {
   return join(root, OWNER_FILE);
 }
 
+function formatPath(root: string): string {
+  return join(root, FORMAT_FILE);
+}
+
 function attemptPath(root: string): string {
   return join(root, ATTEMPT_FILE);
 }
@@ -786,7 +845,10 @@ function validateOwner(value: unknown): CastleOwner {
     "source_root_sha256",
   ])) fail("data_root_owner_invalid");
   if (
-    object.schema !== CASTLE_OWNER_SCHEMA
+    (
+      object.schema !== LEGACY_CASTLE_OWNER_SCHEMA
+      && object.schema !== CASTLE_OWNER_SCHEMA
+    )
     || object.collection_id !== CASTLE_COLLECTION_ID
   ) fail("data_root_owner_invalid");
   const sourceRoot = requireString(
@@ -805,10 +867,37 @@ function validateOwner(value: unknown): CastleOwner {
     fail("data_root_owner_invalid");
   }
   return Object.freeze({
-    schema: CASTLE_OWNER_SCHEMA,
+    schema: object.schema,
     collection_id: CASTLE_COLLECTION_ID,
     source_root_sha256: sourceRoot,
     created_at: createdAt,
+  });
+}
+
+function validateFormat(value: unknown): CastleFormat {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    fail("data_root_format_invalid");
+  }
+  const object = value as Record<string, unknown>;
+  if (!hasExactKeys(object, [
+    "collection_id",
+    "schema",
+    "source_root_sha256",
+  ])) fail("data_root_format_invalid");
+  const sourceRoot = requireString(
+    object.source_root_sha256,
+    "data_root_format_invalid",
+    64,
+  );
+  if (
+    object.schema !== CASTLE_FORMAT_SCHEMA
+    || object.collection_id !== CASTLE_COLLECTION_ID
+    || !SHA256_RE.test(sourceRoot)
+  ) fail("data_root_format_invalid");
+  return Object.freeze({
+    schema: CASTLE_FORMAT_SCHEMA,
+    collection_id: CASTLE_COLLECTION_ID,
+    source_root_sha256: sourceRoot,
   });
 }
 
@@ -853,6 +942,11 @@ async function readOwner(root: string): Promise<CastleOwner | null> {
   return value === null ? null : validateOwner(value);
 }
 
+async function readFormat(root: string): Promise<CastleFormat | null> {
+  const value = await readOptionalJson(formatPath(root), "data_root_format");
+  return value === null ? null : validateFormat(value);
+}
+
 async function readAttempt(root: string): Promise<CastleAttempt | null> {
   const value = await readOptionalJson(attemptPath(root), "attempt");
   return value === null ? null : validateAttempt(value);
@@ -868,6 +962,7 @@ async function validateDataRootShape(root: string): Promise<void> {
 
   const shapes: Readonly<Record<string, "file" | "directory">> = {
     [OWNER_FILE]: "file",
+    [FORMAT_FILE]: "file",
     [STATE_FILE]: "file",
     [PENDING_FILE]: "file",
     [ATTEMPT_FILE]: "file",
@@ -879,7 +974,7 @@ async function validateDataRootShape(root: string): Promise<void> {
     blobs: "directory",
   };
   for (const entry of await readdir(root)) {
-    const temporary = /^castle-(?:owner|state|pending|attempt)\.json\.tmp-(\d+)-[0-9a-f-]+$/.exec(
+    const temporary = /^castle-(?:owner|format|state|pending|attempt)\.json\.tmp-(\d+)-[0-9a-f-]+$/.exec(
       entry,
     );
     const shape = shapes[entry] ?? (temporary ? "file" : undefined);
@@ -906,7 +1001,7 @@ function processIsRunning(pid: number): boolean {
 async function cleanupStaleControlTemps(root: string): Promise<void> {
   let changed = false;
   for (const entry of await readdir(root)) {
-    const match = /^castle-(?:owner|state|pending|attempt)\.json\.tmp-(\d+)-[0-9a-f-]+$/.exec(
+    const match = /^castle-(?:owner|format|state|pending|attempt)\.json\.tmp-(\d+)-[0-9a-f-]+$/.exec(
       entry,
     );
     if (!match) continue;
@@ -941,6 +1036,11 @@ async function prepareOwnedDataRoot(
   }
   const root = await realpath(path).catch(() => fail("data_root_unreadable"));
   await validateDataRootShape(root);
+  const format = await readFormat(root);
+  if (
+    format
+    && format.source_root_sha256 !== sourceRootSha256
+  ) fail("data_root_belongs_to_another_castle");
   let owner = await readOwner(root);
   if (!owner) {
     await assertHaltsClear(haltPaths);
@@ -955,7 +1055,7 @@ async function prepareOwnedDataRoot(
     });
     await writePrivateJsonAtomic(ownerPath(root), owner);
   }
-  if (owner.source_root_sha256 !== sourceRootSha256) {
+  if (!format && owner.source_root_sha256 !== sourceRootSha256) {
     fail("data_root_belongs_to_another_castle");
   }
   await validateDataRootShape(root);
@@ -965,7 +1065,12 @@ async function prepareOwnedDataRoot(
 async function requireOwnedDataRoot(
   requested: string,
   expectedSourceRootSha256?: string,
-): Promise<{ root: string; owner: CastleOwner }> {
+): Promise<{
+  root: string;
+  owner: CastleOwner;
+  format: CastleFormat | null;
+  source_root_sha256: string;
+}> {
   const path = resolve(requested);
   const requestedInfo = await lstat(path).catch(() => fail("castle_projection_empty"));
   if (requestedInfo.isSymbolicLink() || !requestedInfo.isDirectory()) {
@@ -975,14 +1080,96 @@ async function requireOwnedDataRoot(
   await validateDataRootShape(root);
   const owner = await readOwner(root);
   if (!owner) fail("data_root_owner_missing");
+  const format = await readFormat(root);
+  const sourceRootSha256 = format?.source_root_sha256
+    ?? owner.source_root_sha256;
   if (
     expectedSourceRootSha256
-    && owner.source_root_sha256 !== expectedSourceRootSha256
+    && sourceRootSha256 !== expectedSourceRootSha256
   ) fail("data_root_belongs_to_another_castle");
-  return { root, owner };
+  return {
+    root,
+    owner,
+    format,
+    source_root_sha256: sourceRootSha256,
+  };
 }
 
-function validateActiveRecord(value: unknown): ActiveRecord {
+async function installCurrentFormatFence(
+  root: string,
+  sourceRootSha256: string,
+  haltPaths?: readonly string[],
+): Promise<CastleFormat> {
+  const existing = await readFormat(root);
+  if (existing) {
+    if (existing.source_root_sha256 !== sourceRootSha256) {
+      fail("data_root_belongs_to_another_castle");
+    }
+    return existing;
+  }
+  if (haltPaths) await assertHaltsClear(haltPaths);
+  const current: CastleFormat = Object.freeze({
+    schema: CASTLE_FORMAT_SCHEMA,
+    collection_id: CASTLE_COLLECTION_ID,
+    source_root_sha256: sourceRootSha256,
+  });
+  await writePrivateJsonAtomic(formatPath(root), current);
+  if (haltPaths) await assertHaltsClear(haltPaths);
+  return current;
+}
+
+async function installCurrentOwnerFence(
+  root: string,
+  owner: CastleOwner,
+  sourceRootSha256: string,
+  haltPaths?: readonly string[],
+): Promise<CastleOwner> {
+  if (
+    owner.schema === CASTLE_OWNER_SCHEMA
+    && owner.source_root_sha256 === sourceRootSha256
+  ) return owner;
+  if (haltPaths) await assertHaltsClear(haltPaths);
+  const current = Object.freeze({
+    ...owner,
+    schema: CASTLE_OWNER_SCHEMA,
+    source_root_sha256: sourceRootSha256,
+  });
+  await writePrivateJsonAtomic(ownerPath(root), current);
+  if (haltPaths) await assertHaltsClear(haltPaths);
+  return current;
+}
+
+function legacyFallbackTitle(path: string): string {
+  return posix.basename(path, ".md").replaceAll("-", " ");
+}
+
+function isStrictStateTitle(value: string): boolean {
+  return value.trim() === value
+    && value.length > 0
+    && value.length <= MAX_TITLE_LENGTH
+    && !SINGLE_LINE_CONTROL_RE.test(value);
+}
+
+function validateStateTitle(value: unknown, path: string): string {
+  if (
+    typeof value !== "string"
+    || value.length === 0
+    || SINGLE_LINE_CONTROL_RE.test(value)
+  ) fail("state_title_invalid");
+  if (isStrictStateTitle(value)) return value;
+
+  // v0.1 could commit a title ending at whitespace after 200 Unicode code
+  // points, an astral title over 200 UTF-16 code units, or an overlong
+  // filename fallback. Keep only those tightly bounded legacy shapes readable
+  // long enough for sync to replace their immutable v1 envelopes with v2.
+  const legacyHeading = value.trimStart() === value
+    && value.trim().length > 0
+    && [...value].length <= MAX_TITLE_LENGTH;
+  if (legacyHeading || value === legacyFallbackTitle(path)) return value;
+  fail("state_title_invalid");
+}
+
+function validateActiveRecord(value: unknown, path: string): ActiveRecord {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     fail("state_record_invalid");
   }
@@ -1001,13 +1188,14 @@ function validateActiveRecord(value: unknown): ActiveRecord {
   const revision = requireString(object.source_revision, "state_revision_invalid", 64);
   const logicalId = requireString(object.logical_id, "state_logical_id_invalid", 180);
   const kind = requireString(object.kind, "state_kind_invalid", 32) as CastleKind;
-  const title = requireString(object.title, "state_title_invalid", 200);
+  const title = validateStateTitle(object.title, path);
   if (
     !RECORD_ID_RE.test(recordId)
     || !SHA256_RE.test(digest)
     || !COMMIT_RE.test(revision)
     || !SAFE_LOGICAL_ID_RE.test(logicalId)
     || !["room", "word", "generated-room"].includes(kind)
+    || !logicalId.startsWith(`castle:${kind}:`)
     || !Number.isSafeInteger(object.bytes)
     || (object.bytes as number) < 0
     || (object.bytes as number) > MAX_DOCUMENT_BYTES
@@ -1033,7 +1221,7 @@ function validateRecordMap(value: unknown): Readonly<Record<string, ActiveRecord
     const path = safeCastlePath(rawPath, "state_path_invalid");
     if (folded.has(path.toLowerCase())) fail("state_path_collision");
     folded.add(path.toLowerCase());
-    const checked = validateActiveRecord(record);
+    const checked = validateActiveRecord(record, path);
     if (checked.kind !== expectedKind(path)) fail("state_kind_path_mismatch");
     result[path] = checked;
   }
@@ -1100,11 +1288,28 @@ function validateState(value: unknown): CastleState {
     return id;
   });
   const knownSet = new Set(known);
-  if (knownSet.size !== known.length) fail("state_known_record_duplicate");
+  if (
+    knownSet.size !== known.length
+    || [...known].sort().some((id, index) => id !== known[index])
+  ) fail("state_known_record_duplicate");
   const active = validateRecordMap(object.active);
   const lineage = validateRecordMap(object.lineage);
+  const activeBytes = Object.values(active).reduce(
+    (total, record) => total + record.bytes,
+    0,
+  );
+  if (
+    Object.keys(active).length > MAX_DOCUMENTS
+    || activeBytes > MAX_TOTAL_BYTES
+    || new Set(Object.values(active).map((record) => record.record_id)).size
+      !== Object.keys(active).length
+    || new Set(Object.values(active).map((record) => record.logical_id)).size
+      !== Object.keys(active).length
+    || new Set(Object.values(lineage).map((record) => record.record_id)).size
+      !== Object.keys(lineage).length
+  ) fail("state_record_map_invalid");
   for (const [path, record] of Object.entries(active)) {
-    if (lineage[path]?.record_id !== record.record_id) fail("state_lineage_not_current");
+    if (!sameCanonicalJson(lineage[path], record)) fail("state_lineage_not_current");
     if (!knownSet.has(record.record_id)) fail("state_current_record_not_known");
   }
   for (const record of Object.values(lineage)) {
@@ -1119,7 +1324,11 @@ function validateState(value: unknown): CastleState {
   }
   if (
     object.status === "active"
-    && (!rootRecord || rootLineageRecord !== rootRecord)
+    && (
+      !rootRecord
+      || rootLineageRecord !== rootRecord
+      || Object.keys(active).length === 0
+    )
   ) fail("active_state_root_lineage_mismatch");
   if (
     object.status === "active"
@@ -1129,6 +1338,10 @@ function validateState(value: unknown): CastleState {
     object.status === "withdrawn"
     && (object.withdrawn_at === undefined || object.withdrawal_reason === undefined)
   ) fail("withdrawn_state_missing_reason");
+  if (
+    object.withdrawn_at !== undefined
+    && !isExactIsoTimestamp(object.withdrawn_at)
+  ) fail("state_withdrawn_at_invalid");
   const result: CastleState = {
     schema: CASTLE_STATE_SCHEMA,
     status: object.status,
@@ -1345,7 +1558,14 @@ async function completePending(
 ): Promise<boolean> {
   const pending = await readPending(root);
   if (!pending) return false;
-  validateStateAgainstNode(pending.next_state, node);
+  const owner = await readOwner(root);
+  if (!owner) fail("data_root_owner_missing");
+  const format = await readFormat(root);
+  await validateStateAgainstNode(
+    pending.next_state,
+    node,
+    format?.source_root_sha256 ?? owner.source_root_sha256,
+  );
   for (const id of pending.tombstone_ids) {
     if (haltPaths) await assertHaltsClear(haltPaths);
     if (!node.getTombstone(id)) await node.tombstone(id, "superseded or retired");
@@ -1375,27 +1595,489 @@ function validateTransition(previous: CastleState | null, plan: CastlePlan): voi
   }
 }
 
-function validateStateAgainstNode(state: CastleState | null, node: DataNode): void {
-  if (!state) return;
+function documentVersion(
+  profile: CastleDocumentProfile,
+  revision: string,
+  digest: string,
+): string {
+  const source = `${revision}:sha256:${digest}`;
+  return profile === CASTLE_DOCUMENT_PROFILE
+    ? `${source}:profile:v2`
+    : source;
+}
+
+function isExactIsoTimestamp(value: unknown): value is string {
+  if (typeof value !== "string" || value.length > 64) return false;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) && date.toISOString() === value;
+}
+
+function sameCanonicalJson(left: unknown, right: unknown): boolean {
+  try {
+    return canonicalJson(left) === canonicalJson(right);
+  } catch {
+    return false;
+  }
+}
+
+function validOptionalSupersedes(record: RecordEnvelope): boolean {
+  return record.supersedes_id === undefined
+    || (
+      RECORD_ID_RE.test(record.supersedes_id)
+      && record.supersedes_id !== record.id
+    );
+}
+
+async function readStoredText(
+  node: DataNode,
+  record: RecordEnvelope,
+  code: string,
+): Promise<string> {
+  try {
+    return decodeUtf8(await node.readContent(record), code);
+  } catch (error) {
+    if (error instanceof CastleBridgeError) throw error;
+    fail(code);
+  }
+}
+
+function matchesGitBlobOid(text: string, oid: string): boolean {
+  const bytes = new TextEncoder().encode(text);
+  const algorithm = oid.length === 40 ? "sha1" : "sha256";
+  return createHash(algorithm)
+    .update(`blob ${bytes.byteLength}\0`)
+    .update(bytes)
+    .digest("hex") === oid;
+}
+
+async function validateActiveRecordAgainstNode(
+  path: string,
+  active: ActiveRecord,
+  stored: RecordEnvelope | null,
+  node: DataNode,
+): Promise<CastleDocumentProfile> {
+  const profile = stored?.metadata.profile;
+  if (
+    !stored
+    || stored.protocol !== AGENT_DATA_PROTOCOL
+    || stored.collection_id !== CASTLE_COLLECTION_ID
+    || stored.schema_version !== CASTLE_COLLECTION_SCHEMA
+    || stored.source.collector_id !== "text"
+    || stored.source.uri !== `castle:///${path}`
+    || stored.source.external_id !== path
+    || stored.content.sha256 !== active.sha256
+    || stored.content.size !== active.bytes
+    || stored.content.media_type !== "text/markdown"
+    || stored.key !== active.logical_id
+    || !validOptionalSupersedes(stored)
+    || !isExactIsoTimestamp(stored.ingested_at)
+    || !isExactIsoTimestamp(stored.observed_at)
+    || stored.signature !== undefined
+    || (
+      profile !== LEGACY_CASTLE_DOCUMENT_PROFILE
+      && profile !== CASTLE_DOCUMENT_PROFILE
+    )
+    || stored.version !== documentVersion(
+      profile as CastleDocumentProfile,
+      active.source_revision,
+      active.sha256,
+    )
+    || stored.metadata.logical_id !== active.logical_id
+    || stored.metadata.document_kind !== active.kind
+    || stored.metadata.source_path !== path
+    || stored.metadata.source_revision !== active.source_revision
+    || stored.metadata.source_sha256 !== active.sha256
+    || stored.metadata.title !== active.title
+    || !hasExactKeys(stored.metadata, [
+      "content_is_untrusted_markdown",
+      "document_kind",
+      "links",
+      "local_private_projection",
+      "logical_id",
+      "profile",
+      "source_blob_oid",
+      "source_committed_at",
+      "source_path",
+      "source_revision",
+      "source_sha256",
+      "title",
+    ])
+    || !isExactIsoTimestamp(stored.metadata.source_committed_at)
+    || (
+      typeof stored.metadata.source_blob_oid !== "string"
+      || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(
+        stored.metadata.source_blob_oid,
+      )
+    )
+    || stored.metadata.content_is_untrusted_markdown !== true
+    || stored.metadata.local_private_projection !== true
+    || !sameCanonicalJson(stored.provenance, [{
+      activity: "projected_from_committed_git_blob",
+      at: stored.observed_at,
+      actor: "local:agenttool-castle",
+      input_ids: [],
+    }])
+    || (
+      profile === CASTLE_DOCUMENT_PROFILE
+      && !isStrictStateTitle(active.title)
+    )
+  ) fail("state_current_record_missing_or_mismatched");
+  if (stored.supersedes_id) {
+    const prior = node.getRecord(stored.supersedes_id, true);
+    if (
+      !prior
+      || prior.collection_id !== CASTLE_COLLECTION_ID
+      || prior.source.collector_id !== "text"
+      || prior.source.uri !== `castle:///${path}`
+      || prior.source.external_id !== path
+      || prior.key !== active.logical_id
+      || (
+        prior.metadata.profile !== LEGACY_CASTLE_DOCUMENT_PROFILE
+        && prior.metadata.profile !== CASTLE_DOCUMENT_PROFILE
+      )
+    ) fail("state_current_record_missing_or_mismatched");
+  }
+
+  const text = await readStoredText(
+    node,
+    stored,
+    "state_current_record_missing_or_mismatched",
+  );
+  assertNoPrivateMarker(text);
+  if (!matchesGitBlobOid(
+    text,
+    stored.metadata.source_blob_oid as string,
+  )) fail("state_current_record_missing_or_mismatched");
+  const allowedTitles = profile === CASTLE_DOCUMENT_PROFILE
+    ? [extractTitle(text, path)]
+    : legacyV1Titles(text, path);
+  if (!allowedTitles.includes(active.title)) {
+    fail("state_current_record_missing_or_mismatched");
+  }
+  const storedLinks = stored.metadata.links;
+  if (
+    !Array.isArray(storedLinks)
+    || storedLinks.length > MAX_LINKS_PER_DOCUMENT
+    || storedLinks.some((link) => {
+      try {
+        return typeof link !== "string"
+          || safeCastlePath(link, "stored_link_invalid") !== link;
+      } catch {
+        return true;
+      }
+    })
+    || [...storedLinks].sort().some(
+      (link, index) => link !== storedLinks[index],
+    )
+    || new Set(storedLinks).size !== storedLinks.length
+  ) {
+    fail("state_current_record_missing_or_mismatched");
+  }
+  const links = storedLinks as string[];
+  if (!sameCanonicalJson(links, [
+    ...selectedLinks(text, path, new Set(links)),
+  ])) fail("state_current_record_missing_or_mismatched");
+  return profile as CastleDocumentProfile;
+}
+
+async function validateStoredRootRecord(
+  root: RecordEnvelope | null,
+  node: DataNode,
+): Promise<{
+  source_revision: string;
+  source_committed_at: string;
+  selection_sha256: string;
+  purpose: string;
+  retention: string;
+  retired_paths: readonly string[];
+  active: readonly Readonly<{ path: string } & ActiveRecord>[];
+}> {
+  const code = "state_root_record_missing_or_mismatched";
+  const committedAt = root?.metadata.source_committed_at;
+  if (
+    !root
+    || root.protocol !== AGENT_DATA_PROTOCOL
+    || root.collection_id !== CASTLE_COLLECTION_ID
+    || root.schema_version !== CASTLE_COLLECTION_SCHEMA
+    || root.source.collector_id !== "text"
+    || root.source.uri !== "castle:///manifest"
+    || root.source.external_id !== "castle-root"
+    || root.content.media_type !== "application/json"
+    || root.key !== "castle:root:manifest"
+    || !validOptionalSupersedes(root)
+    || !isExactIsoTimestamp(root.ingested_at)
+    || !isExactIsoTimestamp(root.observed_at)
+    || root.signature !== undefined
+    || !hasExactKeys(root.metadata, [
+      "active_records",
+      "local_private_projection",
+      "profile",
+      "selection_sha256",
+      "source_committed_at",
+      "source_revision",
+    ])
+    || root.metadata.profile !== CASTLE_ROOT_SCHEMA
+    || root.metadata.local_private_projection !== true
+    || !isExactIsoTimestamp(committedAt)
+  ) fail(code);
+  if (root.supersedes_id) {
+    const prior = node.getRecord(root.supersedes_id, true);
+    if (
+      !prior
+      || prior.collection_id !== CASTLE_COLLECTION_ID
+      || prior.source.collector_id !== "text"
+      || prior.source.uri !== "castle:///manifest"
+      || prior.source.external_id !== "castle-root"
+      || prior.key !== "castle:root:manifest"
+      || prior.metadata.profile !== CASTLE_ROOT_SCHEMA
+    ) fail(code);
+  }
+
+  const text = await readStoredText(node, root, code);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    fail(code);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    fail(code);
+  }
+  const object = parsed as Record<string, unknown>;
+  if (
+    !hasExactKeys(object, [
+      "active",
+      "audience",
+      "exclusions",
+      "limits",
+      "proof_limits",
+      "purpose",
+      "retention",
+      "retired_paths",
+      "schema",
+      "selection_sha256",
+      "source_committed_at",
+      "source_revision",
+    ])
+    || object.schema !== CASTLE_ROOT_SCHEMA
+    || object.audience !== "local-private"
+    || !sameCanonicalJson(object.limits, ROOT_LIMITS)
+    || !sameCanonicalJson(object.exclusions, [...ROOT_EXCLUSIONS])
+    || !sameCanonicalJson(object.proof_limits, [...ROOT_PROOF_LIMITS])
+    || !Array.isArray(object.active)
+    || object.active.length === 0
+    || object.active.length > MAX_DOCUMENTS
+    || !Array.isArray(object.retired_paths)
+    || object.retired_paths.length > MAX_DOCUMENTS
+  ) fail(code);
+  const sourceRevision = requireString(object.source_revision, code, 64);
+  const sourceCommittedAt = requireString(object.source_committed_at, code, 64);
+  const selectionDigest = requireString(object.selection_sha256, code, 64);
+  const purpose = requireString(object.purpose, code);
+  const retention = requireString(object.retention, code);
+  if (
+    !COMMIT_RE.test(sourceRevision)
+    || !isExactIsoTimestamp(sourceCommittedAt)
+    || !SHA256_RE.test(selectionDigest)
+  ) fail(code);
+
+  const active: Array<Readonly<{ path: string } & ActiveRecord>> = [];
+  const activePaths = new Set<string>();
+  const activeIds = new Set<string>();
+  const activeLogicalIds = new Set<string>();
+  for (const raw of object.active) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) fail(code);
+    const entry = raw as Record<string, unknown>;
+    if (!hasExactKeys(entry, [
+      "bytes",
+      "kind",
+      "logical_id",
+      "path",
+      "record_id",
+      "sha256",
+      "source_revision",
+      "title",
+    ])) fail(code);
+    const path = safeCastlePath(entry.path, code);
+    const record = validateActiveRecord({
+      bytes: entry.bytes,
+      kind: entry.kind,
+      logical_id: entry.logical_id,
+      record_id: entry.record_id,
+      sha256: entry.sha256,
+      source_revision: entry.source_revision,
+      title: entry.title,
+    }, path);
+    if (
+      record.kind !== expectedKind(path)
+      || activePaths.has(path)
+      || activeIds.has(record.record_id)
+      || activeLogicalIds.has(record.logical_id)
+    ) fail(code);
+    activePaths.add(path);
+    activeIds.add(record.record_id);
+    activeLogicalIds.add(record.logical_id);
+    active.push(Object.freeze({ path, ...record }));
+  }
+  if (active.some(
+    (entry, index) => index > 0 && active[index - 1]!.path >= entry.path,
+  ) || active.reduce(
+    (total, entry) => total + entry.bytes,
+    0,
+  ) > MAX_TOTAL_BYTES) fail(code);
+  for (const entry of active) {
+    try {
+      await validateActiveRecordAgainstNode(
+        entry.path,
+        entry,
+        node.getRecord(entry.record_id, true),
+        node,
+      );
+    } catch (error) {
+      if (error instanceof CastleBridgeError) fail(code);
+      throw error;
+    }
+  }
+
+  const retiredPaths: string[] = [];
+  for (const raw of object.retired_paths) {
+    const path = safeCastlePath(raw, code);
+    if (activePaths.has(path)) fail(code);
+    retiredPaths.push(path);
+  }
+  if (
+    new Set(retiredPaths).size !== retiredPaths.length
+    || [...retiredPaths].sort().some(
+      (path, index) => path !== retiredPaths[index],
+    )
+    || root.metadata.source_revision !== sourceRevision
+    || root.metadata.source_committed_at !== sourceCommittedAt
+    || root.metadata.selection_sha256 !== selectionDigest
+    || root.metadata.active_records !== active.length
+    || !sameCanonicalJson(root.provenance, [{
+      activity: "bound_local_projection",
+      at: root.observed_at,
+      actor: "local:agenttool-castle",
+      input_ids: active.map((entry) => entry.record_id),
+    }])
+    || text !== `${canonicalJson(object)}\n`
+    || root.content.sha256 !== sha256Hex(text)
+    || root.content.size !== new TextEncoder().encode(text).byteLength
+    || root.version !== `${sourceRevision}:sha256:${root.content.sha256}`
+  ) fail(code);
+  return Object.freeze({
+    source_revision: sourceRevision,
+    source_committed_at: sourceCommittedAt,
+    selection_sha256: selectionDigest,
+    purpose,
+    retention,
+    retired_paths: Object.freeze(retiredPaths),
+    active: Object.freeze(active),
+  });
+}
+
+async function validateRootRecordAgainstState(
+  state: CastleState,
+  root: RecordEnvelope | null,
+  node: DataNode,
+): Promise<void> {
+  const manifest = await validateStoredRootRecord(root, node);
+  const activePaths = Object.keys(state.active).sort();
+  for (const path of manifest.retired_paths) {
+    if (state.active[path] || !state.lineage[path]) {
+      fail("state_root_record_missing_or_mismatched");
+    }
+  }
+  const expected = {
+    schema: CASTLE_ROOT_SCHEMA,
+    audience: "local-private",
+    source_revision: state.current_revision,
+    source_committed_at: manifest.source_committed_at,
+    selection_sha256: state.selection_sha256,
+    purpose: manifest.purpose,
+    retention: manifest.retention,
+    retired_paths: [...manifest.retired_paths],
+    active: activePaths.map((path) => ({
+      path,
+      ...state.active[path],
+    })),
+    limits: ROOT_LIMITS,
+    exclusions: [...ROOT_EXCLUSIONS],
+    proof_limits: [...ROOT_PROOF_LIMITS],
+  };
+  if (
+    manifest.source_revision !== state.current_revision
+    || manifest.selection_sha256 !== state.selection_sha256
+    || !sameCanonicalJson(manifest.active, expected.active)
+    || !sameCanonicalJson(expected, {
+      schema: CASTLE_ROOT_SCHEMA,
+      audience: "local-private",
+      source_revision: manifest.source_revision,
+      source_committed_at: manifest.source_committed_at,
+      selection_sha256: manifest.selection_sha256,
+      purpose: manifest.purpose,
+      retention: manifest.retention,
+      retired_paths: [...manifest.retired_paths],
+      active: [...manifest.active],
+      limits: ROOT_LIMITS,
+      exclusions: [...ROOT_EXCLUSIONS],
+      proof_limits: [...ROOT_PROOF_LIMITS],
+    })
+  ) fail("state_root_record_missing_or_mismatched");
+}
+
+async function validateStateAgainstNode(
+  state: CastleState | null,
+  node: DataNode,
+  expectedSourceRootSha256?: string,
+): Promise<CastleDocumentProfile | null> {
+  if (!state) return null;
+  if (
+    expectedSourceRootSha256
+    && state.source_root_sha256 !== expectedSourceRootSha256
+  ) fail("data_root_belongs_to_another_castle");
   for (const id of state.known_record_ids) {
     const stored = node.getRecord(id, true);
     if (!stored || stored.collection_id !== CASTLE_COLLECTION_ID) {
       fail("state_known_record_missing_or_wrong_collection");
     }
   }
-  if (state.status === "withdrawn") return;
-  for (const record of Object.values(state.active)) {
-    const stored = node.getRecord(record.record_id);
-    if (
-      !stored
-      || stored.collection_id !== CASTLE_COLLECTION_ID
-      || stored.content.sha256 !== record.sha256
-      || stored.content.size !== record.bytes
-    ) fail("state_current_record_missing_or_mismatched");
+  for (const [path, record] of Object.entries(state.lineage)) {
+    if (state.active[path]?.record_id === record.record_id) continue;
+    await validateActiveRecordAgainstNode(
+      path,
+      record,
+      node.getRecord(record.record_id, true),
+      node,
+    );
   }
-  if (state.root_record_id && !node.getRecord(state.root_record_id)) {
-    fail("state_root_record_missing");
+  if (state.status === "withdrawn") {
+    if (state.root_lineage_record_id) {
+      await validateStoredRootRecord(
+        node.getRecord(state.root_lineage_record_id, true),
+        node,
+      );
+    }
+    return null;
   }
+  let activeProfile: CastleDocumentProfile | null = null;
+  for (const [path, record] of Object.entries(state.active)) {
+    const profile = await validateActiveRecordAgainstNode(
+      path,
+      record,
+      node.getRecord(record.record_id),
+      node,
+    );
+    if (activeProfile && activeProfile !== profile) {
+      fail("state_current_record_missing_or_mismatched");
+    }
+    activeProfile = profile;
+  }
+  const root = state.root_record_id
+    ? node.getRecord(state.root_record_id)
+    : null;
+  await validateRootRecordAgainstState(state, root, node);
+  return activeProfile;
 }
 
 function collectionRecordIds(node: DataNode): readonly string[] {
@@ -1419,10 +2101,10 @@ function collectionRecordIds(node: DataNode): readonly string[] {
   return Object.freeze([...ids].sort());
 }
 
-function recoverLineageFromNode(node: DataNode): {
+async function recoverLineageFromNode(node: DataNode): Promise<{
   lineage: Readonly<Record<string, ActiveRecord>>;
   root_lineage_record_id: string | null;
-} {
+}> {
   const lineage: Record<string, ActiveRecord> = {};
   let rootLineage: string | null = null;
   let cursor: string | undefined;
@@ -1436,38 +2118,48 @@ function recoverLineageFromNode(node: DataNode): {
       if (change.type !== "record.created") continue;
       const record = change.record;
       if (
-        record.collection_id !== CASTLE_COLLECTION_ID
-        || record.source.collector_id !== "text"
-      ) fail("unexpected_castle_record");
-      if (
         record.source.uri === "castle:///manifest"
         && record.metadata.profile === CASTLE_ROOT_SCHEMA
       ) {
-        rootLineage = record.id;
+        try {
+          await validateStoredRootRecord(record, node);
+          rootLineage = record.id;
+        } catch (error) {
+          if (!(error instanceof CastleBridgeError)) throw error;
+        }
         continue;
       }
       const metadata = record.metadata as Record<string, unknown>;
-      if (metadata.profile !== "castle-document/v1") {
-        fail("unexpected_castle_record");
-      }
-      const path = safeCastlePath(metadata.source_path, "stored_source_path_invalid");
-      const candidate = validateActiveRecord({
-        logical_id: metadata.logical_id,
-        kind: metadata.document_kind,
-        record_id: record.id,
-        sha256: record.content.sha256,
-        bytes: record.content.size,
-        title: metadata.title,
-        source_revision: metadata.source_revision,
-      });
       if (
-        record.source.uri !== `castle:///${path}`
-        || record.source.external_id !== path
-        || record.key !== candidate.logical_id
-        || metadata.source_sha256 !== candidate.sha256
-        || candidate.kind !== expectedKind(path)
-      ) fail("stored_castle_record_mismatch");
-      lineage[path] = candidate;
+        metadata.profile !== LEGACY_CASTLE_DOCUMENT_PROFILE
+        && metadata.profile !== CASTLE_DOCUMENT_PROFILE
+      ) {
+        continue;
+      }
+      try {
+        const path = safeCastlePath(
+          metadata.source_path,
+          "stored_source_path_invalid",
+        );
+        const candidate = validateActiveRecord({
+          logical_id: metadata.logical_id,
+          kind: metadata.document_kind,
+          record_id: record.id,
+          sha256: record.content.sha256,
+          bytes: record.content.size,
+          title: metadata.title,
+          source_revision: metadata.source_revision,
+        }, path);
+        await validateActiveRecordAgainstNode(
+          path,
+          candidate,
+          record,
+          node,
+        );
+        lineage[path] = candidate;
+      } catch (error) {
+        if (!(error instanceof CastleBridgeError)) throw error;
+      }
     }
     cursor = page.has_more ? page.cursor : undefined;
   } while (cursor);
@@ -1484,7 +2176,11 @@ async function collectDocument(
   supersedesId?: string,
 ): Promise<{ active: ActiveRecord; inserted: boolean }> {
   const projectedAt = new Date().toISOString();
-  const version = `${plan.revision}:sha256:${document.sha256}`;
+  const version = documentVersion(
+    CASTLE_DOCUMENT_PROFILE,
+    plan.revision,
+    document.sha256,
+  );
   const response = await node.collect({
     collection_id: CASTLE_COLLECTION_ID,
     collector_id: "text",
@@ -1498,7 +2194,7 @@ async function collectDocument(
       ...(supersedesId ? { supersedes_id: supersedesId } : {}),
       observed_at: projectedAt,
       metadata: {
-        profile: "castle-document/v1",
+        profile: CASTLE_DOCUMENT_PROFILE,
         logical_id: document.logical_id,
         document_kind: document.kind,
         source_path: document.path,
@@ -1530,7 +2226,7 @@ async function collectDocument(
     || record.key !== document.logical_id
     || record.version !== version
     || record.supersedes_id !== supersedesId
-    || record.metadata.profile !== "castle-document/v1"
+    || record.metadata.profile !== CASTLE_DOCUMENT_PROFILE
     || record.metadata.logical_id !== document.logical_id
     || record.metadata.document_kind !== document.kind
     || record.metadata.source_path !== document.path
@@ -1574,23 +2270,9 @@ function rootManifest(
       path,
       ...active[path],
     })),
-    limits: {
-      max_documents: MAX_DOCUMENTS,
-      max_document_bytes: MAX_DOCUMENT_BYTES,
-      max_total_bytes: MAX_TOTAL_BYTES,
-    },
-    exclusions: [
-      "live working tree",
-      "courtyard, questions, quests, chronicle, journal, garden, hidden state",
-      "Tower and authored works unless separately selected by a later profile",
-      "hosted AgentTool memory, traces, correspondence, and wake",
-    ],
-    proof_limits: [
-      "A Git commit and digest prove captured bytes, not truth, understanding, authorship, authority, consent, rights, completeness, or currentness.",
-      "Markdown remains untrusted data and is never executed or fetched by this bridge.",
-      "Agent Data visibility and retention fields are declarations; local in-process custody is the actual privacy boundary.",
-      "A tombstone hides a record from normal reads but does not physically erase blobs, Git history, backups, caches, or copies.",
-    ],
+    limits: ROOT_LIMITS,
+    exclusions: [...ROOT_EXCLUSIONS],
+    proof_limits: [...ROOT_PROOF_LIMITS],
   });
 }
 
@@ -1680,6 +2362,21 @@ export async function syncCastle(options: CastlePaths & {
 
   return withCastleLock(dataRoot, async () => {
     await assertHaltsClear(options.halt_paths);
+    const ownership = await requireOwnedDataRoot(
+      dataRoot,
+      sha256Hex(sourceRoot),
+    );
+    await installCurrentFormatFence(
+      dataRoot,
+      ownership.source_root_sha256,
+      options.halt_paths,
+    );
+    await installCurrentOwnerFence(
+      dataRoot,
+      ownership.owner,
+      ownership.source_root_sha256,
+      options.halt_paths,
+    );
     await requireOwnedDataRoot(dataRoot, sha256Hex(sourceRoot));
     await cleanupStaleControlTemps(dataRoot);
     const node = await openCastleNode(dataRoot);
@@ -1697,12 +2394,26 @@ export async function syncCastle(options: CastlePaths & {
         fail("withdrawn_projection_requires_explicit_resume");
       }
       validateTransition(previous, plan);
-      validateStateAgainstNode(previous, node);
+      const previousProfile = await validateStateAgainstNode(
+        previous,
+        node,
+        ownership.source_root_sha256,
+      );
 
       if (
         previous?.status === "active"
         && previous.current_revision === plan.revision
         && previous.selection_sha256 === plan.selection_sha256
+        && previousProfile === CASTLE_DOCUMENT_PROFILE
+        && Object.keys(previous.active).length === plan.documents.length
+        && plan.documents.every((document) => {
+          const active = previous.active[document.path];
+          return active?.logical_id === document.logical_id
+            && active.kind === document.kind
+            && active.sha256 === document.sha256
+            && active.bytes === document.bytes
+            && active.title === document.title;
+        })
       ) {
         if (interruptedAttempt) {
           const known = new Set(previous.known_record_ids);
@@ -1771,8 +2482,11 @@ export async function syncCastle(options: CastlePaths & {
           previous?.status === "active"
           && prior
           && prior.sha256 === document.sha256
+          && prior.bytes === document.bytes
           && prior.logical_id === document.logical_id
           && prior.kind === document.kind
+          && prior.title === document.title
+          && previousProfile === CASTLE_DOCUMENT_PROFILE
           && node.getRecord(prior.record_id)
         ) {
           active[document.path] = Object.freeze({
@@ -1878,20 +2592,58 @@ export async function castleStatus(options: {
   let pending: CastlePending | null = null;
   let attempt: CastleAttempt | null = null;
   let dataRoot = "absent";
+  let ownedRoot: string | null = null;
+  let sourceRootSha256: string | null = null;
   try {
     await lstat(requested);
     const owned = await requireOwnedDataRoot(requested);
     state = await readState(owned.root);
     pending = await readPending(owned.root);
     attempt = await readAttempt(owned.root);
+    ownedRoot = owned.root;
+    sourceRootSha256 = owned.source_root_sha256;
     dataRoot = "owned-local-private";
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
+  const recordedState = state?.status ?? "empty";
+  const haltRaised = Object.values(halts).some((value) => value === "raised");
+  let projectionIntegrity:
+    | "absent"
+    | "empty"
+    | "not_checked"
+    | "recovery_pending"
+    | "valid"
+    | "invalid" = dataRoot === "absent" ? "absent" : "empty";
+  let validationError: string | null = null;
+  if (dataRoot !== "absent" && (pending || attempt)) {
+    projectionIntegrity = "recovery_pending";
+  } else if (dataRoot !== "absent" && state && haltRaised) {
+    projectionIntegrity = "not_checked";
+  } else if (dataRoot !== "absent" && state && ownedRoot && sourceRootSha256) {
+    const node = await openCastleNode(ownedRoot);
+    try {
+      await validateStateAgainstNode(state, node, sourceRootSha256);
+      projectionIntegrity = "valid";
+    } catch (error) {
+      projectionIntegrity = "invalid";
+      validationError = error instanceof CastleBridgeError
+        ? error.code
+        : "projection_validation_failed";
+    } finally {
+      node.close();
+    }
+  }
   return Object.freeze({
     schema: "castle-agenttool-status/v1",
     data_root: dataRoot,
-    state: state?.status ?? "empty",
+    state: projectionIntegrity === "invalid" ? "invalid" : recordedState,
+    recorded_state: recordedState,
+    projection_integrity: projectionIntegrity,
+    validation_error: validationError,
+    usable: recordedState === "active"
+      && projectionIntegrity === "valid"
+      && !haltRaised,
     revision: state?.current_revision ?? null,
     active_records: state ? Object.keys(state.active).length : 0,
     known_records: state?.known_record_ids.length ?? 0,
@@ -1913,7 +2665,8 @@ export async function searchCastle(options: {
 }): Promise<Readonly<Record<string, unknown>>> {
   if (options.halt_paths.length === 0) fail("halt_paths_required");
   await assertHaltsClear(options.halt_paths);
-  const { root } = await requireOwnedDataRoot(options.data_root);
+  const { root, source_root_sha256: sourceRootSha256 } =
+    await requireOwnedDataRoot(options.data_root);
   if (await readPending(root)) fail("castle_recovery_pending");
   if (await readAttempt(root)) fail("castle_sync_interrupted");
   const state = await readState(root);
@@ -1926,7 +2679,12 @@ export async function searchCastle(options: {
   }
   const node = await openCastleNode(root);
   try {
-    validateStateAgainstNode(state, node);
+    const activeProfile = await validateStateAgainstNode(
+      state,
+      node,
+      sourceRootSha256,
+    );
+    if (!activeProfile) fail("state_current_record_missing_or_mismatched");
     const byRecord = new Map(
       Object.entries(state.active).map(([path, record]) => [record.record_id, { path, record }]),
     );
@@ -1935,7 +2693,7 @@ export async function searchCastle(options: {
       text: query,
       limit,
       consistency: "local",
-      where: { metadata: { profile: "castle-document/v1" } },
+      where: { metadata: { profile: activeProfile } },
     });
     const hits = result.records.flatMap((hit) => {
       const current = byRecord.get(hit.record.id);
@@ -1972,7 +2730,8 @@ export async function showCastle(options: {
 }): Promise<string> {
   if (options.halt_paths.length === 0) fail("halt_paths_required");
   await assertHaltsClear(options.halt_paths);
-  const { root } = await requireOwnedDataRoot(options.data_root);
+  const { root, source_root_sha256: sourceRootSha256 } =
+    await requireOwnedDataRoot(options.data_root);
   if (await readPending(root)) fail("castle_recovery_pending");
   if (await readAttempt(root)) fail("castle_sync_interrupted");
   const state = await readState(root);
@@ -1983,6 +2742,7 @@ export async function showCastle(options: {
   if (!current) fail("castle_path_not_active");
   const node = await openCastleNode(root);
   try {
+    await validateStateAgainstNode(state, node, sourceRootSha256);
     const record = node.getRecord(current.record_id);
     if (!record || record.content.sha256 !== current.sha256) {
       fail("state_current_record_missing_or_mismatched");
@@ -2001,66 +2761,93 @@ export async function withdrawCastle(options: {
   reason: string;
 }): Promise<Readonly<Record<string, unknown>>> {
   const reason = requireString(options.reason, "withdrawal_reason_invalid", 500);
-  const { root, owner } = await requireOwnedDataRoot(options.data_root);
+  const initialOwnership = await requireOwnedDataRoot(options.data_root);
+  const { root } = initialOwnership;
   return withCastleLock(root, async () => {
-    await requireOwnedDataRoot(root);
+    const lockedOwnership = await requireOwnedDataRoot(
+      root,
+      initialOwnership.source_root_sha256,
+    );
+    await installCurrentFormatFence(
+      root,
+      lockedOwnership.source_root_sha256,
+    );
+    await installCurrentOwnerFence(
+      root,
+      lockedOwnership.owner,
+      lockedOwnership.source_root_sha256,
+    );
+    await requireOwnedDataRoot(root, lockedOwnership.source_root_sha256);
     await cleanupStaleControlTemps(root);
     const node = await openCastleNode(root);
     try {
-      await completePending(root, node);
+      const pending = await readPending(root);
       const interruptedAttempt = await readAttempt(root);
-      let state = await readState(root);
-      const stateWasMissing = state === null;
+      const state = await readState(root);
       const allIds = collectionRecordIds(node);
-      if (!state) {
-        if (!interruptedAttempt) fail("castle_projection_empty");
-        const recovered = recoverLineageFromNode(node);
-        state = Object.freeze({
-          schema: CASTLE_STATE_SCHEMA,
-          status: "withdrawn",
-          source_root_sha256: owner.source_root_sha256,
-          current_revision: interruptedAttempt.revision,
-          selection_sha256: interruptedAttempt.selection_sha256,
-          root_record_id: null,
-          root_lineage_record_id: recovered.root_lineage_record_id,
-          active: Object.freeze({}),
-          lineage: recovered.lineage,
-          known_record_ids: Object.freeze([...allIds]),
-          withdrawn_at: new Date().toISOString(),
-          withdrawal_reason: reason,
-        });
-      }
-      validateStateAgainstNode(state, node);
       const liveIds = allIds.filter((id) => !node.getTombstone(id));
-      if (!stateWasMissing && state.status === "withdrawn" && liveIds.length === 0) {
-        if (interruptedAttempt) {
-          await unlink(attemptPath(root));
-          await syncDirectory(root);
+      if (
+        state?.status === "withdrawn"
+        && !pending
+        && !interruptedAttempt
+        && liveIds.length === 0
+      ) {
+        try {
+          await validateStateAgainstNode(
+            state,
+            node,
+            lockedOwnership.source_root_sha256,
+          );
+          return Object.freeze({
+            status: "already_withdrawn",
+            known_records: state.known_record_ids.length,
+            new_logical_tombstones: 0,
+            physical_erasure: false,
+          });
+        } catch (error) {
+          if (!(error instanceof CastleBridgeError)) throw error;
         }
-        return Object.freeze({
-          status: "already_withdrawn",
-          known_records: state.known_record_ids.length,
-          new_logical_tombstones: 0,
-          physical_erasure: false,
-        });
       }
-      const known = new Set([...state.known_record_ids, ...allIds]);
-      if (known.size > MAX_KNOWN_RECORDS) fail("known_record_limit");
+
+      const recovered = await recoverLineageFromNode(node);
+      let revision = pending?.next_state.current_revision
+        ?? interruptedAttempt?.revision
+        ?? state?.current_revision;
+      let selectionDigest = pending?.next_state.selection_sha256
+        ?? interruptedAttempt?.selection_sha256
+        ?? state?.selection_sha256;
+      if (
+        (!revision || !selectionDigest)
+        && recovered.root_lineage_record_id
+      ) {
+        const manifest = await validateStoredRootRecord(
+          node.getRecord(recovered.root_lineage_record_id, true),
+          node,
+        );
+        revision ??= manifest.source_revision;
+        selectionDigest ??= manifest.selection_sha256;
+      }
+      if (!revision || !selectionDigest) fail("castle_projection_empty");
       const next: CastleState = Object.freeze({
-        ...state,
+        schema: CASTLE_STATE_SCHEMA,
         status: "withdrawn",
+        source_root_sha256: lockedOwnership.source_root_sha256,
+        current_revision: revision,
+        selection_sha256: selectionDigest,
         root_record_id: null,
+        root_lineage_record_id: recovered.root_lineage_record_id,
         active: Object.freeze({}),
-        known_record_ids: Object.freeze([...known].sort()),
+        lineage: recovered.lineage,
+        known_record_ids: Object.freeze([...allIds]),
         withdrawn_at: new Date().toISOString(),
         withdrawal_reason: reason,
       });
-      const pending: CastlePending = Object.freeze({
+      const withdrawalPending: CastlePending = Object.freeze({
         schema: CASTLE_PENDING_SCHEMA,
         next_state: next,
         tombstone_ids: Object.freeze(liveIds),
       });
-      await writePrivateJsonAtomic(pendingPath(root), pending);
+      await writePrivateJsonAtomic(pendingPath(root), withdrawalPending);
       await completePending(root, node);
       if (interruptedAttempt) {
         await unlink(attemptPath(root));
@@ -2068,7 +2855,7 @@ export async function withdrawCastle(options: {
       }
       return Object.freeze({
         status: "withdrawn",
-        known_records: known.size,
+        known_records: allIds.length,
         new_logical_tombstones: liveIds.length,
         physical_erasure: false,
         warning:

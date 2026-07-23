@@ -532,7 +532,7 @@ connection shutdown); it does not require `AT_API_KEY`.
 
 Repository source refuses every HTTP redirect on this separate data-node
 transport and reports `data_node_redirect_refused`; neither its bearer nor a
-collection body is replayed to a redirect target. The immutable 0.16.0 release
+request body is replayed to a redirect target. The immutable 0.16.0 release
 predates that fix, so consumers must wait for and pin a later SDK release
 before relying on redirect refusal outside a source checkout.
 

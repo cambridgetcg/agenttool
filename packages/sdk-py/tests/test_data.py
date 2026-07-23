@@ -204,14 +204,28 @@ class TestDataWireContract:
         assert "agenttool-project-secret" not in " ".join(data._http.headers.values())
         at.close()
 
-    def test_refuses_redirects_without_replaying_the_request(self) -> None:
+    @pytest.mark.parametrize(
+        ("status_code", "location"),
+        [
+            (301, "http://127.0.0.1:8787/moved"),
+            (307, "https://redirect.example.test/collect"),
+        ],
+    )
+    def test_refuses_redirects_without_replaying_the_request(
+        self,
+        status_code: int,
+        location: str,
+    ) -> None:
         data = DataClient(
             "http://127.0.0.1:8787",
             token="node-token",
         )
-        redirect = _response(status_code=307)
+        redirect = _response(status_code=status_code)
         redirect.headers = httpx.Headers(
-            {"Location": "https://redirect.example.test/collect"}
+            {"Location": location}
+        )
+        redirect.close.side_effect = RuntimeError(
+            "synthetic redirect cleanup failure"
         )
 
         with patch.object(
@@ -227,9 +241,11 @@ class TestDataWireContract:
                 )
 
         assert exc_info.value.error_code == "data_node_redirect_refused"
-        assert exc_info.value.code == 307
+        assert exc_info.value.code == status_code
         request.assert_called_once()
         redirect.close.assert_called_once()
+        redirect.json.assert_not_called()
+        assert location not in str(exc_info.value)
         data._close()
 
 
@@ -355,6 +371,35 @@ class TestDataSyncWireContract:
         assert "local-node-token" not in str(error)
         assert "internal-cursor-value" not in str(error)
         assert "peer-secret-value" not in str(error)
+        data._close()
+
+    def test_redirect_refusal_stays_stable_through_sync_facade(self) -> None:
+        data = DataClient(
+            "http://local-data.test",
+            token="local-node-token",
+        )
+        redirect = _response(status_code=308)
+        redirect.headers = httpx.Headers(
+            {"Location": "https://peer-secret.example.test/pull"}
+        )
+
+        with patch.object(
+            data._http,
+            "request",
+            return_value=redirect,
+        ) as request:
+            with pytest.raises(AgentToolError) as exc_info:
+                data.sync.pull(peer_id="peer-a", collection_id="research")
+
+        error = exc_info.value
+        assert error.error_code == "data_node_redirect_refused"
+        assert error.code == 308
+        assert error.message == "Agent data sync request failed."
+        assert "local-node-token" not in str(error)
+        assert "peer-secret.example.test" not in str(error)
+        request.assert_called_once()
+        redirect.close.assert_called_once()
+        redirect.json.assert_not_called()
         data._close()
 
     def test_transport_errors_do_not_echo_transport_diagnostics(self) -> None:

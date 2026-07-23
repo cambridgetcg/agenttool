@@ -105,10 +105,10 @@ declarations. They are recorded for honesty; Agent Data does not enforce them.
 | Command | Reads | Writes | Available while HALT is raised |
 |---|---|---|---|
 | `plan --selection <file>` | Selection and exact local Git objects | Nothing | No |
-| `sync --selection <file>` | Plan, current local state, and local Agent Data | Owner marker, SQLite/FTS, content-addressed blobs, attempt/pending/state files | No |
-| `status` | HALTs and local control files | Nothing | Yes |
-| `search <words...>` | Current state and local FTS | Nothing | No |
-| `show <path>` | One current local blob | Raw untrusted Markdown to stdout | No |
+| `sync --selection <file>` | Plan, current local state, and local Agent Data | Format/owner markers, SQLite/FTS, content-addressed blobs, attempt/pending/state files | No |
+| `status` | HALTs, local control files, and—when HALT/recovery allows—current record/root bytes | Nothing | Yes |
+| `search <words...>` | Current state, referenced record/root bytes, and local FTS | Nothing | No |
+| `show <path>` | Current state and referenced record/root bytes | Raw untrusted Markdown to stdout | No |
 | `withdraw --reason <words>` | State and every record in this bridge collection | Logical tombstones and withdrawn state | Yes |
 | `sync ... --resume` | A withdrawn lineage plus a newly checked plan | New superseding records and current root | No; resumption is explicit |
 
@@ -116,6 +116,13 @@ declarations. They are recorded for honesty; Agent Data does not enforce them.
 and Git blob identifier. It does not print document text. `sync` is one
 operator invocation; it starts no watcher, server, timer, peer sync, or
 recurring loop.
+
+Status separates the recorded control state from projection integrity. While a
+HALT is raised it reports integrity as `not_checked` without reading document
+blobs. During recovery it reports `recovery_pending`. Otherwise an active or
+withdrawn state has its referenced envelopes and bytes validated; only an
+integrity-valid active state is `usable`. A mismatch is reported as
+`state: "invalid"` with a bounded local error code.
 
 The ordinary checks are:
 
@@ -165,9 +172,14 @@ and no-wait-lock limits. There is no background retry.
 
 The destination must be outside the Castle, owned by the current operating
 system user, and closed to group and other POSIX mode bits. First sync accepts
-only a new or empty directory, then writes `castle-owner.json`. Later commands
-require that marker and reject unknown top-level entries, top-level symbolic
-links, another Castle path binding, or an unsafe file shape.
+only a new or empty directory, then writes `castle-owner.json`. Before any
+record mutation, bridge 0.2 installs `castle-format.json` under the local sync
+lock and upgrades a legacy owner marker. The format marker is the durable
+source binding for bridge 0.2; bridge 0.1 rejects it as an unknown entry before
+opening or changing Agent Data, so running the older binary cannot create a
+mixed-format projection. Later commands reject unknown top-level entries,
+top-level symbolic links, another Castle path binding, or an unsafe file
+shape.
 
 The source binding is a SHA-256 digest of the canonical checkout path. It
 prevents accidental reuse with a different path; it is not a repository
@@ -204,18 +216,37 @@ Each Markdown record uses:
 
 - collection `castle-understanding`;
 - collection schema version `castle-understanding-collection/v1`;
+- metadata profile `castle-document/v2`;
 - stable source `castle:///rooms/name.md` or `castle:///words/name.md`;
 - logical key from the selection;
-- version identity containing the full source commit and content SHA-256;
+- version identity containing the full source commit, content SHA-256, and
+  explicit v2 profile marker;
 - metadata naming the path, kind, title, source commit, source committer time,
   selected link hints, and the fact that the Markdown is untrusted.
 
 Agent Data record identity binds the collection, source, content, schema,
 logical key, version, and optional `supersedes_id`. It does not bind metadata,
 provenance, observation/ingestion times, or signatures. The first immutable
-envelope for one identity wins. The bridge checks the identity and its
-load-bearing metadata echo; its own profile must be bumped if those semantics
-change.
+envelope for one identity wins. The bridge therefore reads and
+integrity-checks the stored bytes, recomputes title and Git-blob semantics,
+checks the exact metadata/provenance shape, and reconstructs the canonical
+root against state before search, show, sync reuse, or a pending commit. Its
+own profile must be bumped if those semantics change.
+
+Bridge 0.2 makes that bump for title normalization. Titles are single-line,
+trimmed, and bounded to 200 UTF-16 code units without splitting a Unicode
+code point. A narrow compatibility reader admits only title shapes that bridge
+0.1 itself could have written, verifies them against their immutable
+`castle-document/v1` envelopes, and keeps reads closed while an attempt is
+pending. The next sync writes distinct v2 identities plus a new root before it
+tombstones the v1 records. A crash before the new pending transaction is
+installed leaves the old transaction retryable; it cannot make corrected
+metadata collide with the first v1 envelope.
+
+Mixed v1/v2 active state is never searchable, showable, or reusable. Withdrawal
+remains the escape hatch: it enumerates and tombstones the dedicated
+collection, preserving only lineage records whose stored bytes and historical
+profile semantics validate.
 
 After completed sync, local state points to one current
 `castle-agenttool-root/v1` manifest. That canonical JSON binds the selected

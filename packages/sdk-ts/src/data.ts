@@ -311,7 +311,11 @@ export class DataClient {
     }
 
     if (response.status >= 300 && response.status < 400) {
-      await response.body?.cancel();
+      try {
+        await response.body?.cancel();
+      } catch {
+        // Cleanup failure must not replace the deterministic redirect refusal.
+      }
       throw new AgentToolError(
         "Agent data node request refused an HTTP redirect.",
         {

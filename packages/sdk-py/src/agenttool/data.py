@@ -244,7 +244,11 @@ class DataClient:
             ) from error
 
         if 300 <= response.status_code < 400:
-            response.close()
+            try:
+                response.close()
+            except Exception:
+                # Cleanup failure must not replace the redirect refusal.
+                pass
             raise AgentToolError(
                 "Agent data node request refused an HTTP redirect.",
                 hint=(
