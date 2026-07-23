@@ -338,7 +338,7 @@ async function readRegularFileNoFollow(
   try {
     handle = await open(
       path,
-      fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW,
+      fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK,
     );
   } catch {
     fail(`${prefix}_unreadable`);
@@ -1289,6 +1289,8 @@ async function removeStaleLock(root: string, lock: string): Promise<boolean> {
 
   const owner = join(lock, entry);
   try {
+    const info = await lstat(owner);
+    if (info.isSymbolicLink() || !info.isFile()) return false;
     const bytes = await readRegularFileNoFollow(
       owner,
       MAX_LOCK_OWNER_BYTES,

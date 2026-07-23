@@ -570,6 +570,32 @@ describe("Castle local projection", () => {
     await rm(deadLock, { recursive: true });
 
     await mkdir(deadLock, { mode: 0o700 });
+    const fifo = join(deadLock, "owner-999999.json");
+    const madeFifo = spawnSync("mkfifo", [fifo], { encoding: "utf8" });
+    expect(madeFifo.status).toBe(0);
+    const script = resolve(import.meta.dir, "..", "agenttool-castle.ts");
+    const fifoAttempt = spawnSync(process.execPath, [
+      script,
+      "sync",
+      "--castle-root",
+      fixture.castle,
+      "--data-root",
+      fixture.data,
+      "--selection",
+      fixture.selection,
+      "--json",
+    ], {
+      encoding: "utf8",
+      env: { ...process.env, HOME: fixture.parent },
+      timeout: 2_000,
+    });
+    expect(fifoAttempt.error).toBeUndefined();
+    expect(fifoAttempt.status).toBe(1);
+    expect(fifoAttempt.stderr).toContain("castle_bridge_lock_busy");
+    expect((await lstat(fifo)).isFIFO()).toBe(true);
+    await rm(deadLock, { recursive: true });
+
+    await mkdir(deadLock, { mode: 0o700 });
     await writeFile(
       join(deadLock, `owner-${process.pid}.json`),
       `${JSON.stringify({
