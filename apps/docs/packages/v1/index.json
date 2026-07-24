@@ -4,7 +4,7 @@
   "packages": [
     {
       "name": "@agenttool/adds",
-      "latest": "0.2.1",
+      "latest": "0.2.2",
       "versions": [
         {
           "version": "0.1.0",
@@ -17,6 +17,10 @@
         {
           "version": "0.2.1",
           "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.1/manifest.json"
+        },
+        {
+          "version": "0.2.2",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.2/manifest.json"
         }
       ]
     },

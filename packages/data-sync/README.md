@@ -20,7 +20,7 @@ The package requires Bun because its optional durable checkpoint store uses
 exact LOVE Package artifacts:
 
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.1/agenttool-adds-0.2.1.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.2/agenttool-adds-0.2.2.tgz
 bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.1/agenttool-data-0.3.1.tgz
 bun add https://docs.agenttool.dev/packages/v1/@agenttool/data-sync/0.1.1/agenttool-data-sync-0.1.1.tgz
 ```

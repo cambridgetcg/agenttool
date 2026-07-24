@@ -17,10 +17,10 @@ It does not provide discovery, query/index APIs, global revocation, secure delet
 ## Install
 
 Portable bundle import/export shipped in `0.2.0` and remains in the licensed
-`0.2.1` package:
+`0.2.2` package:
 
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.1/agenttool-adds-0.2.1.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.2/agenttool-adds-0.2.2.tgz
 ```
 
 This versioned tarball is published through `love-package/v1`; its manifest
@@ -90,12 +90,11 @@ const blocks = new FileSystemBlockStore("./adds-blocks");
 
 The filesystem adapter stores only addressed ciphertext and signed documents. It never persists a DEK. Object keys go through the injected `KeyStore`; the default `MemoryKeyStore` is process-local. `importKey()` is an explicit custody operation. `forgetKey()` is best-effort local forgetting, not secure deletion, and cannot erase Grants, recipient copies, backups, or plaintext already disclosed.
 
-### S3-compatible store (unreleased)
+### S3-compatible store (included since 0.2.2)
 
-The source tree also contains an unreleased Node/Bun network adapter at the
-isolated `@agenttool/adds/s3` subpath. It is not exported from the
-browser-compatible package root and is not present in the immutable `0.2.1`
-release artifact:
+The licensed `0.2.2` package includes a Node/Bun network adapter at the
+isolated `@agenttool/adds/s3` subpath. It is not re-exported from the
+browser-compatible package root:
 
 ```ts
 import { AgentData, type AgentDataIdentity } from "@agenttool/adds";
@@ -157,9 +156,12 @@ referrer, and caller-provided abort and byte limits. Response-body
 cancellation is best-effort and never delays the caller. The adapter has no
 intrinsic wall-clock timeout. Direct callers must supply an `AbortSignal`;
 `AgentData` callers should use its `stores` composition plus a finite
-`storeTimeoutMs`, as above. GET streams into a bounded buffer and verifies the
-exact ADDS CID. Only a bounded, strictly parsed S3 `NoSuchKey` 404 maps to
-`null`; every other, malformed, or oversized 404 is a static provider failure.
+`storeTimeoutMs`, as above. GET streams into a byte-bounded buffer, rejects a
+response after more than 16,384 delivered chunks including empty chunks, and
+verifies the exact ADDS CID. The chunk ceiling bounds fragmented and zero-byte
+delivery work; it is not a wall-clock timeout. Only a bounded, strictly parsed
+S3 `NoSuchKey` 404 maps to `null`; every other, malformed, or oversized 404 is
+a static provider failure.
 PUT validates the size and caller's CID before sending; a 2xx result is only
 one historical provider acknowledgement. It is not proof of future retention,
 independent replication, geographic placement, or durability.
@@ -169,12 +171,13 @@ objects, perform multipart upload, manage versions or lifecycle policy, issue
 ADDS ProviderRecords/Receipts, or persist an ADDS object key. Used through
 `AgentData`, the provider receives encrypted Blocks and signed Manifests but
 still observes the access-key identity, CIDs, sizes, timing, and access
-patterns. Direct `S3CompatibleBlockStore.put()` calls upload the supplied
-bytes verbatim; encryption is provided only by composing the store through
-`AgentData`. JavaScript credential strings necessarily remain in the caller
-and store instance fields for that instance's lifetime, until garbage
-collection; recreate the store to rotate them. Callers still need a scoped
-credential source and an independent `KeyStore`/Grant recovery route.
+patterns.
+Direct `S3CompatibleBlockStore.put()` calls upload the supplied bytes verbatim;
+encryption is provided only by composing the store through `AgentData`.
+JavaScript credential strings necessarily remain in the caller and store
+instance fields for that instance's lifetime, until garbage collection;
+recreate the store to rotate them. Callers still need a scoped credential
+source and an independent `KeyStore`/Grant recovery route.
 
 ## Core API
 

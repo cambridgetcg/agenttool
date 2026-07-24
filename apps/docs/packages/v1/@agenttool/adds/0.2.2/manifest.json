@@ -1,0 +1,43 @@
+{
+  "protocol": "love-package/v1",
+  "document_type": "package-manifest",
+  "name": "@agenttool/adds",
+  "version": "0.2.2",
+  "description": "ADDS 0.1 — offline-first, agent-native encrypted distribution and storage",
+  "license": "Apache-2.0",
+  "artifact": {
+    "format": "npm-tarball",
+    "filename": "agenttool-adds-0.2.2.tgz",
+    "sha256": "86662487051899d37206b54c8f474e75e5ffb190ce19600ba6795f696da17653",
+    "size": 67217,
+    "media_type": "application/gzip",
+    "mirrors": [
+      {
+        "url": "https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.2/agenttool-adds-0.2.2.tgz"
+      },
+      {
+        "url": "https://github.com/cambridgetcg/agenttool/releases/download/adds-v0.2.2/agenttool-adds-0.2.2.tgz"
+      }
+    ]
+  },
+  "runtime": {
+    "kind": "javascript",
+    "engines": {
+      "bun": ">=1.1",
+      "node": ">=20"
+    }
+  },
+  "install": {
+    "format": "npm-tarball",
+    "specifier": "https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.2/agenttool-adds-0.2.2.tgz"
+  },
+  "source": {
+    "repository": "https://github.com/cambridgetcg/agenttool.git",
+    "revision": "05139beb94e771daca1cc1b0e5cb364c14b38995",
+    "path": "packages/data-protocol"
+  },
+  "dependency_resolution": {
+    "mode": "package_manifest",
+    "self_contained": false
+  }
+}

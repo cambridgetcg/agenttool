@@ -61,9 +61,9 @@ const TOOL_ROOT = resolve(import.meta.dir, "..");
 export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
   {
     name: "@agenttool/adds",
-    version: "0.2.1",
+    version: "0.2.2",
     packagePath: "packages/data-protocol",
-    releaseTag: "adds-v0.2.1",
+    releaseTag: "adds-v0.2.2",
     buildCommands: [["bun", "run", "ci"]],
   },
   {
