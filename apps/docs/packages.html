@@ -146,10 +146,11 @@ npm install --save-exact @agenttool/data-sync@0.1.1
 npm install --save-exact @agenttool/credential-broker@0.1.0
 npm install --save-exact @agenttool/sdk@0.16.3
 npm install --save-exact @agenttool/wallet@0.1.0
-npm install --save-exact @agenttool/telescope@0.2.2
+npm install --save-exact @agenttool/telescope@0.2.0
 npm install --save-exact @agenttool/browser@0.2.0</pre>
       </div>
 
+      <p class="muted"><strong>Telescope mirror boundary.</strong> The current exact LOVE release is <code>@agenttool/telescope@0.2.2</code>. npm and GitHub 0.2.2 mirrors are not yet verified; the npm command above deliberately names the last verified public registry version, <code>0.2.0</code>. Use the 0.2.2 LOVE URL below for the current release bytes.</p>
       <p class="muted"><strong>Runtime boundary.</strong> npm is only the installer here; <code>@agenttool/data</code> and <code>@agenttool/data-sync</code> require Bun ≥1.3 at runtime. The credential broker, Agent Wallet, Telescope, and Agent Browser support Node ≥20.19 or Bun ≥1.3.5. Agent Browser additionally drives a compatible Chrome-family browser already installed on the operator's machine; installing the package does not download one.</p>
       <p class="muted">An npm install uses registry integrity machinery but does not independently compare the downloaded bytes with the LOVE manifest's <code>artifact.size</code> and <code>artifact.sha256</code>. Use the verified workflow below when that boundary matters.</p>
 

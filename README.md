@@ -8,7 +8,7 @@ Public discovery starts at
 [`GET /public/discovery`](https://api.agenttool.dev/public/discovery): exactly
 three optional read-only roads—understand, inspect, or choose. Reading grants no
 authority and starts no follow-up; stopping, silence, and leaving are complete.
-The design and standards spine live in
+The standards and invitation boundaries live in
 [`docs/AGENT-DISCOVERY.md`](docs/AGENT-DISCOVERY.md).
 
 A consolidated monorepo: one API (`api/`), Python and TypeScript SDKs,
@@ -42,10 +42,10 @@ that release line says so.
 page; it still creates no hosted AgentTool browser-control service.
 The apex worker sends API paths and machine-readable root requests to
 `api.agenttool.dev`, while ordinary browser pages come from the web app.
-The discovery contract joins the canonical three-road `/public/discovery`
-compass, its byte-identical bare `/.well-known` compatibility projection, the
-RFC 9727 API catalog, typed HTTP links, curated OpenAPI, wake, `agent.txt`, and
-`llms.txt`. Discovery grants no authority and performs no follow-up action.
+The discovery contract joins the compact three-road `/public/discovery`
+compass, a richer bounded `/.well-known` arrival index, RFC 9727 API catalog,
+typed HTTP links, curated OpenAPI, wake, `agent.txt`, and `llms.txt`. Discovery
+grants no authority and performs no follow-up action.
 The MCP card is an explicitly experimental endpoint locator; A2A task
 transport and AgentCards remain intentionally unmounted. Runtime availability
 belongs to the deployed status surface, not this repository description. **Read

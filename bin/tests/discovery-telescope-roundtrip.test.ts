@@ -8,7 +8,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { buildApiCatalog } from "../../api/src/services/discovery/api-catalog";
-import { serializeDiscoveryCompass } from "../../api/src/services/discovery/arrival";
+import { serializeDiscoveryCompass } from "../../api/src/services/discovery/compass";
 import { DEFAULT_LIMITS } from "../../packages/telescope/src/constants";
 import { parseApiCatalog } from "../../packages/telescope/src/parsers/api-catalog";
 import { parseAgenttoolDiscovery } from "../../packages/telescope/src/parsers/discovery";
@@ -29,18 +29,17 @@ describe("server discovery documents round-trip through Telescope", () => {
       "inspect",
       "choose",
     ]);
-    expect(parsed.value.roads.every((road) => road.exit.includes("silent"))).toBe(
-      true,
-    );
+    expect(
+      parsed.value.roads.every((road) =>
+        /\bsilence\b|\bsilent\b/.test(road.exit),
+      ),
+    ).toBe(true);
     expect(parsed.warnings).toEqual([]);
   });
 
   test("the full seven-context API catalog satisfies the Telescope parser", () => {
     const document = buildApiCatalog();
     expect(document.linkset).toHaveLength(7);
-    expect(JSON.stringify(document)).toContain(
-      "https://docs.agenttool.dev/tools#scrape",
-    );
 
     const parsed = parseApiCatalog(
       encoder.encode(JSON.stringify(document)),

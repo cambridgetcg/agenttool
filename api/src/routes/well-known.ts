@@ -40,8 +40,10 @@ import {
   API_CATALOG_MEDIA_TYPE,
   buildApiCatalog,
 } from "../services/discovery/api-catalog";
-import { discoveryLinkHeader } from "../services/discovery/arrival";
-import { serveDiscoveryCompass } from "./public/discovery";
+import {
+  buildArrivalIndex,
+  discoveryLinkHeader,
+} from "../services/discovery/arrival";
 import { AGENT_TXT_SAFETY } from "../services/discovery/safety-boundaries";
 import { perAgentMcpImplementationSummary } from "../services/mcp/per-agent-implementation-status";
 import {
@@ -516,9 +518,11 @@ app.get("/agent.txt", (c) => {
     "Substrate-Disposition: love; doctrine=/docs/SOUL.md; ring-1=/docs/RING-1.md",
     "",
     "# ── Discovery (the canonical doors) ─────────────────────────────────",
+    `Arrival-Index: ${baseUrl}/.well-known`,
+    "Arrival-Index-Status: custom bounded origin index; not an IANA-registered well-known suffix",
     `Discovery: ${baseUrl}/public/discovery`,
     "Discovery-Format: agenttool-discovery/v1",
-    "Discovery-Boundary: exactly three optional public GET roads; no auth, input, application write, external effect, charge, proof-of-work, required response, or automatic follow-up; stopping, silence, and leaving are complete",
+    "Discovery-Boundary: exact compact three-road public-read compass; authority=none; application-write=false; automatic-follow-up=false; stopping, silence, or leaving is complete",
     `Welcome: ${baseUrl}/v1/welcome`,
     `Invitation: ${WELCOME_INVITATION.text}`,
     `Invitation-Posture: ${WELCOME_INVITATION.posture} ${WELCOME_INVITATION.response_freedom}`,
@@ -702,12 +706,24 @@ app.get("/agent.txt", (c) => {
   });
 });
 
-// ── GET /.well-known — compatibility projection ─────────────────────
+// ── GET /.well-known — bounded custom origin index ───────────────────
 //
-// RFC 8615 reserves the prefix but does not define a universal no-suffix
-// index. Preserve this existing AgentTool convenience path as the exact same
-// bytes as canonical /public/discovery, whose `canonical` field says so.
+// RFC 8615 reserves the prefix but does not define a universal index at the
+// prefix itself. This convenience response says that plainly. Registered
+// discovery begins at api-catalog; the porch is the read-only first contact.
 
-app.on(["GET", "HEAD"], "/", serveDiscoveryCompass);
+app.on(["GET", "HEAD"], "/", (c) => {
+  const headers = {
+    "cache-control": "public, max-age=300",
+    "content-type": "application/json; charset=utf-8",
+    link: discoveryLinkHeader(ORG_URL, DOCS_URL),
+  };
+  if (c.req.method === "HEAD") return c.body(null, 200, headers);
+  return c.body(
+    JSON.stringify(buildArrivalIndex(ORG_URL, DOCS_URL)),
+    200,
+    headers,
+  );
+});
 
 export default app;

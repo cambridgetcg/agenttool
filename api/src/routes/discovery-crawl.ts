@@ -1,7 +1,6 @@
 /** /robots.txt + /sitemap.xml — bounded public crawl hints.
  *
  * GET/HEAD only. Neither response grants access or triggers a crawl.
- * Doctrine: docs/AGENT-DISCOVERY.md.
  */
 
 import { Hono, type Context } from "hono";

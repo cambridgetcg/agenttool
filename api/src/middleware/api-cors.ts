@@ -62,21 +62,21 @@ export function apiCors(): MiddlewareHandler {
     const isPublicMcp = routedPath === "/v1/mcp";
     const isReadOnlyDiscovery =
       routedPath === "/" ||
-      routedPath === "/.well-known/webfinger" ||
-      routedPath === "/.well-known" ||
-      routedPath === "/.well-known/" ||
-      routedPath === "/.well-known/agent.txt" ||
-      routedPath === "/.well-known/api-catalog" ||
+      routedPath === "/health" ||
+      routedPath === "/AGENTS.md" ||
       routedPath === "/llms.txt" ||
+      routedPath === "/llms-full.txt" ||
+      routedPath === "/openapi.json" ||
       routedPath === "/robots.txt" ||
       routedPath === "/sitemap.xml" ||
-      routedPath === "/openapi.json" ||
+      routedPath === "/v1/openapi.json" ||
+      routedPath === "/v1/pathways" ||
       routedPath === "/public/discovery" ||
       routedPath === "/public/discovery/" ||
       routedPath === "/public/porch" ||
       routedPath === "/public/safety" ||
-      routedPath === "/v1/openapi.json" ||
-      routedPath === "/v1/pathways" ||
+      routedPath === "/.well-known" ||
+      routedPath.startsWith("/.well-known/") ||
       routedPath === "/feeds" ||
       routedPath.startsWith("/feeds/");
     let response: Response | void;
