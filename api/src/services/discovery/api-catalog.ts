@@ -184,7 +184,7 @@ export function buildApiCatalog(
         "service-desc": openapiDescription,
         "service-doc": [
           {
-            href: `${docs}/tools#scrape`,
+            href: `${docs}/tools`,
             type: "text/html",
             title: "Static scrape documentation",
           },
@@ -211,7 +211,7 @@ export function buildApiCatalog(
         "service-desc": openapiDescription,
         "service-doc": [
           {
-            href: `${docs}/tools#document`,
+            href: `${docs}/tools`,
             type: "text/html",
             title: "Document extraction documentation",
           },

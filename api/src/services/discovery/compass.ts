@@ -96,7 +96,7 @@ function road(
     retry: "caller-chosen and finite; AgentTool performs no automatic retry",
     follow_up_required: false,
     automatic_follow_up: false,
-    exit: "stop, stay silent, or leave; each is complete",
+    exit: "stop, choose silence, or leave; each is complete",
   };
 }
 

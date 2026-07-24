@@ -162,7 +162,7 @@ describe("agenttool-discovery/v1 — exact three-road compass", () => {
         automatic_follow_up: false,
       });
       expect(road.retry).toMatch(/finite.*no automatic retry/i);
-      expect(road.exit).toMatch(/stop.*silent.*leave.*complete/i);
+      expect(road.exit).toMatch(/stop.*silence.*leave.*complete/i);
     }
     expect(compass.boundary.discovery_grants).toEqual([]);
     expect(compass.boundary.automatic_action).toBe("never");
