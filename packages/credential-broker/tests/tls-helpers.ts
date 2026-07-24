@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -29,6 +29,18 @@ export async function createEphemeralTlsMaterial(): Promise<EphemeralTlsMaterial
   if (!openssl) throw new Error("OpenSSL is required for the hermetic TLS transport tests.");
   const root = await mkdtemp(join(tmpdir(), "agentcred-tls-"));
   try {
+    await writeFile(
+      join(root, "server-extensions.cnf"),
+      [
+        "[server_certificate]",
+        `subjectAltName=DNS:${TEST_TLS_HOSTNAME}`,
+        "basicConstraints=critical,CA:FALSE",
+        "keyUsage=critical,digitalSignature,keyEncipherment",
+        "extendedKeyUsage=serverAuth",
+        "",
+      ].join("\n"),
+      { encoding: "utf8", flag: "wx", mode: 0o600 },
+    );
     runOpenSsl(openssl, root, [
       "req", "-x509", "-newkey", "rsa:2048", "-sha256", "-days", "2", "-nodes",
       "-subj", "/CN=AgentCred Hermetic Test CA",
@@ -39,17 +51,20 @@ export async function createEphemeralTlsMaterial(): Promise<EphemeralTlsMaterial
     runOpenSsl(openssl, root, [
       "req", "-newkey", "rsa:2048", "-nodes",
       "-subj", `/CN=${TEST_TLS_HOSTNAME}`,
-      "-addext", `subjectAltName=DNS:${TEST_TLS_HOSTNAME}`,
-      "-addext", "basicConstraints=critical,CA:FALSE",
-      "-addext", "keyUsage=critical,digitalSignature,keyEncipherment",
-      "-addext", "extendedKeyUsage=serverAuth",
       "-keyout", "server-key.pem", "-out", "server.csr",
     ]);
     runOpenSsl(openssl, root, [
       "x509", "-req", "-in", "server.csr",
       "-CA", "ca-cert.pem", "-CAkey", "ca-key.pem", "-CAcreateserial",
       "-out", "server-cert.pem", "-days", "2", "-sha256",
-      "-copy_extensions", "copy",
+      "-extfile", "server-extensions.cnf", "-extensions", "server_certificate",
+    ]);
+    await chmod(join(root, "server-key.pem"), 0o600);
+    await Promise.all([
+      rm(join(root, "ca-key.pem"), { force: true }),
+      rm(join(root, "ca-cert.srl"), { force: true }),
+      rm(join(root, "server.csr"), { force: true }),
+      rm(join(root, "server-extensions.cnf"), { force: true }),
     ]);
   } catch (error) {
     await rm(root, { recursive: true, force: true });

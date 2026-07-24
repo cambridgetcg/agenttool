@@ -14,6 +14,7 @@ export const STRICT_JSON_PROFILE_MEDIA_TYPES = new Set([
 
 const CORRESPONDENCE_EXACT_JSON_PATH =
   /^\/v1\/correspondence\/(?:events|claims|voice)\/?$/;
+const MCP_EXACT_JSON_PATH = /^\/v1\/mcp\/?$/;
 
 export function isStrictJsonProfileResponse(
   response: Response,
@@ -32,6 +33,7 @@ export function isStrictJsonProfileResponse(
   return (
     mediaType === "application/json" &&
     requestPath !== undefined &&
-    CORRESPONDENCE_EXACT_JSON_PATH.test(requestPath)
+    (CORRESPONDENCE_EXACT_JSON_PATH.test(requestPath) ||
+      MCP_EXACT_JSON_PATH.test(requestPath))
   );
 }
