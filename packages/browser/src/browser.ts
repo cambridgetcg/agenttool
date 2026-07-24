@@ -3,7 +3,15 @@ import { existsSync } from "node:fs";
 import { chmod, lstat, mkdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import {
+  resolveBrowserCapabilities,
+  type BrowserCapabilitySet,
+} from "./capabilities.js";
 import { asBrowserError, BrowserError } from "./errors.js";
+import {
+  planBrowserAction,
+  type BrowserConsequencePlan,
+} from "./planning.js";
 import {
   BrowserNetworkPolicy,
   redactHtmlUrlAttributes,
@@ -93,8 +101,7 @@ interface ResolvedRef {
 
 interface NormalizedOptions {
   headless: boolean;
-  allowPublicWeb: boolean;
-  allowLocalNetwork: boolean;
+  capabilities: Readonly<BrowserCapabilitySet>;
   profile: BrowserProfile;
   channel?: string;
   executablePath?: string;
@@ -132,8 +139,7 @@ export class AgentBrowser {
     this.context = context;
     this.browser = browser;
     this.policy = new BrowserNetworkPolicy({
-      allowPublicWeb: options.allowPublicWeb,
-      allowLocalNetwork: options.allowLocalNetwork,
+      capabilities: options.capabilities,
       ...(options.resolveHostname
         ? { resolveHostname: options.resolveHostname }
         : {}),
@@ -163,7 +169,7 @@ export class AgentBrowser {
         viewport: normalized.viewport,
         acceptDownloads: false,
         ignoreHTTPSErrors: false,
-        serviceWorkers: "block",
+        serviceWorkers: normalized.capabilities.runtime.serviceWorkers,
       };
       if (normalized.profile.mode === "persistent") {
         context = await runtime.launchPersistentContext(
@@ -400,6 +406,21 @@ export class AgentBrowser {
 
   async act(action: BrowserAction): Promise<ActionResult> {
     return this.withLock(() => this.actUnlocked(action));
+  }
+
+  /** Return the immutable authority manifest selected when this session launched. */
+  capabilities(): Readonly<BrowserCapabilitySet> {
+    return this.options.capabilities;
+  }
+
+  /**
+   * Forecast possible consequences without touching the page or executing the
+   * action. Planning is advisory and never widens launch-time authority.
+   */
+  plan(action: BrowserAction): Readonly<BrowserConsequencePlan> {
+    this.assertOpen();
+    validateAction(action, this.options);
+    return planBrowserAction(action, this.options.capabilities);
   }
 
   /**
@@ -722,13 +743,22 @@ export class AgentBrowser {
         await route.abort("blockedbyclient");
       }
     });
-    // HTTP routing does not cover WebSockets. V0 blocks every WebSocket
-    // connection instead of claiming the HTTP(S) DNS policy covers it.
     await this.context.routeWebSocket("**/*", async (route) => {
-      await route.close({
-        code: 1008,
-        reason: "WebSockets are blocked by AgentBrowser policy",
-      });
+      try {
+        await this.policy.assertWebSocketAllowed(route.url());
+        if (typeof route.connectToServer !== "function") {
+          throw new BrowserError(
+            "invalid_options",
+            "Browser runtime cannot pass an allowed WebSocket to its server.",
+          );
+        }
+        route.connectToServer();
+      } catch {
+        await route.close({
+          code: 1008,
+          reason: "WebSocket destination is outside this browser authority",
+        });
+      }
     });
   }
 
@@ -1174,11 +1204,7 @@ async function loadDefaultRuntime(): Promise<BrowserRuntime> {
 }
 
 function normalizeOptions(options: AgentBrowserOptions): NormalizedOptions {
-  for (const [name, value] of [
-    ["headless", options.headless],
-    ["allowPublicWeb", options.allowPublicWeb],
-    ["allowLocalNetwork", options.allowLocalNetwork],
-  ] as const) {
+  for (const [name, value] of [["headless", options.headless]] as const) {
     if (value !== undefined && typeof value !== "boolean") {
       throw new BrowserError("invalid_options", `${name} must be a boolean.`);
     }
@@ -1282,10 +1308,19 @@ function normalizeOptions(options: AgentBrowserOptions): NormalizedOptions {
   if (profile.mode === "persistent") {
     validateDedicatedProfileDirectory(profile.directory, outputDir);
   }
+  const capabilities = resolveBrowserCapabilities({
+    ...(options.authority ? { authority: options.authority } : {}),
+    ...(options.allowPublicWeb !== undefined
+      ? { allowPublicWeb: options.allowPublicWeb }
+      : {}),
+    ...(options.allowLocalNetwork !== undefined
+      ? { allowLocalNetwork: options.allowLocalNetwork }
+      : {}),
+    profileMode: profile.mode,
+  });
   return {
     headless: options.headless ?? true,
-    allowPublicWeb: options.allowPublicWeb ?? true,
-    allowLocalNetwork: options.allowLocalNetwork ?? false,
+    capabilities,
     profile,
     ...(channel ? { channel } : {}),
     ...(executablePath ? { executablePath } : {}),

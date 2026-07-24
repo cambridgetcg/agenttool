@@ -1,25 +1,33 @@
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import {
+  resolveBrowserCapabilities,
+  type BrowserAuthorityPreset,
+  type BrowserCapabilitySet,
+} from "./capabilities.js";
 import { BrowserError } from "./errors.js";
 import type { ResolveHostname, ResolvedAddress } from "./types.js";
 
 export type DestinationClass = "public" | "local" | "reserved";
 
 export interface BrowserNetworkPolicyOptions {
+  capabilities?: Readonly<BrowserCapabilitySet>;
+  authority?: BrowserAuthorityPreset;
   allowPublicWeb?: boolean;
   allowLocalNetwork?: boolean;
   resolveHostname?: ResolveHostname;
 }
 
 export interface NetworkBoundary {
-  mode: "local_browser_public_web";
+  mode: "classified" | "browser";
   publicWeb: boolean;
   localNetwork: boolean;
+  reservedNetwork: boolean;
   schemes: readonly ["http", "https"];
   urlCredentials: "blocked";
-  dnsPreflight: true;
+  dnsPreflight: boolean;
   connectionAddressPinning: false;
-  webSockets: "blocked";
+  webSockets: "blocked" | "classified" | "browser";
   statement: string;
 }
 
@@ -38,40 +46,83 @@ export async function defaultResolveHostname(
  */
 export class BrowserNetworkPolicy {
   readonly boundary: NetworkBoundary;
-  private readonly allowPublicWeb: boolean;
-  private readonly allowLocalNetwork: boolean;
+  private readonly capabilities: Readonly<BrowserCapabilitySet>;
   private readonly resolveHostname: ResolveHostname;
 
   constructor(options: BrowserNetworkPolicyOptions = {}) {
-    this.allowPublicWeb = options.allowPublicWeb ?? true;
-    this.allowLocalNetwork = options.allowLocalNetwork ?? false;
+    if (
+      options.capabilities
+      && (
+        options.authority !== undefined
+        || options.allowPublicWeb !== undefined
+        || options.allowLocalNetwork !== undefined
+      )
+    ) {
+      throw new BrowserError(
+        "invalid_options",
+        "capabilities cannot be combined with authority or legacy network options.",
+      );
+    }
+    this.capabilities =
+      options.capabilities
+      ?? resolveBrowserCapabilities({
+        ...(options.authority ? { authority: options.authority } : {}),
+        ...(options.allowPublicWeb !== undefined
+          ? { allowPublicWeb: options.allowPublicWeb }
+          : {}),
+        ...(options.allowLocalNetwork !== undefined
+          ? { allowLocalNetwork: options.allowLocalNetwork }
+          : {}),
+      });
     this.resolveHostname = options.resolveHostname ?? defaultResolveHostname;
     this.boundary = Object.freeze({
-      mode: "local_browser_public_web",
-      publicWeb: this.allowPublicWeb,
-      localNetwork: this.allowLocalNetwork,
+      mode:
+        this.capabilities.network.dnsPreflight === "browser"
+          ? "browser"
+          : "classified",
+      publicWeb: this.capabilities.network.public,
+      localNetwork: this.capabilities.network.local,
+      reservedNetwork: this.capabilities.network.reserved,
       schemes: Object.freeze(["http", "https"] as const),
       urlCredentials: "blocked",
-      dnsPreflight: true,
+      dnsPreflight: this.capabilities.network.dnsPreflight === "classify",
       connectionAddressPinning: false,
-      webSockets: "blocked",
-      statement:
-        "HTTP(S) destinations are checked before browser requests; DNS preflight does not pin Chromium's connected address.",
+      webSockets: this.capabilities.network.webSockets,
+      statement: this.capabilities.statement,
     });
   }
 
   async assertAllowed(input: string | URL): Promise<URL> {
     const url = parseBrowserUrl(input);
+    if (this.capabilities.network.dnsPreflight === "browser") return url;
+    await this.assertDestinationAllowed(url);
+    return url;
+  }
+
+  async assertWebSocketAllowed(input: string | URL): Promise<URL> {
+    const url = parseBrowserWebSocketUrl(input);
+    if (this.capabilities.network.webSockets === "blocked") {
+      throw new BrowserError(
+        "network_blocked",
+        "Browser authority does not permit WebSocket connections.",
+      );
+    }
+    if (this.capabilities.network.webSockets === "browser") return url;
+    await this.assertDestinationAllowed(url);
+    return url;
+  }
+
+  private async assertDestinationAllowed(url: URL): Promise<void> {
     const hostname = normalizeHostname(url.hostname);
     const namedClass = classifySpecialHostname(hostname);
     if (namedClass) {
       this.assertClassAllowed(namedClass);
-      return url;
+      return;
     }
 
     if (isIP(hostname) !== 0) {
       this.assertClassAllowed(classifyIpAddress(hostname));
-      return url;
+      return;
     }
 
     let addresses: readonly ResolvedAddress[];
@@ -94,23 +145,22 @@ export class BrowserNetworkPolicy {
     for (const address of addresses) {
       this.assertClassAllowed(classifyIpAddress(address.address));
     }
-    return url;
   }
 
   private assertClassAllowed(destination: DestinationClass): void {
-    if (destination === "reserved") {
+    if (destination === "reserved" && !this.capabilities.network.reserved) {
       throw new BrowserError(
         "network_blocked",
         "Browser policy blocks reserved network destinations.",
       );
     }
-    if (destination === "local" && !this.allowLocalNetwork) {
+    if (destination === "local" && !this.capabilities.network.local) {
       throw new BrowserError(
         "network_blocked",
         "Browser policy blocks localhost and private network destinations by default.",
       );
     }
-    if (destination === "public" && !this.allowPublicWeb) {
+    if (destination === "public" && !this.capabilities.network.public) {
       throw new BrowserError(
         "network_blocked",
         "Browser policy does not permit public web destinations.",
@@ -130,6 +180,28 @@ export function parseBrowserUrl(input: string | URL): URL {
     throw new BrowserError(
       "url_scheme_blocked",
       "Browser navigation only permits http: and https: URLs.",
+    );
+  }
+  if (url.username || url.password) {
+    throw new BrowserError(
+      "url_credentials_blocked",
+      "Credentials are not permitted in browser URLs.",
+    );
+  }
+  return url;
+}
+
+export function parseBrowserWebSocketUrl(input: string | URL): URL {
+  let url: URL;
+  try {
+    url = input instanceof URL ? new URL(input.href) : new URL(input);
+  } catch (error) {
+    throw new BrowserError("invalid_url", "URL must be absolute.", { cause: error });
+  }
+  if (url.protocol !== "ws:" && url.protocol !== "wss:") {
+    throw new BrowserError(
+      "url_scheme_blocked",
+      "Browser WebSockets only permit ws: and wss: URLs.",
     );
   }
   if (url.username || url.password) {
