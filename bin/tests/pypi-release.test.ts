@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 
 import {
   PINNED_BUILD_REQUIREMENTS,
+  PYPI_SYNC_ARGS,
   PYPI_RELEASE_RECEIPT_SCHEMA,
   discardResponseBody,
   expectedArtifactFilenames,
@@ -236,8 +237,17 @@ describe("protected PyPI release policy", () => {
       "pluggy==1.6.0 --hash=sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746",
       "trove-classifiers==2026.6.1.19 --hash=sha256:ab4c4ec93cc4a4e7815fa759906e05e6bb3f2fbd92ea0f897288c6a43efd15b3",
     ]);
+    expect(PYPI_SYNC_ARGS).toEqual([
+      "sync",
+      "--locked",
+      "--extra",
+      "dev",
+      "--no-install-project",
+      "--no-sources",
+      "--no-python-downloads",
+    ]);
+    expect(PYPI_SYNC_ARGS).not.toContain("--frozen");
     const script = await readFile(join(ROOT, "bin", "pypi-release.ts"), "utf8");
-    expect(script).toContain('"--frozen"');
     expect(script).toContain('"--no-install-project"');
     expect(script).toContain('"--build-constraints"');
     expect(script).toContain('"--require-hashes"');

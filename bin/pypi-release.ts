@@ -37,6 +37,15 @@ export const PINNED_BUILD_REQUIREMENTS = [
   "pluggy==1.6.0 --hash=sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746",
   "trove-classifiers==2026.6.1.19 --hash=sha256:ab4c4ec93cc4a4e7815fa759906e05e6bb3f2fbd92ea0f897288c6a43efd15b3",
 ] as const;
+export const PYPI_SYNC_ARGS = [
+  "sync",
+  "--locked",
+  "--extra",
+  "dev",
+  "--no-install-project",
+  "--no-sources",
+  "--no-python-downloads",
+] as const;
 
 export type PyPIArtifactType = "bdist_wheel" | "sdist";
 
@@ -964,19 +973,7 @@ async function prepare(tag: string, output: string): Promise<PyPIReleaseReceipt>
   });
   const childEnvironment = credentiallessChildEnvironment(outputRoot);
 
-  await command(
-    "uv",
-    [
-      "sync",
-      "--frozen",
-      "--extra",
-      "dev",
-      "--no-install-project",
-      "--no-sources",
-      "--no-python-downloads",
-    ],
-    { cwd: SDK_ROOT, env: childEnvironment },
-  );
+  await command("uv", PYPI_SYNC_ARGS, { cwd: SDK_ROOT, env: childEnvironment });
   await command(join(SDK_ROOT, ".venv", "bin", "python"), ["-m", "pytest", "-q"], {
     cwd: SDK_ROOT,
     env: childEnvironment,

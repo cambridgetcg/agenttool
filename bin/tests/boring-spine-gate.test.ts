@@ -270,7 +270,7 @@ describe("boring test spine", () => {
     }
   });
 
-  test("pins a four-job secret-free workflow and frozen installs", async () => {
+  test("pins a four-job secret-free workflow and reproducible installs", async () => {
     const workflow = await readFile(join(ROOT, ".github", "workflows", "ci.yml"), "utf8");
     expect(workflow).toContain("name: API and protocol");
     expect(workflow).toContain("name: Data, ADDS, and SDK");
@@ -285,6 +285,13 @@ describe("boring test spine", () => {
     );
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("package-manager-cache: false");
+    expect(workflow).toContain("name: Set up release-pinned uv 0.9.26");
+    expect(workflow).toContain(
+      "uses: astral-sh/setup-uv@1e862dfacbd1d6d858c55d9b792c756523627244 # v7.1.4",
+    );
+    expect(workflow).toContain(
+      "uv sync --locked --extra dev --no-install-project --no-sources --no-python-downloads --dry-run --no-cache",
+    );
     expect(workflow).toContain("name: Build local data-sync and projector peers");
     expect(workflow).toContain("cd packages/data && bun run build");
     expect(workflow).toContain("cd packages/data-protocol && bun run build");
@@ -370,14 +377,15 @@ describe("boring test spine", () => {
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.startsWith("uses:"));
-    expect(uses).toHaveLength(11);
+    expect(uses).toHaveLength(12);
     expect(
       uses.every(
         (line) =>
           line === "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1" ||
           line === "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0" ||
           line === "uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0" ||
-          line === "uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0",
+          line === "uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0" ||
+          line === "uses: astral-sh/setup-uv@1e862dfacbd1d6d858c55d9b792c756523627244 # v7.1.4",
       ),
     ).toBe(true);
   });
