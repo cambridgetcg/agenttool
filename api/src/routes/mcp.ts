@@ -30,7 +30,6 @@ import {
   ListToolsRequestSchema,
   McpError,
   ReadResourceRequestSchema,
-  RequestIdSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -122,14 +121,6 @@ function isToolCallMessage(value: unknown): boolean {
     !Array.isArray(value) &&
     (value as { method?: unknown }).method === "tools/call"
   );
-}
-
-function messageId(value: unknown): string | number | null {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  const parsed = RequestIdSchema.safeParse((value as { id?: unknown }).id);
-  return parsed.success ? parsed.data : null;
 }
 
 function isInitializeAttempt(value: unknown): value is {
@@ -290,8 +281,6 @@ app.all("/", async (c) => {
       400,
       ErrorCode.InvalidRequest,
       `Unsupported protocol version. This endpoint requires MCP-Protocol-Version: ${MCP_PROTOCOL_VERSION} after initialization.`,
-      {},
-      messageId(parsedBody),
     );
   }
 

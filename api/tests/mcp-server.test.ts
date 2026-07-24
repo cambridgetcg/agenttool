@@ -254,7 +254,7 @@ describe("public MCP Streamable HTTP wire", () => {
     });
     expect(res.status).toBe(400);
     const body = await res.json();
-    expect(body.id).toBe(2);
+    expect(body.id).toBeNull();
     expect(body.error.message).toMatch(
       /requires MCP-Protocol-Version: 2025-11-25/,
     );
