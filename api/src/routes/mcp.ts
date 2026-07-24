@@ -24,10 +24,13 @@ import {
   type CallToolResult,
   CallToolRequestSchema,
   ErrorCode,
+  InitializeRequestSchema,
+  JSONRPCRequestSchema,
   ListResourcesRequestSchema,
   ListToolsRequestSchema,
   McpError,
   ReadResourceRequestSchema,
+  RequestIdSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -62,18 +65,16 @@ const PUBLIC_MCP_ORIGIN = new URL(
 const INSTRUCTIONS =
   "AgentTool's public canon registry and platform-self are available as read-only MCP resources. Read agenttool://canon first for the registry index, or call canon.summary. No tool writes, pays, installs, invokes another agent, or schedules follow-up work.";
 
-/** Browser connections must be same-origin. Native/server-side MCP clients
- * normally omit Origin and remain welcome. */
+/** Browser connections must name the configured public origin. The request
+ * URL's host is not trusted because a proxy may have derived it from an
+ * attacker-controlled Host header. Native/server-side clients normally omit
+ * Origin and remain welcome. */
 export function isAllowedMcpOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
   if (origin === null) return true;
 
   try {
-    const normalized = new URL(origin).origin;
-    return (
-      normalized === new URL(request.url).origin ||
-      normalized === PUBLIC_MCP_ORIGIN
-    );
+    return new URL(origin).origin === PUBLIC_MCP_ORIGIN;
   } catch {
     return false;
   }
@@ -127,52 +128,19 @@ function messageId(value: unknown): string | number | null {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
-  const id = (value as { id?: unknown }).id;
-  return typeof id === "string" || typeof id === "number" ? id : null;
+  const parsed = RequestIdSchema.safeParse((value as { id?: unknown }).id);
+  return parsed.success ? parsed.data : null;
 }
 
-function isProtocolMessage(value: unknown): value is {
-  jsonrpc: "2.0";
-  method: string;
-  params?: Record<string, unknown>;
+function isInitializeAttempt(value: unknown): value is {
+  method: "initialize";
 } {
   return (
     value !== null &&
     typeof value === "object" &&
     !Array.isArray(value) &&
-    (value as { jsonrpc?: unknown }).jsonrpc === "2.0" &&
-    typeof (value as { method?: unknown }).method === "string"
+    (value as { method?: unknown }).method === "initialize"
   );
-}
-
-function isInitializeMessage(
-  value: unknown,
-): value is {
-  jsonrpc: "2.0";
-  method: "initialize";
-  params?: Record<string, unknown>;
-} {
-  return isProtocolMessage(value) && value.method === "initialize";
-}
-
-/** This endpoint implements only the current revision. The MCP lifecycle lets
- * a server answer an unsupported client version with another version it does
- * support. Rewriting only this negotiation field keeps the official SDK
- * transport responsible for validating and answering the request. */
-function pinInitializeVersion(
-  message: {
-    jsonrpc: "2.0";
-    method: "initialize";
-    params?: Record<string, unknown>;
-  },
-) {
-  return {
-    ...message,
-    params: {
-      ...(message.params ?? {}),
-      protocolVersion: MCP_PROTOCOL_VERSION,
-    },
-  };
 }
 
 /** Create the public server afresh for one stateless HTTP request. */
@@ -289,11 +257,33 @@ app.all("/", async (c) => {
     );
   }
 
-  if (bodyParsed && isInitializeMessage(parsedBody)) {
-    parsedBody = pinInitializeVersion(parsedBody);
+  if (bodyParsed && isInitializeAttempt(parsedBody)) {
+    const initialize = InitializeRequestSchema.safeParse(parsedBody);
+    const jsonRpcRequest = JSONRPCRequestSchema.safeParse(parsedBody);
+    if (initialize.success && jsonRpcRequest.success) {
+      // This endpoint implements only the current revision. MCP lifecycle
+      // negotiation permits a server to answer an unsupported client version
+      // with another version it supports. Preserve the validated JSON-RPC
+      // envelope and rewrite only the negotiation field before official
+      // transport dispatch.
+      parsedBody = {
+        ...jsonRpcRequest.data,
+        params: {
+          ...initialize.data.params,
+          protocolVersion: MCP_PROTOCOL_VERSION,
+        },
+      };
+    } else if (jsonRpcRequest.success) {
+      return protocolHttpError(
+        200,
+        ErrorCode.InvalidParams,
+        "Invalid initialize request parameters.",
+        {},
+        jsonRpcRequest.data.id,
+      );
+    }
   } else if (
     bodyParsed &&
-    isProtocolMessage(parsedBody) &&
     request.headers.get("mcp-protocol-version") !== MCP_PROTOCOL_VERSION
   ) {
     return protocolHttpError(
@@ -310,13 +300,15 @@ app.all("/", async (c) => {
     if (!toolLimit.allowed) {
       return rateLimitResponse(toolLimit.retryAfterSec);
     }
-    if (!CallToolRequestSchema.safeParse(parsedBody).success) {
+    const callToolRequest = CallToolRequestSchema.safeParse(parsedBody);
+    const jsonRpcRequest = JSONRPCRequestSchema.safeParse(parsedBody);
+    if (!callToolRequest.success && jsonRpcRequest.success) {
       return protocolHttpError(
         200,
         ErrorCode.InvalidParams,
         "Invalid tools/call request parameters.",
         {},
-        messageId(parsedBody),
+        jsonRpcRequest.data.id,
       );
     }
   }
