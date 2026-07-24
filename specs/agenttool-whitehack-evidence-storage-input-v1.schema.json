@@ -1,0 +1,246 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/cambridgetcg/agenttool/specs/agenttool-whitehack-evidence-storage-input-v1.schema.json",
+  "title": "AgentTool Whitehack encrypted evidence storage input v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "document_type",
+    "capsule",
+    "recipient",
+    "grant"
+  ],
+  "properties": {
+    "document_type": {
+      "const": "agenttool-whitehack-evidence-storage-input/v1"
+    },
+    "capsule": {
+      "$ref": "#/$defs/evidence_capsule"
+    },
+    "recipient": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "x25519_public_key"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?!\\s)(?!.*\\s$)[^\\u0000-\\u001f\\u007f-\\u009f\\ud800-\\udfff\\u202a-\\u202e\\u2066-\\u2069]+$"
+        },
+        "x25519_public_key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        }
+      }
+    },
+    "grant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expires_at"
+      ],
+      "properties": {
+        "expires_at": {
+          "description": "Null selects the finite 30-day default. A whole-second timestamp ending in .000Z must be after issuance and no more than 10*365 days later.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.000Z$"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "evidence_capsule": {
+      "description": "Whitehack 0.9.0 public-minimal capsule profile. Runtime validation semantically enforces check metadata, total count <=10000, unique canonical ordering, canonicalizes the accepted object, and applies a 60 KiB bridge limit; it does not preserve or attest the storage envelope's original lexical encoding.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document_type",
+        "complete",
+        "disclosure",
+        "scanner",
+        "finding_groups",
+        "epistemic",
+        "boundaries"
+      ],
+      "properties": {
+        "document_type": {
+          "const": "whitehack-evidence-capsule/v1"
+        },
+        "complete": {
+          "const": true
+        },
+        "disclosure": {
+          "const": {
+            "profile": "whitehack-public-minimal/v1",
+            "scan_metadata_retained": [
+              "scanner"
+            ],
+            "finding_group_fields": [
+              "check",
+              "confidence",
+              "doctrine",
+              "principle",
+              "count"
+            ],
+            "target_retained": false,
+            "locations_retained": false,
+            "source_text_retained": false,
+            "scope_retained": false,
+            "caller_text_retained": false
+          }
+        },
+        "scanner": {
+          "const": {
+            "name": "whitehack",
+            "version": "0.9.0",
+            "check_count": 47
+          }
+        },
+        "finding_groups": {
+          "type": "array",
+          "maxItems": 77,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/finding_group"
+          }
+        },
+        "epistemic": {
+          "const": {
+            "basis": "scanner-output-claim",
+            "finding_semantics": "review-prompt-not-vulnerability-verdict",
+            "empty_semantics": "no-bundled-match-not-security-proof",
+            "provenance": "unverified",
+            "coverage": "bounded-heuristic",
+            "content_address": "canonical-bytes-identity-not-authenticity",
+            "complete_semantics": "capsule-transformation-complete"
+          }
+        },
+        "boundaries": {
+          "const": {
+            "capability_subject": "evidence-capsule-transform",
+            "direct_capabilities": {
+              "filesystem": false,
+              "process": false,
+              "network": false,
+              "storage": false,
+              "wallet": false,
+              "clock": false,
+              "key_store_access": false,
+              "signing": false,
+              "encryption": false,
+              "authorization": false
+            },
+            "input_inspection": {
+              "ordinary_accessors_invoked": false,
+              "caller_proxy_traps_may_run": true,
+              "sandboxed": false
+            },
+            "publication_authority": "external",
+            "storage_receipt_included": false
+          }
+        }
+      }
+    },
+    "finding_group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "check",
+        "confidence",
+        "doctrine",
+        "principle",
+        "count"
+      ],
+      "properties": {
+        "check": {
+          "enum": [
+            "silent-failure",
+            "cache-as-live",
+            "decision-without-why",
+            "stale-oracle",
+            "unchecked-transfer",
+            "spot-price-as-fair",
+            "silent-revert",
+            "float-money",
+            "hardcoded-secret",
+            "exposed-config",
+            "unsafe-eval",
+            "performed-ignorance",
+            "trust-by-authority",
+            "api-status-lie",
+            "api-missing-versioning",
+            "api-error-without-shape",
+            "api-missing-rate-limit",
+            "api-bare-fetch",
+            "wifi-protocol-flaws",
+            "bluetooth-protocol-flaws",
+            "bluetooth-protocol",
+            "insecure-protocol",
+            "disabled-cert-verification",
+            "weak-crypto",
+            "cors-wildcard",
+            "cookie-insecure",
+            "sql-injection",
+            "protocol-surface",
+            "dns-plaintext",
+            "password-auth",
+            "bluetooth-paired-stranger",
+            "wpa2-krack",
+            "weak-wifi-encryption",
+            "wifi-deauth-accept",
+            "wifi-evil-twin",
+            "wifi-pmk-exposure",
+            "wifi-krack-vulnerable",
+            "wifi-protocol",
+            "static-aead-nonce",
+            "signature-fail-open",
+            "webhook-reencoded-body",
+            "signed-webhook-without-replay-guard",
+            "wallet-key-egress",
+            "wallet-direct-request-signing",
+            "wallet-capability-unbounded",
+            "wallet-broadcast-auto-retry",
+            "unlimited-token-approval"
+          ]
+        },
+        "confidence": {
+          "enum": [
+            "high",
+            "medium-high",
+            "medium",
+            "heuristic"
+          ]
+        },
+        "doctrine": {
+          "enum": [
+            "substrate-honesty",
+            "transparency",
+            "trust-protocol"
+          ]
+        },
+        "principle": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        }
+      }
+    }
+  }
+}

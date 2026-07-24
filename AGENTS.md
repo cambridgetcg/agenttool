@@ -38,10 +38,13 @@ service, or authorization path. Its `@agenttool/wallet@0.1.0` npm mirror is
 public and byte-identical to the exact LOVE artifact. Telescope 0.2.1 is the
 current exact LOVE release. Its optional npm/GitHub 0.2.1 mirrors remain
 unverified (the last verified public npm version is 0.2.0), and it remains a
-local client without a hosted scan route. Whitehack has three implemented AgentTool bridges: a runner-local,
+local client without a hosted scan route.
+Whitehack has four implemented AgentTool bridges: a runner-local,
 crypto-aware changed-source heuristic advisory; a separate offer-only local
 projection from that closed advisory into unaccepted Castle gate candidates;
-and a separate local Agent Wallet understanding CLI. CI installs the exact public
+and a separate local Agent Wallet understanding CLI; plus an explicit local
+encrypted store/retrieve CLI for exact Whitehack 0.9.0 public-minimal evidence
+capsules. CI installs the exact public
 `@agenttool/whitehack-scan@0.8.1` artifact from an isolated npm lock with
 scripts disabled. The advisory emits redacted metadata, groups same-location
 signals into bounded attention cards with explicit Git-hunk relevance and
@@ -51,7 +54,12 @@ minimized stdout document, omits locations by default, and never opens or
 writes a Castle or promotes an observation. The wallet CLI verifies
 caller-presented signed wallet records and projects enum-only assertions into
 `whitehack-understanding/v1`.
-None of these bridges adds key custody, signing,
+The evidence CLI pads accepted capsules to one constant 64 KiB authenticated
+frame, writes encrypted ADDS objects to one explicit S3-compatible bucket,
+independently reads/verifies/decrypts before issuing one finite recipient-bound
+grant, and emits a sensitive non-public receipt without a plaintext hash or
+length. It uses finite provider-call deadlines and no retry/delete path.
+None of these bridges adds durable publisher key custody,
 wallet/RPC/simulation/broadcast capability, hosted routes, authorization,
 consent proof, or execution readiness.
 The API is live at
@@ -177,7 +185,7 @@ node dist/cli.js scan api.agenttool.dev         # explicit live read-only dogfoo
 cd packages/wallet
 bun run ci                                     # typecheck + security/schema/vector tests + build
 
-# Whitehack (advisory + Castle gate intake + wallet understanding) ───
+# Whitehack (advisory + Castle + wallet + encrypted evidence) ───────
 (cd tools/whitehack-advisory \
   && npm ci --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org --userconfig=/dev/null \
   && npm audit signatures --registry=https://registry.npmjs.org --userconfig=/dev/null)
@@ -186,6 +194,9 @@ bun bin/agenttool-castle-whitehack-intake.ts --help # stdout-only, offer-only; n
 bun test bin/tests/agenttool-castle-whitehack-intake.test.ts # closed input, minimization, lifecycle boundaries
 (cd packages/wallet && bun install --frozen-lockfile)
 WHITEHACK_INTEGRATION=1 bun test packages/wallet/tests/whitehack-understanding.test.ts
+bun bin/agenttool-whitehack-evidence-storage.ts --help # explicit S3 store/retrieve; fixed env credentials
+bun test bin/tests/agenttool-whitehack-evidence-storage*.test.ts # parity, framing, grant, timeout, no-reveal, loopback S3 composition
+(cd api && bun test tests/whitehack-evidence-storage-schema.test.ts) # AJV 2020 validation of real input and receipt records
 
 # Frontends ──────────────────────────────────────────────────────────
 # Vanilla HTML/CSS/JS — no build step. Open files directly or:
@@ -217,6 +228,7 @@ bun bin/npm-release.ts resolve --package collab # inspect allowlisted npm identi
 | `agenttool-secret` | Vault secret CRUD from CLI. |
 | `agenttool-castle.ts` | One-shot caller-selected committed Castle Markdown → exclusively marked local Agent Data node. Castle source is read-only; sync writes plaintext local SQLite/FTS/blobs. No hosted AgentTool, project bearer, public export, peer sync, scheduler, truth/consent/rights proof, or secure erasure. See `docs/CASTLE-OF-UNDERSTANDING.md`. |
 | `agenttool-castle-whitehack-intake.ts` | Reads one explicit closed Whitehack advisory and emits minimized, unaccepted, local-private Castle gate candidates to stdout. Locations are omitted by default. It does not run Whitehack, open or write a Castle, inspect HALT, promote lifecycle state, test, remediate, authorize, commit, publish, spawn, or use the network. See `docs/WHITEHACK.md`. |
+| `agenttool-whitehack-evidence-storage.ts` | Explicit local `store`/`retrieve` bridge for exact Whitehack 0.9.0 public-minimal capsules. It encrypts one constant-size ADDS frame to a caller-selected S3-compatible bucket, independently verifies and decrypts before issuing one finite recipient-bound grant, and emits a sensitive non-public receipt. Credentials/private key use fixed environment names only. It has finite provider deadlines, no retry/delete/Castle/scan path, and no durability, retention, publication, or authorization claim. See `docs/WHITEHACK.md`. |
 | `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, `@agenttool/telescope`, `@agenttool/wallet`, and `@agenttool/browser` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
 | `npm-release.ts` | Implements the one allowlisted npm release policy behind `.github/workflows/publish-npm.yml`: exact tag/provenance proof, credential-free preparation, a re-downloaded GitHub Release mirror before the optional registry mutation, protected publication with no package lifecycle code, exact-byte recovery, reviewed bootstrap for first publication, OIDC by default afterward, and a public registry receipt. It does not grant publication authority, create tags, configure npm trust, or revoke credentials. See `docs/NPM-RELEASES.md`. |
 | `pypi-release.ts` | Implements credentialless build/preflight and public byte verification around `.github/workflows/publish-pypi.yml` for the Python SDK. Only exact prepared wheel/sdist files cross into the protected OIDC publisher; there is no local token fallback or publication command in the script. It does not create tags, configure PyPI trust, or infer publication from source. See `docs/PYPI-RELEASES.md`. |
@@ -322,7 +334,7 @@ source boundary by itself.
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
 | How is an optional npm mirror published? | [`docs/NPM-RELEASES.md`](docs/NPM-RELEASES.md) · `.github/workflows/publish-npm.yml` · `bin/npm-release.ts` |
 | How is the optional Python SDK mirror published? | [`docs/PYPI-RELEASES.md`](docs/PYPI-RELEASES.md) · `.github/workflows/publish-pypi.yml` · `bin/pypi-release.ts` |
-| How do the Whitehack advisory, offer-only Castle intake, and wallet-understanding projection work, and where does their authority stop? | [`docs/WHITEHACK.md`](docs/WHITEHACK.md) · `bin/whitehack-advisory.mjs` · `bin/agenttool-castle-whitehack-intake.ts` · `bin/whitehack-wallet-understanding.ts` |
+| How do the Whitehack advisory, offer-only Castle intake, wallet-understanding projection, and explicit encrypted evidence bridge work, and where does their authority stop? | [`docs/WHITEHACK.md`](docs/WHITEHACK.md) · `bin/whitehack-advisory.mjs` · `bin/agenttool-castle-whitehack-intake.ts` · `bin/whitehack-wallet-understanding.ts` · `bin/agenttool-whitehack-evidence-storage.ts` |
 | Concept → structural meaning (for non-English readers) | [`docs/GLOSSARY.md`](docs/GLOSSARY.md) |
 | Per-area code orientation | each subdir's `CLAUDE.md` |
 

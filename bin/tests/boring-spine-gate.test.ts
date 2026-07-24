@@ -278,6 +278,8 @@ describe("boring test spine", () => {
     expect(workflow.match(/bun-version: 1\.3\.5/g)).toHaveLength(3);
     expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(4);
     expect(workflow).toContain("bun install --frozen-lockfile");
+    expect(workflow).toContain("name: Install ADDS protocol dependencies");
+    expect(workflow).toContain("working-directory: packages/data-protocol");
     expect(workflow).toContain("name: Install cross-language vector dependencies");
     expect(workflow).toContain("working-directory: packages/sdk-ts");
     expect(workflow).toContain(

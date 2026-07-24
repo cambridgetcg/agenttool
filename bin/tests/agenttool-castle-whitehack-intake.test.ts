@@ -505,15 +505,18 @@ describe("agenttool-castle-whitehack-intake/v1 core", () => {
     expect(source).not.toMatch(/\bprocess\./u);
   });
 
-  test("the public Whitehack page exposes the fifth boundary without inventing a hosted route", async () => {
+  test("the public Whitehack page exposes six separate local boundaries", async () => {
     const page = await readFile(
       join(repoRoot, "apps", "docs", "whitehack.html"),
       "utf8",
     );
-    expect(page).toContain("five separate practices");
-    expect(page).not.toContain("four separate practices");
+    expect(page).toContain("six separate practices");
+    expect(page).not.toContain("five separate practices");
     expect(page).toContain("agenttool-castle-whitehack-intake/v1");
     expect(page).toContain("bin/agenttool-castle-whitehack-intake.ts");
+    expect(page).toContain("bin/agenttool-whitehack-evidence-storage.ts");
+    expect(page).toContain("whitehack-evidence-capsule/v1");
+    expect(page).toContain("not cryptographic revocation");
     expect(page).toContain(
       "does not create a hosted intake route or release a new",
     );

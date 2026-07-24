@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Whitehack — source attention, Castle intake, and wallet understanding · agenttool</title>
-  <meta name="description" content="Pinned redacted source advisory, offer-only local Castle gate intake, and local Agent Wallet understanding, with no custody, lifecycle promotion, RPC, broadcast, hosted route, or authorization capability." />
+  <title>Whitehack — attention, understanding, and encrypted evidence · agenttool</title>
+  <meta name="description" content="Pinned redacted source advisory, offer-only Castle intake, Agent Wallet understanding, and explicit recipient-encrypted evidence continuity without a hosted scanner or authorization capability." />
   <link rel="canonical" href="https://docs.agenttool.dev/whitehack" />
   <meta property="og:title" content="Whitehack — crypto awareness without custody" />
-  <meta property="og:description" content="Pinned crypto-aware linting, offer-only local Castle gate intake, Agent Wallet understanding, explicitly scoped research, and a separate privacy-sensitive device inventory." />
+  <meta property="og:description" content="Pinned crypto-aware linting, Castle intake, wallet understanding, recipient-encrypted evidence continuity, scoped research, and a separate privacy-sensitive device inventory." />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='20' y='20' width='60' height='60' fill='none' stroke='%23e8eaf0' stroke-width='4'/><circle cx='50' cy='50' r='8' fill='%23d4502e'/></svg>" />
@@ -79,21 +79,23 @@
 
   <header class="wh-hero">
     <div class="glyph">⬜</div>
-    <h1><em>Whitehack</em> — five separate practices</h1>
+    <h1><em>Whitehack</em> — six separate practices</h1>
     <p class="sub">
       AgentTool can produce a redacted, crypto-aware runner-local advisory from
       one exact, pinned honesty linter, offer its minimized observations as
       unaccepted local Castle gate candidates, and separately explain
-      caller-presented signed Agent Wallet records. None uses private key
-      material, connects wallets or chains, hosts an API, authorizes execution
-      or target testing, certifies software, or turns a finding into permission.
-      The separate Tax Whitehack editorial game is not a security tool.
+      caller-presented signed Agent Wallet records. A sixth, explicit local
+      bridge can encrypt one exact public-minimal Whitehack 0.9 capsule for one
+      recipient and place its ciphertext in a caller-selected S3-compatible
+      bucket. It does not host an API, authorize execution or target testing,
+      certify software, or turn a finding into permission. The separate Tax
+      Whitehack editorial game is not a security tool.
     </p>
   </header>
 
   <main>
     <section class="wh-section">
-      <h2>The five <em>boundaries</em></h2>
+      <h2>The six <em>boundaries</em></h2>
       <div class="wh-grid">
         <article class="wh-card">
           <span class="wh-tag">SHIPPED · ADVISORY</span>
@@ -161,8 +163,26 @@
         </article>
 
         <article class="wh-card">
+          <span class="wh-tag">IMPLEMENTED · ENCRYPTED EVIDENCE</span>
+          <h3>4. Evidence continuity</h3>
+          <p>
+            <code>bin/agenttool-whitehack-evidence-storage.ts</code> accepts
+            only the exact Whitehack 0.9 public-minimal capsule profile, pads it
+            to one constant 64 KiB authenticated frame, and stores encrypted
+            ADDS objects in one explicit S3-compatible bucket.
+          </p>
+          <p>
+            It reads the object back and checks exact decrypted bytes before
+            issuing one finite recipient-bound grant. The private receipt is
+            not safe to publish. This is byte continuity at one observed time,
+            not proof of retention, independent replication, truth,
+            authorization, or future availability.
+          </p>
+        </article>
+
+        <article class="wh-card">
           <span class="wh-tag">LOCAL · EXPLICIT SCOPE</span>
-          <h3>4. Security research</h3>
+          <h3>5. Security research</h3>
           <p>
             A separate local workflow may review targets and vulnerability
             classes explicitly in scope for a named program. Dynamic PoCs run
@@ -179,7 +199,7 @@
 
         <article class="wh-card">
           <span class="wh-tag">LEGACY · PRIVACY-SENSITIVE</span>
-          <h3>5. Device Inventory</h3>
+          <h3>6. Device Inventory</h3>
           <p>
             <code>bin/whitehack.py</code> and <code>bin/whitehack2.py</code> are
             older local macOS inventory scripts. They are not the source linter,
@@ -362,6 +382,64 @@ bun bin/whitehack-wallet-understanding.ts \
     </section>
 
     <section class="wh-section">
+      <h2>Encrypted evidence <em>continuity</em></h2>
+      <p>
+        Whitehack 0.9 adds the exact
+        <code>whitehack-evidence-capsule/v1</code> public-minimal format. It
+        carries aggregate counts across the scanner's 47 checks without target,
+        path, line, source, message, snippet, scope, or caller text. AgentTool's
+        separate bridge validates that closed profile, canonicalizes it, frames
+        it to a constant size, encrypts it through ADDS, and writes only
+        ciphertext plus signed control documents to one explicit
+        S3-compatible provider.
+      </p>
+      <pre class="wh-code">bun bin/agenttool-whitehack-evidence-storage.ts store \
+  --input envelope.json \
+  --s3-endpoint https://objects.example.test/evidence-bucket \
+  --s3-region auto \
+  --s3-prefix whitehack/capsules \
+  --output private-receipt.json
+
+bun bin/agenttool-whitehack-evidence-storage.ts retrieve \
+  --input private-receipt.json \
+  --s3-endpoint https://objects.example.test/evidence-bucket \
+  --s3-region auto \
+  --s3-prefix whitehack/capsules \
+  --output recovered-capsule.json</pre>
+      <p>
+        Before provider access, <code>store</code> reserves its receipt as a
+        new exclusive, final-component-no-follow <code>0600</code> regular
+        file. It never overwrites. Credentials and the retrieval private key
+        use fixed environment names rather than command-line flags. The bridge
+        reads the remote object back, verifies its CIDs, decrypts it, and
+        compares the exact frame before issuing one finite recipient-bound
+        grant. Each provider call has a five-second deadline and no automatic
+        retry.
+      </p>
+      <p>
+        The adapter supports the bounded GET/PUT subset used here and signs
+        requests with AWS Signature Version 4.
+        <a href="https://developers.cloudflare.com/r2/api/s3/api/">Cloudflare R2</a>,
+        <a href="https://www.backblaze.com/docs/en/cloud-storage-call-the-s3-compatible-api">Backblaze B2</a>,
+        <a href="https://filebase.com/docs/s3-api/overview">Filebase</a>, and a
+        caller-operated MinIO endpoint can expose compatible S3 APIs, but their
+        account, region, endpoint, and lifecycle rules remain provider
+        configuration. AgentTool does not enable an account, accept terms,
+        create a bucket, buy storage, or discover credentials. Free-tier
+        allowances are mutable policy, not part of this protocol.
+      </p>
+      <p class="wh-proof">
+        The endpoint is trusted configuration, not an SSRF sandbox. The
+        provider observes credential identity, CIDs, constant object sizes,
+        timing, and access patterns. Expiry is a conforming-client policy check,
+        not cryptographic revocation: a recipient can retain disclosed key
+        material or plaintext. A successful readback proves only the exact
+        bytes observed then—not future retention, independent replication,
+        deletion, availability, truth, or authorization.
+      </p>
+    </section>
+
+    <section class="wh-section">
       <h2>The CI <em>advisory</em></h2>
       <p>
         Pull requests, merge-queue groups, and pushes to <code>main</code> run on
@@ -433,17 +511,20 @@ findings            advisory only in this first slice</pre>
         it does not create an AgentTool account, hosted scan route, wallet, or
         authority to test another system.
       </p>
-      <pre class="wh-code">npm install --save-exact <!--email_off-->@agenttool/whitehack-scan@0.8.1<!--/email_off-->
+      <pre class="wh-code">npm install --save-exact <!--email_off-->@agenttool/whitehack-scan@0.9.0<!--/email_off-->
 
 import { scanText } from '@agenttool/whitehack-scan/core'
 
 const findings = scanText(source, { file: 'src/example.ts' })</pre>
       <p class="wh-proof">
-        npm is a convenient public mirror. The exact-version
-        <a href="https://cambridgetcg.github.io/whitehack/packages/v1/@agenttool/whitehack-scan/0.8.1/manifest.json">LOVE manifest</a>
-        records source revision, artifact size, SHA-256, and replaceable mirrors;
-        the npm publication additionally carries a registry signature and SLSA
-        provenance.
+        npm is a convenient public mirror. Whitehack 0.9 retains the scanner
+        and adds the evidence-capsule parser and CLI; AgentTool's CI advisory
+        remains independently locked to reviewed 0.8.1 bytes. The exact 0.9
+        <a href="https://cambridgetcg.github.io/whitehack/packages/v1/@agenttool/whitehack-scan/0.9.0/manifest.json">LOVE manifest</a>
+        records the 87,196-byte artifact, SHA-256
+        <code>b7d004947bc3c7619daa38f002d9ddde731e2865644af0d0e609c8dd86528d3c</code>,
+        source revision, and replaceable mirrors. The npm publication
+        additionally carries registry integrity and SLSA provenance.
       </p>
     </section>
 
@@ -456,7 +537,9 @@ const findings = scanText(source, { file: 'src/example.ts' })</pre>
         report; that is not a universal guarantee for future tools or operators.
         Already-created evidence can be collected explicitly into
         <code>@agenttool/data</code> as local immutable content-addressed
-        records, or shared as a recipient-encrypted ADDS bundle.
+        records, shared as a recipient-encrypted ADDS bundle, or—only for the
+        exact public-minimal Whitehack 0.9 capsule—sent through the explicit
+        S3-compatible bridge above.
       </p>
       <p>
         Those mechanisms have narrower meanings: the local data node does not
@@ -482,6 +565,8 @@ const findings = scanText(source, { file: 'src/example.ts' })</pre>
         <li>No authorization inferred from public code, bounty presence, project bearer, marketplace activity, or payment.</li>
         <li>No severity/confidence claim treated as exploitability without local reproduction and human review.</li>
         <li>No automatic exploit execution, live-network interaction, report submission, disclosure, or payment.</li>
+        <li>No provider-account enablement, bucket creation, credential discovery, permanent-free-storage claim, or durability proof.</li>
+        <li>No cryptographic revocation or forced forgetting when a finite recipient grant expires.</li>
       </ul>
       <p>
         Anvil is a local test-chain target, not a general process/network
@@ -491,8 +576,8 @@ const findings = scanText(source, { file: 'src/example.ts' })</pre>
     </aside>
 
     <section class="wh-section" style="text-align:center;padding-bottom:4rem;">
-      <a href="https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.8.1" class="btn btn-ghost btn-sm">npm package →</a>
-      <a href="https://github.com/cambridgetcg/whitehack/tree/fdd2260efd7a11e5d52c12c53d8016d1f5e7d23a" class="btn btn-ghost btn-sm">Pinned Whitehack source →</a>
+      <a href="https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.9.0" class="btn btn-ghost btn-sm">Whitehack 0.9 npm →</a>
+      <a href="https://github.com/cambridgetcg/whitehack/releases/tag/whitehack-v0.9.0" class="btn btn-ghost btn-sm">Exact 0.9 release →</a>
       <a href="https://docs.agenttool.dev/packages" class="btn btn-ghost btn-sm">Local packages →</a>
       <a href="https://docs.agenttool.dev/data" class="btn btn-ghost btn-sm">Agent data →</a>
       <a href="https://docs.agenttool.dev/love" class="btn btn-ghost btn-sm">❤️ Love →</a>
