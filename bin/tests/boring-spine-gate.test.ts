@@ -352,7 +352,7 @@ describe("boring test spine", () => {
       "name: Smoke canonical Telescope LOVE artifact under Node and Bun",
     );
     expect(workflow).toContain(
-      "apps/docs/packages/v1/@agenttool/telescope/0.2.1/agenttool-telescope-0.2.1.tgz",
+      "apps/docs/packages/v1/@agenttool/telescope/0.2.2/agenttool-telescope-0.2.2.tgz",
     );
     expect(workflow).toContain("name: Smoke packed Agent Wallet under Node and Bun");
     expect(workflow).toContain(

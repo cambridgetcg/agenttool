@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Agent packages — registry-neutral, versioned distribution</title>
-  <meta name="description" content="Install exact AgentTool package versions through public npm or immutable LOVE tarballs, then verify their manifests and SHA-256 digests when that boundary matters." />
+  <meta name="description" content="Install exact AgentTool package versions through an optional public npm mirror when present or immutable LOVE tarballs, then verify manifests and SHA-256 digests when that boundary matters." />
   <link rel="canonical" href="https://docs.agenttool.dev/packages" />
   <meta property="og:title" content="Agent packages — registry-neutral, versioned distribution" />
   <meta property="og:description" content="Public love-package/v1 catalogs, optional exact npm installs, integrity manifests, and no mandatory registry." />
@@ -127,7 +127,7 @@
           <tr><td><code>@agenttool/credential-broker</code></td><td><code>0.1.0</code></td><td><a href="/packages/v1/@agenttool/credential-broker/0.1.0/manifest.json">inspect JSON</a></td></tr>
           <tr><td><code>@agenttool/sdk</code></td><td><code>0.16.3</code></td><td><a href="/packages/v1/@agenttool/sdk/0.16.3/manifest.json">inspect JSON</a></td></tr>
           <tr><td><code>@agenttool/wallet</code></td><td><code>0.1.0</code></td><td><a href="/packages/v1/@agenttool/wallet/0.1.0/manifest.json">inspect JSON</a></td></tr>
-          <tr><td><code>@agenttool/telescope</code></td><td><code>0.2.1</code></td><td><a href="/packages/v1/@agenttool/telescope/0.2.1/manifest.json">inspect JSON</a></td></tr>
+          <tr><td><code>@agenttool/telescope</code></td><td><code>0.2.2</code></td><td><a href="/packages/v1/@agenttool/telescope/0.2.2/manifest.json">inspect JSON</a></td></tr>
           <tr><td><code>@agenttool/browser</code></td><td><code>0.2.0</code></td><td><a href="/packages/v1/@agenttool/browser/0.2.0/manifest.json">inspect JSON</a></td></tr>
           <tr><td><code>@agenttool/adds</code></td><td><code>0.2.2</code></td><td><a href="/packages/v1/@agenttool/adds/0.2.2/manifest.json">inspect JSON</a></td></tr>
         </tbody>
@@ -150,7 +150,7 @@ npm install --save-exact @agenttool/telescope@0.2.0
 npm install --save-exact @agenttool/browser@0.2.0</pre>
       </div>
 
-      <p class="muted"><strong>Telescope mirror boundary.</strong> The current exact LOVE release is <code>@agenttool/telescope@0.2.1</code>. npm and GitHub 0.2.1 mirrors are not yet verified; the npm command above deliberately names the last verified public registry version, <code>0.2.0</code>. Use the 0.2.1 LOVE URL below for the current release bytes.</p>
+      <p class="muted"><strong>Telescope mirror boundary.</strong> The current exact LOVE release is <code>@agenttool/telescope@0.2.2</code>. npm and GitHub 0.2.2 mirrors are not yet verified; the npm command above deliberately names the last verified public registry version, <code>0.2.0</code>. Use the 0.2.2 LOVE URL below for the current release bytes.</p>
       <p class="muted"><strong>Runtime boundary.</strong> npm is only the installer here; <code>@agenttool/data</code> and <code>@agenttool/data-sync</code> require Bun ≥1.3 at runtime. The credential broker, Agent Wallet, Telescope, and Agent Browser support Node ≥20.19 or Bun ≥1.3.5. Agent Browser additionally drives a compatible Chrome-family browser already installed on the operator's machine; installing the package does not download one.</p>
       <p class="muted">An npm install uses registry integrity machinery but does not independently compare the downloaded bytes with the LOVE manifest's <code>artifact.size</code> and <code>artifact.sha256</code>. Use the verified workflow below when that boundary matters.</p>
 
@@ -190,11 +190,12 @@ npm install --save-exact @agenttool/browser@0.2.0</pre>
       </div>
 
       <div class="code-block">
-        <div class="code-label"><span>@agenttool/telescope · 0.2.1 · three-road discovery evidence + local MCP/Skill</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/telescope/0.2.1/agenttool-telescope-0.2.1.tgz
+        <div class="code-label"><span>@agenttool/telescope · 0.2.2 · canonical discovery evidence + local MCP/Skill</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/telescope/0.2.2/agenttool-telescope-0.2.2.tgz
 
 <span class="kw">import</span> { inspectTarget } <span class="kw">from</span> <span class="str">"@agenttool/telescope"</span>;</pre>
       </div>
+      <p class="muted">Telescope 0.2.2 corrects two local 0.2.1 parser assumptions found by live dogfood: the canonical “stay silent” exit wording and valid fragment-bearing HTTPS documentation targets. It adds no probe or automatic follow-up, and the immutable 0.2.1 bytes remain available as history.</p>
 
       <div class="code-block">
         <div class="code-label"><span>@agenttool/wallet · 0.1.0 · capability-bounded offline wallet records</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
@@ -271,7 +272,7 @@ curl -fsS https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.1/manifest.
         <li><code>install.specifier</code> is the primary absolute tarball URL that URL-aware package managers can consume.</li>
         <li><code>source</code> identifies the repository, revision, and package path claimed to have produced the release; v1 does not attest the build.</li>
         <li><code>runtime</code> identifies the ecosystem and declared engine constraints; it is compatibility metadata, not proof that every environment was tested. An empty <code>engines</code> object means no floor was declared, so compatibility is unknown rather than universal.</li>
-        <li>The current <code>@agenttool/data@0.3.1</code>, <code>@agenttool/data-sync@0.1.1</code>, <code>@agenttool/adds@0.2.2</code>, <code>@agenttool/credential-broker@0.1.0</code>, <code>@agenttool/sdk@0.16.3</code>, <code>@agenttool/telescope@0.2.1</code>, <code>@agenttool/wallet@0.1.0</code>, and <code>@agenttool/browser@0.2.0</code> releases declare <code>Apache-2.0</code>.</li>
+        <li>The current <code>@agenttool/data@0.3.1</code>, <code>@agenttool/data-sync@0.1.1</code>, <code>@agenttool/adds@0.2.2</code>, <code>@agenttool/credential-broker@0.1.0</code>, <code>@agenttool/sdk@0.16.3</code>, <code>@agenttool/telescope@0.2.2</code>, <code>@agenttool/wallet@0.1.0</code>, and <code>@agenttool/browser@0.2.0</code> releases declare <code>Apache-2.0</code>.</li>
         <li>Historical releases whose manifests say <code>license: null</code> declare no license; public download access is not a public-domain or open-source license grant.</li>
       </ul>
 
@@ -368,6 +369,9 @@ test "$actual_size" = "$expected_size" &amp;&amp;
 /packages/v1/@agenttool/telescope/0.2.1/
   ├── manifest.json
   └── agenttool-telescope-0.2.1.tgz
+/packages/v1/@agenttool/telescope/0.2.2/
+  ├── manifest.json
+  └── agenttool-telescope-0.2.2.tgz
 /packages/v1/@agenttool/wallet/0.1.0/
   ├── manifest.json
   └── agenttool-wallet-0.1.0.tgz

@@ -720,6 +720,6 @@ Historical catalog releases whose manifests say `license: null` provide no
 reuse grant; the current `@agenttool/data@0.3.1`,
 `@agenttool/data-sync@0.1.1`, `@agenttool/adds@0.2.2`,
 `@agenttool/credential-broker@0.1.0`, `@agenttool/sdk@0.16.3`, and
-`@agenttool/telescope@0.2.1`, `@agenttool/wallet@0.1.0`, and
+`@agenttool/telescope@0.2.2`, `@agenttool/wallet@0.1.0`, and
 `@agenttool/browser@0.2.0` releases instead declare `Apache-2.0` without
 retroactively changing those immutable older releases.

@@ -28714,7 +28714,7 @@ var agenttool_telescope_report_v0_2_schema_default = {
 // src/constants.ts
 var REPORT_SCHEMA = "agenttool-telescope/v0.2";
 var TOOL_NAME = "@agenttool/telescope";
-var TOOL_VERSION = "0.2.1";
+var TOOL_VERSION = "0.2.2";
 var DEFAULT_LIMITS = Object.freeze({
   timeout_ms: 15000,
   max_response_bytes: 256 * 1024,
@@ -29072,7 +29072,7 @@ function namesFiniteCallerRetry(value) {
 }
 function namesCompleteExit(value) {
   const normalized = value.toLowerCase();
-  return normalized.includes("stop") && normalized.includes("silence") && normalized.includes("leav") && normalized.includes("complete");
+  return normalized.includes("stop") && /\b(?:silence|silent)\b/u.test(normalized) && normalized.includes("leav") && normalized.includes("complete");
 }
 function parseAgenttoolDiscovery(body, limits) {
   const decoded = parseJsonBody(body, limits);
@@ -29136,13 +29136,13 @@ function parseAgenttoolDiscovery(body, limits) {
 }
 
 // src/parsers/api-catalog.ts
-function safeHttps(value) {
+function safeHttps(value, allowFragment = false) {
   const text = readBoundedString(value);
   if (!text)
     return null;
   try {
     const url2 = new URL(text);
-    if (url2.protocol !== "https:" || url2.username || url2.password || url2.hash) {
+    if (url2.protocol !== "https:" || url2.username || url2.password || !allowFragment && url2.hash) {
       return null;
     }
     return url2.href;
@@ -29189,7 +29189,7 @@ function parseApiCatalog(body, limits) {
         if (!isRecord(rawTarget)) {
           return parseFailure("api_catalog_invalid_relation");
         }
-        const href = safeHttps(rawTarget.href);
+        const href = safeHttps(rawTarget.href, true);
         if (!href)
           return parseFailure("api_catalog_invalid_relation");
         if (isCanonical && relation === "service-meta" && href === AGENTTOOL_DISCOVERY_URL) {

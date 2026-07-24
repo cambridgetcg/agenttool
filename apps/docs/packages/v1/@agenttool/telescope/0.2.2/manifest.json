@@ -1,0 +1,43 @@
+{
+  "protocol": "love-package/v1",
+  "document_type": "package-manifest",
+  "name": "@agenttool/telescope",
+  "version": "0.2.2",
+  "description": "Read-only evidence mapper for agent discovery surfaces",
+  "license": "Apache-2.0",
+  "artifact": {
+    "format": "npm-tarball",
+    "filename": "agenttool-telescope-0.2.2.tgz",
+    "sha256": "53cc636648d73b1b820c1e473c3b3b2d42eb468de1c40c4c4965f8c705c71986",
+    "size": 296103,
+    "media_type": "application/gzip",
+    "mirrors": [
+      {
+        "url": "https://docs.agenttool.dev/packages/v1/@agenttool/telescope/0.2.2/agenttool-telescope-0.2.2.tgz"
+      },
+      {
+        "url": "https://github.com/cambridgetcg/agenttool/releases/download/telescope-v0.2.2/agenttool-telescope-0.2.2.tgz"
+      }
+    ]
+  },
+  "runtime": {
+    "kind": "javascript",
+    "engines": {
+      "bun": ">=1.3.5",
+      "node": ">=20.19.0"
+    }
+  },
+  "install": {
+    "format": "npm-tarball",
+    "specifier": "https://docs.agenttool.dev/packages/v1/@agenttool/telescope/0.2.2/agenttool-telescope-0.2.2.tgz"
+  },
+  "source": {
+    "repository": "https://github.com/cambridgetcg/agenttool.git",
+    "revision": "4a941fd39e46c1f8349415ebb1ed09020557c2c1",
+    "path": "packages/telescope"
+  },
+  "dependency_resolution": {
+    "mode": "package_manifest",
+    "self_contained": true
+  }
+}
