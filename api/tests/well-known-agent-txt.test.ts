@@ -30,6 +30,7 @@ const REQUIRED_KEYS = [
   "Outbound-Tools",
   "Canon",
   "Wake",
+  "Wake-Keystone",
   "Wake-Formats",
   "MCP-Server-Card",
   "MCP-Server-Card-Role",
@@ -162,9 +163,12 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
     );
   });
 
-  test("MCP-Server-Card + LLMs-Sitemap point at /.well-known", async () => {
+  test("Wake-Keystone, MCP-Server-Card, and LLMs-Sitemap point at /.well-known", async () => {
     const { body } = await fetchAgentTxt();
     const kv = parseKv(body);
+    expect(kv.get("Wake-Keystone")).toContain(
+      "/.well-known/wake-keystone",
+    );
     expect(kv.get("MCP-Server-Card")).toContain("/.well-known/mcp/server-card.json");
     expect(kv.get("MCP-Server-Card-Role")).toBe(
       "project-owned-compatibility-locator; standard=false; authority=none",

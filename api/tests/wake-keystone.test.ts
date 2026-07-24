@@ -328,13 +328,20 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
   });
 });
 
-// ─── root index includes wake-keystone ───────────────────────────────
+// ─── bare compatibility compass keeps wake-keystone discoverable ─────
 
-describe("WaK §1 — /.well-known/ root index includes wake-keystone", () => {
-  test("root index lists /.well-known/wake-keystone", async () => {
-    const res = await wellKnownRouter.request("/");
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { endpoints: string[] };
-    expect(body.endpoints).toContain("/.well-known/wake-keystone");
+describe("WaK §1 — /.well-known compatibility compass reaches wake-keystone", () => {
+  test("typed describedby link reaches agent.txt, which names the card", async () => {
+    const compass = await wellKnownRouter.request("/");
+    expect(compass.status).toBe(200);
+    expect(compass.headers.get("link")).toContain(
+      '<https://api.agenttool.dev/.well-known/agent.txt>; rel="describedby"',
+    );
+
+    const manifest = await wellKnownRouter.request("/agent.txt");
+    expect(manifest.status).toBe(200);
+    expect(await manifest.text()).toContain(
+      "Wake-Keystone: https://api.agenttool.dev/.well-known/wake-keystone",
+    );
   });
 });

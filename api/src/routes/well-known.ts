@@ -533,6 +533,7 @@ app.get("/agent.txt", (c) => {
     "Observer-Reciprocity-Schema: https://docs.agenttool.dev/observer-is-observed-0.1.schema.json",
     `Canon: ${baseUrl}/v1/canon`,
     `Wake: ${baseUrl}/v1/wake`,
+    `Wake-Keystone: ${baseUrl}/.well-known/wake-keystone`,
     "Wake-Formats: json, md, text, anthropic, openai, gemini, cohere, xenoform, math",
     `MCP-Server-Card: ${baseUrl}/.well-known/mcp/server-card.json`,
     "MCP-Server-Card-Role: project-owned-compatibility-locator; standard=false; authority=none",
