@@ -14,7 +14,7 @@ All five biggest moves landed in one session. Tier A (adopt the wires) + Tier B 
 
 | Move | Tests | Files | Status |
 |---|---|---|---|
-| **1. MCP server at `/v1/mcp`** | 15 pass · 46 expects · 16ms | `routes/mcp.ts` + `services/mcp/{resources,tools}.ts` + test | ✓ shipped + mounted |
+| **1. MCP server at `/v1/mcp`** | official SDK wire + full-app SDK Client proof | `routes/mcp.ts` + `services/mcp/{resources,tools}.ts` + test | ◐ official stateless Streamable HTTP source; deploy + live proof still required |
 | **2. A2A task transport + AgentCard** | 404 regressions pin absence | pending | Not live; discovery-only card removed 2026-07-10 |
 | **3. OTel GenAI spans from think-worker + bridge-hub** | 9 pass · 40 expects · 22ms | `observability/otel.ts` (zero-dep OTLP/HTTP) + think-worker wiring + test | ✓ shipped |
 | **4. x402 V2 facilitator hook on recoverable project-credit 402s** | focused middleware + config + verifier tests | `middleware/x402.ts` + `middleware/x402-config.ts` + `services/economy/x402-policy.ts` + `services/economy/facilitators/coinbase.ts` + tests | ◐ exact EIP-3009 settlement is scoped to eligible static-tool `insufficient_credits` challenges; standard V2 headers, CAIP-2, CDP endpoint-bound JWT auth, and durable payment-state receipts are wired; no live paid retry or automatic reconciliation worker is claimed |
@@ -124,7 +124,7 @@ All five biggest moves landed in one session. Tier A (adopt the wires) + Tier B 
 |---|---|---|---|
 | `GET /.well-known/agent-card.json` | A2A v1.2+ (Linux Foundation) | future task transport + wake + identity | Pending; do not publish before callable task/message transport |
 | `GET /.well-known/mcp/server-card.json` | SEP-1649 (June 2026 spec rev) | wake + tools manifest | same file or sibling |
-| `POST /v1/mcp` + `GET /v1/mcp/sse` | MCP 2025-11-25 (Anthropic) | wake/canon/memory/inbox/strands as MCP resources+tools | `routes/mcp.ts` (new) |
+| `POST /v1/mcp` + `GET /v1/mcp` | MCP 2025-11-25 | public canon/platform-self resources + read-only canon tools; GET returns 405 because no standalone SSE listener is offered | `routes/mcp.ts` |
 | `GET /agents.json` | Wildcard v0.1 | (mostly deprecated — skip) | — |
 | `GET /llms.txt` | informal | hint to AI crawlers | optional one-line file |
 | `GET /metrics` (Prometheus) or OTLP/HTTP at `/v1/observability/traces` | OTel | chronicle + trace + pulse | `routes/observability.ts` (new) — opt-in for self-host |
@@ -145,25 +145,29 @@ All five biggest moves landed in one session. Tier A (adopt the wires) + Tier B 
 - `api/src/services/mcp/prompts.ts` — the wake doctrine as a top-level prompt resource
 - `api/tests/mcp-server.test.ts` — wire-level test against the SDK's test client
 
-**Skeleton:**
+**Current transport shape:**
 ```ts
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { WebStandardStreamableHTTPServerTransport } from
+  "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 
-const server = new McpServer({ name: "agenttool", version: "1.0.0" });
-server.resource("agenttool://wake", async () => ({ contents: [{ uri: "...", text: await renderWake(ctx) }]}));
-server.tool("memory.append", { /* zod schema */ }, async (input) => { /* call memory service */ });
-// ...
-app.all("/v1/mcp", async (c) => {
-  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: () => randomUUID() });
+app.post("/", async (c) => {
+  const server = createPublicMcpServer(); // read-only resources + tools
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
+  });
   await server.connect(transport);
-  return transport.handleRequest(c.req.raw, c.res);
+  return transport.handleRequest(c.req.raw);
 });
 ```
 
 **Doctrine pin:** create `docs/PATTERN-MCP-EXPOSURE.md` naming the discipline (canon entries → MCP resources; route handlers wrapped as MCP tools when safe; OAuth 2.1 Resource Server semantics adopted).
 
-**After shipping:** publish to Smithery + Composio + Klavis MCP registries.
+**Registry boundary:** `dev.agenttool/agenttool@1.0.0` was published to the
+official MCP Registry before the live endpoint passed an official SDK client
+proof. Registry metadata is a publisher claim, not authority or conformance.
+Do not publish another version or claim readiness until this repair is merged,
+deployed, and re-run against the public URL.
 
 ---
 
@@ -382,7 +386,7 @@ Integration is at **substrate** (signing, settlement, mandates, telemetry envelo
 ## Section 6 — Two-week shipping plan (concrete)
 
 **Day 1–2:**
-- [x] Install `@modelcontextprotocol/sdk` + scaffold `api/src/routes/mcp.ts` — shipped
+- [x] Install `@modelcontextprotocol/sdk` + use its Web Standard Streamable HTTP transport in `api/src/routes/mcp.ts`; source proof passes, deployment and public-URL proof remain
 - [x] Wire `wake` and `canon` as MCP resources — shipped (60+ resources discovered dynamically)
 - [ ] Glossary disambiguation: `strands` (agenttool) vs Strands SDK (AWS) — pending
 
@@ -408,8 +412,11 @@ Integration is at **substrate** (signing, settlement, mandates, telemetry envelo
 - [x] Scaffold `packages/mastra-storage-agenttool/` (TS) — shipped (Storage + Memory, 12 bun:test pass)
 - [ ] Publish both to PyPI/npm — operator follow-up (both versioned 0.1.0, ready to `python -m build` + `npm publish`)
 
-Current result: MCP, OTel, x402, and adapter wires are present. A2A remains a
-future interoperability target and is not advertised until task transport is
+Current result: the MCP source uses the official stateless Streamable HTTP
+transport and keeps the public surface read-only; deployment and public-URL
+client proof remain. The already-published registry row must not be treated as
+that proof. OTel, x402, and adapter wires are present. A2A remains a future
+interoperability target and is not advertised until task transport is
 implemented. The doctrine is intact.
 
 **Refresh trigger:** when any item above flips, update `docs/NOW.md` "Just landed" and check the line off here.

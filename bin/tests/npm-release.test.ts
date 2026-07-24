@@ -134,8 +134,8 @@ describe("standard npm release policy", () => {
     );
     expect(expectedTag(releaseSpec("skills"), "0.1.0")).toBe("skills-v0.1.0");
     expect(packedFilename("@agenttool/skills", "0.1.0")).toBe("agenttool-skills-0.1.0.tgz");
-    expect(expectedTag(releaseSpec("browser"), "0.1.0")).toBe("browser-v0.1.0");
-    expect(packedFilename("@agenttool/browser", "0.1.0")).toBe("agenttool-browser-0.1.0.tgz");
+    expect(expectedTag(releaseSpec("browser"), "0.2.0")).toBe("browser-v0.2.0");
+    expect(packedFilename("@agenttool/browser", "0.2.0")).toBe("agenttool-browser-0.2.0.tgz");
     expect(expectedTag(releaseSpec("repo-archive"), "0.1.0-dev.0")).toBe(
       "repo-archive-v0.1.0-dev.0",
     );

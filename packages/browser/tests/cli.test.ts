@@ -8,7 +8,11 @@ import {
   runCli,
   runJsonlSession,
 } from "../src/cli.js";
+import { resolveBrowserCapabilities } from "../src/capabilities.js";
 import { parseBrowserProcessConfig } from "../src/config.js";
+import { BrowserError } from "../src/errors.js";
+import { planBrowserAction } from "../src/planning.js";
+import type { BrowserAction } from "../src/types.js";
 
 function capture() {
   let value = "";
@@ -23,7 +27,16 @@ function capture() {
 
 function fakeBrowser(overrides: Record<string, unknown> = {}) {
   const calls: Array<{ method: string; input?: unknown }> = [];
+  const capabilities = resolveBrowserCapabilities({ authority: "public" });
   const browser = {
+    capabilities() {
+      calls.push({ method: "capabilities" });
+      return capabilities;
+    },
+    plan(action: BrowserAction) {
+      calls.push({ method: "plan", input: action });
+      return planBrowserAction(action, capabilities);
+    },
     async open(url: string) {
       calls.push({ method: "open", input: url });
       return { untrusted: true, url, snapshotId: "snapshot-1" };
@@ -127,6 +140,7 @@ describe("browser process configuration", () => {
     });
     expect(config).toEqual({
       headless: true,
+      authority: "public",
       allowPublicWeb: true,
       allowLocalNetwork: false,
       profile: { mode: "ephemeral" },
@@ -154,6 +168,67 @@ describe("browser process configuration", () => {
       executablePath: "/tmp/project/chrome",
     });
     expect(config.channel).toBeUndefined();
+  });
+
+  test("selects named authority consistently from environment and CLI", () => {
+    const cases = [
+      {
+        args: [],
+        env: { AGENTOOL_BROWSER_AUTHORITY: "public" },
+        authority: "public",
+        allowLocalNetwork: false,
+      },
+      {
+        args: [],
+        env: { AGENTOOL_BROWSER_AUTHORITY: "local" },
+        authority: "local",
+        allowLocalNetwork: true,
+      },
+      {
+        args: ["--authority", "sovereign"],
+        env: { AGENTOOL_BROWSER_AUTHORITY: "public" },
+        authority: "sovereign",
+        allowLocalNetwork: true,
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      const config = parseBrowserProcessConfig(testCase.args, {
+        env: {
+          ...testCase.env,
+          XDG_DATA_HOME: "/tmp/agenttool-browser-data",
+        },
+        cwd: "/tmp/project",
+      });
+      expect(config).toMatchObject({
+        authority: testCase.authority,
+        allowPublicWeb: true,
+        allowLocalNetwork: testCase.allowLocalNetwork,
+      });
+    }
+  });
+
+  test("rejects mixed named authority and legacy network controls", () => {
+    expect(() =>
+      parseBrowserProcessConfig([], {
+        env: {
+          AGENTOOL_BROWSER_AUTHORITY: "sovereign",
+          AGENTOOL_BROWSER_LOCAL_NETWORK: "1",
+        },
+      }),
+    ).toThrow("cannot be combined");
+    expect(() =>
+      parseBrowserProcessConfig(
+        ["--authority", "local", "--no-public-web"],
+        { env: {} },
+      ),
+    ).toThrow("cannot be combined");
+    expect(() =>
+      parseBrowserProcessConfig(
+        ["--local-network", "--authority", "sovereign"],
+        { env: {} },
+      ),
+    ).toThrow("cannot be combined");
   });
 
   test("explicit profile and executable flags can replace incomplete environment choices", () => {
@@ -195,6 +270,54 @@ describe("browser process configuration", () => {
 });
 
 describe("JSONL protocol", () => {
+  test("exposes capability and planning parity without touching the page", async () => {
+    const { browser, calls } = fakeBrowser();
+    const capabilities = resolveBrowserCapabilities({ authority: "public" });
+    const typedAction: BrowserAction = {
+      kind: "type",
+      ref: "e1",
+      snapshotId: "snapshot-1",
+      text: "do-not-echo-this-secret",
+    };
+    const navigateAction: BrowserAction = {
+      kind: "navigate",
+      url: "https://example.com/search?token=secret&query=private#results",
+    };
+    const responses = await jsonl(browser, [
+      request("capabilities", "browser_capabilities"),
+      request("type-plan", "browser_plan", {
+        action: {
+          kind: "type",
+          ref: "e1",
+          snapshot_id: "snapshot-1",
+          text: typedAction.text,
+        },
+      }),
+      request("navigate-plan", "browser_plan", {
+        action: navigateAction,
+      }),
+    ]);
+
+    expect(responses[0]).toMatchObject({
+      id: "capabilities",
+      ok: true,
+      result: capabilities,
+    });
+    expect(responses[1].result).toEqual(
+      planBrowserAction(typedAction, capabilities),
+    );
+    expect(JSON.stringify(responses[1])).not.toContain(typedAction.text);
+    expect(responses[2].result).toEqual(
+      planBrowserAction(navigateAction, capabilities),
+    );
+    expect(responses[2].result.action.url).toBe(
+      "https://example.com/search?token=%5Bredacted%5D&query=%5Bredacted%5D#results",
+    );
+    expect(calls.filter((call) =>
+      call.method === "act" || call.method === "observe"
+    )).toHaveLength(0);
+  });
+
   test("executes request lines sequentially and preserves IDs", async () => {
     let active = 0;
     let maximumActive = 0;
@@ -399,10 +522,18 @@ describe("browser CLI", () => {
     expect(output.text()).toContain("Browser binaries are never downloaded automatically");
   });
 
-  test("doctor launches once, closes once, and reports the fixed policy", async () => {
+  test("doctor launches once, closes once, and reports the fixed policy and capabilities", async () => {
     const output = capture();
     const error = capture();
-    const { browser, calls } = fakeBrowser();
+    const capabilities = resolveBrowserCapabilities({
+      allowPublicWeb: true,
+      allowLocalNetwork: true,
+    });
+    const { browser, calls } = fakeBrowser({
+      capabilities() {
+        return capabilities;
+      },
+    });
     let launchedWith: unknown;
     const code = await runCli(["doctor", "--local-network"], {
       env: { XDG_DATA_HOME: "/tmp/agenttool-browser-data" },
@@ -420,8 +551,126 @@ describe("browser CLI", () => {
     expect(calls.filter((call) => call.method === "close")).toHaveLength(1);
     expect(JSON.parse(output.text())).toMatchObject({
       ok: true,
+      version: "agenttool-browser-doctor/0.2",
+      config: { authority: "legacy_custom" },
+      capabilities: {
+        schema: "agent-browser-capabilities/0.2",
+        authority: { profile: "legacy_custom", fixedAt: "process_start" },
+      },
       checks: { browser_launch: "ok", automatic_download: false },
     });
     expect(error.text()).toBe("");
   });
+
+  test("doctor names an unavailable channel and gives bounded launch help", async () => {
+    const output = capture();
+    const error = capture();
+    const code = await runCli(["doctor", "--channel", "chrome-beta"], {
+      env: { XDG_DATA_HOME: "/tmp/agenttool-browser-data" },
+      cwd: "/tmp/project",
+      stdout: output.stream,
+      stderr: error.stream,
+      launch: async () => {
+        throw new BrowserError(
+          "browser_launch_failed",
+          "Could not launch the local browser.",
+          { cause: new Error("raw Playwright details from /private/not-for-output") },
+        );
+      },
+    });
+
+    expect(code).toBe(1);
+    expect(output.text()).toBe("");
+    expect(error.text()).toContain(
+      "error: browser_launch_failed: Could not launch the local browser.",
+    );
+    expect(error.text()).toContain('configured browser channel "chrome-beta"');
+    expect(error.text()).toContain("--channel NAME");
+    expect(error.text()).toContain("--executable PATH");
+    expect(error.text()).toContain("install one and retry");
+    expect(error.text()).not.toContain("raw Playwright details");
+    expect(error.text()).not.toContain("/private/not-for-output");
+  });
+
+  test("doctor names an executable without exposing its parent path", async () => {
+    const output = capture();
+    const error = capture();
+    const code = await runCli(
+      ["doctor", "--executable", "/private/not-for-output/selected-chrome"],
+      {
+        env: { XDG_DATA_HOME: "/tmp/agenttool-browser-data" },
+        cwd: "/tmp/project",
+        stdout: output.stream,
+        stderr: error.stream,
+        launch: async () => {
+          throw new BrowserError(
+            "browser_launch_failed",
+            "Could not launch the local browser.",
+          );
+        },
+      },
+    );
+
+    expect(code).toBe(1);
+    expect(output.text()).toBe("");
+    expect(error.text()).toContain(
+      'configured browser executable "selected-chrome" (parent path omitted)',
+    );
+    expect(error.text()).not.toContain("/private/not-for-output");
+  });
+
+  test("doctor bounds and neutralizes a caller-controlled executable name", async () => {
+    const output = capture();
+    const error = capture();
+    const unsafeName =
+      `selected\u202e\u2066\u200e\n-${"x".repeat(140)}`;
+    const code = await runCli(
+      ["doctor", "--executable", `/private/not-for-output/${unsafeName}`],
+      {
+        env: { XDG_DATA_HOME: "/tmp/agenttool-browser-data" },
+        cwd: "/tmp/project",
+        stdout: output.stream,
+        stderr: error.stream,
+        launch: async () => {
+          throw new BrowserError(
+            "browser_launch_failed",
+            "Could not launch the local browser.",
+          );
+        },
+      },
+    );
+
+    expect(code).toBe(1);
+    expect(output.text()).toBe("");
+    expect(error.text()).not.toMatch(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/);
+    expect(error.text()).not.toContain("/private/not-for-output");
+    const lines = error.text().trimEnd().split("\n");
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toContain("selected????-");
+    expect(lines[1]).toContain("...");
+    expect(lines[1]!.length).toBeLessThan(400);
+  });
+
+  for (const command of ["jsonl", "mcp"] as const) {
+    test(`${command} keeps startup diagnostics off protocol stdout`, async () => {
+      const output = capture();
+      const error = capture();
+      const code = await runCli([command, "--channel", "chrome"], {
+        env: { XDG_DATA_HOME: "/tmp/agenttool-browser-data" },
+        cwd: "/tmp/project",
+        stdout: output.stream,
+        stderr: error.stream,
+        launch: async () => {
+          throw new BrowserError(
+            "browser_launch_failed",
+            "Could not launch the local browser.",
+          );
+        },
+      });
+
+      expect(code).toBe(1);
+      expect(output.text()).toBe("");
+      expect(error.text()).toContain('configured browser channel "chrome"');
+    });
+  }
 });

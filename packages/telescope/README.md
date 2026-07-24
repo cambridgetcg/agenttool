@@ -137,6 +137,42 @@ preserved by the parser; a duplicated selected key is reported as ambiguous and
 is not silently overwritten. Remote instructions and command templates are
 never executed or copied into action argv.
 
+### Optional XENIA Surface manifest evidence
+
+Library callers can opt into one additional fixed-path observation:
+
+```typescript
+import {
+  createXeniaSurfaceAdapter,
+  inspectTarget,
+} from "@agenttool/telescope";
+
+const report = await inspectTarget("example.com", {
+  adapters: [createXeniaSurfaceAdapter()],
+});
+```
+
+The adapter uses Telescope's public-HTTPS, credential-free, manual-redirect,
+DNS-preflight transport to read only `/.well-known/agent.json`. It recognizes
+the release-pinned XENIA Surface 0.1 markers and emits a bounded summary under
+`extensions[xenia_surface]`, including the response digest and counts of
+publisher-declared resources, claims, and boundaries.
+
+This is deliberately **manifest discovery only**. The adapter does not request
+declared resources, send the Surface `Accept` matrix, generate or probe a wrong
+route, fetch declared evidence, run the XENIA Surface checker, assess Covenant
+adoption, authenticate a speaker, or act on remote content. Its facts always
+record `surface_conformance: "not_tested"`,
+`covenant_adoption: "not_assessed"`, and `authority: "none"`. A recognized
+manifest also records `manifest_schema_validated: false` and
+`declared_claims_verified: false`: the release-pinned profile markers and
+bounded summary are recognized, but the full manifest schema and declared
+evidence rules are not evaluated. It is a publisher-facing doorway, not proof
+of whole-XENIA practice.
+
+The CLI and the single `telescope_scan` MCP tool keep the fixed core scan
+unchanged; hosts that permit this extra GET compose the adapter explicitly.
+
 ## npm and LOVE plans
 
 When a supported Pathways response selects an exact SDK SemVer, Telescope

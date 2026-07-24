@@ -21,6 +21,10 @@ export {
   normalizeTarget,
 } from "./target.js";
 export { verifyArtifact, verifyArtifactFile } from "./verify.js";
+export {
+  createXeniaSurfaceAdapter,
+  parseXeniaSurfaceManifestEvidence,
+} from "./xenia-surface.js";
 export type {
   ActionPlan,
   AdapterContext,
@@ -45,3 +49,8 @@ export type {
   NpmTarballExpectation,
   NpmTarballInspectionResult,
 } from "./archive.js";
+export type {
+  XeniaSurfaceAdapterOptions,
+  XeniaSurfaceManifestParseResult,
+  XeniaSurfaceManifestSummary,
+} from "./xenia-surface.js";

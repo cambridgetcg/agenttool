@@ -210,7 +210,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc"><strong>Disabled by default.</strong> This Playwright path does not use the bounded static-fetch transport: browser navigation and subresources remain unfiltered, Chromium runs unsandboxed, and the worker is not a tenant boundary. It requires <code>AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1</code> plus BullMQ/Redis workers; disabled workers return <code>503 redis_disabled</code>.</p>
+          <p class="endpoint-desc"><strong>Disabled by default.</strong> This Playwright path does not use the bounded static-fetch transport: browser navigation and subresources remain unfiltered, Chromium runs unsandboxed, and the worker is not a tenant boundary. It requires <code>AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1</code> plus BullMQ/Redis workers; disabled workers return <code>503 redis_disabled</code>. It is an AgentTool-hosted, bearer- and credit-scoped queue implementation—not the operator-owned local <a href="browser.html"><code>@agenttool/browser</code></a> TypeScript/JSONL/stdio MCP package. Publishing or selecting a local Browser authority profile neither enables nor hardens this route.</p>
           <table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>

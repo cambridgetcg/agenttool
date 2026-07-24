@@ -35,6 +35,13 @@ describe("/.well-known/* — MCP + native discovery", () => {
     expect(card.transport).toMatch(/JSON-RPC/i);
     expect(card.capabilities.resources).toBeDefined();
     expect(card.capabilities.tools).toBeDefined();
+    expect(card["x-agenttool"].registry).toEqual(
+      expect.objectContaining({
+        status: "published_before_live_transport_conformance_proof",
+        name: "dev.agenttool/agenttool",
+        version: "1.0.0",
+      }),
+    );
   });
 
   test("GET /llms.txt returns well-formed markdown sitemap", async () => {

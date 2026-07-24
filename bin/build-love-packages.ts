@@ -113,9 +113,9 @@ export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
   },
   {
     name: "@agenttool/browser",
-    version: "0.1.0",
+    version: "0.2.0",
     packagePath: "packages/browser",
-    releaseTag: "browser-v0.1.0",
+    releaseTag: "browser-v0.2.0",
     buildCommands: [["bun", "run", "ci"]],
   },
 ] as const;

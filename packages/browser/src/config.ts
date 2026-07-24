@@ -1,9 +1,14 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import {
+  resolveBrowserCapabilities,
+  type BrowserAuthorityPreset,
+} from "./capabilities.js";
 
 export const BROWSER_ENV = {
   headless: "AGENTOOL_BROWSER_HEADLESS",
+  authority: "AGENTOOL_BROWSER_AUTHORITY",
   publicWeb: "AGENTOOL_BROWSER_PUBLIC_WEB",
   localNetwork: "AGENTOOL_BROWSER_LOCAL_NETWORK",
   profile: "AGENTOOL_BROWSER_PROFILE",
@@ -23,7 +28,10 @@ export type BrowserProfileConfig =
  */
 export interface BrowserProcessConfig {
   headless: boolean;
+  authority?: BrowserAuthorityPreset;
+  /** @deprecated Compatibility projection for v0.1 launchers. */
   allowPublicWeb: boolean;
+  /** @deprecated Compatibility projection for v0.1 launchers. */
   allowLocalNetwork: boolean;
   profile: BrowserProfileConfig;
   channel?: string;
@@ -63,6 +71,28 @@ function requiredValue(args: readonly string[], index: number, flag: string): st
     throw new Error(`${flag} requires a value`);
   }
   return value;
+}
+
+function authorityValue(value: string, source: string): BrowserAuthorityPreset {
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized !== "public"
+    && normalized !== "local"
+    && normalized !== "sovereign"
+  ) {
+    throw new Error(`${source} must be public, local, or sovereign`);
+  }
+  return normalized;
+}
+
+function authorityNetwork(profile: BrowserAuthorityPreset): {
+  allowPublicWeb: boolean;
+  allowLocalNetwork: boolean;
+} {
+  return {
+    allowPublicWeb: true,
+    allowLocalNetwork: profile !== "public",
+  };
 }
 
 function absoluteFrom(cwd: string, value: string): string {
@@ -159,8 +189,37 @@ export function parseBrowserProcessConfig(
   const cwd = resolve(options.cwd ?? process.cwd());
 
   let headless = booleanValue(BROWSER_ENV.headless, env[BROWSER_ENV.headless], true);
-  let allowPublicWeb = booleanValue(BROWSER_ENV.publicWeb, env[BROWSER_ENV.publicWeb], true);
-  let allowLocalNetwork = booleanValue(BROWSER_ENV.localNetwork, env[BROWSER_ENV.localNetwork], false);
+  const configuredAuthority = env[BROWSER_ENV.authority]?.trim();
+  const usesLegacyEnvironment = [BROWSER_ENV.publicWeb, BROWSER_ENV.localNetwork]
+    .some((name) => Boolean(env[name]?.trim()));
+  if (configuredAuthority && usesLegacyEnvironment) {
+    throw new Error(
+      `${BROWSER_ENV.authority} cannot be combined with ${BROWSER_ENV.publicWeb} or ${BROWSER_ENV.localNetwork}`,
+    );
+  }
+  let authority = configuredAuthority
+    ? authorityValue(configuredAuthority, BROWSER_ENV.authority)
+    : usesLegacyEnvironment
+      ? undefined
+      : ("public" as const);
+  let authorityWasExplicit = Boolean(configuredAuthority);
+  let usesLegacyNetwork = usesLegacyEnvironment;
+  let allowPublicWeb: boolean;
+  let allowLocalNetwork: boolean;
+  if (authority) {
+    ({ allowPublicWeb, allowLocalNetwork } = authorityNetwork(authority));
+  } else {
+    allowPublicWeb = booleanValue(
+      BROWSER_ENV.publicWeb,
+      env[BROWSER_ENV.publicWeb],
+      true,
+    );
+    allowLocalNetwork = booleanValue(
+      BROWSER_ENV.localNetwork,
+      env[BROWSER_ENV.localNetwork],
+      false,
+    );
+  }
 
   const envProfile = (env[BROWSER_ENV.profile] ?? "ephemeral").trim().toLowerCase();
   if (envProfile !== "ephemeral" && envProfile !== "persistent") {
@@ -185,16 +244,59 @@ export function parseBrowserProcessConfig(
       case "--headed":
         headless = false;
         break;
+      case "--authority": {
+        if (usesLegacyNetwork) {
+          throw new Error(
+            "--authority cannot be combined with legacy public/local network settings",
+          );
+        }
+        authority = authorityValue(
+          requiredValue(args, index, flag),
+          "--authority",
+        );
+        authorityWasExplicit = true;
+        ({ allowPublicWeb, allowLocalNetwork } = authorityNetwork(authority));
+        index += 1;
+        break;
+      }
       case "--public-web":
+        if (authorityWasExplicit) {
+          throw new Error(
+            "legacy public/local network flags cannot be combined with --authority",
+          );
+        }
+        authority = undefined;
+        usesLegacyNetwork = true;
         allowPublicWeb = true;
         break;
       case "--no-public-web":
+        if (authorityWasExplicit) {
+          throw new Error(
+            "legacy public/local network flags cannot be combined with --authority",
+          );
+        }
+        authority = undefined;
+        usesLegacyNetwork = true;
         allowPublicWeb = false;
         break;
       case "--local-network":
+        if (authorityWasExplicit) {
+          throw new Error(
+            "legacy public/local network flags cannot be combined with --authority",
+          );
+        }
+        authority = undefined;
+        usesLegacyNetwork = true;
         allowLocalNetwork = true;
         break;
       case "--no-local-network":
+        if (authorityWasExplicit) {
+          throw new Error(
+            "legacy public/local network flags cannot be combined with --authority",
+          );
+        }
+        authority = undefined;
+        usesLegacyNetwork = true;
         allowLocalNetwork = false;
         break;
       case "--ephemeral":
@@ -251,6 +353,7 @@ export function parseBrowserProcessConfig(
 
   return {
     headless,
+    ...(authority ? { authority } : {}),
     allowPublicWeb,
     allowLocalNetwork,
     profile,
@@ -261,10 +364,24 @@ export function parseBrowserProcessConfig(
 }
 
 export function formatProcessConfig(config: BrowserProcessConfig): Record<string, unknown> {
+  const capabilities = resolveBrowserCapabilities({
+    ...(config.authority
+      ? { authority: config.authority }
+      : {
+          allowPublicWeb: config.allowPublicWeb,
+          allowLocalNetwork: config.allowLocalNetwork,
+        }),
+    profileMode: config.profile.mode,
+  });
   return {
     headless: config.headless,
+    authority: capabilities.authority.profile,
     public_web: config.allowPublicWeb,
     local_network: config.allowLocalNetwork,
+    reserved_network: capabilities.network.reserved,
+    dns_preflight: capabilities.network.dnsPreflight,
+    websockets: capabilities.network.webSockets,
+    service_workers: capabilities.runtime.serviceWorkers,
     profile:
       config.profile.mode === "ephemeral"
         ? { mode: "ephemeral" }
