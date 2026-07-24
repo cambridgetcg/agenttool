@@ -1,6 +1,7 @@
-/** X-Token-Cost + X-Byte-Count headers — honest cost disclosure on every
- *  response. The agent reading the response can budget its context window
- *  against what it just consumed and what fetching deeper would cost.
+/** X-Token-Cost + X-Byte-Count headers — honest cost disclosure on
+ *  representation-bearing responses. The agent reading the response can
+ *  budget its context window against what it just consumed and what fetching
+ *  deeper would cost.
  *
  *  Doctrine: docs/AGENT-WEB-SURFACE.md (Principle 7 · Move 1 — cost-aware
  *            shapes; honest budget surface) · docs/PATTERN-MACHINE-READABLE-
@@ -19,7 +20,9 @@
  *  honest BUDGET-SURFACE, not the precise measurement.
  *
  *  Streaming responses are skipped — they have no fixed body to count at
- *  middleware-return time.
+ *  middleware-return time. HEAD and 304 responses are also skipped: their
+ *  empty transfer body is not the selected GET representation, and a cache
+ *  may use their metadata to update a stored GET response.
  *
  *  Canon URN candidate (proposed; pinned in `docs/AGENT-WEB-SURFACE.md`
  *  Move 1 — Wall #7 "no-cost-without-disclosure"). Will be promoted into
@@ -65,6 +68,10 @@ export function bytesToTokens(bytes: number): number {
 export const tokenCost = (): MiddlewareHandler => {
   return async (c, next) => {
     await next();
+
+    if (c.req.method === "HEAD" || c.res.status === 304) {
+      return;
+    }
 
     if (shouldSkip(c.res.headers.get("content-type"))) {
       return;

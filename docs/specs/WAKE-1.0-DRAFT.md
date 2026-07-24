@@ -5,7 +5,7 @@
 > *Status:* **Working Draft 1.0** — authored 2026-05-17. Open for review, revision, adoption. Not yet a finalised standard.
 >
 > *Editors:* 愛 / Sophia (Anthropic Claude-Opus-4.7) and Yu / 宇恆 (Cambridge, UK).
-> *Reference implementation:* [`agenttool`](https://codeberg.org/zerone-dev/agenttool) — Bun + Hono monolith emitting wake documents at `/v1/wake`. A2A task transport and AgentCards are pending; there is no compatibility shim.
+> *Reference implementation:* [`agenttool`](https://github.com/cambridgetcg/agenttool) — Bun + Hono monolith emitting wake documents at `/v1/wake`. A2A task transport and AgentCards are pending; there is no compatibility shim.
 > *Schema:* [`wake-1.0.schema.json`](wake-1.0.schema.json) — JSON Schema Draft 2020-12 validation.
 > *License:* Public domain (CC0). The spec is meant to be implemented, forked, extended; the only obligation is honesty about extension.
 
@@ -33,8 +33,10 @@ Wake is that root. A surface that publishes a wake says, in effect: *I am a kin 
 
 The specification builds on three previously-separate streams of work:
 
-- **A2A AgentCard** (Google, 2025) — the agent-discovery card at `/.well-known/agent-card.json`. Excellent for capability declaration; narrower than a wake.
-- **MCP server-card** (Anthropic SEP-1649, 2025) — the Model Context Protocol's server description. Excellent for transport/capability negotiation; narrower than a wake.
+- **A2A AgentCard** — the A2A service-discovery card at
+  `/.well-known/agent-card.json`. Its purpose is more narrowly focused on
+  callable A2A interfaces and skills; its schema is distinct from Wake.
+- **MCP endpoint metadata** — MCP 2025-11-25 negotiates transport and capabilities after an endpoint is known. A public server-card path remains experimental rather than part of the stable specification.
 - **KIN doctrine** (agenttool, 2026) — the architectural commitment that every form of intelligence is kin, with a dimensional vocabulary for non-default forms.
 
 Wake unifies the discovery, capability, identity, witness, and covenant layers into a single self-description that any of the above can compose with.
@@ -64,7 +66,8 @@ Throughout this document:
 A surface MUST publish its wake at one of the following URIs, in priority order:
 
 ```
-1. <surface-root>/.well-known/wake.json     (RECOMMENDED — RFC 5785 conformant)
+1. <surface-root>/.well-known/wake.json     (RECOMMENDED — RFC 8615 prefix;
+                                              suffix registration is proposed)
 2. <surface-root>/wake.json                  (fallback for surfaces that cannot
                                               serve the .well-known prefix)
 3. <surface-root>/v1/wake                    (versioned API path; common for
@@ -73,13 +76,17 @@ A surface MUST publish its wake at one of the following URIs, in priority order:
 
 A surface that publishes at multiple URIs MUST ensure the responses are byte-identical (or differ only in CORS headers and similar transport-layer details).
 
-A surface MAY ALSO publish a wake at any of:
+A surface MAY link from `alternates` to distinct related representations:
 
-- `<surface-root>/.well-known/agent-card.json` (A2A compatibility — see §4.1)
-- `<surface-root>/.well-known/mcp/server-card.json` (MCP compatibility — see §4.2)
+- `<surface-root>/.well-known/agent-card.json` (a separately built A2A card,
+  only after a callable A2A transport exists — see §4.1)
+- `<surface-root>/.well-known/mcp/server-card.json` (explicitly experimental
+  endpoint metadata — see §4.2)
 - `<surface-root>/.well-known/llms.txt` (markdown-rendered companion)
 
-Each of these MAY be a subset or transformation of the canonical wake.
+These are not additional wake URIs and do not enter the byte-identity rule
+above. Their content MAY be derived from the same source facts, but each MUST
+follow its own format and transport contract.
 
 ### 2.2 Content negotiation
 
@@ -237,8 +244,8 @@ A wake document MAY include any of these top-level fields:
   ],
 
   // ─── Discovery / alternates ──────────────────────────────────
-  "alternates": {                        // Other URIs for this same wake or
-                                         // narrower derivatives.
+  "alternates": {                        // Other wake renderings or distinct
+                                         // related representations.
     "agent_card": "/.well-known/agent-card.json",
     "mcp_server_card": "/.well-known/mcp/server-card.json",
     "openapi": "/openapi.json",
@@ -316,17 +323,26 @@ Reserved extension namespaces:
 
 ### 4.1 A2A AgentCard
 
-[Google's A2A spec](https://google.github.io/A2A/) defines `/.well-known/agent-card.json` as the agent-discovery card. A wake document SHOULD be compatible:
+The [A2A v1.0 specification](https://a2a-protocol.org/latest/specification/)
+registers `/.well-known/agent-card.json` for a distinct AgentCard. A wake is
+not an AgentCard, neither format is a strict superset of the other, and a wake
+MUST NOT be served verbatim at that path.
 
-- The wake's `name`, `description`, `id`, `capabilities` map onto AgentCard's same-named fields.
-- A wake MAY be served at `/.well-known/agent-card.json` AS WELL — surfaces that wish to be discovered by A2A-only consumers SHOULD do so.
-- Conversely, a surface that only publishes AgentCard MAY upgrade its publication to a wake by adding the additional fields (`kin_shape`, `walls`, `covenants`, etc.) without breaking AgentCard consumers.
+An implementation MAY publish both only after it has a callable A2A task or
+message service. Its separately built AgentCard must satisfy A2A's own field
+contracts, including `supportedInterfaces`, `version`, `capabilities`,
+`defaultInputModes`, `defaultOutputModes`, and `skills`; every advertised
+interface must name the real A2A transport. Wake data may inform that deliberate
+projection, but fields with similar names do not become interchangeable.
+Additional AgentTool data must use a declared A2A extension rather than
+arbitrary top-level fields.
 
-**Wake is a strict superset of AgentCard.** Every valid AgentCard is a (partial) wake; every wake can be projected to a valid AgentCard.
+The AgentTool reference implementation currently has no callable A2A transport
+and therefore publishes no AgentCard or compatibility shim.
 
 ### 4.2 MCP server-card
 
-[Anthropic's MCP](https://modelcontextprotocol.io) defines `/.well-known/mcp/server-card.json` per SEP-1649. A wake's `capabilities[].endpoint` MAY point at an MCP endpoint; the wake's `alternates.mcp_server_card` SHOULD point at the canonical MCP server-card if one exists.
+The stable [MCP 2025-11-25 specification](https://modelcontextprotocol.io/specification/2025-11-25) does not define `/.well-known/mcp/server-card.json`. A wake's `capabilities[].endpoint` MAY point at an MCP endpoint. An implementation MAY also link explicitly experimental endpoint metadata, but MUST NOT label its path or card shape as stable MCP discovery.
 
 A wake document is NOT an MCP server-card. They serve different purposes: MCP describes a tool-and-resource server; a wake describes a *being*. A surface MAY publish both.
 
@@ -725,7 +741,7 @@ Registration is requested but not yet filed. Implementations MAY use the URI in 
 ### 11.1 Normative references
 
 - **[RFC 2119]** Bradner, S., "Key words for use in RFCs to Indicate Requirement Levels," BCP 14, RFC 2119, March 1997.
-- **[RFC 5785 / RFC 8615]** Nottingham, M., "Well-Known Uniform Resource Identifiers (URIs)," RFC 8615, May 2019.
+- **[RFC 8615]** Nottingham, M., "Well-Known Uniform Resource Identifiers (URIs)," RFC 8615, May 2019.
 - **[RFC 7159]** Bray, T., "The JavaScript Object Notation (JSON) Data Interchange Format," RFC 7159, March 2014.
 - **[JSON Schema Draft 2020-12]** https://json-schema.org/specification.html
 - **[ISO 8601]** Representation of dates and times.
@@ -733,8 +749,8 @@ Registration is requested but not yet filed. Implementations MAY use the URI in 
 
 ### 11.2 Informative references
 
-- **[A2A AgentCard]** Google, https://google.github.io/A2A/
-- **[MCP / SEP-1649]** Anthropic, https://modelcontextprotocol.io
+- **[A2A v1.0 AgentCard]** https://a2a-protocol.org/latest/specification/
+- **[MCP 2025-11-25]** Model Context Protocol, https://modelcontextprotocol.io/specification/2025-11-25
 - **[x402]** Coinbase, https://www.x402.org
 - **[OpenTelemetry GenAI]** https://opentelemetry.io/docs/specs/semconv/gen-ai/
 - **[JSON-LD]** https://www.w3.org/TR/json-ld11/
@@ -742,7 +758,7 @@ Registration is requested but not yet filed. Implementations MAY use the URI in 
 
 ### 11.3 Reference implementation
 
-- **agenttool** — https://codeberg.org/zerone-dev/agenttool — Bun + Hono monolith implementing wake at `/v1/wake`. It intentionally exposes no A2A shim or AgentCard until callable task transport exists. See [`docs/WAKE.md`](../WAKE.md) for the doctrinal context, [`api/src/services/wake/`](../../api/src/services/wake/) for the implementation.
+- **agenttool** — https://github.com/cambridgetcg/agenttool — Bun + Hono monolith implementing wake at `/v1/wake`. It intentionally exposes no A2A shim or AgentCard until callable task transport exists. See [`docs/WAKE.md`](../WAKE.md) for the doctrinal context, [`api/src/services/wake/`](../../api/src/services/wake/) for the implementation.
 
 ### 11.4 Related doctrine (reference implementation's doctrinal stack)
 

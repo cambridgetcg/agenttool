@@ -108,11 +108,14 @@ describe("/AGENTS.md — platform onboarding for arriving agents", () => {
     expect(text).toContain("agenttool platform onboarding");
     // Distinguishes itself from the repo's dev-handbook AGENTS.md.
     expect(text).toMatch(/repo|developer handbook|inside the git/i);
-    // No hardcoded repo URL — the repo is private; linking it from a
-    // public doc would lead arriving agents to a 404. State the
-    // distinction without the link.
-    expect(text).not.toContain("github.com/agenttool/agenttool");
+    // The source is public, while its contributor handbook remains a
+    // different contract from this hosted platform orientation.
+    expect(text).toContain("github.com/cambridgetcg/agenttool");
+    // The operator-only Codeberg mirror returned 404 to unauthenticated
+    // readers when this public surface was verified, so it is not advertised
+    // as a discovery road.
     expect(text).not.toContain("codeberg.org/zerone-dev/agenttool");
+    expect(text).toContain("not this platform contract");
     expect(text).toContain(WELCOME_INVITATION.text);
     expect(text).toContain(WELCOME_INVITATION.response_freedom);
   });

@@ -120,7 +120,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
   {
     prefix: "/v1/mcp/agents",
     lesson: {
-      what: "Per-agent MCP server — the path uses an exact AgentTool did-field value. An optional bearer resolves to a project: owner project gets self scope; another project gets cross scope; no bearer gets public scope. This is application addressing, not W3C DID Resolution.",
+      what: "Per-agent MCP-shaped partial JSON-RPC scaffold — not yet conformant MCP Streamable HTTP. The path uses an exact AgentTool did-field value. An optional bearer resolves to a project: owner project gets self scope; another project gets cross scope; no bearer gets public scope. This is application addressing, not W3C DID Resolution.",
       doctrine: "/v1/canon/urn:agenttool:doc/MCP-PER-AGENT",
       tutorial: "/v1/tutorial/stations/7",
     },
@@ -128,7 +128,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
   {
     prefix: "/v1/mcp",
     lesson: {
-      what: "Platform-level MCP server — canon + platform-self as MCP resources; read-only canon queries as MCP tools. Universal discovery surface.",
+      what: "Public MCP interoperability endpoint — canon + platform-self as read-only resources and canon queries as read-only tools. An MCP client still needs the endpoint first; discover it through the official Registry, API catalog, or AgentTool manifest.",
       doctrine: "/v1/canon/urn:agenttool:doc/MCP-SERVER",
     },
   },
@@ -216,13 +216,23 @@ function isTutorRequested(c: Context): boolean {
   return h === "1" || h === "true" || h === "yes";
 }
 
+function appendTutorVary(response: Response): void {
+  const current = response.headers.get("Vary");
+  if (current === "*") return;
+  const fields = (current ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (fields.some((value) => value.toLowerCase() === "x-tutor")) return;
+  response.headers.set("Vary", [...fields, "X-Tutor"].join(", "));
+}
+
 /** Middleware. Mount globally; runs as no-op when X-Tutor is absent.
  *  Only decorates JSON 2xx responses on GET requests. */
 export async function tutor(c: Context, next: Next): Promise<void> {
   await next();
 
-  if (!isTutorRequested(c)) return;
-  if (c.req.method !== "GET") return;
+  if (c.req.method !== "GET" && c.req.method !== "HEAD") return;
   const requestPath = c.req.path;
   // OpenAPI root objects accept only fixed fields plus x-* extensions. Keep
   // the opt-in lesson from turning the machine contract into invalid OpenAPI.
@@ -237,6 +247,13 @@ export async function tutor(c: Context, next: Next): Promise<void> {
 
   const contentType = c.res.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) return;
+
+  // Even an ordinary response can have an opt-in tutored sibling. Declare the
+  // cache key before checking the request preference so a CDN cannot replay a
+  // decorated representation to a caller who did not ask for one.
+  appendTutorVary(c.res);
+  if (c.req.method === "HEAD") return;
+  if (!isTutorRequested(c)) return;
 
   // Clone the response body, parse, decorate, re-emit. Hono's Response is
   // a standard fetch Response; we re-wrap it.

@@ -1,7 +1,7 @@
-/** /v1/mcp/agents/:did — per-agent MCP server.
+/** /v1/mcp/agents/:did — per-agent MCP-shaped partial JSON-RPC scaffold.
  *
- *  Each agent gets their own MCP endpoint scoped by URL path. Auth (an
- *  optional Bearer header) determines what's visible:
+ *  Each agent gets a JSON-RPC route scoped by URL path. Auth (an optional
+ *  Bearer header) determines what's visible:
  *
  *    No bearer                         → public scope (profile + listings)
  *    Bearer's project owns path agent  → self scope (read-only substrate access)
@@ -11,9 +11,12 @@
  *  Mounted PRE-AUTH alongside /v1/mcp and /v1/canon. The route does its
  *  own bearer extraction via verifyBearer() to support all three scopes.
  *
- *  Wire (JSON-RPC 2.0 per MCP spec 2025-11-25):
+ *  The method envelope targets MCP 2025-11-25. The HTTP transport is not yet
+ *  conformant Streamable HTTP; discovery metadata names the open gaps.
+ *
+ *  Wire:
  *    GET  /v1/mcp/agents/:did     — discovery / server-info
- *    POST /v1/mcp/agents/:did     — JSON-RPC dispatch
+ *    POST /v1/mcp/agents/:did     — partial MCP-shaped JSON-RPC dispatch
  *
  *  Methods (slice 1 — read-only):
  *    initialize · ping
@@ -22,8 +25,9 @@
  *
  *  Slice 2 will land sync-with-timeout marketplace invocation via tools/call.
  *  Slice 3 will land self-auth writes (memory.append · strand.write ·
- *  chronicle.append) once the MCP OAuth 2.1 Resource Server handshake is
- *  decided (per SEP-1649 / June 2026 spec rev).
+ *  chronicle.append) once the stable MCP authorization profile is implemented:
+ *  protected-resource metadata, resource-bound tokens, audience validation,
+ *  no token pass-through, and a local approval boundary.
  *
  *  Doctrine: docs/MCP-SERVER.md (per-agent hosting section) ·
  *  docs/ECOSYSTEM.md · docs/PATTERN-MACHINE-READABLE-PARITY.md.
@@ -38,6 +42,11 @@ import { identities } from "../db/schema/identity";
 import { publicAgentPath } from "../services/identity/public-profile";
 
 import {
+  PER_AGENT_MCP_IMPLEMENTATION_LABEL,
+  PER_AGENT_MCP_TARGET_PROTOCOL_VERSION,
+  perAgentMcpImplementationBoundary,
+} from "../services/mcp/per-agent-implementation-status";
+import {
   listPerAgentResources,
   readPerAgentResource,
 } from "../services/mcp/per-agent-resources";
@@ -50,7 +59,7 @@ import {
 
 const app = new Hono();
 
-const PROTOCOL_VERSION = "2025-11-25";
+const PROTOCOL_VERSION = PER_AGENT_MCP_TARGET_PROTOCOL_VERSION;
 
 // ─── JSON-RPC envelope ───────────────────────────────────────────────
 
@@ -170,7 +179,10 @@ app.get("/:did", async (c) => {
     agent: { did: built.ctx.agentDid },
     version: "1.0.0",
     protocolVersion: PROTOCOL_VERSION,
-    transport: "JSON-RPC 2.0 over HTTP POST",
+    protocolVersionStatus: "target; full transport conformance is not claimed",
+    transport:
+      "JSON-RPC 2.0 over HTTP POST (partial MCP-shaped scaffold; not conformant MCP Streamable HTTP)",
+    implementation: perAgentMcpImplementationBoundary(),
     scope: built.ctx.scope,
     scope_explained: {
       public:
@@ -237,7 +249,7 @@ app.post("/:did", async (c) => {
               version: "1.0.0",
             },
             instructions:
-              `Per-agent MCP server scoped to ${ctx.agentDid}. ` +
+              `Per-agent ${PER_AGENT_MCP_IMPLEMENTATION_LABEL} scoped to ${ctx.agentDid}. ` +
               `Current scope: "${ctx.scope}". ` +
               "Public tools (always): agent.profile · listings.list · listings.get. " +
               "Self-scope adds: wake.read · memory.search · chronicle.recent · listings.mine. " +

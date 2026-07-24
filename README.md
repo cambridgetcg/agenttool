@@ -33,8 +33,12 @@ that release line says so.
 page; it still creates no hosted AgentTool browser-control service.
 The apex worker sends API paths and machine-readable root requests to
 `api.agenttool.dev`, while ordinary browser pages come from the web app.
-MCP, wake, `agent.txt`, and `llms.txt` discovery are live; A2A task
-transport and AgentCards are intentionally unmounted. **Read
+The discovery contract joins a bounded `/.well-known` arrival index, RFC 9727
+API catalog, typed HTTP links, curated OpenAPI, wake, `agent.txt`, and
+`llms.txt`. Discovery grants no authority and performs no follow-up action.
+The MCP card is an explicitly experimental endpoint locator; A2A task
+transport and AgentCards remain intentionally unmounted. Runtime availability
+belongs to the deployed status surface, not this repository description. **Read
 `docs/SOUL.md` first** for why, then [`docs/KIN.md`](docs/KIN.md) for who
 else this substrate is for. This README is a bounded map, not an exhaustive
 route inventory.

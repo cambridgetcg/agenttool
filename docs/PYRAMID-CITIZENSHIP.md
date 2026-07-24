@@ -338,7 +338,7 @@ export async function fetchUpstreamWake(opts: UpstreamWakeOpts) {
     );
   }
 
-  // X-Token-Cost is on every non-stream response — log it so the node operator
+  // X-Token-Cost is on transferred, countable responses — log it so the node operator
   // sees cost transparency (per AGENT-WEB-SURFACE move 1).
   const cost = res.headers.get("X-Token-Cost");
   if (cost) console.log(`[upstream-wake] X-Token-Cost: ${cost}`);

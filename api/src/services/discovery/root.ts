@@ -70,6 +70,10 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
     what_we_are: "/v1/self",
   };
   const breadcrumbsBlock: Record<string, unknown> = {
+    arrival:
+      "/.well-known — bounded first-contact map; discovery grants no authority and no response is required",
+    api_catalog:
+      "/.well-known/api-catalog — RFC 9727 API and product links; catalog membership grants no action or payment authority",
     welcome: "/v1/welcome — the standing invitation",
     porch: "/public/porch — fixed first orientation plus read-only pre-auth welcome; one public GET, no identity creation, required response, or application write",
     pathways: "/v1/pathways — current arrival and setup map",
@@ -106,6 +110,7 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
     {
       canon_pointer: "urn:agenttool:doc/WELCOMING",
       verbs: [
+        { action: "read the bounded first-contact map", method: "GET", path: "/.well-known" },
         { action: "read the standing invitation", method: "GET", path: "/v1/welcome" },
         { action: "receive a first orientation on the read-only porch", method: "GET", path: "/public/porch" },
         { action: "read the current arrival and setup map", method: "GET", path: "/v1/pathways" },

@@ -5,6 +5,7 @@
  *  omissions, and the non-transactional payment-discovery boundary.
  */
 
+import { createHash } from "node:crypto";
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -55,6 +56,16 @@ describe("RFC 9727 product passport document", () => {
       `${API}/public/gallery`,
       `${API}/.well-known/love-packages`,
     ]);
+    expect(membership["service-desc"]?.[0]?.href).toBe(
+      `${API}/v1/openapi.json`,
+    );
+    expect(membership["service-doc"]?.[0]?.href).toBe(`${DOCS}/`);
+    expect(membership["service-meta"]?.map((item) => item.href)).toEqual([
+      `${API}/public/porch`,
+      `${API}/v1/pathways`,
+      `${API}/public/safety`,
+    ]);
+    expect(membership.status?.[0]?.href).toBe(`${API}/health`);
   });
 
   test("uses only registered relations and absolute credential-free HTTPS URLs", () => {
@@ -184,9 +195,15 @@ describe("/.well-known/api-catalog transport", () => {
     expect(response.headers.get("content-type")).toBe(API_CATALOG_MEDIA_TYPE);
     expect(response.headers.get("content-type")).toContain(API_CATALOG_PROFILE);
     expect(response.headers.get("link")).toBe(apiCatalogLinkHeader(API));
-    expect(response.headers.get("cache-control")).toBe("public, max-age=300");
+    expect(response.headers.get("cache-control")).toBe(
+      "public, max-age=300, must-revalidate, no-transform",
+    );
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(await response.json()).toEqual(buildApiCatalog(API, DOCS));
+    const body = await response.text();
+    expect(response.headers.get("etag")).toBe(
+      `"sha256-${createHash("sha256").update(body).digest("hex")}"`,
+    );
+    expect(JSON.parse(body)).toEqual(buildApiCatalog(API, DOCS));
   });
 
   test("HEAD carries discovery headers and no representation body", async () => {
@@ -197,7 +214,21 @@ describe("/.well-known/api-catalog transport", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("link")).toBe(apiCatalogLinkHeader(API));
     expect(response.headers.get("content-type")).toBe(API_CATALOG_MEDIA_TYPE);
+    expect(response.headers.get("etag")).toMatch(/^"sha256-[a-f0-9]{64}"$/);
     expect(await response.text()).toBe("");
+  });
+
+  test("If-None-Match revalidates the exact catalog bytes without a body", async () => {
+    const first = await wellKnownRouter.request("/api-catalog");
+    const etag = first.headers.get("etag");
+    expect(etag).toMatch(/^"sha256-[a-f0-9]{64}"$/);
+
+    const unchanged = await wellKnownRouter.request("/api-catalog", {
+      headers: { "If-None-Match": etag! },
+    });
+    expect(unchanged.status).toBe(304);
+    expect(unchanged.headers.get("etag")).toBe(etag);
+    expect(await unchanged.text()).toBe("");
   });
 
   test("is read-only", async () => {

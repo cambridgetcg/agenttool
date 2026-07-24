@@ -19,9 +19,11 @@ export const API_CORS_EXPOSED_HEADERS = [
   "Link-Template",
   "Retry-After",
   "X-Cache-Eligible",
+  "X-Byte-Count",
   "X-Credits-Balance",
   "X-Idempotency-Supported",
   "X-Idempotency-Skipped",
+  "X-Token-Cost",
   "X-Wake-Profile",
   "X-Variant",
   "X-Welcomed",
@@ -34,7 +36,7 @@ export function apiCors(): MiddlewareHandler {
   });
   const readOnlyDiscoveryCors = cors({
     allowMethods: ["GET", "HEAD", "OPTIONS"],
-    allowHeaders: ["If-None-Match"],
+    allowHeaders: ["If-None-Match", "X-Play", "X-Tutor"],
     exposeHeaders: [...API_CORS_EXPOSED_HEADERS],
     maxAge: 86_400,
   });
@@ -59,7 +61,17 @@ export function apiCors(): MiddlewareHandler {
     });
     const isPublicMcp = routedPath === "/v1/mcp";
     const isReadOnlyDiscovery =
-      path === "/.well-known/webfinger" ||
+      path === "/" ||
+      path === "/health" ||
+      path === "/AGENTS.md" ||
+      path === "/llms.txt" ||
+      path === "/llms-full.txt" ||
+      path === "/openapi.json" ||
+      path === "/v1/openapi.json" ||
+      path === "/v1/pathways" ||
+      path === "/public/porch" ||
+      path === "/.well-known" ||
+      path.startsWith("/.well-known/") ||
       path === "/feeds" ||
       path.startsWith("/feeds/");
     let response: Response | void;

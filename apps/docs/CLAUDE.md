@@ -7,6 +7,10 @@ API documentation site for the AgentTool platform. Static HTML pages covering al
 Active — all 9 service pages live, plus the main index, local agent-data docs,
 local Agent Browser docs, and a LOVE Package Protocol surface for public
 exact-version package discovery.
+The root page and response headers now expose a bounded typed discovery map,
+while `_redirects` sends common machine-document guesses to the canonical API.
+`AGENT-DISCOVERY.md` and `CASTLE-OF-UNDERSTANDING.md` are public symlinks to
+their canonical doctrine files. Reading either guide performs no operation.
 It also serves the Agent Wallet 0.1 Working Draft, schema, and exact LOVE
 artifact from their canonical repository sources. This docs surface does not
 imply npm mirror availability, a hosted wallet, key custody, RPC, or broadcast
@@ -51,6 +55,9 @@ authorization, execution-readiness proof, or a hosted route.
 ## Project Structure
 ```
 index.html      — Docs home: quick start, service cards, auth, errors, rate limits
+_redirects      — Common machine-document paths → canonical API contracts
+AGENT-DISCOVERY.md — symlink to the invitation-only discovery doctrine
+CASTLE-OF-UNDERSTANDING.md — symlink to the local Castle consumer boundary
 packages.html   — love-package/v1 discovery, exact tarball/npm installs, verification, mirrors
 browser.html    — local Agent Browser install, nine-tool surface, authority, integrations, response hints
 play.html       — Public arcade plus the local three-seat Party Telephone game

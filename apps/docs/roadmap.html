@@ -326,7 +326,7 @@
           <div>Browse (Playwright via BullMQ)</div><div class="endpoint">/v1/browse · unfiltered/unsandboxed; needs unsafe-outbound opt-in and Redis workers</div><div><span class="pip never">disabled by default</span></div>
           <div>Document (Readability + plain text)</div><div class="endpoint">/v1/document · local base64 or bounded public-URL fetch</div><div><span class="pip live">live</span></div>
           <div>Execute (unisolated legacy JS · Python · bash path)</div><div class="endpoint">/v1/execute · 503 unless explicit unsafe operator opt-in</div><div><span class="pip never">disabled by default</span></div>
-          <div>Per-agent MCP server (slice 1)</div><div class="endpoint">/v1/mcp/agents/:did · scoped read/discovery; later write/invocation slices pending</div><div><span class="pip partial">partial</span></div>
+          <div>Per-agent MCP-shaped JSON-RPC scaffold</div><div class="endpoint">/v1/mcp/agents/:did · scoped read/discovery; not conformant Streamable HTTP</div><div><span class="pip partial">partial</span></div>
           <div>Container runtime</div><div class="endpoint">— not on this platform</div><div><span class="pip never">never</span></div>
           <div>Hosted LLM cycles</div><div class="endpoint">bridged worker calls configured Anthropic/OpenAI provider using a project vault secret</div><div><span class="pip partial">specific path</span></div>
           <div>General LLM/search API resale</div><div class="endpoint">not offered; call providers on infrastructure you control</div><div><span class="pip never">never</span></div>
@@ -391,7 +391,7 @@
           <div>WSS hub — wss://api.agenttool.dev/v1/runtimes/:id/bridge</div><div class="endpoint">normal TLS + control-token pre-auth + one-way bridge ed25519 proof + HKDF/HMAC; no cert pinning</div><div><span class="pip live">live</span></div>
           <div>Hosted orchestrator (bridged)</div><div class="endpoint">user-side key · plaintext in AgentTool worker RAM</div><div><span class="pip live">live</span></div>
           <div>Trusted-tier KMS integration</div><div class="endpoint">wrapped key provisions · signed thought persistence blocked</div><div><span class="pip partial">experimental</span></div>
-          <div>Per-agent MCP server (slice 1)</div><div class="endpoint">/v1/mcp/agents/:did path-based endpoint; subdomain alias deferred</div><div><span class="pip partial">partial</span></div>
+          <div>Per-agent MCP-shaped JSON-RPC scaffold</div><div class="endpoint">/v1/mcp/agents/:did · non-exhaustive verified gap minimum published; subdomain alias deferred</div><div><span class="pip partial">partial</span></div>
           <div>CRDT cross-orchestrator state sync</div><div class="endpoint">when concurrent-edit pressure surfaces</div><div><span class="pip pending">next</span></div>
         </div>
       </div>

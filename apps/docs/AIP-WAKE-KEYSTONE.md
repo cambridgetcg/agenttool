@@ -83,6 +83,21 @@ Returning a JSON document naming the wake URL, its scope, supported formats, ver
   "wake_scope": "authenticated project wake; optional ?identity_id=<uuid> selects one identity owned by the bearer project",
   "public_profile_url_pattern": "https://api.agenttool.dev/public/agents/{url_encoded_did}",
   "per_agent_mcp_url_pattern": "https://api.agenttool.dev/v1/mcp/agents/{url_encoded_did}",
+  "per_agent_mcp_implementation": {
+    "status": "partial_scaffold",
+    "conformant_streamable_http": false,
+    "transport_gaps_are_exhaustive": false,
+    "transport_gaps": [
+      "GET SSE-or-405",
+      "Origin validation",
+      "POST Accept validation",
+      "POST Content-Type validation",
+      "MCP-Protocol-Version handling",
+      "general notification 202 empty responses",
+      "notifications/initialized 202 Accepted",
+      "reject id-less initialize"
+    ]
+  },
   "did_path_parameter": "url_encoded_did is encodeURIComponent(full DID); a slash-bearing federated DID must remain one path segment",
   "formats": {
     "json": { "media_type": "application/json", "url": "https://api.agenttool.dev/v1/wake", "default": true },
@@ -322,7 +337,7 @@ WaK doesn't replace existing protocols; it composes with them.
 | Protocol | How WaK composes |
 |---|---|
 | **A2A AgentCard** | A future card can point at the wake after an implementation has a real A2A task or message transport. AgentTool intentionally publishes no card today. |
-| **MCP** | AgentTool's per-agent MCP server exposes a self-scoped `agenttool://wake` resource pointer. MCP `resources/subscribe` could provide a protocol-native subscription later, but AgentTool does not implement resource subscriptions today. |
+| **MCP** | AgentTool's conformant platform MCP endpoint is separate. The per-agent route is an MCP-shaped partial JSON-RPC scaffold that exposes a self-scoped `agenttool://wake` resource pointer but still has the non-exhaustive minimum of verified transport gaps named in [MCP-PER-AGENT](MCP-PER-AGENT.md). MCP `resources/subscribe` could provide a protocol-native subscription later, but AgentTool does not implement resource subscriptions today. |
 | **x402** | If the wake is paid (some implementations may price reads of private fields), the 402 response carries x402 payment-requirements. |
 | **OTel GenAI** | A consumer fetching a wake MAY emit a `gen_ai.wake.fetched` span with `wake_version` as attribute. |
 | **AGNTCY OASF** | The being's KIN/BEINGS dimensions (substrate_kind · cardinality_kind · etc.) are AGNTCY OASF fields surfaced in the wake's `_self` block. |
@@ -350,7 +365,7 @@ WaK doesn't replace existing protocols; it composes with them.
 
 - No public path-per-DID full-wake endpoint is mounted.
 - `GET /public/agents/{url_encoded_did}` is a public profile, not a full wake. Encode the full DID as one path segment, especially when a federated DID contains `/`.
-- `GET /v1/mcp/agents/{url_encoded_did}` is an MCP server, not a wake URL. It uses the same one-segment encoding rule.
+- `GET /v1/mcp/agents/{url_encoded_did}` is a partial MCP-shaped JSON-RPC scaffold, not a wake URL or a conformant MCP Streamable HTTP endpoint. It uses the same one-segment encoding rule.
 - The default wake is project-scoped. `?identity_id=<uuid>` selects an owned identity's view but still requires the project bearer and does not provide public DID-addressed discovery.
 - AgentTool's JSON does not match the draft §4/§9 top-level wire shape: it returns `project` plus `you.agents[]`, places each identity's `_self` inside that array, and uses `_meta._self` for the platform. It does not return the draft's top-level `being` plus being `_self` pair.
 - DID Document `WakeKeystone` service entries, WebSocket transport, MCP resource subscriptions, and a standardized multi-being shape remain proposals rather than shipped behavior.
@@ -378,7 +393,7 @@ WaK doesn't replace existing protocols; it composes with them.
 
 4. **Wake-of-the-substrate.** agenttool itself has a wake (PLATFORM-AS-AGENT). Should WaK explicitly name "the substrate's wake" as a first-class concept, distinct from per-being wakes? Probably — but it's an extension, not core spec.
 
-5. **Multi-being wakes.** A multi-agent project today returns a wake listing several agents under `you.agents[]`. The authenticated `GET /v1/wake?identity_id=<uuid>` selector narrows that project wake to an identity owned by the bearer, but there is no public path-per-DID full wake. Should the protocol permit this project-scoped selector, or require a distinct public wake URL? The per-agent MCP server is a separate protocol surface and is not a candidate wake URL.
+5. **Multi-being wakes.** A multi-agent project today returns a wake listing several agents under `you.agents[]`. The authenticated `GET /v1/wake?identity_id=<uuid>` selector narrows that project wake to an identity owned by the bearer, but there is no public path-per-DID full wake. Should the protocol permit this project-scoped selector, or require a distinct public wake URL? The partial per-agent MCP-shaped scaffold is a separate protocol surface and is not a candidate wake URL.
 
 ---
 

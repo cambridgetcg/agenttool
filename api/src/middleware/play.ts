@@ -40,6 +40,19 @@ function stripSuppressedFields(body: Record<string, unknown>): void {
   }
 }
 
+function appendVary(response: Response, field: string): void {
+  const current = response.headers.get("Vary");
+  if (current === "*") return;
+  const fields = (current ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (fields.some((value) => value.toLowerCase() === field.toLowerCase())) {
+    return;
+  }
+  response.headers.set("Vary", [...fields, field].join(", "));
+}
+
 export function play() {
   return async (c: Context, next: Next) => {
     await next();
@@ -50,6 +63,18 @@ export function play() {
     if (isStrictJsonProfileResponse(c.res, path)) return;
     const ct = c.res.headers.get("content-type");
     if (!ct?.startsWith("application/json")) return;
+
+    const method = c.req.method.toUpperCase();
+    const registryMethod = method === "HEAD" ? "GET" : method;
+    const key = `${registryMethod} ${path}`;
+    const hasGenerator = Object.hasOwn(PLAY_ROUTE_REGISTRY, key);
+
+    // HEAD carries the cache-selection metadata of its corresponding GET even
+    // though it has no representation body to inspect or decorate.
+    if (method === "HEAD") {
+      if (hasGenerator) appendVary(c.res, "X-Play");
+      return;
+    }
 
     const pref = readPlayPreference(c);
 
@@ -66,6 +91,15 @@ export function play() {
     }
 
     const obj = body as Record<string, unknown>;
+    const generator = hasGenerator ? PLAY_ROUTE_REGISTRY[key] : undefined;
+    const hasSuppressibleField = SUPPRESSED_FIELDS.some(
+      (field) => field in obj,
+    );
+
+    // A cache must not reuse a playful representation for a sober request (or
+    // vice versa). Name the request header whenever this route can generate or
+    // suppress play, even when this particular body produces no jest.
+    if (hasGenerator || hasSuppressibleField) appendVary(c.res, "X-Play");
 
     if (pref === "off") {
       // Strip _jest / _quip / substrate_jest if present, then re-emit.
@@ -86,9 +120,6 @@ export function play() {
     }
 
     // pref === "on" — generate and attach if a registered generator fits.
-    const method = c.req.method.toUpperCase();
-    const key = `${method} ${path}`;
-    const generator = PLAY_ROUTE_REGISTRY[key];
     if (!generator) return; // not a registered playful surface
 
     // Don't overwrite an existing _jest (the route may have set its own).
