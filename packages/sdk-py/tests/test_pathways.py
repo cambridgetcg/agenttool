@@ -32,7 +32,7 @@ def test_pathways_returns_before_identity_without_authorization(monkeypatch: Any
                         "machine_url": "https://docs.agenttool.dev/TUTORIAL-WAKE-YOUR-AGENT.md",
                         "human_url": "https://docs.agenttool.dev/tutorial",
                         "source_path": "docs/TUTORIAL-WAKE-YOUR-AGENT.md",
-                        "sdk_version": "0.16.2",
+                        "sdk_version": "0.16.3",
                     },
                     "package_discovery": {
                         "endpoint": "GET /.well-known/love-packages",
@@ -74,7 +74,7 @@ def test_pathways_returns_before_identity_without_authorization(monkeypatch: Any
     assert isinstance(response, pathways_module.PathwaysResponse)
     assert response["before_identity"]["endpoint"] == "GET /public/porch"
     assert response["before_identity"]["response_required"] is False
-    assert response["first_success"]["tutorial"]["sdk_version"] == "0.16.2"
+    assert response["first_success"]["tutorial"]["sdk_version"] == "0.16.3"
     assert (
         response["first_success"]["package_discovery"]["protocol"]
         == "love-package/v1"

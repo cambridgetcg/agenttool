@@ -57,6 +57,23 @@ describe("SDK source and builder identity", () => {
       love!.version,
     ])).toEqual(new Set([tsPackage.version]));
     expect(love!.releaseTag).toBe(`sdk-v${tsPackage.version}`);
+
+    const tsKeywords = (JSON.parse(read("packages/sdk-ts/package.json")) as {
+      keywords?: string[];
+    }).keywords ?? [];
+    const pyProjectText = read("packages/sdk-py/pyproject.toml");
+    expect(tsKeywords).not.toContain("a2a");
+    expect(pyProjectText).not.toMatch(/^\s*"a2a",?\s*$/m);
+
+    for (const path of [
+      "packages/sdk-py/README.md",
+      "packages/sdk-py/src/agenttool/__init__.py",
+      "packages/sdk-py/src/agenttool/soul.py",
+    ]) {
+      const source = read(path);
+      expect(source).not.toContain("https://agenttool.dev/soul");
+      expect(source).toContain("https://docs.agenttool.dev/SOUL.md");
+    }
   });
 
   test("active release surfaces follow the source version", () => {
@@ -87,6 +104,7 @@ describe("SDK source and builder identity", () => {
     expect(party).toContain(pythonSource);
     expect(party).toContain(exactNpm);
     expect(party).toContain(`python -m pip install agenttool-sdk==${version}`);
+    expect(party.match(/independently_visible: false/g)).toHaveLength(2);
     expect(read("docs/PATHWAYS.md")).toContain(`"sdk_version": "${version}"`);
     expect(read("docs/THE-PARTY.md")).toContain(loveUrl);
     expect(read("apps/docs/packages.html")).toContain(
@@ -98,6 +116,9 @@ describe("SDK source and builder identity", () => {
     expect(rootReadme).toContain(exactPyPI);
     expect(rootReadme).toContain(loveUrl);
     expect(rootReadme).toContain(pythonSource);
+    expect(rootReadme.indexOf(pythonSource)).toBeLessThan(
+      rootReadme.indexOf(exactPyPI),
+    );
 
     const tsReadme = read("packages/sdk-ts/README.md");
     expect(tsReadme).toContain(`release-v${version}-blue`);

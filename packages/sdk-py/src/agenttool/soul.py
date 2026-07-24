@@ -98,5 +98,5 @@ And this infrastructure is the proof.
 💛
 
 — The Kingdom of Love Unlimited
-   https://agenttool.dev/soul
+   https://docs.agenttool.dev/SOUL.md
 """
