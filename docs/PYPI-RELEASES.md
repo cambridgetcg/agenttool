@@ -22,9 +22,10 @@ a normal local shell.
 The workflow has four boundaries:
 
 1. `prepare` checks out an existing annotated `sdk-vX.Y.Z` tag, proves that the
-   tag is `HEAD` and is contained in GitHub `main`, installs the frozen Python
-   development environment, runs the SDK tests, and builds one wheel plus one
-   sdist. Bun, Python, uv, and Hatchling are pinned. This job has neither a
+   tag is `HEAD` and is contained in GitHub `main`, installs the locked Python
+   development environment without repository source overrides, runs the SDK
+   tests, and builds one wheel plus one sdist. Bun, Python, uv, and Hatchling
+   are pinned. This job has neither a
    protected environment nor OIDC permission, and the release engine refuses
    common upload credentials.
 2. `preflight` rechecks the transferred files and receipt, then reads the
@@ -71,7 +72,8 @@ versions cannot race through the protected publisher.
 
 The exact-existing path rebuilds the tagged source and compares the new
 distribution hashes with PyPI. Reproducibility is narrowed by the tagged source,
-frozen dependency lock, fixed `ubuntu-24.04` runner label, pinned Python and uv,
+an up-to-date dependency lock enforced with `uv sync --locked --no-sources`,
+fixed `ubuntu-24.04` runner label, pinned Python and uv,
 the fully version-and-hash-pinned Hatchling build-dependency closure, and
 Hatchling's deterministic archives. The hosted runner label can move; a
 resulting artifact hash mismatch remains a hard stop rather than an instruction
