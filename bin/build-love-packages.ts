@@ -106,9 +106,9 @@ export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
   },
   {
     name: "@agenttool/telescope",
-    version: "0.2.0",
+    version: "0.2.1",
     packagePath: "packages/telescope",
-    releaseTag: "telescope-v0.2.0",
+    releaseTag: "telescope-v0.2.1",
     buildCommands: [["bun", "run", "ci"]],
   },
   {
