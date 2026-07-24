@@ -33,6 +33,24 @@ describe("browser consequence planning", () => {
     ]);
   });
 
+  test("defers sovereign navigation policy checks to execution", () => {
+    const sovereign = resolveBrowserCapabilities({ authority: "sovereign" });
+
+    for (const action of [
+      { kind: "navigate" as const, url: "ftp://example.com/file" },
+      {
+        kind: "new_tab" as const,
+        url: "https://user:password@example.com/",
+      },
+      { kind: "reload" as const },
+    ]) {
+      expect(planBrowserAction(action, sovereign).authority).toEqual({
+        profile: "sovereign",
+        decision: "checked_at_execution",
+      });
+    }
+  });
+
   test("separates data disclosure, session changes, and durable state", () => {
     const persistent = resolveBrowserCapabilities({
       authority: "sovereign",

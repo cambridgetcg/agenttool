@@ -520,6 +520,9 @@ describe("browser CLI", () => {
     expect(code).toBe(0);
     expect(launches).toBe(0);
     expect(output.text()).toContain("Browser binaries are never downloaded automatically");
+    expect(output.text()).toContain(
+      "Chromium-managed redirect hops are not independently policy-checked",
+    );
   });
 
   test("doctor launches once, closes once, and reports the fixed policy and capabilities", async () => {
@@ -554,7 +557,7 @@ describe("browser CLI", () => {
       version: "agenttool-browser-doctor/0.2",
       config: { authority: "legacy_custom" },
       capabilities: {
-        schema: "agent-browser-capabilities/0.2",
+        schema: "agent-browser-capabilities/0.3",
         authority: { profile: "legacy_custom", fixedAt: "process_start" },
       },
       checks: { browser_launch: "ok", automatic_download: false },

@@ -21,6 +21,17 @@ const INTERACTIVE_ROLES = new Set([
   "treeitem",
 ]);
 
+const STRUCTURAL_CONTEXT_ROLES = new Set([
+  "heading",
+  "main",
+  "navigation",
+  "form",
+  "region",
+  "dialog",
+  "alert",
+  "status",
+]);
+
 const SENSITIVE_HINT =
   /\b(?:password|passwd|passcode|pin|secret|token|api[\s_-]*key|private[\s_-]*key|cvv|cvc)\b/i;
 
@@ -34,9 +45,11 @@ export interface AriaCandidate {
 export interface CompactAriaSnapshotOptions {
   publicRefs: ReadonlyMap<string, string>;
   visibleRefs: ReadonlySet<string>;
+  visibleStructuralRefs?: ReadonlySet<string>;
   secretRefs?: ReadonlySet<string>;
   maxChars: number;
   maxElements: number;
+  maxStructuralElements?: number;
 }
 
 export interface CompactAriaSnapshotResult {
@@ -51,25 +64,33 @@ export interface CompactAriaSnapshotResult {
 export function parseAriaCandidates(snapshot: string): AriaCandidate[] {
   const candidates: AriaCandidate[] = [];
   const seen = new Set<string>();
-  for (const rawLine of snapshot.split(/\r?\n/)) {
-    const refMatch = rawLine.match(/\[ref=([A-Za-z0-9_-]+)\]/);
-    const roleMatch = rawLine.match(/^\s*-\s+([a-z][a-z0-9_-]*)\b/i);
-    if (!refMatch?.[1] || !roleMatch?.[1]) continue;
-    const nativeRef = refMatch[1];
-    const role = roleMatch[1].toLowerCase();
+  for (const node of parseSnapshotNodes(snapshot)) {
+    if (seen.has(node.nativeRef) || !isInteractiveNode(node)) continue;
+    seen.add(node.nativeRef);
+    candidates.push({
+      nativeRef: node.nativeRef,
+      role: node.role,
+      name: node.name,
+      line: node.line.trim().replace(/^-\s*/, "- "),
+    });
+  }
+  return candidates;
+}
+
+export function parseStructuralAriaCandidates(
+  snapshot: string,
+): Array<{ nativeRef: string; role: string }> {
+  const candidates: Array<{ nativeRef: string; role: string }> = [];
+  const seen = new Set<string>();
+  for (const node of parseSnapshotNodes(snapshot)) {
     if (
-      seen.has(nativeRef)
-      || (!INTERACTIVE_ROLES.has(role) && !rawLine.includes("[cursor=pointer]"))
+      seen.has(node.nativeRef)
+      || !STRUCTURAL_CONTEXT_ROLES.has(node.role)
     ) {
       continue;
     }
-    seen.add(nativeRef);
-    candidates.push({
-      nativeRef,
-      role,
-      name: parseAccessibleName(rawLine),
-      line: rawLine.trim().replace(/^-\s*/, "- "),
-    });
+    seen.add(node.nativeRef);
+    candidates.push({ nativeRef: node.nativeRef, role: node.role });
   }
   return candidates;
 }
@@ -79,12 +100,33 @@ export function compactAriaSnapshot(
   options: CompactAriaSnapshotOptions,
 ): CompactAriaSnapshotResult {
   const secretRefs = options.secretRefs ?? new Set<string>();
-  const eligible = parseAriaCandidates(rawSnapshot).filter((candidate) =>
-    options.visibleRefs.has(candidate.nativeRef)
-    && options.publicRefs.has(candidate.nativeRef)
+  const visibleStructuralRefs =
+    options.visibleStructuralRefs ?? new Set<string>();
+  const maxStructuralElements = Math.max(
+    0,
+    Math.floor(options.maxStructuralElements ?? 0),
   );
+  const nodes = parseSnapshotNodes(rawSnapshot);
+  const seenInteractive = new Set<string>();
+  const eligible = nodes.filter((node) => {
+    if (
+      seenInteractive.has(node.nativeRef)
+      || !isInteractiveNode(node)
+    ) {
+      return false;
+    }
+    seenInteractive.add(node.nativeRef);
+    return (
+      options.visibleRefs.has(node.nativeRef)
+      && options.publicRefs.has(node.nativeRef)
+    );
+  });
   const refs: SnapshotRef[] = [];
-  const lines: string[] = [];
+  const selectedLines: Array<{
+    index: number;
+    line: string;
+    contextualLine?: string;
+  }> = [];
   let usedChars = 0;
   let snapshotTruncated = false;
 
@@ -92,17 +134,18 @@ export function compactAriaSnapshot(
     if (refs.length >= options.maxElements) break;
     const publicRef = options.publicRefs.get(candidate.nativeRef)!;
     const secret = secretRefs.has(candidate.nativeRef);
-    let line = candidate.line.replace(
+    let contextualLine = candidate.line.replace(
       `[ref=${candidate.nativeRef}]`,
       `[ref=${publicRef}]`,
     );
-    if (secret) line = redactLineValue(line, publicRef);
-    const addition = (lines.length === 0 ? 0 : 1) + line.length;
+    if (secret) contextualLine = redactLineValue(contextualLine, publicRef);
+    const line = contextualLine.trimStart();
+    const addition = (selectedLines.length === 0 ? 0 : 1) + line.length;
     if (usedChars + addition > options.maxChars) {
       snapshotTruncated = true;
       break;
     }
-    lines.push(line);
+    selectedLines.push({ index: candidate.index, line, contextualLine });
     usedChars += addition;
     refs.push({
       ref: publicRef,
@@ -116,9 +159,54 @@ export function compactAriaSnapshot(
   if (elementsTruncated && refs.length >= options.maxElements) {
     snapshotTruncated = true;
   }
+  const interactiveIndentationChars = selectedLines.reduce(
+    (total, item) =>
+      total + ((item.contextualLine?.length ?? item.line.length) - item.line.length),
+    0,
+  );
+  if (usedChars + interactiveIndentationChars <= options.maxChars) {
+    for (const item of selectedLines) {
+      if (item.contextualLine) item.line = item.contextualLine;
+    }
+    usedChars += interactiveIndentationChars;
+  }
+  const seenStructural = new Set<string>();
+  const eligibleStructural = nodes.filter((node) => {
+    if (
+      seenStructural.has(node.nativeRef)
+      || !STRUCTURAL_CONTEXT_ROLES.has(node.role)
+    ) {
+      return false;
+    }
+    seenStructural.add(node.nativeRef);
+    return visibleStructuralRefs.has(node.nativeRef);
+  });
+  let selectedStructural = 0;
+  for (const candidate of eligibleStructural) {
+    if (selectedStructural >= maxStructuralElements) {
+      snapshotTruncated = true;
+      break;
+    }
+    const line = stripNativeSnapshotRefs(candidate.line);
+    const addition = (selectedLines.length === 0 ? 0 : 1) + line.length;
+    if (usedChars + addition > options.maxChars) {
+      snapshotTruncated = true;
+      break;
+    }
+    selectedLines.push({ index: candidate.index, line });
+    selectedStructural += 1;
+    usedChars += addition;
+  }
+  if (eligibleStructural.length > selectedStructural) {
+    snapshotTruncated = true;
+  }
+  selectedLines.sort((left, right) => left.index - right.index);
+
   const empty = "(no viewport-visible interactive elements)";
   return {
-    snapshot: lines.join("\n") || empty.slice(0, options.maxChars),
+    snapshot:
+      selectedLines.map((item) => item.line).join("\n")
+      || empty.slice(0, options.maxChars),
     refs,
     truncated: {
       snapshot: snapshotTruncated,
@@ -226,6 +314,48 @@ function parseAccessibleName(line: string): string | null {
   } catch {
     return match[1];
   }
+}
+
+interface SnapshotNode {
+  index: number;
+  nativeRef: string;
+  role: string;
+  name: string | null;
+  line: string;
+}
+
+function parseSnapshotNodes(snapshot: string): SnapshotNode[] {
+  const nodes: SnapshotNode[] = [];
+  snapshot.split(/\r?\n/).forEach((rawLine, index) => {
+    const refMatch = rawLine.match(/\[ref=([A-Za-z0-9_-]+)\]/);
+    const roleMatch = rawLine.match(/^\s*-\s+([a-z][a-z0-9_-]*)\b/i);
+    if (!refMatch?.[1] || !roleMatch?.[1]) return;
+    const normalized = rawLine
+      .replace(/^(\s*)-\s*/, "$1- ")
+      .trimEnd();
+    nodes.push({
+      index,
+      nativeRef: refMatch[1],
+      role: roleMatch[1].toLowerCase(),
+      name: parseAccessibleName(rawLine),
+      line: normalized,
+    });
+  });
+  return nodes;
+}
+
+function isInteractiveNode(node: SnapshotNode): boolean {
+  return (
+    !STRUCTURAL_CONTEXT_ROLES.has(node.role)
+    && (
+      INTERACTIVE_ROLES.has(node.role)
+      || node.line.includes("[cursor=pointer]")
+    )
+  );
+}
+
+function stripNativeSnapshotRefs(line: string): string {
+  return line.replace(/\s*\[ref=[A-Za-z0-9_-]+\]/g, "");
 }
 
 function redactLineValue(line: string, ref: string): string {

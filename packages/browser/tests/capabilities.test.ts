@@ -7,7 +7,11 @@ import {
 
 const expectedNetwork = {
   schemes: ["http", "https"],
-  urlCredentials: "blocked",
+  urlCredentials: {
+    policyCheckedRequests: "blocked",
+    redirectHops: "browser",
+  },
+  redirectRevalidation: false,
   connectionAddressPinning: false,
 } as const;
 
@@ -15,7 +19,7 @@ describe("browser capabilities", () => {
   test("publishes a public, process-fixed authority profile by default", () => {
     const capabilities = resolveBrowserCapabilities();
 
-    expect(BROWSER_CAPABILITIES_SCHEMA).toBe("agent-browser-capabilities/0.2");
+    expect(BROWSER_CAPABILITIES_SCHEMA).toBe("agent-browser-capabilities/0.3");
     expect(capabilities).toMatchObject({
       schema: BROWSER_CAPABILITIES_SCHEMA,
       authority: {
@@ -164,6 +168,7 @@ describe("browser capabilities", () => {
     expect(Object.isFrozen(capabilities.authority)).toBe(true);
     expect(Object.isFrozen(capabilities.network)).toBe(true);
     expect(Object.isFrozen(capabilities.network.schemes)).toBe(true);
+    expect(Object.isFrozen(capabilities.network.urlCredentials)).toBe(true);
     expect(Object.isFrozen(capabilities.runtime)).toBe(true);
     expect(Object.isFrozen(capabilities.features)).toBe(true);
     expect(capabilities.runtime.profile).toBe("dedicated_persistent");

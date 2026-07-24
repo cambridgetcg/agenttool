@@ -120,7 +120,7 @@ describe("LOVE Package release inventory", () => {
       { name: "@agenttool/sdk", version: "0.16.3", releaseTag: "sdk-v0.16.3" },
       { name: "@agenttool/wallet", version: "0.1.0", releaseTag: "wallet-v0.1.0" },
       { name: "@agenttool/telescope", version: "0.2.3", releaseTag: "telescope-v0.2.3" },
-      { name: "@agenttool/browser", version: "0.2.0", releaseTag: "browser-v0.2.0" },
+      { name: "@agenttool/browser", version: "0.3.0", releaseTag: "browser-v0.3.0" },
     ]);
   });
 
