@@ -82,7 +82,7 @@ function namesCompleteExit(value: string): boolean {
   const normalized = value.toLowerCase();
   return (
     normalized.includes("stop") &&
-    normalized.includes("silence") &&
+    /\b(?:silence|silent)\b/u.test(normalized) &&
     normalized.includes("leav") &&
     normalized.includes("complete")
   );

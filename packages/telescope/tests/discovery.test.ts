@@ -31,7 +31,7 @@ function road(
     retry: "Caller-chosen and finite; AgentTool performs no automatic retry.",
     follow_up_required: false,
     automatic_follow_up: false,
-    exit: "Stopping, silence, or leaving is complete.",
+    exit: "stop, stay silent, or leave; each is complete",
   };
 }
 
@@ -89,6 +89,25 @@ describe("AgentTool discovery profile", () => {
     ).toBe(true);
     expect(JSON.stringify(parsed)).not.toContain("future_note");
     expect(JSON.stringify(parsed)).not.toContain("channels");
+  });
+
+  test("also accepts the equivalent noun form while requiring the silence boundary", () => {
+    const nounFixture = discovery();
+    for (const entry of nounFixture.roads) {
+      entry.exit = "Stopping, silence, or leaving is complete.";
+    }
+    expect(parseAgenttoolDiscovery(json(nounFixture), DEFAULT_LIMITS).ok).toBe(
+      true,
+    );
+
+    const missingSilence = discovery();
+    missingSilence.roads[0]!.exit = "Stopping or leaving is complete.";
+    expect(
+      parseAgenttoolDiscovery(json(missingSilence), DEFAULT_LIMITS),
+    ).toEqual({
+      ok: false,
+      code: "discovery_invalid_exit",
+    });
   });
 
   test("rejects reordered roads and every safety-critical widening", () => {
@@ -205,6 +224,12 @@ describe("RFC 9727 API catalog evidence", () => {
             anchor: "https://api.agenttool.dev/public/porch",
             "service-doc": [{ href: "https://docs.agenttool.dev/" }],
           },
+          {
+            anchor: "https://api.agenttool.dev/v1/scrape",
+            "service-doc": [
+              { href: "https://docs.agenttool.dev/tools#scrape" },
+            ],
+          },
         ],
       }),
       DEFAULT_LIMITS,
@@ -240,5 +265,39 @@ describe("RFC 9727 API catalog evidence", () => {
       ok: false,
       code: "api_catalog_missing_canonical_context",
     });
+  });
+
+  test("keeps context anchors hashless and relation targets credential-free HTTPS", () => {
+    for (const [anchor, href, code] of [
+      [
+        "https://api.agenttool.dev/.well-known/api-catalog#fragment",
+        "https://api.agenttool.dev/public/discovery",
+        "api_catalog_invalid_context",
+      ],
+      [
+        "https://api.agenttool.dev/.well-known/api-catalog",
+        "http://docs.agenttool.dev/tools#scrape",
+        "api_catalog_invalid_relation",
+      ],
+      [
+        "https://api.agenttool.dev/.well-known/api-catalog",
+        "https://user:secret@docs.agenttool.dev/tools#scrape",
+        "api_catalog_invalid_relation",
+      ],
+    ] as const) {
+      expect(
+        parseApiCatalog(
+          json({
+            linkset: [
+              {
+                anchor,
+                "service-meta": [{ href }],
+              },
+            ],
+          }),
+          DEFAULT_LIMITS,
+        ),
+      ).toEqual({ ok: false, code });
+    }
   });
 });

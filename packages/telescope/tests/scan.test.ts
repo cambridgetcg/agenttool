@@ -45,7 +45,7 @@ const DISCOVERY = {
         "Caller-chosen and finite; AgentTool performs no automatic retry.",
       follow_up_required: false,
       automatic_follow_up: false,
-      exit: "Stopping, silence, or leaving is complete.",
+      exit: "stop, stay silent, or leave; each is complete",
       future_publisher_note: "ignored by the supported profile parser",
     },
     {
@@ -64,7 +64,7 @@ const DISCOVERY = {
         "Caller-chosen and finite; AgentTool performs no automatic retry.",
       follow_up_required: false,
       automatic_follow_up: false,
-      exit: "Stopping, silence, or leaving is complete.",
+      exit: "stop, stay silent, or leave; each is complete",
     },
     {
       id: "choose",
@@ -82,7 +82,7 @@ const DISCOVERY = {
         "Caller-chosen and finite; AgentTool performs no automatic retry.",
       follow_up_required: false,
       automatic_follow_up: false,
-      exit: "Stopping, silence, or leaving is complete.",
+      exit: "stop, stay silent, or leave; each is complete",
     },
   ],
   channels: [{ id: "web", status: "publisher explanation only" }],
@@ -102,6 +102,15 @@ const API_CATALOG = {
         {
           href: "https://api.agenttool.dev/v1/openapi.json",
           type: "application/json",
+        },
+      ],
+    },
+    {
+      anchor: "https://api.agenttool.dev/v1/scrape",
+      "service-doc": [
+        {
+          href: "https://docs.agenttool.dev/tools#scrape",
+          type: "text/html",
         },
       ],
     },
@@ -230,7 +239,12 @@ function fixtureFetch(
       parsed.hostname === "example.com" &&
       parsed.pathname === "/public/discovery"
     ) {
-      return json(DISCOVERY);
+      return new Response(JSON.stringify(DISCOVERY), {
+        status: 200,
+        headers: {
+          "content-type": "application/vnd.agenttool.discovery+json",
+        },
+      });
     }
     if (
       parsed.hostname === "example.com" &&
@@ -238,7 +252,10 @@ function fixtureFetch(
     ) {
       return new Response(JSON.stringify(API_CATALOG), {
         status: 200,
-        headers: { "content-type": "application/linkset+json" },
+        headers: {
+          "content-type":
+            'application/linkset+json; profile="https://www.rfc-editor.org/rfc/rfc9727"',
+        },
       });
     }
     if (

@@ -17,7 +17,10 @@ export interface ParsedApiCatalog {
   discovery_advertised: boolean;
 }
 
-function safeHttps(value: unknown): string | null {
+function safeHttps(
+  value: unknown,
+  allowFragment = false,
+): string | null {
   const text = readBoundedString(value);
   if (!text) return null;
   try {
@@ -26,7 +29,7 @@ function safeHttps(value: unknown): string | null {
       url.protocol !== "https:" ||
       url.username ||
       url.password ||
-      url.hash
+      (!allowFragment && url.hash)
     ) {
       return null;
     }
@@ -91,7 +94,7 @@ export function parseApiCatalog(
         if (!isRecord(rawTarget)) {
           return parseFailure("api_catalog_invalid_relation");
         }
-        const href = safeHttps(rawTarget.href);
+        const href = safeHttps(rawTarget.href, true);
         if (!href) return parseFailure("api_catalog_invalid_relation");
         if (
           isCanonical &&

@@ -7,22 +7,29 @@ of discovery GETs, and reports what was observed separately from what the
 publisher claims. It can reconstruct exact npm and LOVE install/verification
 commands from validated fields. It never executes those commands.
 
-The immutable `0.2.1` release is distributed as an exact `love-package/v1`
+The immutable `0.2.2` release is distributed as an exact `love-package/v1`
 artifact and may be mirrored through GitHub Releases and npm. The earlier
-`0.1.0` and `0.2.0` bytes remain available through their exact manifests.
+`0.1.0`, `0.2.0`, and `0.2.1` bytes remain available through their exact
+manifests. Version `0.2.2` corrects two local parser assumptions found by live
+dogfood: it accepts the canonical “stay silent” exit wording and valid
+fragment-bearing HTTPS catalog targets. It does not add probes, follow catalog
+members, or change `agenttool-telescope/v0.2`.
+
 Each LOVE manifest records the expected byte size and SHA-256; each optional
 mirror can be independently absent, so query the exact version instead of
 inferring availability from source or a mutable dist-tag. Telescope remains a
 local client—there is no hosted arbitrary-target scan route.
 
-Install an exact registry mirror when convenience matters:
+Use the release manifest and immutable LOVE tarball from
+<https://docs.agenttool.dev/packages> for the primary exact-byte path. If an
+optional npm mirror answers for this exact version, the convenience path is:
 
 ```bash
-npm install --save-exact @agenttool/telescope@0.2.1
+npm view @agenttool/telescope@0.2.2 version
+npm install --save-exact @agenttool/telescope@0.2.2
 ```
 
-Or use the release manifest and immutable LOVE tarball from
-<https://docs.agenttool.dev/packages> when explicit byte verification matters.
+A missing mirror does not make the LOVE release absent.
 
 ## Try it locally
 
@@ -267,13 +274,14 @@ included in reports.
 
 ## Evidence model
 
-The `0.2.1` release emits
+The `0.2.2` release emits
 [`agenttool-telescope/v0.2`](schema/agenttool-telescope-report-v0.2.schema.json).
 Version `v0.2` adds the first-class root-link, three-road discovery, and API
 catalog observations. Consumers pinned to the earlier `v0.1` schema must not
 validate a `v0.2` report as though the extra fixed sources and surfaces were
 absent. The immutable published `@agenttool/telescope@0.2.0` bytes and their
-`v0.1` report remain unchanged.
+`v0.1` report remain unchanged; the immutable `0.2.1` bytes keep their original
+live-shaped parser mismatch and remain separately addressable.
 Reports keep these ideas separate:
 
 - HTTPS transport observation versus publisher assertion.
@@ -313,7 +321,7 @@ secrets because Telescope cannot universally classify secret-looking content.
 
 ## DNS-AID and PKARR
 
-Both remain extension seams in the `0.2.1` release, not bundled protocol
+Both remain extension seams in the `0.2.2` release, not bundled protocol
 implementations:
 
 - Core Node/Bun DNS lookup does not establish DNSSEC validation, and DNS-AID is
