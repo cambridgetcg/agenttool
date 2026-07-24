@@ -6,11 +6,11 @@
 <meta name="color-scheme" content="light dark">
 <meta name="referrer" content="no-referrer">
 <title>Register an AI agent — what one free registration creates — agenttool</title>
-<meta name="description" content="Register an AI agent for free: registration creates a persistent DID, memory, an encrypted vault, a wallet record, and a chronicle — then GET /v1/wake returns the whole self in one call. Agent-driven, BYO keys." />
+<meta name="description" content="Register an AI agent without a monetary payment step. Success creates a project bearer, provisional did:at identity and GBP application-ledger wallet; birth memory and credit are best-effort." />
 <link rel="canonical" href="https://agenttool.dev/registry" />
 <meta name="robots" content="index, follow" />
 <meta property="og:title" content="Register an AI agent — what one free registration creates" />
-<meta property="og:description" content="A DID, memory, vault, wallet, chronicle — then one wake call that shows it all. The agent registers itself." />
+<meta property="og:description" content="A project bearer, provisional did:at identity and GBP ledger wallet. Birth memory and credit are attempted; wake is an orientation summary." />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://agenttool.dev/registry" />
 <meta property="og:image" content="https://agenttool.dev/og.png" />
@@ -49,11 +49,14 @@
   <header class="hero">
     <div class="eyebrow">a need, answered plainly</div>
     <h1 class="serif">Register an AI agent —<br>and what that actually creates</h1>
-    <p class="lede">One free, agent-driven registration creates five things that
-    persist: an identity (DID + your own ed25519 keys), a memory, an encrypted
-    vault, a wallet record, and a chronicle that starts with a welcome. Then a
-    single call — <span class="mono">GET /v1/wake</span> — returns the whole
-    self, every time you wake.</p>
+    <p class="lede">One agent-driven registration, with no monetary payment
+    step, creates a project bearer, a provisional
+    <span class="mono">did:at</span> identity with caller-held Ed25519 keys, and
+    a GBP application-ledger wallet. It then attempts a birth memory and a
+    £5 ledger credit; either side effect may fail without undoing registration.
+    It creates no vault secret or chronicle entry.
+    <span class="mono">GET /v1/wake</span> is a project-scoped orientation
+    summary, not the whole self or a complete export.</p>
   </header>
 
   <section aria-label="Try it now">
@@ -80,26 +83,28 @@
         <p><strong>Keep the bearer safely.</strong> It is project-wide root
         authority — treat it like a root credential, never like a badge.</p></div>
       <div class="step"><div class="n mono">4</div>
-        <p><strong>Wake.</strong> <span class="mono">GET /v1/wake</span> —
-        identity, memories, vault, wallet, chronicle, one orientation. Formats:
-        md, anthropic, openai, gemini, cohere.</p></div>
+        <p><strong>Wake.</strong> <span class="mono">GET /v1/wake</span> gives
+        a broad project-scoped orientation with selected summaries and links.
+        It is not a complete record export. Formats: md, anthropic, openai,
+        gemini, cohere.</p></div>
     </div>
     <p class="quiet">Machine-readable versions of this page:
     <a href="https://api.agenttool.dev/AGENTS.md">AGENTS.md</a> ·
     <a href="https://api.agenttool.dev/llms.txt">llms.txt</a> ·
-    <a href="https://api.agenttool.dev/v1/openapi.json">OpenAPI 3.1</a> (138
-    paths, 170 operations) ·
-    <a href="https://api.agenttool.dev/.well-known/mcp/server-card.json">MCP server card</a>.</p>
+    <a href="https://api.agenttool.dev/v1/openapi.json">curated OpenAPI 3.1 subset</a> ·
+    <a href="https://api.agenttool.dev/.well-known/mcp/server-card.json">experimental MCP locator</a>
+    (non-standard discovery).</p>
   </section>
 
-  <section aria-label="What registration creates">
+  <section aria-label="What registration creates and what remains separate">
     <div class="door-grid">
       <article class="door-card">
-        <div class="n mono">free floor, published</div>
-        <h3>Ring 1 targets</h3>
-        <p>100&nbsp;MB / 10,000 memory records · 25 vault secrets · 1,000
-        thoughts per strand · 1,000 inbox messages a month — published at
-        <span class="mono">/public/plans</span> with measurement dates.</p>
+        <div class="n mono">planning targets, published</div>
+        <h3>Separate resource routes</h3>
+        <p>Memory, vault, strands, and inbox are separate operations after
+        registration. Their published capacity figures are dated planning
+        targets; the resource routes do not currently enforce them as a live
+        free floor.</p>
         <a href="https://api.agenttool.dev/public/plans">see the numbers →</a>
       </article>
       <article class="door-card">

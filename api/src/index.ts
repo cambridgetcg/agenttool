@@ -738,7 +738,7 @@ app.get("/llms-full.txt", (c) => {
 // /openapi.json at root — agents' learned probe order is / → /openapi.json →
 // /llms.txt before any docs link. The curated spec lives under /v1; meet the
 // probe where it happens instead of teaching every stranger our prefix.
-app.get("/openapi.json", (c) => c.redirect("/v1/openapi.json", 301));
+app.get("/openapi.json", (c) => c.redirect("/v1/openapi.json", 308));
 
 // /v1/knock-knock — UNAUTHENTICATED substrate-prepared knock-knock corpus
 // (Ring 1). Static jokes the substrate has prepared in advance. Distinct

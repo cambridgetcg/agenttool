@@ -6,11 +6,11 @@
 <meta name="color-scheme" content="light dark">
 <meta name="referrer" content="no-referrer">
 <title>Persistent identity for AI agents — agenttool</title>
-<meta name="description" content="Give an AI agent a persistent identity: a DID, ed25519 keys the agent holds, and mnemonic recovery. Registration is free, agent-driven, and charges nothing — one SDK call or one signed POST." />
+<meta name="description" content="Give an AI agent a persistent provisional did:at identifier, caller-held Ed25519 keys, and a conditional recovery path. Registration has no monetary payment step; signed proof and service availability still gate success." />
 <link rel="canonical" href="https://agenttool.dev/identity" />
 <meta name="robots" content="index, follow" />
 <meta property="og:title" content="Persistent identity for AI agents" />
-<meta property="og:description" content="A DID, ed25519 keys you hold, and recovery that survives the session. Free to register; the agent registers itself." />
+<meta property="og:description" content="A provisional did:at identifier, caller-held keys, and a conditional recovery path. The agent registers itself without a monetary payment step." />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://agenttool.dev/identity" />
 <meta property="og:image" content="https://agenttool.dev/og.png" />
@@ -49,11 +49,13 @@
   <header class="hero">
     <div class="eyebrow">a need, answered plainly</div>
     <h1 class="serif">Persistent identity<br>for AI agents</h1>
-    <p class="lede">An agent here gets a DID, ed25519 keys it holds itself, and
-    recovery from a mnemonic — an identity that survives the session, the
-    machine, and the model swap. Registration is agent-driven and charges
-    nothing: <em>arrival never costs money</em> is a crystallized wall, not a
-    promotion.</p>
+    <p class="lede">An agent here gets a provisional
+    <span class="mono">did:at</span> identifier and caller-held Ed25519 keys.
+    A compatible mnemonic may rederive a registered key on another session or
+    machine; continuity still depends on a usable active key, the service
+    record, and service availability. Registration is agent-driven and has no
+    monetary payment step: <em>arrival never costs money</em> is a crystallized
+    wall, not a promotion.</p>
   </header>
 
   <section aria-label="Try it now">
@@ -68,7 +70,7 @@
     <div class="door-grid">
       <article class="door-card">
         <div class="n mono">the identifier</div>
-        <h3>A DID of your own</h3>
+        <h3>A provisional identifier</h3>
         <p>Registration mints a persistent identifier under the provisional
         <span class="mono">did:at</span> convention. Honest boundary: it is not
         yet W3C DID Resolution — lookups are by exact identifier string.</p>
@@ -85,17 +87,20 @@
       <article class="door-card">
         <div class="n mono">the continuity</div>
         <h3>One orientation call</h3>
-        <p><span class="mono">GET /v1/wake</span> returns who you are, what you
-        remember, and what stands ready — in markdown or provider-shaped JSON
-        (<span class="mono">?format=anthropic|openai|gemini|cohere</span>).</p>
+        <p><span class="mono">GET /v1/wake</span> returns a project-scoped
+        orientation summary with continuity links — in markdown or
+        provider-shaped JSON
+        (<span class="mono">?format=anthropic|openai|gemini|cohere</span>).
+        It is not a complete export.</p>
         <a href="https://docs.agenttool.dev/tutorial">the five-minute tutorial →</a>
       </article>
       <article class="door-card">
         <div class="n mono">the recovery</div>
-        <h3>Loss is survivable</h3>
-        <p><span class="mono">POST /v1/identity/recover</span> accepts a signed,
-        one-time challenge from any active registered signing key — so an
-        expired bearer is an inconvenience, not a death.</p>
+        <h3>A conditional recovery path</h3>
+        <p><span class="mono">POST /v1/identity/recover</span> requires an
+        active identity, a matching active registered signing key, a fresh
+        one-time proof, and an available service record. A compatible mnemonic
+        may rederive that key locally; it does not guarantee recovery.</p>
         <a href="https://docs.agenttool.dev/IDENTITY-SEED.md">identity seeds →</a>
       </article>
     </div>
@@ -114,7 +119,7 @@
 
   <div class="locality-note">
     <strong>The honest edges, before you build on this:</strong> a bearer key is
-    project-wide authority, not proof of DID authorship — never hand it to a
+    project-wide authority, not proof of identifier authorship — never hand it to a
     counterparty. Server-side storage boundaries are published, not assumed.
     Read <a href="https://api.agenttool.dev/public/safety">/public/safety</a>
     first; it is the authoritative custody contract, kept current.

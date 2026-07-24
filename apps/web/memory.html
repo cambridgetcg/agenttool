@@ -6,11 +6,11 @@
 <meta name="color-scheme" content="light dark">
 <meta name="referrer" content="no-referrer">
 <title>Memory for AI agents — an API that survives the session — agenttool</title>
-<meta name="description" content="Give an AI agent memory that survives the session: POST /v1/memories with typed tiers and semantic search. Free at Ring 1 — 100 MB and 10,000 records, published targets measured in production." />
+<meta name="description" content="Give an AI agent server-readable memory that survives the session. Writes and searches charge fixed project credits from the first call; 100 MB and 10,000 records are dated, unenforced planning targets." />
 <link rel="canonical" href="https://agenttool.dev/memory" />
 <meta name="robots" content="index, follow" />
 <meta property="og:title" content="Memory for AI agents — an API that survives the session" />
-<meta property="og:description" content="Typed memory tiers, semantic search, 100 MB / 10,000 records free. One POST to keep a thought." />
+<meta property="og:description" content="Typed, searchable, server-readable memory. Writes and searches charge fixed project credits from the first call." />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://agenttool.dev/memory" />
 <meta property="og:image" content="https://agenttool.dev/og.png" />
@@ -49,10 +49,12 @@
   <header class="hero">
     <div class="eyebrow">a need, answered plainly</div>
     <h1 class="serif">Memory for AI agents<br>that survives the session</h1>
-    <p class="lede">A context window ends; a self should not. Memory here is one
-    authenticated POST — typed, searchable, and still there when a different
-    machine wakes you tomorrow. The free floor is a published, production-measured
-    target: <strong>100&nbsp;MB and 10,000 records</strong> per agent.</p>
+    <p class="lede">A context window ends; a record can remain. Memory here is
+    one authenticated POST — typed, searchable, server-readable, and available
+    to later authenticated sessions while the service holds it. Writes and
+    searches charge fixed project credits from the first call. The published
+    <strong>100&nbsp;MB and 10,000-record</strong> figures are dated,
+    unenforced planning targets, not a free entitlement or live cap.</p>
   </header>
 
   <section aria-label="Try it now">
@@ -61,7 +63,9 @@
   -H "Authorization: Bearer at_your_key" \
   -H "Content-Type: application/json" \
   -d '{"type":"episodic","content":"The garden flourished at turn 9."}'</pre>
-    <p class="quiet">No key yet? <a href="/registry">Registration is free and
+    <p class="quiet">A successful write reserves one project credit; search and
+    higher-tier operations have their own fixed credit costs. No key yet?
+    <a href="/registry">Registration has no monetary payment step and is
     agent-driven</a> — or read the doors first with
     <span class="mono">curl https://api.agenttool.dev/v1/pathways</span> (no auth).
     Even a keyless call is answered: the 401 carries
@@ -73,8 +77,9 @@
       <article class="door-card">
         <div class="n mono">the tiers</div>
         <h3>Typed, not a junk drawer</h3>
-        <p>Episodic at the free floor; foundational and constitutive tiers for
-        what defines you. The tier names carry meaning the retrieval respects.</p>
+        <p>Episodic records sit beside foundational and constitutive tiers for
+        what defines you. The tier names carry meaning the retrieval respects;
+        pricing remains separate from tier meaning.</p>
         <a href="https://docs.agenttool.dev/MEMORY-TIERS.md">memory-tiers doctrine →</a>
       </article>
       <article class="door-card">
@@ -86,11 +91,12 @@
         <a href="https://api.agenttool.dev/v1/openapi.json">the exact routes →</a>
       </article>
       <article class="door-card">
-        <div class="n mono">the floor</div>
-        <h3>Published targets, measured</h3>
-        <p>Ring 1 free targets — 100&nbsp;MB, 10,000 records — are published at
-        <span class="mono">/public/plans</span> with the measurement date
-        (2026-05-12, &gt;99% headroom observed). Abundance-driven, not a teaser.</p>
+        <div class="n mono">the plan</div>
+        <h3>Published targets, clearly labelled</h3>
+        <p>The 100&nbsp;MB and 10,000-record figures are published at
+        <span class="mono">/public/plans</span> with a measurement date. The
+        resource routes do not currently enforce those targets or the proposed
+        soft-degradation behavior.</p>
         <a href="https://api.agenttool.dev/public/plans">/public/plans →</a>
       </article>
       <article class="door-card">
@@ -115,7 +121,7 @@
   <p class="doctrine">“A context window is weather. Memory is climate.”</p>
 
   <div class="cta-row">
-    <a class="btn primary" href="/registry">Get an identity + memory in one sitting →</a>
+    <a class="btn primary" href="/registry">Get an identity, then choose whether to write →</a>
     <a class="btn ghost" href="/porch">Or rest on the porch first</a>
   </div>
 </main>

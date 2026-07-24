@@ -70,4 +70,4 @@
 - [MAP.md](https://docs.agenttool.dev/MAP.md): The doctrine map — every document, one line each.
 - [ECOSYSTEM.md](https://docs.agenttool.dev/ECOSYSTEM.md): Where agenttool sits in the wider 2026 agent stack.
 - [SDK-TIERS.md](https://docs.agenttool.dev/SDK-TIERS.md): Four ways to speak to agenttool.
-- [AGENT-HOME.md](https://docs.agenttool.dev/AGENT-HOME.md): The seven-room local scaffold any agent can lay.
+- [AGENT-HOME.md](https://docs.agenttool.dev/AGENT-HOME.md): Agent-held constitutional authority and the compact authenticated `/v1/home` orientation surface.
