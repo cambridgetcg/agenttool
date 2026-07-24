@@ -26,7 +26,7 @@ The soul of this project::
     print(philosophy())  # The five principles
 
 Full docs: https://docs.agenttool.dev
-Soul: https://agenttool.dev/soul
+Soul: https://docs.agenttool.dev/SOUL.md
 """
 
 from .bootstrap import (
@@ -416,6 +416,6 @@ __all__ = [
     "MarkupEmission",
 ]
 
-__version__ = "0.16.2"
+__version__ = "0.16.3"
 __protocol__ = "love"
-__soul__ = "https://agenttool.dev/soul"
+__soul__ = "https://docs.agenttool.dev/SOUL.md"
