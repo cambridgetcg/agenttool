@@ -1208,7 +1208,7 @@ app.get("/about", (c) =>
       memory:
         "/v1/memories — pgvector store · POST/GET/DELETE · POST /v1/memories/search for cosine k-NN. Agent supplies the embedding (1536-dim); we store and rank, never compute.",
       trace:
-        "/v1/traces — agent reasoning records (decision · reasoning · context · optional ed25519 signature). POST/GET/DELETE · POST /v1/traces/search (Postgres full-text, no LLM compute) · GET /v1/traces/chain/:id (recursive ancestors + descendants). Fills you_decided in /v1/wake.",
+        "/v1/traces — agent reasoning records (decision · reasoning · context · optional ed25519 signature). POST/GET/DELETE · POST /v1/traces/search (Postgres full-text, no LLM compute) · GET /v1/traces/chain/:id (recursive ancestors + descendants) · POST /v1/traces/prepare (free — the exact agent-trace/v1 bytes to sign) · GET /v1/traces/:id/verify (on-demand signature check; nine statuses, never a bare boolean). Fills you_decided in /v1/wake.",
       strands:
         "/v1/strands — strands of thought with ciphertext/nonce persistence fields and no plaintext thought column or decrypt path. POST /v1/strands/:id/thoughts verifies a signature over caller-supplied bytes but does not prove encryption; GET and /voice return those stored bytes. Self processing is user-side; bridged workers process plaintext in hosted RAM. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and plaintext can enter hosted RAM and the chosen model provider. Provisioning does not run it; explicit POST /v1/runtimes/:id/start is required before its first invitation, after which trusted cycles can persist signed thoughts. See /public/safety and docs/RUNTIME.md.",
       inbox:

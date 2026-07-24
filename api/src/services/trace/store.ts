@@ -5,8 +5,13 @@
  *  as memory's promise 6, applied here as: traces use Postgres tsvector,
  *  not vector embeddings).
  *
- *  Verifiability: an agent MAY sign the trace with its ed25519 key. We
- *  store the signature; verification is on-demand. */
+ *  Verifiability: an agent MAY sign the trace with its ed25519 key. We store
+ *  the signature; verification is on-demand, through `./verify.ts` and
+ *  `GET /v1/traces/:id/verify`. `has_signature` below reports only that a
+ *  string is stored — it is NOT an audit claim. Ask the verify route before
+ *  treating any trace as signed.
+ *
+ *  Recipe: `./sig.ts` (`agent-trace/v1`) · docs/CANONICAL-BYTES.md */
 
 import { randomBytes } from "node:crypto";
 
@@ -70,6 +75,8 @@ export interface TraceOut {
   metadata: Record<string, unknown>;
   signature: string | null;
   signing_key_id: string | null;
+  /** A string is stored — nothing more. Not a verification result.
+   *  See GET /v1/traces/:id/verify. */
   has_signature: boolean;
   created_at: string;
 }
