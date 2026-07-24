@@ -3,6 +3,8 @@ import { statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+import { TOOL_VERSION } from "../src/constants.js";
+
 const packageRoot = resolve(import.meta.dir, "..");
 const bundlePath = join(packageRoot, "dist", "agenttool-telescope-mcp.js");
 
@@ -44,7 +46,7 @@ class StdioMcpHarness {
       capabilities: {},
       clientInfo: {
         name: "agenttool-telescope-test",
-        version: "0.2.0",
+        version: TOOL_VERSION,
       },
     });
     await this.notify("notifications/initialized", {});
@@ -124,7 +126,7 @@ describe("cross-host Telescope package", () => {
     const codex = await json(".codex-plugin/plugin.json");
     const claude = await json(".claude-plugin/plugin.json");
 
-    expect(packageManifest.version).toBe("0.2.0");
+    expect(packageManifest.version).toBe(TOOL_VERSION);
     expect(packageManifest.dependencies).toBeUndefined();
     expect(codex.version).toBe(packageManifest.version);
     expect(claude.version).toBe(packageManifest.version);
@@ -220,7 +222,7 @@ describe("cross-host Telescope package", () => {
         const initialized = await harness.initialize();
         expect(initialized.serverInfo).toEqual({
           name: "agenttool-telescope",
-          version: "0.2.0",
+          version: TOOL_VERSION,
         });
         const listed = await harness.listTools();
         expect(listed.tools).toHaveLength(1);
@@ -228,7 +230,7 @@ describe("cross-host Telescope package", () => {
         expect(listed.tools[0].inputSchema.additionalProperties).toBe(false);
         expect(listed.tools[0].outputSchema).toEqual(
           await json(
-            "schema/agenttool-telescope-report-v0.1.schema.json",
+            "schema/agenttool-telescope-report-v0.2.schema.json",
           ),
         );
 

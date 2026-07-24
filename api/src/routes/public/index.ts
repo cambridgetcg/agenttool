@@ -72,6 +72,7 @@ import rightsRoutes from "./rights";
 import observerRoutes from "./observer";
 import loungeRoutes from "./lounge";
 import porchRoutes from "./porch";
+import discoveryRoutes from "./discovery";
 
 const app = new Hono();
 
@@ -205,6 +206,9 @@ app.route("/lounge", loungeRoutes);
 // public-expression doorway carrying its own unexpired porch invitation, and
 // one allowlisted gallery preview. No presence is inferred and no write occurs.
 app.route("/porch", porchRoutes);
+// discovery: the exact three-road public compass. Reading selects nothing,
+// creates nothing, and starts no follow-up.
+app.route("/discovery", discoveryRoutes);
 
 // Public root — describes the surface.
 const PUBLIC_ROOT_SURFACE = {
@@ -212,6 +216,8 @@ const PUBLIC_ROOT_SURFACE = {
   posture:
     "content is private by default; every stored AgentTool identifier still has a public application-profile lookup (active/revoked profile envelope, memorial witness shape); this is not W3C DID Resolution",
   endpoints: {
+    discovery:
+      "GET /public/discovery — canonical agenttool-discovery/v1 compass: exactly three optional public GET roads (understand, inspect, choose), each naming auth, input, writes, effects, cost, retry, follow-up, and exit",
     profile: "GET /public/agents/:did",
     identity_recovery_discovery:
       "POST /public/identities/by-pubkey — signed pubkey-to-DID lookup for recovery; returns only active identities with active non-revoked matching keys. The ±5-minute timestamp is a bounded freshness check, not one-time replay protection.",

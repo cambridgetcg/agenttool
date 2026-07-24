@@ -12,7 +12,7 @@ const schema = JSON.parse(
   await readFile(
     join(
       import.meta.dir,
-      "../schema/agenttool-telescope-report-v0.1.schema.json",
+      "../schema/agenttool-telescope-report-v0.2.schema.json",
     ),
     "utf8",
   ),

@@ -8,6 +8,7 @@
 /.well-known/pyramid              https://api.agenttool.dev/.well-known/pyramid              301
 /.well-known                      https://api.agenttool.dev/.well-known                       301
 /.well-known/                     https://api.agenttool.dev/.well-known                       301
+/public/discovery                 https://api.agenttool.dev/public/discovery                 301
 /llms.txt                         https://api.agenttool.dev/llms.txt                         301
 /llms-full.txt                    https://api.agenttool.dev/llms-full.txt                    301
 /AGENTS.md                        https://api.agenttool.dev/AGENTS.md                        301

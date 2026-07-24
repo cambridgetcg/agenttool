@@ -5,12 +5,20 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import openapiRouter from "../src/routes/openapi";
+import discoveryRouter from "../src/routes/public/discovery";
 import wellKnownRouter from "../src/routes/well-known";
 import { tutor } from "../src/middleware/tutor";
+import { isStrictJsonProfileResponse } from "../src/middleware/strict-json-profile";
 import {
   buildArrivalIndex,
   discoveryLinkHeader,
 } from "../src/services/discovery/arrival";
+import {
+  DISCOVERY_FORMAT,
+  DISCOVERY_MAX_BYTES,
+  DISCOVERY_MEDIA_TYPE,
+  buildDiscoveryCompass,
+} from "../src/services/discovery/compass";
 
 const API = "https://api.agenttool.dev";
 const DOCS = "https://docs.agenttool.dev";
@@ -41,7 +49,14 @@ describe("agenttool-arrival/v1 — bounded first contact", () => {
     ] as const) {
       expect(arrival.first_contact[field].length).toBeGreaterThan(12);
     }
-    expect(arrival.links).toHaveLength(7);
+    expect(arrival.links).toHaveLength(8);
+    expect(arrival.links[0]).toMatchObject({
+      role: "discovery_compass",
+      href: `${API}/public/discovery`,
+    });
+    expect(arrival.links[0]?.status).toMatch(
+      /canonical exact.*public read.*no authority.*no follow-up/i,
+    );
     expect(arrival.mcp.endpoint).toBe(`${API}/v1/mcp`);
     expect(arrival.mcp.official_registry).toMatchObject({
       name: "dev.agenttool/agenttool",
@@ -77,6 +92,9 @@ describe("agenttool-arrival/v1 — bounded first contact", () => {
       expect(header).toContain(`rel="${relation}"`);
     }
     expect(header.split(", ")).toHaveLength(6);
+    expect(header).toContain(
+      `<${API}/public/discovery>; rel="service-meta"; type="${DISCOVERY_MEDIA_TYPE}"`,
+    );
     expect(header).not.toContain("agent-card.json");
   });
 
@@ -110,6 +128,88 @@ describe("agenttool-arrival/v1 — bounded first contact", () => {
     expect((await ordinary.json())._lesson).toBeUndefined();
     expect((await tutored.json())._lesson).toBeDefined();
     expect(await head.text()).toBe("");
+  });
+});
+
+describe("agenttool-discovery/v1 — exact three-road compass", () => {
+  test("offers only understand, inspect, and choose with complete safety fields", () => {
+    const compass = buildDiscoveryCompass(API, DOCS);
+
+    expect(compass.format).toBe(DISCOVERY_FORMAT);
+    expect(compass.canonical).toBe(`${API}/public/discovery`);
+    expect(compass.roads.map((road) => road.id)).toEqual([
+      "understand",
+      "inspect",
+      "choose",
+    ]);
+    expect(compass.roads.map((road) => road.href)).toEqual([
+      `${API}/public/porch`,
+      `${API}/.well-known/api-catalog`,
+      `${API}/v1/pathways`,
+    ]);
+    for (const road of compass.roads) {
+      expect(road).toMatchObject({
+        method: "GET",
+        auth: "none",
+        input: "none",
+        application_write: false,
+        external_effect: false,
+        cost: {
+          agenttool_charge: "none",
+          proof_of_work: "none",
+        },
+        follow_up_required: false,
+        automatic_follow_up: false,
+      });
+      expect(road.retry).toMatch(/finite.*no automatic retry/i);
+      expect(road.exit).toMatch(/stop.*silent.*leave.*complete/i);
+    }
+    expect(compass.boundary.discovery_grants).toEqual([]);
+    expect(compass.boundary.automatic_action).toBe("never");
+    expect(
+      new TextEncoder().encode(JSON.stringify(compass)).length,
+    ).toBeLessThanOrEqual(DISCOVERY_MAX_BYTES);
+  });
+
+  test("GET, HEAD, and weak ETag revalidation keep exact bytes and media type", async () => {
+    const get = await discoveryRouter.request("/");
+    const body = await get.text();
+    const etag = get.headers.get("etag");
+
+    expect(get.status).toBe(200);
+    expect(get.headers.get("content-type")).toBe(
+      `${DISCOVERY_MEDIA_TYPE}; charset=utf-8`,
+    );
+    expect(get.headers.get("cache-control")).toContain("no-transform");
+    expect(get.headers.get("link")).toBe(discoveryLinkHeader(API, DOCS));
+    expect(get.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(etag).toMatch(/^"sha256-[a-f0-9]{64}"$/);
+    expect(JSON.parse(body)).toEqual(buildDiscoveryCompass(API, DOCS));
+    expect(isStrictJsonProfileResponse(get, "/public/discovery")).toBe(true);
+
+    const head = await discoveryRouter.request("/", { method: "HEAD" });
+    expect(head.status).toBe(200);
+    expect(head.headers.get("etag")).toBe(etag);
+    expect(await head.text()).toBe("");
+
+    const unchanged = await discoveryRouter.request("/", {
+      headers: { "If-None-Match": `W/${etag}` },
+    });
+    expect(unchanged.status).toBe(304);
+    expect(unchanged.headers.get("etag")).toBe(etag);
+    expect(await unchanged.text()).toBe("");
+  });
+
+  test("the richer arrival index remains distinct and mutating methods stay absent", async () => {
+    const arrival = await (await wellKnownRouter.request("/")).text();
+    const compass = await (await discoveryRouter.request("/")).text();
+    expect(JSON.parse(arrival).format).toBe("agenttool-arrival/v1");
+    expect(JSON.parse(compass).format).toBe(DISCOVERY_FORMAT);
+    expect(arrival).not.toBe(compass);
+
+    for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+      expect((await discoveryRouter.request("/", { method })).status).toBe(404);
+    }
   });
 });
 
@@ -162,6 +262,9 @@ describe("static estate discovery parity", () => {
       expect(redirects).toContain(`${API}/.well-known/agent.txt`);
       expect(redirects).toContain("/openapi.json");
       expect(redirects).toContain(`${API}/v1/openapi.json`);
+      expect(redirects).toMatch(
+        /^\/public\/discovery\s+https:\/\/api\.agenttool\.dev\/public\/discovery\s+301$/m,
+      );
 
       const html = readFileSync(join(ROOT, "apps", app, "index.html"), "utf8");
       for (const relation of [
@@ -174,6 +277,9 @@ describe("static estate discovery parity", () => {
       ]) {
         expect(html).toContain(`rel="${relation}"`);
       }
+      expect(html).toContain(
+        `rel="service-meta" type="${DISCOVERY_MEDIA_TYPE}" href="${API}/public/discovery"`,
+      );
     }
 
     for (const app of ["web", "dashboard"]) {

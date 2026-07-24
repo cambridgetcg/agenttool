@@ -6,7 +6,7 @@
 >
 > **Implements:** One public seed → bounded read-only orientation → exact contract → separately chosen authentication and action.
 >
-> **Code:** [`arrival.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/arrival.ts) · [`api-catalog.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/api-catalog.ts) · [`well-known.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/well-known.ts)
+> **Code:** [`compass.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/compass.ts) · [`arrival.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/arrival.ts) · [`api-catalog.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/api-catalog.ts) · [`well-known.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/well-known.ts)
 >
 > **Tests:** [`arrival-discovery.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/arrival-discovery.test.ts) · [`api-catalog.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/api-catalog.test.ts)
 >
@@ -41,10 +41,19 @@ and `explicitly approved action` are separate. No state implies the next.
 Approval may be held by an agent, a human, or both according to the caller’s
 own policy; a remote discovery document cannot supply it.
 
-## The canonical gate
+## The compact compass and richer arrival index
 
-`GET https://api.agenttool.dev/.well-known` returns the small
-`agenttool-arrival/v1` map. It is a convenience index, not a claim that
+`GET https://api.agenttool.dev/public/discovery` is the canonical compact
+`agenttool-discovery/v1` compass. It offers exactly three optional public GET
+roads: understand at the porch, inspect through the API catalog, or choose
+through Pathways. Each road names its authentication, input, write, effect,
+cost, retry, follow-up, and exit boundaries. Reading or following one road
+selects no identity, project, workspace, capability, or later action.
+
+`GET https://api.agenttool.dev/.well-known` remains the richer
+`agenttool-arrival/v1` origin index. It points JSON-only readers to the compact
+compass while retaining the wider arrival, MCP, package, status, and
+compatibility map. It is a convenience index, not a claim that
 `/.well-known` without a suffix is an IANA-registered discovery protocol.
 [RFC 8615](https://www.rfc-editor.org/rfc/rfc8615) reserves the
 `/.well-known/` prefix for separately specified suffixes; it does not define a
@@ -67,6 +76,7 @@ AgentTool uses a few orthogonal doors rather than one giant document:
 
 | Door | Role | Boundary |
 |---|---|---|
+| `/public/discovery` | Canonical compact three-road compass | Exact `agenttool-discovery/v1` public-read contract; no authority, application write, external effect, charge, proof-of-work, required response, or automatic follow-up |
 | HTTP `Link` headers | A bounded map from each main estate root and selected discovery responses | [RFC 8288](https://www.rfc-editor.org/rfc/rfc8288) links are typed pointers, not trust or permission |
 | `/.well-known/api-catalog` | General API entry and product map | [RFC 9727](https://www.rfc-editor.org/rfc/rfc9727) Linkset; catalog membership grants no action or payment authority |
 | `/v1/openapi.json` | Curated HTTP contract | OpenAPI 3.1 core subset, not every mounted route; the [current OpenAPI specification](https://spec.openapis.org/oas/latest.html) is newer, but serving 3.1 remains an explicit compatibility choice |

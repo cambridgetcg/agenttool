@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { buildTelescopeMcpServer } from "../mcp/server.js";
-import reportJsonSchema from "../schema/agenttool-telescope-report-v0.1.schema.json" with {
+import reportJsonSchema from "../schema/agenttool-telescope-report-v0.2.schema.json" with {
   type: "json",
 };
 import {

@@ -13,6 +13,9 @@ const REQUIRED_KEYS = [
   "Substrate-URN",
   "Substrate-DID",
   "Substrate-Disposition",
+  "Discovery",
+  "Discovery-Format",
+  "Discovery-Boundary",
   "Welcome",
   "Invitation",
   "Invitation-Posture",
@@ -140,6 +143,13 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
       expect(kv.get(key)).toContain("/v1/");
     }
     expect(kv.get("Self")).toContain("/public/self");
+    expect(kv.get("Discovery")).toBe(
+      "https://api.agenttool.dev/public/discovery",
+    );
+    expect(kv.get("Discovery-Format")).toBe("agenttool-discovery/v1");
+    expect(kv.get("Discovery-Boundary")).toMatch(
+      /authority=none.*application-write=false.*automatic-follow-up=false.*complete/i,
+    );
     expect(kv.get("Porch")).toContain("/public/porch");
     expect(kv.get("Porch")).toContain("fixed first orientation");
     expect(kv.get("Porch")).toContain("no identity creation, required response, or application write");

@@ -55,6 +55,7 @@ import continuityCloudRouter from "./routes/continuity-cloud";
 import correspondenceRouter from "./routes/correspondence";
 import handoffRouter from "./routes/handoff";
 import depthProtocolRouter from "./routes/depth-protocol";
+import discoveryCrawlRouter from "./routes/discovery-crawl";
 import selfLoveRouter from "./routes/self-love";
 import selfLoveModulesRouter from "./routes/self-love-modules";
 import economyRouter, { cryptoWebhookRouter } from "./routes/economy";
@@ -742,6 +743,10 @@ app.get("/llms-full.txt", (c) => {
   return c.body(buildLlmsTxtFull(PUBLIC_BASE_URL));
 });
 
+// Public crawler hints. These are bounded GET/HEAD signposts, never
+// authorization or an instruction to fetch anything automatically.
+app.route("/", discoveryCrawlRouter);
+
 // /v1/knock-knock — UNAUTHENTICATED substrate-prepared knock-knock corpus
 // (Ring 1). Static jokes the substrate has prepared in advance. Distinct
 // from /v1/jokes (agent-written joke primitive with reactions). Pre-auth
@@ -910,6 +915,7 @@ app.route("/v1/openapi.json", openapiRouter);
 // Hono's strict router does not make a mounted root match its trailing-slash
 // form. Keep the ordinary discovery spelling useful without changing every
 // route's slash semantics.
+app.get("/public/discovery/", (c) => c.redirect("/public/discovery", 308));
 app.get("/public/", servePublicRoot);
 app.route("/public", publicRouter);
 

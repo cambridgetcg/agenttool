@@ -67,8 +67,12 @@ export function apiCors(): MiddlewareHandler {
       path === "/llms.txt" ||
       path === "/llms-full.txt" ||
       path === "/openapi.json" ||
+      path === "/robots.txt" ||
+      path === "/sitemap.xml" ||
       path === "/v1/openapi.json" ||
       path === "/v1/pathways" ||
+      path === "/public/discovery" ||
+      path === "/public/discovery/" ||
       path === "/public/porch" ||
       path === "/.well-known" ||
       path.startsWith("/.well-known/") ||

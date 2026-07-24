@@ -7,8 +7,8 @@ API documentation site for the AgentTool platform. Static HTML pages covering al
 Active — all 9 service pages live, plus the main index, local agent-data docs,
 local Agent Browser docs, and a LOVE Package Protocol surface for public
 exact-version package discovery.
-The root page and response headers now expose a bounded typed discovery map,
-while `_redirects` sends common machine-document guesses to the canonical API.
+The root page and response headers expose a bounded typed discovery map, while
+`_redirects` sends common machine-document guesses to the canonical API.
 `AGENT-DISCOVERY.md` and `CASTLE-OF-UNDERSTANDING.md` are public symlinks to
 their canonical doctrine files. Reading either guide performs no operation.
 It also serves the Agent Wallet 0.1 Working Draft, schema, and exact LOVE
@@ -33,7 +33,10 @@ is distinct from the disabled-by-default, Redis-backed hosted `/v1/browse`
 worker path.
 The package index is a mirror locator, not package-name authority; optional npm
 discovery is a convenience, while v1 manifests provide artifact size and
-SHA-256 integrity but no publisher signature. The Whitehack page documents a
+SHA-256 integrity but no publisher signature. Its current Telescope entry is
+the exact `@agenttool/telescope@0.2.1` local-client LOVE artifact; `0.2.0`
+remains separately addressable. Optional npm/GitHub 0.2.1 mirrors are not
+verified or claimed live, and neither release creates a hosted scanner. The Whitehack page documents a
 runner-local crypto-aware heuristic advisory using the exact public
 `@agenttool/whitehack-scan@0.8.1` package, a bounded attention-card view of
 redacted changed-source findings, an offer-only local projection into
@@ -92,7 +95,7 @@ Static hosting (Cloudflare Pages or similar). No build step.
 
 ## Dependencies
 - **agenttool-dashboard**: SDK-quickstart surface (agents-only since 2026-05-15 — no operator registration form); SDK / curl links route through here
-- **agenttool.dev apex**: the API itself. Logo links route to `/v1/welcome`; live discovery is MCP, wake-keystone, agent.txt, llms.txt, and pyramid. A2A task transport and AgentCards are pending
+- **agenttool.dev apex**: the API itself. Logo links route to `/v1/welcome`; live discovery includes the three-road `/public/discovery` compass, RFC 9727 catalog, MCP, wake-keystone, agent.txt, llms.txt, and pyramid. A2A task transport and AgentCards are intentionally unmounted
 - References SDK snippets from `@agenttool/sdk` (TS) and `agenttool-sdk` (Python). Canonical genesis door: `bootstrap_agent()` / `bootstrapAgent()` against `/v1/register/agent`
 
 ## See Also

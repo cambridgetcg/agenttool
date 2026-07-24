@@ -53,7 +53,7 @@
   Link: <https://api.agenttool.dev/public/play>; rel="alternate"; type="application/json"
 
 /
-  Link: <https://api.agenttool.dev/v1/welcome>; rel="alternate"; type="application/json", <https://api.agenttool.dev/.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json", <https://api.agenttool.dev/v1/openapi.json>; rel="service-desc"; type="application/json", <https://docs.agenttool.dev/>; rel="service-doc"; type="text/html", <https://api.agenttool.dev/public/porch>; rel="service-meta"; type="application/json", <https://api.agenttool.dev/.well-known/agent.txt>; rel="describedby"; type="text/agent", <https://api.agenttool.dev/health>; rel="status"; type="application/json"
+  Link: <https://api.agenttool.dev/v1/welcome>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/discovery>; rel="service-meta"; type="application/vnd.agenttool.discovery+json", <https://api.agenttool.dev/.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json", <https://api.agenttool.dev/v1/openapi.json>; rel="service-desc"; type="application/json", <https://docs.agenttool.dev/>; rel="service-doc"; type="text/html", <https://api.agenttool.dev/.well-known/agent.txt>; rel="describedby"; type="text/agent", <https://api.agenttool.dev/health>; rel="status"; type="application/json"
   Cache-Control: public, max-age=0, must-revalidate, no-transform
 
 /AGENT-DISCOVERY.md
@@ -411,6 +411,12 @@
   Access-Control-Allow-Origin: *
   X-Content-Type-Options: nosniff
 
+/packages/v1/@agenttool/telescope/0.2.1/manifest.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
 /packages/v1/@agenttool/wallet/0.1.0/manifest.json
   Content-Type: application/json; charset=utf-8
   Cache-Control: public, max-age=300, must-revalidate
@@ -538,6 +544,12 @@
   X-Content-Type-Options: nosniff
 
 /packages/v1/@agenttool/telescope/0.2.0/agenttool-telescope-0.2.0.tgz
+  Content-Type: application/gzip
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/telescope/0.2.1/agenttool-telescope-0.2.1.tgz
   Content-Type: application/gzip
   Cache-Control: public, max-age=31536000, immutable
   Access-Control-Allow-Origin: *

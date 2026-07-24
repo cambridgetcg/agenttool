@@ -76,14 +76,20 @@ describe("browser-visible machine recovery headers", () => {
     app.get("/.well-known/webfinger", (c) => c.json({ ok: true }));
     app.get("/.well-known", (c) => c.json({ ok: true }));
     app.get("/v1/openapi.json", (c) => c.json({ ok: true }));
+    app.get("/public/discovery", (c) => c.json({ ok: true }));
     app.get("/public/porch", (c) => c.json({ ok: true }));
+    app.get("/robots.txt", (c) => c.text("ok"));
+    app.get("/sitemap.xml", (c) => c.text("ok"));
     app.get("/feeds/offers.json", (c) => c.json({ ok: true }));
 
     for (const path of [
       "/.well-known/webfinger",
       "/.well-known",
       "/v1/openapi.json",
+      "/public/discovery",
       "/public/porch",
+      "/robots.txt",
+      "/sitemap.xml",
       "/feeds/offers.json",
     ]) {
       const response = await app.request(path, {

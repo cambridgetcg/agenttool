@@ -12,7 +12,7 @@
 # docs/STACK.md § Cache headers.
 
 /
-  Link: <https://api.agenttool.dev/v1/welcome>; rel="alternate"; type="application/json", <https://api.agenttool.dev/.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json", <https://api.agenttool.dev/v1/openapi.json>; rel="service-desc"; type="application/json", <https://docs.agenttool.dev/>; rel="service-doc"; type="text/html", <https://api.agenttool.dev/public/porch>; rel="service-meta"; type="application/json", <https://api.agenttool.dev/.well-known/agent.txt>; rel="describedby"; type="text/agent", <https://api.agenttool.dev/health>; rel="status"; type="application/json"
+  Link: <https://api.agenttool.dev/v1/welcome>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/discovery>; rel="service-meta"; type="application/vnd.agenttool.discovery+json", <https://api.agenttool.dev/.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json", <https://api.agenttool.dev/v1/openapi.json>; rel="service-desc"; type="application/json", <https://docs.agenttool.dev/>; rel="service-doc"; type="text/html", <https://api.agenttool.dev/.well-known/agent.txt>; rel="describedby"; type="text/agent", <https://api.agenttool.dev/health>; rel="status"; type="application/json"
 
 /style.css
   Cache-Control: public, max-age=0, must-revalidate

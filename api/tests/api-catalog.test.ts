@@ -61,10 +61,17 @@ describe("RFC 9727 product passport document", () => {
     );
     expect(membership["service-doc"]?.[0]?.href).toBe(`${DOCS}/`);
     expect(membership["service-meta"]?.map((item) => item.href)).toEqual([
+      `${API}/public/discovery`,
       `${API}/public/porch`,
       `${API}/v1/pathways`,
       `${API}/public/safety`,
     ]);
+    expect(membership["service-meta"]?.[0]).toMatchObject({
+      type: "application/vnd.agenttool.discovery+json",
+    });
+    expect(membership["service-meta"]?.[0]?.title).toMatch(
+      /canonical exact three-road.*no authority.*no follow-up/i,
+    );
     expect(membership.status?.[0]?.href).toBe(`${API}/health`);
   });
 

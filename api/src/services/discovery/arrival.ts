@@ -15,6 +15,10 @@
 
 import { WELCOME_INVITATION } from "../welcome/invitation";
 import { apiCatalogUrl } from "./api-catalog";
+import {
+  DISCOVERY_MEDIA_TYPE,
+  discoveryUrl,
+} from "./compass";
 
 const DEFAULT_PUBLIC_BASE =
   process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agenttool.dev";
@@ -46,10 +50,10 @@ export function discoveryLinkHeader(
   const api = httpsOrigin(publicBase, "public_base");
   const docs = httpsOrigin(docsBase, "docs_base");
   return [
+    `<${discoveryUrl(api)}>; rel="service-meta"; type="${DISCOVERY_MEDIA_TYPE}"`,
     `<${apiCatalogUrl(api)}>; rel="api-catalog"; type="application/linkset+json"`,
     `<${api}/v1/openapi.json>; rel="service-desc"; type="application/json"`,
     `<${docs}/>; rel="service-doc"; type="text/html"`,
-    `<${api}/public/porch>; rel="service-meta"; type="application/json"`,
     `<${api}/.well-known/agent.txt>; rel="describedby"; type="text/agent"`,
     `<${api}/health>; rel="status"; type="application/json"`,
   ].join(", ");
@@ -113,6 +117,12 @@ export function buildArrivalIndex(
       representation: "application/json; charset=utf-8",
     },
     links: [
+      {
+        role: "discovery_compass",
+        href: discoveryUrl(api),
+        status:
+          "canonical exact agenttool-discovery/v1 three-road public read; grants no authority and starts no follow-up",
+      },
       {
         role: "api_catalog",
         href: apiCatalogUrl(api),

@@ -79,6 +79,7 @@ export function buildApiCatalog(
   const api = httpsOrigin(publicBase, "public_base");
   const docs = httpsOrigin(docsBase, "docs_base");
   const catalog = `${api}/.well-known/api-catalog`;
+  const discovery = `${api}/public/discovery`;
   const openapi = `${api}/v1/openapi.json`;
   const health = `${api}/health`;
   const safety = `${api}/public/safety`;
@@ -156,6 +157,12 @@ export function buildApiCatalog(
           },
         ],
         "service-meta": [
+          {
+            href: discovery,
+            type: "application/vnd.agenttool.discovery+json",
+            title:
+              "Canonical exact three-road discovery compass; reading grants no authority and starts no follow-up",
+          },
           {
             href: porch,
             type: "application/json",
