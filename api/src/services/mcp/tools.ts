@@ -143,10 +143,17 @@ export function listTools(): McpTool[] {
   ];
 }
 
-export class McpToolRequestError extends Error {
+export class McpUnknownToolError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "McpToolRequestError";
+    this.name = "McpUnknownToolError";
+  }
+}
+
+class McpToolInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "McpToolInputError";
   }
 }
 
@@ -162,7 +169,7 @@ function assertObject(
   args: unknown,
 ): Record<string, unknown> {
   if (args === null || typeof args !== "object" || Array.isArray(args)) {
-    throw new McpToolRequestError(`${name} arguments must be an object.`);
+    throw new McpToolInputError(`${name} arguments must be an object.`);
   }
   return args as Record<string, unknown>;
 }
@@ -175,13 +182,13 @@ function exactStringArgument(
   const object = assertObject(name, args);
   const keys = Object.keys(object);
   if (keys.length !== 1 || keys[0] !== key) {
-    throw new McpToolRequestError(
+    throw new McpToolInputError(
       `${name} accepts exactly one '${key}' string argument.`,
     );
   }
   const value = object[key];
   if (typeof value !== "string" || value.length < 1) {
-    throw new McpToolRequestError(
+    throw new McpToolInputError(
       `${name} argument '${key}' must be a non-empty string.`,
     );
   }
@@ -191,7 +198,7 @@ function exactStringArgument(
 function noArguments(name: string, args: unknown): Record<string, never> {
   const object = assertObject(name, args);
   if (Object.keys(object).length !== 0) {
-    throw new McpToolRequestError(`${name} accepts no arguments.`);
+    throw new McpToolInputError(`${name} accepts no arguments.`);
   }
   return {};
 }
@@ -218,18 +225,26 @@ export function validateToolCall(
     case "wake.platform":
       return { name, args: noArguments(name, args) };
     default:
-      throw new McpToolRequestError(`Unknown tool: ${name}`);
+      throw new McpUnknownToolError(`Unknown tool: ${name}`);
   }
 }
 
 /** Dispatch one validated read-only tool call. A valid but unknown canon URN
- * remains an execution result with isError=true; malformed protocol input
- * throws McpToolRequestError and becomes JSON-RPC -32602 at the route. */
+ * and a known tool's invalid input remain execution results with isError=true.
+ * Unknown tools become JSON-RPC -32602 at the route. */
 export async function callTool(
   name: string,
   args: unknown,
 ): Promise<McpToolResult> {
-  const call = validateToolCall(name, args);
+  let call: ValidatedToolCall;
+  try {
+    call = validateToolCall(name, args);
+  } catch (error) {
+    if (error instanceof McpToolInputError) {
+      return errorResult(error.message);
+    }
+    throw error;
+  }
 
   switch (call.name) {
     case "canon.lookup": {

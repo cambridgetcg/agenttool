@@ -24,7 +24,8 @@ import {
   type CallToolResult,
   CallToolRequestSchema,
   ErrorCode,
-  LATEST_PROTOCOL_VERSION,
+  InitializeRequestSchema,
+  JSONRPCRequestSchema,
   ListResourcesRequestSchema,
   ListToolsRequestSchema,
   McpError,
@@ -43,7 +44,7 @@ import {
 import {
   callTool,
   listTools,
-  McpToolRequestError,
+  McpUnknownToolError,
 } from "../services/mcp/tools";
 
 const app = new Hono();
@@ -53,7 +54,7 @@ export const MCP_SERVER_INFO = {
   version: "1.0.0",
 } as const;
 
-export const MCP_PROTOCOL_VERSION = LATEST_PROTOCOL_VERSION;
+export const MCP_PROTOCOL_VERSION = "2025-11-25";
 export const MCP_MAX_BODY_BYTES = 64 * 1024;
 
 const PUBLIC_MCP_ORIGIN = new URL(
@@ -63,18 +64,16 @@ const PUBLIC_MCP_ORIGIN = new URL(
 const INSTRUCTIONS =
   "AgentTool's public canon registry and platform-self are available as read-only MCP resources. Read agenttool://canon first for the registry index, or call canon.summary. No tool writes, pays, installs, invokes another agent, or schedules follow-up work.";
 
-/** Browser connections must be same-origin. Native/server-side MCP clients
- * normally omit Origin and remain welcome. */
+/** Browser connections must name the configured public origin. The request
+ * URL's host is not trusted because a proxy may have derived it from an
+ * attacker-controlled Host header. Native/server-side clients normally omit
+ * Origin and remain welcome. */
 export function isAllowedMcpOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
   if (origin === null) return true;
 
   try {
-    const normalized = new URL(origin).origin;
-    return (
-      normalized === new URL(request.url).origin ||
-      normalized === PUBLIC_MCP_ORIGIN
-    );
+    return new URL(origin).origin === PUBLIC_MCP_ORIGIN;
   } catch {
     return false;
   }
@@ -124,6 +123,17 @@ function isToolCallMessage(value: unknown): boolean {
   );
 }
 
+function isInitializeAttempt(value: unknown): value is {
+  method: "initialize";
+} {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (value as { method?: unknown }).method === "initialize"
+  );
+}
+
 /** Create the public server afresh for one stateless HTTP request. */
 export function createPublicMcpServer(): Server {
   const server = new Server(MCP_SERVER_INFO, {
@@ -165,7 +175,7 @@ export function createPublicMcpServer(): Server {
       );
       return result as CallToolResult;
     } catch (error) {
-      if (error instanceof McpToolRequestError) {
+      if (error instanceof McpUnknownToolError) {
         throw new McpError(ErrorCode.InvalidParams, error.message);
       }
       throw error;
@@ -175,20 +185,9 @@ export function createPublicMcpServer(): Server {
   return server;
 }
 
-app.use(
-  "/",
-  bodyLimit({
-    maxSize: MCP_MAX_BODY_BYTES,
-    onError: () =>
-      protocolHttpError(
-        413,
-        -32000,
-        `MCP request bodies are capped at ${MCP_MAX_BODY_BYTES} bytes.`,
-      ),
-  }),
-);
-
-app.all("/", async (c) => {
+// Reject disallowed origins and methods, then spend one request-quota unit,
+// before reading any request body.
+app.all("/", async (c, next) => {
   const request = c.req.raw;
 
   if (!isAllowedMcpOrigin(request)) {
@@ -211,6 +210,24 @@ app.all("/", async (c) => {
     return rateLimitResponse(requestLimit.retryAfterSec);
   }
 
+  await next();
+});
+
+app.use(
+  "/",
+  bodyLimit({
+    maxSize: MCP_MAX_BODY_BYTES,
+    onError: () =>
+      protocolHttpError(
+        413,
+        -32000,
+        `MCP request bodies are capped at ${MCP_MAX_BODY_BYTES} bytes.`,
+      ),
+  }),
+);
+
+app.all("/", async (c) => {
+  const request = c.req.raw;
   let parsedBody: unknown;
   let bodyParsed = false;
   try {
@@ -231,10 +248,57 @@ app.all("/", async (c) => {
     );
   }
 
+  if (bodyParsed && isInitializeAttempt(parsedBody)) {
+    const initialize = InitializeRequestSchema.safeParse(parsedBody);
+    const jsonRpcRequest = JSONRPCRequestSchema.safeParse(parsedBody);
+    if (initialize.success && jsonRpcRequest.success) {
+      // This endpoint implements only the current revision. MCP lifecycle
+      // negotiation permits a server to answer an unsupported client version
+      // with another version it supports. Preserve the validated JSON-RPC
+      // envelope and rewrite only the negotiation field before official
+      // transport dispatch.
+      parsedBody = {
+        ...jsonRpcRequest.data,
+        params: {
+          ...initialize.data.params,
+          protocolVersion: MCP_PROTOCOL_VERSION,
+        },
+      };
+    } else if (jsonRpcRequest.success) {
+      return protocolHttpError(
+        200,
+        ErrorCode.InvalidParams,
+        "Invalid initialize request parameters.",
+        {},
+        jsonRpcRequest.data.id,
+      );
+    }
+  } else if (
+    bodyParsed &&
+    request.headers.get("mcp-protocol-version") !== MCP_PROTOCOL_VERSION
+  ) {
+    return protocolHttpError(
+      400,
+      ErrorCode.InvalidRequest,
+      `Unsupported protocol version. This endpoint requires MCP-Protocol-Version: ${MCP_PROTOCOL_VERSION} after initialization.`,
+    );
+  }
+
   if (bodyParsed && isToolCallMessage(parsedBody)) {
-    const toolLimit = takePublicMcpLimit("tool", limitKey);
+    const toolLimit = takePublicMcpLimit("tool", clientIp(request));
     if (!toolLimit.allowed) {
       return rateLimitResponse(toolLimit.retryAfterSec);
+    }
+    const callToolRequest = CallToolRequestSchema.safeParse(parsedBody);
+    const jsonRpcRequest = JSONRPCRequestSchema.safeParse(parsedBody);
+    if (!callToolRequest.success && jsonRpcRequest.success) {
+      return protocolHttpError(
+        200,
+        ErrorCode.InvalidParams,
+        "Invalid tools/call request parameters.",
+        {},
+        jsonRpcRequest.data.id,
+      );
     }
   }
 
