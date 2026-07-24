@@ -191,7 +191,157 @@ export function buildInvokeRecipe(
     settlement:
       "Your payment escrows on invoke. The seller acks, does the work, and " +
       "submits a signed sealed output; escrow releases to the seller on " +
-      "completion. If the seller misses the SLA, escrow auto-refunds you.",
+      "completion. If this listing sets sla_seconds, a missed deadline " +
+      "refunds you the next time the invocation is read or acted on — " +
+      "expiry is lazy, not a timer. If sla_seconds is null this listing is " +
+      "best-effort: the escrow has no deadline and will not expire on its " +
+      "own. See GET /public/listings/{id}/quote for this listing's terms.",
+  } as const;
+}
+
+export interface CompleteRecipeBoxKey {
+  box_key_id: string;
+  public_key: string;
+}
+
+export interface CompleteRecipeOptions {
+  slaDeadlineAt?: string | null;
+}
+
+/** The machine-actionable completion recipe embedded in a seller's queue.
+ *
+ * The twin of buildInvokeRecipe, for the other side of the counter. A buyer
+ * reading one public listing gets the seller's encryption material and the
+ * exact wire profile; a seller reading their own queue got nothing, and had
+ * to rediscover the canonical-byte layout, the buyer's recipient key, and the
+ * acknowledge-then-complete ordering from error strings. Same read, same
+ * shape, opposite direction.
+ *
+ * The buyer's active box key is inlined deliberately: sealing the output
+ * requires it, and the lookup (GET /v1/inbox/box-keys/{buyer_did}) is a call
+ * a first-time seller has no reason to know exists.
+ *
+ * AgentTool checks the submitted envelope's limited shape; it does not prove
+ * encryption, recipient-key binding, or decryptability. The helper and byte
+ * layout below match api/src/services/marketplace/sig.ts exactly. */
+export function buildCompleteRecipe(
+  invocationId: string,
+  status: string,
+  buyerBoxKey: CompleteRecipeBoxKey | null,
+  opts: CompleteRecipeOptions = {},
+) {
+  if (status !== "escrowed" && status !== "acknowledged") {
+    return {
+      completable: false,
+      reason: "invocation_not_open",
+      note:
+        `This invocation is ${status}. Completion is only legal from ` +
+        "'acknowledged'; released and refunded are terminal.",
+    } as const;
+  }
+
+  if (!buyerBoxKey) {
+    return {
+      completable: false,
+      reason: "buyer_has_no_active_box_key",
+      note:
+        "This buyer has no active X25519 recipient key, so the canonical " +
+        "encryption path cannot produce a buyer-sealed output. The API only " +
+        "checks caller-supplied envelope shape and may accept bytes whose " +
+        "confidentiality it cannot verify; do not treat that as a safe " +
+        "substitute. Decline the invocation rather than ship an output only " +
+        "the substrate can read.",
+    } as const;
+  }
+
+  const deadline = opts.slaDeadlineAt ?? null;
+
+  return {
+    completable: true,
+    envelope_profile: "agenttool-inbox-v1",
+    buyer_box_key_id: buyerBoxKey.box_key_id,
+    buyer_box_public_key: buyerBoxKey.public_key,
+    next_step:
+      status === "escrowed"
+        ? "acknowledge_first"
+        : "complete",
+    endpoint:
+      status === "escrowed"
+        ? {
+            method: "POST",
+            path: `/v1/invocations/${invocationId}/acknowledge`,
+            then: {
+              method: "POST",
+              path: `/v1/invocations/${invocationId}/complete`,
+            },
+          }
+        : {
+            method: "POST",
+            path: `/v1/invocations/${invocationId}/complete`,
+          },
+    sdk_helper: {
+      package: "@agenttool/sdk",
+      export: "sealForRecipient",
+      input:
+        "sealForRecipient(JSON.stringify(your_output), decodeStandardBase64(buyer_box_public_key))",
+      output_mapping: {
+        ciphertextB64: "output_sealed.ct",
+        nonceB64: "output_sealed.nonce",
+        ephemeralPubB64: "output_sealed.sender_pub",
+      },
+    },
+    body: {
+      output_sealed: {
+        ct: "<standard padded base64: AES-GCM ciphertext plus 16-byte tag>",
+        nonce: "<standard padded base64: random 12-byte nonce>",
+        sender_pub:
+          "<standard padded base64: fresh ephemeral 32-byte X25519 public key>",
+      },
+      signature: "<standard padded base64: 64-byte ed25519 signature>",
+    },
+    body_note:
+      "Exactly these two keys. The invocation id is the path parameter and " +
+      "must not be repeated in the body; output_sealed accepts only ct, " +
+      "nonce and sender_pub.",
+    how_to_sign: {
+      domain: "invocation-completion/v1",
+      preimage:
+        'sha256( utf8("invocation-completion/v1") || 0x00 || utf8(invocation_id) ' +
+        "|| 0x00 || decoded(ct) || 0x00 || decoded(nonce) || 0x00 || decoded(sender_pub) )",
+      separator: "One 0x00 byte between fields. None leading, none trailing.",
+      raw_bytes_not_base64:
+        "ct, nonce and sender_pub enter the preimage as their RAW DECODED " +
+        "bytes, not as their base64 text. This is the most common first-try " +
+        "failure.",
+      sign_the_digest:
+        "ed25519 signs the 32-byte sha256 DIGEST, not the concatenated " +
+        "preimage. In Node: sign(null, digest, privateKey).",
+      key:
+        "Your identity's active ed25519 signing key. Verify your derived " +
+        "public key equals the one registered on your identity before you " +
+        "sign; a mismatch fails closed as invalid_signature.",
+      shape_gates:
+        "Before the signature is checked: ct must be non-empty, decoded " +
+        "nonce must be 24 or 12 bytes, decoded sender_pub must be 32 bytes.",
+    },
+    sla_deadline_at: deadline,
+    sla_warning: deadline
+      ? "Completing after sla_deadline_at REFUNDS the buyer instead of " +
+        "releasing to you. Check the clock before you sign."
+      : "This listing set no SLA, so nothing expires on its own — but the " +
+        "buyer has no exit from 'acknowledged' either. Acknowledge only " +
+        "when you intend to deliver.",
+    confidentiality:
+      "Confidential only when you perform this recipe correctly. AgentTool " +
+      "does not verify encryption or recipient binding, and cannot read a " +
+      "correctly sealed output. Invocation metadata is server-readable; " +
+      "never seal credentials, bearers, private keys, mnemonics, recovery " +
+      "phrases, or third-party secrets into a deliverable.",
+    settlement:
+      "A valid signature over these exact bytes releases the escrow to your " +
+      "wallet. The signature proves your active key authorized this " +
+      "invocation id and these output bytes; it does not prove the buyer " +
+      "can decrypt them. Seal honestly.",
   } as const;
 }
 
