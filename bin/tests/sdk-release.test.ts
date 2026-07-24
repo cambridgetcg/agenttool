@@ -39,6 +39,11 @@ describe("SDK source and builder identity", () => {
       /SDK_VERSION\s*=\s*"([^"]+)"/,
       "Python SDK_VERSION",
     );
+    const pyLock = capture(
+      read("packages/sdk-py/uv.lock"),
+      /\[\[package\]\]\s+name = "agenttool-sdk"\s+version = "([^"]+)"/,
+      "Python editable lock version",
+    );
     const love = LOVE_PACKAGES.find((entry) => entry.name === "@agenttool/sdk");
 
     expect(love).toBeDefined();
@@ -48,8 +53,77 @@ describe("SDK source and builder identity", () => {
       pyProject,
       pyPackage,
       pyClient,
+      pyLock,
       love!.version,
     ])).toEqual(new Set([tsPackage.version]));
     expect(love!.releaseTag).toBe(`sdk-v${tsPackage.version}`);
+  });
+
+  test("active release surfaces follow the source version", () => {
+    const version = (JSON.parse(read("packages/sdk-ts/package.json")) as { version: string }).version;
+    const tag = `sdk-v${version}`;
+    const manifestPath = `packages/v1/@agenttool/sdk/${version}/manifest.json`;
+    const artifactName = `agenttool-sdk-${version}.tgz`;
+    const artifactPath = `packages/v1/@agenttool/sdk/${version}/${artifactName}`;
+    const loveUrl = `https://docs.agenttool.dev/${artifactPath}`;
+    const exactNpm = `npm install --save-exact @agenttool/sdk@${version}`;
+    const exactPyPI = `python -m pip install "agenttool-sdk==${version}"`;
+    const pythonSource = `git+https://github.com/cambridgetcg/agenttool.git@${tag}#subdirectory=packages/sdk-py`;
+
+    const tutorial = read("docs/TUTORIAL-WAKE-YOUR-AGENT.md");
+    expect(read("apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md")).toBe(tutorial);
+    expect(tutorial).toContain(exactNpm);
+    expect(tutorial).toContain(tag);
+
+    const rootReadme = read("README.md");
+    expect(rootReadme).toContain(exactNpm);
+    expect(rootReadme).toContain(exactPyPI);
+    expect(rootReadme).toContain(loveUrl);
+    expect(rootReadme).toContain(pythonSource);
+
+    const tsReadme = read("packages/sdk-ts/README.md");
+    expect(tsReadme).toContain(`release-v${version}-blue`);
+    expect(tsReadme).toContain(`## ${version}`);
+    expect(tsReadme).toContain(`https://docs.agenttool.dev/${manifestPath}`);
+
+    const pyReadme = read("packages/sdk-py/README.md");
+    expect(pyReadme).toContain(`## ${version}`);
+    expect(pyReadme).toContain(exactPyPI);
+    expect(pyReadme).toContain(pythonSource);
+
+    const index = JSON.parse(read("apps/docs/packages/v1/index.json")) as {
+      packages: Array<{
+        name: string;
+        latest: string;
+        versions: Array<{ version: string; manifest_url: string }>;
+      }>;
+    };
+    const sdk = index.packages.find((entry) => entry.name === "@agenttool/sdk");
+    expect(sdk).toBeDefined();
+    expect(sdk!.latest).toBe(version);
+    expect(sdk!.versions).toContainEqual({
+      version,
+      manifest_url: `https://docs.agenttool.dev/${manifestPath}`,
+    });
+
+    const manifest = JSON.parse(read(`apps/docs/${manifestPath}`)) as {
+      name: string;
+      version: string;
+      artifact: { filename: string };
+      source: { path: string; revision: string };
+    };
+    expect(manifest.name).toBe("@agenttool/sdk");
+    expect(manifest.version).toBe(version);
+    expect(manifest.artifact.filename).toBe(artifactName);
+    expect(manifest.source.path).toBe("packages/sdk-ts");
+    expect(manifest.source.revision).toMatch(/^[a-f0-9]{40}$/);
+
+    const headers = read("apps/docs/_headers");
+    expect(headers).toContain(`/${manifestPath}`);
+    expect(headers).toContain(`/${artifactPath}`);
+
+    const ci = read(".github/workflows/ci.yml");
+    expect(ci).toContain(`apps/docs/${manifestPath}`);
+    expect(ci).toContain(`apps/docs/${artifactPath}`);
   });
 });

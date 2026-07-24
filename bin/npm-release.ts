@@ -184,6 +184,29 @@ interface RegistryPackage {
   "dist-tags"?: Record<string, unknown>;
 }
 
+interface RegistryState {
+  packageStatus: number;
+  versionStatus: number;
+  packageDocument?: RegistryPackage;
+  versionDocument?: RegistryVersion;
+}
+
+type TimedRegistryFetch = (
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+) => Promise<Response>;
+
+interface RegistryPollOptions {
+  maxAttempts?: number;
+  deadlineMs?: number;
+  now?: () => number;
+  loadState?: (name: string, version: string, timeoutMs: number) => Promise<RegistryState>;
+  fetchMetadata?: TimedRegistryFetch;
+  fetchTarball?: TimedRegistryFetch;
+  sleep?: (milliseconds: number) => Promise<void>;
+}
+
 interface CommandResult {
   exitCode: number;
   stdout: string;
@@ -191,6 +214,10 @@ interface CommandResult {
 
 const REPO_ROOT = resolve(import.meta.dir, "..");
 const REGISTRY_ORIGIN = "https://registry.npmjs.org";
+const REGISTRY_VISIBILITY_DEADLINE_MS = 450_000;
+const REGISTRY_METADATA_TIMEOUT_MS = 30_000;
+const REGISTRY_TARBALL_TIMEOUT_MS = 60_000;
+const REGISTRY_POLL_DELAY_MS = 5_000;
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const SAFE_TAG = /^[a-z0-9][a-z0-9._-]*$/;
 const SAFE_NPM_TAG = /^[a-z][a-z0-9._-]*$/;
@@ -665,7 +692,10 @@ export async function readReleaseReceipt(path: string): Promise<PreparedReceipt>
     );
     const registryTarball = ownString(result.registry_tarball, "release receipt.result.registry_tarball");
     const registryUrl = new URL(registryTarball);
-    if (registryUrl.protocol !== "https:" || registryUrl.hostname !== "registry.npmjs.org") {
+    if (registryUrl.username !== "" || registryUrl.password !== "") {
+      fail("release receipt result registry tarball URL must not contain userinfo");
+    }
+    if (registryUrl.origin !== REGISTRY_ORIGIN) {
       fail("release receipt result registry tarball has an unexpected origin");
     }
     receipt.result = {
@@ -714,30 +744,78 @@ async function prepare(packageKey: string, tag: string, output: string): Promise
   return receipt;
 }
 
-async function registryFetch(path: string): Promise<Response> {
-  return fetch(`${REGISTRY_ORIGIN}${path}`, {
-    headers: { accept: "application/json" },
-    redirect: "error",
-    signal: AbortSignal.timeout(30_000),
+class RegistryPropagationPendingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RegistryPropagationPendingError";
+  }
+}
+
+async function timedRegistryFetch(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  return fetch(url, {
+    ...init,
+    signal: AbortSignal.timeout(timeoutMs),
   });
 }
 
-async function registryState(name: string, version: string): Promise<{
-  packageStatus: number;
-  versionStatus: number;
-  packageDocument?: RegistryPackage;
-  versionDocument?: RegistryVersion;
-}> {
+async function registryFetch(
+  path: string,
+  timeoutMs = REGISTRY_METADATA_TIMEOUT_MS,
+  fetchMetadata: TimedRegistryFetch = timedRegistryFetch,
+): Promise<Response> {
+  try {
+    return await fetchMetadata(
+      `${REGISTRY_ORIGIN}${path}`,
+      {
+        headers: { accept: "application/json" },
+        redirect: "error",
+      },
+      timeoutMs,
+    );
+  } catch {
+    throw new RegistryPropagationPendingError("npm registry metadata transport is not yet reachable");
+  }
+}
+
+async function registryJson(
+  response: Response,
+  label: string,
+): Promise<Record<string, unknown>> {
+  let body: string;
+  try {
+    body = await response.text();
+  } catch {
+    throw new RegistryPropagationPendingError(`${label} body was interrupted`);
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(body);
+  } catch {
+    fail(`${label} returned malformed JSON`);
+  }
+  return record(value, label);
+}
+
+async function registryState(
+  name: string,
+  version: string,
+  timeoutMs = REGISTRY_METADATA_TIMEOUT_MS,
+  fetchMetadata: TimedRegistryFetch = timedRegistryFetch,
+): Promise<RegistryState> {
   const packagePath = registryPackagePath(name);
   const [packageResponse, versionResponse] = await Promise.all([
-    registryFetch(packagePath),
-    registryFetch(`${packagePath}/${encodeURIComponent(version)}`),
+    registryFetch(packagePath, timeoutMs, fetchMetadata),
+    registryFetch(`${packagePath}/${encodeURIComponent(version)}`, timeoutMs, fetchMetadata),
   ]);
   const packageDocument = packageResponse.status === 200
-    ? await packageResponse.json() as RegistryPackage
+    ? await registryJson(packageResponse, "npm registry package document") as RegistryPackage
     : undefined;
   const versionDocument = versionResponse.status === 200
-    ? await versionResponse.json() as RegistryVersion
+    ? await registryJson(versionResponse, "npm registry version document") as RegistryVersion
     : undefined;
   return {
     packageStatus: packageResponse.status,
@@ -747,7 +825,7 @@ async function registryState(name: string, version: string): Promise<{
   };
 }
 
-async function verifyRegistryVersion(receipt: PreparedReceipt, versionDocument: RegistryVersion): Promise<string> {
+function registryTarballUrl(receipt: PreparedReceipt, versionDocument: RegistryVersion): string {
   if (versionDocument.name !== receipt.package.name || versionDocument.version !== receipt.package.version) {
     fail("npm registry returned a different package identity");
   }
@@ -757,12 +835,71 @@ async function verifyRegistryVersion(receipt: PreparedReceipt, versionDocument: 
   }
   const tarball = ownString(dist.tarball, "npm registry dist.tarball");
   const url = new URL(tarball);
-  if (url.protocol !== "https:" || url.hostname !== "registry.npmjs.org") {
+  if (url.username !== "" || url.password !== "") {
+    fail("npm registry tarball URL must not contain userinfo");
+  }
+  if (url.origin !== REGISTRY_ORIGIN) {
     fail("npm registry returned an unexpected tarball origin");
   }
-  const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(60_000) });
-  if (!response.ok) fail(`npm tarball download returned HTTP ${response.status}`);
-  const bytes = new Uint8Array(await response.arrayBuffer());
+  return tarball;
+}
+
+function retryableRegistryStatus(status: number): boolean {
+  return status === 404
+    || status === 408
+    || status === 425
+    || status === 429
+    || (status >= 500 && status <= 599);
+}
+
+function registryDistTag(packageDocument: RegistryPackage, npmTag: string): string | undefined {
+  const distTags = record(packageDocument["dist-tags"], "npm registry package dist-tags");
+  const value = distTags[npmTag];
+  if (value !== undefined && typeof value !== "string") {
+    fail(`npm registry dist-tag ${npmTag} must be a string`);
+  }
+  return value;
+}
+
+async function verifyRegistryVersion(
+  receipt: PreparedReceipt,
+  versionDocument: RegistryVersion,
+  timeoutMs = REGISTRY_TARBALL_TIMEOUT_MS,
+  fetchTarball: TimedRegistryFetch = timedRegistryFetch,
+): Promise<string> {
+  const tarball = registryTarballUrl(receipt, versionDocument);
+  let response: Response;
+  try {
+    response = await fetchTarball(
+      tarball,
+      { redirect: "error" },
+      timeoutMs,
+    );
+  } catch {
+    throw new RegistryPropagationPendingError("npm tarball download is not yet reachable");
+  }
+  if (!response.ok) {
+    try {
+      await response.body?.cancel();
+    } catch {
+      // Cleanup must not replace either a retryable propagation state or a
+      // deterministic non-retryable HTTP failure.
+    }
+    if (retryableRegistryStatus(response.status)) {
+      throw new RegistryPropagationPendingError(
+        `npm tarball download is not yet visible (HTTP ${response.status})`,
+      );
+    }
+    fail(`npm tarball download returned HTTP ${response.status}`);
+  }
+  let bytes: Uint8Array;
+  try {
+    bytes = new Uint8Array(await response.arrayBuffer());
+  } catch {
+    throw new RegistryPropagationPendingError(
+      "npm tarball download ended before the artifact was readable",
+    );
+  }
   const sha1 = createHash("sha1").update(bytes).digest("hex");
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const integrity = `sha512-${createHash("sha512").update(bytes).digest("base64")}`;
@@ -777,18 +914,99 @@ async function verifyRegistryVersion(receipt: PreparedReceipt, versionDocument: 
   return tarball;
 }
 
-async function pollRegistry(receipt: PreparedReceipt, npmTag: string): Promise<string> {
-  for (let attempt = 1; attempt <= 90; attempt += 1) {
-    const state = await registryState(receipt.package.name, receipt.package.version);
-    if (state.versionStatus === 200 && state.versionDocument && state.packageStatus === 200 && state.packageDocument) {
-      const tarball = await verifyRegistryVersion(receipt, state.versionDocument);
-      if (state.packageDocument["dist-tags"]?.[npmTag] === receipt.package.version) return tarball;
-    } else if (![200, 404].includes(state.versionStatus) || ![200, 404].includes(state.packageStatus)) {
-      fail(`npm registry returned ambiguous HTTP state ${state.packageStatus}/${state.versionStatus}`);
-    }
-    if (attempt < 90) await Bun.sleep(5_000);
+export async function pollRegistry(
+  receipt: PreparedReceipt,
+  npmTag: string,
+  options: RegistryPollOptions = {},
+): Promise<string> {
+  const maxAttempts = options.maxAttempts ?? 90;
+  if (!Number.isSafeInteger(maxAttempts) || maxAttempts < 1) {
+    fail("npm registry polling requires a positive integer attempt limit");
   }
-  fail(`npm accepted ${receipt.package.name}@${receipt.package.version}, but exact bytes and ${npmTag} were not visible within 450 seconds`);
+  const deadlineMs = options.deadlineMs ?? REGISTRY_VISIBILITY_DEADLINE_MS;
+  if (!Number.isSafeInteger(deadlineMs) || deadlineMs < 1) {
+    fail("npm registry polling requires a positive integer deadline");
+  }
+  const now = options.now ?? (() => performance.now());
+  const startedAt = now();
+  if (!Number.isFinite(startedAt)) fail("npm registry polling clock returned a non-finite value");
+  const deadlineAt = startedAt + deadlineMs;
+  let lastObservedAt = startedAt;
+  const remainingMs = (): number => {
+    const observedAt = now();
+    if (!Number.isFinite(observedAt) || observedAt < lastObservedAt) {
+      fail("npm registry polling clock must be finite and monotonic");
+    }
+    lastObservedAt = observedAt;
+    const remaining = Math.floor(deadlineAt - observedAt);
+    if (remaining < 1) {
+      fail(
+        `npm registry visibility deadline expired after ${deadlineMs} milliseconds for ${receipt.package.name}@${receipt.package.version}`,
+      );
+    }
+    return remaining;
+  };
+  const fetchMetadata = options.fetchMetadata ?? timedRegistryFetch;
+  const loadState = options.loadState
+    ?? ((name: string, version: string, timeoutMs: number) =>
+      registryState(name, version, timeoutMs, fetchMetadata));
+  const fetchTarball = options.fetchTarball ?? timedRegistryFetch;
+  const sleep = options.sleep ?? Bun.sleep;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const state = await loadState(
+        receipt.package.name,
+        receipt.package.version,
+        Math.min(REGISTRY_METADATA_TIMEOUT_MS, remainingMs()),
+      );
+      remainingMs();
+      if (state.packageStatus === 200 && !state.packageDocument) {
+        fail("npm registry package lookup returned HTTP 200 without a document");
+      }
+      if (state.versionStatus === 200 && !state.versionDocument) {
+        fail("npm registry version lookup returned HTTP 200 without a document");
+      }
+      if (state.versionStatus === 200 && state.versionDocument) {
+        registryTarballUrl(receipt, state.versionDocument);
+      }
+      const observedNpmTag = state.packageStatus === 200 && state.packageDocument
+        ? registryDistTag(state.packageDocument, npmTag)
+        : undefined;
+      const statuses = [state.packageStatus, state.versionStatus];
+      const nonRetryableStatus = statuses.find(
+        (status) => status !== 200 && !retryableRegistryStatus(status),
+      );
+      if (nonRetryableStatus !== undefined) {
+        fail(`npm registry returned non-retryable HTTP state ${state.packageStatus}/${state.versionStatus}`);
+      }
+      if (
+        state.versionStatus === 200
+        && state.versionDocument
+        && state.packageStatus === 200
+        && state.packageDocument
+      ) {
+        const tarball = await verifyRegistryVersion(
+          receipt,
+          state.versionDocument,
+          Math.min(REGISTRY_TARBALL_TIMEOUT_MS, remainingMs()),
+          fetchTarball,
+        );
+        remainingMs();
+        if (observedNpmTag === receipt.package.version) {
+          return tarball;
+        }
+      }
+    } catch (error) {
+      if (!(error instanceof RegistryPropagationPendingError)) throw error;
+    }
+    const remaining = remainingMs();
+    if (attempt < maxAttempts) {
+      await sleep(Math.min(REGISTRY_POLL_DELAY_MS, remaining));
+    }
+  }
+  fail(
+    `npm accepted ${receipt.package.name}@${receipt.package.version}, but exact bytes and ${npmTag} were not visible after ${maxAttempts} attempts before the ${deadlineMs}-millisecond deadline`,
+  );
 }
 
 interface GitHubReleaseAsset {
@@ -989,7 +1207,7 @@ async function publish(
   let tarball: string;
   if (decision === "verify-existing") {
     if (!state.versionDocument) fail("npm version lookup did not return a document");
-    await verifyRegistryVersion(receipt, state.versionDocument);
+    registryTarballUrl(receipt, state.versionDocument);
     tarball = await pollRegistry(receipt, npmTag);
     status = "already_published_exact";
   } else {
