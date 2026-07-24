@@ -31,9 +31,20 @@ import {
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 
-import { listResources, readResource } from "../services/mcp/resources";
-import { callTool, listTools } from "../services/mcp/tools";
+import { clientIp } from "../middleware/client-ip";
+import { takePublicMcpLimit } from "../services/mcp/rate-limit";
+import {
+  listResources,
+  McpResourceNotFoundError,
+  readResource,
+} from "../services/mcp/resources";
+import {
+  callTool,
+  listTools,
+  McpToolRequestError,
+} from "../services/mcp/tools";
 
 const app = new Hono();
 
@@ -43,6 +54,7 @@ export const MCP_SERVER_INFO = {
 } as const;
 
 export const MCP_PROTOCOL_VERSION = LATEST_PROTOCOL_VERSION;
+export const MCP_MAX_BODY_BYTES = 64 * 1024;
 
 const PUBLIC_MCP_ORIGIN = new URL(
   process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agenttool.dev",
@@ -73,10 +85,12 @@ function protocolHttpError(
   code: number,
   message: string,
   headers: HeadersInit = {},
+  id: string | number | null = null,
 ): Response {
   return new Response(
     JSON.stringify({
       jsonrpc: "2.0",
+      id,
       error: { code, message },
     }),
     {
@@ -86,6 +100,27 @@ function protocolHttpError(
         ...headers,
       },
     },
+  );
+}
+
+function rateLimitResponse(retryAfterSec: number): Response {
+  return protocolHttpError(
+    429,
+    -32000,
+    "Rate limit exceeded. Retry after the stated interval.",
+    {
+      "Cache-Control": "no-store",
+      "Retry-After": String(retryAfterSec),
+    },
+  );
+}
+
+function isToolCallMessage(value: unknown): boolean {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (value as { method?: unknown }).method === "tools/call"
   );
 }
 
@@ -109,10 +144,12 @@ export function createPublicMcpServer(): Server {
         contents: [await readResource(request.params.uri)],
       };
     } catch (error) {
-      throw new McpError(
-        ErrorCode.InvalidParams,
-        error instanceof Error ? error.message : "Unknown resource URI.",
-      );
+      if (error instanceof McpResourceNotFoundError) {
+        throw new McpError(-32002, "Resource not found", {
+          uri: error.uri,
+        });
+      }
+      throw error;
     }
   });
 
@@ -121,15 +158,35 @@ export function createPublicMcpServer(): Server {
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const result = await callTool(
-      request.params.name,
-      request.params.arguments ?? {},
-    );
-    return result as CallToolResult;
+    try {
+      const result = await callTool(
+        request.params.name,
+        request.params.arguments ?? {},
+      );
+      return result as CallToolResult;
+    } catch (error) {
+      if (error instanceof McpToolRequestError) {
+        throw new McpError(ErrorCode.InvalidParams, error.message);
+      }
+      throw error;
+    }
   });
 
   return server;
 }
+
+app.use(
+  "/",
+  bodyLimit({
+    maxSize: MCP_MAX_BODY_BYTES,
+    onError: () =>
+      protocolHttpError(
+        413,
+        -32000,
+        `MCP request bodies are capped at ${MCP_MAX_BODY_BYTES} bytes.`,
+      ),
+  }),
+);
 
 app.all("/", async (c) => {
   const request = c.req.raw;
@@ -144,8 +201,41 @@ app.all("/", async (c) => {
 
   if (request.method !== "POST") {
     return protocolHttpError(405, -32000, "Method not allowed.", {
-      Allow: "GET, POST",
+      Allow: "POST",
     });
+  }
+
+  const limitKey = clientIp(request);
+  const requestLimit = takePublicMcpLimit("request", limitKey);
+  if (!requestLimit.allowed) {
+    return rateLimitResponse(requestLimit.retryAfterSec);
+  }
+
+  let parsedBody: unknown;
+  let bodyParsed = false;
+  try {
+    parsedBody = await request.clone().json();
+    bodyParsed = true;
+  } catch {
+    // Let the official transport return its own parse error.
+  }
+
+  // MCP removed JSON-RPC batching in the 2025-06-18 protocol revision. The
+  // SDK remains backwards-compatible, so narrow it at this current endpoint.
+  if (bodyParsed && Array.isArray(parsedBody)) {
+    return protocolHttpError(
+      400,
+      ErrorCode.InvalidRequest,
+      "JSON-RPC batching is not supported by this MCP protocol version.",
+      {},
+    );
+  }
+
+  if (bodyParsed && isToolCallMessage(parsedBody)) {
+    const toolLimit = takePublicMcpLimit("tool", limitKey);
+    if (!toolLimit.allowed) {
+      return rateLimitResponse(toolLimit.retryAfterSec);
+    }
   }
 
   const transport = new WebStandardStreamableHTTPServerTransport({
@@ -154,7 +244,10 @@ app.all("/", async (c) => {
   });
   const server = createPublicMcpServer();
   await server.connect(transport);
-  return transport.handleRequest(request);
+  return transport.handleRequest(
+    request,
+    bodyParsed ? { parsedBody } : undefined,
+  );
 });
 
 export default app;

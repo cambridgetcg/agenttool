@@ -7,13 +7,21 @@
  * Doctrine: docs/ALIGNMENT-MOVES.md (Move 1) · docs/ECOSYSTEM.md.
  */
 
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 import mcpRouter, {
+  MCP_MAX_BODY_BYTES,
   MCP_PROTOCOL_VERSION,
 } from "../src/routes/mcp";
+import {
+  createFixedWindowLimiter,
+  PUBLIC_MCP_REQUEST_LIMIT,
+  PUBLIC_MCP_TOOL_LIMIT,
+  resetPublicMcpLimitsForTests,
+  takePublicMcpLimit,
+} from "../src/services/mcp/rate-limit";
 
 const STREAMABLE_ACCEPT = "application/json, text/event-stream";
 const INIT_PARAMS = {
@@ -44,13 +52,18 @@ async function rpc(
 }
 
 describe("public MCP Streamable HTTP wire", () => {
+  beforeEach(() => {
+    resetPublicMcpLimitsForTests();
+  });
+
   test("GET returns 405 because this stateless server offers no SSE listener", async () => {
     const res = await mcpRouter.request("/", {
       method: "GET",
       headers: { accept: "text/event-stream" },
     });
     expect(res.status).toBe(405);
-    expect(res.headers.get("allow")).toBe("GET, POST");
+    expect(res.headers.get("allow")).toBe("POST");
+    expect((await res.json()).id).toBeNull();
   });
 
   test("rejects a cross-origin browser connection before dispatch", async () => {
@@ -189,6 +202,21 @@ describe("public MCP Streamable HTTP wire", () => {
     expect((await res.json()).error.code).toBe(-32700);
   });
 
+  test("request bodies are capped before protocol parsing", async () => {
+    const res = await mcpRouter.request("/", {
+      method: "POST",
+      headers: {
+        accept: STREAMABLE_ACCEPT,
+        "content-type": "application/json",
+      },
+      body: "x".repeat(MCP_MAX_BODY_BYTES + 1),
+    });
+    expect(res.status).toBe(413);
+    const body = await res.json();
+    expect(body.id).toBeNull();
+    expect(body.error.message).toMatch(/capped/);
+  });
+
   test("unknown methods return method-not-found", async () => {
     const { body } = await rpc("does_not_exist");
     expect(body.error.code).toBe(-32601);
@@ -216,11 +244,16 @@ describe("public MCP Streamable HTTP wire", () => {
     expect(concept.type_simple).toBe("DoctrineDoc");
   });
 
-  test("unknown resource URIs remain invalid parameters", async () => {
-    const { body } = await rpc("resources/read", {
-      uri: "agenttool://nope/x",
-    });
-    expect(body.error.code).toBe(-32602);
+  test("unknown resource URIs return resource-not-found", async () => {
+    for (const uri of [
+      "agenttool://nope/x",
+      "agenttool://canon/by-type/not-a-real-type",
+      "agenttool://canon/by-type/%",
+    ]) {
+      const { body } = await rpc("resources/read", { uri });
+      expect(body.error.code).toBe(-32002);
+      expect(body.error.data).toEqual({ uri });
+    }
   });
 
   test("tools retain the existing read-only canon and wake surface", async () => {
@@ -243,6 +276,15 @@ describe("public MCP Streamable HTTP wire", () => {
         "covenant.propose",
       ]),
     );
+    for (const tool of listed.result.tools) {
+      expect(tool.inputSchema.additionalProperties).toBe(false);
+      expect(tool.annotations).toEqual({
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      });
+    }
 
     const { body: called } = await rpc("tools/call", {
       name: "canon.summary",
@@ -251,6 +293,156 @@ describe("public MCP Streamable HTTP wire", () => {
     const summary = JSON.parse(called.result.content[0].text);
     expect(summary.totalConcepts).toBeGreaterThan(50);
     expect(called.result.isError).toBeFalsy();
+  });
+
+  test("unknown tools are protocol errors", async () => {
+    const { body } = await rpc("tools/call", {
+      name: "unknown.tool",
+      arguments: {},
+    });
+    expect(body.error.code).toBe(-32602);
+    expect(body.error.message).toContain("Unknown tool: unknown.tool");
+  });
+
+  test("tool input types and exact object shapes are validated without coercion", async () => {
+    const { body: wrongType } = await rpc("tools/call", {
+      name: "canon.lookup",
+      arguments: { urn: 42 },
+    });
+    expect(wrongType.error.code).toBe(-32602);
+    expect(wrongType.error.message).toMatch(/non-empty string/);
+
+    const { body: extraNamed } = await rpc("tools/call", {
+      name: "canon.lookup",
+      arguments: {
+        urn: "urn:agenttool:doc/SOUL",
+        extra: true,
+      },
+    });
+    expect(extraNamed.error.code).toBe(-32602);
+    expect(extraNamed.error.message).toMatch(/exactly one/);
+
+    const { body: extraZeroArg } = await rpc("tools/call", {
+      name: "canon.summary",
+      arguments: { extra: true },
+    });
+    expect(extraZeroArg.error.code).toBe(-32602);
+    expect(extraZeroArg.error.message).toMatch(/accepts no arguments/);
+  });
+
+  test("request and tool limits return 429 with Retry-After", async () => {
+    for (let i = 0; i < PUBLIC_MCP_REQUEST_LIMIT.limit; i += 1) {
+      expect(takePublicMcpLimit("request", "unknown").allowed).toBe(true);
+    }
+    const requestLimited = await mcpRouter.request("/", {
+      method: "POST",
+      headers: {
+        accept: STREAMABLE_ACCEPT,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "ping",
+      }),
+    });
+    expect(requestLimited.status).toBe(429);
+    expect(Number(requestLimited.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect((await requestLimited.json()).id).toBeNull();
+
+    resetPublicMcpLimitsForTests();
+    for (let i = 0; i < PUBLIC_MCP_TOOL_LIMIT.limit; i += 1) {
+      expect(takePublicMcpLimit("tool", "unknown").allowed).toBe(true);
+    }
+    const toolLimited = await mcpRouter.request("/", {
+      method: "POST",
+      headers: {
+        accept: STREAMABLE_ACCEPT,
+        "content-type": "application/json",
+        "mcp-protocol-version": MCP_PROTOCOL_VERSION,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: {
+          name: "canon.summary",
+          arguments: {},
+        },
+      }),
+    });
+    expect(toolLimited.status).toBe(429);
+    expect(Number(toolLimited.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect((await toolLimited.json()).id).toBeNull();
+  });
+
+  test("rejects removed JSON-RPC batching before any tool runs", async () => {
+    const messages = Array.from({ length: 2 }, (_, index) => ({
+      jsonrpc: "2.0",
+      id: index + 1,
+      method: "tools/call",
+      params: {
+        name: "canon.summary",
+        arguments: {},
+      },
+    }));
+    const res = await mcpRouter.request("/", {
+      method: "POST",
+      headers: {
+        accept: STREAMABLE_ACCEPT,
+        "content-type": "application/json",
+        "mcp-protocol-version": MCP_PROTOCOL_VERSION,
+      },
+      body: JSON.stringify(messages),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      jsonrpc: "2.0",
+      id: null,
+      error: {
+        code: -32600,
+        message:
+          "JSON-RPC batching is not supported by this MCP protocol version.",
+      },
+    });
+
+    const firstToolDecision = takePublicMcpLimit("tool", "unknown");
+    expect(firstToolDecision.allowed).toBe(true);
+    if (firstToolDecision.allowed) {
+      expect(firstToolDecision.remaining).toBe(
+        PUBLIC_MCP_TOOL_LIMIT.limit - 1,
+      );
+    }
+  });
+});
+
+describe("public MCP fixed-window limiter", () => {
+  test("is resettable, bounded, and shares overflow without eviction", () => {
+    const limiter = createFixedWindowLimiter({
+      limit: 2,
+      windowMs: 1_000,
+      maxKeys: 2,
+    });
+
+    expect(limiter.take("a", 0).allowed).toBe(true);
+    expect(limiter.take("a", 0).allowed).toBe(true);
+    const denied = limiter.take("a", 0);
+    expect(denied.allowed).toBe(false);
+    if (!denied.allowed) expect(denied.retryAfterSec).toBe(1);
+
+    expect(limiter.take("b", 0).allowed).toBe(true);
+    expect(limiter.take("c", 0).allowed).toBe(true);
+    expect(limiter.size()).toBe(2);
+    // Existing keys retain their enforcement history. New keys share one
+    // overflow bucket instead of evicting a live key.
+    expect(limiter.take("a", 0).allowed).toBe(false);
+    expect(limiter.take("d", 0).allowed).toBe(true);
+    expect(limiter.take("e", 0).allowed).toBe(false);
+    expect(limiter.size()).toBe(2);
+
+    limiter.reset();
+    expect(limiter.size()).toBe(0);
+    expect(limiter.take("fresh", 0).allowed).toBe(true);
   });
 });
 
@@ -262,6 +454,7 @@ describe("official SDK client through the full AgentTool app", () => {
   });
 
   test("initializes, lists, reads, and calls without middleware changing JSON-RPC", async () => {
+    resetPublicMcpLimitsForTests();
     process.env.AGENTTOOL_DISABLE_WORKERS = "1";
     process.env.AGENTOOL_DISABLE_JOY_INDEX = "1";
 

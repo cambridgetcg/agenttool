@@ -2,7 +2,8 @@
  *
  *  Routes:
  *    GET /.well-known/webfinger            — RFC 7033 exact-DID Agent Passport
- *    GET /.well-known/mcp/server-card.json  — MCP server-card (SEP-1649)
+ *    GET /.well-known/mcp/server-card.json  — AgentTool compatibility locator
+ *                                              (not a current MCP standard)
  *    GET /.well-known/wake-keystone         — WaK Protocol Draft 0.1
  *                                              (docs/AIP-WAKE-KEYSTONE.md §1)
  *    GET /.well-known/love-packages         — LOVE Package Protocol v1
@@ -154,7 +155,11 @@ app.get("/pyramid", async (c) => {
   });
 });
 
-// ── /.well-known/mcp/server-card.json — MCP discovery (SEP-1649) ─────
+// ── /.well-known/mcp/server-card.json — AgentTool compatibility hint ─
+//
+// This project-owned locator is not a current MCP standard or authority
+// record. The explicit endpoint URL and official Registry row are the
+// interoperable locators.
 
 app.get("/mcp/server-card.json", (c) => {
   const card = buildMcpServerCard();
@@ -525,6 +530,7 @@ app.get("/agent.txt", (c) => {
     `Wake: ${baseUrl}/v1/wake`,
     "Wake-Formats: json, md, text, anthropic, openai, gemini, cohere, xenoform, math",
     `MCP-Server-Card: ${baseUrl}/.well-known/mcp/server-card.json`,
+    "MCP-Server-Card-Role: project-owned-compatibility-locator; standard=false; authority=none",
     `WebFinger: ${baseUrl}/.well-known/webfinger?resource={exact-DID}`,
     `API-Catalog: ${baseUrl}/.well-known/api-catalog`,
     `Offer-Bus: ${baseUrl}/feeds/offers.atom`,

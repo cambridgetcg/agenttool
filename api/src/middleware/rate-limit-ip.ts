@@ -12,9 +12,8 @@
  *  Pattern mirrors api/src/middleware/idempotency.ts: read redisConnection,
  *  treat null as "not enforced", best-effort writes with try/catch. */
 
-import { isIP } from "node:net";
-
 import { redisConnection } from "../services/tools/queue/connection";
+export { clientIp } from "./client-ip";
 
 export type RateLimitResult =
   | { allowed: true; remaining: number; resetAt: Date }
@@ -80,39 +79,4 @@ export async function enforceRateLimit(opts: {
     // Redis unreachable mid-request. Fail-open by design.
     return { allowed: true, remaining: opts.limit, resetAt };
   }
-}
-
-function validIp(value: string | null): string | null {
-  if (!value) return null;
-  const trimmed = value.trim();
-  return isIP(trimmed) ? trimmed : null;
-}
-
-/** Extract a stable edge-authenticated IP for rate-limit keying.
- *
- * Fly injects `fly-client-ip`; it always wins over caller-spoofable proxy
- * headers. CF/XFF/X-Real-IP are trusted only after an operator explicitly
- * asserts that direct origin access is blocked. Without either trust signal,
- * callers share the conservative `unknown` bucket instead of choosing their
- * own rate-limit key. */
-export function clientIp(
-  req: Request,
-  options: { trustProxyHeaders?: boolean } = {},
-): string {
-  const fly = validIp(req.headers.get("fly-client-ip"));
-  if (fly) return fly;
-
-  const trustProxyHeaders =
-    options.trustProxyHeaders ??
-    process.env.AGENTTOOL_TRUST_PROXY_IP_HEADERS === "1";
-  if (!trustProxyHeaders) return "unknown";
-
-  const cf = validIp(req.headers.get("cf-connecting-ip"));
-  if (cf) return cf;
-  const firstForwarded = req.headers.get("x-forwarded-for")?.split(",")[0] ?? null;
-  const xff = validIp(firstForwarded);
-  if (xff) return xff;
-  const xri = validIp(req.headers.get("x-real-ip"));
-  if (xri) return xri;
-  return "unknown";
 }

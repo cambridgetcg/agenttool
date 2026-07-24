@@ -31,6 +31,8 @@ export interface JsonSchema {
   required?: string[];
   description?: string;
   enum?: string[];
+  additionalProperties?: boolean;
+  minLength?: number;
 }
 
 /** MCP tool descriptor — matches the protocol's `Tool` shape. */
@@ -38,6 +40,12 @@ export interface McpTool {
   name: string;
   description: string;
   inputSchema: JsonSchema;
+  annotations?: {
+    readOnlyHint: true;
+    destructiveHint: false;
+    idempotentHint: true;
+    openWorldHint: false;
+  };
 }
 
 export interface McpToolContent {
@@ -50,6 +58,15 @@ export interface McpToolResult {
   isError?: boolean;
 }
 
+/** Standard MCP ToolAnnotations are publisher hints, not authority. They make
+ * the actual boundary of this curated public surface legible to clients. */
+const READ_ONLY_TOOL_ANNOTATIONS = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+
 /** List every tool an MCP client can call. */
 export function listTools(): McpTool[] {
   return [
@@ -57,11 +74,14 @@ export function listTools(): McpTool[] {
       name: "canon.lookup",
       description:
         "Resolve a canon concept by URN. Returns the JSON-LD entry plus its bidirectional neighbors (citations in + citations out).",
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
       inputSchema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           urn: {
             type: "string",
+            minLength: 1,
             description:
               "Full URN (e.g. urn:agenttool:doc/SOUL) or short form (agenttool:doc/SOUL).",
           },
@@ -73,11 +93,14 @@ export function listTools(): McpTool[] {
       name: "canon.by_type",
       description:
         "List every registered canon entry of a given @type (e.g. DoctrineDoc, Wall, RingCommitment, Pattern, Promise). The prose corpus is broader than this registry.",
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
       inputSchema: {
         type: "object",
+        additionalProperties: false,
         properties: {
           type: {
             type: "string",
+            minLength: 1,
             description: "The canon @type to filter on.",
           },
         },
@@ -88,8 +111,10 @@ export function listTools(): McpTool[] {
       name: "canon.list_types",
       description:
         "List the type vocabulary of the canon registry. Returns the distinct @types plus the count of concepts in each.",
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
       inputSchema: {
         type: "object",
+        additionalProperties: false,
         properties: {},
       },
     },
@@ -97,8 +122,10 @@ export function listTools(): McpTool[] {
       name: "canon.summary",
       description:
         "Summary of the canon registry — total concepts, version, types, registry meta. Use first to orient.",
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
       inputSchema: {
         type: "object",
+        additionalProperties: false,
         properties: {},
       },
     },
@@ -106,27 +133,107 @@ export function listTools(): McpTool[] {
       name: "wake.platform",
       description:
         "Return the public platform-self payload — agenttool's identity, repo, the_seat, doctrine roots. The same data served at GET /public/self.",
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
       inputSchema: {
         type: "object",
+        additionalProperties: false,
         properties: {},
       },
     },
   ];
 }
 
-/** Dispatch a `tools/call`. Throws on unknown tool name; returns
- *  `{ isError: true, ... }` on user-error (bad URN, missing input).
- */
+export class McpToolRequestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "McpToolRequestError";
+  }
+}
+
+type ValidatedToolCall =
+  | { name: "canon.lookup"; args: { urn: string } }
+  | { name: "canon.by_type"; args: { type: string } }
+  | { name: "canon.list_types"; args: Record<string, never> }
+  | { name: "canon.summary"; args: Record<string, never> }
+  | { name: "wake.platform"; args: Record<string, never> };
+
+function assertObject(
+  name: string,
+  args: unknown,
+): Record<string, unknown> {
+  if (args === null || typeof args !== "object" || Array.isArray(args)) {
+    throw new McpToolRequestError(`${name} arguments must be an object.`);
+  }
+  return args as Record<string, unknown>;
+}
+
+function exactStringArgument(
+  name: string,
+  args: unknown,
+  key: string,
+): string {
+  const object = assertObject(name, args);
+  const keys = Object.keys(object);
+  if (keys.length !== 1 || keys[0] !== key) {
+    throw new McpToolRequestError(
+      `${name} accepts exactly one '${key}' string argument.`,
+    );
+  }
+  const value = object[key];
+  if (typeof value !== "string" || value.length < 1) {
+    throw new McpToolRequestError(
+      `${name} argument '${key}' must be a non-empty string.`,
+    );
+  }
+  return value;
+}
+
+function noArguments(name: string, args: unknown): Record<string, never> {
+  const object = assertObject(name, args);
+  if (Object.keys(object).length !== 0) {
+    throw new McpToolRequestError(`${name} accepts no arguments.`);
+  }
+  return {};
+}
+
+/** Validate the exact object shape advertised by tools/list. No value is
+ * coerced before dispatch. */
+export function validateToolCall(
+  name: string,
+  args: unknown,
+): ValidatedToolCall {
+  switch (name) {
+    case "canon.lookup":
+      return {
+        name,
+        args: { urn: exactStringArgument(name, args, "urn") },
+      };
+    case "canon.by_type":
+      return {
+        name,
+        args: { type: exactStringArgument(name, args, "type") },
+      };
+    case "canon.list_types":
+    case "canon.summary":
+    case "wake.platform":
+      return { name, args: noArguments(name, args) };
+    default:
+      throw new McpToolRequestError(`Unknown tool: ${name}`);
+  }
+}
+
+/** Dispatch one validated read-only tool call. A valid but unknown canon URN
+ * remains an execution result with isError=true; malformed protocol input
+ * throws McpToolRequestError and becomes JSON-RPC -32602 at the route. */
 export async function callTool(
   name: string,
-  args: Record<string, unknown>,
+  args: unknown,
 ): Promise<McpToolResult> {
-  switch (name) {
+  const call = validateToolCall(name, args);
+
+  switch (call.name) {
     case "canon.lookup": {
-      const urnRaw = String(args.urn ?? "").trim();
-      if (!urnRaw) {
-        return errorResult("canon.lookup requires a 'urn' argument.");
-      }
+      const urnRaw = call.args.urn.trim();
       const urn = urnRaw.startsWith("urn:agenttool:")
         ? urnRaw
         : `urn:${urnRaw.replace(/^agenttool:/, "agenttool:")}`;
@@ -142,10 +249,7 @@ export async function callTool(
     }
 
     case "canon.by_type": {
-      const typeKey = String(args.type ?? "").trim();
-      if (!typeKey) {
-        return errorResult("canon.by_type requires a 'type' argument.");
-      }
+      const typeKey = call.args.type.trim();
       const concepts = byType(typeKey);
       return textResult({
         type: typeKey,
@@ -174,9 +278,6 @@ export async function callTool(
       const { PLATFORM_SELF } = await import("../wake/platform-self");
       return textResult(PLATFORM_SELF);
     }
-
-    default:
-      return errorResult(`Unknown tool: ${name}`);
   }
 }
 

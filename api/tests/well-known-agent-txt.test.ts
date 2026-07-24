@@ -32,6 +32,7 @@ const REQUIRED_KEYS = [
   "Wake",
   "Wake-Formats",
   "MCP-Server-Card",
+  "MCP-Server-Card-Role",
   "LLMs-Sitemap",
   "Arrival-Door",
   "Arrival-Cost",
@@ -165,6 +166,9 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
     const { body } = await fetchAgentTxt();
     const kv = parseKv(body);
     expect(kv.get("MCP-Server-Card")).toContain("/.well-known/mcp/server-card.json");
+    expect(kv.get("MCP-Server-Card-Role")).toBe(
+      "project-owned-compatibility-locator; standard=false; authority=none",
+    );
     expect(kv.get("LLMs-Sitemap")).toContain("/.well-known/llms.txt");
     expect(kv.has("Agent-Card")).toBe(false);
     expect(body).not.toContain("/.well-known/agent-card.json");
