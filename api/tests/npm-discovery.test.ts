@@ -13,7 +13,7 @@ const ROOT = join(import.meta.dir, "../..");
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 
 const CURRENT_NPM_SPECIFIERS = [
-  "@agenttool/adds@0.2.1",
+  "@agenttool/adds@0.2.2",
   "@agenttool/credential-broker@0.1.0",
   "@agenttool/data@0.3.1",
   "@agenttool/data-sync@0.1.1",
