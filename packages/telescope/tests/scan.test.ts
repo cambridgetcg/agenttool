@@ -390,6 +390,11 @@ describe("inspectTarget orchestration", () => {
       calls.filter(({ url }) => url.endsWith("/.well-known/api-catalog")),
     ).toHaveLength(1);
     expect(calls.some(({ url }) => url.endsWith("/public/porch"))).toBe(false);
+    expect(
+      calls.some(({ url }) =>
+        url.startsWith("https://docs.agenttool.dev/tools"),
+      ),
+    ).toBe(false);
     for (const call of calls) {
       expect(call.init?.method).toBe("GET");
       expect(call.init?.redirect).toBe("manual");

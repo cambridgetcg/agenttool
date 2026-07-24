@@ -78,14 +78,19 @@ function namesFiniteCallerRetry(value: string): boolean {
   );
 }
 
+const COMPLETE_EXIT_BOUNDARIES = new Set([
+  "stop, choose silence, or leave; each is complete",
+  "stop, stay silent, or leave; each is complete",
+  "stopping, silence, or leaving is complete",
+]);
+
 function namesCompleteExit(value: string): boolean {
-  const normalized = value.toLowerCase();
-  return (
-    normalized.includes("stop") &&
-    /\b(?:silence|silent)\b/u.test(normalized) &&
-    normalized.includes("leav") &&
-    normalized.includes("complete")
-  );
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/gu, " ")
+    .replace(/\.$/u, "");
+  return COMPLETE_EXIT_BOUNDARIES.has(normalized);
 }
 
 export function parseAgenttoolDiscovery(

@@ -3,6 +3,11 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { LOVE_PACKAGES } from "../build-love-packages";
+import {
+  LOVE_ARTIFACT_HEADER_PATTERN,
+  LOVE_MANIFEST_HEADER_PATTERN,
+  matchesCloudflarePathPattern,
+} from "./cloudflare-headers";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -158,8 +163,14 @@ describe("SDK source and builder identity", () => {
     expect(manifest.source.revision).toMatch(/^[a-f0-9]{40}$/);
 
     const headers = read("apps/docs/_headers");
-    expect(headers).toContain("/packages/v1/@agenttool/:package/:version/manifest.json");
-    expect(headers).toContain("/packages/v1/@agenttool/:package/:version/*.tgz");
+    expect(headers).toContain(`${LOVE_MANIFEST_HEADER_PATTERN}\n`);
+    expect(headers).toContain(`${LOVE_ARTIFACT_HEADER_PATTERN}\n`);
+    expect(
+      matchesCloudflarePathPattern(LOVE_MANIFEST_HEADER_PATTERN, `/${manifestPath}`),
+    ).toBe(true);
+    expect(
+      matchesCloudflarePathPattern(LOVE_ARTIFACT_HEADER_PATTERN, `/${artifactPath}`),
+    ).toBe(true);
 
     const ci = read(".github/workflows/ci.yml");
     expect(ci).toContain(`apps/docs/${manifestPath}`);
