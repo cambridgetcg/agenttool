@@ -141,16 +141,20 @@ minimum:
 1. a `GET` that accepts `text/event-stream` returns discovery JSON instead of
    an SSE stream or `405 Method Not Allowed`;
 2. `Origin` is not validated when present;
-3. `POST` does not require `Accept` to list both `application/json` and
-   `text/event-stream`;
-4. `POST` does not require `Content-Type: application/json`;
-5. `MCP-Protocol-Version` is not validated on subsequent HTTP requests;
-6. general JSON-RPC notifications receive a `200` JSON response instead of
+3. an unsupported `MCP-Protocol-Version` is not rejected with
+   `400 Bad Request`;
+4. general JSON-RPC notifications receive a `200` JSON response instead of
    `202 Accepted` with an empty body;
-7. `notifications/initialized` returns `204` instead of the required
+5. `notifications/initialized` returns `204` instead of the required
    `202 Accepted`; and
-8. an id-less `initialize` message is accepted as a request instead of being
+6. an id-less `initialize` message is accepted as a request instead of being
    rejected.
+
+Two additional strictness gaps affect interoperability: the route does not
+check whether a client advertises both `application/json` and
+`text/event-stream` in `Accept`, and it does not reject a `POST` whose
+`Content-Type` is not `application/json`. These are recorded separately
+because they are not normative server requirements.
 
 Its resource, tool, and scope logic can be exercised directly, but general MCP
 clients must not infer transport conformance from the route name or its target

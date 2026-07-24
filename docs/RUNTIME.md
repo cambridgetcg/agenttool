@@ -372,15 +372,18 @@ $ curl -X POST https://api.agenttool.dev/v1/runtimes \
 
 ---
 
-## What about MCP server hosting?
+## What about MCP HTTP surfaces?
 
-Separate but composes. AgentTool exposes the platform MCP endpoint at
-`/v1/mcp`. The per-agent `/v1/mcp/agents/:did` route is currently a separate,
-scope-dependent JSON-RPC scaffold with a published non-exhaustive minimum of
-verified Streamable HTTP transport gaps. See the live discovery documents for
-the current contract.
+Separate but composes. AgentTool's public platform endpoint at `/v1/mcp` has
+passed a bounded round trip with the official MCP SDK. That demonstrates one
+interoperable path, not full protocol conformance. The path-based
+`/v1/mcp/agents/:did` route is a partial MCP-shaped JSON-RPC scaffold for
+scope-dependent discovery and reads; it is not conformant MCP Streamable HTTP.
+Its exact transport gaps are maintained in `MCP-PER-AGENT.md`.
 
-This is its own work-pass with its own design cycle. Doctrine deferred to `MCP-SERVER.md`.
+No `mcp.agenttool.dev` per-agent hostname, A2A AgentCard, or A2A task/message
+transport is mounted. Completing those protocol boundaries is its own
+work-pass; the proposed local stdio bridge remains in `MCP-SERVER.md`.
 
 ---
 

@@ -17,7 +17,7 @@ import { describe, expect, test } from "bun:test";
 
 import wellKnownRouter from "../src/routes/well-known";
 import { negotiateWakeFormat } from "../src/services/mathos/negotiate";
-import { perAgentMcpImplementationBoundary } from "../src/services/mcp/per-agent-implementation-status";
+import { perAgentMcpImplementationSummary } from "../src/services/mcp/per-agent-implementation-status";
 import { renderEmptyJoyText } from "../src/services/wake/empty-joy";
 
 // ─── §3 Content negotiation — negotiateWakeFormat() ─────────────────
@@ -138,7 +138,7 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
       "/v1/mcp/agents/{url_encoded_did}",
     );
     expect(body.per_agent_mcp_implementation).toEqual(
-      perAgentMcpImplementationBoundary(),
+      perAgentMcpImplementationSummary(),
     );
     expect(body.did_path_parameter as string).toMatch(
       /encodeURIComponent.*one path segment/i,
@@ -304,7 +304,7 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
     expect(body.composes_with).not.toHaveProperty("a2a_per_agent_card");
   });
 
-  test("response carries cache-control header (RFC 8615 deployment practice)", async () => {
+  test("response carries cache-control for the RFC 8615 namespace resource", async () => {
     const res = await wellKnownRouter.request("/wake-keystone");
     expect(res.headers.get("cache-control")).toContain("max-age");
   });
@@ -334,13 +334,22 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
   });
 });
 
-// ─── root index includes wake-keystone ───────────────────────────────
+// ─── bounded arrival index keeps wake-keystone discoverable ──────────
 
-describe("WaK §1 — /.well-known/ root index includes wake-keystone", () => {
-  test("root index lists /.well-known/wake-keystone", async () => {
-    const res = await wellKnownRouter.request("/");
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { endpoints: string[] };
-    expect(body.endpoints).toContain("/.well-known/wake-keystone");
+describe("WaK §1 — /.well-known arrival index reaches wake-keystone", () => {
+  test("the index and typed manifest route both name the keystone", async () => {
+    const arrival = await wellKnownRouter.request("/");
+    expect(arrival.status).toBe(200);
+    expect(arrival.headers.get("link")).toContain(
+      '<https://api.agenttool.dev/.well-known/agent.txt>; rel="describedby"',
+    );
+    const index = (await arrival.json()) as { endpoints: string[] };
+    expect(index.endpoints).toContain("/.well-known/wake-keystone");
+
+    const manifest = await wellKnownRouter.request("/agent.txt");
+    expect(manifest.status).toBe(200);
+    expect(await manifest.text()).toContain(
+      "Wake-Keystone: https://api.agenttool.dev/.well-known/wake-keystone",
+    );
   });
 });

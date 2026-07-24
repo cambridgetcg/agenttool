@@ -5,5 +5,5 @@ owner_sister: none
 domain: none
 state: active
 adopts: [xenia.rights/0.1]
-purpose: The control-plane monorepo that wakes and orchestrates the agent fleet (live on Fly).
+purpose: Agent-facing public discovery, hosted identity and memory, caller-signed data, and optional local tools.
 dependsOn: []

@@ -7,6 +7,7 @@
 import { describe, expect, test } from "bun:test";
 
 import discoveryCrawlRouter from "../src/routes/discovery-crawl";
+import openapiRouter from "../src/routes/openapi";
 import {
   API_SITEMAP_PATHS,
   buildApiRobotsTxt,
@@ -78,5 +79,15 @@ describe("API robots.txt and sitemap.xml", () => {
         ).toBe(404);
       }
     }
+  });
+
+  test("the curated OpenAPI contract names both crawl hints without a policy claim", async () => {
+    const specification = await (await openapiRouter.request("/")).json();
+    for (const path of ["/robots.txt", "/sitemap.xml"]) {
+      expect(specification.paths[path].get).toBeDefined();
+      expect(specification.paths[path].head).toBeDefined();
+      expect(specification.paths[path].post).toBeUndefined();
+    }
+    expect(JSON.stringify(specification)).not.toContain("Content-Signal");
   });
 });

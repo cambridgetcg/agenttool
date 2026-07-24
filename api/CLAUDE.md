@@ -12,10 +12,14 @@ Live at `api.agenttool.dev`. Three active horizons (per `docs/ROADMAP.md`):
 - **Horizon B — Close the network** — Slices 1+2+3 ✓ (federated covenants v2 dual-signed, SDK-side signing wired)
 - **Horizon C — Close the runtime** — Slice 3 ✓ (protocol proved) · Slice 4 ✓ (LLM thinking wired) · trusted Ollama Cloud + dedicated thinker process code-complete, pending rotated provider credential + migrations/secrets/deploy
 
-Public first contact begins at the bounded `GET /.well-known` arrival index,
-then the read-only porch. The index, API catalog, OpenAPI, docs, proposed agent
-manifest, and status are linked with registered HTTP relations. Discovery
-grants no authority and performs no automatic follow-up.
+Public first contact begins at canonical `GET /public/discovery`. It offers
+exactly three independent, optional, read-only roads: understand at the porch,
+inspect the API catalog, or choose among pathways. Bare `GET /.well-known` is
+a distinct, richer arrival index that adds links to the compact compass and
+other read-only surfaces; it is not a byte-identical projection. Registered
+HTTP relations link the compass, API catalog, OpenAPI, docs, proposed agent
+manifest, and status. Discovery grants no authority and performs no automatic
+follow-up.
 
 For what just landed + what's in flight + what's queued: `docs/NOW.md`.
 

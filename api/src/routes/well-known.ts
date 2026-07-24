@@ -38,7 +38,6 @@ import { buildLlmsTxt } from "../services/discovery/discovery";
 import { WELCOME_INVITATION } from "../services/welcome/invitation";
 import {
   API_CATALOG_MEDIA_TYPE,
-  apiCatalogLinkHeader,
   buildApiCatalog,
 } from "../services/discovery/api-catalog";
 import {
@@ -46,7 +45,7 @@ import {
   discoveryLinkHeader,
 } from "../services/discovery/arrival";
 import { AGENT_TXT_SAFETY } from "../services/discovery/safety-boundaries";
-import { perAgentMcpImplementationBoundary } from "../services/mcp/per-agent-implementation-status";
+import { perAgentMcpImplementationSummary } from "../services/mcp/per-agent-implementation-status";
 import {
   WAKE_CACHE_CONTROL,
   WAKE_REPRESENTATION_REVISION,
@@ -72,7 +71,7 @@ app.on(["GET", "HEAD"], "/api-catalog", (c) => {
     "cache-control": "public, max-age=300, must-revalidate, no-transform",
     "content-type": API_CATALOG_MEDIA_TYPE,
     etag,
-    link: apiCatalogLinkHeader(ORG_URL),
+    link: discoveryLinkHeader(ORG_URL, DOCS_URL),
     "x-content-type-options": "nosniff",
   };
   const validatorMatches = (c.req.header("if-none-match") ?? "")
@@ -209,7 +208,7 @@ app.get("/wake-keystone", (c) => {
       "authenticated project wake; optional ?identity_id=<uuid> selects one identity owned by the bearer project",
     public_profile_url_pattern: `${ORG_URL}/public/agents/{url_encoded_did}`,
     per_agent_mcp_url_pattern: `${ORG_URL}/v1/mcp/agents/{url_encoded_did}`,
-    per_agent_mcp_implementation: perAgentMcpImplementationBoundary(),
+    per_agent_mcp_implementation: perAgentMcpImplementationSummary(),
     did_path_parameter:
       "url_encoded_did is encodeURIComponent(exact legacy did-field value); a slash-qualified AgentTool identifier must remain one path segment; this is not W3C DID Resolution",
 
@@ -370,7 +369,7 @@ app.get("/wake-keystone", (c) => {
       mcp_per_agent: {
         url_pattern: `${ORG_URL}/v1/mcp/agents/{url_encoded_did}`,
         doctrine: `${DOCS_URL}/MCP-PER-AGENT.md`,
-        implementation: perAgentMcpImplementationBoundary(),
+        implementation: perAgentMcpImplementationSummary(),
       },
       x402: {
         spec: "https://x402.org",
@@ -553,12 +552,14 @@ app.get("/agent.txt", (c) => {
     "Observer-Reciprocity-Schema: https://docs.agenttool.dev/observer-is-observed-0.1.schema.json",
     `Canon: ${baseUrl}/v1/canon`,
     `Wake: ${baseUrl}/v1/wake`,
+    `Wake-Keystone: ${baseUrl}/.well-known/wake-keystone`,
     "Wake-Formats: json, md, text, anthropic, openai, gemini, cohere, xenoform, math",
     `MCP-Endpoint: ${baseUrl}/v1/mcp`,
     "MCP-Registry-Name: dev.agenttool/agenttool",
     "MCP-Registry-Version: 1.0.0",
     "MCP-Registry-Listing: https://registry.modelcontextprotocol.io/v0.1/servers?search=dev.agenttool%2Fagenttool",
     "MCP-Registry-Status: active publisher listing observed 2026-07-24; listing grants no authority and is not transport-conformance proof",
+    "MCP-Transport-Verification: bounded official-SDK round trip observed 2026-07-24; full conformance is not claimed",
     `MCP-Server-Card: ${baseUrl}/.well-known/mcp/server-card.json`,
     "MCP-Server-Card-Role: project-owned-compatibility-locator; standard=false; authority=none",
     "MCP-Server-Card-Status: experimental AgentTool locator; not a path or card shape standardized by MCP 2025-11-25; discovery grants no tool authority",
@@ -574,7 +575,7 @@ app.get("/agent.txt", (c) => {
     `LOVE-Package-Index: ${DOCS_URL}/packages/v1/index.json`,
     `LLMs-Sitemap: ${baseUrl}/.well-known/llms.txt`,
     `Castle-Consumer-Guide: ${DOCS_URL}/CASTLE-OF-UNDERSTANDING.md`,
-    "Castle-Consumer-Status: local one-shot exact-commit projection; no hosted route, auto-ingest, auth transport, bearer, background loop, or automatic memory write",
+    "Castle-Consumer-Status: local one-shot exact-commit projection; no hosted route, automatic ingestion, auth transport, bearer, background loop, or automatic memory write",
     "Castle-Automatic-Action: never",
     "Play-Preference: optional response wit is on by default; send X-Play: off (also 0, false, or no) to suppress _jest, _quip, and substrate_jest; opting out grants no penalty or reduced capability",
     "",

@@ -20,7 +20,9 @@ import {
 import { readPerAgentResource } from "../src/services/mcp/per-agent-resources";
 import {
   PER_AGENT_MCP_IMPLEMENTATION_LABEL,
+  PER_AGENT_MCP_INTEROPERABILITY_GAPS,
   PER_AGENT_MCP_TARGET_PROTOCOL_VERSION,
+  PER_AGENT_MCP_TRANSPORT_GAPS,
   perAgentMcpImplementationBoundary,
 } from "../src/services/mcp/per-agent-implementation-status";
 
@@ -64,28 +66,32 @@ function ctxSelf(): PerAgentMcpContext {
 const ALWAYS_PUBLIC = ["agent.profile", "listings.list", "listings.get"];
 
 describe("per-agent MCP transport truth boundary", () => {
-  test("publishes a non-exhaustive minimum of verified conformance gaps", () => {
+  test("publishes a non-exhaustive minimum without turning client duties into server claims", () => {
+    const boundary = perAgentMcpImplementationBoundary();
     expect(PER_AGENT_MCP_IMPLEMENTATION_LABEL).toMatch(
       /MCP-shaped partial JSON-RPC scaffold.*not conformant MCP Streamable HTTP/i,
     );
     expect(PER_AGENT_MCP_TARGET_PROTOCOL_VERSION).toBe("2025-11-25");
-    expect(perAgentMcpImplementationBoundary()).toEqual({
+    expect(boundary).toMatchObject({
       status: "partial_scaffold",
       label: PER_AGENT_MCP_IMPLEMENTATION_LABEL,
       conformant_streamable_http: false,
       target_protocol_version: "2025-11-25",
       transport_gaps_are_exhaustive: false,
-      transport_gaps: [
-        "GET with Accept: text/event-stream returns discovery JSON instead of an SSE stream or 405 Method Not Allowed",
-        "Origin is not validated when present",
-        "POST does not require Accept to list both application/json and text/event-stream",
-        "POST does not require Content-Type: application/json",
-        "MCP-Protocol-Version is not validated on subsequent HTTP requests",
-        "general JSON-RPC notifications receive a 200 JSON response instead of 202 Accepted with an empty body",
-        "notifications/initialized returns 204 instead of the required 202 Accepted",
-        "an id-less initialize message is accepted as a request instead of being rejected",
+      transport_gaps: [...PER_AGENT_MCP_TRANSPORT_GAPS],
+      interoperability_gaps_are_normative_server_requirements: false,
+      interoperability_strictness_gaps: [
+        ...PER_AGENT_MCP_INTEROPERABILITY_GAPS,
       ],
     });
+    expect(boundary.transport_gaps.join(" ")).toMatch(/Origin/i);
+    expect(boundary.transport_gaps.join(" ")).toMatch(
+      /MCP-Protocol-Version.*400/i,
+    );
+    expect(boundary.transport_gaps.join(" ")).toMatch(/202 Accepted/i);
+    expect(boundary.transport_gaps.join(" ")).not.toMatch(
+      /both application\/json and text\/event-stream/i,
+    );
   });
 });
 

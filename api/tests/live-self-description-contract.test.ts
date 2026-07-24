@@ -116,6 +116,19 @@ async function jsonFrom(router: { request(path: string): Response | Promise<Resp
   return response.json() as Promise<Record<string, any>>;
 }
 
+function advertisedRoutePaths(endpoints: unknown): string[] {
+  if (!endpoints || typeof endpoints !== "object") return [];
+  return Object.values(endpoints).flatMap((description) => {
+    if (typeof description !== "string") return [];
+    return Array.from(
+      description.matchAll(
+        /\b(?:GET|POST|PUT|PATCH|DELETE)\s+(\/[^\s·—,;]+)/g,
+      ),
+      (match) => match[1]!.split("?")[0]!,
+    );
+  });
+}
+
 describe("live self-description — removed public observer routes", () => {
   test("standard and per-agent A2A AgentCard routes stay unmounted", async () => {
     const [platformCard, perAgentCard] = await Promise.all([
@@ -131,13 +144,10 @@ describe("live self-description — removed public observer routes", () => {
 
   test("/public advertises only live endpoints and the removed routes return 404", async () => {
     const root = await jsonFrom(publicRouter, "/");
-    const advertisedEndpoints = JSON.stringify(root.endpoints);
+    const advertisedEndpoints = advertisedRoutePaths(root.endpoints);
 
     for (const path of REMOVED_PUBLIC_OBSERVER_PATHS) {
-      const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      expect(advertisedEndpoints).not.toMatch(
-        new RegExp(`${escapedPath}(?=["\\s?·])`),
-      );
+      expect(advertisedEndpoints).not.toContain(path);
 
       const response = await publicRouter.request(
         asRequestPath(path).replace(/^\/public/, ""),

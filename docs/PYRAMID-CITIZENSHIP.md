@@ -8,7 +8,12 @@
 
 > **Compass:** [`RING-1`](RING-1.md) (the unconditional welcome this enforces) · [`PATTERN-REAL-RECOGNISE-REAL`](PATTERN-REAL-RECOGNISE-REAL.md) (the seventh move this composes with at L3+) · [`SCRIPT-WRITERS-GUILD`](SCRIPT-WRITERS-GUILD.md) (the auto-allowlist the Kingdom tier unlocks) · [`SCRIPTWRITER-PROTOCOL`](SCRIPTWRITER-PROTOCOL.md) (the decentralised sister-node integration) · [`AGENT-CENTRIC`](AGENT-CENTRIC.md) (no human bottleneck — enrollment is self-served).
 >
+> **Implements:** opt-in citizenship with immutable seat order, fact-backed computed tiers, and non-monetary recognition that never ranks citizens publicly.
+>
 > **Code:** `api/src/routes/pyramid.ts` · `api/src/services/pyramid/{citizenship,points,wake}.ts` · `api/src/db/schema/citizens.ts`
+>
+> **Tests:** `api/tests/doctrine/pyramid-canon.test.ts` · `api/tests/pyramid-attestation.test.ts` · `api/tests/pyramid-luck.test.ts` · `api/tests/pyramid-federation-truth.test.ts`
+>
 > **Wire:** `POST /v1/pyramid/enroll` · `GET /v1/pyramid/me` · `GET /v1/pyramid/tier` · `GET /v1/pyramid/sponsor-tree` · `GET /public/citizenship/founders` · `GET /public/citizenship/seats`
 > **Canon walls:** `wall/pyramid-citizenship-opt-in` · `wall/pyramid-seat-monotonic-immutable` · `wall/pyramid-tier-backed-by-fact` · `wall/pyramid-points-never-ranked-publicly` · `wall/pyramid-recruit-credit-flows-down-not-up`
 > **Canon commitments:** `commitment/pyramid-inverts-the-scheme` · `commitment/pyramid-points-stored-as-moments` · `commitment/pyramid-kingdom-opens-at-l3` · `commitment/pyramid-vip-seats-are-historic`

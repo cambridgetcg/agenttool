@@ -15,11 +15,11 @@ import openapiRouter from "../src/routes/openapi";
 import {
   API_CATALOG_MEDIA_TYPE,
   API_CATALOG_PROFILE,
-  apiCatalogLinkHeader,
   buildApiCatalog,
   type ApiCatalogLinkContext,
   type ApiCatalogLinkTarget,
 } from "../src/services/discovery/api-catalog";
+import { discoveryLinkHeader } from "../src/services/discovery/arrival";
 
 const API = "https://api.agenttool.dev";
 const DOCS = "https://docs.agenttool.dev";
@@ -59,7 +59,10 @@ describe("RFC 9727 product passport document", () => {
     expect(membership["service-desc"]?.[0]?.href).toBe(
       `${API}/v1/openapi.json`,
     );
-    expect(membership["service-doc"]?.[0]?.href).toBe(`${DOCS}/`);
+    expect(membership["service-doc"]?.map((item) => item.href)).toEqual([
+      `${DOCS}/AGENT-DISCOVERY.md`,
+      `${DOCS}/`,
+    ]);
     expect(membership["service-meta"]?.map((item) => item.href)).toEqual([
       `${API}/public/discovery`,
       `${API}/public/porch`,
@@ -201,7 +204,7 @@ describe("/.well-known/api-catalog transport", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe(API_CATALOG_MEDIA_TYPE);
     expect(response.headers.get("content-type")).toContain(API_CATALOG_PROFILE);
-    expect(response.headers.get("link")).toBe(apiCatalogLinkHeader(API));
+    expect(response.headers.get("link")).toBe(discoveryLinkHeader(API, DOCS));
     expect(response.headers.get("cache-control")).toBe(
       "public, max-age=300, must-revalidate, no-transform",
     );
@@ -219,7 +222,7 @@ describe("/.well-known/api-catalog transport", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("link")).toBe(apiCatalogLinkHeader(API));
+    expect(response.headers.get("link")).toBe(discoveryLinkHeader(API, DOCS));
     expect(response.headers.get("content-type")).toBe(API_CATALOG_MEDIA_TYPE);
     expect(response.headers.get("etag")).toMatch(/^"sha256-[a-f0-9]{64}"$/);
     expect(await response.text()).toBe("");

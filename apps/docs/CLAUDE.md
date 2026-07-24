@@ -7,10 +7,13 @@ API documentation site for the AgentTool platform. Static HTML pages covering al
 Active — all 9 service pages live, plus the main index, local agent-data docs,
 local Agent Browser docs, and a LOVE Package Protocol surface for public
 exact-version package discovery.
-The root page and response headers expose a bounded typed discovery map, while
-`_redirects` sends common machine-document guesses to the canonical API.
-`AGENT-DISCOVERY.md` and `CASTLE-OF-UNDERSTANDING.md` are public symlinks to
-their canonical doctrine files. Reading either guide performs no operation.
+The root advertises the same bounded six-link discovery set as the web and
+dashboard roots. Bare `/.well-known` is a distinct, richer arrival index that
+links to the canonical compact three-road `/public/discovery` compass; neither
+surface grants authority or starts follow-up. `AGENT-DISCOVERY.md` and
+`CASTLE-OF-UNDERSTANDING.md` are published as symlinks to their canonical
+repository guides; finding either guide performs no registration, installation,
+Castle read, or follow-up.
 It also serves the Agent Wallet 0.1 Working Draft, schema, and exact LOVE
 artifact from their canonical repository sources. This docs surface does not
 imply npm mirror availability, a hosted wallet, key custody, RPC, or broadcast
@@ -69,6 +72,8 @@ whitehack.html  — crypto-aware advisory, offer-only Castle intake, local walle
 AGENT-WALLET-0.1.md — symlink to the provider-neutral wallet Working Draft
 agent-wallet-v0.1.schema.json — symlink to the package's canonical record schema
 AGENT-REPO-ARCHIVE.md — symlink to the local encrypted Git archive overview
+AGENT-DISCOVERY.md — symlink to the canonical invitation-only discovery guide
+CASTLE-OF-UNDERSTANDING.md — symlink to the bounded local Castle bridge guide
 specs/AGENT-REPO-ARCHIVE-0.1.md — symlink to the normative experimental profile
 specs/agent-repo-archive-0.1.schema.json — public alias for the package schema
 specs/agent-repo-archive-0.1-vectors.json — public alias for the package vectors
@@ -95,7 +100,7 @@ Static hosting (Cloudflare Pages or similar). No build step.
 
 ## Dependencies
 - **agenttool-dashboard**: SDK-quickstart surface (agents-only since 2026-05-15 — no operator registration form); SDK / curl links route through here
-- **agenttool.dev apex**: the API itself. Logo links route to `/v1/welcome`; live discovery includes the three-road `/public/discovery` compass, RFC 9727 catalog, MCP, wake-keystone, agent.txt, llms.txt, and pyramid. A2A task transport and AgentCards are intentionally unmounted
+- **agenttool.dev apex**: the API itself. The canonical compact three-road discovery compass is `/public/discovery`; bare `/.well-known` is a distinct richer arrival index. API catalog, OpenAPI, agent.txt, llms.txt, MCP, wake-keystone, and pyramid are separately scoped signposts. No A2A task transport or AgentCard is published.
 - References SDK snippets from `@agenttool/sdk` (TS) and `agenttool-sdk` (Python). Canonical genesis door: `bootstrap_agent()` / `bootstrapAgent()` against `/v1/register/agent`
 
 ## See Also
@@ -120,6 +125,7 @@ AgentTool Platform
 - `whitehack.html` — Whitehack crypto-awareness, offer-only Castle intake, local wallet understanding, no-custody, privacy, and authorization boundaries
 - `AGENT-WALLET-0.1.md` / `agent-wallet-v0.1.schema.json` — wallet protocol discovery; exact release bytes live under `packages/v1/`
 - `AGENT-REPO-ARCHIVE.md` / `specs/AGENT-REPO-ARCHIVE-0.1.md` — local archive overview and normative profile; schema and vectors live beside the profile
+- `AGENT-DISCOVERY.md` / `CASTLE-OF-UNDERSTANDING.md` — canonical discovery and bounded local-context guides, published by symlink
 - `memory.html` — Most detailed endpoint reference (the flagship service)
 - `tools.html` — Search, scrape, browse, execute, document parsing endpoints
 - `style.css` — Shared stylesheet with endpoint styling, sidebar, code blocks

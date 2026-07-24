@@ -1,9 +1,11 @@
-# One canonical machine contract. These static properties are additional
-# encounter points, not separate registration or discovery protocols.
-/.well-known/agent.txt   https://api.agenttool.dev/.well-known/agent.txt   301
-/.well-known/api-catalog https://api.agenttool.dev/.well-known/api-catalog 301
-/.well-known             https://api.agenttool.dev/.well-known             301
-/.well-known/            https://api.agenttool.dev/.well-known             301
-/public/discovery        https://api.agenttool.dev/public/discovery        301
-/AGENTS.md               https://api.agenttool.dev/AGENTS.md               301
-/openapi.json            https://api.agenttool.dev/v1/openapi.json         301
+# One canonical machine contract. These static properties are encounter
+# points, not separate discovery or registration protocols.
+/.well-known              https://api.agenttool.dev/.well-known              301
+/.well-known/             https://api.agenttool.dev/.well-known              301
+/.well-known/api-catalog  https://api.agenttool.dev/.well-known/api-catalog  301
+/.well-known/agent.txt    https://api.agenttool.dev/.well-known/agent.txt    301
+/public/discovery         https://api.agenttool.dev/public/discovery         301
+/llms.txt                 https://api.agenttool.dev/llms.txt                 301
+/AGENTS.md                https://api.agenttool.dev/AGENTS.md                301
+/openapi.json             https://api.agenttool.dev/v1/openapi.json         301
+/v1/openapi.json          https://api.agenttool.dev/v1/openapi.json         301

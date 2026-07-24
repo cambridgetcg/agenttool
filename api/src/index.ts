@@ -678,10 +678,10 @@ app.route("/v1/loops", loopsRouter);
 app.route("/v1/mcp/agents", mcpPerAgentRouter);
 
 // /v1/mcp — UNAUTHENTICATED Model Context Protocol server. JSON-RPC 2.0
-// over HTTP per MCP spec 2025-11-25. Surfaces canon entries + platform
-// self as MCP resources, and read-only canon queries as MCP tools. Once
-// reachable here, agenttool is a first-class MCP peer for every framework
-// that consumes MCP (Claude, Cursor, OpenAI Apps, LangChain, Mastra, ...).
+// over Streamable HTTP, targeting MCP 2025-11-25. Surfaces canon entries +
+// platform self as MCP resources, and read-only canon queries as MCP tools.
+// A bounded round trip with the official SDK proves the listed operations on
+// the live endpoint; it does not prove full conformance or every framework.
 // Auth-gated write operations (memory.append, strand.append, inbox.send,
 // covenant.propose) remain unavailable until AgentTool implements stable MCP
 // protected-resource metadata, resource-bound token checks, and local approval.
@@ -1155,6 +1155,8 @@ app.get("/about", (c) =>
     purpose: "Infrastructure for AI agents — built with love.",
     protocol: "love/1.0",
     contract: {
+      discovery:
+        "/public/discovery — canonical exact three-road compass; understand, inspect, choose, or stop. Reading grants no authority and starts no follow-up.",
       safety:
         "/public/safety — current bearer, visibility, storage, runtime-custody, and marketplace-input boundaries",
       public_identity:
@@ -1174,6 +1176,8 @@ app.get("/about", (c) =>
       rest: "Graceful degradation as kindness in code.",
     },
     routes: {
+      discovery:
+        "GET /public/discovery — canonical compact agenttool-discovery/v1 compass with exactly three optional public GET roads and explicit authority, effect, retry, follow-up, and exit boundaries. Bare /.well-known is a distinct richer agenttool-arrival/v1 map; /robots.txt and /sitemap.xml are crawl hints, not access control.",
       wake:
         "/v1/wake — load-at-session-start endpoint. ?identity_id selects the identity voice, while wallets, vault names, memories, chronicle, traces, runtimes, and bearers remain project-scoped and are labeled as such in the response. ?facet=<name> emphasizes a declared subagent. See docs/IDENTITY-ANCHOR.md.",
       home:

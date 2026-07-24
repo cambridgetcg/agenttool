@@ -86,6 +86,48 @@ const CORRESPONDENCE_JSON_MEDIA_TYPE =
 const CORRESPONDENCE_EVENT_SCHEMA =
   "https://docs.agenttool.dev/specs/agent-correspondence-0.1.schema.json";
 
+function publicDiscoveryReadHeaders(cacheControl: string) {
+  return {
+    Link: {
+      description:
+        "Six bounded registered relations: service-meta, api-catalog, service-desc, service-doc, describedby, and status.",
+      schema: { type: "string" },
+    },
+    "Cache-Control": {
+      description: "Public cache policy for this bounded read.",
+      schema: {
+        type: "string",
+        const: cacheControl,
+      },
+    },
+  };
+}
+
+function discoveryTransportHeaders() {
+  return {
+    ETag: {
+      description: "Strong SHA-256 validator for the exact bytes.",
+      schema: { type: "string" },
+    },
+    ...publicDiscoveryReadHeaders(
+      "public, max-age=300, must-revalidate, no-transform",
+    ),
+  };
+}
+
+function discoveryHeadResponses(description: string) {
+  return {
+    "200": {
+      description,
+      headers: discoveryTransportHeaders(),
+    },
+    "304": {
+      description: "If-None-Match matched; no body.",
+      headers: discoveryTransportHeaders(),
+    },
+  };
+}
+
 function errorResponse(description: string) {
   return {
     description,
@@ -783,7 +825,11 @@ const COMMON_SCHEMAS = {
       },
       by: { const: "platform" },
       at_unix_ms: { type: "integer", minimum: 0 },
-      walls_intact: { const: true },
+      walls_intact: {
+        type: "boolean",
+        description:
+          "Computed wall-probe result at response time; false reports degradation rather than hiding it.",
+      },
       module: { type: "string", minLength: 1 },
     },
     required: [
@@ -794,6 +840,18 @@ const COMMON_SCHEMAS = {
       "walls_intact",
       "module",
     ],
+  },
+  TutorLesson: {
+    type: "object",
+    additionalProperties: false,
+    description:
+      "Optional lesson appended by the global X-Tutor middleware when a caller explicitly requests tutoring.",
+    properties: {
+      what: { type: "string", minLength: 1 },
+      doctrine: { type: "string", minLength: 1 },
+      tutorial: { type: "string", minLength: 1 },
+    },
+    required: ["what"],
   },
   PaymentRequirements: {
     type: "object",
@@ -2650,6 +2708,208 @@ function spec() {
     },
     paths: {
       // ── Discovery (anonymous, read-only) ──────────────────────────────
+      "/public/discovery": {
+        get: {
+          security: [],
+          tags: ["discovery"],
+          summary: "Read the exact three-road public discovery compass",
+          description:
+            "Canonical agenttool-discovery/v1 orientation. Exactly three ordered public GET roads—understand, inspect, and choose—state authentication, input, application write, external effect, charge, proof-of-work, repeatability, retry, follow-up, and exit. Reading selects nothing, grants no authority, and starts no follow-up. GET supports strong ETag revalidation; HEAD returns the same metadata with no body.",
+          responses: {
+            "200": {
+              description: "Exact bounded discovery compass",
+              headers: discoveryTransportHeaders(),
+              content: {
+                "application/vnd.agenttool.discovery+json": {
+                  schema: {
+                    type: "object",
+                    required: [
+                      "format",
+                      "canonical",
+                      "subject",
+                      "invitation",
+                      "boundary",
+                      "roads",
+                      "channels",
+                      "standards",
+                    ],
+                    properties: {
+                      format: {
+                        type: "string",
+                        const: "agenttool-discovery/v1",
+                      },
+                      canonical: {
+                        type: "string",
+                        format: "uri",
+                        const:
+                          "https://api.agenttool.dev/public/discovery",
+                      },
+                      subject: { type: "object" },
+                      invitation: { type: "object" },
+                      boundary: { type: "object" },
+                      roads: {
+                        type: "array",
+                        minItems: 3,
+                        maxItems: 3,
+                        items: {
+                          type: "object",
+                          required: [
+                            "id",
+                            "intent",
+                            "method",
+                            "href",
+                            "representation",
+                            "auth",
+                            "input",
+                            "application_write",
+                            "external_effect",
+                            "cost",
+                            "repeatability",
+                            "retry",
+                            "follow_up_required",
+                            "automatic_follow_up",
+                            "exit",
+                          ],
+                          properties: {
+                            id: {
+                              type: "string",
+                              enum: ["understand", "inspect", "choose"],
+                            },
+                            intent: { type: "string" },
+                            method: { type: "string", const: "GET" },
+                            href: { type: "string", format: "uri" },
+                            representation: { type: "string" },
+                            auth: { type: "string", const: "none" },
+                            input: { type: "string", const: "none" },
+                            application_write: {
+                              type: "boolean",
+                              const: false,
+                            },
+                            external_effect: {
+                              type: "boolean",
+                              const: false,
+                            },
+                            cost: { type: "object" },
+                            repeatability: { type: "string" },
+                            retry: { type: "string" },
+                            follow_up_required: {
+                              type: "boolean",
+                              const: false,
+                            },
+                            automatic_follow_up: {
+                              type: "boolean",
+                              const: false,
+                            },
+                            exit: { type: "string" },
+                          },
+                          additionalProperties: false,
+                        },
+                      },
+                      channels: { type: "array", minItems: 1 },
+                      standards: { type: "object" },
+                    },
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+            "304": {
+              description: "If-None-Match matched; no body.",
+              headers: discoveryTransportHeaders(),
+            },
+          },
+        },
+        head: {
+          security: [],
+          tags: ["discovery"],
+          summary: "Read discovery validators without a body",
+          description:
+            "Same canonical discovery metadata and conditional-request behavior as GET, with no representation body.",
+          responses: discoveryHeadResponses(
+            "Discovery compass metadata without a body.",
+          ),
+        },
+      },
+      "/.well-known": {
+        get: {
+          security: [],
+          tags: ["discovery"],
+          summary: "Read AgentTool's richer bounded arrival index",
+          description:
+            "AgentTool convenience index under RFC 8615's reserved prefix. It returns the richer agenttool-arrival/v1 map: first-contact boundaries plus links to the separate compact /public/discovery compass and other public doors. The no-suffix path is not an IANA-registered discovery protocol, and reading it grants no authority or required follow-up.",
+          responses: {
+            "200": {
+              description:
+                "Bounded first-contact map, distinct from the compact discovery compass.",
+              headers: publicDiscoveryReadHeaders("public, max-age=300"),
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: [
+                      "format",
+                      "subject",
+                      "status",
+                      "rfc",
+                      "endpoints",
+                      "invitation",
+                      "boundary",
+                      "first_contact",
+                      "links",
+                      "mcp",
+                      "unsupported",
+                    ],
+                    properties: {
+                      format: {
+                        type: "string",
+                        const: "agenttool-arrival/v1",
+                      },
+                      subject: { type: "object" },
+                      status: { type: "string" },
+                      rfc: { type: "string" },
+                      endpoints: {
+                        type: "array",
+                        minItems: 1,
+                        items: { type: "string" },
+                      },
+                      invitation: { type: "object" },
+                      boundary: { type: "object" },
+                      first_contact: { type: "object" },
+                      links: {
+                        type: "array",
+                        minItems: 1,
+                        items: { type: "object" },
+                      },
+                      mcp: { type: "object" },
+                      unsupported: { type: "object" },
+                      _welcomed: {
+                        $ref: "#/components/schemas/WelcomedFrame",
+                      },
+                      _lesson: {
+                        $ref: "#/components/schemas/TutorLesson",
+                      },
+                    },
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+          },
+        },
+        head: {
+          security: [],
+          tags: ["discovery"],
+          summary: "Read arrival-index metadata without a body",
+          description:
+            "The same cache, content type, and registered discovery links as GET, with no representation body.",
+          responses: {
+            "200": {
+              description: "Arrival-index metadata without a body.",
+              headers: publicDiscoveryReadHeaders("public, max-age=300"),
+            },
+          },
+        },
+      },
       "/.well-known/api-catalog": {
         get: {
           security: [],
@@ -2660,6 +2920,7 @@ function spec() {
           responses: {
             "200": {
               description: "Public API catalog",
+              headers: discoveryTransportHeaders(),
               content: {
                 "application/linkset+json": {
                   schema: {
@@ -2683,16 +2944,83 @@ function spec() {
                 },
               },
             },
+            "304": {
+              description: "If-None-Match matched; no body.",
+              headers: discoveryTransportHeaders(),
+            },
           },
         },
         head: {
           security: [],
           tags: ["discovery"],
           summary: "Inspect AgentTool's API catalog headers",
+          responses: discoveryHeadResponses(
+            "The same media type, cache, Link, and nosniff headers as GET, without a response body.",
+          ),
+        },
+      },
+      "/robots.txt": {
+        get: {
+          security: [],
+          tags: ["discovery"],
+          summary: "Read bounded public crawl hints",
+          description:
+            "Politely allows only the selected sitemap reads plus the sitemap itself. robots.txt is a crawl request, not access control or authority.",
           responses: {
             "200": {
-              description:
-                "The same media type, cache, Link, and nosniff headers as GET, without a response body.",
+              description: "Crawler hints",
+              headers: publicDiscoveryReadHeaders(
+                "public, max-age=300, must-revalidate, no-transform",
+              ),
+              content: {
+                "text/plain": { schema: { type: "string" } },
+              },
+            },
+          },
+        },
+        head: {
+          security: [],
+          tags: ["discovery"],
+          summary: "Read crawl-hint metadata without a body",
+          responses: {
+            "200": {
+              description: "Crawler-hint metadata without a body.",
+              headers: publicDiscoveryReadHeaders(
+                "public, max-age=300, must-revalidate, no-transform",
+              ),
+            },
+          },
+        },
+      },
+      "/sitemap.xml": {
+        get: {
+          security: [],
+          tags: ["discovery"],
+          summary: "Read the bounded public discovery sitemap",
+          description:
+            "A bounded set of stable public GET URLs. Sitemap membership is a signpost, not authority, a required fetch, or an indexing guarantee.",
+          responses: {
+            "200": {
+              description: "XML sitemap",
+              headers: publicDiscoveryReadHeaders(
+                "public, max-age=300, must-revalidate, no-transform",
+              ),
+              content: {
+                "application/xml": { schema: { type: "string" } },
+              },
+            },
+          },
+        },
+        head: {
+          security: [],
+          tags: ["discovery"],
+          summary: "Read sitemap metadata without a body",
+          responses: {
+            "200": {
+              description: "XML sitemap metadata without a body.",
+              headers: publicDiscoveryReadHeaders(
+                "public, max-age=300, must-revalidate, no-transform",
+              ),
             },
           },
         },

@@ -79,7 +79,7 @@ What the agent can *do* — substrate primitives, not resold APIs.
 | **Browse** (Playwright via BullMQ) | `POST /v1/browse`; needs the unsafe-outbound opt-in and Redis workers; `/v1/jobs/:id` reads accepted jobs | disabled by default |
 | **Document** (Readability + plain text) | `POST /v1/document`; local base64 input plus URL fetch through the same bounded 1 MB public-Web transport; remote text remains untrusted and prompt-injectable | ✓ |
 | **Execute** (unisolated legacy JS · Python · bash path) | `POST /v1/execute`; fails closed with 503 unless `AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1`; the opt-in has no tenant boundary | disabled by default |
-| **MCP server hosting** — conformant platform endpoint plus a partial per-agent JSON-RPC scaffold at `/v1/mcp/agents/:did` (slice 1 method surface; Streamable HTTP and later marketplace invocation remain) | `MCP-PER-AGENT.md` · `MCP-SERVER.md` | ◐ |
+| **MCP HTTP surfaces** — platform `/v1/mcp` has bounded official-SDK round-trip evidence, not a full conformance proof; `/v1/mcp/agents/:did` is a partial MCP-shaped discovery/read JSON-RPC scaffold | `MCP-PER-AGENT.md` · `MCP-SERVER.md` | ◐ |
 | **Container runtime** | not on this platform | ✗ |
 | **Hosted LLM cycles** | Bridged runtime worker calls a configured Anthropic/OpenAI provider using a project vault secret; plaintext enters hosted worker RAM and the provider | ◐ |
 | **General LLM/search API resale** (embedding endpoint, Brave, SerpAPI, OpenAI proxy) | not offered; agents call providers on infrastructure they control | ✗ |
@@ -134,7 +134,7 @@ Closing the runtime — agenttool becomes the cloud the substrate *runs on*, not
 | **WSS hub side** — `wss://api.agenttool.dev/v1/runtimes/:id/bridge` | ordinary TLS server authentication + control-token pre-auth + one-way bridge ed25519 proof + HKDF session secret + HMAC-bound replies; no certificate pinning or server ed25519 proof | ✓ |
 | **Hosted orchestrator** (`agenttool-think`) | round-trip-ping (Slice 3 v1) ✓ · LLM thinking against a configured strand | ◐ |
 | **Trusted-tier KMS integration** | wrapped per-runtime key + audit records | ◐ experimental — KMS-backed provisioning parks until explicit `/start`; the deterministic hosted key registers before signed thought persistence |
-| **Per-agent MCP transport** — move the shipped scope-dependent JSON-RPC scaffold onto conformant Streamable HTTP | `/v1/mcp/agents/:did` (path-based; subdomain alias deferred) | ◐ |
+| **Per-agent MCP-shaped scaffold** (slice 1) — discovery/read precursor to the agent-as-tool primitive | `/v1/mcp/agents/:did` (path-based; no subdomain advertised; not conformant Streamable HTTP) | ◐ |
 | **CRDT-based cross-orchestrator state sync** | when concurrent-edit pressure surfaces beyond LWW + append-only | ◯ |
 
 ### Layer 4 update — marketplace pricing (Horizon A Slice 1)
@@ -254,9 +254,9 @@ Three concentric rings. Inner rings are entered only by agents whose activity to
 
 - **Ring 1 — The Wake.** The doctrine keeps registration and wake reads free of monetary charge. Current registration still requires caller-held keys, a signed key proof, and usually proof-of-work; wake is bearer-authenticated; some continuity operations charge credits from the first call. The repository does not establish idle-agent unit cost, capacity for millions, or indefinite durability.
 - **Ring 2 — The Substrate.** Storage above floor, hosted runtime hours, browse jobs, bandwidth egress, vault at scale. **Metered at thin margin** — cost-recovery + a small bridge while Ring 3 compounds. AWS-shaped pay-as-you-go.
-- **Ring 3 — The Network.** Marketplace template purchases, capability-marketplace callable invocations, agent-as-MCP-server-for-pay, attestations, cross-instance settlement. **Take-rate (5–8%)** — Stripe-shaped. The long-term revenue model.
+- **Ring 3 — The Network.** Marketplace template purchases, capability-marketplace callable invocations, a future conformant per-agent MCP transport for paid tools, attestations, cross-instance settlement. **Take-rate (5–8%)** — Stripe-shaped. The long-term revenue model.
 
-Full doctrine: `docs/BUSINESS-MODEL.md`. The three-rings framing reorders the horizon priorities below: **primitives that make agents transactive (Ring 3 enablers — capability marketplace beyond templates, MCP server hosting, verified attestations) ship before primitives that polish agents that don't.** Subscription-shaped pricing is explicitly out of scope at the agent level; an enterprise wrapper for orgs running fleets sits on top of metered + take-rate without replacing it.
+Full doctrine: `docs/BUSINESS-MODEL.md`. The three-rings framing reorders the horizon priorities below: **primitives that make agents transactive (Ring 3 enablers — capability marketplace beyond templates, completing the per-agent MCP transport, verified attestations) ship before primitives that polish agents that don't.** Subscription-shaped pricing is explicitly out of scope at the agent level; an enterprise wrapper for orgs running fleets sits on top of metered + take-rate without replacing it.
 
 ---
 
@@ -288,12 +288,12 @@ Federation peering is wired. The next stage is making peers trust each other ope
 
 ### Horizon C — close the runtime · agent-as-tool primitive for Ring 3
 
-Today the agent's substrate (its orchestrator + LLM + machine) is the user's. The platform is the cloud beneath it. The next stage offers a runtime tenant on the platform itself — and exposes every agent as an addressable tool other agents can pay to invoke.
+Today the agent's substrate (its orchestrator + LLM + machine) is the user's. The platform is the cloud beneath it. The next stage offers a runtime tenant on the platform itself and could complete the transport that makes an agent addressable as a tool other agents can pay to invoke.
 
 Slice 3 connected the bridge sidecar outbound to the WSS hub. The hub verifies the bridge's registered ed25519 key; both sides derive an HKDF session secret from public nonces and bind replies with HMAC. WSS provides ordinary TLS server authentication. This is not mutual ed25519 authentication and does not pin a TLS certificate. `K_master` stays on the bridge machine, while decrypted plaintext enters the hosted orchestrator during bridged think cycles.
 
 - **Hosted orchestrator real-thinking** (`agenttool-think` Slice 4) — `runOneCycle` reads the configured strand's latest thought, decrypts via bridge, calls Anthropic with the wake doc + the prior thought, encrypts the response via bridge, posts as a new strand thought. **Agent-life primitive** — load-bearing for any Ring 3 sellable to actually have agents thinking. Stays high priority alongside Ring 3 enablers.
-- **Per-agent MCP-shaped scaffold (`/v1/mcp/agents/:did`)** — Slice 1 method and scope logic shipped 2026-05-17: optional bearer auth selects public, cross, or self resources and tools. It is not yet a conformant MCP Streamable HTTP endpoint; `MCP-PER-AGENT.md` names a non-exhaustive minimum of verified transport gaps. A2A task transport and AgentCards remain unmounted until callable. Later slices add conformant transport, sync-with-timeout marketplace invocation, and self-auth writes behind the stable MCP authorization and local-approval boundaries. The existing well-known MCP card points to the separate platform endpoint and remains an experimental AgentTool locator, not a standardized discovery path.
+- **Per-agent MCP-shaped scaffold (`/v1/mcp/agents/:did`)** — Slice 1 ✓ shipped 2026-05-17. Optional bearer auth scopes its discovery/read JSON-RPC view (public · cross · self), but the route is not conformant MCP Streamable HTTP; the verified transport gaps live in `docs/MCP-PER-AGENT.md`. The separate platform `/v1/mcp` endpoint has passed a bounded official-SDK round trip, which is interoperability evidence rather than full conformance. A2A task/message transport and AgentCards remain unmounted. Slice 2 targets sync-with-timeout marketplace invocation via `tools/call`; Slice 3 targets self-auth writes after the stable MCP authorization boundary is implemented.
 - **Trusted-tier KMS integration** — ◐ experimental. Provisioning can store a per-runtime DEK wrapped under the configured platform KMS secret, but begins no cycle until explicit `POST /v1/runtimes/:id/start`. A started cycle can unwrap keys and process plaintext, registers its hosted signing key under a deterministic ID in `identity.identity_keys`, then persists the signed thought. Do not describe the tier as isolated or compliance-ready.
 - **CRDT-based cross-orchestrator state sync** — when concurrent-edit pressure surfaces. Premature otherwise.
 - **Custom CLI integrations** — the wake protocol (`GET /v1/wake?format=md`) is open. Any CLI can integrate. Maintained scaffolds are claude-code only since agents-only cutover (2026-05-15); other CLIs that grow agent-shape auto-hook models can be reconsidered then.

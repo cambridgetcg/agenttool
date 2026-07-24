@@ -151,6 +151,11 @@ export function buildApiCatalog(
         "service-desc": openapiDescription,
         "service-doc": [
           {
+            href: `${docs}/AGENT-DISCOVERY.md`,
+            type: "text/markdown",
+            title: "AgentTool discovery contract and authority boundary",
+          },
+          {
             href: `${docs}/`,
             type: "text/html",
             title: "AgentTool technical library",

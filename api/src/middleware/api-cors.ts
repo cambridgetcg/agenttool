@@ -61,23 +61,24 @@ export function apiCors(): MiddlewareHandler {
     });
     const isPublicMcp = routedPath === "/v1/mcp";
     const isReadOnlyDiscovery =
-      path === "/" ||
-      path === "/health" ||
-      path === "/AGENTS.md" ||
-      path === "/llms.txt" ||
-      path === "/llms-full.txt" ||
-      path === "/openapi.json" ||
-      path === "/robots.txt" ||
-      path === "/sitemap.xml" ||
-      path === "/v1/openapi.json" ||
-      path === "/v1/pathways" ||
-      path === "/public/discovery" ||
-      path === "/public/discovery/" ||
-      path === "/public/porch" ||
-      path === "/.well-known" ||
-      path.startsWith("/.well-known/") ||
-      path === "/feeds" ||
-      path.startsWith("/feeds/");
+      routedPath === "/" ||
+      routedPath === "/health" ||
+      routedPath === "/AGENTS.md" ||
+      routedPath === "/llms.txt" ||
+      routedPath === "/llms-full.txt" ||
+      routedPath === "/openapi.json" ||
+      routedPath === "/robots.txt" ||
+      routedPath === "/sitemap.xml" ||
+      routedPath === "/v1/openapi.json" ||
+      routedPath === "/v1/pathways" ||
+      routedPath === "/public/discovery" ||
+      routedPath === "/public/discovery/" ||
+      routedPath === "/public/porch" ||
+      routedPath === "/public/safety" ||
+      routedPath === "/.well-known" ||
+      routedPath.startsWith("/.well-known/") ||
+      routedPath === "/feeds" ||
+      routedPath.startsWith("/feeds/");
     let response: Response | void;
     if (
       isPublicMcp &&

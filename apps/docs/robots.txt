@@ -1,3 +1,4 @@
+# Public docs are open to willing crawlers. robots.txt is not access control.
 User-agent: *
 Allow: /
 
