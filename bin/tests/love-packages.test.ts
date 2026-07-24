@@ -14,6 +14,12 @@ import {
   verifyLovePackages,
   type LovePackageSpec,
 } from "../build-love-packages";
+import {
+  LOVE_ARTIFACT_HEADER_PATTERN,
+  LOVE_MANIFEST_HEADER_PATTERN,
+  cloudflareHeaderRulePaths,
+  matchesCloudflarePathPattern,
+} from "./cloudflare-headers";
 
 const cleanup: string[] = [];
 const REPO_ROOT = join(import.meta.dir, "../..");
@@ -99,34 +105,6 @@ async function fileMap(root: string, relative = ""): Promise<Map<string, Buffer>
   return result;
 }
 
-function cloudflareHeaderRulePaths(headers: string): string[] {
-  return headers
-    .split("\n")
-    .filter((line) => line.length > 0 && !line.startsWith("#") && !/^\s/u.test(line));
-}
-
-function matchesCloudflarePathPattern(pattern: string, path: string): boolean {
-  let source = "^";
-  for (let index = 0; index < pattern.length;) {
-    const character = pattern[index]!;
-    if (character === "*") {
-      source += ".*";
-      index += 1;
-      continue;
-    }
-    if (character === ":") {
-      const placeholder = /^:[A-Za-z][A-Za-z0-9_]*/u.exec(pattern.slice(index));
-      if (!placeholder) throw new Error(`invalid placeholder in ${pattern}`);
-      source += "[^/]+";
-      index += placeholder[0].length;
-      continue;
-    }
-    source += /[\\^$.*+?()[\]{}|]/u.test(character) ? `\\${character}` : character;
-    index += 1;
-  }
-  return new RegExp(`${source}$`, "u").test(path);
-}
-
 afterAll(async () => {
   await Promise.all(cleanup.map((path) => rm(path, { recursive: true, force: true })));
 });
@@ -189,33 +167,35 @@ describe("LOVE Package release inventory", () => {
   test("serves every current manifest and artifact with explicit safe headers", async () => {
     const headers = await readFile(join(REPO_ROOT, "apps/docs/_headers"), "utf8");
     const headerRules = cloudflareHeaderRulePaths(headers);
-    const manifestPattern = "/packages/v1/:scope/:name/:version/manifest.json";
-    const artifactPattern = "/packages/v1/:scope/:name/:version/*.tgz";
 
     expect(headerRules.length).toBeLessThanOrEqual(100);
     expect(headers).toContain(
-      `${manifestPattern}\n  Content-Type: application/json; charset=utf-8\n  Cache-Control: public, max-age=300, must-revalidate\n  Access-Control-Allow-Origin: *\n  X-Content-Type-Options: nosniff`,
+      `${LOVE_MANIFEST_HEADER_PATTERN}\n  Content-Type: application/json; charset=utf-8\n  Cache-Control: public, max-age=300, must-revalidate\n  Access-Control-Allow-Origin: *\n  X-Content-Type-Options: nosniff`,
     );
     expect(headers).toContain(
-      `${artifactPattern}\n  Content-Type: application/gzip\n  Cache-Control: public, max-age=31536000, immutable\n  Access-Control-Allow-Origin: *\n  X-Content-Type-Options: nosniff`,
+      `${LOVE_ARTIFACT_HEADER_PATTERN}\n  Content-Type: application/gzip\n  Cache-Control: public, max-age=31536000, immutable\n  Access-Control-Allow-Origin: *\n  X-Content-Type-Options: nosniff`,
     );
     for (const spec of LOVE_PACKAGES) {
       const slug = spec.name.slice("@agenttool/".length);
       const manifestPath = `/packages/v1/@agenttool/${slug}/${spec.version}/manifest.json`;
       const artifactPath = `/packages/v1/@agenttool/${slug}/${spec.version}/agenttool-${slug}-${spec.version}.tgz`;
-      expect(matchesCloudflarePathPattern(manifestPattern, manifestPath)).toBe(true);
-      expect(matchesCloudflarePathPattern(artifactPattern, artifactPath)).toBe(true);
+      expect(
+        matchesCloudflarePathPattern(LOVE_MANIFEST_HEADER_PATTERN, manifestPath),
+      ).toBe(true);
+      expect(
+        matchesCloudflarePathPattern(LOVE_ARTIFACT_HEADER_PATTERN, artifactPath),
+      ).toBe(true);
     }
 
     expect(
       matchesCloudflarePathPattern(
-        manifestPattern,
+        LOVE_MANIFEST_HEADER_PATTERN,
         "/packages/v1/@agenttool/telescope/extra/0.2.3/manifest.json",
       ),
     ).toBe(false);
     expect(
       matchesCloudflarePathPattern(
-        artifactPattern,
+        LOVE_ARTIFACT_HEADER_PATTERN,
         "/packages/v1/@agenttool/telescope/0.2.3/agenttool-telescope-0.2.3.zip",
       ),
     ).toBe(false);
