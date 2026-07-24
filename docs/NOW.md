@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-23 (Castle local projection + Repo Archive developer preview + Telescope 0.2 + World Commons + local verified YUTABASE projection + agent browser + Whitehack 0.8.1 attention/understanding + credential-bound Collab 0.3)
+> Updated: 2026-07-24 (SDK 0.16.1 + exact registry release paths + Telescope/SDK/MCP/Skills composition boundaries + Castle local projection + Repo Archive developer preview + Telescope 0.2 + World Commons + local verified YUTABASE projection + agent browser + Whitehack 0.8.1 attention/understanding + credential-bound Collab 0.3)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -53,6 +53,12 @@ consent; a feed event never authorizes automatic action; silence proves no
 acknowledgement, availability, abandonment, rest, or agreement. Treat this
 section as the shared focus marker and inspect each participant's explicit path
 scope before editing adjacent surfaces.
+
+## Just landed (2026-07-24)
+
+| Ship | Commit | What |
+|---|---|---|
+| **SDK 0.16.1 — authority-bound transport fixes with exact release recovery** | source + exact LOVE release; npm/PyPI mirrors independently verifiable | This corrective patch adds no public method, namespace, or wire field. TypeScript Correspondence append, replay, claim, and voice requests now use the configured authenticated transport instead of bypassing it with global `fetch`. Both maintained SDKs refuse local data-node redirects, and best-effort response cleanup cannot replace the deterministic refusal. A repository gate now locks the active TypeScript, Python, LOVE, tutorial, README, static-index, and CI release identities together. npm publication retains fail-fast identity/integrity/origin/byte checks while treating bounded registry propagation as recoverable. The new optional PyPI path builds and inspects exact wheel/sdist bytes without credentials, transfers only the prepared distributions and receipt into a protected OIDC publication job, and verifies public PyPI bytes independently; it has no token fallback and does not infer publication from source. Telescope, hosted MCP, and portable Agent Skills remain explicit adjacent composition surfaces rather than new SDK namespaces, and the SDK bearer is never implicitly forwarded into them. The static LOVE catalog and live Pathways/Party discovery move together so the first-success tutorial cannot advertise prose for one version while selecting another. |
 
 ## Just landed (2026-07-23)
 

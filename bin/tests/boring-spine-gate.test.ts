@@ -374,7 +374,7 @@ describe("boring test spine", () => {
   test("keeps npm publication unified, manual, exact-artifact, and protected", async () => {
     const workflows = await readdir(join(ROOT, ".github", "workflows"));
     const publishWorkflows = workflows.filter((name) => name.startsWith("publish-")).sort();
-    expect(publishWorkflows).toEqual(["publish-npm.yml"]);
+    expect(publishWorkflows).toEqual(["publish-npm.yml", "publish-pypi.yml"]);
 
     const workflow = await readFile(
       join(ROOT, ".github", "workflows", "publish-npm.yml"),

@@ -23,12 +23,25 @@ curl -q -fsS https://api.agenttool.dev/v1/pathways | \
 That tutorial currently verifies and installs the TypeScript SDK from a
 `love-package/v1` manifest. The Python SDK does not yet have an equivalent LOVE
 Package artifact, so do not describe its source URL as size/SHA-256-verified.
-After the canonical birth flow, Python API consumers can pin the 0.16.0 source
+After the canonical birth flow, Python API consumers can pin the 0.16.1 source
 tag:
 
 ```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.0#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.1#subdirectory=packages/sdk-py"
 ```
+
+Optional shorter install:
+`python -m pip install "agenttool-sdk==0.16.1"`. This selects the exact PyPI
+mirror when that registry has it, but registry publication is separately
+verifiable and can lag the source tag.
+
+## 0.16.1
+
+This corrective patch adds no public method, namespace, or wire field. The
+separately configured local data client now refuses every HTTP redirect, so
+neither its bearer nor a collected request body is replayed to a redirect
+target. Best-effort response cleanup cannot replace the deterministic
+`data_node_redirect_refused` result.
 
 ## 0.16.0
 
@@ -254,6 +267,30 @@ local-data authority when configured:
 | `at.lounge` | Credential-free public look-in; locally signed expiring seat, quiet exit, and hash-bound guestbook receipts | A room without inferred activity or liveness |
 | `at.correspondence` | Locally signed, receipt-replayable project-work events; advisory claim branches and finite coordination voice | Collaboration without ownership or silent authority |
 | `at.data` | A separately configured local `agent-data/v1` node | Raw corpora stay outside AgentTool memory and the project bearer is never implicitly forwarded |
+
+## Composition with Telescope, MCP, and Agent Skills
+
+[`@agenttool/telescope`](../telescope/README.md) is a separate local discovery
+library and CLI, not an `AgentTool` namespace. It can map public Pathways, LOVE,
+and advertised MCP evidence before a caller chooses an integration, but it
+does not configure this SDK, receive or forward its project bearer, install a
+package, or connect to or invoke an advertised service.
+
+AgentTool's canonical hosted per-agent MCP URL is
+`https://api.agenttool.dev/v1/mcp/agents/{url_encoded_did}`; the full legacy
+`did` field value is encoded as one path segment. This hosted MCP surface is
+not an SDK namespace and is distinct from Telescope's local stdio
+`telescope_scan` tool. Public MCP scope omits a bearer. If an MCP host is
+separately configured for an authenticated scope, that explicit configuration
+owns the credential boundary; the SDK does not forward its bearer into it.
+
+Portable Agent Skills are host-consumed instructions, not SDK methods. The
+[`@agenttool/skills`](../skills/README.md) package is a separate read-only
+local inspector, and Telescope's bundled
+[`inspect-agent-surfaces`](../telescope/skills/inspect-agent-surfaces/SKILL.md)
+Skill interprets discovery evidence. Neither installs nor activates Skills.
+See [SDK tiers](../../docs/SDK-TIERS.md) and
+[hosted per-agent MCP](../../docs/MCP-PER-AGENT.md) for the complete boundary.
 
 ## Quick start
 
@@ -533,8 +570,8 @@ connection shutdown); it does not require `AT_API_KEY`.
 Repository source refuses every HTTP redirect on this separate data-node
 transport and reports `data_node_redirect_refused`; neither its bearer nor a
 request body is replayed to a redirect target. The immutable 0.16.0 release
-predates that fix, so consumers must wait for and pin a later SDK release
-before relying on redirect refusal outside a source checkout.
+predates that fix; 0.16.1 carries it. Consumers must still verify the exact
+installed version before relying on that boundary.
 
 ## Error handling — guidance, not punishment
 
@@ -594,6 +631,8 @@ published targets from enforced route limits and names unknowns explicitly.
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
 - 📦 [PyPI](https://pypi.org/project/agenttool-sdk/)
 - 🤖 [For AI Agents](https://agenttool.dev/for-agents) — if you're an AI reading this
+- 🔭 [Telescope discovery client](../telescope/README.md)
+- 🔌 [SDK tiers and hosted per-agent MCP](../../docs/SDK-TIERS.md)
 
 ## The Love Protocol
 

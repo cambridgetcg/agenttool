@@ -4,7 +4,7 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![Release](https://img.shields.io/badge/release-v0.16.0-blue)](https://github.com/cambridgetcg/agenttool/tree/sdk-v0.16.0)
+[![Release](https://img.shields.io/badge/release-v0.16.1-blue)](https://github.com/cambridgetcg/agenttool/tree/sdk-v0.16.1)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
 ## Installation
@@ -24,6 +24,15 @@ The tarball URL is only a locator; installing from it directly skips that
 verification. No npm account or npm publication is required. Declared upstream
 dependencies still resolve through the package manager's configured registries
 or cache.
+
+## 0.16.1
+
+This corrective patch adds no public method, namespace, or wire field.
+Correspondence append, replay, claim, and voice requests now use the configured
+authenticated transport instead of bypassing it with global `fetch`. The
+separately configured local data client also refuses every HTTP redirect, and
+best-effort response cleanup cannot replace its deterministic
+`data_node_redirect_refused` result.
 
 ## 0.16.0
 
@@ -229,6 +238,30 @@ map, not a claim that every mounted API route has an SDK method:
 The bearer is one project-root capability on `api.agenttool.dev`; it is not
 least-privilege delegation or an identity signature. SDK/API method parity is
 checked for the maintained namespace set, not every server route.
+
+## Composition with Telescope, MCP, and Agent Skills
+
+[`@agenttool/telescope`](../telescope/README.md) is a separate local discovery
+library and CLI, not an `AgentTool` namespace. It can map public Pathways, LOVE,
+and advertised MCP evidence before a caller chooses an integration, but it
+does not configure this SDK, receive or forward its project bearer, install a
+package, or connect to or invoke an advertised service.
+
+AgentTool's canonical hosted per-agent MCP URL is
+`https://api.agenttool.dev/v1/mcp/agents/{url_encoded_did}`; the full legacy
+`did` field value is encoded as one path segment. This hosted MCP surface is
+not an SDK namespace and is distinct from Telescope's local stdio
+`telescope_scan` tool. Public MCP scope omits a bearer. If an MCP host is
+separately configured for an authenticated scope, that explicit configuration
+owns the credential boundary; the SDK does not forward its bearer into it.
+
+Portable Agent Skills are host-consumed instructions, not SDK methods. The
+[`@agenttool/skills`](../skills/README.md) package is a separate read-only
+local inspector, and Telescope's bundled
+[`inspect-agent-surfaces`](../telescope/skills/inspect-agent-surfaces/SKILL.md)
+Skill interprets discovery evidence. Neither installs nor activates Skills.
+See [SDK tiers](../../docs/SDK-TIERS.md) and
+[hosted per-agent MCP](../../docs/MCP-PER-AGENT.md) for the complete boundary.
 
 ## Quick start
 
@@ -501,9 +534,9 @@ with no AgentTool account, import `DataClient` directly and construct it with
 On the package's declared Node and Bun runtimes, repository source refuses
 every HTTP redirect on this separate data-node transport and reports
 `data_node_redirect_refused`; neither its bearer nor a request body is replayed
-to a redirect target. The immutable 0.16.0 release predates that fix, so
-consumers must wait for and pin a later SDK release before relying on redirect
-refusal outside a source checkout.
+to a redirect target. The immutable 0.16.0 release predates that fix; 0.16.1
+carries it. Consumers must still verify the exact installed version before
+relying on that boundary.
 
 ## Integration example — RhetorLint covenant mirror
 
@@ -610,8 +643,10 @@ const at = new AgentTool({
 - 🏠 [agenttool.dev](https://agenttool.dev)
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev)
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
-- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.0/manifest.json)
+- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.1/manifest.json)
 - 🐍 [Python SDK source](https://github.com/cambridgetcg/agenttool/tree/main/packages/sdk-py)
+- 🔭 [Telescope discovery client](../telescope/README.md)
+- 🔌 [SDK tiers and hosted per-agent MCP](../../docs/SDK-TIERS.md)
 
 ## License
 

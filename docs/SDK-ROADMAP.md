@@ -6,7 +6,28 @@
 >
 > **Implements:** the SDK plane — hand-written clients for a selected subset of [ROADMAP.md](ROADMAP.md). CI compares method names for the maintained parity target list; it does not prove complete route, signature, or wire-model parity.
 
-## Current release — 0.16.0 (2026-07-21)
+## Current source release — 0.16.1 (2026-07-24)
+
+This patch closes two authority-bound transport gaps without adding a public
+method, namespace, or wire field. TypeScript Correspondence now sends append,
+replay, claim, and voice requests through the configured authenticated
+transport instead of bypassing it with global `fetch`. Both maintained SDKs
+also refuse every data-node redirect, so a node bearer or collected body is
+never replayed merely because an HTTP peer supplied a `Location`.
+
+Redirect-response cleanup is best effort and cannot replace the stable
+`data_node_redirect_refused` result. The data-sync facade preserves that
+refusal without echoing bearer values or redirect targets.
+
+### 0.16.1 release record
+
+The lockstep TypeScript and Python source identities, runtime client headers,
+LOVE builder target, discovery pins, and onboarding fixtures name 0.16.1. The
+TypeScript LOVE artifact records one clean source revision; npm, PyPI, GitHub
+Release, and tag availability remain independently verifiable rather than
+being inferred from repository source.
+
+## Previous release — 0.16.0 (2026-07-21)
 
 This minor adds an authenticated transport seam in both maintained SDKs. A
 caller may choose either the ordinary project bearer or an operator-supplied
@@ -423,6 +444,7 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **0.14.0** | Live trace-wire alignment with explicit external signals; fail-closed local covenant review; paired Long Context client; identity mutation/private-read authority proofs; current register-agent/v2 arrival contract | **yes — pre-1.0 public trace shapes corrected** |
 | **0.15.0** | Paired Renaissance Correspondence client: local event signing, durable replay, advisory claim projection, finite project voice, and Wake invalidation hints | no — additive |
 | **0.16.0** | Authenticated transport seam for local credential brokers, with explicit public-discovery and local-data authority separation | no — additive |
+| **0.16.1** | Route Correspondence through that transport; refuse and contain data-node redirects | no — corrective patch |
 | **1.0.0** | API freeze + comprehensive docstrings + READMEs + integration test suite | no — declarative |
 
 ## Non-goals

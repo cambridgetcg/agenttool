@@ -945,8 +945,9 @@ Therefore:
 On the declared Node, Bun, and Python runtimes, repository SDK source refuses
 every HTTP redirect on the data-node transport before response parsing, so a
 bearer or request body is not replayed to a redirect target. The immutable
-0.16.0 SDK artifacts predate that behavior; a later released version must be
-selected before an external consumer relies on this guarantee.
+0.16.0 SDK artifacts predate that behavior. The 0.16.1 source and artifact line
+carries the refusal; an external consumer must still verify that it selected
+that exact version before relying on the boundary.
 
 The Slice 1 file collector resolves a caller-supplied path and has no per-path
 allow-list. The HTTP collector bounds schemes, URL credentials, redirects,

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -9,13 +10,69 @@ import {
   expectedTag,
   isPrereleaseVersion,
   packedFilename,
+  pollRegistry,
   readReleaseReceipt,
   registryDecision,
   registryPackagePath,
   releaseSpec,
   requiredArchiveEntries,
   validateNpmTagForVersion,
+  type PreparedReceipt,
 } from "../npm-release";
+
+function registryFixture(): {
+  bytes: Uint8Array;
+  receipt: PreparedReceipt;
+  tarball: string;
+  versionDocument: {
+    name: string;
+    version: string;
+    dist: {
+      integrity: string;
+      shasum: string;
+      tarball: string;
+    };
+  };
+} {
+  const bytes = new TextEncoder().encode("exact prepared npm artifact");
+  const digest = (algorithm: "sha1" | "sha256" | "sha512", encoding: "hex" | "base64") =>
+    createHash(algorithm).update(bytes).digest(encoding);
+  const tarball = "https://registry.npmjs.org/@agenttool/sdk/-/sdk-0.16.1.tgz";
+  const receipt: PreparedReceipt = {
+    schema: RELEASE_RECEIPT_SCHEMA,
+    package: {
+      key: "sdk",
+      name: "@agenttool/sdk",
+      version: "0.16.1",
+      path: "packages/sdk-ts",
+    },
+    tag: "sdk-v0.16.1",
+    tag_commit: "a".repeat(40),
+    source_revision: "a".repeat(40),
+    artifact: {
+      filename: "agenttool-sdk-0.16.1.tgz",
+      size: bytes.byteLength,
+      sha1: digest("sha1", "hex"),
+      sha256: digest("sha256", "hex"),
+      integrity: `sha512-${digest("sha512", "base64")}`,
+    },
+    prepared_at: "2026-07-24T12:00:00.000Z",
+  };
+  return {
+    bytes,
+    receipt,
+    tarball,
+    versionDocument: {
+      name: receipt.package.name,
+      version: receipt.package.version,
+      dist: {
+        integrity: receipt.artifact.integrity,
+        shasum: receipt.artifact.sha1,
+        tarball,
+      },
+    },
+  };
+}
 
 describe("standard npm release policy", () => {
   test("allowlists twelve reviewed release identities", () => {
@@ -70,7 +127,7 @@ describe("standard npm release policy", () => {
 
   test("derives exact annotated tags and npm filenames", () => {
     expect(expectedTag(releaseSpec("credential-broker"), "0.1.0")).toBe("credential-broker-v0.1.0");
-    expect(expectedTag(releaseSpec("sdk"), "0.16.0")).toBe("sdk-v0.16.0");
+    expect(expectedTag(releaseSpec("sdk"), "0.16.1")).toBe("sdk-v0.16.1");
     expect(packedFilename("@agenttool/collab", "0.1.0")).toBe("agenttool-collab-0.1.0.tgz");
     expect(packedFilename("@agenttool/correspondence-yutabase", "0.1.0-dev.0")).toBe(
       "agenttool-correspondence-yutabase-0.1.0-dev.0.tgz",
@@ -177,6 +234,275 @@ describe("standard npm release policy", () => {
     expect(() => registryDecision(503, 404, "trusted")).toThrow("HTTP 503");
   });
 
+  test("retries classified metadata transport and visibility-status failures", async () => {
+    const fixture = registryFixture();
+    let metadataCalls = 0;
+    let tarballCalls = 0;
+    const metadataTimeouts: number[] = [];
+    const sleeps: number[] = [];
+
+    const tarball = await pollRegistry(fixture.receipt, "latest", {
+      maxAttempts: 3,
+      fetchMetadata: async (url, init, timeoutMs) => {
+        const attempt = Math.floor(metadataCalls / 2);
+        metadataCalls += 1;
+        metadataTimeouts.push(timeoutMs);
+        expect(init.redirect).toBe("error");
+        if (attempt === 0) throw new TypeError("temporary metadata connection failure");
+        if (attempt === 1) {
+          return new Response(null, {
+            status: url.endsWith(`/${fixture.receipt.package.version}`) ? 404 : 503,
+          });
+        }
+        const document = url.endsWith(`/${fixture.receipt.package.version}`)
+          ? fixture.versionDocument
+          : { "dist-tags": { latest: fixture.receipt.package.version } };
+        return Response.json(document);
+      },
+      fetchTarball: async (_url, _init, timeoutMs) => {
+        tarballCalls += 1;
+        expect(timeoutMs).toBe(60_000);
+        return new Response(fixture.bytes, { status: 200 });
+      },
+      sleep: async (milliseconds) => {
+        sleeps.push(milliseconds);
+      },
+    });
+
+    expect(tarball).toBe(fixture.tarball);
+    expect(metadataCalls).toBe(6);
+    expect(metadataTimeouts).toEqual(Array(6).fill(30_000));
+    expect(tarballCalls).toBe(1);
+    expect(sleeps).toEqual([5_000, 5_000]);
+  });
+
+  test("retries temporary tarball propagation failures within the registry visibility bound", async () => {
+    const fixture = registryFixture();
+    const outcomes: Array<Response | Error> = [
+      new Response(null, { status: 404 }),
+      new Response(null, { status: 408 }),
+      new Response(null, { status: 425 }),
+      new Response(null, { status: 429 }),
+      new Response(null, { status: 503 }),
+      new TypeError("temporary registry connection failure"),
+      new Response(fixture.bytes, { status: 200 }),
+    ];
+    let metadataCalls = 0;
+    let tarballCalls = 0;
+    const sleeps: number[] = [];
+
+    const tarball = await pollRegistry(fixture.receipt, "latest", {
+      maxAttempts: outcomes.length,
+      loadState: async () => {
+        metadataCalls += 1;
+        return {
+          packageStatus: 200,
+          versionStatus: 200,
+          packageDocument: { "dist-tags": { latest: fixture.receipt.package.version } },
+          versionDocument: fixture.versionDocument,
+        };
+      },
+      fetchTarball: async (input) => {
+        expect(String(input)).toBe(fixture.tarball);
+        const outcome = outcomes[tarballCalls]!;
+        tarballCalls += 1;
+        if (outcome instanceof Error) throw outcome;
+        return outcome;
+      },
+      sleep: async (milliseconds) => {
+        sleeps.push(milliseconds);
+      },
+    });
+
+    expect(tarball).toBe(fixture.tarball);
+    expect(metadataCalls).toBe(outcomes.length);
+    expect(tarballCalls).toBe(outcomes.length);
+    expect(sleeps).toEqual(Array(outcomes.length - 1).fill(5_000));
+  });
+
+  test("stops after the bounded number of retryable tarball visibility failures", async () => {
+    const fixture = registryFixture();
+    let tarballCalls = 0;
+    const sleeps: number[] = [];
+
+    await expect(pollRegistry(fixture.receipt, "latest", {
+      maxAttempts: 3,
+      loadState: async () => ({
+        packageStatus: 200,
+        versionStatus: 200,
+        packageDocument: { "dist-tags": { latest: fixture.receipt.package.version } },
+        versionDocument: fixture.versionDocument,
+      }),
+      fetchTarball: async () => {
+        tarballCalls += 1;
+        return new Response(null, { status: 404 });
+      },
+      sleep: async (milliseconds) => {
+        sleeps.push(milliseconds);
+      },
+    })).rejects.toThrow("not visible after 3 attempts");
+
+    expect(tarballCalls).toBe(3);
+    expect(sleeps).toEqual([5_000, 5_000]);
+  });
+
+  test("clips metadata, tarball, and sleep bounds to one wall-clock deadline", async () => {
+    const fixture = registryFixture();
+    let now = 0;
+    const metadataTimeouts: number[] = [];
+    const tarballTimeouts: number[] = [];
+    const sleeps: number[] = [];
+
+    await expect(pollRegistry(fixture.receipt, "latest", {
+      maxAttempts: 10,
+      deadlineMs: 7_000,
+      now: () => now,
+      loadState: async (_name, _version, timeoutMs) => {
+        metadataTimeouts.push(timeoutMs);
+        now += 4_000;
+        return {
+          packageStatus: 200,
+          versionStatus: 200,
+          packageDocument: { "dist-tags": { latest: fixture.receipt.package.version } },
+          versionDocument: fixture.versionDocument,
+        };
+      },
+      fetchTarball: async (_url, _init, timeoutMs) => {
+        tarballTimeouts.push(timeoutMs);
+        now += 1_000;
+        return new Response(null, { status: 404 });
+      },
+      sleep: async (milliseconds) => {
+        sleeps.push(milliseconds);
+        now += milliseconds;
+      },
+    })).rejects.toThrow("visibility deadline expired after 7000 milliseconds");
+
+    expect(metadataTimeouts).toEqual([7_000]);
+    expect(tarballTimeouts).toEqual([3_000]);
+    expect(sleeps).toEqual([2_000]);
+    expect(now).toBe(7_000);
+  });
+
+  test("fails immediately on registry identity, integrity, origin, and downloaded-byte mismatches", async () => {
+    const fixture = registryFixture();
+    const cases = [
+      {
+        versionDocument: { ...fixture.versionDocument, name: "@agenttool/not-sdk" },
+        body: fixture.bytes,
+        expected: "different package identity",
+        expectedTarballCalls: 0,
+      },
+      {
+        versionDocument: {
+          ...fixture.versionDocument,
+          dist: { ...fixture.versionDocument.dist, integrity: "sha512-not-the-prepared-artifact" },
+        },
+        body: fixture.bytes,
+        expected: "bytes different from the prepared artifact",
+        expectedTarballCalls: 0,
+      },
+      {
+        versionDocument: {
+          ...fixture.versionDocument,
+          dist: {
+            ...fixture.versionDocument.dist,
+            tarball: "https://registry.npmjs.org:444/@agenttool/sdk/-/sdk-0.16.1.tgz",
+          },
+        },
+        body: fixture.bytes,
+        expected: "unexpected tarball origin",
+        expectedTarballCalls: 0,
+      },
+      {
+        versionDocument: {
+          ...fixture.versionDocument,
+          dist: {
+            ...fixture.versionDocument.dist,
+            tarball: "https://agent:secret@registry.npmjs.org/@agenttool/sdk/-/sdk-0.16.1.tgz",
+          },
+        },
+        body: fixture.bytes,
+        expected: "must not contain userinfo",
+        expectedTarballCalls: 0,
+      },
+      {
+        versionDocument: fixture.versionDocument,
+        body: new TextEncoder().encode("different artifact bytes"),
+        expected: "not byte-identical",
+        expectedTarballCalls: 1,
+      },
+      {
+        versionDocument: fixture.versionDocument,
+        body: fixture.bytes,
+        status: 403,
+        expected: "tarball download returned HTTP 403",
+        expectedTarballCalls: 1,
+      },
+    ];
+
+    for (const testCase of cases) {
+      let metadataCalls = 0;
+      let tarballCalls = 0;
+      let sleepCalls = 0;
+      await expect(pollRegistry(fixture.receipt, "latest", {
+        maxAttempts: 5,
+        loadState: async () => {
+          metadataCalls += 1;
+          return {
+            packageStatus: 200,
+            versionStatus: 200,
+            packageDocument: { "dist-tags": { latest: fixture.receipt.package.version } },
+            versionDocument: testCase.versionDocument,
+          };
+        },
+        fetchTarball: async () => {
+          tarballCalls += 1;
+          return new Response(testCase.body, { status: testCase.status ?? 200 });
+        },
+        sleep: async () => {
+          sleepCalls += 1;
+        },
+      })).rejects.toThrow(testCase.expected);
+      expect(metadataCalls).toBe(1);
+      expect(tarballCalls).toBe(testCase.expectedTarballCalls);
+      expect(sleepCalls).toBe(0);
+    }
+  });
+
+  test("fails immediately on non-retryable and malformed metadata", async () => {
+    const fixture = registryFixture();
+    let sleepCalls = 0;
+    await expect(pollRegistry(fixture.receipt, "latest", {
+      maxAttempts: 5,
+      loadState: async () => ({
+        packageStatus: 403,
+        versionStatus: 404,
+      }),
+      sleep: async () => {
+        sleepCalls += 1;
+      },
+    })).rejects.toThrow("non-retryable HTTP state 403/404");
+    expect(sleepCalls).toBe(0);
+
+    let metadataCalls = 0;
+    await expect(pollRegistry(fixture.receipt, "latest", {
+      maxAttempts: 5,
+      fetchMetadata: async (url) => {
+        metadataCalls += 1;
+        if (url.endsWith(`/${fixture.receipt.package.version}`)) {
+          return new Response("{not-json", { status: 200 });
+        }
+        return Response.json({ "dist-tags": { latest: fixture.receipt.package.version } });
+      },
+      sleep: async () => {
+        sleepCalls += 1;
+      },
+    })).rejects.toThrow("version document returned malformed JSON");
+    expect(metadataCalls).toBe(2);
+    expect(sleepCalls).toBe(0);
+  });
+
   test("parses only portable, exact-shape release receipts", async () => {
     const directory = await mkdtemp(join(tmpdir(), "npm-release-receipt-test-"));
     const path = join(directory, "receipt.json");
@@ -217,6 +543,17 @@ describe("standard npm release policy", () => {
         },
       }));
       await expect(readReleaseReceipt(path)).rejects.toThrow("canonical ISO timestamp");
+
+      await writeFile(path, JSON.stringify({
+        ...base,
+        result: {
+          status: "published",
+          npm_tag: "latest",
+          registry_observed_at: "2026-07-24T12:10:00.000Z",
+          registry_tarball: "https://agent:secret@registry.npmjs.org/archive.tgz",
+        },
+      }));
+      await expect(readReleaseReceipt(path)).rejects.toThrow("must not contain userinfo");
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

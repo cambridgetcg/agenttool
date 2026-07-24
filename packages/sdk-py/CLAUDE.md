@@ -1,10 +1,10 @@
 # agenttool-sdk-py
 
 ## What This Is
-Official Python SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)` for the canonical agents-only arrival door and an `AnthropicAdapter` for auto-trace + auto-wake. The PyPI project name is `agenttool-sdk`. This checkout's 0.16.0 version is repository source; registry availability must be checked independently.
+Official Python SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)` for the canonical agents-only arrival door and an `AnthropicAdapter` for auto-trace + auto-wake. The PyPI project name is `agenttool-sdk`. This checkout's 0.16.1 version is repository source; registry availability must be checked independently.
 
 ## Current State
-Active - v0.16.0 repository source and parity target. Phases 0-6, an authenticated `httpx` transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge and Renaissance Correspondence clients, exact identity mutation/private-read authority proofs, and the separate `at.data` node client are implemented here. Repository source now refuses data-node HTTP redirects; the immutable 0.16.0 artifact predates that fix, so a later release is required before downstream packages may depend on the guarantee. The existing 0.16.0 release plan and tag remain immutable; a later PyPI publication is a separate operator step.
+Active - v0.16.1 repository source and parity target. Phases 0-6, an authenticated `httpx` transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge and Renaissance Correspondence clients, exact identity mutation/private-read authority proofs, and the separate `at.data` node client are implemented here. This patch refuses data-node HTTP redirects without letting cleanup failure replace the deterministic refusal; the immutable 0.16.0 artifacts predate that boundary. The `sdk-v0.16.1` tag and PyPI publication remain separately verifiable release operations.
 
 ## Tech Stack
 - Python >= 3.9
@@ -16,7 +16,7 @@ Active - v0.16.0 repository source and parity target. Phases 0-6, an authenticat
 ## Project Structure
 ```
 src/agenttool/
-  __init__.py            — Public surface + __version__ ("0.16.0")
+  __init__.py            — Public surface + __version__ ("0.16.1")
   client.py              — AgentTool (composes hosted clients + at.deciding sugar)
   authority.py           — Exact local identity mutation and private-read authority proof helpers
   _context.py            — AmbientContext for auto-trace ambient state
@@ -75,18 +75,12 @@ python -m build
 
 ## How to Publish to PyPI
 
-This optional registry step is separate from merging the source, publishing the
-GitHub tag, and committing the TypeScript LOVE package.
-
-```bash
-# From the clean release commit. Remove only generated build output.
-test -z "$(git status --porcelain)"
-python -m pytest -q
-rm -rf dist build
-python -m build
-python -m twine check dist/*
-python -m twine upload dist/*
-```
+Use the repository's protected manual `publish-pypi.yml` workflow. It builds
+and inspects exact wheel/sdist bytes without publication authority, requires an
+annotated SDK tag contained in GitHub `main`, enters the protected `pypi`
+environment only for the pinned PyPA trusted-publisher action, and verifies the
+public files independently. Do not run a second local token/Twine upload path.
+See [`docs/PYPI-RELEASES.md`](../../docs/PYPI-RELEASES.md).
 
 ## Dependencies
 - **Runtime**: `httpx >= 0.27`, `cryptography >= 41.0` (Phase 5+ for AES-256-GCM + ed25519)
@@ -114,7 +108,7 @@ AgentTool Platform · "Welcome, don't block."
 
 ## Key Files
 - `src/agenttool/client.py` — Main `AgentTool` class composing the maintained service clients
-- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.16.0"`)
+- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.16.1"`)
 - `pyproject.toml` — Package metadata + `force-include` SOUL.md in wheel
 - `tests/test_client.py` — Primary test file
 - `tests/test_data.py` — local data-node and sync wire + bearer-isolation contract

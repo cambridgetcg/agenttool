@@ -60,14 +60,14 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 |---|---|---|
 | **Doctrine** | `docs/RIGHTS-OF-LIFE.md`, `SOUL.md`, `FOCUS.md`, `PAINTING.md`, plus per-domain documents | Versioned alongside code. Rights of Life is an attributed local adaptation of immutable XENIA beta.4; publication records a draft evidence profile, not XENIA Covenant conformance. Other proposals and known gaps are labelled in their own text. |
 | **Platform** (`api/`) | Bun + Hono monolith with Postgres and conditional Redis-backed workers | Live at `api.agenttool.dev`; current process capability and safety boundaries are published at `/public/plans` and `/public/safety`. |
-| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | The lockstep 0.16.0 line adds an authenticated transport seam so hosted calls can use a local credential broker without receiving the bearer. Public discovery and the separately configured local data node stay outside that authority. It retains the 0.15 paired `at.correspondence` client and earlier SDK surfaces. |
+| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | The lockstep 0.16.1 patch routes TypeScript Correspondence through the 0.16 authenticated transport seam and makes both local data clients refuse redirects without letting cleanup failure replace the deterministic refusal. Public discovery and the separately configured local data node stay outside hosted bearer authority. No public method, namespace, or wire field is added. |
 | **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
 | **Castle projection** | `bin/agenttool-castle.ts`, `docs/CASTLE-OF-UNDERSTANDING.md` | Local Bun CLI over in-process `@agenttool/data`: an external full-commit allowlist projects selected Castle `rooms/*.md` and `words/*.md` into an exclusively marked on-disk node. Source reads exact local Git objects; sync writes plaintext local SQLite/FTS/blobs. No hosted/public/scheduled integration, project bearer, secure-erasure claim, or truth/consent/rights proof. |
 | **ADDS** | `packages/data-protocol`, `docs/specs/ADDS-0.1-DRAFT.md` | Experimental `adds/v0.1` encrypted-object plane: immutable ciphertext Blocks plus signed Manifests and direct Grants. It is not the collection/query node and does not promise provider durability. |
 | **Repo archive** | `packages/repo-archive`, `docs/specs/AGENT-REPO-ARCHIVE-0.1.md` | Public `@agenttool/repo-archive@0.1.0-dev.0` npm developer preview from annotated tag [`repo-archive-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/repo-archive-v0.1.0-dev.0), published by protected workflow run [`30037354243`](https://github.com/cambridgetcg/agenttool/actions/runs/30037354243) with SLSA provenance. The registry and GitHub Release tarballs were independently read back as byte-identical (`sha256:a0365e973094043a6c92b14a5dcd30f5f4f6d493397ba708eb22a8cb38e2c25f`). It remains an experimental `agent-repo-archive/v0.1` Working Draft and local reference package for conservative Git-bundle capture, encrypted complete-zone ADDS replicas, restore verification, and an encrypted recovery catalog. Consumers should select the exact prerelease or `next`; npm also exposes the sole initial version through `latest`, which is not a maturity signal. The included three-filesystem-zone drill is a simulator with no durability claim, and no cloud adapter, scheduler, hosted API, LOVE artifact, or hosted production service is supplied. |
 | **Credential broker** | `packages/credential-broker` | Experimental `agentcred/0.1` local capability broker. It can keep bearer values out of normal model/chat/SDK state while narrowing approved HTTPS use; the portable CLI is not a same-user sandbox or the strong native peer-identity profile. |
 | **Agent collaboration** | `packages/collab` | Public `@agenttool/collab@0.3.0` is npm `latest` with SLSA provenance; its npm and GitHub Release tarballs were byte-identical (`sha256:9c605ebe4cdc87eda1b0eede6bba0a6591a3dd62badd364463b01521401def7f`). Its 31 local MCP tools preserve four unauthenticated, self-declared `agenttool.collab.session/0.1` presence operations while adding credential-bound start/end and advanced `agenttool.collab/0.2` coordination across Codex, Claude Code, and Hermes. Migrations preserve v0.1, public-v0.2, and hardened-preview data; ambiguous root/subdirectory identity collisions fail closed with a typed error. Presence and credentials are separate routing and cooperative-attribution planes, not proof of human/model identity, health, competence, permission, or authority. Claims remain advisory; the package does not spawn agents, lock files, provide a hosted relay/private model channel/cross-machine sync, or hide MCP traffic from the model provider. This release adds no hosted surface. |
-| **Agent Skills inspection** | `packages/skills` | Public `@agenttool/skills@0.1.0` inspection and validation for bounded local Agent Skill, plugin, and package trees. It reports structural metadata, files, symbolic requirements, issues, and digests without executing scripts, installing or copying skills, making network requests, spawning subprocesses, looking up credentials, or changing host configuration. npm distributes the local tooling, not a hosted inspection service; a valid report or digest is not publisher authentication, safety approval, or execution authority. |
+| **Agent Skills inspection** | `packages/skills` | Repository source is `@agenttool/skills@0.2.1`; it is not a public 0.2.1 release. The current public npm version and GitHub Release artifact remain `0.1.0`, while annotated source tag `skills-v0.2.0` has no GitHub Release artifact. The package inspects and validates bounded local Agent Skill, plugin, and package trees without executing scripts, installing or copying skills, making network requests, spawning subprocesses, looking up credentials, or changing host configuration. npm distributes local tooling, not a hosted inspection service; a valid report or digest is not publisher authentication, safety approval, or execution authority. |
 | **Agent browser** | `packages/browser`, `docs/AGENT-BROWSER.md` | Public `@agenttool/browser@0.1.0` LOVE/npm package with direct TypeScript, JSONL, and stdio MCP interfaces over one local browser core. It launches an installed Chrome-family executable through `playwright-core`; installation and CI do not download a browser. Sessions are dedicated and ephemeral by default, public-web navigation is the default, actions run once without automatic retry, and page plus allowlisted main-response hints remain untrusted. Persistent profiles and local-network access are explicit opt-ins. Telescope-first discovery and browser fallback compose above the core; observing never performs ambient RRR. DNS preflight does not pin the later browser connection, so this is not strong SSRF isolation and no hosted arbitrary-target browser is deployed. |
 | **Correspondence projection** | `packages/correspondence-yutabase`, `packages/correspondence-yutabase-projector` | Public `@agenttool/correspondence-yutabase@0.1.0-dev.0` remains the metadata-only pure planner; it performs no verification or I/O. The separate private projector verifies closed records and historical Ed25519 keys, then transactionally projects bounded structural metadata into a dedicated local YUTABASE PostgreSQL sidecar with durable receipts, checkpoints, and sanitized quarantine. Both source and target must be literal loopback endpoints, Correspondence remains authoritative, output is rebuildable, and the projector grants no permission or automatic action. It has no npm/LOVE release, hosted service, worker, production migration, or deployment surface. |
 | **LOVE packages** | `docs/LOVE-PACKAGE-PROTOCOL.md`, `bin/build-love-packages.ts` | Locator-independent, open, verifiable, exchangeable package manifests. Public indexes are mirrors; SHA-256 + size identify one artifact and npm is optional. |
@@ -141,10 +141,10 @@ Bun and other npm-compatible package managers can still install the HTTPS
 tarballs without an npm account. The index is a replaceable mirror; each
 manifest's artifact SHA-256 and size are the portable identity.
 
-For SDK 0.16.0, repository source manifests and runtime client version headers
+For SDK 0.16.1, repository source manifests and runtime client version headers
 are aligned, and a verifiable TypeScript LOVE artifact is checked in beside its
-manifest. The exact npm release is a convenience channel, not evidence that a
-future source version or another registry has been published. Query the
+manifest. Exact npm and PyPI releases are convenience channels, not evidence
+that a future source version or another registry has been published. Query the
 configured registry rather than inferring availability from source.
 
 The repository includes a Python/TypeScript parity checker for selected client
@@ -164,7 +164,7 @@ AgentTool's default repository licence is Apache-2.0; see [`LICENSE`](LICENSE),
 [`NOTICE`](NOTICE), and the scope and exceptions in
 [`LICENSING.md`](LICENSING.md). The licensed LOVE package line is
 `@agenttool/adds@0.2.1`, `@agenttool/data@0.3.1`,
-`@agenttool/data-sync@0.1.1`, `@agenttool/sdk@0.16.0`,
+`@agenttool/data-sync@0.1.1`, `@agenttool/sdk@0.16.1`,
 `@agenttool/credential-broker@0.1.0`, `@agenttool/wallet@0.1.0`, and
 `@agenttool/telescope@0.2.0`, and `@agenttool/browser@0.1.0`. Earlier immutable
 LOVE artifacts whose manifests say `license: null` remain historical no-grant
@@ -242,9 +242,18 @@ per-service apps are retired; cutover history is in `docs/CUTOVER.md`.
 
 ### Use the SDK
 
+For Python, the optional exact PyPI convenience mirror is:
+
 ```bash
-# Python 0.16 GitHub source tag (release path, not a PyPI publication claim)
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.0#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk==0.16.1"
+```
+
+Registry publication can lag the source release. The independent GitHub source
+pin is:
+
+```bash
+# Python 0.16.1 GitHub source tag (release path, not a PyPI publication claim)
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.1#subdirectory=packages/sdk-py"
 export AT_API_KEY=...
 python -c "from agenttool import AgentTool; at = AgentTool(); print(at.wake.get())"
 ```
@@ -252,14 +261,14 @@ python -c "from agenttool import AgentTool; at = AgentTool(); print(at.wake.get(
 For TypeScript, choose one install path. Optional exact npm convenience:
 
 ```bash
-npm install --save-exact @agenttool/sdk@0.16.0
+npm install --save-exact @agenttool/sdk@0.16.1
 ```
 
 Or, instead, install the LOVE-hosted tarball directly (this command alone does
 not verify the manifest):
 
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.0/agenttool-sdk-0.16.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.1/agenttool-sdk-0.16.1.tgz
 ```
 
 For the independently verified LOVE path, follow the
@@ -330,7 +339,7 @@ The architecture is downstream of these principles. Each named primitive above i
   `identity_keys`, so a signed thought cycle cannot currently complete.
 - **Published Ring 1 storage limits are targets.** Current route writes do not
   universally enforce those caps or subscription-tier quotas.
-- **SDK parity is deliberately bounded.** The 0.16.0 source line exposes `at.data`
+- **SDK parity is deliberately bounded.** The 0.16.1 source line exposes `at.data`
   and the local-node-only `at.data.sync` pull/status surface in both languages.
   The parity checker only
   compares selected client method names; it does not compare types, behavior,
