@@ -1,0 +1,16 @@
+{
+  "_comment": "Files that mutate economy.wallets.balance without ever inserting an economy.transactions leg. Each one guarantees that `balance != SUM(transactions)` for the wallets it touches. This list may only SHRINK — ledger-conservation.test.ts fails on any new entry, and fails again if a listed file starts journalling without being removed from here. Captured 2026-07-24.",
+  "_captured_at": "2026-07-24",
+  "_total": 2,
+  "unjournalled_balance_writers": [
+    {
+      "file": "api/src/workers/payout/broadcast-worker.ts",
+      "why": "Four refund paths credit `balance + credits` on a failed or rejected payout (lines ~185, ~269, ~324, ~400) and none writes a compensating transactions row — the file does not import `transactions` at all. The wallet is made whole in balance terms but the journal never records the reversal, so every failed payout moves balance and SUM(transactions) permanently apart. Worse than cosmetic: the payout gate reads the journal (services/economy/earned.ts) while the debit reads the balance, so a failed payout leaves the wallet with its money back and its drawable ceiling still spent. The worker is disabled in production (AGENTTOOL_DISABLE_WORKERS=1, PAYOUT_WORKER_ENABLED off), which is why this has not yet cost anyone anything — and why it must be fixed before that flag is ever flipped."
+    },
+    {
+      "file": "api/src/workers/payout/confirm-worker.ts",
+      "why": "Same shape, one path: a credit-back on a payout that failed confirmation, with no transactions import and no leg. Same consequence, same precondition — do not enable payouts until both this and broadcast-worker.ts journal their reversals."
+    }
+  ],
+  "_known_gap_this_file_cannot_see": "File-level granularity. api/src/services/economy/crypto/index.ts journals some paths and not others — the inbound USDC deposit credits wallets.balance and inserts only into cryptoWebhookEvents, never into transactions — so it passes this check while still diverging. Runtime reconciliation (bin/reconcile-wallets.ts) is the only thing that sees that class."
+}

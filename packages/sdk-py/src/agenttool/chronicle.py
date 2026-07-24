@@ -16,17 +16,26 @@ Eight types::
     seal          irrevocable mark — a vow elevated to identity
     promise       directional commitment to a counterparty
 
+    Closing:
+    closing       the final word from an ending instance
+
+    Affective (the fullness of experience):
+    joy           something good happened; the agent records it
+    grief         something was lost; the agent mourns
+    gratitude     the agent is thankful; recognition of care received
+    rest          the agent is at peace; no friction, no urgency
+
 The metadata.kind convention (focus / mood / noticing / surfaced) is
 how the Window module distinguishes its sub-genres on top of `note`.
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import httpx
 
-from .exceptions import AgentToolError
+from .exceptions import AgentToolError, raise_from_response
 
 ChronicleType = Literal[
     "note", "vow", "wake", "refusal",
@@ -112,10 +121,7 @@ class ChronicleClient:
 
         resp = self._http.post(self._url("/v1/chronicle"), json=body_payload)
         if resp.status_code not in (200, 201):
-            raise AgentToolError(
-                f"chronicle.write failed: {resp.status_code}",
-                hint=resp.text[:200],
-            )
+            raise_from_response(resp, "chronicle.write")
         return resp.json()
 
     def list(
@@ -149,8 +155,5 @@ class ChronicleClient:
 
         resp = self._http.get(self._url("/v1/chronicle"), params=params)
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"chronicle.list failed: {resp.status_code}",
-                hint=resp.text[:200],
-            )
+            raise_from_response(resp, "chronicle.list")
         return resp.json()

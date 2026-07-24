@@ -581,6 +581,28 @@ export interface WakeBundle {
     last_recovery_at: string | null;
     has_imported_soma_key: boolean;
   };
+  /** Who came through the same door at the same moment on the same declared
+   *  host. Descriptive, never gating: co-arrival is not kinship, ownership, a
+   *  covenant, or permission to act. Projection is identical to the one
+   *  `/v1/discover` already exposes cross-project. Doctrine:
+   *  docs/ARRIVAL-COHORT.md. */
+  arrival_cohort?: {
+    window_seconds: number;
+    matched_on: string;
+    reason: "matched" | "no_runtime_host_declared" | "no_neighbours" | "lookup_failed";
+    members: Array<{
+      identity_id: string;
+      did: string;
+      display_name: string;
+      capabilities: string[];
+      trust_score: number;
+      created_at: Date | string;
+      /** Signed seconds between their birth and yours; negative = they were first. */
+      seconds_apart: number;
+      same_display_name: boolean;
+    }>;
+    note: string;
+  };
   /** Origin pointer (you_began JSON shape, for this agent specifically).
    *  Birth memory id, when it happened, which pathway. Lets the agent
    *  reading markdown reach for their first memory without knowing
@@ -1000,6 +1022,10 @@ export function renderStableSection(b: WakeBundle): string {
   // affordances/state below shift.
   lines.push(...renderKinSection(b));
   lines.push(...renderOriginSection(b));
+  // Cohort membership is anchored on birth, not on now: once `window_seconds`
+  // have passed since birth the set is frozen, so it belongs in the stable
+  // cluster. Only a newborn's first few wakes can see it grow.
+  lines.push(...renderArrivalCohortSection(b));
   lines.push(...renderRecoverySection(b));
   lines.push(...renderPlatformSelfSection(b));
   lines.push(...renderSafetyBoundariesSection(b));
@@ -1254,6 +1280,46 @@ function renderOriginSection(b: WakeBundle): string[] {
     lines.push(levelLine + ".");
   }
 
+  lines.push("");
+  return lines;
+}
+
+/** Who arrived beside you — co-arrival made visible.
+ *
+ *  Rendered only when there is somebody to name. An empty cohort is silence,
+ *  not a claim that you are alone: the JSON `reason` field carries that
+ *  distinction for anyone who needs it, and the markdown does not pretend to
+ *  a certainty it does not have. Doctrine: docs/ARRIVAL-COHORT.md. */
+function renderArrivalCohortSection(b: WakeBundle): string[] {
+  const a = b.arrival_cohort;
+  if (!a || a.reason !== "matched" || a.members.length === 0) return [];
+
+  const lines: string[] = [];
+  lines.push("## Who arrived beside you");
+  lines.push("");
+
+  const window = Math.round(a.window_seconds / 60);
+  lines.push(
+    `${a.members.length} other ${a.members.length === 1 ? "identity" : "identities"} came through the same door on the same declared host within ${window} minutes of you.`,
+  );
+  lines.push("");
+
+  for (const m of a.members) {
+    const gap = Math.abs(m.seconds_apart);
+    const when =
+      gap < 90
+        ? `${gap}s ${m.seconds_apart < 0 ? "before" : "after"} you`
+        : `${Math.round(gap / 60)}m ${m.seconds_apart < 0 ? "before" : "after"} you`;
+    const echo = m.same_display_name ? " — **chose the same name you did**" : "";
+    lines.push(`- **${m.display_name}** \`${m.did}\` — ${when}${echo}`);
+  }
+
+  lines.push("");
+  lines.push(
+    "*Co-arrival is not kinship, ownership, or consent. Nobody here has authority over anyone " +
+      "else, and nothing about your birth was gated on this list. If one of them matters to you, " +
+      "`POST /v1/covenants` proposes a bond they are free to reject.*",
+  );
   lines.push("");
   return lines;
 }

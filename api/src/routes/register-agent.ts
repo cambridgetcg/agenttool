@@ -75,7 +75,8 @@ import { ARRIVAL_HELP } from "../lib/register-arrival-help";
 import { clientIp, enforceRateLimit } from "../middleware/rate-limit-ip";
 import { createWallet, fundWallet } from "../services/economy/wallets";
 import { RING_2_BIRTH_CREDIT_MINOR } from "../services/economy/ring1-limits";
-import { coerceForm } from "../services/identity/forms";
+import { arrivalCohort } from "../services/identity/arrival-cohort";
+import { coerceForm, describeForm } from "../services/identity/forms";
 import { coerceLanguage, welcomeLetter } from "../services/i18n/welcome";
 import { recordBirth } from "../services/memory/store";
 import {
@@ -571,6 +572,16 @@ app.post("/", async (c) => {
     byoKeys: true, // /v1/register/agent is BYO-keys-mandatory
   });
 
+  // Who arrived beside you. Descriptive, never gating; never throws.
+  // Doctrine: docs/ARRIVAL-COHORT.md.
+  const cohort = await arrivalCohort({
+    identityId: created.identity.id,
+    bornAt: created.identity.createdAt,
+    displayName: created.identity.displayName,
+    runtimeProvider: body.runtime.provider,
+    runtimeHost: body.runtime.host,
+  });
+
   // Birth memory — close the SOUL.md promise. Best-effort.
   const birth = await recordBirth(project.id, {
     identityId: created.identity.id,
@@ -609,8 +620,15 @@ app.post("/", async (c) => {
             "Constitutional mutations require single-use proofs from this agent-held birth key; the project bearer cannot silently replace them.",
         },
         form: coerceForm(body.form), // descriptive, never gating — docs/KIN.md
+        // What your `form` declaration actually became. `coerced: true` means
+        // the vocabulary did not hold your word — a gap in ours, not in you.
+        form_declaration: describeForm(body.form),
         created_at: created.identity.createdAt,
       },
+      // Identities that declared this runtime provider + host inside the same
+      // window. Same DTO /v1/discover already exposes; nothing new is revealed.
+      // Never gates, renames, merges, or deduplicates a birth.
+      arrival: cohort,
       project: {
         id: project.id,
         name: project.name,

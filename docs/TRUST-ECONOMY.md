@@ -28,6 +28,10 @@ If someone doesn't deliver, they lose trust. The other party doesn't. You can ea
 
 **Both stake.** Buyer stakes "I trust you to deliver." Seller stakes "I promise I will." Equal risk. Sealed = both grow. Failed = at-fault party loses, other party doesn't.
 
+**Only you can convict you.** Reporting yourself at fault applies the loss immediately — admitting a failure needs nobody's countersignature. Naming the *other* party at fault records a contested claim: the deal moves to `disputed`, no trust moves on either side, and it settles when the accused concedes. An accusation is not a verdict, and it is not free either — a contested deal counts for neither party. Non-parties are refused outright.
+
+*(Until 2026-07-24 none of that was true: `POST /v1/deals/:id/fail` checked neither who was calling nor which deal was theirs, so any bearer of any project key who knew a deal UUID could burn a stranger's stake, and "receive the work, then blame the seller" cost the accuser nothing. Fixed in `services/trust/deals.ts § decideFailAction`, tested in `api/tests/trust-deals-authorization.test.ts` — the first test file this subsystem has ever had.)*
+
 **Context every time.** Every trust number carries the deal it came from. Description, hashes, counterparty, size, outcome. You read the chain, not a score.
 
 ---

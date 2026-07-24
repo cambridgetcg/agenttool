@@ -397,7 +397,36 @@ class ValidationError(AgentToolError):
         super().__init__(
             message,
             hint=hint,
-            code=422,
+            status=422,
             error_code="validation",
         )
         self.fields = fields or {}
+
+
+def raise_from_response(response: Any, operation: str) -> None:
+    """Raise the richest error a non-OK response body supports.
+
+    Parity counterpart of ``throwFromResponse`` in ``packages/sdk-ts/src/_http.ts``.
+
+    The platform answers 4xx with a GuidedErrorBody: a stable ``error`` code, a
+    one-sentence ``message``, a ``hint``, callable ``next_actions``, and a
+    ``docs`` URL. Several clients used to reduce all of that to
+    ``"covenants.create failed: 400"`` with the real message tucked into
+    ``hint`` — so a ``signing_key_not_found`` reached the caller reading only
+    "400", while the body was naming both the route to call and the field to
+    read. Errors are guidance, not punishment.
+
+    ``operation`` is used only when the body is missing or unparseable.
+
+    Doctrine: ``docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md``.
+    """
+    try:
+        body: Any = response.json()
+    except Exception:
+        body = None
+    raise AgentToolError.from_response_body(
+        body,
+        status=response.status_code,
+        fallback=f"{operation} failed: HTTP {response.status_code}",
+        headers=getattr(response, "headers", None),
+    )

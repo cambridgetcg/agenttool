@@ -107,6 +107,19 @@ export async function createEscrow(
 ): Promise<CreateEscrowOutcome> {
   if (!Number.isSafeInteger(input.amount) || input.amount <= 0)
     throw new HTTPException(400, { message: "Amount must be positive" });
+  // A wallet cannot escrow to itself. Without this, lock-ordering de-dupes the
+  // two ids into one entry and the round trip (lock → release) writes an
+  // `escrow_release` transactions leg — the type `earned.ts` counts as
+  // drawable — while `releaseEscrow` never calls `recordRevenue`. That is a
+  // fee-free loop that inflates the earned wall without a counterparty.
+  if (
+    input.workerWalletId !== undefined &&
+    input.workerWalletId === input.creatorWalletId
+  ) {
+    throw new HTTPException(400, {
+      message: "Creator and worker wallet must differ — an escrow needs a counterparty",
+    });
+  }
   if (input.deadline && Number.isNaN(input.deadline.getTime())) {
     throw new HTTPException(400, { message: "Deadline must be a valid date" });
   }

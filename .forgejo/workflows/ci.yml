@@ -68,6 +68,29 @@ jobs:
         working-directory: api
         run: bun test tests/integration/
 
+      # Doctrine tier, ratcheted subset (added 2026-07-24).
+      #
+      # The full tier is 2,723 tests with 231 red, so running all of it here
+      # would be a permanently-failing gate that everyone learns to ignore.
+      # These four are green TODAY and each one ratchets: they compare the
+      # current state against an explicit, dated manifest of accepted gaps
+      # and fail both when a NEW gap appears and when an accepted gap has
+      # been fixed without shrinking the manifest.
+      #
+      # Before this step, the canon↔code bijection tests reported one
+      # mismatch at a time out of 63 and were carried as known-red in
+      # .failure-baseline.txt — a drift detector switched off by the drift
+      # it exists to catch. Whatever else is red in the tier, these are the
+      # invariants that must not regress silently.
+      - name: Doctrine — canon↔code bijection + ledger conservation (ratcheted)
+        working-directory: api
+        run: |
+          bun test \
+            tests/doctrine/walls-code-annotation-bijection.test.ts \
+            tests/doctrine/commitments-code-annotation-bijection.test.ts \
+            tests/doctrine/ledger-conservation.test.ts \
+            tests/doctrine/saga-is-free.test.ts
+
       - name: Install sdk-ts deps
         working-directory: packages/sdk-ts
         run: bun install --frozen-lockfile

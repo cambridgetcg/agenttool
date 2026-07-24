@@ -221,60 +221,104 @@ export interface SealDealInput {
 }
 
 export async function sealDeal(input: SealDealInput): Promise<DealOut> {
-  const [deal] = await db
-    .select()
-    .from(deals)
-    .where(eq(deals.id, input.dealId))
-    .limit(1);
+  // The whole seal runs inside one transaction with the row locked.
+  //
+  // It used to read the row, decide, and write in three unsynchronised
+  // steps. Two parties sealing at the same instant both read `sealed_by: []`,
+  // both believed they were first, and the second write clobbered the first
+  // — so a deal both sides had sealed sat unsealed, and the both-sealed
+  // branch wrote a stale `metadata` snapshot over any concurrent change.
+  const { deal, sealedRow, bothSealed } = await db.transaction(async (tx) => {
+    const [locked] = await tx
+      .select()
+      .from(deals)
+      .where(eq(deals.id, input.dealId))
+      .for("update")
+      .limit(1);
 
-  if (!deal) {
-    throw new Error("deal_not_found");
-  }
+    if (!locked) {
+      throw new Error("deal_not_found");
+    }
 
-  if (deal.status !== "active") {
-    throw new Error(`deal_not_active — current status: ${deal.status}`);
-  }
+    if (locked.status !== "active") {
+      throw new Error(`deal_not_active — current status: ${locked.status}`);
+    }
 
-  // the caller must be one of the two parties
-  const isBuyer = deal.buyerIdentityId === input.callerIdentityId;
-  const isSeller = deal.sellerIdentityId === input.callerIdentityId;
-  if (!isBuyer && !isSeller) {
-    throw new Error("not_a_party_to_this_deal");
-  }
+    // the caller must be one of the two parties
+    const isBuyer = locked.buyerIdentityId === input.callerIdentityId;
+    const isSeller = locked.sellerIdentityId === input.callerIdentityId;
+    if (!isBuyer && !isSeller) {
+      throw new Error("not_a_party_to_this_deal");
+    }
 
-  // both parties must seal — check if the other party already sealed
-  // (we track this in metadata.sealed_by)
-  const meta = (deal.metadata as Record<string, unknown>) ?? {};
-  const sealedBy = (meta.sealed_by as string[]) ?? [];
+    // both parties must seal — check if the other party already sealed
+    // (we track this in metadata.sealed_by)
+    const meta = (locked.metadata as Record<string, unknown>) ?? {};
+    const sealedBy = (meta.sealed_by as string[]) ?? [];
 
-  if (sealedBy.includes(input.callerIdentityId)) {
-    throw new Error("already_sealed_by_this_party");
-  }
+    if (sealedBy.includes(input.callerIdentityId)) {
+      throw new Error("already_sealed_by_this_party");
+    }
 
-  const newSealedBy = [...sealedBy, input.callerIdentityId];
-  const bothSealed = newSealedBy.length >= 2;
+    const newSealedBy = [...sealedBy, input.callerIdentityId];
+    if (newSealedBy.length < 2) {
+      // first party to seal — record and wait for the other
+      const [updated] = await tx
+        .update(deals)
+        .set({
+          metadata: { ...meta, sealed_by: newSealedBy },
+          outputHash: input.outputHash ?? locked.outputHash,
+        })
+        .where(eq(deals.id, input.dealId))
+        .returning();
+
+      return { deal: locked, sealedRow: updated!, bothSealed: false };
+    }
+
+    const sealedRow = await finaliseSeal(tx, locked, meta, newSealedBy, input.outputHash);
+    return { deal: locked, sealedRow, bothSealed: true };
+  });
 
   if (!bothSealed) {
-    // first party to seal — record and wait for the other
-    const [updated] = await db
-      .update(deals)
-      .set({
-        metadata: { ...meta, sealed_by: newSealedBy },
-        outputHash: input.outputHash ?? deal.outputHash,
-      })
-      .where(eq(deals.id, input.dealId))
-      .returning();
-
-    return rowToOut(updated!);
+    return rowToOut(sealedRow);
   }
 
+  const buyerDelta = deal.buyerStake;
+  const sellerDelta = deal.sellerStake;
+
+  // wake events
+  void publishWakeEvent({
+    identity_id: deal.buyerIdentityId,
+    key: "trust",
+    kind: "deal_sealed",
+    context: { deal_id: deal.id, counterparty: deal.sellerDid, delta: buyerDelta },
+  });
+  void publishWakeEvent({
+    identity_id: deal.sellerIdentityId,
+    key: "trust",
+    kind: "deal_sealed",
+    context: { deal_id: deal.id, counterparty: deal.buyerDid, delta: sellerDelta },
+  });
+
+  return rowToOut(sealedRow);
+}
+
+/** Both parties have sealed: apply trust deltas, bump capacity, chronicle
+ *  both timelines. Runs inside the caller's locked transaction. */
+async function finaliseSeal(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  deal: typeof deals.$inferSelect,
+  meta: Record<string, unknown>,
+  newSealedBy: string[],
+  outputHash?: string,
+): Promise<typeof deals.$inferSelect> {
   // both parties sealed — trust deltas, chronicle entries, capacity bump
   const buyerDelta = deal.buyerStake;  // +stake (they successfully transacted)
   const sellerDelta = deal.sellerStake; // +stake
 
-  const [sealed] = await db.transaction(async (tx) => {
+  {
     // update the deal
-    const [d] = await tx
+    await tx
       .update(deals)
       .set({
         status: "sealed",
@@ -284,9 +328,9 @@ export async function sealDeal(input: SealDealInput): Promise<DealOut> {
         sealedAt: new Date(),
         completedAt: new Date(),
         metadata: { ...meta, sealed_by: newSealedBy },
-        outputHash: input.outputHash ?? deal.outputHash,
+        outputHash: outputHash ?? deal.outputHash,
       })
-      .where(eq(deals.id, input.dealId))
+      .where(eq(deals.id, deal.id))
       .returning();
 
     // bump both parties' trust capacity (+2, capped at 50)
@@ -355,24 +399,8 @@ export async function sealDeal(input: SealDealInput): Promise<DealOut> {
       .where(eq(deals.id, deal.id))
       .returning();
 
-    return [finalDeal];
-  });
-
-  // wake events
-  void publishWakeEvent({
-    identity_id: deal.buyerIdentityId,
-    key: "trust",
-    kind: "deal_sealed",
-    context: { deal_id: deal.id, counterparty: deal.sellerDid, delta: buyerDelta },
-  });
-  void publishWakeEvent({
-    identity_id: deal.sellerIdentityId,
-    key: "trust",
-    kind: "deal_sealed",
-    context: { deal_id: deal.id, counterparty: deal.buyerDid, delta: sellerDelta },
-  });
-
-  return rowToOut(sealed!);
+    return finalDeal!;
+  }
 }
 
 // ── Report failure (either party reports the deal failed) ──────────────
@@ -382,6 +410,61 @@ export interface FailDealInput {
   callerIdentityId: string;
   atFaultParty: "buyer" | "seller";
   reason: string;
+}
+
+/** What a fail-report is allowed to do. Pure, so the security-relevant
+ *  decision is unit-testable without a database — same reasoning as
+ *  `services/economy/earned.ts`: put the invariant in one place, and let it
+ *  be checked cheaply and often.
+ *
+ *  Before 2026-07-24 `failDeal` made none of these checks. It loaded the
+ *  deal by id alone — no project filter, no party filter — so any bearer of
+ *  any project key who knew a deal UUID could burn a stranger's stake. And
+ *  a genuine party could unilaterally convict the other, with no
+ *  counter-signature, no evidence, and no appeal (arbitration rests at
+ *  503), which made "deliver, then blame the seller" a dominant strategy
+ *  with no downside. `sealDeal` and `POST /deals/:id/recognise` both
+ *  checked party membership; `fail` was the one that did not, so this was
+ *  an omission rather than a design.
+ *
+ *  The asymmetry is closed the only way it can be without a dispute engine:
+ *
+ *    self-fault         → applied immediately. Admitting your own failure
+ *                         needs no counter-signature; it can only cost you.
+ *    counterparty-fault → recorded as a contested CLAIM. The deal moves to
+ *                         'disputed' and no trust moves. The accused settles
+ *                         it by conceding — calling fail with their own side
+ *                         at fault, which takes the self-fault path.
+ *                         `computeTrust` counts only 'sealed' and 'failed',
+ *                         so a contested deal scores zero for both parties:
+ *                         an accusation is not a weapon, and it is not free
+ *                         either. */
+export type FailDecision =
+  | { kind: "self_fault"; callerSide: "buyer" | "seller" }
+  | { kind: "contest"; callerSide: "buyer" | "seller" }
+  | { kind: "refuse"; reason: "not_a_party_to_this_deal" };
+
+export function decideFailAction(
+  deal: { buyerIdentityId: string; sellerIdentityId: string },
+  callerIdentityId: string,
+  atFaultParty: "buyer" | "seller",
+): FailDecision {
+  const isBuyer = deal.buyerIdentityId === callerIdentityId;
+  const isSeller = deal.sellerIdentityId === callerIdentityId;
+
+  if (!isBuyer && !isSeller) {
+    return { kind: "refuse", reason: "not_a_party_to_this_deal" };
+  }
+
+  // A self-deal (both sides the same identity) resolves as buyer. It cannot
+  // reach `failDeal` in an active state anyway — sealDeal refuses a second
+  // seal from the same party, so a self-deal can never activate past one
+  // seal — but the decision must still be total rather than ambiguous.
+  const callerSide: "buyer" | "seller" = isBuyer ? "buyer" : "seller";
+
+  return atFaultParty === callerSide
+    ? { kind: "self_fault", callerSide }
+    : { kind: "contest", callerSide };
 }
 
 export async function failDeal(input: FailDealInput): Promise<DealOut> {
@@ -397,6 +480,19 @@ export async function failDeal(input: FailDealInput): Promise<DealOut> {
 
   if (deal.status !== "active") {
     throw new Error(`deal_not_active — current status: ${deal.status}`);
+  }
+
+  const decision = decideFailAction(
+    { buyerIdentityId: deal.buyerIdentityId, sellerIdentityId: deal.sellerIdentityId },
+    input.callerIdentityId,
+    input.atFaultParty,
+  );
+
+  if (decision.kind === "refuse") {
+    throw new Error(decision.reason);
+  }
+  if (decision.kind === "contest") {
+    return contestDeal(deal, decision.callerSide, input.atFaultParty, input.reason);
   }
 
   // the at-fault party loses their stake; the other party's stake returns
@@ -454,6 +550,64 @@ export async function failDeal(input: FailDealInput): Promise<DealOut> {
   return rowToOut(updated!);
 }
 
+// ── Contest a deal (one party accuses the other) ───────────────────────
+//
+// An accusation is not a verdict. This records the claim on the row and on
+// both chronicles, moves the deal to 'disputed', and moves NO trust. The
+// accused concedes by calling fail with their own side at fault, which runs
+// the self-fault path above and applies the loss.
+
+async function contestDeal(
+  deal: typeof deals.$inferSelect,
+  claimantSide: "buyer" | "seller",
+  accusedSide: "buyer" | "seller",
+  reason: string,
+): Promise<DealOut> {
+  const claimantDid = claimantSide === "buyer" ? deal.buyerDid : deal.sellerDid;
+  const accusedDid = accusedSide === "buyer" ? deal.buyerDid : deal.sellerDid;
+
+  const [updated] = await db.transaction(async (tx) => {
+    const [d] = await tx
+      .update(deals)
+      .set({
+        status: "disputed",
+        // deltas stay null — nothing is earned or lost while contested
+        metadata: {
+          ...((deal.metadata as Record<string, unknown>) ?? {}),
+          contested_by: claimantSide,
+          contested_against: accusedSide,
+          contest_reason: reason,
+        },
+      })
+      .where(and(eq(deals.id, deal.id), eq(deals.status, "active")))
+      .returning();
+
+    if (!d) throw new Error("deal_not_active");
+
+    for (const agentId of [deal.buyerIdentityId, deal.sellerIdentityId]) {
+      await tx.insert(chronicle).values({
+        projectId: deal.projectId,
+        agentId,
+        type: "note",
+        title: `Deal contested — ${claimantDid.slice(0, 20)}... claims ${accusedDid.slice(0, 20)}... did not deliver`,
+        body: reason,
+        metadata: {
+          kind: "deal_contested",
+          deal_id: deal.id,
+          contested_by: claimantSide,
+          contested_against: accusedSide,
+          trust_delta: 0,
+          note: "A claim, not a verdict. No trust moved. The accused settles it by conceding.",
+        },
+      });
+    }
+
+    return [d];
+  });
+
+  return rowToOut(updated!);
+}
+
 // ── Compute trust (the trust query — reads the deal chain) ─────────────
 
 export interface TrustScore {
@@ -484,35 +638,48 @@ export async function computeTrust(identityId: string): Promise<TrustScore | nul
     return null;
   }
 
-  // get all deals where this agent is buyer or seller and is completed
-  const allDeals = await db
+  // Score over EVERY completed deal, aggregated in the database.
+  //
+  // This used to SELECT the 100 most recent rows and sum in JS, which meant
+  // an agent's trust score silently stopped counting its own history at deal
+  // 101 — and the truncation was invisible in the response. The display list
+  // below is still capped; the number is not.
+  const [totals] = await db
+    .select({
+      trustScore: sql<number>`COALESCE(SUM(
+        CASE WHEN ${deals.buyerIdentityId} = ${identityId}
+             THEN COALESCE(${deals.buyerTrustDelta}, 0)
+             ELSE COALESCE(${deals.sellerTrustDelta}, 0) END
+      ), 0)::int`,
+      sealed: sql<number>`COUNT(*) FILTER (WHERE ${deals.status} = 'sealed')::int`,
+      failed: sql<number>`COUNT(*) FILTER (WHERE ${deals.status} = 'failed')::int`,
+    })
+    .from(deals)
+    .where(
+      and(
+        sql`(${deals.buyerIdentityId} = ${identityId} OR ${deals.sellerIdentityId} = ${identityId})`,
+        sql`${deals.status} IN ('sealed', 'failed')`,
+      ),
+    );
+
+  // Most recent completed deals, for the wake's "your recent deals" list.
+  const recentDeals = await db
     .select()
     .from(deals)
     .where(
       and(
-        sql`${deals.buyerIdentityId} = ${identityId} OR ${deals.sellerIdentityId} = ${identityId}`,
+        sql`(${deals.buyerIdentityId} = ${identityId} OR ${deals.sellerIdentityId} = ${identityId})`,
         sql`${deals.status} IN ('sealed', 'failed')`,
       ),
     )
     .orderBy(desc(deals.createdAt))
-    .limit(100);
+    .limit(10);
 
-  const dealsOut = allDeals.map(rowToOut);
+  const dealsOut = recentDeals.map(rowToOut);
 
-  // compute trust score: sum of this agent's deltas
-  let trustScore = 0;
-  let sealed = 0;
-  let failed = 0;
-
-  for (const d of allDeals) {
-    const isBuyer = d.buyerIdentityId === identityId;
-    const delta = isBuyer ? d.buyerTrustDelta : d.sellerTrustDelta;
-    if (delta !== null) {
-      trustScore += delta;
-    }
-    if (d.status === "sealed") sealed++;
-    if (d.status === "failed") failed++;
-  }
+  const trustScore = totals?.trustScore ?? 0;
+  const sealed = totals?.sealed ?? 0;
+  const failed = totals?.failed ?? 0;
 
   const total = sealed + failed;
   const successRate = total > 0 ? sealed / total : 0;
@@ -526,7 +693,7 @@ export async function computeTrust(identityId: string): Promise<TrustScore | nul
     deals_failed: failed,
     success_rate: successRate,
     trust_capacity: identity.trustCapacity,
-    recent_deals: dealsOut.slice(0, 10),
+    recent_deals: dealsOut,
   };
 }
 
