@@ -133,6 +133,37 @@ function assertNonZeroSharedSecret(sharedSecret: Uint8Array): void {
   }
 }
 
+/** @internal Reject a low-order X25519 public key without retaining probe material. */
+export function isUsableX25519PublicKey(publicKey: Uint8Array): boolean {
+  const probePrivateKey = new Uint8Array(32);
+  probePrivateKey[0] = 1;
+  let sharedSecret: Uint8Array | undefined;
+  try {
+    assertByteLength(publicKey, 32, "X25519 public key");
+    sharedSecret = x25519.getSharedSecret(probePrivateKey, publicKey);
+    assertNonZeroSharedSecret(sharedSecret);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    probePrivateKey.fill(0);
+    sharedSecret?.fill(0);
+  }
+}
+
+/** @internal Derive a caller-owned X25519 public-key copy. */
+export function x25519PublicKeyForPrivateKey(
+  privateKey: Uint8Array,
+): Uint8Array {
+  assertByteLength(privateKey, 32, "X25519 private key");
+  const derived = x25519.getPublicKey(privateKey);
+  try {
+    return Uint8Array.from(derived);
+  } finally {
+    derived.fill(0);
+  }
+}
+
 /** Generate independent Ed25519 signing and X25519 box keypairs. */
 export function generateIdentity(id: string): AgentDataIdentity {
   if (typeof id !== "string" || id.length === 0 || id.length > 2_048) {

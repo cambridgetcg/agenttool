@@ -90,6 +90,92 @@ const blocks = new FileSystemBlockStore("./adds-blocks");
 
 The filesystem adapter stores only addressed ciphertext and signed documents. It never persists a DEK. Object keys go through the injected `KeyStore`; the default `MemoryKeyStore` is process-local. `importKey()` is an explicit custody operation. `forgetKey()` is best-effort local forgetting, not secure deletion, and cannot erase Grants, recipient copies, backups, or plaintext already disclosed.
 
+### S3-compatible store (unreleased)
+
+The source tree also contains an unreleased Node/Bun network adapter at the
+isolated `@agenttool/adds/s3` subpath. It is not exported from the
+browser-compatible package root and is not present in the immutable `0.2.1`
+release artifact:
+
+```ts
+import { AgentData, type AgentDataIdentity } from "@agenttool/adds";
+import { S3CompatibleBlockStore } from "@agenttool/adds/s3";
+
+declare const credentials: {
+  accessKeyId: string;
+  secretAccessKey: string;
+  sessionToken?: string;
+};
+declare const publisherIdentity: AgentDataIdentity;
+
+const blocks = new S3CompatibleBlockStore({
+  // The bucket is the endpoint's one path segment, not a separate option.
+  endpoint: "https://objects.example.test/evidence-bucket",
+  region: "auto",
+  accessKeyId: credentials.accessKeyId,
+  secretAccessKey: credentials.secretAccessKey,
+  sessionToken: credentials.sessionToken,
+  prefix: "whitehack/capsules",
+});
+
+// AgentData's direct `store` form supplies no deadline. Compose a network
+// provider through `stores` so MultiBlockStore applies a finite timeout.
+const data = new AgentData({
+  identity: publisherIdentity,
+  stores: [blocks],
+  minimumWrites: 1,
+  storeTimeoutMs: 5_000,
+});
+```
+
+The caller supplies credentials explicitly; the adapter reads no environment,
+config file, Keychain, or AgentTool bearer. It accepts only a canonical HTTPS
+path-style bucket endpoint without userinfo, query, fragment, encoded path
+components, or a trailing slash. The endpoint is trusted configuration, not
+an SSRF sandbox: arbitrary HTTPS private, loopback, and DNS-rebound
+destinations remain reachable. An API-facing caller must apply its own
+hostname/address allowlist and egress policy before constructing the store.
+An explicitly named
+`allowInsecureLoopbackHttpForTests` option permits HTTP only for a loopback
+test endpoint; it is not a production transport mode.
+
+The path-style, Signature Version 4 contract targets existing
+[Cloudflare R2](https://developers.cloudflare.com/r2/api/s3/api/),
+[Backblaze B2](https://www.backblaze.com/docs/en/cloud-storage-call-the-s3-compatible-api),
+[Filebase](https://filebase.com/docs/s3-api/overview), and caller-operated
+MinIO buckets when they implement the bounded GET/PUT subset used here.
+Endpoint, signing-region, credential-scope, billing, lifecycle, and retention
+configuration remains provider-specific. Exact signing fixtures and a real
+loopback HTTP composition test do not certify every provider deployment.
+
+Each CID maps deterministically to
+`<endpoint>/<optional-prefix>/<cid>`. The optional prefix is bounded to 964
+ASCII bytes so the prefix, separator, and 59-byte ADDS CID stay within S3's
+1,024-byte object-key ceiling. Requests use AWS Signature Version 4 with
+service `s3`, manual redirect handling, `credentials: "omit"`, no retry, no
+referrer, and caller-provided abort and byte limits. Response-body
+cancellation is best-effort and never delays the caller. The adapter has no
+intrinsic wall-clock timeout. Direct callers must supply an `AbortSignal`;
+`AgentData` callers should use its `stores` composition plus a finite
+`storeTimeoutMs`, as above. GET streams into a bounded buffer and verifies the
+exact ADDS CID. Only a bounded, strictly parsed S3 `NoSuchKey` 404 maps to
+`null`; every other, malformed, or oversized 404 is a static provider failure.
+PUT validates the size and caller's CID before sending; a 2xx result is only
+one historical provider acknowledgement. It is not proof of future retention,
+independent replication, geographic placement, or durability.
+
+The adapter does not create or list buckets, discover endpoints, delete
+objects, perform multipart upload, manage versions or lifecycle policy, issue
+ADDS ProviderRecords/Receipts, or persist an ADDS object key. Used through
+`AgentData`, the provider receives encrypted Blocks and signed Manifests but
+still observes the access-key identity, CIDs, sizes, timing, and access
+patterns. Direct `S3CompatibleBlockStore.put()` calls upload the supplied
+bytes verbatim; encryption is provided only by composing the store through
+`AgentData`. JavaScript credential strings necessarily remain in the caller
+and store instance fields for that instance's lifetime, until garbage
+collection; recreate the store to rotate them. Callers still need a scoped
+credential source and an independent `KeyStore`/Grant recovery route.
+
 ## Core API
 
 - `put(source, options)` encrypts, stores, signs, and returns `{ ref, manifest, replication }` without a DEK.
