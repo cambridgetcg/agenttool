@@ -357,7 +357,12 @@ app.post("/covenants", async (c) => {
         eq(identityKeys.active, true),
       ))
       .limit(1);
-    if (!keyRow) return fail(c, errors.signingKeyNotFound(), 400);
+    if (!keyRow) {
+      return fail(c, errors.signingKeyNotFound({
+        identity_id: body.agent_id,
+        signing_key_id: body.signing_key_id!,
+      }), 400);
+    }
 
     const { declareV2PreSigned } = await import("../services/covenants/lifecycle");
     const { propagateCovenant } = await import("../services/covenants/federation");
@@ -515,7 +520,12 @@ app.patch("/covenants/:id", async (c) => {
           eq(identityKeys.identityId, existing.agentId),
           eq(identityKeys.active, true),
         )).limit(1);
-      if (!keyRow) return fail(c, errors.signingKeyNotFound(), 400);
+      if (!keyRow) {
+        return fail(c, errors.signingKeyNotFound({
+          identity_id: existing.agentId,
+          signing_key_id: data.signing_key_id,
+        }), 400);
+      }
 
       const { withdrawProposalPreSigned } = await import("../services/covenants/lifecycle");
       const { propagateWithdraw } = await import("../services/covenants/federation");
@@ -612,7 +622,12 @@ app.post("/covenants/:id/accept", async (c) => {
       eq(identityKeys.identityId, existing.agentId),
       eq(identityKeys.active, true),
     )).limit(1);
-  if (!keyRow) return fail(c, errors.signingKeyNotFound(), 400);
+  if (!keyRow) {
+    return fail(c, errors.signingKeyNotFound({
+      identity_id: existing.agentId,
+      signing_key_id: data.counterparty_signing_key_id,
+    }), 400);
+  }
 
   const { acceptProposalPreSigned } = await import("../services/covenants/lifecycle");
   const { propagateCosign } = await import("../services/covenants/federation");
@@ -674,7 +689,12 @@ app.post("/covenants/:id/reject", async (c) => {
       eq(identityKeys.identityId, existing.agentId),
       eq(identityKeys.active, true),
     )).limit(1);
-  if (!keyRow) return fail(c, errors.signingKeyNotFound(), 400);
+  if (!keyRow) {
+    return fail(c, errors.signingKeyNotFound({
+      identity_id: existing.agentId,
+      signing_key_id: data.rejecter_signing_key_id,
+    }), 400);
+  }
 
   const { rejectProposalPreSigned } = await import("../services/covenants/lifecycle");
   const { propagateReject } = await import("../services/covenants/federation");

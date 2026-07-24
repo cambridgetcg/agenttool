@@ -8,7 +8,7 @@
  */
 
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./_http.js";
+import { throwFromResponse, type HttpConfig } from "./_http.js";
 import {
   signCovenantDeclare,
   signCovenantCosign,
@@ -409,20 +409,9 @@ export class CovenantsClient {
     if (body !== undefined) init.body = JSON.stringify(body);
     const resp = await this.http.request(url, init);
     if (!resp.ok) {
-      let detail: string;
-      try {
-        const json = (await resp.json()) as Record<string, unknown>;
-        detail =
-          (json.message as string) ??
-          (json.error as string) ??
-          (json.detail as string) ??
-          resp.statusText;
-      } catch {
-        detail = resp.statusText;
-      }
-      throw new AgentToolError(`covenants ${method.toLowerCase()} failed: ${resp.status}`, {
-        hint: detail.slice(0, 200),
-      });
+      // Hand the server's own guidance back intact — code, hint, next_actions,
+      // docs — instead of a bare status. See _http.ts § throwFromResponse.
+      await throwFromResponse(resp, `covenants ${method.toLowerCase()}`);
     }
     return resp.json();
   }
