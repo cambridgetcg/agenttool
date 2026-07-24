@@ -346,7 +346,12 @@ describe("boring test spine", () => {
     }
     expect(workflow).toContain("report.skills[0].name !== expectedName");
     expect(workflow).toContain('Object.hasOwn(report, "installPlan")');
-    expect(workflow).toContain("name: Smoke packed Telescope under Node and Bun");
+    expect(workflow).toContain(
+      "name: Smoke canonical Telescope LOVE artifact under Node and Bun",
+    );
+    expect(workflow).toContain(
+      "apps/docs/packages/v1/@agenttool/telescope/0.2.1/agenttool-telescope-0.2.1.tgz",
+    );
     expect(workflow).toContain("name: Smoke packed Agent Wallet under Node and Bun");
     expect(workflow).toContain(
       "name: Smoke canonical Agent Browser LOVE artifact under Node and Bun",

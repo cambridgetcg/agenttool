@@ -33,7 +33,10 @@ is distinct from the disabled-by-default, Redis-backed hosted `/v1/browse`
 worker path.
 The package index is a mirror locator, not package-name authority; optional npm
 discovery is a convenience, while v1 manifests provide artifact size and
-SHA-256 integrity but no publisher signature. The Whitehack page documents a
+SHA-256 integrity but no publisher signature. Its current Telescope entry is
+the exact `@agenttool/telescope@0.2.1` local-client artifact; `0.2.0` remains
+separately addressable, optional npm/GitHub mirrors may be absent, and neither
+entry creates a hosted scanner. The Whitehack page documents a
 runner-local crypto-aware heuristic advisory using the exact public
 `@agenttool/whitehack-scan@0.8.1` package, a bounded attention-card view of
 redacted changed-source findings, an offer-only local projection into
