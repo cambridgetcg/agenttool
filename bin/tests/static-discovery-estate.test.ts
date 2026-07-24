@@ -287,9 +287,20 @@ describe("published understanding guides keep canonical source custody", () => {
     );
   });
 
-  for (const route of [
-    "/AGENT-DISCOVERY.md",
-    "/CASTLE-OF-UNDERSTANDING.md",
+  for (const { route, link } of [
+    {
+      route: "/AGENT-DISCOVERY.md",
+      link:
+        `Link: <${API}/public/discovery>; rel="service-meta"; type="application/vnd.agenttool.discovery+json", ` +
+        `<${API}/.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json"`,
+    },
+    {
+      route: "/CASTLE-OF-UNDERSTANDING.md",
+      link:
+        `Link: <${API}/public/discovery>; rel="service-meta"; type="application/vnd.agenttool.discovery+json", ` +
+        `<https://cambridgetcg.com/api/v1/castle>; rel="related"; type="application/json", ` +
+        `<${API}/.well-known/agent.txt>; rel="describedby"; type="text/agent"`,
+    },
   ]) {
     test(`${route} has explicit markdown, cache, CORS, and nosniff truth`, () => {
       const block = headerBlock(read("apps/docs/_headers"), route);
@@ -297,7 +308,7 @@ describe("published understanding guides keep canonical source custody", () => {
         "Content-Type: text/markdown; charset=utf-8",
         "Cache-Control: public, max-age=300, must-revalidate, no-transform",
         "Access-Control-Allow-Origin: *",
-        `Link: <${API}/public/discovery>; rel="service-meta"; type="application/vnd.agenttool.discovery+json"`,
+        link,
         "X-Content-Type-Options: nosniff",
       ]);
     });
