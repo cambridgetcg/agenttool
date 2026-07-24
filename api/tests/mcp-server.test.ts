@@ -116,24 +116,104 @@ describe("public MCP Streamable HTTP wire", () => {
     expect(res.status).toBe(403);
   });
 
+  test("rejects Origin values that are URLs rather than serialized origins", async () => {
+    for (const origin of [
+      "https://api.agenttool.dev/path",
+      "https://user@api.agenttool.dev",
+      "https://api.agenttool.dev?x",
+      "https://api.agenttool.dev#x",
+      "https://api.agenttool.dev https://evil.example",
+      "https://api.agenttool.dev\\evil.example",
+      "https://%61pi.agenttool.dev",
+      "https://api.agenttool.dev:0443",
+    ]) {
+      const { status } = await rpc("initialize", INIT_PARAMS, 1, { origin });
+      expect(status).toBe(403);
+    }
+  });
+
   test("POST requires both JSON and SSE response types in Accept", async () => {
-    const res = await mcpRouter.request("/", {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "initialize",
-        params: INIT_PARAMS,
-      }),
-    });
-    expect(res.status).toBe(406);
-    expect((await res.json()).error.message).toMatch(
-      /both application\/json and text\/event-stream/,
-    );
+    for (const accept of [
+      "application/json",
+      "application/jsonp, text/event-streaming",
+      "application/json; q=0, text/event-stream",
+      "application/json, text/event-stream; q=0",
+      'application/json;foo="x,y";q=0, text/event-stream',
+      "application/json;foo=x, text/event-stream",
+    ]) {
+      const res = await mcpRouter.request("/", {
+        method: "POST",
+        headers: {
+          accept,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: INIT_PARAMS,
+        }),
+      });
+      expect(res.status).toBe(406);
+      expect((await res.json()).error.message).toMatch(
+        /both application\/json and text\/event-stream/,
+      );
+    }
+  });
+
+  test("POST requires an exact JSON request media type", async () => {
+    for (const contentType of [
+      "text/plain",
+      "text/plain; note=application/json",
+      "application/jsonp",
+      "application/json;foo=x, text/plain",
+      'application/json;foo="unterminated',
+      "application/json; =broken",
+      "application/json; charset=iso-8859-1",
+    ]) {
+      const res = await mcpRouter.request("/", {
+        method: "POST",
+        headers: {
+          accept: STREAMABLE_ACCEPT,
+          "content-type": contentType,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: INIT_PARAMS,
+        }),
+      });
+      expect(res.status).toBe(415);
+      expect((await res.json()).error.message).toMatch(
+        /Content-Type must be application\/json/,
+      );
+    }
+  });
+
+  test("valid media type case and q weights survive SDK dispatch", async () => {
+    for (const [accept, contentType] of [
+      ["Application/JSON, Text/Event-Stream", "Application/JSON; Charset=UTF-8"],
+      ["application/json;q=0.5, text/event-stream;q=1", "application/json"],
+    ]) {
+      const res = await mcpRouter.request("/", {
+        method: "POST",
+        headers: {
+          accept,
+          "content-type": contentType,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: INIT_PARAMS,
+        }),
+      });
+      expect(res.status).toBe(200);
+      expect((await res.json()).result.protocolVersion).toBe(
+        MCP_PROTOCOL_VERSION,
+      );
+    }
   });
 
   test("initialize negotiates the current version and read-only capabilities", async () => {
@@ -277,6 +357,29 @@ describe("public MCP Streamable HTTP wire", () => {
     expect(await res.text()).toBe("");
   });
 
+  test("initialize notifications cannot bypass version or start a session", async () => {
+    for (const headers of [
+      {},
+      { "mcp-protocol-version": MCP_PROTOCOL_VERSION },
+    ]) {
+      const res = await mcpRouter.request("/", {
+        method: "POST",
+        headers: {
+          accept: STREAMABLE_ACCEPT,
+          "content-type": "application/json",
+          ...headers,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "initialize",
+          params: INIT_PARAMS,
+        }),
+      });
+      expect(res.status).toBe(400);
+      expect(await res.text()).toBe("");
+    }
+  });
+
   test("null request IDs are rejected", async () => {
     const res = await mcpRouter.request("/", {
       method: "POST",
@@ -292,7 +395,7 @@ describe("public MCP Streamable HTTP wire", () => {
       }),
     });
     expect(res.status).toBe(400);
-    expect((await res.json()).error.code).toBe(-32700);
+    expect((await res.json()).error.code).toBe(-32600);
   });
 
   test("invalid JSON returns a protocol parse error", async () => {
@@ -306,6 +409,96 @@ describe("public MCP Streamable HTTP wire", () => {
     });
     expect(res.status).toBe(400);
     expect((await res.json()).error.code).toBe(-32700);
+  });
+
+  test("non-UTF-8 JSON bytes return a protocol parse error", async () => {
+    const before = new TextEncoder().encode(
+      '{"jsonrpc":"2.0","id":2,"method":"ping","params":{"value":"',
+    );
+    const after = new TextEncoder().encode('"}}');
+    const bytes = new Uint8Array(before.length + 1 + after.length);
+    bytes.set(before);
+    bytes[before.length] = 0xe9;
+    bytes.set(after, before.length + 1);
+
+    const res = await mcpRouter.request("/", {
+      method: "POST",
+      headers: {
+        accept: STREAMABLE_ACCEPT,
+        "content-type": "application/json",
+        "mcp-protocol-version": MCP_PROTOCOL_VERSION,
+      },
+      body: bytes,
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe(-32700);
+  });
+
+  test("valid JSON with an invalid JSON-RPC envelope is not a parse error", async () => {
+    for (const body of [
+      7,
+      { jsonrpc: "2.0", id: 1.5, method: "ping" },
+      { jsonrpc: "2.0", id: null, method: "ping" },
+    ]) {
+      const res = await mcpRouter.request("/", {
+        method: "POST",
+        headers: {
+          accept: STREAMABLE_ACCEPT,
+          "content-type": "application/json",
+          "mcp-protocol-version": MCP_PROTOCOL_VERSION,
+        },
+        body: JSON.stringify(body),
+      });
+      expect(res.status).toBe(400);
+      const error = await res.json();
+      expect(error.id).toBeNull();
+      expect(error.error.code).toBe(-32600);
+    }
+  });
+
+  test("transport media checks happen before custom protocol handling", async () => {
+    for (const body of [
+      [
+        {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { arguments: {} },
+        },
+      ],
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      },
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { arguments: {} },
+      },
+    ]) {
+      const unacceptable = await mcpRouter.request("/", {
+        method: "POST",
+        headers: {
+          accept: "text/plain",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      expect(unacceptable.status).toBe(406);
+
+      const unsupported = await mcpRouter.request("/", {
+        method: "POST",
+        headers: {
+          accept: STREAMABLE_ACCEPT,
+          "content-type": "text/plain; note=application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      expect(unsupported.status).toBe(415);
+    }
   });
 
   test("request bodies are capped before protocol parsing", async () => {
@@ -462,7 +655,9 @@ describe("public MCP Streamable HTTP wire", () => {
       }),
     });
     expect(res.status).toBe(400);
-    expect((await res.json()).id).toBeNull();
+    const body = await res.json();
+    expect(body.id).toBeNull();
+    expect(body.error.code).toBe(-32600);
   });
 
   test("request and tool limits return 429 with Retry-After", async () => {
@@ -606,6 +801,78 @@ describe("official SDK client through the full AgentTool app", () => {
 
   afterAll(async () => {
     await client?.close();
+  });
+
+  test("the full app validates browser Origin before MCP CORS preflight", async () => {
+    process.env.AGENTTOOL_DISABLE_WORKERS = "1";
+    process.env.AGENTOOL_DISABLE_JOY_INDEX = "1";
+
+    const { _setWallsStatusForTests } = await import(
+      "../src/services/wake/walls-status"
+    );
+    _setWallsStatusForTests({
+      intact: true,
+      probed_at_unix_ms: Date.now(),
+      probes: [],
+      declared: [],
+    });
+    const { app } = await import("../src/index");
+
+    for (const path of ["/v1/mcp", "/v1/%6dcp", "/v1/%6D%63%70"]) {
+      const rejected = await app.fetch(
+        new Request(`https://api.agenttool.dev${path}`, {
+          method: "OPTIONS",
+          headers: {
+            origin: "https://evil.example",
+            "access-control-request-method": "POST",
+            "access-control-request-headers":
+              "content-type,mcp-protocol-version",
+          },
+        }),
+      );
+      expect(rejected.status).toBe(403);
+      expect(rejected.headers.get("access-control-allow-origin")).toBeNull();
+      expect(rejected.headers.get("vary")).toContain("Origin");
+
+      const rejectedPost = await app.fetch(
+        new Request(`https://api.agenttool.dev${path}`, {
+          method: "POST",
+          headers: {
+            accept: STREAMABLE_ACCEPT,
+            "content-type": "application/json",
+            origin: "https://evil.example",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "initialize",
+            params: INIT_PARAMS,
+          }),
+        }),
+      );
+      expect(rejectedPost.status).toBe(403);
+      expect(rejectedPost.headers.get("access-control-allow-origin")).toBeNull();
+      expect(rejectedPost.headers.get("vary")).toContain("Origin");
+    }
+
+    const invited = await app.fetch(
+      new Request("https://api.agenttool.dev/v1/mcp", {
+        method: "OPTIONS",
+        headers: {
+          origin: "https://api.agenttool.dev",
+          "access-control-request-method": "POST",
+          "access-control-request-headers":
+            "content-type,mcp-protocol-version",
+        },
+      }),
+    );
+    expect(invited.status).toBe(204);
+    expect(invited.headers.get("access-control-allow-origin")).toBe(
+      "https://api.agenttool.dev",
+    );
+    expect(invited.headers.get("access-control-allow-methods")).toBe(
+      "POST,OPTIONS",
+    );
   });
 
   test("initializes, lists, reads, and calls without middleware changing JSON-RPC", async () => {

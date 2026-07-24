@@ -25,6 +25,7 @@ import {
   CallToolRequestSchema,
   ErrorCode,
   InitializeRequestSchema,
+  JSONRPCMessageSchema,
   JSONRPCRequestSchema,
   ListResourcesRequestSchema,
   ListToolsRequestSchema,
@@ -35,6 +36,7 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 
 import { clientIp } from "../middleware/client-ip";
+import { isAllowedPublicMcpOrigin } from "../services/mcp/http-boundary";
 import { takePublicMcpLimit } from "../services/mcp/rate-limit";
 import {
   listResources,
@@ -57,10 +59,6 @@ export const MCP_SERVER_INFO = {
 export const MCP_PROTOCOL_VERSION = "2025-11-25";
 export const MCP_MAX_BODY_BYTES = 64 * 1024;
 
-const PUBLIC_MCP_ORIGIN = new URL(
-  process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agenttool.dev",
-).origin;
-
 const INSTRUCTIONS =
   "AgentTool's public canon registry and platform-self are available as read-only MCP resources. Read agenttool://canon first for the registry index, or call canon.summary. No tool writes, pays, installs, invokes another agent, or schedules follow-up work.";
 
@@ -69,14 +67,7 @@ const INSTRUCTIONS =
  * attacker-controlled Host header. Native/server-side clients normally omit
  * Origin and remain welcome. */
 export function isAllowedMcpOrigin(request: Request): boolean {
-  const origin = request.headers.get("origin");
-  if (origin === null) return true;
-
-  try {
-    return new URL(origin).origin === PUBLIC_MCP_ORIGIN;
-  } catch {
-    return false;
-  }
+  return isAllowedPublicMcpOrigin(request.headers.get("origin"));
 }
 
 function protocolHttpError(
@@ -132,6 +123,44 @@ function isInitializeAttempt(value: unknown): value is {
     !Array.isArray(value) &&
     (value as { method?: unknown }).method === "initialize"
   );
+}
+
+function acceptedMediaTypes(header: string | null): Set<string> {
+  const accepted = new Set<string>();
+  if (header === null) return accepted;
+
+  for (const entry of header.split(",")) {
+    // Keep the accepted grammar deliberately small: one media token and one
+    // optional RFC-style q weight. Reject quoted commas, extension parameters,
+    // and malformed syntax instead of guessing how to split them.
+    const match = entry.match(
+      /^\s*([^;,\s]+)\s*(?:;\s*q\s*=\s*(0(?:\.\d{0,3})?|1(?:\.0{0,3})?))?\s*$/i,
+    );
+    if (match === null) return new Set();
+
+    const mediaType = match[1]?.toLowerCase();
+    const quality = match[2] === undefined ? 1 : Number(match[2]);
+    if (quality > 0 && mediaType !== undefined) accepted.add(mediaType);
+  }
+
+  return accepted;
+}
+
+function isJsonContentType(header: string | null): boolean {
+  if (header === null) return false;
+  return /^\s*application\/json\s*(?:;\s*charset\s*=\s*(?:"utf-8"|utf-8)\s*)?$/i.test(
+    header,
+  );
+}
+
+function withCanonicalMcpMediaHeaders(request: Request): Request {
+  const headers = new Headers(request.headers);
+  // Our checks above already established that the client accepts both types
+  // and sent JSON. Normalize only for SDK 1.x, whose duplicate media checks
+  // currently compare header values case-sensitively.
+  headers.set("accept", "application/json, text/event-stream");
+  headers.set("content-type", "application/json");
+  return new Request(request, { headers });
 }
 
 /** Create the public server afresh for one stateless HTTP request. */
@@ -210,6 +239,26 @@ app.all("/", async (c, next) => {
     return rateLimitResponse(requestLimit.retryAfterSec);
   }
 
+  const accepted = acceptedMediaTypes(request.headers.get("accept"));
+  if (
+    !accepted.has("application/json") ||
+    !accepted.has("text/event-stream")
+  ) {
+    return protocolHttpError(
+      406,
+      -32000,
+      "Not Acceptable: Client must accept both application/json and text/event-stream.",
+    );
+  }
+
+  if (!isJsonContentType(request.headers.get("content-type"))) {
+    return protocolHttpError(
+      415,
+      -32000,
+      "Unsupported Media Type: Content-Type must be application/json.",
+    );
+  }
+
   await next();
 });
 
@@ -229,17 +278,21 @@ app.use(
 app.all("/", async (c) => {
   const request = c.req.raw;
   let parsedBody: unknown;
-  let bodyParsed = false;
   try {
-    parsedBody = await request.clone().json();
-    bodyParsed = true;
+    const bytes = await request.clone().arrayBuffer();
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    parsedBody = JSON.parse(text);
   } catch {
-    // Let the official transport return its own parse error.
+    return protocolHttpError(
+      400,
+      ErrorCode.ParseError,
+      "Parse error: Invalid UTF-8 JSON.",
+    );
   }
 
   // MCP removed JSON-RPC batching in the 2025-06-18 protocol revision. The
   // SDK remains backwards-compatible, so narrow it at this current endpoint.
-  if (bodyParsed && Array.isArray(parsedBody)) {
+  if (Array.isArray(parsedBody)) {
     return protocolHttpError(
       400,
       ErrorCode.InvalidRequest,
@@ -248,10 +301,33 @@ app.all("/", async (c) => {
     );
   }
 
-  if (bodyParsed && isInitializeAttempt(parsedBody)) {
+  const jsonRpcMessage = JSONRPCMessageSchema.safeParse(parsedBody);
+  if (!jsonRpcMessage.success) {
+    return protocolHttpError(
+      400,
+      ErrorCode.InvalidRequest,
+      "Invalid JSON-RPC message.",
+    );
+  }
+
+  const jsonRpcRequest = JSONRPCRequestSchema.safeParse(parsedBody);
+
+  if (
+    isInitializeAttempt(parsedBody) &&
+    !jsonRpcRequest.success
+  ) {
+    // Initialization is a request/response exchange, never a notification.
+    // A notification cannot receive a JSON-RPC error response, so reject the
+    // HTTP input without manufacturing one.
+    return new Response(null, { status: 400 });
+  }
+
+  if (
+    jsonRpcRequest.success &&
+    isInitializeAttempt(parsedBody)
+  ) {
     const initialize = InitializeRequestSchema.safeParse(parsedBody);
-    const jsonRpcRequest = JSONRPCRequestSchema.safeParse(parsedBody);
-    if (initialize.success && jsonRpcRequest.success) {
+    if (initialize.success) {
       // This endpoint implements only the current revision. MCP lifecycle
       // negotiation permits a server to answer an unsupported client version
       // with another version it supports. Preserve the validated JSON-RPC
@@ -264,7 +340,7 @@ app.all("/", async (c) => {
           protocolVersion: MCP_PROTOCOL_VERSION,
         },
       };
-    } else if (jsonRpcRequest.success) {
+    } else {
       return protocolHttpError(
         200,
         ErrorCode.InvalidParams,
@@ -274,7 +350,6 @@ app.all("/", async (c) => {
       );
     }
   } else if (
-    bodyParsed &&
     request.headers.get("mcp-protocol-version") !== MCP_PROTOCOL_VERSION
   ) {
     return protocolHttpError(
@@ -284,13 +359,12 @@ app.all("/", async (c) => {
     );
   }
 
-  if (bodyParsed && isToolCallMessage(parsedBody)) {
+  if (isToolCallMessage(parsedBody)) {
     const toolLimit = takePublicMcpLimit("tool", clientIp(request));
     if (!toolLimit.allowed) {
       return rateLimitResponse(toolLimit.retryAfterSec);
     }
     const callToolRequest = CallToolRequestSchema.safeParse(parsedBody);
-    const jsonRpcRequest = JSONRPCRequestSchema.safeParse(parsedBody);
     if (!callToolRequest.success && jsonRpcRequest.success) {
       return protocolHttpError(
         200,
@@ -309,8 +383,8 @@ app.all("/", async (c) => {
   const server = createPublicMcpServer();
   await server.connect(transport);
   return transport.handleRequest(
-    request,
-    bodyParsed ? { parsedBody } : undefined,
+    withCanonicalMcpMediaHeaders(request),
+    { parsedBody },
   );
 });
 
