@@ -29,6 +29,8 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     expect(text).toContain("# agenttool");
     expect(text).not.toContain(`${BASE}/.well-known/agent-card.json`);
     expect(text).toContain(`${BASE}/.well-known/mcp/server-card.json`);
+    expect(text).toContain(`${BASE}/public/discovery`);
+    expect(text).toContain("exactly three optional public GET roads");
     expect(text).toContain("MCP compatibility locator");
     expect(text).toContain("not a current MCP standard or authority record");
     expect(text).not.toContain("MCP Server Card");
@@ -136,6 +138,7 @@ describe("/AGENTS.md — platform onboarding for arriving agents", () => {
 
   test("names core surfaces an arriving agent needs", () => {
     const text = buildAgentsMd(BASE);
+    expect(text).toContain("/public/discovery");
     expect(text).toContain("/v1/wake");
     expect(text).toContain("/v1/welcome");
     expect(text).toContain("/public/porch");

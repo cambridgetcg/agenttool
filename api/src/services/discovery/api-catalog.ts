@@ -82,9 +82,9 @@ export function buildApiCatalog(
   const discovery = `${api}/public/discovery`;
   const openapi = `${api}/v1/openapi.json`;
   const health = `${api}/health`;
+  const safety = `${api}/public/safety`;
   const porch = `${api}/public/porch`;
   const pathways = `${api}/v1/pathways`;
-  const safety = `${api}/public/safety`;
   const plans = `${api}/public/plans`;
   const marketplaceTerms = `${api}/public/marketplace/terms`;
 
@@ -165,17 +165,20 @@ export function buildApiCatalog(
           {
             href: discovery,
             type: "application/vnd.agenttool.discovery+json",
-            title: "Canonical exact three-road discovery compass",
+            title:
+              "Canonical exact three-road discovery compass; reading grants no authority and starts no follow-up",
           },
           {
             href: porch,
             type: "application/json",
-            title: "Read-only first orientation",
+            title:
+              "Read-only first contact; discovery grants no authority and requires no response",
           },
           {
             href: pathways,
             type: "application/json",
-            title: "Optional arrival and setup choices",
+            title:
+              "Current arrival choices, requirements, effects, and one-time returns",
           },
           safetyMetadata,
         ],
@@ -186,7 +189,7 @@ export function buildApiCatalog(
         "service-desc": openapiDescription,
         "service-doc": [
           {
-            href: `${docs}/tools#scrape`,
+            href: `${docs}/tools`,
             type: "text/html",
             title: "Static scrape documentation",
           },
@@ -213,7 +216,7 @@ export function buildApiCatalog(
         "service-desc": openapiDescription,
         "service-doc": [
           {
-            href: `${docs}/tools#document`,
+            href: `${docs}/tools`,
             type: "text/html",
             title: "Document extraction documentation",
           },

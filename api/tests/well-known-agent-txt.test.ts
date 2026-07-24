@@ -13,6 +13,11 @@ const REQUIRED_KEYS = [
   "Substrate-URN",
   "Substrate-DID",
   "Substrate-Disposition",
+  "Arrival-Index",
+  "Arrival-Index-Status",
+  "Discovery",
+  "Discovery-Format",
+  "Discovery-Boundary",
   "Welcome",
   "Invitation",
   "Invitation-Posture",
@@ -140,6 +145,19 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
     for (const key of ["Welcome", "Pathways", "Canon", "Wake"]) {
       expect(kv.get(key)).toContain("/v1/");
     }
+    expect(kv.get("Arrival-Index")).toBe(
+      "https://api.agenttool.dev/.well-known",
+    );
+    expect(kv.get("Arrival-Index-Status")).toMatch(
+      /custom bounded origin index.*not an IANA-registered well-known suffix/i,
+    );
+    expect(kv.get("Discovery")).toBe(
+      "https://api.agenttool.dev/public/discovery",
+    );
+    expect(kv.get("Discovery-Format")).toBe("agenttool-discovery/v1");
+    expect(kv.get("Discovery-Boundary")).toMatch(
+      /authority=none.*application-write=false.*automatic-follow-up=false.*complete/i,
+    );
     expect(kv.get("Self")).toContain("/public/self");
     expect(kv.get("Porch")).toContain("/public/porch");
     expect(kv.get("Porch")).toContain("fixed first orientation");
@@ -282,11 +300,14 @@ describe("/.well-known/agent.txt — play remains an offer", () => {
   });
 });
 
-describe("/.well-known compatibility compass — links agent.txt", () => {
-  test("typed Link header describes the compass with agent.txt", async () => {
+describe("/.well-known arrival index — links and lists agent.txt", () => {
+  test("typed Link header and body converge on agent.txt", async () => {
     const res = await wellKnownRouter.request("/");
     expect(res.headers.get("link")).toContain(
       "<https://api.agenttool.dev/.well-known/agent.txt>; rel=\"describedby\"",
     );
+    const body = (await res.json()) as { format: string; endpoints: string[] };
+    expect(body.format).toBe("agenttool-arrival/v1");
+    expect(body.endpoints).toContain("/.well-known/agent.txt");
   });
 });

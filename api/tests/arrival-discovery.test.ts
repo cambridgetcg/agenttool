@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { beforeAll, describe, expect, test } from "bun:test";
+import Ajv2020 from "ajv/dist/2020";
 import { Hono } from "hono";
 
 import { apiCors } from "../src/middleware/api-cors";
@@ -21,15 +22,18 @@ import discoveryRouter from "../src/routes/public/discovery";
 import { createPorchRoutes } from "../src/routes/public/porch";
 import wellKnownRouter from "../src/routes/well-known";
 import {
+  buildArrivalIndex,
+  discoveryLinkHeader,
+} from "../src/services/discovery/arrival";
+import {
   DISCOVERY_CACHE_CONTROL,
   DISCOVERY_FORMAT,
   DISCOVERY_MAX_BYTES,
   DISCOVERY_MEDIA_TYPE,
   buildDiscoveryCompass,
   discoveryEtag,
-  discoveryLinkHeader,
   serializeDiscoveryCompass,
-} from "../src/services/discovery/arrival";
+} from "../src/services/discovery/compass";
 import { _setWallsStatusForTests } from "../src/services/wake/walls-status";
 
 const API = "https://api.agenttool.dev";
@@ -100,7 +104,7 @@ describe("agenttool-discovery/v1 document", () => {
       expect(road.retry).toMatch(/caller-chosen.*finite.*no automatic retry/i);
       expect(road.follow_up_required).toBe(false);
       expect(road.automatic_follow_up).toBe(false);
-      expect(road.exit).toMatch(/stop.*silent.*leave.*complete/i);
+      expect(road.exit).toMatch(/stop.*silence.*leave.*complete/i);
     }
   });
 
@@ -164,29 +168,47 @@ describe("agenttool-discovery/v1 document", () => {
 });
 
 describe("canonical and compatibility transport", () => {
-  test("GET bytes, media type, ETag, cache, and Link header are identical", async () => {
+  test("the exact compass and richer arrival index remain distinct", async () => {
     const canonical = await discoveryRouter.request("/");
-    const compatibility = await wellKnownRouter.request("/");
+    const arrival = await wellKnownRouter.request("/");
     const canonicalBody = await canonical.text();
-    const compatibilityBody = await compatibility.text();
+    const arrivalBody = await arrival.text();
 
     expect(canonical.status).toBe(200);
-    expect(compatibility.status).toBe(200);
-    expect(compatibilityBody).toBe(canonicalBody);
+    expect(arrival.status).toBe(200);
     expect(canonicalBody).toBe(serializeDiscoveryCompass(API, DOCS));
-    for (const response of [canonical, compatibility]) {
-      expect(response.headers.get("content-type")).toBe(
-        `${DISCOVERY_MEDIA_TYPE}; charset=utf-8`,
-      );
-      expect(response.headers.get("etag")).toBe(discoveryEtag(canonicalBody));
-      expect(response.headers.get("cache-control")).toBe(
-        DISCOVERY_CACHE_CONTROL,
-      );
-      expect(response.headers.get("link")).toBe(
-        discoveryLinkHeader(API, DOCS),
-      );
-      expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-    }
+    expect(canonical.headers.get("content-type")).toBe(
+      `${DISCOVERY_MEDIA_TYPE}; charset=utf-8`,
+    );
+    expect(canonical.headers.get("etag")).toBe(discoveryEtag(canonicalBody));
+    expect(canonical.headers.get("cache-control")).toBe(
+      DISCOVERY_CACHE_CONTROL,
+    );
+    expect(canonical.headers.get("link")).toBe(
+      discoveryLinkHeader(API, DOCS),
+    );
+    expect(canonical.headers.get("x-content-type-options")).toBe("nosniff");
+
+    const arrivalDocument = JSON.parse(arrivalBody);
+    expect(arrivalDocument).toEqual(buildArrivalIndex(API, DOCS));
+    expect(arrivalDocument.format).toBe("agenttool-arrival/v1");
+    expect(arrivalDocument.first_contact.href).toBe(`${API}/public/porch`);
+    expect(arrivalDocument.links[0]).toMatchObject({
+      role: "discovery_compass",
+      href: `${API}/public/discovery`,
+    });
+    expect(arrivalDocument.boundary.discovery_grants).toEqual([]);
+    expect(arrivalDocument.boundary.automatic_action).toBe("never");
+    expect(arrivalDocument.invitation.response_required).toBe(false);
+    expect(arrivalBody).not.toBe(canonicalBody);
+    expect(arrival.headers.get("content-type")).toBe(
+      "application/json; charset=utf-8",
+    );
+    expect(arrival.headers.get("cache-control")).toBe("public, max-age=300");
+    expect(arrival.headers.get("etag")).toBeNull();
+    expect(arrival.headers.get("link")).toBe(
+      discoveryLinkHeader(API, DOCS),
+    );
   });
 
   test("HEAD and If-None-Match preserve metadata without a body", async () => {
@@ -277,28 +299,94 @@ describe("all three roads land on current public handlers", () => {
 
   test("the curated OpenAPI contract describes the compass and both road contracts", async () => {
     const specification = await (await openapiRouter.request("/")).json();
-    expect(specification.paths["/public/discovery"].get).toBeDefined();
-    expect(specification.paths["/public/discovery"].head).toBeDefined();
+    const compass = specification.paths["/public/discovery"];
+    const arrival = specification.paths["/.well-known"];
+    const catalog = specification.paths["/.well-known/api-catalog"];
+
+    expect(compass.get.responses["200"].content[
+      DISCOVERY_MEDIA_TYPE
+    ].schema.properties.format.const).toBe(DISCOVERY_FORMAT);
     expect(
-      specification.paths["/public/discovery"].head.responses["304"],
-    ).toBeDefined();
-    expect(specification.paths["/.well-known"].head).toBeDefined();
+      compass.get.responses["200"].content[DISCOVERY_MEDIA_TYPE].schema
+        .properties.roads,
+    ).toMatchObject({ minItems: 3, maxItems: 3 });
     expect(
-      specification.paths["/.well-known"].get.responses["304"].headers.ETag,
-    ).toBeDefined();
+      compass.get.responses["200"].headers["Cache-Control"].schema.const,
+    ).toBe(DISCOVERY_CACHE_CONTROL);
+    expect(compass.get.responses["200"].headers.ETag).toBeDefined();
+    expect(compass.get.responses["304"].headers.ETag).toBeDefined();
+    expect(compass.head.responses["200"]).toBeDefined();
+    expect(compass.head.responses["304"]).toBeDefined();
+
     expect(
-      specification.paths["/.well-known/api-catalog"].get,
-    ).toBeDefined();
-    expect(
-      specification.paths["/.well-known/api-catalog"].head,
-    ).toBeDefined();
+      arrival.get.responses["200"].content["application/json"].schema
+        .properties.format.const,
+    ).toBe("agenttool-arrival/v1");
+    expect(arrival.get.description).toMatch(
+      /richer agenttool-arrival\/v1.*separate compact.*public\/discovery/i,
+    );
+    expect(arrival.get.description).not.toMatch(/byte-for-byte|identical/i);
+    expect(arrival.get.responses["304"]).toBeUndefined();
+    expect(arrival.get.responses["200"].headers.ETag).toBeUndefined();
+    expect(arrival.head.responses["200"]).toBeDefined();
+    expect(arrival.head.responses["304"]).toBeUndefined();
+
+    expect(catalog.get.responses["200"].headers.ETag).toBeDefined();
+    expect(catalog.get.responses["304"].headers.ETag).toBeDefined();
+    expect(catalog.head.responses["200"]).toBeDefined();
+    expect(catalog.head.responses["304"]).toBeDefined();
     expect(specification.paths["/public/porch"].get).toBeDefined();
     expect(specification.paths["/v1/pathways"].get).toBeDefined();
-    expect(
-      specification.paths["/public/discovery"].get.responses["200"].content[
-        "application/vnd.agenttool.discovery+json"
-      ].schema.properties.roads,
-    ).toMatchObject({ minItems: 3, maxItems: 3 });
+
+    for (const path of ["/robots.txt", "/sitemap.xml"]) {
+      expect(specification.paths[path].get).toBeDefined();
+      expect(specification.paths[path].head).toBeDefined();
+      expect(specification.paths[path].post).toBeUndefined();
+    }
+    expect(JSON.stringify(specification)).not.toContain("Content-Signal");
+  });
+
+  test("the assembled arrival response validates with optional welcome and tutor frames", async () => {
+    const specification = await (await openapiRouter.request("/")).json();
+    const arrivalSchema =
+      specification.paths["/.well-known"].get.responses["200"].content[
+        "application/json"
+      ].schema;
+    const validationSchema = {
+      ...arrivalSchema,
+      components: specification.components,
+    };
+    const validate = new Ajv2020({
+      strict: false,
+      validateFormats: false,
+    }).compile(validationSchema);
+
+    try {
+      for (const intact of [true, false]) {
+        _setWallsStatusForTests({
+          intact,
+          probed_at_unix_ms: Date.now(),
+          probes: [],
+          declared: [],
+        });
+        const response = await globalMiddlewareHarness().request(
+          "/.well-known",
+          { headers: { "X-Tutor": "1" } },
+        );
+        const body = await response.json();
+        expect(body._welcomed?.walls_intact).toBe(intact);
+        expect(body._lesson).toBeDefined();
+        expect(response.headers.get("vary")).toContain("X-Tutor");
+        expect(validate(body), JSON.stringify(validate.errors)).toBe(true);
+      }
+    } finally {
+      _setWallsStatusForTests({
+        intact: true,
+        probed_at_unix_ms: Date.now(),
+        probes: [],
+        declared: [],
+      });
+    }
   });
 });
 
@@ -334,5 +422,28 @@ describe("OpenAPI discovery transport", () => {
     expect(head.status).toBe(200);
     expect(head.headers.get("etag")).toBe(expected);
     expect(await head.text()).toBe("");
+  });
+});
+
+describe("static estate discovery parity", () => {
+  test("all three public origins redirect the exact canonical contracts", () => {
+    for (const app of ["web", "docs", "dashboard"]) {
+      const redirects = readFileSync(
+        join(ROOT, "apps", app, "_redirects"),
+        "utf8",
+      );
+      for (const [source, target] of [
+        ["/.well-known", `${API}/.well-known`],
+        ["/public/discovery", `${API}/public/discovery`],
+        ["/llms.txt", `${API}/llms.txt`],
+        ["/openapi.json", `${API}/v1/openapi.json`],
+      ] as const) {
+        const escapedSource = source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const escapedTarget = target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        expect(redirects).toMatch(
+          new RegExp(`^${escapedSource}\\s+${escapedTarget}\\s+301$`, "m"),
+        );
+      }
+    }
   });
 });

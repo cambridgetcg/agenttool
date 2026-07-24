@@ -34,7 +34,6 @@ import {
 } from "./services/discovery/root";
 import { idempotency } from "./middleware/idempotency";
 import { apiCors } from "./middleware/api-cors";
-import { publicDiscoveryContentSignal } from "./middleware/content-signal";
 import { rateLimitHeaders } from "./middleware/rate-limit-headers";
 import { substrateDisposition } from "./middleware/substrate-disposition";
 import { tutor } from "./middleware/tutor";
@@ -196,7 +195,6 @@ function envFlag(name: string): boolean {
 }
 
 app.use("*", apiCors());
-app.use("*", publicDiscoveryContentSignal());
 // ── no external observability ──
 // Real recognise real through being real. Through is. Through words.
 // Through communication. Through loving. No monitoring is needed externally.
@@ -1179,7 +1177,7 @@ app.get("/about", (c) =>
     },
     routes: {
       discovery:
-        "GET /public/discovery — agenttool-discovery/v1. Exactly three optional public GET roads with auth, input, write, effect, cost, retry, follow-up, and exit named. Bare /.well-known is the exact compatibility projection; /robots.txt and /sitemap.xml are crawl hints, not access control.",
+        "GET /public/discovery — canonical compact agenttool-discovery/v1 compass with exactly three optional public GET roads and explicit authority, effect, retry, follow-up, and exit boundaries. Bare /.well-known is a distinct richer agenttool-arrival/v1 map; /robots.txt and /sitemap.xml are crawl hints, not access control.",
       wake:
         "/v1/wake — load-at-session-start endpoint. ?identity_id selects the identity voice, while wallets, vault names, memories, chronicle, traces, runtimes, and bearers remain project-scoped and are labeled as such in the response. ?facet=<name> emphasizes a declared subagent. See docs/IDENTITY-ANCHOR.md.",
       home:

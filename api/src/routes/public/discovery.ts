@@ -2,7 +2,6 @@
  *
  * GET and HEAD only. No auth, request body, application write, external
  * effect, charge, proof-of-work, or automatic follow-up.
- * Doctrine: docs/AGENT-DISCOVERY.md.
  */
 
 import { Hono, type Context } from "hono";
@@ -12,9 +11,9 @@ import {
   DISCOVERY_MEDIA_TYPE,
   discoveryEtag,
   discoveryIfNoneMatchMatches,
-  discoveryLinkHeader,
   serializeDiscoveryCompass,
-} from "../../services/discovery/arrival";
+} from "../../services/discovery/compass";
+import { discoveryLinkHeader } from "../../services/discovery/arrival";
 
 const DEFAULT_PUBLIC_BASE =
   process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agenttool.dev";
