@@ -23,6 +23,9 @@ export type ObservationState =
   | "not_attempted";
 
 export type ProbeId =
+  | "root"
+  | "discovery"
+  | "api_catalog"
   | "agent_txt"
   | "pathways"
   | "love_discovery"
@@ -90,6 +93,9 @@ export interface TelescopeClaim {
 
 export interface SurfaceObservation {
   id:
+    | "root_links"
+    | "discovery"
+    | "api_catalog"
     | "agent_txt"
     | "pathways"
     | "love_packages"

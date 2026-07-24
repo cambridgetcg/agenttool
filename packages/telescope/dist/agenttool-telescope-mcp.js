@@ -28299,11 +28299,11 @@ var _defaultValidator;
 function fromJsonSchema2(schema, validator) {
   return fromJsonSchema(schema, validator ?? (_defaultValidator ??= new AjvJsonSchemaValidator));
 }
-// schema/agenttool-telescope-report-v0.1.schema.json
-var agenttool_telescope_report_v0_1_schema_default = {
+// schema/agenttool-telescope-report-v0.2.schema.json
+var agenttool_telescope_report_v0_2_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:agenttool:telescope:report:v0.1",
-  title: "AgentTool Telescope report v0.1",
+  $id: "urn:agenttool:telescope:report:v0.2",
+  title: "AgentTool Telescope report v0.2",
   type: "object",
   additionalProperties: false,
   required: [
@@ -28321,7 +28321,7 @@ var agenttool_telescope_report_v0_1_schema_default = {
     "diagnostics"
   ],
   properties: {
-    schema: { const: "agenttool-telescope/v0.1" },
+    schema: { const: "agenttool-telescope/v0.2" },
     tool: {
       type: "object",
       additionalProperties: false,
@@ -28407,6 +28407,9 @@ var agenttool_telescope_report_v0_1_schema_default = {
   $defs: {
     probe_id: {
       enum: [
+        "root",
+        "discovery",
+        "api_catalog",
         "agent_txt",
         "pathways",
         "love_discovery",
@@ -28581,6 +28584,9 @@ var agenttool_telescope_report_v0_1_schema_default = {
       properties: {
         id: {
           enum: [
+            "root_links",
+            "discovery",
+            "api_catalog",
             "agent_txt",
             "pathways",
             "love_packages",
@@ -28706,7 +28712,7 @@ var agenttool_telescope_report_v0_1_schema_default = {
 };
 
 // src/constants.ts
-var REPORT_SCHEMA = "agenttool-telescope/v0.1";
+var REPORT_SCHEMA = "agenttool-telescope/v0.2";
 var TOOL_NAME = "@agenttool/telescope";
 var TOOL_VERSION = "0.2.0";
 var DEFAULT_LIMITS = Object.freeze({
@@ -28714,7 +28720,7 @@ var DEFAULT_LIMITS = Object.freeze({
   max_response_bytes: 256 * 1024,
   max_total_bytes: 1500 * 1024,
   max_redirects: 3,
-  max_requests: 12,
+  max_requests: 24,
   max_agent_txt_lines: 512,
   max_agent_txt_line_bytes: 4096,
   max_json_depth: 20,
@@ -29038,6 +29044,174 @@ function parseAgentTxt(body, limits) {
   };
 }
 
+// src/parsers/discovery.ts
+var AGENTTOOL_DISCOVERY_URL = "https://api.agenttool.dev/public/discovery";
+var AGENTTOOL_API_CATALOG_URL = "https://api.agenttool.dev/.well-known/api-catalog";
+var ROAD_SHAPES = [
+  {
+    id: "understand",
+    href: "https://api.agenttool.dev/public/porch",
+    representation: "application/json"
+  },
+  {
+    id: "inspect",
+    href: AGENTTOOL_API_CATALOG_URL,
+    representation: "application/linkset+json"
+  },
+  {
+    id: "choose",
+    href: "https://api.agenttool.dev/v1/pathways",
+    representation: "application/json"
+  }
+];
+function namesFiniteCallerRetry(value) {
+  const normalized = value.toLowerCase();
+  const callerChosen = normalized.includes("caller-chosen") || normalized.includes("caller chosen") || /caller(?:s|'s)? (?:choose|chooses)/u.test(normalized);
+  const noAgenttoolAutomaticRetry = normalized.includes("agenttool") && (normalized.includes("no automatic retry") || /agenttool (?:does not|doesn't|never) automatically retr/u.test(normalized) || /agenttool performs no automatic retr/u.test(normalized));
+  return callerChosen && normalized.includes("finite") && noAgenttoolAutomaticRetry;
+}
+function namesCompleteExit(value) {
+  const normalized = value.toLowerCase();
+  return normalized.includes("stop") && normalized.includes("silence") && normalized.includes("leav") && normalized.includes("complete");
+}
+function parseAgenttoolDiscovery(body, limits) {
+  const decoded = parseJsonBody(body, limits);
+  if (!decoded.ok)
+    return decoded;
+  const root = decoded.value;
+  if (!isRecord(root) || root.format !== "agenttool-discovery/v1") {
+    return parseFailure("discovery_invalid_format");
+  }
+  if (!Array.isArray(root.roads) || root.roads.length !== ROAD_SHAPES.length) {
+    return parseFailure("discovery_invalid_roads");
+  }
+  const roads = [];
+  for (let index = 0;index < ROAD_SHAPES.length; index += 1) {
+    const expected = ROAD_SHAPES[index];
+    const candidate = root.roads[index];
+    if (!isRecord(candidate) || candidate.id !== expected.id) {
+      return parseFailure("discovery_invalid_road_identity");
+    }
+    const intent = readBoundedString(candidate.intent, 2048);
+    if (!intent || candidate.method !== "GET" || candidate.href !== expected.href || candidate.representation !== expected.representation || candidate.auth !== "none" || candidate.input !== "none" || candidate.application_write !== false || candidate.external_effect !== false || candidate.repeatability !== "safe and idempotent public read" || candidate.follow_up_required !== false || candidate.automatic_follow_up !== false) {
+      return parseFailure("discovery_invalid_road_contract");
+    }
+    if (!isRecord(candidate.cost) || candidate.cost.agenttool_charge !== "none" || candidate.cost.proof_of_work !== "none") {
+      return parseFailure("discovery_invalid_cost");
+    }
+    const retry = readBoundedString(candidate.retry, 2048);
+    if (!retry || !namesFiniteCallerRetry(retry)) {
+      return parseFailure("discovery_invalid_retry_boundary");
+    }
+    const exit = readBoundedString(candidate.exit, 2048);
+    if (!exit || !namesCompleteExit(exit)) {
+      return parseFailure("discovery_invalid_exit");
+    }
+    roads.push({
+      id: expected.id,
+      intent,
+      method: "GET",
+      href: expected.href,
+      representation: expected.representation,
+      auth: "none",
+      input: "none",
+      application_write: false,
+      external_effect: false,
+      cost: {
+        agenttool_charge: "none",
+        proof_of_work: "none"
+      },
+      repeatability: "safe and idempotent public read",
+      retry,
+      follow_up_required: false,
+      automatic_follow_up: false,
+      exit
+    });
+  }
+  return {
+    ok: true,
+    value: { format: "agenttool-discovery/v1", roads },
+    warnings: []
+  };
+}
+
+// src/parsers/api-catalog.ts
+function safeHttps(value) {
+  const text = readBoundedString(value);
+  if (!text)
+    return null;
+  try {
+    const url2 = new URL(text);
+    if (url2.protocol !== "https:" || url2.username || url2.password || url2.hash) {
+      return null;
+    }
+    return url2.href;
+  } catch {
+    return null;
+  }
+}
+function parseApiCatalog(body, limits) {
+  const decoded = parseJsonBody(body, limits);
+  if (!decoded.ok)
+    return decoded;
+  const root = decoded.value;
+  if (!isRecord(root) || !Array.isArray(root.linkset) || root.linkset.length === 0 || root.linkset.length > 64) {
+    return parseFailure("api_catalog_invalid_linkset");
+  }
+  let canonicalContextFound = false;
+  let discoveryAdvertised = false;
+  const canonicalRelations = new Set;
+  for (const candidate of root.linkset) {
+    if (!isRecord(candidate)) {
+      return parseFailure("api_catalog_invalid_context");
+    }
+    const anchor = safeHttps(candidate.anchor);
+    if (!anchor)
+      return parseFailure("api_catalog_invalid_context");
+    const isCanonical = anchor === AGENTTOOL_API_CATALOG_URL;
+    if (isCanonical) {
+      if (canonicalContextFound) {
+        return parseFailure("api_catalog_duplicate_canonical_context");
+      }
+      canonicalContextFound = true;
+    }
+    const relationEntries = Object.entries(candidate).filter(([key]) => key !== "anchor");
+    if (relationEntries.length > 64) {
+      return parseFailure("api_catalog_invalid_context");
+    }
+    for (const [relation, rawTargets] of relationEntries) {
+      if (relation.length === 0 || relation.length > 2048 || !Array.isArray(rawTargets) || rawTargets.length === 0 || rawTargets.length > 128) {
+        return parseFailure("api_catalog_invalid_relation");
+      }
+      if (isCanonical)
+        canonicalRelations.add(relation);
+      for (const rawTarget of rawTargets) {
+        if (!isRecord(rawTarget)) {
+          return parseFailure("api_catalog_invalid_relation");
+        }
+        const href = safeHttps(rawTarget.href);
+        if (!href)
+          return parseFailure("api_catalog_invalid_relation");
+        if (isCanonical && relation === "service-meta" && href === AGENTTOOL_DISCOVERY_URL) {
+          discoveryAdvertised = true;
+        }
+      }
+    }
+  }
+  if (!canonicalContextFound) {
+    return parseFailure("api_catalog_missing_canonical_context");
+  }
+  return {
+    ok: true,
+    value: {
+      anchor: AGENTTOOL_API_CATALOG_URL,
+      relations: [...canonicalRelations].sort(),
+      discovery_advertised: discoveryAdvertised
+    },
+    warnings: discoveryAdvertised ? [] : ["api_catalog_discovery_not_advertised"]
+  };
+}
+
 // src/parsers/cards.ts
 function parseMcpCard(body, limits) {
   const decoded = parseJsonBody(body, limits);
@@ -29081,6 +29255,137 @@ function parseA2aCard(body, limits) {
       endpoint: readBoundedString(decoded.value.url ?? decoded.value.endpoint, 2048)
     },
     warnings: []
+  };
+}
+
+// src/parsers/link-header.ts
+function splitOutside(value, separator) {
+  const parts = [];
+  let start = 0;
+  let quoted = false;
+  let escaped = false;
+  let angled = false;
+  for (let index = 0;index < value.length; index += 1) {
+    const character = value[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (quoted && character === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (character === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (!quoted && character === "<")
+      angled = true;
+    else if (!quoted && character === ">")
+      angled = false;
+    else if (!quoted && !angled && character === separator) {
+      parts.push(value.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  if (quoted || angled || escaped)
+    return null;
+  parts.push(value.slice(start).trim());
+  return parts;
+}
+function parameterValue(value) {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('"')) {
+    return trimmed.length > 0 && trimmed.length <= 2048 ? trimmed : null;
+  }
+  if (!trimmed.endsWith('"') || trimmed.length < 2)
+    return null;
+  let result = "";
+  for (let index = 1;index < trimmed.length - 1; index += 1) {
+    const character = trimmed[index];
+    if (character === "\\") {
+      index += 1;
+      if (index >= trimmed.length - 1)
+        return null;
+      result += trimmed[index];
+    } else {
+      result += character;
+    }
+  }
+  return result.length > 0 && result.length <= 2048 ? result : null;
+}
+function canonicalHttpsTarget(value, origin) {
+  try {
+    const url2 = new URL(value, `${origin}/`);
+    if (url2.protocol !== "https:" || url2.username || url2.password || url2.hash || url2.href.length > 2048) {
+      return null;
+    }
+    return url2.href;
+  } catch {
+    return null;
+  }
+}
+function parseRootLinkHeader(header, origin) {
+  if (header.length === 0 || header.length > 16384 || /[\u0000-\u0008\u000a-\u001f\u007f]/u.test(header)) {
+    return parseFailure("root_links_invalid");
+  }
+  const values = splitOutside(header, ",");
+  if (!values || values.length === 0 || values.length > 32) {
+    return parseFailure("root_links_invalid");
+  }
+  const relations = new Set;
+  let discoveryAdvertised = false;
+  let apiCatalogAdvertised = false;
+  for (const value of values) {
+    const close = value.indexOf(">");
+    if (!value.startsWith("<") || close < 2) {
+      return parseFailure("root_links_invalid");
+    }
+    const target = canonicalHttpsTarget(value.slice(1, close), origin);
+    if (!target)
+      return parseFailure("root_links_invalid");
+    const parameters = splitOutside(value.slice(close + 1), ";");
+    if (!parameters)
+      return parseFailure("root_links_invalid");
+    let relationValues = null;
+    for (const rawParameter of parameters) {
+      if (!rawParameter)
+        continue;
+      const equals = rawParameter.indexOf("=");
+      if (equals <= 0)
+        return parseFailure("root_links_invalid");
+      const name = rawParameter.slice(0, equals).trim().toLowerCase();
+      const parsedValue = parameterValue(rawParameter.slice(equals + 1));
+      if (!parsedValue)
+        return parseFailure("root_links_invalid");
+      if (name === "rel") {
+        if (relationValues)
+          return parseFailure("root_links_invalid");
+        relationValues = parsedValue.split(/\s+/u);
+        if (relationValues.length === 0 || relationValues.length > 16 || relationValues.some((relation) => relation.length === 0 || relation.length > 2048 || /[\u0000-\u0020\u007f]/u.test(relation))) {
+          return parseFailure("root_links_invalid");
+        }
+      }
+    }
+    if (!relationValues)
+      return parseFailure("root_links_invalid");
+    for (const relation of relationValues)
+      relations.add(relation);
+    if (target === AGENTTOOL_DISCOVERY_URL && relationValues.includes("service-meta")) {
+      discoveryAdvertised = true;
+    }
+    if (target === AGENTTOOL_API_CATALOG_URL && relationValues.includes("api-catalog")) {
+      apiCatalogAdvertised = true;
+    }
+  }
+  return {
+    ok: true,
+    value: {
+      relations: [...relations].sort(),
+      discovery_advertised: discoveryAdvertised,
+      api_catalog_advertised: apiCatalogAdvertised
+    },
+    warnings: discoveryAdvertised ? [] : ["root_links_missing_discovery"]
   };
 }
 
@@ -29673,7 +29978,8 @@ async function fetchDocument(input) {
               redirect_chain: safeRedirects2.values,
               redirect_chain_redacted: safeRedirects2.redacted
             },
-            body: null
+            body: null,
+            link_header: null
           };
         }
         if (redirects >= input.limits.max_redirects) {
@@ -29708,7 +30014,8 @@ async function fetchDocument(input) {
             sha256: null,
             error_code: null
           },
-          body: null
+          body: null,
+          link_header: null
         };
       }
       if (response.status === 401 || response.status === 403) {
@@ -29721,7 +30028,8 @@ async function fetchDocument(input) {
             sha256: null,
             error_code: null
           },
-          body: null
+          body: null,
+          link_header: null
         };
       }
       if (!response.ok) {
@@ -29734,7 +30042,8 @@ async function fetchDocument(input) {
             sha256: null,
             error_code: "http_error"
           },
-          body: null
+          body: null,
+          link_header: null
         };
       }
       const contentEncoding = response.headers.get("content-encoding");
@@ -29757,7 +30066,8 @@ async function fetchDocument(input) {
           sha256: createHash("sha256").update(body).digest("hex"),
           error_code: null
         },
-        body
+        body,
+        link_header: response.headers.get("link")
       };
     }
   } catch (error51) {
@@ -29769,7 +30079,8 @@ async function fetchDocument(input) {
         redirect_chain: safeRedirects.values,
         redirect_chain_redacted: safeRedirects.redacted
       },
-      body: null
+      body: null,
+      link_header: null
     };
   }
 }
@@ -29777,11 +30088,27 @@ async function fetchDocument(input) {
 // src/scan.ts
 var JSON_ACCEPT = "application/json, application/*+json;q=0.9";
 var AGENT_TXT_ACCEPT = "text/agent, text/plain;q=0.9";
+var ROOT_ACCEPT = "application/json, application/*+json;q=0.9, text/html;q=0.8";
 var DIAGNOSTIC_MESSAGES = {
   unexpected_media_type: "A response used a media type Telescope will not parse for this surface.",
   invalid_utf8: "A discovery document was not valid UTF-8.",
   invalid_json: "A discovery document was not valid JSON.",
   json_complexity_limit: "A JSON document exceeded the configured structural limit.",
+  root_links_invalid: "The root Link header was outside Telescope's bounded supported shape.",
+  root_links_missing_discovery: "The root Link header did not name AgentTool's canonical discovery compass.",
+  discovery_invalid_format: "The discovery document did not identify the agenttool-discovery/v1 profile.",
+  discovery_invalid_roads: "The discovery document did not contain exactly three roads.",
+  discovery_invalid_road_identity: "The discovery roads were not ordered understand, inspect, then choose.",
+  discovery_invalid_road_contract: "A discovery road did not match the fixed read-only first-contact contract.",
+  discovery_invalid_cost: "A discovery road did not state zero AgentTool charge and zero proof of work.",
+  discovery_invalid_retry_boundary: "A discovery road did not state caller-chosen finite retry with no AgentTool automatic retry.",
+  discovery_invalid_exit: "A discovery road did not state that stopping, silence, and leaving are complete.",
+  api_catalog_invalid_linkset: "The API catalog was not a bounded JSON Linkset.",
+  api_catalog_invalid_context: "The API catalog contained an invalid link context.",
+  api_catalog_invalid_relation: "The API catalog contained an invalid relation target.",
+  api_catalog_duplicate_canonical_context: "The API catalog repeated its canonical membership context.",
+  api_catalog_missing_canonical_context: "The API catalog did not contain AgentTool's canonical membership context.",
+  api_catalog_discovery_not_advertised: "The API catalog did not link back to AgentTool's canonical discovery compass.",
   agent_txt_duplicate_key: "agent.txt repeated a key; entries were preserved and selected duplicates were not guessed.",
   agent_txt_malformed_line: "agent.txt contained a malformed non-comment line.",
   love_index_latest_ignored: "The LOVE index latest field was ignored for release selection.",
@@ -30022,15 +30349,272 @@ async function inspectTarget(input, options = {}) {
     signal: deadline.signal
   });
   try {
-    const [agentDocument, pathwaysDocument, loveDocument, a2aDocument] = await Promise.all([
+    const [
+      rootDocument,
+      discoveryDocument,
+      apiCatalogDocument,
+      agentDocument,
+      pathwaysDocument,
+      loveDocument,
+      a2aDocument
+    ] = await Promise.all([
+      get("root", probeUrl(subject.origin, "/"), ROOT_ACCEPT),
+      get("discovery", probeUrl(subject.origin, "/public/discovery"), JSON_ACCEPT),
+      get("api_catalog", probeUrl(subject.origin, "/.well-known/api-catalog"), JSON_ACCEPT),
       get("agent_txt", probeUrl(subject.origin, "/.well-known/agent.txt"), AGENT_TXT_ACCEPT),
       get("pathways", probeUrl(subject.origin, "/v1/pathways"), JSON_ACCEPT),
       get("love_discovery", probeUrl(subject.origin, "/.well-known/love-packages"), JSON_ACCEPT),
       get("a2a_card", probeUrl(subject.origin, "/.well-known/agent-card.json"), JSON_ACCEPT)
     ]);
-    sources.push(agentDocument.observation, pathwaysDocument.observation, loveDocument.observation, a2aDocument.observation);
+    sources.push(rootDocument.observation, discoveryDocument.observation, apiCatalogDocument.observation, agentDocument.observation, pathwaysDocument.observation, loveDocument.observation, a2aDocument.observation);
     for (const source of sources)
       addTransportDiagnostic(source, diagnostics);
+    if (rootDocument.observation.state === "present") {
+      if (!rootDocument.link_header) {
+        surfaces.push({
+          id: "root_links",
+          state: "not_found",
+          schema_conformance: "not_assessed",
+          evidence_ids: ["root"],
+          claims: [],
+          boundary_codes: [
+            "absence_is_scoped_to_the_final_root_response_at_observation_time",
+            "no_link_target_was_followed"
+          ],
+          diagnostic_codes: []
+        });
+      } else {
+        const parsed = parseRootLinkHeader(rootDocument.link_header, subject.origin);
+        if (!parsed.ok) {
+          diagnostics.push(diagnostic(parsed.code, "root", "error"));
+          surfaces.push({
+            id: "root_links",
+            state: "invalid",
+            schema_conformance: "invalid",
+            evidence_ids: ["root"],
+            claims: [],
+            boundary_codes: [
+              "link_relations_are_publisher_assertions",
+              "no_link_target_was_followed"
+            ],
+            diagnostic_codes: [parsed.code]
+          });
+        } else {
+          parserWarnings(parsed.warnings, "root", diagnostics);
+          const claims = [];
+          if (parsed.value.discovery_advertised) {
+            claims.push(claim({
+              key: "canonical_discovery",
+              value: AGENTTOOL_DISCOVERY_URL,
+              basis: "publisher_assertion",
+              role: "locator",
+              evidence_ids: ["root"]
+            }));
+          }
+          if (parsed.value.api_catalog_advertised) {
+            claims.push(claim({
+              key: "api_catalog",
+              value: AGENTTOOL_API_CATALOG_URL,
+              basis: "publisher_assertion",
+              role: "locator",
+              evidence_ids: ["root"]
+            }));
+          }
+          surfaces.push({
+            id: "root_links",
+            state: "present",
+            schema_conformance: "supported_shape_valid",
+            evidence_ids: ["root"],
+            claims,
+            boundary_codes: [
+              "link_relations_are_publisher_assertions",
+              "link_presence_does_not_prove_reachability_or_authority",
+              "no_link_target_was_followed"
+            ],
+            diagnostic_codes: parsed.warnings
+          });
+        }
+      }
+    } else {
+      surfaces.push(parseUnavailableSurface("root_links", rootDocument.observation, [
+        "absence_is_scoped_to_the_exact_root_probe_and_observation_time"
+      ]));
+    }
+    if (discoveryDocument.observation.state === "present" && discoveryDocument.body) {
+      if (!isJsonMediaType(discoveryDocument.observation.media_type)) {
+        diagnostics.push(diagnostic("unexpected_media_type", "discovery", "error"));
+        surfaces.push({
+          ...parseUnavailableSurface("discovery", discoveryDocument.observation, [
+            "discovery_is_an_invitation_not_permission",
+            "no_road_was_followed"
+          ]),
+          state: "invalid",
+          schema_conformance: "invalid",
+          diagnostic_codes: ["unexpected_media_type"]
+        });
+      } else {
+        const parsed = parseAgenttoolDiscovery(discoveryDocument.body, limits);
+        if (!parsed.ok) {
+          diagnostics.push(diagnostic(parsed.code, "discovery", "error"));
+          surfaces.push({
+            ...parseUnavailableSurface("discovery", discoveryDocument.observation, [
+              "discovery_is_an_invitation_not_permission",
+              "no_road_was_followed"
+            ]),
+            state: "invalid",
+            schema_conformance: "invalid",
+            diagnostic_codes: [parsed.code]
+          });
+        } else {
+          const roadClaims = parsed.value.roads.flatMap((road) => [
+            claim({
+              key: `${road.id}_href`,
+              value: road.href,
+              basis: "publisher_assertion",
+              role: "locator",
+              evidence_ids: ["discovery"]
+            }),
+            claim({
+              key: `${road.id}_intent`,
+              value: road.intent,
+              basis: "publisher_assertion",
+              role: "capability_advertisement",
+              evidence_ids: ["discovery"]
+            })
+          ]);
+          surfaces.push({
+            id: "discovery",
+            state: "present",
+            schema_conformance: "supported_shape_valid",
+            evidence_ids: ["discovery"],
+            claims: [
+              claim({
+                key: "format",
+                value: parsed.value.format,
+                basis: "publisher_assertion",
+                role: "capability_advertisement",
+                evidence_ids: ["discovery"]
+              }),
+              claim({
+                key: "road_order",
+                value: parsed.value.roads.map(({ id }) => id),
+                basis: "local_derivation",
+                role: "capability_advertisement",
+                taint: "local",
+                evidence_ids: ["discovery"]
+              }),
+              ...roadClaims,
+              claim({
+                key: "application_write",
+                value: false,
+                basis: "publisher_assertion",
+                role: "authority_boundary",
+                evidence_ids: ["discovery"]
+              }),
+              claim({
+                key: "external_effect",
+                value: false,
+                basis: "publisher_assertion",
+                role: "authority_boundary",
+                evidence_ids: ["discovery"]
+              }),
+              claim({
+                key: "automatic_follow_up",
+                value: false,
+                basis: "publisher_assertion",
+                role: "authority_boundary",
+                evidence_ids: ["discovery"]
+              })
+            ],
+            boundary_codes: [
+              "publisher_profile_not_operational_proof",
+              "discovery_grants_no_authority_permission_or_consent",
+              "profile_does_not_trigger_follow_up",
+              "no_automatic_follow_up"
+            ],
+            diagnostic_codes: []
+          });
+        }
+      }
+    } else {
+      surfaces.push(parseUnavailableSurface("discovery", discoveryDocument.observation, [
+        "absence_is_scoped_to_the_exact_canonical_path_and_observation_time",
+        "no_road_was_followed"
+      ]));
+    }
+    if (apiCatalogDocument.observation.state === "present" && apiCatalogDocument.body) {
+      if (!isJsonMediaType(apiCatalogDocument.observation.media_type)) {
+        diagnostics.push(diagnostic("unexpected_media_type", "api_catalog", "error"));
+        surfaces.push({
+          ...parseUnavailableSurface("api_catalog", apiCatalogDocument.observation, [
+            "catalog_links_are_publisher_assertions",
+            "no_catalog_target_was_followed"
+          ]),
+          state: "invalid",
+          schema_conformance: "invalid",
+          diagnostic_codes: ["unexpected_media_type"]
+        });
+      } else {
+        const parsed = parseApiCatalog(apiCatalogDocument.body, limits);
+        if (!parsed.ok) {
+          diagnostics.push(diagnostic(parsed.code, "api_catalog", "error"));
+          surfaces.push({
+            ...parseUnavailableSurface("api_catalog", apiCatalogDocument.observation, [
+              "catalog_links_are_publisher_assertions",
+              "no_catalog_target_was_followed"
+            ]),
+            state: "invalid",
+            schema_conformance: "invalid",
+            diagnostic_codes: [parsed.code]
+          });
+        } else {
+          parserWarnings(parsed.warnings, "api_catalog", diagnostics);
+          surfaces.push({
+            id: "api_catalog",
+            state: "present",
+            schema_conformance: "supported_shape_valid",
+            evidence_ids: ["api_catalog"],
+            claims: [
+              claim({
+                key: "anchor",
+                value: parsed.value.anchor,
+                basis: "publisher_assertion",
+                role: "locator",
+                evidence_ids: ["api_catalog"]
+              }),
+              claim({
+                key: "relations",
+                value: parsed.value.relations,
+                basis: "local_derivation",
+                role: "capability_advertisement",
+                taint: "local",
+                evidence_ids: ["api_catalog"]
+              }),
+              ...parsed.value.discovery_advertised ? [
+                claim({
+                  key: "canonical_discovery",
+                  value: AGENTTOOL_DISCOVERY_URL,
+                  basis: "publisher_assertion",
+                  role: "locator",
+                  evidence_ids: ["api_catalog"]
+                })
+              ] : []
+            ],
+            boundary_codes: [
+              "rfc_9727_catalog_membership_is_not_authority",
+              "catalog_links_are_publisher_assertions",
+              "no_catalog_target_was_followed"
+            ],
+            diagnostic_codes: parsed.warnings
+          });
+        }
+      }
+    } else {
+      surfaces.push(parseUnavailableSurface("api_catalog", apiCatalogDocument.observation, [
+        "absence_is_scoped_to_the_exact_rfc_9727_path_and_observation_time",
+        "no_catalog_target_was_followed"
+      ]));
+    }
     let parsedAgent = null;
     if (agentDocument.observation.state === "present" && agentDocument.body) {
       if (!isAgentTxtMediaType(agentDocument.observation.media_type)) {
@@ -30707,6 +31291,8 @@ async function inspectTarget(input, options = {}) {
       signal: deadline.signal
     }, diagnostics);
     const coreIds = new Set([
+      "discovery",
+      "api_catalog",
       "agent_txt",
       "pathways",
       "love_packages",
@@ -30757,7 +31343,7 @@ var publicReadOnly = {
   idempotentHint: true,
   openWorldHint: true
 };
-var reportOutputSchema = fromJsonSchema2(agenttool_telescope_report_v0_1_schema_default);
+var reportOutputSchema = fromJsonSchema2(agenttool_telescope_report_v0_2_schema_default);
 function result(payload) {
   const json2 = escapeTerminalText(JSON.stringify(payload), Number.MAX_SAFE_INTEGER);
   return {

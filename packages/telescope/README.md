@@ -122,15 +122,30 @@ The core performs these fixed root-origin probes:
 
 | Surface        | Probe                                               | Meaning of presence                                                                    |
 | -------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| root links     | `/`                                                 | Bounded RFC 8288 assertions; the header does not trigger another request                |
+| discovery      | `/public/discovery`                                 | Exact ordered `agenttool-discovery/v1` roads; the profile triggers no request           |
+| API catalog    | `/.well-known/api-catalog`                          | Bounded RFC 9727 JSON Linkset assertions; catalog members are not requested             |
 | agent manifest | `/.well-known/agent.txt`                            | Publisher-provided key/value discovery assertions                                      |
 | pathways       | `/v1/pathways`                                      | A publisher-scoped tutorial/release selection, when the supported shape is present     |
 | LOVE           | `/.well-known/love-packages`                        | A registry-neutral locator; the index and exact selected manifest may be followed      |
 | A2A            | `/.well-known/agent-card.json`                      | A card advertisement at the standard path, not proof of a working task transport       |
 | MCP            | the unique card URL advertised by valid `agent.txt` | Experimental publisher metadata, not proof of initialization, tools, or authentication |
 
+The discovery parser requires exactly three ordered roads:
+`understand` → `/public/porch`, `inspect` →
+`/.well-known/api-catalog`, and `choose` → `/v1/pathways`. Each must state a
+credential-free GET with no input, application write, external effect,
+AgentTool charge, proof of work, required or automatic follow-up, or unbounded
+retry. The parser ignores extra explanatory root and road fields. It validates
+the profile as publisher data; it does not establish that a route is reachable
+or that its stated effects are true.
+
 Telescope does not query WebFinger without an exact DID. It reports advertised
-WebFinger and Offer Bus locators but does not fetch feeds, invoke actions,
-settle offers, make payments, initialize MCP, or contact an A2A endpoint.
+WebFinger and Offer Bus locators but does not fetch feeds, let discovery or
+catalog documents trigger requests, invoke actions, settle offers, make
+payments, initialize MCP, or contact an A2A endpoint. The catalog and Pathways
+reads listed above are independent fixed probes, not traversal of a returned
+road or link.
 
 `agent.txt` is parsed at the first colon. Ordered entries and duplicates are
 preserved by the parser; a duplicated selected key is reported as ambiguous and
@@ -252,8 +267,14 @@ included in reports.
 
 ## Evidence model
 
-The JSON schema is
-[`schema/agenttool-telescope-report-v0.1.schema.json`](schema/agenttool-telescope-report-v0.1.schema.json).
+The current unreleased source emits
+[`agenttool-telescope/v0.2`](schema/agenttool-telescope-report-v0.2.schema.json).
+Version `v0.2` adds the first-class root-link, three-road discovery, and API
+catalog observations. Consumers pinned to the earlier `v0.1` schema must not
+validate a `v0.2` report as though the extra fixed sources and surfaces were
+absent. The immutable published `@agenttool/telescope@0.2.0` bytes and their
+`v0.1` report remain unchanged; current main is not a reconstruction of that
+release.
 Reports keep these ideas separate:
 
 - HTTPS transport observation versus publisher assertion.

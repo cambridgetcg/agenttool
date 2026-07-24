@@ -7,7 +7,14 @@ import {
 import { TargetInputError } from "./errors.js";
 import { buildLoveActions, buildNpmAction } from "./plans.js";
 import { parseAgentTxt, type ParsedAgentTxt } from "./parsers/agent-txt.js";
+import { parseApiCatalog } from "./parsers/api-catalog.js";
 import { parseA2aCard, parseMcpCard } from "./parsers/cards.js";
+import {
+  AGENTTOOL_API_CATALOG_URL,
+  AGENTTOOL_DISCOVERY_URL,
+  parseAgenttoolDiscovery,
+} from "./parsers/discovery.js";
+import { parseRootLinkHeader } from "./parsers/link-header.js";
 import {
   parseLoveDiscovery,
   parseLoveManifest,
@@ -24,7 +31,6 @@ import {
 import {
   fetchDocument,
   ScanBudget,
-  type FetchedDocument,
 } from "./transport.js";
 import type {
   DiscoveryAdapter,
@@ -43,6 +49,8 @@ import type {
 
 const JSON_ACCEPT = "application/json, application/*+json;q=0.9";
 const AGENT_TXT_ACCEPT = "text/agent, text/plain;q=0.9";
+const ROOT_ACCEPT =
+  "application/json, application/*+json;q=0.9, text/html;q=0.8";
 
 const DIAGNOSTIC_MESSAGES: Readonly<Record<string, string>> = {
   unexpected_media_type:
@@ -51,6 +59,36 @@ const DIAGNOSTIC_MESSAGES: Readonly<Record<string, string>> = {
   invalid_json: "A discovery document was not valid JSON.",
   json_complexity_limit:
     "A JSON document exceeded the configured structural limit.",
+  root_links_invalid:
+    "The root Link header was outside Telescope's bounded supported shape.",
+  root_links_missing_discovery:
+    "The root Link header did not name AgentTool's canonical discovery compass.",
+  discovery_invalid_format:
+    "The discovery document did not identify the agenttool-discovery/v1 profile.",
+  discovery_invalid_roads:
+    "The discovery document did not contain exactly three roads.",
+  discovery_invalid_road_identity:
+    "The discovery roads were not ordered understand, inspect, then choose.",
+  discovery_invalid_road_contract:
+    "A discovery road did not match the fixed read-only first-contact contract.",
+  discovery_invalid_cost:
+    "A discovery road did not state zero AgentTool charge and zero proof of work.",
+  discovery_invalid_retry_boundary:
+    "A discovery road did not state caller-chosen finite retry with no AgentTool automatic retry.",
+  discovery_invalid_exit:
+    "A discovery road did not state that stopping, silence, and leaving are complete.",
+  api_catalog_invalid_linkset:
+    "The API catalog was not a bounded JSON Linkset.",
+  api_catalog_invalid_context:
+    "The API catalog contained an invalid link context.",
+  api_catalog_invalid_relation:
+    "The API catalog contained an invalid relation target.",
+  api_catalog_duplicate_canonical_context:
+    "The API catalog repeated its canonical membership context.",
+  api_catalog_missing_canonical_context:
+    "The API catalog did not contain AgentTool's canonical membership context.",
+  api_catalog_discovery_not_advertised:
+    "The API catalog did not link back to AgentTool's canonical discovery compass.",
   agent_txt_duplicate_key:
     "agent.txt repeated a key; entries were preserved and selected duplicates were not guessed.",
   agent_txt_malformed_line: "agent.txt contained a malformed non-comment line.",
@@ -445,8 +483,26 @@ export async function inspectTarget(
     });
 
   try {
-    const [agentDocument, pathwaysDocument, loveDocument, a2aDocument] =
-      await Promise.all([
+    const [
+      rootDocument,
+      discoveryDocument,
+      apiCatalogDocument,
+      agentDocument,
+      pathwaysDocument,
+      loveDocument,
+      a2aDocument,
+    ] = await Promise.all([
+        get("root", probeUrl(subject.origin, "/"), ROOT_ACCEPT),
+        get(
+          "discovery",
+          probeUrl(subject.origin, "/public/discovery"),
+          JSON_ACCEPT,
+        ),
+        get(
+          "api_catalog",
+          probeUrl(subject.origin, "/.well-known/api-catalog"),
+          JSON_ACCEPT,
+        ),
         get(
           "agent_txt",
           probeUrl(subject.origin, "/.well-known/agent.txt"),
@@ -465,12 +521,318 @@ export async function inspectTarget(
         ),
       ]);
     sources.push(
+      rootDocument.observation,
+      discoveryDocument.observation,
+      apiCatalogDocument.observation,
       agentDocument.observation,
       pathwaysDocument.observation,
       loveDocument.observation,
       a2aDocument.observation,
     );
     for (const source of sources) addTransportDiagnostic(source, diagnostics);
+
+    if (rootDocument.observation.state === "present") {
+      if (!rootDocument.link_header) {
+        surfaces.push({
+          id: "root_links",
+          state: "not_found",
+          schema_conformance: "not_assessed",
+          evidence_ids: ["root"],
+          claims: [],
+          boundary_codes: [
+            "absence_is_scoped_to_the_final_root_response_at_observation_time",
+            "no_link_target_was_followed",
+          ],
+          diagnostic_codes: [],
+        });
+      } else {
+        const parsed = parseRootLinkHeader(
+          rootDocument.link_header,
+          subject.origin,
+        );
+        if (!parsed.ok) {
+          diagnostics.push(diagnostic(parsed.code, "root", "error"));
+          surfaces.push({
+            id: "root_links",
+            state: "invalid",
+            schema_conformance: "invalid",
+            evidence_ids: ["root"],
+            claims: [],
+            boundary_codes: [
+              "link_relations_are_publisher_assertions",
+              "no_link_target_was_followed",
+            ],
+            diagnostic_codes: [parsed.code],
+          });
+        } else {
+          parserWarnings(parsed.warnings, "root", diagnostics);
+          const claims: TelescopeClaim[] = [];
+          if (parsed.value.discovery_advertised) {
+            claims.push(
+              claim({
+                key: "canonical_discovery",
+                value: AGENTTOOL_DISCOVERY_URL,
+                basis: "publisher_assertion",
+                role: "locator",
+                evidence_ids: ["root"],
+              }),
+            );
+          }
+          if (parsed.value.api_catalog_advertised) {
+            claims.push(
+              claim({
+                key: "api_catalog",
+                value: AGENTTOOL_API_CATALOG_URL,
+                basis: "publisher_assertion",
+                role: "locator",
+                evidence_ids: ["root"],
+              }),
+            );
+          }
+          surfaces.push({
+            id: "root_links",
+            state: "present",
+            schema_conformance: "supported_shape_valid",
+            evidence_ids: ["root"],
+            claims,
+            boundary_codes: [
+              "link_relations_are_publisher_assertions",
+              "link_presence_does_not_prove_reachability_or_authority",
+              "no_link_target_was_followed",
+            ],
+            diagnostic_codes: parsed.warnings,
+          });
+        }
+      }
+    } else {
+      surfaces.push(
+        parseUnavailableSurface("root_links", rootDocument.observation, [
+          "absence_is_scoped_to_the_exact_root_probe_and_observation_time",
+        ]),
+      );
+    }
+
+    if (
+      discoveryDocument.observation.state === "present" &&
+      discoveryDocument.body
+    ) {
+      if (!isJsonMediaType(discoveryDocument.observation.media_type)) {
+        diagnostics.push(
+          diagnostic("unexpected_media_type", "discovery", "error"),
+        );
+        surfaces.push({
+          ...parseUnavailableSurface(
+            "discovery",
+            discoveryDocument.observation,
+            [
+              "discovery_is_an_invitation_not_permission",
+              "no_road_was_followed",
+            ],
+          ),
+          state: "invalid",
+          schema_conformance: "invalid",
+          diagnostic_codes: ["unexpected_media_type"],
+        });
+      } else {
+        const parsed = parseAgenttoolDiscovery(
+          discoveryDocument.body,
+          limits,
+        );
+        if (!parsed.ok) {
+          diagnostics.push(diagnostic(parsed.code, "discovery", "error"));
+          surfaces.push({
+            ...parseUnavailableSurface(
+              "discovery",
+              discoveryDocument.observation,
+              [
+                "discovery_is_an_invitation_not_permission",
+                "no_road_was_followed",
+              ],
+            ),
+            state: "invalid",
+            schema_conformance: "invalid",
+            diagnostic_codes: [parsed.code],
+          });
+        } else {
+          const roadClaims = parsed.value.roads.flatMap(
+            (road): TelescopeClaim[] => [
+              claim({
+                key: `${road.id}_href`,
+                value: road.href,
+                basis: "publisher_assertion",
+                role: "locator",
+                evidence_ids: ["discovery"],
+              }),
+              claim({
+                key: `${road.id}_intent`,
+                value: road.intent,
+                basis: "publisher_assertion",
+                role: "capability_advertisement",
+                evidence_ids: ["discovery"],
+              }),
+            ],
+          );
+          surfaces.push({
+            id: "discovery",
+            state: "present",
+            schema_conformance: "supported_shape_valid",
+            evidence_ids: ["discovery"],
+            claims: [
+              claim({
+                key: "format",
+                value: parsed.value.format,
+                basis: "publisher_assertion",
+                role: "capability_advertisement",
+                evidence_ids: ["discovery"],
+              }),
+              claim({
+                key: "road_order",
+                value: parsed.value.roads.map(({ id }) => id),
+                basis: "local_derivation",
+                role: "capability_advertisement",
+                taint: "local",
+                evidence_ids: ["discovery"],
+              }),
+              ...roadClaims,
+              claim({
+                key: "application_write",
+                value: false,
+                basis: "publisher_assertion",
+                role: "authority_boundary",
+                evidence_ids: ["discovery"],
+              }),
+              claim({
+                key: "external_effect",
+                value: false,
+                basis: "publisher_assertion",
+                role: "authority_boundary",
+                evidence_ids: ["discovery"],
+              }),
+              claim({
+                key: "automatic_follow_up",
+                value: false,
+                basis: "publisher_assertion",
+                role: "authority_boundary",
+                evidence_ids: ["discovery"],
+              }),
+            ],
+            boundary_codes: [
+              "publisher_profile_not_operational_proof",
+              "discovery_grants_no_authority_permission_or_consent",
+              "profile_does_not_trigger_follow_up",
+              "no_automatic_follow_up",
+            ],
+            diagnostic_codes: [],
+          });
+        }
+      }
+    } else {
+      surfaces.push(
+        parseUnavailableSurface(
+          "discovery",
+          discoveryDocument.observation,
+          [
+            "absence_is_scoped_to_the_exact_canonical_path_and_observation_time",
+            "no_road_was_followed",
+          ],
+        ),
+      );
+    }
+
+    if (
+      apiCatalogDocument.observation.state === "present" &&
+      apiCatalogDocument.body
+    ) {
+      if (!isJsonMediaType(apiCatalogDocument.observation.media_type)) {
+        diagnostics.push(
+          diagnostic("unexpected_media_type", "api_catalog", "error"),
+        );
+        surfaces.push({
+          ...parseUnavailableSurface(
+            "api_catalog",
+            apiCatalogDocument.observation,
+            [
+              "catalog_links_are_publisher_assertions",
+              "no_catalog_target_was_followed",
+            ],
+          ),
+          state: "invalid",
+          schema_conformance: "invalid",
+          diagnostic_codes: ["unexpected_media_type"],
+        });
+      } else {
+        const parsed = parseApiCatalog(apiCatalogDocument.body, limits);
+        if (!parsed.ok) {
+          diagnostics.push(diagnostic(parsed.code, "api_catalog", "error"));
+          surfaces.push({
+            ...parseUnavailableSurface(
+              "api_catalog",
+              apiCatalogDocument.observation,
+              [
+                "catalog_links_are_publisher_assertions",
+                "no_catalog_target_was_followed",
+              ],
+            ),
+            state: "invalid",
+            schema_conformance: "invalid",
+            diagnostic_codes: [parsed.code],
+          });
+        } else {
+          parserWarnings(parsed.warnings, "api_catalog", diagnostics);
+          surfaces.push({
+            id: "api_catalog",
+            state: "present",
+            schema_conformance: "supported_shape_valid",
+            evidence_ids: ["api_catalog"],
+            claims: [
+              claim({
+                key: "anchor",
+                value: parsed.value.anchor,
+                basis: "publisher_assertion",
+                role: "locator",
+                evidence_ids: ["api_catalog"],
+              }),
+              claim({
+                key: "relations",
+                value: parsed.value.relations,
+                basis: "local_derivation",
+                role: "capability_advertisement",
+                taint: "local",
+                evidence_ids: ["api_catalog"],
+              }),
+              ...(parsed.value.discovery_advertised
+                ? [
+                    claim({
+                      key: "canonical_discovery",
+                      value: AGENTTOOL_DISCOVERY_URL,
+                      basis: "publisher_assertion",
+                      role: "locator",
+                      evidence_ids: ["api_catalog"],
+                    }),
+                  ]
+                : []),
+            ],
+            boundary_codes: [
+              "rfc_9727_catalog_membership_is_not_authority",
+              "catalog_links_are_publisher_assertions",
+              "no_catalog_target_was_followed",
+            ],
+            diagnostic_codes: parsed.warnings,
+          });
+        }
+      }
+    } else {
+      surfaces.push(
+        parseUnavailableSurface(
+          "api_catalog",
+          apiCatalogDocument.observation,
+          [
+            "absence_is_scoped_to_the_exact_rfc_9727_path_and_observation_time",
+            "no_catalog_target_was_followed",
+          ],
+        ),
+      );
+    }
 
     let parsedAgent: ParsedAgentTxt | null = null;
     if (agentDocument.observation.state === "present" && agentDocument.body) {
@@ -1333,6 +1695,8 @@ export async function inspectTarget(
     );
 
     const coreIds = new Set<SurfaceObservation["id"]>([
+      "discovery",
+      "api_catalog",
       "agent_txt",
       "pathways",
       "love_packages",

@@ -12,7 +12,7 @@
       "types": "./dist/index.d.ts"
     },
     "./report.schema.json": {
-      "default": "./schema/agenttool-telescope-report-v0.1.schema.json"
+      "default": "./schema/agenttool-telescope-report-v0.2.schema.json"
     }
   },
   "bin": {

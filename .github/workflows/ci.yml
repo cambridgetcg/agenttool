@@ -235,7 +235,7 @@ jobs:
           install_dir="$(mktemp -d)"
           trap 'rm -rf "$install_dir" "$tarball"' EXIT
           npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
-          smoke='import("@agenttool/telescope").then(m=>{const t=m.normalizeTarget("example.com");if(t.origin!=="https://example.com"||m.REPORT_SCHEMA!=="agenttool-telescope/v0.1")process.exit(1)})'
+          smoke='import("@agenttool/telescope").then(m=>{const t=m.normalizeTarget("example.com");if(t.origin!=="https://example.com"||m.REPORT_SCHEMA!=="agenttool-telescope/v0.2")process.exit(1)})'
           (cd "$install_dir" && node -e "$smoke")
           (cd "$install_dir" && bun -e "$smoke")
           schema_smoke='import("@agenttool/telescope/report.schema.json",{with:{type:"json"}}).then(m=>{if(m.default.title!=="AgentTool Telescope report v0.1")process.exit(1)})'

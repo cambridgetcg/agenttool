@@ -23,7 +23,7 @@ describe("release metadata", () => {
     expect(packageJson.dependencies).toBeUndefined();
     expect(packageJson.publishConfig).toEqual({ access: "public" });
     expect(packageJson.exports?.["./report.schema.json"]?.default).toBe(
-      "./schema/agenttool-telescope-report-v0.1.schema.json",
+      "./schema/agenttool-telescope-report-v0.2.schema.json",
     );
   });
 });

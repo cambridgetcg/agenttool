@@ -35,10 +35,14 @@ npm pack --ignore-scripts --dry-run
   cookie, npm, or project credentials.
 - DNS preflight is not socket pinning. Do not describe the native-fetch client
   as DNS-rebinding-proof or suitable for a hosted arbitrary-URL scanner.
-- Fixed core probes are `/.well-known/agent.txt`, `/v1/pathways`,
-  `/.well-known/love-packages`, and `/.well-known/agent-card.json`. Follow only
-  a uniquely advertised MCP card and the explicit LOVE index → exact manifest
-  chain. Do not recursively crawl remote locators.
+- Fixed core probes are `/` (including its final `Link` header),
+  `/public/discovery`, `/.well-known/api-catalog`,
+  `/.well-known/agent.txt`, `/v1/pathways`,
+  `/.well-known/love-packages`, and `/.well-known/agent-card.json`.
+  The AgentTool discovery profile is exactly three optional read-only roads;
+  parsing it triggers no request. Catalog and Pathways remain independent fixed
+  probes. Follow only a uniquely advertised MCP card and the explicit LOVE
+  index → exact manifest chain. Do not recursively crawl remote locators.
 - Keep XENIA Surface discovery opt-in through `createXeniaSurfaceAdapter()`.
   It may read only the canonical `/.well-known/agent.json` manifest through
   Telescope's bounded transport. It does not probe declared resources or
@@ -75,7 +79,8 @@ npm pack --ignore-scripts --dry-run
 - Keep the report schema, TypeScript report type, formatter, and tests aligned.
 - Keep the package version, `TOOL_VERSION`, User-Agent, tests, LOVE inventory,
   plugin manifests, MCP server identity, and release tag aligned. The report
-  protocol remains `agenttool-telescope/v0.1` until that schema itself changes.
+  current source report protocol is `agenttool-telescope/v0.2`; bump it again
+  whenever the emitted schema changes.
   Published version bytes are immutable: never rebuild or replace an existing
   manifest/tarball under the same name and version.
 - External publication and deploy remain explicit operator actions. The

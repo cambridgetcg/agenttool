@@ -241,7 +241,7 @@ describe("XENIA Surface evidence adapter", () => {
       ],
     });
 
-    expect(report.schema).toBe("agenttool-telescope/v0.1");
+    expect(report.schema).toBe("agenttool-telescope/v0.2");
     expect(report.extensions.find(({ id }) => id === "xenia_surface")).toMatchObject({
       state: "present",
       facts: {

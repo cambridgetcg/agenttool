@@ -228,7 +228,7 @@ describe("cross-host Telescope package", () => {
         expect(listed.tools[0].inputSchema.additionalProperties).toBe(false);
         expect(listed.tools[0].outputSchema).toEqual(
           await json(
-            "schema/agenttool-telescope-report-v0.1.schema.json",
+            "schema/agenttool-telescope-report-v0.2.schema.json",
           ),
         );
 
