@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/cambridgetcg/agenttool/specs/agenttool-whitehack-evidence-storage-receipt-v1.schema.json",
+  "title": "AgentTool Whitehack encrypted evidence storage receipt v1",
+  "description": "Sensitive local receipt. It contains recipient and publisher metadata plus a recipient-bound ADDS read grant; it is not safe to publish.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "document_type",
+    "manifest_cid",
+    "signed_grant",
+    "handling",
+    "counts",
+    "verification",
+    "boundaries"
+  ],
+  "properties": {
+    "document_type": {
+      "const": "agenttool-whitehack-evidence-storage-receipt/v1"
+    },
+    "manifest_cid": {
+      "$ref": "#/$defs/cid"
+    },
+    "signed_grant": {
+      "$ref": "#/$defs/signed_grant"
+    },
+    "handling": {
+      "const": {
+        "sensitivity": "sensitive-recipient-bound-read-grant",
+        "contains_recipient_metadata": true,
+        "contains_publisher_metadata": true,
+        "safe_for_publication": false
+      }
+    },
+    "counts": {
+      "const": {
+        "ciphertext_blocks": 1,
+        "ciphertext_blocks_verified": 1,
+        "encrypted_bytes_verified": 65564,
+        "remote_objects_acknowledged": 2,
+        "minimum_write_acknowledgements": 1,
+        "maximum_write_acknowledgements": 1,
+        "failed_writes": 0
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verified_at",
+        "manifest_and_ciphertext_cids",
+        "decrypted_read_back_exact_bytes",
+        "capsule_schema_revalidated",
+        "fixed_size_frame_validated"
+      ],
+      "properties": {
+        "verified_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "manifest_and_ciphertext_cids": {
+          "const": true
+        },
+        "decrypted_read_back_exact_bytes": {
+          "const": true
+        },
+        "capsule_schema_revalidated": {
+          "const": true
+        },
+        "fixed_size_frame_validated": {
+          "const": true
+        }
+      }
+    },
+    "boundaries": {
+      "const": {
+        "status": "observed-and-verified-at-time-only",
+        "durability_claim": false,
+        "permanence_claim": false,
+        "retention_claim": false,
+        "deletion_claim": false,
+        "publication_claim": false,
+        "target_authorization_claim": false,
+        "automatic_scan": false,
+        "castle_write": false,
+        "retry": false,
+        "delete_operation": false
+      }
+    }
+  },
+  "$defs": {
+    "cid": {
+      "type": "string",
+      "pattern": "^b[a-z2-7]{58}$"
+    },
+    "principal": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!\\s)(?!.*\\s$)[^\\u0000-\\u001f\\u007f-\\u009f\\ud800-\\udfff\\u202a-\\u202e\\u2066-\\u2069]+$"
+    },
+    "base64url_32": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "public_key",
+        "value"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "Ed25519"
+        },
+        "public_key": {
+          "$ref": "#/$defs/base64url_32"
+        },
+        "value": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{86}$"
+        }
+      }
+    },
+    "signed_grant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "adds_version",
+        "kind",
+        "grant_id",
+        "manifest_cid",
+        "issuer",
+        "audience",
+        "audience_x25519_public_key",
+        "audience_x25519_key_id",
+        "rights",
+        "issued_at",
+        "expires_at",
+        "key_wrap",
+        "signature"
+      ],
+      "properties": {
+        "adds_version": {
+          "const": "0.1"
+        },
+        "kind": {
+          "const": "grant"
+        },
+        "grant_id": {
+          "type": "string",
+          "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "manifest_cid": {
+          "$ref": "#/$defs/cid"
+        },
+        "issuer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "ed25519_public_key"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/principal"
+            },
+            "ed25519_public_key": {
+              "$ref": "#/$defs/base64url_32"
+            }
+          }
+        },
+        "audience": {
+          "$ref": "#/$defs/principal"
+        },
+        "audience_x25519_public_key": {
+          "$ref": "#/$defs/base64url_32"
+        },
+        "audience_x25519_key_id": {
+          "type": "string",
+          "pattern": "^sha256:[A-Za-z0-9_-]{43}$"
+        },
+        "rights": {
+          "const": [
+            "read"
+          ]
+        },
+        "issued_at": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "expires_at": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "key_wrap": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "algorithm",
+            "ephemeral_public_key",
+            "nonce",
+            "ciphertext"
+          ],
+          "properties": {
+            "algorithm": {
+              "const": "X25519-HKDF-SHA256-AES-256-GCM"
+            },
+            "ephemeral_public_key": {
+              "$ref": "#/$defs/base64url_32"
+            },
+            "nonce": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{16}$"
+            },
+            "ciphertext": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{64}$"
+            }
+          }
+        },
+        "signature": {
+          "$ref": "#/$defs/signature"
+        }
+      }
+    }
+  }
+}

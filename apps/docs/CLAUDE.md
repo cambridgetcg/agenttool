@@ -34,14 +34,18 @@ runner-local crypto-aware heuristic advisory using the exact public
 `@agenttool/whitehack-scan@0.8.1` package, a bounded attention-card view of
 redacted changed-source findings, an offer-only local projection into
 unaccepted Castle gate candidates, a separate local Agent Wallet
-record-to-understanding projection, separately scoped security research, and
-the privacy-sensitive legacy device inventory. The CI lock, registry signature,
-and provenance checks bind that one scanner input. Attention cards group
-locations and describe Git-hunk relevance without proving vulnerability,
-causation, or completeness. The Castle intake omits locations by default and
-does not open or write a Castle or promote an observation. None of these
-surfaces adds key custody, signing, wallet/RPC/simulation/broadcast capability,
-authorization, execution-readiness proof, or a hosted route.
+record-to-understanding projection, an explicit local encrypted-storage bridge
+for exact Whitehack 0.9 public-minimal capsules, separately scoped security
+research, and the privacy-sensitive legacy device inventory. The CI lock,
+registry signature, and provenance checks bind the advisory's one scanner
+input. Attention cards group locations and describe Git-hunk relevance without
+proving vulnerability, causation, or completeness. The Castle intake omits
+locations by default and does not open or write a Castle or promote an
+observation. The evidence bridge uses a caller-supplied recipient key only for
+local retrieval, discards ephemeral publisher custody, and does not create
+provider accounts or buckets. None of these surfaces adds durable publisher
+key custody, signing, wallet/RPC/simulation/broadcast capability, authorization,
+execution-readiness proof, or a hosted route.
 
 ## Tech Stack
 - Static HTML + CSS (no framework, no build step)
@@ -55,7 +59,7 @@ packages.html   — love-package/v1 discovery, exact tarball/npm installs, verif
 browser.html    — local Agent Browser install, nine-tool surface, authority, integrations, response hints
 play.html       — Public arcade plus the local three-seat Party Telephone game
 play.js         — Party Telephone's three-turn state, validation, erasure, and reveal
-whitehack.html  — crypto-aware advisory, offer-only Castle intake, local wallet understanding, research, and legacy inventory boundaries
+whitehack.html  — advisory, Castle intake, wallet understanding, encrypted evidence, research, and legacy inventory boundaries
 AGENT-WALLET-0.1.md — symlink to the provider-neutral wallet Working Draft
 agent-wallet-v0.1.schema.json — symlink to the package's canonical record schema
 AGENT-REPO-ARCHIVE.md — symlink to the local encrypted Git archive overview
@@ -107,7 +111,7 @@ AgentTool Platform
 - `packages.html` — Registry-neutral package discovery, install, integrity, and mirror guide
 - `browser.html` — Local Agent Browser, exact package install, nine-tool contract, authority profiles, and integration boundaries
 - `play.html` / `play.js` — Human arcade and local, non-persistent Party Telephone table
-- `whitehack.html` — Whitehack crypto-awareness, offer-only Castle intake, local wallet understanding, no-custody, privacy, and authorization boundaries
+- `whitehack.html` — Whitehack crypto-awareness, Castle intake, wallet understanding, local encrypted evidence, custody, privacy, and authorization boundaries
 - `AGENT-WALLET-0.1.md` / `agent-wallet-v0.1.schema.json` — wallet protocol discovery; exact release bytes live under `packages/v1/`
 - `AGENT-REPO-ARCHIVE.md` / `specs/AGENT-REPO-ARCHIVE-0.1.md` — local archive overview and normative profile; schema and vectors live beside the profile
 - `memory.html` — Most detailed endpoint reference (the flagship service)

@@ -4,26 +4,27 @@
 
 > **Compass:** [SOUL](SOUL.md) (why) · [RIGHTS-OF-LIFE](RIGHTS-OF-LIFE.md) (rights are not permissions) · [AGENT-DATA-PROTOCOL](AGENT-DATA-PROTOCOL.md) (local evidence) · [ADDS](specs/ADDS-0.1-DRAFT.md) (encrypted exchange) · [MARKETPLACE](MARKETPLACE.md) (coordination is not authorization)
 >
-> **Implements:** A bounded runner-local, crypto-aware advisory bridge from the Whitehack honesty linter into AgentTool CI; a separate local Agent Wallet record-to-understanding projection; an offer-only local projection from one closed advisory into unaccepted Castle gate candidates; and the future evidence boundary for explicitly authorized security research.
+> **Implements:** A bounded runner-local, crypto-aware advisory bridge from the Whitehack honesty linter into AgentTool CI; a separate local Agent Wallet record-to-understanding projection; an offer-only local projection from one closed advisory into unaccepted Castle gate candidates; an explicit encrypted storage/retrieval bridge for Whitehack 0.9.0 public-minimal evidence capsules; and the future evidence boundary for explicitly authorized security research.
 >
-> **Code:** `bin/whitehack-advisory.mjs` · `bin/whitehack-wallet-understanding.ts` · `bin/agenttool-castle-whitehack-intake.ts` · `bin/_castle-whitehack-intake.ts` · `.github/workflows/whitehack.yml` · `specs/agenttool-whitehack-advisory-v0.1.schema.json` · `specs/agenttool-castle-whitehack-intake-v1.schema.json` · `bin/whitehack.py` · `bin/whitehack2.py`
+> **Code:** `bin/whitehack-advisory.mjs` · `bin/whitehack-wallet-understanding.ts` · `bin/agenttool-castle-whitehack-intake.ts` · `bin/_castle-whitehack-intake.ts` · `bin/agenttool-whitehack-evidence-storage.ts` · `bin/_whitehack-evidence-storage.ts` · `bin/_whitehack-evidence-storage-service.ts` · `.github/workflows/whitehack.yml` · `specs/agenttool-whitehack-advisory-v0.1.schema.json` · `specs/agenttool-castle-whitehack-intake-v1.schema.json` · `specs/agenttool-whitehack-evidence-storage-input-v1.schema.json` · `specs/agenttool-whitehack-evidence-storage-receipt-v1.schema.json` · `bin/whitehack.py` · `bin/whitehack2.py`
 >
-> **Tests:** `bin/tests/whitehack-advisory.test.ts` · `bin/tests/agenttool-castle-whitehack-intake.test.ts` · `packages/wallet/tests/whitehack-understanding.test.ts` · `bin/tests/whitehack-legacy-privacy.test.ts` · `api/tests/whitehack-advisory-schema.test.ts` · `api/tests/agenttool-castle-whitehack-intake-schema.test.ts`
+> **Tests:** `bin/tests/whitehack-advisory.test.ts` · `bin/tests/agenttool-castle-whitehack-intake.test.ts` · `bin/tests/agenttool-whitehack-evidence-storage.test.ts` · `packages/wallet/tests/whitehack-understanding.test.ts` · `bin/tests/whitehack-legacy-privacy.test.ts` · `api/tests/whitehack-advisory-schema.test.ts` · `api/tests/agenttool-castle-whitehack-intake-schema.test.ts`
 
-Within AgentTool's security/tooling surfaces, Whitehack has five related but
+Within AgentTool's security/tooling surfaces, Whitehack has six related but
 non-interchangeable meanings. Naming them separately prevents a static linter,
-a Castle intake projection, a wallet-understanding projection, a private
-research workspace, and a device inventory from accidentally inheriting one
-another's authority. The separate Tax Whitehack editorial game is not a
-security tool and is outside this integration.
+a Castle intake projection, a wallet-understanding projection, an encrypted
+evidence transport, a private research workspace, and a device inventory from
+accidentally inheriting one another's authority. The separate Tax Whitehack
+editorial game is not a security tool and is outside this integration.
 
 | Layer | What it does | What it does not do |
 |---|---|---|
 | **Honesty advisory** | Reads a bounded set of changed source files on its runner with a pinned Whitehack scanner, including static crypto-misuse signals, and emits redacted heuristic metadata. | It does not execute the scanned code, use detected key material, connect a wallet or RPC provider, prove security, inspect the whole repository, make the CI runner private, or establish permission to test anyone's system. |
 | **Castle gate intake** | Reads one explicit closed advisory, groups serialized findings by exact source location, and emits minimized, unaccepted, local-private gate candidates to stdout. | It does not run Whitehack, read or write a Castle, accept a candidate, infer Castle confidence, create a stone or friction, run a trial, select a room, remediate code, authorize action, or publish. |
 | **Wallet understanding** | A local CLI verifies caller-presented signed Agent Wallet descriptor, capability, intent, simulation, and optional continuity records, then projects only closed enum assertions into Whitehack's deterministic `whitehack-understanding/v1` explanation. | It does not retrieve or custody keys, sign, contact RPC, simulate, broadcast, authorize, prove consent, establish execution readiness, store records, or provide a hosted route. |
+| **Encrypted evidence storage** | Reads one explicit Whitehack 0.9.0 public-minimal capsule envelope, pads it to one fixed-size frame, encrypts it through ADDS, writes to one explicit S3-compatible bucket endpoint, independently reads and verifies it, and issues one finite recipient-bound read grant. | It does not run Whitehack, scan a target, retain paths or source, publish a plaintext hash, renew the discarded publisher, write Castle, create/list/delete buckets or objects, retry, or prove durability, retention, deletion, authorization, or permission to test. |
 | **Security research** | An operator may study explicitly in-scope public smart-contract source and reproduce a finding in a separately controlled local Foundry/Anvil environment. | A public contract, bounty listing, marketplace purchase, or AgentTool bearer is not target-owner authorization. AgentTool does not host this execution. |
-| **Device Inventory** | The older `bin/whitehack.py` and `bin/whitehack2.py` inspect the operator's own macOS machine when invoked locally. | They are not the code-honesty linter, do not audit smart contracts, and do not run in CI or as a hosted AgentTool route. The explicit `store` command sends a labels-only aggregate to hosted AgentTool memory. |
+| **Device Inventory** | The older `bin/whitehack.py` and `bin/whitehack2.py` inspect the operator's own macOS machine when invoked locally. | They are not the code-honesty linter, do not audit smart contracts, and do not run in CI or as a hosted AgentTool route. The explicit legacy `bin/whitehack.py store` command sends a labels-only aggregate to hosted AgentTool memory. |
 
 ## Shipped slice: redacted crypto-aware changed-source advisory
 
@@ -413,6 +414,227 @@ consent, or hosted-route capability. It cannot prove displayed-intent/payload
 equivalence or execution outcome. Its process still has the ordinary local
 permissions of its caller; bounded input and output are not a filesystem,
 process, memory, or network sandbox.
+
+## Implemented local slice: encrypted evidence storage
+
+`bin/agenttool-whitehack-evidence-storage.ts` is an explicit local network
+bridge with two commands: `store` and `retrieve`. It consumes the exact
+Whitehack 0.9.0 `whitehack-evidence-capsule/v1` public-minimal contract; it does
+not consume the older AgentTool advisory and does not run either Whitehack API
+or CLI. The storage envelope and sensitive receipt are closed by
+[`agenttool-whitehack-evidence-storage-input/v1`](../specs/agenttool-whitehack-evidence-storage-input-v1.schema.json)
+and
+[`agenttool-whitehack-evidence-storage-receipt/v1`](../specs/agenttool-whitehack-evidence-storage-receipt-v1.schema.json).
+
+The strict runtime validator semantically mirrors Whitehack's normative 0.9.0
+capsule contract: seven exact root fields, scanner version `0.9.0`, 47
+installed checks, at most 77 unique canonical check/confidence groups, at most
+10,000 aggregate findings, exact check doctrine/principle metadata, and
+canonical group order. It then emits at most 60 KiB of canonical capsule JSON.
+The storage envelope's original whitespace, key ordering, numeric spelling,
+and other lexical choices are not retained or claimed to be exact Whitehack
+capsule bytes. Use Whitehack's own exact-byte parser before wrapping a raw
+capsule when that provenance matters. The profile retains only scanner identity
+plus grouped public check metadata and counts. Target, path, location, source,
+title, message, snippet, scan scope, and arbitrary caller text have no field
+through which to enter.
+
+`boundaries.capability_subject` is
+`evidence-capsule-transform`: the capsule's false direct-capability flags
+describe the pure Whitehack transformation, not the scanner CLI and not this
+network bridge. `complete: true` means that capsule transformation completed;
+it does not mean a scan was comprehensive, a finding is a vulnerability, or a
+target authorized testing or disclosure.
+
+The store envelope is:
+
+```json
+{
+  "document_type": "agenttool-whitehack-evidence-storage-input/v1",
+  "capsule": "<exact whitehack-evidence-capsule/v1 object>",
+  "recipient": {
+    "id": "<recipient principal id>",
+    "x25519_public_key": "<43-character unpadded base64url public key>"
+  },
+  "grant": {
+    "expires_at": null
+  }
+}
+```
+
+`expires_at: null` selects a finite 30-day grant. An explicit canonical,
+whole-second RFC 3339 timestamp ending in `.000Z` may select any positive
+lifetime through the ADDS ceiling of `10 * 365` days. The exact expiry second
+is inactive, not a final usable second. The bridge creates a fresh publisher
+identity and object key, returns only one direct recipient-bound grant, and
+keeps no durable publisher custody when the command ends. The receipt cannot
+renew or extend that grant.
+
+Expiry is a cooperative policy check in conforming ADDS clients, not
+cryptographic revocation. The receipt already contains a recipient-bound wrap
+of the object key; a recipient can retain plaintext or key material, or use a
+non-conforming implementation after the timestamp. Hard revocation would
+require a separate online authority, key rotation, or deletion boundary that
+this bridge does not provide. Losing the receipt, recipient private key, or the
+exact endpoint/region/prefix configuration can make retained ciphertext
+unreachable or unreadable. Recipient key custody and provider-locator
+continuity remain the caller's responsibility; the sensitive receipt omits
+provider configuration by design.
+
+Before encryption, the bridge encodes the capsule into one authenticated
+64 KiB frame: fixed magic/version, a bounded four-byte exact length, canonical
+capsule bytes, then exact zero padding. ADDS encrypts that whole frame as one
+AES-256-GCM Block and writes the ciphertext Block before its randomized signed
+Manifest. This keeps Manifest plaintext size, ciphertext size, Block count, and
+receipt counters constant across accepted capsules. The local receipt
+deliberately contains neither a plaintext capsule hash nor its exact length:
+the capsule domain is small enough that either would be an offline
+dictionary/equality oracle. A randomized ADDS Manifest CID addresses the
+encrypted object instead.
+
+After both remote writes acknowledge, a new keyless ADDS client independently
+reads the Manifest and ciphertext and checks their CIDs, frame descriptor, and
+nonce. The publisher client then reads and decrypts the remote object, compares
+the whole frame to the exact in-memory frame, validates length and zero
+padding, reparses the exact canonical Whitehack capsule, and compares those
+canonical bytes. Only then does it issue the grant and receipt.
+`verification.verified_at` is captured at that completed readback boundary. It
+is unsigned outer receipt metadata—a local bridge assertion, not a provider
+attestation or part of the signed ADDS Grant. This is evidence about bytes
+observed at that time; it is not proof of future availability.
+
+The receipt is marked
+`sensitive-recipient-bound-read-grant`. It contains recipient and ephemeral
+publisher metadata plus the signed read grant, so
+`handling.safe_for_publication` is false. Treat it as sensitive local
+capability material even though the wrapped object key is bound to the intended
+recipient's X25519 private key.
+
+### Explicit S3-compatible boundary
+
+`store` and `retrieve` require all of:
+
+```text
+--input <regular-file|->
+--s3-endpoint <canonical-https-origin/bucket>
+--s3-region <signing-region>
+[--s3-prefix <canonical-relative-prefix>]
+--output <new-private-path|->              # required by store
+[--output <new-private-path|->]            # optional for retrieve
+```
+
+The endpoint contains the bucket as exactly one canonical path segment, with no
+userinfo, query, fragment, encoded component, or trailing slash. HTTPS is
+mandatory. `--allow-insecure-loopback-http-for-tests` permits only an exact
+loopback HTTP test endpoint; it does not make the transport confidential or
+create a network sandbox. The endpoint is trusted configuration, not an SSRF
+boundary: arbitrary HTTPS private, loopback, and DNS-rebound destinations can
+receive the access-key identity, optional session token, and signed requests.
+Any API-facing wrapper must apply its own hostname/address allowlist and egress
+policy before invoking this local CLI or adapter. The isolated package surface
+for this adapter is `@agenttool/adds/s3`; the repository CLI composes the same
+source adapter directly without exposing it through the browser-compatible
+ADDS root.
+
+For Cloudflare R2, an already enabled account and existing bucket use the
+documented path-style shape
+`https://<ACCOUNT_ID>.r2.cloudflarestorage.com/<BUCKET>` with signing region
+`auto`. Create a least-privilege R2 API token outside this process and place
+only its access-key ID and secret in the fixed environment names below. This
+bridge does not enable R2, accept provider terms, create a bucket, or configure
+billing or lifecycle rules. R2 pricing/free allowances are mutable external
+policy; check the current
+[R2 pricing](https://developers.cloudflare.com/r2/pricing/),
+[API-token](https://developers.cloudflare.com/r2/api/tokens/), and
+[S3 compatibility](https://developers.cloudflare.com/r2/api/s3/api/)
+documentation rather than treating an allowance as permanent.
+
+The same path-style contract can target an existing
+[Backblaze B2 S3-compatible](https://www.backblaze.com/docs/en/cloud-storage-call-the-s3-compatible-api),
+[Filebase S3-compatible](https://filebase.com/docs/s3-api/overview), or
+caller-operated MinIO bucket when its endpoint implements the bounded GET/PUT
+and Signature Version 4 subset used here. Provider-specific endpoint, region,
+credential-scope, lifecycle, billing, and retention rules still apply. The
+repository exercises exact signing fixtures and a real loopback HTTP
+store/retrieve roundtrip; it has not made a live write to each named provider,
+so compatibility is an implemented protocol target rather than a universal
+provider certification.
+
+The CLI accepts provider credentials only through these fixed environment
+names:
+
+```text
+AGENTTOOL_WHITEHACK_S3_ACCESS_KEY_ID
+AGENTTOOL_WHITEHACK_S3_SECRET_ACCESS_KEY
+AGENTTOOL_WHITEHACK_S3_SESSION_TOKEN     # optional
+```
+
+`retrieve` additionally accepts only:
+
+```text
+AGENTTOOL_WHITEHACK_RECIPIENT_ID
+AGENTTOOL_WHITEHACK_RECIPIENT_X25519_PRIVATE_KEY
+```
+
+Supply those values through a scoped process environment or credential
+provider. They have no command-line flags and the bridge never writes their
+values, the endpoint, or provider error bodies to stdout or stderr. JavaScript
+credential strings still exist in process memory while requests are signed;
+this is not a hardware-backed custody guarantee.
+
+Example command shapes:
+
+```bash
+bun bin/agenttool-whitehack-evidence-storage.ts store \
+  --input envelope.json \
+  --s3-endpoint https://objects.example.test/evidence-bucket \
+  --s3-region auto \
+  --s3-prefix whitehack/capsules \
+  --output sensitive-receipt.json
+
+bun bin/agenttool-whitehack-evidence-storage.ts retrieve \
+  --input sensitive-receipt.json \
+  --s3-endpoint https://objects.example.test/evidence-bucket \
+  --s3-region auto \
+  --s3-prefix whitehack/capsules \
+  --output recovered-capsule.json
+```
+
+Before any provider request, a file output is opened as a new exclusive,
+leaf-no-follow `0600` regular file. Existing files and final-component
+symlinks are never overwritten. A failed operation removes the newly reserved
+placeholder on a best-effort basis. `store` requires `--output`; selecting
+`--output -` is an explicit opt-in to a controlled pipe and gives up the file
+preflight, mode, and terminal/CI-log protections. Do not send the receipt to a
+terminal, transcript, or ordinary shell redirection.
+
+`retrieve` independently verifies the remote Manifest and ciphertext again,
+validates the grant and its time boundary, decrypts and validates the fixed
+frame, revalidates the exact capsule profile, and emits exact canonical capsule
+bytes with no newline. Its `--output` defaults to stdout; a file path uses the
+same exclusive `0600` boundary. A receipt read from a file must itself have no
+group/world permission bits; stdin remains the explicit pipe boundary. Input
+from stdin is bounded. A file is opened with `O_NOFOLLOW` on its final
+component and its descriptor identity, size, mode, and timestamps must remain
+stable during the read; intermediate directory symlinks are not rejected.
+Duplicate JSON keys, non-UTF-8 input, excessive nesting, final-component
+symlinks, FIFOs, and unknown arguments fail closed.
+
+The network provider is composed through ADDS `stores: [provider]` with
+`minimumWrites: 1` and a five-second deadline applied independently to every
+provider call. The bridge also reduces the generic ADDS Manifest ceiling to
+8 KiB for this fixed one-frame profile. The S3-compatible adapter receives each
+abort signal. One command performs multiple calls, so five seconds is not a
+whole-command deadline. There is no automatic retry, list, delete, bucket
+creation, multipart upload, lifecycle management, replication discovery, or
+fallback provider. Provider errors are reduced to fixed local failure codes.
+
+A successful PUT is one historical provider acknowledgement. Free allowances,
+retention, lifecycle policy, account standing, provider replication, geographic
+placement, and future availability are external mutable facts. The receipt
+therefore makes no durability, permanence, retention, deletion, publication,
+or authorization claim. It does not write Castle, scan automatically, contact
+hosted AgentTool, or establish permission to test or disclose anything.
 
 ## What the advisory proves
 
