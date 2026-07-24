@@ -179,7 +179,7 @@ api.agenttool.dev       ──X────&gt; no implicit raw-data path</pre>
 
       <div class="callout success">
         <span class="icon">↗</span>
-        <p><strong>Optional exact npm convenience.</strong> <code>npm install --save-exact @agenttool/data@0.3.1 @agenttool/adds@0.2.1 @agenttool/data-sync@0.1.1</code>. The data and sync packages still require Bun where stated. See <a href="packages.html#verify">Packages → Verify</a> for the authoritative LOVE size/SHA-256 workflow; npm <code>latest</code> is not release authority.</p>
+        <p><strong>Optional exact npm convenience.</strong> <code>npm install --save-exact @agenttool/data@0.3.1 @agenttool/adds@0.2.2 @agenttool/data-sync@0.1.1</code>. The data and sync packages still require Bun where stated. See <a href="packages.html#verify">Packages → Verify</a> for the authoritative LOVE size/SHA-256 workflow; npm <code>latest</code> is not release authority.</p>
       </div>
 
       <h2 id="run-node">Run the local reference node</h2>
@@ -247,7 +247,7 @@ curl -X POST http://127.0.0.1:7742/v1/data/query \
 
       <div class="code-block">
         <div class="code-label"><span>Bun · publish encrypted bytes offline</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.1/agenttool-adds-0.2.1.tgz
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.2/agenttool-adds-0.2.2.tgz
 
 <span class="kw">import</span> { AgentData, MemoryBlockStore, generateIdentity } <span class="kw">from</span> <span class="str">"@agenttool/adds"</span>;
 
@@ -273,7 +273,7 @@ console.<span class="fn">log</span>(published.ref); <span class="cm">// cipherte
 
       <div class="code-block">
         <div class="code-label"><span>developer preview · local three-zone proof</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>npm install --save-exact @agenttool/repo-archive@0.1.0-dev.0 @agenttool/adds@0.2.1
+<pre>npm install --save-exact @agenttool/repo-archive@0.1.0-dev.0 @agenttool/adds@0.2.2
 npx agent-repo-archive simulate --repo /absolute/path/to/clean/repository</pre>
       </div>
 

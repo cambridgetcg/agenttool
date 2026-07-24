@@ -178,7 +178,7 @@ do not add a hosted browser API.
 AgentTool's default repository licence is Apache-2.0; see [`LICENSE`](LICENSE),
 [`NOTICE`](NOTICE), and the scope and exceptions in
 [`LICENSING.md`](LICENSING.md). The licensed LOVE package line is
-`@agenttool/adds@0.2.1`, `@agenttool/data@0.3.1`,
+`@agenttool/adds@0.2.2`, `@agenttool/data@0.3.1`,
 `@agenttool/data-sync@0.1.1`, `@agenttool/sdk@0.16.3`,
 `@agenttool/credential-broker@0.1.0`, `@agenttool/wallet@0.1.0`,
 `@agenttool/telescope@0.2.1`, and `@agenttool/browser@0.2.0`. Earlier immutable

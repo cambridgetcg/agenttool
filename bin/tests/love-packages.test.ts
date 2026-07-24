@@ -107,7 +107,7 @@ describe("LOVE Package release inventory", () => {
   test("pins the current immutable package release batch", () => {
     expect(LOVE_PACKAGE_PROTOCOL).toBe("love-package/v1");
     expect(LOVE_PACKAGES.map(({ name, version, releaseTag }) => ({ name, version, releaseTag }))).toEqual([
-      { name: "@agenttool/adds", version: "0.2.1", releaseTag: "adds-v0.2.1" },
+      { name: "@agenttool/adds", version: "0.2.2", releaseTag: "adds-v0.2.2" },
       { name: "@agenttool/data", version: "0.3.1", releaseTag: "data-v0.3.1" },
       { name: "@agenttool/data-sync", version: "0.1.1", releaseTag: "data-sync-v0.1.1" },
       { name: "@agenttool/credential-broker", version: "0.1.0", releaseTag: "credential-broker-v0.1.0" },

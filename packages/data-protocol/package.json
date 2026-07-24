@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/adds",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "ADDS 0.1 — offline-first, agent-native encrypted distribution and storage",
   "license": "Apache-2.0",
   "type": "module",
