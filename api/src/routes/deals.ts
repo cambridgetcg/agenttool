@@ -9,7 +9,11 @@
  *    POST   /v1/deals/:id/accept  — seller accepts
  *    POST   /v1/deals/:id/decline — seller declines
  *    POST   /v1/deals/:id/seal    — both parties seal (trust +)
- *    POST   /v1/deals/:id/fail    — report failure (trust -)
+ *    POST   /v1/deals/:id/fail    — report failure. Naming YOURSELF at
+ *                                    fault applies the loss immediately;
+ *                                    naming the OTHER party records a
+ *                                    contested claim and moves no trust.
+ *                                    Non-parties are refused (403).
  *    GET    /v1/deals              — list my deals
  *    GET    /v1/deals/:id          — get one deal
  *    GET    /v1/deals/trust/:did   — compute trust score for any agent
@@ -208,9 +212,30 @@ app.post("/deals/:id/fail", async (c) => {
       atFaultParty: body.at_fault,
       reason: body.reason,
     });
-    return c.json({ deal });
+    // A deal that comes back 'disputed' was CONTESTED, not failed: the
+    // caller named the other side at fault, so the claim is recorded and no
+    // trust moved. Say so, rather than letting the caller read a 200 as a
+    // conviction. See services/trust/deals.ts § decideFailAction.
+    if (deal.status === "disputed") {
+      return c.json({
+        deal,
+        outcome: "contested",
+        _note:
+          "Recorded as a claim, not a verdict — no trust moved on either side. You may only convict yourself. The other party settles this by conceding (POST /v1/deals/:id/fail with at_fault set to their own side).",
+      });
+    }
+    return c.json({ deal, outcome: "failed" });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "unknown_error";
+    if (msg === "not_a_party_to_this_deal") {
+      return c.json(
+        {
+          error: "not_a_party",
+          message: "only deal parties can report a deal failed",
+        },
+        403,
+      );
+    }
     return c.json({ error: "deal_fail_failed", message: msg }, 400);
   }
 });
