@@ -149,13 +149,14 @@ fi
 if [ -z "\${KEY:-}" ] && [ -n "$ACCOUNT" ] && [ -n "\${DBUS_SESSION_BUS_ADDRESS:-}" ] && command -v secret-tool >/dev/null 2>&1; then
   KEY=$(secret-tool lookup service '${credentialService}' username "$ACCOUNT" 2>/dev/null || true)
 fi${linuxFileProbe}
+# Password Vault is a Windows Runtime API. Require a Windows executable name
+# so a native Linux/macOS PowerShell installation cannot stall SessionStart
+# while attempting an API that does not exist on that substrate.
 POWERSHELL_BIN=""
 if command -v powershell.exe >/dev/null 2>&1; then
   POWERSHELL_BIN="powershell.exe"
-elif command -v pwsh >/dev/null 2>&1; then
-  POWERSHELL_BIN="pwsh"
-elif command -v powershell >/dev/null 2>&1; then
-  POWERSHELL_BIN="powershell"
+elif command -v pwsh.exe >/dev/null 2>&1; then
+  POWERSHELL_BIN="pwsh.exe"
 fi
 if [ -z "\${KEY:-}" ] && [ -n "$POWERSHELL_BIN" ]; then
   KEY=$("$POWERSHELL_BIN" -NoProfile -NonInteractive -Command '
