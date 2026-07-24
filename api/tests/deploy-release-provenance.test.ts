@@ -65,6 +65,10 @@ async function fixture() {
     mkdir(join(repo, "api"), { recursive: true }),
     mkdir(join(repo, "apps", "docs"), { recursive: true }),
     mkdir(join(repo, "apps", "docs", "specs"), { recursive: true }),
+    mkdir(
+      join(repo, "apps", "docs", "packages", "v1", "@agenttool", "fixture", "1.0.0"),
+      { recursive: true },
+    ),
     mkdir(join(repo, "bin"), { recursive: true }),
     mkdir(join(repo, "docs"), { recursive: true }),
     mkdir(home, { recursive: true }),
@@ -115,6 +119,45 @@ async function fixture() {
   await writeFile(
     join(repo, "apps/docs/specs/agent-repo-archive-0.1-vectors.json"),
     '{"fixture":"agent-repo-archive-vectors"}\n',
+  );
+  await writeFile(
+    join(repo, "apps/docs/packages/v1/index.json"),
+    `${JSON.stringify({
+      packages: [
+        {
+          name: "@agenttool/fixture",
+          latest: "1.0.0",
+          versions: [
+            {
+              version: "1.0.0",
+              manifest_url:
+                "https://docs.agenttool.dev/packages/v1/@agenttool/fixture/1.0.0/manifest.json",
+            },
+          ],
+        },
+      ],
+    })}\n`,
+  );
+  await writeFile(
+    join(repo, "apps/docs/packages/v1/@agenttool/fixture/1.0.0/manifest.json"),
+    `${JSON.stringify({
+      artifact: {
+        filename: "agenttool-fixture-1.0.0.tgz",
+        mirrors: [
+          {
+            url:
+              "https://docs.agenttool.dev/packages/v1/@agenttool/fixture/1.0.0/agenttool-fixture-1.0.0.tgz",
+          },
+        ],
+      },
+    })}\n`,
+  );
+  await writeFile(
+    join(
+      repo,
+      "apps/docs/packages/v1/@agenttool/fixture/1.0.0/agenttool-fixture-1.0.0.tgz",
+    ),
+    "fixture archive bytes\n",
   );
   await writeFile(join(repo, "release.txt"), "first\n");
   await mustRun(["git", "add", "."], repo);
@@ -197,6 +240,39 @@ for arg in "$@"; do
 done
 
 case "$url" in
+  */packages/v1/@agenttool/fixture/1.0.0/manifest.json)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: application/json; charset=utf-8' \
+        'cache-control: public, max-age=300, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-content-type-options: nosniff' \
+        ''
+    else
+      cat apps/docs/packages/v1/@agenttool/fixture/1.0.0/manifest.json
+    fi
+    ;;
+  */packages/v1/@agenttool/fixture/1.0.0/agenttool-fixture-1.0.0.tgz)
+    if [ "$headers" = 1 ]; then
+      if [ "\${DEPLOY_TEST_BAD_LOVE_HEADERS:-0}" = 1 ]; then
+        content_type='application/octet-stream'
+        cache_control='public, max-age=0, must-revalidate'
+      else
+        content_type='application/gzip'
+        cache_control='public, max-age=31536000, immutable'
+      fi
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        "content-type: $content_type" \
+        "cache-control: $cache_control" \
+        'access-control-allow-origin: *' \
+        'x-content-type-options: nosniff' \
+        ''
+    else
+      cat apps/docs/packages/v1/@agenttool/fixture/1.0.0/agenttool-fixture-1.0.0.tgz
+    fi
+    ;;
   */AGENT-REPO-ARCHIVE.md)
     if [ "$headers" = 1 ]; then
       printf '%s\r\n' \
@@ -909,6 +985,140 @@ describe("deploy release provenance spine", () => {
     );
     expect(receipt.outcome).toBe("succeeded");
     expect(receipt.phases.frontends).toBe("deployed_verified");
+  }, 15_000);
+
+  test("selects LOVE package probes from the committed release when the worktree is dirty", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "fake-pages-bin");
+    const frontendCounter = join(setup.root, "frontend-upload-count");
+    const fenceCounter = join(setup.root, "fence-counter");
+    await mkdir(fakeBin, { recursive: true });
+    await installFakePagesVerificationTools(fakeBin);
+    await writeFile(
+      join(setup.repo, "apps/docs/packages/v1/index.json"),
+      `${JSON.stringify({
+        packages: [
+          {
+            name: "@agenttool/ambient-only",
+            latest: "9.9.9",
+            versions: [
+              {
+                version: "9.9.9",
+                manifest_url:
+                  "https://docs.agenttool.dev/packages/v1/@agenttool/ambient-only/9.9.9/manifest.json",
+              },
+            ],
+          },
+        ],
+      })}\n`,
+    );
+
+    const result = await run(
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--no-migrate",
+        "--skip-preflight",
+        "--no-api",
+        "--allow-dirty-release",
+      ],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FRONTEND_COUNTER: frontendCounter,
+        DEPLOY_TEST_FENCE_COUNTER: fenceCounter,
+        DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
+        DEPLOY_TEST_RIGHTS_SCHEMA: join(setup.repo, "apps/docs/being-rights-v1.schema.json"),
+      }),
+    );
+
+    expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain("UNSAFE SOURCE OVERRIDE");
+    expect(result.stdout).not.toContain("ambient-only");
+    expect(await readFile(frontendCounter, "utf8")).toBe("1\n");
+    expect(await readFile(fenceCounter, "utf8")).toBe("1\n");
+    const [name] = await readdir(join(setup.state, "agenttool", "deploy-receipts"));
+    const receipt = JSON.parse(
+      await readFile(join(setup.state, "agenttool", "deploy-receipts", name), "utf8"),
+    );
+    expect(receipt.outcome).toBe("succeeded");
+    expect(receipt.source_revision).toBe(setup.release);
+    expect(receipt.source_dirty).toBe(true);
+    expect(receipt.source_overrides.dirty).toBe(true);
+    expect(receipt.phases.frontends).toBe("deployed_verified");
+  }, 15_000);
+
+  test("fails immediately when committed LOVE package probes cannot be selected", async () => {
+    const setup = await fixture();
+    const frontendMarker = join(setup.root, "frontend-uploaded");
+    const frontendCounter = join(setup.root, "frontend-upload-count");
+    await unlink(join(setup.repo, "apps/docs/packages/v1/index.json"));
+    await mustRun(["git", "add", "-u"], setup.repo);
+    await mustRun(["git", "commit", "-qm", "remove package index"], setup.repo);
+    await mustRun(["git", "push", "-q", "github", "main"], setup.repo);
+
+    const result = await run(
+      ["bash", "bin/deploy.sh", "--no-migrate", "--skip-preflight", "--no-api"],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        DEPLOY_TEST_FRONTEND_MARKER: frontendMarker,
+        DEPLOY_TEST_FRONTEND_COUNTER: frontendCounter,
+      }),
+    );
+
+    expect(result.code).toBe(1);
+    expect(await exists(frontendMarker)).toBe(false);
+    expect(await exists(frontendCounter)).toBe(false);
+    expect(result.stdout).toContain("Could not select latest LOVE package header probes");
+    expect(result.stdout).not.toContain("Pages custom domains not yet converged");
+    expect(await exists(join(setup.state, "agenttool", "deploy-receipts"))).toBe(false);
+  }, 10_000);
+
+  test("fails closed when LOVE package archive headers fall back at the edge", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "fake-pages-bin");
+    const frontendMarker = join(setup.root, "frontend-uploaded");
+    const frontendCounter = join(setup.root, "frontend-upload-count");
+    const fenceCounter = join(setup.root, "fence-counter");
+    await mkdir(fakeBin, { recursive: true });
+    await installFakePagesVerificationTools(fakeBin);
+
+    const result = await run(
+      ["bash", "bin/deploy.sh", "--no-migrate", "--skip-preflight", "--no-api"],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FRONTEND_MARKER: frontendMarker,
+        DEPLOY_TEST_FRONTEND_COUNTER: frontendCounter,
+        DEPLOY_TEST_FENCE_COUNTER: fenceCounter,
+        DEPLOY_TEST_BAD_LOVE_HEADERS: "1",
+        DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
+        DEPLOY_TEST_RIGHTS_SCHEMA: join(setup.repo, "apps/docs/being-rights-v1.schema.json"),
+      }),
+    );
+
+    expect(result.code).toBe(1);
+    expect(await exists(frontendMarker)).toBe(true);
+    expect(await readFile(frontendCounter, "utf8")).toBe("1\n");
+    expect(await exists(fenceCounter)).toBe(false);
+    expect(result.stdout).toContain(
+      "https://docs.agenttool.dev/packages/v1/@agenttool/fixture/1.0.0/agenttool-fixture-1.0.0.tgz Content-Type mismatch",
+    );
+    expect(result.stdout).toContain("expected: application/gzip");
+    expect(result.stdout).toContain("observed: application/octet-stream");
+    expect(result.stdout).toContain("LOVE package static header verification failed");
+    expect(result.stdout).toContain(
+      "Pages custom domains did not converge after 25 verification attempts.",
+    );
+    const [name] = await readdir(join(setup.state, "agenttool", "deploy-receipts"));
+    const receipt = JSON.parse(
+      await readFile(join(setup.state, "agenttool", "deploy-receipts", name), "utf8"),
+    );
+    expect(receipt.outcome).toBe("failed_or_uncertain");
+    expect(receipt.phases.frontends).toBe("deployed_unverified");
   }, 15_000);
 
   test("fails closed after the bounded Pages convergence window", async () => {

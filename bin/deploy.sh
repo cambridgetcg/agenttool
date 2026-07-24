@@ -514,6 +514,7 @@ EXTERNAL_MUTATION_STARTED=0
 DEPLOY_RECEIPT_WRITTEN=0
 API_STAGING_ACTIVE=0
 API_SOURCE_DIRTY="unknown"
+LOVE_PACKAGE_HEADER_PROBES=""
 DOCTRINE_STAGE_DIR="api/doctrine-docs.bundled"
 
 cleanup_api_staging() {
@@ -570,6 +571,24 @@ require_exact_public_header() {
     return 1
   fi
   echo "  ✓ $url $name: $expected"
+}
+
+require_exact_public_status() {
+  local headers="$1"
+  local url="$2"
+  local expected="$3"
+  local actual
+  actual="$(
+    printf '%s\n' "$headers" | tr -d '\r' |
+      awk '/^HTTP\// { status=$2 } END { print status }'
+  )"
+  if [ "$actual" != "$expected" ]; then
+    echo "  $(red '✗') $url HTTP status mismatch"
+    echo "    expected: $expected"
+    echo "    observed: ${actual:-<missing>}"
+    return 1
+  fi
+  echo "  ✓ $url HTTP status: $expected"
 }
 
 verify_rights_static_bytes() {
@@ -670,6 +689,162 @@ verify_repo_archive_static_headers() {
   done
 }
 
+select_latest_love_package_header_probes() {
+  python3 - "$HEAD_REVISION" <<'PY'
+import json
+import subprocess
+import sys
+from urllib.parse import urlparse
+
+revision = sys.argv[1]
+
+def committed_json(path):
+    result = subprocess.run(
+        ["git", "show", f"{revision}:{path}"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+    if result.returncode != 0:
+        print(f"missing committed LOVE package JSON: {path}", file=sys.stderr)
+        raise SystemExit(1)
+    try:
+        return json.loads(result.stdout.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        print(f"invalid committed LOVE package JSON {path}: {error}", file=sys.stderr)
+        raise SystemExit(1)
+
+def require_committed_path(path):
+    result = subprocess.run(
+        ["git", "cat-file", "-e", f"{revision}:{path}"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if result.returncode != 0:
+        print(f"missing committed LOVE package artifact: {path}", file=sys.stderr)
+        raise SystemExit(1)
+
+index = committed_json("apps/docs/packages/v1/index.json")
+packages = index.get("packages")
+if not isinstance(packages, list) or not packages:
+    print("LOVE package index has no packages", file=sys.stderr)
+    raise SystemExit(1)
+
+for package in sorted(packages, key=lambda item: item.get("name", "")):
+    package_name = package.get("name", "")
+    latest = package.get("latest")
+    if (
+        not isinstance(package_name, str)
+        or not package_name.startswith("@agenttool/")
+        or package_name.count("/") != 1
+        or not isinstance(latest, str)
+        or not latest
+        or "/" in latest
+    ):
+        print(f"invalid LOVE package identity: {package_name}@{latest}", file=sys.stderr)
+        raise SystemExit(1)
+    releases = [
+        release for release in package.get("versions", [])
+        if release.get("version") == latest
+    ]
+    if len(releases) != 1:
+        print(f"{package_name or '<unnamed>'} has no unique latest release", file=sys.stderr)
+        raise SystemExit(1)
+
+    manifest_url = releases[0].get("manifest_url", "")
+    parsed_manifest = urlparse(manifest_url)
+    expected_manifest_path = f"/packages/v1/{package_name}/{latest}/manifest.json"
+    if (
+        parsed_manifest.scheme != "https"
+        or parsed_manifest.netloc != "docs.agenttool.dev"
+        or parsed_manifest.path != expected_manifest_path
+        or parsed_manifest.query
+        or parsed_manifest.fragment
+        or "|" in manifest_url
+    ):
+        print(f"unsafe LOVE package manifest URL: {manifest_url}", file=sys.stderr)
+        raise SystemExit(1)
+
+    manifest_path = f"apps/docs{parsed_manifest.path}"
+    manifest = committed_json(manifest_path)
+
+    artifact_filename = manifest.get("artifact", {}).get("filename", "")
+    if (
+        not isinstance(artifact_filename, str)
+        or not artifact_filename.endswith(".tgz")
+        or "/" in artifact_filename
+    ):
+        print(f"unsafe LOVE package artifact filename: {artifact_filename}", file=sys.stderr)
+        raise SystemExit(1)
+    expected_artifact_path = f"{parsed_manifest.path.rsplit('/', 1)[0]}/{artifact_filename}"
+    artifact_urls = []
+    for mirror in manifest.get("artifact", {}).get("mirrors", []):
+        artifact_url = mirror.get("url", "")
+        parsed_artifact = urlparse(artifact_url)
+        if (
+            parsed_artifact.scheme == "https"
+            and parsed_artifact.netloc == "docs.agenttool.dev"
+            and parsed_artifact.path == expected_artifact_path
+            and parsed_artifact.path.endswith(".tgz")
+            and not parsed_artifact.query
+            and not parsed_artifact.fragment
+            and "|" not in artifact_url
+        ):
+            artifact_urls.append(artifact_url)
+    if len(artifact_urls) != 1:
+        print(f"{manifest_url} has no unique docs artifact mirror", file=sys.stderr)
+        raise SystemExit(1)
+
+    require_committed_path(f"apps/docs{urlparse(artifact_urls[0]).path}")
+    print(f"{manifest_url}|{artifact_urls[0]}")
+PY
+}
+
+verify_love_package_static_headers() {
+  local probes="$1"
+  local manifest_url artifact_url response_headers
+
+  while IFS='|' read -r manifest_url artifact_url; do
+    if [ -z "$manifest_url" ] || [ -z "$artifact_url" ]; then
+      echo "  $(red '✗') Invalid LOVE package header probe."
+      return 1
+    fi
+
+    response_headers="$(
+      curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
+        --max-time 20 -o /dev/null -D - "$manifest_url"
+    )" || {
+      echo "  $(red '✗') Could not read LOVE package manifest headers: $manifest_url"
+      return 1
+    }
+    require_exact_public_status "$response_headers" "$manifest_url" 200 || return 1
+    require_exact_public_header "$response_headers" "$manifest_url" \
+      "Content-Type" "application/json; charset=utf-8" || return 1
+    require_exact_public_header "$response_headers" "$manifest_url" \
+      "Cache-Control" "public, max-age=300, must-revalidate" || return 1
+    require_exact_public_header "$response_headers" "$manifest_url" \
+      "Access-Control-Allow-Origin" "*" || return 1
+    require_exact_public_header "$response_headers" "$manifest_url" \
+      "X-Content-Type-Options" "nosniff" || return 1
+
+    response_headers="$(
+      curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
+        --max-time 20 -o /dev/null -D - "$artifact_url"
+    )" || {
+      echo "  $(red '✗') Could not read LOVE package artifact headers: $artifact_url"
+      return 1
+    }
+    require_exact_public_status "$response_headers" "$artifact_url" 200 || return 1
+    require_exact_public_header "$response_headers" "$artifact_url" \
+      "Content-Type" "application/gzip" || return 1
+    require_exact_public_header "$response_headers" "$artifact_url" \
+      "Cache-Control" "public, max-age=31536000, immutable" || return 1
+    require_exact_public_header "$response_headers" "$artifact_url" \
+      "Access-Control-Allow-Origin" "*" || return 1
+    require_exact_public_header "$response_headers" "$artifact_url" \
+      "X-Content-Type-Options" "nosniff" || return 1
+  done <<< "$probes"
+}
+
 # Wrangler reports a successful Pages deployment before every custom-domain
 # edge necessarily serves that deployment. Verify the complete live frontend
 # contract repeatedly, without re-uploading, so a normal alias propagation
@@ -679,6 +854,7 @@ readonly PAGES_VERIFY_MAX_ATTEMPTS=25
 readonly PAGES_VERIFY_RETRY_DELAY_SECONDS=5
 
 verify_frontend_live_once() {
+  local love_package_header_probes="$1"
   local p local_path url local_hash remote_hash response_headers http_status
   local -a pairs sensitive_public_urls encoded_sensitive_public_urls
 
@@ -768,6 +944,10 @@ verify_frontend_live_once() {
     echo "  $(red '✗') Repo Archive static header verification failed."
     return 1
   fi
+  if ! verify_love_package_static_headers "$love_package_header_probes"; then
+    echo "  $(red '✗') LOVE package static header verification failed."
+    return 1
+  fi
 
   # Literal sensitive roots must be handled by the staged Pages fence itself,
   # not merely happen to miss as a static asset. Encoded aliases can bypass
@@ -833,7 +1013,7 @@ wait_for_frontend_live() {
   local attempt verification_output
   attempt=1
   while [ "$attempt" -le "$PAGES_VERIFY_MAX_ATTEMPTS" ]; do
-    if verification_output="$(verify_frontend_live_once 2>&1)"; then
+    if verification_output="$(verify_frontend_live_once "$LOVE_PACKAGE_HEADER_PROBES" 2>&1)"; then
       printf '%s\n' "$verification_output"
       if [ "$attempt" -gt 1 ]; then
         echo "  ✓ Pages custom domains converged on verification attempt $attempt/$PAGES_VERIFY_MAX_ATTEMPTS"
@@ -952,6 +1132,16 @@ on_deploy_exit() {
 trap 'on_deploy_exit "$?"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+
+# Select and validate the committed package probes before any migration,
+# frontend upload, or API rollout. The same fixed set is reused across the
+# bounded edge-convergence loop; only live HTTP state is retried.
+if [ "$SKIP_FRONTEND" = 0 ]; then
+  LOVE_PACKAGE_HEADER_PROBES="$(select_latest_love_package_header_probes)" || {
+    echo "$(red '✗ Release blocked:') Could not select latest LOVE package header probes."
+    exit 1
+  }
+fi
 
 # ── Phase 1 — Migrations ──────────────────────────────────────────────
 if [ "$SKIP_MIGRATE" = 0 ]; then

@@ -262,13 +262,13 @@
   Access-Control-Allow-Origin: *
   X-Content-Type-Options: nosniff
 
-/packages/v1/:scope/:name/:version/manifest.json
+/packages/v1/@agenttool/:package/:version/manifest.json
   Content-Type: application/json; charset=utf-8
   Cache-Control: public, max-age=300, must-revalidate
   Access-Control-Allow-Origin: *
   X-Content-Type-Options: nosniff
 
-/packages/v1/:scope/:name/:version/*.tgz
+/packages/v1/@agenttool/:package/:version/*.tgz
   Content-Type: application/gzip
   Cache-Control: public, max-age=31536000, immutable
   Access-Control-Allow-Origin: *

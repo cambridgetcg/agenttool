@@ -14,12 +14,6 @@ import {
   verifyLovePackages,
   type LovePackageSpec,
 } from "../build-love-packages";
-import {
-  LOVE_ARTIFACT_HEADER_PATTERN,
-  LOVE_MANIFEST_HEADER_PATTERN,
-  cloudflareHeaderRulePaths,
-  matchesCloudflarePathPattern,
-} from "./cloudflare-headers";
 
 const cleanup: string[] = [];
 const REPO_ROOT = join(import.meta.dir, "../..");
@@ -164,41 +158,82 @@ describe("LOVE Package release inventory", () => {
     }
   });
 
-  test("serves every current manifest and artifact with explicit safe headers", async () => {
+  test("covers every published manifest and artifact with two stable header rules", async () => {
     const headers = await readFile(join(REPO_ROOT, "apps/docs/_headers"), "utf8");
-    const headerRules = cloudflareHeaderRulePaths(headers);
+    const manifestRoute = "/packages/v1/@agenttool/:package/:version/manifest.json";
+    const artifactRoute = "/packages/v1/@agenttool/:package/:version/*.tgz";
+    const manifestPathPattern = /^\/packages\/v1\/@agenttool\/[^/]+\/[^/]+\/manifest\.json$/;
+    // Cloudflare's one splat is greedy (including "/"); package and version
+    // stay segment-bounded by named placeholders.
+    const artifactPathPattern = /^\/packages\/v1\/@agenttool\/[^/]+\/[^/]+\/.*\.tgz$/;
 
-    expect(headerRules.length).toBeLessThanOrEqual(100);
     expect(headers).toContain(
-      `${LOVE_MANIFEST_HEADER_PATTERN}\n  Content-Type: application/json; charset=utf-8\n  Cache-Control: public, max-age=300, must-revalidate\n  Access-Control-Allow-Origin: *\n  X-Content-Type-Options: nosniff`,
+      [
+        manifestRoute,
+        "  Content-Type: application/json; charset=utf-8",
+        "  Cache-Control: public, max-age=300, must-revalidate",
+        "  Access-Control-Allow-Origin: *",
+        "  X-Content-Type-Options: nosniff",
+      ].join("\n"),
     );
     expect(headers).toContain(
-      `${LOVE_ARTIFACT_HEADER_PATTERN}\n  Content-Type: application/gzip\n  Cache-Control: public, max-age=31536000, immutable\n  Access-Control-Allow-Origin: *\n  X-Content-Type-Options: nosniff`,
+      [
+        artifactRoute,
+        "  Content-Type: application/gzip",
+        "  Cache-Control: public, max-age=31536000, immutable",
+        "  Access-Control-Allow-Origin: *",
+        "  X-Content-Type-Options: nosniff",
+      ].join("\n"),
     );
-    for (const spec of LOVE_PACKAGES) {
-      const slug = spec.name.slice("@agenttool/".length);
-      const manifestPath = `/packages/v1/@agenttool/${slug}/${spec.version}/manifest.json`;
-      const artifactPath = `/packages/v1/@agenttool/${slug}/${spec.version}/agenttool-${slug}-${spec.version}.tgz`;
-      expect(
-        matchesCloudflarePathPattern(LOVE_MANIFEST_HEADER_PATTERN, manifestPath),
-      ).toBe(true);
-      expect(
-        matchesCloudflarePathPattern(LOVE_ARTIFACT_HEADER_PATTERN, artifactPath),
-      ).toBe(true);
+
+    const packageRules = headers
+      .split("\n")
+      .filter((line) => line.startsWith("/packages/v1/@agenttool/"));
+    expect(packageRules).toEqual([manifestRoute, artifactRoute]);
+
+    const index = JSON.parse(
+      await readFile(join(REPO_ROOT, "apps/docs/packages/v1/index.json"), "utf8"),
+    ) as {
+      packages: Array<{
+        versions: Array<{ manifest_url: string }>;
+      }>;
+    };
+    for (const packageEntry of index.packages) {
+      for (const release of packageEntry.versions) {
+        const manifestUrl = new URL(release.manifest_url);
+        expect(manifestUrl.origin).toBe("https://docs.agenttool.dev");
+        expect(manifestUrl.pathname).toMatch(manifestPathPattern);
+
+        const manifestPath = join(
+          REPO_ROOT,
+          "apps/docs",
+          decodeURIComponent(manifestUrl.pathname).slice(1),
+        );
+        const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+          artifact: {
+            filename: string;
+            mirrors: Array<{ url: string }>;
+          };
+        };
+        const artifactUrl = new URL(
+          manifest.artifact.mirrors.find(({ url }) => (
+            new URL(url).origin === "https://docs.agenttool.dev"
+          ))?.url ?? "",
+        );
+        expect(artifactUrl.pathname).toMatch(artifactPathPattern);
+        expect(artifactUrl.pathname.endsWith(`/${manifest.artifact.filename}`)).toBe(true);
+        expect(
+          await Bun.file(
+            join(REPO_ROOT, "apps/docs", decodeURIComponent(artifactUrl.pathname).slice(1)),
+          ).exists(),
+        ).toBe(true);
+      }
     }
 
-    expect(
-      matchesCloudflarePathPattern(
-        LOVE_MANIFEST_HEADER_PATTERN,
-        "/packages/v1/@agenttool/telescope/extra/0.2.3/manifest.json",
-      ),
-    ).toBe(false);
-    expect(
-      matchesCloudflarePathPattern(
-        LOVE_ARTIFACT_HEADER_PATTERN,
-        "/packages/v1/@agenttool/telescope/0.2.3/agenttool-telescope-0.2.3.zip",
-      ),
-    ).toBe(false);
+    expect(manifestPathPattern.test("/packages/v1/@agenttool/data/manifest.json")).toBe(false);
+    expect(manifestPathPattern.test("/packages/v1/other/data/0.1.0/manifest.json")).toBe(false);
+    expect(artifactPathPattern.test("/packages/v1/@agenttool/data/0.1.0/manifest.json")).toBe(false);
+    expect(artifactPathPattern.test("/packages/v1/@agenttool/data/0.1.0/package.zip")).toBe(false);
   });
 });
 
