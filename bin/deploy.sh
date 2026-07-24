@@ -682,6 +682,7 @@ verify_frontend_live_once() {
     "apps/docs/packages.html|https://docs.agenttool.dev/packages"
     "apps/docs/pathways.html|https://docs.agenttool.dev/pathways"
     "apps/docs/tutorial.html|https://docs.agenttool.dev/tutorial"
+    "apps/docs/whitehack.html|https://docs.agenttool.dev/whitehack"
     "apps/docs/agenttool.jsonld|https://docs.agenttool.dev/agenttool.jsonld"
     "apps/docs/observer-is-observed-0.1.schema.json|https://docs.agenttool.dev/observer-is-observed-0.1.schema.json"
     "apps/docs/AGENT-REPO-ARCHIVE.md|https://docs.agenttool.dev/AGENT-REPO-ARCHIVE.md"

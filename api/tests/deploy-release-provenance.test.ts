@@ -696,7 +696,7 @@ describe("deploy release provenance spine", () => {
       readFile(join(projectRoot, "apps/docs/_headers"), "utf8"),
     ]);
 
-    for (const page of ["data", "packages", "pathways", "tutorial"]) {
+    for (const page of ["data", "packages", "pathways", "tutorial", "whitehack"]) {
       expect(deploy).toContain(
         `"apps/docs/${page}.html|https://docs.agenttool.dev/${page}"`,
       );

@@ -180,6 +180,9 @@
 /tutorial
   Cache-Control: public, max-age=0, must-revalidate, no-transform
 
+/whitehack
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+
 /trace
   Link: <https://api.agenttool.dev/v1/traces>; rel="alternate"; type="application/json"
 
