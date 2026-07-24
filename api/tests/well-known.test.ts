@@ -37,29 +37,30 @@ describe("/.well-known/* — MCP + native discovery", () => {
     expect(card.transport).toMatch(/JSON-RPC/i);
     expect(card.capabilities.resources).toBeDefined();
     expect(card.capabilities.tools).toBeDefined();
+    expect(card.documentationUrl).toBe(
+      "https://docs.agenttool.dev/AGENT-DISCOVERY.md#deliberately-absent-doors",
+    );
+    expect(card.discoveryStatus).toMatch(/not a path or card shape standardized/i);
     expect(card["x-agenttool"].locator_role).toMatch(/not an MCP Server Card/);
     expect(card["x-agenttool"]).not.toHaveProperty("sep");
+    expect(card["x-agenttool"].alignment_move).toMatch(/ALIGNMENT-MOVES$/);
     expect(card["x-agenttool"].doctrine).toMatch(
       /\/v1\/canon\/urn:agenttool:doc\/ECOSYSTEM$/,
     );
-    expect(card["x-agenttool"].alignment_move).toMatch(
-      /\/v1\/canon\/urn:agenttool:doc\/ALIGNMENT-MOVES$/,
-    );
-    expect(card.instructions).toContain("Discovery grants no tool authority");
+    expect(card.instructions).toMatch(/AgentTool implements.*authorization/i);
     expect(card.instructions).not.toContain("upcoming MCP spec");
     expect(card["x-agenttool"].registry).toEqual(
       expect.objectContaining({
-        status: "active_listing_and_live_transport_verified_2026-07-24",
+        status: "active_publisher_listing_observed_2026-07-24",
         name: "dev.agenttool/agenttool",
         version: "1.0.0",
       }),
     );
-    expect(card.discoveryStatus).toMatch(
-      /experimental.*not.*standardized.*MCP 2025-11-25/i,
-    );
-    expect(card.documentationUrl).toBe(
-      "https://docs.agenttool.dev/AGENT-DISCOVERY.md#mcp",
-    );
+    expect(card["x-agenttool"].transport_verification).toMatchObject({
+      status: "bounded_official_sdk_round_trip_verified_2026-07-24",
+      full_conformance_claimed: false,
+    });
+    expect(card.instructions).toMatch(/Discovery grants no tool authority/i);
   });
 
   test("GET /llms.txt returns well-formed markdown sitemap", async () => {
@@ -115,30 +116,19 @@ describe("/.well-known/* — MCP + native discovery", () => {
     expect(npm).not.toHaveProperty("version");
   });
 
-  test("GET / returns the well-known index", async () => {
+  test("GET / returns the canonical discovery compatibility projection", async () => {
     const { status, body } = await get("/");
     expect(status).toBe(200);
     const idx = await body.json();
-    expect(idx.endpoints).toEqual(
-      expect.arrayContaining([
-        "/.well-known/webfinger?resource={exact-DID}",
-        "/.well-known/mcp/server-card.json",
-        "/.well-known/love-packages",
-        "/.well-known/llms.txt",
-        "/.well-known/pyramid",
-      ]),
+    expect(idx.format).toBe("agenttool-discovery/v1");
+    expect(idx.canonical).toBe(
+      "https://api.agenttool.dev/public/discovery",
     );
-    expect(idx.format).toBe("agenttool-arrival/v1");
-    expect(idx.rfc).toMatch(/RFC 8615/);
-    expect(idx.first_contact).toMatchObject({
-      href: "https://api.agenttool.dev/public/porch",
-      method: "GET",
-      auth_scope: "none",
-      workspace_identity: expect.stringMatching(/none/),
-    });
-    expect(idx.boundary.automatic_action).toBe("never");
-    expect(idx.boundary.discovery_grants).toEqual([]);
-    expect(idx.links).toHaveLength(7);
-    expect(idx.endpoints).not.toContain("/.well-known/agent-card.json");
+    expect(idx.roads.map((road: { id: string }) => road.id)).toEqual([
+      "understand",
+      "inspect",
+      "choose",
+    ]);
+    expect(JSON.stringify(idx)).not.toContain("agent-card.json");
   });
 });

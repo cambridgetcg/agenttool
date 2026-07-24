@@ -18,6 +18,7 @@ type TransportObservation<Id extends string> = Omit<SourceObservation, "id"> & {
 export interface FetchedDocument<Id extends string = ProbeId> {
   observation: TransportObservation<Id>;
   body: Uint8Array | null;
+  link_header: string | null;
 }
 
 export class ScanBudget {
@@ -265,6 +266,7 @@ export async function fetchDocument<Id extends string>(input: {
               redirect_chain_redacted: safeRedirects.redacted,
             },
             body: null,
+            link_header: null,
           };
         }
         if (redirects >= input.limits.max_redirects) {
@@ -312,6 +314,7 @@ export async function fetchDocument<Id extends string>(input: {
             error_code: null,
           },
           body: null,
+          link_header: null,
         };
       }
       if (response.status === 401 || response.status === 403) {
@@ -325,6 +328,7 @@ export async function fetchDocument<Id extends string>(input: {
             error_code: null,
           },
           body: null,
+          link_header: null,
         };
       }
       if (!response.ok) {
@@ -338,6 +342,7 @@ export async function fetchDocument<Id extends string>(input: {
             error_code: "http_error",
           },
           body: null,
+          link_header: null,
         };
       }
 
@@ -373,6 +378,7 @@ export async function fetchDocument<Id extends string>(input: {
           error_code: null,
         },
         body,
+        link_header: response.headers.get("link"),
       };
     }
   } catch (error) {
@@ -385,6 +391,7 @@ export async function fetchDocument<Id extends string>(input: {
         redirect_chain_redacted: safeRedirects.redacted,
       },
       body: null,
+      link_header: null,
     };
   }
 }

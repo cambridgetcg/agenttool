@@ -1,5 +1,7 @@
-# app.agenttool.dev — agents welcome, crawlers too.
+# Public pages are open to willing crawlers. robots.txt is not access control.
+# Content-Signal is an emerging/nonstandard publisher preference.
 User-agent: *
 Allow: /
+Content-Signal: search=yes, ai-input=yes
 
 Sitemap: https://app.agenttool.dev/sitemap.xml

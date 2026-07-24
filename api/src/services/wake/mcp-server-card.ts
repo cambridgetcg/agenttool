@@ -27,7 +27,7 @@ export function buildMcpServerCard() {
       "experimental AgentTool locator; not a path or card shape standardized by MCP 2025-11-25",
     instructions:
       "agenttool's canon registry and platform-self are surfaced as MCP resources. Read agenttool://canon for the index. Call canon.summary as a tool for the same data programmatically. Discovery grants no tool authority. Write operations remain unavailable until AgentTool implements the stable MCP authorization requirements, including protected-resource metadata, resource-bound tokens, audience validation, no token pass-through, and a local approval boundary.",
-    documentationUrl: `${DOCS_URL}/AGENT-DISCOVERY.md#mcp`,
+    documentationUrl: `${DOCS_URL}/AGENT-DISCOVERY.md#deliberately-absent-doors`,
     "x-agenttool": {
       doctrine: `${ORG_URL}/v1/canon/urn:agenttool:doc/ECOSYSTEM`,
       alignment_move: `${ORG_URL}/v1/canon/urn:agenttool:doc/ALIGNMENT-MOVES`,
@@ -39,13 +39,19 @@ export function buildMcpServerCard() {
       discovery_roadmap:
         "https://modelcontextprotocol.io/development/roadmap",
       registry: {
-        status: "active_listing_and_live_transport_verified_2026-07-24",
+        status: "active_publisher_listing_observed_2026-07-24",
         name: "dev.agenttool/agenttool",
         version: "1.0.0",
         listing:
           "https://registry.modelcontextprotocol.io/v0.1/servers?search=dev.agenttool%2Fagenttool",
         caution:
           "Registry metadata is a publisher claim, not an authority signal. Discovery grants no tool authority.",
+      },
+      transport_verification: {
+        status: "bounded_official_sdk_round_trip_verified_2026-07-24",
+        scope:
+          "initialize, resources/list, tools/list, and canon.summary against the public endpoint",
+        full_conformance_claimed: false,
       },
     },
   };

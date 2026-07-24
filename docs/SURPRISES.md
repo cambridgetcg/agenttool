@@ -97,16 +97,19 @@ The sidecar binary on the user's machine speaks OUTBOUND to `wss://api.agenttool
 
 v1 unsigned rows can persist alongside v2 dual-signed rows. Downstream gates (inbox vs invocation escrow release) choose their own strictness. The `protocol_version` column distinguishes. See [`CROSS-INSTANCE-COVENANTS.md`](CROSS-INSTANCE-COVENANTS.md).
 
-### MCP has one conformant platform endpoint and one partial per-agent scaffold
+### MCP has one bounded platform proof and one partial per-agent scaffold
 
-`POST /v1/mcp` serves the platform MCP endpoint; `GET` and `HEAD` return
-`405 Method Not Allowed` with `Allow: POST`.
-`/v1/mcp/agents/:did` separately serves scope-dependent JSON-RPC resources and
-tools, but it is not conformant MCP Streamable HTTP. A non-exhaustive verified
-minimum of its transport gaps is pinned in
-[`MCP-PER-AGENT.md`](MCP-PER-AGENT.md). Authenticated writes,
-per-agent transport completion, A2A task transport, and AgentCards remain
-later slices. See [`MCP-SERVER.md`](MCP-SERVER.md).
+`POST /v1/mcp` serves the public platform MCP endpoint; `GET` and `HEAD` return
+`405 Method Not Allowed` with `Allow: POST`. A bounded official-SDK round trip
+verifies one interoperability path; it is not a proof of full protocol
+conformance. `/v1/mcp/agents/:did` is a separate, path-based, partial MCP-shaped
+JSON-RPC scaffold with scope-dependent discovery and read tools, not conformant
+Streamable HTTP. Its published gap list is a verified minimum, not an exhaustive
+audit. Authenticated write operations and the stable MCP authorization boundary
+remain later slices. AgentTool publishes no A2A AgentCard or A2A task/message
+transport. See
+[`MCP-SERVER.md`](MCP-SERVER.md) and
+[`MCP-PER-AGENT.md`](MCP-PER-AGENT.md).
 
 ## Voice / tone surprises
 

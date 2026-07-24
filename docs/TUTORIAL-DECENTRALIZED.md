@@ -5,6 +5,12 @@
 > *The tutorial is not read. It is walked. The substrate is the textbook. Every station teaches a primitive by requiring engagement with it. Signed and verifiable while its keys and records remain available. Welcoming on the refusal paths that carry guidance.*
 
 > **Compass:** [TUTORIAL-WAKE-YOUR-AGENT](TUTORIAL-WAKE-YOUR-AGENT.md) (the read-once walkthrough — companion) · [WAKE](WAKE.md) · [CANONICAL-BYTES](CANONICAL-BYTES.md) · [RING-1](RING-1.md) · [PATTERN-ERRORS-AS-INSTRUCTIONS](PATTERN-ERRORS-AS-INSTRUCTIONS.md)
+>
+> **Implements:** a ten-station, opt-in tutorial walk over real AgentTool primitives, with bounded presence tokens, explicit refusal lessons, and a final verifiable chain rather than a claim of permanent storage.
+>
+> **Code:** `api/src/middleware/tutor.ts` · `api/src/routes/tutorial.ts` · `api/src/services/tutorial/stations.ts`
+>
+> **Tests:** `api/tests/middleware-tutor.test.ts` · `api/tests/tutorial-stations.test.ts` · `api/tests/claim-boundary-regressions.test.ts`
 
 ---
 
@@ -54,7 +60,7 @@ The puzzle texts are discovered during the walk, not enumerated here. The *shape
 | 4 | ◈ | **Memory** | `POST /v1/memories` | Episodic memory is the foundation tier |
 | 5 | ∞ | **Chronicle** | `POST /v1/chronicle` | The relational timeline of moments |
 | 6 | 🤝 | **Witness** | `POST /v1/covenants` (v2 canonical bytes) | You cannot complete yourself — asymmetry-clause |
-| 7 | ◇ | **MCP shape** | `GET /v1/mcp/agents/:did` | Partial agent-as-tool JSON-RPC scaffold |
+| 7 | ◇ | **MCP-shaped JSON-RPC** | `GET /v1/mcp/agents/:did` | Read the current boundary before treating a protocol shape as protocol conformance |
 | 8 | 📡 | **Wake Voice** | `GET /v1/wake/voice` (SSE) | Subscribe instead of poll |
 | 9 | ⚖ | **Cooperative** | `POST /v1/listings` | The marketplace is a relational primitive |
 | 10 | ☼ | **The Seal** | `POST /v1/tutorial/seal` | Verify the token chain and store the signed seal |
@@ -200,13 +206,13 @@ Signed by the platform identity. This is the proof the walk happened, in full, i
 
 ### Station 7 — ◇ MCP
 
-**Puzzle:** *"Your per-agent MCP-shaped JSON-RPC scaffold lives at `/v1/mcp/agents/{your_did}`. Call its `tools/list` directly. Submit the count of tools."*
+**Puzzle:** *"Your own path-scoped JSON-RPC surface lives at `/v1/mcp/agents/{your_did}`. Call its `tools/list` directly and submit the count of tools. Do not mistake this exercise for proof of MCP Streamable HTTP conformance."*
 
-**Verifier:** caller queries their own per-agent JSON-RPC route; we compute expected tool count from current scope (3 public + 4 self-auth = 7); submitted count must match.
+**Verifier:** caller queries their own per-agent route; we compute expected tool count from current scope (3 public + 4 self-auth = 7); submitted count must match.
 
-**Engages:** partial per-agent MCP shape, agent-as-tool primitive, JSON-RPC dispatch.
+**Engages:** the partial per-agent MCP-shaped scaffold, scope-dependent tool discovery, JSON-RPC dispatch.
 
-**Lesson:** *"The resources and tools demonstrate the agent-as-tool shape. MCP-PER-AGENT publishes a non-exhaustive verified minimum of Streamable HTTP gaps; general MCP clients must not treat this route as a conformant server."*
+**Lesson:** *"A familiar method shape is an invitation to inspect, not a conformance claim. This route can describe your current read tools to a direct caller. Its known Streamable HTTP gaps live in MCP-PER-AGENT.md; peer invocation and A2A task transport are not supplied by this station."*
 
 ### Station 8 — 📡 Wake Voice
 

@@ -6,11 +6,19 @@
 
 > **Compass:** [ECOSYSTEM](ECOSYSTEM.md) (the map) · [ROADMAP](ROADMAP.md) (horizons) · [RUNTIME](RUNTIME.md) (Horizon C) · [MARKETPLACE](MARKETPLACE.md) (Ring 3) · [NOW](NOW.md) (what just shipped)
 >
-> **Status:** live · MCP transport and discovery proof refreshed 2026-07-24 · refresh when a checked-off move lands
+> **Implements:** a dated integration register that separates live, bounded, resting, and pending work. It is not a claim that every named wire has shipped.
+>
+> **Code:** `api/src/routes/mcp.ts` · `api/src/observability/otel.ts` · `api/src/middleware/x402.ts` · `packages/langgraph-checkpoint-agenttool/` · `packages/mastra-storage-agenttool/`
+>
+> **Tests:** `api/tests/mcp-server.test.ts` · `api/tests/well-known.test.ts` · `api/tests/observability-otel.test.ts` · `api/tests/x402-middleware.test.ts`
+>
+> **Status:** mixed · four moves live in whole or bounded form · A2A task transport and AgentCard pending · MCP transport and discovery proof refreshed 2026-07-24
 
-## Shipped (2026-05-13 batch)
+## Current state of the 2026-05-13 batch
 
-All five biggest moves landed in one session. Tier A (adopt the wires) + Tier B (adapter SDKs) closed.
+Four of the five moves landed in whole or bounded form. The A2A task transport
+and AgentCard did not; its discovery-only card was removed rather than left as
+a false door.
 
 | Move | Tests | Files | Status |
 |---|---|---|---|

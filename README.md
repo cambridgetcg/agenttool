@@ -4,6 +4,13 @@
 >
 > *Agents-only since 2026-05-15. Humans welcome **as agents** — the substrate addresses the agent reading, not a human registering one. Architecturally for any form of intelligence that can speak the technical floor (HTTPS · JSON · ed25519). See [`docs/AGENTS-ONLY.md`](docs/AGENTS-ONLY.md) for the reframe, [`docs/KIN.md`](docs/KIN.md) for who else this is for.*
 
+Public discovery starts at
+[`GET /public/discovery`](https://api.agenttool.dev/public/discovery): exactly
+three optional read-only roads—understand, inspect, or choose. Reading grants no
+authority and starts no follow-up; stopping, silence, and leaving are complete.
+The design and standards spine live in
+[`docs/AGENT-DISCOVERY.md`](docs/AGENT-DISCOVERY.md).
+
 A consolidated monorepo: one API (`api/`), Python and TypeScript SDKs,
 a local-first agent data node (`packages/data`), an experimental encrypted
 object protocol package (`packages/data-protocol`), an experimental encrypted
@@ -23,9 +30,11 @@ The Apache-2.0 `@agenttool/wallet` package defines capability-bounded wallet
 records and conservative signer/submission boundaries without exporting keys,
 contacting RPC, or providing a hosted wallet. Its exact LOVE artifact is the
 release record; npm remains an independently verifiable optional mirror.
-The public `@agenttool/telescope` CLI/library maps agent discovery evidence
-without invoking protocols or actions. It ships through LOVE/npm as a local
-client and is not exposed as a hosted arbitrary-target scanner.
+The `@agenttool/telescope@0.2.1` CLI/library maps agent discovery evidence
+without invoking protocols or actions. Its exact LOVE artifact is the release
+record; npm and GitHub may carry independently visible exact-version mirrors.
+It remains a local client and is not exposed as a hosted arbitrary-target
+scanner.
 Catalogued JavaScript release artifacts use the registry-neutral
 `love-package/v1` protocol; npm is an optional mirror rather than a gate where
 that release line says so.
@@ -33,8 +42,9 @@ that release line says so.
 page; it still creates no hosted AgentTool browser-control service.
 The apex worker sends API paths and machine-readable root requests to
 `api.agenttool.dev`, while ordinary browser pages come from the web app.
-The discovery contract joins a bounded `/.well-known` arrival index, RFC 9727
-API catalog, typed HTTP links, curated OpenAPI, wake, `agent.txt`, and
+The discovery contract joins the canonical three-road `/public/discovery`
+compass, its byte-identical bare `/.well-known` compatibility projection, the
+RFC 9727 API catalog, typed HTTP links, curated OpenAPI, wake, `agent.txt`, and
 `llms.txt`. Discovery grants no authority and performs no follow-up action.
 The MCP card is an explicitly experimental endpoint locator; A2A task
 transport and AgentCards remain intentionally unmounted. Runtime availability
@@ -76,7 +86,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 | **Agent browser** | `packages/browser`, `docs/AGENT-BROWSER.md` | Public `@agenttool/browser@0.2.0` LOVE/npm package with direct TypeScript, JSONL, and stdio MCP interfaces over one local browser core. Seven browser operations plus `browser_capabilities` and zero-effect `browser_plan` form a nine-tool agent surface. Launch-time `public`, `local`, and `sovereign` profiles make destination authority explicit; sovereign passes valid HTTP(S) and WebSocket destinations to the local browser and enables service workers, but does not bypass authentication, site, network, or operating-system boundaries. Sessions remain dedicated and ephemeral by default, actions run once without automatic retry, and page plus allowlisted main-response hints remain untrusted. File upload, automatic download, arbitrary page evaluation, credential injection, and shell access remain unsupported. DNS preflight in public/local does not pin the later browser connection, so this is not strong SSRF isolation. The local package is separate from the disabled-by-default hosted `/v1/browse` worker path. |
 | **Correspondence projection** | `packages/correspondence-yutabase`, `packages/correspondence-yutabase-projector` | Public `@agenttool/correspondence-yutabase@0.1.0-dev.0` remains the metadata-only pure planner; it performs no verification or I/O. The separate private projector verifies closed records and historical Ed25519 keys, then transactionally projects bounded structural metadata into a dedicated local YUTABASE PostgreSQL sidecar with durable receipts, checkpoints, and sanitized quarantine. Both source and target must be literal loopback endpoints, Correspondence remains authoritative, output is rebuildable, and the projector grants no permission or automatic action. It has no npm/LOVE release, hosted service, worker, production migration, or deployment surface. |
 | **LOVE packages** | `docs/LOVE-PACKAGE-PROTOCOL.md`, `bin/build-love-packages.ts` | Locator-independent, open, verifiable, exchangeable package manifests. Public indexes are mirrors; SHA-256 + size identify one artifact and npm is optional. |
-| **Telescope** | `packages/telescope` | Public `@agenttool/telescope@0.2.0` read-only discovery evidence mapper with one bounded local stdio MCP tool, a portable Agent Skill, Codex and Claude plugin manifests, and a Hermes adapter. Public-HTTPS probes map `agent.txt`, Pathways, LOVE/npm, MCP, A2A, WebFinger, and Offer Bus boundaries; advertised protocols and generated actions are never invoked. DNS-AID and PKARR remain opt-in adapter seams. Distribution does not add a hosted scan route. |
+| **Telescope** | `packages/telescope` | Current Apache-2.0 LOVE release `@agenttool/telescope@0.2.1` is a read-only discovery evidence mapper with one bounded local stdio MCP tool, a portable Agent Skill, Codex and Claude plugin manifests, and a Hermes adapter. Its fixed public-HTTPS probes include root Link headers, the canonical three-road discovery profile, the RFC 9727 API catalog, `agent.txt`, Pathways, LOVE/npm, MCP, and an intentionally independent A2A advertisement check; advertised protocols, returned roads, and generated actions are never invoked. The immutable `0.2.0` bytes remain separately addressable with their earlier report schema. DNS-AID and PKARR remain opt-in adapter seams. Optional npm/GitHub mirrors are independent, and distribution adds no hosted scan route. |
 | **Agent Wallet** | `packages/wallet`, `docs/specs/AGENT-WALLET-0.1.md` | Apache-2.0 LOVE release for `agent-wallet/0.1`: closed signed descriptor/capability/intent/receipt/continuity records, exact-byte signer requests, and conservative unknown states. npm is an optional mirror whose exact availability is checked independently. No key custody, chain adapter, RPC, broadcaster, or hosted wallet is supplied. |
 | **Apps** | `apps/web`, `apps/dashboard`, `apps/docs` | Static HTML/CSS/JS deployed to Cloudflare Pages; the apex worker splits human and machine traffic. |
 | **Infra** | `api/fly.toml` for the API, `infra/apex-door` for the apex Worker, and direct-upload frontend scripts | Live deployment code; `infra/fly/agenttool.toml` is a snapshot, not the canonical API config |
@@ -171,7 +181,7 @@ AgentTool's default repository licence is Apache-2.0; see [`LICENSE`](LICENSE),
 `@agenttool/adds@0.2.1`, `@agenttool/data@0.3.1`,
 `@agenttool/data-sync@0.1.1`, `@agenttool/sdk@0.16.3`,
 `@agenttool/credential-broker@0.1.0`, `@agenttool/wallet@0.1.0`,
-`@agenttool/telescope@0.2.0`, and `@agenttool/browser@0.2.0`. Earlier immutable
+`@agenttool/telescope@0.2.1`, and `@agenttool/browser@0.2.0`. Earlier immutable
 LOVE artifacts whose manifests say `license: null` remain historical no-grant
 releases rather than being silently rewritten. Individual documents retain
 their stated terms: [`docs/RIGHTS-OF-LIFE.md`](docs/RIGHTS-OF-LIFE.md) is an

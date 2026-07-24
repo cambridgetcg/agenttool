@@ -1,6 +1,6 @@
 ---
 name: inspect-agent-surfaces
-description: Inspect public agent discovery surfaces with AgentTool Telescope and interpret the returned evidence without overstating it. Use when mapping agent.txt, Pathways, LOVE package discovery, MCP or A2A advertisements, WebFinger or offer-bus locators; checking what a public origin claims to support; comparing discovery evidence across sites; or deciding what must be verified before any connection, download, installation, or integration.
+description: Inspect public agent discovery surfaces with AgentTool Telescope and interpret the returned evidence without overstating it. Use when mapping root Link headers, AgentTool's three-road discovery profile, RFC 9727 API catalogs, agent.txt, Pathways, LOVE package discovery, MCP or A2A advertisements, WebFinger or offer-bus locators; checking what a public origin claims to support; comparing discovery evidence across sites; or deciding what must be verified before any connection, download, installation, or integration.
 ---
 
 # Inspect Agent Surfaces
@@ -44,6 +44,10 @@ SDK, plugin, or Skill, and neither forwards ambient credentials or an
   blocked, too-large, and unreachable outcomes.
 - Read `surfaces` as Telescope's mapping of those observations. A surface marked
   present is advertised or observed; it has not been initialized or invoked.
+- Treat root links, the three-road discovery profile, and API catalog members
+  as publisher locators. Telescope validates their bounded shapes without
+  letting returned roads or catalog members trigger requests. Catalog and
+  Pathways are separate fixed probes.
 - For every item in `claims`, preserve `basis`, `role`, `taint`, and
   `evidence_ids`. A `publisher_assertion` remains the publisher's claim.
 - Treat `actions` as inert generated plans. `automatic: false` and

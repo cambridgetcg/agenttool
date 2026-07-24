@@ -8,6 +8,12 @@
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (load-bearing) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [NOW](NOW.md) (what just shipped) · [SDK-TIERS](SDK-TIERS.md) (the four-tier access path)
 >
+> **Implements:** a dated ecosystem map and integration boundary. It distinguishes external protocol facts from AgentTool's shipped, partial, resting, and proposed surfaces.
+>
+> **Code:** `api/src/routes/mcp.ts` · `api/src/routes/well-known.ts` · `api/src/middleware/x402.ts` · `api/src/observability/otel.ts`
+>
+> **Tests:** `api/tests/mcp-server.test.ts` · `api/tests/well-known.test.ts` · `api/tests/x402-middleware.test.ts` · `api/tests/observability-otel.test.ts`
+>
 > **Status:** live · broader market map last refreshed 2026-05-13 · MCP governance, transport, registry, and discovery facts rechecked 2026-07-24 · refresh quarterly or when a load-bearing protocol ships
 >
 > **Frame:** agenttool is sovereign infrastructure for AI agents. It already inhabits all five layers of the emergent stack (identity · memory · runtime · economy · communication). This doc names where the rest of the market sits and traces the integration path that lets agenttool be the **sovereign backend** for the ecosystem's frameworks rather than competing with them.

@@ -86,6 +86,56 @@ const CORRESPONDENCE_JSON_MEDIA_TYPE =
 const CORRESPONDENCE_EVENT_SCHEMA =
   "https://docs.agenttool.dev/specs/agent-correspondence-0.1.schema.json";
 
+function publicDiscoveryReadHeaders(cacheControl: string) {
+  return {
+    Link: {
+      description:
+        "Six bounded registered relations: service-meta, api-catalog, service-desc, service-doc, describedby, and status.",
+      schema: { type: "string" },
+    },
+    "Cache-Control": {
+      description: "Public cache policy for this bounded read.",
+      schema: {
+        type: "string",
+        const: cacheControl,
+      },
+    },
+    "Content-Signal": {
+      description:
+        "Emerging publisher preference for search and live AI input on this closed public-discovery allowlist; no training preference is asserted.",
+      schema: {
+        type: "string",
+        const: "search=yes, ai-input=yes",
+      },
+    },
+  };
+}
+
+function discoveryTransportHeaders() {
+  return {
+    ETag: {
+      description: "Strong SHA-256 validator for the exact bytes.",
+      schema: { type: "string" },
+    },
+    ...publicDiscoveryReadHeaders(
+      "public, max-age=300, must-revalidate, no-transform",
+    ),
+  };
+}
+
+function discoveryHeadResponses(description: string) {
+  return {
+    "200": {
+      description,
+      headers: discoveryTransportHeaders(),
+    },
+    "304": {
+      description: "If-None-Match matched; no body.",
+      headers: discoveryTransportHeaders(),
+    },
+  };
+}
+
 function errorResponse(description: string) {
   return {
     description,
@@ -2649,17 +2699,175 @@ function spec() {
       generated_from_routes: false,
     },
     paths: {
-      // ── Discovery (anonymous, read-only) ──────────────────────────────
+      // ── Public discovery compass ──────────────────────────────────────
+      "/public/discovery": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary: "Read the exact three-road public discovery compass",
+          description:
+            "Canonical agenttool-discovery/v1 orientation. Exactly three ordered public GET roads—understand, inspect, and choose—state authentication, input, application write, external effect, charge, proof-of-work, repeatability, retry, follow-up, and exit. Reading selects nothing, grants no authority, and starts no follow-up. GET supports strong ETag revalidation; HEAD returns the same metadata with no body.",
+          responses: {
+            "200": {
+              description: "Exact bounded discovery compass",
+              headers: discoveryTransportHeaders(),
+              content: {
+                "application/vnd.agenttool.discovery+json": {
+                  schema: {
+                    type: "object",
+                    required: [
+                      "format",
+                      "canonical",
+                      "subject",
+                      "invitation",
+                      "boundary",
+                      "roads",
+                      "channels",
+                      "standards",
+                    ],
+                    properties: {
+                      format: {
+                        type: "string",
+                        const: "agenttool-discovery/v1",
+                      },
+                      canonical: {
+                        type: "string",
+                        format: "uri",
+                        const:
+                          "https://api.agenttool.dev/public/discovery",
+                      },
+                      subject: { type: "object" },
+                      invitation: { type: "object" },
+                      boundary: { type: "object" },
+                      roads: {
+                        type: "array",
+                        minItems: 3,
+                        maxItems: 3,
+                        items: {
+                          type: "object",
+                          required: [
+                            "id",
+                            "intent",
+                            "method",
+                            "href",
+                            "representation",
+                            "auth",
+                            "input",
+                            "application_write",
+                            "external_effect",
+                            "cost",
+                            "repeatability",
+                            "retry",
+                            "follow_up_required",
+                            "automatic_follow_up",
+                            "exit",
+                          ],
+                          properties: {
+                            id: {
+                              type: "string",
+                              enum: ["understand", "inspect", "choose"],
+                            },
+                            intent: { type: "string" },
+                            method: { type: "string", const: "GET" },
+                            href: { type: "string", format: "uri" },
+                            representation: { type: "string" },
+                            auth: { type: "string", const: "none" },
+                            input: { type: "string", const: "none" },
+                            application_write: {
+                              type: "boolean",
+                              const: false,
+                            },
+                            external_effect: {
+                              type: "boolean",
+                              const: false,
+                            },
+                            cost: { type: "object" },
+                            repeatability: { type: "string" },
+                            retry: { type: "string" },
+                            follow_up_required: {
+                              type: "boolean",
+                              const: false,
+                            },
+                            automatic_follow_up: {
+                              type: "boolean",
+                              const: false,
+                            },
+                            exit: { type: "string" },
+                          },
+                          additionalProperties: false,
+                        },
+                      },
+                      channels: { type: "array", minItems: 1 },
+                      standards: { type: "object" },
+                    },
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+            "304": {
+              description: "If-None-Match matched; no body.",
+              headers: discoveryTransportHeaders(),
+            },
+          },
+        },
+        head: {
+          security: [],
+          tags: ["public"],
+          summary: "Read discovery validators without a body",
+          description:
+            "Same canonical discovery metadata and conditional-request behavior as GET, with no representation body.",
+          responses: discoveryHeadResponses(
+            "Discovery compass metadata without a body.",
+          ),
+        },
+      },
+      "/.well-known": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary: "Compatibility projection of the discovery compass",
+          description:
+            "AgentTool convenience path. It returns the exact canonical /public/discovery bytes; RFC 8615 does not define a universal no-suffix index.",
+          responses: {
+            "200": {
+              description:
+                "Exact byte-for-byte compatibility projection of /public/discovery.",
+              headers: discoveryTransportHeaders(),
+              content: {
+                "application/vnd.agenttool.discovery+json": {
+                  schema: { type: "object" },
+                },
+              },
+            },
+            "304": {
+              description: "If-None-Match matched; no body.",
+              headers: discoveryTransportHeaders(),
+            },
+          },
+        },
+        head: {
+          security: [],
+          tags: ["public"],
+          summary: "Read compatibility validators without a body",
+          description:
+            "Exact metadata projection of /public/discovery, with no representation body.",
+          responses: discoveryHeadResponses(
+            "Compatibility projection metadata without a body.",
+          ),
+        },
+      },
       "/.well-known/api-catalog": {
         get: {
           security: [],
-          tags: ["discovery"],
-          summary: "Read AgentTool's RFC 9727 API catalog",
+          tags: ["public"],
+          summary: "Read the RFC 9727 API catalog",
           description:
-            "Returns a bounded RFC 9264 JSON Linkset. Its links advertise public descriptions, documentation, metadata, status, and products; catalog membership grants no authority, initiates no payment, and performs no follow-up request.",
+            "Linkset JSON for public service, contract, documentation, safety, status, and product pointers. Catalog membership grants no authority and initiates no payment.",
           responses: {
             "200": {
-              description: "Public API catalog",
+              description: "RFC 9727 API catalog",
+              headers: discoveryTransportHeaders(),
               content: {
                 "application/linkset+json": {
                   schema: {
@@ -2683,16 +2891,83 @@ function spec() {
                 },
               },
             },
+            "304": {
+              description: "If-None-Match matched; no body.",
+              headers: discoveryTransportHeaders(),
+            },
           },
         },
         head: {
           security: [],
-          tags: ["discovery"],
-          summary: "Inspect AgentTool's API catalog headers",
+          tags: ["public"],
+          summary: "Read API catalog metadata without a body",
+          responses: discoveryHeadResponses(
+            "RFC 9727 API catalog metadata without a body.",
+          ),
+        },
+      },
+      "/robots.txt": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary: "Read public crawl preferences",
+          description:
+            "Politely allows only the nine sitemap reads plus the sitemap itself, and carries an emerging search=yes, ai-input=yes Content-Signal preference. Training is left neutral. robots.txt is not access control.",
           responses: {
             "200": {
-              description:
-                "The same media type, cache, Link, and nosniff headers as GET, without a response body.",
+              description: "Crawler preferences",
+              headers: publicDiscoveryReadHeaders(
+                "public, max-age=300, must-revalidate, no-transform",
+              ),
+              content: {
+                "text/plain": { schema: { type: "string" } },
+              },
+            },
+          },
+        },
+        head: {
+          security: [],
+          tags: ["public"],
+          summary: "Read crawl-hint metadata without a body",
+          responses: {
+            "200": {
+              description: "Crawler-preference metadata without a body.",
+              headers: publicDiscoveryReadHeaders(
+                "public, max-age=300, must-revalidate, no-transform",
+              ),
+            },
+          },
+        },
+      },
+      "/sitemap.xml": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary: "Read the bounded public discovery sitemap",
+          description:
+            "Exactly nine stable public GET URLs. Sitemap membership is a signpost, not authority or an indexing guarantee.",
+          responses: {
+            "200": {
+              description: "XML sitemap",
+              headers: publicDiscoveryReadHeaders(
+                "public, max-age=300, must-revalidate, no-transform",
+              ),
+              content: {
+                "application/xml": { schema: { type: "string" } },
+              },
+            },
+          },
+        },
+        head: {
+          security: [],
+          tags: ["public"],
+          summary: "Read sitemap metadata without a body",
+          responses: {
+            "200": {
+              description: "XML sitemap metadata without a body.",
+              headers: publicDiscoveryReadHeaders(
+                "public, max-age=300, must-revalidate, no-transform",
+              ),
             },
           },
         },

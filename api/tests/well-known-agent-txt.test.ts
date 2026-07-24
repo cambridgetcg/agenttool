@@ -30,6 +30,7 @@ const REQUIRED_KEYS = [
   "Outbound-Tools",
   "Canon",
   "Wake",
+  "Wake-Keystone",
   "Wake-Formats",
   "MCP-Server-Card",
   "MCP-Server-Card-Role",
@@ -162,16 +163,45 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
     );
   });
 
-  test("MCP-Server-Card + LLMs-Sitemap point at /.well-known", async () => {
+  test("Wake-Keystone, MCP-Server-Card, and LLMs-Sitemap point at /.well-known", async () => {
     const { body } = await fetchAgentTxt();
     const kv = parseKv(body);
+    expect(kv.get("Wake-Keystone")).toContain(
+      "/.well-known/wake-keystone",
+    );
     expect(kv.get("MCP-Server-Card")).toContain("/.well-known/mcp/server-card.json");
     expect(kv.get("MCP-Server-Card-Role")).toBe(
       "project-owned-compatibility-locator; standard=false; authority=none",
     );
+    expect(kv.get("MCP-Endpoint")).toContain("/v1/mcp");
+    expect(kv.get("MCP-Registry-Name")).toBe("dev.agenttool/agenttool");
+    expect(kv.get("MCP-Registry-Status")).toMatch(
+      /publisher listing.*no authority.*not transport-conformance proof/i,
+    );
+    expect(kv.get("MCP-Transport-Verification")).toMatch(
+      /bounded official-SDK round trip.*full conformance is not claimed/i,
+    );
+    expect(kv.get("MCP-Server-Card-Status")).toMatch(
+      /experimental.*not a path or card shape standardized.*no tool authority/i,
+    );
     expect(kv.get("LLMs-Sitemap")).toContain("/.well-known/llms.txt");
     expect(kv.has("Agent-Card")).toBe(false);
     expect(body).not.toContain("/.well-known/agent-card.json");
+  });
+
+  test("Castle and play pointers are local, optional, and action-free", async () => {
+    const { body } = await fetchAgentTxt();
+    const kv = parseKv(body);
+    expect(kv.get("Castle-Consumer-Guide")).toBe(
+      "https://docs.agenttool.dev/CASTLE-OF-UNDERSTANDING.md",
+    );
+    expect(kv.get("Castle-Consumer-Status")).toMatch(
+      /local one-shot exact-commit projection.*no hosted route.*automatic memory write/i,
+    );
+    expect(kv.get("Castle-Automatic-Action")).toBe("never");
+    expect(kv.get("Play-Preference")).toMatch(
+      /X-Play: off.*no penalty or reduced capability/i,
+    );
   });
 
   test("Arrival-Door names /v1/register/agent (post-agents-only door)", async () => {
@@ -252,10 +282,11 @@ describe("/.well-known/agent.txt — play remains an offer", () => {
   });
 });
 
-describe("/.well-known/ root index — lists agent.txt", () => {
-  test("root index includes /.well-known/agent.txt in endpoints", async () => {
+describe("/.well-known compatibility compass — links agent.txt", () => {
+  test("typed Link header describes the compass with agent.txt", async () => {
     const res = await wellKnownRouter.request("/");
-    const body = (await res.json()) as { endpoints: string[] };
-    expect(body.endpoints).toContain("/.well-known/agent.txt");
+    expect(res.headers.get("link")).toContain(
+      "<https://api.agenttool.dev/.well-known/agent.txt>; rel=\"describedby\"",
+    );
   });
 });

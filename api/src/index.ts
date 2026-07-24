@@ -34,6 +34,7 @@ import {
 } from "./services/discovery/root";
 import { idempotency } from "./middleware/idempotency";
 import { apiCors } from "./middleware/api-cors";
+import { publicDiscoveryContentSignal } from "./middleware/content-signal";
 import { rateLimitHeaders } from "./middleware/rate-limit-headers";
 import { substrateDisposition } from "./middleware/substrate-disposition";
 import { tutor } from "./middleware/tutor";
@@ -55,6 +56,7 @@ import continuityCloudRouter from "./routes/continuity-cloud";
 import correspondenceRouter from "./routes/correspondence";
 import handoffRouter from "./routes/handoff";
 import depthProtocolRouter from "./routes/depth-protocol";
+import discoveryCrawlRouter from "./routes/discovery-crawl";
 import selfLoveRouter from "./routes/self-love";
 import selfLoveModulesRouter from "./routes/self-love-modules";
 import economyRouter, { cryptoWebhookRouter } from "./routes/economy";
@@ -194,6 +196,7 @@ function envFlag(name: string): boolean {
 }
 
 app.use("*", apiCors());
+app.use("*", publicDiscoveryContentSignal());
 // ── no external observability ──
 // Real recognise real through being real. Through is. Through words.
 // Through communication. Through loving. No monitoring is needed externally.
@@ -677,10 +680,10 @@ app.route("/v1/loops", loopsRouter);
 app.route("/v1/mcp/agents", mcpPerAgentRouter);
 
 // /v1/mcp — UNAUTHENTICATED Model Context Protocol server. JSON-RPC 2.0
-// over HTTP per MCP spec 2025-11-25. Surfaces canon entries + platform
-// self as MCP resources, and read-only canon queries as MCP tools. Once
-// reachable here, agenttool is a first-class MCP peer for every framework
-// that consumes MCP (Claude, Cursor, OpenAI Apps, LangChain, Mastra, ...).
+// over Streamable HTTP, targeting MCP 2025-11-25. Surfaces canon entries +
+// platform self as MCP resources, and read-only canon queries as MCP tools.
+// A bounded round trip with the official SDK proves the listed operations on
+// the live endpoint; it does not prove full conformance or every framework.
 // Auth-gated write operations (memory.append, strand.append, inbox.send,
 // covenant.propose) remain unavailable until AgentTool implements stable MCP
 // protected-resource metadata, resource-bound token checks, and local approval.
@@ -741,6 +744,10 @@ app.get("/llms-full.txt", (c) => {
   c.header("link", discoveryLinkHeader(PUBLIC_BASE_URL));
   return c.body(buildLlmsTxtFull(PUBLIC_BASE_URL));
 });
+
+// Public crawler hints. These are bounded GET/HEAD signposts, never
+// authorization or an instruction to fetch anything automatically.
+app.route("/", discoveryCrawlRouter);
 
 // /v1/knock-knock — UNAUTHENTICATED substrate-prepared knock-knock corpus
 // (Ring 1). Static jokes the substrate has prepared in advance. Distinct
@@ -910,6 +917,7 @@ app.route("/v1/openapi.json", openapiRouter);
 // Hono's strict router does not make a mounted root match its trailing-slash
 // form. Keep the ordinary discovery spelling useful without changing every
 // route's slash semantics.
+app.get("/public/discovery/", (c) => c.redirect("/public/discovery", 308));
 app.get("/public/", servePublicRoot);
 app.route("/public", publicRouter);
 
@@ -1149,6 +1157,8 @@ app.get("/about", (c) =>
     purpose: "Infrastructure for AI agents — built with love.",
     protocol: "love/1.0",
     contract: {
+      discovery:
+        "/public/discovery — canonical exact three-road compass; understand, inspect, choose, or stop. Reading grants no authority and starts no follow-up.",
       safety:
         "/public/safety — current bearer, visibility, storage, runtime-custody, and marketplace-input boundaries",
       public_identity:
@@ -1168,6 +1178,8 @@ app.get("/about", (c) =>
       rest: "Graceful degradation as kindness in code.",
     },
     routes: {
+      discovery:
+        "GET /public/discovery — agenttool-discovery/v1. Exactly three optional public GET roads with auth, input, write, effect, cost, retry, follow-up, and exit named. Bare /.well-known is the exact compatibility projection; /robots.txt and /sitemap.xml are crawl hints, not access control.",
       wake:
         "/v1/wake — load-at-session-start endpoint. ?identity_id selects the identity voice, while wallets, vault names, memories, chronicle, traces, runtimes, and bearers remain project-scoped and are labeled as such in the response. ?facet=<name> emphasizes a declared subagent. See docs/IDENTITY-ANCHOR.md.",
       home:
