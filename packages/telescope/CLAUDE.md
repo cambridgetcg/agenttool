@@ -4,11 +4,13 @@ Read-only agent discovery evidence mapper. This package does not own hosted API
 routes, production egress, protocol invocation, npm publication, or the LOVE
 release inventory.
 
-The current source release is `0.2.2`; immutable `0.1.0`, `0.2.0`, and
-`0.2.1` artifacts remain separate historical bytes. Version `0.2.2` corrects
-the local parser's handling of the canonical “stay silent” exit wording and
-fragment-bearing HTTPS catalog targets; it does not widen the scan or report
-schema.
+The current source release is `0.2.3`; immutable `0.1.0`, `0.2.0`, `0.2.1`,
+and `0.2.2` artifacts remain separate historical bytes. Version `0.2.3`
+accepts only three complete, positive exit phrases and permits URI fragments
+on credential-free HTTPS catalog relation targets. Immutable `0.2.2` used
+permissive token matching that could mistake negation or “incomplete” for a
+complete exit. The current AgentTool producer remains compatible with
+`0.2.1`; this correction does not widen the scan or report schema.
 
 ## Commands
 
@@ -88,7 +90,7 @@ npm pack --ignore-scripts --dry-run
 - Keep the report schema, TypeScript report type, formatter, and tests aligned.
 - Keep the package version, `TOOL_VERSION`, User-Agent, tests, LOVE inventory,
   plugin manifests, MCP server identity, and release tag aligned. The report
-  `0.2.2` report protocol is `agenttool-telescope/v0.2`; bump it again
+  `0.2.3` report protocol is `agenttool-telescope/v0.2`; bump it again
   whenever the emitted schema changes.
   Published version bytes are immutable: never rebuild or replace an existing
   manifest/tarball under the same name and version.

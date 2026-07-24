@@ -37,9 +37,10 @@ worker path.
 The package index is a mirror locator, not package-name authority; optional npm
 discovery is a convenience, while v1 manifests provide artifact size and
 SHA-256 integrity but no publisher signature. Its current Telescope entry is
-the exact `@agenttool/telescope@0.2.2` local-client artifact; `0.2.0` and
-`0.2.1` remain separately addressable, optional npm/GitHub mirrors may be
-absent, and no entry creates a hosted scanner. The Whitehack page documents a
+the exact `@agenttool/telescope@0.2.3` local-client artifact; `0.2.0`, `0.2.1`,
+and the historically permissive `0.2.2` remain separately addressable.
+Optional npm/GitHub 0.2.3 mirrors are independently unverified, and no entry
+creates a hosted scanner. The Whitehack page documents a
 runner-local crypto-aware heuristic advisory using the exact public
 `@agenttool/whitehack-scan@0.8.1` package, a bounded attention-card view of
 redacted changed-source findings, an offer-only local projection into

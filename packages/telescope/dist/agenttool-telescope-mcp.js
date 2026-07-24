@@ -28714,7 +28714,7 @@ var agenttool_telescope_report_v0_2_schema_default = {
 // src/constants.ts
 var REPORT_SCHEMA = "agenttool-telescope/v0.2";
 var TOOL_NAME = "@agenttool/telescope";
-var TOOL_VERSION = "0.2.2";
+var TOOL_VERSION = "0.2.3";
 var DEFAULT_LIMITS = Object.freeze({
   timeout_ms: 15000,
   max_response_bytes: 256 * 1024,
@@ -29070,9 +29070,14 @@ function namesFiniteCallerRetry(value) {
   const noAgenttoolAutomaticRetry = normalized.includes("agenttool") && (normalized.includes("no automatic retry") || /agenttool (?:does not|doesn't|never) automatically retr/u.test(normalized) || /agenttool performs no automatic retr/u.test(normalized));
   return callerChosen && normalized.includes("finite") && noAgenttoolAutomaticRetry;
 }
+var COMPLETE_EXIT_BOUNDARIES = new Set([
+  "stop, choose silence, or leave; each is complete",
+  "stop, stay silent, or leave; each is complete",
+  "stopping, silence, or leaving is complete"
+]);
 function namesCompleteExit(value) {
-  const normalized = value.toLowerCase();
-  return normalized.includes("stop") && /\b(?:silence|silent)\b/u.test(normalized) && normalized.includes("leav") && normalized.includes("complete");
+  const normalized = value.trim().toLowerCase().replace(/\s+/gu, " ").replace(/\.$/u, "");
+  return COMPLETE_EXIT_BOUNDARIES.has(normalized);
 }
 function parseAgenttoolDiscovery(body, limits) {
   const decoded = parseJsonBody(body, limits);
