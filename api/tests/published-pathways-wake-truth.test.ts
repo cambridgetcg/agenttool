@@ -63,14 +63,16 @@ describe("published Wake-as-Keystone truth", () => {
     expect(canonical).toContain("public_profile_url_pattern");
     expect(canonical).toContain("per_agent_mcp_url_pattern");
     expect(canonical).not.toContain("wake_url_per_being");
-    expect(canonical).toMatch(/MCP server, not a wake URL/i);
+    expect(canonical).toMatch(
+      /partial MCP-shaped JSON-RPC scaffold, not a wake URL or a conformant MCP Streamable HTTP endpoint/i,
+    );
     expect(canonical).toContain(
       "/v1/wake/voice?identity_id={uuid}",
     );
     expect(canonical).toMatch(/required_query.*identity_id=<uuid>/i);
   });
 
-  test("implementation status lists exact gaps without completeness scores", () => {
+  test("implementation status lists known gaps without completeness scores", () => {
     expect(canonical).toContain("### Implemented");
     expect(canonical).toContain("### Known gaps");
     expect(canonical).toMatch(/No public path-per-DID full-wake endpoint/i);

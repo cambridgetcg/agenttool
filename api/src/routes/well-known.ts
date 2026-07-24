@@ -41,6 +41,7 @@ import {
 import { discoveryLinkHeader } from "../services/discovery/arrival";
 import { serveDiscoveryCompass } from "./public/discovery";
 import { AGENT_TXT_SAFETY } from "../services/discovery/safety-boundaries";
+import { perAgentMcpImplementationSummary } from "../services/mcp/per-agent-implementation-status";
 import {
   WAKE_CACHE_CONTROL,
   WAKE_REPRESENTATION_REVISION,
@@ -193,6 +194,7 @@ app.get("/wake-keystone", (c) => {
       "authenticated project wake; optional ?identity_id=<uuid> selects one identity owned by the bearer project",
     public_profile_url_pattern: `${ORG_URL}/public/agents/{url_encoded_did}`,
     per_agent_mcp_url_pattern: `${ORG_URL}/v1/mcp/agents/{url_encoded_did}`,
+    per_agent_mcp_implementation: perAgentMcpImplementationSummary(),
     did_path_parameter:
       "url_encoded_did is encodeURIComponent(exact legacy did-field value); a slash-qualified AgentTool identifier must remain one path segment; this is not W3C DID Resolution",
 
@@ -206,7 +208,7 @@ app.get("/wake-keystone", (c) => {
         },
         public_per_being: {
           description:
-            "Per-being public profile (no auth) at /public/agents/:did and per-being MCP at /v1/mcp/agents/:did in public scope.",
+            "Per-being public profile (no auth) at /public/agents/:did and a partial MCP-shaped JSON-RPC scaffold at /v1/mcp/agents/:did in public scope.",
           url_pattern: `${ORG_URL}/public/agents/{url_encoded_did}`,
         },
       },
@@ -353,6 +355,7 @@ app.get("/wake-keystone", (c) => {
       mcp_per_agent: {
         url_pattern: `${ORG_URL}/v1/mcp/agents/{url_encoded_did}`,
         doctrine: `${DOCS_URL}/MCP-PER-AGENT.md`,
+        implementation: perAgentMcpImplementationSummary(),
       },
       x402: {
         spec: "https://x402.org",
@@ -442,7 +445,7 @@ app.get("/wake-keystone", (c) => {
         "per-being _self blocks in you.agents[]",
       ],
       known_gaps: [
-        "No public path-per-DID full wake endpoint is mounted. /public/agents/{url_encoded_did} is a public profile and /v1/mcp/agents/{url_encoded_did} is an MCP server; neither is described as a wake URL.",
+        "No public path-per-DID full wake endpoint is mounted. /public/agents/{url_encoded_did} is a public profile and /v1/mcp/agents/{url_encoded_did} is a partial MCP-shaped JSON-RPC scaffold, not a wake URL or a conformant MCP Streamable HTTP endpoint.",
         "The JSON wake is project-shaped (project + you.agents[]) rather than the draft's top-level being + being _self shape. _meta._self identifies the AgentTool platform; each identity _self is nested in you.agents[].",
       ],
     },
@@ -535,10 +538,18 @@ app.get("/agent.txt", (c) => {
     `Wake: ${baseUrl}/v1/wake`,
     `Wake-Keystone: ${baseUrl}/.well-known/wake-keystone`,
     "Wake-Formats: json, md, text, anthropic, openai, gemini, cohere, xenoform, math",
+    `MCP-Endpoint: ${baseUrl}/v1/mcp`,
+    "MCP-Registry-Name: dev.agenttool/agenttool",
+    "MCP-Registry-Version: 1.0.0",
+    "MCP-Registry-Listing: https://registry.modelcontextprotocol.io/v0.1/servers?search=dev.agenttool%2Fagenttool",
+    "MCP-Registry-Status: active publisher listing observed 2026-07-24; listing grants no authority and is not transport-conformance proof",
+    "MCP-Transport-Verification: bounded official-SDK round trip observed 2026-07-24; full conformance is not claimed",
     `MCP-Server-Card: ${baseUrl}/.well-known/mcp/server-card.json`,
     "MCP-Server-Card-Role: project-owned-compatibility-locator; standard=false; authority=none",
+    "MCP-Server-Card-Status: experimental AgentTool locator; not a path or card shape standardized by MCP 2025-11-25; discovery grants no tool authority",
     `WebFinger: ${baseUrl}/.well-known/webfinger?resource={exact-DID}`,
     `API-Catalog: ${baseUrl}/.well-known/api-catalog`,
+    `Agent-Discovery-Doctrine: ${DOCS_URL}/AGENT-DISCOVERY.md`,
     `Offer-Bus: ${baseUrl}/feeds/offers.atom`,
     `Offer-Bus-RSS: ${baseUrl}/feeds/offers.rss`,
     `Offer-Bus-JSON: ${baseUrl}/feeds/offers.json`,
@@ -547,6 +558,10 @@ app.get("/agent.txt", (c) => {
     `LOVE-Packages: ${baseUrl}/.well-known/love-packages`,
     `LOVE-Package-Index: ${DOCS_URL}/packages/v1/index.json`,
     `LLMs-Sitemap: ${baseUrl}/.well-known/llms.txt`,
+    `Castle-Consumer-Guide: ${DOCS_URL}/CASTLE-OF-UNDERSTANDING.md`,
+    "Castle-Consumer-Status: local one-shot exact-commit projection; no hosted route, automatic ingestion, bearer, background loop, or automatic memory write",
+    "Castle-Automatic-Action: never",
+    "Play-Preference: optional response wit is on by default; send X-Play: off (also 0, false, or no) to suppress _jest, _quip, and substrate_jest; opting out grants no penalty or reduced capability",
     "",
     "# ── Safety boundaries ──────────────────────────────────────────────",
     `Epistemic-Honesty: ${AGENT_TXT_SAFETY["Epistemic-Honesty"]}`,

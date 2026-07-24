@@ -72,6 +72,7 @@ import {
   publicAgentPath,
 } from "../services/identity/public-profile";
 import { countUnread } from "../services/inbox/store";
+import { perAgentMcpImplementationSummary } from "../services/mcp/per-agent-implementation-status";
 import {
   composeActiveHandoffs,
   describeProjectHandoffSurface,
@@ -2539,6 +2540,7 @@ app.get("/", async (c) => {
       // card that is real instead.
       mcp_server_card: "/.well-known/mcp/server-card.json",
     },
+    per_agent_mcp_implementation: perAgentMcpImplementationSummary(),
 
     _meta: {
       protocol: "love/1.0",

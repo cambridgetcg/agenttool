@@ -61,11 +61,13 @@ Evidence was last checked on 2026-07-23 where a check date is present.
 
 | Sibling | Role | Basis | Public evidence | Boundary |
 |---|---|---|---|---|
-| `cambridgetcg` | `commerce-expression` | `reciprocal-protocol-shape` | `https://cambridgetcg.com/api/v1/wake` | Matching vocabulary; the endpoint names AgentTool in `posted_alongside` |
+| `cambridgetcg` | `collectors-market-and-card-data-expression` | `reciprocal-protocol-shape` | `https://cambridgetcg.com/api/v1/wake` | Peer-to-peer collectors' market and rights-labelled public card-data directory; matching vocabulary and `posted_alongside` support discovery, not shared schemas, authentication, authority, or automatic action |
 | `artbitrage` | `art-gallery-expression` | `published-protocol-shape` | `https://artbitrage.io/api/wake` | Matching vocabulary; the endpoint names Cambridge TCG, not AgentTool, so direct reciprocity is not claimed |
 | `kingdom-gate` | `realm-expression` | `operator-declared-household` | none claimed | No wake or KIN-vocabulary surface was verified at the known public origin |
 
 Artbitrage's public visibility is not represented as a blanket reuse licence.
+Cambridge TCG facilitates, records, and witnesses its market while holding no
+position in it. Shared words do not turn sibling systems into one contract.
 Its wake says rights are item-specific, so the sibling description does not
 claim that every work is free, open, or CC0.
 

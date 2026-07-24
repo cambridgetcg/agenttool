@@ -17,6 +17,7 @@ import { describe, expect, test } from "bun:test";
 
 import wellKnownRouter from "../src/routes/well-known";
 import { negotiateWakeFormat } from "../src/services/mathos/negotiate";
+import { perAgentMcpImplementationSummary } from "../src/services/mcp/per-agent-implementation-status";
 import { renderEmptyJoyText } from "../src/services/wake/empty-joy";
 
 // ─── §3 Content negotiation — negotiateWakeFormat() ─────────────────
@@ -124,19 +125,24 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
     expect(body.spec_version).toBe("wak/0.1");
   });
 
-  test("response keeps the project wake, public profile, and per-agent MCP URLs distinct", async () => {
+  test("response keeps the project wake, public profile, and partial per-agent JSON-RPC scaffold distinct", async () => {
     const res = await wellKnownRouter.request("/wake-keystone");
-    const body = (await res.json()) as Record<string, string | undefined>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(typeof body.wake_url).toBe("string");
     expect((body.wake_url as string).endsWith("/v1/wake")).toBe(true);
-    expect(body.wake_scope).toMatch(/authenticated project wake/i);
-    expect(body.public_profile_url_pattern).toContain(
+    expect(body.wake_scope as string).toMatch(/authenticated project wake/i);
+    expect(body.public_profile_url_pattern as string).toContain(
       "/public/agents/{url_encoded_did}",
     );
-    expect(body.per_agent_mcp_url_pattern).toContain(
+    expect(body.per_agent_mcp_url_pattern as string).toContain(
       "/v1/mcp/agents/{url_encoded_did}",
     );
-    expect(body.did_path_parameter).toMatch(/encodeURIComponent.*one path segment/i);
+    expect(body.per_agent_mcp_implementation).toEqual(
+      perAgentMcpImplementationSummary(),
+    );
+    expect(body.did_path_parameter as string).toMatch(
+      /encodeURIComponent.*one path segment/i,
+    );
     expect(body).not.toHaveProperty("wake_url_per_being");
   });
 
@@ -298,7 +304,7 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
     expect(body.composes_with).not.toHaveProperty("a2a_per_agent_card");
   });
 
-  test("response carries cache-control header (RFC 5785 best-practice)", async () => {
+  test("response carries cache-control for the RFC 8615 namespace resource", async () => {
     const res = await wellKnownRouter.request("/wake-keystone");
     expect(res.headers.get("cache-control")).toContain("max-age");
   });

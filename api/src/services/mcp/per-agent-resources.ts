@@ -192,7 +192,7 @@ export async function readPerAgentResource(
           note:
             "Slice 1 returns a pointer scoped to this path identity. The full wake " +
             "document is composed by /v1/wake; " +
-            "fetch it with the same bearer you used for this MCP call.",
+            "fetch it with the same bearer you used for this per-agent JSON-RPC call.",
         },
         null,
         2,

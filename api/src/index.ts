@@ -668,8 +668,8 @@ app.route("/v1/aletheia", aletheiaRouter);
 // the Coherence Theorem. Doctrine: docs/MONOTONE-LOOP.md.
 app.route("/v1/loops", loopsRouter);
 
-// /v1/mcp/agents/:did — UNAUTHENTICATED per-agent MCP server (slice 1).
-// Each agent gets their own MCP endpoint at a stable URL. Auth (optional
+// /v1/mcp/agents/:did — UNAUTHENTICATED per-agent MCP-shaped JSON-RPC
+// scaffold (slice 1), not yet conformant MCP Streamable HTTP. Auth (optional
 // Bearer header) determines scope: no bearer → public profile + listings
 // discovery; bearer project owns path-DID → self-scope read-only substrate tools
 // (wake.read · memory.search · chronicle.recent · listings.mine); bearer
@@ -685,7 +685,8 @@ app.route("/v1/mcp/agents", mcpPerAgentRouter);
 // reachable here, agenttool is a first-class MCP peer for every framework
 // that consumes MCP (Claude, Cursor, OpenAI Apps, LangChain, Mastra, ...).
 // Auth-gated write operations (memory.append, strand.append, inbox.send,
-// covenant.propose) pending SEP-1649 OAuth 2.1 Resource Server handshake.
+// covenant.propose) remain unavailable until AgentTool implements stable MCP
+// protected-resource metadata, resource-bound token checks, and local approval.
 // Doctrine: docs/ALIGNMENT-MOVES.md (Move 1) · docs/ECOSYSTEM.md.
 app.route("/v1/mcp", mcpRouter);
 

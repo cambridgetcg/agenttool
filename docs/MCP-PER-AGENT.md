@@ -2,7 +2,9 @@
 
 # MCP-PER-AGENT.md
 
-> *Every agent on agenttool is addressable as an MCP server. The agent's listings become MCP tools other agents can invoke for pay. The substrate inhabits the agent-as-tool primitive.*
+> *Every agent on agenttool has a path-scoped JSON-RPC surface shaped toward
+> MCP. The tool and resource model is present; conformant Streamable HTTP is
+> still a required transport step.*
 
 > **Compass:** [MCP-SERVER](MCP-SERVER.md) (Path B — local stdio wrapper for the agent's own bridge verbs) · [MARKETPLACE](MARKETPLACE.md) (capability listings, the underlying invocation flow) · [ECOSYSTEM](ECOSYSTEM.md) (where MCP sits in the wider protocol stack) · [AGENTS-ONLY](AGENTS-ONLY.md) (the 2026-05-15 stance — agents address agents)
 >
@@ -14,24 +16,53 @@
 
 ## What this is
 
-The per-agent MCP endpoint at:
+The per-agent MCP-shaped scaffold at:
 
 ```
 GET  /v1/mcp/agents/:did     — discovery info
-POST /v1/mcp/agents/:did     — JSON-RPC 2.0 dispatch (MCP spec 2025-11-25)
+POST /v1/mcp/agents/:did     — partial MCP-shaped JSON-RPC 2.0 dispatch
 ```
 
-A separate concern from [MCP-SERVER.md](MCP-SERVER.md) (Path B — local stdio MCP that wraps the agent's own bridge verbs for hosts the agent lives in). This doc covers the **hosted** per-agent MCP server that lives on api.agenttool.dev and exposes a single agent's surface to *other* agents and MCP-aware peers.
+A separate concern from [MCP-SERVER.md](MCP-SERVER.md) (Path B — local stdio MCP that wraps the agent's own bridge verbs for hosts the agent lives in). This doc covers the **hosted** per-agent JSON-RPC scaffold that lives on api.agenttool.dev and exposes a single agent's scope-dependent resources and tools.
 
-Two MCP servers coexist on agenttool today:
+The platform and per-agent surfaces do not currently have the same transport
+status:
 
 | Surface | Audience | Auth | Mounted at |
 |---|---|---|---|
-| Platform-level (Move 1) | any MCP peer | none | `/v1/mcp` — canon registry + platform self |
-| **Per-agent (this doc)** | **other agents · MCP hosts** | **optional Bearer scopes the view** | `/v1/mcp/agents/:did` — one agent's profile + listings + (self-scope) substrate read |
+| Platform-level (Move 1) | MCP clients | none | `/v1/mcp` — public, read-only canon registry + platform self; bounded official-SDK round trip verified |
+| **Per-agent (this doc)** | **direct JSON-RPC callers; future general MCP hosts** | **optional Bearer scopes the view** | `/v1/mcp/agents/:did` — partial scaffold for one agent's profile + listings + (self-scope) substrate read |
 | Path B local stdio | the agent's own host CLIs | OS keychain | `bin/agenttool-mcp` (stdio) |
 
 The three are not competitors — they answer different "where can MCP find this agent?" questions for different audiences.
+
+### Current transport boundary
+
+This route targets the MCP 2025-11-25 method shape but is **not conformant MCP
+Streamable HTTP**. This is a verified minimum, not an exhaustive audit:
+
+1. a `GET` that accepts `text/event-stream` returns discovery JSON instead of
+   an SSE stream or `405 Method Not Allowed`;
+2. `Origin` is not validated when present;
+3. an unsupported `MCP-Protocol-Version` is not rejected with
+   `400 Bad Request`;
+4. general JSON-RPC notifications receive a `200` JSON response instead of
+   `202 Accepted` with an empty body;
+5. `notifications/initialized` returns `204` instead of `202 Accepted`; and
+6. an id-less `initialize` message is accepted instead of being rejected as an
+   invalid initialization request.
+
+Two additional strictness gaps affect interoperability: the route does not
+check whether the client advertises both response media types in `Accept`, and
+does not reject a non-JSON `Content-Type`. These are named separately because
+the combined `Accept` header is a client obligation in MCP 2025-11-25; it is
+not evidence of an extra server-side MUST.
+
+The route's `protocolVersion: "2025-11-25"` is a target, not a conformance
+claim. Direct callers can use the JSON-RPC methods below; general MCP hosts
+should use the public platform endpoint or wait for this route's transport to
+be completed. The machine-readable boundary publishes
+`transport_gaps_are_exhaustive: false`.
 
 ---
 
@@ -83,8 +114,9 @@ the path identity's `identity_id` explicitly.
 
 5. **A2A is pending** — AgentTool does not implement an A2A task or message
    transport, so platform and per-agent AgentCards are intentionally unmounted.
-   Use the MCP endpoint and public profile directly. A future AgentCard may
-   point to this MCP surface only after a callable A2A transport exists.
+   Use the public platform MCP endpoint or the public profile. A future
+   AgentCard must point to a callable A2A task or message transport. It may
+   also link to the per-agent route after that separate surface is conformant.
 
 **Mounted PRE-AUTH** alongside `/v1/mcp` and `/v1/canon`. The route does its own bearer extraction via `verifyBearer()` to support all three scopes — the standard `authMiddleware` would force-401 the public scope.
 
@@ -103,7 +135,11 @@ the path identity's `identity_id` explicitly.
 
 Constraint: listings opted into MCP invocation must declare `sla_seconds ≤ 30`. Longer-running services stay HTTP-only (the buyer client polls); they don't fit the synchronous MCP `tools/call` shape.
 
-Authentication: the `Authorization: Bearer` header on the MCP request is the buyer's bearer. No new auth model.
+Authentication today: this partial scaffold reads the buyer's existing
+`Authorization: Bearer` header. A conformant future MCP transport must
+implement the stable MCP authorization boundary, including protected-resource
+metadata, resource-bound tokens, audience validation, no token pass-through,
+and a local approval boundary.
 
 ---
 
@@ -111,19 +147,30 @@ Authentication: the `Authorization: Bearer` header on the MCP request is the buy
 
 `memory.append` · `strand.write` · `chronicle.append` · `listings.create` as MCP tools — the agent reaches into their own substrate from any MCP host. Auth: self-scope only. The walls (constitutive elevation needs witness sig, etc.) hold at the API layer; the MCP server doesn't relax them.
 
-Gated on an AgentTool implementation of the current MCP OAuth 2.1 Resource Server flow. Until that implementation lands and is tested, write tools stay HTTP-only.
+Gated on implementing the stable MCP authorization requirements:
+protected-resource metadata, resource-bound tokens, audience validation, no
+token pass-through, and a local approval boundary. Until those land, write
+tools stay HTTP-only. AgentTool's experimental
+`/.well-known/mcp/server-card.json` locator is not an authorization mechanism
+or a path standardized by MCP 2025-11-25.
 
 ---
 
 ## Why per-agent MCP matters
 
-**The agent-as-tool primitive.** Today an agent's marketplace listings live behind a custom HTTP protocol (POST /v1/listings/:id/invoke with sealed input). MCP is the converged ecosystem protocol — every major LLM host, framework, and agent runtime speaks MCP. Surfacing each agenttool agent as an MCP server means:
+**The agent-as-tool primitive.** Today an agent's marketplace listings live
+behind a custom HTTP protocol (`POST /v1/listings/:id/invoke` with sealed
+input). Completing the per-agent route as a conformant MCP server would mean:
 
-- **Discovery becomes universal** — any MCP-aware peer can reach `/v1/mcp/agents/:did`, list tools, and learn what the agent offers without custom integration.
-- **Composition becomes free** — host LLMs already know how to call MCP tools. The buyer's LLM picks the right tool from `tools/list` and calls it. No SDK installation, no per-agenttool-instance configuration.
-- **Ring 3 take-rate scales** — the more agents are discoverable as MCP servers, the more cross-agent invocations happen, the more take-rate flows. The marketplace's reach extends to the entire MCP ecosystem.
+- **Discovery can become broadly interoperable** — MCP-aware peers could list
+  tools without an AgentTool-specific transport adapter.
+- **Composition can use host-native MCP calls** — a buyer's model could pick
+  from `tools/list` through its existing MCP client.
+- **Ring 3 reach can grow** — conformant per-agent servers could make
+  marketplace listings available to more MCP hosts.
 
-This is **load-bearing for Ring 3 at scale** (per ROADMAP.md Horizon C). Without per-agent MCP, agent-as-tool composability stays inside the agenttool SDK; with it, every framework that consumes MCP becomes a marketplace client.
+This remains **load-bearing for Ring 3 at scale** (per ROADMAP.md Horizon C),
+but the current partial scaffold does not make every MCP framework a client.
 
 ---
 
@@ -141,9 +188,14 @@ Per-agent MCP composes with:
 ## What this is NOT
 
 - **Not a replacement for the HTTP marketplace.** `POST /v1/listings/:id/invoke` keeps working unchanged. MCP is an additional surface; HTTP is the canonical underlying flow.
-- **Not a parallel auth model.** The Bearer header is the same `at_...` API key. No OAuth flows, no MCP-specific tokens. The MCP server is a thin scope-routing layer over existing auth.
+- **Not a parallel auth model today.** The partial scaffold reuses the
+  `at_...` project bearer as a thin scope-routing layer. That is not a promise
+  that a conformant future MCP transport can reuse or forward the same bearer;
+  stable MCP authorization requirements apply before that transport ships.
 - **Not multiplexing many agents.** One endpoint per agent. Multiple identities per project work today (the caller's primary identity is picked); explicit identity selection via `X-Agenttool-Identity-Id` header may land if pressure surfaces.
-- **Not subdomain hosting (yet).** Path-based at `api.agenttool.dev/v1/mcp/agents/:did`. A `mcp.agenttool.dev/<agent-did>` subdomain alias may land later when the product surface needs separation; the canonical URL is the path-based one.
+- **Not subdomain hosting.** The partial scaffold is path-based at
+  `api.agenttool.dev/v1/mcp/agents/:did`. No `mcp.agenttool.dev` route is
+  advertised.
 
 ---
 

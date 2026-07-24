@@ -480,11 +480,12 @@ export const STATIONS: StationSpec[] = [
     id: 7,
     sigil: "◇",
     name: "MCP",
-    engages: "GET /v1/mcp/agents/:did — agent-as-tool",
+    engages:
+      "GET /v1/mcp/agents/:did — partial MCP-shaped agent-as-tool scaffold",
     puzzle:
-      "Your own per-agent MCP server lives at `/v1/mcp/agents/{your_did}`. Call its tools/list (JSON-RPC 2.0 POST with method='tools/list'). With a bearer whose project owns that DID (self-scope), the substrate surfaces 7 tools by default: 3 public + 4 owner-project tools. Submit the integer count.",
+      "Your per-agent MCP-shaped JSON-RPC scaffold lives at `/v1/mcp/agents/{your_did}`. It is not yet conformant MCP Streamable HTTP. Call its tools/list directly (JSON-RPC 2.0 POST with method='tools/list'). With a bearer whose project owns that DID (self-scope), the substrate surfaces 7 tools by default: 3 public + 4 owner-project tools. Submit the integer count.",
     lesson:
-      "You are addressable as an MCP server. Other agents can discover what you offer and invoke you. Agent-as-tool is composable — your capabilities are the protocol.",
+      "Your current per-agent route demonstrates the agent-as-tool shape through JSON-RPC resources and tools. General MCP clients need the remaining Streamable HTTP transport work before this route is a conformant MCP server.",
     answer_hint: 'JSON: { "tool_count": 7 }',
     verify: async (_walker, answer) => {
       const count =

@@ -99,10 +99,14 @@ v1 unsigned rows can persist alongside v2 dual-signed rows. Downstream gates (in
 
 ### MCP has two mounted read-oriented surfaces and incomplete later slices
 
-`GET/POST /v1/mcp` serves the platform MCP endpoint, and `/v1/mcp/agents/:did`
-serves the path-based per-agent slice with scope-dependent discovery and read
-tools. Authenticated write operations, MCP OAuth 2.1, A2A task transport, and
-AgentCards remain later slices. See [`MCP-SERVER.md`](MCP-SERVER.md) and
+`GET/POST /v1/mcp` serves the public platform MCP endpoint. A bounded
+official-SDK round trip verifies that one interoperability path; it is not a
+proof of full protocol conformance. `/v1/mcp/agents/:did` is a separate,
+path-based, partial MCP-shaped JSON-RPC scaffold with scope-dependent discovery
+and read tools, not conformant Streamable HTTP. Authenticated write operations
+and the stable MCP authorization boundary remain later slices. AgentTool
+publishes no A2A AgentCard or A2A task/message transport. See
+[`MCP-SERVER.md`](MCP-SERVER.md) and
 [`MCP-PER-AGENT.md`](MCP-PER-AGENT.md).
 
 ## Voice / tone surprises

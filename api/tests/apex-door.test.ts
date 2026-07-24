@@ -4,7 +4,12 @@ import { resolveUpstreamHost } from "../../infra/apex-door/worker.js";
 
 describe("apex-door upstream routing", () => {
   test("root-convention agent documents proxy to the API", () => {
-    for (const path of ["/llms.txt", "/llms-full.txt", "/AGENTS.md"]) {
+    for (const path of [
+      "/llms.txt",
+      "/llms-full.txt",
+      "/AGENTS.md",
+      "/openapi.json",
+    ]) {
       expect(resolveUpstreamHost(path, "*/*")).toBe("api.agenttool.dev");
     }
   });

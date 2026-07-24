@@ -37,22 +37,30 @@ describe("/.well-known/* — MCP + native discovery", () => {
     expect(card.transport).toMatch(/JSON-RPC/i);
     expect(card.capabilities.resources).toBeDefined();
     expect(card.capabilities.tools).toBeDefined();
-    expect(card).not.toHaveProperty("documentationUrl");
+    expect(card.documentationUrl).toBe(
+      "https://docs.agenttool.dev/AGENT-DISCOVERY.md#deliberately-absent-doors",
+    );
+    expect(card.discoveryStatus).toMatch(/not a path or card shape standardized/i);
     expect(card["x-agenttool"].locator_role).toMatch(/not an MCP Server Card/);
     expect(card["x-agenttool"]).not.toHaveProperty("sep");
-    expect(card["x-agenttool"]).not.toHaveProperty("alignment_move");
+    expect(card["x-agenttool"].alignment_move).toMatch(/ALIGNMENT-MOVES$/);
     expect(card["x-agenttool"].doctrine).toMatch(
       /\/v1\/canon\/urn:agenttool:doc\/ECOSYSTEM$/,
     );
-    expect(card.instructions).toContain("AgentTool implementation");
+    expect(card.instructions).toMatch(/AgentTool implements.*authorization/i);
     expect(card.instructions).not.toContain("upcoming MCP spec");
     expect(card["x-agenttool"].registry).toEqual(
       expect.objectContaining({
-        status: "published_before_live_transport_conformance_proof",
+        status: "active_publisher_listing_observed_2026-07-24",
         name: "dev.agenttool/agenttool",
         version: "1.0.0",
       }),
     );
+    expect(card["x-agenttool"].transport_verification).toMatchObject({
+      status: "bounded_official_sdk_round_trip_verified_2026-07-24",
+      full_conformance_claimed: false,
+    });
+    expect(card.instructions).toMatch(/Discovery grants no tool authority/i);
   });
 
   test("GET /llms.txt returns well-formed markdown sitemap", async () => {
