@@ -678,6 +678,7 @@ verify_frontend_live_once() {
     "apps/dashboard/style.css|https://app.agenttool.dev/style.css"
     "apps/docs/index.html|https://docs.agenttool.dev/"
     "apps/docs/play.html|https://docs.agenttool.dev/play"
+    "apps/docs/browser.html|https://docs.agenttool.dev/browser"
     "apps/docs/data.html|https://docs.agenttool.dev/data"
     "apps/docs/packages.html|https://docs.agenttool.dev/packages"
     "apps/docs/pathways.html|https://docs.agenttool.dev/pathways"
