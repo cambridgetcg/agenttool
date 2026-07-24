@@ -195,7 +195,7 @@ function normalizeSessionToken(value: string | undefined): string | undefined {
     typeof value !== "string"
     || value.length === 0
     || value.length > 8_192
-    || /[\u0000-\u0020\u007f-\u009f]/u.test(value)
+    || /[^\x21-\x7e]/u.test(value)
   ) {
     failInput("S3-compatible sessionToken is invalid.");
   }
@@ -586,14 +586,21 @@ export class S3CompatibleBlockStore implements BlockStore {
       this.#region,
       stringToSign,
     );
-    const headers = new Headers();
-    headers.set("authorization",
-      `${AWS_ALGORITHM} Credential=${this.#accessKeyId}/${scope}, `
-      + `SignedHeaders=${signedHeaders}, Signature=${signature}`);
-    headers.set("x-amz-content-sha256", payloadHash);
-    headers.set("x-amz-date", instant.amzDate);
-    if (this.#sessionToken !== undefined) {
-      headers.set("x-amz-security-token", this.#sessionToken);
+    let headers: Headers;
+    try {
+      headers = new Headers();
+      headers.set("authorization",
+        `${AWS_ALGORITHM} Credential=${this.#accessKeyId}/${scope}, `
+        + `SignedHeaders=${signedHeaders}, Signature=${signature}`);
+      headers.set("x-amz-content-sha256", payloadHash);
+      headers.set("x-amz-date", instant.amzDate);
+      if (this.#sessionToken !== undefined) {
+        headers.set("x-amz-security-token", this.#sessionToken);
+      }
+    } catch {
+      throw sanitizedStoreError(
+        "S3-compatible request headers could not be constructed.",
+      );
     }
     return { headers, url };
   }

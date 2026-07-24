@@ -218,6 +218,23 @@ describe("S3CompatibleBlockStore", () => {
     })).not.toThrow();
   });
 
+  test("rejects a non-ASCII session token without reflection or provider I/O", () => {
+    const sessionToken =
+      `private-session-${String.fromCodePoint(0x100)}-marker`;
+    let calls = 0;
+    try {
+      fixtureStore(fakeFetch(() => {
+        calls += 1;
+        return new Response(null, { status: 200 });
+      }), { sessionToken });
+      throw new Error("invalid session token should have failed");
+    } catch (error) {
+      expect(error).toBeInstanceOf(InvalidInputError);
+      expect(serializedError(error)).not.toContain(sessionToken);
+    }
+    expect(calls).toBe(0);
+  });
+
   test("rejects non-canonical prefixes and signing years outside four digits", async () => {
     const fetch = fakeFetch(() => new Response(null, { status: 200 }));
     for (const prefix of [
