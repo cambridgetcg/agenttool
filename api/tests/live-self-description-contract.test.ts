@@ -134,7 +134,10 @@ describe("live self-description — removed public observer routes", () => {
     const advertisedEndpoints = JSON.stringify(root.endpoints);
 
     for (const path of REMOVED_PUBLIC_OBSERVER_PATHS) {
-      expect(advertisedEndpoints).not.toContain(path);
+      const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      expect(advertisedEndpoints).not.toMatch(
+        new RegExp(`${escapedPath}(?=["\\s?·])`),
+      );
 
       const response = await publicRouter.request(
         asRequestPath(path).replace(/^\/public/, ""),

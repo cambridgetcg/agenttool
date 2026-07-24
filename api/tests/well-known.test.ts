@@ -138,7 +138,7 @@ describe("/.well-known/* — MCP + native discovery", () => {
     });
     expect(idx.boundary.automatic_action).toBe("never");
     expect(idx.boundary.discovery_grants).toEqual([]);
-    expect(idx.links).toHaveLength(7);
+    expect(idx.links).toHaveLength(8);
     expect(idx.endpoints).not.toContain("/.well-known/agent-card.json");
   });
 });
