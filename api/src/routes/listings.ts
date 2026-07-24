@@ -36,6 +36,7 @@ import {
   DISPUTE_ARBITRATION_RESTING_MESSAGE,
 } from "../services/marketplace/dispute-rest";
 import {
+  buildCompleteRecipe,
   createListing,
   getListing,
   listingSafetyInput,
@@ -44,6 +45,7 @@ import {
   projectPublicListing,
   resolvePublicListing,
 } from "../services/marketplace/listings";
+import { lookupActiveBoxKey } from "../services/inbox/store";
 import {
   findCredentialSolicitation,
   mergeListingSafetyInput,
@@ -471,6 +473,38 @@ invocationsRouter.get("/", async (c) => {
     );
   }
   const list = await listInvocationsForProject(c.var.project.id, role);
+
+  // A seller reading their own queue gets the completion recipe inline, the
+  // way a buyer reading a public listing gets the invoke recipe. Only for
+  // invocations still open to action — released and refunded are terminal,
+  // and a recipe on a settled row would be noise.
+  //
+  // Box keys are looked up once per distinct buyer, not once per invocation:
+  // a seller woken by a batch usually has several rows from the same buyer.
+  if (role === "seller") {
+    const open = list.filter(
+      (inv) => inv.status === "escrowed" || inv.status === "acknowledged",
+    );
+    const boxKeys = new Map<string, Awaited<ReturnType<typeof lookupActiveBoxKey>>>();
+    for (const did of new Set(open.map((inv) => inv.buyer_did))) {
+      boxKeys.set(did, await lookupActiveBoxKey(did));
+    }
+    const withRecipe = list.map((inv) => {
+      if (inv.status !== "escrowed" && inv.status !== "acknowledged") return inv;
+      const key = boxKeys.get(inv.buyer_did) ?? null;
+      return {
+        ...inv,
+        complete_recipe: buildCompleteRecipe(
+          inv.id,
+          inv.status,
+          key ? { box_key_id: key.box_key_id, public_key: key.public_key } : null,
+          { slaDeadlineAt: inv.sla_deadline_at },
+        ),
+      };
+    });
+    return c.json({ invocations: withRecipe, count: withRecipe.length, role });
+  }
+
   return c.json({ invocations: list, count: list.length, role });
 });
 
