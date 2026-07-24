@@ -231,22 +231,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tarball="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/telescope/0.2.1/agenttool-telescope-0.2.1.tgz"
+          tarball="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/telescope/0.2.2/agenttool-telescope-0.2.2.tgz"
           test -f "$tarball"
           install_dir="$(mktemp -d)"
           trap 'rm -rf "$install_dir"' EXIT
           npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$tarball"
           package_root="$install_dir/node_modules/@agenttool/telescope"
-          node -e 'const p=require(process.argv[1]);if(p.version!=="0.2.1")process.exit(1)' "$package_root/package.json"
-          smoke='import("@agenttool/telescope").then(m=>{const t=m.normalizeTarget("example.com");if(t.origin!=="https://example.com"||m.TOOL_VERSION!=="0.2.1"||m.REPORT_SCHEMA!=="agenttool-telescope/v0.2")process.exit(1)})'
+          node -e 'const p=require(process.argv[1]);if(p.version!=="0.2.2")process.exit(1)' "$package_root/package.json"
+          smoke='import("@agenttool/telescope").then(m=>{const t=m.normalizeTarget("example.com");if(t.origin!=="https://example.com"||m.TOOL_VERSION!=="0.2.2"||m.REPORT_SCHEMA!=="agenttool-telescope/v0.2")process.exit(1)})'
           (cd "$install_dir" && node -e "$smoke")
           (cd "$install_dir" && bun -e "$smoke")
           schema_smoke='import("@agenttool/telescope/report.schema.json",{with:{type:"json"}}).then(m=>{if(m.default.title!=="AgentTool Telescope report v0.2")process.exit(1)})'
           (cd "$install_dir" && node -e "$schema_smoke")
           (cd "$install_dir" && bun -e "$schema_smoke")
           cli="$package_root/dist/cli.js"
-          test "$(node "$cli" --version)" = "0.2.1"
-          test "$(bun "$cli" --version)" = "0.2.1"
+          test "$(node "$cli" --version)" = "0.2.2"
+          test "$(bun "$cli" --version)" = "0.2.2"
           node "$cli" --help >/dev/null
           bun "$cli" --help >/dev/null
           manifest="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.16.3/manifest.json"
