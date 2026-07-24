@@ -2,28 +2,23 @@
 
 A small local browser surface for agents.
 
-`0.1.0` is distributed as an exact LOVE package and mirrored to npm. It remains
+`0.2.0` is distributed as an exact LOVE package and mirrored to npm. It remains
 a local runtime: the docs deployment publishes package bytes and documentation,
 not a hosted browser-control service.
 
-> **Release status:** `0.1.0` remains the current published release. This
-> checkout also documents an **unreleased source-next** authority,
-> capability-reporting, and zero-effect planning surface. Those source-next
-> features are not present in the exact npm/LOVE `0.1.0` bytes.
-
 ```bash
-npm install --save-exact @agenttool/browser@0.1.0
+npm install --save-exact @agenttool/browser@0.2.0
 ```
 
 Registry-neutral exact artifact:
 
 ```bash
 npm install --save-exact \
-  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.1.0/agenttool-browser-0.1.0.tgz
+  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.2.0/agenttool-browser-0.2.0.tgz
 ```
 
 The sibling
-[LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.1.0/manifest.json)
+[LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.2.0/manifest.json)
 names the artifact size and SHA-256. A URL install does not compare those
 values automatically; verify them first when that boundary matters.
 
@@ -35,10 +30,11 @@ One browser core is available through three local interfaces:
 - one-request/one-response line-delimited JSON over stdin/stdout; and
 - a stdio MCP server.
 
-The core exposes the essential loop: `open`, `observe`, `act`, `extract`,
-`screenshot`, `tabs`, and `close`. `observe` produces a bounded semantic view
-with snapshot-scoped ARIA references, so actions target observed accessible
-elements rather than invented selectors.
+The core exposes the essential loop: inspect `capabilities`, create a
+zero-effect `plan`, then `open`, `observe`, `act`, `extract`, `screenshot`,
+inspect `tabs`, and `close`. `observe` produces a bounded semantic view with
+snapshot-scoped ARIA references, so actions target observed accessible elements
+rather than invented selectors.
 
 This package uses `playwright-core` with a Chrome-family browser already
 installed on the machine. It has no postinstall script and does not download a
@@ -75,16 +71,33 @@ Or start the local MCP server:
 agenttool-browser mcp
 ```
 
+For a persistent MCP host, install the package in that host's project and use
+the absolute project-local binary path rather than an `npx` command that may
+fetch at startup:
+
+```json
+{
+  "command": "/absolute/path/to/project/node_modules/.bin/agenttool-browser",
+  "args": ["mcp", "--authority", "sovereign"]
+}
+```
+
+Run the same binary with `doctor --authority sovereign` first. After startup,
+call `browser_capabilities` to verify the effective profile; that report does
+not probe whether a destination is reachable. Ephemeral profiles need no
+shared state. Give concurrent persistent hosts separate dedicated profile
+directories.
+
 Both keep protocol traffic on stdout and operational diagnostics on stderr.
 Use `agenttool-browser help` for the current command and options.
 
-The JSONL methods and MCP tool names are `browser_open`, `browser_observe`,
-`browser_act`, `browser_extract`, `browser_screenshot`, `browser_tabs`, and
-`browser_close`.
+The JSONL methods and MCP tool names are `browser_capabilities`,
+`browser_plan`, `browser_open`, `browser_observe`, `browser_act`,
+`browser_extract`, `browser_screenshot`, `browser_tabs`, and `browser_close`.
 
-### Unreleased source-next operations
+### Capabilities and planning
 
-A source build also aligns `capabilities()` with `browser_capabilities`, and
+The direct API aligns `capabilities()` with `browser_capabilities`, and
 `plan(action)` with `browser_plan`. `browser_capabilities` reports effective
 launch-time authority and implemented operations; it does not visit or probe a
 destination. `browser_plan` accepts `{ "action": ... }` only. It produces an
@@ -197,9 +210,8 @@ and cannot alter the same underlying facts or widen authority.
 
 ## Authority profiles
 
-The exact `0.1.0` release uses the public/local booleans described below.
-Unreleased source-next names the same compatibility default explicitly as
-`authority: "public"` and adds three launch-time profiles:
+Version `0.2.0` names the compatibility default explicitly as
+`authority: "public"` and provides three launch-time profiles:
 
 | Profile | HTTP(S) destinations | WebSockets | Service workers |
 |---|---|---|---|
@@ -218,13 +230,12 @@ destinations available to the host, including local services. In a persistent
 profile, service-worker and site state can outlive the process. Sovereign is
 therefore broad local process authority, not an isolation or SSRF claim.
 
-Destination authority does not imply every other browser power. In this first
-source-next slice, file upload, automatic download, arbitrary JavaScript
-evaluation, credential injection/lookup, ambient profile import, shell
-execution, and extension installation remain unsupported and are reported as
-such by `capabilities()`.
+Destination authority does not imply every other browser power. In `0.2.0`,
+file upload, automatic download, arbitrary JavaScript evaluation, credential
+injection/lookup, ambient profile import, shell execution, and extension
+installation remain unsupported and are reported as such by `capabilities()`.
 
-Select source-next authority at launch:
+Select authority at launch:
 
 ```ts
 const browser = await AgentBrowser.launch({ authority: "sovereign" });
@@ -237,7 +248,7 @@ agenttool-browser jsonl --authority sovereign
 or set `AGENTOOL_BROWSER_AUTHORITY=sovereign`. Authority cannot be widened by
 a tool call after launch.
 
-### Published `0.1.0` compatibility defaults
+### Compatibility defaults
 
 The default process is:
 
@@ -284,9 +295,9 @@ Do this only for a caller-controlled development network. Tool calls cannot
 widen either profile or network authority after launch. Reserved destinations
 remain blocked even with this opt-in.
 
-Source-next retains `allowPublicWeb` / `allowLocalNetwork`,
+Version `0.2.0` retains `allowPublicWeb` / `allowLocalNetwork`,
 `--public-web` / `--local-network`, and their environment variables as a
-deprecated compatibility surface. Do not combine the new `authority` form
+deprecated `0.1.0` compatibility surface. Do not combine the `authority` form
 with any legacy authority option in one launch; mixed configuration is
 rejected rather than guessed.
 
@@ -294,7 +305,7 @@ rejected rather than guessed.
 
 | Purpose | CLI | Environment |
 |---|---|---|
-| Authority profile (source-next) | `--authority public|local|sovereign` | `AGENTOOL_BROWSER_AUTHORITY` |
+| Authority profile | `--authority public|local|sovereign` | `AGENTOOL_BROWSER_AUTHORITY` |
 | Headless or visible | `--headless` / `--headed` | `AGENTOOL_BROWSER_HEADLESS` |
 | Public web (deprecated compatibility) | `--public-web` / `--no-public-web` | `AGENTOOL_BROWSER_PUBLIC_WEB` |
 | Local/private network (deprecated compatibility) | `--local-network` / `--no-local-network` | `AGENTOOL_BROWSER_LOCAL_NETWORK` |
@@ -305,7 +316,7 @@ rejected rather than guessed.
 | Artifact directory | `--output-dir <path>` | `AGENTOOL_BROWSER_OUTPUT_DIR` |
 
 Environment booleans accept `1/0`, `true/false`, `yes/no`, or `on/off`.
-Unknown flags, malformed values, and mixed source-next/legacy authority
+Unknown flags, malformed values, and mixed named/legacy authority
 configuration fail rather than silently broadening policy.
 
 The artifact directory follows the same existing-directory rule. A missing
@@ -331,8 +342,7 @@ unrecognized carriers such as `srcset`, meta refresh, CSS `url()`, or malformed
 markup, browser storage, canvas/image content, or screenshot pixels. It cannot
 undo data already submitted to a site.
 
-The published `0.1.0` package and the first source-next slice intentionally
-have no:
+The published `0.2.0` package intentionally has no:
 
 - arbitrary JavaScript evaluation;
 - file-upload operation;
@@ -347,8 +357,8 @@ model-visible state, or advisory plans.
 
 ## Network limitation
 
-The published `0.1.0` policy—and the source-next `public` and `local`
-profiles—checks destinations before navigation, including DNS answers.
+The `0.2.0` `public` and `local` profiles—and the historical `0.1.0`
+policy—check destinations before navigation, including DNS answers.
 Playwright then owns the browser connection. The package cannot pin the
 checked DNS answer to the later socket or verify the connected peer address,
 and ambient proxies or browser routing can change the path.
@@ -360,8 +370,8 @@ widening of local process authority, not a sandbox.
 The public/local check is an HTTP(S) browser-request boundary, not generic
 process egress isolation. `public` blocks WebSockets; `local` classifies them
 against its public-plus-local destination boundary rather than extending the
-HTTP(S) DNS claim to WebSocket transport. Source-next `sovereign`
-intentionally removes that destination-class boundary, passes WebSockets
+HTTP(S) DNS claim to WebSocket transport. The `sovereign` profile intentionally
+removes that destination-class boundary, passes WebSockets
 through, and enables service workers. Its capability report makes that
 authority legible; it does not make the resulting traffic isolated, harmless,
 or guaranteed to succeed.

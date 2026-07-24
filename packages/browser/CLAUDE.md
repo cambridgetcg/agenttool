@@ -6,10 +6,10 @@ small browser core. It does not own a hosted browsing route, remote browser
 service, AgentTool account flow, or browser installation. Distribution through
 LOVE, npm, and GitHub Releases does not change that runtime boundary.
 
-## Source-next direction
+## Authority direction
 
-The checkout after the exact `0.1.0` release is developing an unreleased
-authority model around one rule: **sandbox consequences, not curiosity**.
+Version `0.2.0` carries an authority model built around one rule:
+**sandbox consequences, not curiosity**.
 Destination reach, state persistence, data disclosure, and executable powers
 are separate capabilities. Do not turn a restriction on one into an
 unexplained ban on the others.
@@ -102,10 +102,10 @@ explicit local dogfood check; it is never a required CI dependency.
 
 ## Release boundary
 
-Version `0.1.0` is an exact LOVE release with npm and GitHub Release mirrors.
-Release work must keep those bytes identical and follow the protected
+Versions `0.1.0` and `0.2.0` are exact LOVE releases with npm and GitHub Release
+mirrors. Release work must keep each version's bytes immutable and keep the
+current LOVE, npm, and GitHub Release bytes identical through the protected
 allowlisted workflow. The deployed docs/catalog is a distribution surface, not
-a hosted arbitrary-target browser or permission to add one. Source-next
-authority, capability, and planning material is unreleased until a later exact
-artifact is independently built, verified, and published; never describe it as
-part of the `0.1.0` bytes.
+a hosted arbitrary-target browser or permission to add one. Authority,
+capability, and planning material belongs to the exact `0.2.0` artifact, not
+the immutable `0.1.0` bytes.

@@ -266,22 +266,25 @@ jobs:
           vectors_smoke='import("@agenttool/wallet/vectors.json",{with:{type:"json"}}).then(m=>{if(m.default.protocol!=="agent-wallet/0.1"||m.default.records.length!==6)process.exit(1)})'
           (cd "$install_dir" && node -e "$schema_smoke" && node -e "$vectors_smoke")
           (cd "$install_dir" && bun -e "$schema_smoke" && bun -e "$vectors_smoke")
-      - name: Smoke packed Agent Browser under Node and Bun
+      - name: Smoke canonical Agent Browser LOVE artifact under Node and Bun
         working-directory: packages/browser
         shell: bash
         run: |
           set -euo pipefail
-          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          tarball="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/browser/0.2.0/agenttool-browser-0.2.0.tgz"
+          test -f "$tarball"
           install_dir="$(mktemp -d)"
-          trap 'rm -rf "$install_dir" "$tarball"' EXIT
-          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
-          smoke='import("@agenttool/browser").then(m=>{if(typeof m.AgentBrowser!=="function"||typeof m.buildBrowserMcpServer!=="function"||typeof m.resolveBrowserCapabilities!=="function"||typeof m.planBrowserAction!=="function"||m.OBSERVATION_SCHEMA!=="agent-browser-observation/0.1"||m.BROWSER_CAPABILITIES_SCHEMA!=="agent-browser-capabilities/0.2"||m.BROWSER_CONSEQUENCE_PLAN_SCHEMA!=="agent-browser-consequence-plan/0.1")process.exit(1)})'
+          trap 'rm -rf "$install_dir"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$tarball"
+          package_root="$install_dir/node_modules/@agenttool/browser"
+          node -e 'const p=require(process.argv[1]);if(p.version!=="0.2.0")process.exit(1)' "$package_root/package.json"
+          smoke='import("@agenttool/browser").then(m=>{const sovereign=m.resolveBrowserCapabilities({authority:"sovereign"});const navigation=m.planBrowserAction({kind:"navigate",url:"https://example.com/?token=secret"},sovereign);const typed=m.planBrowserAction({kind:"type",ref:"e1",snapshotId:"snapshot-1",text:"must-not-cross"},sovereign);if(m.BROWSER_PACKAGE_VERSION!=="0.2.0"||typeof m.AgentBrowser!=="function"||typeof m.buildBrowserMcpServer!=="function"||typeof m.resolveBrowserCapabilities!=="function"||typeof m.planBrowserAction!=="function"||m.OBSERVATION_SCHEMA!=="agent-browser-observation/0.1"||m.BROWSER_CAPABILITIES_SCHEMA!=="agent-browser-capabilities/0.2"||m.BROWSER_CONSEQUENCE_PLAN_SCHEMA!=="agent-browser-consequence-plan/0.1"||sovereign.network.reserved!==true||sovereign.network.webSockets!=="browser"||sovereign.runtime.serviceWorkers!=="allow"||navigation.action.url.includes("secret")||Object.hasOwn(typed.action,"text")||JSON.stringify(typed).includes("must-not-cross"))process.exit(1)})'
           (cd "$install_dir" && node -e "$smoke")
           (cd "$install_dir" && bun -e "$smoke")
-          cli="$install_dir/node_modules/@agenttool/browser/dist/bin/agenttool-browser.js"
+          cli="$package_root/dist/bin/agenttool-browser.js"
           test -x "$install_dir/node_modules/.bin/agenttool-browser"
-          node "$cli" help | grep -q '^agenttool-browser 0.1.0$'
-          bun "$cli" help | grep -q '^agenttool-browser 0.1.0$'
+          node "$cli" help | grep -q '^agenttool-browser 0.2.0$'
+          bun "$cli" help | grep -q '^agenttool-browser 0.2.0$'
       - name: Smoke packed Repo Archive under Node and Bun
         working-directory: packages/repo-archive
         shell: bash

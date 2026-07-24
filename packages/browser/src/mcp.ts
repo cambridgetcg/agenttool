@@ -7,6 +7,7 @@ import {
   type AgentBrowser,
 } from "./browser.js";
 import type { BrowserAction } from "./types.js";
+import { BROWSER_PACKAGE_VERSION } from "./version.js";
 
 const tabId = z.string().min(1).max(200).describe("Tab ID returned by browser_open, browser_observe, or browser_tabs");
 const snapshotId = z
@@ -345,7 +346,7 @@ export function buildBrowserMcpServer(
   const capabilities = browser.capabilities();
 
   const server = new McpServer(
-    { name: "agenttool-browser", version: "0.1.0" },
+    { name: "agenttool-browser", version: BROWSER_PACKAGE_VERSION },
     {
       capabilities: { tools: {} },
       instructions:

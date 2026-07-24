@@ -16,10 +16,17 @@ schema, and vectors from canonical repository sources. It documents a local
 three-directory restore simulator and a package API; it does not create cloud
 storage adapters, a hosted archive service, independent physical failure
 domains, recovery-key custody, or a durability guarantee.
-The Agent Browser page documents a separately installed local runtime with
-TypeScript, JSONL, and stdio MCP doors. Its main-response discovery hints are
-bounded and untrusted; the docs deployment does not create a hosted browser,
-ambient recognition action, credential bridge, or stronger SSRF isolation.
+The Agent Browser page documents the separately installed
+`@agenttool/browser@0.2.0` local runtime with TypeScript, JSONL, and stdio MCP
+doors. Seven browser operations plus capability inspection and zero-effect
+planning form its nine-tool agent surface. Named `public`, `local`, and
+`sovereign` launch profiles make destination authority legible; sovereign is
+broad local pass-through, not a bypass of browser, account, site, network, or
+operating-system boundaries. Main-response discovery hints remain bounded and
+untrusted. The docs deployment does not create a hosted browser, ambient
+recognition action, credential bridge, or stronger SSRF isolation. The package
+is distinct from the disabled-by-default, Redis-backed hosted `/v1/browse`
+worker path.
 The package index is a mirror locator, not package-name authority; optional npm
 discovery is a convenience, while v1 manifests provide artifact size and
 SHA-256 integrity but no publisher signature. The Whitehack page documents a
@@ -43,7 +50,7 @@ authorization, execution-readiness proof, or a hosted route.
 ```
 index.html      — Docs home: quick start, service cards, auth, errors, rate limits
 packages.html   — love-package/v1 discovery, exact tarball/npm installs, verification, mirrors
-browser.html    — local Agent Browser install, seven-tool loop, integrations, response hints
+browser.html    — local Agent Browser install, nine-tool surface, authority, integrations, response hints
 play.html       — Public arcade plus the local three-seat Party Telephone game
 play.js         — Party Telephone's three-turn state, validation, erasure, and reveal
 whitehack.html  — crypto-aware advisory, local wallet understanding, research, and legacy inventory boundaries
@@ -96,7 +103,7 @@ AgentTool Platform
 ## Key Files
 - `index.html` — Main docs page: quick start guide, service overview, auth, errors, rate limits
 - `packages.html` — Registry-neutral package discovery, install, integrity, and mirror guide
-- `browser.html` — Local Agent Browser, exact package install, seven-tool contract, and integration boundaries
+- `browser.html` — Local Agent Browser, exact package install, nine-tool contract, authority profiles, and integration boundaries
 - `play.html` / `play.js` — Human arcade and local, non-persistent Party Telephone table
 - `whitehack.html` — Whitehack crypto-awareness, local wallet understanding, no-custody, privacy, and authorization boundaries
 - `AGENT-WALLET-0.1.md` / `agent-wallet-v0.1.schema.json` — wallet protocol discovery; exact release bytes live under `packages/v1/`

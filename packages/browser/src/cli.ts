@@ -19,6 +19,7 @@ import {
   parseBrowserProcessConfig,
   type BrowserProcessConfig,
 } from "./config.js";
+import { BROWSER_PACKAGE_VERSION } from "./version.js";
 
 export const JSONL_PROTOCOL_VERSION = "agenttool-browser-jsonl/0.1";
 export const MAX_JSONL_REQUEST_BYTES = 1_048_576;
@@ -440,7 +441,7 @@ export async function runJsonlSession(
   }
 }
 
-export const CLI_HELP = `agenttool-browser 0.1.0
+export const CLI_HELP = `agenttool-browser ${BROWSER_PACKAGE_VERSION}
 
 Usage:
   agenttool-browser mcp [startup options]       stdio MCP server

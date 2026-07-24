@@ -56,6 +56,7 @@ export {
   toBrowserAction,
 } from "./mcp.js";
 export { OBSERVATION_SCHEMA } from "./types.js";
+export { BROWSER_PACKAGE_VERSION } from "./version.js";
 export type * from "./errors.js";
 export type * from "./capabilities.js";
 export type * from "./planning.js";
