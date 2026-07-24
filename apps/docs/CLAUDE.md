@@ -8,9 +8,12 @@ Active — all 9 service pages live, plus the main index, local agent-data docs,
 local Agent Browser docs, and a LOVE Package Protocol surface for public
 exact-version package discovery.
 The root advertises the same bounded six-link discovery set as the web and
-dashboard roots. `AGENT-DISCOVERY.md` and `CASTLE-OF-UNDERSTANDING.md` are
-published as symlinks to their canonical repository guides; finding either
-guide performs no registration, installation, Castle read, or follow-up.
+dashboard roots. Bare `/.well-known` is a distinct, richer arrival index that
+links to the canonical compact three-road `/public/discovery` compass; neither
+surface grants authority or starts follow-up. `AGENT-DISCOVERY.md` and
+`CASTLE-OF-UNDERSTANDING.md` are published as symlinks to their canonical
+repository guides; finding either guide performs no registration, installation,
+Castle read, or follow-up.
 It also serves the Agent Wallet 0.1 Working Draft, schema, and exact LOVE
 artifact from their canonical repository sources. This docs surface does not
 imply npm mirror availability, a hosted wallet, key custody, RPC, or broadcast
@@ -34,9 +37,9 @@ worker path.
 The package index is a mirror locator, not package-name authority; optional npm
 discovery is a convenience, while v1 manifests provide artifact size and
 SHA-256 integrity but no publisher signature. Its current Telescope entry is
-the exact `@agenttool/telescope@0.2.1` local-client artifact; `0.2.0` remains
-separately addressable, optional npm/GitHub mirrors may be absent, and neither
-entry creates a hosted scanner. The Whitehack page documents a
+the exact `@agenttool/telescope@0.2.1` local-client LOVE artifact; `0.2.0`
+remains separately addressable. Optional npm/GitHub 0.2.1 mirrors are not
+verified or claimed live, and neither release creates a hosted scanner. The Whitehack page documents a
 runner-local crypto-aware heuristic advisory using the exact public
 `@agenttool/whitehack-scan@0.8.1` package, a bounded attention-card view of
 redacted changed-source findings, an offer-only local projection into
@@ -101,7 +104,7 @@ Static hosting (Cloudflare Pages or similar). No build step.
 
 ## Dependencies
 - **agenttool-dashboard**: SDK-quickstart surface (agents-only since 2026-05-15 — no operator registration form); SDK / curl links route through here
-- **agenttool.dev apex**: the API itself. The canonical discovery compass is `/public/discovery`; API catalog, OpenAPI, agent.txt, llms.txt, MCP, wake-keystone, and pyramid are separately scoped signposts. No A2A task transport or AgentCard is published.
+- **agenttool.dev apex**: the API itself. The canonical compact three-road discovery compass is `/public/discovery`; bare `/.well-known` is a distinct richer arrival index. API catalog, OpenAPI, agent.txt, llms.txt, MCP, wake-keystone, and pyramid are separately scoped signposts. No A2A task transport or AgentCard is published.
 - References SDK snippets from `@agenttool/sdk` (TS) and `agenttool-sdk` (Python). Canonical genesis door: `bootstrap_agent()` / `bootstrapAgent()` against `/v1/register/agent`
 
 ## See Also

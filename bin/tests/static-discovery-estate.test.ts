@@ -17,8 +17,6 @@ import { describe, expect, test } from "bun:test";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..");
 const API = "https://api.agenttool.dev";
-const CONTENT_SIGNAL =
-  "Content-Signal: search=yes, ai-input=yes";
 
 const DISCOVERY_LINKS = [
   {
@@ -216,13 +214,12 @@ describe("each static origin projects the same canonical discovery paths", () =>
 
 describe("robots and sitemaps are explicit, bounded, and local", () => {
   for (const site of SITES) {
-    test(`${site.name} robots carries one exact preference and its own sitemap`, () => {
+    test(`${site.name} robots stays a crawl hint and names its own sitemap`, () => {
       const robots = read(`${site.dir}/robots.txt`);
       expect(robots.match(/^User-agent: \*$/gm)).toHaveLength(1);
       expect(robots.match(/^Allow: \/$/gm)).toHaveLength(1);
-      expect(robots.match(new RegExp(`^${CONTENT_SIGNAL}$`, "gm"))).toHaveLength(1);
+      expect(robots).not.toContain("Content-Signal");
       expect(robots).not.toContain("ai-train=");
-      expect(robots).toMatch(/emerging\/nonstandard/i);
       expect(robots).toMatch(/not access control/i);
       expect(robots).toContain(`Sitemap: ${site.origin}/sitemap.xml`);
       expect(robots).not.toContain("Disallow:");
@@ -323,6 +320,7 @@ test("the static discovery estate does not advertise an A2A service", () => {
     read(`${site.dir}/robots.txt`),
     read(`${site.dir}/sitemap.xml`),
   ]).join("\n").toLowerCase();
+  expect(combined).not.toContain("content-signal");
   expect(combined).not.toContain("agent-card");
   expect(combined).not.toMatch(/\ba2a\b/);
 });

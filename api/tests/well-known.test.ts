@@ -116,19 +116,32 @@ describe("/.well-known/* — MCP + native discovery", () => {
     expect(npm).not.toHaveProperty("version");
   });
 
-  test("GET / returns the canonical discovery compatibility projection", async () => {
+  test("GET / returns the richer bounded arrival index", async () => {
     const { status, body } = await get("/");
     expect(status).toBe(200);
     const idx = await body.json();
-    expect(idx.format).toBe("agenttool-discovery/v1");
-    expect(idx.canonical).toBe(
-      "https://api.agenttool.dev/public/discovery",
+    expect(idx.format).toBe("agenttool-arrival/v1");
+    expect(idx.first_contact).toMatchObject({
+      href: "https://api.agenttool.dev/public/porch",
+      method: "GET",
+      auth_scope: "none",
+      workspace_identity: expect.stringMatching(/none/),
+    });
+    expect(idx.boundary.automatic_action).toBe("never");
+    expect(idx.boundary.discovery_grants).toEqual([]);
+    expect(idx.links[0]).toMatchObject({
+      role: "discovery_compass",
+      href: "https://api.agenttool.dev/public/discovery",
+    });
+    expect(idx.endpoints).toEqual(
+      expect.arrayContaining([
+        "/.well-known/webfinger?resource={exact-DID}",
+        "/.well-known/mcp/server-card.json",
+        "/.well-known/wake-keystone",
+        "/.well-known/agent.txt",
+        "/.well-known/api-catalog",
+      ]),
     );
-    expect(idx.roads.map((road: { id: string }) => road.id)).toEqual([
-      "understand",
-      "inspect",
-      "choose",
-    ]);
     expect(JSON.stringify(idx)).not.toContain("agent-card.json");
   });
 });
