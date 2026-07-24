@@ -193,7 +193,8 @@ bun test bin/tests/agenttool-castle-whitehack-intake.test.ts # closed input, min
 (cd packages/wallet && bun install --frozen-lockfile)
 WHITEHACK_INTEGRATION=1 bun test packages/wallet/tests/whitehack-understanding.test.ts
 bun bin/agenttool-whitehack-evidence-storage.ts --help # explicit S3 store/retrieve; fixed env credentials
-bun test bin/tests/agenttool-whitehack-evidence-storage.test.ts # capsule parity, framing, grant, timeout, no-reveal boundaries
+bun test bin/tests/agenttool-whitehack-evidence-storage*.test.ts # parity, framing, grant, timeout, no-reveal, loopback S3 composition
+(cd api && bun test tests/whitehack-evidence-storage-schema.test.ts) # AJV 2020 validation of real input and receipt records
 
 # Frontends ──────────────────────────────────────────────────────────
 # Vanilla HTML/CSS/JS — no build step. Open files directly or:
