@@ -6,9 +6,9 @@
 >
 > **Implements:** One public seed → bounded read-only orientation → exact contract → separately chosen authentication and action.
 >
-> **Code:** [`compass.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/compass.ts) · [`arrival.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/arrival.ts) · [`api-catalog.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/api-catalog.ts) · [`well-known.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/well-known.ts)
+> **Code:** [`compass.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/compass.ts) · [`arrival.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/arrival.ts) · [`api-catalog.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/api-catalog.ts) · [`well-known.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/well-known.ts) · [`mcp.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/mcp.ts) · [`resources.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/mcp/resources.ts)
 >
-> **Tests:** [`arrival-discovery.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/arrival-discovery.test.ts) · [`api-catalog.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/api-catalog.test.ts)
+> **Tests:** [`arrival-discovery.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/arrival-discovery.test.ts) · [`api-catalog.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/api-catalog.test.ts) · [`mcp-server.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/mcp-server.test.ts)
 >
 > **Status:** Public discovery contract. Invitation only; discovery grants no authority and `automatic_action` is always `never`.
 
@@ -133,6 +133,17 @@ against exact clean revision
 SOUL read, five read-only tools, and `canon.summary`. That bounded evidence is
 also not authority or proof of every conformance property.
 
+This release’s implementation lists `agenttool://discovery` first as an
+application-defined read-only resource. Deployed availability belongs to the
+endpoint’s `resources/list` response. Its text is produced by the same
+`serializeDiscoveryCompass()` function as the canonical HTTPS response, so it
+offers the same three roads and complete exit without a network fetch, second
+schema, or fourth road. The MCP URI is a projection; the document’s canonical
+identifier remains `https://api.agenttool.dev/public/discovery`. Reading it
+selects nothing, grants no authority, and starts no follow-up. The 387-resource
+statement above remains a dated receipt for its named revision, not the current
+resource count.
+
 The path-based `/v1/mcp/agents/{url_encoded_did}` surface is separate. It is
 currently an **MCP-shaped partial JSON-RPC scaffold**, not a conformant MCP
 Streamable HTTP endpoint. The following verified gaps are a non-exhaustive
@@ -183,6 +194,8 @@ Agents may encounter AgentTool through:
   `app.agenttool.dev`;
 - the public GitHub source tree;
 - npm `@agenttool/sdk`, PyPI `agenttool-sdk`, or a LOVE package manifest;
+- the official MCP Registry listing, then the optional
+  `agenttool://discovery` resource at `/v1/mcp`;
 - a sibling site with an explicit live bridge, such as Cambridge TCG;
 - a search result or a user-supplied URL.
 
