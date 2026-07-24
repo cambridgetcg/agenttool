@@ -8,6 +8,7 @@
 import type { MiddlewareHandler } from "hono";
 import { cors } from "hono/cors";
 
+import { isAllowedPublicMcpOrigin } from "../services/mcp/http-boundary";
 import { welcomeHeaderForPath } from "./welcome";
 
 export const API_CORS_EXPOSED_HEADERS = [
@@ -37,16 +38,47 @@ export function apiCors(): MiddlewareHandler {
     exposeHeaders: [...API_CORS_EXPOSED_HEADERS],
     maxAge: 86_400,
   });
+  const publicMcpCors = cors({
+    origin: (origin) =>
+      origin && isAllowedPublicMcpOrigin(origin) ? origin : null,
+    allowMethods: ["POST", "OPTIONS"],
+    allowHeaders: ["Content-Type", "MCP-Protocol-Version"],
+    exposeHeaders: [...API_CORS_EXPOSED_HEADERS],
+    maxAge: 86_400,
+  });
 
   return async (c, next) => {
     const path = new URL(c.req.url, "http://_").pathname;
+    // Hono decodes percent-encoded unreserved characters while routing. Match
+    // the same equivalent spelling without decoding `%2F` into a new path.
+    const routedPath = path.replace(/%[0-9A-Fa-f]{2}/g, (encoded) => {
+      const character = String.fromCharCode(
+        Number.parseInt(encoded.slice(1), 16),
+      );
+      return /^[A-Za-z0-9._~-]$/.test(character) ? character : encoded;
+    });
+    const isPublicMcp = routedPath === "/v1/mcp";
     const isReadOnlyDiscovery =
       path === "/.well-known/webfinger" ||
       path === "/feeds" ||
       path.startsWith("/feeds/");
-    const response = await (isReadOnlyDiscovery
-      ? readOnlyDiscoveryCors
-      : corsMiddleware)(c, next);
+    let response: Response | void;
+    if (
+      isPublicMcp &&
+      !isAllowedPublicMcpOrigin(c.req.header("origin") ?? null)
+    ) {
+      // Do not let generic CORS short-circuit an invalid MCP Origin. The MCP
+      // route returns its protocol-shaped 403 for both POST and preflight.
+      await next();
+      c.header("Vary", "Origin", { append: true });
+      response = c.res;
+    } else {
+      response = await (isPublicMcp
+        ? publicMcpCors
+        : isReadOnlyDiscovery
+          ? readOnlyDiscoveryCors
+          : corsMiddleware)(c, next);
+    }
 
     // Hono's CORS middleware answers a valid preflight immediately, before
     // downstream response framing runs. Preserve that short circuit while
