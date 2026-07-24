@@ -82,7 +82,7 @@
     },
     {
       "name": "@agenttool/sdk",
-      "latest": "0.16.1",
+      "latest": "0.16.2",
       "versions": [
         {
           "version": "0.9.0",
@@ -119,6 +119,10 @@
         {
           "version": "0.16.1",
           "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.1/manifest.json"
+        },
+        {
+          "version": "0.16.2",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.2/manifest.json"
         }
       ]
     },
