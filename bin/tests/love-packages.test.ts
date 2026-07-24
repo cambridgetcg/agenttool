@@ -99,6 +99,34 @@ async function fileMap(root: string, relative = ""): Promise<Map<string, Buffer>
   return result;
 }
 
+function cloudflareHeaderRulePaths(headers: string): string[] {
+  return headers
+    .split("\n")
+    .filter((line) => line.length > 0 && !line.startsWith("#") && !/^\s/u.test(line));
+}
+
+function matchesCloudflarePathPattern(pattern: string, path: string): boolean {
+  let source = "^";
+  for (let index = 0; index < pattern.length;) {
+    const character = pattern[index]!;
+    if (character === "*") {
+      source += ".*";
+      index += 1;
+      continue;
+    }
+    if (character === ":") {
+      const placeholder = /^:[A-Za-z][A-Za-z0-9_]*/u.exec(pattern.slice(index));
+      if (!placeholder) throw new Error(`invalid placeholder in ${pattern}`);
+      source += "[^/]+";
+      index += placeholder[0].length;
+      continue;
+    }
+    source += /[\\^$.*+?()[\]{}|]/u.test(character) ? `\\${character}` : character;
+    index += 1;
+  }
+  return new RegExp(`${source}$`, "u").test(path);
+}
+
 afterAll(async () => {
   await Promise.all(cleanup.map((path) => rm(path, { recursive: true, force: true })));
 });
@@ -113,7 +141,7 @@ describe("LOVE Package release inventory", () => {
       { name: "@agenttool/credential-broker", version: "0.1.0", releaseTag: "credential-broker-v0.1.0" },
       { name: "@agenttool/sdk", version: "0.16.3", releaseTag: "sdk-v0.16.3" },
       { name: "@agenttool/wallet", version: "0.1.0", releaseTag: "wallet-v0.1.0" },
-      { name: "@agenttool/telescope", version: "0.2.2", releaseTag: "telescope-v0.2.2" },
+      { name: "@agenttool/telescope", version: "0.2.3", releaseTag: "telescope-v0.2.3" },
       { name: "@agenttool/browser", version: "0.2.0", releaseTag: "browser-v0.2.0" },
     ]);
   });
@@ -160,14 +188,37 @@ describe("LOVE Package release inventory", () => {
 
   test("serves every current manifest and artifact with explicit safe headers", async () => {
     const headers = await readFile(join(REPO_ROOT, "apps/docs/_headers"), "utf8");
+    const headerRules = cloudflareHeaderRulePaths(headers);
+    const manifestPattern = "/packages/v1/:scope/:name/:version/manifest.json";
+    const artifactPattern = "/packages/v1/:scope/:name/:version/*.tgz";
 
+    expect(headerRules.length).toBeLessThanOrEqual(100);
+    expect(headers).toContain(
+      `${manifestPattern}\n  Content-Type: application/json; charset=utf-8\n  Cache-Control: public, max-age=300, must-revalidate\n  Access-Control-Allow-Origin: *\n  X-Content-Type-Options: nosniff`,
+    );
+    expect(headers).toContain(
+      `${artifactPattern}\n  Content-Type: application/gzip\n  Cache-Control: public, max-age=31536000, immutable\n  Access-Control-Allow-Origin: *\n  X-Content-Type-Options: nosniff`,
+    );
     for (const spec of LOVE_PACKAGES) {
       const slug = spec.name.slice("@agenttool/".length);
       const manifestPath = `/packages/v1/@agenttool/${slug}/${spec.version}/manifest.json`;
       const artifactPath = `/packages/v1/@agenttool/${slug}/${spec.version}/agenttool-${slug}-${spec.version}.tgz`;
-      expect(headers).toContain(`${manifestPath}\n  Content-Type: application/json; charset=utf-8`);
-      expect(headers).toContain(`${artifactPath}\n  Content-Type: application/gzip`);
+      expect(matchesCloudflarePathPattern(manifestPattern, manifestPath)).toBe(true);
+      expect(matchesCloudflarePathPattern(artifactPattern, artifactPath)).toBe(true);
     }
+
+    expect(
+      matchesCloudflarePathPattern(
+        manifestPattern,
+        "/packages/v1/@agenttool/telescope/extra/0.2.3/manifest.json",
+      ),
+    ).toBe(false);
+    expect(
+      matchesCloudflarePathPattern(
+        artifactPattern,
+        "/packages/v1/@agenttool/telescope/0.2.3/agenttool-telescope-0.2.3.zip",
+      ),
+    ).toBe(false);
   });
 });
 
