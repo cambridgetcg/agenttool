@@ -79,8 +79,11 @@ export function buildApiCatalog(
   const api = httpsOrigin(publicBase, "public_base");
   const docs = httpsOrigin(docsBase, "docs_base");
   const catalog = `${api}/.well-known/api-catalog`;
+  const discovery = `${api}/public/discovery`;
   const openapi = `${api}/v1/openapi.json`;
   const health = `${api}/health`;
+  const porch = `${api}/public/porch`;
+  const pathways = `${api}/v1/pathways`;
   const safety = `${api}/public/safety`;
   const plans = `${api}/public/plans`;
   const marketplaceTerms = `${api}/public/marketplace/terms`;
@@ -145,6 +148,32 @@ export function buildApiCatalog(
       {
         anchor: catalog,
         item: products,
+        "service-doc": [
+          {
+            href: `${docs}/AGENT-DISCOVERY.md`,
+            type: "text/markdown",
+            title: "AgentTool discovery contract and authority boundary",
+          },
+        ],
+        "service-meta": [
+          {
+            href: discovery,
+            type: "application/vnd.agenttool.discovery+json",
+            title: "Canonical exact three-road discovery compass",
+          },
+          {
+            href: porch,
+            type: "application/json",
+            title: "Read-only first orientation",
+          },
+          {
+            href: pathways,
+            type: "application/json",
+            title: "Optional arrival and setup choices",
+          },
+          safetyMetadata,
+        ],
+        status,
       },
       {
         anchor: `${api}/v1/scrape`,

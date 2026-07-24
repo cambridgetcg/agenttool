@@ -72,10 +72,18 @@ describe("browser-visible machine recovery headers", () => {
     const app = new Hono();
     app.use("*", apiCors());
     app.get("/.well-known/webfinger", (c) => c.json({ ok: true }));
+    app.get("/.well-known/api-catalog", (c) => c.json({ ok: true }));
+    app.get("/public/discovery", (c) => c.json({ ok: true }));
+    app.get("/public/porch", (c) => c.json({ ok: true }));
+    app.get("/v1/pathways", (c) => c.json({ ok: true }));
     app.get("/feeds/offers.json", (c) => c.json({ ok: true }));
 
     for (const path of [
       "/.well-known/webfinger",
+      "/.well-known/api-catalog",
+      "/public/discovery",
+      "/public/porch",
+      "/v1/pathways",
       "/feeds/offers.json",
     ]) {
       const response = await app.request(path, {

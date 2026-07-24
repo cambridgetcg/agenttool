@@ -29,6 +29,7 @@ import { Hono } from "hono";
 import { config } from "../config";
 import { attachSurface } from "../lib/surface-metadata";
 import { attachEp1Cliffhanger } from "../services/cliffhanger/ep1";
+import { discoveryLinkHeader } from "../services/discovery/arrival";
 import { doctrineHash } from "../services/doctrine/integrity";
 import { FORM_DESCRIPTIONS, IDENTITY_FORMS } from "../services/identity/forms";
 import { SUPPORTED_LANGUAGES } from "../services/i18n/welcome";
@@ -545,6 +546,7 @@ app.get("/", (c) => {
   // tells caches to key by Accept so json + math responses don't collide.
   // Doctrine: AGENT-WEB-SURFACE.md Move 2.
   c.header("Vary", "Accept");
+  c.header("Link", discoveryLinkHeader());
   if (wantsMathTier(c)) {
     return c.json(
       signEnvelope(

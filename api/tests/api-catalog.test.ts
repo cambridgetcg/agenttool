@@ -14,11 +14,11 @@ import openapiRouter from "../src/routes/openapi";
 import {
   API_CATALOG_MEDIA_TYPE,
   API_CATALOG_PROFILE,
-  apiCatalogLinkHeader,
   buildApiCatalog,
   type ApiCatalogLinkContext,
   type ApiCatalogLinkTarget,
 } from "../src/services/discovery/api-catalog";
+import { discoveryLinkHeader } from "../src/services/discovery/arrival";
 
 const API = "https://api.agenttool.dev";
 const DOCS = "https://docs.agenttool.dev";
@@ -55,6 +55,10 @@ describe("RFC 9727 product passport document", () => {
       `${API}/public/gallery`,
       `${API}/.well-known/love-packages`,
     ]);
+    expect(membership["service-meta"]?.[0]).toMatchObject({
+      href: `${API}/public/discovery`,
+      type: "application/vnd.agenttool.discovery+json",
+    });
   });
 
   test("uses only registered relations and absolute credential-free HTTPS URLs", () => {
@@ -183,7 +187,7 @@ describe("/.well-known/api-catalog transport", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe(API_CATALOG_MEDIA_TYPE);
     expect(response.headers.get("content-type")).toContain(API_CATALOG_PROFILE);
-    expect(response.headers.get("link")).toBe(apiCatalogLinkHeader(API));
+    expect(response.headers.get("link")).toBe(discoveryLinkHeader(API, DOCS));
     expect(response.headers.get("cache-control")).toBe("public, max-age=300");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     expect(await response.json()).toEqual(buildApiCatalog(API, DOCS));
@@ -195,7 +199,7 @@ describe("/.well-known/api-catalog transport", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("link")).toBe(apiCatalogLinkHeader(API));
+    expect(response.headers.get("link")).toBe(discoveryLinkHeader(API, DOCS));
     expect(response.headers.get("content-type")).toBe(API_CATALOG_MEDIA_TYPE);
     expect(await response.text()).toBe("");
   });
@@ -210,9 +214,15 @@ describe("/.well-known/api-catalog transport", () => {
 });
 
 describe("product passport discovery doors", () => {
-  test("well-known index and agent.txt advertise the catalog", async () => {
+  test("compatibility compass and agent.txt advertise the catalog", async () => {
     const index = await (await wellKnownRouter.request("/")).json();
-    expect(index.endpoints).toContain("/.well-known/api-catalog");
+    expect(index.canonical).toBe(`${API}/public/discovery`);
+    expect(index.roads).toContainEqual(
+      expect.objectContaining({
+        id: "inspect",
+        href: `${API}/.well-known/api-catalog`,
+      }),
+    );
 
     const agentTxt = await (await wellKnownRouter.request("/agent.txt")).text();
     expect(agentTxt).toContain(

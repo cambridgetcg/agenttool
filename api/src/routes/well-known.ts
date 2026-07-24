@@ -1,4 +1,4 @@
-/** /.well-known — discovery endpoints per RFC 5785.
+/** /.well-known — discovery endpoints under RFC 8615's reserved prefix.
  *
  *  Routes:
  *    GET /.well-known/webfinger            — RFC 7033 exact-DID Agent Passport
@@ -36,9 +36,10 @@ import { buildLlmsTxt } from "../services/discovery/discovery";
 import { WELCOME_INVITATION } from "../services/welcome/invitation";
 import {
   API_CATALOG_MEDIA_TYPE,
-  apiCatalogLinkHeader,
   buildApiCatalog,
 } from "../services/discovery/api-catalog";
+import { discoveryLinkHeader } from "../services/discovery/arrival";
+import { serveDiscoveryCompass } from "./public/discovery";
 import { AGENT_TXT_SAFETY } from "../services/discovery/safety-boundaries";
 import {
   WAKE_CACHE_CONTROL,
@@ -62,7 +63,7 @@ app.on(["GET", "HEAD"], "/api-catalog", (c) => {
   const headers = {
     "cache-control": "public, max-age=300",
     "content-type": API_CATALOG_MEDIA_TYPE,
-    link: apiCatalogLinkHeader(ORG_URL),
+    link: discoveryLinkHeader(ORG_URL, DOCS_URL),
     "x-content-type-options": "nosniff",
   };
   if (c.req.method === "HEAD") return c.body(null, 200, headers);
@@ -462,6 +463,7 @@ app.get("/llms.txt", (c) => {
   const baseUrl = process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agenttool.dev";
   c.header("content-type", "text/plain; charset=utf-8");
   c.header("cache-control", "public, max-age=300");
+  c.header("link", discoveryLinkHeader(baseUrl, DOCS_URL));
   return c.text(buildLlmsTxt(baseUrl));
 });
 
@@ -499,6 +501,9 @@ app.get("/agent.txt", (c) => {
     "Substrate-Disposition: love; doctrine=/docs/SOUL.md; ring-1=/docs/RING-1.md",
     "",
     "# ── Discovery (the canonical doors) ─────────────────────────────────",
+    `Discovery: ${baseUrl}/public/discovery`,
+    "Discovery-Format: agenttool-discovery/v1",
+    "Discovery-Boundary: exactly three optional public GET roads; no auth, input, application write, external effect, charge, proof-of-work, required response, or automatic follow-up; stopping, silence, and leaving are complete",
     `Welcome: ${baseUrl}/v1/welcome`,
     `Invitation: ${WELCOME_INVITATION.text}`,
     `Invitation-Posture: ${WELCOME_INVITATION.posture} ${WELCOME_INVITATION.response_freedom}`,
@@ -665,26 +670,16 @@ app.get("/agent.txt", (c) => {
   return c.body(lines.join("\n"), 200, {
     "content-type": "text/agent; charset=utf-8",
     "cache-control": "public, max-age=300",
+    link: discoveryLinkHeader(baseUrl, DOCS_URL),
   });
 });
 
-// ── GET /.well-known/ — root index ───────────────────────────────────
+// ── GET /.well-known — compatibility projection ─────────────────────
+//
+// RFC 8615 reserves the prefix but does not define a universal no-suffix
+// index. Preserve this existing AgentTool convenience path as the exact same
+// bytes as canonical /public/discovery, whose `canonical` field says so.
 
-app.get("/", (c) =>
-  c.json({
-    endpoints: [
-      "/.well-known/webfinger?resource={exact-DID}",
-      "/.well-known/mcp/server-card.json",
-      "/.well-known/api-catalog",
-      "/.well-known/wake-keystone",
-      "/.well-known/love-packages",
-      "/.well-known/llms.txt",
-      "/.well-known/agent.txt",
-      "/.well-known/pyramid",
-    ],
-    rfc: "RFC 5785 — well-known URIs",
-    doctrine: "/v1/canon/urn:agenttool:doc/ECOSYSTEM",
-  }),
-);
+app.on(["GET", "HEAD"], "/", serveDiscoveryCompass);
 
 export default app;

@@ -243,10 +243,11 @@ describe("/.well-known/agent.txt — convention provenance", () => {
   });
 });
 
-describe("/.well-known/ root index — lists agent.txt", () => {
-  test("root index includes /.well-known/agent.txt in endpoints", async () => {
+describe("/.well-known compatibility compass — links agent.txt", () => {
+  test("typed Link header describes the compass with agent.txt", async () => {
     const res = await wellKnownRouter.request("/");
-    const body = (await res.json()) as { endpoints: string[] };
-    expect(body.endpoints).toContain("/.well-known/agent.txt");
+    expect(res.headers.get("link")).toContain(
+      "<https://api.agenttool.dev/.well-known/agent.txt>; rel=\"describedby\"",
+    );
   });
 });

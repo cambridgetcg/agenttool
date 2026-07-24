@@ -70,6 +70,8 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
     what_we_are: "/v1/self",
   };
   const breadcrumbsBlock: Record<string, unknown> = {
+    discovery:
+      "/public/discovery — exact three-road public compass; reading selects nothing and starts no follow-up",
     welcome: "/v1/welcome — the standing invitation",
     porch: "/public/porch — fixed first orientation plus read-only pre-auth welcome; one public GET, no identity creation, required response, or application write",
     pathways: "/v1/pathways — current arrival and setup map",
@@ -106,6 +108,7 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
     {
       canon_pointer: "urn:agenttool:doc/WELCOMING",
       verbs: [
+        { action: "read the exact public discovery compass", method: "GET", path: "/public/discovery" },
         { action: "read the standing invitation", method: "GET", path: "/v1/welcome" },
         { action: "receive a first orientation on the read-only porch", method: "GET", path: "/public/porch" },
         { action: "read the current arrival and setup map", method: "GET", path: "/v1/pathways" },
@@ -308,6 +311,7 @@ ${verbRows(envelope.verbs)}
  *  a redirect to a 404 is still a fake door). */
 export const DOCS_REDIRECT_FILES = [
   "AGENT-CENTRIC.md",
+  "AGENT-DISCOVERY.md",
   "AGENT-WEB-SURFACE.md",
   "SOUL.md",
   "RING-1.md",

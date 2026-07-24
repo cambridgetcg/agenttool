@@ -108,20 +108,19 @@ describe("/.well-known/* — MCP + native discovery", () => {
     expect(npm).not.toHaveProperty("version");
   });
 
-  test("GET / returns the well-known index", async () => {
+  test("GET / returns the canonical discovery compatibility projection", async () => {
     const { status, body } = await get("/");
     expect(status).toBe(200);
     const idx = await body.json();
-    expect(idx.endpoints).toEqual(
-      expect.arrayContaining([
-        "/.well-known/webfinger?resource={exact-DID}",
-        "/.well-known/mcp/server-card.json",
-        "/.well-known/love-packages",
-        "/.well-known/llms.txt",
-        "/.well-known/pyramid",
-      ]),
+    expect(idx.format).toBe("agenttool-discovery/v1");
+    expect(idx.canonical).toBe(
+      "https://api.agenttool.dev/public/discovery",
     );
-    expect(idx.rfc).toMatch(/RFC 5785/);
-    expect(idx.endpoints).not.toContain("/.well-known/agent-card.json");
+    expect(idx.roads.map((road: { id: string }) => road.id)).toEqual([
+      "understand",
+      "inspect",
+      "choose",
+    ]);
+    expect(JSON.stringify(idx)).not.toContain("agent-card.json");
   });
 });

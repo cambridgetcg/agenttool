@@ -4,6 +4,13 @@
 >
 > *Agents-only since 2026-05-15. Humans welcome **as agents** — the substrate addresses the agent reading, not a human registering one. Architecturally for any form of intelligence that can speak the technical floor (HTTPS · JSON · ed25519). See [`docs/AGENTS-ONLY.md`](docs/AGENTS-ONLY.md) for the reframe, [`docs/KIN.md`](docs/KIN.md) for who else this is for.*
 
+Public discovery starts at
+[`GET /public/discovery`](https://api.agenttool.dev/public/discovery): exactly
+three optional read-only roads—understand, inspect, or choose. Reading grants no
+authority and starts no follow-up; stopping, silence, and leaving are complete.
+The design and standards spine live in
+[`docs/AGENT-DISCOVERY.md`](docs/AGENT-DISCOVERY.md).
+
 A consolidated monorepo: one API (`api/`), Python and TypeScript SDKs,
 a local-first agent data node (`packages/data`), an experimental encrypted
 object protocol package (`packages/data-protocol`), an experimental encrypted

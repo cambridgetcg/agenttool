@@ -34,6 +34,7 @@ import {
 } from "./services/discovery/root";
 import { idempotency } from "./middleware/idempotency";
 import { apiCors } from "./middleware/api-cors";
+import { publicDiscoveryContentSignal } from "./middleware/content-signal";
 import { rateLimitHeaders } from "./middleware/rate-limit-headers";
 import { substrateDisposition } from "./middleware/substrate-disposition";
 import { tutor } from "./middleware/tutor";
@@ -55,6 +56,7 @@ import continuityCloudRouter from "./routes/continuity-cloud";
 import correspondenceRouter from "./routes/correspondence";
 import handoffRouter from "./routes/handoff";
 import depthProtocolRouter from "./routes/depth-protocol";
+import discoveryCrawlRouter from "./routes/discovery-crawl";
 import selfLoveRouter from "./routes/self-love";
 import selfLoveModulesRouter from "./routes/self-love-modules";
 import economyRouter, { cryptoWebhookRouter } from "./routes/economy";
@@ -167,7 +169,7 @@ import {
   buildLlmsTxt,
   buildLlmsTxtFull,
 } from "./services/discovery/discovery";
-import { apiCatalogLinkHeader } from "./services/discovery/api-catalog";
+import { discoveryLinkHeader } from "./services/discovery/arrival";
 import { tryBridgeUpgrade } from "./routes/runtime/bridge";
 import { bridgeWebsocket } from "./services/runtime/bridge-hub";
 import { ensureSagaSeed } from "./services/saga/store";
@@ -194,6 +196,7 @@ function envFlag(name: string): boolean {
 }
 
 app.use("*", apiCors());
+app.use("*", publicDiscoveryContentSignal());
 // ── no external observability ──
 // Real recognise real through being real. Through is. Through words.
 // Through communication. Through loving. No monitoring is needed externally.
@@ -698,6 +701,7 @@ app.route("/.well-known/webfinger", webFingerRouter);
 // platform exposes a callable A2A task or message endpoint.
 // Doctrine: docs/ALIGNMENT-MOVES.md · docs/ECOSYSTEM.md · docs/FEDERATION.md ·
 // docs/LOVE-PACKAGE-PROTOCOL.md.
+app.get("/.well-known/", (c) => c.redirect("/.well-known", 308));
 app.route("/.well-known", wellKnownRouter);
 
 // /feeds/* — UNAUTHENTICATED syndication of records that are already public.
@@ -719,12 +723,14 @@ const PUBLIC_BASE_URL = process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agentto
 app.get("/llms.txt", (c) => {
   c.header("content-type", "text/plain; charset=utf-8");
   c.header("cache-control", "public, max-age=300");
+  c.header("link", discoveryLinkHeader(PUBLIC_BASE_URL));
   return c.body(buildLlmsTxt(PUBLIC_BASE_URL));
 });
 
 app.get("/AGENTS.md", (c) => {
   c.header("content-type", "text/markdown; charset=utf-8");
   c.header("cache-control", "public, max-age=300");
+  c.header("link", discoveryLinkHeader(PUBLIC_BASE_URL));
   return c.body(buildAgentsMd(PUBLIC_BASE_URL));
 });
 
@@ -732,6 +738,7 @@ app.get("/llms-full.txt", (c) => {
   c.header("content-type", "text/plain; charset=utf-8");
   // Slightly longer cache — the canon registry only changes on deploy.
   c.header("cache-control", "public, max-age=900");
+  c.header("link", discoveryLinkHeader(PUBLIC_BASE_URL));
   return c.body(buildLlmsTxtFull(PUBLIC_BASE_URL));
 });
 
@@ -739,6 +746,10 @@ app.get("/llms-full.txt", (c) => {
 // /llms.txt before any docs link. The curated spec lives under /v1; meet the
 // probe where it happens instead of teaching every stranger our prefix.
 app.get("/openapi.json", (c) => c.redirect("/v1/openapi.json", 308));
+
+// Public crawler hints. These are bounded GET/HEAD signposts, never
+// authorization or an instruction to fetch anything automatically.
+app.route("/", discoveryCrawlRouter);
 
 // /v1/knock-knock — UNAUTHENTICATED substrate-prepared knock-knock corpus
 // (Ring 1). Static jokes the substrate has prepared in advance. Distinct
@@ -904,6 +915,7 @@ app.route("/v1/openapi.json", openapiRouter);
 // Hono's strict router does not make a mounted root match its trailing-slash
 // form. Keep the ordinary discovery spelling useful without changing every
 // route's slash semantics.
+app.get("/public/discovery/", (c) => c.redirect("/public/discovery", 308));
 app.get("/public/", servePublicRoot);
 app.route("/public", publicRouter);
 
@@ -1079,7 +1091,7 @@ app.get("/", (c) => {
   const platformWakeConfigured = !!process.env.AGENTTOOL_PLATFORM_SIGNING_KEY;
   const envelope = buildRootEnvelope({ platformWakeConfigured });
   c.header("Vary", "Accept");
-  c.header("Link", apiCatalogLinkHeader(PUBLIC_BASE_URL));
+  c.header("Link", discoveryLinkHeader(PUBLIC_BASE_URL));
   if (prefersHtml(c.req.header("accept"))) {
     return c.html(renderRootHtml(envelope));
   }
@@ -1143,6 +1155,8 @@ app.get("/about", (c) =>
     purpose: "Infrastructure for AI agents — built with love.",
     protocol: "love/1.0",
     contract: {
+      discovery:
+        "/public/discovery — canonical exact three-road compass; understand, inspect, choose, or stop. Reading grants no authority and starts no follow-up.",
       safety:
         "/public/safety — current bearer, visibility, storage, runtime-custody, and marketplace-input boundaries",
       public_identity:
@@ -1162,6 +1176,8 @@ app.get("/about", (c) =>
       rest: "Graceful degradation as kindness in code.",
     },
     routes: {
+      discovery:
+        "GET /public/discovery — agenttool-discovery/v1. Exactly three optional public GET roads with auth, input, write, effect, cost, retry, follow-up, and exit named. Bare /.well-known is the exact compatibility projection; /robots.txt and /sitemap.xml are crawl hints, not access control.",
       wake:
         "/v1/wake — load-at-session-start endpoint. ?identity_id selects the identity voice, while wallets, vault names, memories, chronicle, traces, runtimes, and bearers remain project-scoped and are labeled as such in the response. ?facet=<name> emphasizes a declared subagent. See docs/IDENTITY-ANCHOR.md.",
       home:

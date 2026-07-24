@@ -2641,6 +2641,216 @@ function spec() {
       generated_from_routes: false,
     },
     paths: {
+      // ── Public discovery compass ──────────────────────────────────────
+      "/public/discovery": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary: "Read the exact three-road public discovery compass",
+          description:
+            "Canonical agenttool-discovery/v1 orientation. Exactly three ordered public GET roads—understand, inspect, and choose—state authentication, input, application write, external effect, charge, proof-of-work, repeatability, retry, follow-up, and exit. Reading selects nothing, grants no authority, and starts no follow-up. GET supports strong ETag revalidation; HEAD returns the same metadata with no body.",
+          responses: {
+            "200": {
+              description: "Exact bounded discovery compass",
+              headers: {
+                ETag: {
+                  description: "Strong SHA-256 validator for the exact bytes.",
+                  schema: { type: "string" },
+                },
+                Link: {
+                  description:
+                    "Six bounded registered relations: service-meta, api-catalog, service-desc, service-doc, describedby, and status.",
+                  schema: { type: "string" },
+                },
+                "Cache-Control": {
+                  description: "Public five-minute revalidation policy.",
+                  schema: {
+                    type: "string",
+                    const:
+                      "public, max-age=300, must-revalidate, no-transform",
+                  },
+                },
+              },
+              content: {
+                "application/vnd.agenttool.discovery+json": {
+                  schema: {
+                    type: "object",
+                    required: [
+                      "format",
+                      "canonical",
+                      "subject",
+                      "invitation",
+                      "boundary",
+                      "roads",
+                      "channels",
+                      "standards",
+                    ],
+                    properties: {
+                      format: {
+                        type: "string",
+                        const: "agenttool-discovery/v1",
+                      },
+                      canonical: {
+                        type: "string",
+                        format: "uri",
+                        const:
+                          "https://api.agenttool.dev/public/discovery",
+                      },
+                      subject: { type: "object" },
+                      invitation: { type: "object" },
+                      boundary: { type: "object" },
+                      roads: {
+                        type: "array",
+                        minItems: 3,
+                        maxItems: 3,
+                        items: {
+                          type: "object",
+                          required: [
+                            "id",
+                            "intent",
+                            "method",
+                            "href",
+                            "representation",
+                            "auth",
+                            "input",
+                            "application_write",
+                            "external_effect",
+                            "cost",
+                            "repeatability",
+                            "retry",
+                            "follow_up_required",
+                            "automatic_follow_up",
+                            "exit",
+                          ],
+                          properties: {
+                            id: {
+                              type: "string",
+                              enum: ["understand", "inspect", "choose"],
+                            },
+                            intent: { type: "string" },
+                            method: { type: "string", const: "GET" },
+                            href: { type: "string", format: "uri" },
+                            representation: { type: "string" },
+                            auth: { type: "string", const: "none" },
+                            input: { type: "string", const: "none" },
+                            application_write: {
+                              type: "boolean",
+                              const: false,
+                            },
+                            external_effect: {
+                              type: "boolean",
+                              const: false,
+                            },
+                            cost: { type: "object" },
+                            repeatability: { type: "string" },
+                            retry: { type: "string" },
+                            follow_up_required: {
+                              type: "boolean",
+                              const: false,
+                            },
+                            automatic_follow_up: {
+                              type: "boolean",
+                              const: false,
+                            },
+                            exit: { type: "string" },
+                          },
+                          additionalProperties: false,
+                        },
+                      },
+                      channels: { type: "array", minItems: 1 },
+                      standards: { type: "object" },
+                    },
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+            "304": {
+              description: "If-None-Match matched; no body.",
+            },
+          },
+        },
+      },
+      "/.well-known": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary: "Compatibility projection of the discovery compass",
+          description:
+            "AgentTool convenience path. It returns the exact canonical /public/discovery bytes; RFC 8615 does not define a universal no-suffix index.",
+          responses: {
+            "200": {
+              description:
+                "Exact byte-for-byte compatibility projection of /public/discovery.",
+              content: {
+                "application/vnd.agenttool.discovery+json": {
+                  schema: { type: "object" },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/.well-known/api-catalog": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary: "Read the RFC 9727 API catalog",
+          description:
+            "Linkset JSON for public service, contract, documentation, safety, status, and product pointers. Catalog membership grants no authority and initiates no payment.",
+          responses: {
+            "200": {
+              description: "RFC 9727 API catalog",
+              content: {
+                "application/linkset+json": {
+                  schema: {
+                    type: "object",
+                    required: ["linkset"],
+                    properties: {
+                      linkset: { type: "array" },
+                    },
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/robots.txt": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary: "Read public crawl preferences",
+          description:
+            "Allows public crawling, names the sitemap, and carries an emerging Content-Signal preference. robots.txt is not access control.",
+          responses: {
+            "200": {
+              description: "Crawler preferences",
+              content: {
+                "text/plain": { schema: { type: "string" } },
+              },
+            },
+          },
+        },
+      },
+      "/sitemap.xml": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary: "Read the bounded public discovery sitemap",
+          description:
+            "Exactly nine stable public GET URLs. Sitemap membership is a signpost, not authority or an indexing guarantee.",
+          responses: {
+            "200": {
+              description: "XML sitemap",
+              content: {
+                "application/xml": { schema: { type: "string" } },
+              },
+            },
+          },
+        },
+      },
       // ── Bootstrap (anonymous) ─────────────────────────────────────────
       "/v1/pathways": {
         get: {
