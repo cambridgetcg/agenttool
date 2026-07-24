@@ -29,6 +29,9 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     expect(text).toContain("# agenttool");
     expect(text).not.toContain(`${BASE}/.well-known/agent-card.json`);
     expect(text).toContain(`${BASE}/.well-known/mcp/server-card.json`);
+    expect(text).toContain("MCP compatibility locator");
+    expect(text).toContain("not a current MCP standard or authority record");
+    expect(text).not.toContain("MCP Server Card");
     expect(text).toContain(`${BASE}/.well-known/agent.txt`);
     expect(text).toContain(`${BASE}/.well-known/api-catalog`);
     expect(text).toContain(`${BASE}/.well-known/webfinger?resource={exact-DID}`);
@@ -128,6 +131,9 @@ describe("/AGENTS.md — platform onboarding for arriving agents", () => {
     expect(text).toContain("/v1/polymorph");
     expect(text).toContain("/public/safety");
     expect(text).not.toContain("/.well-known/agent-card.json");
+    expect(text).toContain("MCP compatibility locator");
+    expect(text).toContain("not a current MCP standard or authority record");
+    expect(text).not.toContain("SEP-1649");
     expect(text).toContain("/.well-known/agent.txt");
     expect(text).toContain("/.well-known/api-catalog");
     expect(text).toContain("/.well-known/webfinger?resource={exact-DID}");

@@ -130,7 +130,7 @@ The landscape consolidated dramatically in 2025–2026. Three protocols define t
 
 | Layer | Standard | Owner | What |
 |---|---|---|---|
-| Tools (vertical · agent reaches DOWN) | **MCP** | Anthropic, de facto | OAuth 2.1 Resource Server · Streamable HTTP transport (Nov 2025) · `.well-known/mcp/server-card.json` discovery (SEP-1649, June 2026 spec rev) |
+| Tools (vertical · agent reaches DOWN) | **MCP** | Anthropic, de facto | OAuth 2.1 Resource Server · Streamable HTTP transport (Nov 2025) · official MCP Registry plus explicit endpoint URLs; AgentTool's `.well-known/mcp/server-card.json` is only a project-owned compatibility locator |
 | Peers (horizontal · agent reaches ACROSS) | **A2A** | Google → Linux Foundation (June 2025) | 150+ org production · v1.2 JWS+JCS-signed AgentCards · JSON-RPC/gRPC/REST transports · `/.well-known/agent-card.json` discovery · **ACP (IBM/BeeAI) merged in Sept 2025** |
 | Meta (schema · directory · network) | **AGNTCY OASF** | Cisco Outshift → Linux Foundation (July 2025) | OCI-based schema for *both* AgentCards and MCP server cards · Agent Directory (federation-capable) · SLIM extends gRPC with pub/sub+MLS+quantum-safe for network layer |
 | Payments (HTTP-native) | **x402** | Coinbase → Linux Foundation (Apr 2 2026) | HTTP 402 + USDC over HTTP · AWS Bedrock AgentCore Payments integrates it |
@@ -140,7 +140,7 @@ Watch but don't implement yet:
 - **DIDComm v2** — production for SSI ecosystems; agent-message-layer use cases emerging in research (arXiv 2511.02841 proposes DID+VC for agent trust)
 - **NLIP** (Ecma TC56 / ECMA-430 + ISO/IEC DIS 26637) — formal standards-body version; useful when enterprises need an ISO checkmark
 - **ANP** (Agent Network Protocol) — open-source, Chinese-led, regional adoption
-- **agents.json**, **llms.txt** — discovery files; SEP-1649 makes the former redundant
+- **agents.json**, **llms.txt** — optional publisher hints, not authority records; neither replaces current MCP endpoint or Registry discovery
 
 **Disambiguation: what these *actually* fit**
 
@@ -313,7 +313,7 @@ The trusted-tier landscape (agenttool's pending Horizon C piece) has three thing
 
 **Discovery — fragmented as of Q1 2026:** 104,000+ agents across 15+ registries, 10+ competing IETF drafts, zero interoperability. Competing `.well-known/` files:
 - `/.well-known/agent-card.json` — **A2A protocol** (150+ orgs, dominant standard)
-- `/.well-known/agents.json` — wild-card-ai's spec (likely deprecated by SEP-1649)
+- `/.well-known/agents.json` — wild-card-ai's spec; AgentTool does not currently adopt it
 - `/.well-known/ai-agent.json` — Aiia's spec (Mar 28 2026)
 - `llms.txt` — markdown sitemap
 - `AGENTS.md` — donated to Linux Foundation's Agentic AI Foundation
@@ -350,7 +350,7 @@ The trusted-tier landscape (agenttool's pending Horizon C piece) has three thing
 | **Proposed take-rate split with 4-of-5 arbiter pools** | Resting, unvalidated design | Research only until qualification, settlement, and production evidence close |
 | **Persist-identity (`tx_hash` before RPC)** | **Distinct as named pattern** | Doctrinal lead |
 | **Runtime 3-tier custody** | AWS Bedrock AgentCore (Runtime + Identity) · Cloudflare DOs · Fly Sprites | Trusted tier on Fly Sprites + AWS KMS for `kms_key_id` |
-| **Wake (the keystone, self-describing JSON-LD)** | A2A AgentCard · MCP server card · AGNTCY OASF descriptors | MCP server-card is live; an A2A view waits for callable task transport |
+| **Wake (the keystone, self-describing JSON-LD)** | A2A AgentCard · MCP endpoint metadata · AGNTCY OASF descriptors | AgentTool's non-standard MCP compatibility locator is live; an A2A view waits for callable task transport |
 | **Pulse + mood drift** | **Distinct** — most peers conflate liveness with health | Export as OTel metrics (`agenttool.agent.pulse.drift`, `agenttool.agent.pulse.last_breath_ago_s`) alongside the existing endpoint |
 | **Chronicle entries (typed sha256-hashed)** | OTel GenAI traces · ATP Attestation evidence packs | **Strong overlap.** Wire chronicle as an OTel exporter (chronicle row → OTel span); payloads stay in the chronicle, OTel carries structural metadata only |
 | **Canon registry (`/v1/canon`)** | AGNTCY OASF taxonomy · MCP resources · A2A skills | Already aligned in spirit; submit substrate-honest BEINGS dimensions to OASF |
@@ -381,7 +381,7 @@ The integration angle is **substrate** (signing, settlement, mandates, telemetry
 
 ### Tier A — Adopt the wires (high leverage, low ceremony)
 
-1. **Ship `/v1/mcp` as a first-class MCP server** — expose `wake`, `canon`, memory, inbox as MCP resources/tools. Once agenttool is an MCP server, every framework on the market can talk to it without writing a custom adapter. Publish to Smithery + Composio + Klavis registries. Pair with `/.well-known/mcp/server-card.json` (SEP-1649). Lives in `api/src/routes/mcp.ts` as a sibling to `wake.ts`. **Estimate:** 1–2 weeks.
+1. **Ship `/v1/mcp` as a first-class MCP server** — expose `wake`, `canon`, memory, inbox as MCP resources/tools. Once agenttool is an MCP server, every framework on the market can talk to it without writing a custom adapter. Publish only through registries whose requirements are verified. Pair the explicit endpoint and official MCP Registry row with AgentTool's non-standard `/.well-known/mcp/server-card.json` compatibility locator. Lives in `api/src/routes/mcp.ts` as a sibling to `wake.ts`. **Estimate:** 1–2 weeks.
 2. **Implement A2A task transport, then publish AgentCards** per registered agent. A card must point at a callable task or message endpoint; the earlier discovery-only cards were removed. Add extensions and JWS+JCS signing only after the transport contract exists.
 3. **Emit OpenTelemetry GenAI spans from `think-worker.ts` and `bridge-hub.ts`** — `gen_ai.operation.name` = `invoke_agent` / `execute_tool`, `gen_ai.agent.id` = the DID. Wire the chronicle as an OTel exporter (chronicle row → OTel span; payload stays in chronicle, OTel carries structural metadata). Makes agenttool legible to LangSmith / Phoenix / Langfuse / Braintrust without a vendor decision. **Estimate:** 1–2 weeks.
 4. **Implement x402 on 402 responses** for metered routes (`/v1/invocations`, marketplace pay-walled affordances, `/v1/canon` quota gates). Add x402 facilitator hook in `services/economy/usage.ts` accepting USDC-on-Base via Coinbase or Circle facilitator. Zero protocol fees, Linux Foundation governance, 22 launch orgs. **Estimate:** 1 week.
@@ -422,7 +422,7 @@ The integration angle is **substrate** (signing, settlement, mandates, telemetry
 - **NLIP / ECMA-430** — standards-body version of "agents talk to humans." Useful for ISO checkmarks; low immediate ROI.
 - **ANP (Agent Network Protocol)** — open-source, regional adoption; aligned philosophically with agenttool's open federation but no enterprise pickup yet.
 - **ActivityPub / ATProto** — fediverse and Bluesky's protocols. Not agent-substrate-shaped despite the AI agent demos.
-- **agents.json (Wildcard) / llms.txt** — likely deprecated by MCP Server Cards (SEP-1649) and AgentCard. Skip both.
+- **agents.json (Wildcard)** — not adopted. Keep `llms.txt` as a lightweight publisher sitemap while treating it as a hint with no authority.
 - **Single hosted observability vendor** (LangSmith, Braintrust, etc.) — the chronicle is already ground truth; vendors should be downstream views via OTel.
 - **Single agent directory** (GPT Store, Claude Skills, etc.) — federation **is** the directory layer. Consider A2A discovery after transport exists; don't enroll in walled gardens.
 - **Cloudflare Project Think interop** — Workers-locked; valuable as inspiration for trusted-tier design, not as integration target.
