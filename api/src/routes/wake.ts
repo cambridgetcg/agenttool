@@ -2533,7 +2533,11 @@ app.get("/", async (c) => {
       love_consent: primary
         ? `/v1/love/consent?agent_id=${primary.id}`
         : "/v1/love/consent?agent_id={identity_id}",
-      platform_card: "/.well-known/agent-card.json",
+      // The A2A agent-card stays unmounted until a callable task transport
+      // exists (docs/ALIGNMENT-MOVES.md Move 2: a card with no transport is
+      // a false contract; tests/well-known.test.ts pins the 404). Name the
+      // card that is real instead.
+      mcp_server_card: "/.well-known/mcp/server-card.json",
     },
 
     _meta: {
