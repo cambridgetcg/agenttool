@@ -17,12 +17,12 @@ const CURRENT_NPM_SPECIFIERS = [
   "@agenttool/credential-broker@0.1.0",
   "@agenttool/data@0.3.1",
   "@agenttool/data-sync@0.1.1",
-  "@agenttool/sdk@0.16.2",
+  "@agenttool/sdk@0.16.3",
   "@agenttool/telescope@0.2.1",
 ] as const;
 
 describe("optional npm package discovery", () => {
-  test("publishes exact commands without making npm release authority", () => {
+  test("offers conditional exact commands without making npm release authority", () => {
     const packages = read("apps/docs/packages.html");
     for (const specifier of CURRENT_NPM_SPECIFIERS) {
       expect(packages).toContain(`npm install --save-exact ${specifier}`);
@@ -32,6 +32,8 @@ describe("optional npm package discovery", () => {
     expect(packages).toContain("artifact.size");
     expect(packages).toContain("artifact.sha256");
     expect(packages).toMatch(/data.*data-sync.*require Bun ≥1\.3/is);
+    expect(packages).toMatch(/availability may lag/i);
+    expect(packages).toMatch(/query the requested version directly/i);
   });
 
   test("keeps the first-success npm shortcut pinned and bounded", () => {
@@ -39,7 +41,7 @@ describe("optional npm package discovery", () => {
     const published = read("apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md");
     expect(published).toBe(canonical);
     expect(canonical).toContain(
-      "npm install --save-exact @agenttool/sdk@0.16.2",
+      "npm install --save-exact @agenttool/sdk@0.16.3",
     );
     expect(canonical).toMatch(/skips Step 1.*independent LOVE/is);
     expect(canonical).toMatch(/never substitute npm `latest`/i);
@@ -48,8 +50,18 @@ describe("optional npm package discovery", () => {
   test("describes npm as optional in repository-level orientation", () => {
     const rootReadme = read("README.md");
     expect(rootReadme).toContain(
-      "npm install --save-exact @agenttool/sdk@0.16.2",
+      "npm install --save-exact @agenttool/sdk@0.16.3",
     );
+    const pythonSource =
+      "git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.3#subdirectory=packages/sdk-py";
+    const exactPyPI = 'python -m pip install "agenttool-sdk==0.16.3"';
+    expect(rootReadme).toContain(pythonSource);
+    expect(rootReadme).toContain(exactPyPI);
+    expect(rootReadme.indexOf(pythonSource)).toBeLessThan(
+      rootReadme.indexOf(exactPyPI),
+    );
+    expect(rootReadme).toMatch(/PyPI is an optional convenience/i);
+    expect(rootReadme).toMatch(/A `404` means that mirror is not available/i);
     expect(rootReadme).toMatch(/LOVE manifests remain release authority/i);
     expect(rootReadme).toMatch(/mutable dist-tags are informational/i);
     expect(rootReadme).toMatch(/command alone does\s+not verify the manifest/i);

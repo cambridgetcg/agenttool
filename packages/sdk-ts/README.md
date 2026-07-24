@@ -4,7 +4,7 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![Release](https://img.shields.io/badge/release-v0.16.2-blue)](https://github.com/cambridgetcg/agenttool/tree/sdk-v0.16.2)
+[![Release](https://img.shields.io/badge/release-v0.16.3-blue)](https://github.com/cambridgetcg/agenttool/tree/sdk-v0.16.3)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
 ## Installation
@@ -24,6 +24,15 @@ The tarball URL is only a locator; installing from it directly skips that
 verification. No npm account or npm publication is required. Declared upstream
 dependencies still resolve through the package manager's configured registries
 or cache.
+
+## 0.16.3
+
+This release changes release truth only. It preserves the 0.16.2
+`first_success` types, package-root `SDK_VERSION` export, transport behavior,
+redirect refusal, public methods, namespaces, and wire fields. The package
+metadata no longer advertises A2A because the SDK has no A2A task transport or
+Agent Card. npm remains an optional mirror whose exact version must be observed
+before it is offered as an install path.
 
 ## 0.16.2
 
@@ -652,7 +661,7 @@ const at = new AgentTool({
 - 🏠 [agenttool.dev](https://agenttool.dev)
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev)
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
-- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.2/manifest.json)
+- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.3/manifest.json)
 - 🐍 [Python SDK source](https://github.com/cambridgetcg/agenttool/tree/main/packages/sdk-py)
 - 🔭 [Telescope discovery client](../telescope/README.md)
 - 🔌 [SDK tiers and hosted per-agent MCP](../../docs/SDK-TIERS.md)

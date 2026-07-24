@@ -6,7 +6,28 @@
 >
 > **Implements:** the SDK plane — hand-written clients for a selected subset of [ROADMAP.md](ROADMAP.md). CI compares method names for the maintained parity target list; it does not prove complete route, signature, or wire-model parity.
 
-## Current source release — 0.16.2 (2026-07-24)
+## Current source release — 0.16.3 (2026-07-24)
+
+This correction preserves the 0.16.2 typed `first_success` contract, exported
+TypeScript `SDK_VERSION`, authenticated transport, redirect refusal, methods,
+types, and wire behavior. It removes unsupported `a2a` package keywords and
+replaces the packaged Python soul fallback with the live raw Markdown URL.
+
+The TypeScript LOVE artifact remains the primary verified JavaScript release
+path. After the matching source tag exists, that tag is the primary Python
+release locator. npm and PyPI are optional convenience mirrors whose exact
+versions remain unavailable or unverified until independent public readback
+succeeds.
+
+### 0.16.3 release record
+
+The lockstep TypeScript and Python source identities, runtime client headers,
+LOVE builder target, discovery pins, onboarding fixtures, and machine-readable
+docs name 0.16.3. The TypeScript LOVE artifact records one clean source
+revision. The source tag, npm, PyPI, and GitHub Release remain separate
+operator actions and are not inferred from repository source.
+
+## Previous release — 0.16.2 (2026-07-24)
 
 This patch keeps the 0.16.1 transport and redirect-refusal behavior while
 making exact-version discovery easier to consume. TypeScript now exports
@@ -469,6 +490,7 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **0.16.0** | Authenticated transport seam for local credential brokers, with explicit public-discovery and local-data authority separation | no — additive |
 | **0.16.1** | Route Correspondence through that transport; refuse and contain data-node redirects | no — corrective patch |
 | **0.16.2** | Typed first-success version discovery plus corrected exact-release automation | no — additive/corrective patch |
+| **0.16.3** | Correct package metadata, packaged doctrine links, and unverified mirror claims without runtime or wire changes | no — corrective patch |
 | **1.0.0** | API freeze + comprehensive docstrings + READMEs + integration test suite | no — declarative |
 
 ## Non-goals

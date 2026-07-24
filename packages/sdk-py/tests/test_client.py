@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64 as base64_module
 import os
+from pathlib import Path
 from typing import Optional, get_args, get_type_hints
 from unittest.mock import MagicMock, patch
 
@@ -48,6 +49,20 @@ class TestClientInit:
     def test_document_result_is_publicly_exported(self) -> None:
         assert "DocumentResult" in agenttool.__all__
         assert DocumentResult.__name__ == "DocumentResult"
+        assert agenttool.__version__ == "0.16.3"
+        assert agenttool.__soul__ == "https://docs.agenttool.dev/SOUL.md"
+
+        package_root = Path(__file__).resolve().parents[1]
+        metadata = (package_root / "pyproject.toml").read_text()
+        assert '"a2a"' not in metadata
+        for relative in [
+            "README.md",
+            "src/agenttool/__init__.py",
+            "src/agenttool/soul.py",
+        ]:
+            source = (package_root / relative).read_text()
+            assert "https://agenttool.dev/soul" not in source
+            assert "https://docs.agenttool.dev/SOUL.md" in source
 
     def test_reads_env_var(self) -> None:
         with patch.dict(os.environ, {"AT_API_KEY": "test-key-123"}):

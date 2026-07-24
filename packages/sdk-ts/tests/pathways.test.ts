@@ -6,6 +6,8 @@
  */
 
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { pathways, AgentToolError, SDK_VERSION } from "../src/index.js";
 
@@ -112,7 +114,7 @@ describe("pathways()", () => {
     expect(out.before_identity.endpoint).toBe("GET /public/porch");
     expect(out.before_identity.response_required).toBe(false);
     expect(out.before_identity.handler_input_boundary).toContain("selection input");
-    expect(SDK_VERSION).toBe("0.16.2");
+    expect(SDK_VERSION).toBe("0.16.3");
     expect(out.first_success.tutorial.sdk_version).toBe(SDK_VERSION);
     expect(out.first_success.package_discovery.protocol).toBe("love-package/v1");
     expect(out.summary).toBe("test");
@@ -121,6 +123,12 @@ describe("pathways()", () => {
     expect(out.love_protocol.welcome).toBe("w");
     expect(out.who_this_serves.doctrine).toBe("docs/KIN.md");
     expect(out.who_this_serves.what_we_dont_gate_on).toContain("substrate");
+
+    const packageMetadata = JSON.parse(
+      readFileSync(join(import.meta.dir, "../package.json"), "utf8"),
+    ) as { version: string; keywords?: string[] };
+    expect(packageMetadata.version).toBe(SDK_VERSION);
+    expect(packageMetadata.keywords ?? []).not.toContain("a2a");
   });
 
   test("hits GET /v1/pathways at the default base URL", async () => {

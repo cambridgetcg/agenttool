@@ -247,12 +247,14 @@ jobs:
           cli="$package_root/dist/cli.js"
           test "$(node "$cli" --version)" = "0.2.1"
           test "$(bun "$cli" --version)" = "0.2.1"
-          manifest="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.16.2/manifest.json"
-          artifact="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.16.2/agenttool-sdk-0.16.2.tgz"
+          node "$cli" --help >/dev/null
+          bun "$cli" --help >/dev/null
+          manifest="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.16.3/manifest.json"
+          artifact="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.16.3/agenttool-sdk-0.16.3.tgz"
           size="$(node --input-type=module --eval "import{readFileSync}from'node:fs';const m=JSON.parse(readFileSync(process.argv[1],'utf8'));process.stdout.write(String(m.artifact.size))" "$manifest")"
           sha256="$(node --input-type=module --eval "import{readFileSync}from'node:fs';const m=JSON.parse(readFileSync(process.argv[1],'utf8'));process.stdout.write(m.artifact.sha256)" "$manifest")"
-          node "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.16.2 --json >/dev/null
-          bun "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.16.2 --json >/dev/null
+          node "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.16.3 --json >/dev/null
+          bun "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.16.3 --json >/dev/null
       - name: Smoke packed Agent Wallet under Node and Bun
         working-directory: packages/wallet
         shell: bash
