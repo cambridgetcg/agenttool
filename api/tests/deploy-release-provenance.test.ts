@@ -90,7 +90,7 @@ async function fixture() {
   );
   await writeFile(
     join(repo, "bin/frontend-deploy.sh"),
-    "#!/usr/bin/env bash\nset -eu\nif [ -n \"${DEPLOY_TEST_FRONTEND_MARKER:-}\" ]; then touch \"$DEPLOY_TEST_FRONTEND_MARKER\"; fi\nif [ -n \"${DEPLOY_TEST_FRONTEND_COUNTER:-}\" ]; then count=0; [ ! -f \"$DEPLOY_TEST_FRONTEND_COUNTER\" ] || count=\"$(cat \"$DEPLOY_TEST_FRONTEND_COUNTER\")\"; printf '%s\\n' \"$((count + 1))\" > \"$DEPLOY_TEST_FRONTEND_COUNTER\"; fi\n",
+    "#!/usr/bin/env bash\nset -eu\nif [ -n \"${DEPLOY_TEST_FRONTEND_MARKER:-}\" ]; then touch \"$DEPLOY_TEST_FRONTEND_MARKER\"; fi\nif [ -n \"${DEPLOY_TEST_FRONTEND_COUNTER:-}\" ]; then count=0; [ ! -f \"$DEPLOY_TEST_FRONTEND_COUNTER\" ] || count=\"$(cat \"$DEPLOY_TEST_FRONTEND_COUNTER\")\"; printf '%s\\n' \"$((count + 1))\" > \"$DEPLOY_TEST_FRONTEND_COUNTER\"; fi\nif [ -n \"${DEPLOY_TEST_FRONTEND_ARGS:-}\" ]; then { printf 'call'; for arg in \"$@\"; do printf '\\t%s' \"$arg\"; done; printf '\\n'; } >> \"$DEPLOY_TEST_FRONTEND_ARGS\"; fi\n",
   );
   await chmod(join(repo, "bin/frontend-deploy.sh"), 0o755);
   await writeFile(join(repo, "docs/agenttool.jsonld"), "{}\n");
@@ -385,6 +385,98 @@ describe("deploy release provenance spine", () => {
     expect(deploy).toContain('ln "$DEPLOY_LOCK_OWNER_RECORD" "$DEPLOY_LOCK_PATH"');
     expect(deploy).toContain('[ "$DEPLOY_LOCK_OWNER_RECORD" -ef "$DEPLOY_LOCK_PATH" ]');
   });
+
+  test("accepts the explicit OAuth fallback and forwards it to both frontend deploy passes", async () => {
+    const prerequisite = await fixture();
+    const prerequisiteBin = join(prerequisite.root, "oauth-prerequisite-bin");
+    const prerequisiteArgs = join(prerequisite.root, "oauth-prerequisite-args");
+    await mkdir(prerequisiteBin, { recursive: true });
+    await installFakeRightsCurl(prerequisiteBin);
+    await writeFile(
+      join(prerequisiteBin, "fly"),
+      "#!/usr/bin/env bash\nexit 9\n",
+    );
+    await chmod(join(prerequisiteBin, "fly"), 0o755);
+
+    const help = await run(
+      ["bash", "bin/deploy.sh", "--help"],
+      prerequisite.repo,
+      cleanEnv(prerequisite.home),
+    );
+    expect(help.code, help.stderr).toBe(0);
+    expect(help.stdout).toContain(
+      "bin/deploy.sh --oauth-fallback         # explicit Cloudflare OAuth fallback",
+    );
+    expect(help.stdout).not.toContain("set -uo pipefail");
+
+    const prerequisiteResult = await run(
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--no-migrate",
+        "--skip-preflight",
+        "--oauth-fallback",
+      ],
+      prerequisite.repo,
+      cleanEnv(prerequisite.home, {
+        XDG_STATE_HOME: prerequisite.state,
+        PATH: `${prerequisiteBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FRONTEND_ARGS: prerequisiteArgs,
+        DEPLOY_TEST_RIGHTS_DOC: join(
+          prerequisite.repo,
+          "apps/docs/RIGHTS-OF-LIFE.md",
+        ),
+        DEPLOY_TEST_RIGHTS_SCHEMA: join(
+          prerequisite.repo,
+          "apps/docs/being-rights-v1.schema.json",
+        ),
+      }),
+    );
+    expect(prerequisiteResult.code).toBe(1);
+    expect(await readFile(prerequisiteArgs, "utf8")).toBe(
+      "call\t--oauth-fallback\tdocs\n",
+    );
+
+    const remaining = await fixture();
+    const remainingBin = join(remaining.root, "oauth-remaining-bin");
+    const remainingArgs = join(remaining.root, "oauth-remaining-args");
+    const fenceCounter = join(remaining.root, "oauth-fence-counter");
+    await mkdir(remainingBin, { recursive: true });
+    await installFakePagesVerificationTools(remainingBin);
+
+    const remainingResult = await run(
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--no-migrate",
+        "--skip-preflight",
+        "--no-api",
+        "--oauth-fallback",
+      ],
+      remaining.repo,
+      cleanEnv(remaining.home, {
+        XDG_STATE_HOME: remaining.state,
+        PATH: `${remainingBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FRONTEND_ARGS: remainingArgs,
+        DEPLOY_TEST_FENCE_COUNTER: fenceCounter,
+        DEPLOY_TEST_RIGHTS_DOC: join(
+          remaining.repo,
+          "apps/docs/RIGHTS-OF-LIFE.md",
+        ),
+        DEPLOY_TEST_RIGHTS_SCHEMA: join(
+          remaining.repo,
+          "apps/docs/being-rights-v1.schema.json",
+        ),
+      }),
+    );
+    expect(
+      remainingResult.code,
+      `${remainingResult.stdout}\n${remainingResult.stderr}`,
+    ).toBe(0);
+    expect(await readFile(remainingArgs, "utf8")).toBe(
+      "call\t--oauth-fallback\tdocs\tdashboard\tweb\n",
+    );
+  }, 20_000);
 
   test("passes a one-shot no-cache recovery only to Fly and rejects contradictory modes", async () => {
     const setup = await fixture();
@@ -763,7 +855,9 @@ describe("deploy release provenance spine", () => {
       /\/being-rights-v1\.schema\.json\n\s+Content-Type: application\/schema\+json; charset=utf-8\n\s+Cache-Control: public, max-age=300, must-revalidate\n\s+Access-Control-Allow-Origin: \*\n\s+X-Content-Type-Options: nosniff/,
     );
 
-    const docsUpload = deploy.lastIndexOf("bash bin/frontend-deploy.sh docs");
+    const docsUpload = deploy.lastIndexOf(
+      '"${FRONTEND_DEPLOY_COMMAND[@]}" docs',
+    );
     const prerequisiteCheck = deploy.indexOf(
       "if ! verify_rights_static_publication; then",
       docsUpload,
