@@ -21,8 +21,9 @@ import {
 } from "../packages/data-protocol/src/bytes.js";
 import { canonicalJson } from "../packages/data-protocol/src/canonical.js";
 import {
-  x25519,
-} from "../packages/data-protocol/node_modules/@noble/curves/ed25519.js";
+  isUsableX25519PublicKey,
+  x25519PublicKeyForPrivateKey,
+} from "../packages/data-protocol/src/crypto.js";
 import {
   DEFAULT_WHITEHACK_EVIDENCE_STORE_TIMEOUT_MS,
   MAX_WHITEHACK_EVIDENCE_CAPSULE_BYTES,
@@ -62,38 +63,13 @@ function fail(code: string): never {
   throw new WhitehackEvidenceStorageError(code);
 }
 
-/**
- * Reject low-order X25519 public keys before any provider I/O. The fixed probe
- * scalar is validation material, not a persisted bridge or recipient key.
- */
-function isUsableX25519PublicKey(publicKey: Uint8Array): boolean {
-  const probePrivateKey = new Uint8Array(32);
-  probePrivateKey[0] = 1;
-  let sharedSecret: Uint8Array | undefined;
-  try {
-    sharedSecret = x25519.getSharedSecret(probePrivateKey, publicKey);
-    let combined = 0;
-    for (const byte of sharedSecret) combined |= byte;
-    return combined !== 0;
-  } catch {
-    return false;
-  } finally {
-    probePrivateKey.fill(0);
-    sharedSecret?.fill(0);
-  }
-}
-
 function publicKeyForX25519PrivateKey(
   privateKey: Uint8Array,
 ): Uint8Array | null {
-  let publicKey: Uint8Array | undefined;
   try {
-    publicKey = x25519.getPublicKey(privateKey);
-    return Uint8Array.from(publicKey);
+    return x25519PublicKeyForPrivateKey(privateKey);
   } catch {
     return null;
-  } finally {
-    publicKey?.fill(0);
   }
 }
 

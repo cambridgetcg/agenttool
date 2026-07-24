@@ -30,6 +30,9 @@ jobs:
       - name: Install API dependencies from lockfile
         working-directory: api
         run: bun install --frozen-lockfile
+      - name: Install ADDS protocol dependencies
+        working-directory: packages/data-protocol
+        run: bun install --frozen-lockfile
       - name: Install cross-language vector dependencies
         working-directory: packages/sdk-ts
         run: bun install --frozen-lockfile
