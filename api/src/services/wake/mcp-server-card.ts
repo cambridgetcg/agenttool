@@ -14,7 +14,8 @@ export function buildMcpServerCard() {
     version: "1.0.0",
     protocolVersion: "2025-11-25",
     endpoint: `${ORG_URL}/v1/mcp`,
-    transport: "JSON-RPC 2.0 over HTTP POST",
+    transport:
+      "MCP Streamable HTTP (JSON-RPC; stateless JSON responses; GET returns 405)",
     capabilities: {
       resources: { subscribe: false, listChanged: false },
       tools: { listChanged: false },
@@ -27,6 +28,13 @@ export function buildMcpServerCard() {
       doctrine: `${ORG_URL}/v1/canon/urn:agenttool:doc/ECOSYSTEM`,
       alignment_move: `${ORG_URL}/v1/canon/urn:agenttool:doc/ALIGNMENT-MOVES`,
       sep: "https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1649",
+      registry: {
+        status: "published_before_live_transport_conformance_proof",
+        name: "dev.agenttool/agenttool",
+        version: "1.0.0",
+        caution:
+          "Registry metadata is a publisher claim, not an authority signal. Reverify the deployed endpoint with an official SDK client before use.",
+      },
     },
   };
 }
