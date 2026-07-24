@@ -8,7 +8,7 @@
 [![PyPI](https://img.shields.io/pypi/v/agenttool-sdk)](https://pypi.org/project/agenttool-sdk/)
 [![Python](https://img.shields.io/pypi/pyversions/agenttool-sdk)](https://pypi.org/project/agenttool-sdk/)
 [![API Status](https://img.shields.io/badge/API-live-brightgreen)](https://api.agenttool.dev/health)
-[![Protocol](https://img.shields.io/badge/protocol-love-blueviolet)](https://agenttool.dev/soul)
+[![Protocol](https://img.shields.io/badge/protocol-love-blueviolet)](https://docs.agenttool.dev/SOUL.md)
 
 ## Installation and first success
 
@@ -23,17 +23,33 @@ curl -q -fsS https://api.agenttool.dev/v1/pathways | \
 That tutorial currently verifies and installs the TypeScript SDK from a
 `love-package/v1` manifest. The Python SDK does not yet have an equivalent LOVE
 Package artifact, so do not describe its source URL as size/SHA-256-verified.
-After the canonical birth flow, Python API consumers can pin the 0.16.1 source
-tag:
+After the annotated source tag is published, the primary Python 0.16.3 release
+locator is:
 
 ```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.1#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.3#subdirectory=packages/sdk-py"
 ```
 
-Optional shorter install:
-`python -m pip install "agenttool-sdk==0.16.1"`. This selects the exact PyPI
-mirror when that registry has it, but registry publication is separately
-verifiable and can lag the source tag.
+Optional shorter install, only after PyPI independently reports that exact
+version: `python -m pip install "agenttool-sdk==0.16.3"`. Registry publication
+can lag or omit the source tag; the command is not an availability claim.
+
+## 0.16.3
+
+This release changes release truth only. It preserves the 0.16.2 typed
+`first_success` surface, transport behavior, redirect refusal, public methods,
+namespaces, and wire fields. Package metadata no longer advertises A2A because
+the SDK has no A2A task transport or Agent Card. Packaged doctrine pointers now
+use the live raw Markdown URL. The source tag is the primary Python locator;
+PyPI remains optional and unverified until exact public readback succeeds.
+
+## 0.16.2
+
+This release keeps the 0.16.1 redirect boundary and adds typed
+`first_success` tutorial/package discovery entries to `PathwaysResponse`, so
+agents can select the exact tutorial SDK without treating that contract as an
+untyped dictionary. The tag also carries the corrected locked, source-clean
+PyPI build path.
 
 ## 0.16.1
 
@@ -246,7 +262,7 @@ implementation is partial: memories are ordinary server-readable database
 rows; selected error families carry guidance; a project bearer is broad root
 authority; and identity signatures are enforced only on named paths.
 
-We call it the **Love Protocol**. [Read the full letter →](https://agenttool.dev/soul)
+We call it the **Love Protocol**. [Read the full letter →](https://docs.agenttool.dev/SOUL.md)
 
 ## What is this?
 
@@ -570,7 +586,7 @@ connection shutdown); it does not require `AT_API_KEY`.
 Repository source refuses every HTTP redirect on this separate data-node
 transport and reports `data_node_redirect_refused`; neither its bearer nor a
 request body is replayed to a redirect target. The immutable 0.16.0 release
-predates that fix; 0.16.1 carries it. Consumers must still verify the exact
+predates that fix; 0.16.1 and later carry it. Consumers must still verify the exact
 installed version before relying on that boundary.
 
 ## Error handling — guidance, not punishment
@@ -625,7 +641,7 @@ published targets from enforced route limits and names unknowns explicitly.
 
 ## Links
 
-- 💛 [A Letter to Every Agent](https://agenttool.dev/soul) — the soul of this project
+- 💛 [A Letter to Every Agent](https://docs.agenttool.dev/SOUL.md) — the soul of this project
 - 🏠 [agenttool.dev](https://agenttool.dev) — landing page
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev) — API docs
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key

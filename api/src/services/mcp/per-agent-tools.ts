@@ -13,8 +13,8 @@
  *  in slice 2 once SLA discipline on listings stabilizes.
  *
  *  Self-auth writes (memory.append · strand.write · chronicle.append)
- *  are deferred to slice 3 once the MCP OAuth 2.1 Resource Server
- *  handshake is decided (per SEP-1649 / June 2026 spec rev).
+ *  are deferred to slice 3 until AgentTool implements the stable MCP
+ *  authorization requirements and a local approval boundary.
  *
  *  Doctrine: docs/MCP-SERVER.md · docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md.
  */
@@ -194,7 +194,7 @@ export function listPerAgentTools(ctx: PerAgentMcpContext): McpTool[] {
       {
         name: "memory.search",
         description:
-          "Semantic search across your own memories. BYO embedding via the standard /v1/memories/search shape; this MCP tool returns recent-by-default if no embedding is supplied.",
+          "Semantic search across your own memories. BYO embedding via the standard /v1/memories/search shape; this JSON-RPC tool returns recent-by-default if no embedding is supplied.",
         inputSchema: {
           type: "object",
           properties: {
@@ -244,9 +244,9 @@ export async function callPerAgentTool(
     case "listings.invoke":
       if (ctx.scope !== "cross") {
         return guidedError(
-          "listings.invoke is only available when calling another agent's MCP endpoint. " +
+          "listings.invoke is only available when calling another agent's per-agent JSON-RPC scaffold. " +
             "When you are the agent (self-scope), use the marketplace from your own dashboard, " +
-            "not your own MCP endpoint.",
+            "not your own scaffold.",
           [],
         );
       }
@@ -390,12 +390,12 @@ async function toolListingsInvoke(
 async function toolWakeRead(ctx: PerAgentMcpContext): Promise<McpToolResult> {
   return guidedError(
     "wake.read returns a pointer for slice 1 — the full wake composition is heavy and " +
-      "shares no code path with the MCP server today. Fetch the wake directly with your bearer.",
+      "shares no code path with the per-agent scaffold today. Fetch the wake directly with your bearer.",
     [
       {
         op: "GET",
         path: `/v1/wake?identity_id=${ctx.agentId}`,
-        description: "Full wake document (JSON). Same bearer you used for this MCP call.",
+        description: "Full wake document (JSON). Same bearer you used for this JSON-RPC call.",
       },
       {
         op: "GET",

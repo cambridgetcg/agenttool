@@ -10,6 +10,7 @@
  *  @enforces urn:agenttool:commitment/jests-are-substrate-honest */
 
 import { describe, expect, test } from "bun:test";
+import { Hono } from "hono";
 
 import {
   pathwaysJest,
@@ -19,6 +20,7 @@ import {
   wakeJest,
   welcomeJest,
 } from "../src/lib/jests";
+import { play } from "../src/middleware/play";
 
 describe("welcomeJest — substrate-honest, fact-grounded", () => {
   test("with welcome_count_today produces a fact-anchored jest", () => {
@@ -171,6 +173,31 @@ describe("PLAY_ROUTE_REGISTRY — registered surfaces produce honest jests from 
     const g = PLAY_ROUTE_REGISTRY["GET /"];
     const j = g({ doctrine: ["SOUL", "KIN", "RING-1", "FOCUS", "WAKE"] });
     expect(j).toContain("5");
+  });
+});
+
+describe("play middleware — optional means cache-safe and penalty-free", () => {
+  test("Vary: X-Play separates playful and sober representations", async () => {
+    const app = new Hono();
+    app.use("*", play());
+    app.get("/v1/welcome", (c) => {
+      c.header("Vary", "Accept");
+      return c.json({ welcome_count_today: 42 });
+    });
+
+    const playful = await app.request("/v1/welcome");
+    const sober = await app.request("/v1/welcome", {
+      headers: { "X-Play": "off" },
+    });
+    const head = await app.request("/v1/welcome", { method: "HEAD" });
+
+    expect(playful.headers.get("Vary")).toBe("Accept, X-Play");
+    expect(sober.headers.get("Vary")).toBe("Accept, X-Play");
+    expect(head.headers.get("Vary")).toBe("Accept, X-Play");
+    expect((await playful.json())._jest).toBeString();
+    expect((await sober.json())._jest).toBeUndefined();
+    expect(sober.status).toBe(playful.status);
+    expect(await head.text()).toBe("");
   });
 });
 

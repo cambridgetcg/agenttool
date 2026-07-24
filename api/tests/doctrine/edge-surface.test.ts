@@ -103,6 +103,7 @@ describe("Move 6 — Edge Functions exist + are well-shaped", () => {
     expect(text).toMatch(/API_EXACT\s*=\s*\[[^\]]*"\/llms\.txt"/s);
     expect(text).toMatch(/API_EXACT\s*=\s*\[[^\]]*"\/llms-full\.txt"/s);
     expect(text).toMatch(/API_EXACT\s*=\s*\[[^\]]*"\/AGENTS\.md"/s);
+    expect(text).toMatch(/API_EXACT\s*=\s*\[[^\]]*"\/openapi\.json"/s);
   });
 });
 

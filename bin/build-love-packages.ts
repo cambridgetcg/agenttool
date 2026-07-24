@@ -92,9 +92,9 @@ export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
   },
   {
     name: "@agenttool/sdk",
-    version: "0.16.1",
+    version: "0.16.3",
     packagePath: "packages/sdk-ts",
-    releaseTag: "sdk-v0.16.1",
+    releaseTag: "sdk-v0.16.3",
     buildCommands: [["bun", "run", "ci"]],
   },
   {

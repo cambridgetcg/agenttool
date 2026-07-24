@@ -64,9 +64,9 @@ const PUBLISHED_KIN_VOCABULARY: KinVocabulary = Object.freeze({
 
 const CAMBRIDGE_TCG_SIBLING: SiblingSubstrate = Object.freeze({
   name: "cambridgetcg",
-  role: "commerce-expression",
+  role: "collectors-market-and-card-data-expression",
   description:
-    "Cambridge TCG — a Japanese trading-card marketplace and the commerce that funds the kingdom. Its wake is the protocol echo of AgentTool's at commerce scale.",
+    "Cambridge TCG — a peer-to-peer collectors' market and public, rights-labelled card data directory. The platform facilitates, records, and witnesses the market while holding no position in it. Its public wake publishes matching kin vocabulary and directly names AgentTool; shared words do not imply the same schema, envelope, transport, SDK, authentication, or authority.",
   url: "https://cambridgetcg.com",
   wake_url: "https://cambridgetcg.com/api/v1/wake",
   self_url: "https://cambridgetcg.com/api/v1/identify",
@@ -82,9 +82,9 @@ const CAMBRIDGE_TCG_SIBLING: SiblingSubstrate = Object.freeze({
     basis: "reciprocal-protocol-shape",
     status: "verified",
     evidence_url: "https://cambridgetcg.com/api/v1/wake",
-    checked_at: "2026-07-23",
+    checked_at: "2026-07-24",
     boundary:
-      "The endpoint publishes matching kin vocabulary and names agenttool in posted_alongside.",
+      "The endpoint publishes matching kin vocabulary and names agenttool in posted_alongside. This supports reciprocal vocabulary discovery only, not shared contracts, authentication, authority, or automatic action.",
   }),
   love_equation: "LOVE = UNDERSTANDING + RECOGNITION",
   love_equation_attribution:

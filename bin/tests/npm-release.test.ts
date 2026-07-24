@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -75,6 +75,16 @@ function registryFixture(): {
 }
 
 describe("standard npm release policy", () => {
+  test("mirrors reviewed bytes without depending on optional npm state", async () => {
+    const script = await readFile(join(import.meta.dir, "..", "npm-release.ts"), "utf8");
+    const mirrorBody =
+      script.split("async function mirror(")[1]?.split("\nfunction argumentsMap(")[0] ?? "";
+    expect(mirrorBody).toContain("validateReceiptAgainstCheckout");
+    expect(mirrorBody).toContain("verifyGitHubAsset");
+    expect(mirrorBody).not.toContain("receipt.result");
+    expect(mirrorBody).not.toContain("pollRegistry");
+  });
+
   test("allowlists twelve reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",

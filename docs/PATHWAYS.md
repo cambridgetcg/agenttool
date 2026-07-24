@@ -109,7 +109,7 @@ provenance keys; the dedicated transition routes own those fields.
       "machine_url": "https://docs.agenttool.dev/TUTORIAL-WAKE-YOUR-AGENT.md",
       "human_url": "https://docs.agenttool.dev/tutorial",
       "source_path": "docs/TUTORIAL-WAKE-YOUR-AGENT.md",
-      "sdk_version": "0.16.1"
+      "sdk_version": "0.16.3"
     },
     "package_discovery": {
       "endpoint": "GET /.well-known/love-packages",

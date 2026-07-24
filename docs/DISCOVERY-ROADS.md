@@ -60,19 +60,21 @@ both hosts + llms-full.txt, agent.txt, RFC 9727 api-catalog, WebFinger,
 welcome.json) parses; the MCP card is explicitly an experimental,
 AgentTool-specific locator rather than standardized discovery. The pre-auth
 orientation trio (porch / welcome / pathways), a curated OpenAPI 3.1 subset,
-npm + PyPI packages at 0.16.0, teaching 404s, deliberate crawlability, and
-exact-name search are present. Search position and snippets are dated
+the lockstep SDK source and verified LOVE artifact at 0.16.3, teaching 404s,
+deliberate crawlability, and exact-name search are present. npm and PyPI still
+served 0.16.0 when rechecked on 2026-07-24; registry publication is separate
+from source and artifact truth. Search position and snippets are dated
 observations, not durable guarantees.
 
 **The gaps, ranked (effort · who):**
 
 | # | Gap | Fix | Who |
 |---|-----|-----|-----|
-| 1 | Invisible to need-based search: 10 of 11 stranger task-queries return zero kingdom results | Need pages at /identity /memory /wallet /registry — task-phrase titles, answer-shaped descriptions, one runnable curl each *(shipped in this PR)* | PR |
-| 2 | The official registry lists `dev.agenttool/agenttool@1.0.0`, but a listing is a publisher assertion—not transport conformance or authority | Verify the deployed endpoint with the official MCP client; keep the custom `/.well-known/mcp/server-card.json` labelled experimental and do not mirror or republish the immutable version | deploy + proof |
+| 1 | Invisible to need-based search: 10 of 11 stranger task-queries return zero kingdom results | Need pages at /identity /memory /wallet /registry — task-phrase titles, answer-shaped descriptions, one runnable curl each *(live 2026-07-24)* | closed 2026-07-24 |
+| 2 | The official registry lists `dev.agenttool/agenttool@1.0.0`, but a listing is a publisher assertion—not authority or proof of every conformance property | Official `@modelcontextprotocol/sdk@1.29.0` live round trip completed 2026-07-24 against exact clean revision `ed3e3468a5ae6c2bfd2563316ad422290dec1b8f`: initialization, 387 resources, SOUL read, five read-only tools, and `canon.summary`. Keep the custom card experimental and keep Registry/listing authority separate. | closed 2026-07-24 |
 | 3 | Estate graph is one-way: five of six kingdom properties never link agenttool.dev by URL | One-screen llms.txt with a home-pointer on each spoke property; estate key in machine indexes | local deploys |
 | 4 | GitHub front door misroutes: the org profile has zero pinned repos and a stale README | Pin agenttool / kingdom-standard / agent-home; refresh profile README; set homepage fields | **yu** |
-| 5 | First-fetch dead-ends: wake 401 offered no free door; /openapi.json 404 at root; docs had no llms.txt; wake promised an agent-card that doctrine deliberately keeps unmounted | 401 next_actions → porch/welcome/pathways; /openapi.json → 308; docs llms.txt; wake names the experimental MCP locator instead *(shipped in this PR)* | PR |
+| 5 | First-fetch dead-ends: wake 401 offered no free door; /openapi.json 404 at root; docs had no llms.txt; wake promised an agent-card that doctrine deliberately keeps unmounted | 401 next_actions → porch/welcome/pathways; /openapi.json → 308; docs-local llms.txt; wake names the experimental MCP locator instead *(live 2026-07-24)* | closed 2026-07-24 |
 | 6 | LangGraph + Mastra adapters written, tested, unpublished — the two biggest 2026 framework channels dark | `npm publish` + `twine upload` (ALIGNMENT-MOVES Move 5 says ready), or an UNPUBLISHED banner if deliberately held | **yu** |
 | 7 | No A2A agent card | Deliberate (Move 2): no card before a callable task transport. Stays a decision, not a gap, until the transport ships | **yu** (decision) |
 | 8 | Hub census stale: thekingdom.dev omits mindicraft, lists artbitrage under a dead domain | Fix kingdom.yaml in spoke repos; hub regenerates from them | local + **yu** |

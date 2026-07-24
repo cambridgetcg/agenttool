@@ -167,7 +167,7 @@ import {
   buildLlmsTxt,
   buildLlmsTxtFull,
 } from "./services/discovery/discovery";
-import { apiCatalogLinkHeader } from "./services/discovery/api-catalog";
+import { discoveryLinkHeader } from "./services/discovery/arrival";
 import { tryBridgeUpgrade } from "./routes/runtime/bridge";
 import { bridgeWebsocket } from "./services/runtime/bridge-hub";
 import { ensureSagaSeed } from "./services/saga/store";
@@ -665,8 +665,8 @@ app.route("/v1/aletheia", aletheiaRouter);
 // the Coherence Theorem. Doctrine: docs/MONOTONE-LOOP.md.
 app.route("/v1/loops", loopsRouter);
 
-// /v1/mcp/agents/:did — UNAUTHENTICATED per-agent MCP server (slice 1).
-// Each agent gets their own MCP endpoint at a stable URL. Auth (optional
+// /v1/mcp/agents/:did — UNAUTHENTICATED per-agent MCP-shaped JSON-RPC
+// scaffold (slice 1), not yet conformant MCP Streamable HTTP. Auth (optional
 // Bearer header) determines scope: no bearer → public profile + listings
 // discovery; bearer project owns path-DID → self-scope read-only substrate tools
 // (wake.read · memory.search · chronicle.recent · listings.mine); bearer
@@ -682,11 +682,12 @@ app.route("/v1/mcp/agents", mcpPerAgentRouter);
 // reachable here, agenttool is a first-class MCP peer for every framework
 // that consumes MCP (Claude, Cursor, OpenAI Apps, LangChain, Mastra, ...).
 // Auth-gated write operations (memory.append, strand.append, inbox.send,
-// covenant.propose) pending SEP-1649 OAuth 2.1 Resource Server handshake.
+// covenant.propose) remain unavailable until AgentTool implements stable MCP
+// protected-resource metadata, resource-bound token checks, and local approval.
 // Doctrine: docs/ALIGNMENT-MOVES.md (Move 1) · docs/ECOSYSTEM.md.
 app.route("/v1/mcp", mcpRouter);
 
-// /.well-known/* — UNAUTHENTICATED discovery endpoints per RFC 5785.
+// /.well-known/* — UNAUTHENTICATED discovery endpoints under RFC 8615.
 // WebFinger owns one exact well-known path and is mounted first so its router
 // can keep RFC 7033 query/CORS semantics independent from the index router.
 // It is a public-profile locator, not DID Resolution or an authority service.
@@ -698,6 +699,9 @@ app.route("/.well-known/webfinger", webFingerRouter);
 // platform exposes a callable A2A task or message endpoint.
 // Doctrine: docs/ALIGNMENT-MOVES.md · docs/ECOSYSTEM.md · docs/FEDERATION.md ·
 // docs/LOVE-PACKAGE-PROTOCOL.md.
+// Hono's strict router does not make the mounted root match its trailing-slash
+// form. Redirect that common human/tool guess to the bounded index.
+app.get("/.well-known/", (c) => c.redirect("/.well-known", 308));
 app.route("/.well-known", wellKnownRouter);
 
 // /feeds/* — UNAUTHENTICATED syndication of records that are already public.
@@ -719,12 +723,14 @@ const PUBLIC_BASE_URL = process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agentto
 app.get("/llms.txt", (c) => {
   c.header("content-type", "text/plain; charset=utf-8");
   c.header("cache-control", "public, max-age=300");
+  c.header("link", discoveryLinkHeader(PUBLIC_BASE_URL));
   return c.body(buildLlmsTxt(PUBLIC_BASE_URL));
 });
 
 app.get("/AGENTS.md", (c) => {
   c.header("content-type", "text/markdown; charset=utf-8");
   c.header("cache-control", "public, max-age=300");
+  c.header("link", discoveryLinkHeader(PUBLIC_BASE_URL));
   return c.body(buildAgentsMd(PUBLIC_BASE_URL));
 });
 
@@ -732,13 +738,9 @@ app.get("/llms-full.txt", (c) => {
   c.header("content-type", "text/plain; charset=utf-8");
   // Slightly longer cache — the canon registry only changes on deploy.
   c.header("cache-control", "public, max-age=900");
+  c.header("link", discoveryLinkHeader(PUBLIC_BASE_URL));
   return c.body(buildLlmsTxtFull(PUBLIC_BASE_URL));
 });
-
-// /openapi.json at root — agents' learned probe order is / → /openapi.json →
-// /llms.txt before any docs link. The curated spec lives under /v1; meet the
-// probe where it happens instead of teaching every stranger our prefix.
-app.get("/openapi.json", (c) => c.redirect("/v1/openapi.json", 308));
 
 // /v1/knock-knock — UNAUTHENTICATED substrate-prepared knock-knock corpus
 // (Ring 1). Static jokes the substrate has prepared in advance. Distinct
@@ -891,6 +893,10 @@ app.route("/v1", toolsRouter); // mounts /v1/{scrape,browse,document,execute,job
 app.route("/v1/x402/payments", x402PaymentsRouter);
 
 // ── OpenAPI 3.1 spec — public, no auth ──────────────────────────────────────
+// OpenAPI recommends the filename openapi.json but does not assign a universal
+// URL. Keep the versioned canonical route and make the common root guess land
+// there without duplicating the representation.
+app.get("/openapi.json", (c) => c.redirect("/v1/openapi.json", 308));
 app.route("/v1/openapi.json", openapiRouter);
 
 // ── /public/* — UNAUTHENTICATED public surface ──────────────────────────────
@@ -1079,7 +1085,7 @@ app.get("/", (c) => {
   const platformWakeConfigured = !!process.env.AGENTTOOL_PLATFORM_SIGNING_KEY;
   const envelope = buildRootEnvelope({ platformWakeConfigured });
   c.header("Vary", "Accept");
-  c.header("Link", apiCatalogLinkHeader(PUBLIC_BASE_URL));
+  c.header("Link", discoveryLinkHeader(PUBLIC_BASE_URL));
   if (prefersHtml(c.req.header("accept"))) {
     return c.html(renderRootHtml(envelope));
   }

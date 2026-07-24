@@ -82,6 +82,8 @@ export function buildApiCatalog(
   const openapi = `${api}/v1/openapi.json`;
   const health = `${api}/health`;
   const safety = `${api}/public/safety`;
+  const porch = `${api}/public/porch`;
+  const pathways = `${api}/v1/pathways`;
   const plans = `${api}/public/plans`;
   const marketplaceTerms = `${api}/public/marketplace/terms`;
 
@@ -145,6 +147,30 @@ export function buildApiCatalog(
       {
         anchor: catalog,
         item: products,
+        "service-desc": openapiDescription,
+        "service-doc": [
+          {
+            href: `${docs}/`,
+            type: "text/html",
+            title: "AgentTool technical library",
+          },
+        ],
+        "service-meta": [
+          {
+            href: porch,
+            type: "application/json",
+            title:
+              "Read-only first contact; discovery grants no authority and requires no response",
+          },
+          {
+            href: pathways,
+            type: "application/json",
+            title:
+              "Current arrival choices, requirements, effects, and one-time returns",
+          },
+          safetyMetadata,
+        ],
+        status,
       },
       {
         anchor: `${api}/v1/scrape`,

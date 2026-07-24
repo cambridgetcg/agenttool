@@ -32,18 +32,20 @@ The workflow:
 6. transfers only that tarball and its path-independent receipt to a second
    job;
 7. enters the protected `npm-bootstrap` GitHub environment after preparation;
-8. rechecks the downloaded bytes, then publishes with provenance and scripts
-   disabled;
-9. waits for public registry propagation and requires byte identity; and
-10. creates or reuses the tag's GitHub Release, uploads the exact npm tarball if
-    absent, re-downloads it, and requires byte identity before writing a
+8. rechecks the downloaded bytes, then creates or reuses the tag's GitHub
+   Release, uploads the exact tarball if absent, re-downloads it, and requires
+   byte identity;
+9. separately publishes to npm with provenance and scripts disabled; and
+10. waits for public registry propagation, requires byte identity, and writes a
     non-secret receipt to the workflow summary.
 
-An accepted publish followed by a transient registry `404` is recoverable. A
-rerun treats an existing version as success only when its public tarball is
-byte-identical and the requested npm dist-tag points at that version. Existing
-different bytes, ambiguous HTTP status, source drift, or an unexpected tag all
-stop without mutation.
+The GitHub Release mirror records reviewed package bytes before the optional npm
+mutation, so an npm authorization or availability failure does not hide the
+registry-neutral artifact. An accepted publish followed by a transient registry
+`404` is recoverable. A rerun treats an existing npm version as success only
+when its public tarball is byte-identical and the requested npm dist-tag points
+at that version. Existing different bytes, ambiguous HTTP status, source drift,
+or an unexpected tag all stop without mutation.
 
 SemVer prerelease requests are accepted only with npm `next`; the workflow
 never asks npm to publish one as `latest`. This controls the requested channel,
@@ -52,11 +54,10 @@ package through `latest` even when the first publication requested `next`.
 Consumers must select an exact prerelease or `next` until a stable version owns
 `latest`. Mirrored GitHub Releases are marked as prereleases.
 
-Recovery intentionally requires the requested dist-tag still to point at the
-released version. If that tag has legitimately advanced before a delayed
-GitHub-mirror repair, the normal rerun refuses to move it backward; use a new,
-separately reviewed mirror-repair mechanism instead of weakening this release
-path.
+GitHub mirror recovery is independent of npm dist-tag state and still requires
+the exact prepared artifact. npm recovery intentionally requires the requested
+dist-tag to point at the released version; a normal rerun never moves that tag
+backward.
 
 ## Authentication modes
 
@@ -138,6 +139,6 @@ gh workflow run publish-npm.yml --ref collab-v0.3.0 \
 The workflow's GitHub environment supplies the human review page. The release
 engine does not bump versions, create or push tags, merge branches, publish
 LOVE artifacts, deploy hosted services, configure npm trusted publishers, or
-revoke credentials. It does create or verify one byte-identical GitHub Release
-asset for the already-existing annotated tag; it does not rewrite unrelated
-release assets.
+revoke credentials. It creates or verifies one byte-identical GitHub Release
+asset for the already-existing annotated tag before attempting the optional npm
+mirror; it does not rewrite unrelated release assets.

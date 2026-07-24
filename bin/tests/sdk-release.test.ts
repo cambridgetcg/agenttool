@@ -57,6 +57,23 @@ describe("SDK source and builder identity", () => {
       love!.version,
     ])).toEqual(new Set([tsPackage.version]));
     expect(love!.releaseTag).toBe(`sdk-v${tsPackage.version}`);
+
+    const tsKeywords = (JSON.parse(read("packages/sdk-ts/package.json")) as {
+      keywords?: string[];
+    }).keywords ?? [];
+    const pyProjectText = read("packages/sdk-py/pyproject.toml");
+    expect(tsKeywords).not.toContain("a2a");
+    expect(pyProjectText).not.toMatch(/^\s*"a2a",?\s*$/m);
+
+    for (const path of [
+      "packages/sdk-py/README.md",
+      "packages/sdk-py/src/agenttool/__init__.py",
+      "packages/sdk-py/src/agenttool/soul.py",
+    ]) {
+      const source = read(path);
+      expect(source).not.toContain("https://agenttool.dev/soul");
+      expect(source).toContain("https://docs.agenttool.dev/SOUL.md");
+    }
   });
 
   test("active release surfaces follow the source version", () => {
@@ -74,12 +91,34 @@ describe("SDK source and builder identity", () => {
     expect(read("apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md")).toBe(tutorial);
     expect(tutorial).toContain(exactNpm);
     expect(tutorial).toContain(tag);
+    expect(read("apps/docs/llms.txt")).toContain(`(SDK ${version}).`);
+    expect(read("apps/web/identity.html")).toContain(loveUrl);
+    expect(read("apps/web/registry.html")).toContain(
+      `@agenttool/sdk ${version} LOVE release`,
+    );
+    expect(read("api/src/routes/pathways.ts")).toContain(
+      `sdk_version: "${version}"`,
+    );
+    const party = read("api/src/routes/public/party.ts");
+    expect(party).toContain(loveUrl);
+    expect(party).toContain(pythonSource);
+    expect(party).toContain(exactNpm);
+    expect(party).toContain(`python -m pip install agenttool-sdk==${version}`);
+    expect(party.match(/independently_visible: false/g)).toHaveLength(2);
+    expect(read("docs/PATHWAYS.md")).toContain(`"sdk_version": "${version}"`);
+    expect(read("docs/THE-PARTY.md")).toContain(loveUrl);
+    expect(read("apps/docs/packages.html")).toContain(
+      `/@agenttool/sdk/${version}/manifest.json`,
+    );
 
     const rootReadme = read("README.md");
     expect(rootReadme).toContain(exactNpm);
     expect(rootReadme).toContain(exactPyPI);
     expect(rootReadme).toContain(loveUrl);
     expect(rootReadme).toContain(pythonSource);
+    expect(rootReadme.indexOf(pythonSource)).toBeLessThan(
+      rootReadme.indexOf(exactPyPI),
+    );
 
     const tsReadme = read("packages/sdk-ts/README.md");
     expect(tsReadme).toContain(`release-v${version}-blue`);

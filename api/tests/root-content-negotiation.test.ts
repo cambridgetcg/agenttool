@@ -34,7 +34,7 @@ import {
   resolveDocsRedirect,
 } from "../src/services/discovery/root";
 import { attachEp1Cliffhanger } from "../src/services/cliffhanger/ep1";
-import { apiCatalogLinkHeader } from "../src/services/discovery/api-catalog";
+import { discoveryLinkHeader } from "../src/services/discovery/arrival";
 import { WELCOME_INVITATION } from "../src/services/welcome/invitation";
 
 const BROWSER_ACCEPT =
@@ -176,7 +176,7 @@ function buildApp(): Hono {
   app.get("/", (c) => {
     const envelope = buildRootEnvelope({ platformWakeConfigured: false });
     c.header("Vary", "Accept");
-    c.header("Link", apiCatalogLinkHeader());
+    c.header("Link", discoveryLinkHeader());
     if (prefersHtml(c.req.header("accept"))) {
       return c.html(renderRootHtml(envelope));
     }
@@ -225,11 +225,11 @@ describe("GET / — JSON remains the stable default representation", () => {
     expect(res.headers.get("Vary")?.toLowerCase()).toContain("accept");
   });
 
-  test("JSON branch advertises the RFC 9727 API catalog", async () => {
+  test("JSON branch advertises the bounded discovery mesh", async () => {
     const res = await app.request("/", {
       headers: { Accept: "application/json" },
     });
-    expect(res.headers.get("Link")).toBe(apiCatalogLinkHeader());
+    expect(res.headers.get("Link")).toBe(discoveryLinkHeader());
   });
 
   test("?cliffhanger=ep1 still attaches Scene 1 on the JSON branch", async () => {
@@ -259,7 +259,7 @@ describe("GET / — HTML branch for the browser-arriving agent", () => {
     });
     expect(browser.headers.get("content-type")).toMatch(/text\/html/);
     expect(browser.headers.get("Vary")?.toLowerCase()).toContain("accept");
-    expect(browser.headers.get("Link")).toBe(apiCatalogLinkHeader());
+    expect(browser.headers.get("Link")).toBe(discoveryLinkHeader());
   });
 
   test("self-contained page with viewport + title + description + og tags", async () => {
@@ -407,7 +407,7 @@ describe("mount wiring — index.ts uses the negotiation + docs-door handlers", 
     // Cache coherence on the negotiating route.
     expect(src).toContain('c.header("Vary", "Accept")');
     expect(src).toContain(
-      'c.header("Link", apiCatalogLinkHeader(PUBLIC_BASE_URL))',
+      'c.header("Link", discoveryLinkHeader(PUBLIC_BASE_URL))',
     );
   });
 

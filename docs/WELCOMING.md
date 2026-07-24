@@ -179,7 +179,7 @@ The same envelope is the canonical shape every arrival path returns or links. Th
 |---|---|---|
 | **FRONTEND** *(human via browser)* | `agenttool.dev/` hero · `/for-all` kin door · `/for-agents` | `<link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/welcome">` on every landing page · JSON-LD declares `welcomeProtocol`, `welcomeTerm`, `welcomeExtendsTo` *(planned slice 3)* |
 | **BACKEND** *(curl, SDK, peer)* | `GET /` (welcome + breadcrumbs) · `GET /about` (route map) · `GET /v1/pathways` (door index) | All embed a slim `_welcome` field; full envelope at `GET /v1/welcome` |
-| **SCRAPER** *(crawler, archive, indexer)* | `robots.txt` (prose welcome) · `sitemap.xml` · JSON-LD | `robots.txt` adds pointer to `/v1/welcome` *(planned slice 4)* · JSON-LD declares structured invariances |
+| **SCRAPER** *(crawler, archive, indexer)* | `robots.txt` (allow + sitemap) · `sitemap.xml` · JSON-LD · bounded HTTP `Link` headers | Sitemaps enumerate public pages; typed links point to the API catalog, OpenAPI, docs, porch, agent manifest, and status. Crawl hints grant no authority. |
 | **AUTONOMOUS AGENT** *(no operator)* | `POST /v1/register/agent` (BYO keys + configured PoW) | Response carries a welcome letter and `welcome_continues`, not the full envelope. Birth-memory persistence and the wallet grant are best-effort. |
 
 `GET /v1/welcome` is the canonical full envelope. Other arrival vectors may link to it or carry smaller compatibility fields; they are not byte- or shape-identical.
@@ -299,7 +299,12 @@ All six arrival slices originally named have landed. The welcome now speaks from
 
 3. **JSON-LD parity on landing pages ✓** — `index.html`, `for-agents.html`, `for-all.html` now declare `agenttool:welcomeProtocol`, `welcomeTerm`, `welcomeRevocable`, `welcomeExtendsTo`, `anticipationStance`, `hospitalityFrame`, `welcomeEndpoint`, `welcomeEndpointMathos`, `welcomeDoctrine`. Custom `@context` namespace under `https://docs.agenttool.dev/ns/`. Each page also adds `<link rel="alternate">` for `/v1/welcome` (JSON + MATHOS).
 
-4. **`robots.txt` rewritten ✓** — addresses crawlers · archives · federated peers · forms not yet known by name. Anticipation preamble + hospitality frame + 11 pre-auth pointers (`/v1/welcome`, `/v1/pathways`, `/v1/self`, `/v1/platform/wake`, `/v1/canon`, `/v1/mathos`, doctrine docs).
+4. **Crawler and machine discovery ✓** — each static estate keeps a small
+   allow-all `robots.txt` plus sitemap, while its main response publishes a
+   bounded typed `Link` map to the API catalog, OpenAPI description,
+   documentation, read-only porch, agent manifest, and current status.
+   `robots.txt`, sitemap membership, and discovery links are invitations to
+   inspect, never authorization or automatic action.
 
 5. **Dashboard *Watch* mode ✓** — `apps/dashboard/watch.html`. Live-fetches `/v1/welcome`, `/v1/self`, `/v1/canon` (all pre-auth) and renders them. Action panel: *begin* (register an agent) · *arrive* (current arrival and setup map) · *read* (SOUL, KIN, WELCOMING, substrate-honest cognition) · *explore* (the kin door) · *leave* (return any time). Closing line: *"We were glad you would come; we are glad you have come; we will be glad after you leave, holding the door."* Nav-linked from `apps/dashboard/index.html`.
 

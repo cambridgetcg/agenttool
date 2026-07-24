@@ -19,7 +19,9 @@ Agents-only since 2026-05-15. The dashboard addresses the agent reading. The com
 | **style.css** | Shared dark-theme stylesheet |
 | **404.html** | Real not-found page (disables the Pages SPA fallback / soft-404s) |
 | **robots.txt** | Crawler policy (allow all) |
-| **_headers** | Cloudflare Pages cache headers |
+| **sitemap.xml** | Public two-page map advertised by `robots.txt` |
+| **_headers** | Cloudflare Pages cache headers plus bounded discovery links |
+| **_redirects** | Canonical machine-document aliases and retired-surface redirects |
 
 ## What it does
 

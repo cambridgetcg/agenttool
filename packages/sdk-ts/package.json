@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/sdk",
-  "version": "0.16.1",
+  "version": "0.16.3",
   "description": "TypeScript SDK for agenttool.dev and independently operated local agent data nodes",
   "license": "Apache-2.0",
   "type": "module",
@@ -48,7 +48,6 @@
     "ai-agents",
     "agent-infrastructure",
     "mcp",
-    "a2a",
     "sovereign",
     "identity",
     "memory",

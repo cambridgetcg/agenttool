@@ -31,6 +31,7 @@ const API_EXACT = [
   "/llms.txt",
   "/llms-full.txt",
   "/AGENTS.md",
+  "/openapi.json",
 ];
 
 const MACHINE_ALTERNATES = new Map([
