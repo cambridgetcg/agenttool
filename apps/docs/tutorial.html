@@ -242,9 +242,9 @@
 )</pre>
       </div>
 
-      <p>The installed tutorial contract is currently SDK 0.16.1. Python's separately distributed source tag is <code>sdk-v0.16.1</code>; it is not part of the LOVE JavaScript catalog.</p>
+      <p>The installed tutorial contract is currently SDK 0.16.2. Python's separately distributed source tag is <code>sdk-v0.16.2</code>; it is not part of the LOVE JavaScript catalog.</p>
 
-      <p><strong>Optional shorter install:</strong> <code>npm install --save-exact @agenttool/sdk@0.16.1</code>. This requests the compatible exact npm mirror, when that registry has it, but skips Step 1's independent LOVE size/SHA-256 verification. Mirror publication may lag; never substitute npm <code>latest</code> for the version selected by <code>/v1/pathways</code>.</p>
+      <p><strong>Optional shorter install:</strong> <code>npm install --save-exact @agenttool/sdk@0.16.2</code>. This requests the compatible exact npm mirror, when that registry has it, but skips Step 1's independent LOVE size/SHA-256 verification. Mirror publication may lag; never substitute npm <code>latest</code> for the version selected by <code>/v1/pathways</code>.</p>
 
       <p>Create an owner-readable handoff file, then save the TypeScript below as <code>birth.ts</code> and run it. The file bridges a one-time registration or recovery response into Step 2 without writing either secret to terminal output.</p>
 
@@ -400,8 +400,8 @@ if (seedOnly) {
   const sdkPackage = JSON.parse(
     readFileSync(new URL("../package.json", sdkEntryUrl), "utf8"),
   ) as { name?: unknown; version?: unknown };
-  if (sdkPackage.name !== "@agenttool/sdk" || sdkPackage.version !== "0.16.1") {
-    throw new Error("Seed-only recovery requires the verified @agenttool/sdk 0.16.1 artifact.");
+  if (sdkPackage.name !== "@agenttool/sdk" || sdkPackage.version !== "0.16.2") {
+    throw new Error("Seed-only recovery requires the verified @agenttool/sdk 0.16.2 artifact.");
   }
   const seedBridge = await import(
     new URL("./seed.js", sdkEntryUrl).href
@@ -410,7 +410,7 @@ if (seedOnly) {
     typeof seedBridge.signDiscoveryChallenge !== "function" ||
     typeof seedBridge.signRecoverChallenge !== "function"
   ) {
-    throw new Error("Verified SDK 0.16.1 is missing its recovery signing helpers.");
+    throw new Error("Verified SDK 0.16.2 is missing its recovery signing helpers.");
   }
 
   const discoveryProof = seedBridge.signDiscoveryChallenge({
@@ -576,7 +576,7 @@ if (seedOnly) {
 }</pre>
       </div>
 
-      <p>The mnemonic reaches the owner-only handoff before registration can commit. If the process times out, rerun the same <code>birth.ts</code> with the same handoff path: the seed-only branch verifies the exact installed SDK 0.16.1 package, loads its pinned <code>dist/seed.js</code> helpers by file URL, performs signed discovery, and recovers rather than registering again. A rooted match reuses one serialized recovery body for both its <code>identity-recover/v1</code> and exact-request <code>identity-authority/v1</code> proofs. Zero matches refuse. Multiple matches print only public candidate metadata and refuse; set <code>AGENT_RECOVERY_DID='the exact printed DID'</code> and rerun to select one. A completed handoff also refuses a rerun. The exact wire contract is in <a href="IDENTITY-SEED.md" class="link">IDENTITY-SEED.md</a>. If final atomic replacement fails, the error names a separate mode-<code>0600</code> completed handoff containing the one-time response.</p>
+      <p>The mnemonic reaches the owner-only handoff before registration can commit. If the process times out, rerun the same <code>birth.ts</code> with the same handoff path: the seed-only branch verifies the exact installed SDK 0.16.2 package, loads its pinned <code>dist/seed.js</code> helpers by file URL, performs signed discovery, and recovers rather than registering again. A rooted match reuses one serialized recovery body for both its <code>identity-recover/v1</code> and exact-request <code>identity-authority/v1</code> proofs. Zero matches refuse. Multiple matches print only public candidate metadata and refuse; set <code>AGENT_RECOVERY_DID='the exact printed DID'</code> and rerun to select one. A completed handoff also refuses a rerun. The exact wire contract is in <a href="IDENTITY-SEED.md" class="link">IDENTITY-SEED.md</a>. If final atomic replacement fails, the error names a separate mode-<code>0600</code> completed handoff containing the one-time response.</p>
 
       <p>You now have:</p>
       <ul class="primitive-list">

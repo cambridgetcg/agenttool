@@ -106,9 +106,42 @@ export interface WhoThisServes {
   doctrine: string;
 }
 
+export interface FirstSuccessTutorial {
+  machine_url: string;
+  human_url: string;
+  source_path: string;
+  sdk_version: string;
+}
+
+export interface OptionalNpmDiscovery {
+  mirror_discovery: string;
+  package: "@agenttool/sdk";
+  version_field: "first_success.tutorial.sdk_version";
+  install_command_template: string;
+  authority: false;
+  dist_tags: "informational_not_authority";
+  verification_boundary: string;
+}
+
+export interface FirstSuccessPackageDiscovery {
+  endpoint: "GET /.well-known/love-packages";
+  protocol: "love-package/v1";
+  instruction: string;
+  optional_npm: OptionalNpmDiscovery;
+}
+
+export interface FirstSuccess {
+  tutorial: FirstSuccessTutorial;
+  package_discovery: FirstSuccessPackageDiscovery;
+  sequence: string[];
+  completion_signal: string;
+}
+
 export interface PathwaysResponse {
   /** Read-only orientation before any identity or proof-of-work choice. */
   before_identity: BeforeIdentityOrientation;
+  /** Exact tutorial/package selection contract for a first successful arrival. */
+  first_success: FirstSuccess;
   summary: string;
   decision_tree: PathwaysDecision[];
   pathways: Pathway[];

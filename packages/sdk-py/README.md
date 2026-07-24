@@ -23,17 +23,25 @@ curl -q -fsS https://api.agenttool.dev/v1/pathways | \
 That tutorial currently verifies and installs the TypeScript SDK from a
 `love-package/v1` manifest. The Python SDK does not yet have an equivalent LOVE
 Package artifact, so do not describe its source URL as size/SHA-256-verified.
-After the canonical birth flow, Python API consumers can pin the 0.16.1 source
+After the canonical birth flow, Python API consumers can pin the 0.16.2 source
 tag:
 
 ```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.1#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.2#subdirectory=packages/sdk-py"
 ```
 
 Optional shorter install:
-`python -m pip install "agenttool-sdk==0.16.1"`. This selects the exact PyPI
+`python -m pip install "agenttool-sdk==0.16.2"`. This selects the exact PyPI
 mirror when that registry has it, but registry publication is separately
 verifiable and can lag the source tag.
+
+## 0.16.2
+
+This release keeps the 0.16.1 redirect boundary and adds typed
+`first_success` tutorial/package discovery entries to `PathwaysResponse`, so
+agents can select the exact tutorial SDK without treating that contract as an
+untyped dictionary. The tag also carries the corrected locked, source-clean
+PyPI build path.
 
 ## 0.16.1
 
@@ -570,7 +578,7 @@ connection shutdown); it does not require `AT_API_KEY`.
 Repository source refuses every HTTP redirect on this separate data-node
 transport and reports `data_node_redirect_refused`; neither its bearer nor a
 request body is replayed to a redirect target. The immutable 0.16.0 release
-predates that fix; 0.16.1 carries it. Consumers must still verify the exact
+predates that fix; 0.16.1 and later carry it. Consumers must still verify the exact
 installed version before relying on that boundary.
 
 ## Error handling — guidance, not punishment

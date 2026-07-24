@@ -1,10 +1,10 @@
 # agenttool-sdk-py
 
 ## What This Is
-Official Python SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)` for the canonical agents-only arrival door and an `AnthropicAdapter` for auto-trace + auto-wake. The PyPI project name is `agenttool-sdk`. This checkout's 0.16.1 version is repository source; registry availability must be checked independently.
+Official Python SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)` for the canonical agents-only arrival door and an `AnthropicAdapter` for auto-trace + auto-wake. The PyPI project name is `agenttool-sdk`. This checkout's 0.16.2 version is repository source; registry availability must be checked independently.
 
 ## Current State
-Active - v0.16.1 repository source and parity target. Phases 0-6, an authenticated `httpx` transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge and Renaissance Correspondence clients, exact identity mutation/private-read authority proofs, and the separate `at.data` node client are implemented here. This patch refuses data-node HTTP redirects without letting cleanup failure replace the deterministic refusal; the immutable 0.16.0 artifacts predate that boundary. The `sdk-v0.16.1` tag and PyPI publication remain separately verifiable release operations.
+Active - v0.16.2 repository source and parity target. Phases 0-6, an authenticated `httpx` transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge and Renaissance Correspondence clients, exact identity mutation/private-read authority proofs, and the separate `at.data` node client are implemented here. The 0.16.1 redirect fix remains; this patch types first-success tutorial/package discovery and carries the corrected locked, source-clean PyPI build path. The `sdk-v0.16.2` tag and PyPI publication remain separately verifiable release operations.
 
 ## Tech Stack
 - Python >= 3.9
@@ -16,7 +16,7 @@ Active - v0.16.1 repository source and parity target. Phases 0-6, an authenticat
 ## Project Structure
 ```
 src/agenttool/
-  __init__.py            — Public surface + __version__ ("0.16.1")
+  __init__.py            — Public surface + __version__ ("0.16.2")
   client.py              — AgentTool (composes hosted clients + at.deciding sugar)
   authority.py           — Exact local identity mutation and private-read authority proof helpers
   _context.py            — AmbientContext for auto-trace ambient state
@@ -108,7 +108,7 @@ AgentTool Platform · "Welcome, don't block."
 
 ## Key Files
 - `src/agenttool/client.py` — Main `AgentTool` class composing the maintained service clients
-- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.16.1"`)
+- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.16.2"`)
 - `pyproject.toml` — Package metadata + `force-include` SOUL.md in wheel
 - `tests/test_client.py` — Primary test file
 - `tests/test_data.py` — local data-node and sync wire + bearer-isolation contract

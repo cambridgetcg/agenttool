@@ -6,7 +6,30 @@
 >
 > **Implements:** the SDK plane — hand-written clients for a selected subset of [ROADMAP.md](ROADMAP.md). CI compares method names for the maintained parity target list; it does not prove complete route, signature, or wire-model parity.
 
-## Current source release — 0.16.1 (2026-07-24)
+## Current source release — 0.16.2 (2026-07-24)
+
+This patch keeps the 0.16.1 transport and redirect-refusal behavior while
+making exact-version discovery easier to consume. TypeScript now exports
+`SDK_VERSION` from the package root. Both maintained SDKs give
+`first_success` an explicit tutorial/package-selection type instead of leaving
+the release contract as an unknown object or untyped dictionary.
+
+The release path also closes two operational gaps found while publishing
+0.16.1: the pinned uv command now enforces an up-to-date lock without accepting
+repository source overrides, and the protected npm workflow mirrors exact
+reviewed bytes to GitHub before attempting the optional registry mutation.
+Pinned-uv CI and expanded static-surface drift tests exercise those boundaries
+before a release tag exists.
+
+### 0.16.2 release record
+
+The lockstep TypeScript and Python source identities, runtime client headers,
+LOVE builder target, discovery pins, onboarding fixtures, and machine-readable
+docs name 0.16.2. The TypeScript LOVE artifact records one clean source
+revision; npm, PyPI, GitHub Release, and tag availability remain independently
+verifiable rather than being inferred from repository source.
+
+## Previous release — 0.16.1 (2026-07-24)
 
 This patch closes two authority-bound transport gaps without adding a public
 method, namespace, or wire field. TypeScript Correspondence now sends append,
@@ -445,6 +468,7 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **0.15.0** | Paired Renaissance Correspondence client: local event signing, durable replay, advisory claim projection, finite project voice, and Wake invalidation hints | no — additive |
 | **0.16.0** | Authenticated transport seam for local credential brokers, with explicit public-discovery and local-data authority separation | no — additive |
 | **0.16.1** | Route Correspondence through that transport; refuse and contain data-node redirects | no — corrective patch |
+| **0.16.2** | Typed first-success version discovery plus corrected exact-release automation | no — additive/corrective patch |
 | **1.0.0** | API freeze + comprehensive docstrings + READMEs + integration test suite | no — declarative |
 
 ## Non-goals

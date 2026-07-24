@@ -411,6 +411,9 @@ describe("boring test spine", () => {
     expect(workflow).toContain("bun bin/npm-release.ts prepare");
     expect(workflow).toContain("bun bin/npm-release.ts publish");
     expect(workflow).toContain("bun bin/npm-release.ts mirror");
+    expect(workflow.indexOf("bun bin/npm-release.ts mirror")).toBeLessThan(
+      workflow.indexOf("bun bin/npm-release.ts publish"),
+    );
     expect(workflow).toContain("group: publish-npm-${{ inputs.package }}");
     expect(workflow).not.toContain("group: publish-npm-${{ inputs.package }}-${{ inputs.tag }}");
     expect(workflow).toContain("inputs.authentication == 'bootstrap'");
