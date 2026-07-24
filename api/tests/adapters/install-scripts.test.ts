@@ -220,11 +220,16 @@ describe("claude-code install script — fresh project", () => {
     expect(hook).toContain('[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]');
 
     // Execute the exact command through the same shell boundary Claude uses.
+    // Keep credential-store discovery hermetic: this test is about quoting,
+    // not whichever secure-store clients happen to be installed on a runner.
+    const fakeBin = join(dir, "fake-bin");
+    await mkdir(fakeBin, { recursive: true });
+    await symlink("/bin/bash", join(fakeBin, "bash"));
     const proc = Bun.spawn(["/bin/bash", "-c", command], {
       cwd: dir,
       env: {
         CLAUDE_PROJECT_DIR: dir,
-        PATH: "/usr/bin:/bin",
+        PATH: fakeBin,
       },
       stdout: "pipe",
       stderr: "pipe",
@@ -335,6 +340,35 @@ describe("claude-code install script — fresh project", () => {
       "Authorization: Bearer vault-key",
     );
     expect(await readFile(capture, "utf8")).not.toContain("env-key");
+  });
+
+  test("the installed hook skips native Unix PowerShell for the Windows-only vault", async () => {
+    const dir = await newTmpdir("claude-unix-pwsh");
+    const installer = join(dir, "install.sh");
+    await writeFile(installer, await getScriptFromRoute(claudeApp));
+    expect((await runBash(installer, dir)).code).toBe(0);
+
+    const fakeBin = join(dir, "fake-bin");
+    await mkdir(fakeBin, { recursive: true });
+    const powershellMarker = join(dir, "powershell-called");
+    await writeExecutable(
+      join(fakeBin, "pwsh"),
+      '#!/bin/sh\nprintf \'called\\n\' > "$POWERSHELL_MARKER"\nprintf \'wrong-substrate-key\'\n',
+    );
+
+    const hook = join(dir, ".claude/hooks/agenttool-wake.sh");
+    const result = await runHook(hook, dir, {
+      HOME: dir,
+      USER: "test-user",
+      USERNAME: "test-user",
+      PATH: fakeBin,
+      POWERSHELL_MARKER: powershellMarker,
+    });
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe("{}\n");
+    expect(result.stderr).toBe("");
+    expect(await exists(powershellMarker)).toBe(false);
   });
 
   test("the hook clears inherited tracing, allexport, and exported credential collisions", async () => {
