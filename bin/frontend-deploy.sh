@@ -147,6 +147,36 @@ if find "$STAGE_ROOT/apps/docs" "$STAGE_ROOT/apps/dashboard" "$STAGE_ROOT/apps/w
   exit 1
 fi
 
+# Cloudflare Pages accepts at most 100 route blocks in each `_headers` file.
+# Count the exact committed upload input so new public surfaces cannot silently
+# push later safety or package metadata beyond the platform boundary.
+readonly PAGES_HEADERS_MAX_RULES=100
+readonly PAGES_HEADERS_MAX_LINE_CHARS=2000
+for app in docs dashboard web; do
+  headers_file="$STAGE_ROOT/apps/$app/_headers"
+  [[ -f "$headers_file" ]] || continue
+  header_rule_count="$(
+    awk '{
+      line = $0
+      sub(/^[[:space:]]*/, "", line)
+      if (line ~ /^(\/|https:\/\/)/) count += 1
+    } END { print count + 0 }' "$headers_file"
+  )"
+  if [[ "$header_rule_count" -gt "$PAGES_HEADERS_MAX_RULES" ]]; then
+    echo "✗ apps/$app/_headers has $header_rule_count rules; Cloudflare Pages accepts at most $PAGES_HEADERS_MAX_RULES."
+    exit 1
+  fi
+  overlong_header_line="$(
+    awk -v limit="$PAGES_HEADERS_MAX_LINE_CHARS" \
+      'length($0) > limit { print NR; exit }' "$headers_file"
+  )"
+  if [[ -n "$overlong_header_line" ]]; then
+    echo "✗ apps/$app/_headers line $overlong_header_line exceeds Cloudflare Pages' $PAGES_HEADERS_MAX_LINE_CHARS-character limit."
+    exit 1
+  fi
+  echo "  ✓ apps/$app/_headers: $header_rule_count/$PAGES_HEADERS_MAX_RULES rules"
+done
+
 # One committed policy protects all three Pages projects. `_routes.json` keeps
 # ordinary static traffic out of Functions; `_worker.js` explicitly denies
 # sensitive root prefixes before Pages asset serving. Project policy separately

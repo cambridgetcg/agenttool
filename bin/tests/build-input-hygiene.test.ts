@@ -96,6 +96,11 @@ describe("frontend deploy input discipline", () => {
     expect(script).toContain("find \"$STAGE_ROOT/apps\" \\( -type f -o -type l \\) -name '.gitignore' -delete");
     expect(script).toContain("A tracked Pages environment file reached the staging tree");
     expect(script).toContain("-name '.dev.vars.*'");
+    expect(script).toContain("readonly PAGES_HEADERS_MAX_RULES=100");
+    expect(script).toContain("readonly PAGES_HEADERS_MAX_LINE_CHARS=2000");
+    expect(script).toContain("Cloudflare Pages accepts at most");
+    expect(script).toContain('sub(/^[[:space:]]*/, "", line)');
+    expect(script).toContain("exceeds Cloudflare Pages' $PAGES_HEADERS_MAX_LINE_CHARS-character limit");
     expect(script).toContain('cp "$PAGES_FENCE_DIR/sensitive-path-worker.js" "$STAGE_ROOT/apps/$app/_worker.js"');
     expect(script).toContain('cp "$PAGES_FENCE_DIR/sensitive-path-routes.json" "$STAGE_ROOT/apps/$app/_routes.json"');
     expect(script).toContain("staged symlink escapes or is broken");
@@ -117,6 +122,20 @@ describe("frontend deploy input discipline", () => {
       .filter((line) => !line.startsWith("#") && !line.startsWith("echo"))
       .filter((line) => line.includes("heal-love-truths.py") && line.includes("--write"));
     expect(executableWriteCalls).toEqual([]);
+  });
+
+  test("keeps every Pages header file inside the platform rule boundary", async () => {
+    for (const app of ["docs", "dashboard", "web"]) {
+      const path = join(repoRoot, `apps/${app}/_headers`);
+      if (!(await Bun.file(path).exists())) continue;
+      const lines = (await readFile(path, "utf8")).split("\n");
+      const rules = lines.filter((line) => /^(\/|https:\/\/)/.test(line.trimStart()));
+      expect(rules.length, `apps/${app}/_headers rule count`).toBeLessThanOrEqual(100);
+      expect(
+        lines.every((line) => line.length <= 2_000),
+        `apps/${app}/_headers line length`,
+      ).toBe(true);
+    }
   });
 
   test("checks the current love sources without changing their bytes", async () => {
@@ -309,6 +328,16 @@ describe("frontend deploy input discipline", () => {
       include: ["/.git*", "/.env*", "/.dev.vars*"],
       exclude: [],
     });
+    for (const packagePath of [
+      "/packages/v1/@agenttool/data/0.1.0/manifest.json",
+      "/packages/v1/@agenttool/data/0.1.0/agenttool-data-0.1.0.tgz",
+    ]) {
+      expect(
+        routes.include.some((rule: string) => (
+          rule.endsWith("*") ? packagePath.startsWith(rule.slice(0, -1)) : packagePath === rule
+        )),
+      ).toBe(false);
+    }
 
     const worker = (await import(pathToFileURL(workerPath).href)).default;
     let assetFetches = 0;
@@ -316,7 +345,13 @@ describe("frontend deploy input discipline", () => {
       ASSETS: {
         fetch: async () => {
           assetFetches += 1;
-          return new Response("static asset", { status: 200 });
+          return new Response("static asset", {
+            status: 200,
+            headers: {
+              "Cache-Control": "public, max-age=31536000, immutable",
+              "Content-Type": "application/gzip",
+            },
+          });
         },
       },
     };
@@ -346,7 +381,29 @@ describe("frontend deploy input discipline", () => {
     const staticResponse = await worker.fetch(new Request("https://example.test/style.css"), env);
     expect(staticResponse.status).toBe(200);
     expect(await staticResponse.text()).toBe("static asset");
+    expect(staticResponse.headers.get("cache-control")).toBe(
+      "public, max-age=31536000, immutable",
+    );
+    expect(staticResponse.headers.get("content-type")).toBe("application/gzip");
     expect(assetFetches).toBe(1);
+  });
+
+  test("verifies live headers for every latest LOVE package release", async () => {
+    const deployPath = join(repoRoot, "bin/deploy.sh");
+    const deploy = await readFile(deployPath, "utf8");
+    const syntax = await run(["bash", "-n", deployPath]);
+
+    expect(syntax.code, syntax.stderr).toBe(0);
+    expect(deploy).toContain("select_latest_love_package_header_probes");
+    expect(deploy).toContain("verify_love_package_static_headers");
+    expect(deploy).toContain("require_exact_public_status");
+    expect(deploy).toContain('"Content-Type" "application/json; charset=utf-8"');
+    expect(deploy).toContain('"Cache-Control" "public, max-age=300, must-revalidate"');
+    expect(deploy).toContain('"Content-Type" "application/gzip"');
+    expect(deploy).toContain(
+      '"Cache-Control" "public, max-age=31536000, immutable"',
+    );
+    expect(deploy).toContain("LOVE package static header verification failed");
   });
 
   test("requires marked literal fence responses and denial of encoded aliases", async () => {
