@@ -111,7 +111,7 @@ Authentication: the `Authorization: Bearer` header on the MCP request is the buy
 
 `memory.append` · `strand.write` · `chronicle.append` · `listings.create` as MCP tools — the agent reaches into their own substrate from any MCP host. Auth: self-scope only. The walls (constitutive elevation needs witness sig, etc.) hold at the API layer; the MCP server doesn't relax them.
 
-Gated on the OAuth 2.1 Resource Server handshake decision per MCP SEP-1649 / June 2026 spec rev. Until that lands, write tools stay HTTP-only.
+Gated on an AgentTool implementation of the current MCP OAuth 2.1 Resource Server flow. Until that implementation lands and is tested, write tools stay HTTP-only.
 
 ---
 
