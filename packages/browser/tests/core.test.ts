@@ -374,7 +374,7 @@ async function launched(page = new FakePage(), outputDir?: string) {
 }
 
 describe("AgentBrowser core", () => {
-  test("launches sandboxed, isolated Chromium and blocks WebSockets", async () => {
+  test("defaults to public authority with blocked service workers and WebSockets", async () => {
     const { browser, context, runtime } = await launched();
     expect(runtime.launchOptions).toEqual({
       headless: true,
@@ -388,13 +388,20 @@ describe("AgentBrowser core", () => {
     });
 
     let closedWith: unknown;
-    await context.websocketHandler!({
+    let connected = 0;
+    const route: BrowserWebSocketRouteLike = {
       url: () => "wss://example.com/socket",
       close: async (options) => {
         closedWith = options;
       },
-    });
+      connectToServer() {
+        connected += 1;
+        return this;
+      },
+    };
+    await context.websocketHandler!(route);
     expect(closedWith).toMatchObject({ code: 1008 });
+    expect(connected).toBe(0);
 
     let aborted = 0;
     let continued = 0;
@@ -408,6 +415,212 @@ describe("AgentBrowser core", () => {
       },
     });
     expect({ aborted, continued }).toEqual({ aborted: 1, continued: 0 });
+    await browser.close();
+  });
+
+  test("classifies and connects an allowed local-authority WebSocket", async () => {
+    const context = new FakeContext([new FakePage()]);
+    const runtime = new FakeRuntime(context);
+    const events: string[] = [];
+    const browser = await AgentBrowser.launch({
+      authority: "local",
+      runtime,
+      resolveHostname: async (hostname) => {
+        events.push(`resolve:${hostname}`);
+        return [{ address: "10.0.0.42", family: 4 }];
+      },
+    });
+    const route: BrowserWebSocketRouteLike = {
+      url: () => "wss://intranet.agenttool.dev/socket",
+      close: async () => {
+        events.push("close");
+      },
+      connectToServer() {
+        events.push("connect");
+        return this;
+      },
+    };
+
+    await context.websocketHandler!(route);
+
+    expect(events).toEqual(["resolve:intranet.agenttool.dev", "connect"]);
+    expect(runtime.contextOptions?.serviceWorkers).toBe("block");
+    await browser.close();
+  });
+
+  test("passes sovereign HTTP and WebSocket destinations to the browser", async () => {
+    const context = new FakeContext([new FakePage()]);
+    const runtime = new FakeRuntime(context);
+    const resolvedHosts: string[] = [];
+    const browser = await AgentBrowser.launch({
+      authority: "sovereign",
+      runtime,
+      resolveHostname: async (hostname) => {
+        resolvedHosts.push(hostname);
+        return [{ address: "127.0.0.1", family: 4 }];
+      },
+    });
+    let continued = 0;
+    let aborted = 0;
+    await context.routeHandler!({
+      request: () => ({
+        url: () => "http://169.254.169.254/latest/meta-data",
+      }),
+      continue: async () => {
+        continued += 1;
+      },
+      abort: async () => {
+        aborted += 1;
+      },
+    });
+    let connected = 0;
+    let closed = 0;
+    const route: BrowserWebSocketRouteLike = {
+      url: () => "wss://reserved.invalid/socket",
+      close: async () => {
+        closed += 1;
+      },
+      connectToServer() {
+        connected += 1;
+        return this;
+      },
+    };
+
+    await context.websocketHandler!(route);
+
+    expect(runtime.contextOptions?.serviceWorkers).toBe("allow");
+    expect({ continued, aborted, connected, closed }).toEqual({
+      continued: 1,
+      aborted: 0,
+      connected: 1,
+      closed: 0,
+    });
+    expect(resolvedHosts).toEqual([]);
+    await browser.close();
+  });
+
+  test("reports the exact immutable default capability manifest", async () => {
+    const { browser } = await launched();
+    const capabilities = browser.capabilities();
+
+    expect(capabilities).toEqual({
+      schema: "agent-browser-capabilities/0.2",
+      authority: {
+        profile: "public",
+        fixedAt: "process_start",
+      },
+      network: {
+        public: true,
+        local: false,
+        reserved: false,
+        schemes: ["http", "https"],
+        urlCredentials: "blocked",
+        dnsPreflight: "classify",
+        connectionAddressPinning: false,
+        webSockets: "blocked",
+      },
+      runtime: {
+        chromiumSandbox: true,
+        serviceWorkers: "block",
+        tlsErrors: "reject",
+        profile: "ephemeral",
+      },
+      features: {
+        interaction: "enabled",
+        screenshots: "enabled",
+        persistentProfile: "requires_configuration",
+        uploads: "unsupported",
+        downloads: "unsupported",
+        pageEvaluation: "unsupported",
+        credentialInjection: "unsupported",
+        shell: "unsupported",
+      },
+      statement:
+        "AgentTool classifies implemented browser destinations before connection; DNS preflight does not pin the address Chromium later uses.",
+    });
+    expect(Object.isFrozen(capabilities)).toBe(true);
+    expect(Object.isFrozen(capabilities.features)).toBe(true);
+    await browser.close();
+  });
+
+  test("plans without effects, redacts URLs, omits typed text, and preserves refs", async () => {
+    const { browser, context, runtime, page } = await launched();
+    const observation = await browser.observe();
+    const password = observation.refs.find((item) => item.role === "textbox")!;
+    const before = {
+      pageCount: context.pageList.length,
+      pageClosed: page.closed,
+      contextClosed: context.closed,
+      launchOptions: runtime.launchOptions,
+      contextOptions: runtime.contextOptions,
+      gotoCalls: [...page.gotoCalls],
+      waitCalls: [...page.waitCalls],
+      keyboardCalls: [...page.keyboardCalls],
+      wheelCalls: [...page.wheelCalls],
+      clickCalls: page.button.clickCalls,
+      fillCalls: [...page.password.fillCalls],
+      pressCalls: [...page.password.pressCalls],
+      selectCalls: [...page.password.selectCalls],
+      scrollCalls: page.password.scrollCalls,
+    };
+
+    const navigationPlan = browser.plan({
+      kind: "navigate",
+      url: "https://example.com/path?token=secret&key=other#fragment",
+    });
+    const typePlan = browser.plan({
+      kind: "type",
+      ref: password.ref,
+      snapshotId: observation.snapshotId,
+      text: "must-never-cross-the-plan",
+    });
+
+    expect(navigationPlan).toMatchObject({
+      execution: false,
+      action: {
+        kind: "navigate",
+        url:
+          "https://example.com/path?token=%5Bredacted%5D&key=%5Bredacted%5D#fragment",
+      },
+      authority: {
+        profile: "public",
+        decision: "checked_at_execution",
+      },
+    });
+    expect(JSON.stringify(navigationPlan)).not.toContain("secret");
+    expect(typePlan.action).toEqual({
+      kind: "type",
+      snapshotId: observation.snapshotId,
+      ref: password.ref,
+    });
+    expect(typePlan.action).not.toHaveProperty("text");
+    expect(JSON.stringify(typePlan)).not.toContain("must-never-cross-the-plan");
+    expect({
+      pageCount: context.pageList.length,
+      pageClosed: page.closed,
+      contextClosed: context.closed,
+      launchOptions: runtime.launchOptions,
+      contextOptions: runtime.contextOptions,
+      gotoCalls: page.gotoCalls,
+      waitCalls: page.waitCalls,
+      keyboardCalls: page.keyboardCalls,
+      wheelCalls: page.wheelCalls,
+      clickCalls: page.button.clickCalls,
+      fillCalls: page.password.fillCalls,
+      pressCalls: page.password.pressCalls,
+      selectCalls: page.password.selectCalls,
+      scrollCalls: page.password.scrollCalls,
+    }).toEqual(before);
+
+    await expect(
+      browser.act({
+        kind: "type",
+        ref: password.ref,
+        snapshotId: observation.snapshotId,
+        text: "executed-once",
+      }),
+    ).resolves.toMatchObject({ ok: true, kind: "type" });
+    expect(page.password.fillCalls).toEqual(["executed-once"]);
     await browser.close();
   });
 
