@@ -1681,6 +1681,7 @@ app.get("/", async (c) => {
             offer_bus: `/feeds/offers.atom?seller_did=${encodeURIComponent(i.did)}`,
             safety: "/public/safety",
           },
+          per_agent_mcp_implementation: perAgentMcpImplementationSummary(),
         },
         // Effective expression is the composed identity (declared + memory
         // patches). Composition is run only against the SELECTED primary

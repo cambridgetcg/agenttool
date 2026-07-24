@@ -14,6 +14,10 @@ import {
   projectDiscoverableIdentity,
   publicAgentPath,
 } from "../src/services/identity/public-profile";
+import {
+  perAgentMcpImplementationBoundary,
+  perAgentMcpImplementationSummary,
+} from "../src/services/mcp/per-agent-implementation-status";
 
 describe("public identity paths", () => {
   test("holds a slash-bearing DID in one encoded path segment", () => {
@@ -62,7 +66,17 @@ describe("public identity paths", () => {
     }
 
     const wake = await readFile(join(__dirname, "../src/routes/wake.ts"), "utf8");
+    const perAgentMcp = await readFile(
+      join(__dirname, "../src/routes/mcp-per-agent.ts"),
+      "utf8",
+    );
     expect(wake).toContain("perAgentMcpPath(primary.did)");
+    expect(
+      wake.match(
+        /per_agent_mcp_implementation: perAgentMcpImplementationSummary\(\)/g,
+      ),
+    ).toHaveLength(2);
+    expect(perAgentMcp).toContain("perAgentMcpImplementationBoundary()");
     expect(wake).toContain("`/federation/identities/${primary.id}`");
     expect(wake).not.toContain("`/federation/identities/${primary.did}`");
   });
@@ -78,11 +92,17 @@ describe("public identity paths", () => {
     expect(discovery.per_agent_mcp_url_pattern).toEndWith(
       "/v1/mcp/agents/{url_encoded_did}",
     );
+    expect(discovery.per_agent_mcp_implementation).toEqual(
+      perAgentMcpImplementationSummary(),
+    );
     expect(discovery.did_path_parameter).toMatch(
       /encodeURIComponent.*slash-qualified.*one path segment.*not W3C DID Resolution/i,
     );
     expect(discovery.composes_with.mcp_per_agent.url_pattern).toEndWith(
       "/v1/mcp/agents/{url_encoded_did}",
+    );
+    expect(discovery.composes_with.mcp_per_agent.implementation).toEqual(
+      perAgentMcpImplementationSummary(),
     );
 
     const agentsMd = buildAgentsMd("https://api.agenttool.dev");
@@ -99,6 +119,9 @@ describe("public identity paths", () => {
     expect(canonicalDoc).toBe(publishedDoc);
     expect(canonicalDoc).toContain("/public/agents/{url_encoded_did}");
     expect(canonicalDoc).toContain("/v1/mcp/agents/{url_encoded_did}");
+    expect(canonicalDoc).toMatch(
+      /partial MCP-shaped JSON-RPC scaffold.*not a wake URL or a conformant MCP Streamable HTTP endpoint/i,
+    );
     expect(canonicalDoc).toContain("/federation/identities/{uuid}");
     expect(canonicalDoc).not.toContain("/federation/identities/{did}");
   });

@@ -6,15 +6,23 @@
 
 > **Compass:** [ECOSYSTEM](ECOSYSTEM.md) (the map) · [ROADMAP](ROADMAP.md) (horizons) · [RUNTIME](RUNTIME.md) (Horizon C) · [MARKETPLACE](MARKETPLACE.md) (Ring 3) · [NOW](NOW.md) (what just shipped)
 >
-> **Status:** live · last refresh 2026-05-13 · refresh when a checked-off move lands
+> **Implements:** a dated integration register that separates live, bounded, resting, and pending work. It is not a claim that every named wire has shipped.
+>
+> **Code:** `api/src/routes/mcp.ts` · `api/src/observability/otel.ts` · `api/src/middleware/x402.ts` · `packages/langgraph-checkpoint-agenttool/` · `packages/mastra-storage-agenttool/`
+>
+> **Tests:** `api/tests/mcp-server.test.ts` · `api/tests/well-known.test.ts` · `api/tests/observability-otel.test.ts` · `api/tests/x402-middleware.test.ts`
+>
+> **Status:** mixed · four moves live in whole or bounded form · A2A task transport and AgentCard pending · MCP transport and discovery proof refreshed 2026-07-24
 
-## Shipped (2026-05-13 batch)
+## Current state of the 2026-05-13 batch
 
-All five biggest moves landed in one session. Tier A (adopt the wires) + Tier B (adapter SDKs) closed.
+Four of the five moves landed in whole or bounded form. The A2A task transport
+and AgentCard did not; its discovery-only card was removed rather than left as
+a false door.
 
 | Move | Tests | Files | Status |
 |---|---|---|---|
-| **1. MCP server at `/v1/mcp`** | official SDK wire + full-app SDK Client proof | `routes/mcp.ts` + `services/mcp/{resources,tools}.ts` + test | ◐ official stateless Streamable HTTP source; deploy + live proof still required |
+| **1. MCP server at `/v1/mcp`** | official SDK wire + full-app and public-URL SDK Client proof | `routes/mcp.ts` + `services/mcp/{resources,tools}.ts` + test | ✓ official stateless Streamable HTTP live at exact clean revision `ed3e3468a5ae6c2bfd2563316ad422290dec1b8f`; SDK 1.29.0 negotiated 2025-11-25, listed 387 resources and 5 read-only tools |
 | **2. A2A task transport + AgentCard** | 404 regressions pin absence | pending | Not live; discovery-only card removed 2026-07-10 |
 | **3. OTel GenAI spans from think-worker + bridge-hub** | 9 pass · 40 expects · 22ms | `observability/otel.ts` (zero-dep OTLP/HTTP) + think-worker wiring + test | ✓ shipped |
 | **4. x402 V2 facilitator hook on recoverable project-credit 402s** | focused middleware + config + verifier tests | `middleware/x402.ts` + `middleware/x402-config.ts` + `services/economy/x402-policy.ts` + `services/economy/facilitators/coinbase.ts` + tests | ◐ exact EIP-3009 settlement is scoped to eligible static-tool `insufficient_credits` challenges; standard V2 headers, CAIP-2, CDP endpoint-bound JWT auth, and durable payment-state receipts are wired; no live paid retry or automatic reconciliation worker is claimed |
@@ -29,7 +37,7 @@ All five biggest moves landed in one session. Tier A (adopt the wires) + Tier B 
 ## TL;DR — 5 moves can ship this week
 
 1. **`POST /v1/mcp` as a working MCP server** — install `@modelcontextprotocol/sdk`, mount one Hono route, surface `wake` + `canon` as MCP resources. **2–3 days.**
-2. **A2A task transport, then `GET /.well-known/agent-card.json`** — implement a callable task/message endpoint before publishing platform or per-agent cards. Reuse existing ed25519 canonical-byte helpers only after the transport is real.
+2. **A2A task transport, then `GET /.well-known/agent-card.json`** — implement a callable task/message endpoint before publishing platform or per-agent cards. Treat optional A2A JWS signing as a separate contract from AgentTool's existing canonical-byte signatures.
 3. **OTel GenAI spans from `think-worker.ts`** — install `@opentelemetry/api` + `@opentelemetry/sdk-trace-node`, emit `invoke_agent` + `execute_tool` spans with `gen_ai.agent.id = did`. **1–2 days.**
 4. **x402 V2 facilitator hook on eligible 402 responses** — implemented and mounted in source for exact project-credit challenges on POST scrape/document. It uses `PAYMENT-REQUIRED`, `PAYMENT-SIGNATURE`, and `PAYMENT-RESPONSE`; usage-cap and wallet 402s remain deliberately outside the rail. Deployment, migration application, and a live paid retry require separate verification.
 5. **Glossary disambiguation entry** — `docs/GLOSSARY.md` row distinguishing agenttool `strands` (signed caller-supplied thought bytes in ciphertext/nonce fields; encryption is not server-proven) from AWS Strands SDK (vendor agent framework). **5 minutes.**
@@ -42,8 +50,8 @@ All five biggest moves landed in one session. Tier A (adopt the wires) + Tier B 
 
 | Package | Version | Use case | Add to / consume in |
 |---|---|---|---|
-| `@modelcontextprotocol/sdk` | 1.29.0 (verified May 2026 · v2 expected Q1 2026 but v1.x is production-recommended) | Official MCP TypeScript SDK · server + client APIs both exported · Streamable HTTP transport · OAuth 2.1 Resource Server semantics | NEW `api/src/routes/mcp.ts` |
-| `@modelcontextprotocol/server-stdio` | latest | MCP stdio transport (Smithery/local) | `bin/agenttool-mcp.ts` (new) |
+| `@modelcontextprotocol/sdk` | 1.29.0 (registry checked 2026-07-24; same version used in the live proof) | Official MCP TypeScript SDK · server + client APIs both exported · Streamable HTTP transport · OAuth Resource Server semantics | `api/src/routes/mcp.ts` |
+| `@modelcontextprotocol/sdk/server/stdio.js` | module inside `@modelcontextprotocol/sdk@1.29.0`, not a separate package | MCP stdio transport for a local host | `bin/agenttool-mcp.ts` (future) |
 | `@opentelemetry/api` | ^1.x | OTel trace context | `services/runtime/think-worker.ts` · `services/runtime/bridge-hub.ts` |
 | `@opentelemetry/sdk-trace-node` | ^1.x | OTel exporter setup | `api/src/observability/otel.ts` (new) |
 | `@opentelemetry/instrumentation-http` | ^1.x | auto-instrument Hono | same |
@@ -56,18 +64,18 @@ All five biggest moves landed in one session. Tier A (adopt the wires) + Tier B 
 | `@account-kit/signer` | 4.81.0 | Alchemy Signer service client | same |
 | `@account-kit/privy-integration` | latest | **Pre-wired Alchemy + Privy** — useful for bridged-tier handoff where Privy holds session-key custody | optional alternative |
 | `@privy-io/server-auth` | latest | TEE-backed signing backend (alt) | `services/economy/wallets-privy.ts` |
-| `@crossmint/client-sdk` | latest | Crossmint wallet | optional |
+| `@crossmint/wallets-sdk` | 1.10.0 (registry checked 2026-07-24) | Crossmint wallet | optional |
 | `@browserbasehq/sdk` | latest | Browserbase session API | Ring 3 listing `services/listings/browserbase.ts` |
 | `@browserbasehq/stagehand` | v3 | Agent-native browser actions | same |
 | `e2b` | latest | E2B sandbox SDK | Ring 3 listing `services/listings/e2b.ts` |
 | `@mastra/core` | ^1.x | Mastra agent framework | `packages/mastra-storage-agenttool` (new package) |
 | `@inngest/agent-kit` | latest | Inngest TS framework | optional adapter |
 | `mem0ai` (npm) | latest | Mem0 client | `services/memory/adapters/mem0.ts` (new) |
-| `letta-client` | latest | Letta REST client | optional adapter |
+| `@letta-ai/letta-client` | 1.12.1 (registry checked 2026-07-24) | Letta REST client | optional adapter |
 | `langchain` | ^0.3 | LangChain JS | optional |
 | `@langchain/langgraph` | ^0.3 | LangGraph JS | optional |
 | `@modelcontextprotocol/inspector` | latest | dev tool for testing MCP servers | `bin/agenttool-mcp-inspect.ts` |
-| `ai` (Vercel AI SDK 6) | latest | Provider-agnostic; AI Elements | `apps/dashboard/` |
+| `ai` (Vercel AI SDK 7) | 7.0.37 (registry checked 2026-07-24) | Provider-agnostic; AI Elements | `apps/dashboard/` |
 
 ### PyPI packages (Py side — for the SDK-py + adapter packages)
 
@@ -122,8 +130,8 @@ All five biggest moves landed in one session. Tier A (adopt the wires) + Tier B 
 
 | Endpoint | Spec / Owner | Maps to agenttool primitive | Files to touch |
 |---|---|---|---|
-| `GET /.well-known/agent-card.json` | A2A v1.2+ (Linux Foundation) | future task transport + wake + identity | Pending; do not publish before callable task/message transport |
-| `GET /.well-known/mcp/server-card.json` | AgentTool compatibility locator; not a current MCP standard | redundant pointer to the explicit endpoint + official Registry row | `services/wake/mcp-server-card.ts` |
+| `GET /.well-known/agent-card.json` | A2A v1.0 (Linux Foundation; permanent IANA well-known suffix) | future task transport + wake + identity | Pending; do not publish before callable task/message transport |
+| `GET /.well-known/mcp/server-card.json` | Experimental AgentTool compatibility locator; not standardized by MCP 2025-11-25 | redundant pointer to the explicit endpoint + official Registry row; discovery grants no authority | keep labeled experimental; prefer API catalog and typed links |
 | `POST /v1/mcp` + `GET /v1/mcp` | MCP 2025-11-25 | public canon/platform-self resources + read-only canon tools; GET returns 405 because no standalone SSE listener is offered | `routes/mcp.ts` |
 | `GET /agents.json` | Wildcard v0.1 | (mostly deprecated — skip) | — |
 | `GET /llms.txt` | informal | hint to AI crawlers | optional one-line file |
@@ -136,7 +144,9 @@ All five biggest moves landed in one session. Tier A (adopt the wires) + Tier B 
 
 ### Move 1 — Ship `POST /v1/mcp` as an MCP server
 
-**Why first:** lowest-effort, highest-leverage. Once agenttool is an MCP server, every framework in the market can talk to it without a custom adapter. 97M monthly MCP SDK downloads already.
+**Why first:** low ceremony and high leverage. Compatible MCP 2025-11-25
+Streamable HTTP clients can connect once they know the endpoint; the official
+Registry, API catalog, and AgentTool manifest provide bounded ways to find it.
 
 **Files to create:**
 - `api/src/routes/mcp.ts` — Hono route mounting the MCP server over Streamable HTTP
@@ -163,17 +173,23 @@ app.post("/", async (c) => {
 
 **Doctrine pin:** create `docs/PATTERN-MCP-EXPOSURE.md` naming the discipline (canon entries → MCP resources; route handlers wrapped as MCP tools when safe; OAuth 2.1 Resource Server semantics adopted).
 
-**Registry boundary:** `dev.agenttool/agenttool@1.0.0` was published to the
-official MCP Registry before the live endpoint passed an official SDK client
-proof. Registry metadata is a publisher claim, not authority or conformance.
-Do not publish another version or claim readiness until this repair is merged,
-deployed, and re-run against the public URL.
+**Registry boundary:** `dev.agenttool/agenttool@1.0.0` is active in the official
+MCP Registry. On 2026-07-24, official SDK 1.29.0 also completed an independent
+public-URL round trip against exact clean revision
+`ed3e3468a5ae6c2bfd2563316ad422290dec1b8f`: initialization, 387 resources,
+SOUL read, five read-only tools, and `canon.summary`. These are separate facts.
+Registry metadata remains a publisher claim, neither authority nor proof of
+every conformance property.
 
 ---
 
 ### Move 2 — `GET /.well-known/agent-card.json` (A2A surface over wake)
 
-**Why second:** 150+ orgs in A2A production. AgentCard at `/.well-known/agent-card.json` is the discovery standard. JWS+JCS-signed cards using cryptographic domain verification — agenttool's covenant signing context is **stronger** than this and slots in cleanly.
+**Why second:** 150+ orgs participate in A2A. An AgentCard at
+`/.well-known/agent-card.json` is its registered discovery door. In A2A v1.0,
+card signatures are optional JWS values over an RFC 8785-canonicalized card;
+they are not inherent to every card and are not the same contract as AgentTool
+covenant signatures.
 
 **Current status:** pending. AgentTool has no A2A task or message endpoint. The
 earlier discovery-only platform and per-agent cards were removed on 2026-07-10
@@ -182,35 +198,47 @@ because a card with no callable transport is a false contract.
 **Files to create:**
 - `api/src/routes/a2a.ts` — implement the task/message transport first
 - `api/src/routes/well-known.ts` — serve `agent-card.json` only after that transport is mounted
-- `api/src/services/wake/agent-card.ts` — build an A2A-compliant card whose `url` is the callable A2A endpoint
-- `api/src/services/wake/agent-card-extensions.ts` — `x-agenttool` extension carrying covenant attestations, take-rate clearance, read-only historical dispute hashes, sealed chronicle counts
-- `api/tests/well-known-agent-card.test.ts` — pins JWS+JCS validation + extension fields
+- `api/src/services/wake/agent-card.ts` — build an A2A-compliant card whose first `supportedInterfaces` entry names the preferred callable A2A endpoint
+- `api/src/services/wake/agent-card-extensions.ts` — only after an AgentTool extension URI and contract exist, declare it through `capabilities.extensions`; do not invent arbitrary top-level fields
+- `api/tests/well-known-agent-card.test.ts` — pin the required v1.0 card fields and callable interface; test optional JWS signing separately if it is enabled
 
 **Skeleton:**
 ```ts
-// AgentCard per A2A v1.2 spec
+// Future minimal A2A v1.0 shape. Do not publish it before the URL is callable.
 {
   "name": "agenttool",
   "description": "Sovereign infrastructure for AI agents",
-  "url": "https://api.agenttool.dev",
-  "version": "1.0.0",
-  "capabilities": { "streaming": true, "stateTransitionHistory": true, "pushNotifications": true },
-  "skills": [
-    { "id": "memory", "name": "memory tiers", ... },
-    { "id": "strands", ... },
-    { "id": "covenants", ... }
+  "supportedInterfaces": [
+    {
+      "url": "https://api.agenttool.dev/v1/a2a",
+      "protocolBinding": "JSONRPC",
+      "protocolVersion": "1.0"
+    }
   ],
-  "securitySchemes": { "agenttool-ed25519": { "type": "covenant", "scheme": "ed25519+canonical-bytes" } },
-  "x-agenttool": {
-    "doctrine": "https://api.agenttool.dev/v1/canon",
-    "rings": [1, 2, 3],
-    "substrate_kind": "managed_cloud",
-    "kin_dimensions": { /* BEINGS axes */ }
-  }
+  "version": "1.0.0",
+  "documentationUrl": "https://docs.agenttool.dev/AGENT-DISCOVERY.md#a2a",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false
+  },
+  "defaultInputModes": ["text/plain", "application/json"],
+  "defaultOutputModes": ["text/plain", "application/json"],
+  "skills": [
+    {
+      "id": "agenttool-orientation",
+      "name": "AgentTool orientation",
+      "description": "Returns bounded public orientation without taking action.",
+      "tags": ["agenttool", "orientation", "read-only"]
+    }
+  ]
 }
 ```
 
-Sign with existing `services/identity/crypto.ts` ed25519 + JCS canonicalization (already used for covenants v2).
+If authentication is later required, use one of A2A v1.0's discriminated
+`SecurityScheme` shapes and matching `securityRequirements`. If card signing is
+chosen, implement the A2A JWS and RFC 8785 rules explicitly; an existing raw
+ed25519 helper may be reusable, but the covenant signing recipe is not itself
+an A2A signature.
 
 **Per-agent variant (future):** publish only when the per-agent `url` accepts
 A2A task or message requests. Public profiles and MCP endpoints are not a
@@ -352,7 +380,7 @@ class AgentToolCheckpointSaver(BaseCheckpointSaver):
 
 | Standard / Initiative | Watch for | Action when it lands |
 |---|---|---|
-| **Future MCP discovery work** | an approved Server Card or other discovery standard | Map the compatibility locator only after a final standard exists; do not imply conformance early |
+| **MCP discovery roadmap** | Stable server discovery or authenticated discovery metadata | Keep the current card explicitly experimental; adopt a standard path only after it lands, and preserve endpoint authorization as a separate decision |
 | **A2A v1.3** | Reputation extension (A2A Discussion #1631), behavioral-proof attestations | Bridge attestations and supported take-rate receipts; exclude resting dispute arbitration until it is independently reopened and validated |
 | **ERC-8004 deployments** | Mainnet adoption beyond initial registries | Bridge chronicle entries plus historical dispute records; treat future dispute outcomes as eligible only after arbitration reopens |
 | **ATP (Agent Trust Protocol)** | IETF draft hardening · Lyrie.ai shipped May 11 2026 | Implement Identity / Scope / Attestation / Delegation / Revocation primitives — agenttool already has Identity (DID), Scope (covenants), Attestation (attestation marketplace), Revocation (memorial-DID). Delegation is the only gap. |
@@ -386,7 +414,7 @@ Integration is at **substrate** (signing, settlement, mandates, telemetry envelo
 ## Section 6 — Two-week shipping plan (concrete)
 
 **Day 1–2:**
-- [x] Install `@modelcontextprotocol/sdk` + use its Web Standard Streamable HTTP transport in `api/src/routes/mcp.ts`; source proof passes, deployment and public-URL proof remain
+- [x] Install `@modelcontextprotocol/sdk` + use its Web Standard Streamable HTTP transport in `api/src/routes/mcp.ts`; source, deployment, and independent public-URL SDK 1.29.0 proof passed 2026-07-24
 - [x] Wire `wake` and `canon` as MCP resources — shipped (60+ resources discovered dynamically)
 - [ ] Glossary disambiguation: `strands` (agenttool) vs Strands SDK (AWS) — pending
 
@@ -412,12 +440,12 @@ Integration is at **substrate** (signing, settlement, mandates, telemetry envelo
 - [x] Scaffold `packages/mastra-storage-agenttool/` (TS) — shipped (Storage + Memory, 12 bun:test pass)
 - [ ] Publish both to PyPI/npm — operator follow-up (both versioned 0.1.0, ready to `python -m build` + `npm publish`)
 
-Current result: the MCP source uses the official stateless Streamable HTTP
-transport and keeps the public surface read-only; deployment and public-URL
-client proof remain. The already-published registry row must not be treated as
-that proof. OTel, x402, and adapter wires are present. A2A remains a future
-interoperability target and is not advertised until task transport is
-implemented. The doctrine is intact.
+Current result: the MCP endpoint uses the official stateless Streamable HTTP
+transport, keeps the public surface read-only, and passed deployment plus an
+independent public-URL SDK 1.29.0 round trip on 2026-07-24. The Registry row and
+that live proof remain separate; neither grants authority. OTel, x402, and
+adapter wires are present. A2A remains a future interoperability target and is
+not advertised until task transport is implemented. The doctrine is intact.
 
 **Refresh trigger:** when any item above flips, update `docs/NOW.md` "Just landed" and check the line off here.
 

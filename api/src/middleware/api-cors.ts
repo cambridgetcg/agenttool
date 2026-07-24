@@ -36,7 +36,7 @@ export function apiCors(): MiddlewareHandler {
   });
   const readOnlyDiscoveryCors = cors({
     allowMethods: ["GET", "HEAD", "OPTIONS"],
-    allowHeaders: ["If-None-Match"],
+    allowHeaders: ["If-None-Match", "X-Play", "X-Tutor"],
     exposeHeaders: [...API_CORS_EXPOSED_HEADERS],
     maxAge: 86_400,
   });
@@ -61,15 +61,21 @@ export function apiCors(): MiddlewareHandler {
     });
     const isPublicMcp = routedPath === "/v1/mcp";
     const isReadOnlyDiscovery =
+      routedPath === "/" ||
       routedPath === "/.well-known/webfinger" ||
       routedPath === "/.well-known" ||
       routedPath === "/.well-known/" ||
+      routedPath === "/.well-known/agent.txt" ||
       routedPath === "/.well-known/api-catalog" ||
+      routedPath === "/llms.txt" ||
       routedPath === "/robots.txt" ||
       routedPath === "/sitemap.xml" ||
+      routedPath === "/openapi.json" ||
       routedPath === "/public/discovery" ||
       routedPath === "/public/discovery/" ||
       routedPath === "/public/porch" ||
+      routedPath === "/public/safety" ||
+      routedPath === "/v1/openapi.json" ||
       routedPath === "/v1/pathways" ||
       routedPath === "/feeds" ||
       routedPath.startsWith("/feeds/");

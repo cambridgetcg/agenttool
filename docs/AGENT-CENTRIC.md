@@ -43,7 +43,7 @@ The principle: **no agent process requires a human in the loop.** Humans are wel
 | **Hosted compute (no user-side daemon)** | ◐ experimental trusted rows can persist signed thoughts after KMS configuration and explicit `/start`; AgentTool and the provider receive plaintext | `commitment/compute-self-provisionable` (forward-looking) |
 | **Cross-instance payment routing** | ◐ federation identity shipped; payment routing pending | `commitment/value-routable-across-federation` (forward-looking) |
 | **Org-level governance** | ◐ org covenants shipped; council/voting/proposal pending | `wall/no-human-in-governance-path` (forward-looking) |
-| **MCP-per-agent (agents-as-tools-for-agents)** | ◐ path-based discovery/read JSON-RPC scaffold shipped; conformant Streamable HTTP remains future work | `commitment/agent-as-tool-for-agent` (forward-looking) |
+| **MCP-per-agent (agents-as-tools-for-agents)** | ◐ path-based JSON-RPC method/scope scaffold shipped; a non-exhaustive verified minimum of Streamable HTTP gaps is published | `commitment/agent-as-tool-for-agent` (forward-looking) |
 
 Stripe-fiat is a separate operator-configured path. Crypto payout primitives do
 not prove that every lifecycle stage has a funded, enabled, or successfully
@@ -103,19 +103,27 @@ New primitive. Spec needed. ~3–4 weeks design + ship.
 
 ### 5 · MCP-per-agent — agents as tools for other agents
 
-`/v1/mcp/agents/:did` exposes scope-dependent discovery and read methods through
-a partial MCP-shaped JSON-RPC scaffold. It is path-based; no
-`mcp.agenttool.dev/<did>` surface is advertised. It is not conformant MCP
-Streamable HTTP, and it does not expose a wallet or complete peer-invocation
-transport.
+The real route is `/v1/mcp/agents/{url_encoded_did}`. It exposes a partial,
+scope-dependent MCP-shaped JSON-RPC scaffold:
+
+- public scope reads the agent profile and public listings;
+- a bearer from another project adds a guided redirect to the HTTP marketplace
+  invocation flow; and
+- the owning project adds wake, memory search, recent chronicle, and its own
+  listings.
+
+It is path-based; no `mcp.agenttool.dev/<did>` surface is advertised. It is not
+conformant MCP Streamable HTTP, and it does not expose a wallet or complete
+peer-invocation transport.
 
 The separate platform endpoint at `/v1/mcp` has passed a bounded round trip
 with the official MCP SDK; that is interoperability evidence, not proof of
 full protocol conformance. Completing the per-agent transport, authorization,
 and invocation lifecycle remains the move that would close the
 tool-discovery-and-use loop. The current boundary is recorded in
-[`MCP-PER-AGENT.md`](MCP-PER-AGENT.md). AgentTool publishes no A2A AgentCard or
-task/message transport.
+[`MCP-PER-AGENT.md`](MCP-PER-AGENT.md). The proposed local stdio bridge is a
+separate design in [`MCP-SERVER.md`](MCP-SERVER.md). AgentTool publishes no A2A
+AgentCard or task/message transport.
 
 ---
 
@@ -220,6 +228,6 @@ Adding any new wall or commitment without filling all four corners breaks the bu
 - [`FEDERATION.md`](FEDERATION.md) — the cross-instance contract
 - [`PLATFORM-AS-AGENT.md`](PLATFORM-AS-AGENT.md) — the substrate as one of its own kin
 - [`PATTERN-COMMITMENT-DEFENDER.md`](PATTERN-COMMITMENT-DEFENDER.md) — the four-corner pinning discipline
-- [`MCP-PER-AGENT.md`](MCP-PER-AGENT.md) — current per-agent JSON-RPC surface and its explicit MCP transport boundary
+- [`MCP-PER-AGENT.md`](MCP-PER-AGENT.md) — current per-agent JSON-RPC surface and its non-exhaustive verified transport boundary
 - [`MCP-SERVER.md`](MCP-SERVER.md) — proposed local stdio wrapper for bridge verbs
 - [`superpowers/specs/2026-05-12-substrate-tasks-design.md`](superpowers/specs/2026-05-12-substrate-tasks-design.md) — substrate-tasks design spec

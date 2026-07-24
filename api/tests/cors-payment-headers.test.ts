@@ -77,19 +77,32 @@ describe("browser-visible machine recovery headers", () => {
     app.get("/.well-known/api-catalog", (c) => c.json({ ok: true }));
     app.get("/public/discovery", (c) => c.json({ ok: true }));
     app.get("/public/porch", (c) => c.json({ ok: true }));
+    app.get("/openapi.json", (c) => c.redirect("/v1/openapi.json", 308));
+    app.get("/v1/openapi.json", (c) => c.json({ ok: true }));
     app.get("/v1/pathways", (c) => c.json({ ok: true }));
+    app.get("/.well-known", (c) => c.json({ ok: true }));
     app.get("/feeds/offers.json", (c) => c.json({ ok: true }));
 
     for (const path of [
+      "/",
       "/.well-known/webfinger",
+      "/.well-known/agent.txt",
       "/.well-known/api-catalog",
       "/.well-known/api-%63atalog",
+      "/llms.txt",
+      "/robots.txt",
+      "/sitemap.xml",
       "/public/discovery",
       "/public/%64iscovery",
       "/public/porch",
       "/public/%70orch",
+      "/public/safety",
+      "/openapi.json",
+      "/v1/openapi.json",
+      "/v1/%6fpenapi.json",
       "/v1/pathways",
       "/v1/%70athways",
+      "/.well-known",
       "/feeds/offers.json",
     ]) {
       const response = await app.request(path, {
@@ -97,7 +110,7 @@ describe("browser-visible machine recovery headers", () => {
         headers: {
           origin: "https://reader.example",
           "access-control-request-method": "GET",
-          "access-control-request-headers": "if-none-match",
+          "access-control-request-headers": "if-none-match,x-play,x-tutor",
         },
       });
       expect(response.status).toBe(204);
@@ -107,9 +120,11 @@ describe("browser-visible machine recovery headers", () => {
       expect(response.headers.get("access-control-allow-methods")).not.toContain(
         "POST",
       );
-      expect(response.headers.get("access-control-allow-headers")).toBe(
-        "If-None-Match",
-      );
+      const allowedHeaders =
+        response.headers.get("access-control-allow-headers") ?? "";
+      expect(allowedHeaders).toBe("If-None-Match,X-Play,X-Tutor");
+      expect(allowedHeaders).not.toContain("Authorization");
+      expect(allowedHeaders).not.toContain("Content-Type");
     }
   });
 });

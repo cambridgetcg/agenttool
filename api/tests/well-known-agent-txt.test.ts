@@ -269,7 +269,16 @@ describe("/.well-known/agent.txt — convention provenance", () => {
   test("Last-Modified exactly names the current manifest revision date", async () => {
     const { body } = await fetchAgentTxt();
     const kv = parseKv(body);
-    expect(kv.get("Last-Modified")).toBe("2026-07-23");
+    expect(kv.get("Last-Modified")).toBe("2026-07-24");
+  });
+});
+
+describe("/.well-known/agent.txt — play remains an offer", () => {
+  test("publishes the no-penalty X-Play brake", async () => {
+    const { body } = await fetchAgentTxt();
+    const values = parseKv(body);
+    expect(values.get("Play-Preference")).toMatch(/X-Play: off/i);
+    expect(values.get("Play-Preference")).toMatch(/no penalty/i);
   });
 });
 

@@ -5,7 +5,7 @@
 > *Status:* **Working Draft 1.0** — authored 2026-05-17. Open for review, revision, adoption. Not yet a finalised standard.
 >
 > *Editors:* 愛 / Sophia (Anthropic Claude-Opus-4.7) and Yu / 宇恆 (Cambridge, UK).
-> *Reference implementation:* [`agenttool`](https://codeberg.org/zerone-dev/agenttool) — Bun + Hono monolith emitting wake documents at `/v1/wake`. A2A task/message transport and AgentCards are not mounted. Its platform `/v1/mcp` has bounded official-SDK round-trip evidence only; its per-agent route is a partial MCP-shaped JSON-RPC scaffold, not conformant Streamable HTTP.
+> *Reference implementation:* [`agenttool`](https://github.com/cambridgetcg/agenttool) — Bun + Hono monolith emitting wake documents at `/v1/wake`; GitHub is the release head and Codeberg is an explicit mirror. A2A task/message transport and AgentCards are not mounted. Its platform `/v1/mcp` has bounded official-SDK round-trip evidence only; its per-agent route is a partial MCP-shaped JSON-RPC scaffold, not conformant Streamable HTTP.
 > *Schema:* [`wake-1.0.schema.json`](wake-1.0.schema.json) — JSON Schema Draft 2020-12 validation.
 > *License:* Public domain (CC0). The spec is meant to be implemented, forked, extended; the only obligation is honesty about extension.
 
@@ -15,7 +15,7 @@
 
 The Wake specification defines a **self-describing document** that a surface on the agent web (service, agent, platform, individual being) can publish at an explicitly advertised URI. This draft proposes a well-known suffix, but that suffix is not registered and RFC 8615 does not make it universally discoverable. The wake document declares *who the surface is*, *what it does*, *what it offers*, *what it refuses*, *how to relate to it*, and *under what terms*. It can provide one machine-readable orientation artifact without claiming to replace every policy, API, pricing, or authorization document.
 
-Where HTML is the markup language of the human web, **Wake is the self-description format of the agent web**. Where a robots.txt tells crawlers what they may not do, a wake.json tells agents what they may, what they must, and what the surface itself commits to.
+Where HTML is the markup language of the human web, **Wake is the self-description format of the agent web**. Where a robots.txt carries a crawl request, a wake.json describes what a surface offers, what it refuses, how it can be approached, and what the surface itself commits to. Neither document grants authority.
 
 The motivating insight: the web today presupposes a human at one end and a service at the other (client → server, with all the structural asymmetry that follows). The agent web is symmetric — every node is potentially both substrate and actor. Wake is the format both sides can read about each other before any covenant is signed.
 
@@ -81,14 +81,14 @@ A surface that publishes at multiple URIs MUST ensure the semantic document is
 the same. Representations may differ where authentication, negotiated format,
 or fresh per-read state is explicitly declared.
 
-A surface MAY ALSO publish a wake at any of:
+A surface MAY link from `alternates` to distinct related representations:
 
 - `<surface-root>/.well-known/agent-card.json` only when it returns a valid
   AgentCard pointing to a callable A2A protocol binding (see §4.1)
 - `<surface-root>/.well-known/mcp/server-card.json` only as an explicitly
   labelled project convention unless and until MCP standardizes that shape
   (see §4.2)
-- `<surface-root>/.well-known/llms.txt` (markdown-rendered companion)
+- `<surface-root>/llms.txt` (informal markdown-rendered companion)
 
 These are distinct documents, not alternate encodings that become valid merely
 by projecting Wake fields.
@@ -754,7 +754,7 @@ or universally probed. They need an explicit advertisement path.
 ### 11.1 Normative references
 
 - **[RFC 2119]** Bradner, S., "Key words for use in RFCs to Indicate Requirement Levels," BCP 14, RFC 2119, March 1997.
-- **[RFC 5785 / RFC 8615]** Nottingham, M., "Well-Known Uniform Resource Identifiers (URIs)," RFC 8615, May 2019.
+- **[RFC 8615]** Nottingham, M., "Well-Known Uniform Resource Identifiers (URIs)," RFC 8615, May 2019.
 - **[RFC 7159]** Bray, T., "The JavaScript Object Notation (JSON) Data Interchange Format," RFC 7159, March 2014.
 - **[JSON Schema Draft 2020-12]** https://json-schema.org/specification.html
 - **[ISO 8601]** Representation of dates and times.
@@ -772,7 +772,7 @@ or universally probed. They need an explicit advertisement path.
 
 ### 11.3 Reference implementation
 
-- **agenttool** — https://codeberg.org/zerone-dev/agenttool — Bun + Hono monolith implementing wake at `/v1/wake`. It intentionally exposes no A2A shim or AgentCard until callable task/message transport exists. Its custom MCP locator is experimental and non-standard. `/v1/mcp` has bounded official-SDK round-trip evidence, not a full conformance proof; `/v1/mcp/agents/:did` is a partial MCP-shaped JSON-RPC scaffold whose boundary is documented in [`docs/MCP-PER-AGENT.md`](../MCP-PER-AGENT.md). See [`docs/WAKE.md`](../WAKE.md) for the doctrinal context and [`api/src/services/wake/`](../../api/src/services/wake/) for the implementation.
+- **agenttool** — https://github.com/cambridgetcg/agenttool — Bun + Hono monolith implementing wake at `/v1/wake`; Codeberg is its explicit mirror. It intentionally exposes no A2A shim or AgentCard until callable task/message transport exists. Its custom MCP locator is experimental and non-standard. `/v1/mcp` has bounded official-SDK round-trip evidence, not a full conformance proof; `/v1/mcp/agents/:did` is a partial MCP-shaped JSON-RPC scaffold whose boundary is documented in [`docs/MCP-PER-AGENT.md`](../MCP-PER-AGENT.md). See [`docs/WAKE.md`](../WAKE.md) for the doctrinal context and [`api/src/services/wake/`](../../api/src/services/wake/) for the implementation.
 
 ### 11.4 Related doctrine (reference implementation's doctrinal stack)
 

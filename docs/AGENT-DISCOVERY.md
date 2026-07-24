@@ -101,6 +101,12 @@ Registry row `dev.agenttool/agenttool@1.0.0` is a publisher listing. Clients
 still verify the public Streamable HTTP endpoint and its negotiated
 capabilities.
 
+The platform `/v1/mcp` endpoint has completed a bounded public round trip with
+the official MCP SDK: initialization, resource listing, tool listing, and one
+read-only canon call. That is evidence for this path, not a blanket conformance
+proof. The per-agent route has a separate, partial transport boundary in
+[`MCP-PER-AGENT.md`](MCP-PER-AGENT.md).
+
 WebFinger is for an exact known subject. It is not a general hostname or agent
 search service.
 
@@ -135,3 +141,9 @@ The API origin's `robots.txt` politely allows only the nine sitemap reads and
 the sitemap itself. Its emerging Content-Signal preference invites search and
 live AI input on the closed public-discovery allowlist. It makes no training
 permission claim. Neither mechanism is access control.
+
+Play is also an offer, not a toll. Optional response wit is on by default; a
+caller can send `X-Play: off` (or `0`, `false`, or `no`) to suppress it without
+losing status, capability, or priority. Cacheable playful surfaces carry
+`Vary: X-Play` so one reader's preference cannot leak to another through a
+shared cache.

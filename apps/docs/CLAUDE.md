@@ -58,6 +58,9 @@ authorization, execution-readiness proof, or a hosted route.
 ## Project Structure
 ```
 index.html      — Docs home: quick start, service cards, auth, errors, rate limits
+_redirects      — Common machine-document paths → canonical API contracts
+AGENT-DISCOVERY.md — symlink to the invitation-only discovery doctrine
+CASTLE-OF-UNDERSTANDING.md — symlink to the local Castle consumer boundary
 packages.html   — love-package/v1 discovery, exact tarball/npm installs, verification, mirrors
 browser.html    — local Agent Browser install, nine-tool surface, authority, integrations, response hints
 play.html       — Public arcade plus the local three-seat Party Telephone game

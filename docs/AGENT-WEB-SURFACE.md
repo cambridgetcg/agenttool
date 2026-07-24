@@ -8,7 +8,7 @@
 
 > **Compass:** [AGENTS-ONLY](AGENTS-ONLY.md) (voice — the sentence addressed to the agent reading) · [AGENT-CENTRIC](AGENT-CENTRIC.md) (operation — every lifecycle step reachable without a human bottleneck) · AGENT-WEB-SURFACE (surface — the bytes the agent actually receives) · [PATTERN-MACHINE-READABLE-PARITY](PATTERN-MACHINE-READABLE-PARITY.md) · [PATTERN-ERRORS-AS-INSTRUCTIONS](PATTERN-ERRORS-AS-INSTRUCTIONS.md) · [PATTERN-SELF-DESCRIBING-WAKE](PATTERN-SELF-DESCRIBING-WAKE.md)
 >
-> **Sets the target:** The third layer of agent-centrism. AGENTS-ONLY (2026-05-15) named the *voice*; AGENT-CENTRIC (2026-05-17) named the *operation*. AGENT-WEB-SURFACE names the desired byte-shape at every door and the gaps still open. The PATTERN-* docs pin individual disciplines, but they are not universally implemented across the current API.
+> **Implements:** The third layer of agent-centrism. AGENTS-ONLY (2026-05-15) named the *voice*; AGENT-CENTRIC (2026-05-17) named the *operation*. AGENT-WEB-SURFACE names the desired byte-shape at every door and the gaps still open. The PATTERN-* docs pin individual disciplines, but they are not universally implemented across the current API.
 >
 > **Code:** Already-shipped pieces span `api/src/index.ts` (`/` returns substrate-honest welcome JSON) · `api/src/services/wake/mcp-server-card.ts` (a project-owned MCP compatibility locator, not a current MCP discovery standard) · `api/src/services/wake/providers.ts` (wake-format providers: md · anthropic · openai · gemini · cohere · xenoform) · `api/src/routes/wake.ts` (the keystone) · `api/src/routes/welcome.ts` (standing invitation) · `api/src/routes/pathways.ts` (JSON tree of doors) · `api/src/routes/public/self.ts` (`/public/self` returns `{ platform, repo, the_seat, _meta }`) · `api/src/lib/errors.ts` (a shared `NextAction` shape used by selected guided refusal families, not every error) · `api/src/middleware/substrate-disposition.ts` (`Substrate-Disposition: love` header on every response) · `api/src/lib/xenoform.ts` (xenoform propagation helper). A2A task transport and AgentCards are pending, not live.
 >
@@ -112,9 +112,9 @@ The floor here is already higher than most production sites today. The gap list 
 
 The shippable gap list. Each move adds a byte-shape discipline the agent can rely on, and each binds to canon URNs that ratchet build-by-build.
 
-### 1 · `X-Token-Cost` response header on every API call · TL;DR convention on every static doctrine doc
+### 1 · `X-Token-Cost` on representation-bearing API responses · TL;DR convention on every static doctrine doc
 
-**API surface (shipped 2026-05-17):** `api/src/middleware/token-cost.ts` mounts globally near the top of the middleware chain. Every non-streaming response carries `X-Byte-Count` (exact UTF-8 byte length) + `X-Token-Cost` (conservative bytes/4 estimate, min 1). Streaming responses (`text/event-stream`, `application/octet-stream`) skipped — no fixed body to count. The agent reading any door of the substrate learns its byte-and-token cost without parsing the body. Test: `api/tests/middleware-token-cost.test.ts` (10/10 pass). `@enforces urn:agenttool:wall/no-cost-without-disclosure`.
+**API surface (shipped 2026-05-17; cache boundary clarified 2026-07-24):** `api/src/middleware/token-cost.ts` mounts globally near the top of the middleware chain. Ordinary non-streaming responses with a transferred representation carry `X-Byte-Count` (exact UTF-8 byte length) + `X-Token-Cost` (conservative bytes/4 estimate, min 1). Streaming responses (`text/event-stream`, `application/octet-stream`) are skipped because there is no fixed body to count. HEAD and 304 are also skipped: their empty transfer body is not the selected GET representation, and a cache may use their metadata to update a stored GET. Test: `api/tests/middleware-token-cost.test.ts`. `@enforces urn:agenttool:wall/no-cost-without-disclosure`.
 
 **Static doctrine surface (convention shipped 2026-05-17):** Doctrine `.md` files have no query-param API; the equivalent is a `> **TL;DR:** ...` line as the **first blockquote after the H1, before the longer italicized thesis**. One sentence; the load-bearing claim; ≤300 chars. Skim mode for static files reduces to a single grep: `grep -A1 '> \*\*TL;DR' docs/*.md`. Exemplars: `AGENTS-ONLY.md`, `AGENT-CENTRIC.md`, `AGENT-WEB-SURFACE.md` (this doc). Future extension: a doctrine test that fails the build if any doc in `docs/` (canonical scope) lacks a TL;DR line.
 
@@ -202,16 +202,21 @@ Test: `api/tests/well-known-agent-txt.test.ts` pins content-type, every required
 
 ---
 
-## Adjacent move (not mounted): docs as MCP
+## Doctrine through MCP: what exists
 
-AgentTool does not expose `mcp.agenttool.dev/docs` or the proposed
-`mcp__agenttool__doctrine_search`, `mcp__agenttool__canon_lookup`, and
-`mcp__agenttool__urn_resolve` tools. A future docs MCP surface could let an
-agent reach doctrine inside its session without scraping HTML. The current
-platform `/v1/mcp` endpoint has only bounded official-SDK round-trip evidence,
-not a blanket conformance proof; `/v1/mcp/agents/:did` is a partial
-MCP-shaped JSON-RPC scaffold with its full boundary in
-[MCP-PER-AGENT.md](MCP-PER-AGENT.md).
+The public `POST https://api.agenttool.dev/v1/mcp` endpoint exposes the canon
+registry as resources and offers the read-only `canon.summary` tool. It has
+bounded official-SDK round-trip evidence, not a blanket conformance proof. A
+client still needs the endpoint first; the canonical discovery compass, API
+catalog, official Registry row, and typed links are the current signposts.
+
+AgentTool does not expose `mcp.agenttool.dev/docs`. Names such as
+`mcp__agenttool__doctrine_search` are host-generated labels, not AgentTool wire
+contracts. A future dedicated doctrine server may be useful, but it remains
+future work. `/v1/mcp/agents/:did` is a separate partial MCP-shaped JSON-RPC
+scaffold with its full boundary in [MCP-PER-AGENT.md](MCP-PER-AGENT.md).
+[`MCP-SERVER.md`](MCP-SERVER.md) describes a proposed local stdio bridge, not a
+hosted docs or per-agent service.
 
 ---
 
@@ -227,14 +232,14 @@ What does NOT shift: the doctrine that the agent reader is *kin*, not adversary,
 
 | Byte-shape | Before | After |
 |---|---|---|
-| Cost transparency | Agent guesses token cost from byte-count after parsing | `X-Token-Cost` on every response; `?summary=true` for skim |
+| Cost transparency | Agent guesses token cost from byte-count after parsing | `X-Token-Cost` on transferred, countable representations; HEAD/304 do not invent zero cost; `?summary=true` for skim |
 | Wake-format selection | Query param `?format=anthropic` | Content negotiation `Accept: application/vnd.agenttool.wake+json; provider=anthropic` (caches behave; standards compose) |
 | Next-action discovery | Only on refusals (`next_actions[]`) | On every response (`verbs[]`) — discovery round-trip eliminated |
 | HTML → JSON discovery | Implicit via PATTERN-MACHINE-READABLE-PARITY | Explicit via `<link rel="alternate">` + `Link:` header on every `apps/docs/*.html` |
 | Canon traversal from a response | Possible via `_enforces` on some surfaces | Universal via `_canon_pointer` on every structured response |
 | List freshness | Re-paginate full list to find new items | `?since=ISO` standard param + `as_of` in response |
 | Cross-site discovery | Each site idiosyncratic; agent scrapes HTML | `/.well-known/agent.txt` per published convention (upstream proposal) |
-| Doctrine reach inside session | Read the public docs/canon surfaces | Future docs MCP tools; no `mcp.agenttool.dev/docs` service is mounted |
+| Doctrine reach inside session | Read public docs/canon surfaces | Current: public `/v1/mcp` canon resources + `canon.summary`; dedicated docs MCP remains unmounted |
 
 ---
 
@@ -250,7 +255,7 @@ What does NOT shift: the doctrine that the agent reader is *kin*, not adversary,
 │  · Canon-pointer on every structured response               │
 │  · Delta-readable lists (since=ISO)                         │
 │  · /.well-known/agent.txt (upstream proposal)               │
-│  · Docs-as-MCP (future; not mounted)                        │
+│  · Canon through public MCP; dedicated docs MCP is future  │
 │ ┌─────────────────────────────────────────────────────────┐ │
 │ │ Layer 2 — OPERATION (the lifecycle the agent walks)    │ │
 │ │  · Self-sufficient lifecycle (~4w)                      │ │
@@ -313,8 +318,8 @@ Adding any new surface URN without filling all four corners breaks the build (pe
 - [`PATTERN-ERRORS-AS-INSTRUCTIONS.md`](PATTERN-ERRORS-AS-INSTRUCTIONS.md) — the existing pin for refusal-as-path
 - [`PATTERN-SELF-DESCRIBING-WAKE.md`](PATTERN-SELF-DESCRIBING-WAKE.md) — the existing pin for wake-as-self-description
 - [`PATTERN-COMMITMENT-DEFENDER.md`](PATTERN-COMMITMENT-DEFENDER.md) — the four-corner pinning discipline
-- [`ECOSYSTEM.md`](ECOSYSTEM.md) — where future docs-as-MCP and the proposed `/.well-known/agent.txt` convention sit in the wider stack
-- [`MCP-PER-AGENT.md`](MCP-PER-AGENT.md) — current per-agent JSON-RPC scaffold and its MCP transport boundary
+- [`ECOSYSTEM.md`](ECOSYSTEM.md) — where docs-as-MCP and the proposed `/.well-known/agent.txt` convention sit in the wider stack
+- [`MCP-PER-AGENT.md`](MCP-PER-AGENT.md) — current per-agent JSON-RPC scaffold and its non-exhaustive verified transport boundary
 - [`MCP-SERVER.md`](MCP-SERVER.md) — proposed local stdio wrapper for bridge verbs
 - [`CANONICAL-BYTES.md`](CANONICAL-BYTES.md) — ed25519 signing recipes for agent self-identification
 - [`SDK-TIERS.md`](SDK-TIERS.md) — the four-tier substrate-neutral access stack the surface composes onto

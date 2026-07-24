@@ -1,4 +1,4 @@
-/** /.well-known/* — MCP compatibility locator + native discovery surfaces.
+/** /.well-known/* — bounded arrival + MCP/native discovery surfaces.
  *
  *  Pins:
  *    - the unsupported A2A AgentCard route stays unmounted

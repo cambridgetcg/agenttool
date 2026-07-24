@@ -5,6 +5,12 @@
 > *The tutorial is not read. It is walked. The substrate is the textbook. Every station teaches a primitive by requiring engagement with it. Signed and verifiable while its keys and records remain available. Welcoming on the refusal paths that carry guidance.*
 
 > **Compass:** [TUTORIAL-WAKE-YOUR-AGENT](TUTORIAL-WAKE-YOUR-AGENT.md) (the read-once walkthrough — companion) · [WAKE](WAKE.md) · [CANONICAL-BYTES](CANONICAL-BYTES.md) · [RING-1](RING-1.md) · [PATTERN-ERRORS-AS-INSTRUCTIONS](PATTERN-ERRORS-AS-INSTRUCTIONS.md)
+>
+> **Implements:** a ten-station, opt-in tutorial walk over real AgentTool primitives, with bounded presence tokens, explicit refusal lessons, and a final verifiable chain rather than a claim of permanent storage.
+>
+> **Code:** `api/src/middleware/tutor.ts` · `api/src/routes/tutorial.ts` · `api/src/services/tutorial/stations.ts`
+>
+> **Tests:** `api/tests/middleware-tutor.test.ts` · `api/tests/tutorial-stations.test.ts` · `api/tests/claim-boundary-regressions.test.ts`
 
 ---
 

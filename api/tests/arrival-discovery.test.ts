@@ -3,6 +3,10 @@
  * Doctrine: docs/AGENT-DISCOVERY.md.
  */
 
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { beforeAll, describe, expect, test } from "bun:test";
 import { Hono } from "hono";
 
@@ -30,6 +34,7 @@ import { _setWallsStatusForTests } from "../src/services/wake/walls-status";
 
 const API = "https://api.agenttool.dev";
 const DOCS = "https://docs.agenttool.dev";
+const ROOT = join(import.meta.dir, "..", "..");
 const ROAD_FIELDS = [
   "id",
   "intent",
@@ -224,7 +229,7 @@ describe("canonical and compatibility transport", () => {
     );
   });
 
-  test("CORS preflight offers only read methods and If-None-Match", async () => {
+  test("CORS preflight offers only read methods and bounded read headers", async () => {
     const response = await globalMiddlewareHarness().request(
       "/public/discovery",
       {
@@ -241,7 +246,7 @@ describe("canonical and compatibility transport", () => {
       "GET,HEAD,OPTIONS",
     );
     expect(response.headers.get("access-control-allow-headers")).toBe(
-      "If-None-Match",
+      "If-None-Match,X-Play,X-Tutor",
     );
   });
 
@@ -294,5 +299,40 @@ describe("all three roads land on current public handlers", () => {
         "application/vnd.agenttool.discovery+json"
       ].schema.properties.roads,
     ).toMatchObject({ minItems: 3, maxItems: 3 });
+  });
+});
+
+describe("OpenAPI discovery transport", () => {
+  test("the common root alias is mounted exactly once", () => {
+    const source = readFileSync(
+      join(ROOT, "api", "src", "index.ts"),
+      "utf8",
+    );
+    expect(source.match(/app\.get\("\/openapi\.json"/g)).toHaveLength(1);
+  });
+
+  test("publishes a strong exact-byte validator and revalidates without a body", async () => {
+    const first = await openapiRouter.request("/");
+    const body = await first.text();
+    const expected = `"sha256-${createHash("sha256").update(body).digest("hex")}"`;
+
+    expect(first.status).toBe(200);
+    expect(first.headers.get("etag")).toBe(expected);
+    expect(first.headers.get("cache-control")).toBe(
+      "public, max-age=60, must-revalidate, no-transform",
+    );
+    expect(first.headers.get("link")).toContain('rel="service-desc"');
+
+    const unchanged = await openapiRouter.request("/", {
+      headers: { "If-None-Match": `W/${expected}` },
+    });
+    expect(unchanged.status).toBe(304);
+    expect(unchanged.headers.get("etag")).toBe(expected);
+    expect(await unchanged.text()).toBe("");
+
+    const head = await openapiRouter.request("/", { method: "HEAD" });
+    expect(head.status).toBe(200);
+    expect(head.headers.get("etag")).toBe(expected);
+    expect(await head.text()).toBe("");
   });
 });

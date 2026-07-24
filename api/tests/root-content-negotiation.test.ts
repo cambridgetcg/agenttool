@@ -225,7 +225,7 @@ describe("GET / — JSON remains the stable default representation", () => {
     expect(res.headers.get("Vary")?.toLowerCase()).toContain("accept");
   });
 
-  test("JSON branch advertises the RFC 9727 API catalog", async () => {
+  test("JSON branch advertises the bounded discovery mesh", async () => {
     const res = await app.request("/", {
       headers: { Accept: "application/json" },
     });

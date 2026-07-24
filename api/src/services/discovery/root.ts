@@ -72,6 +72,8 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
   const breadcrumbsBlock: Record<string, unknown> = {
     discovery:
       "/public/discovery — exact three-road public compass; reading selects nothing and starts no follow-up",
+    api_catalog:
+      "/.well-known/api-catalog — RFC 9727 API and product links; catalog membership grants no action or payment authority",
     welcome: "/v1/welcome — the standing invitation",
     porch: "/public/porch — fixed first orientation plus read-only pre-auth welcome; one public GET, no identity creation, required response, or application write",
     pathways: "/v1/pathways — current arrival and setup map",

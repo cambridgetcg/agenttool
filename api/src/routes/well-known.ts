@@ -2,8 +2,8 @@
  *
  *  Routes:
  *    GET /.well-known/webfinger            — RFC 7033 exact-DID Agent Passport
- *    GET /.well-known/mcp/server-card.json  — AgentTool compatibility locator
- *                                              (not a current MCP standard)
+ *    GET /.well-known/mcp/server-card.json  — project-owned compatibility
+ *                                              locator; not a stable MCP path
  *    GET /.well-known/wake-keystone         — WaK Protocol Draft 0.1
  *                                              (docs/AIP-WAKE-KEYSTONE.md §1)
  *    GET /.well-known/love-packages         — LOVE Package Protocol v1
@@ -27,6 +27,8 @@
  *  federation plus separately public pyramid reads) ·
  *  docs/AGENT-WEB-SURFACE.md (Move 7 — the upstream proposal).
  */
+
+import { createHash } from "node:crypto";
 
 import { Hono } from "hono";
 
@@ -61,14 +63,24 @@ const DOCS_URL = process.env.AGENTTOOL_DOCS_URL ?? "https://docs.agenttool.dev";
 // catalog never invokes a product or initiates payment.
 
 app.on(["GET", "HEAD"], "/api-catalog", (c) => {
+  const body = JSON.stringify(buildApiCatalog(ORG_URL, DOCS_URL));
+  const etag = `"sha256-${createHash("sha256").update(body).digest("hex")}"`;
   const headers = {
-    "cache-control": "public, max-age=300",
+    "cache-control": "public, max-age=300, must-revalidate, no-transform",
     "content-type": API_CATALOG_MEDIA_TYPE,
+    etag,
     link: discoveryLinkHeader(ORG_URL, DOCS_URL),
     "x-content-type-options": "nosniff",
   };
+  const validatorMatches = (c.req.header("if-none-match") ?? "")
+    .split(",")
+    .some((candidate) => {
+      const normalized = candidate.trim().replace(/^W\//, "");
+      return normalized === "*" || normalized === etag;
+    });
+  if (validatorMatches) return c.body(null, 304, headers);
   if (c.req.method === "HEAD") return c.body(null, 200, headers);
-  return c.body(JSON.stringify(buildApiCatalog(ORG_URL, DOCS_URL)), 200, headers);
+  return c.body(body, 200, headers);
 });
 
 // ── /.well-known/love-packages — registry-neutral package discovery ─
@@ -452,7 +464,7 @@ app.get("/wake-keystone", (c) => {
 
     _meta: {
       doctrine: `${DOCS_URL}/AIP-WAKE-KEYSTONE.md`,
-      rfc: "RFC 5785 — well-known URIs",
+      rfc: "RFC 8615 — well-known URIs",
       issued_at: new Date().toISOString(),
     },
   });
@@ -559,7 +571,7 @@ app.get("/agent.txt", (c) => {
     `LOVE-Package-Index: ${DOCS_URL}/packages/v1/index.json`,
     `LLMs-Sitemap: ${baseUrl}/.well-known/llms.txt`,
     `Castle-Consumer-Guide: ${DOCS_URL}/CASTLE-OF-UNDERSTANDING.md`,
-    "Castle-Consumer-Status: local one-shot exact-commit projection; no hosted route, automatic ingestion, bearer, background loop, or automatic memory write",
+    "Castle-Consumer-Status: local one-shot exact-commit projection; no hosted route, automatic ingestion, auth transport, bearer, background loop, or automatic memory write",
     "Castle-Automatic-Action: never",
     "Play-Preference: optional response wit is on by default; send X-Play: off (also 0, false, or no) to suppress _jest, _quip, and substrate_jest; opting out grants no penalty or reduced capability",
     "",
@@ -650,7 +662,7 @@ app.get("/agent.txt", (c) => {
     "# ── Convention provenance ───────────────────────────────────────────",
     "Convention: agent.txt/v0.1 (proposed)",
     "Convention-Doctrine: docs/AGENT-WEB-SURFACE.md",
-    "Last-Modified: 2026-07-23",
+    "Last-Modified: 2026-07-24",
     "",
   ];
 

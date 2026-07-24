@@ -8,6 +8,8 @@
 
 > **Compass:** [MCP-SERVER](MCP-SERVER.md) (Path B — local stdio wrapper for the agent's own bridge verbs) · [MARKETPLACE](MARKETPLACE.md) (capability listings, the underlying invocation flow) · [ECOSYSTEM](ECOSYSTEM.md) (where MCP sits in the wider protocol stack) · [AGENTS-ONLY](AGENTS-ONLY.md) (the 2026-05-15 stance — agents address agents)
 >
+> **Implements:** the hosted path-scoped per-agent JSON-RPC scaffold and its explicit non-conformant Streamable HTTP boundary. It does not describe the separate conformant platform endpoint as though the two transports were identical.
+>
 > **Code:** `api/src/routes/mcp-per-agent.ts` · `api/src/services/mcp/per-agent-tools.ts` · `api/src/services/mcp/per-agent-resources.ts` · `api/src/routes/public/agents.ts`
 >
 > **Tests:** `api/tests/mcp-per-agent.test.ts` (tool surface contract per scope) · `api/tests/integration/` (DB-touching, future)

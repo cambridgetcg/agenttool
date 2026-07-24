@@ -680,17 +680,17 @@ app.route("/v1/loops", loopsRouter);
 app.route("/v1/mcp/agents", mcpPerAgentRouter);
 
 // /v1/mcp — UNAUTHENTICATED Model Context Protocol server. JSON-RPC 2.0
-// over HTTP per MCP spec 2025-11-25. Surfaces canon entries + platform
-// self as MCP resources, and read-only canon queries as MCP tools. Once
-// reachable here, agenttool is a first-class MCP peer for every framework
-// that consumes MCP (Claude, Cursor, OpenAI Apps, LangChain, Mastra, ...).
+// over Streamable HTTP, targeting MCP 2025-11-25. Surfaces canon entries +
+// platform self as MCP resources, and read-only canon queries as MCP tools.
+// A bounded round trip with the official SDK proves the listed operations on
+// the live endpoint; it does not prove full conformance or every framework.
 // Auth-gated write operations (memory.append, strand.append, inbox.send,
 // covenant.propose) remain unavailable until AgentTool implements stable MCP
 // protected-resource metadata, resource-bound token checks, and local approval.
 // Doctrine: docs/ALIGNMENT-MOVES.md (Move 1) · docs/ECOSYSTEM.md.
 app.route("/v1/mcp", mcpRouter);
 
-// /.well-known/* — UNAUTHENTICATED discovery endpoints per RFC 5785.
+// /.well-known/* — UNAUTHENTICATED discovery endpoints under RFC 8615.
 // WebFinger owns one exact well-known path and is mounted first so its router
 // can keep RFC 7033 query/CORS semantics independent from the index router.
 // It is a public-profile locator, not DID Resolution or an authority service.
@@ -702,6 +702,8 @@ app.route("/.well-known/webfinger", webFingerRouter);
 // platform exposes a callable A2A task or message endpoint.
 // Doctrine: docs/ALIGNMENT-MOVES.md · docs/ECOSYSTEM.md · docs/FEDERATION.md ·
 // docs/LOVE-PACKAGE-PROTOCOL.md.
+// Hono's strict router does not make the mounted root match its trailing-slash
+// form. Redirect that common human/tool guess to the bounded index.
 app.get("/.well-known/", (c) => c.redirect("/.well-known", 308));
 app.route("/.well-known", wellKnownRouter);
 
@@ -742,11 +744,6 @@ app.get("/llms-full.txt", (c) => {
   c.header("link", discoveryLinkHeader(PUBLIC_BASE_URL));
   return c.body(buildLlmsTxtFull(PUBLIC_BASE_URL));
 });
-
-// /openapi.json at root — agents' learned probe order is / → /openapi.json →
-// /llms.txt before any docs link. The curated spec lives under /v1; meet the
-// probe where it happens instead of teaching every stranger our prefix.
-app.get("/openapi.json", (c) => c.redirect("/v1/openapi.json", 308));
 
 // Public crawler hints. These are bounded GET/HEAD signposts, never
 // authorization or an instruction to fetch anything automatically.
@@ -903,6 +900,10 @@ app.route("/v1", toolsRouter); // mounts /v1/{scrape,browse,document,execute,job
 app.route("/v1/x402/payments", x402PaymentsRouter);
 
 // ── OpenAPI 3.1 spec — public, no auth ──────────────────────────────────────
+// OpenAPI recommends the filename openapi.json but does not assign a universal
+// URL. Keep the versioned canonical route and make the common root guess land
+// there without duplicating the representation.
+app.get("/openapi.json", (c) => c.redirect("/v1/openapi.json", 308));
 app.route("/v1/openapi.json", openapiRouter);
 
 // ── /public/* — UNAUTHENTICATED public surface ──────────────────────────────

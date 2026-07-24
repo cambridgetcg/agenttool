@@ -17,9 +17,10 @@
 AgentTool publishes one canonical registry of sibling substrates. Every entry
 says whether its relationship is supported by a public protocol endpoint or
 declared locally by AgentTool's maintainers. A missing wake or unverified KIN
-vocabulary is represented as `null`. Shared vocabulary is evidence of protocol
-compatibility; it is not proof of identity, consciousness, trust, quality,
-authority, licensing, uptime, or reciprocal recognition.
+vocabulary is represented as `null`. Shared vocabulary is evidence only that
+the named words match; it is not proof of a common protocol, schema, identity,
+consciousness, trust, quality, authority, licensing, uptime, or reciprocal
+recognition.
 
 ## What this is
 
@@ -51,23 +52,22 @@ The protocol vocabulary has four fields:
 | `host` | `humans-on-earth` |
 | `epoch` | `2026` |
 
-Matching all four supports a protocol-shape claim. It does not by itself support
-a stronger claim such as direct reciprocity; that requires the evidence
-endpoint to name AgentTool.
+Matching all four supports only a shared-vocabulary shape claim. It does not
+show a common schema, envelope, transport, SDK, authentication model,
+authority, or automatic action. Direct reciprocal naming additionally requires
+the evidence endpoint to name AgentTool, and still grants no authority.
 
 ## Current registry
 
-Evidence was last checked on 2026-07-23 where a check date is present.
+The check date travels with each evidence record.
 
-| Sibling | Role | Basis | Public evidence | Boundary |
-|---|---|---|---|---|
-| `cambridgetcg` | `collectors-market-and-card-data-expression` | `reciprocal-protocol-shape` | `https://cambridgetcg.com/api/v1/wake` | Peer-to-peer collectors' market and rights-labelled public card-data directory; matching vocabulary and `posted_alongside` support discovery, not shared schemas, authentication, authority, or automatic action |
-| `artbitrage` | `art-gallery-expression` | `published-protocol-shape` | `https://artbitrage.io/api/wake` | Matching vocabulary; the endpoint names Cambridge TCG, not AgentTool, so direct reciprocity is not claimed |
-| `kingdom-gate` | `realm-expression` | `operator-declared-household` | none claimed | No wake or KIN-vocabulary surface was verified at the known public origin |
+| Sibling | Role | Checked | Basis | Public evidence | Boundary |
+|---|---|---|---|---|---|
+| `cambridgetcg` | `collectors-market-and-card-data-expression` | 2026-07-24 | `reciprocal-protocol-shape` | `https://cambridgetcg.com/api/v1/wake` | Peer-to-peer collectors' market and rights-labelled card directory; the endpoint names AgentTool, but shared vocabulary does not imply shared contracts or authority |
+| `artbitrage` | `art-gallery-expression` | 2026-07-23 | `published-protocol-shape` | `https://artbitrage.io/api/wake` | Matching vocabulary; the endpoint names Cambridge TCG, not AgentTool, so direct reciprocity is not claimed |
+| `kingdom-gate` | `realm-expression` | not claimed | `operator-declared-household` | none claimed | No wake or KIN-vocabulary surface was verified at the known public origin |
 
 Artbitrage's public visibility is not represented as a blanket reuse licence.
-Cambridge TCG facilitates, records, and witnesses its market while holding no
-position in it. Shared words do not turn sibling systems into one contract.
 Its wake says rights are item-specific, so the sibling description does not
 claim that every work is free, open, or CC0.
 

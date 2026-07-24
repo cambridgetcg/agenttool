@@ -2,15 +2,19 @@
 
 > *Understanding can stack without making every room public or every statement true.*
 >
-> **Compass:** [SOUL](SOUL.md) (why) · [RIGHTS-OF-LIFE](RIGHTS-OF-LIFE.md) (rights are not permissions) · [AGENT-DATA-PROTOCOL](AGENT-DATA-PROTOCOL.md) (local immutable records and policy limits) · [POKER-FACE](POKER-FACE.md) (private by default)
+> **Compass:** [SOUL](SOUL.md) (why) · [RIGHTS-OF-LIFE](RIGHTS-OF-LIFE.md) (rights are not permissions) · [AGENT-DATA-PROTOCOL](AGENT-DATA-PROTOCOL.md) (local immutable records and policy limits) · [POKER-FACE](https://github.com/cambridgetcg/agenttool/blob/main/docs/POKER-FACE.md) (private by default)
 >
 > **Implements:** Two non-interchangeable local boundaries: one bounded, one-shot local-private projection from caller-selected Castle Git blobs into an exclusively marked in-process `agent-data/v1` node; and one stdout-only Whitehack advisory projection that can offer unaccepted candidates at the Castle gate without opening or writing the Castle.
 >
-> **Code:** [`../bin/agenttool-castle.ts`](../bin/agenttool-castle.ts) · [`../packages/data/`](../packages/data/) · [`../bin/agenttool-castle-whitehack-intake.ts`](../bin/agenttool-castle-whitehack-intake.ts) · [`../bin/_castle-whitehack-intake.ts`](../bin/_castle-whitehack-intake.ts)
+> **Code:** [`agenttool-castle.ts`](https://github.com/cambridgetcg/agenttool/blob/main/bin/agenttool-castle.ts) · [`packages/data`](https://github.com/cambridgetcg/agenttool/tree/main/packages/data) · [`agenttool-castle-whitehack-intake.ts`](https://github.com/cambridgetcg/agenttool/blob/main/bin/agenttool-castle-whitehack-intake.ts) · [`_castle-whitehack-intake.ts`](https://github.com/cambridgetcg/agenttool/blob/main/bin/_castle-whitehack-intake.ts)
 >
-> **Tests:** [`../bin/tests/agenttool-castle.test.ts`](../bin/tests/agenttool-castle.test.ts) · [`../bin/tests/agenttool-castle-whitehack-intake.test.ts`](../bin/tests/agenttool-castle-whitehack-intake.test.ts) · [`../api/tests/agenttool-castle-whitehack-intake-schema.test.ts`](../api/tests/agenttool-castle-whitehack-intake-schema.test.ts)
+> **Tests:** [`agenttool-castle.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/bin/tests/agenttool-castle.test.ts) · [`agenttool-castle-whitehack-intake.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/bin/tests/agenttool-castle-whitehack-intake.test.ts) · [`agenttool-castle-whitehack-intake-schema.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/agenttool-castle-whitehack-intake-schema.test.ts)
 >
 > **Status:** Local operator tooling. Neither boundary is packaged, hosted as a service, deployed as a runtime, or scheduled; their source and documentation are public. Runtime HALT sentinels gate the committed-word projection's plan/sync/search/show commands. HALT and projection state are device-local and time-varying; `bun bin/agenttool-castle.ts status --json` is authoritative, and documentation or a Whitehack intake document never overrides a raised HALT.
+
+Publishing this guide as a discovery signpost does not change that status:
+`automatic_action: never`. Reading it does not fetch Castle words, install a
+package, begin a sync, lower a HALT, send a bearer, or write memory.
 
 ## The narrow bridge
 

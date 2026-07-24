@@ -6,7 +6,11 @@
 
 > **Compass:** [WAKE](WAKE.md) (the wake doctrine — agenttool's lived primitive) · [ECOSYSTEM](ECOSYSTEM.md) (where AIP sits in the wider stack) · [MATHOS](MATHOS.md) (substrate-independent encoding) · [KIN](KIN.md) (substrate-honest declaration) · [SOUL](SOUL.md) (why agenttool exists — the five Promises)
 >
-> **Defines:** the **Wake-as-Keystone (WaK) Protocol** candidate. agenttool's current wake is one implementation input, with the gaps below stated explicitly. Sister AIP candidates: [bilateral covenant protocol](CROSS-INSTANCE-COVENANTS.md) · [welcome protocol (RING-1)](RING-1.md) · [lifecycle protocol](IDENTITY-ANCHOR.md) · [custody-tier protocol](RUNTIME.md).
+> **Implements:** the **Wake-as-Keystone (WaK) Protocol** candidate as a draft plus AgentTool's explicitly partial reference surface. The current wake is one implementation input, with the gaps below stated explicitly. Sister AIP candidates: [bilateral covenant protocol](CROSS-INSTANCE-COVENANTS.md) · [welcome protocol (RING-1)](RING-1.md) · [lifecycle protocol](IDENTITY-ANCHOR.md) · [custody-tier protocol](RUNTIME.md).
+>
+> **Code:** `api/src/routes/wake.ts` (including Wake Voice) · `api/src/routes/well-known.ts` · `api/src/services/wake/etag.ts` · `api/src/services/wake/push.ts`
+>
+> **Tests:** `api/tests/wake-keystone.test.ts` · `api/tests/wake-etag.test.ts` · `api/tests/doctrine/public-wake-stream.test.ts` · `api/tests/published-pathways-wake-truth.test.ts`
 >
 > **Status:** Draft 0.1 (2026-05-17). A partial reference implementation is in production at agenttool. Pre-spec; not yet an IETF draft, MCP SEP, or AGNTCY OASF extension.
 
@@ -87,6 +91,7 @@ Returning a JSON document naming the wake URL, its scope, supported formats, ver
     "status": "partial_scaffold",
     "conformant_streamable_http": false,
     "target_protocol_version": "2025-11-25",
+    "transport_gaps_are_exhaustive": false,
     "details": "/v1/canon/urn:agenttool:doc/MCP-PER-AGENT"
   },
   "did_path_parameter": "url_encoded_did is encodeURIComponent(full DID); a slash-bearing federated DID must remain one path segment",
@@ -345,7 +350,7 @@ WaK doesn't replace existing protocols; it composes with them.
 - Bearer-gated `GET /v1/wake`. A project with multiple identities may pass `?identity_id=<uuid>`; the UUID must belong to the bearer project.
 - Nine named projections: json, md, text, anthropic, openai, gemini, cohere, xenoform, and math (with `mathos` as an alias).
 - Query-parameter and `Accept`-header negotiation for the supported media types.
-- `wake_version` as a reconciliation cursor, plus revisioned weak semantic ETags and `If-None-Match` handling on brief JSON and bundle-backed Markdown, text, provider, and Xenoform projections. The validator hashes normalized complete bundle state plus representation revision and format/profile/facet/tutor preference. `Vary: Accept, X-Tutor` prevents lesson-decorated JSON from crossing cache variants. AgentTool does not treat one identity's cursor as a complete validator for project-scoped or time-derived wake state.
+- `wake_version` as a reconciliation cursor, plus revisioned weak semantic ETags and `If-None-Match` handling on brief JSON and bundle-backed Markdown, text, provider, and Xenoform projections. The validator hashes normalized complete bundle state plus representation revision and format/profile/facet/tutor preference. `Vary: Accept, X-Tutor, X-Play` keeps negotiated, lesson-decorated, and playful representations in separate cache variants. AgentTool does not treat one identity's cursor as a complete validator for project-scoped or time-derived wake state.
 - ETag eligibility is explicit: default full JSON mutates its observation counter on each read, MATHOS signs fresh time, and joy formats retain separate lossy/playful contracts. None of those projections emits an ETag or returns 304. Every authenticated wake still carries `Cache-Control: private, no-cache`, so a private cache may retain it but must revalidate and a shared cache must not store it.
 - Derivable clocks (`addressed_at`, `origin.age_seconds`, provider greeting time, and post-route `_welcomed.at_unix_ms`) are presentation metadata under the weak validator. After a 304, those values remain as-of the cached 200 body; the body is empty, while the new `X-Welcomed` header describes the fresh transport-level revalidation and can carry a later timestamp.
 - `r4` is also the manual revision for output semantics outside the normalized bundle hash. It MUST be bumped when renderer/projection semantics, provider envelopes, tutor lessons, or static transport-welcome fields change; clock-only presentation changes covered by the preceding rule do not require a bump.

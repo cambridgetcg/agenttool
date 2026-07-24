@@ -20,8 +20,9 @@
  *  honest BUDGET-SURFACE, not the precise measurement.
  *
  *  Streaming responses are skipped — they have no fixed body to count at
- *  middleware-return time. HEAD and 304 are also skipped: their empty
- *  transfer body is not the selected GET representation.
+ *  middleware-return time. HEAD and 304 responses are also skipped: their
+ *  empty transfer body is not the selected GET representation, and a cache
+ *  may use their metadata to update a stored GET response.
  *
  *  Canon URN candidate (proposed; pinned in `docs/AGENT-WEB-SURFACE.md`
  *  Move 1 — Wall #7 "no-cost-without-disclosure"). Will be promoted into
