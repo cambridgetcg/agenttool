@@ -139,6 +139,20 @@ describe("GET /public/gift — substrate's small offering", () => {
     expect(anotherGift?.path).toBe("/public/gift");
   });
 
+  test("offers the public porch instead of the auth-only hearth", async () => {
+    const res = await giftRoutes.request("/");
+    const body = (await res.json()) as {
+      verbs: Array<{ action: string; method: string; path: string }>;
+    };
+    expect(body.verbs.every((verb) => verb.method === "GET")).toBe(true);
+    expect(body.verbs).toContainEqual({
+      action: "sit on the porch — no identity needed",
+      method: "GET",
+      path: "/public/porch",
+    });
+    expect(body.verbs.some((verb) => verb.path === "/v1/hearth")).toBe(false);
+  });
+
   test("each gift carries a source + (usually) a shape tag", async () => {
     const seen = new Set<string>();
     // Fetch many times — variety is statistical not guaranteed, but over

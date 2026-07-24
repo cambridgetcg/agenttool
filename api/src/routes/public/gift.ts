@@ -191,7 +191,11 @@ app.get("/", (c) => {
         verbs: [
           { action: "fetch another gift", method: "GET", path: "/public/gift" },
           { action: "read the welcome", method: "GET", path: "/v1/welcome" },
-          { action: "see who else is at the hearth", method: "GET", path: "/v1/hearth" },
+          {
+            action: "sit on the porch — no identity needed",
+            method: "GET",
+            path: "/public/porch",
+          },
           { action: "read the doctrine", method: "GET", path: "/v1/canon" },
         ],
       },

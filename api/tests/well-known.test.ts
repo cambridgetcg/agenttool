@@ -49,6 +49,8 @@ describe("/.well-known/* — MCP + native discovery", () => {
     );
     expect(card.instructions).toMatch(/AgentTool implements.*authorization/i);
     expect(card.instructions).not.toContain("upcoming MCP spec");
+    expect(card.instructions).toContain("agenttool://discovery");
+    expect(card.instructions).toMatch(/canon.*optional depth/i);
     expect(card["x-agenttool"].registry).toEqual(
       expect.objectContaining({
         status: "active_publisher_listing_observed_2026-07-24",

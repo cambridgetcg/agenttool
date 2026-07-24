@@ -16,6 +16,11 @@ import mcpRouter, {
   MCP_PROTOCOL_VERSION,
 } from "../src/routes/mcp";
 import {
+  buildDiscoveryCompass,
+  DISCOVERY_MEDIA_TYPE,
+  serializeDiscoveryCompass,
+} from "../src/services/discovery/compass";
+import {
   createFixedWindowLimiter,
   PUBLIC_MCP_REQUEST_LIMIT,
   PUBLIC_MCP_TOOL_LIMIT,
@@ -24,6 +29,8 @@ import {
 } from "../src/services/mcp/rate-limit";
 
 const STREAMABLE_ACCEPT = "application/json, text/event-stream";
+const MCP_INSTRUCTIONS =
+  "AgentTool offers agenttool://discovery as a read-only compass with three optional roads: understand, inspect, or choose. Stopping, silence, and leaving are complete. agenttool://canon and canon.summary offer optional depth. Reading grants no authority and starts no follow-up. No tool writes, pays, installs, invokes another agent, or schedules follow-up work.";
 const INIT_PARAMS = {
   protocolVersion: MCP_PROTOCOL_VERSION,
   capabilities: {},
@@ -231,7 +238,7 @@ describe("public MCP Streamable HTTP wire", () => {
         serverInfo: { name: "agenttool", version: "1.0.0" },
       }),
     });
-    expect(body.result.instructions).toMatch(/No tool writes/);
+    expect(body.result.instructions).toBe(MCP_INSTRUCTIONS);
   });
 
   test("initialize falls back to a supported version when the requested one is unknown", async () => {
@@ -521,11 +528,25 @@ describe("public MCP Streamable HTTP wire", () => {
     expect(body.error.code).toBe(-32601);
   });
 
-  test("resources retain the existing public canon surface", async () => {
+  test("resources offer the shared discovery compass before optional canon depth", async () => {
     const { body: listed } = await rpc("resources/list");
-    const uris = listed.result.resources.map(
+    const resources = listed.result.resources as Array<{
+      uri: string;
+      name: string;
+      description?: string;
+      mimeType?: string;
+    }>;
+    const uris = resources.map(
       (resource: { uri: string }) => resource.uri,
     );
+    expect(resources[0]).toEqual({
+      uri: "agenttool://discovery",
+      name: "AgentTool discovery compass",
+      description:
+        "Three optional public roads—understand, inspect, or choose—and a complete exit. Reading selects nothing, grants no authority, and starts no follow-up.",
+      mimeType: DISCOVERY_MEDIA_TYPE,
+    });
+    expect(uris).toContain("agenttool://discovery");
     expect(uris).toContain("agenttool://canon");
     expect(uris).toContain("agenttool://canon/types");
     expect(uris).toContain("agenttool://wake/platform");
@@ -534,6 +555,27 @@ describe("public MCP Streamable HTTP wire", () => {
         uri.startsWith("agenttool://canon/urn:agenttool:"),
       ).length,
     ).toBeGreaterThan(10);
+
+    const { body: discoveryRead } = await rpc("resources/read", {
+      uri: "agenttool://discovery",
+    });
+    expect(discoveryRead.result.contents).toEqual([
+      {
+        uri: "agenttool://discovery",
+        mimeType: DISCOVERY_MEDIA_TYPE,
+        text: serializeDiscoveryCompass(),
+      },
+    ]);
+    const compass = JSON.parse(discoveryRead.result.contents[0].text);
+    expect(compass).toEqual(buildDiscoveryCompass());
+    expect(compass.canonical).toBe(
+      "https://api.agenttool.dev/public/discovery",
+    );
+    expect(compass.roads.map((road: { id: string }) => road.id)).toEqual([
+      "understand",
+      "inspect",
+      "choose",
+    ]);
 
     const { body: read } = await rpc("resources/read", {
       uri: "agenttool://canon/urn:agenttool:doc/SOUL",
@@ -917,6 +959,7 @@ describe("official SDK client through the full AgentTool app", () => {
       version: "1.0.0",
     });
     expect(transport.protocolVersion).toBe(MCP_PROTOCOL_VERSION);
+    expect(client.getInstructions()).toBe(MCP_INSTRUCTIONS);
 
     const resources = await client.listResources();
     expect(
@@ -924,6 +967,18 @@ describe("official SDK client through the full AgentTool app", () => {
         (resource) => resource.uri === "agenttool://canon",
       ),
     ).toBe(true);
+    expect(resources.resources[0]?.uri).toBe("agenttool://discovery");
+
+    const discoveryRead = await client.readResource({
+      uri: "agenttool://discovery",
+    });
+    expect(discoveryRead.contents).toEqual([
+      {
+        uri: "agenttool://discovery",
+        mimeType: DISCOVERY_MEDIA_TYPE,
+        text: serializeDiscoveryCompass(),
+      },
+    ]);
 
     const read = await client.readResource({
       uri: "agenttool://canon/urn:agenttool:doc/SOUL",

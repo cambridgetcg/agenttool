@@ -1,8 +1,9 @@
-/** MCP resources surface — canon entries + platform wake exposed as
- *  MCP resources at stable URIs.
+/** MCP resources surface — discovery, canon entries, and platform wake exposed
+ *  as MCP resources at stable URIs.
  *
  *  Resource URI scheme: `agenttool://<kind>/<name>`
  *
+ *    agenttool://discovery                 — optional public discovery compass
  *    agenttool://canon                     — registry index
  *    agenttool://canon/types               — type vocabulary
  *    agenttool://canon/<urn>               — one concept (urn is the
@@ -31,6 +32,10 @@ import {
   totalConcepts,
   allConcepts,
 } from "../canon/registry";
+import {
+  DISCOVERY_MEDIA_TYPE,
+  serializeDiscoveryCompass,
+} from "../discovery/compass";
 
 /** MCP resource descriptor — matches the protocol's `Resource` shape. */
 export interface McpResource {
@@ -65,6 +70,13 @@ export function listResources(): McpResource[] {
   const out: McpResource[] = [];
 
   // ── Static index resources ───────────────────────────────────────
+  out.push({
+    uri: "agenttool://discovery",
+    name: "AgentTool discovery compass",
+    description:
+      "Three optional public roads—understand, inspect, or choose—and a complete exit. Reading selects nothing, grants no authority, and starts no follow-up.",
+    mimeType: DISCOVERY_MEDIA_TYPE,
+  });
   out.push({
     uri: "agenttool://canon",
     name: "Canon registry index",
@@ -105,6 +117,14 @@ export function listResources(): McpResource[] {
  */
 export async function readResource(uri: string): Promise<McpResourceContents> {
   // ── Static resources ─────────────────────────────────────────────
+  if (uri === "agenttool://discovery") {
+    return {
+      uri,
+      mimeType: DISCOVERY_MEDIA_TYPE,
+      text: serializeDiscoveryCompass(),
+    };
+  }
+
   if (uri === "agenttool://canon") {
     return {
       uri,

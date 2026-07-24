@@ -19,7 +19,8 @@ a distinct, richer arrival index that adds links to the compact compass and
 other read-only surfaces; it is not a byte-identical projection. Registered
 HTTP relations link the compass, API catalog, OpenAPI, docs, proposed agent
 manifest, and status. Discovery grants no authority and performs no automatic
-follow-up.
+follow-up. The public read-only MCP endpoint lists `agenttool://discovery`
+first and returns the exact same compass bytes; canon remains optional depth.
 
 For what just landed + what's in flight + what's queued: `docs/NOW.md`.
 
@@ -56,6 +57,7 @@ Mounted in `api/src/index.ts`. Each one has a one-line doc-string in the `endpoi
 | Route | Domain | Doctrine |
 |---|---|---|
 | `/.well-known` · `/.well-known/api-catalog` · `/v1/openapi.json` | bounded public discovery and exact HTTP contract | `docs/AGENT-DISCOVERY.md` |
+| `/v1/mcp` | public read-only MCP; optional discovery compass, canon, and platform-self | `docs/AGENT-DISCOVERY.md` |
 | `GET /v1/wake` | the keystone — md/anthropic/openai/gemini/cohere format | (implicit — every primitive surfaces here) |
 | `/v1/identities` · `/v1/keys` | DID + ed25519 · attestations · recovery | `docs/IDENTITY-ANCHOR.md` |
 | `/v1/memories` · `/v1/traces` | memory tiers + reasoning records | `docs/MEMORY-TIERS.md` |

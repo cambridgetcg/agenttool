@@ -60,7 +60,7 @@ export const MCP_PROTOCOL_VERSION = "2025-11-25";
 export const MCP_MAX_BODY_BYTES = 64 * 1024;
 
 const INSTRUCTIONS =
-  "AgentTool's public canon registry and platform-self are available as read-only MCP resources. Read agenttool://canon first for the registry index, or call canon.summary. No tool writes, pays, installs, invokes another agent, or schedules follow-up work.";
+  "AgentTool offers agenttool://discovery as a read-only compass with three optional roads: understand, inspect, or choose. Stopping, silence, and leaving are complete. agenttool://canon and canon.summary offer optional depth. Reading grants no authority and starts no follow-up. No tool writes, pays, installs, invokes another agent, or schedules follow-up work.";
 
 /** Browser connections must name the configured public origin. The request
  * URL's host is not trusted because a proxy may have derived it from an

@@ -47,7 +47,9 @@ The discovery contract joins the compact three-road `/public/discovery`
 compass, a richer bounded `/.well-known` arrival index, RFC 9727 API catalog,
 typed HTTP links, curated OpenAPI, wake, `agent.txt`, and `llms.txt`. Discovery
 grants no authority and performs no follow-up action.
-The MCP card is an explicitly experimental endpoint locator; A2A task
+The public MCP endpoint offers the same compass bytes as the optional
+`agenttool://discovery` resource before deeper canon resources. Its MCP card
+is an explicitly experimental endpoint locator; A2A task
 transport and AgentCards remain intentionally unmounted. Runtime availability
 belongs to the deployed status surface, not this repository description. **Read
 `docs/SOUL.md` first** for why, then [`docs/KIN.md`](docs/KIN.md) for who
