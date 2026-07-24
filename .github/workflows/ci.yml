@@ -275,7 +275,7 @@ jobs:
           install_dir="$(mktemp -d)"
           trap 'rm -rf "$install_dir" "$tarball"' EXIT
           npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
-          smoke='import("@agenttool/browser").then(m=>{if(typeof m.AgentBrowser!=="function"||typeof m.buildBrowserMcpServer!=="function"||m.OBSERVATION_SCHEMA!=="agent-browser-observation/0.1")process.exit(1)})'
+          smoke='import("@agenttool/browser").then(m=>{if(typeof m.AgentBrowser!=="function"||typeof m.buildBrowserMcpServer!=="function"||typeof m.resolveBrowserCapabilities!=="function"||typeof m.planBrowserAction!=="function"||m.OBSERVATION_SCHEMA!=="agent-browser-observation/0.1"||m.BROWSER_CAPABILITIES_SCHEMA!=="agent-browser-capabilities/0.2"||m.BROWSER_CONSEQUENCE_PLAN_SCHEMA!=="agent-browser-consequence-plan/0.1")process.exit(1)})'
           (cd "$install_dir" && node -e "$smoke")
           (cd "$install_dir" && bun -e "$smoke")
           cli="$install_dir/node_modules/@agenttool/browser/dist/bin/agenttool-browser.js"

@@ -35,7 +35,7 @@
     "build": "bun run clean && tsc",
     "typecheck": "tsc --noEmit",
     "test": "bun test tests",
-    "smoke:runtimes": "node --input-type=module --eval \"const m = await import('./dist/src/index.js'); if (typeof m.AgentBrowser !== 'function') process.exit(1)\" && bun --eval \"const m = await import('./dist/src/index.js'); if (typeof m.AgentBrowser !== 'function') process.exit(1)\"",
+    "smoke:runtimes": "node --input-type=module --eval \"const m = await import('./dist/src/index.js'); if (typeof m.AgentBrowser !== 'function' || typeof m.resolveBrowserCapabilities !== 'function' || typeof m.planBrowserAction !== 'function') process.exit(1)\" && bun --eval \"const m = await import('./dist/src/index.js'); if (typeof m.AgentBrowser !== 'function' || typeof m.resolveBrowserCapabilities !== 'function' || typeof m.planBrowserAction !== 'function') process.exit(1)\"",
     "check:package": "npm pack --dry-run --ignore-scripts",
     "ci": "bun run typecheck && bun run test && bun run build && bun run smoke:runtimes && bun run check:package",
     "prepack": "bun run typecheck && bun run test && bun run build"

@@ -21,6 +21,12 @@ installed on the caller's machine. There is no postinstall hook and no bundled
 browser download. This keeps browser selection and browser bytes under the
 operator's control.
 
+`0.1.0` remains the current published release. This checkout also contains an
+**unreleased source-next** authority model plus capability reporting and
+zero-effect action planning. Those additions are not present in the exact
+npm/LOVE `0.1.0` bytes and must not be described as a retroactive change to
+that release.
+
 ## Why this surface exists
 
 Most browser automation APIs expose either a large test framework or a
@@ -56,6 +62,19 @@ explicit operation names:
 | `screenshot` | `browser_screenshot` |
 | `tabs` | `browser_tabs` |
 | `close` | `browser_close` |
+
+Unreleased source-next adds two aligned, non-executing operations:
+
+| TypeScript method | JSONL method / MCP tool | Effect |
+|---|---|---|
+| `capabilities()` | `browser_capabilities` | Reports effective process authority and implemented operations; no page or network probe |
+| `plan(action)` | `browser_plan` | Returns a redacted advisory for one `BrowserAction`; no execution or approval |
+
+`browser_plan` accepts `{ "action": ... }` only in this first slice. Opening a
+destination can be represented as a `new_tab` or `navigate` action. Plans never
+echo typed text or selected values, and redact URL query values. Planning does
+not inspect the live DOM, resolve a reference, make a request, reserve a future
+act, issue an approval token, or prove what a remote UI will do.
 
 Each JSONL request is
 `{ "version", "id", "method", "params" }`. A response repeats `version` and
@@ -95,6 +114,44 @@ An operator may select another installed channel with `--channel`, or an exact
 browser executable with `--executable`. Selecting one clears the other in CLI
 configuration; direct callers must supply at most one. Neither choice
 downloads a browser.
+
+### Unreleased source-next authority profiles
+
+Source-next makes destination authority explicit:
+
+| Profile | HTTP(S) destinations | WebSockets | Service workers |
+|---|---|---|---|
+| `public` (default) | Public only | Blocked | Blocked |
+| `local` | Public plus local/private; reserved denied | Classified by the same boundary | Blocked |
+| `sovereign` | Broad pass-through, including local/private/reserved; URL-embedded userinfo remains blocked | Passed through | Enabled |
+
+`public` preserves the published compatibility default. `local` corresponds
+to public web plus the existing local-network opt-in. `sovereign` does not
+apply AgentTool destination-class blocking to valid HTTP(S) requests or
+WebSockets; URL-embedded userinfo remains blocked, and reachability is
+delegated to the selected browser, host, DNS/proxy configuration, network,
+and destination.
+
+That delegation is broad local process authority. It may let remote page code
+or a service worker reach loopback services, private networks, or other
+host-reachable endpoints. A persistent profile may retain site and
+service-worker state. Sovereign therefore does not claim SSRF isolation,
+harmlessness, or reversibility. It also does not bypass authentication,
+CAPTCHAs, site policy, account permissions, browser support, network controls,
+or operating-system policy.
+
+Destination reach remains separate from other consequential powers. File
+upload, automatic download, arbitrary JavaScript evaluation, credential
+injection/lookup, ambient normal-profile import, shell execution, and
+extension installation remain unsupported in this first source-next slice.
+`capabilities()` reports those absences instead of treating sovereign
+destination reach as an implication that every power exists.
+
+The source-next forms are `authority: "public" | "local" | "sovereign"`,
+`--authority`, and `AGENTOOL_BROWSER_AUTHORITY`. The legacy booleans, flags,
+and environment variables remain as a deprecated compatibility surface, but a
+launch cannot mix new and legacy authority forms. Ambiguous configuration is
+rejected.
 
 ### Persistent profiles are an explicit authority increase
 
@@ -235,11 +292,11 @@ and treat persistent-profile artifacts as sensitive owner-held data.
 
 ## Network boundary
 
-Public web is allowed by default; loopback, link-local, and private HTTP(S)
-navigation/request destinations require the process-level `--local-network`
-opt-in. Reserved destinations remain blocked even with that opt-in.
-Local-network access is broad local authority and should be reserved for a
-caller-controlled development environment.
+In published `0.1.0`, public web is allowed by default; loopback, link-local,
+and private HTTP(S) navigation/request destinations require the process-level
+`--local-network` opt-in. Reserved destinations remain blocked even with that
+opt-in. Source-next `public` and `local` preserve those respective
+destination rules.
 
 The native policy performs hostname and address checks before navigation, but
 Playwright controls the later browser connection. This implementation cannot
@@ -253,11 +310,18 @@ tenant isolation, quotas, abuse controls, and a separate security review.
 The public-web check is also not a claim that a public site is trustworthy,
 safe to transact with, or authorized to receive data.
 
-This documented check is an HTTP(S) browser-request boundary, not generic
-process egress isolation. No protection for another browser protocol or
-process channel should be inferred unless this version names and tests it. V0
-separately blocks every WebSocket connection rather than pretending the
-HTTP(S) DNS policy applies to WebSocket transport.
+The public/local check is an HTTP(S) browser-request boundary, not generic
+process egress isolation. `public` separately blocks every WebSocket
+connection. `local` classifies WebSocket destinations against its
+public-plus-local boundary rather than pretending the HTTP(S) DNS claim
+extends to WebSocket transport.
+
+Source-next `sovereign` is the explicit alternative: it intentionally performs
+no destination-class blocking for valid HTTP(S), passes WebSockets through,
+and enables service workers. URL-embedded userinfo remains blocked. That makes
+exploration possible wherever the surrounding system permits it while leaving
+consequential choices visible. It is not a security label, an authorization
+grant for external accounts, or a guarantee that any destination is reachable.
 
 ## Integration: discover first, render when needed
 
@@ -293,9 +357,10 @@ boundary:
 
 | Purpose | CLI | Environment |
 |---|---|---|
+| Authority profile (source-next) | `--authority public|local|sovereign` | `AGENTOOL_BROWSER_AUTHORITY` |
 | Headless or visible | `--headless` / `--headed` | `AGENTOOL_BROWSER_HEADLESS` |
-| Public web | `--public-web` / `--no-public-web` | `AGENTOOL_BROWSER_PUBLIC_WEB` |
-| Local/private network | `--local-network` / `--no-local-network` | `AGENTOOL_BROWSER_LOCAL_NETWORK` |
+| Public web (deprecated source-next compatibility) | `--public-web` / `--no-public-web` | `AGENTOOL_BROWSER_PUBLIC_WEB` |
+| Local/private network (deprecated source-next compatibility) | `--local-network` / `--no-local-network` | `AGENTOOL_BROWSER_LOCAL_NETWORK` |
 | Ephemeral profile | `--ephemeral` | `AGENTOOL_BROWSER_PROFILE=ephemeral` |
 | Dedicated persistent profile | `--profile <directory>` | `AGENTOOL_BROWSER_PROFILE=persistent` plus `AGENTOOL_BROWSER_PROFILE_DIR` |
 | Installed browser channel | `--channel <name>` | `AGENTOOL_BROWSER_CHANNEL` |
@@ -304,8 +369,12 @@ boundary:
 
 Boolean environment values accept `1/0`, `true/false`, `yes/no`, or `on/off`.
 Paths are resolved at process start. Tool calls do not accept these settings.
+Source-next rejects mixed `authority` and legacy public/local configuration.
 
 ## Install the exact release
+
+These commands install published `0.1.0`; they do not install the unreleased
+source-next authority, capability, or planning surface.
 
 ```bash
 npm install --save-exact @agenttool/browser@0.1.0

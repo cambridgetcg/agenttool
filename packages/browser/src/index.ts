@@ -1,5 +1,13 @@
 export { AgentBrowser, DEFAULT_BROWSER_LIMITS } from "./browser.js";
 export {
+  BROWSER_CAPABILITIES_SCHEMA,
+  resolveBrowserCapabilities,
+} from "./capabilities.js";
+export {
+  BROWSER_CONSEQUENCE_PLAN_SCHEMA,
+  planBrowserAction,
+} from "./planning.js";
+export {
   asBrowserError,
   BrowserError,
   isBrowserError,
@@ -10,6 +18,7 @@ export {
   defaultResolveHostname,
   isPrivateOrReservedAddress,
   parseBrowserUrl,
+  parseBrowserWebSocketUrl,
   redactHtmlUrlAttributes,
   redactUrlReferenceForOutput,
   redactUrlForOutput,
@@ -48,6 +57,8 @@ export {
 } from "./mcp.js";
 export { OBSERVATION_SCHEMA } from "./types.js";
 export type * from "./errors.js";
+export type * from "./capabilities.js";
+export type * from "./planning.js";
 export type * from "./policy.js";
 export type * from "./snapshot.js";
 export type * from "./types.js";

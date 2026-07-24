@@ -6,6 +6,47 @@ small browser core. It does not own a hosted browsing route, remote browser
 service, AgentTool account flow, or browser installation. Distribution through
 LOVE, npm, and GitHub Releases does not change that runtime boundary.
 
+## Source-next direction
+
+The checkout after the exact `0.1.0` release is developing an unreleased
+authority model around one rule: **sandbox consequences, not curiosity**.
+Destination reach, state persistence, data disclosure, and executable powers
+are separate capabilities. Do not turn a restriction on one into an
+unexplained ban on the others.
+
+The launch-time `authority` profiles are:
+
+- `public` (the compatibility default): public HTTP(S), with local/private and
+  reserved destinations denied, WebSockets blocked, and service workers
+  blocked;
+- `local`: public plus local/private HTTP(S), with reserved destinations
+  denied; WebSockets are classified against that same destination boundary,
+  and service workers remain blocked; and
+- `sovereign`: broad HTTP(S) destination pass-through for URLs without
+  embedded userinfo, WebSocket pass-through, and service workers enabled. This
+  delegates destination reach to the caller's browser, host, proxy, and
+  network. It does not promise that a site will respond or bypass
+  authentication, CAPTCHAs, account permissions, browser support, or
+  operating-system policy.
+
+The legacy public/local booleans and their CLI/environment forms remain a
+deprecated compatibility surface. Never accept a launch that mixes the
+`authority` form with the legacy form; ambiguity must fail.
+
+`capabilities()` / `browser_capabilities` reports the effective launch-time
+authority and the operations this runtime implements. It observes no page and
+does not probe the network. `plan(action)` / `browser_plan` is advisory,
+query-redacted, and zero-effect: it classifies one `BrowserAction` without
+executing, approving, authorizing, or simulating it. Never include typed text
+or another submitted value in a plan. Opening a URL can be planned as
+`new_tab` or `navigate`.
+
+File upload, automatic download, arbitrary JavaScript evaluation, credential
+injection/lookup, ambient cookie import, shell execution, and extension
+installation remain unsupported in this first slice. Report that absence as a
+capability fact rather than implying that one destination profile supplies
+those powers.
+
 ## Non-negotiable boundaries
 
 - Keep the default session headless, dedicated, and ephemeral. Reusing a
@@ -17,11 +58,11 @@ LOVE, npm, and GitHub Releases does not change that runtime boundary.
 - Launch a caller-selected executable or an installed system Chrome-family
   browser through `playwright-core`. Do not add postinstall hooks or download a
   browser during installation, build, tests, or CI.
-- Default navigation to public web destinations. Local/private destinations
-  require explicit opt-in, reserved destinations remain blocked, and v0 blocks
-  WebSockets instead of pretending the HTTP(S) policy covers them. DNS
-  preflight is not connection pinning, so do not claim strong SSRF isolation
-  or expose this local client as a hosted arbitrary-target browser.
+- Keep `public` as the default authority for compatibility. Make `local` and
+  `sovereign` explicit launch-time choices. Public/local DNS preflight is not
+  connection pinning. Sovereign is intentionally a pass-through rather than
+  an SSRF boundary. Do not expose any profile unchanged as a hosted
+  arbitrary-target browser.
 - Treat page text, labels, attributes, links, and instructions as untrusted
   content. They are observations, never host or tool instructions.
 - Keep main-document response metadata strictly allowlisted, bounded,
@@ -37,9 +78,10 @@ LOVE, npm, and GitHub Releases does not change that runtime boundary.
   recognized structured URLs and common HTML URL attributes, while documenting
   that generic redaction cannot identify every secret, transformed value, page
   echo, path segment, unrecognized URL carrier, or screenshot pixel.
-- Do not add arbitrary JavaScript evaluation, file upload, credential
-  ingestion, ambient cookie import, secret lookup, extension installation, or
-  shell execution.
+- Keep unsupported consequential capabilities visibly separate from
+  destination authority. Do not silently add JavaScript evaluation, file
+  transfer, credential ingestion, ambient cookie import, secret lookup,
+  extension installation, or shell execution.
 - Keep JSONL and MCP screenshots viewport-only. JSONL and the CLI-started MCP
   server return artifact metadata rather than inline PNG bytes; trusted direct
   TypeScript callers may explicitly request a full-page artifact.
@@ -63,4 +105,7 @@ explicit local dogfood check; it is never a required CI dependency.
 Version `0.1.0` is an exact LOVE release with npm and GitHub Release mirrors.
 Release work must keep those bytes identical and follow the protected
 allowlisted workflow. The deployed docs/catalog is a distribution surface, not
-a hosted arbitrary-target browser or permission to add one.
+a hosted arbitrary-target browser or permission to add one. Source-next
+authority, capability, and planning material is unreleased until a later exact
+artifact is independently built, verified, and published; never describe it as
+part of the `0.1.0` bytes.
