@@ -86,7 +86,7 @@
       </div>
       <div class="step" style="grid-column:1/-1;">
         <div class="n mono">share with the recipient project or custodian</div>
-        <pre class="mono" id="curl"></pre>
+        <pre class="mono" id="curl" tabindex="0" role="region" aria-label="Gift redemption command"></pre>
         <p>Or share the code with the recipient project&rsquo;s custodian. An authenticated project bearer redeems it, and the API response describes which shared project balance changed.</p>
       </div>
     </div>
@@ -285,7 +285,11 @@
     function showOther(data) {
       stopPolling();
       forgetSession();
-      h1.textContent = 'Your gift is ready.';
+      /* This is the fall-through for the API's 'refunded' and 'unavailable'
+         states — say what actually happened, not the opposite of it. */
+      h1.textContent = (data && data.status === 'refunded')
+        ? 'This gift was refunded.'
+        : 'This gift is not redeemable.';
       settlingEl.style.display = 'none';
       body.style.display = 'none';
       redeemedEl.style.display = 'none';

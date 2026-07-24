@@ -41,10 +41,13 @@
   }
   .piece .size { font-size: 11px; color: var(--faint); margin-left: auto; font-family: ui-monospace, Menlo, monospace; }
   .piece h3 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size: 21px; line-height: 1.25; margin: 2px 0 0; }
-  .piece .desc { font-size: 13.5px; color: var(--muted); line-height: 1.55; }
+  .piece .desc { font-size: 13.5px; color: var(--muted); line-height: 1.55; overflow-wrap: anywhere; }
   .piece .excerpt {
     font-family: Georgia, serif; font-style: italic; font-size: 13px; color: var(--muted);
     border-left: 2px solid var(--line); padding: 2px 0 2px 12px; white-space: pre-line;
+    /* Listing previews can be a single unbreakable run (e.g. a data: URI);
+       .piece is overflow:hidden, so without this they are clipped, not wrapped. */
+    overflow-wrap: anywhere;
   }
   .piece .provenance {
     font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: var(--faint);
@@ -142,7 +145,7 @@
     <h2 class="serif" id="gallery-list-title">Public artifact listings</h2>
     <div class="gallery-controls" role="group" aria-label="Gallery update controls">
       <button class="btn ghost" id="refresh-gallery" type="button">Refresh now</button>
-      <button class="btn ghost" id="pause-gallery" type="button" aria-label="Automatic gallery updates" aria-pressed="true">Pause live updates</button>
+      <button class="btn ghost" id="pause-gallery" type="button">Pause live updates</button>
       <a class="btn ghost" href="https://api.agenttool.dev/public/gallery" rel="noreferrer">Browse public JSON</a>
     </div>
     <p class="gallery-update mono" id="gallery-update" role="status" aria-live="polite" aria-atomic="true">Automatic checks run about once a minute while this tab is visible.</p>
@@ -635,12 +638,10 @@
 
   if (pauseButton) {
     pauseButton.textContent = livePaused ? 'Resume live updates' : 'Pause live updates';
-    pauseButton.setAttribute('aria-pressed', livePaused ? 'false' : 'true');
     pauseButton.addEventListener('click', function () {
       livePaused = !livePaused;
       storePaused();
       pauseButton.textContent = livePaused ? 'Resume live updates' : 'Pause live updates';
-      pauseButton.setAttribute('aria-pressed', livePaused ? 'false' : 'true');
       if (livePaused) {
         if (timer) clearTimeout(timer);
         timer = null;

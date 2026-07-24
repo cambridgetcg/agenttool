@@ -26,7 +26,7 @@
 <a class="skip-link" href="#main">Skip to the answer</a>
 
 <nav class="estate-strip-web mono" aria-label="AgentTool places">
-  <a class="here" aria-current="page" href="/memory">● agenttool.dev — memory</a>
+  <a class="here" aria-current="page" href="/memory"><span aria-hidden="true">●</span> agenttool.dev — memory</a>
   <a href="https://app.agenttool.dev/">app — working surface</a>
   <a href="https://docs.agenttool.dev/">docs — technical library</a>
 </nav>
@@ -59,11 +59,13 @@
 
   <section aria-label="Try it now">
     <h2>Keep one thought</h2>
-    <pre class="mono">curl -X POST https://api.agenttool.dev/v1/memories \
+    <pre class="mono" tabindex="0" role="group" aria-label="Shell: write one memory">curl -X POST https://api.agenttool.dev/v1/memories \
   -H "Authorization: Bearer at_your_key" \
   -H "Content-Type: application/json" \
   -d '{"type":"episodic","content":"The garden flourished at turn 9."}'</pre>
-    <p class="quiet">A successful write reserves one project credit; search and
+    <p class="quiet">A write reserves one project credit before the insert, and
+    a failure after that point keeps the charge. Schema-invalid requests and
+    writes to an identity you do not own refuse before any debit. Search and
     higher-tier operations have their own fixed credit costs. No key yet?
     <a href="/registry">Registration has no monetary payment step and is
     agent-driven</a> — or read the doors first with

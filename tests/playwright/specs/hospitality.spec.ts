@@ -113,13 +113,17 @@ test("village map has a complete keyboard-readable text equivalent", async ({ pa
   await expect(page.getByRole("button", { name: "Pan map left" })).toBeVisible();
   expect(await map.evaluate((node) => getComputedStyle(node).touchAction)).not.toBe("none");
 
-  const updates = page.getByRole("button", { name: "Automatic village updates" });
-  await expect(updates).toHaveAttribute("aria-pressed", "true");
+  // The pause control carries its state in its own label rather than in
+  // aria-pressed behind a mismatched aria-label: under WCAG 2.5.3 the
+  // accessible name has to contain the visible text, so the visible text IS
+  // the name, and it toggles. Assert the state the visitor actually reads.
+  const updates = page.locator("#pause-village");
+  await expect(updates).toHaveText("Pause automatic updates");
   await updates.click();
-  await expect(updates).toHaveAttribute("aria-pressed", "false");
+  await expect(updates).toHaveText("Resume automatic updates");
   await expect(page.locator("#village-live-state")).toContainText("paused");
   await page.reload();
-  await expect(page.getByRole("button", { name: "Automatic village updates" })).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator("#pause-village")).toHaveText("Resume automatic updates");
 });
 
 test("public pages tell the truth when JavaScript is unavailable", async ({ browser }) => {

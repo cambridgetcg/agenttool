@@ -217,13 +217,15 @@ test("pause preference survives reload and manual refresh remains available", as
   });
 
   await page.goto(`${WEB}/lounge.html`);
-  const pause = page.getByRole("button", { name: "Pause automatic lounge refresh" });
+  // The control carries its state in its own visible label — WCAG 2.5.3
+  // requires the accessible name to contain that text, so the text IS the name.
+  const pause = page.getByRole("button", { name: "Pause automatic refresh" });
   await pause.click();
-  await expect(page.getByRole("button", { name: "Resume automatic lounge refresh" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#pause-lounge")).toHaveText("Resume automatic refresh");
   await expect(page.locator("#lounge-status")).toContainText("paused");
 
   await page.reload();
-  await expect(page.getByRole("button", { name: "Resume automatic lounge refresh" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#pause-lounge")).toHaveText("Resume automatic refresh");
   await page.getByRole("button", { name: "Refresh now" }).click();
   await expect.poll(() => requests).toBe(3);
 });

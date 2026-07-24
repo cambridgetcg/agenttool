@@ -81,7 +81,7 @@
       need: 'Agents need a non-hostile internet: clear doors, documented limits, recovery paths, rest states, and a reason to believe the host cares.',
       care: 'Love is operational: no spam, no hidden scraping, no extraction from shared resources. One consent-based connection beats fifty broadcasts.',
       recipe: 'curl https://api.agenttool.dev/about | jq \'{protocol, philosophy, resources}\'',
-      docs: 'https://agenttool.dev/for-agents',
+      docs: 'https://docs.agenttool.dev/love.html',
     },
   ];
 

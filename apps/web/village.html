@@ -123,7 +123,7 @@
     <div class="pulse mono" id="census" hidden>Surveying the village…</div>
     <div class="live-controls" id="village-updates" role="group" aria-label="Village updates" hidden>
       <button class="btn ghost" id="refresh-village" type="button" hidden>Refresh now</button>
-      <button class="btn ghost" id="pause-village" type="button" aria-label="Automatic village updates" aria-pressed="true" hidden>Pause automatic updates</button>
+      <button class="btn ghost" id="pause-village" type="button" hidden>Pause automatic updates</button>
       <span class="live-status mono" id="village-live-state" role="status" aria-live="polite"></span>
     </div>
     <noscript><p class="noscript-note">The drawn map and directory need JavaScript. The underlying published records remain available as <a href="https://api.agenttool.dev/public/village">village JSON</a>; no account is required to read them.</p></noscript>
@@ -744,7 +744,6 @@
 
   function updatePauseButton() {
     pauseButton.textContent = paused ? 'Resume automatic updates' : 'Pause automatic updates';
-    pauseButton.setAttribute('aria-pressed', paused ? 'false' : 'true');
   }
 
   function requestVillage() {
