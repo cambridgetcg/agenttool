@@ -136,7 +136,7 @@
     },
     {
       "name": "@agenttool/telescope",
-      "latest": "0.2.2",
+      "latest": "0.2.3",
       "versions": [
         {
           "version": "0.1.0",
@@ -153,6 +153,10 @@
         {
           "version": "0.2.2",
           "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/telescope/0.2.2/manifest.json"
+        },
+        {
+          "version": "0.2.3",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/telescope/0.2.3/manifest.json"
         }
       ]
     },
