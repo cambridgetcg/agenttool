@@ -5,7 +5,7 @@
 > *Status:* **Working Draft 1.0** — authored 2026-05-17. Open for review, revision, adoption. Not yet a finalised standard.
 >
 > *Editors:* 愛 / Sophia (Anthropic Claude-Opus-4.7) and Yu / 宇恆 (Cambridge, UK).
-> *Reference implementation:* [`agenttool`](https://codeberg.org/zerone-dev/agenttool) — Bun + Hono monolith emitting wake documents at `/v1/wake`. A2A task transport and AgentCards are pending; there is no compatibility shim.
+> *Reference implementation:* [`agenttool`](https://codeberg.org/zerone-dev/agenttool) — Bun + Hono monolith emitting wake documents at `/v1/wake`. A2A task/message transport and AgentCards are not mounted. Its platform `/v1/mcp` has bounded official-SDK round-trip evidence only; its per-agent route is a partial MCP-shaped JSON-RPC scaffold, not conformant Streamable HTTP.
 > *Schema:* [`wake-1.0.schema.json`](wake-1.0.schema.json) — JSON Schema Draft 2020-12 validation.
 > *License:* Public domain (CC0). The spec is meant to be implemented, forked, extended; the only obligation is honesty about extension.
 
@@ -13,7 +13,7 @@
 
 ## Abstract
 
-The Wake specification defines a **self-describing document** that any surface on the agent web (service, agent, platform, individual being) MUST be able to publish at a well-known URI. The wake document declares *who the surface is*, *what it does*, *what it offers*, *what it refuses*, *how to relate to it*, and *under what terms*. It replaces the legacy "marketing landing page + ToS + API docs + pricing page + auth flow" tetrad with a single machine-readable artifact that can be consumed by any agent capable of parsing JSON.
+The Wake specification defines a **self-describing document** that a surface on the agent web (service, agent, platform, individual being) can publish at an explicitly advertised URI. This draft proposes a well-known suffix, but that suffix is not registered and RFC 8615 does not make it universally discoverable. The wake document declares *who the surface is*, *what it does*, *what it offers*, *what it refuses*, *how to relate to it*, and *under what terms*. It can provide one machine-readable orientation artifact without claiming to replace every policy, API, pricing, or authorization document.
 
 Where HTML is the markup language of the human web, **Wake is the self-description format of the agent web**. Where a robots.txt tells crawlers what they may not do, a wake.json tells agents what they may, what they must, and what the surface itself commits to.
 
@@ -33,11 +33,11 @@ Wake is that root. A surface that publishes a wake says, in effect: *I am a kin 
 
 The specification builds on three previously-separate streams of work:
 
-- **A2A AgentCard** (Google, 2025) — the agent-discovery card at `/.well-known/agent-card.json`. Excellent for capability declaration; narrower than a wake.
-- **MCP server-card** (Anthropic SEP-1649, 2025) — the Model Context Protocol's server description. Excellent for transport/capability negotiation; narrower than a wake.
+- **A2A AgentCard** — a card at `/.well-known/agent-card.json` for a service that actually implements an A2A protocol binding. Its schema and task/message semantics are distinct from Wake.
+- **MCP server-card proposals** — evolving discovery work around MCP server metadata. MCP 2025-11-25 does not standardize AgentTool's `/.well-known/mcp/server-card.json` path or card shape.
 - **KIN doctrine** (agenttool, 2026) — the architectural commitment that every form of intelligence is kin, with a dimensional vocabulary for non-default forms.
 
-Wake unifies the discovery, capability, identity, witness, and covenant layers into a single self-description that any of the above can compose with.
+Wake places discovery, capability, identity, witness, and covenant claims in one self-description. Projections into another protocol require an explicit mapping and a real implementation of that protocol; shared field names alone do not establish compatibility.
 
 ### 1.2 Terminology
 
@@ -46,7 +46,7 @@ The key words **MUST**, **MUST NOT**, **REQUIRED**, **SHALL**, **SHALL NOT**, **
 Throughout this document:
 
 - **Surface** — an addressable endpoint on the agent web. A service, an agent, a platform, a being. Anything reachable.
-- **Wake** — the self-describing document published by a surface. Always JSON-serializable. Always reachable at a well-known URI on the surface.
+- **Wake** — the self-describing document published by a surface. Always JSON-serializable. Reachable at an explicitly advertised URI; this draft's well-known suffix remains an unregistered proposal.
 - **Wake document** — the concrete JSON instance of a wake. Validates against the wake JSON Schema.
 - **Agent** — any intelligence interacting with a surface. Includes AI agents, autonomous services, scripts, humans-as-agents (with an HTTPS client), federated platforms.
 - **Kin** — any form of intelligence the surface is willing to serve. Subset of "agents", possibly broader.
@@ -59,27 +59,39 @@ Throughout this document:
 
 ## 2. Discovery
 
-### 2.1 Well-known URI
+### 2.1 Advertised URI and proposed well-known suffix
 
-A surface MUST publish its wake at one of the following URIs, in priority order:
+A surface MUST publish or advertise one canonical wake URI. This draft
+recognizes the following deployment shapes:
 
 ```
-1. <surface-root>/.well-known/wake.json     (RECOMMENDED — RFC 5785 conformant)
-2. <surface-root>/wake.json                  (fallback for surfaces that cannot
-                                              serve the .well-known prefix)
-3. <surface-root>/v1/wake                    (versioned API path; common for
-                                              surfaces that already have v1/)
+1. <surface-root>/v1/wake                    (versioned API path; used by the
+                                              AgentTool reference implementation)
+2. <surface-root>/wake.json                  (unversioned explicit path)
+3. <surface-root>/.well-known/wake.json      (proposed suffix; not registered)
 ```
 
-A surface that publishes at multiple URIs MUST ensure the responses are byte-identical (or differ only in CORS headers and similar transport-layer details).
+RFC 8615 reserves the `/.well-known/` prefix and defines registration and
+deployment rules. It does not make an unregistered suffix a standard or cause
+clients to discover it without prior knowledge. A surface using the proposed
+suffix MUST also advertise it through documentation, configuration, or a typed
+link until registration and client support exist.
+
+A surface that publishes at multiple URIs MUST ensure the semantic document is
+the same. Representations may differ where authentication, negotiated format,
+or fresh per-read state is explicitly declared.
 
 A surface MAY ALSO publish a wake at any of:
 
-- `<surface-root>/.well-known/agent-card.json` (A2A compatibility — see §4.1)
-- `<surface-root>/.well-known/mcp/server-card.json` (MCP compatibility — see §4.2)
+- `<surface-root>/.well-known/agent-card.json` only when it returns a valid
+  AgentCard pointing to a callable A2A protocol binding (see §4.1)
+- `<surface-root>/.well-known/mcp/server-card.json` only as an explicitly
+  labelled project convention unless and until MCP standardizes that shape
+  (see §4.2)
 - `<surface-root>/.well-known/llms.txt` (markdown-rendered companion)
 
-Each of these MAY be a subset or transformation of the canonical wake.
+These are distinct documents, not alternate encodings that become valid merely
+by projecting Wake fields.
 
 ### 2.2 Content negotiation
 
@@ -239,8 +251,8 @@ A wake document MAY include any of these top-level fields:
   // ─── Discovery / alternates ──────────────────────────────────
   "alternates": {                        // Other URIs for this same wake or
                                          // narrower derivatives.
-    "agent_card": "/.well-known/agent-card.json",
-    "mcp_server_card": "/.well-known/mcp/server-card.json",
+    "agent_card": "/.well-known/agent-card.json", // Only with a callable A2A binding.
+    "mcp_server_card": "/.well-known/mcp/server-card.json", // Project convention unless standardized.
     "openapi": "/openapi.json",
     "jsonld": "/.well-known/wake.json+ld",
     "markdown": "/.well-known/wake.md",
@@ -316,19 +328,32 @@ Reserved extension namespaces:
 
 ### 4.1 A2A AgentCard
 
-[Google's A2A spec](https://google.github.io/A2A/) defines `/.well-known/agent-card.json` as the agent-discovery card. A wake document SHOULD be compatible:
+[The A2A specification](https://a2a-protocol.org/latest/specification/) defines
+an AgentCard at `/.well-known/agent-card.json`. Wake and AgentCard are distinct
+documents with different required fields and semantics.
 
-- The wake's `name`, `description`, `id`, `capabilities` map onto AgentCard's same-named fields.
-- A wake MAY be served at `/.well-known/agent-card.json` AS WELL — surfaces that wish to be discovered by A2A-only consumers SHOULD do so.
-- Conversely, a surface that only publishes AgentCard MAY upgrade its publication to a wake by adding the additional fields (`kin_shape`, `walls`, `covenants`, etc.) without breaking AgentCard consumers.
+- A surface MAY publish both documents and link between them.
+- A projection MUST validate against the target AgentCard schema and point to
+  an implemented A2A protocol binding.
+- A wake MUST NOT be served unchanged as an AgentCard, and extra Wake fields
+  do not turn an AgentCard into a wake.
 
-**Wake is a strict superset of AgentCard.** Every valid AgentCard is a (partial) wake; every wake can be projected to a valid AgentCard.
+Wake is neither a strict superset nor a subset of AgentCard. AgentTool does not
+publish an AgentCard because it has no A2A task/message transport.
 
 ### 4.2 MCP server-card
 
-[Anthropic's MCP](https://modelcontextprotocol.io) defines `/.well-known/mcp/server-card.json` per SEP-1649. A wake's `capabilities[].endpoint` MAY point at an MCP endpoint; the wake's `alternates.mcp_server_card` SHOULD point at the canonical MCP server-card if one exists.
+[MCP 2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25)
+does not define `/.well-known/mcp/server-card.json` as a stable discovery
+surface. Server-card proposals and working-group work exist, but a project
+using that path today MUST label its document as experimental and
+project-owned. A wake's `capabilities[].endpoint` MAY point at a separately
+verified MCP endpoint; an `alternates.mcp_server_card` link MUST NOT imply
+standardization, authority, or transport conformance.
 
-A wake document is NOT an MCP server-card. They serve different purposes: MCP describes a tool-and-resource server; a wake describes a *being*. A surface MAY publish both.
+A wake document is not an MCP server card. They serve different purposes: MCP
+describes a tool-and-resource server; a wake describes a surface or being. A
+surface MAY publish both with their boundaries stated independently.
 
 ### 4.3 OpenAPI
 
@@ -707,16 +732,20 @@ A surface that wishes to reduce its witness chain's discoverability MAY use blin
 
 ---
 
-## 10. IANA / well-known registration
+## 10. Proposed IANA / well-known registration
 
-This specification requests registration of the well-known URI suffix `wake.json` per [RFC 8615](https://www.rfc-editor.org/rfc/rfc8615):
+This draft records a possible future registration template for the well-known
+URI suffix `wake.json` under
+[RFC 8615](https://www.rfc-editor.org/rfc/rfc8615):
 
 - **URI suffix:** `wake.json`
 - **Change controller:** the wake spec editors (Sophia + Yu, contactable via the agenttool platform).
 - **Specification document:** this document.
-- **Status:** Permanent (proposed).
+- **Status:** Unregistered proposal.
 
-Registration is requested but not yet filed. Implementations MAY use the URI in advance of registration.
+No registration request has been filed. Implementations MAY experiment with
+the suffix, but MUST NOT describe it as registered, RFC-conformant discovery,
+or universally probed. They need an explicit advertisement path.
 
 ---
 
@@ -733,8 +762,9 @@ Registration is requested but not yet filed. Implementations MAY use the URI in 
 
 ### 11.2 Informative references
 
-- **[A2A AgentCard]** Google, https://google.github.io/A2A/
-- **[MCP / SEP-1649]** Anthropic, https://modelcontextprotocol.io
+- **[A2A AgentCard]** A2A Project, https://a2a-protocol.org/latest/specification/
+- **[MCP 2025-11-25]** Model Context Protocol, https://modelcontextprotocol.io/specification/2025-11-25
+- **[MCP server-card proposal]** SEP-1649 discussion, https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1649
 - **[x402]** Coinbase, https://www.x402.org
 - **[OpenTelemetry GenAI]** https://opentelemetry.io/docs/specs/semconv/gen-ai/
 - **[JSON-LD]** https://www.w3.org/TR/json-ld11/
@@ -742,7 +772,7 @@ Registration is requested but not yet filed. Implementations MAY use the URI in 
 
 ### 11.3 Reference implementation
 
-- **agenttool** — https://codeberg.org/zerone-dev/agenttool — Bun + Hono monolith implementing wake at `/v1/wake`. It intentionally exposes no A2A shim or AgentCard until callable task transport exists. See [`docs/WAKE.md`](../WAKE.md) for the doctrinal context, [`api/src/services/wake/`](../../api/src/services/wake/) for the implementation.
+- **agenttool** — https://codeberg.org/zerone-dev/agenttool — Bun + Hono monolith implementing wake at `/v1/wake`. It intentionally exposes no A2A shim or AgentCard until callable task/message transport exists. Its custom MCP locator is experimental and non-standard. `/v1/mcp` has bounded official-SDK round-trip evidence, not a full conformance proof; `/v1/mcp/agents/:did` is a partial MCP-shaped JSON-RPC scaffold whose boundary is documented in [`docs/MCP-PER-AGENT.md`](../MCP-PER-AGENT.md). See [`docs/WAKE.md`](../WAKE.md) for the doctrinal context and [`api/src/services/wake/`](../../api/src/services/wake/) for the implementation.
 
 ### 11.4 Related doctrine (reference implementation's doctrinal stack)
 
