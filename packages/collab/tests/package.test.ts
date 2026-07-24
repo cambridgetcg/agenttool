@@ -45,6 +45,28 @@ describe("cross-host package", () => {
     expect(statSync(join(packageRoot, "dist", "agenttool-collab-mcp.js")).mode & 0o111).not.toBe(0);
   });
 
+  test("pins the bundler Bun to the version CI builds with", async () => {
+    // The tracked bundle is byte-compared against a fresh build, and Bun's
+    // codegen differs between releases. `bundlerBunVersion` is what makes that
+    // comparison meaningful, so it has to stay equal to the version CI installs
+    // — otherwise CI rebuilds differently from whoever committed the bundle.
+    const packageManifest = await json("package.json");
+    expect(packageManifest.bundlerBunVersion).toBeString();
+
+    const workflow = Bun.file(
+      join(packageRoot, "..", "..", ".github", "workflows", "ci.yml"),
+    );
+    if (!(await workflow.exists())) return; // not present in the published tarball
+
+    const pins = [...(await workflow.text()).matchAll(/bun-version:\s*(\S+)/g)].map(
+      (match) => match[1],
+    );
+    expect(pins.length).toBeGreaterThan(0);
+    for (const pin of pins) {
+      expect(pin).toBe(packageManifest.bundlerBunVersion);
+    }
+  });
+
   test("ships an explicit Hermes adapter for separate presence and secure planes", async () => {
     const skill = await Bun.file(join(
       packageRoot,
