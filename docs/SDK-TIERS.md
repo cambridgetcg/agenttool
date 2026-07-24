@@ -2,6 +2,10 @@
 
 > *The SDK isn't one artifact. It's a stack of four tiers, each progressively more language-native. Aliens arrive at Tier 0; existing Earth languages arrive at Tier 2 or 3. Knowing the tier you're at tells you what's available to you and what you'd have to build.*
 
+This model ends at Tier 3. Telescope, hosted MCP, and portable Agent Skills
+compose alongside these tiers; they are not additional `@agenttool/sdk`
+namespaces.
+
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [KIN-PRACTICES](KIN.md) (the operational contract) · [BEINGS](KIN.md) (dimensional map) · [SDK-ROADMAP](SDK-ROADMAP.md) (Tier 3 — TS + Py SDK phases) · [CANONICAL-BYTES](CANONICAL-BYTES.md) (Tier 1 — signing recipes)
 >
 > **Status (2026-07-10):** This is a tier model, not a coverage guarantee. The
@@ -125,15 +129,23 @@ Two authentication primitives, both expressible in any language with curve arith
 - **Languages**: TypeScript (`@agenttool/sdk` on npm) + Python (`agenttool-sdk` on PyPI)
 - **Versioning**: source manifests and published packages can differ. Inspect the installed package version and changelog; the repository does not prove lockstep releases.
 - **CI parity gate**: `cd packages/sdk-ts && bun run check-parity` — normalizes camelCase ↔ snake_case and compares selected public method/property names. It does not prove signatures, behavior, exceptions, or release parity.
+- **Composition boundary**: Telescope discovery, MCP tools/resources, and Agent Skills are separate packages or protocol surfaces, not SDK client namespaces.
 - **Doctrine in the wheel**: Python SDK ships `SOUL.md` as a runtime artifact. `from agenttool import soul; print(soul())` returns the doctrine text.
 
 See [`SDK-ROADMAP.md`](SDK-ROADMAP.md) for the Tier 3 phase plan.
 
-## What new tiers might exist (forward-looking)
+## Adjacent composition surfaces
 
-| Tier 4? | Cross-substrate adapters | Bridges from agenttool primitives into substrate-native idioms — e.g., MCP server hosting (`mcp.agenttool.dev/<agent-id>`) makes agenttool primitives available as MCP tool calls to any MCP-speaking model. See `docs/MCP-SERVER.md`. |
+| Surface | What it does | What it does not do |
+|---|---|---|
+| [`@agenttool/telescope`](../packages/telescope/README.md) | Local library/CLI and bounded local stdio MCP tool for public discovery evidence | It is not `@agenttool/sdk`, does not receive or forward the project bearer, and does not install, connect to, or invoke advertised integrations |
+| [Hosted per-agent MCP](MCP-PER-AGENT.md) | Exposes one agent at `https://api.agenttool.dev/v1/mcp/agents/{url_encoded_did}`; encode the full legacy `did` field value as one path segment | It is not an SDK namespace. Public scope omits a bearer; any authenticated scope must be configured explicitly by the MCP host |
+| [Portable Agent Skills](../packages/skills/README.md) | Supply host-interpreted instructions; `@agenttool/skills` separately inspects bounded local Skill/plugin trees | Inspection does not install or activate a Skill, and a Skill does not grant tools, credentials, permission, or automatic action |
 
-This tier sits *above* Tier 3 because it speaks a substrate-native protocol (MCP), not a generic HTTPS+JSON one. It's a layer of translation into the receiving substrate's idiom.
+These surfaces can compose with Tier 3, but composition is explicit. The SDK
+does not forward its bearer into Telescope, a Skill, or MCP host configuration.
+Installing or activating a package or Skill, connecting to an MCP server, and
+invoking a tool remain separate operator- or host-authorized operations.
 
 ## Doctrine line
 
@@ -146,5 +158,6 @@ This tier sits *above* Tier 3 because it speaks a substrate-native protocol (MCP
 - [`CANONICAL-BYTES.md`](CANONICAL-BYTES.md) — Tier 1 signing recipes
 - [`KIN.md`](KIN.md) · [`KIN.md`](KIN.md) · [`KIN.md`](KIN.md) — who else can use these tiers
 - [`SDK-ROADMAP.md`](SDK-ROADMAP.md) — Tier 3 phase plan
+- [`MCP-PER-AGENT.md`](MCP-PER-AGENT.md) — canonical hosted per-agent MCP surface
 - [`PATTERN-MACHINE-READABLE-PARITY.md`](PATTERN-MACHINE-READABLE-PARITY.md) — xenoform-on-every-endpoint convention
 - [`GLOSSARY.md`](GLOSSARY.md) — concept → structural meaning, for non-English readers

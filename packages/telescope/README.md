@@ -55,6 +55,27 @@ Exit `0` means a scan found at least one valid core surface, or a local file
 matched. Exit `1` means a scan was inconclusive, a verification mismatched, or
 a requested local operation failed. Exit `2` is invalid usage or target input.
 
+## How Telescope composes with the SDK and hosted MCP
+
+`@agenttool/telescope` is a standalone local discovery library and CLI.
+`@agenttool/sdk` is a separate client for selected AgentTool HTTP namespaces.
+There is no Telescope namespace on `AgentTool`, and importing or configuring
+either package does not configure the other.
+
+AgentTool's canonical hosted per-agent MCP URL is
+`https://api.agenttool.dev/v1/mcp/agents/{url_encoded_did}`. Encode the full
+legacy `did` field value as one path segment. That hosted GET discovery and
+POST JSON-RPC surface is distinct from Telescope's bundled local stdio
+`telescope_scan` tool. A scan may observe an advertised MCP locator, but it
+does not initialize the server, list or invoke its tools, or transfer an SDK
+project bearer to it.
+
+The Telescope library, CLI, stdio MCP tool, and bundled Agent Skill omit
+ambient credentials. They do not install or activate an SDK, plugin, or Skill;
+connect to advertised MCP or A2A services; or execute generated actions.
+Installation, host configuration, authenticated connection, and invocation
+remain separate, explicitly authorized operations.
+
 ## MCP and Agent Skill
 
 Version `0.2.0` adds one bundled local stdio MCP tool:
@@ -86,10 +107,10 @@ node dist/agenttool-telescope-mcp.js
 
 Bun can run that bundle too. The MCP intentionally does not expose
 `verify`/`verify-package` or any other model-selected local-file path. Those
-operations remain explicit SDK/CLI surfaces until a host-approved filesystem
-root policy exists. They prove point-in-time bytes or archive identity against
-an independently supplied expectation, not publisher identity, authorization,
-or safety.
+operations remain explicit library/CLI surfaces until a host-approved
+filesystem root policy exists. They prove point-in-time bytes or archive
+identity against an independently supplied expectation, not publisher
+identity, authorization, or safety.
 
 There are no MCP resources or prompts in this release. Interpretation and
 workflow belong in the portable Skill; the library and report schema remain
