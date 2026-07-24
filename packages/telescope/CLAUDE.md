@@ -4,6 +4,9 @@ Read-only agent discovery evidence mapper. This package does not own hosted API
 routes, production egress, protocol invocation, npm publication, or the LOVE
 release inventory.
 
+The current source release is `0.2.1`; immutable `0.1.0` and `0.2.0`
+artifacts remain separate historical bytes.
+
 ## Commands
 
 ```bash
@@ -31,6 +34,9 @@ npm pack --ignore-scripts --dry-run
 - Build one standalone Node-targeted MCP bundle, run it under both supported
   Node and Bun, and byte-compare the checked-in bundle. Keep all actually
   bundled third-party names, versions, notices, and license text complete.
+  Rebuild the checked-in bytes with the repository-pinned Bun 1.3.5 compiler;
+  runtime compatibility with newer Bun versions does not promise identical
+  compiler output.
 - Default scanning is bounded public HTTPS GET only. Never read ambient bearer,
   cookie, npm, or project credentials.
 - DNS preflight is not socket pinning. Do not describe the native-fetch client
@@ -79,7 +85,7 @@ npm pack --ignore-scripts --dry-run
 - Keep the report schema, TypeScript report type, formatter, and tests aligned.
 - Keep the package version, `TOOL_VERSION`, User-Agent, tests, LOVE inventory,
   plugin manifests, MCP server identity, and release tag aligned. The report
-  current source report protocol is `agenttool-telescope/v0.2`; bump it again
+  `0.2.1` report protocol is `agenttool-telescope/v0.2`; bump it again
   whenever the emitted schema changes.
   Published version bytes are immutable: never rebuild or replace an existing
   manifest/tarball under the same name and version.

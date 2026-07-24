@@ -17,6 +17,7 @@ describe("release metadata", () => {
       exports?: Record<string, { default?: string }>;
     };
 
+    expect(TOOL_VERSION).toBe("0.2.1");
     expect(packageJson.name).toBe(TOOL_NAME);
     expect(packageJson.version).toBe(TOOL_VERSION);
     expect(packageJson.private).toBeUndefined();

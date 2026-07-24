@@ -28714,7 +28714,7 @@ var agenttool_telescope_report_v0_2_schema_default = {
 // src/constants.ts
 var REPORT_SCHEMA = "agenttool-telescope/v0.2";
 var TOOL_NAME = "@agenttool/telescope";
-var TOOL_VERSION = "0.2.0";
+var TOOL_VERSION = "0.2.1";
 var DEFAULT_LIMITS = Object.freeze({
   timeout_ms: 15000,
   max_response_bytes: 256 * 1024,

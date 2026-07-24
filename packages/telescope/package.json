@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/telescope",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Read-only evidence mapper for agent discovery surfaces",
   "license": "Apache-2.0",
   "type": "module",
