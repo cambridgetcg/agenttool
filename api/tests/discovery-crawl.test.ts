@@ -102,7 +102,9 @@ describe("API robots.txt and sitemap.xml", () => {
   test("the curated OpenAPI contract names both crawl hints", async () => {
     const specification = await (await openapiRouter.request("/")).json();
     expect(specification.paths["/robots.txt"].get).toBeDefined();
+    expect(specification.paths["/robots.txt"].head).toBeDefined();
     expect(specification.paths["/sitemap.xml"].get).toBeDefined();
+    expect(specification.paths["/sitemap.xml"].head).toBeDefined();
   });
 });
 

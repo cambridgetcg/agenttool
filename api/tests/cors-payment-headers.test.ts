@@ -81,9 +81,13 @@ describe("browser-visible machine recovery headers", () => {
     for (const path of [
       "/.well-known/webfinger",
       "/.well-known/api-catalog",
+      "/.well-known/api-%63atalog",
       "/public/discovery",
+      "/public/%64iscovery",
       "/public/porch",
+      "/public/%70orch",
       "/v1/pathways",
+      "/v1/%70athways",
       "/feeds/offers.json",
     ]) {
       const response = await app.request(path, {

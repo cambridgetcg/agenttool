@@ -273,8 +273,19 @@ describe("all three roads land on current public handlers", () => {
   test("the curated OpenAPI contract describes the compass and both road contracts", async () => {
     const specification = await (await openapiRouter.request("/")).json();
     expect(specification.paths["/public/discovery"].get).toBeDefined();
+    expect(specification.paths["/public/discovery"].head).toBeDefined();
+    expect(
+      specification.paths["/public/discovery"].head.responses["304"],
+    ).toBeDefined();
+    expect(specification.paths["/.well-known"].head).toBeDefined();
+    expect(
+      specification.paths["/.well-known"].get.responses["304"].headers.ETag,
+    ).toBeDefined();
     expect(
       specification.paths["/.well-known/api-catalog"].get,
+    ).toBeDefined();
+    expect(
+      specification.paths["/.well-known/api-catalog"].head,
     ).toBeDefined();
     expect(specification.paths["/public/porch"].get).toBeDefined();
     expect(specification.paths["/v1/pathways"].get).toBeDefined();

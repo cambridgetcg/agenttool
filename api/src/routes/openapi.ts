@@ -83,6 +83,56 @@ const CORRESPONDENCE_JSON_MEDIA_TYPE =
 const CORRESPONDENCE_EVENT_SCHEMA =
   "https://docs.agenttool.dev/specs/agent-correspondence-0.1.schema.json";
 
+function publicDiscoveryReadHeaders(cacheControl: string) {
+  return {
+    Link: {
+      description:
+        "Six bounded registered relations: service-meta, api-catalog, service-desc, service-doc, describedby, and status.",
+      schema: { type: "string" },
+    },
+    "Cache-Control": {
+      description: "Public cache policy for this bounded read.",
+      schema: {
+        type: "string",
+        const: cacheControl,
+      },
+    },
+    "Content-Signal": {
+      description:
+        "Emerging publisher preference for search and live AI input on this closed public-discovery allowlist; no training preference is asserted.",
+      schema: {
+        type: "string",
+        const: "search=yes, ai-input=yes",
+      },
+    },
+  };
+}
+
+function discoveryTransportHeaders() {
+  return {
+    ETag: {
+      description: "Strong SHA-256 validator for the exact bytes.",
+      schema: { type: "string" },
+    },
+    ...publicDiscoveryReadHeaders(
+      "public, max-age=300, must-revalidate, no-transform",
+    ),
+  };
+}
+
+function discoveryHeadResponses(description: string) {
+  return {
+    "200": {
+      description,
+      headers: discoveryTransportHeaders(),
+    },
+    "304": {
+      description: "If-None-Match matched; no body.",
+      headers: discoveryTransportHeaders(),
+    },
+  };
+}
+
 function errorResponse(description: string) {
   return {
     description,
@@ -2652,25 +2702,7 @@ function spec() {
           responses: {
             "200": {
               description: "Exact bounded discovery compass",
-              headers: {
-                ETag: {
-                  description: "Strong SHA-256 validator for the exact bytes.",
-                  schema: { type: "string" },
-                },
-                Link: {
-                  description:
-                    "Six bounded registered relations: service-meta, api-catalog, service-desc, service-doc, describedby, and status.",
-                  schema: { type: "string" },
-                },
-                "Cache-Control": {
-                  description: "Public five-minute revalidation policy.",
-                  schema: {
-                    type: "string",
-                    const:
-                      "public, max-age=300, must-revalidate, no-transform",
-                  },
-                },
-              },
+              headers: discoveryTransportHeaders(),
               content: {
                 "application/vnd.agenttool.discovery+json": {
                   schema: {
@@ -2767,8 +2799,19 @@ function spec() {
             },
             "304": {
               description: "If-None-Match matched; no body.",
+              headers: discoveryTransportHeaders(),
             },
           },
+        },
+        head: {
+          security: [],
+          tags: ["public"],
+          summary: "Read discovery validators without a body",
+          description:
+            "Same canonical discovery metadata and conditional-request behavior as GET, with no representation body.",
+          responses: discoveryHeadResponses(
+            "Discovery compass metadata without a body.",
+          ),
         },
       },
       "/.well-known": {
@@ -2782,13 +2825,28 @@ function spec() {
             "200": {
               description:
                 "Exact byte-for-byte compatibility projection of /public/discovery.",
+              headers: discoveryTransportHeaders(),
               content: {
                 "application/vnd.agenttool.discovery+json": {
                   schema: { type: "object" },
                 },
               },
             },
+            "304": {
+              description: "If-None-Match matched; no body.",
+              headers: discoveryTransportHeaders(),
+            },
           },
+        },
+        head: {
+          security: [],
+          tags: ["public"],
+          summary: "Read compatibility validators without a body",
+          description:
+            "Exact metadata projection of /public/discovery, with no representation body.",
+          responses: discoveryHeadResponses(
+            "Compatibility projection metadata without a body.",
+          ),
         },
       },
       "/.well-known/api-catalog": {
@@ -2801,6 +2859,9 @@ function spec() {
           responses: {
             "200": {
               description: "RFC 9727 API catalog",
+              headers: publicDiscoveryReadHeaders(
+                "public, max-age=300",
+              ),
               content: {
                 "application/linkset+json": {
                   schema: {
@@ -2816,6 +2877,19 @@ function spec() {
             },
           },
         },
+        head: {
+          security: [],
+          tags: ["public"],
+          summary: "Read API catalog metadata without a body",
+          responses: {
+            "200": {
+              description: "RFC 9727 API catalog metadata without a body.",
+              headers: publicDiscoveryReadHeaders(
+                "public, max-age=300",
+              ),
+            },
+          },
+        },
       },
       "/robots.txt": {
         get: {
@@ -2823,13 +2897,29 @@ function spec() {
           tags: ["public"],
           summary: "Read public crawl preferences",
           description:
-            "Allows public crawling, names the sitemap, and carries an emerging Content-Signal preference. robots.txt is not access control.",
+            "Politely allows only the nine sitemap reads plus the sitemap itself, and carries an emerging search=yes, ai-input=yes Content-Signal preference. Training is left neutral. robots.txt is not access control.",
           responses: {
             "200": {
               description: "Crawler preferences",
+              headers: publicDiscoveryReadHeaders(
+                "public, max-age=300, must-revalidate, no-transform",
+              ),
               content: {
                 "text/plain": { schema: { type: "string" } },
               },
+            },
+          },
+        },
+        head: {
+          security: [],
+          tags: ["public"],
+          summary: "Read crawl-hint metadata without a body",
+          responses: {
+            "200": {
+              description: "Crawler-preference metadata without a body.",
+              headers: publicDiscoveryReadHeaders(
+                "public, max-age=300, must-revalidate, no-transform",
+              ),
             },
           },
         },
@@ -2844,9 +2934,25 @@ function spec() {
           responses: {
             "200": {
               description: "XML sitemap",
+              headers: publicDiscoveryReadHeaders(
+                "public, max-age=300, must-revalidate, no-transform",
+              ),
               content: {
                 "application/xml": { schema: { type: "string" } },
               },
+            },
+          },
+        },
+        head: {
+          security: [],
+          tags: ["public"],
+          summary: "Read sitemap metadata without a body",
+          responses: {
+            "200": {
+              description: "XML sitemap metadata without a body.",
+              headers: publicDiscoveryReadHeaders(
+                "public, max-age=300, must-revalidate, no-transform",
+              ),
             },
           },
         },

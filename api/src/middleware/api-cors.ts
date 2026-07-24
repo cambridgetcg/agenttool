@@ -59,18 +59,18 @@ export function apiCors(): MiddlewareHandler {
     });
     const isPublicMcp = routedPath === "/v1/mcp";
     const isReadOnlyDiscovery =
-      path === "/.well-known/webfinger" ||
-      path === "/.well-known" ||
-      path === "/.well-known/" ||
-      path === "/.well-known/api-catalog" ||
-      path === "/robots.txt" ||
-      path === "/sitemap.xml" ||
-      path === "/public/discovery" ||
-      path === "/public/discovery/" ||
-      path === "/public/porch" ||
-      path === "/v1/pathways" ||
-      path === "/feeds" ||
-      path.startsWith("/feeds/");
+      routedPath === "/.well-known/webfinger" ||
+      routedPath === "/.well-known" ||
+      routedPath === "/.well-known/" ||
+      routedPath === "/.well-known/api-catalog" ||
+      routedPath === "/robots.txt" ||
+      routedPath === "/sitemap.xml" ||
+      routedPath === "/public/discovery" ||
+      routedPath === "/public/discovery/" ||
+      routedPath === "/public/porch" ||
+      routedPath === "/v1/pathways" ||
+      routedPath === "/feeds" ||
+      routedPath.startsWith("/feeds/");
     let response: Response | void;
     if (
       isPublicMcp &&
