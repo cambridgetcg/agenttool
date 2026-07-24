@@ -81,10 +81,14 @@ function findHeaderAlternateJsonHrefs(headers: string, path: string): string[] {
   for (let i = start + 1; i < lines.length; i++) {
     const line = lines[i] ?? "";
     if (line === "" || !/^\s/.test(line)) break;
-    const match = line.match(
-      /^\s*Link:\s*<([^>]+)>;\s*rel=["']alternate["'];\s*type=["']application\/json["']\s*$/,
-    );
-    if (match) hrefs.push(match[1]);
+    const value = line.match(/^\s*Link:\s*(.+)$/)?.[1];
+    if (!value) continue;
+    for (const linkValue of value.split(/,\s*(?=<)/)) {
+      const match = linkValue.match(
+        /^<([^>]+)>;\s*rel=["']alternate["'];\s*type=["']application\/json["']$/,
+      );
+      if (match) hrefs.push(match[1]);
+    }
   }
   return hrefs;
 }

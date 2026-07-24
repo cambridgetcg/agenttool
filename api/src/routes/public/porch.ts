@@ -6,6 +6,7 @@
 import { Hono } from "hono";
 
 import { attachSurface } from "../../lib/surface-metadata";
+import { discoveryLinkHeader } from "../../services/discovery/arrival";
 import {
   defaultPorchSourceLoaders,
   readPorch,
@@ -19,6 +20,7 @@ export function createPorchRoutes(
 
   app.get("/", async (c) => {
     c.header("cache-control", "no-store");
+    c.header("link", discoveryLinkHeader());
     return c.json(
       attachSurface(await readPorch(loaders), {
         canon_pointer: "urn:agenttool:doc/WELCOMING",

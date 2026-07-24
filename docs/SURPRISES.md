@@ -97,13 +97,16 @@ The sidecar binary on the user's machine speaks OUTBOUND to `wss://api.agenttool
 
 v1 unsigned rows can persist alongside v2 dual-signed rows. Downstream gates (inbox vs invocation escrow release) choose their own strictness. The `protocol_version` column distinguishes. See [`CROSS-INSTANCE-COVENANTS.md`](CROSS-INSTANCE-COVENANTS.md).
 
-### MCP has two mounted read-oriented surfaces and incomplete later slices
+### MCP has one conformant platform endpoint and one partial per-agent scaffold
 
-`GET/POST /v1/mcp` serves the platform MCP endpoint, and `/v1/mcp/agents/:did`
-serves the path-based per-agent slice with scope-dependent discovery and read
-tools. Authenticated write operations, MCP OAuth 2.1, A2A task transport, and
-AgentCards remain later slices. See [`MCP-SERVER.md`](MCP-SERVER.md) and
-[`MCP-PER-AGENT.md`](MCP-PER-AGENT.md).
+`POST /v1/mcp` serves the platform MCP endpoint; `GET` and `HEAD` return
+`405 Method Not Allowed` with `Allow: POST`.
+`/v1/mcp/agents/:did` separately serves scope-dependent JSON-RPC resources and
+tools, but it is not conformant MCP Streamable HTTP. A non-exhaustive verified
+minimum of its transport gaps is pinned in
+[`MCP-PER-AGENT.md`](MCP-PER-AGENT.md). Authenticated writes,
+per-agent transport completion, A2A task transport, and AgentCards remain
+later slices. See [`MCP-SERVER.md`](MCP-SERVER.md).
 
 ## Voice / tone surprises
 

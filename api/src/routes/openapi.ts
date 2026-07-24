@@ -11,9 +11,12 @@
  *  When new endpoints land, extend this spec deliberately. Future move:
  *  generate from route schemas and enforce mount parity. */
 
+import { createHash } from "node:crypto";
+
 import { Hono } from "hono";
 
 import { config } from "../config";
+import { discoveryLinkHeader } from "../services/discovery/arrival";
 import {
   SAFE_NET_ADMISSION_QUEUE_TIMEOUT_MS,
   SAFE_NET_MAX_CONCURRENT_REQUESTS,
@@ -2591,6 +2594,11 @@ function spec() {
       },
     },
     tags: [
+      {
+        name: "discovery",
+        description:
+          "Public read-only orientation. Discovery grants no authority and performs no follow-up action.",
+      },
       { name: "wake", description: "Identity anchor — load at session start" },
       { name: "identity", description: "Provisional AgentTool identifiers in legacy did fields, keys, attestations, and expression; no W3C DID method or conforming resolution" },
       { name: "memory", description: "pgvector store, agent-supplied embeddings" },
@@ -2641,6 +2649,54 @@ function spec() {
       generated_from_routes: false,
     },
     paths: {
+      // ── Discovery (anonymous, read-only) ──────────────────────────────
+      "/.well-known/api-catalog": {
+        get: {
+          security: [],
+          tags: ["discovery"],
+          summary: "Read AgentTool's RFC 9727 API catalog",
+          description:
+            "Returns a bounded RFC 9264 JSON Linkset. Its links advertise public descriptions, documentation, metadata, status, and products; catalog membership grants no authority, initiates no payment, and performs no follow-up request.",
+          responses: {
+            "200": {
+              description: "Public API catalog",
+              content: {
+                "application/linkset+json": {
+                  schema: {
+                    type: "object",
+                    required: ["linkset"],
+                    properties: {
+                      linkset: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          required: ["anchor"],
+                          properties: {
+                            anchor: { type: "string", format: "uri" },
+                          },
+                          additionalProperties: true,
+                        },
+                      },
+                    },
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+          },
+        },
+        head: {
+          security: [],
+          tags: ["discovery"],
+          summary: "Inspect AgentTool's API catalog headers",
+          responses: {
+            "200": {
+              description:
+                "The same media type, cache, Link, and nosniff headers as GET, without a response body.",
+            },
+          },
+        },
+      },
       // ── Bootstrap (anonymous) ─────────────────────────────────────────
       "/v1/pathways": {
         get: {
@@ -8434,11 +8490,45 @@ function spec() {
   };
 }
 
-app.get("/", (c) =>
-  c.json(spec(), 200, {
+function renderSpec() {
+  const body = JSON.stringify(spec());
+  const digest = createHash("sha256").update(body).digest("hex");
+  return {
+    body,
+    etag: `"sha256-${digest}"`,
+  };
+}
+
+const OPENAPI_REPRESENTATION = renderSpec();
+
+function validatorMatches(value: string | undefined, etag: string): boolean {
+  if (!value) return false;
+  const opaque = etag.replace(/^W\//, "");
+  return value.split(",").some((candidate) => {
+    const trimmed = candidate.trim();
+    return trimmed === "*" || trimmed.replace(/^W\//, "") === opaque;
+  });
+}
+
+app.on(["GET", "HEAD"], "/", (c) => {
+  const headers = {
     "content-type": "application/json; charset=utf-8",
-    "cache-control": "public, max-age=60",
-  }),
-);
+    "cache-control": "public, max-age=60, must-revalidate, no-transform",
+    etag: OPENAPI_REPRESENTATION.etag,
+    link: discoveryLinkHeader(),
+    "x-content-type-options": "nosniff",
+  };
+
+  if (
+    validatorMatches(
+      c.req.header("if-none-match"),
+      OPENAPI_REPRESENTATION.etag,
+    )
+  ) {
+    return c.body(null, 304, headers);
+  }
+  if (c.req.method === "HEAD") return c.body(null, 200, headers);
+  return c.body(OPENAPI_REPRESENTATION.body, 200, headers);
+});
 
 export default app;

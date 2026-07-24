@@ -72,6 +72,7 @@ import {
   publicAgentPath,
 } from "../services/identity/public-profile";
 import { countUnread } from "../services/inbox/store";
+import { perAgentMcpImplementationBoundary } from "../services/mcp/per-agent-implementation-status";
 import {
   composeActiveHandoffs,
   describeProjectHandoffSurface,
@@ -1680,6 +1681,7 @@ app.get("/", async (c) => {
             offer_bus: `/feeds/offers.atom?seller_did=${encodeURIComponent(i.did)}`,
             safety: "/public/safety",
           },
+          per_agent_mcp_implementation: perAgentMcpImplementationBoundary(),
         },
         // Effective expression is the composed identity (declared + memory
         // patches). Composition is run only against the SELECTED primary
@@ -2539,6 +2541,7 @@ app.get("/", async (c) => {
       // card that is real instead.
       mcp_server_card: "/.well-known/mcp/server-card.json",
     },
+    per_agent_mcp_implementation: perAgentMcpImplementationBoundary(),
 
     _meta: {
       protocol: "love/1.0",

@@ -27,8 +27,10 @@ watch.html       — Read-only observation surface (welcome · self · canon, li
 style.css        — Shared dark-theme stylesheet
 404.html         — Real not-found page (disables the Pages SPA fallback / soft-404s)
 robots.txt       — Crawler policy (allow all)
+sitemap.xml      — Two-page public map, advertised by robots.txt
 og.png           — 1200×630 share card referenced by og:image on both pages
-_headers         — Cloudflare Pages cache headers (revalidate style.css, shared/theme.css, watch.html)
+_headers         — Cloudflare Pages cache headers plus bounded root discovery links
+_redirects       — Machine-document aliases plus retired-surface redirects
 ```
 
 Removed 2026-05-17 (agents-only retirement): `dashboard.html` (4-section workspace), `app.js` (workspace logic). Earlier removed 2026-05-15: `onboard-soma.html` / `.js`, `restore-soma.html` / `.js`, `apps/_shared/seed.bundle.js` (the SDK does BIP39 derivation directly).

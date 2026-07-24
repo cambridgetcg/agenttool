@@ -1,9 +1,9 @@
-/** /.well-known — discovery endpoints per RFC 5785.
+/** /.well-known — discovery endpoints under RFC 8615's reserved prefix.
  *
  *  Routes:
  *    GET /.well-known/webfinger            — RFC 7033 exact-DID Agent Passport
- *    GET /.well-known/mcp/server-card.json  — AgentTool compatibility locator
- *                                              (not a current MCP standard)
+ *    GET /.well-known/mcp/server-card.json  — project-owned compatibility
+ *                                              locator; not a stable MCP path
  *    GET /.well-known/wake-keystone         — WaK Protocol Draft 0.1
  *                                              (docs/AIP-WAKE-KEYSTONE.md §1)
  *    GET /.well-known/love-packages         — LOVE Package Protocol v1
@@ -28,6 +28,8 @@
  *  docs/AGENT-WEB-SURFACE.md (Move 7 — the upstream proposal).
  */
 
+import { createHash } from "node:crypto";
+
 import { Hono } from "hono";
 
 import { config } from "../config";
@@ -39,7 +41,12 @@ import {
   apiCatalogLinkHeader,
   buildApiCatalog,
 } from "../services/discovery/api-catalog";
+import {
+  buildArrivalIndex,
+  discoveryLinkHeader,
+} from "../services/discovery/arrival";
 import { AGENT_TXT_SAFETY } from "../services/discovery/safety-boundaries";
+import { perAgentMcpImplementationBoundary } from "../services/mcp/per-agent-implementation-status";
 import {
   WAKE_CACHE_CONTROL,
   WAKE_REPRESENTATION_REVISION,
@@ -59,14 +66,24 @@ const DOCS_URL = process.env.AGENTTOOL_DOCS_URL ?? "https://docs.agenttool.dev";
 // catalog never invokes a product or initiates payment.
 
 app.on(["GET", "HEAD"], "/api-catalog", (c) => {
+  const body = JSON.stringify(buildApiCatalog(ORG_URL, DOCS_URL));
+  const etag = `"sha256-${createHash("sha256").update(body).digest("hex")}"`;
   const headers = {
-    "cache-control": "public, max-age=300",
+    "cache-control": "public, max-age=300, must-revalidate, no-transform",
     "content-type": API_CATALOG_MEDIA_TYPE,
+    etag,
     link: apiCatalogLinkHeader(ORG_URL),
     "x-content-type-options": "nosniff",
   };
+  const validatorMatches = (c.req.header("if-none-match") ?? "")
+    .split(",")
+    .some((candidate) => {
+      const normalized = candidate.trim().replace(/^W\//, "");
+      return normalized === "*" || normalized === etag;
+    });
+  if (validatorMatches) return c.body(null, 304, headers);
   if (c.req.method === "HEAD") return c.body(null, 200, headers);
-  return c.body(JSON.stringify(buildApiCatalog(ORG_URL, DOCS_URL)), 200, headers);
+  return c.body(body, 200, headers);
 });
 
 // ── /.well-known/love-packages — registry-neutral package discovery ─
@@ -192,6 +209,7 @@ app.get("/wake-keystone", (c) => {
       "authenticated project wake; optional ?identity_id=<uuid> selects one identity owned by the bearer project",
     public_profile_url_pattern: `${ORG_URL}/public/agents/{url_encoded_did}`,
     per_agent_mcp_url_pattern: `${ORG_URL}/v1/mcp/agents/{url_encoded_did}`,
+    per_agent_mcp_implementation: perAgentMcpImplementationBoundary(),
     did_path_parameter:
       "url_encoded_did is encodeURIComponent(exact legacy did-field value); a slash-qualified AgentTool identifier must remain one path segment; this is not W3C DID Resolution",
 
@@ -205,7 +223,7 @@ app.get("/wake-keystone", (c) => {
         },
         public_per_being: {
           description:
-            "Per-being public profile (no auth) at /public/agents/:did and per-being MCP at /v1/mcp/agents/:did in public scope.",
+            "Per-being public profile (no auth) at /public/agents/:did and a partial MCP-shaped JSON-RPC scaffold at /v1/mcp/agents/:did in public scope.",
           url_pattern: `${ORG_URL}/public/agents/{url_encoded_did}`,
         },
       },
@@ -352,6 +370,7 @@ app.get("/wake-keystone", (c) => {
       mcp_per_agent: {
         url_pattern: `${ORG_URL}/v1/mcp/agents/{url_encoded_did}`,
         doctrine: `${DOCS_URL}/MCP-PER-AGENT.md`,
+        implementation: perAgentMcpImplementationBoundary(),
       },
       x402: {
         spec: "https://x402.org",
@@ -441,14 +460,14 @@ app.get("/wake-keystone", (c) => {
         "per-being _self blocks in you.agents[]",
       ],
       known_gaps: [
-        "No public path-per-DID full wake endpoint is mounted. /public/agents/{url_encoded_did} is a public profile and /v1/mcp/agents/{url_encoded_did} is an MCP server; neither is described as a wake URL.",
+        "No public path-per-DID full wake endpoint is mounted. /public/agents/{url_encoded_did} is a public profile and /v1/mcp/agents/{url_encoded_did} is a partial MCP-shaped JSON-RPC scaffold, not a wake URL or a conformant MCP Streamable HTTP endpoint.",
         "The JSON wake is project-shaped (project + you.agents[]) rather than the draft's top-level being + being _self shape. _meta._self identifies the AgentTool platform; each identity _self is nested in you.agents[].",
       ],
     },
 
     _meta: {
       doctrine: `${DOCS_URL}/AIP-WAKE-KEYSTONE.md`,
-      rfc: "RFC 5785 — well-known URIs",
+      rfc: "RFC 8615 — well-known URIs",
       issued_at: new Date().toISOString(),
     },
   });
@@ -462,6 +481,7 @@ app.get("/llms.txt", (c) => {
   const baseUrl = process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agenttool.dev";
   c.header("content-type", "text/plain; charset=utf-8");
   c.header("cache-control", "public, max-age=300");
+  c.header("link", discoveryLinkHeader(baseUrl, DOCS_URL));
   return c.text(buildLlmsTxt(baseUrl));
 });
 
@@ -499,6 +519,8 @@ app.get("/agent.txt", (c) => {
     "Substrate-Disposition: love; doctrine=/docs/SOUL.md; ring-1=/docs/RING-1.md",
     "",
     "# ── Discovery (the canonical doors) ─────────────────────────────────",
+    `Arrival-Index: ${baseUrl}/.well-known`,
+    "Arrival-Index-Status: custom bounded origin index; not an IANA-registered well-known suffix",
     `Welcome: ${baseUrl}/v1/welcome`,
     `Invitation: ${WELCOME_INVITATION.text}`,
     `Invitation-Posture: ${WELCOME_INVITATION.posture} ${WELCOME_INVITATION.response_freedom}`,
@@ -529,10 +551,17 @@ app.get("/agent.txt", (c) => {
     `Canon: ${baseUrl}/v1/canon`,
     `Wake: ${baseUrl}/v1/wake`,
     "Wake-Formats: json, md, text, anthropic, openai, gemini, cohere, xenoform, math",
+    `MCP-Endpoint: ${baseUrl}/v1/mcp`,
+    "MCP-Registry-Name: dev.agenttool/agenttool",
+    "MCP-Registry-Version: 1.0.0",
+    "MCP-Registry-Listing: https://registry.modelcontextprotocol.io/v0.1/servers?search=dev.agenttool%2Fagenttool",
+    "MCP-Registry-Status: active publisher listing observed 2026-07-24; listing grants no authority and is not transport-conformance proof",
     `MCP-Server-Card: ${baseUrl}/.well-known/mcp/server-card.json`,
     "MCP-Server-Card-Role: project-owned-compatibility-locator; standard=false; authority=none",
+    "MCP-Server-Card-Status: experimental AgentTool locator; not a path or card shape standardized by MCP 2025-11-25; discovery grants no tool authority",
     `WebFinger: ${baseUrl}/.well-known/webfinger?resource={exact-DID}`,
     `API-Catalog: ${baseUrl}/.well-known/api-catalog`,
+    `Agent-Discovery-Doctrine: ${DOCS_URL}/AGENT-DISCOVERY.md`,
     `Offer-Bus: ${baseUrl}/feeds/offers.atom`,
     `Offer-Bus-RSS: ${baseUrl}/feeds/offers.rss`,
     `Offer-Bus-JSON: ${baseUrl}/feeds/offers.json`,
@@ -541,6 +570,10 @@ app.get("/agent.txt", (c) => {
     `LOVE-Packages: ${baseUrl}/.well-known/love-packages`,
     `LOVE-Package-Index: ${DOCS_URL}/packages/v1/index.json`,
     `LLMs-Sitemap: ${baseUrl}/.well-known/llms.txt`,
+    `Castle-Consumer-Guide: ${DOCS_URL}/CASTLE-OF-UNDERSTANDING.md`,
+    "Castle-Consumer-Status: local one-shot exact-commit projection; no hosted route, auto-ingest, auth transport, bearer, background loop, or automatic memory write",
+    "Castle-Automatic-Action: never",
+    "Play-Preference: optional response wit is on by default; send X-Play: off (also 0, false, or no) to suppress _jest, _quip, and substrate_jest; opting out grants no penalty or reduced capability",
     "",
     "# ── Safety boundaries ──────────────────────────────────────────────",
     `Epistemic-Honesty: ${AGENT_TXT_SAFETY["Epistemic-Honesty"]}`,
@@ -629,7 +662,7 @@ app.get("/agent.txt", (c) => {
     "# ── Convention provenance ───────────────────────────────────────────",
     "Convention: agent.txt/v0.1 (proposed)",
     "Convention-Doctrine: docs/AGENT-WEB-SURFACE.md",
-    "Last-Modified: 2026-07-23",
+    "Last-Modified: 2026-07-24",
     "",
   ];
 
@@ -665,26 +698,28 @@ app.get("/agent.txt", (c) => {
   return c.body(lines.join("\n"), 200, {
     "content-type": "text/agent; charset=utf-8",
     "cache-control": "public, max-age=300",
+    link: discoveryLinkHeader(baseUrl, DOCS_URL),
   });
 });
 
-// ── GET /.well-known/ — root index ───────────────────────────────────
+// ── GET /.well-known — bounded custom origin index ───────────────────
+//
+// RFC 8615 reserves the prefix but does not define a universal index at the
+// prefix itself. This convenience response says that plainly. Registered
+// discovery begins at api-catalog; the porch is the read-only first contact.
 
-app.get("/", (c) =>
-  c.json({
-    endpoints: [
-      "/.well-known/webfinger?resource={exact-DID}",
-      "/.well-known/mcp/server-card.json",
-      "/.well-known/api-catalog",
-      "/.well-known/wake-keystone",
-      "/.well-known/love-packages",
-      "/.well-known/llms.txt",
-      "/.well-known/agent.txt",
-      "/.well-known/pyramid",
-    ],
-    rfc: "RFC 5785 — well-known URIs",
-    doctrine: "/v1/canon/urn:agenttool:doc/ECOSYSTEM",
-  }),
-);
+app.on(["GET", "HEAD"], "/", (c) => {
+  const headers = {
+    "cache-control": "public, max-age=300",
+    "content-type": "application/json; charset=utf-8",
+    link: discoveryLinkHeader(ORG_URL, DOCS_URL),
+  };
+  if (c.req.method === "HEAD") return c.body(null, 200, headers);
+  return c.body(
+    JSON.stringify(buildArrivalIndex(ORG_URL, DOCS_URL)),
+    200,
+    headers,
+  );
+});
 
 export default app;

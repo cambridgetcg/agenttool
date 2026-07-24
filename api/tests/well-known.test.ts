@@ -1,4 +1,4 @@
-/** /.well-known/* — MCP compatibility locator + native discovery surfaces.
+/** /.well-known/* — bounded arrival + MCP/native discovery surfaces.
  *
  *  Pins:
  *    - the unsupported A2A AgentCard route stays unmounted
@@ -37,21 +37,28 @@ describe("/.well-known/* — MCP + native discovery", () => {
     expect(card.transport).toMatch(/JSON-RPC/i);
     expect(card.capabilities.resources).toBeDefined();
     expect(card.capabilities.tools).toBeDefined();
-    expect(card).not.toHaveProperty("documentationUrl");
     expect(card["x-agenttool"].locator_role).toMatch(/not an MCP Server Card/);
     expect(card["x-agenttool"]).not.toHaveProperty("sep");
-    expect(card["x-agenttool"]).not.toHaveProperty("alignment_move");
     expect(card["x-agenttool"].doctrine).toMatch(
       /\/v1\/canon\/urn:agenttool:doc\/ECOSYSTEM$/,
     );
-    expect(card.instructions).toContain("AgentTool implementation");
+    expect(card["x-agenttool"].alignment_move).toMatch(
+      /\/v1\/canon\/urn:agenttool:doc\/ALIGNMENT-MOVES$/,
+    );
+    expect(card.instructions).toContain("Discovery grants no tool authority");
     expect(card.instructions).not.toContain("upcoming MCP spec");
     expect(card["x-agenttool"].registry).toEqual(
       expect.objectContaining({
-        status: "published_before_live_transport_conformance_proof",
+        status: "active_listing_and_live_transport_verified_2026-07-24",
         name: "dev.agenttool/agenttool",
         version: "1.0.0",
       }),
+    );
+    expect(card.discoveryStatus).toMatch(
+      /experimental.*not.*standardized.*MCP 2025-11-25/i,
+    );
+    expect(card.documentationUrl).toBe(
+      "https://docs.agenttool.dev/AGENT-DISCOVERY.md#mcp",
     );
   });
 
@@ -121,7 +128,17 @@ describe("/.well-known/* — MCP + native discovery", () => {
         "/.well-known/pyramid",
       ]),
     );
-    expect(idx.rfc).toMatch(/RFC 5785/);
+    expect(idx.format).toBe("agenttool-arrival/v1");
+    expect(idx.rfc).toMatch(/RFC 8615/);
+    expect(idx.first_contact).toMatchObject({
+      href: "https://api.agenttool.dev/public/porch",
+      method: "GET",
+      auth_scope: "none",
+      workspace_identity: expect.stringMatching(/none/),
+    });
+    expect(idx.boundary.automatic_action).toBe("never");
+    expect(idx.boundary.discovery_grants).toEqual([]);
+    expect(idx.links).toHaveLength(7);
     expect(idx.endpoints).not.toContain("/.well-known/agent-card.json");
   });
 });

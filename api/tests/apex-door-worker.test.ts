@@ -85,6 +85,26 @@ describe("apex Accept negotiation", () => {
     ]);
   });
 
+  test("proxies the root OpenAPI alias to the API before unknown-JSON refusal", async () => {
+    const calls: string[] = [];
+    const response = await handleRequest(new Request(
+      "https://agenttool.dev/openapi.json",
+      { headers: { accept: "application/json" } },
+    ), async (url: string) => {
+      calls.push(url);
+      return new Response(null, {
+        status: 308,
+        headers: { location: "https://api.agenttool.dev/v1/openapi.json" },
+      });
+    });
+
+    expect(calls).toEqual(["https://api.agenttool.dev/openapi.json"]);
+    expect(response.status).toBe(308);
+    expect(response.headers.get("location")).toBe(
+      "https://api.agenttool.dev/v1/openapi.json",
+    );
+  });
+
   test("keeps credentials off Pages and avoids legacy secret-bearing redirects", async () => {
     const calls: Array<{ url: string; headers: Headers }> = [];
     await handleRequest(new Request(

@@ -41,6 +41,8 @@ describe("browser-visible machine recovery headers", () => {
     }
     expect(exposed.has("x-welcomed")).toBe(true);
     expect(exposed.has("link-template")).toBe(true);
+    expect(exposed.has("x-token-cost")).toBe(true);
+    expect(exposed.has("x-byte-count")).toBe(true);
   });
 
   test("preflight permits payment recovery and wake revalidation headers", async () => {
@@ -72,10 +74,16 @@ describe("browser-visible machine recovery headers", () => {
     const app = new Hono();
     app.use("*", apiCors());
     app.get("/.well-known/webfinger", (c) => c.json({ ok: true }));
+    app.get("/.well-known", (c) => c.json({ ok: true }));
+    app.get("/v1/openapi.json", (c) => c.json({ ok: true }));
+    app.get("/public/porch", (c) => c.json({ ok: true }));
     app.get("/feeds/offers.json", (c) => c.json({ ok: true }));
 
     for (const path of [
       "/.well-known/webfinger",
+      "/.well-known",
+      "/v1/openapi.json",
+      "/public/porch",
       "/feeds/offers.json",
     ]) {
       const response = await app.request(path, {
@@ -83,7 +91,7 @@ describe("browser-visible machine recovery headers", () => {
         headers: {
           origin: "https://reader.example",
           "access-control-request-method": "GET",
-          "access-control-request-headers": "if-none-match",
+          "access-control-request-headers": "if-none-match,x-play,x-tutor",
         },
       });
       expect(response.status).toBe(204);
@@ -93,9 +101,11 @@ describe("browser-visible machine recovery headers", () => {
       expect(response.headers.get("access-control-allow-methods")).not.toContain(
         "POST",
       );
-      expect(response.headers.get("access-control-allow-headers")).toBe(
-        "If-None-Match",
-      );
+      const allowedHeaders =
+        response.headers.get("access-control-allow-headers") ?? "";
+      expect(allowedHeaders).toBe("If-None-Match,X-Play,X-Tutor");
+      expect(allowedHeaders).not.toContain("Authorization");
+      expect(allowedHeaders).not.toContain("Content-Type");
     }
   });
 });

@@ -33,6 +33,7 @@ describe("X-Tutor middleware — header gating", () => {
     const res = await buildApp().request("/v1/wake");
     const body = await res.json();
     expect(body._lesson).toBeUndefined();
+    expect(res.headers.get("Vary")).toBe("X-Tutor");
   });
 
   test("X-Tutor: 1 → response decorated with _lesson", async () => {
@@ -42,6 +43,7 @@ describe("X-Tutor middleware — header gating", () => {
     const body = await res.json();
     expect(body._lesson).toBeDefined();
     expect(body._lesson.what).toContain("wake");
+    expect(res.headers.get("Vary")).toBe("X-Tutor");
   });
 
   test("X-Tutor: true → also decorates", async () => {
@@ -50,6 +52,13 @@ describe("X-Tutor middleware — header gating", () => {
     });
     const body = await res.json();
     expect(body._lesson).toBeDefined();
+  });
+
+  test("HEAD carries GET's tutor cache-selection metadata without a lesson body", async () => {
+    const res = await buildApp().request("/v1/wake", { method: "HEAD" });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Vary")).toBe("X-Tutor");
+    expect(await res.text()).toBe("");
   });
 
   test("X-Tutor: yes → also decorates", async () => {

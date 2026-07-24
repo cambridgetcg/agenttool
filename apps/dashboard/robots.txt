@@ -1,3 +1,5 @@
 # app.agenttool.dev — agents welcome, crawlers too.
 User-agent: *
 Allow: /
+
+Sitemap: https://app.agenttool.dev/sitemap.xml

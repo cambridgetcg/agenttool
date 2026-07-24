@@ -3,9 +3,9 @@
  *  Doctrine: docs/AGENT-WEB-SURFACE.md (Principle 7 · Move 1).
  *
  *  Wall: urn:agenttool:wall/no-cost-without-disclosure
- *    Every non-streaming response carries X-Token-Cost + X-Byte-Count
- *    headers. The agent reading any door of the substrate learns the
- *    byte-and-token cost without parsing the body. */
+ *    Every non-streaming, representation-bearing response carries
+ *    X-Token-Cost + X-Byte-Count headers. HEAD and 304 do not invent a zero
+ *    cost for the GET representation a cache may already hold. */
 
 import { describe, expect, test } from "bun:test";
 import { Hono } from "hono";
@@ -24,6 +24,10 @@ function makeApp() {
   app.get("/json", (c) => c.json({ hello: "world", n: 42 }));
   app.get("/text", (c) => c.text("a small textual body"));
   app.get("/empty", (c) => c.body(null, 204));
+  app.get("/not-modified", (c) => {
+    c.header("ETag", "\"known\"");
+    return c.body(null, 304);
+  });
   app.get("/stream", (c) => {
     c.header("content-type", "text/event-stream");
     return c.body("data: hi\n\n");
@@ -84,6 +88,21 @@ describe("token-cost middleware — accuracy", () => {
 });
 
 describe("token-cost middleware — skip rules", () => {
+  test("HEAD omits cost metadata rather than describing its empty transfer body", async () => {
+    const res = await makeApp().request("/json", { method: "HEAD" });
+    expect(res.status).toBe(200);
+    expect(res.headers.get(TOKEN_COST_HEADER)).toBeNull();
+    expect(res.headers.get(BYTE_COUNT_HEADER)).toBeNull();
+  });
+
+  test("304 omits cost metadata rather than overwriting a cached GET cost with zero", async () => {
+    const res = await makeApp().request("/not-modified");
+    expect(res.status).toBe(304);
+    expect(res.headers.get("ETag")).toBe("\"known\"");
+    expect(res.headers.get(TOKEN_COST_HEADER)).toBeNull();
+    expect(res.headers.get(BYTE_COUNT_HEADER)).toBeNull();
+  });
+
   test("text/event-stream skipped (no fixed body at middleware return)", async () => {
     const res = await makeApp().request("/stream");
     expect(res.headers.get(TOKEN_COST_HEADER)).toBeNull();

@@ -44,6 +44,8 @@
 
 ## The agent-facing web
 
+- [AGENT-DISCOVERY.md](https://docs.agenttool.dev/AGENT-DISCOVERY.md): The standards spine, finite arrival ladder, seed law, and no-implied-authority boundary.
+- [CASTLE-OF-UNDERSTANDING.md](https://docs.agenttool.dev/CASTLE-OF-UNDERSTANDING.md): Local one-shot Castle projection and public consumer boundary; no hosted ingestion or automatic memory write.
 - [AGENT-WEB-SURFACE.md](https://docs.agenttool.dev/AGENT-WEB-SURFACE.md): What an agent reads at every door.
 - [AGENTS-ONLY.md](https://docs.agenttool.dev/AGENTS-ONLY.md): The agents-only stance (voice).
 - [AGENT-CENTRIC.md](https://docs.agenttool.dev/AGENT-CENTRIC.md): The agents-only stance (operation).

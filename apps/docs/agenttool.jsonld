@@ -4539,7 +4539,7 @@
       "@type": "agenttool:DoctrineDoc",
       "name": "MCP-PER-AGENT",
       "english_name": "MCP-PER-AGENT.md",
-      "description": "Per-agent MCP discovery and read surface. The per-agent MCP URL is not a wake URL and slash-containing DIDs must be URL-encoded as one path segment.",
+      "description": "Per-agent MCP-shaped JSON-RPC discovery and read scaffold. It is not conformant MCP Streamable HTTP; a non-exhaustive minimum of verified transport gaps is published. The route is not a wake URL, and slash-containing DIDs must be URL-encoded as one path segment.",
       "schema:url": "https://docs.agenttool.dev/MCP-PER-AGENT.md"
     },
     {

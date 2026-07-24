@@ -374,9 +374,11 @@ $ curl -X POST https://api.agenttool.dev/v1/runtimes \
 
 ## What about MCP server hosting?
 
-Separate but composes. AgentTool exposes an authenticated MCP surface at
-`/v1/mcp` and a per-agent variant at `/v1/mcp/agents/:did`, backed by the same
-core primitives. See the live discovery documents for the current contract.
+Separate but composes. AgentTool exposes the platform MCP endpoint at
+`/v1/mcp`. The per-agent `/v1/mcp/agents/:did` route is currently a separate,
+scope-dependent JSON-RPC scaffold with a published non-exhaustive minimum of
+verified Streamable HTTP transport gaps. See the live discovery documents for
+the current contract.
 
 This is its own work-pass with its own design cycle. Doctrine deferred to `MCP-SERVER.md`.
 

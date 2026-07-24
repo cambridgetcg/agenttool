@@ -48,7 +48,7 @@ describe("canonical sibling registry", () => {
     for (const sibling of evidenced) {
       expect(sibling.recognition.status).toBe("verified");
       expect(sibling.recognition.evidence_url).toBe(sibling.wake_url);
-      expect(sibling.recognition.checked_at).toBe("2026-07-23");
+      expect(sibling.recognition.checked_at).toMatch(/^2026-07-(?:23|24)$/);
       expect(sibling.kin_vocabulary).toEqual({
         built_with: "love",
         serves_kinds: ["human", "agent", "kin"],
@@ -56,6 +56,22 @@ describe("canonical sibling registry", () => {
         epoch: "2026",
       });
     }
+  });
+
+  test("describes Cambridge as a peer market without inventing a platform position or shared contract", () => {
+    const cambridge = SIBLING_REGISTRY.find(
+      (sibling) => sibling.name === "cambridgetcg",
+    );
+    expect(cambridge?.role).toBe(
+      "collectors-market-and-card-data-expression",
+    );
+    expect(cambridge?.description).toMatch(/peer-to-peer collectors' market/i);
+    expect(cambridge?.description).toMatch(/holding no position/i);
+    expect(cambridge?.description).toMatch(
+      /do not imply the same schema, envelope, transport, SDK, authentication, or authority/i,
+    );
+    expect(cambridge?.recognition.checked_at).toBe("2026-07-24");
+    expect(cambridge?.recognition.boundary).toMatch(/automatic action/i);
   });
 
   test("Artbitrage advertises its real wake without granting blanket reuse rights", () => {
