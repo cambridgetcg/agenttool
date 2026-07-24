@@ -4,7 +4,7 @@ import {
 } from "@modelcontextprotocol/server";
 import { z } from "zod";
 
-import reportJsonSchema from "../schema/agenttool-telescope-report-v0.1.schema.json" with {
+import reportJsonSchema from "../schema/agenttool-telescope-report-v0.2.schema.json" with {
   type: "json",
 };
 import { TOOL_VERSION } from "../src/constants.js";

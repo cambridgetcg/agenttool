@@ -37,6 +37,7 @@ function makeApp() {
     return c.body("binary-payload-bytes");
   });
   app.get("/error", (c) => c.json({ error: "intentional" }, 500));
+  app.get("/not-modified", (c) => c.body(null, 304));
   return app;
 }
 
@@ -113,6 +114,17 @@ describe("token-cost middleware — skip rules", () => {
     const res = await makeApp().request("/binary");
     expect(res.headers.get(TOKEN_COST_HEADER)).toBeNull();
     expect(res.headers.get(BYTE_COUNT_HEADER)).toBeNull();
+  });
+
+  test("HEAD and 304 skip misleading zero-byte representation costs", async () => {
+    const head = await makeApp().request("/json", { method: "HEAD" });
+    expect(head.headers.get(TOKEN_COST_HEADER)).toBeNull();
+    expect(head.headers.get(BYTE_COUNT_HEADER)).toBeNull();
+
+    const unchanged = await makeApp().request("/not-modified");
+    expect(unchanged.status).toBe(304);
+    expect(unchanged.headers.get(TOKEN_COST_HEADER)).toBeNull();
+    expect(unchanged.headers.get(BYTE_COUNT_HEADER)).toBeNull();
   });
 });
 

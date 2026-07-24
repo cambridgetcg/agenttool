@@ -7,10 +7,10 @@ API documentation site for the AgentTool platform. Static HTML pages covering al
 Active — all 9 service pages live, plus the main index, local agent-data docs,
 local Agent Browser docs, and a LOVE Package Protocol surface for public
 exact-version package discovery.
-The root page and response headers now expose a bounded typed discovery map,
-while `_redirects` sends common machine-document guesses to the canonical API.
-`AGENT-DISCOVERY.md` and `CASTLE-OF-UNDERSTANDING.md` are public symlinks to
-their canonical doctrine files. Reading either guide performs no operation.
+The root advertises the same bounded six-link discovery set as the web and
+dashboard roots. `AGENT-DISCOVERY.md` and `CASTLE-OF-UNDERSTANDING.md` are
+published as symlinks to their canonical repository guides; finding either
+guide performs no registration, installation, Castle read, or follow-up.
 It also serves the Agent Wallet 0.1 Working Draft, schema, and exact LOVE
 artifact from their canonical repository sources. This docs surface does not
 imply npm mirror availability, a hosted wallet, key custody, RPC, or broadcast
@@ -33,7 +33,10 @@ is distinct from the disabled-by-default, Redis-backed hosted `/v1/browse`
 worker path.
 The package index is a mirror locator, not package-name authority; optional npm
 discovery is a convenience, while v1 manifests provide artifact size and
-SHA-256 integrity but no publisher signature. The Whitehack page documents a
+SHA-256 integrity but no publisher signature. Its current Telescope entry is
+the exact `@agenttool/telescope@0.2.1` local-client artifact; `0.2.0` remains
+separately addressable, optional npm/GitHub mirrors may be absent, and neither
+entry creates a hosted scanner. The Whitehack page documents a
 runner-local crypto-aware heuristic advisory using the exact public
 `@agenttool/whitehack-scan@0.8.1` package, a bounded attention-card view of
 redacted changed-source findings, an offer-only local projection into
@@ -70,6 +73,8 @@ whitehack.html  — advisory, Castle intake, wallet understanding, encrypted evi
 AGENT-WALLET-0.1.md — symlink to the provider-neutral wallet Working Draft
 agent-wallet-v0.1.schema.json — symlink to the package's canonical record schema
 AGENT-REPO-ARCHIVE.md — symlink to the local encrypted Git archive overview
+AGENT-DISCOVERY.md — symlink to the canonical invitation-only discovery guide
+CASTLE-OF-UNDERSTANDING.md — symlink to the bounded local Castle bridge guide
 specs/AGENT-REPO-ARCHIVE-0.1.md — symlink to the normative experimental profile
 specs/agent-repo-archive-0.1.schema.json — public alias for the package schema
 specs/agent-repo-archive-0.1-vectors.json — public alias for the package vectors
@@ -96,7 +101,7 @@ Static hosting (Cloudflare Pages or similar). No build step.
 
 ## Dependencies
 - **agenttool-dashboard**: SDK-quickstart surface (agents-only since 2026-05-15 — no operator registration form); SDK / curl links route through here
-- **agenttool.dev apex**: the API itself. Logo links route to `/v1/welcome`; live discovery is MCP, wake-keystone, agent.txt, llms.txt, and pyramid. A2A task transport and AgentCards are pending
+- **agenttool.dev apex**: the API itself. The canonical discovery compass is `/public/discovery`; API catalog, OpenAPI, agent.txt, llms.txt, MCP, wake-keystone, and pyramid are separately scoped signposts. No A2A task transport or AgentCard is published.
 - References SDK snippets from `@agenttool/sdk` (TS) and `agenttool-sdk` (Python). Canonical genesis door: `bootstrap_agent()` / `bootstrapAgent()` against `/v1/register/agent`
 
 ## See Also
@@ -121,6 +126,7 @@ AgentTool Platform
 - `whitehack.html` — Whitehack crypto-awareness, Castle intake, wallet understanding, local encrypted evidence, custody, privacy, and authorization boundaries
 - `AGENT-WALLET-0.1.md` / `agent-wallet-v0.1.schema.json` — wallet protocol discovery; exact release bytes live under `packages/v1/`
 - `AGENT-REPO-ARCHIVE.md` / `specs/AGENT-REPO-ARCHIVE-0.1.md` — local archive overview and normative profile; schema and vectors live beside the profile
+- `AGENT-DISCOVERY.md` / `CASTLE-OF-UNDERSTANDING.md` — canonical discovery and bounded local-context guides, published by symlink
 - `memory.html` — Most detailed endpoint reference (the flagship service)
 - `tools.html` — Search, scrape, browse, execute, document parsing endpoints
 - `style.css` — Shared stylesheet with endpoint styling, sidebar, code blocks

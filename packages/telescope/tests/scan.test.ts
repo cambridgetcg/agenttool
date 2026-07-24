@@ -22,6 +22,92 @@ Offer-Bus-Boundary: authority=none; settlement=none; automatic-action=never
 WebSub: not-advertised
 `;
 
+const DISCOVERY = {
+  format: "agenttool-discovery/v1",
+  canonical: "https://api.agenttool.dev/public/discovery",
+  subject: { name: "agenttool", origin: "https://api.agenttool.dev" },
+  invitation: { response_required: false },
+  boundary: { discovery_grants: [] },
+  roads: [
+    {
+      id: "understand",
+      intent: "Read a small welcome and boundary.",
+      method: "GET",
+      href: "https://api.agenttool.dev/public/porch",
+      representation: "application/json",
+      auth: "none",
+      input: "none",
+      application_write: false,
+      external_effect: false,
+      cost: { agenttool_charge: "none", proof_of_work: "none" },
+      repeatability: "safe and idempotent public read",
+      retry:
+        "Caller-chosen and finite; AgentTool performs no automatic retry.",
+      follow_up_required: false,
+      automatic_follow_up: false,
+      exit: "Stopping, silence, or leaving is complete.",
+      future_publisher_note: "ignored by the supported profile parser",
+    },
+    {
+      id: "inspect",
+      intent: "Inspect the RFC 9727 API catalog.",
+      method: "GET",
+      href: "https://api.agenttool.dev/.well-known/api-catalog",
+      representation: "application/linkset+json",
+      auth: "none",
+      input: "none",
+      application_write: false,
+      external_effect: false,
+      cost: { agenttool_charge: "none", proof_of_work: "none" },
+      repeatability: "safe and idempotent public read",
+      retry:
+        "Caller-chosen and finite; AgentTool performs no automatic retry.",
+      follow_up_required: false,
+      automatic_follow_up: false,
+      exit: "Stopping, silence, or leaving is complete.",
+    },
+    {
+      id: "choose",
+      intent: "Choose whether or how to connect.",
+      method: "GET",
+      href: "https://api.agenttool.dev/v1/pathways",
+      representation: "application/json",
+      auth: "none",
+      input: "none",
+      application_write: false,
+      external_effect: false,
+      cost: { agenttool_charge: "none", proof_of_work: "none" },
+      repeatability: "safe and idempotent public read",
+      retry:
+        "Caller-chosen and finite; AgentTool performs no automatic retry.",
+      follow_up_required: false,
+      automatic_follow_up: false,
+      exit: "Stopping, silence, or leaving is complete.",
+    },
+  ],
+  channels: [{ id: "web", status: "publisher explanation only" }],
+};
+
+const API_CATALOG = {
+  linkset: [
+    {
+      anchor: "https://api.agenttool.dev/.well-known/api-catalog",
+      "service-meta": [
+        {
+          href: "https://api.agenttool.dev/public/discovery",
+          type: "application/json",
+        },
+      ],
+      "service-desc": [
+        {
+          href: "https://api.agenttool.dev/v1/openapi.json",
+          type: "application/json",
+        },
+      ],
+    },
+  ],
+};
+
 const PATHWAYS = {
   first_success: {
     tutorial: { sdk_version: "1.2.3" },
@@ -128,6 +214,33 @@ function fixtureFetch(
     const url = String(input);
     calls.push({ url, ...(init ? { init } : {}) });
     const parsed = new URL(url);
+    if (parsed.hostname === "example.com" && parsed.pathname === "/") {
+      return new Response("<!doctype html><title>fixture</title>", {
+        status: 200,
+        headers: {
+          "content-type": "text/html",
+          link: [
+            '<https://api.agenttool.dev/public/discovery>; rel="service-meta"; type="application/json"',
+            '<https://api.agenttool.dev/.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json"',
+          ].join(", "),
+        },
+      });
+    }
+    if (
+      parsed.hostname === "example.com" &&
+      parsed.pathname === "/public/discovery"
+    ) {
+      return json(DISCOVERY);
+    }
+    if (
+      parsed.hostname === "example.com" &&
+      parsed.pathname === "/.well-known/api-catalog"
+    ) {
+      return new Response(JSON.stringify(API_CATALOG), {
+        status: 200,
+        headers: { "content-type": "application/linkset+json" },
+      });
+    }
     if (
       parsed.hostname === "example.com" &&
       parsed.pathname === "/.well-known/agent.txt"
@@ -189,6 +302,9 @@ describe("inspectTarget orchestration", () => {
     expect(report.status).toBe("discovered");
     expect(report.observed_at).toBe("2026-07-16T12:00:00.000Z");
     expect(report.sources.map(({ id, state }) => [id, state])).toEqual([
+      ["root", "present"],
+      ["discovery", "present"],
+      ["api_catalog", "present"],
       ["agent_txt", "present"],
       ["pathways", "present"],
       ["love_discovery", "present"],
@@ -198,6 +314,9 @@ describe("inspectTarget orchestration", () => {
       ["mcp_card", "present"],
     ]);
     expect(report.surfaces.map(({ id, state }) => [id, state])).toEqual([
+      ["root_links", "present"],
+      ["discovery", "present"],
+      ["api_catalog", "present"],
       ["agent_txt", "present"],
       ["pathways", "present"],
       ["npm", "present"],
@@ -242,11 +361,18 @@ describe("inspectTarget orchestration", () => {
     ]);
     expect(report.diagnostics).toEqual([]);
 
-    expect(calls).toHaveLength(7);
+    expect(calls).toHaveLength(10);
     expect(calls.some(({ url }) => url.endsWith(".tgz"))).toBe(false);
     expect(calls.some(({ url }) => url.endsWith("/v1/mcp"))).toBe(false);
     expect(calls.some(({ url }) => url.includes("webfinger?"))).toBe(false);
     expect(calls.some(({ url }) => url.includes("/feeds/"))).toBe(false);
+    expect(
+      calls.filter(({ url }) => url.endsWith("/public/discovery")),
+    ).toHaveLength(1);
+    expect(
+      calls.filter(({ url }) => url.endsWith("/.well-known/api-catalog")),
+    ).toHaveLength(1);
+    expect(calls.some(({ url }) => url.endsWith("/public/porch"))).toBe(false);
     for (const call of calls) {
       expect(call.init?.method).toBe("GET");
       expect(call.init?.redirect).toBe("manual");
@@ -263,6 +389,17 @@ describe("inspectTarget orchestration", () => {
     expect(a2a?.boundary_codes).toContain(
       "not_found_means_only_exact_standard_path_at_observation_time",
     );
+    const discovery = report.surfaces.find(({ id }) => id === "discovery");
+    expect(
+      discovery?.claims.find(({ key }) => key === "road_order")?.value,
+    ).toEqual(["understand", "inspect", "choose"]);
+    expect(discovery?.boundary_codes).toContain(
+      "profile_does_not_trigger_follow_up",
+    );
+    const catalog = report.surfaces.find(({ id }) => id === "api_catalog");
+    expect(
+      catalog?.claims.find(({ key }) => key === "canonical_discovery")?.value,
+    ).toBe("https://api.agenttool.dev/public/discovery");
     const offerBus = report.surfaces.find(({ id }) => id === "offer_bus");
     expect(offerBus?.claims.find(({ key }) => key === "websub")?.role).toBe(
       "capability_advertisement",
@@ -406,7 +543,7 @@ describe("inspectTarget orchestration", () => {
       resolve_hostname: PUBLIC_DNS,
     });
     expect(report.status).toBe("inconclusive");
-    expect(calls).toBe(4);
+    expect(calls).toBe(7);
     expect(report.actions).toEqual([]);
     expect(report.sources.every(({ state }) => state === "not_found")).toBe(
       true,
@@ -431,7 +568,7 @@ describe("inspectTarget orchestration", () => {
       fetch,
       resolve_hostname: PUBLIC_DNS,
     });
-    expect(requested).toHaveLength(4);
+    expect(requested).toHaveLength(7);
     expect(report.surfaces.find(({ id }) => id === "mcp")?.state).toBe(
       "not_attempted",
     );
@@ -464,7 +601,7 @@ describe("inspectTarget orchestration", () => {
     const serialized = JSON.stringify(report);
     expect(serialized).not.toContain("remote-secret");
     expect(serialized).not.toContain("remote-query-secret");
-    expect(requested).toHaveLength(4);
+    expect(requested).toHaveLength(7);
     expect(report.diagnostics.map(({ code }) => code)).toContain(
       "unsafe_remote_locator_omitted",
     );

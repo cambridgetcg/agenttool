@@ -8,6 +8,13 @@ export { verifyNpmTarballFile } from "./archive.js";
 export { escapeTerminalText, formatTelescopeReport } from "./format.js";
 export { parseAgentTxt } from "./parsers/agent-txt.js";
 export { parseA2aCard, parseMcpCard } from "./parsers/cards.js";
+export { parseApiCatalog } from "./parsers/api-catalog.js";
+export {
+  AGENTTOOL_API_CATALOG_URL,
+  AGENTTOOL_DISCOVERY_URL,
+  parseAgenttoolDiscovery,
+} from "./parsers/discovery.js";
+export { parseRootLinkHeader } from "./parsers/link-header.js";
 export {
   parseLoveDiscovery,
   parseLoveManifest,

@@ -74,16 +74,35 @@ describe("browser-visible machine recovery headers", () => {
     const app = new Hono();
     app.use("*", apiCors());
     app.get("/.well-known/webfinger", (c) => c.json({ ok: true }));
-    app.get("/.well-known", (c) => c.json({ ok: true }));
-    app.get("/v1/openapi.json", (c) => c.json({ ok: true }));
+    app.get("/.well-known/api-catalog", (c) => c.json({ ok: true }));
+    app.get("/public/discovery", (c) => c.json({ ok: true }));
     app.get("/public/porch", (c) => c.json({ ok: true }));
+    app.get("/openapi.json", (c) => c.redirect("/v1/openapi.json", 308));
+    app.get("/v1/openapi.json", (c) => c.json({ ok: true }));
+    app.get("/v1/pathways", (c) => c.json({ ok: true }));
+    app.get("/.well-known", (c) => c.json({ ok: true }));
     app.get("/feeds/offers.json", (c) => c.json({ ok: true }));
 
     for (const path of [
+      "/",
       "/.well-known/webfinger",
-      "/.well-known",
-      "/v1/openapi.json",
+      "/.well-known/agent.txt",
+      "/.well-known/api-catalog",
+      "/.well-known/api-%63atalog",
+      "/llms.txt",
+      "/robots.txt",
+      "/sitemap.xml",
+      "/public/discovery",
+      "/public/%64iscovery",
       "/public/porch",
+      "/public/%70orch",
+      "/public/safety",
+      "/openapi.json",
+      "/v1/openapi.json",
+      "/v1/%6fpenapi.json",
+      "/v1/pathways",
+      "/v1/%70athways",
+      "/.well-known",
       "/feeds/offers.json",
     ]) {
       const response = await app.request(path, {

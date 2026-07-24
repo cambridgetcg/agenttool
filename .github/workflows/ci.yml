@@ -229,28 +229,33 @@ jobs:
           ' "$package_root")
           test ! -e "$package_root/.codex-plugin/plugin.json"
           test ! -e "$package_root/.claude-plugin/plugin.json"
-      - name: Smoke packed Telescope under Node and Bun
+      - name: Smoke canonical Telescope LOVE artifact under Node and Bun
         working-directory: packages/telescope
         shell: bash
         run: |
           set -euo pipefail
-          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          tarball="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/telescope/0.2.1/agenttool-telescope-0.2.1.tgz"
+          test -f "$tarball"
           install_dir="$(mktemp -d)"
-          trap 'rm -rf "$install_dir" "$tarball"' EXIT
-          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
-          smoke='import("@agenttool/telescope").then(m=>{const t=m.normalizeTarget("example.com");if(t.origin!=="https://example.com"||m.REPORT_SCHEMA!=="agenttool-telescope/v0.1")process.exit(1)})'
+          trap 'rm -rf "$install_dir"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$tarball"
+          package_root="$install_dir/node_modules/@agenttool/telescope"
+          node -e 'const p=require(process.argv[1]);if(p.version!=="0.2.1")process.exit(1)' "$package_root/package.json"
+          smoke='import("@agenttool/telescope").then(m=>{const t=m.normalizeTarget("example.com");if(t.origin!=="https://example.com"||m.TOOL_VERSION!=="0.2.1"||m.REPORT_SCHEMA!=="agenttool-telescope/v0.2")process.exit(1)})'
           (cd "$install_dir" && node -e "$smoke")
           (cd "$install_dir" && bun -e "$smoke")
-          schema_smoke='import("@agenttool/telescope/report.schema.json",{with:{type:"json"}}).then(m=>{if(m.default.title!=="AgentTool Telescope report v0.1")process.exit(1)})'
+          schema_smoke='import("@agenttool/telescope/report.schema.json",{with:{type:"json"}}).then(m=>{if(m.default.title!=="AgentTool Telescope report v0.2")process.exit(1)})'
           (cd "$install_dir" && node -e "$schema_smoke")
           (cd "$install_dir" && bun -e "$schema_smoke")
-          node "$install_dir/node_modules/@agenttool/telescope/dist/cli.js" --help >/dev/null
-          bun "$install_dir/node_modules/@agenttool/telescope/dist/cli.js" --help >/dev/null
+          cli="$package_root/dist/cli.js"
+          test "$(node "$cli" --version)" = "0.2.1"
+          test "$(bun "$cli" --version)" = "0.2.1"
+          node "$cli" --help >/dev/null
+          bun "$cli" --help >/dev/null
           manifest="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.16.3/manifest.json"
           artifact="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.16.3/agenttool-sdk-0.16.3.tgz"
           size="$(node --input-type=module --eval "import{readFileSync}from'node:fs';const m=JSON.parse(readFileSync(process.argv[1],'utf8'));process.stdout.write(String(m.artifact.size))" "$manifest")"
           sha256="$(node --input-type=module --eval "import{readFileSync}from'node:fs';const m=JSON.parse(readFileSync(process.argv[1],'utf8'));process.stdout.write(m.artifact.sha256)" "$manifest")"
-          cli="$install_dir/node_modules/@agenttool/telescope/dist/cli.js"
           node "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.16.3 --json >/dev/null
           bun "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.16.3 --json >/dev/null
       - name: Smoke packed Agent Wallet under Node and Bun

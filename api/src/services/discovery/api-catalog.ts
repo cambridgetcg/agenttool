@@ -79,11 +79,12 @@ export function buildApiCatalog(
   const api = httpsOrigin(publicBase, "public_base");
   const docs = httpsOrigin(docsBase, "docs_base");
   const catalog = `${api}/.well-known/api-catalog`;
+  const discovery = `${api}/public/discovery`;
   const openapi = `${api}/v1/openapi.json`;
   const health = `${api}/health`;
-  const safety = `${api}/public/safety`;
   const porch = `${api}/public/porch`;
   const pathways = `${api}/v1/pathways`;
+  const safety = `${api}/public/safety`;
   const plans = `${api}/public/plans`;
   const marketplaceTerms = `${api}/public/marketplace/terms`;
 
@@ -150,6 +151,11 @@ export function buildApiCatalog(
         "service-desc": openapiDescription,
         "service-doc": [
           {
+            href: `${docs}/AGENT-DISCOVERY.md`,
+            type: "text/markdown",
+            title: "AgentTool discovery contract and authority boundary",
+          },
+          {
             href: `${docs}/`,
             type: "text/html",
             title: "AgentTool technical library",
@@ -157,16 +163,19 @@ export function buildApiCatalog(
         ],
         "service-meta": [
           {
+            href: discovery,
+            type: "application/vnd.agenttool.discovery+json",
+            title: "Canonical exact three-road discovery compass",
+          },
+          {
             href: porch,
             type: "application/json",
-            title:
-              "Read-only first contact; discovery grants no authority and requires no response",
+            title: "Read-only first orientation",
           },
           {
             href: pathways,
             type: "application/json",
-            title:
-              "Current arrival choices, requirements, effects, and one-time returns",
+            title: "Optional arrival and setup choices",
           },
           safetyMetadata,
         ],

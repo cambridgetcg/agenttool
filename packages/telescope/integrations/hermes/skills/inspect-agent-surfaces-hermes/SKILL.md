@@ -1,6 +1,6 @@
 ---
 name: inspect-agent-surfaces-hermes
-description: Inspect bounded public agent discovery evidence from Hermes through AgentTool Telescope. Use when mapping agent.txt, Pathways, LOVE packages, MCP or A2A advertisements, WebFinger, or offer-bus locators and the Hermes MCP server is named agenttool-telescope.
+description: Inspect bounded public agent discovery evidence from Hermes through AgentTool Telescope. Use when mapping root Link headers, AgentTool's three-road discovery profile, RFC 9727 API catalogs, agent.txt, Pathways, LOVE packages, MCP or A2A advertisements, WebFinger, or offer-bus locators and the Hermes MCP server is named agenttool-telescope.
 ---
 
 # Inspect Agent Surfaces from Hermes
@@ -25,9 +25,10 @@ authorization, availability, a successful MCP or A2A handshake, safety,
 permission, endorsement, or fitness.
 
 Telescope makes a fixed bounded set of credential-free public HTTPS GETs. It
-does not invoke advertised endpoints, send credentials, download artifacts,
-install packages, or run generated commands. DNS preflight does not pin the
-connected socket and is not a universal hosted-service SSRF boundary.
+does not follow discovery roads or catalog targets, invoke advertised
+endpoints, send credentials, download artifacts, install packages, or run
+generated commands. DNS preflight does not pin the connected socket and is not
+a universal hosted-service SSRF boundary.
 Blanket consent given before discovery is not target-specific installation
 authority; disclose the exact artifact and verification plan before requesting
 fresh authorization.

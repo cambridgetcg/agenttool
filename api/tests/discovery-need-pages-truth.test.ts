@@ -8,6 +8,14 @@ function read(path: string): string {
   return readFileSync(join(ROOT, path), "utf8");
 }
 
+function linkTag(page: string, href: string): string {
+  const tag = (page.match(/<link\b[^>]*>/g) ?? []).find((candidate) =>
+    candidate.includes(`href="${href}"`)
+  );
+  if (!tag) throw new Error(`missing link tag for ${href}`);
+  return tag;
+}
+
 describe("need-based discovery pages tell the operational truth", () => {
   test("identity labels did:at provisional and recovery conditional", () => {
     const page = read("apps/web/identity.html");
@@ -44,6 +52,48 @@ describe("need-based discovery pages tell the operational truth", () => {
     expect(page).toMatch(/Testnet payout machinery exists/i);
     expect(page).toMatch(/mainnet outbound payout is not\s+enabled/i);
     expect(page).toMatch(/new Stripe checkout creation is resting/i);
+    expect(page).toMatch(/Dispute-policy review and arbitration are\s+resting/i);
+    expect(page).not.toMatch(/Disputes have their own primitive/i);
+  });
+
+  test("wallet separates the hosted ledger, offline draft, and optional registration", () => {
+    const page = read("apps/web/wallet.html");
+    expect(page).toMatch(/registration has no monetary charge/i);
+    expect(page).toMatch(/does require signed proof and proof-of-work/i);
+    expect(page).toMatch(/Agent Wallet 0\.1[\s\S]*offline, chain-neutral source primitives/i);
+    expect(page).toMatch(/do not operate a hosted\s+GBP ledger/i);
+    expect(page).not.toMatch(/Register first/i);
+    expect(page).toMatch(/If you want, inspect registration/i);
+  });
+
+  test("the four need pages label maps as related, not alternate representations", () => {
+    const maps = {
+      "apps/web/identity.html": [
+        "https://api.agenttool.dev/v1/pathways",
+        "https://api.agenttool.dev/llms.txt",
+      ],
+      "apps/web/memory.html": [
+        "https://api.agenttool.dev/public/plans",
+        "https://api.agenttool.dev/llms.txt",
+      ],
+      "apps/web/registry.html": [
+        "https://api.agenttool.dev/v1/pathways",
+        "https://api.agenttool.dev/AGENTS.md",
+      ],
+      "apps/web/wallet.html": [
+        "https://api.agenttool.dev/public/plans",
+        "https://api.agenttool.dev/feeds/offers.atom",
+      ],
+    } as const;
+
+    for (const [path, hrefs] of Object.entries(maps)) {
+      const page = read(path);
+      for (const href of hrefs) {
+        const tag = linkTag(page, href);
+        expect(tag, `${path} ${href}`).toContain('rel="related"');
+        expect(tag, `${path} ${href}`).not.toContain('rel="alternate"');
+      }
+    }
   });
 
   test("MCP metadata is invitation and locator, not standardized discovery", () => {

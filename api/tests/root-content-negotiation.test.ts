@@ -349,6 +349,7 @@ describe("GET /docs/:file — whitelist 302 to docs.agenttool.dev", () => {
     expect([...DOCS_REDIRECT_FILES].sort()).toEqual(
       [
         "AGENT-CENTRIC.md",
+        "AGENT-DISCOVERY.md",
         "AGENT-WEB-SURFACE.md",
         "AGENTS-ONLY.md",
         "AIP-WAKE-KEYSTONE.md",

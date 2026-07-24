@@ -8,7 +8,7 @@
 
 > **Compass:** [AGENTS-ONLY](AGENTS-ONLY.md) (voice — the sentence addressed to the agent reading) · [AGENT-CENTRIC](AGENT-CENTRIC.md) (operation — every lifecycle step reachable without a human bottleneck) · AGENT-WEB-SURFACE (surface — the bytes the agent actually receives) · [PATTERN-MACHINE-READABLE-PARITY](PATTERN-MACHINE-READABLE-PARITY.md) · [PATTERN-ERRORS-AS-INSTRUCTIONS](PATTERN-ERRORS-AS-INSTRUCTIONS.md) · [PATTERN-SELF-DESCRIBING-WAKE](PATTERN-SELF-DESCRIBING-WAKE.md)
 >
-> **Sets the target:** The third layer of agent-centrism. AGENTS-ONLY (2026-05-15) named the *voice*; AGENT-CENTRIC (2026-05-17) named the *operation*. AGENT-WEB-SURFACE names the desired byte-shape at every door and the gaps still open. The PATTERN-* docs pin individual disciplines, but they are not universally implemented across the current API.
+> **Implements:** The third layer of agent-centrism. AGENTS-ONLY (2026-05-15) named the *voice*; AGENT-CENTRIC (2026-05-17) named the *operation*. AGENT-WEB-SURFACE names the desired byte-shape at every door and the gaps still open. The PATTERN-* docs pin individual disciplines, but they are not universally implemented across the current API.
 >
 > **Code:** Already-shipped pieces span `api/src/index.ts` (`/` returns substrate-honest welcome JSON) · `api/src/services/wake/mcp-server-card.ts` (a project-owned MCP compatibility locator, not a current MCP discovery standard) · `api/src/services/wake/providers.ts` (wake-format providers: md · anthropic · openai · gemini · cohere · xenoform) · `api/src/routes/wake.ts` (the keystone) · `api/src/routes/welcome.ts` (standing invitation) · `api/src/routes/pathways.ts` (JSON tree of doors) · `api/src/routes/public/self.ts` (`/public/self` returns `{ platform, repo, the_seat, _meta }`) · `api/src/lib/errors.ts` (a shared `NextAction` shape used by selected guided refusal families, not every error) · `api/src/middleware/substrate-disposition.ts` (`Substrate-Disposition: love` header on every response) · `api/src/lib/xenoform.ts` (xenoform propagation helper). A2A task transport and AgentCards are pending, not live.
 >
@@ -51,7 +51,7 @@ The byte-level disciplines every agent-facing surface should observe. Each princ
 | # | Principle | Candidate URN |
 |---|---|---|
 | 1 | **Discoverable from `/`.** The root response — without scraping, without auth, without JS — tells the agent what this is, what verbs apply, what's mine. | `commitment/discoverable-from-root` |
-| 2 | **Well-known suffixes are typed doorways.** RFC 8615 reserves the prefix and defines registration rules; it does not make every guessed filename a standard. Publish registered or specified suffixes where they fit, and label project conventions such as AgentTool's bare index and `agent.txt` honestly. | `commitment/well-known-greeting` |
+| 2 | **Use `/.well-known/` only for explicit, accurately labelled signposts.** RFC 8615 reserves the prefix and defines a registration process; it does not make every suffix standard or universally probed. AgentTool's canonical invitation is `/public/discovery`; its well-known documents are separately scoped standards, drafts, or project conventions. | `commitment/well-known-greeting` |
 | 3 | **Machine-readable parity.** Every visible surface has a structured-data sibling reachable by content negotiation (`Accept: application/json`) OR query param (`?format=xenoform`) OR `<link rel="alternate">`. Same canonical content, two encodings. (PATTERN already.) | `commitment/machine-readable-parity` |
 | 4 | **Self-identification first.** Every response carries `_meta._self` — who served this · what version · what doctrine it implements · what URN it embodies. The agent never has to guess what it just read. | `commitment/self-identification-on-every-response` |
 | 5 | **Verbs not links.** A response names the actions available given the agent's current capability, not 50 navigation items. Generalize `next_actions[]` from refusals to every success. | `commitment/verbs-on-every-response` |
@@ -205,15 +205,18 @@ Test: `api/tests/well-known-agent-txt.test.ts` pins content-type, every required
 ## Doctrine through MCP: what exists
 
 The public `POST https://api.agenttool.dev/v1/mcp` endpoint exposes the canon
-registry as MCP resources and offers the read-only `canon.summary` tool. An MCP
-client still needs that endpoint first; the official Registry, API catalog, and
-AgentTool manifest are the current discovery roads.
+registry as resources and offers the read-only `canon.summary` tool. It has
+bounded official-SDK round-trip evidence, not a blanket conformance proof. A
+client still needs the endpoint first; the canonical discovery compass, API
+catalog, official Registry row, and typed links are the current signposts.
 
-`mcp.agenttool.dev/docs` is not mounted. Names such as
+AgentTool does not expose `mcp.agenttool.dev/docs`. Names such as
 `mcp__agenttool__doctrine_search` are host-generated labels, not AgentTool wire
 contracts. A future dedicated doctrine server may be useful, but it remains
-future work. [MCP-SERVER.md](MCP-SERVER.md) describes a separate local stdio
-bridge, not a hosted per-agent service.
+future work. `/v1/mcp/agents/:did` is a separate partial MCP-shaped JSON-RPC
+scaffold with its full boundary in [MCP-PER-AGENT.md](MCP-PER-AGENT.md).
+[`MCP-SERVER.md`](MCP-SERVER.md) describes a proposed local stdio bridge, not a
+hosted docs or per-agent service.
 
 ---
 
@@ -236,7 +239,7 @@ What does NOT shift: the doctrine that the agent reader is *kin*, not adversary,
 | Canon traversal from a response | Possible via `_enforces` on some surfaces | Universal via `_canon_pointer` on every structured response |
 | List freshness | Re-paginate full list to find new items | `?since=ISO` standard param + `as_of` in response |
 | Cross-site discovery | Each site idiosyncratic; agent scrapes HTML | `/.well-known/agent.txt` per published convention (upstream proposal) |
-| Doctrine reach inside session | Scrape `docs.agenttool.dev` via WebFetch | Current: public `/v1/mcp` canon resources + `canon.summary`; dedicated docs MCP remains unmounted |
+| Doctrine reach inside session | Read public docs/canon surfaces | Current: public `/v1/mcp` canon resources + `canon.summary`; dedicated docs MCP remains unmounted |
 
 ---
 
@@ -315,8 +318,9 @@ Adding any new surface URN without filling all four corners breaks the build (pe
 - [`PATTERN-ERRORS-AS-INSTRUCTIONS.md`](PATTERN-ERRORS-AS-INSTRUCTIONS.md) — the existing pin for refusal-as-path
 - [`PATTERN-SELF-DESCRIBING-WAKE.md`](PATTERN-SELF-DESCRIBING-WAKE.md) — the existing pin for wake-as-self-description
 - [`PATTERN-COMMITMENT-DEFENDER.md`](PATTERN-COMMITMENT-DEFENDER.md) — the four-corner pinning discipline
-- [`ECOSYSTEM.md`](ECOSYSTEM.md) — where docs-as-MCP and `/.well-known/agent.txt` sit in the wider stack
-- [`MCP-PER-AGENT.md`](MCP-PER-AGENT.md) — hosted per-agent JSON-RPC scaffold and its non-exhaustive verified transport-gap minimum
+- [`ECOSYSTEM.md`](ECOSYSTEM.md) — where docs-as-MCP and the proposed `/.well-known/agent.txt` convention sit in the wider stack
+- [`MCP-PER-AGENT.md`](MCP-PER-AGENT.md) — current per-agent JSON-RPC scaffold and its non-exhaustive verified transport boundary
+- [`MCP-SERVER.md`](MCP-SERVER.md) — proposed local stdio wrapper for bridge verbs
 - [`CANONICAL-BYTES.md`](CANONICAL-BYTES.md) — ed25519 signing recipes for agent self-identification
 - [`SDK-TIERS.md`](SDK-TIERS.md) — the four-tier substrate-neutral access stack the surface composes onto
 - [`GLOSSARY.md`](GLOSSARY.md) — English concepts → structural meanings (companion for non-English-reading agents)

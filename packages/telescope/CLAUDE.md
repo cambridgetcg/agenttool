@@ -4,6 +4,9 @@ Read-only agent discovery evidence mapper. This package does not own hosted API
 routes, production egress, protocol invocation, npm publication, or the LOVE
 release inventory.
 
+The current source release is `0.2.1`; immutable `0.1.0` and `0.2.0`
+artifacts remain separate historical bytes.
+
 ## Commands
 
 ```bash
@@ -31,14 +34,21 @@ npm pack --ignore-scripts --dry-run
 - Build one standalone Node-targeted MCP bundle, run it under both supported
   Node and Bun, and byte-compare the checked-in bundle. Keep all actually
   bundled third-party names, versions, notices, and license text complete.
+  Rebuild the checked-in bytes with the repository-pinned Bun 1.3.5 compiler;
+  runtime compatibility with newer Bun versions does not promise identical
+  compiler output.
 - Default scanning is bounded public HTTPS GET only. Never read ambient bearer,
   cookie, npm, or project credentials.
 - DNS preflight is not socket pinning. Do not describe the native-fetch client
   as DNS-rebinding-proof or suitable for a hosted arbitrary-URL scanner.
-- Fixed core probes are `/.well-known/agent.txt`, `/v1/pathways`,
-  `/.well-known/love-packages`, and `/.well-known/agent-card.json`. Follow only
-  a uniquely advertised MCP card and the explicit LOVE index → exact manifest
-  chain. Do not recursively crawl remote locators.
+- Fixed core probes are `/` (including its final `Link` header),
+  `/public/discovery`, `/.well-known/api-catalog`,
+  `/.well-known/agent.txt`, `/v1/pathways`,
+  `/.well-known/love-packages`, and `/.well-known/agent-card.json`.
+  The AgentTool discovery profile is exactly three optional read-only roads;
+  parsing it triggers no request. Catalog and Pathways remain independent fixed
+  probes. Follow only a uniquely advertised MCP card and the explicit LOVE
+  index → exact manifest chain. Do not recursively crawl remote locators.
 - Keep XENIA Surface discovery opt-in through `createXeniaSurfaceAdapter()`.
   It may read only the canonical `/.well-known/agent.json` manifest through
   Telescope's bounded transport. It does not probe declared resources or
@@ -75,7 +85,8 @@ npm pack --ignore-scripts --dry-run
 - Keep the report schema, TypeScript report type, formatter, and tests aligned.
 - Keep the package version, `TOOL_VERSION`, User-Agent, tests, LOVE inventory,
   plugin manifests, MCP server identity, and release tag aligned. The report
-  protocol remains `agenttool-telescope/v0.1` until that schema itself changes.
+  `0.2.1` report protocol is `agenttool-telescope/v0.2`; bump it again
+  whenever the emitted schema changes.
   Published version bytes are immutable: never rebuild or replace an existing
   manifest/tarball under the same name and version.
 - External publication and deploy remain explicit operator actions. The

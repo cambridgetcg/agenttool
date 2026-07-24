@@ -61,19 +61,24 @@ export function apiCors(): MiddlewareHandler {
     });
     const isPublicMcp = routedPath === "/v1/mcp";
     const isReadOnlyDiscovery =
-      path === "/" ||
-      path === "/health" ||
-      path === "/AGENTS.md" ||
-      path === "/llms.txt" ||
-      path === "/llms-full.txt" ||
-      path === "/openapi.json" ||
-      path === "/v1/openapi.json" ||
-      path === "/v1/pathways" ||
-      path === "/public/porch" ||
-      path === "/.well-known" ||
-      path.startsWith("/.well-known/") ||
-      path === "/feeds" ||
-      path.startsWith("/feeds/");
+      routedPath === "/" ||
+      routedPath === "/.well-known/webfinger" ||
+      routedPath === "/.well-known" ||
+      routedPath === "/.well-known/" ||
+      routedPath === "/.well-known/agent.txt" ||
+      routedPath === "/.well-known/api-catalog" ||
+      routedPath === "/llms.txt" ||
+      routedPath === "/robots.txt" ||
+      routedPath === "/sitemap.xml" ||
+      routedPath === "/openapi.json" ||
+      routedPath === "/public/discovery" ||
+      routedPath === "/public/discovery/" ||
+      routedPath === "/public/porch" ||
+      routedPath === "/public/safety" ||
+      routedPath === "/v1/openapi.json" ||
+      routedPath === "/v1/pathways" ||
+      routedPath === "/feeds" ||
+      routedPath.startsWith("/feeds/");
     let response: Response | void;
     if (
       isPublicMcp &&
