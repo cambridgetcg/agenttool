@@ -195,7 +195,7 @@ npm install --save-exact @agenttool/browser@0.2.0</pre>
 
 <span class="kw">import</span> { inspectTarget } <span class="kw">from</span> <span class="str">"@agenttool/telescope"</span>;</pre>
       </div>
-      <p class="muted">Telescope 0.2.2 corrects two local 0.2.1 parser assumptions found by live dogfood: the canonical “stay silent” exit wording and valid fragment-bearing HTTPS documentation targets. It adds no probe or automatic follow-up, and the immutable 0.2.1 bytes remain available as history.</p>
+      <p class="muted">Telescope 0.2.2 broadens safe parser compatibility: it accepts a small positive family of equivalent complete-exit wording, rejects negated or incomplete wording, and accepts URI fragments on credential-free HTTPS catalog relation targets. The current AgentTool producer remains compatible with immutable 0.2.1. No catalog member is followed, and the release adds no probe or automatic follow-up.</p>
 
       <div class="code-block">
         <div class="code-label"><span>@agenttool/wallet · 0.1.0 · capability-bounded offline wallet records</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>

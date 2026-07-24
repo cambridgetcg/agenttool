@@ -8,8 +8,8 @@
   "artifact": {
     "format": "npm-tarball",
     "filename": "agenttool-telescope-0.2.2.tgz",
-    "sha256": "53cc636648d73b1b820c1e473c3b3b2d42eb468de1c40c4c4965f8c705c71986",
-    "size": 296103,
+    "sha256": "3517651cf9805f2610f9c329a8543c4cc4376b573b6dfa43735244efe9ae220d",
+    "size": 296564,
     "media_type": "application/gzip",
     "mirrors": [
       {
@@ -33,7 +33,7 @@
   },
   "source": {
     "repository": "https://github.com/cambridgetcg/agenttool.git",
-    "revision": "4a941fd39e46c1f8349415ebb1ed09020557c2c1",
+    "revision": "b8d8581e80efffa219cf2ec8f94e574e9086236d",
     "path": "packages/telescope"
   },
   "dependency_resolution": {
