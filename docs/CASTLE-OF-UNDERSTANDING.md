@@ -10,7 +10,7 @@
 >
 > **Tests:** [`../bin/tests/agenttool-castle.test.ts`](../bin/tests/agenttool-castle.test.ts) · [`../bin/tests/agenttool-castle-whitehack-intake.test.ts`](../bin/tests/agenttool-castle-whitehack-intake.test.ts) · [`../api/tests/agenttool-castle-whitehack-intake-schema.test.ts`](../api/tests/agenttool-castle-whitehack-intake-schema.test.ts)
 >
-> **Status:** Local operator tooling. Neither boundary is released, hosted, deployed, public, or scheduled. Runtime HALT sentinels gate the committed-word projection's plan/sync/search/show commands. HALT and projection state are device-local and time-varying; `bun bin/agenttool-castle.ts status --json` is authoritative, and documentation or a Whitehack intake document never overrides a raised HALT.
+> **Status:** Local operator tooling. Neither boundary is packaged, hosted as a service, deployed as a runtime, or scheduled; their source and documentation are public. Runtime HALT sentinels gate the committed-word projection's plan/sync/search/show commands. HALT and projection state are device-local and time-varying; `bun bin/agenttool-castle.ts status --json` is authoritative, and documentation or a Whitehack intake document never overrides a raised HALT.
 
 ## The narrow bridge
 

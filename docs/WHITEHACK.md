@@ -221,10 +221,13 @@ count, not a Castle offer count.
 
 The JSON Schema closes fields, fixes every authority and lifecycle state, and
 keeps top-level and per-candidate location disclosure consistent. JSON Schema
-cannot express every arithmetic equality among the retained source counts.
-Those count, status, and truncation relationships are checked by the projector
-and its tests. Arbitrary schema-valid JSON remains an unauthenticated claim,
-not proof that this projector or the declared scanner produced it.
+cannot express every arithmetic equality among the retained source counts or
+the projector's exact UTF-8 byte ceiling for path labels. The schema closes
+path syntax and applies a character ceiling; the projector additionally
+enforces 1,024 UTF-8 bytes. Count, status, truncation, and byte relationships
+are checked by the projector and its tests. Arbitrary schema-valid JSON remains
+an unauthenticated claim, not proof that this projector or the declared scanner
+produced it.
 
 The Castle lifecycle boundaries are data, not implied workflow:
 

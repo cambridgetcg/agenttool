@@ -384,9 +384,10 @@
     },
     "path": {
       "type": "string",
+      "description": "Relative path with non-empty components. maxLength is a Unicode-character ceiling; the projector additionally enforces 1,024 UTF-8 bytes.",
       "minLength": 1,
       "maxLength": 1024,
-      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*[\\\\\\u0000-\\u001f\\u007f-\\u009f\\u202a-\\u202e\\u2066-\\u2069]).+$"
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*[\\\\\\u0000-\\u001f\\u007f-\\u009f\\u202a-\\u202e\\u2066-\\u2069])[^/]+(?:/[^/]+)*$"
     },
     "count": {
       "type": "integer",

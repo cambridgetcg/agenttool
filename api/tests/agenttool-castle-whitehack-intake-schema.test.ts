@@ -83,6 +83,12 @@ describe("agenttool-castle-whitehack-intake/v1 JSON Schema", () => {
     });
     expect(validate(included), JSON.stringify(validate.errors)).toBe(true);
 
+    for (const unsafePath of ["src//private-path.ts", "src/private-path.ts/"]) {
+      const emptyPathComponent = structuredClone(included) as Record<string, any>;
+      emptyPathComponent.candidates[0].location.file = unsafePath;
+      expect(validate(emptyPathComponent)).toBe(false);
+    }
+
     const promoted = structuredClone(hidden) as Record<string, any>;
     promoted.candidates[0].castle_confidence = "tested";
     expect(validate(promoted)).toBe(false);
