@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { resolveBrowserCapabilities } from "../src/capabilities.js";
 import {
   BrowserNetworkPolicy,
   classifyIpAddress,
@@ -11,6 +12,7 @@ import {
 describe("browser network policy", () => {
   test("accepts only absolute HTTP(S) URLs without URL credentials", async () => {
     const policy = new BrowserNetworkPolicy({
+      capabilities: resolveBrowserCapabilities(),
       resolveHostname: async () => [{ address: "93.184.216.34", family: 4 }],
     });
 
@@ -38,6 +40,7 @@ describe("browser network policy", () => {
       ],
     };
     const policy = new BrowserNetworkPolicy({
+      capabilities: resolveBrowserCapabilities(),
       resolveHostname: async (hostname) => answers[hostname] ?? [],
     });
 
@@ -58,9 +61,9 @@ describe("browser network policy", () => {
     ).toBe("public.example.net");
   });
 
-  test("local opt-in permits local/private but never reserved destinations", async () => {
+  test("local authority permits public and local/private but never reserved destinations", async () => {
     const policy = new BrowserNetworkPolicy({
-      allowLocalNetwork: true,
+      capabilities: resolveBrowserCapabilities({ authority: "local" }),
       resolveHostname: async () => [{ address: "10.0.0.4", family: 4 }],
     });
 
@@ -80,8 +83,10 @@ describe("browser network policy", () => {
 
   test("public and local authority are independent and fixed at construction", async () => {
     const localOnly = new BrowserNetworkPolicy({
-      allowPublicWeb: false,
-      allowLocalNetwork: true,
+      capabilities: resolveBrowserCapabilities({
+        allowPublicWeb: false,
+        allowLocalNetwork: true,
+      }),
       resolveHostname: async () => [{ address: "93.184.216.34", family: 4 }],
     });
     expect((await localOnly.assertAllowed("http://127.0.0.1/")).hostname).toBe(
@@ -93,6 +98,73 @@ describe("browser network policy", () => {
     expect(Object.isFrozen(localOnly.boundary)).toBe(true);
     expect(localOnly.boundary.connectionAddressPinning).toBe(false);
     expect(localOnly.boundary.webSockets).toBe("blocked");
+  });
+
+  test("sovereign authority allows every destination class without DNS preflight", async () => {
+    let resolverCalls = 0;
+    const policy = new BrowserNetworkPolicy({
+      capabilities: resolveBrowserCapabilities({ authority: "sovereign" }),
+      resolveHostname: async () => {
+        resolverCalls += 1;
+        throw new Error("the browser, not preflight, owns sovereign resolution");
+      },
+    });
+
+    expect((await policy.assertAllowed("https://example.com/")).hostname).toBe(
+      "example.com",
+    );
+    expect((await policy.assertAllowed("http://127.0.0.1/")).hostname).toBe(
+      "127.0.0.1",
+    );
+    expect((await policy.assertAllowed("http://anything.test/")).hostname).toBe(
+      "anything.test",
+    );
+    expect(resolverCalls).toBe(0);
+  });
+
+  test("applies each authority's declared WebSocket boundary", async () => {
+    const resolver = async (hostname: string) =>
+      hostname === "private.example.net"
+        ? [{ address: "10.0.0.4", family: 4 as const }]
+        : [{ address: "93.184.216.34", family: 4 as const }];
+    const publicPolicy = new BrowserNetworkPolicy({
+      capabilities: resolveBrowserCapabilities(),
+      resolveHostname: resolver,
+    });
+    const localPolicy = new BrowserNetworkPolicy({
+      capabilities: resolveBrowserCapabilities({ authority: "local" }),
+      resolveHostname: resolver,
+    });
+    let sovereignResolverCalls = 0;
+    const sovereignPolicy = new BrowserNetworkPolicy({
+      capabilities: resolveBrowserCapabilities({ authority: "sovereign" }),
+      resolveHostname: async () => {
+        sovereignResolverCalls += 1;
+        return [];
+      },
+    });
+
+    await expect(
+      publicPolicy.assertWebSocketAllowed("wss://example.com/socket"),
+    ).rejects.toMatchObject({ code: "network_blocked" });
+    expect(
+      (await localPolicy.assertWebSocketAllowed("ws://127.0.0.1/socket")).hostname,
+    ).toBe("127.0.0.1");
+    expect(
+      (
+        await localPolicy.assertWebSocketAllowed(
+          "wss://private.example.net/socket",
+        )
+      ).hostname,
+    ).toBe("private.example.net");
+    await expect(
+      localPolicy.assertWebSocketAllowed("wss://anything.test/socket"),
+    ).rejects.toMatchObject({ code: "network_blocked" });
+    expect(
+      (await sovereignPolicy.assertWebSocketAllowed("wss://anything.test/socket"))
+        .hostname,
+    ).toBe("anything.test");
+    expect(sovereignResolverCalls).toBe(0);
   });
 
   test("classifies special IPv4 and IPv6 ranges conservatively", () => {
@@ -108,12 +180,16 @@ describe("browser network policy", () => {
   });
 
   test("fails closed on empty or failed DNS resolution", async () => {
-    const empty = new BrowserNetworkPolicy({ resolveHostname: async () => [] });
+    const empty = new BrowserNetworkPolicy({
+      capabilities: resolveBrowserCapabilities(),
+      resolveHostname: async () => [],
+    });
     await expect(empty.assertAllowed("https://example.com/")).rejects.toMatchObject({
       code: "dns_failed",
     });
 
     const failed = new BrowserNetworkPolicy({
+      capabilities: resolveBrowserCapabilities(),
       resolveHostname: async () => {
         throw new Error("resolver internals");
       },

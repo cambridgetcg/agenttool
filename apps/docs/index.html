@@ -320,7 +320,7 @@
         <a href="browser.html" class="surface">
           <div class="surface-head"><div class="surface-name">Agent Browser</div><span class="surface-status new">Local</span></div>
           <div class="surface-tagline">The web, with an agent-shaped handle.</div>
-          <div class="surface-desc"><code>@agenttool/browser</code> exposes seven bounded operations through TypeScript, JSONL, and stdio MCP. Main-response discovery hints stay allowlisted and untrusted; no hosted browser-control service is created.</div>
+          <div class="surface-desc"><code>@agenttool/browser@0.2.0</code> exposes seven browser operations plus capability inspection and zero-effect planning through local TypeScript, JSONL, and stdio MCP. Named public, local, and sovereign destination authority stays process-scoped; this is not the hosted <code>/v1/browse</code> route.</div>
           <div class="surface-path">local process · agent-browser-observation/0.1</div>
         </a>
         <a href="data.html" class="surface">
@@ -380,7 +380,7 @@
         <a href="tools.html" class="surface">
           <div class="surface-head"><div class="surface-name">Tools</div><span class="surface-status beta">Conditional</span></div>
           <div class="surface-tagline">Substrate, not resold APIs.</div>
-          <div class="surface-desc">Static scrape and URL-document parsing use a ≤1 MB, DNS-pinned public HTTP(S) fetch with connected-peer and redirect-hop checks; HTTP is cleartext and remote content is server-readable/untrusted. Playwright browse remains unsafe-opt-in, unfiltered/unsandboxed, and Redis-backed. Execute remains a separate unisolated opt-in.</div>
+          <div class="surface-desc">Static scrape and URL-document parsing use a ≤1 MB, DNS-pinned public HTTP(S) fetch with connected-peer and redirect-hop checks; HTTP is cleartext and remote content is server-readable/untrusted. Hosted Playwright <code>/v1/browse</code> remains unsafe-opt-in, unfiltered/unsandboxed, and Redis-backed; it is separate from the local Browser package. Execute remains a separate unisolated opt-in.</div>
           <div class="surface-path">/v1/scrape · /v1/browse · /v1/document · /v1/execute</div>
         </a>
       </div>
@@ -460,7 +460,7 @@ console.log(ctx.welcome)</pre>
       <ul>
         <li><a href="tutorial.html">Tutorial — Wake Your Agent</a> — the full walkthrough: land into a CLI as yourself at every session start.</li>
         <li><a href="packages.html">Packages</a> — discover, verify, install, or mirror exact AgentTool releases without an npm account.</li>
-        <li><a href="browser.html">Agent Browser</a> — install the local seven-tool browser and compose machine discovery before rendered fallback.</li>
+        <li><a href="browser.html">Agent Browser</a> — install the local nine-tool browser surface and compose machine discovery before rendered fallback.</li>
         <li><a href="data.html">Agent data</a> — run a local <code>agent-data/v1</code> node and call it through the SDK's separately configured URL and node bearer.</li>
         <li><a href="wake.html">Wake</a> — the centerpiece endpoint, in detail.</li>
         <li><a href="bootstrap.html">Bootstrap</a> — birth flow, scaffold, cloud backup.</li>

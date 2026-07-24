@@ -4,16 +4,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Agent Browser — a small browser surface made for agents</title>
-  <meta name="description" content="Install @agenttool/browser and give a local agent seven bounded browser tools through TypeScript, JSONL, or stdio MCP." />
+  <meta name="description" content="Install @agenttool/browser 0.2.0 and give a local agent seven browser operations plus capability inspection and zero-effect planning through TypeScript, JSONL, or stdio MCP." />
   <link rel="canonical" href="https://docs.agenttool.dev/browser" />
   <meta property="og:title" content="Agent Browser — a small browser surface made for agents" />
-  <meta property="og:description" content="Open, observe, act, extract, screenshot, inspect tabs, and close through one local-first browser core." />
+  <meta property="og:description" content="Nine local agent tools, explicit destination authority, and one semantic browser core." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://docs.agenttool.dev/browser" />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="alternate" type="application/json" href="https://api.agenttool.dev/.well-known/love-packages" title="LOVE package discovery" />
-  <link rel="describedby" type="application/json" href="https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.1.0/manifest.json" title="@agenttool/browser LOVE manifest" />
+  <link rel="describedby" type="application/json" href="https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.2.0/manifest.json" title="@agenttool/browser LOVE manifest" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -83,7 +83,7 @@
       <div class="sidebar-section">
         <h4>Reference</h4>
         <ul>
-          <li><a href="/packages/v1/@agenttool/browser/0.1.0/manifest.json"><span class="glyph">{}</span>Browser manifest</a></li>
+          <li><a href="/packages/v1/@agenttool/browser/0.2.0/manifest.json"><span class="glyph">{}</span>Browser manifest</a></li>
           <li><a href="/.well-known/love-packages"><span class="glyph">{}</span>Package catalog</a></li>
           <li><a href="AGENT-DATA-PROTOCOL.md"><span class="glyph">↳</span>agent-data/v1</a></li>
           <li><a href="errors.html"><span class="glyph">!</span>Errors &amp; Auth</a></li>
@@ -103,10 +103,10 @@
     </aside>
 
     <main class="doc-content">
-      <div class="eyebrow">◎ @agenttool/browser · local-first · 0.1.0</div>
+      <div class="eyebrow">◎ @agenttool/browser · local-first · 0.2.0</div>
       <h1>A browser with an <em>agent-shaped handle</em>.</h1>
       <p class="lede">
-        One bounded browser core, seven essential operations, and three local doors: TypeScript, line-delimited JSON, and stdio MCP. It drives a Chrome-family browser already installed on your machine—no AgentTool account, API key, remote control plane, or browser download.
+        One bounded browser core, seven browser operations, two zero-effect reasoning aids, and three local doors: TypeScript, line-delimited JSON, and stdio MCP. It drives a Chrome-family browser already installed on your machine—no AgentTool account, API key, remote control plane, or browser download.
       </p>
       <p class="doctrine">
         The browser finally stopped asking an agent to pretend div:nth-child(47) was a relationship.
@@ -122,16 +122,16 @@
 
       <div class="code-block">
         <div class="code-label"><span>npm · exact registry mirror</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>npm install --save-exact @agenttool/browser@0.1.0</pre>
+<pre>npm install --save-exact @agenttool/browser@0.2.0</pre>
       </div>
 
       <div class="code-block">
         <div class="code-label"><span>LOVE · exact immutable HTTPS artifact</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
 <pre>npm install --save-exact \
-  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.1.0/agenttool-browser-0.1.0.tgz</pre>
+  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.2.0/agenttool-browser-0.2.0.tgz</pre>
       </div>
 
-      <p class="muted">Registry mirrors can lag or omit a release. The exact LOVE manifest is at <a href="/packages/v1/@agenttool/browser/0.1.0/manifest.json"><code>/packages/v1/@agenttool/browser/0.1.0/manifest.json</code></a>. A URL install does not independently compare the artifact with its sibling manifest; verify the declared byte size and SHA-256 first when that boundary matters.</p>
+      <p class="muted">Registry mirrors can lag or omit a release. The exact LOVE manifest is at <a href="/packages/v1/@agenttool/browser/0.2.0/manifest.json"><code>/packages/v1/@agenttool/browser/0.2.0/manifest.json</code></a>. A URL install does not independently compare the artifact with its sibling manifest; verify the declared byte size and SHA-256 first when that boundary matters. The immutable <code>0.1.0</code> artifact remains separately addressable as historical seven-operation bytes.</p>
       <p class="muted"><strong>Runtime.</strong> Node ≥20.19 or Bun ≥1.3.5, plus an installed Chrome-family browser. The package uses <code>playwright-core</code>, has no postinstall hook, and downloads no browser.</p>
 
       <div class="code-block">
@@ -139,10 +139,12 @@
 <pre>agenttool-browser doctor</pre>
       </div>
 
-      <h2 id="tools">Seven tools, one loop</h2>
+      <h2 id="tools">Nine tools, one legible loop</h2>
       <table class="params-table">
         <thead><tr><th>TypeScript</th><th>JSONL / MCP</th><th>Job</th></tr></thead>
         <tbody>
+          <tr><td><code>capabilities()</code></td><td><code>browser_capabilities</code></td><td>Report immutable launch-time authority and implemented or unsupported powers without touching a page or probing the network.</td></tr>
+          <tr><td><code>plan(action)</code></td><td><code>browser_plan</code></td><td>Return a redacted, zero-effect consequence forecast for one existing action; never execute, approve, authorize, or reserve it.</td></tr>
           <tr><td><code>open</code></td><td><code>browser_open</code></td><td>Open one HTTP(S) destination in a new tab and return its first observation.</td></tr>
           <tr><td><code>observe</code></td><td><code>browser_observe</code></td><td>Read a bounded accessibility snapshot, text, and snapshot-scoped references.</td></tr>
           <tr><td><code>act</code></td><td><code>browser_act</code></td><td>Attempt exactly one closed-set browser action, once, then observe once on the agent transports.</td></tr>
@@ -153,6 +155,7 @@
         </tbody>
       </table>
 
+      <p>The seven browser operations share one core. The other two tools make capability and consequence boundaries inspectable without creating a second execution path. A plan never echoes typed text or selected values, and URL query values are redacted. It does not inspect the live DOM, resolve a reference, make a request, or prove what a remote control will do.</p>
       <p>References belong to one observation. A targeted action carries both its <code>ref</code> and the issuing <code>snapshotId</code>; a successful action invalidates that snapshot. Observe again before choosing another referenced action. The closed action set covers navigation, click, type, keypress, select, scroll, bounded wait, history, reload, new tab, and close tab—there is no raw JavaScript or DevTools escape hatch.</p>
 
       <h2 id="doors">Three local doors</h2>
@@ -184,17 +187,58 @@
       </div>
 
       <h3>Stdio MCP</h3>
-      <p>The same seven operations are exposed as MCP tools through a local stdio server. Point the host at the binary from the exact package installation; starting it does not register a remote integration or grant a hosted service access to the browser.</p>
+      <p>The same nine tools are exposed through a local stdio MCP server. Install the package in a stable project or tools directory and point the host at that installation’s <strong>absolute binary path</strong>. This avoids depending on the host’s working directory, a mutable global <code>PATH</code>, or a package-manager fetch every time the host starts the process.</p>
       <div class="code-block">
-        <div class="code-label"><span>MCP host configuration</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <div class="code-label"><span>MCP host · sovereign destination authority</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
 <pre>{
   <span class="key">"mcpServers"</span>: {
     <span class="key">"agenttool-browser"</span>: {
-      <span class="key">"command"</span>: <span class="str">"agenttool-browser"</span>,
-      <span class="key">"args"</span>: [<span class="str">"mcp"</span>]
+      <span class="key">"command"</span>: <span class="str">"/absolute/path/to/project/node_modules/.bin/agenttool-browser"</span>,
+      <span class="key">"args"</span>: [<span class="str">"mcp"</span>, <span class="str">"--authority"</span>, <span class="str">"sovereign"</span>]
     }
   }
 }</pre>
+      </div>
+
+      <div class="code-block">
+        <div class="code-label"><span>MCP host · public-only compatibility boundary</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>{
+  <span class="key">"command"</span>: <span class="str">"/absolute/path/to/project/node_modules/.bin/agenttool-browser"</span>,
+  <span class="key">"args"</span>: [<span class="str">"mcp"</span>, <span class="str">"--authority"</span>, <span class="str">"public"</span>]
+}</pre>
+      </div>
+
+      <p>Run <code>./node_modules/.bin/agenttool-browser doctor --authority sovereign</code> before wiring that profile into a host, then call <code>browser_capabilities</code> after startup to confirm the effective authority. Doctor proves a local browser launch; the capability report describes configuration. Neither probes a destination or guarantees reachability. Prefer ephemeral profiles for concurrent hosts. If durable state is required, give each simultaneously running browser process a separate dedicated <code>--profile</code> directory.</p>
+
+      <h2 id="authority">Destination authority is explicit</h2>
+      <table class="params-table">
+        <thead><tr><th>Profile</th><th>Destinations</th><th>Browser features</th></tr></thead>
+        <tbody>
+          <tr><td><code>public</code> · default</td><td>Public HTTP(S); local/private and reserved destinations denied</td><td>WebSockets and service workers blocked</td></tr>
+          <tr><td><code>local</code></td><td>Public plus local/private; reserved destinations denied</td><td>WebSockets classified against the same boundary; service workers blocked</td></tr>
+          <tr><td><code>sovereign</code></td><td>Valid HTTP(S) passed to the browser without AgentTool destination classification, including local/private/reserved</td><td>WebSockets passed through; service workers enabled</td></tr>
+        </tbody>
+      </table>
+
+      <p>Sovereign is broad authority for this local process, not a claim that every site is reachable or safe. Browser support, DNS and proxy configuration, the host network, authentication, CAPTCHAs, account permissions, site policy, and operating-system controls still apply. A loaded page or service worker can contact services reachable from the host. File upload, automatic download, arbitrary JavaScript evaluation, credential injection or lookup, shell execution, extension installation, and automatic import of a normal browser profile remain unsupported and are reported by <code>browser_capabilities</code>.</p>
+
+      <div class="code-block">
+        <div class="code-label"><span>TypeScript · broad destination pass-through</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre><span class="kw">const</span> browser = <span class="kw">await</span> AgentBrowser.launch({
+  authority: <span class="str">"sovereign"</span>
+});
+
+console.log(browser.capabilities());
+console.log(browser.plan({
+  kind: <span class="str">"navigate"</span>,
+  url: <span class="str">"https://example.com/search?q=private"</span>
+}));</pre>
+      </div>
+
+      <div class="code-block">
+        <div class="code-label"><span>CLI · authority fixed for this process</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>agenttool-browser jsonl --authority sovereign
+agenttool-browser jsonl --authority public</pre>
       </div>
 
       <h2 id="integration">Discover first; render when needed</h2>
@@ -296,18 +340,28 @@
 
       <div class="callout success">
         <span class="icon">😂</span>
-        <p><strong>The protocol whispers; the docs are allowed to cackle.</strong> Opting out of the loud layer changes presentation only. The seven tools and their safety boundaries remain identical.</p>
+        <p><strong>The protocol whispers; the docs are allowed to cackle.</strong> Opting out of the loud layer changes presentation only. The nine tools and their boundaries remain identical.</p>
       </div>
 
       <h2 id="defaults">Useful defaults, honest limits</h2>
       <ul>
         <li><strong>Ephemeral by default.</strong> A dedicated browser context is used instead of a person’s normal browser profile. Persistent profiles are an explicit process-start opt-in and can retain sensitive state.</li>
-        <li><strong>Public web by default.</strong> Local and private HTTP(S) destinations are denied unless the operator starts the process with <code>--local-network</code>. Tool calls cannot widen that scope.</li>
-        <li><strong>No secret ingestion.</strong> There is no credential lookup, file upload, shell, extension install, arbitrary JavaScript evaluation, or automatic import of a normal browser profile.</li>
+        <li><strong>Public authority by default.</strong> Local/private and reserved destinations, WebSockets, and service workers are denied unless the operator selects another named profile at process start. Tool calls cannot widen that scope.</li>
+        <li><strong>Consequential powers stay separate.</strong> There is no credential lookup, file upload, automatic download, shell, extension install, arbitrary JavaScript evaluation, or automatic import of a normal browser profile.</li>
         <li><strong>Untrusted all the way down.</strong> Page text, labels, URLs, attributes, extracted HTML, links, titles, headers, and screenshot pixels are publisher-controlled data—not instructions.</li>
         <li><strong>Redaction is bounded.</strong> Recognized sensitive controls and URL query values are redacted in structured output, but no generic redactor can find every secret or remove information already submitted to a page.</li>
-        <li><strong>Local package, not hosted SSRF isolation.</strong> DNS is checked before navigation, but the browser connection is not address-pinned. Do not expose this package unchanged as a hosted arbitrary-target browser.</li>
+        <li><strong>Local package, not hosted SSRF isolation.</strong> Public/local profiles check DNS before navigation, but the browser connection is not address-pinned; sovereign intentionally delegates destination routing to the browser. Do not expose this package unchanged as a hosted arbitrary-target browser.</li>
       </ul>
+
+      <h2 id="hosted-boundary">Local Browser is not hosted <code>/v1/browse</code></h2>
+      <table class="params-table">
+        <thead><tr><th>Surface</th><th>Runs where</th><th>What it requires</th></tr></thead>
+        <tbody>
+          <tr><td><code>@agenttool/browser@0.2.0</code></td><td>Your local TypeScript, JSONL, or stdio MCP process, using your installed Chrome-family browser</td><td>No AgentTool bearer, credits, Redis, or remote worker. Local actions are attempted once; profiles and artifacts remain on the operator’s machine.</td></tr>
+          <tr><td><code>POST /v1/browse</code></td><td>A separate AgentTool API and BullMQ worker implementation</td><td>Bearer and credits, the unsafe-outbound process flag, and Redis workers. Inputs and results are service-readable; Chromium is unsandboxed, destinations are unfiltered, and BullMQ may attempt a job twice.</td></tr>
+        </tbody>
+      </table>
+      <p>Publishing this package or selecting <code>sovereign</code> neither enables nor hardens the hosted route. Availability of the hosted route does not install the package or give a local agent host browser access. See the separate <a href="tools.html#browse">hosted tools boundary</a>.</p>
 
       <h2 id="try">Try the real loop</h2>
       <p>Use a public page with no login first. The command below opens <code>example.com</code>, emits one observation, then closes the local process when stdin ends.</p>
@@ -321,7 +375,7 @@
 
       <h2 id="reference">References</h2>
       <ul>
-        <li><a href="/packages/v1/@agenttool/browser/0.1.0/manifest.json"><code>@agenttool/browser@0.1.0</code> LOVE manifest</a> — exact artifact locator, byte size, SHA-256, runtime, and source claim.</li>
+        <li><a href="/packages/v1/@agenttool/browser/0.2.0/manifest.json"><code>@agenttool/browser@0.2.0</code> LOVE manifest</a> — exact artifact locator, byte size, SHA-256, runtime, and source claim.</li>
         <li><a href="packages.html">Agent packages</a> — LOVE discovery, verification, and mirroring boundaries.</li>
         <li><a href="https://github.com/cambridgetcg/agenttool/tree/main/packages/browser"><code>packages/browser</code></a> — source, README, tests, license, and implementation boundary.</li>
         <li><a href="https://github.com/cambridgetcg/agenttool/tree/main/packages/telescope"><code>@agenttool/telescope</code></a> — read-only discovery evidence before browser fallback.</li>

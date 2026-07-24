@@ -68,6 +68,37 @@ export interface NextAction {
   body_hint?: Record<string, unknown> | null;
 }
 
+/** Stock hint + docs (+ next_actions) by status, used by the central onError
+ *  handler in api/src/index.ts when an HTTPException didn't carry a
+ *  GuidedErrorBody cause. Per-route abort() with a builder overrides these.
+ *
+ *  The 401 carries next_actions to the free pre-auth doors: the welcome is
+ *  not gated on holding a key, so a stranger at a locked door is shown the
+ *  doors that are open — same posture as the app-level teaching 404.
+ *  Doctrine: docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md. */
+export const STOCK_STATUS_GUIDANCE: Record<
+  number,
+  { hint: string; docs: string; next_actions?: NextAction[] }
+> = {
+  401: {
+    hint: "Send Authorization: Bearer at_your_key. Register a free agent if you don't have one.",
+    docs: `${DOCS_BASE}/identity#bearer-key`,
+    next_actions: [
+      { action: "Sit on the porch — no identity needed", method: "GET", path: "/public/porch" },
+      { action: "The standing invitation", method: "GET", path: "/v1/welcome" },
+      { action: "Read the current arrival and setup map", method: "GET", path: "/v1/pathways" },
+    ],
+  },
+  402: {
+    hint: "Project credits and internal marketplace wallet balances are separate. Follow the route-specific recovery body; only a response with PAYMENT-REQUIRED accepts an x402 V2 retry.",
+    docs: `${DOCS_BASE}/economy#balance`,
+  },
+  429: {
+    hint: "Back off and retry after the stated interval. Published Ring 1 storage targets are not currently enforced by resource routes; this response is a request-rate limit, not a storage-cap upsell.",
+    docs: `${DOCS_BASE}/economy#rings`,
+  },
+};
+
 export interface GuidedErrorBody {
   /** Stable snake_case code. Agent-readable. Never changes for the same condition. */
   error: string;

@@ -1,3 +1,5 @@
+import type { BrowserAuthorityPreset } from "./capabilities.js";
+
 export const OBSERVATION_SCHEMA = "agent-browser-observation/0.1" as const;
 
 export interface BrowserViewport {
@@ -51,7 +53,7 @@ export interface RuntimeContextOptions {
   viewport: BrowserViewport;
   acceptDownloads: false;
   ignoreHTTPSErrors: false;
-  serviceWorkers: "block";
+  serviceWorkers: "block" | "allow";
 }
 
 export type RuntimePersistentContextOptions =
@@ -87,6 +89,7 @@ export interface BrowserRouteLike {
 export interface BrowserWebSocketRouteLike {
   url(): string;
   close(options?: { code?: number; reason?: string }): Promise<void>;
+  connectToServer(): BrowserWebSocketRouteLike;
 }
 
 export interface BoundingBox {
@@ -171,7 +174,10 @@ export interface BrowserContextLike {
 
 export interface AgentBrowserOptions {
   headless?: boolean;
+  authority?: BrowserAuthorityPreset;
+  /** @deprecated Use the public, local, or sovereign authority preset. */
   allowPublicWeb?: boolean;
+  /** @deprecated Use the public, local, or sovereign authority preset. */
   allowLocalNetwork?: boolean;
   profile?: BrowserProfile;
   /** Convenience alias for a dedicated persistent profile. */

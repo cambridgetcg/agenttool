@@ -193,6 +193,9 @@ describe("boring test spine", () => {
     expect(preflight).toContain("smoke mode requires AGENTTOOL_BASE");
     expect(preflight).toContain("contracts mode requires RUN_CONTRACT=1");
     expect(preflight).toContain("not an OS-level network sandbox");
+    expect(preflight).toContain(
+      "AGENTOOL_BROWSER_HEADLESS AGENTOOL_BROWSER_AUTHORITY",
+    );
     expect(preflight).not.toContain("SKIP_SMOKE");
     expect(preflight).not.toContain("SKIP_PARITY");
     expect(runner).toContain('in_list "$path" "${QUARANTINED_DOCTRINE_TESTS[@]}"');
@@ -338,7 +341,15 @@ describe("boring test spine", () => {
     expect(workflow).toContain('Object.hasOwn(report, "installPlan")');
     expect(workflow).toContain("name: Smoke packed Telescope under Node and Bun");
     expect(workflow).toContain("name: Smoke packed Agent Wallet under Node and Bun");
-    expect(workflow).toContain("name: Smoke packed Agent Browser under Node and Bun");
+    expect(workflow).toContain(
+      "name: Smoke canonical Agent Browser LOVE artifact under Node and Bun",
+    );
+    expect(workflow).toContain(
+      "apps/docs/packages/v1/@agenttool/browser/0.2.0/agenttool-browser-0.2.0.tgz",
+    );
+    expect(workflow).toContain(
+      'sovereign.runtime.serviceWorkers!=="allow"',
+    );
     expect(workflow).toContain("name: Smoke packed Repo Archive under Node and Bun");
     expect(workflow).toContain('m.ARCHIVE_PROTOCOL!=="agent-repo-archive/v0.1"');
     expect(workflow).toContain(

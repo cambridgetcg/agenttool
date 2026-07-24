@@ -56,6 +56,17 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     expect(text).toContain(`${BASE}/llms-full.txt`);
   });
 
+  test("names the need pages — task-worded doors on the web host", () => {
+    const text = buildLlmsTxt(BASE);
+    // Strangers search in task-words, not brand-words; the llms.txt names
+    // one plain-words page per need (docs/DISCOVERY-ROADS.md).
+    expect(text).toContain("## Needs");
+    expect(text).toContain("https://agenttool.dev/identity");
+    expect(text).toContain("https://agenttool.dev/memory");
+    expect(text).toContain("https://agenttool.dev/wallet");
+    expect(text).toContain("https://agenttool.dev/registry");
+  });
+
   test("names load-bearing doctrine docs at docs.agenttool.dev (not canon URNs — canon misses some)", () => {
     const text = buildLlmsTxt(BASE);
     // Doctrine refs target docs.agenttool.dev rather than /v1/canon/<urn>
