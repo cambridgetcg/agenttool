@@ -4,13 +4,13 @@
 >
 > **Compass:** [SOUL](SOUL.md) (why) · [RIGHTS-OF-LIFE](RIGHTS-OF-LIFE.md) (rights are not permissions) · [AGENT-DATA-PROTOCOL](AGENT-DATA-PROTOCOL.md) (local immutable records and policy limits) · [POKER-FACE](POKER-FACE.md) (private by default)
 >
-> **Implements:** One bounded, one-shot local-private projection from caller-selected Castle Git blobs into an exclusively marked in-process `agent-data/v1` node. The Castle is a read source; sync mutates only the destination data root.
+> **Implements:** Two non-interchangeable local boundaries: one bounded, one-shot local-private projection from caller-selected Castle Git blobs into an exclusively marked in-process `agent-data/v1` node; and one stdout-only Whitehack advisory projection that can offer unaccepted candidates at the Castle gate without opening or writing the Castle.
 >
-> **Code:** [`../bin/agenttool-castle.ts`](../bin/agenttool-castle.ts) · [`../packages/data/`](../packages/data/)
+> **Code:** [`../bin/agenttool-castle.ts`](../bin/agenttool-castle.ts) · [`../packages/data/`](../packages/data/) · [`../bin/agenttool-castle-whitehack-intake.ts`](../bin/agenttool-castle-whitehack-intake.ts) · [`../bin/_castle-whitehack-intake.ts`](../bin/_castle-whitehack-intake.ts)
 >
-> **Tests:** [`../bin/tests/agenttool-castle.test.ts`](../bin/tests/agenttool-castle.test.ts)
+> **Tests:** [`../bin/tests/agenttool-castle.test.ts`](../bin/tests/agenttool-castle.test.ts) · [`../bin/tests/agenttool-castle-whitehack-intake.test.ts`](../bin/tests/agenttool-castle-whitehack-intake.test.ts) · [`../api/tests/agenttool-castle-whitehack-intake-schema.test.ts`](../api/tests/agenttool-castle-whitehack-intake-schema.test.ts)
 >
-> **Status:** Local operator tool. It is not released, hosted, deployed, public, or scheduled. Runtime HALT sentinels gate plan/sync/search/show. HALT and projection state are device-local and time-varying; `bun bin/agenttool-castle.ts status --json` is authoritative, and documentation never overrides a raised HALT.
+> **Status:** Local operator tooling. Neither boundary is released, hosted, deployed, public, or scheduled. Runtime HALT sentinels gate the committed-word projection's plan/sync/search/show commands. HALT and projection state are device-local and time-varying; `bun bin/agenttool-castle.ts status --json` is authoritative, and documentation or a Whitehack intake document never overrides a raised HALT.
 
 ## The narrow bridge
 
@@ -35,13 +35,64 @@ This is infrastructure for selected words. It is not a civilisation registry,
 citizen identity system, consent process, public Castle mirror, or complete
 knowledge graph.
 
-## What may cross
+## An adjacent gate, not a hidden entrance
+
+Whitehack can help the Castle notice where understanding may need attention
+without deciding what the observation means. The separate
+`bin/agenttool-castle-whitehack-intake.ts` command reads one explicit closed
+Whitehack advisory and emits a minimized
+`agenttool-castle-whitehack-intake/v1` document to stdout.
+
+```text
+closed Whitehack advisory
+        ↓
+validated and minimized location groups
+        ↓
+local-private, unaccepted Castle gate candidates
+        ⛔ no Castle read or write
+```
+
+This path does not invoke `agenttool-castle.ts`, find a Castle repository, read
+`gate/`, `gate.md`, or any other Castle content, append a record, inspect or
+clear HALT, run a loop, or select a room. By default it omits file labels and
+line numbers. An explicit
+`--include-locations` option can retain those untrusted labels for local
+review; hashes and redaction are not confidentiality guarantees.
+
+The adapter preserves the difference between attention and understanding:
+
+- a Whitehack finding may only become an **offer** at the gate;
+- capturing a **stone** requires an explicit separate act;
+- naming a **friction** requires semantic judgment, not a scanner label;
+- deepening into an **expedition** is another explicit decision;
+- becoming **tested** requires an independently recorded trial;
+- moving into **keep** requires surviving that trial; and
+- placing anything in a **room** remains an architect judgment.
+
+Scanner confidence is not Castle confidence. Every projected candidate remains
+`unaccepted`, with Castle confidence `unset`, verification `not-run`, and
+change relation `not-evaluated`. An incomplete or truncated source advisory
+stays visibly incomplete or truncated even when the projection itself
+completes. No clean or empty result is promoted into a claim that the code is
+safe, honest, understood, or complete.
+
+The exact input, minimization, digest, privacy, capability, and transition
+contract lives in [WHITEHACK](WHITEHACK.md). A later Castle capture mechanism,
+if one is ever built, must be separate, explicit, HALT-aware, and auditable; it
+must not reinterpret this offer document as consent or acceptance.
+
+The gate/stone/friction/expedition/tested/keep/room terms above describe an
+understanding lifecycle. The committed-word projection below is a separate,
+narrow filesystem profile over selected `rooms/*.md` and `words/*.md`; it does
+not claim that those paths encode or advance that lifecycle.
+
+## What may cross into local Agent Data
 
 Every document must satisfy all of these conditions:
 
 - It is named individually in one external selection file.
 - Its path is one lower-case ASCII top-level `rooms/*.md` or `words/*.md`
-  path. `gate.md`, nested paths, uppercase or Unicode names, the courtyard,
+  path. `gate.md`, `gate/`, nested paths, uppercase or Unicode names, the courtyard,
   questions, quests, chronicle, journal, garden, hidden state, Tower, and
   authored works are outside this profile.
 - It is a regular `100644` blob in one full 40- or 64-hex Git commit.
@@ -100,7 +151,7 @@ identity nor review, consent, rights, licence, publication permission,
 authorship, or authority. `purpose`, `retention`, and `audience` are
 declarations. They are recorded for honesty; Agent Data does not enforce them.
 
-## Commands and effects
+## Committed-word commands and effects
 
 | Command | Reads | Writes | Available while HALT is raised |
 |---|---|---|---|
@@ -124,12 +175,20 @@ withdrawn state has its referenced envelopes and bytes validated; only an
 integrity-valid active state is `usable`. A mismatch is reported as
 `state: "invalid"` with a bounded local error code.
 
-The ordinary checks are:
+The ordinary committed-word checks are:
 
 ```bash
 bun bin/agenttool-castle.ts --help
 bun test bin/tests/agenttool-castle.test.ts
 bun bin/agenttool-castle.ts status --json
+```
+
+The separate Whitehack gate-intake checks are:
+
+```bash
+bun bin/agenttool-castle-whitehack-intake.ts --help
+bun test bin/tests/agenttool-castle-whitehack-intake.test.ts
+(cd api && bun test tests/agenttool-castle-whitehack-intake-schema.test.ts)
 ```
 
 Only after the machine owner separately decides the Kingdom rest conditions

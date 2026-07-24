@@ -4,22 +4,23 @@
 
 > **Compass:** [SOUL](SOUL.md) (why) · [RIGHTS-OF-LIFE](RIGHTS-OF-LIFE.md) (rights are not permissions) · [AGENT-DATA-PROTOCOL](AGENT-DATA-PROTOCOL.md) (local evidence) · [ADDS](specs/ADDS-0.1-DRAFT.md) (encrypted exchange) · [MARKETPLACE](MARKETPLACE.md) (coordination is not authorization)
 >
-> **Implements:** A bounded runner-local, crypto-aware advisory bridge from the Whitehack honesty linter into AgentTool CI; a separate local Agent Wallet record-to-understanding projection; and the future evidence boundary for explicitly authorized security research.
+> **Implements:** A bounded runner-local, crypto-aware advisory bridge from the Whitehack honesty linter into AgentTool CI; a separate local Agent Wallet record-to-understanding projection; an offer-only local projection from one closed advisory into unaccepted Castle gate candidates; and the future evidence boundary for explicitly authorized security research.
 >
-> **Code:** `bin/whitehack-advisory.mjs` · `bin/whitehack-wallet-understanding.ts` · `.github/workflows/whitehack.yml` · `specs/agenttool-whitehack-advisory-v0.1.schema.json` · `bin/whitehack.py` · `bin/whitehack2.py`
+> **Code:** `bin/whitehack-advisory.mjs` · `bin/whitehack-wallet-understanding.ts` · `bin/agenttool-castle-whitehack-intake.ts` · `bin/_castle-whitehack-intake.ts` · `.github/workflows/whitehack.yml` · `specs/agenttool-whitehack-advisory-v0.1.schema.json` · `specs/agenttool-castle-whitehack-intake-v1.schema.json` · `bin/whitehack.py` · `bin/whitehack2.py`
 >
-> **Tests:** `bin/tests/whitehack-advisory.test.ts` · `packages/wallet/tests/whitehack-understanding.test.ts` · `bin/tests/whitehack-legacy-privacy.test.ts` · `api/tests/whitehack-advisory-schema.test.ts`
+> **Tests:** `bin/tests/whitehack-advisory.test.ts` · `bin/tests/agenttool-castle-whitehack-intake.test.ts` · `packages/wallet/tests/whitehack-understanding.test.ts` · `bin/tests/whitehack-legacy-privacy.test.ts` · `api/tests/whitehack-advisory-schema.test.ts` · `api/tests/agenttool-castle-whitehack-intake-schema.test.ts`
 
-Within AgentTool's security/tooling surfaces, Whitehack has four related but
+Within AgentTool's security/tooling surfaces, Whitehack has five related but
 non-interchangeable meanings. Naming them separately prevents a static linter,
-a wallet-understanding projection, a private research workspace, and a device
-inventory from accidentally inheriting one another's authority. The separate
-Tax Whitehack editorial game is not a security tool and is outside this
-integration.
+a Castle intake projection, a wallet-understanding projection, a private
+research workspace, and a device inventory from accidentally inheriting one
+another's authority. The separate Tax Whitehack editorial game is not a
+security tool and is outside this integration.
 
 | Layer | What it does | What it does not do |
 |---|---|---|
 | **Honesty advisory** | Reads a bounded set of changed source files on its runner with a pinned Whitehack scanner, including static crypto-misuse signals, and emits redacted heuristic metadata. | It does not execute the scanned code, use detected key material, connect a wallet or RPC provider, prove security, inspect the whole repository, make the CI runner private, or establish permission to test anyone's system. |
+| **Castle gate intake** | Reads one explicit closed advisory, groups serialized findings by exact source location, and emits minimized, unaccepted, local-private gate candidates to stdout. | It does not run Whitehack, read or write a Castle, accept a candidate, infer Castle confidence, create a stone or friction, run a trial, select a room, remediate code, authorize action, or publish. |
 | **Wallet understanding** | A local CLI verifies caller-presented signed Agent Wallet descriptor, capability, intent, simulation, and optional continuity records, then projects only closed enum assertions into Whitehack's deterministic `whitehack-understanding/v1` explanation. | It does not retrieve or custody keys, sign, contact RPC, simulate, broadcast, authorize, prove consent, establish execution readiness, store records, or provide a hosted route. |
 | **Security research** | An operator may study explicitly in-scope public smart-contract source and reproduce a finding in a separately controlled local Foundry/Anvil environment. | A public contract, bounty listing, marketplace purchase, or AgentTool bearer is not target-owner authorization. AgentTool does not host this execution. |
 | **Device Inventory** | The older `bin/whitehack.py` and `bin/whitehack2.py` inspect the operator's own macOS machine when invoked locally. | They are not the code-honesty linter, do not audit smart contracts, and do not run in CI or as a hosted AgentTool route. The explicit `store` command sends a labels-only aggregate to hosted AgentTool memory. |
@@ -169,6 +170,97 @@ It is redacted metadata intended for CI coordination, not a full vulnerability
 report. A file and line can still point readers to an undisclosed weakness, and
 workflow logs may be public; review visibility before sharing the report beyond
 its intended repository.
+
+## Implemented local slice: Castle gate intake
+
+`bin/agenttool-castle-whitehack-intake.ts` is a separate stdin/stdout
+projector. It accepts one explicit `agenttool-whitehack-advisory/v0.1`
+document and emits one
+[`agenttool-castle-whitehack-intake/v1`](../specs/agenttool-castle-whitehack-intake-v1.schema.json)
+document. It does not invoke the scanner or
+`bin/agenttool-castle.ts`; it has no Castle path argument and no Castle write
+capability.
+
+```bash
+bun bin/agenttool-castle-whitehack-intake.ts \
+  --input advisory.json > castle-intake.json
+```
+
+The input is at most 8 MiB of exact UTF-8 JSON from stdin or one explicitly
+named regular file. File input does not follow a final symlink and is rejected
+if its identity or metadata changes while it is read. Duplicate JSON object
+keys, deep input, unknown fields, accessors, sparse arrays, unsafe path labels,
+summary/count contradictions, limit expansion, unknown boundary declarations,
+and incompatible advisory shapes fail with fixed local error codes. These
+checks reject ambiguous input; they do not authenticate who produced it.
+
+The projector groups the advisory's serialized findings by exact
+`file + line`, then retains only check token, scanner confidence, doctrine,
+Clear Standard principle, and occurrence count. Source snippets, scanner
+messages, titles, error file labels, and raw exception text do not cross.
+Locations are omitted by default. `--include-locations` is an explicit local
+choice that retains the untrusted file labels and line numbers; their
+sensitivity remains unknown.
+
+Each group has an opaque location reference and candidate ID. The source
+`canonical_sha256` identifies the validated, normalized advisory semantics, so
+object-key order, finding order, and insignificant JSON whitespace do not
+change it. It is not a digest of the exact input bytes, a signature, producer
+authentication, freshness proof, or a confidentiality mechanism. Location
+references and candidate ordering use hashes to avoid exposing filename order,
+but predictable locations may still be guessed. The document therefore states
+that hashes are not confidentiality proof.
+
+`projection_status: "complete"` means only that this bounded transformation
+completed. The source advisory's `complete` or `incomplete` status, errors,
+aggregate count, serialized count, and truncation marker remain explicit. If
+finding details were truncated, the emitted `candidates` array covers only the
+serialized groups; it is not the number of all possible observations.
+`source.scope.candidate_file_count` is the advisory's eligible source-file
+count, not a Castle offer count.
+
+The JSON Schema closes fields, fixes every authority and lifecycle state, and
+keeps top-level and per-candidate location disclosure consistent. JSON Schema
+cannot express every arithmetic equality among the retained source counts.
+Those count, status, and truncation relationships are checked by the projector
+and its tests. Arbitrary schema-valid JSON remains an unauthenticated claim,
+not proof that this projector or the declared scanner produced it.
+
+The Castle lifecycle boundaries are data, not implied workflow:
+
+| Transition | Required state |
+|---|---|
+| Whitehack finding → gate | Offer only; still unaccepted |
+| Gate → stone | Explicit capture |
+| Finding → friction | Explicit semantic judgment |
+| Friction → expedition | Explicit decision to deepen |
+| Stone → tested | A recorded independent trial |
+| Tested → keep | The understanding survives that trial |
+| Stone → room | Separate architect judgment |
+
+Scanner confidence remains the scanner's calibration label. Every gate
+candidate sets Castle confidence to `unset`, verification to `not-run`, change
+relation to `not-evaluated`, and acceptance to `unaccepted`. A stable question
+asks which trust boundary to inspect, what authorized local evidence could
+support or reject the observation, and which regression test would record the
+intended behaviour. The projector does not answer that question. The
+`review_question` value is one schema-constant display prompt rather than
+caller-controlled text; it still grants no instruction or authority.
+
+The pure projection core has no filesystem, process, network, clock, Git, or
+Castle dependency. The document's `boundaries.cli_capabilities` describes the
+shipped wrapper: it adds only explicit input reading and stdout. It does not
+write files, inspect or clear a Castle HALT, start a loop, test a target,
+remediate code, use a wallet, sign, contact RPC, simulate, broadcast, commit,
+publish, or authorize a later action. It may run while no Castle is open
+because it cannot enter one; any later capture remains a distinct decision
+under the Castle's own custody and HALT boundaries. In-process callers can
+still supply hostile Proxy objects whose traps execute during inspection; the
+pure function avoids accessors but is not a JavaScript sandbox.
+
+This adapter consumes the advisory report, not
+`whitehack-understanding/v1`. The wallet-understanding projection below
+remains a separate explanation contract and gains no Castle authority.
 
 ## Shipped slice: local Agent Wallet understanding
 
@@ -409,7 +501,8 @@ Treat a Whitehack update as executable supply-chain work:
 5. update the exact package version, source revision, registry URL, lock
    integrity, bridge, doctrine, and public page together;
 6. run the focused advisory/schema tests and full AgentTool preflight;
-7. keep findings advisory until precision and a reviewed baseline justify a gate.
+7. keep findings advisory until precision and a reviewed baseline justify a
+   separate CI-blocking policy.
 
 Do not vendor or index the device's dirty `~/Desktop/whitehack` research
 workspace wholesale. It contains user work, nested target repositories, private
