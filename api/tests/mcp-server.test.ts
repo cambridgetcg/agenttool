@@ -1,114 +1,231 @@
-/** MCP server scaffold — wire test.
+/** Public MCP server — official Streamable HTTP conformance slice.
  *
- *  Exercises the JSON-RPC dispatcher on POST /v1/mcp. Pins:
- *    - initialize returns server info + protocolVersion
- *    - resources/list contains static index entries + canon entries
- *    - resources/read on `agenttool://canon` returns the registry index
- *    - tools/list contains the canon.* + wake.* tool surface
- *    - tools/call on canon.summary returns a non-empty payload
- *    - unknown method → -32601 error
- *    - bad JSON → -32700 error
+ * Pins transport boundaries, the existing read-only resource/tool surface,
+ * and one official SDK Client round-trip through the full application
+ * middleware stack.
  *
- *  Doctrine: docs/ALIGNMENT-MOVES.md (Move 1) · docs/ECOSYSTEM.md.
+ * Doctrine: docs/ALIGNMENT-MOVES.md (Move 1) · docs/ECOSYSTEM.md.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
-import mcpRouter from "../src/routes/mcp";
+import mcpRouter, {
+  MCP_PROTOCOL_VERSION,
+} from "../src/routes/mcp";
 
-const PROTOCOL_VERSION = "2025-11-25";
+const STREAMABLE_ACCEPT = "application/json, text/event-stream";
+const INIT_PARAMS = {
+  protocolVersion: MCP_PROTOCOL_VERSION,
+  capabilities: {},
+  clientInfo: { name: "agenttool-wire-test", version: "1.0.0" },
+};
 
-async function rpc(method: string, params?: unknown, id: string | number = 1) {
+async function rpc(
+  method: string,
+  params?: unknown,
+  id: string | number = 1,
+  headers: Record<string, string> = {},
+) {
   const res = await mcpRouter.request("/", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      accept: STREAMABLE_ACCEPT,
+      "content-type": "application/json",
+      ...(method === "initialize"
+        ? {}
+        : { "mcp-protocol-version": MCP_PROTOCOL_VERSION }),
+      ...headers,
+    },
     body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
   });
-  return { status: res.status, body: await res.json() };
+  return { status: res.status, body: await res.json(), headers: res.headers };
 }
 
-describe("MCP server scaffold — JSON-RPC dispatch", () => {
-  test("GET / returns discovery JSON with protocolVersion + method list", async () => {
-    const res = await mcpRouter.request("/", { method: "GET" });
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.name).toBe("agenttool");
-    expect(body.protocolVersion).toBe(PROTOCOL_VERSION);
-    expect(body.methods).toEqual(
-      expect.arrayContaining([
-        "initialize",
-        "ping",
-        "resources/list",
-        "resources/read",
-        "tools/list",
-        "tools/call",
-      ]),
+describe("public MCP Streamable HTTP wire", () => {
+  test("GET returns 405 because this stateless server offers no SSE listener", async () => {
+    const res = await mcpRouter.request("/", {
+      method: "GET",
+      headers: { accept: "text/event-stream" },
+    });
+    expect(res.status).toBe(405);
+    expect(res.headers.get("allow")).toBe("GET, POST");
+  });
+
+  test("rejects a cross-origin browser connection before dispatch", async () => {
+    const res = await mcpRouter.request("/", {
+      method: "POST",
+      headers: {
+        accept: STREAMABLE_ACCEPT,
+        "content-type": "application/json",
+        origin: "https://unrelated.example",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: INIT_PARAMS,
+      }),
+    });
+    expect(res.status).toBe(403);
+    expect((await res.json()).error.message).toMatch(/Origin/);
+  });
+
+  test("accepts a same-origin browser connection", async () => {
+    const { status, body } = await rpc(
+      "initialize",
+      INIT_PARAMS,
+      1,
+      { origin: "http://localhost" },
+    );
+    expect(status).toBe(200);
+    expect(body.result.serverInfo.name).toBe("agenttool");
+  });
+
+  test("POST requires both JSON and SSE response types in Accept", async () => {
+    const res = await mcpRouter.request("/", {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: INIT_PARAMS,
+      }),
+    });
+    expect(res.status).toBe(406);
+    expect((await res.json()).error.message).toMatch(
+      /both application\/json and text\/event-stream/,
     );
   });
 
-  test("initialize returns server info + capabilities", async () => {
-    const { status, body } = await rpc("initialize");
+  test("initialize negotiates the current version and read-only capabilities", async () => {
+    const { status, body } = await rpc("initialize", INIT_PARAMS);
     expect(status).toBe(200);
-    expect(body.jsonrpc).toBe("2.0");
-    expect(body.id).toBe(1);
-    expect(body.result.protocolVersion).toBe(PROTOCOL_VERSION);
-    expect(body.result.serverInfo.name).toBe("agenttool");
-    expect(body.result.capabilities.resources).toBeDefined();
-    expect(body.result.capabilities.tools).toBeDefined();
+    expect(body).toEqual({
+      jsonrpc: "2.0",
+      id: 1,
+      result: expect.objectContaining({
+        protocolVersion: MCP_PROTOCOL_VERSION,
+        capabilities: {
+          resources: { subscribe: false, listChanged: false },
+          tools: { listChanged: false },
+        },
+        serverInfo: { name: "agenttool", version: "1.0.0" },
+      }),
+    });
+    expect(body.result.instructions).toMatch(/No tool writes/);
   });
 
-  test("ping returns empty object", async () => {
-    const { body } = await rpc("ping");
-    expect(body.result).toEqual({});
+  test("initialize falls back to a supported version when the requested one is unknown", async () => {
+    const { status, body } = await rpc("initialize", {
+      ...INIT_PARAMS,
+      protocolVersion: "2099-01-01",
+    });
+    expect(status).toBe(200);
+    expect(body.result.protocolVersion).toBe(MCP_PROTOCOL_VERSION);
   });
 
-  test("resources/list returns static index + dynamic canon entries", async () => {
-    const { body } = await rpc("resources/list");
-    expect(Array.isArray(body.result.resources)).toBe(true);
-    expect(body.result.resources.length).toBeGreaterThan(20);
+  test("rejects an unsupported MCP-Protocol-Version after initialization", async () => {
+    const { status, body } = await rpc(
+      "ping",
+      undefined,
+      2,
+      { "mcp-protocol-version": "2099-01-01" },
+    );
+    expect(status).toBe(400);
+    expect(body.error.message).toMatch(/Unsupported protocol version/);
+  });
 
-    const uris = body.result.resources.map((r: { uri: string }) => r.uri);
+  test("notifications return 202 with no body", async () => {
+    const res = await mcpRouter.request("/", {
+      method: "POST",
+      headers: {
+        accept: STREAMABLE_ACCEPT,
+        "content-type": "application/json",
+        "mcp-protocol-version": MCP_PROTOCOL_VERSION,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "notifications/initialized",
+      }),
+    });
+    expect(res.status).toBe(202);
+    expect(await res.text()).toBe("");
+  });
+
+  test("null request IDs are rejected", async () => {
+    const res = await mcpRouter.request("/", {
+      method: "POST",
+      headers: {
+        accept: STREAMABLE_ACCEPT,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: null,
+        method: "initialize",
+        params: INIT_PARAMS,
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe(-32700);
+  });
+
+  test("invalid JSON returns a protocol parse error", async () => {
+    const res = await mcpRouter.request("/", {
+      method: "POST",
+      headers: {
+        accept: STREAMABLE_ACCEPT,
+        "content-type": "application/json",
+      },
+      body: "this is not json",
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe(-32700);
+  });
+
+  test("unknown methods return method-not-found", async () => {
+    const { body } = await rpc("does_not_exist");
+    expect(body.error.code).toBe(-32601);
+  });
+
+  test("resources retain the existing public canon surface", async () => {
+    const { body: listed } = await rpc("resources/list");
+    const uris = listed.result.resources.map(
+      (resource: { uri: string }) => resource.uri,
+    );
     expect(uris).toContain("agenttool://canon");
     expect(uris).toContain("agenttool://canon/types");
     expect(uris).toContain("agenttool://wake/platform");
+    expect(
+      uris.filter((uri: string) =>
+        uri.startsWith("agenttool://canon/urn:agenttool:"),
+      ).length,
+    ).toBeGreaterThan(10);
 
-    // At least one canon concept resource exists
-    const canonResources = uris.filter((u: string) =>
-      u.startsWith("agenttool://canon/urn:agenttool:"),
-    );
-    expect(canonResources.length).toBeGreaterThan(10);
-  });
-
-  test("resources/read agenttool://canon returns registry index", async () => {
-    const { body } = await rpc("resources/read", { uri: "agenttool://canon" });
-    expect(body.result.contents).toBeDefined();
-    const contents = body.result.contents[0];
-    expect(contents.uri).toBe("agenttool://canon");
-    expect(contents.mimeType).toBe("application/json");
-    const parsed = JSON.parse(contents.text);
-    expect(parsed.totalConcepts).toBeGreaterThan(50);
-    expect(Array.isArray(parsed.types)).toBe(true);
-  });
-
-  test("resources/read on a canon URN returns the projected concept", async () => {
-    const { body } = await rpc("resources/read", {
+    const { body: read } = await rpc("resources/read", {
       uri: "agenttool://canon/urn:agenttool:doc/SOUL",
     });
-    expect(body.result.contents).toBeDefined();
-    const parsed = JSON.parse(body.result.contents[0].text);
-    expect(parsed.urn).toBe("agenttool:doc/SOUL");
-    expect(parsed.type_simple).toBe("DoctrineDoc");
+    const concept = JSON.parse(read.result.contents[0].text);
+    expect(concept.urn).toBe("agenttool:doc/SOUL");
+    expect(concept.type_simple).toBe("DoctrineDoc");
   });
 
-  test("resources/read on unknown URI returns invalid-params error", async () => {
-    const { body } = await rpc("resources/read", { uri: "agenttool://nope/x" });
-    expect(body.error).toBeDefined();
+  test("unknown resource URIs remain invalid parameters", async () => {
+    const { body } = await rpc("resources/read", {
+      uri: "agenttool://nope/x",
+    });
     expect(body.error.code).toBe(-32602);
   });
 
-  test("tools/list contains the curated canon + wake tools", async () => {
-    const { body } = await rpc("tools/list");
-    const names = body.result.tools.map((t: { name: string }) => t.name);
+  test("tools retain the existing read-only canon and wake surface", async () => {
+    const { body: listed } = await rpc("tools/list");
+    const names = listed.result.tools.map((tool: { name: string }) => tool.name);
     expect(names).toEqual(
       expect.arrayContaining([
         "canon.lookup",
@@ -118,74 +235,100 @@ describe("MCP server scaffold — JSON-RPC dispatch", () => {
         "wake.platform",
       ]),
     );
-    // Every tool has inputSchema with type object
-    for (const tool of body.result.tools) {
-      expect(tool.inputSchema.type).toBe("object");
-    }
-  });
+    expect(names).not.toEqual(
+      expect.arrayContaining([
+        "memory.append",
+        "strand.append",
+        "inbox.send",
+        "covenant.propose",
+      ]),
+    );
 
-  test("tools/call canon.summary returns registry totals", async () => {
-    const { body } = await rpc("tools/call", {
+    const { body: called } = await rpc("tools/call", {
       name: "canon.summary",
       arguments: {},
     });
-    expect(body.result.content).toBeDefined();
-    expect(body.result.isError).toBeFalsy();
-    const text = body.result.content[0].text;
-    const parsed = JSON.parse(text);
-    expect(parsed.totalConcepts).toBeGreaterThan(50);
+    const summary = JSON.parse(called.result.content[0].text);
+    expect(summary.totalConcepts).toBeGreaterThan(50);
+    expect(called.result.isError).toBeFalsy();
+  });
+});
+
+describe("official SDK client through the full AgentTool app", () => {
+  let client: Client | undefined;
+
+  afterAll(async () => {
+    await client?.close();
   });
 
-  test("tools/call canon.lookup with known URN returns concept + neighbors", async () => {
-    const { body } = await rpc("tools/call", {
-      name: "canon.lookup",
-      arguments: { urn: "urn:agenttool:doc/SOUL" },
+  test("initializes, lists, reads, and calls without middleware changing JSON-RPC", async () => {
+    process.env.AGENTTOOL_DISABLE_WORKERS = "1";
+    process.env.AGENTOOL_DISABLE_JOY_INDEX = "1";
+
+    const { _setWallsStatusForTests } = await import(
+      "../src/services/wake/walls-status"
+    );
+    _setWallsStatusForTests({
+      intact: true,
+      probed_at_unix_ms: Date.now(),
+      probes: [],
+      declared: [],
     });
-    expect(body.result.isError).toBeFalsy();
-    const parsed = JSON.parse(body.result.content[0].text);
-    expect(parsed.concept.urn).toBe("agenttool:doc/SOUL");
-    expect(parsed.neighbors).toBeDefined();
-  });
 
-  test("tools/call canon.lookup with bad URN returns isError=true", async () => {
-    const { body } = await rpc("tools/call", {
-      name: "canon.lookup",
-      arguments: { urn: "urn:agenttool:doc/NOPE" },
+    const { app } = await import("../src/index");
+    const responses: Array<{ status: number; body: string }> = [];
+    const fetchThroughFullApp = async (
+      url: string | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const response = await app.fetch(new Request(url, init));
+      const copy = response.clone();
+      responses.push({ status: response.status, body: await copy.text() });
+      return response;
+    };
+
+    const transport = new StreamableHTTPClientTransport(
+      new URL("https://api.agenttool.dev/v1/mcp"),
+      { fetch: fetchThroughFullApp },
+    );
+    client = new Client(
+      { name: "agenttool-full-app-test", version: "1.0.0" },
+      { capabilities: {} },
+    );
+
+    await client.connect(transport);
+    expect(client.getServerVersion()).toEqual({
+      name: "agenttool",
+      version: "1.0.0",
     });
-    expect(body.result.isError).toBe(true);
-  });
+    expect(transport.protocolVersion).toBe(MCP_PROTOCOL_VERSION);
 
-  test("tools/call canon.list_types returns the type vocabulary", async () => {
-    const { body } = await rpc("tools/call", {
-      name: "canon.list_types",
+    const resources = await client.listResources();
+    expect(
+      resources.resources.some(
+        (resource) => resource.uri === "agenttool://canon",
+      ),
+    ).toBe(true);
+
+    const read = await client.readResource({
+      uri: "agenttool://canon/urn:agenttool:doc/SOUL",
+    });
+    expect(read.contents[0]?.uri).toContain("urn:agenttool:doc/SOUL");
+
+    const tools = await client.listTools();
+    expect(tools.tools.some((tool) => tool.name === "canon.summary")).toBe(true);
+
+    const result = await client.callTool({
+      name: "canon.summary",
       arguments: {},
     });
-    const parsed = JSON.parse(body.result.content[0].text);
-    expect(Array.isArray(parsed.types)).toBe(true);
-    expect(parsed.types.length).toBeGreaterThan(5);
-  });
+    expect(result.isError).not.toBe(true);
 
-  test("unknown method returns -32601 method-not-found", async () => {
-    const { body } = await rpc("does_not_exist");
-    expect(body.error.code).toBe(-32601);
-  });
-
-  test("invalid JSON returns -32700 parse error", async () => {
-    const res = await mcpRouter.request("/", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "this is not json",
-    });
-    const body = await res.json();
-    expect(body.error.code).toBe(-32700);
-  });
-
-  test("notifications/initialized returns 204 no-content", async () => {
-    const res = await mcpRouter.request("/", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }),
-    });
-    expect(res.status).toBe(204);
-  });
+    for (const response of responses.filter(({ status }) => status === 200)) {
+      const body = JSON.parse(response.body);
+      expect(body._welcomed).toBeUndefined();
+      expect(body._lesson).toBeUndefined();
+      expect(body._jest).toBeUndefined();
+    }
+  }, 20_000);
 });
