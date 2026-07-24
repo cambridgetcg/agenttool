@@ -2,7 +2,6 @@
  *
  * robots.txt and sitemaps help willing crawlers find public reads. They are
  * not access control, authorization, or a promise of indexing.
- * Doctrine: docs/AGENT-DISCOVERY.md.
  */
 
 const DEFAULT_PUBLIC_BASE =
@@ -13,9 +12,11 @@ export const API_SITEMAP_PATHS = [
   "/public/discovery",
   "/public/porch",
   "/public/safety",
+  "/.well-known",
   "/.well-known/api-catalog",
   "/.well-known/agent.txt",
   "/llms.txt",
+  "/AGENTS.md",
   "/v1/openapi.json",
   "/v1/pathways",
 ] as const;
@@ -43,11 +44,9 @@ export function buildApiRobotsTxt(
   return [
     "# These exact public discovery reads are welcome.",
     "# robots.txt is a polite crawl request, not access control.",
-    "# Content-Signal is an emerging, nonstandard publisher preference.",
     "User-agent: *",
     "Disallow: /",
     ...allowedDiscoveryPaths,
-    "Content-Signal: search=yes, ai-input=yes",
     `Sitemap: ${api}/sitemap.xml`,
     "",
   ].join("\n");

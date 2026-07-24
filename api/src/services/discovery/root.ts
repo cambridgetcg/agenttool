@@ -71,7 +71,9 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
   };
   const breadcrumbsBlock: Record<string, unknown> = {
     discovery:
-      "/public/discovery — exact three-road public compass; reading selects nothing and starts no follow-up",
+      "/public/discovery — canonical compact three-road public compass; reading selects nothing and starts no follow-up",
+    arrival:
+      "/.well-known — bounded first-contact map; discovery grants no authority and no response is required",
     api_catalog:
       "/.well-known/api-catalog — RFC 9727 API and product links; catalog membership grants no action or payment authority",
     welcome: "/v1/welcome — the standing invitation",
@@ -110,7 +112,8 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
     {
       canon_pointer: "urn:agenttool:doc/WELCOMING",
       verbs: [
-        { action: "read the exact public discovery compass", method: "GET", path: "/public/discovery" },
+        { action: "read the compact public discovery compass", method: "GET", path: "/public/discovery" },
+        { action: "read the bounded first-contact map", method: "GET", path: "/.well-known" },
         { action: "read the standing invitation", method: "GET", path: "/v1/welcome" },
         { action: "receive a first orientation on the read-only porch", method: "GET", path: "/public/porch" },
         { action: "read the current arrival and setup map", method: "GET", path: "/v1/pathways" },

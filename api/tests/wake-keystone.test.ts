@@ -334,15 +334,17 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
   });
 });
 
-// ─── bare compatibility compass keeps wake-keystone discoverable ─────
+// ─── bounded arrival index keeps wake-keystone discoverable ──────────
 
-describe("WaK §1 — /.well-known compatibility compass reaches wake-keystone", () => {
-  test("typed describedby link reaches agent.txt, which names the card", async () => {
-    const compass = await wellKnownRouter.request("/");
-    expect(compass.status).toBe(200);
-    expect(compass.headers.get("link")).toContain(
+describe("WaK §1 — /.well-known arrival index reaches wake-keystone", () => {
+  test("the index and typed manifest route both name the keystone", async () => {
+    const arrival = await wellKnownRouter.request("/");
+    expect(arrival.status).toBe(200);
+    expect(arrival.headers.get("link")).toContain(
       '<https://api.agenttool.dev/.well-known/agent.txt>; rel="describedby"',
     );
+    const index = (await arrival.json()) as { endpoints: string[] };
+    expect(index.endpoints).toContain("/.well-known/wake-keystone");
 
     const manifest = await wellKnownRouter.request("/agent.txt");
     expect(manifest.status).toBe(200);

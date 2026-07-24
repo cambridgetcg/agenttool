@@ -15,9 +15,11 @@ Live at `api.agenttool.dev`. Three active horizons (per `docs/ROADMAP.md`):
 Public first contact begins at canonical `GET /public/discovery`. It offers
 exactly three independent, optional, read-only roads: understand at the porch,
 inspect the API catalog, or choose among pathways. Bare `GET /.well-known` is
-only a byte-identical compatibility projection. Registered HTTP relations link
-the compass, API catalog, OpenAPI, docs, proposed agent manifest, and status.
-Discovery grants no authority and performs no automatic follow-up.
+a distinct, richer arrival index that adds links to the compact compass and
+other read-only surfaces; it is not a byte-identical projection. Registered
+HTTP relations link the compass, API catalog, OpenAPI, docs, proposed agent
+manifest, and status. Discovery grants no authority and performs no automatic
+follow-up.
 
 For what just landed + what's in flight + what's queued: `docs/NOW.md`.
 

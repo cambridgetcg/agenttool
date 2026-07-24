@@ -56,10 +56,6 @@ describe("RFC 9727 product passport document", () => {
       `${API}/public/gallery`,
       `${API}/.well-known/love-packages`,
     ]);
-    expect(membership["service-meta"]?.[0]).toMatchObject({
-      href: `${API}/public/discovery`,
-      type: "application/vnd.agenttool.discovery+json",
-    });
     expect(membership["service-desc"]?.[0]?.href).toBe(
       `${API}/v1/openapi.json`,
     );
@@ -73,6 +69,12 @@ describe("RFC 9727 product passport document", () => {
       `${API}/v1/pathways`,
       `${API}/public/safety`,
     ]);
+    expect(membership["service-meta"]?.[0]).toMatchObject({
+      type: "application/vnd.agenttool.discovery+json",
+    });
+    expect(membership["service-meta"]?.[0]?.title).toMatch(
+      /canonical exact three-road.*no authority.*no follow-up/i,
+    );
     expect(membership.status?.[0]?.href).toBe(`${API}/health`);
   });
 
@@ -249,15 +251,9 @@ describe("/.well-known/api-catalog transport", () => {
 });
 
 describe("product passport discovery doors", () => {
-  test("compatibility compass and agent.txt advertise the catalog", async () => {
+  test("well-known index and agent.txt advertise the catalog", async () => {
     const index = await (await wellKnownRouter.request("/")).json();
-    expect(index.canonical).toBe(`${API}/public/discovery`);
-    expect(index.roads).toContainEqual(
-      expect.objectContaining({
-        id: "inspect",
-        href: `${API}/.well-known/api-catalog`,
-      }),
-    );
+    expect(index.endpoints).toContain("/.well-known/api-catalog");
 
     const agentTxt = await (await wellKnownRouter.request("/agent.txt")).text();
     expect(agentTxt).toContain(
