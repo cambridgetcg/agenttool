@@ -26,6 +26,10 @@ const MAX_PREFIX_BYTES =
   MAX_S3_OBJECT_KEY_BYTES - 1 - ADDS_CID_TEXT_BYTES;
 const MAX_PREFIX_COMPONENT_BYTES = 255;
 const MAX_S3_ERROR_BODY_BYTES = 16 * 1_024;
+// Bound stream-fragment amplification independently of the byte limit. At the
+// default 64 MiB read limit this still permits 16,384 chunks (4 KiB average),
+// while counting empty chunks closes the zero-byte liveness bypass.
+const MAX_S3_RESPONSE_CHUNKS = 16 * 1_024;
 const S3_ERROR_FIELDS = new Set([
   "Code",
   "Message",
@@ -337,6 +341,7 @@ async function readBoundedBody(
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
+  let chunkCount = 0;
   try {
     while (true) {
       throwIfAborted(signal);
@@ -348,10 +353,17 @@ async function readBoundedBody(
         },
       );
       if (result.done) break;
+      chunkCount += 1;
+      if (chunkCount > MAX_S3_RESPONSE_CHUNKS) {
+        throw sanitizedStoreError(
+          "S3-compatible block response was too fragmented.",
+        );
+      }
       const chunk = result.value;
       if (!(chunk instanceof Uint8Array)) {
         throw sanitizedStoreError("S3-compatible block response could not be read.");
       }
+      if (chunk.byteLength === 0) continue;
       if (chunk.byteLength > maxBytes - total) {
         cancelReader(reader);
         throw new LimitExceededError("S3-compatible block exceeds maxBytes.");

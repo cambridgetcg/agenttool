@@ -16,6 +16,7 @@ import {
 const FIXTURE_ACCESS_KEY_ID = "AKIDEXAMPLE";
 const FIXTURE_SECRET_ACCESS_KEY = "not-a-real-aws-signing-secret";
 const FIXTURE_SESSION_TOKEN = "not-a-real-session-token";
+const EXPECTED_S3_RESPONSE_CHUNK_LIMIT = 16 * 1_024;
 
 function fakeFetch(
   implementation: (
@@ -461,6 +462,79 @@ describe("S3CompatibleBlockStore", () => {
     await expect(put.put(cid, copyGuarded, { maxBytes: 7 }))
       .rejects.toBeInstanceOf(LimitExceededError);
     expect(putCalls).toBe(0);
+  });
+
+  test("bounds endless empty response chunks and cancels without waiting", async () => {
+    const cid = cidForBytes(new Uint8Array());
+    let pulls = 0;
+    let cancellations = 0;
+    const store = fixtureStore(fakeFetch(() => new Response(
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          pulls += 1;
+          controller.enqueue(new Uint8Array());
+        },
+        cancel() {
+          cancellations += 1;
+          return new Promise(() => undefined);
+        },
+      }),
+      { status: 200 },
+    )));
+
+    await expect(settlesWithin(store.get(cid, { maxBytes: 0 })))
+      .rejects.toThrow("S3-compatible block response was too fragmented.");
+    expect(pulls).toBeGreaterThan(0);
+    expect(pulls).toBeLessThanOrEqual(EXPECTED_S3_RESPONSE_CHUNK_LIMIT + 2);
+    expect(cancellations).toBe(1);
+  });
+
+  test("accepts the fragment ceiling and refuses the next non-empty chunk", async () => {
+    const acceptedBytes =
+      new Uint8Array(EXPECTED_S3_RESPONSE_CHUNK_LIMIT).fill(7);
+    const acceptedCid = cidForBytes(acceptedBytes);
+    let acceptedOffset = 0;
+    const accepted = fixtureStore(fakeFetch(() => new Response(
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (acceptedOffset >= acceptedBytes.byteLength) {
+            controller.close();
+            return;
+          }
+          controller.enqueue(
+            acceptedBytes.slice(acceptedOffset, acceptedOffset + 1),
+          );
+          acceptedOffset += 1;
+        },
+      }),
+      { status: 200 },
+    )));
+    await expect(accepted.get(acceptedCid, {
+      maxBytes: acceptedBytes.byteLength,
+    })).resolves.toEqual(acceptedBytes);
+
+    const bytes =
+      new Uint8Array(EXPECTED_S3_RESPONSE_CHUNK_LIMIT + 1).fill(7);
+    const cid = cidForBytes(bytes);
+    let pulls = 0;
+    let cancellations = 0;
+    const store = fixtureStore(fakeFetch(() => new Response(
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          pulls += 1;
+          controller.enqueue(new Uint8Array([7]));
+        },
+        cancel() {
+          cancellations += 1;
+        },
+      }),
+      { status: 200 },
+    )));
+
+    await expect(store.get(cid, { maxBytes: bytes.byteLength }))
+      .rejects.toThrow("S3-compatible block response was too fragmented.");
+    expect(pulls).toBeLessThanOrEqual(EXPECTED_S3_RESPONSE_CHUNK_LIMIT + 2);
+    expect(cancellations).toBe(1);
   });
 
   test("honors pre-abort and in-flight abort without reflecting provider failures", async () => {
