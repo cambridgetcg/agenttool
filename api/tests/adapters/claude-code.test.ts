@@ -98,6 +98,7 @@ describe("GET /v1/adapters/claude-code (default JSON)", () => {
       "#!/usr/bin/env bash",
       "set -euo pipefail",
       "security find-generic-password -s 'agenttool:",
+      '[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]',
       "secret-tool lookup service 'agenttool:",
       `$HOME/.config/agenttool/${namespace}/key`,
       'KEY_MODE" = "600',

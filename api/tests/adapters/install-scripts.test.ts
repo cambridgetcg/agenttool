@@ -213,6 +213,11 @@ describe("claude-code install script — fresh project", () => {
     expect(command).toBe(
       '"$CLAUDE_PROJECT_DIR/.claude/hooks/agenttool-wake.sh"',
     );
+    const hook = await readFile(
+      join(dir, ".claude/hooks/agenttool-wake.sh"),
+      "utf8",
+    );
+    expect(hook).toContain('[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]');
 
     // Execute the exact command through the same shell boundary Claude uses.
     const proc = Bun.spawn(["/bin/bash", "-c", command], {
