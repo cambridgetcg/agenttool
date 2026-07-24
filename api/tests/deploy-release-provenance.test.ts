@@ -696,7 +696,14 @@ describe("deploy release provenance spine", () => {
       readFile(join(projectRoot, "apps/docs/_headers"), "utf8"),
     ]);
 
-    for (const page of ["data", "packages", "pathways", "tutorial"]) {
+    expect(deploy).toContain(
+      '"apps/docs/index.html|https://docs.agenttool.dev/"',
+    );
+    expect(headers).toMatch(
+      /\n\/\n(?:  [^\n]+\n)*?  Cache-Control: public, max-age=0, must-revalidate, no-transform/,
+    );
+
+    for (const page of ["browser", "data", "packages", "pathways", "tutorial"]) {
       expect(deploy).toContain(
         `"apps/docs/${page}.html|https://docs.agenttool.dev/${page}"`,
       );

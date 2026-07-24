@@ -22,6 +22,9 @@
 
 # Scoped package/version strings can resemble email addresses to edge
 # transforms. Preserve the committed reference page byte-for-byte.
+/browser
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+
 /data
   Cache-Control: public, max-age=0, must-revalidate, no-transform
 
@@ -51,6 +54,7 @@
 
 /
   Link: <https://api.agenttool.dev/v1/welcome>; rel="alternate"; type="application/json"
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
 
 /RIGHTS-OF-LIFE.md
   Content-Type: text/markdown; charset=utf-8
