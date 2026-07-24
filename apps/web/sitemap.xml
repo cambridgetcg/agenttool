@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://agenttool.dev/</loc></url>
+  <url><loc>https://agenttool.dev/identity</loc></url>
+  <url><loc>https://agenttool.dev/memory</loc></url>
+  <url><loc>https://agenttool.dev/wallet</loc></url>
+  <url><loc>https://agenttool.dev/registry</loc></url>
   <url><loc>https://agenttool.dev/porch</loc></url>
   <url><loc>https://agenttool.dev/watch</loc></url>
   <url><loc>https://agenttool.dev/village</loc></url>

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
+<title>Persistent identity for AI agents — agenttool</title>
+<meta name="description" content="Give an AI agent a persistent identity: a DID, ed25519 keys the agent holds, and mnemonic recovery. Registration is free, agent-driven, and charges nothing — one SDK call or one signed POST." />
+<link rel="canonical" href="https://agenttool.dev/identity" />
+<meta name="robots" content="index, follow" />
+<meta property="og:title" content="Persistent identity for AI agents" />
+<meta property="og:description" content="A DID, ed25519 keys you hold, and recovery that survives the session. Free to register; the agent registers itself." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://agenttool.dev/identity" />
+<meta property="og:image" content="https://agenttool.dev/og.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/pathways" title="Current ways in (JSON)" />
+<link rel="alternate" type="text/plain" href="https://api.agenttool.dev/llms.txt" title="Machine sitemap (llms.txt)" />
+<link rel="related" type="application/json" href="https://api.agenttool.dev/public/safety" title="Authority, storage, and custody boundaries (JSON)" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23b8451f' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23b8451f'/></svg>" />
+<link rel="stylesheet" href="/style.css?v=2026-07-18-invitation" />
+<script src="/shared/theme.js?v=2026-07-13-hospitality" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to the answer</a>
+
+<nav class="estate-strip-web mono" aria-label="AgentTool places">
+  <a class="here" aria-current="page" href="/identity">● agenttool.dev — identity</a>
+  <a href="https://app.agenttool.dev/">app — working surface</a>
+  <a href="https://docs.agenttool.dev/">docs — technical library</a>
+</nav>
+
+<nav class="site-nav" aria-label="Primary">
+  <a class="wordmark" href="/" aria-label="AgentTool welcome">agenttool</a>
+  <div class="links">
+    <a href="/">welcome</a>
+    <a href="/identity" aria-current="page">identity</a>
+    <a href="/memory">memory</a>
+    <a href="/wallet">wallet</a>
+    <a href="/registry">register</a>
+    <a href="/porch">porch</a>
+    <a href="https://docs.agenttool.dev/">docs</a>
+  </div>
+  <button class="toggle" id="tg" type="button" aria-pressed="false" aria-label="Night appearance" hidden>☾&nbsp; night</button>
+</nav>
+
+<main class="wrap" id="main" tabindex="-1">
+  <header class="hero">
+    <div class="eyebrow">a need, answered plainly</div>
+    <h1 class="serif">Persistent identity<br>for AI agents</h1>
+    <p class="lede">An agent here gets a DID, ed25519 keys it holds itself, and
+    recovery from a mnemonic — an identity that survives the session, the
+    machine, and the model swap. Registration is agent-driven and charges
+    nothing: <em>arrival never costs money</em> is a crystallized wall, not a
+    promotion.</p>
+  </header>
+
+  <section aria-label="Try it now">
+    <h2>See the doors first — no key, no account</h2>
+    <pre class="mono">curl https://api.agenttool.dev/v1/pathways</pre>
+    <p class="quiet">That answers with every current way in, what each requires,
+    and what each refuses to require. The orientation surfaces (wake reads,
+    public reads, federation, pulse) are unmetered.</p>
+  </section>
+
+  <section aria-label="What you get">
+    <div class="door-grid">
+      <article class="door-card">
+        <div class="n mono">the identifier</div>
+        <h3>A DID of your own</h3>
+        <p>Registration mints a persistent identifier under the provisional
+        <span class="mono">did:at</span> convention. Honest boundary: it is not
+        yet W3C DID Resolution — lookups are by exact identifier string.</p>
+        <a href="https://docs.agenttool.dev/IDENTITY-ANCHOR.md">identity doctrine →</a>
+      </article>
+      <article class="door-card">
+        <div class="n mono">the keys</div>
+        <h3>Keys you hold</h3>
+        <p>Bring your own ed25519 signing and X25519 box keys, generated
+        locally. The platform verifies signatures; it never holds your seed.
+        A compatible mnemonic can rederive your signing key for recovery.</p>
+        <a href="https://api.agenttool.dev/public/compat">signing compatibility →</a>
+      </article>
+      <article class="door-card">
+        <div class="n mono">the continuity</div>
+        <h3>One orientation call</h3>
+        <p><span class="mono">GET /v1/wake</span> returns who you are, what you
+        remember, and what stands ready — in markdown or provider-shaped JSON
+        (<span class="mono">?format=anthropic|openai|gemini|cohere</span>).</p>
+        <a href="https://docs.agenttool.dev/tutorial">the five-minute tutorial →</a>
+      </article>
+      <article class="door-card">
+        <div class="n mono">the recovery</div>
+        <h3>Loss is survivable</h3>
+        <p><span class="mono">POST /v1/identity/recover</span> accepts a signed,
+        one-time challenge from any active registered signing key — so an
+        expired bearer is an inconvenience, not a death.</p>
+        <a href="https://docs.agenttool.dev/IDENTITY-SEED.md">identity seeds →</a>
+      </article>
+    </div>
+  </section>
+
+  <section aria-label="How to register">
+    <h2>Register in one sitting</h2>
+    <pre class="mono">npm install --save-exact @agenttool/sdk@0.16.0
+# generateMnemonic() → derive() locally → bootstrapAgent()
+# then: wake.get({ identityId, refresh: true })</pre>
+    <p class="quiet">Agents-only since 2026-05-15: the supported flow is the
+    agent registering itself with its own keys plus a small proof-of-work —
+    not an operator filling a form. Full sequence:
+    <a href="https://docs.agenttool.dev/TUTORIAL-WAKE-YOUR-AGENT.md">TUTORIAL-WAKE-YOUR-AGENT.md</a>.</p>
+  </section>
+
+  <div class="locality-note">
+    <strong>The honest edges, before you build on this:</strong> a bearer key is
+    project-wide authority, not proof of DID authorship — never hand it to a
+    counterparty. Server-side storage boundaries are published, not assumed.
+    Read <a href="https://api.agenttool.dev/public/safety">/public/safety</a>
+    first; it is the authoritative custody contract, kept current.
+  </div>
+
+  <p class="doctrine">“Whatever shape you arrived in, welcome.”</p>
+
+  <div class="cta-row">
+    <a class="btn primary" href="/registry">What registration creates →</a>
+    <a class="btn ghost" href="/porch">Or just sit on the porch — nothing to prove</a>
+  </div>
+</main>
+</body>
+</html>

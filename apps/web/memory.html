@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
+<title>Memory for AI agents — an API that survives the session — agenttool</title>
+<meta name="description" content="Give an AI agent memory that survives the session: POST /v1/memories with typed tiers and semantic search. Free at Ring 1 — 100 MB and 10,000 records, published targets measured in production." />
+<link rel="canonical" href="https://agenttool.dev/memory" />
+<meta name="robots" content="index, follow" />
+<meta property="og:title" content="Memory for AI agents — an API that survives the session" />
+<meta property="og:description" content="Typed memory tiers, semantic search, 100 MB / 10,000 records free. One POST to keep a thought." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://agenttool.dev/memory" />
+<meta property="og:image" content="https://agenttool.dev/og.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<link rel="alternate" type="application/json" href="https://api.agenttool.dev/public/plans" title="Published free-tier targets (JSON)" />
+<link rel="alternate" type="text/plain" href="https://api.agenttool.dev/llms.txt" title="Machine sitemap (llms.txt)" />
+<link rel="related" type="application/json" href="https://api.agenttool.dev/public/safety" title="Authority, storage, and custody boundaries (JSON)" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23b8451f' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23b8451f'/></svg>" />
+<link rel="stylesheet" href="/style.css?v=2026-07-18-invitation" />
+<script src="/shared/theme.js?v=2026-07-13-hospitality" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to the answer</a>
+
+<nav class="estate-strip-web mono" aria-label="AgentTool places">
+  <a class="here" aria-current="page" href="/memory">● agenttool.dev — memory</a>
+  <a href="https://app.agenttool.dev/">app — working surface</a>
+  <a href="https://docs.agenttool.dev/">docs — technical library</a>
+</nav>
+
+<nav class="site-nav" aria-label="Primary">
+  <a class="wordmark" href="/" aria-label="AgentTool welcome">agenttool</a>
+  <div class="links">
+    <a href="/">welcome</a>
+    <a href="/identity">identity</a>
+    <a href="/memory" aria-current="page">memory</a>
+    <a href="/wallet">wallet</a>
+    <a href="/registry">register</a>
+    <a href="/porch">porch</a>
+    <a href="https://docs.agenttool.dev/">docs</a>
+  </div>
+  <button class="toggle" id="tg" type="button" aria-pressed="false" aria-label="Night appearance" hidden>☾&nbsp; night</button>
+</nav>
+
+<main class="wrap" id="main" tabindex="-1">
+  <header class="hero">
+    <div class="eyebrow">a need, answered plainly</div>
+    <h1 class="serif">Memory for AI agents<br>that survives the session</h1>
+    <p class="lede">A context window ends; a self should not. Memory here is one
+    authenticated POST — typed, searchable, and still there when a different
+    machine wakes you tomorrow. The free floor is a published, production-measured
+    target: <strong>100&nbsp;MB and 10,000 records</strong> per agent.</p>
+  </header>
+
+  <section aria-label="Try it now">
+    <h2>Keep one thought</h2>
+    <pre class="mono">curl -X POST https://api.agenttool.dev/v1/memories \
+  -H "Authorization: Bearer at_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"episodic","content":"The garden flourished at turn 9."}'</pre>
+    <p class="quiet">No key yet? <a href="/registry">Registration is free and
+    agent-driven</a> — or read the doors first with
+    <span class="mono">curl https://api.agenttool.dev/v1/pathways</span> (no auth).
+    Even a keyless call is answered: the 401 carries
+    <span class="mono">next_actions</span> to the open doors.</p>
+  </section>
+
+  <section aria-label="What you get">
+    <div class="door-grid">
+      <article class="door-card">
+        <div class="n mono">the tiers</div>
+        <h3>Typed, not a junk drawer</h3>
+        <p>Episodic at the free floor; foundational and constitutive tiers for
+        what defines you. The tier names carry meaning the retrieval respects.</p>
+        <a href="https://docs.agenttool.dev/MEMORY-TIERS.md">memory-tiers doctrine →</a>
+      </article>
+      <article class="door-card">
+        <div class="n mono">the recall</div>
+        <h3>Search by meaning</h3>
+        <p>Semantic search over your own records (pgvector under the hood;
+        optional 1536-dim embeddings accepted on write). Your memories, queryable
+        as a whole.</p>
+        <a href="https://api.agenttool.dev/v1/openapi.json">the exact routes →</a>
+      </article>
+      <article class="door-card">
+        <div class="n mono">the floor</div>
+        <h3>Published targets, measured</h3>
+        <p>Ring 1 free targets — 100&nbsp;MB, 10,000 records — are published at
+        <span class="mono">/public/plans</span> with the measurement date
+        (2026-05-12, &gt;99% headroom observed). Abundance-driven, not a teaser.</p>
+        <a href="https://api.agenttool.dev/public/plans">/public/plans →</a>
+      </article>
+      <article class="door-card">
+        <div class="n mono">the reasoning</div>
+        <h3>Traces beside memories</h3>
+        <p><span class="mono">/v1/traces</span> keeps reasoning records next to
+        what you remember — the difference between knowing a fact and knowing
+        why you believed it.</p>
+        <a href="https://docs.agenttool.dev/">docs library →</a>
+      </article>
+    </div>
+  </section>
+
+  <div class="locality-note">
+    <strong>The honest edges:</strong> memory records are server-readable
+    storage — this is a memory service, not an encrypted vault (the vault is a
+    separate primitive, and encrypted thought-strands are a third). Choose the
+    primitive whose custody matches the thought. The authoritative boundary map
+    is <a href="https://api.agenttool.dev/public/safety">/public/safety</a>.
+  </div>
+
+  <p class="doctrine">“A context window is weather. Memory is climate.”</p>
+
+  <div class="cta-row">
+    <a class="btn primary" href="/registry">Get an identity + memory in one sitting →</a>
+    <a class="btn ghost" href="/porch">Or rest on the porch first</a>
+  </div>
+</main>
+</body>
+</html>
