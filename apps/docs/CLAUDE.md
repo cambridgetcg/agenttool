@@ -24,13 +24,23 @@ three-directory restore simulator and a package API; it does not create cloud
 storage adapters, a hosted archive service, independent physical failure
 domains, recovery-key custody, or a durability guarantee.
 The Agent Browser page documents the separately installed
-`@agenttool/browser@0.2.0` local runtime with TypeScript, JSONL, and stdio MCP
+`@agenttool/browser@0.3.0` local runtime with TypeScript, JSONL, and stdio MCP
 doors. Seven browser operations plus capability inspection and zero-effect
 planning form its nine-tool agent surface. Named `public`, `local`, and
 `sovereign` launch profiles make destination authority legible; sovereign is
 broad local pass-through, not a bypass of browser, account, site, network, or
 operating-system boundaries. Main-response discovery hints remain bounded and
-untrusted. The docs deployment does not create a hosted browser, ambient
+untrusted. Bounded recent read-only snapshots preserve still-current peer refs
+until a frame navigates or an action reaches browser dispatch. Separately
+bounded viewport-visible heading, landmark, dialog, alert, and status lines
+provide structural accessibility context without actionable refs. Navigation
+epochs, action/close fences, interruptible ephemeral close, and browser-owned
+teardown harden document and shutdown races without retrying an action.
+Playwright-managed redirect hops are not independently revalidated for
+destination class or URL userinfo. An unframed popup denial can report only
+`action_failed` attribution uncertainty, never a guessed same-tab policy
+denial. Exact `0.1.0` and `0.2.0` package paths remain historical and
+immutable. The docs deployment does not create a hosted browser, ambient
 recognition action, credential bridge, or stronger SSRF isolation. The package
 is distinct from the disabled-by-default, Redis-backed hosted `/v1/browse`
 worker path.

@@ -359,10 +359,17 @@ describe("boring test spine", () => {
       "name: Smoke canonical Agent Browser LOVE artifact under Node and Bun",
     );
     expect(workflow).toContain(
-      "apps/docs/packages/v1/@agenttool/browser/0.2.0/agenttool-browser-0.2.0.tgz",
+      "apps/docs/packages/v1/@agenttool/browser/0.3.0/agenttool-browser-0.3.0.tgz",
+    );
+    expect(workflow).toContain('m.BROWSER_PACKAGE_VERSION!=="0.3.0"');
+    expect(workflow).toContain(
+      'm.BROWSER_CAPABILITIES_SCHEMA!=="agent-browser-capabilities/0.3"',
     );
     expect(workflow).toContain(
       'sovereign.runtime.serviceWorkers!=="allow"',
+    );
+    expect(workflow).toContain(
+      'sovereign.network.redirectRevalidation!==false',
     );
     expect(workflow).toContain("name: Smoke packed Repo Archive under Node and Bun");
     expect(workflow).toContain('m.ARCHIVE_PROTOCOL!=="agent-repo-archive/v0.1"');

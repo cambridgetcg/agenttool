@@ -8,7 +8,7 @@ LOVE, npm, and GitHub Releases does not change that runtime boundary.
 
 ## Authority direction
 
-Version `0.2.0` carries an authority model built around one rule:
+Version `0.3.0` carries forward the authority model built around one rule:
 **sandbox consequences, not curiosity**.
 Destination reach, state persistence, data disclosure, and executable powers
 are separate capabilities. Do not turn a restriction on one into an
@@ -109,12 +109,13 @@ explicit local dogfood check; it is never a required CI dependency.
 
 ## Release boundary
 
-Versions `0.1.0` and `0.2.0` are exact LOVE releases with npm and GitHub Release
-mirrors. Release work must keep each version's bytes immutable and keep the
-current LOVE, npm, and GitHub Release bytes identical through the protected
-allowlisted workflow. The deployed docs/catalog is a distribution surface, not
-a hosted arbitrary-target browser or permission to add one. Authority,
-capability, and planning material belongs to the exact `0.2.0` artifact, not
-the immutable `0.1.0` bytes. Any source change after `0.2.0`, especially a
-machine-readable capability contract change, requires a new package version
-before publication.
+Versions `0.1.0`, `0.2.0`, and `0.3.0` are exact LOVE releases with npm and
+GitHub Release mirrors. Release work must keep each version's bytes immutable
+and keep the current LOVE, npm, and GitHub Release bytes identical through the
+protected allowlisted workflow. The deployed docs/catalog is a distribution
+surface, not a hosted arbitrary-target browser or permission to add one.
+Retained observations, structural accessibility context, race hardening, and
+the `agent-browser-capabilities/0.3` contract belong to the exact `0.3.0`
+artifact, not the immutable `0.1.0` or `0.2.0` bytes. Any source change after
+`0.3.0`, especially a machine-readable capability contract change, requires a
+new package version before publication.

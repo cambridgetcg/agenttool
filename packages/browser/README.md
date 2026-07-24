@@ -2,27 +2,28 @@
 
 A small local browser surface for agents.
 
-`0.2.0` is distributed as an exact LOVE package and mirrored to npm. It remains
+`0.3.0` is distributed as an exact LOVE package and mirrored to npm. It remains
 a local runtime: the docs deployment publishes package bytes and documentation,
 not a hosted browser-control service.
 
-The source below also describes unreleased work intended for the next package
-version. The exact `0.2.0` artifact remains immutable; do not publish these
-source bytes under that version.
+Version `0.3.0` adds collaboration-safe retained observations, structural
+accessibility context, stricter navigation/action/close race handling, and an
+explicit capability declaration for browser-managed redirect hops. The exact
+`0.1.0` and `0.2.0` artifacts remain immutable.
 
 ```bash
-npm install --save-exact @agenttool/browser@0.2.0
+npm install --save-exact @agenttool/browser@0.3.0
 ```
 
 Registry-neutral exact artifact:
 
 ```bash
 npm install --save-exact \
-  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.2.0/agenttool-browser-0.2.0.tgz
+  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.3.0/agenttool-browser-0.3.0.tgz
 ```
 
 The sibling
-[LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.2.0/manifest.json)
+[LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.3.0/manifest.json)
 names the artifact size and SHA-256. A URL install does not compare those
 values automatically; verify them first when that boundary matters.
 
@@ -256,8 +257,8 @@ and cannot alter the same underlying facts or widen authority.
 
 ## Authority profiles
 
-Version `0.2.0` names the compatibility default explicitly as
-`authority: "public"` and provides three launch-time profiles:
+Version `0.2.0` introduced the three named launch-time profiles retained by
+`0.3.0`:
 
 | Profile | Policy-checked HTTP(S) requests | WebSockets | Service workers |
 |---|---|---|---|
@@ -278,7 +279,7 @@ destinations available to the host, including local services. In a persistent
 profile, service-worker and site state can outlive the process. Sovereign is
 therefore broad local process authority, not an isolation or SSRF claim.
 
-Destination authority does not imply every other browser power. In `0.2.0`,
+Destination authority does not imply every other browser power. In `0.3.0`,
 file upload, automatic download, arbitrary JavaScript evaluation, credential
 injection/lookup, ambient profile import, shell execution, and extension
 installation remain unsupported and are reported as such by `capabilities()`.
@@ -343,7 +344,7 @@ Do this only for a caller-controlled development network. Tool calls cannot
 widen either profile or network authority after launch. Reserved destinations
 remain blocked even with this opt-in.
 
-Version `0.2.0` retains `allowPublicWeb` / `allowLocalNetwork`,
+Version `0.3.0` retains `allowPublicWeb` / `allowLocalNetwork`,
 `--public-web` / `--local-network`, and their environment variables as a
 deprecated `0.1.0` compatibility surface. Do not combine the `authority` form
 with any legacy authority option in one launch; mixed configuration is
@@ -390,7 +391,7 @@ unrecognized carriers such as `srcset`, meta refresh, CSS `url()`, or malformed
 markup, browser storage, canvas/image content, or screenshot pixels. It cannot
 undo data already submitted to a site.
 
-The published `0.2.0` package intentionally has no:
+The published `0.3.0` package intentionally has no:
 
 - arbitrary JavaScript evaluation;
 - file-upload operation;
@@ -405,8 +406,8 @@ model-visible state, or advisory plans.
 
 ## Network limitation
 
-The `0.2.0` `public` and `local` profiles—and the historical `0.1.0`
-policy—check destinations before navigation, including DNS answers.
+The `0.3.0` `public` and `local` profiles preserve the `0.2.0` and historical
+`0.1.0` destination checks before navigation, including DNS answers.
 Playwright then owns the browser connection. The package cannot pin the
 checked DNS answer to the later socket or verify the connected peer address,
 and ambient proxies or browser routing can change the path.
