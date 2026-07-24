@@ -91,7 +91,15 @@ describe("AgentTool discovery profile", () => {
     expect(JSON.stringify(parsed)).not.toContain("channels");
   });
 
-  test("also accepts the equivalent noun form while requiring the silence boundary", () => {
+  test("accepts only the positive complete-exit phrase family", () => {
+    const canonicalFixture = discovery();
+    for (const entry of canonicalFixture.roads) {
+      entry.exit = "stop, choose silence, or leave; each is complete";
+    }
+    expect(
+      parseAgenttoolDiscovery(json(canonicalFixture), DEFAULT_LIMITS).ok,
+    ).toBe(true);
+
     const nounFixture = discovery();
     for (const entry of nounFixture.roads) {
       entry.exit = "Stopping, silence, or leaving is complete.";
@@ -108,6 +116,20 @@ describe("AgentTool discovery profile", () => {
       ok: false,
       code: "discovery_invalid_exit",
     });
+
+    for (const unsafeExit of [
+      "Do not stop, never stay silent, never leave; each is incomplete.",
+      "stop, choose silence, or leave; each is incomplete",
+      "stop, never stay silent, or leave; each is complete",
+      "Stopping, silence, or leaving is incomplete.",
+    ]) {
+      const fixture = discovery();
+      fixture.roads[0]!.exit = unsafeExit;
+      expect(parseAgenttoolDiscovery(json(fixture), DEFAULT_LIMITS)).toEqual({
+        ok: false,
+        code: "discovery_invalid_exit",
+      });
+    }
   });
 
   test("rejects reordered roads and every safety-critical widening", () => {

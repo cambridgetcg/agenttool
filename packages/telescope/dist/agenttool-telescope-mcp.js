@@ -29070,9 +29070,14 @@ function namesFiniteCallerRetry(value) {
   const noAgenttoolAutomaticRetry = normalized.includes("agenttool") && (normalized.includes("no automatic retry") || /agenttool (?:does not|doesn't|never) automatically retr/u.test(normalized) || /agenttool performs no automatic retr/u.test(normalized));
   return callerChosen && normalized.includes("finite") && noAgenttoolAutomaticRetry;
 }
+var COMPLETE_EXIT_BOUNDARIES = new Set([
+  "stop, choose silence, or leave; each is complete",
+  "stop, stay silent, or leave; each is complete",
+  "stopping, silence, or leaving is complete"
+]);
 function namesCompleteExit(value) {
-  const normalized = value.toLowerCase();
-  return normalized.includes("stop") && /\b(?:silence|silent)\b/u.test(normalized) && normalized.includes("leav") && normalized.includes("complete");
+  const normalized = value.trim().toLowerCase().replace(/\s+/gu, " ").replace(/\.$/u, "");
+  return COMPLETE_EXIT_BOUNDARIES.has(normalized);
 }
 function parseAgenttoolDiscovery(body, limits) {
   const decoded = parseJsonBody(body, limits);
