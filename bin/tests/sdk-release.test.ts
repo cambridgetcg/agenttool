@@ -158,8 +158,8 @@ describe("SDK source and builder identity", () => {
     expect(manifest.source.revision).toMatch(/^[a-f0-9]{40}$/);
 
     const headers = read("apps/docs/_headers");
-    expect(headers).toContain(`/${manifestPath}`);
-    expect(headers).toContain(`/${artifactPath}`);
+    expect(headers).toContain("/packages/v1/@agenttool/:package/:version/manifest.json");
+    expect(headers).toContain("/packages/v1/@agenttool/:package/:version/*.tgz");
 
     const ci = read(".github/workflows/ci.yml");
     expect(ci).toContain(`apps/docs/${manifestPath}`);
