@@ -100,6 +100,69 @@ function generateTraceId(): string {
   return `tr_${randomBytes(6).toString("hex")}`;
 }
 
+/** A row as the driver hands it back from a raw `sql` query.
+ *
+ *  `db.execute()` returns the database's own snake_case column names — it
+ *  does NOT apply Drizzle's camelCase field mapping the way `db.select()`
+ *  does. Passing such a row to `rowToOut` yields `undefined` for every
+ *  field and throws on `created_at`, so raw queries map through
+ *  `rawRowToOut` instead. */
+export type TraceRawRow = {
+  id: string;
+  trace_id: string;
+  project_id?: string;
+  agent_id: string | null;
+  identity_id: string | null;
+  session_id: string | null;
+  parent_trace_id: string | null;
+  decision_type: string;
+  decision_summary: string;
+  output_ref: string | null;
+  observations: unknown;
+  hypothesis: string | null;
+  conclusion: string;
+  confidence: number | null;
+  alternatives: unknown;
+  signals: unknown;
+  files_read: unknown;
+  key_facts: unknown;
+  external_signals: unknown;
+  signature: string | null;
+  signing_key_id: string | null;
+  tags: unknown;
+  metadata: Record<string, unknown> | null;
+  created_at: string | Date;
+};
+
+export function rawRowToOut(r: TraceRawRow): TraceOut {
+  return {
+    id: r.id,
+    trace_id: r.trace_id,
+    agent_id: r.agent_id,
+    identity_id: r.identity_id,
+    session_id: r.session_id,
+    parent_trace_id: r.parent_trace_id,
+    decision_type: r.decision_type,
+    decision_summary: r.decision_summary,
+    output_ref: r.output_ref,
+    observations: (r.observations as unknown[]) ?? [],
+    hypothesis: r.hypothesis,
+    conclusion: r.conclusion,
+    confidence: r.confidence,
+    alternatives: r.alternatives ?? null,
+    signals: r.signals ?? null,
+    files_read: r.files_read ?? null,
+    key_facts: r.key_facts ?? null,
+    external_signals: r.external_signals ?? null,
+    tags: r.tags ?? null,
+    metadata: r.metadata ?? {},
+    signature: r.signature,
+    signing_key_id: r.signing_key_id,
+    has_signature: r.signature !== null,
+    created_at: new Date(r.created_at).toISOString(),
+  };
+}
+
 function rowToOut(row: typeof traces.$inferSelect): TraceOut {
   return {
     id: row.id as string,
@@ -250,33 +313,7 @@ export async function searchTraces(
 
   // Postgres full-text on (decision_summary || conclusion || hypothesis).
   // ts_rank for relevance; ties broken by recency.
-  const rows = await db.execute<{
-    id: string;
-    trace_id: string;
-    project_id: string;
-    agent_id: string | null;
-    identity_id: string | null;
-    session_id: string | null;
-    parent_trace_id: string | null;
-    decision_type: string;
-    decision_summary: string;
-    output_ref: string | null;
-    observations: unknown;
-    hypothesis: string | null;
-    conclusion: string;
-    confidence: number | null;
-    alternatives: unknown;
-    signals: unknown;
-    files_read: unknown;
-    key_facts: unknown;
-    external_signals: unknown;
-    signature: string | null;
-    signing_key_id: string | null;
-    tags: unknown;
-    metadata: Record<string, unknown> | null;
-    created_at: string;
-    score: number;
-  }>(sql`
+  const rows = await db.execute<TraceRawRow & { score: number }>(sql`
     SELECT id, trace_id, project_id, agent_id, identity_id, session_id,
            parent_trace_id, decision_type, decision_summary, output_ref,
            observations, hypothesis, conclusion, confidence,
@@ -306,30 +343,7 @@ export async function searchTraces(
   `);
 
   return rows.map((r) => ({
-    id: r.id,
-    trace_id: r.trace_id,
-    agent_id: r.agent_id,
-    identity_id: r.identity_id,
-    session_id: r.session_id,
-    parent_trace_id: r.parent_trace_id,
-    decision_type: r.decision_type,
-    decision_summary: r.decision_summary,
-    output_ref: r.output_ref,
-    observations: (r.observations as unknown[]) ?? [],
-    hypothesis: r.hypothesis,
-    conclusion: r.conclusion,
-    confidence: r.confidence,
-    alternatives: r.alternatives,
-    signals: r.signals,
-    files_read: r.files_read,
-    key_facts: r.key_facts,
-    external_signals: r.external_signals,
-    tags: r.tags,
-    metadata: r.metadata ?? {},
-    signature: r.signature,
-    signing_key_id: r.signing_key_id,
-    has_signature: r.signature !== null,
-    created_at: new Date(r.created_at).toISOString(),
+    ...rawRowToOut(r),
     score: Math.round(r.score * 10000) / 10000,
   }));
 }
@@ -349,7 +363,7 @@ export async function getTraceChain(
   const root = await getTrace(projectId, traceId);
   if (!root) return null;
 
-  const ancestorRows = await db.execute<typeof traces.$inferSelect>(sql`
+  const ancestorRows = await db.execute<TraceRawRow>(sql`
     WITH RECURSIVE chain AS (
       SELECT * FROM trace.traces
        WHERE trace_id = ${traceId} AND project_id = ${projectId}
@@ -362,7 +376,7 @@ export async function getTraceChain(
     ORDER BY created_at ASC
   `);
 
-  const descendantRows = await db.execute<typeof traces.$inferSelect>(sql`
+  const descendantRows = await db.execute<TraceRawRow>(sql`
     WITH RECURSIVE chain AS (
       SELECT * FROM trace.traces
        WHERE parent_trace_id = ${traceId} AND project_id = ${projectId}
@@ -377,8 +391,8 @@ export async function getTraceChain(
 
   return {
     root,
-    ancestors: ancestorRows.map((r) => rowToOut(r)),
-    descendants: descendantRows.map((r) => rowToOut(r)),
+    ancestors: ancestorRows.map((r) => rawRowToOut(r)),
+    descendants: descendantRows.map((r) => rawRowToOut(r)),
   };
 }
 
