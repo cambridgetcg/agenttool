@@ -5,10 +5,11 @@ routes, production egress, protocol invocation, npm publication, or the LOVE
 release inventory.
 
 The current source release is `0.2.2`; immutable `0.1.0`, `0.2.0`, and
-`0.2.1` artifacts remain separate historical bytes. Version `0.2.2` corrects
-the local parser's handling of the canonical “stay silent” exit wording and
-fragment-bearing HTTPS catalog targets; it does not widen the scan or report
-schema.
+`0.2.1` artifacts remain separate historical bytes. Version `0.2.2` accepts
+both “silence” and “silent” in the fixed complete-exit boundary and permits URI
+fragments on credential-free HTTPS catalog relation targets. The current
+AgentTool producer remains compatible with `0.2.1`; this compatibility
+broadening does not widen the scan or report schema.
 
 ## Commands
 

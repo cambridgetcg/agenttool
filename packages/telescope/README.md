@@ -10,10 +10,13 @@ commands from validated fields. It never executes those commands.
 The immutable `0.2.2` release is distributed as an exact `love-package/v1`
 artifact and may be mirrored through GitHub Releases and npm. The earlier
 `0.1.0`, `0.2.0`, and `0.2.1` bytes remain available through their exact
-manifests. Version `0.2.2` corrects two local parser assumptions found by live
-dogfood: it accepts the canonical “stay silent” exit wording and valid
-fragment-bearing HTTPS catalog targets. It does not add probes, follow catalog
-members, or change `agenttool-telescope/v0.2`.
+manifests. Version `0.2.2` corrects two local parser assumptions found during
+producer-consumer integration: it accepts either the noun “silence” or the
+adjective “silent” in the otherwise unchanged complete-exit boundary, and it
+accepts URI fragments on credential-free absolute HTTPS catalog relation
+targets. The current AgentTool compass and catalog remain deliberately
+compatible with immutable `0.2.1`. Version `0.2.2` does not add probes, follow
+catalog members, or change `agenttool-telescope/v0.2`.
 
 Each LOVE manifest records the expected byte size and SHA-256; each optional
 mirror can be independently absent, so query the exact version instead of
@@ -281,7 +284,8 @@ catalog observations. Consumers pinned to the earlier `v0.1` schema must not
 validate a `v0.2` report as though the extra fixed sources and surfaces were
 absent. The immutable published `@agenttool/telescope@0.2.0` bytes and their
 `v0.1` report remain unchanged; the immutable `0.2.1` bytes keep their original
-live-shaped parser mismatch and remain separately addressable.
+narrower wording and URI grammar and remain separately addressable. The current
+canonical AgentTool producer stays within that grammar.
 Reports keep these ideas separate:
 
 - HTTPS transport observation versus publisher assertion.
