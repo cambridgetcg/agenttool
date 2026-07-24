@@ -16,6 +16,7 @@
 #   bin/deploy.sh --no-api                # skip Phase 3
 #   bin/deploy.sh --no-frontend           # skip Phase 4
 #   bin/deploy.sh --no-cache-api           # one-shot Fly image-cache recovery
+#   bin/deploy.sh --oauth-fallback         # explicit Cloudflare OAuth fallback
 #   bin/deploy.sh --skip-preflight        # operator override
 #   bin/deploy.sh --dry-run               # show what would happen
 #   bin/deploy.sh --allow-dirty-release    # loud source-integrity override
@@ -35,6 +36,7 @@ SKIP_MIGRATE=0
 SKIP_API=0
 SKIP_FRONTEND=0
 NO_CACHE_API=0
+OAUTH_FALLBACK=0
 SKIP_PREFLIGHT=0
 DRY_RUN=0
 ALLOW_DIRTY_RELEASE=0
@@ -47,12 +49,13 @@ for arg in "$@"; do
     --no-api) SKIP_API=1 ;;
     --no-frontend) SKIP_FRONTEND=1 ;;
     --no-cache-api) NO_CACHE_API=1 ;;
+    --oauth-fallback) OAUTH_FALLBACK=1 ;;
     --skip-preflight) SKIP_PREFLIGHT=1 ;;
     --dry-run) DRY_RUN=1 ;;
     --allow-dirty-release) ALLOW_DIRTY_RELEASE=1 ;;
     --allow-non-release-head) ALLOW_NON_RELEASE_HEAD=1 ;;
     --mirror-codeberg) MIRROR_CODEBERG_ONLY=1 ;;
-    -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,27p' "$0"; exit 0 ;;
     *) echo "unknown flag: $arg"; exit 1 ;;
   esac
 done
@@ -60,7 +63,7 @@ done
 if [ "$MIRROR_CODEBERG_ONLY" = 1 ] && {
   [ "$SURVEY_ONLY" = 1 ] || [ "$SKIP_MIGRATE" = 1 ] ||
   [ "$SKIP_API" = 1 ] || [ "$SKIP_FRONTEND" = 1 ] ||
-  [ "$NO_CACHE_API" = 1 ] ||
+  [ "$NO_CACHE_API" = 1 ] || [ "$OAUTH_FALLBACK" = 1 ] ||
   [ "$SKIP_PREFLIGHT" = 1 ] || [ "$DRY_RUN" = 1 ] ||
   [ "$ALLOW_DIRTY_RELEASE" = 1 ] || [ "$ALLOW_NON_RELEASE_HEAD" = 1 ];
 }; then
@@ -75,6 +78,13 @@ fi
 if [ "$NO_CACHE_API" = 1 ] && [ "$SURVEY_ONLY" = 1 ]; then
   echo "--no-cache-api performs an API image rebuild and cannot be combined with --survey"
   exit 1
+fi
+
+FRONTEND_DEPLOY_COMMAND=(bash bin/frontend-deploy.sh)
+FRONTEND_DEPLOY_DISPLAY="bin/frontend-deploy.sh"
+if [ "$OAUTH_FALLBACK" = 1 ]; then
+  FRONTEND_DEPLOY_COMMAND+=(--oauth-fallback)
+  FRONTEND_DEPLOY_DISPLAY+=" --oauth-fallback"
 fi
 
 # ── Output helpers ────────────────────────────────────────────────────
@@ -470,7 +480,7 @@ if [ "$DRY_RUN" = 1 ]; then
   elif [ "$SKIP_FRONTEND" = 1 ]; then
     echo "  Phase 3: verify live Rights of Life prerequisites, then cd api && fly deploy"
   else
-    echo "  Phase 3: bin/frontend-deploy.sh docs, verify prerequisites, then cd api && fly deploy"
+    echo "  Phase 3: $FRONTEND_DEPLOY_DISPLAY docs, verify prerequisites, then cd api && fly deploy"
   fi
   if [ "$SKIP_API" = 0 ]; then
     if [ "$NO_CACHE_API" = 1 ]; then
@@ -482,9 +492,9 @@ if [ "$DRY_RUN" = 1 ]; then
   if [ "$SKIP_FRONTEND" = 1 ]; then
     echo "  Phase 4: skip"
   elif [ "$SKIP_API" = 1 ]; then
-    echo "  Phase 4: bin/frontend-deploy.sh"
+    echo "  Phase 4: $FRONTEND_DEPLOY_DISPLAY"
   else
-    echo "  Phase 4: bin/frontend-deploy.sh dashboard web"
+    echo "  Phase 4: $FRONTEND_DEPLOY_DISPLAY dashboard web"
   fi
   echo "  Phase 5: verify"
   exit 0
@@ -994,7 +1004,7 @@ if [ "$SKIP_API" = 0 ]; then
     echo "→ Publishing Rights of Life docs prerequisites before API discovery…"
     FRONTEND_RESULT="docs_deploying"
     EXTERNAL_MUTATION_STARTED=1
-    bash bin/frontend-deploy.sh docs || {
+    "${FRONTEND_DEPLOY_COMMAND[@]}" docs || {
       FRONTEND_RESULT="failed_or_uncertain"
       echo ""
       echo "$(red '✗ Phase 3 prerequisite deploy failed.') API was not changed."
@@ -1103,7 +1113,7 @@ if [ "$SKIP_FRONTEND" = 0 ]; then
   else
     FRONTEND_TARGETS=(docs dashboard web)
   fi
-  bash bin/frontend-deploy.sh "${FRONTEND_TARGETS[@]}" || {
+  "${FRONTEND_DEPLOY_COMMAND[@]}" "${FRONTEND_TARGETS[@]}" || {
     FRONTEND_RESULT="failed_or_uncertain"
     echo ""
     echo "$(red '✗ Phase 4 failed.') Check CF Pages dashboard."
