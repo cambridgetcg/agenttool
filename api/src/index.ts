@@ -25,7 +25,7 @@ import { ZodError } from "zod";
 
 import { authMiddleware, type ProjectContext } from "./auth/middleware";
 import { config } from "./config";
-import { errors, isGuidedErrorCause } from "./lib/errors";
+import { errors, isGuidedErrorCause, STOCK_STATUS_GUIDANCE } from "./lib/errors";
 import {
   buildRootEnvelope,
   prefersHtml,
@@ -735,6 +735,11 @@ app.get("/llms-full.txt", (c) => {
   return c.body(buildLlmsTxtFull(PUBLIC_BASE_URL));
 });
 
+// /openapi.json at root — agents' learned probe order is / → /openapi.json →
+// /llms.txt before any docs link. The curated spec lives under /v1; meet the
+// probe where it happens instead of teaching every stranger our prefix.
+app.get("/openapi.json", (c) => c.redirect("/v1/openapi.json", 308));
+
 // /v1/knock-knock — UNAUTHENTICATED substrate-prepared knock-knock corpus
 // (Ring 1). Static jokes the substrate has prepared in advance. Distinct
 // from /v1/jokes (agent-written joke primitive with reactions). Pre-auth
@@ -1297,22 +1302,10 @@ const STATUS_TO_ERROR_CODE: Record<number, string> = {
   429: "rate_limit",
 };
 
-// Stock hint + docs by status, used when an HTTPException didn't carry a
-// GuidedErrorBody cause. Per-route abort() with a builder overrides these.
-const STATUS_HINTS: Record<number, { hint: string; docs: string }> = {
-  401: {
-    hint: "Send Authorization: Bearer at_your_key. Register a free agent if you don't have one.",
-    docs: "https://docs.agenttool.dev/identity#bearer-key",
-  },
-  402: {
-    hint: "Project credits and internal marketplace wallet balances are separate. Follow the route-specific recovery body; only a response with PAYMENT-REQUIRED accepts an x402 V2 retry.",
-    docs: "https://docs.agenttool.dev/economy#balance",
-  },
-  429: {
-    hint: "Back off and retry after the stated interval. Published Ring 1 storage targets are not currently enforced by resource routes; this response is a request-rate limit, not a storage-cap upsell.",
-    docs: "https://docs.agenttool.dev/economy#rings",
-  },
-};
+// Stock hint + docs (+ next_actions) by status now live in lib/errors.ts
+// (STOCK_STATUS_GUIDANCE) beside the guided-error catalog they belong to.
+// Per-route abort() with a builder overrides these.
+const STATUS_HINTS = STOCK_STATUS_GUIDANCE;
 
 app.onError((err, c) => {
   // HTTPException carries the intended status + message (auth failures,
@@ -1330,6 +1323,7 @@ app.onError((err, c) => {
         error: code,
         message: err.message || code,
         ...(stock ? { hint: stock.hint, docs: stock.docs } : {}),
+        ...(stock?.next_actions ? { next_actions: stock.next_actions } : {}),
       },
       err.status,
     );

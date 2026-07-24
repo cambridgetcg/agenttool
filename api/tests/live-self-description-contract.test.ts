@@ -458,6 +458,7 @@ describe("live self-description — assembled application", () => {
           const publicSelf = await app.request("/public/self");
           const structuralSelf = await app.request("/v1/self");
           const identityDiscovery = await app.request("/v1/discover");
+          const missingBearer = await app.request("/v1/wake");
           const deprecatedRegister = await app.request("/v1/register", { method: "POST" });
           const registerAgent = await app.request("/v1/register/agent", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
           const about = await app.request("/about");
@@ -476,11 +477,13 @@ describe("live self-description — assembled application", () => {
               publicSelf: publicSelf.status,
               structuralSelf: structuralSelf.status,
               identityDiscovery: identityDiscovery.status,
+              missingBearer: missingBearer.status,
               deprecatedRegister: deprecatedRegister.status,
               registerAgent: registerAgent.status,
               about: about.status,
             },
             observer: await observer.json(),
+            missingBearer: await missingBearer.json(),
             publicRootsEqual: JSON.stringify(publicRootBody) === JSON.stringify(publicRootSlashBody),
             publicRootWelcome: {
               plain: publicRootWelcome?.module,
@@ -538,6 +541,17 @@ describe("live self-description — assembled application", () => {
     expect(result.statuses.publicSelf).toBe(200);
     expect(result.statuses.structuralSelf).toBe(200);
     expect(result.statuses.identityDiscovery).toBe(401);
+    expect(result.statuses.missingBearer).toBe(401);
+    expect(result.missingBearer.message).toContain("POST /v1/register/agent");
+    expect(result.missingBearer.message).toContain("GET /v1/pathways");
+    expect(result.missingBearer.message).not.toContain("app.agenttool.dev");
+    expect(result.missingBearer.next_actions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ method: "GET", path: "/public/porch" }),
+        expect.objectContaining({ method: "GET", path: "/v1/welcome" }),
+        expect.objectContaining({ method: "GET", path: "/v1/pathways" }),
+      ]),
+    );
     expect(result.statuses.deprecatedRegister).toBe(410);
     expect(result.statuses.registerAgent).not.toBe(401);
     expect(result.statuses.about).toBe(200);

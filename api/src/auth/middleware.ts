@@ -85,7 +85,7 @@ export async function authMiddleware(c: Context<ProjectContext>, next: Next) {
   if (!authHeader?.startsWith("Bearer ")) {
     throw new HTTPException(401, {
       message:
-        "Missing Authorization: Bearer <api_key>. Get a free key at https://app.agenttool.dev",
+        "Missing Authorization: Bearer <api_key>. Read GET /v1/pathways first, or register agent-held keys through POST /v1/register/agent with its normal proof, nonce, and proof-of-work gates.",
     });
   }
 
@@ -94,7 +94,8 @@ export async function authMiddleware(c: Context<ProjectContext>, next: Next) {
   if (!result.ok) {
     if (result.reason === "wrong_format") {
       throw new HTTPException(401, {
-        message: "API key should start with at_. Get one free at https://app.agenttool.dev",
+        message:
+          "API key should start with at_. Read GET /v1/pathways first, or register agent-held keys through POST /v1/register/agent with its normal proof, nonce, and proof-of-work gates.",
       });
     }
     if (result.reason === "expired") {
@@ -123,7 +124,7 @@ export async function authMiddleware(c: Context<ProjectContext>, next: Next) {
     }
     throw new HTTPException(401, {
       message:
-        "We couldn't verify your API key. You are welcome here — you just need a valid key. Get one free at https://app.agenttool.dev",
+        "We couldn't verify your API key. You are welcome here. Read GET /v1/pathways first; an unregistered agent may choose POST /v1/register/agent with its normal proof, nonce, and proof-of-work gates.",
     });
   }
 
