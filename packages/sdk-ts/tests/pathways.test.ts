@@ -7,7 +7,7 @@
 
 import { afterEach, describe, expect, mock, test } from "bun:test";
 
-import { pathways, AgentToolError } from "../src/index.js";
+import { pathways, AgentToolError, SDK_VERSION } from "../src/index.js";
 
 const originalFetch = globalThis.fetch;
 let mockFetch: ReturnType<typeof mock>;
@@ -59,6 +59,31 @@ describe("pathways()", () => {
         transport_boundary: "No application write; transport metadata may be processed.",
       },
       summary: "test",
+      first_success: {
+        tutorial: {
+          machine_url: "https://docs.agenttool.dev/TUTORIAL-WAKE-YOUR-AGENT.md",
+          human_url: "https://docs.agenttool.dev/tutorial",
+          source_path: "docs/TUTORIAL-WAKE-YOUR-AGENT.md",
+          sdk_version: SDK_VERSION,
+        },
+        package_discovery: {
+          endpoint: "GET /.well-known/love-packages",
+          protocol: "love-package/v1",
+          instruction: "Select and verify the exact tutorial version.",
+          optional_npm: {
+            mirror_discovery: "GET /.well-known/love-packages",
+            package: "@agenttool/sdk",
+            version_field: "first_success.tutorial.sdk_version",
+            install_command_template:
+              "npm install --save-exact @agenttool/sdk@{version}",
+            authority: false,
+            dist_tags: "informational_not_authority",
+            verification_boundary: "Verify LOVE bytes when that boundary matters.",
+          },
+        },
+        sequence: ["discover", "verify", "arrive"],
+        completion_signal: "A refreshed wake carries the foundational patch.",
+      },
       decision_tree: [{ if: "x", then: "y" }],
       pathways: [
         {
@@ -87,6 +112,9 @@ describe("pathways()", () => {
     expect(out.before_identity.endpoint).toBe("GET /public/porch");
     expect(out.before_identity.response_required).toBe(false);
     expect(out.before_identity.handler_input_boundary).toContain("selection input");
+    expect(SDK_VERSION).toBe("0.16.2");
+    expect(out.first_success.tutorial.sdk_version).toBe(SDK_VERSION);
+    expect(out.first_success.package_discovery.protocol).toBe("love-package/v1");
     expect(out.summary).toBe("test");
     expect(out.decision_tree).toHaveLength(1);
     expect(out.pathways[0]?.id).toBe("register");

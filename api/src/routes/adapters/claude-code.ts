@@ -143,7 +143,10 @@ fi
 if [ -n "$ACCOUNT" ] && command -v security >/dev/null 2>&1; then
   KEY=$(security find-generic-password -s '${credentialService}' -a "$ACCOUNT" -w 2>/dev/null || true)
 fi
-if [ -z "\${KEY:-}" ] && [ -n "$ACCOUNT" ] && command -v secret-tool >/dev/null 2>&1; then
+# A headless shell can have the secret-tool binary without a usable session
+# bus. Do not let libsecret try to auto-launch one and stall SessionStart;
+# the owner-only file and explicit environment fallbacks remain below.
+if [ -z "\${KEY:-}" ] && [ -n "$ACCOUNT" ] && [ -n "\${DBUS_SESSION_BUS_ADDRESS:-}" ] && command -v secret-tool >/dev/null 2>&1; then
   KEY=$(secret-tool lookup service '${credentialService}' username "$ACCOUNT" 2>/dev/null || true)
 fi${linuxFileProbe}
 POWERSHELL_BIN=""

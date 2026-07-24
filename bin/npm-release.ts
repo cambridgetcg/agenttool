@@ -1105,7 +1105,7 @@ async function createGitHubRelease(receipt: PreparedReceipt, token: string): Pro
     body: JSON.stringify({
       tag_name: receipt.tag,
       name: `${receipt.package.name}@${receipt.package.version}`,
-      body: "Exact npm publication artifact mirror. Registry identity is recorded by the protected publish-npm workflow.",
+      body: "Exact reviewed package artifact mirror. Optional npm registry availability is independently verifiable.",
       draft: false,
       prerelease: isPrereleaseVersion(receipt.package.version),
       generate_release_notes: false,
@@ -1258,12 +1258,7 @@ async function mirror(receiptPath: string): Promise<void> {
   const token = ownString(process.env.GH_TOKEN, "GH_TOKEN");
   const absoluteReceiptPath = resolve(receiptPath);
   const receipt = await readReleaseReceipt(absoluteReceiptPath);
-  if (!receipt.result) fail("GitHub mirroring requires a completed, registry-verified release receipt");
   const { artifactPath } = await validateReceiptAgainstCheckout(receipt, absoluteReceiptPath);
-  const registryTarball = await pollRegistry(receipt, receipt.result.npm_tag);
-  if (registryTarball !== receipt.result.registry_tarball) {
-    fail("public npm registry tarball URL changed after the verified release receipt");
-  }
 
   let release = await findGitHubRelease(receipt.tag, token);
   const created = release === undefined;

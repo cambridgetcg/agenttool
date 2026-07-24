@@ -59,13 +59,55 @@ class BeforeIdentityOrientation(TypedDict):
     transport_boundary: str
 
 
+class FirstSuccessTutorial(TypedDict):
+    """Exact tutorial contract selected before SDK installation."""
+
+    machine_url: str
+    human_url: str
+    source_path: str
+    sdk_version: str
+
+
+class OptionalNpmDiscovery(TypedDict):
+    """Non-authoritative npm convenience described by first-success discovery."""
+
+    mirror_discovery: str
+    package: Literal["@agenttool/sdk"]
+    version_field: Literal["first_success.tutorial.sdk_version"]
+    install_command_template: str
+    authority: Literal[False]
+    dist_tags: Literal["informational_not_authority"]
+    verification_boundary: str
+
+
+class FirstSuccessPackageDiscovery(TypedDict):
+    """Registry-neutral package selection plus an explicitly optional npm mirror."""
+
+    endpoint: Literal["GET /.well-known/love-packages"]
+    protocol: Literal["love-package/v1"]
+    instruction: str
+    optional_npm: OptionalNpmDiscovery
+
+
+class FirstSuccess(TypedDict):
+    """Typed first-success tutorial, package, and completion contract."""
+
+    tutorial: FirstSuccessTutorial
+    package_discovery: FirstSuccessPackageDiscovery
+    sequence: list[str]
+    completion_signal: str
+
+
 class PathwaysResponse(Dict[str, Any]):
-    """Dict-compatible response with a typed ``before_identity`` entry."""
+    """Dict-compatible response with typed orientation and first-success entries."""
 
     @overload
     def __getitem__(
         self, key: Literal["before_identity"]
     ) -> BeforeIdentityOrientation: ...
+
+    @overload
+    def __getitem__(self, key: Literal["first_success"]) -> FirstSuccess: ...
 
     @overload
     def __getitem__(self, key: str) -> Any: ...

@@ -32,8 +32,20 @@ app.get("/", (c) => {
       deals: "GET /public/deal-trust/deals/recent",
     },
     sdk: {
-      typescript: "bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.1/agenttool-sdk-0.16.1.tgz",
-      python: "python -m pip install agenttool-sdk==0.16.1",
+      typescript: "bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.2/agenttool-sdk-0.16.2.tgz",
+      python: "python -m pip install \"agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.2#subdirectory=packages/sdk-py\"",
+      optional_registry_mirrors: {
+        npm: {
+          install: "npm install --save-exact @agenttool/sdk@0.16.2",
+          authority: false,
+          independently_visible: true,
+        },
+        pypi: {
+          install: "python -m pip install agenttool-sdk==0.16.2",
+          authority: false,
+          independently_visible: true,
+        },
+      },
     },
     companion: {
       name: "zerone",

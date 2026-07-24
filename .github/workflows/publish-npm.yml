@@ -97,7 +97,7 @@ jobs:
           retention-days: 1
 
   publish:
-    name: Approve, publish, verify, and mirror exact npm artifact
+    name: Approve, mirror, publish, and verify exact npm artifact
     needs: prepare
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -129,6 +129,14 @@ jobs:
         with:
           name: npm-release-${{ github.run_id }}
           path: ${{ runner.temp }}/agenttool-npm-release
+      - name: Mirror and re-download the exact artifact from GitHub Releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          bun bin/npm-release.ts mirror \
+            --receipt "${RUNNER_TEMP}/agenttool-npm-release/receipt.json"
       - name: Publish or recover exact artifact, then verify registry bytes
         shell: bash
         env:
@@ -141,14 +149,6 @@ jobs:
             --receipt "${RUNNER_TEMP}/agenttool-npm-release/receipt.json" \
             --authentication "$RELEASE_AUTHENTICATION" \
             --npm-tag "$RELEASE_NPM_TAG"
-      - name: Mirror and re-download the exact artifact from GitHub Releases
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          bun bin/npm-release.ts mirror \
-            --receipt "${RUNNER_TEMP}/agenttool-npm-release/receipt.json"
       - name: Record non-secret release receipt
         if: ${{ always() }}
         shell: bash

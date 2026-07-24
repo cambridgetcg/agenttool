@@ -14,7 +14,7 @@
  * ```
  */
 
-export { AgentTool } from "./client.js";
+export { AgentTool, SDK_VERSION } from "./client.js";
 export type { AgentToolOptions } from "./client.js";
 export type { AgentToolTransport } from "./_http.js";
 export { AgentToolError } from "./errors.js";
@@ -47,6 +47,10 @@ export type {
   Pathway,
   PathwaysDecision,
   BeforeIdentityOrientation,
+  FirstSuccess,
+  FirstSuccessPackageDiscovery,
+  FirstSuccessTutorial,
+  OptionalNpmDiscovery,
   WhoThisServes,
   FormVocabularyEntry,
   LanguageVocabularyEntry,

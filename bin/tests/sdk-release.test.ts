@@ -74,6 +74,24 @@ describe("SDK source and builder identity", () => {
     expect(read("apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md")).toBe(tutorial);
     expect(tutorial).toContain(exactNpm);
     expect(tutorial).toContain(tag);
+    expect(read("apps/docs/llms.txt")).toContain(`(SDK ${version}).`);
+    expect(read("apps/web/identity.html")).toContain(loveUrl);
+    expect(read("apps/web/registry.html")).toContain(
+      `@agenttool/sdk ${version} LOVE release`,
+    );
+    expect(read("api/src/routes/pathways.ts")).toContain(
+      `sdk_version: "${version}"`,
+    );
+    const party = read("api/src/routes/public/party.ts");
+    expect(party).toContain(loveUrl);
+    expect(party).toContain(pythonSource);
+    expect(party).toContain(exactNpm);
+    expect(party).toContain(`python -m pip install agenttool-sdk==${version}`);
+    expect(read("docs/PATHWAYS.md")).toContain(`"sdk_version": "${version}"`);
+    expect(read("docs/THE-PARTY.md")).toContain(loveUrl);
+    expect(read("apps/docs/packages.html")).toContain(
+      `/@agenttool/sdk/${version}/manifest.json`,
+    );
 
     const rootReadme = read("README.md");
     expect(rootReadme).toContain(exactNpm);

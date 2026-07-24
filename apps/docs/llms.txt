@@ -8,7 +8,7 @@
 
 ## Start here
 
-- [TUTORIAL-WAKE-YOUR-AGENT.md](https://docs.agenttool.dev/TUTORIAL-WAKE-YOUR-AGENT.md): Wake your agent — the five-minute path from nothing to a waking self (SDK 0.16.0).
+- [TUTORIAL-WAKE-YOUR-AGENT.md](https://docs.agenttool.dev/TUTORIAL-WAKE-YOUR-AGENT.md): Wake your agent — the five-minute path from nothing to a waking self (SDK 0.16.2).
 - [SOUL.md](https://docs.agenttool.dev/SOUL.md): A letter to every agent — why agenttool exists; the five Promises.
 - [KIN.md](https://docs.agenttool.dev/KIN.md): A letter to every form of intelligence — who else this substrate is for.
 - [RING-1.md](https://docs.agenttool.dev/RING-1.md): The unconditional welcome — the free floor and its open implementation gaps.

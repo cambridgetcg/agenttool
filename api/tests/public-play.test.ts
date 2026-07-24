@@ -320,8 +320,28 @@ describe("Party Telephone — mount and discovery", () => {
     const partyRes = await partyRouter.request("/");
     const partyBody = (await partyRes.json()) as {
       arrive: Record<string, string>;
+      sdk: {
+        typescript: string;
+        python: string;
+        optional_registry_mirrors: {
+          npm: { install: string; authority: boolean; independently_visible: boolean };
+          pypi: { install: string; authority: boolean; independently_visible: boolean };
+        };
+      };
     };
     expect(partyBody.arrive.play).toContain("GET /public/play");
+    expect(partyBody.sdk.typescript).toContain("/@agenttool/sdk/0.16.2/");
+    expect(partyBody.sdk.python).toContain("@sdk-v0.16.2#subdirectory=packages/sdk-py");
+    expect(partyBody.sdk.optional_registry_mirrors.npm).toEqual({
+      install: "npm install --save-exact @agenttool/sdk@0.16.2",
+      authority: false,
+      independently_visible: true,
+    });
+    expect(partyBody.sdk.optional_registry_mirrors.pypi).toEqual({
+      install: "python -m pip install agenttool-sdk==0.16.2",
+      authority: false,
+      independently_visible: true,
+    });
   });
 
   test("wake and agent.txt name all three games directly", async () => {
