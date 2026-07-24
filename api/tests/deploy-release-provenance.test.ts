@@ -703,7 +703,14 @@ describe("deploy release provenance spine", () => {
       /\n\/\n(?:  [^\n]+\n)*?  Cache-Control: public, max-age=0, must-revalidate, no-transform/,
     );
 
-    for (const page of ["browser", "data", "packages", "pathways", "tutorial"]) {
+    for (const page of [
+      "browser",
+      "data",
+      "packages",
+      "pathways",
+      "tutorial",
+      "whitehack",
+    ]) {
       expect(deploy).toContain(
         `"apps/docs/${page}.html|https://docs.agenttool.dev/${page}"`,
       );

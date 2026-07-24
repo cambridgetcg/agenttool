@@ -1,0 +1,796 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:castle:whitehack-intake:v1",
+  "title": "AgentTool Castle Whitehack intake v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "document_type",
+    "projection_status",
+    "intake",
+    "source",
+    "redaction",
+    "candidates",
+    "unknowns",
+    "boundaries"
+  ],
+  "properties": {
+    "document_type": {
+      "const": "agenttool-castle-whitehack-intake/v1"
+    },
+    "projection_status": {
+      "const": "complete"
+    },
+    "intake": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "destination",
+        "audience",
+        "accepted",
+        "writes_castle"
+      ],
+      "properties": {
+        "mode": { "const": "offer-only" },
+        "destination": { "const": "castle-gate" },
+        "audience": { "const": "local-private" },
+        "accepted": { "const": false },
+        "writes_castle": { "const": false }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document_type",
+        "canonical_sha256",
+        "generated_at",
+        "advisory_status",
+        "scanner",
+        "scope"
+      ],
+      "properties": {
+        "document_type": {
+          "const": "agenttool-whitehack-advisory/v0.1"
+        },
+        "canonical_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "advisory_status": {
+          "enum": ["complete", "incomplete"]
+        },
+        "scanner": {
+          "$ref": "#/$defs/scanner"
+        },
+        "scope": {
+          "$ref": "#/$defs/source_scope"
+        }
+      }
+    },
+    "redaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "location_disclosure",
+        "file_label_sensitivity",
+        "source_text_retained",
+        "retained_signal_fields",
+        "hashes_are_confidentiality_proof"
+      ],
+      "properties": {
+        "location_disclosure": {
+          "enum": ["omitted", "included"]
+        },
+        "file_label_sensitivity": {
+          "const": "unknown"
+        },
+        "source_text_retained": {
+          "const": false
+        },
+        "retained_signal_fields": {
+          "const": [
+            "check",
+            "scanner_confidence",
+            "doctrine",
+            "principle",
+            "occurrence_count"
+          ]
+        },
+        "hashes_are_confidentiality_proof": {
+          "const": false
+        }
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/candidate"
+      }
+    },
+    "unknowns": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "advisory-provenance",
+        "authorization",
+        "castle-semantic-fit",
+        "causation",
+        "consent",
+        "coverage",
+        "exploitability",
+        "fix-correctness",
+        "freshness",
+        "location-sensitivity",
+        "publication-safety",
+        "room-selection",
+        "severity",
+        "verification-outcome"
+      ],
+      "properties": {
+        "advisory-provenance": {
+          "const": "The projector validates structure and internal coherence but does not authenticate who produced the advisory or prove that the declared scanner revision executed."
+        },
+        "authorization": {
+          "const": "A Whitehack observation does not establish permission to test, remediate, disclose, publish, or act on a target."
+        },
+        "castle-semantic-fit": {
+          "const": "The projector does not decide whether an observation contains an insight, belongs at the gate, or should become a friction."
+        },
+        "causation": {
+          "const": "A finding in a changed file does not establish that the change introduced or caused the observed pattern."
+        },
+        "consent": {
+          "const": "Repository access, signatures, purpose text, or an advisory do not establish present consent for a later action."
+        },
+        "coverage": {
+          "const": "The advisory covers only its declared bounded changed-file scope; omitted or clean code is not established secure or honest."
+        },
+        "exploitability": {
+          "const": "A heuristic text match does not establish an exploitable vulnerability or reachable runtime behaviour."
+        },
+        "fix-correctness": {
+          "const": "Disappearance on a later scan does not prove that a remediation is correct, complete, or regression-tested."
+        },
+        "freshness": {
+          "const": "The advisory timestamp and revisions are retained declarations; the projector does not inspect Git or prove that the observation is current."
+        },
+        "location-sensitivity": {
+          "const": "A file label and line can reveal an undisclosed weakness or private repository structure; their sharing safety is unknown."
+        },
+        "publication-safety": {
+          "const": "This local projection does not decide whether any candidate is safe or authorized to enter durable or public Castle history."
+        },
+        "room-selection": {
+          "const": "No Castle room is selected; room placement requires a separate architect judgment over accepted and reviewed understanding."
+        },
+        "severity": {
+          "const": "Whitehack confidence calibrates a check match and is not impact, urgency, bounty value, or Castle truth confidence."
+        },
+        "verification-outcome": {
+          "const": "No counterexample, reproduction, regression test, or other independent trial is run by this projector."
+        }
+      }
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cli_capabilities", "transitions"],
+      "properties": {
+        "cli_capabilities": {
+          "$ref": "#/$defs/cli_capabilities"
+        },
+        "transitions": {
+          "$ref": "#/$defs/transitions"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "redaction": {
+            "type": "object",
+            "properties": {
+              "location_disclosure": {
+                "const": "omitted"
+              }
+            },
+            "required": ["location_disclosure"]
+          }
+        },
+        "required": ["redaction"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "location": {
+                  "type": "object",
+                  "properties": {
+                    "disclosure": {
+                      "const": "omitted"
+                    }
+                  },
+                  "required": ["disclosure"]
+                }
+              },
+              "required": ["location"]
+            }
+          }
+        },
+        "required": ["candidates"]
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "redaction": {
+            "type": "object",
+            "properties": {
+              "location_disclosure": {
+                "const": "included"
+              }
+            },
+            "required": ["location_disclosure"]
+          }
+        },
+        "required": ["redaction"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "location": {
+                  "type": "object",
+                  "properties": {
+                    "disclosure": {
+                      "const": "included"
+                    }
+                  },
+                  "required": ["disclosure"]
+                }
+              },
+              "required": ["location"]
+            }
+          }
+        },
+        "required": ["candidates"]
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "object",
+            "properties": {
+              "advisory_status": {
+                "const": "complete"
+              }
+            },
+            "required": ["advisory_status"]
+          }
+        },
+        "required": ["source"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "object",
+            "properties": {
+              "scope": {
+                "type": "object",
+                "properties": {
+                  "error_count": {
+                    "const": 0
+                  },
+                  "errors_by_code": {
+                    "type": "object",
+                    "maxProperties": 0
+                  }
+                },
+                "required": ["error_count", "errors_by_code"]
+              }
+            },
+            "required": ["scope"]
+          }
+        },
+        "required": ["source"]
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "object",
+            "properties": {
+              "advisory_status": {
+                "const": "incomplete"
+              }
+            },
+            "required": ["advisory_status"]
+          }
+        },
+        "required": ["source"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "object",
+            "properties": {
+              "scope": {
+                "type": "object",
+                "properties": {
+                  "error_count": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "errors_by_code": {
+                    "type": "object",
+                    "minProperties": 1,
+                    "properties": {
+                      "scanner_file_incomplete": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 200
+                      }
+                    },
+                    "required": ["scanner_file_incomplete"]
+                  }
+                },
+                "required": ["error_count", "errors_by_code"]
+              }
+            },
+            "required": ["scope"]
+          }
+        },
+        "required": ["source"]
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "git_revision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "token": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+    },
+    "path": {
+      "type": "string",
+      "description": "Relative path with non-empty components. maxLength is a Unicode-character ceiling; the projector additionally enforces 1,024 UTF-8 bytes.",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*[\\\\\\u0000-\\u001f\\u007f-\\u009f\\u202a-\\u202e\\u2066-\\u2069])[^/]+(?:/[^/]+)*$"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "scanner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "revision", "version"],
+      "properties": {
+        "repository": {
+          "const": "https://github.com/cambridgetcg/whitehack"
+        },
+        "revision": {
+          "$ref": "#/$defs/git_revision"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        }
+      }
+    },
+    "skipped": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hidden_path",
+        "non_production_path",
+        "non_regular_file",
+        "unsupported_extension"
+      ],
+      "properties": {
+        "hidden_path": { "$ref": "#/$defs/count" },
+        "non_production_path": { "$ref": "#/$defs/count" },
+        "non_regular_file": { "$ref": "#/$defs/count" },
+        "unsupported_extension": { "$ref": "#/$defs/count" }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_changed_paths",
+        "max_path_bytes",
+        "max_diff_bytes",
+        "max_files",
+        "max_file_bytes",
+        "max_total_bytes",
+        "max_total_findings",
+        "max_reported_findings"
+      ],
+      "properties": {
+        "max_changed_paths": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2000
+        },
+        "max_path_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024
+        },
+        "max_diff_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 262144
+        },
+        "max_files": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "max_file_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 524288
+        },
+        "max_total_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8388608
+        },
+        "max_total_findings": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5000
+        },
+        "max_reported_findings": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      }
+    },
+    "errors_by_code": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scanner_file_incomplete": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      }
+    },
+    "source_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "base_revision",
+        "head_revision",
+        "changed_path_count",
+        "changed_path_bytes",
+        "candidate_file_count",
+        "candidate_bytes",
+        "skipped",
+        "limits",
+        "finding_count",
+        "serialized_finding_count",
+        "finding_details_truncated",
+        "error_count",
+        "errors_by_code"
+      ],
+      "properties": {
+        "mode": {
+          "const": "changed_supported_regular_files"
+        },
+        "base_revision": {
+          "$ref": "#/$defs/git_revision"
+        },
+        "head_revision": {
+          "$ref": "#/$defs/git_revision"
+        },
+        "changed_path_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2000
+        },
+        "changed_path_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 262144
+        },
+        "candidate_file_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200
+        },
+        "candidate_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8388608
+        },
+        "skipped": {
+          "$ref": "#/$defs/skipped"
+        },
+        "limits": {
+          "$ref": "#/$defs/limits"
+        },
+        "finding_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5000
+        },
+        "serialized_finding_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200
+        },
+        "finding_details_truncated": {
+          "type": "boolean"
+        },
+        "error_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200
+        },
+        "errors_by_code": {
+          "$ref": "#/$defs/errors_by_code"
+        }
+      }
+    },
+    "signal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "check",
+        "scanner_confidence",
+        "doctrine",
+        "principle",
+        "occurrence_count"
+      ],
+      "properties": {
+        "check": {
+          "$ref": "#/$defs/token"
+        },
+        "scanner_confidence": {
+          "enum": ["high", "medium-high", "medium", "heuristic"]
+        },
+        "doctrine": {
+          "$ref": "#/$defs/token"
+        },
+        "principle": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6
+        },
+        "occurrence_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      }
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "disclosure",
+        "reference",
+        "file",
+        "line",
+        "sensitivity"
+      ],
+      "properties": {
+        "disclosure": {
+          "enum": ["omitted", "included"]
+        },
+        "reference": {
+          "$ref": "#/$defs/sha256"
+        },
+        "file": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/path" }
+          ]
+        },
+        "line": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          ]
+        },
+        "sensitivity": {
+          "const": "unknown"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "disclosure": { "const": "omitted" }
+            },
+            "required": ["disclosure"]
+          },
+          "then": {
+            "properties": {
+              "file": { "type": "null" },
+              "line": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "disclosure": { "const": "included" }
+            },
+            "required": ["disclosure"]
+          },
+          "then": {
+            "properties": {
+              "file": { "$ref": "#/$defs/path" },
+              "line": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            }
+          }
+        }
+      ]
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "maturity",
+        "acceptance",
+        "location",
+        "signals",
+        "change_relation",
+        "castle_confidence",
+        "verification",
+        "suggested_destination",
+        "review_question"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/sha256"
+        },
+        "kind": {
+          "const": "castle-gate-candidate"
+        },
+        "maturity": {
+          "const": "observation"
+        },
+        "acceptance": {
+          "const": "unaccepted"
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "signals": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 200,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/signal"
+          }
+        },
+        "change_relation": {
+          "const": "not-evaluated"
+        },
+        "castle_confidence": {
+          "const": "unset"
+        },
+        "verification": {
+          "const": "not-run"
+        },
+        "suggested_destination": {
+          "const": "gate"
+        },
+        "review_question": {
+          "const": "Which trust boundary or invariant should a reviewer inspect? What authorized local evidence would support or reject the observation, and which regression test records the intended behaviour?"
+        }
+      }
+    },
+    "cli_capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "explicit_input_read",
+        "stdout",
+        "filesystem_write",
+        "castle_write",
+        "castle_loop_execution",
+        "process_spawn",
+        "network",
+        "target_testing",
+        "remediation",
+        "wallet",
+        "signing",
+        "rpc",
+        "broadcast",
+        "authorization"
+      ],
+      "properties": {
+        "explicit_input_read": { "const": true },
+        "stdout": { "const": true },
+        "filesystem_write": { "const": false },
+        "castle_write": { "const": false },
+        "castle_loop_execution": { "const": false },
+        "process_spawn": { "const": false },
+        "network": { "const": false },
+        "target_testing": { "const": false },
+        "remediation": { "const": false },
+        "wallet": { "const": false },
+        "signing": { "const": false },
+        "rpc": { "const": false },
+        "broadcast": { "const": false },
+        "authorization": { "const": false }
+      }
+    },
+    "transitions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "finding_to_gate",
+        "gate_to_stone",
+        "finding_to_friction",
+        "friction_to_expedition",
+        "stone_to_tested",
+        "tested_to_keep",
+        "stone_to_room"
+      ],
+      "properties": {
+        "finding_to_gate": { "const": "offer-only" },
+        "gate_to_stone": { "const": "requires-explicit-capture" },
+        "finding_to_friction": { "const": "requires-explicit-judgment" },
+        "friction_to_expedition": { "const": "requires-explicit-deepen" },
+        "stone_to_tested": { "const": "requires-recorded-trial" },
+        "tested_to_keep": { "const": "requires-surviving-trial" },
+        "stone_to_room": { "const": "requires-architect-judgment" }
+      }
+    }
+  }
+}

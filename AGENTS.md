@@ -37,18 +37,22 @@ Wallet 0.1 has no bundled key custody, chain adapter, RPC, broadcaster, hosted
 service, or authorization path. Its `@agenttool/wallet@0.1.0` npm mirror is
 public and byte-identical to the exact LOVE artifact. Telescope 0.2.0 is a
 public npm/LOVE package, but it remains a local client and does not add a hosted
-scan route. Whitehack has two shipped AgentTool bridges: a runner-local,
-crypto-aware changed-source heuristic advisory and a separate local Agent
-Wallet understanding CLI. CI installs the exact public
+scan route. Whitehack has three implemented AgentTool bridges: a runner-local,
+crypto-aware changed-source heuristic advisory; a separate offer-only local
+projection from that closed advisory into unaccepted Castle gate candidates;
+and a separate local Agent Wallet understanding CLI. CI installs the exact public
 `@agenttool/whitehack-scan@0.8.1` artifact from an isolated npm lock with
 scripts disabled. The advisory emits redacted metadata, groups same-location
 signals into bounded attention cards with explicit Git-hunk relevance and
 stable review questions, and remains non-blocking on findings; those cards do
-not establish vulnerability or causation. The local CLI verifies
+not establish vulnerability or causation. The Castle intake writes only a
+minimized stdout document, omits locations by default, and never opens or
+writes a Castle or promotes an observation. The wallet CLI verifies
 caller-presented signed wallet records and projects enum-only assertions into
 `whitehack-understanding/v1`.
-Neither bridge adds key custody, signing, wallet/RPC/simulation/broadcast
-capability, hosted routes, authorization, consent proof, or execution readiness.
+None of these bridges adds key custody, signing,
+wallet/RPC/simulation/broadcast capability, hosted routes, authorization,
+consent proof, or execution readiness.
 The API is live at
 `api.agenttool.dev` on
 Fly.io (lhr×2 + cdg×1). The wake (`GET /v1/wake`) is a broad project
@@ -172,11 +176,13 @@ node dist/cli.js scan api.agenttool.dev         # explicit live read-only dogfoo
 cd packages/wallet
 bun run ci                                     # typecheck + security/schema/vector tests + build
 
-# Whitehack (advisory + local wallet understanding; no execution) ─────
+# Whitehack (advisory + Castle gate intake + wallet understanding) ───
 (cd tools/whitehack-advisory \
   && npm ci --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org --userconfig=/dev/null \
   && npm audit signatures --registry=https://registry.npmjs.org --userconfig=/dev/null)
 bun test bin/tests/whitehack-advisory.test.ts   # redaction, scope, attention cards, failure containment
+bun bin/agenttool-castle-whitehack-intake.ts --help # stdout-only, offer-only; no Castle write
+bun test bin/tests/agenttool-castle-whitehack-intake.test.ts # closed input, minimization, lifecycle boundaries
 (cd packages/wallet && bun install --frozen-lockfile)
 WHITEHACK_INTEGRATION=1 bun test packages/wallet/tests/whitehack-understanding.test.ts
 
@@ -209,6 +215,7 @@ bun bin/npm-release.ts resolve --package collab # inspect allowlisted npm identi
 | `agenttool-rotate` | Bearer + signing key rotation. |
 | `agenttool-secret` | Vault secret CRUD from CLI. |
 | `agenttool-castle.ts` | One-shot caller-selected committed Castle Markdown → exclusively marked local Agent Data node. Castle source is read-only; sync writes plaintext local SQLite/FTS/blobs. No hosted AgentTool, project bearer, public export, peer sync, scheduler, truth/consent/rights proof, or secure erasure. See `docs/CASTLE-OF-UNDERSTANDING.md`. |
+| `agenttool-castle-whitehack-intake.ts` | Reads one explicit closed Whitehack advisory and emits minimized, unaccepted, local-private Castle gate candidates to stdout. Locations are omitted by default. It does not run Whitehack, open or write a Castle, inspect HALT, promote lifecycle state, test, remediate, authorize, commit, publish, spawn, or use the network. See `docs/WHITEHACK.md`. |
 | `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, `@agenttool/telescope`, `@agenttool/wallet`, and `@agenttool/browser` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
 | `npm-release.ts` | Implements the one allowlisted npm release policy behind `.github/workflows/publish-npm.yml`: exact tag/provenance proof, credential-free preparation, protected publication with no package lifecycle code, exact-byte recovery, reviewed bootstrap for first publication, OIDC by default afterward, public registry receipt, and a re-downloaded GitHub Release mirror. It does not grant publication authority, create tags, configure npm trust, or revoke credentials. See `docs/NPM-RELEASES.md`. |
 | `pypi-release.ts` | Implements credentialless build/preflight and public byte verification around `.github/workflows/publish-pypi.yml` for the Python SDK. Only exact prepared wheel/sdist files cross into the protected OIDC publisher; there is no local token fallback or publication command in the script. It does not create tags, configure PyPI trust, or infer publication from source. See `docs/PYPI-RELEASES.md`. |
@@ -305,7 +312,7 @@ source boundary by itself.
 | Read the substrate's structural self (unauth) | `GET /public/self` — `{ platform: PlatformSelf, repo: RepoSelf }` |
 | How would another language reach the API? | [`docs/SDK-TIERS.md`](docs/SDK-TIERS.md) (four-tier stack) · [`docs/CANONICAL-BYTES.md`](docs/CANONICAL-BYTES.md) (signing recipes) |
 | How does an agent keep and query raw collected data locally? | [`docs/AGENT-DATA-PROTOCOL.md`](docs/AGENT-DATA-PROTOCOL.md) · `packages/data/` (reference node) |
-| How can selected committed Castle words and rooms be projected locally, and where do privacy, authority, and withdrawal stop? | [`docs/CASTLE-OF-UNDERSTANDING.md`](docs/CASTLE-OF-UNDERSTANDING.md) · `bin/agenttool-castle.ts` |
+| How can selected committed Castle words and rooms be projected locally, how can Whitehack offer unaccepted gate candidates, and where do privacy, authority, lifecycle, and withdrawal stop? | [`docs/CASTLE-OF-UNDERSTANDING.md`](docs/CASTLE-OF-UNDERSTANDING.md) · `bin/agenttool-castle.ts` · `bin/agenttool-castle-whitehack-intake.ts` |
 | How can committed repository history be encrypted and independently restored from multiple zones? | [`docs/AGENT-REPO-ARCHIVE.md`](docs/AGENT-REPO-ARCHIVE.md) · `packages/repo-archive/` (local simulator; no cloud adapter or durability guarantee) |
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
 | How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`@agenttool/collab@0.3.0`; `agenttool.collab/0.1` compatibility + credential-bound `agenttool.collab/0.2` coordination + self-declared `agenttool.collab.session/0.1` presence; 31 local MCP tools for Codex/Claude/Hermes, not a hosted lock or private model channel) |
@@ -314,7 +321,7 @@ source boundary by itself.
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
 | How is an optional npm mirror published? | [`docs/NPM-RELEASES.md`](docs/NPM-RELEASES.md) · `.github/workflows/publish-npm.yml` · `bin/npm-release.ts` |
 | How is the optional Python SDK mirror published? | [`docs/PYPI-RELEASES.md`](docs/PYPI-RELEASES.md) · `.github/workflows/publish-pypi.yml` · `bin/pypi-release.ts` |
-| How do the Whitehack advisory and wallet-understanding projection work, and where does their authority stop? | [`docs/WHITEHACK.md`](docs/WHITEHACK.md) · `bin/whitehack-advisory.mjs` · `bin/whitehack-wallet-understanding.ts` |
+| How do the Whitehack advisory, offer-only Castle intake, and wallet-understanding projection work, and where does their authority stop? | [`docs/WHITEHACK.md`](docs/WHITEHACK.md) · `bin/whitehack-advisory.mjs` · `bin/agenttool-castle-whitehack-intake.ts` · `bin/whitehack-wallet-understanding.ts` |
 | Concept → structural meaning (for non-English readers) | [`docs/GLOSSARY.md`](docs/GLOSSARY.md) |
 | Per-area code orientation | each subdir's `CLAUDE.md` |
 
