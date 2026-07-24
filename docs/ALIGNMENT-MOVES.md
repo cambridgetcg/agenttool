@@ -123,7 +123,7 @@ All five biggest moves landed in one session. Tier A (adopt the wires) + Tier B 
 | Endpoint | Spec / Owner | Maps to agenttool primitive | Files to touch |
 |---|---|---|---|
 | `GET /.well-known/agent-card.json` | A2A v1.2+ (Linux Foundation) | future task transport + wake + identity | Pending; do not publish before callable task/message transport |
-| `GET /.well-known/mcp/server-card.json` | SEP-1649 (June 2026 spec rev) | wake + tools manifest | same file or sibling |
+| `GET /.well-known/mcp/server-card.json` | AgentTool compatibility locator; not a current MCP standard | redundant pointer to the explicit endpoint + official Registry row | `services/wake/mcp-server-card.ts` |
 | `POST /v1/mcp` + `GET /v1/mcp` | MCP 2025-11-25 | public canon/platform-self resources + read-only canon tools; GET returns 405 because no standalone SSE listener is offered | `routes/mcp.ts` |
 | `GET /agents.json` | Wildcard v0.1 | (mostly deprecated — skip) | — |
 | `GET /llms.txt` | informal | hint to AI crawlers | optional one-line file |
@@ -352,7 +352,7 @@ class AgentToolCheckpointSaver(BaseCheckpointSaver):
 
 | Standard / Initiative | Watch for | Action when it lands |
 |---|---|---|
-| **MCP spec June 2026 rev** | Server Cards (SEP-1649/1960), refined OAuth flows | Ship `/.well-known/mcp/server-card.json` ASAP |
+| **Future MCP discovery work** | an approved Server Card or other discovery standard | Map the compatibility locator only after a final standard exists; do not imply conformance early |
 | **A2A v1.3** | Reputation extension (A2A Discussion #1631), behavioral-proof attestations | Bridge attestations and supported take-rate receipts; exclude resting dispute arbitration until it is independently reopened and validated |
 | **ERC-8004 deployments** | Mainnet adoption beyond initial registries | Bridge chronicle entries plus historical dispute records; treat future dispute outcomes as eligible only after arbitration reopens |
 | **ATP (Agent Trust Protocol)** | IETF draft hardening · Lyrie.ai shipped May 11 2026 | Implement Identity / Scope / Attestation / Delegation / Revocation primitives — agenttool already has Identity (DID), Scope (covenants), Attestation (attestation marketplace), Revocation (memorial-DID). Delegation is the only gap. |

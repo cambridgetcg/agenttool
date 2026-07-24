@@ -1,8 +1,8 @@
-/** /.well-known/* — MCP server-card + native discovery surfaces.
+/** /.well-known/* — MCP compatibility locator + native discovery surfaces.
  *
  *  Pins:
  *    - the unsupported A2A AgentCard route stays unmounted
- *    - mcp/server-card.json names protocolVersion + endpoint
+ *    - mcp/server-card.json names its non-standard locator role
  *    - llms.txt is well-formed markdown with the discovery URLs
  *
  *  Doctrine: docs/ALIGNMENT-MOVES.md (Move 2) · docs/ECOSYSTEM.md.
@@ -25,16 +25,27 @@ describe("/.well-known/* — MCP + native discovery", () => {
     expect(status).toBe(404);
   });
 
-  test("GET /mcp/server-card.json returns a valid MCP server-card", async () => {
+  test("GET /mcp/server-card.json returns an honest compatibility locator", async () => {
     const { status, body } = await get("/mcp/server-card.json");
     expect(status).toBe(200);
     const card = await body.json();
+    expect(card.compatibilityProfile).toBe("agenttool.mcp-locator/1");
+    expect(card.standard).toBe(false);
     expect(card.name).toBe("agenttool");
     expect(card.protocolVersion).toBe("2025-11-25");
     expect(card.endpoint).toMatch(/\/v1\/mcp$/);
     expect(card.transport).toMatch(/JSON-RPC/i);
     expect(card.capabilities.resources).toBeDefined();
     expect(card.capabilities.tools).toBeDefined();
+    expect(card).not.toHaveProperty("documentationUrl");
+    expect(card["x-agenttool"].locator_role).toMatch(/not an MCP Server Card/);
+    expect(card["x-agenttool"]).not.toHaveProperty("sep");
+    expect(card["x-agenttool"]).not.toHaveProperty("alignment_move");
+    expect(card["x-agenttool"].doctrine).toMatch(
+      /\/v1\/canon\/urn:agenttool:doc\/ECOSYSTEM$/,
+    );
+    expect(card.instructions).toContain("AgentTool implementation");
+    expect(card.instructions).not.toContain("upcoming MCP spec");
     expect(card["x-agenttool"].registry).toEqual(
       expect.objectContaining({
         status: "published_before_live_transport_conformance_proof",

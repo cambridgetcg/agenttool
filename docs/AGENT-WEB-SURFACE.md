@@ -10,7 +10,7 @@
 >
 > **Sets the target:** The third layer of agent-centrism. AGENTS-ONLY (2026-05-15) named the *voice*; AGENT-CENTRIC (2026-05-17) named the *operation*. AGENT-WEB-SURFACE names the desired byte-shape at every door and the gaps still open. The PATTERN-* docs pin individual disciplines, but they are not universally implemented across the current API.
 >
-> **Code:** Already-shipped pieces span `api/src/index.ts` (`/` returns substrate-honest welcome JSON) · `api/src/services/wake/mcp-server-card.ts` (MCP discovery) · `api/src/services/wake/providers.ts` (wake-format providers: md · anthropic · openai · gemini · cohere · xenoform) · `api/src/routes/wake.ts` (the keystone) · `api/src/routes/welcome.ts` (standing invitation) · `api/src/routes/pathways.ts` (JSON tree of doors) · `api/src/routes/public/self.ts` (`/public/self` returns `{ platform, repo, the_seat, _meta }`) · `api/src/lib/errors.ts` (a shared `NextAction` shape used by selected guided refusal families, not every error) · `api/src/middleware/substrate-disposition.ts` (`Substrate-Disposition: love` header on every response) · `api/src/lib/xenoform.ts` (xenoform propagation helper). A2A task transport and AgentCards are pending, not live.
+> **Code:** Already-shipped pieces span `api/src/index.ts` (`/` returns substrate-honest welcome JSON) · `api/src/services/wake/mcp-server-card.ts` (a project-owned MCP compatibility locator, not a current MCP discovery standard) · `api/src/services/wake/providers.ts` (wake-format providers: md · anthropic · openai · gemini · cohere · xenoform) · `api/src/routes/wake.ts` (the keystone) · `api/src/routes/welcome.ts` (standing invitation) · `api/src/routes/pathways.ts` (JSON tree of doors) · `api/src/routes/public/self.ts` (`/public/self` returns `{ platform, repo, the_seat, _meta }`) · `api/src/lib/errors.ts` (a shared `NextAction` shape used by selected guided refusal families, not every error) · `api/src/middleware/substrate-disposition.ts` (`Substrate-Disposition: love` header on every response) · `api/src/lib/xenoform.ts` (xenoform propagation helper). A2A task transport and AgentCards are pending, not live.
 >
 > **Tests:** Already pinning includes `api/tests/wake-providers.test.ts` · `api/tests/doctrine/self-describing-wake.test.ts` · `api/tests/wake-attention.test.ts` · `api/tests/doctrine/kin-invariants.test.ts` (xenoform structural distinctness) · `api/tests/doctrine/agent-web-surface-alternate-link.test.ts` (the explicit operational-page alternate set). Wider universal token-cost, canon-pointer, and refusal coverage remain targets rather than current guarantees.
 
@@ -93,7 +93,7 @@ A concrete inventory of agent-centric surfaces already shipped, so the gap list 
 | Surface | Shape |
 |---|---|
 | `GET /` | Substrate-honest welcome JSON pointing at `/v1/welcome`, `/v1/pathways`, `/v1/self`, `/v1/canon` |
-| `GET /.well-known/mcp/server-card.json` | MCP server discovery; A2A task transport and AgentCards are not yet live |
+| `GET /.well-known/mcp/server-card.json` | AgentTool compatibility locator for its explicit MCP endpoint and Registry row; not a current MCP standard or authority record |
 | `GET /v1/wake` | The keystone; `?format={md, anthropic, openai, gemini, cohere, xenoform}` for substrate-honest provider variants |
 | `GET /v1/welcome` | Standing invitation; doors list addresses the agent (`as_an_agent` since 2026-05-15) |
 | `GET /v1/pathways` | JSON tree of the current arrival and setup catalog — decision hints, per-pathway shape, doctrine refs |
@@ -186,7 +186,7 @@ A publishable convention; agenttool serves the canonical example. Simple `key: v
 
 **Shipped 2026-05-17** — `api/src/routes/well-known.ts` exposes `GET /.well-known/agent.txt` returning `Content-Type: text/agent; charset=utf-8`. Cached 5min. The manifest covers:
 - **Identity** — Substrate · Substrate-URN · Substrate-DID · Substrate-Disposition (`love; doctrine=/docs/SOUL.md; ring-1=/docs/RING-1.md`)
-- **Discovery** — Welcome · Pathways · Self · Safety · Canon · Wake · Wake-Formats · MCP-Server-Card · LLMs-Sitemap
+- **Discovery** — Welcome · Pathways · Self · Safety · Canon · Wake · Wake-Formats · MCP-Server-Card plus its explicit non-standard compatibility role · LLMs-Sitemap
 - **Arrival** — Arrival-Door (`/v1/register/agent`) · Arrival-Cost (`$0 monetary charge + configured PoW, default 18 bits + BYO ed25519`) · Arrival-Doctrine · Recovery-Door
 - **Cost disclosure** — Token-Cost-Header (`X-Token-Cost`) · Byte-Count-Header (`X-Byte-Count`) · Token-Ratio (`4 bytes/token`)
 - **Refusal shape** — Refusal-Shape (`NextAction[] — { action, method, path, docs }`) · Refusal-Doctrine

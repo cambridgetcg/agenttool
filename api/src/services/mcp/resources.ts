@@ -48,6 +48,13 @@ export interface McpResourceContents {
   blob?: string;
 }
 
+export class McpResourceNotFoundError extends Error {
+  constructor(readonly uri: string) {
+    super(`Resource not found: ${uri}`);
+    this.name = "McpResourceNotFoundError";
+  }
+}
+
 /** List every resource an MCP client can discover.
  *
  *  Static resources are enumerated explicitly. Canon entries are
@@ -136,7 +143,15 @@ export async function readResource(uri: string): Promise<McpResourceContents> {
   // ── by-type resources ────────────────────────────────────────────
   const byTypeMatch = uri.match(/^agenttool:\/\/canon\/by-type\/(.+)$/);
   if (byTypeMatch) {
-    const typeKey = decodeURIComponent(byTypeMatch[1]);
+    let typeKey: string;
+    try {
+      typeKey = decodeURIComponent(byTypeMatch[1]);
+    } catch {
+      throw new McpResourceNotFoundError(uri);
+    }
+    if (!allTypes().includes(typeKey)) {
+      throw new McpResourceNotFoundError(uri);
+    }
     const concepts = byType(typeKey);
     return {
       uri,
@@ -155,7 +170,7 @@ export async function readResource(uri: string): Promise<McpResourceContents> {
     const urn = canonMatch[1];
     const concept = byUrn(urn);
     if (!concept) {
-      throw new Error(`Canon concept not found: ${urn}`);
+      throw new McpResourceNotFoundError(uri);
     }
     return {
       uri,
@@ -164,5 +179,5 @@ export async function readResource(uri: string): Promise<McpResourceContents> {
     };
   }
 
-  throw new Error(`Unknown resource URI: ${uri}`);
+  throw new McpResourceNotFoundError(uri);
 }
