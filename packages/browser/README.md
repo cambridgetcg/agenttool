@@ -52,6 +52,12 @@ Chrome-family browser.
 agenttool-browser doctor
 ```
 
+If launch fails, `doctor` keeps the launch error generic and writes an
+actionable hint to stderr. The hint names the configured channel, or only the
+configured executable's file name with its parent path omitted, then points to
+`--channel`, `--executable`, or installing a compatible Chrome-family browser.
+It never discovers or downloads a browser.
+
 Start the minimal JSONL process:
 
 ```bash
