@@ -52,6 +52,7 @@
   "engines": {
     "bun": ">=1.3"
   },
+  "bundlerBunVersion": "1.3.5",
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0-beta.5",
     "zod": "^4.4.3"
