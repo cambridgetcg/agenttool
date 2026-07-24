@@ -14,6 +14,10 @@
     "./fs": {
       "import": "./dist/file-store.js",
       "types": "./dist/file-store.d.ts"
+    },
+    "./s3": {
+      "import": "./dist/s3-store.js",
+      "types": "./dist/s3-store.d.ts"
     }
   },
   "files": [
