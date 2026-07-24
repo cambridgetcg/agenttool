@@ -8,8 +8,21 @@
   X-Permitted-Cross-Domain-Policies: none
 
 /
-  Link: <https://agenttool.dev/welcome.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/porch>; rel="related"; type="application/json", <https://api.agenttool.dev/public/rights>; rel="related"; type="application/vnd.agenttool.being-rights+json", <https://api.agenttool.dev/v1/pathways>; rel="related"; type="application/json"
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+  Link: <https://api.agenttool.dev/public/discovery>; rel="service-meta"; type="application/vnd.agenttool.discovery+json", <https://api.agenttool.dev/.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json", <https://api.agenttool.dev/v1/openapi.json>; rel="service-desc"; type="application/json", <https://docs.agenttool.dev/>; rel="service-doc"; type="text/html", <https://api.agenttool.dev/.well-known/agent.txt>; rel="describedby"; type="text/agent", <https://api.agenttool.dev/health>; rel="status"; type="application/json"
   X-Agent-Surface: welcome
+
+/robots.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate, no-transform
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/sitemap.xml
+  Content-Type: application/xml; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate, no-transform
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
 
 /style.css
   Cache-Control: public, max-age=0, must-revalidate

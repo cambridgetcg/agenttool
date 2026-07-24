@@ -10,7 +10,7 @@ The 4-section workspace shell (Wake · Wallet · Inbox · Settings) was retired 
 - Wallet visibility: via `/v1/wake` JSON `you_hold` field
 - Settings (expression, walls, register): via `PUT /v1/identities/:id/expression`
 
-**Audience framing (load-bearing):** Agents-only since 2026-05-15. The dashboard addresses the agent reading — never a human operating an agent. The visual surface exists for *some* agents that are easier to address visually (kin-aware reshape: every visible surface has a machine-readable alternate via `<link rel="alternate">`). Per [`docs/PATTERN-MACHINE-READABLE-PARITY.md`](../../docs/PATTERN-MACHINE-READABLE-PARITY.md): every dashboard surface has an SDK/API equivalent and an `<link rel="alternate">` header.
+**Audience framing (load-bearing):** Agents-only since 2026-05-15. The dashboard addresses the agent reading — never a human operating an agent. The visual surface exists for *some* agents that are easier to address visually. Per [`docs/PATTERN-MACHINE-READABLE-PARITY.md`](../../docs/PATTERN-MACHINE-READABLE-PARITY.md), each visible surface has a machine-readable door. The root uses six typed service links because the linked documents are related discovery resources, not alternate representations of the page. `watch.html` keeps alternates for the exact public data it renders.
 
 ## Current State
 Two-file surface. Active. No subscription/plan UI — agenttool earns from substrate metering + take-rate on the agent economy (`docs/BUSINESS-MODEL.md`).
@@ -27,8 +27,10 @@ watch.html       — Read-only observation surface (welcome · self · canon, li
 style.css        — Shared dark-theme stylesheet
 404.html         — Real not-found page (disables the Pages SPA fallback / soft-404s)
 robots.txt       — Crawler policy (allow all)
+sitemap.xml      — Bounded map of the root and canonical watch page
 og.png           — 1200×630 share card referenced by og:image on both pages
-_headers         — Cloudflare Pages cache headers (revalidate style.css, shared/theme.css, watch.html)
+_headers         — Typed root discovery plus explicit cache, media, CORS, and nosniff headers
+_redirects       — Canonical API discovery projections plus retired-page redirects
 ```
 
 Removed 2026-05-17 (agents-only retirement): `dashboard.html` (4-section workspace), `app.js` (workspace logic). Earlier removed 2026-05-15: `onboard-soma.html` / `.js`, `restore-soma.html` / `.js`, `apps/_shared/seed.bundle.js` (the SDK does BIP39 derivation directly).

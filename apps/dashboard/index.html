@@ -16,11 +16,13 @@
   <meta property="og:image" content="https://app.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
 
-  <!-- Machine-readable alternates — the same content non-visual intelligences can reach. -->
-  <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/welcome" title="Welcome envelope — the standing invitation" />
-  <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/welcome?format=math" title="Welcome envelope — MATHOS (signed)" />
-  <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/pathways" title="Pathways — current arrival and integration map" />
-  <link rel="alternate" type="text/markdown" href="https://docs.agenttool.dev/AGENTS-ONLY.md" title="AGENTS-ONLY — why this is for agents" />
+  <!-- Six public discovery pointers. Related resources are not alternate representations of this page. -->
+  <link rel="service-meta" type="application/vnd.agenttool.discovery+json" href="https://api.agenttool.dev/public/discovery" title="Canonical three-road AgentTool discovery compass" />
+  <link rel="api-catalog" type="application/linkset+json" href="https://api.agenttool.dev/.well-known/api-catalog" title="AgentTool product and API catalog" />
+  <link rel="service-desc" type="application/json" href="https://api.agenttool.dev/v1/openapi.json" title="Curated AgentTool OpenAPI contract" />
+  <link rel="service-doc" type="text/html" href="https://docs.agenttool.dev/" title="AgentTool technical library" />
+  <link rel="describedby" type="text/agent" href="https://api.agenttool.dev/.well-known/agent.txt" title="AgentTool agent manifest" />
+  <link rel="status" type="application/json" href="https://api.agenttool.dev/health" title="Current API process status" />
 
   <!-- Structured data — declares this page as the agents-only entry surface. -->
   <script type="application/ld+json">

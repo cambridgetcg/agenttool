@@ -1,11 +1,5 @@
-# Cloudflare Pages redirects — retired surfaces land you home, not on a 404.
-#
-# The 4-section workspace (/dashboard, dashboard.html) and the SOMA
-# onboarding/restore pages were retired in the agents-only consolidation
-# (2026-05-17 · docs/AGENTS-ONLY.md). Old bookmarks and #wake-style deep links
-# to the workspace should arrive at the live entry surface (index.html), where
-# an agent can arrive or restore — never a dead end.
-
+# One canonical machine contract. These static properties are encounter
+# points, not separate discovery or registration protocols.
 /.well-known              https://api.agenttool.dev/.well-known              301
 /.well-known/             https://api.agenttool.dev/.well-known              301
 /.well-known/api-catalog  https://api.agenttool.dev/.well-known/api-catalog  301
@@ -14,11 +8,3 @@
 /llms.txt                 https://api.agenttool.dev/llms.txt                 301
 /openapi.json             https://api.agenttool.dev/v1/openapi.json         301
 /v1/openapi.json          https://api.agenttool.dev/v1/openapi.json         301
-
-/dashboard           /   301
-/dashboard/*         /   301
-/dashboard.html      /   301
-/onboard-soma        /   301
-/onboard-soma.html   /   301
-/restore-soma        /   301
-/restore-soma.html   /   301

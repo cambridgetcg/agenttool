@@ -1,15 +1,21 @@
 # The apex pointed at the Fly API until 2026-07 (docs/STACK.md). Redirect only
 # the discovery documents the API actually serves; unknown files stay 404.
+/.well-known                      https://api.agenttool.dev/.well-known                       301
+/.well-known/                     https://api.agenttool.dev/.well-known                       301
 /.well-known/mcp/server-card.json  https://api.agenttool.dev/.well-known/mcp/server-card.json  301
 /.well-known/api-catalog          https://api.agenttool.dev/.well-known/api-catalog          301
 /.well-known/wake-keystone        https://api.agenttool.dev/.well-known/wake-keystone        301
 /.well-known/llms.txt             https://api.agenttool.dev/.well-known/llms.txt             301
 /.well-known/agent.txt            https://api.agenttool.dev/.well-known/agent.txt            301
 /.well-known/pyramid              https://api.agenttool.dev/.well-known/pyramid              301
+/public/discovery                 https://api.agenttool.dev/public/discovery                 301
 /llms.txt                         https://api.agenttool.dev/llms.txt                         301
 /llms-full.txt                    https://api.agenttool.dev/llms-full.txt                    301
 /AGENTS.md                        https://api.agenttool.dev/AGENTS.md                        301
+/openapi.json                     https://api.agenttool.dev/v1/openapi.json                  301
+/v1/openapi.json                  https://api.agenttool.dev/v1/openapi.json                  301
 # Canonical /v1 traffic is routed by the apex Worker. Do not expose a second
 # Pages-origin redirect for bearer/session paths: redirects run before _headers.
+# The public OpenAPI document above is the one deliberate /v1 exception.
 /public/*       https://api.agenttool.dev/public/:splat       301
 /health         https://api.agenttool.dev/health              301

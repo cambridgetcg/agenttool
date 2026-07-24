@@ -2,8 +2,10 @@
  *
  *  Operational API-reference pages carry a JSON alternate in both their HTML
  *  head and the parallel Cloudflare Pages `_headers` block. Other editorial or
- *  visual pages are not forced to invent a structured sibling. When any page
- *  does declare a JSON alternate, this test still checks that URL's discipline.
+ *  visual pages are not forced to invent a structured sibling. The docs root
+ *  uses registered service relations for related discovery resources instead
+ *  of calling them alternate representations. When any page does declare a
+ *  JSON alternate, this test still checks that URL's discipline.
  *
  *  Doctrine: docs/AGENT-WEB-SURFACE.md Move 4 ·
  *            docs/PATTERN-MACHINE-READABLE-PARITY.md (operational deepening).
@@ -28,7 +30,6 @@ const OPERATIONAL_JSON_PAGES = [
   { file: "errors.html", path: "/errors" },
   { file: "identity.html", path: "/identity" },
   { file: "inbox.html", path: "/inbox" },
-  { file: "index.html", path: "/" },
   { file: "marketplace.html", path: "/marketplace" },
   { file: "mathos.html", path: "/mathos" },
   { file: "memory.html", path: "/memory" },
