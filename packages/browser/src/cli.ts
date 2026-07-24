@@ -1,4 +1,5 @@
 import { once } from "node:events";
+import { basename } from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { z } from "zod";
@@ -529,6 +530,37 @@ async function launchFrom(
   );
 }
 
+const MAX_BROWSER_SELECTION_LABEL_CHARS = 100;
+
+function boundedBrowserSelectionLabel(value: string): string {
+  const printable = value.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, "?");
+  const characters = Array.from(printable);
+  const bounded =
+    characters.length <= MAX_BROWSER_SELECTION_LABEL_CHARS
+      ? printable
+      : `${characters
+          .slice(0, MAX_BROWSER_SELECTION_LABEL_CHARS - 3)
+          .join("")}...`;
+  return JSON.stringify(bounded);
+}
+
+function browserLaunchDiagnostic(config: BrowserProcessConfig): string {
+  const action =
+    "Select a compatible Chrome-family browser already installed on this machine with " +
+    "--channel NAME or --executable PATH, or install one and retry.";
+  if (config.executablePath) {
+    const executableName = basename(config.executablePath) || "unnamed executable";
+    return (
+      `hint: configured browser executable ${boundedBrowserSelectionLabel(executableName)} ` +
+      `(parent path omitted). ${action}\n`
+    );
+  }
+  return (
+    `hint: configured browser channel ${boundedBrowserSelectionLabel(config.channel ?? "chrome")}. ` +
+    `${action}\n`
+  );
+}
+
 export async function runCli(
   argv: readonly string[],
   dependencies: CliDependencies = {},
@@ -552,11 +584,13 @@ export async function runCli(
     return 2;
   }
 
+  let launchConfig: BrowserProcessConfig | undefined;
   try {
     const config = parseBrowserProcessConfig(args, {
       ...(dependencies.env ? { env: dependencies.env } : {}),
       ...(dependencies.cwd ? { cwd: dependencies.cwd } : {}),
     });
+    launchConfig = config;
     if (command === "doctor") {
       const browser = await launchFrom(config, dependencies);
       const capabilities = browser.capabilities();
@@ -595,6 +629,9 @@ export async function runCli(
   } catch (error) {
     const detail = publicBrowserError(error);
     stderr.write(`error: ${detail.code}: ${detail.message}\n`);
+    if (detail.code === "browser_launch_failed" && launchConfig) {
+      stderr.write(browserLaunchDiagnostic(launchConfig));
+    }
     return 1;
   }
 }

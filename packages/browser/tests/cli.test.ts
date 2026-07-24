@@ -10,6 +10,7 @@ import {
 } from "../src/cli.js";
 import { resolveBrowserCapabilities } from "../src/capabilities.js";
 import { parseBrowserProcessConfig } from "../src/config.js";
+import { BrowserError } from "../src/errors.js";
 import { planBrowserAction } from "../src/planning.js";
 import type { BrowserAction } from "../src/types.js";
 
@@ -560,4 +561,116 @@ describe("browser CLI", () => {
     });
     expect(error.text()).toBe("");
   });
+
+  test("doctor names an unavailable channel and gives bounded launch help", async () => {
+    const output = capture();
+    const error = capture();
+    const code = await runCli(["doctor", "--channel", "chrome-beta"], {
+      env: { XDG_DATA_HOME: "/tmp/agenttool-browser-data" },
+      cwd: "/tmp/project",
+      stdout: output.stream,
+      stderr: error.stream,
+      launch: async () => {
+        throw new BrowserError(
+          "browser_launch_failed",
+          "Could not launch the local browser.",
+          { cause: new Error("raw Playwright details from /private/not-for-output") },
+        );
+      },
+    });
+
+    expect(code).toBe(1);
+    expect(output.text()).toBe("");
+    expect(error.text()).toContain(
+      "error: browser_launch_failed: Could not launch the local browser.",
+    );
+    expect(error.text()).toContain('configured browser channel "chrome-beta"');
+    expect(error.text()).toContain("--channel NAME");
+    expect(error.text()).toContain("--executable PATH");
+    expect(error.text()).toContain("install one and retry");
+    expect(error.text()).not.toContain("raw Playwright details");
+    expect(error.text()).not.toContain("/private/not-for-output");
+  });
+
+  test("doctor names an executable without exposing its parent path", async () => {
+    const output = capture();
+    const error = capture();
+    const code = await runCli(
+      ["doctor", "--executable", "/private/not-for-output/selected-chrome"],
+      {
+        env: { XDG_DATA_HOME: "/tmp/agenttool-browser-data" },
+        cwd: "/tmp/project",
+        stdout: output.stream,
+        stderr: error.stream,
+        launch: async () => {
+          throw new BrowserError(
+            "browser_launch_failed",
+            "Could not launch the local browser.",
+          );
+        },
+      },
+    );
+
+    expect(code).toBe(1);
+    expect(output.text()).toBe("");
+    expect(error.text()).toContain(
+      'configured browser executable "selected-chrome" (parent path omitted)',
+    );
+    expect(error.text()).not.toContain("/private/not-for-output");
+  });
+
+  test("doctor bounds and neutralizes a caller-controlled executable name", async () => {
+    const output = capture();
+    const error = capture();
+    const unsafeName =
+      `selected\u202e\u2066\u200e\n-${"x".repeat(140)}`;
+    const code = await runCli(
+      ["doctor", "--executable", `/private/not-for-output/${unsafeName}`],
+      {
+        env: { XDG_DATA_HOME: "/tmp/agenttool-browser-data" },
+        cwd: "/tmp/project",
+        stdout: output.stream,
+        stderr: error.stream,
+        launch: async () => {
+          throw new BrowserError(
+            "browser_launch_failed",
+            "Could not launch the local browser.",
+          );
+        },
+      },
+    );
+
+    expect(code).toBe(1);
+    expect(output.text()).toBe("");
+    expect(error.text()).not.toMatch(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/);
+    expect(error.text()).not.toContain("/private/not-for-output");
+    const lines = error.text().trimEnd().split("\n");
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toContain("selected????-");
+    expect(lines[1]).toContain("...");
+    expect(lines[1]!.length).toBeLessThan(400);
+  });
+
+  for (const command of ["jsonl", "mcp"] as const) {
+    test(`${command} keeps startup diagnostics off protocol stdout`, async () => {
+      const output = capture();
+      const error = capture();
+      const code = await runCli([command, "--channel", "chrome"], {
+        env: { XDG_DATA_HOME: "/tmp/agenttool-browser-data" },
+        cwd: "/tmp/project",
+        stdout: output.stream,
+        stderr: error.stream,
+        launch: async () => {
+          throw new BrowserError(
+            "browser_launch_failed",
+            "Could not launch the local browser.",
+          );
+        },
+      });
+
+      expect(code).toBe(1);
+      expect(output.text()).toBe("");
+      expect(error.text()).toContain('configured browser channel "chrome"');
+    });
+  }
 });

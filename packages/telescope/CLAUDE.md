@@ -39,6 +39,11 @@ npm pack --ignore-scripts --dry-run
   `/.well-known/love-packages`, and `/.well-known/agent-card.json`. Follow only
   a uniquely advertised MCP card and the explicit LOVE index → exact manifest
   chain. Do not recursively crawl remote locators.
+- Keep XENIA Surface discovery opt-in through `createXeniaSurfaceAdapter()`.
+  It may read only the canonical `/.well-known/agent.json` manifest through
+  Telescope's bounded transport. It does not probe declared resources or
+  problem routes, fetch claim evidence, run the XENIA checker, assess Covenant
+  adoption, grant authority, or produce a conformance result.
 - Preserve ordered `agent.txt` duplicates. Never silently overwrite or choose a
   duplicated selected key.
 - Remote documents are tainted publisher assertions. Do not copy remote shell

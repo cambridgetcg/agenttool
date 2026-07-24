@@ -11,8 +11,12 @@ import type {
   TelescopeLimits,
 } from "./types.js";
 
-export interface FetchedDocument {
-  observation: SourceObservation;
+type TransportObservation<Id extends string> = Omit<SourceObservation, "id"> & {
+  id: Id;
+};
+
+export interface FetchedDocument<Id extends string = ProbeId> {
+  observation: TransportObservation<Id>;
   body: Uint8Array | null;
 }
 
@@ -72,12 +76,12 @@ function reportSafeRedirects(values: readonly string[]): {
   };
 }
 
-function emptyObservation(
-  id: ProbeId,
+function emptyObservation<Id extends string>(
+  id: Id,
   url: string,
   state: SourceObservation["state"],
   errorCode: string,
-): SourceObservation {
+): TransportObservation<Id> {
   const safeUrl = reportSafeUrl(url);
   return {
     id,
@@ -190,8 +194,8 @@ function classifyThrown(error: unknown): {
   return { state: "unreachable", code: "network_failure" };
 }
 
-export async function fetchDocument(input: {
-  id: ProbeId;
+export async function fetchDocument<Id extends string>(input: {
+  id: Id;
   url: string;
   accept: string;
   fetch: FetchLike;
@@ -199,7 +203,7 @@ export async function fetchDocument(input: {
   budget: ScanBudget;
   limits: TelescopeLimits;
   signal: AbortSignal;
-}): Promise<FetchedDocument> {
+}): Promise<FetchedDocument<Id>> {
   const redirectChain: string[] = [];
   let current = input.url;
 
