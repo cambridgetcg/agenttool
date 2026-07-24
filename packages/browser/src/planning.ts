@@ -57,10 +57,7 @@ export function planBrowserAction(
     action: Object.freeze(summary),
     authority: Object.freeze({
       profile: capabilities.authority.profile,
-      decision:
-        navigates && capabilities.network.dnsPreflight === "classify"
-          ? "checked_at_execution"
-          : "allowed",
+      decision: navigates ? "checked_at_execution" : "allowed",
     }),
     possibleEffects: Object.freeze(effects),
     repeatSafety: repeatSafety(action),

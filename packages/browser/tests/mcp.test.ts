@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { z } from "zod";
 import {
   browserActionSchema,
   buildBrowserMcpServer,
@@ -138,6 +139,23 @@ async function callTool(server: any, name: string, args: Record<string, unknown>
   return await (registration.handler ?? registration.callback)(args, {});
 }
 
+async function callServer(
+  server: any,
+  method: "tools/list" | "tools/call",
+  params: Record<string, unknown>,
+) {
+  const handler = server.server._requestHandlers.get(method);
+  if (!handler) throw new Error(`server method not registered: ${method}`);
+  return await handler(
+    { jsonrpc: "2.0", id: 1, method, params },
+    {
+      mcpReq: {
+        requestState: () => undefined,
+      },
+    },
+  );
+}
+
 describe("browser MCP surface", () => {
   test("registers only the nine small browser tools", () => {
     const { browser } = fakeBrowser();
@@ -179,6 +197,148 @@ describe("browser MCP surface", () => {
     expect(tools.browser_act.annotations.destructiveHint).toBe(true);
     expect(tools.browser_screenshot.annotations.readOnlyHint).toBe(false);
     expect(tools.browser_close.annotations.destructiveHint).toBe(true);
+  });
+
+  test("advertises the ref pairing and scroll exclusivity in JSON Schema", async () => {
+    const { browser } = fakeBrowser();
+    const server = buildBrowserMcpServer(browser);
+    const result = await callServer(server, "tools/list", {});
+    const act = result.tools.find((tool: any) => tool.name === "browser_act");
+    const extract = result.tools.find(
+      (tool: any) => tool.name === "browser_extract",
+    );
+    const actInput = z.fromJSONSchema(act.inputSchema);
+    const extractInput = z.fromJSONSchema(extract.inputSchema);
+
+    for (const action of [
+      { kind: "press", key: "Enter" },
+      {
+        kind: "press",
+        key: "Enter",
+        ref: "e1",
+        snapshot_id: "snapshot-1",
+      },
+      { kind: "scroll", delta_y: 400 },
+      { kind: "scroll", delta_x: 10, delta_y: 400 },
+      {
+        kind: "scroll",
+        ref: "e1",
+        snapshot_id: "snapshot-1",
+      },
+    ]) {
+      expect(actInput.safeParse({ action }).success).toBe(true);
+    }
+    for (const action of [
+      { kind: "press", key: "Enter", ref: "e1" },
+      { kind: "press", key: "Enter", snapshot_id: "snapshot-1" },
+      { kind: "scroll" },
+      { kind: "scroll", delta_x: 10 },
+      { kind: "scroll", ref: "e1" },
+      { kind: "scroll", snapshot_id: "snapshot-1" },
+      {
+        kind: "scroll",
+        ref: "e1",
+        snapshot_id: "snapshot-1",
+        delta_y: 400,
+      },
+    ]) {
+      expect(actInput.safeParse({ action }).success).toBe(false);
+    }
+
+    expect(extractInput.safeParse({ format: "text" }).success).toBe(true);
+    expect(
+      extractInput.safeParse({
+        format: "text",
+        ref: "e1",
+        snapshot_id: "snapshot-1",
+      }).success,
+    ).toBe(true);
+    expect(
+      extractInput.safeParse({ format: "text", ref: "e1" }).success,
+    ).toBe(false);
+    expect(
+      extractInput.safeParse({
+        format: "text",
+        snapshot_id: "snapshot-1",
+      }).success,
+    ).toBe(false);
+  });
+
+  test("accepts only the advertised action and extract variants through the server", async () => {
+    const { browser, calls } = fakeBrowser();
+    const server = buildBrowserMcpServer(browser);
+
+    for (const action of [
+      { kind: "press", key: "Enter" },
+      {
+        kind: "press",
+        key: "Enter",
+        ref: "e1",
+        snapshot_id: "snapshot-1",
+      },
+      { kind: "scroll", delta_y: 400 },
+      {
+        kind: "scroll",
+        ref: "e1",
+        snapshot_id: "snapshot-1",
+      },
+    ]) {
+      const result = await callServer(server, "tools/call", {
+        name: "browser_act",
+        arguments: { action },
+      });
+      expect(result.isError).toBeUndefined();
+    }
+    expect(calls.filter((call) => call.method === "act")).toHaveLength(4);
+
+    for (const action of [
+      { kind: "press", key: "Enter", ref: "e1" },
+      { kind: "press", key: "Enter", snapshot_id: "snapshot-1" },
+      { kind: "scroll", delta_x: 10 },
+      {
+        kind: "scroll",
+        ref: "e1",
+        snapshot_id: "snapshot-1",
+        delta_y: 400,
+      },
+    ]) {
+      const result = await callServer(server, "tools/call", {
+        name: "browser_act",
+        arguments: { action },
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Input validation error");
+    }
+    expect(calls.filter((call) => call.method === "act")).toHaveLength(4);
+
+    for (const argumentsValue of [
+      { format: "text" },
+      {
+        format: "html",
+        ref: "e1",
+        snapshot_id: "snapshot-1",
+      },
+    ]) {
+      const result = await callServer(server, "tools/call", {
+        name: "browser_extract",
+        arguments: argumentsValue,
+      });
+      expect(result.isError).toBeUndefined();
+    }
+    expect(calls.filter((call) => call.method === "extract")).toHaveLength(2);
+
+    for (const argumentsValue of [
+      { format: "text", ref: "e1" },
+      { format: "text", snapshot_id: "snapshot-1" },
+    ]) {
+      const result = await callServer(server, "tools/call", {
+        name: "browser_extract",
+        arguments: argumentsValue,
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Input validation error");
+    }
+    expect(calls.filter((call) => call.method === "extract")).toHaveLength(2);
   });
 
   test("reports capabilities and redacted plans without touching the page", async () => {

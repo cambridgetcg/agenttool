@@ -1,7 +1,7 @@
 import { BrowserError } from "./errors.js";
 
 export const BROWSER_CAPABILITIES_SCHEMA =
-  "agent-browser-capabilities/0.2" as const;
+  "agent-browser-capabilities/0.3" as const;
 
 export type BrowserAuthorityPreset = "public" | "local" | "sovereign";
 export type EffectiveBrowserAuthority =
@@ -19,7 +19,11 @@ export interface BrowserCapabilitySet {
     local: boolean;
     reserved: boolean;
     schemes: readonly ["http", "https"];
-    urlCredentials: "blocked";
+    urlCredentials: {
+      policyCheckedRequests: "blocked";
+      redirectHops: "browser";
+    };
+    redirectRevalidation: false;
     dnsPreflight: "classify" | "browser";
     connectionAddressPinning: false;
     webSockets: "blocked" | "classified" | "browser";
@@ -157,7 +161,11 @@ export function resolveBrowserCapabilities(
       local: preset.local,
       reserved: preset.reserved,
       schemes: ["http", "https"] as const,
-      urlCredentials: "blocked",
+      urlCredentials: {
+        policyCheckedRequests: "blocked",
+        redirectHops: "browser",
+      },
+      redirectRevalidation: false,
       dnsPreflight: preset.dnsPreflight,
       connectionAddressPinning: false,
       webSockets: preset.webSockets,
@@ -186,8 +194,8 @@ export function resolveBrowserCapabilities(
     },
     statement:
       profile === "sovereign"
-        ? "AgentTool passes implemented HTTP(S) and WebSocket destinations to the browser without DNS classification; browser, network, account, and site boundaries still apply."
-        : "AgentTool classifies implemented browser destinations before connection; DNS preflight does not pin the address Chromium later uses.",
+        ? "AgentTool passes policy-checked HTTP(S) and WebSocket destinations to the browser without DNS classification; Chromium-managed redirect hops are not revalidated for destination class or URL credentials."
+        : "AgentTool classifies policy-checked HTTP(S) requests before connection, but Chromium-managed redirect hops are not revalidated for destination class or URL credentials and DNS preflight does not pin Chromium's later address.",
   });
 }
 

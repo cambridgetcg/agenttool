@@ -16,6 +16,10 @@ catalog and docs distribute bytes and documentation; they do not expose an
 AgentTool-hosted browser. The package requires no AgentTool account, API key,
 credits, Redis, database, or hosted control plane.
 
+This source document also tracks unreleased work intended for the next package
+version. The exact `0.2.0` artifact remains immutable and must not be
+republished with these source changes.
+
 The package uses `playwright-core` to drive a Chrome-family browser already
 installed on the caller's machine. There is no postinstall hook and no bundled
 browser download. This keeps browser selection and browser bytes under the
@@ -117,18 +121,19 @@ downloads a browser.
 
 Version `0.2.0` makes destination authority explicit:
 
-| Profile | HTTP(S) destinations | WebSockets | Service workers |
+| Profile | Policy-checked HTTP(S) requests | WebSockets | Service workers |
 |---|---|---|---|
 | `public` (default) | Public only | Blocked | Blocked |
 | `local` | Public plus local/private; reserved denied | Classified by the same boundary | Blocked |
-| `sovereign` | Broad pass-through, including local/private/reserved; URL-embedded userinfo remains blocked | Passed through | Enabled |
+| `sovereign` | Broad pass-through, including local/private/reserved; embedded userinfo rejected at the policy check | Passed through | Enabled |
 
 `public` preserves the published compatibility default. `local` corresponds
 to public web plus the existing local-network opt-in. `sovereign` does not
-apply AgentTool destination-class blocking to valid HTTP(S) requests or
-WebSockets; URL-embedded userinfo remains blocked, and reachability is
-delegated to the selected browser, host, DNS/proxy configuration, network,
-and destination.
+apply AgentTool destination-class blocking to policy-checked HTTP(S) requests
+or WebSockets; embedded userinfo is rejected when a URL crosses that policy
+boundary. Chromium-managed `Location` hops do not cross it again.
+Reachability is delegated to the selected browser, host, DNS/proxy
+configuration, network, and destination.
 
 That delegation is broad local process authority. It may let remote page code
 or a service worker reach loopback services, private networks, or other
@@ -178,9 +183,13 @@ state, not durable CSS selectors or identity claims. A later navigation,
 rerender, tab change, or DOM mutation can make a reference stale.
 
 `open` creates a new tab and returns its first observation. Every
-reference-targeted action carries both `ref` and `snapshotId`; a successful
-action invalidates that snapshot. Observe again before selecting another
-referenced action.
+reference-targeted action carries both `ref` and `snapshotId`. Read-only
+observations retain a bounded recent snapshot history within the current frame
+documents, so one observer does not immediately stale a peer's references.
+Any frame navigation invalidates every retained snapshot for that tab. Once an
+action reaches browser dispatch, success or failure also invalidates every
+retained snapshot for that tab; validation and navigation-preflight rejection
+do not. Observe again before selecting another referenced action.
 
 `act` accepts one action at a time. A reference must resolve to one current,
 eligible target. Missing, stale, ambiguous, hidden, disabled, or out-of-range
@@ -305,6 +314,13 @@ does **not** claim strong SSRF isolation and must not be exposed as a hosted
 arbitrary-target browser. A hosted design would need connection-pinned egress,
 tenant isolation, quotas, abuse controls, and a separate security review.
 
+Playwright-managed HTTP redirects do not re-enter the package's request route.
+AgentTool rejects embedded URL credentials only when a URL crosses its policy
+check boundary: direct inputs and routed requests. A Chromium-managed
+`Location` hop is not independently rechecked and may change destination class
+or contain userinfo before the package can observe the committed page. Do not
+treat the local authority profiles as credential-disclosure or SSRF isolation.
+
 The public-web check is also not a claim that a public site is trustworthy,
 safe to transact with, or authorized to receive data.
 
@@ -316,11 +332,12 @@ extends to WebSocket transport.
 
 The `0.2.0` `sovereign` profile is the explicit alternative: it intentionally
 performs no destination-class blocking for valid HTTP(S), passes WebSockets
-through, and enables service workers. URL-embedded userinfo remains blocked.
-That makes exploration possible wherever the surrounding system permits it
-while leaving consequential choices visible. It is not a security label, an
-authorization grant for external accounts, or a guarantee that any destination
-is reachable.
+through, and enables service workers. Embedded userinfo is blocked on direct
+inputs and routed requests, not on unseen Chromium-managed redirect hops. That
+makes exploration possible wherever the surrounding system permits it while
+leaving consequential choices visible. It is not a security label, an
+authorization grant for external accounts, or a guarantee that any
+destination is reachable.
 
 ## Local package and hosted `/v1/browse` are separate
 

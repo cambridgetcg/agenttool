@@ -64,13 +64,19 @@ export interface BrowserLike {
   close(): Promise<void>;
 }
 
+export interface BrowserFrameLike {
+  parentFrame(): BrowserFrameLike | null;
+}
+
 export interface BrowserRequestLike {
   url(): string;
+  isNavigationRequest(): boolean;
+  frame(): BrowserFrameLike;
 }
 
 export interface BrowserNavigationRequestLike {
   isNavigationRequest(): boolean;
-  frame(): object;
+  frame(): BrowserFrameLike;
 }
 
 export interface BrowserResponseLike {
@@ -105,7 +111,7 @@ export interface LocatorLike {
   locator(selector: string): LocatorLike;
   isVisible(): Promise<boolean>;
   isEnabled(): Promise<boolean>;
-  boundingBox(): Promise<BoundingBox | null>;
+  boundingBox(options?: { timeout?: number }): Promise<BoundingBox | null>;
   getAttribute(name: string): Promise<string | null>;
   textContent(): Promise<string | null>;
   innerText(): Promise<string>;
@@ -128,10 +134,14 @@ export interface MouseLike {
 export interface PageLike {
   url(): string;
   title(): Promise<string>;
-  mainFrame?(): object;
-  on?(
+  mainFrame(): BrowserFrameLike;
+  on(
     event: "response",
     listener: (response: BrowserResponseLike) => void,
+  ): unknown;
+  on(
+    event: "framenavigated",
+    listener: (frame: BrowserFrameLike) => void,
   ): unknown;
   goto(
     url: string,

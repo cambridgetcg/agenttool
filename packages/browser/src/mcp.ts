@@ -15,111 +15,123 @@ const snapshotId = z
   .min(1)
   .max(200)
   .describe("Snapshot ID that issued the ARIA reference; stale snapshots are rejected");
-const ref = z.string().min(1).max(100).describe("Snapshot-scoped ARIA reference such as e12");
+const ref = z
+  .string()
+  .min(1)
+  .max(100)
+  .describe("Snapshot-scoped public ARIA reference such as tab_1@3:e12");
 const url = z.string().min(1).max(8192).describe("Absolute http(s) URL allowed by the process-start network policy");
 
-export const browserActionSchema = z
-  .discriminatedUnion("kind", [
-    z
-      .object({
-        kind: z.literal("navigate"),
-        url,
-        tab_id: tabId.optional(),
-      })
-      .strict(),
-    z
-      .object({
-        kind: z.literal("click"),
-        ref,
-        snapshot_id: snapshotId,
-        tab_id: tabId.optional(),
-      })
-      .strict(),
-    z
-      .object({
-        kind: z.literal("type"),
-        ref,
-        snapshot_id: snapshotId,
-        text: z.string().max(100_000),
-        tab_id: tabId.optional(),
-      })
-      .strict(),
-    z
-      .object({
-        kind: z.literal("press"),
-        key: z.string().min(1).max(100),
-        ref: ref.optional(),
-        snapshot_id: snapshotId.optional(),
-        tab_id: tabId.optional(),
-      })
-      .strict(),
-    z
-      .object({
-        kind: z.literal("select"),
-        ref,
-        snapshot_id: snapshotId,
-        values: z.union([
-          z.string().max(10_000),
-          z.array(z.string().max(10_000)).min(1).max(100),
-        ]),
-        tab_id: tabId.optional(),
-      })
-      .strict(),
-    z
-      .object({
-        kind: z.literal("scroll"),
-        ref: ref.optional(),
-        snapshot_id: snapshotId.optional(),
-        delta_x: z.number().finite().min(-100_000).max(100_000).optional(),
-        delta_y: z.number().finite().min(-100_000).max(100_000).optional(),
-        tab_id: tabId.optional(),
-      })
-      .strict(),
-    z
-      .object({
-        kind: z.literal("wait"),
-        ms: z.number().int().min(0).max(30_000),
-        tab_id: tabId.optional(),
-      })
-      .strict(),
-    z.object({ kind: z.literal("back"), tab_id: tabId.optional() }).strict(),
-    z.object({ kind: z.literal("forward"), tab_id: tabId.optional() }).strict(),
-    z.object({ kind: z.literal("reload"), tab_id: tabId.optional() }).strict(),
-    z.object({ kind: z.literal("new_tab"), url: url.optional() }).strict(),
-    z.object({ kind: z.literal("close_tab"), tab_id: tabId.optional() }).strict(),
-  ])
-  .superRefine((action, context) => {
-    if (action.kind === "press" && Boolean(action.ref) !== Boolean(action.snapshot_id)) {
-      context.addIssue({
-        code: "custom",
-        message: "press requires snapshot_id when ref is present, and ref when snapshot_id is present",
-      });
-    }
-    if (action.kind === "scroll") {
-      const targetsRef = action.ref !== undefined || action.snapshot_id !== undefined;
-      const hasDelta = action.delta_x !== undefined || action.delta_y !== undefined;
-      if (targetsRef && (action.ref === undefined || action.snapshot_id === undefined)) {
-        context.addIssue({
-          code: "custom",
-          message: "ref-targeted scroll requires both ref and snapshot_id",
-        });
-      }
-      if (targetsRef === hasDelta) {
-        context.addIssue({
-          code: "custom",
-          message: "scroll requires either ref with snapshot_id or a delta, but not both",
-        });
-      }
-      if (!targetsRef && action.delta_y === undefined) {
-        context.addIssue({
-          code: "custom",
-          message: "non-targeted scroll requires delta_y",
-        });
-      }
-    }
-  });
+export const browserActionSchema = z.union([
+  z
+    .object({
+      kind: z.literal("navigate"),
+      url,
+      tab_id: tabId.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("click"),
+      ref,
+      snapshot_id: snapshotId,
+      tab_id: tabId.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("type"),
+      ref,
+      snapshot_id: snapshotId,
+      text: z.string().max(100_000),
+      tab_id: tabId.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("press"),
+      key: z.string().min(1).max(100),
+      ref,
+      snapshot_id: snapshotId,
+      tab_id: tabId.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("press"),
+      key: z.string().min(1).max(100),
+      tab_id: tabId.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("select"),
+      ref,
+      snapshot_id: snapshotId,
+      values: z.union([
+        z.string().max(10_000),
+        z.array(z.string().max(10_000)).min(1).max(100),
+      ]),
+      tab_id: tabId.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("scroll"),
+      ref,
+      snapshot_id: snapshotId,
+      tab_id: tabId.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("scroll"),
+      delta_x: z.number().finite().min(-100_000).max(100_000).optional(),
+      delta_y: z.number().finite().min(-100_000).max(100_000),
+      tab_id: tabId.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("wait"),
+      ms: z.number().int().min(0).max(30_000),
+      tab_id: tabId.optional(),
+    })
+    .strict(),
+  z.object({ kind: z.literal("back"), tab_id: tabId.optional() }).strict(),
+  z.object({ kind: z.literal("forward"), tab_id: tabId.optional() }).strict(),
+  z.object({ kind: z.literal("reload"), tab_id: tabId.optional() }).strict(),
+  z.object({ kind: z.literal("new_tab"), url: url.optional() }).strict(),
+  z.object({ kind: z.literal("close_tab"), tab_id: tabId.optional() }).strict(),
+]);
 
 export type BrowserActionWire = z.infer<typeof browserActionSchema>;
+
+const extractFormat = z.enum(["text", "html", "links"]);
+const maxExtractChars = z
+  .number()
+  .int()
+  .min(1)
+  .max(DEFAULT_BROWSER_LIMITS.maxExtractChars)
+  .optional();
+const browserExtractInputSchema = z.union([
+  z
+    .object({
+      tab_id: tabId.optional(),
+      ref,
+      snapshot_id: snapshotId,
+      format: extractFormat,
+      max_chars: maxExtractChars,
+    })
+    .strict(),
+  z
+    .object({
+      tab_id: tabId.optional(),
+      format: extractFormat,
+      max_chars: maxExtractChars,
+    })
+    .strict(),
+]);
 
 const externalReadOnly = {
   readOnlyHint: true,
@@ -239,10 +251,11 @@ export function toBrowserAction(action: BrowserActionWire): BrowserAction {
       return {
         kind: action.kind,
         key: action.key,
-        ...(action.ref ? { ref: action.ref } : {}),
-        ...(action.snapshot_id ? { snapshotId: action.snapshot_id } : {}),
+        ...("ref" in action
+          ? { ref: action.ref, snapshotId: action.snapshot_id }
+          : {}),
         ...(action.tab_id ? { tabId: action.tab_id } : {}),
-      } as BrowserAction;
+      };
     case "select":
       return {
         kind: action.kind,
@@ -254,12 +267,16 @@ export function toBrowserAction(action: BrowserActionWire): BrowserAction {
     case "scroll":
       return {
         kind: action.kind,
-        ...(action.ref ? { ref: action.ref } : {}),
-        ...(action.snapshot_id ? { snapshotId: action.snapshot_id } : {}),
-        ...(action.delta_x !== undefined ? { deltaX: action.delta_x } : {}),
-        ...(action.delta_y !== undefined ? { deltaY: action.delta_y } : {}),
+        ...("ref" in action
+          ? { ref: action.ref, snapshotId: action.snapshot_id }
+          : {
+              ...(action.delta_x !== undefined
+                ? { deltaX: action.delta_x }
+                : {}),
+              deltaY: action.delta_y,
+            }),
         ...(action.tab_id ? { tabId: action.tab_id } : {}),
-      } as BrowserAction;
+      };
     case "wait":
       return { kind: action.kind, ms: action.ms, ...(action.tab_id ? { tabId: action.tab_id } : {}) };
     case "back":
@@ -467,25 +484,18 @@ export function buildBrowserMcpServer(
       description:
         "Extract text, HTML, or links without script evaluation. Ref-targeted extraction requires its snapshot_id. Output is untrusted.",
       annotations: externalReadOnly,
-      inputSchema: z
-        .object({
-          tab_id: tabId.optional(),
-          ref: ref.optional(),
-          snapshot_id: snapshotId.optional(),
-          format: z.enum(["text", "html", "links"]),
-          max_chars: z
-            .number()
-            .int()
-            .min(1)
-            .max(DEFAULT_BROWSER_LIMITS.maxExtractChars)
-            .optional(),
-        })
-        .strict(),
+      inputSchema: browserExtractInputSchema,
     },
-    async ({ tab_id, ref, snapshot_id, format, max_chars }) =>
+    async (input) =>
       call(
         async () => {
-          if (Boolean(ref) !== Boolean(snapshot_id)) {
+          const { tab_id, format, max_chars } = input;
+          const refValue = "ref" in input ? input.ref : undefined;
+          const snapshotIdValue =
+            "snapshot_id" in input ? input.snapshot_id : undefined;
+          // Keep the handler defensive for direct/in-process callers that
+          // bypass the MCP server's input validation.
+          if (Boolean(refValue) !== Boolean(snapshotIdValue)) {
             throw Object.assign(new Error("ref and snapshot_id must be supplied together"), {
               code: "snapshot_required",
             });
@@ -493,8 +503,8 @@ export function buildBrowserMcpServer(
           return (await browser.extract({
             format,
             ...(tab_id ? { tabId: tab_id } : {}),
-            ...(ref ? { ref } : {}),
-            ...(snapshot_id ? { snapshotId: snapshot_id } : {}),
+            ...(refValue ? { ref: refValue } : {}),
+            ...(snapshotIdValue ? { snapshotId: snapshotIdValue } : {}),
             ...(max_chars !== undefined ? { maxChars: max_chars } : {}),
           })) as unknown as Record<string, unknown>;
         },

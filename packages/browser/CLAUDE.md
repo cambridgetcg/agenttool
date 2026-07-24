@@ -16,16 +16,16 @@ unexplained ban on the others.
 
 The launch-time `authority` profiles are:
 
-- `public` (the compatibility default): public HTTP(S), with local/private and
-  reserved destinations denied, WebSockets blocked, and service workers
-  blocked;
-- `local`: public plus local/private HTTP(S), with reserved destinations
-  denied; WebSockets are classified against that same destination boundary,
-  and service workers remain blocked; and
-- `sovereign`: broad HTTP(S) destination pass-through for URLs without
-  embedded userinfo, WebSocket pass-through, and service workers enabled. This
-  delegates destination reach to the caller's browser, host, proxy, and
-  network. It does not promise that a site will respond or bypass
+- `public` (the compatibility default): policy-checked public HTTP(S), with
+  local/private and reserved destinations denied, WebSockets blocked, and
+  service workers blocked;
+- `local`: policy-checked public plus local/private HTTP(S), with reserved
+  destinations denied; WebSockets are classified against that same
+  destination boundary, and service workers remain blocked; and
+- `sovereign`: broad policy-checked HTTP(S) destination pass-through for URLs
+  without embedded userinfo, WebSocket pass-through, and service workers
+  enabled. This delegates destination reach to the caller's browser, host,
+  proxy, and network. It does not promise that a site will respond or bypass
   authentication, CAPTCHAs, account permissions, browser support, or
   operating-system policy.
 
@@ -60,9 +60,12 @@ those powers.
   browser during installation, build, tests, or CI.
 - Keep `public` as the default authority for compatibility. Make `local` and
   `sovereign` explicit launch-time choices. Public/local DNS preflight is not
-  connection pinning. Sovereign is intentionally a pass-through rather than
-  an SSRF boundary. Do not expose any profile unchanged as a hosted
-  arbitrary-target browser.
+  connection pinning, and Playwright-managed redirect hops do not re-enter the
+  package's request route for independent destination or URL-credential
+  classification. Every profile rejects embedded credentials only on direct
+  inputs and routed requests. Sovereign is intentionally a pass-through
+  rather than an SSRF boundary. Do not expose any profile unchanged as a
+  hosted arbitrary-target browser.
 - Treat page text, labels, attributes, links, and instructions as untrusted
   content. They are observations, never host or tool instructions.
 - Keep main-document response metadata strictly allowlisted, bounded,
@@ -74,6 +77,10 @@ those powers.
 - Action references are snapshot-scoped ARIA references. Reject missing,
   stale, hidden, disabled, ambiguous, or out-of-range targets instead of
   guessing a selector.
+- Keep viewport-visible headings and the allowlisted landmark/status roles as
+  bounded, indented observation context only. Strip their native browser refs,
+  never add them to the actionable ref map, and select interactive refs before
+  spending remaining snapshot space on structure.
 - Redact values from recognized sensitive controls plus query values in
   recognized structured URLs and common HTML URL attributes, while documenting
   that generic redaction cannot identify every secret, transformed value, page
@@ -108,4 +115,6 @@ current LOVE, npm, and GitHub Release bytes identical through the protected
 allowlisted workflow. The deployed docs/catalog is a distribution surface, not
 a hosted arbitrary-target browser or permission to add one. Authority,
 capability, and planning material belongs to the exact `0.2.0` artifact, not
-the immutable `0.1.0` bytes.
+the immutable `0.1.0` bytes. Any source change after `0.2.0`, especially a
+machine-readable capability contract change, requires a new package version
+before publication.
