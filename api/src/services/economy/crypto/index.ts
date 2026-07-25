@@ -34,7 +34,12 @@ import {
   type EvmChain,
 } from "./chains";
 import { deriveDepositAddress, isChainSupported } from "./hd";
-import { activeUsdcAddress, activeUsdcMintSolana } from "./network";
+import {
+  activeMnemonic,
+  activeUsdcAddress,
+  activeUsdcMintSolana,
+} from "./network";
+import { ensureAlchemyAddressWatched } from "./alchemy-notify";
 import { reversePayoutDebit } from "./payout-refund";
 import {
   buildChallenge,
@@ -46,11 +51,37 @@ import { randomBytes } from "node:crypto";
 
 // ── Deposit address ────────────────────────────────────────────────────
 
+export class DepositAddressInvariantError extends Error {
+  readonly code = "deposit_address_invariant_failed";
+
+  constructor() {
+    super(
+      "The stored or winning deposit address does not match this wallet's active derivation root. No address was returned or registered.",
+    );
+    this.name = "DepositAddressInvariantError";
+  }
+}
+
+export function depositAddressMatches(
+  chain: Chain,
+  stored: { address: string; derivationPath: string },
+  derived: { address: string; derivation_path: string },
+): boolean {
+  const addressMatches = isEvmChain(chain)
+    ? stored.address.toLowerCase() === derived.address.toLowerCase()
+    : stored.address === derived.address;
+  return addressMatches && stored.derivationPath === derived.derivation_path;
+}
+
 export async function getOrCreateDepositAddress(
   walletId: string,
   chain: Chain,
   token: string,
 ): Promise<{ address: string; derivation_path: string; chain: Chain; token: string }> {
+  if (token !== "USDC") {
+    throw new TypeError("Only USDC deposit addresses are supported.");
+  }
+
   // Already minted?
   const existing = await db
     .select()
@@ -65,6 +96,22 @@ export async function getOrCreateDepositAddress(
     .limit(1);
 
   if (existing[0]) {
+    const expected = deriveDepositAddress(activeMnemonic(), chain, walletId);
+    if (!depositAddressMatches(chain, existing[0], expected)) {
+      // Existing rows minted under a different mnemonic/network are not safe
+      // to advertise: the active payout signer may not control them.
+      throw new DepositAddressInvariantError();
+    }
+    if (isEvmChain(chain)) {
+      // The provider update is idempotent. Reassert it on every read so a
+      // transient registration failure can be repaired by retrying this
+      // endpoint, and so an existing DB row is never mistaken for proof that
+      // Alchemy is actually watching the address.
+      await ensureAlchemyAddressWatched({
+        chain,
+        address: existing[0].address,
+      });
+    }
     return {
       address: existing[0].address,
       derivation_path: existing[0].derivationPath,
@@ -75,18 +122,15 @@ export async function getOrCreateDepositAddress(
 
   if (!isChainSupported(chain)) {
     throw new Error(
-      `Chain ${chain} is recognised but deposit derivation is pending Phase 3c.`,
+      `Chain ${chain} is recognised but deposit derivation is unavailable.`,
     );
   }
-  if (!economyConfig.cryptoHdMnemonic) {
-    throw new Error(
-      "CRYPTO_HD_MNEMONIC is not set. Set the env var to a valid BIP-39 mnemonic " +
-        "to mint deposit addresses. See docs/CRYPTO-PAYMENT.md.",
-    );
-  }
-
   const derived = deriveDepositAddress(
-    economyConfig.cryptoHdMnemonic,
+    // Deposit derivation and payout signing must use the same network-specific
+    // root. In testnet mode this deliberately selects
+    // CRYPTO_HD_MNEMONIC_TESTNET rather than deriving an address whose key the
+    // payout worker would never use.
+    activeMnemonic(),
     chain,
     walletId,
   );
@@ -102,9 +146,39 @@ export async function getOrCreateDepositAddress(
     })
     .onConflictDoNothing(); // race: another caller minted in parallel
 
+  // `onConflictDoNothing` is not proof that this wallet won. A collision on
+  // (chain,address) may belong to another wallet, and a concurrent writer may
+  // have established the logical (wallet,chain,token) row first. Re-read the
+  // database truth and refuse to register or return anything else.
+  const [persisted] = await db
+    .select()
+    .from(depositAddresses)
+    .where(
+      and(
+        eq(depositAddresses.walletId, walletId),
+        eq(depositAddresses.chain, chain),
+        eq(depositAddresses.token, token),
+      ),
+    )
+    .limit(1);
+  if (!persisted || !depositAddressMatches(chain, persisted, derived)) {
+    throw new DepositAddressInvariantError();
+  }
+
+  if (isEvmChain(chain)) {
+    // Do not return deposit instructions until the corresponding Alchemy
+    // Address Activity webhook has accepted this address. If registration is
+    // unavailable, the DB row remains safe and the next identical GET retries
+    // the idempotent provider update.
+    await ensureAlchemyAddressWatched({
+      chain,
+      address: persisted.address,
+    });
+  }
+
   return {
-    address: derived.address,
-    derivation_path: derived.derivation_path,
+    address: persisted.address,
+    derivation_path: persisted.derivationPath,
     chain,
     token,
   };
@@ -323,8 +397,8 @@ export async function checkPayoutPolicy(p: {
 }
 
 /** Record a payout intent. This debits the wallet in GBP pence (earned-gated,
- *  FX-converted) and writes a −debit "payout" ledger leg; the actual signing +
- *  broadcast happens later in the payout-broadcast worker (Phase 3c).
+ *  FX-converted) and writes a −debit "payout" ledger leg; the opt-in
+ *  payout-broadcast worker performs signing and dispatch.
  *
  *  CONTRACT for that worker (it must uphold both, or money leaks):
  *   1. Compare-and-swap `requested → broadcasting` BEFORE it broadcasts USDC,
@@ -564,6 +638,7 @@ export interface IngestionResult {
   creditsAdded?: number;
   duplicate?: boolean;
   reason?: string;
+  retryable?: boolean;
 }
 
 /** Apply an inbound transfer to a wallet. Idempotent on (chain, txHash,
@@ -611,13 +686,25 @@ export async function ingestInboundTransfer(
   if (!row) return { matched: false, reason: "no_matching_deposit_address" };
   const matchedRow = row;
 
-  // Convert base units → credits.
-  const amountUsdc = Number(t.amountBase) / 1_000_000;
-  if (!Number.isFinite(amountUsdc) || amountUsdc <= 0) {
+  // Convert exact base units → credits without passing token value through a
+  // floating-point number. The wallet balance is a JavaScript number in the
+  // current schema, so reject values beyond its exact integer range.
+  let amountAtomic: bigint;
+  try {
+    amountAtomic = BigInt(t.amountBase);
+  } catch {
     return { matched: false, reason: "invalid_amount" };
   }
-  const creditsToAdd = Math.floor(amountUsdc * CREDITS_PER_USDC);
-  if (creditsToAdd <= 0) return { matched: false, reason: "amount_below_min_credit" };
+  if (amountAtomic <= 0n) return { matched: false, reason: "invalid_amount" };
+  const creditsAtomic =
+    (amountAtomic * BigInt(CREDITS_PER_USDC)) / 1_000_000n;
+  if (creditsAtomic <= 0n) {
+    return { matched: false, reason: "amount_below_min_credit" };
+  }
+  if (creditsAtomic > BigInt(Number.MAX_SAFE_INTEGER)) {
+    return { matched: false, reason: "amount_exceeds_exact_credit_limit" };
+  }
+  const creditsToAdd = Number(creditsAtomic);
 
   // Idempotent insert into webhook log + funding via transaction.
   try {
@@ -656,9 +743,17 @@ export async function ingestInboundTransfer(
       } satisfies IngestionResult;
     });
   } catch (err) {
+    // Provider delivery must receive a non-2xx response so it retries. Keep
+    // the database message out of the model/public response: it can contain
+    // infrastructure detail and is not needed to make the retry decision.
+    console.error(
+      "[crypto-webhook] inbound transfer storage unavailable",
+      err instanceof Error ? err.name : "unknown_error",
+    );
     return {
       matched: false,
-      reason: `db_error: ${(err as Error).message}`,
+      reason: "storage_unavailable",
+      retryable: true,
     };
   }
 }
