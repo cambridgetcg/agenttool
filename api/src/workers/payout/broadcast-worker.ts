@@ -47,9 +47,9 @@ import {
   submitSolanaTx,
   type SignedSolanaTx,
 } from "../../services/economy/crypto/sign-solana";
+import { refundPayoutAndFail } from "../../services/economy/crypto/payout-refund";
 import { redisConnection } from "../../services/tools/queue/connection";
 import type { PayoutBroadcastJobData } from "./queue";
-import { refundPayoutAndFail } from "./refund";
 import { resolveSubmitError } from "./submit-outcome";
 
 let worker: Worker<PayoutBroadcastJobData, void> | null = null;
@@ -66,7 +66,22 @@ export function startPayoutBroadcastWorker() {
   worker = new Worker<PayoutBroadcastJobData, void>(
     "payout-broadcast",
     async (job) => {
-      await processPayout(job.data.payoutId);
+      try {
+        await processPayout(job.data.payoutId);
+      } catch {
+        // Contain unexpected pre-submit failures as one terminal, ledger-
+        // reconciled failure instead of leaving `requested` behind a retained
+        // BullMQ job id. If the row already reached `broadcasting`, the helper
+        // does nothing: post-submit ambiguity remains sticky.
+        try {
+          await containUnexpectedProcessingFailure(job.data.payoutId);
+        } catch {
+          // A retained failed job is deliberate here: containment itself was
+          // unavailable, so silently re-enqueueing could cross an unknown RPC
+          // boundary. The stable error contains no provider/endpoint detail.
+          throw new Error("payout_failure_containment_unavailable");
+        }
+      }
     },
     {
       connection: redisConnection,
@@ -80,6 +95,11 @@ export function startPayoutBroadcastWorker() {
   worker.on("error", (err) => {
     console.error("[payout-broadcast] worker error:", err);
   });
+  worker.on("failed", (job) => {
+    console.error(
+      `[payout-broadcast] ${job?.data.payoutId ?? "unknown"}: job retained after containment failure; no automatic retry`,
+    );
+  });
 
   console.log("💸 payout broadcast worker started");
   return worker;
@@ -90,6 +110,26 @@ export async function stopPayoutBroadcastWorker() {
     await worker.close();
     worker = null;
   }
+}
+
+async function containUnexpectedProcessingFailure(
+  payoutId: string,
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(cryptoPayouts)
+      .where(eq(cryptoPayouts.id, payoutId))
+      .limit(1);
+    if (!row || row.status !== "requested") return;
+
+    await refundPayoutAndFail(
+      tx,
+      row,
+      "requested",
+      "worker_pre_submit_failed",
+    );
+  });
 }
 
 // ── Top-level chain dispatcher ──────────────────────────────────────────
@@ -173,21 +213,21 @@ async function processEvmPayout(payoutId: string): Promise<void> {
         destinationAddress: row.destinationAddress as Address,
         amountBase: BigInt(row.amountBase as string),
       });
-    } catch (err) {
+    } catch {
       // Build/sign failed pre-RPC — refund + fail in this same tx.
-      const failure = `build_or_sign_failed: ${(err as Error).message}`.slice(
-        0,
-        500,
-      );
       const refund = await refundPayoutAndFail(
         tx,
         row,
         "requested",
-        failure,
+        "build_or_sign_failed",
       );
       return {
         ok: false as const,
-        reason: refund.refunded ? "sign_failed" : "race_lost",
+        reason: refund.refunded
+          ? "sign_failed"
+          : refund.reason === "ledger_unreconciled" && refund.terminal
+            ? "refund_unreconciled"
+            : "race_lost",
       };
     }
 
@@ -318,20 +358,20 @@ async function processSolanaPayout(payoutId: string): Promise<void> {
         destinationAddress: row.destinationAddress,
         amountBase: BigInt(row.amountBase as string),
       });
-    } catch (err) {
-      const failure = `build_or_sign_failed: ${(err as Error).message}`.slice(
-        0,
-        500,
-      );
+    } catch {
       const refund = await refundPayoutAndFail(
         tx,
         row,
         "requested",
-        failure,
+        "build_or_sign_failed",
       );
       return {
         ok: false as const,
-        reason: refund.refunded ? "sign_failed" : "race_lost",
+        reason: refund.refunded
+          ? "sign_failed"
+          : refund.reason === "ledger_unreconciled" && refund.terminal
+            ? "refund_unreconciled"
+            : "race_lost",
       };
     }
 

@@ -167,12 +167,50 @@ export interface ConfirmResult {
   confirmations?: bigint;
 }
 
+export interface EvmReceiptFinalityInput {
+  receiptStatus: "success" | "reverted";
+  receiptBlockNumber: bigint;
+  currentBlockNumber: bigint;
+  threshold: number;
+}
+
+/** Classify both success and revert only after the configured block threshold.
+ * An unconfirmed revert can disappear in a reorg and cannot authorize a
+ * terminal refund. */
+export function classifyEvmReceiptFinality(
+  input: EvmReceiptFinalityInput,
+): ConfirmResult {
+  if (!Number.isSafeInteger(input.threshold) || input.threshold < 1) {
+    throw new Error("invalid_evm_confirmation_threshold");
+  }
+
+  const confirmations =
+    input.currentBlockNumber >= input.receiptBlockNumber
+      ? input.currentBlockNumber - input.receiptBlockNumber
+      : 0n;
+  if (confirmations < BigInt(input.threshold)) {
+    return {
+      status: "pending",
+      blockNumber: input.receiptBlockNumber,
+      confirmations,
+    };
+  }
+  return {
+    status: input.receiptStatus === "reverted" ? "reverted" : "confirmed",
+    blockNumber: input.receiptBlockNumber,
+    confirmations,
+  };
+}
+
 /** Poll a tx for confirmation. */
 export async function confirmTx(
   chain: EvmChain,
   txHash: Hex,
   threshold: number,
 ): Promise<ConfirmResult> {
+  if (!Number.isSafeInteger(threshold) || threshold < 1) {
+    throw new Error("invalid_evm_confirmation_threshold");
+  }
   const publicClient = createPublicClient({
     transport: evmRpcTransport(chain),
   });
@@ -184,21 +222,11 @@ export async function confirmTx(
   }
   if (!receipt) return { status: "pending" };
 
-  if (receipt.status === "reverted") {
-    return { status: "reverted", blockNumber: receipt.blockNumber };
-  }
   const currentBlock = await publicClient.getBlockNumber();
-  const confirmations = currentBlock - receipt.blockNumber;
-  if (confirmations >= BigInt(threshold)) {
-    return {
-      status: "confirmed",
-      blockNumber: receipt.blockNumber,
-      confirmations,
-    };
-  }
-  return {
-    status: "pending",
-    blockNumber: receipt.blockNumber,
-    confirmations,
-  };
+  return classifyEvmReceiptFinality({
+    receiptStatus: receipt.status,
+    receiptBlockNumber: receipt.blockNumber,
+    currentBlockNumber: currentBlock,
+    threshold,
+  });
 }

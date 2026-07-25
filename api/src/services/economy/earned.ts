@@ -51,9 +51,26 @@ export function penceForUsdcPayout(
     // No operator FX rate → refuse rather than assume £1 = $1.
     throw new Error("payout_fx_rate_unset");
   }
-  const amountUsd = Number(amountBaseUsdc) / 1_000_000;
-  if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
+  let amountBase: bigint;
+  try {
+    amountBase = BigInt(amountBaseUsdc);
+  } catch {
     throw new Error("amount_base_must_be_positive");
   }
-  return Math.ceil((amountUsd * 100) / gbpUsdRate);
+  if (amountBase <= 0n) {
+    throw new Error("amount_base_must_be_positive");
+  }
+  // The current wallet/ledger schema exposes integer minor units as JS
+  // numbers. Until the FX rate is represented as fixed-point rational data,
+  // refuse atomic amounts that cannot enter Number exactly.
+  if (amountBase > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error("payout_amount_exceeds_safe_conversion");
+  }
+  const pence = Math.ceil(
+    (Number(amountBase) * 100) / (1_000_000 * gbpUsdRate),
+  );
+  if (!Number.isSafeInteger(pence) || pence <= 0) {
+    throw new Error("payout_amount_exceeds_safe_conversion");
+  }
+  return pence;
 }

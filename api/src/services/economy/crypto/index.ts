@@ -34,7 +34,8 @@ import {
   type EvmChain,
 } from "./chains";
 import { deriveDepositAddress, isChainSupported } from "./hd";
-import { activeUsdcAddress } from "./network";
+import { activeUsdcAddress, activeUsdcMintSolana } from "./network";
+import { reversePayoutDebit } from "./payout-refund";
 import {
   buildChallenge,
   verifyEvmSignature,
@@ -330,10 +331,9 @@ export async function checkPayoutPolicy(p: {
  *      so a concurrent cancelPayout (which only touches `requested` rows)
  *      cannot refund a payout that is already going out on-chain.
  *   2. On terminal FAILURE, reverse atomically exactly like cancelPayout does:
- *      credit `balance` back by the row's debited_minor AND insert a positive
- *      "payout" leg so the earned wall un-counts it. Do NOT leave the −debit
- *      leg standing with the balance un-refunded (strands funds), nor refund
- *      without reversing the leg (permanently shrinks the wall). */
+ *      lock and validate the original negative payout ledger leg, credit that
+ *      exact amount back, and insert its linked positive reversal. Never infer
+ *      a refund from caller-extensible JSON or a fresh token/FX conversion. */
 export async function requestPayout(
   p: PayoutRequest,
 ): Promise<{ id: string; status: string; broadcast_pending: true }> {
@@ -427,14 +427,12 @@ export async function requestPayout(
         amountBase: p.amountBase,
         destinationAddress: p.destinationAddress,
         status: "requested",
-        // debited_minor is the source of truth for the refund on cancel — the
-        // FX rate may move between request and cancel, so we refund what was
-        // actually taken, never a re-derived amount.
+        // Informational quote only. Refund authority lives exclusively in the
+        // server-written negative transactions ledger leg below; this
+        // caller-extensible JSON is never trusted for accounting.
         metadata: {
           ...(p.metadata ?? {}),
-          debited_minor: penceRequired,
-          debit_currency: "GBP",
-          gbp_usd_rate: rate,
+          quoted_gbp_usd_rate: rate,
         },
       })
       .returning({ id: cryptoPayouts.id });
@@ -478,7 +476,11 @@ export type CancelPayoutResult =
   | { ok: true; refunded: number; status: "cancelled" }
   | {
       ok: false;
-      error: "payout_not_found" | "wrong_wallet" | "not_cancellable";
+      error:
+        | "payout_not_found"
+        | "wrong_wallet"
+        | "not_cancellable"
+        | "refund_unreconciled";
       currentStatus?: string;
     };
 
@@ -511,73 +513,33 @@ export async function cancelPayout(
       } as const;
     }
 
-    // Refund exactly what requestPayout debited. For rows this gate created,
-    // that amount is stored (debited_minor) — needed because the FX rate may
-    // have moved since the request. We trust it ONLY when the row also carries
-    // this code's server-set markers (requestPayout writes debit_currency +
-    // gbp_usd_rate AFTER spreading user metadata, so on gated rows they are
-    // authoritative and cannot be forged by the caller). A row lacking the
-    // markers predates this gate; recompute its refund from the server-owned
-    // amountBase column, never from user-writable metadata, so a poisoned
-    // debited_minor can't over-refund into free spendable balance. (No such
-    // legacy rows exist today — payout has never been enabled — so this is
-    // defence in depth; see the PR's broadcast-worker contract note.)
-    const payoutMeta = (payout.metadata as Record<string, unknown> | null) ?? {};
-    const gated =
-      payoutMeta.debit_currency === "GBP" &&
-      typeof payoutMeta.gbp_usd_rate === "number";
-    const refundMinor = gated
-      ? Number(payoutMeta.debited_minor ?? 0)
-      : Math.ceil((Number(payout.amountBase) / 1_000_000) * CREDITS_PER_USDC);
-
-    const newMetadata = {
-      ...payoutMeta,
-      cancelled_at: new Date().toISOString(),
-      cancelled_by: "user",
-    };
-
-    // Compare-and-swap on status: only the first canceller wins. A worker
-    // that has just flipped this to 'broadcasting' would also lose here.
-    const updated = await tx
-      .update(cryptoPayouts)
-      .set({
-        status: "cancelled",
-        error: "cancelled_by_user",
-        metadata: newMetadata,
-      })
-      .where(
-        and(
-          eq(cryptoPayouts.id, p.payoutId),
-          eq(cryptoPayouts.status, "requested"),
-        ),
-      )
-      .returning({ id: cryptoPayouts.id });
-
-    if (updated.length === 0) {
+    // The exact server-written negative payout ledger leg is the only refund
+    // authority. Caller-extensible payout metadata and fresh FX/USDC
+    // conversions are ignored. Missing, duplicate, malformed, or previously
+    // reversed ledger history leaves the payout requested for explicit
+    // operator reconciliation and moves no balance.
+    const reversal = await reversePayoutDebit(tx, payout, {
+      expectedStatus: "requested",
+      terminalStatus: "cancelled",
+      terminalError: "cancelled_by_user",
+      description: "payout cancelled — original debit reversed",
+      terminalizeUnreconciled: false,
+    });
+    if (
+      !reversal.refunded &&
+      reversal.reason === "status_race_lost"
+    ) {
       return { ok: false, error: "not_cancellable" } as const;
     }
-
-    await tx
-      .update(wallets)
-      .set({ balance: sqlPlus(refundMinor) })
-      .where(eq(wallets.id, payout.walletId));
-
-    // Reverse the ledger leg only for gated rows: they wrote a −debit "payout"
-    // leg at request, so this positive leg nets it to zero and the earned wall
-    // stops counting the cancelled payout. Legacy rows never wrote a leg, so
-    // there is nothing to net — writing one would wrongly inflate the wall.
-    if (gated) {
-      await tx.insert(transactions).values({
-        walletId: payout.walletId,
-        type: "payout",
-        amount: refundMinor,
-        counterparty: payout.destinationAddress,
-        description: `payout cancelled — refunded ${refundMinor} pence`,
-        metadata: { payout_id: payout.id, reverses: "payout" },
-      });
+    if (!reversal.refunded) {
+      return { ok: false, error: "refund_unreconciled" } as const;
     }
 
-    return { ok: true, refunded: refundMinor, status: "cancelled" as const };
+    return {
+      ok: true,
+      refunded: reversal.refundMinor,
+      status: "cancelled" as const,
+    };
   });
 }
 
@@ -588,7 +550,7 @@ const SUPPORTED_PAYOUT_TOKENS = ["USDC"] as const;
 export interface InboundTransfer {
   chain: Chain;
   txHash: string;
-  logIndex: number | null;
+  logIndex: number;
   toAddress: string;
   contractAddress: string;
   token: string;
@@ -623,31 +585,29 @@ export async function ingestInboundTransfer(
     if (t.contractAddress.toLowerCase() !== expected) {
       return { matched: false, reason: "wrong_contract" };
     }
+  } else if (
+    t.chain === "solana" &&
+    t.contractAddress !== activeUsdcMintSolana()
+  ) {
+    return { matched: false, reason: "wrong_contract" };
   }
 
-  // Find the wallet — case-insensitive lookup on (chain, address).
-  const matches = await db
+  // EVM addresses are case-insensitive and use a functional lower(address)
+  // predicate backed by the deployment migration's partial index. Solana
+  // base58 addresses are case-sensitive and must match exactly.
+  const addressPredicate = isEvmChain(t.chain)
+    ? sql`lower(${depositAddresses.address}) = lower(${t.toAddress})`
+    : eq(depositAddresses.address, t.toAddress);
+  const [row] = await db
     .select()
     .from(depositAddresses)
     .where(
       and(
         eq(depositAddresses.chain, t.chain),
-        eq(depositAddresses.address, t.toAddress),
+        addressPredicate,
       ),
     )
     .limit(1);
-
-  // EVM addresses may be checksummed differently — fall back to lowercase.
-  let row: typeof depositAddresses.$inferSelect | undefined = matches[0];
-  if (!row) {
-    const all = await db
-      .select()
-      .from(depositAddresses)
-      .where(eq(depositAddresses.chain, t.chain));
-    row = all.find(
-      (r) => r.address.toLowerCase() === t.toAddress.toLowerCase(),
-    );
-  }
   if (!row) return { matched: false, reason: "no_matching_deposit_address" };
   const matchedRow = row;
 

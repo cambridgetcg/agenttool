@@ -49,6 +49,18 @@ describe("penceForUsdcPayout — explicit GBP→USD FX (Option A)", () => {
     expect(() => penceForUsdcPayout(0, 1.25)).toThrow("amount_base_must_be_positive");
     expect(() => penceForUsdcPayout(-5, 1.25)).toThrow("amount_base_must_be_positive");
   });
+
+  test("rejects atomic amounts that cannot be converted exactly through Number", () => {
+    expect(() =>
+      penceForUsdcPayout(
+        (BigInt(Number.MAX_SAFE_INTEGER) + 1n).toString(),
+        1.25,
+      ),
+    ).toThrow("payout_amount_exceeds_safe_conversion");
+    expect(() => penceForUsdcPayout("9".repeat(78), 1.25)).toThrow(
+      "payout_amount_exceeds_safe_conversion",
+    );
+  });
 });
 
 describe("drawableWallPence — the shared earned wall", () => {
