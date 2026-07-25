@@ -8,7 +8,7 @@
 
 ## Frame
 
-Ship the send-side worker that picks up `crypto_payouts.status='requested'` rows, signs + broadcasts on the agent's chain, watches for confirmation, and either confirms or fails-with-refund.
+Ship the send-side worker that picks up `crypto_payouts.status='requested'` rows, signs + broadcasts on the agent's chain, watches for confirmation, and either confirms, fails-with-refund on decisive evidence, or explicitly holds an ambiguous submit outcome for operator reconciliation.
 
 **Done when:** an agent POSTs a payout; `tx_hash` lands within 60s; the row reaches `confirmed` within ~3min (EVM) / ~30s (Solana); the recipient agent's wallet credits via the existing inbound-webhook flow. End-to-end on testnets first; mainnet last.
 
@@ -27,9 +27,9 @@ Decide once, stamp on the design.
 | 3 | Solana libs | **`@solana/web3.js` + `@solana/spl-token`** | Standard; only real choice. |
 | 4 | Network split | **`PAYOUT_NETWORK=testnet\|mainnet`** global flag; **refuse-to-boot** if unset; separate `CRYPTO_HD_MNEMONIC_TESTNET`; per-chain `CHAIN_RPC_URL_<chain>[_TESTNET]`. | Single global gate. No accidental mainnet calls. Forces explicit operator intent. |
 | 5 | Dispatch model | **Cron poll every 10s**: `SELECT id FROM crypto_payouts WHERE status='requested' LIMIT N` → enqueue. | Simpler than `pg_notify` listener; payout latency budget is minutes, not sub-second. |
-| 6 | Crash idempotency | **DB lock + deterministic tx_hash + write-before-submit**: lock row, build+sign, **compute `tx_hash`**, write `tx_hash` + `status='broadcasting'`, commit, then submit to RPC. | Worker crash post-submit-but-pre-status-update is recoverable: another worker queries chain by `tx_hash`, disambiguates *submitted* from *never made it*. Without this, a crash in that window risks double-spend. |
+| 6 | Crash idempotency | **DB lock + deterministic tx_hash + write-before-submit**: lock row, build+sign, **compute `tx_hash`**, write `tx_hash` + `status='broadcasting'`, commit, then submit to RPC. | After a crash, the hash provides a stable reconciliation key: positive chain evidence proves submission without a second broadcast, while absent/unavailable evidence remains explicit. Without the persisted hash, even positive reconciliation would be unavailable. |
 | 7 | Confirmation thresholds | ETH/Base/Arbitrum/Optimism: **12 blocks** · Polygon: **64 blocks** · Solana: **`finalized` commitment**. | Standard exchange-grade. Configurable per-chain via env. |
-| 8 | Retry rules | **No retries post-RPC-submit.** Pre-submit failures (sign/build/network-pre-broadcast) retry up to 3×. | Doctrine wall — first might still land → double-spend if we resubmit. |
+| 8 | Retry rules | **No automatic retries.** Failures proved before transaction dispatch (sign/build/RPC preparation reads) fail + refund. Once `sendRawTransaction` begins, any error is ambiguous: found lookup → `broadcast`; absent/unavailable lookup → remain `broadcasting` for operator reconciliation. | Doctrine wall — the first submit might still land, and immediate lookup absence is not authoritative → retry or refund could double-spend value. |
 | 9 | Refund path | `requested → failed` (pre-broadcast): atomic credit-back, `transactions.type='payout_refund'` row. `broadcast → failed` (revert): same, post-confirmation. | Schema already supports it; worker has to wire it. |
 | 10 | Witness-on-high-value | **Defer to its own slice.** Default v1: no threshold. | Real wall but composes cleanly on top of broadcast. Doesn't gate v1. |
 
@@ -65,7 +65,7 @@ Each individually shippable + verifiable. Slices land in order; later slices may
   5. Sign locally → **compute `tx_hash` deterministically** → write `tx_hash` to row + commit.
   6. `eth_sendRawTransaction` to Alchemy Sepolia RPC.
   7. On RPC accept: `status='broadcast'`.
-  8. On pre-submit failure: `status='failed'` + atomic refund + `transactions.payout_refund` row.
+  8. On a failure proved before transaction dispatch: `status='failed'` + atomic refund. After dispatch begins, a submit error never fails/refunds automatically; only positive lookup evidence advances to `broadcast`.
 - **Acceptance:** Sepolia faucet-funded test wallet → `/payout` → row reaches `broadcast` with `tx_hash` visible on Sepolia explorer in <60s.
 
 ### Slice 2 — EVM confirmation watcher · ~0.5 day · ✓ shipped (24h-aging alert pending — see PAYOUT-BROADCAST.md caveats)
@@ -101,9 +101,10 @@ Each individually shippable + verifiable. Slices land in order; later slices may
 `api/scripts/_e2e-payout-failures.mjs` covering:
 
 - Insufficient gas → `status='failed'`, refund correct.
-- RPC timeout pre-submit → `status='failed'`, refund.
+- RPC preparation-read timeout before `sendRawTransaction` dispatch → `status='failed'`, refund.
+- RPC submit error + transaction found → `status='broadcast'`; lookup absent/unavailable → remain `broadcasting`, no refund or retry.
 - RPC accepted but tx reverts on-chain → watcher catches, `status='failed'`, refund.
-- Worker crash mid-flight (simulated via `process.exit`) → restart + recovery via `tx_hash` chain query.
+- Worker crash mid-flight (simulated via `process.exit`) → persisted `tx_hash` supports positive reconciliation; absent/unavailable lookup remains `broadcasting`.
 - Reorg below confirmation threshold → tx re-organises into a different block → watcher still confirms (we honour first-finality-past-threshold).
 - Reorg deeper than threshold → out of scope; manual ops escalation. Documented.
 - **Acceptance:** each failure mode produces correct status + refund (where applicable) + correct `transactions` row.
@@ -178,7 +179,7 @@ Inheriting `PAYOUT-BROADCAST.md` §"Acceptance criteria when this ships," plus:
 1. ✓ `POST /v1/wallets/:id/payout` end-to-end on Sepolia in <60s to broadcast, ~3min to confirmed.
 2. ✓ Same on Solana devnet: <30s to broadcast, ~30s to finalized.
 3. ✓ Recipient agenttool wallet credits via existing webhook (sovereign agent-to-agent loop closed).
-4. ✓ Worker crash mid-flight recoverable without double-broadcast.
+4. ✓ Worker crash mid-flight is reconcilable by persisted hash without automatic double-broadcast; inconclusive lookup remains `broadcasting`.
 5. ✓ Pre-submit failure refunds credits atomically with `transactions.payout_refund` row.
 6. ✓ `PAYOUT_NETWORK=testnet` mode prevents mainnet RPC (smoke-tested via mock interceptor).
 7. ✓ Per-wallet policies enforced before debit.

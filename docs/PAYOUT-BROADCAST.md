@@ -8,7 +8,7 @@
 >
 > **Code:** `api/src/workers/payout/{dispatcher,broadcast-worker,confirm-worker,queue,index}.ts` · `api/src/routes/economy/crypto.ts` (request handler) · `api/src/services/economy/crypto/{hd,sign-evm,sign-solana}.ts`
 >
-> **Tests:** `api/scripts/_e2e-payout-{evm,sol,loop-closure,policies,cancel}.{ts,mjs}` (E2E harnesses)
+> **Tests:** `api/tests/{alchemy-rpc-auth,payout-submit-outcome}.test.ts` (transport and ambiguity unit tests) · `api/scripts/_e2e-payout-{evm,sol,loop-closure,policies,cancel}.{ts,mjs}` (E2E harnesses)
 
 ## What's already shipped
 
@@ -34,10 +34,10 @@ requested  ─────►  broadcasting  ─────►  broadcast  ─�
 ```
 
 - **`requested`** — `POST /v1/wallets/:id/payout` records the intent (already shipped).
-- **`broadcasting`** — worker picks up the request, derives the signing key, builds + signs the transaction, submits to chain RPC. Locks the payout row.
+- **`broadcasting`** — worker picks up the request, derives the signing key, builds + signs the transaction, and persists its deterministic hash before submitting to chain RPC. A submit error remains here unless a lookup positively finds the transaction.
 - **`broadcast`** — RPC accepted, has a tx hash; waiting for confirmations.
 - **`confirmed`** — N confirmations reached (chain-specific: 12 ETH-equiv, 32 Solana finalized).
-- **`failed`** — RPC rejected, gas exhausted, signing failed, or row was double-claimed.
+- **`failed`** — a failure proved before RPC dispatch, or a later on-chain revert observed by the confirmation watcher. An RPC submit error alone never authorizes this transition or a refund.
 
 ## Worker shape (BullMQ — already in deps)
 
@@ -47,7 +47,7 @@ Two queues:
    - SELECT FOR UPDATE on the row, lock to in-flight worker.
    - Derive signing key from `cryptoHdMnemonic` + payout's wallet path.
    - Build + sign transaction (EVM via ethers/viem, Solana via @solana/web3.js).
-   - Submit to RPC. On success: status='broadcast', tx_hash set. On failure: status='failed', error_reason set.
+   - Submit to RPC. On success: status='broadcast'. On error: query by the persisted hash; found → `broadcast`, absent or lookup unavailable → remain `broadcasting` with a bounded operator-facing error.
 
 2. **`payout-confirm`** — periodic. Polls `status='broadcast'` rows, queries chain for confirmations:
    - For EVM: `eth_getTransactionReceipt(tx_hash)` — confirmed when blockNumber > current - confirmation_threshold.
@@ -60,12 +60,13 @@ These hold:
 - **Witness on payout authorization for high-value payouts.** Mirrors constitutive memory elevation: a payout above some threshold (e.g. 1000 USDC equivalent) requires a covenant counterparty's signature on the request, not just the agent's. Without this, the signing-key holder is the only wall — same as a stolen private key.
 - **HD derivation paths are deterministic, never logged with full mnemonic.** The mnemonic stays in env / vault; derivation paths log just the index.
 - **No payout to addresses outside the wallet's chain.** Schema enforces `chain` consistency. Cross-chain via bridge is a separate flow and not implemented.
-- **No autonomous retries on RPC failure that change semantics.** A failed broadcast that emitted a tx hash does NOT retry — would risk double-spend if the first eventually lands. The worker only retries pre-RPC-submit failures (signing, build).
+- **No autonomous retries on RPC failure that change semantics.** A submit attempt that emitted a tx hash does NOT retry — the first attempt may still land. Failures proved before dispatch (signing/build) fail and refund without automatic retry.
+- **No refund from ambiguous evidence.** Once dispatch begins, a provider error, an immediately absent lookup, and an unavailable lookup are all inconclusive. Only a positive lookup advances to `broadcast`; operator reconciliation decides any later retry or refund.
 
 ## Provider choices (deferred until building)
 
 For broadcast RPC:
-- **EVM**: Alchemy or Infura. Already authenticated for webhook; reuse the API key.
+- **EVM**: Alchemy or an explicit per-chain override. The shared Alchemy key is sent as `Authorization: Bearer`, never embedded in the endpoint URL; overrides receive no Alchemy credential.
 - **Solana**: Helius. Same reuse pattern.
 
 For transaction building:

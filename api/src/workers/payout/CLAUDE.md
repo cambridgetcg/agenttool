@@ -14,6 +14,7 @@ Outbound sovereign-payment worker. Closes Horizon A's economic loop.
 |---|---|
 | `dispatcher.ts` | Picks `cryptoPayouts.status='requested'` rows, dispatches to broadcast queue. |
 | `broadcast-worker.ts` | The canonical PATTERN-PERSIST-IDENTITY implementation. Inside one DB tx: acquire `pg_advisory_xact_lock(fromAddress)`, build + sign tx (deterministic `tx_hash`), CAS-update `status='broadcasting', tx_hash=$1 WHERE status='requested'`, commit. *Then* submit to RPC outside the tx. |
+| `submit-outcome.ts` | Shared EVM/Solana submit-error classifier. Positive lookup → `broadcast`; absent/unavailable lookup → remain `broadcasting` with a bounded safe error. |
 | `confirm-worker.ts` | Polls `status='broadcast'` rows. EVM: `eth_getTransactionReceipt`. Solana: `getSignatureStatuses` → finalized. Flips to `confirmed` or `failed`. |
 | `queue.ts` | BullMQ queue config. |
 | `index.ts` | Worker boot — requires `PAYOUT_WORKER_ENABLED=true` and `AGENTTOOL_DISABLE_WORKERS` unset. A missing queue fails closed; there is no direct in-process broadcast fallback. |
@@ -27,15 +28,15 @@ requested ─► broadcasting ─► broadcast ─► confirmed
 ```
 
 - **`requested`** — `POST /v1/wallets/:id/payout` records intent.
-- **`broadcasting`** — worker locked the row, deterministic `tx_hash` persisted, RPC submit in flight.
+- **`broadcasting`** — worker locked the row and persisted deterministic `tx_hash`; RPC submit is in flight or its outcome is ambiguous.
 - **`broadcast`** — RPC accepted; awaiting confirmations.
 - **`confirmed`** — N confirmations (EVM: 12 · Solana: finalized).
-- **`failed`** — pre-RPC failure (signing, build, gas estimate). **Never retried.**
+- **`failed`** — failure proved before transaction dispatch (signing, build, gas estimate) or a later on-chain revert. **Never retried.**
 
 ## Invariants to defend
 
-1. **Persist the tx_hash before submitting.** If the worker crashes mid-flight, recovery is `eth_getTransactionByHash(stored_hash)` — found = confirm, not found = retry-eligible. The pattern *only* works if the persist happens first.
-2. **No autonomous retry after RPC submit.** A `broadcast` row that may have landed on chain doesn't get re-signed — risk of double-spend if the first eventually confirms. Failures pre-submit (signing, build) can retry; failures post-submit are operator-driven.
+1. **Persist the tx_hash before submitting.** If the worker crashes mid-flight, recovery uses `eth_getTransactionByHash(stored_hash)` — found = advance to `broadcast`; absent or lookup unavailable remains ambiguous. An immediate negative lookup does not authorize retry or refund.
+2. **No autonomous retry or refund after RPC submit begins.** A `broadcasting` row may have landed even when submit errored. Only positive lookup evidence advances it automatically; ambiguous recovery is operator-driven.
 3. **Per-source-address lock (Phase 1).** `pg_advisory_xact_lock(hashtextextended(fromAddress, 0))` blocks same-address concurrent workers across machines. *Residual race:* lock releases at commit but submit happens outside the tx — protected today only by low payout volume. Full close needs a session-level lock spanning Phase 1 + Phase 2.
 4. **Mainnet enable is operator-gated.** `PAYOUT_NETWORK=mainnet` flip + small smoke (≤0.01 USDC verified on Etherscan + Solscan) is **never** done in a session — see ops runbook.
 
@@ -49,14 +50,16 @@ requested ─► broadcasting ─► broadcast ─► confirmed
 
 ## Tests
 
+Focused unit tests:
+- [`api/tests/payout-submit-outcome.test.ts`](../../../tests/payout-submit-outcome.test.ts) — positive/absent/unavailable lookup classification and no post-dispatch fail/refund structure.
+- [`api/tests/alchemy-rpc-auth.test.ts`](../../../tests/alchemy-rpc-auth.test.ts) — Alchemy Bearer transport and override isolation.
+
 E2E harnesses live in [`api/scripts/`](../../../scripts/):
 - `_e2e-payout-evm.ts` — Sepolia round-trip.
 - `_e2e-payout-sol.ts` — Solana devnet round-trip.
 - `_e2e-payout-loop-closure.ts` — A pays B; B sees credit via webhook.
 - `_e2e-payout-policies.ts` — payout policy enforcement.
 - `_e2e-payout-cancel.mjs` — cancel before broadcast.
-
-No unit tests today for the worker itself — flow is exercised via e2e against testnet.
 
 ## See also
 
