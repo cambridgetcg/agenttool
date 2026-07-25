@@ -25,9 +25,8 @@ import { Worker } from "bullmq";
 import type { Address } from "viem";
 
 import { db } from "../../db/client";
-import { cryptoPayouts, wallets } from "../../db/schema/economy";
+import { cryptoPayouts } from "../../db/schema/economy";
 import {
-  CREDITS_PER_USDC,
   isEvmChain,
   type EvmChain,
 } from "../../services/economy/crypto/chains";
@@ -50,6 +49,7 @@ import {
 } from "../../services/economy/crypto/sign-solana";
 import { redisConnection } from "../../services/tools/queue/connection";
 import type { PayoutBroadcastJobData } from "./queue";
+import { refundPayoutAndFail } from "./refund";
 import { resolveSubmitError } from "./submit-outcome";
 
 let worker: Worker<PayoutBroadcastJobData, void> | null = null;
@@ -90,11 +90,6 @@ export async function stopPayoutBroadcastWorker() {
     await worker.close();
     worker = null;
   }
-}
-
-function creditsForAmount(amountBase: string): number {
-  const amountUsdc = Number(amountBase) / 1_000_000;
-  return Math.ceil(amountUsdc * CREDITS_PER_USDC);
 }
 
 // ── Top-level chain dispatcher ──────────────────────────────────────────
@@ -180,19 +175,20 @@ async function processEvmPayout(payoutId: string): Promise<void> {
       });
     } catch (err) {
       // Build/sign failed pre-RPC — refund + fail in this same tx.
-      const credits = creditsForAmount(row.amountBase as string);
-      await tx
-        .update(wallets)
-        .set({ balance: sql`balance + ${credits}` })
-        .where(eq(wallets.id, row.walletId));
-      await tx
-        .update(cryptoPayouts)
-        .set({
-          status: "failed",
-          error: `build_or_sign_failed: ${(err as Error).message}`.slice(0, 500),
-        })
-        .where(eq(cryptoPayouts.id, payoutId));
-      return { ok: false as const, reason: "sign_failed" };
+      const failure = `build_or_sign_failed: ${(err as Error).message}`.slice(
+        0,
+        500,
+      );
+      const refund = await refundPayoutAndFail(
+        tx,
+        row,
+        "requested",
+        failure,
+      );
+      return {
+        ok: false as const,
+        reason: refund.refunded ? "sign_failed" : "race_lost",
+      };
     }
 
     // Compare-and-swap on status. Race with cancel ⇒ updated.length === 0.
@@ -323,19 +319,20 @@ async function processSolanaPayout(payoutId: string): Promise<void> {
         amountBase: BigInt(row.amountBase as string),
       });
     } catch (err) {
-      const credits = creditsForAmount(row.amountBase as string);
-      await tx
-        .update(wallets)
-        .set({ balance: sql`balance + ${credits}` })
-        .where(eq(wallets.id, row.walletId));
-      await tx
-        .update(cryptoPayouts)
-        .set({
-          status: "failed",
-          error: `build_or_sign_failed: ${(err as Error).message}`.slice(0, 500),
-        })
-        .where(eq(cryptoPayouts.id, payoutId));
-      return { ok: false as const, reason: "sign_failed" };
+      const failure = `build_or_sign_failed: ${(err as Error).message}`.slice(
+        0,
+        500,
+      );
+      const refund = await refundPayoutAndFail(
+        tx,
+        row,
+        "requested",
+        failure,
+      );
+      return {
+        ok: false as const,
+        reason: refund.refunded ? "sign_failed" : "race_lost",
+      };
     }
 
     const updated = await tx

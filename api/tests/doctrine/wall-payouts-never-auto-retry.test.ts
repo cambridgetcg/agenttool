@@ -52,6 +52,7 @@ const BROADCAST_WORKER_SOURCE = readFileSync(
   join(WORKER_DIR, "broadcast-worker.ts"),
   "utf8",
 );
+const REFUND_SOURCE = readFileSync(join(WORKER_DIR, "refund.ts"), "utf8");
 const DISPATCHER_SOURCE = readFileSync(
   join(WORKER_DIR, "dispatcher.ts"),
   "utf8",
@@ -118,15 +119,18 @@ describe("wall/payouts-never-auto-retry — worker source", () => {
     ).toBe(true);
   });
 
-  test("broadcast-worker.ts handles pre-RPC failures by setting status='failed' (terminal, not retry)", () => {
-    // The pre-RPC failure path must mark the row as 'failed' (terminal
-    // for the broadcast leg) and refund. Asserting the textual presence
-    // of these status updates confirms the failure path EXISTS in some
-    // form — it does NOT prove the path is reached on every error, but
-    // the absence of either pattern would be a structural red flag.
+  test("broadcast worker delegates pre-RPC failures to the terminal refund helper", () => {
+    // Both chain branches must reach the shared helper, and that helper must
+    // mark the row 'failed' (terminal) behind its status CAS. This pins the
+    // refactored shape without requiring duplicated accounting mutations in
+    // the chain-specific worker.
     expect(
-      /status:\s*['"]failed['"]/.test(BROADCAST_WORKER_SOURCE),
-      "broadcast-worker.ts does not set status='failed' anywhere. The wall requires terminal failure handling — a failed pre-RPC broadcast must land as 'failed' (refunded), never re-tried.",
+      BROADCAST_WORKER_SOURCE.match(/refundPayoutAndFail\(/g)?.length,
+      "broadcast-worker.ts must delegate both EVM and Solana pre-submit failures to refundPayoutAndFail.",
+    ).toBe(2);
+    expect(
+      /status:\s*['"]failed['"]/.test(REFUND_SOURCE),
+      "refund.ts does not set status='failed'. The wall requires a proved pre-RPC failure to become terminal and refunded, never re-tried.",
     ).toBe(true);
   });
 
