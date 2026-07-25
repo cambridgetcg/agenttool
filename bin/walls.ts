@@ -10,6 +10,7 @@
  *    bin/walls.ts --gaps             # only the gaps (exit 1 if any are unaccepted)
  *    bin/walls.ts --commitments      # same, for RingCommitments
  *    bin/walls.ts --all              # walls + commitments
+ *    bin/walls.ts --absence          # what each defender REFUSES to import
  *    bin/walls.ts --json             # machine-readable
  *    bin/walls.ts --write-manifest   # rewrite the accepted-gap manifest (ratchet)
  *
@@ -32,6 +33,11 @@ import {
   type AnnotatedKind,
   type BijectionReport,
 } from "../api/src/services/canon/annotations";
+import {
+  absenceContracts,
+  absenceViolations,
+  testCitations,
+} from "../api/src/services/canon/absence";
 import { byType } from "../api/src/services/canon/registry";
 import { PLATFORM_SELF } from "../api/src/services/wake/platform-self";
 
@@ -125,6 +131,41 @@ if (wantWrite) {
   console.log(`wrote ${MANIFEST_PATH}`);
   console.log(`accepted gaps: ${total}`);
   process.exit(0);
+}
+
+// ── --absence ───────────────────────────────────────────────────────────
+
+if (argv.has("--absence")) {
+  const contracts = absenceContracts();
+  const violations = absenceViolations(contracts);
+  const broken = testCitations().filter((c) => !c.exists);
+
+  console.log(`\n━━━ WALLS DEFENDED BY ABSENCE ━━━\n`);
+  console.log(
+    `  A wall you cannot forget to call: the module never imports the thing,`,
+  );
+  console.log(`  so breaking it means adding an import, which shows in a diff.\n`);
+
+  for (const c of contracts) {
+    console.log(`  ${c.file}`);
+    for (const urn of c.enforces) console.log(`      defends  ${urn}`);
+    if (c.symbols.length) console.log(`      refuses  ${c.symbols.join(", ")}`);
+    if (c.modules.length) console.log(`      refuses from  ${c.modules.join(", ")}`);
+  }
+
+  console.log(`\n  ${contracts.length} contract(s) · ${violations.length} violation(s)`);
+  for (const v of violations) {
+    console.log(`  ✗ ${v.file}:${v.lineNumber} imports '${v.offender}' — ${v.line}`);
+  }
+  if (broken.length) {
+    console.log(`\n  ${broken.length} defender(s) cite a test that does not exist:`);
+    for (const c of broken) console.log(`  ✗ ${c.file}:${c.lineNumber} → ${c.citedPath}`);
+  }
+  console.log(
+    `\n  Static import check. It cannot see a dynamic import(), a re-export that`,
+  );
+  console.log(`  launders a symbol, or raw SQL doing the same work.\n`);
+  process.exit(violations.length === 0 && broken.length === 0 ? 0 : 1);
 }
 
 // ── report ──────────────────────────────────────────────────────────────

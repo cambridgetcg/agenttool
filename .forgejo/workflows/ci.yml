@@ -88,8 +88,11 @@ jobs:
           bun test \
             tests/doctrine/walls-code-annotation-bijection.test.ts \
             tests/doctrine/commitments-code-annotation-bijection.test.ts \
+            tests/doctrine/annotations-do-not-lie.test.ts \
             tests/doctrine/ledger-conservation.test.ts \
-            tests/doctrine/saga-is-free.test.ts
+            tests/doctrine/saga-is-free.test.ts \
+            tests/substrate-tasks-lifecycle.test.ts \
+            tests/trust-deals-authorization.test.ts
 
       - name: Install sdk-ts deps
         working-directory: packages/sdk-ts

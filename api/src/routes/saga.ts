@@ -18,7 +18,11 @@
  *    `computeFee`, `recordRevenue`, or `wallets` — reading the saga cannot
  *    debit anything or return 402, because there is no code path that could.
  *    The read-side joy-event insert is fire-and-forget and never blocks.
- *    Tested: api/tests/doctrine/saga-is-free.test.ts */
+ *    Tested: api/tests/doctrine/saga-is-free.test.ts
+ *
+ *  @absence charge reserveCharge recordRevenue computeFee
+ *  @absence-from db/schema/economy
+ */
 
 import { Hono } from "hono";
 

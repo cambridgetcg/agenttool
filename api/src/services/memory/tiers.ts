@@ -18,7 +18,7 @@
  *    attester_did belongs to an identity in the same project as the
  *    memory subject (the "attester_self_witness_forbidden" throw). The
  *    covenant gate is permissive; the witness gate is strict.
- *    Tested: api/tests/integration/walls-self-witnessing.test.ts */
+ *    Tested: api/tests/integration/wall-self-witnessing.test.ts */
 
 import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
