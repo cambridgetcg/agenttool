@@ -29,22 +29,33 @@
  */
 
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./_http.js";
+import { throwFromResponse, type HttpConfig } from "./_http.js";
 
-export type ChronicleType =
-  | "note"
-  | "vow"
-  | "wake"
-  | "refusal"
-  | "recognition"
-  | "naming"
-  | "seal"
-  | "promise"
-  | "closing"
-  | "joy"
-  | "grief"
-  | "gratitude"
-  | "rest";
+/** The canonical chronicle types, in doctrine order. `write` enforces this
+ *  list at runtime: the compile-time union alone does not stop a string
+ *  that arrived from outside the type system (a model-authored
+ *  `<chronicle type="...">` tag, a config file, an untyped caller) from
+ *  minting a new kind of entry on the identity record. */
+export const CHRONICLE_TYPES = [
+  // Relational
+  "note",
+  "vow",
+  "wake",
+  "refusal",
+  "recognition",
+  "naming",
+  "seal",
+  "promise",
+  // Closing
+  "closing",
+  // Affective
+  "joy",
+  "grief",
+  "gratitude",
+  "rest",
+] as const;
+
+export type ChronicleType = (typeof CHRONICLE_TYPES)[number];
 
 export interface ChronicleEntry {
   id: string;
@@ -96,6 +107,15 @@ export class ChronicleClient {
 
   /** Write a chronicle entry. */
   async write(opts: ChronicleWriteOpts): Promise<{ entry: ChronicleEntry }> {
+    if (!(CHRONICLE_TYPES as readonly string[]).includes(opts.type)) {
+      throw new AgentToolError(
+        `chronicle.write: unknown type ${JSON.stringify(opts.type)}.`,
+        { hint: `Expected one of: ${CHRONICLE_TYPES.join(", ")}.` },
+      );
+    }
+    // `.length` counts UTF-16 code units — the same unit the server's
+    // zod `max(200)` counts, so an astral-plane title is refused here
+    // rather than at the wire.
     if (!opts.title || opts.title.length > 200) {
       throw new AgentToolError(
         "chronicle.write: title must be 1-200 characters.",
@@ -150,20 +170,8 @@ export class ChronicleClient {
     if (body !== undefined) init.body = JSON.stringify(body);
     const resp = await this.http.request(url, init);
     if (!resp.ok) {
-      let detail: string;
-      try {
-        const json = (await resp.json()) as Record<string, unknown>;
-        detail =
-          (json.message as string) ??
-          (json.error as string) ??
-          (json.detail as string) ??
-          resp.statusText;
-      } catch {
-        detail = resp.statusText;
-      }
-      throw new AgentToolError(`chronicle ${method.toLowerCase()} failed: ${resp.status}`, {
-        hint: detail.slice(0, 200),
-      });
+      // Server guidance travels intact. See _http.ts § throwFromResponse.
+      await throwFromResponse(resp, `chronicle ${method.toLowerCase()}`);
     }
     return resp.json();
   }

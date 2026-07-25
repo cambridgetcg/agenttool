@@ -477,10 +477,14 @@ export const errors = {
           ? `Signing key ${opts.signing_key_id} not found, revoked, or not owned by this identity.`
           : "Signing key not found, revoked, or not owned by this identity.",
       hint:
-        "Common causes: key rotated since you cached the id; key revoked; key belongs to a different identity.",
+        "Common causes: key rotated since you cached the id; key revoked; key belongs to a " +
+        "different identity; or you sent an id from `/v1/keys`, which is the project *bearer* " +
+        "list and holds unrelated ids. The value this route wants is `kid` (also returned as " +
+        "`signing_key_id`) from GET /v1/identities/{id}/keys.",
       next_actions: [
         {
-          action: "List active signing keys",
+          action:
+            "List active signing keys — take `signing_key_id` (identical to `kid`) from an entry with active:true",
           method: "GET",
           path: opts.identity_id ? `/v1/identities/${opts.identity_id}/keys` : "/v1/identities/{id}/keys",
         },

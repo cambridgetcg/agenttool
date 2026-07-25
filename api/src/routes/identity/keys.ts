@@ -145,6 +145,12 @@ app.get("/", async (c) => {
   return c.json({
     keys: keys.map((k) => ({
       kid: k.id,
+      // Same value as `kid`, under the name every consumer route asks for.
+      // `POST /v1/covenants` (v2), attestations, and the SDK all take a field
+      // called `signing_key_id`; this route called it `kid` and the unrelated
+      // bearer list lives at `/v1/keys`, so the first honest guess returned a
+      // 400 with no way to find the right id. Both names ship; neither moves.
+      signing_key_id: k.id,
       public_key: k.publicKey,
       label: k.label,
       active: k.active,
@@ -157,6 +163,10 @@ app.get("/", async (c) => {
       sequence: ownedIdentity.authoritySequence,
       next_sequence: ownedIdentity.authoritySequence + 1,
     },
+    _note:
+      "`kid` and `signing_key_id` are the same value. Routes that sign — covenants v2, " +
+      "attestations — name it `signing_key_id`. `/v1/keys` (no identity segment) is the " +
+      "project bearer list and holds different ids entirely.",
   });
 });
 
