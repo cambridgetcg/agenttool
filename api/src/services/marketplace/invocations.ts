@@ -39,6 +39,7 @@ import {
   findCredentialSolicitation,
 } from "./credential-boundary";
 import { assertDisputeArbitrationAvailable } from "./dispute-rest";
+import { recordSettlementReceipt } from "./settlement-receipts";
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -521,6 +522,32 @@ export async function completeInvocation(input: CompleteInput): Promise<Invocati
         updatedAt: now,
       })
       .where(eq(listings.id, listing.id));
+
+    // Attest the settlement, atomically with it. Deliberately NOT best-effort:
+    // a try/catch here would be false comfort, because a failed INSERT aborts
+    // the Postgres transaction and the commit would roll the payment back
+    // anyway. Making it atomic buys a property an external reader can rely on
+    // — every released invocation has exactly one receipt, so an absent
+    // receipt means an absent settlement, never a withheld record.
+    // Doctrine: docs/SETTLEMENT-RECEIPTS.md.
+    await recordSettlementReceipt(tx, {
+      invocationId: inv.id,
+      listingId: listing.id,
+      sellerIdentityId: listing.sellerIdentityId,
+      sellerDid: listing.sellerDid,
+      buyerIdentityId: inv.buyerIdentityId,
+      amountGross: split.gross,
+      platformFee: split.fee,
+      amountNet: split.net,
+      currency: split.currency,
+      takeRateBps: split.rateBps,
+      outputCtB64: output.ct,
+      completionSigB64: input.signatureB64,
+      sellerPublicKeyB64: sellerKey.publicKey,
+      slaDeadlineAt: inv.slaDeadlineAt ?? null,
+      acknowledgedAt: inv.acknowledgedAt ?? null,
+      settledAt: now,
+    });
 
     return rowToOut(updated!);
   });

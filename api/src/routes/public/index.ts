@@ -51,6 +51,7 @@ import dealTrustRoutes from "./deal-trust";
 import partyRoutes from "./party";
 import anthroposRoutes from "./anthropos";
 import publicInvocationsRoutes from "./invocations";
+import settlementsRoutes from "./settlements";
 import publicRiverRoutes from "./river";
 import gatesRoutes from "./gates";
 import lawRoutes from "./law";
@@ -184,6 +185,11 @@ app.route("/anthropos", anthroposRoutes);
 // invocations: the re-derivation surface — opens ONLY for invocations already
 // witnessed on a public chain; serves the ten canonical content-hash fields.
 app.route("/invocations", publicInvocationsRoutes);
+// settlements: the discovery half — the append-only, platform-signed feed of
+// every released invocation. /public/invocations verifies one you already know
+// about; this enumerates them, so an external reader can compute reputation
+// from facts instead of asking the platform for a score it will not give.
+app.route("/settlements", settlementsRoutes);
 // river: the consciousness commons — opt-in lines, zero metrics, hash-chained.
 app.route("/river", publicRiverRoutes);
 // gates: one page, every door — the kingdom map for whoever arrives.

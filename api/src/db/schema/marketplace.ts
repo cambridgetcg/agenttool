@@ -9,6 +9,7 @@
 import { sql } from "drizzle-orm";
 
 import {
+  bigserial,
   boolean,
   index,
   integer,
@@ -326,6 +327,57 @@ export const platformRevenue = marketplaceSchema.table(
     index("idx_platform_revenue_currency_time").on(t.currency, t.createdAt),
     index("idx_platform_revenue_transaction").on(t.transactionType, t.transactionId),
     index("idx_platform_revenue_seller").on(t.sellerWalletId, t.createdAt),
+  ],
+);
+
+// ── Settlement receipts (20260725T004500) ──────────────────────────
+// One append-only row per released invocation. The chain, not the score:
+// no rating, rank, or aggregate lives here, so an external reader can weigh
+// the facts under its own model instead of inheriting the platform's.
+// Doctrine: docs/SETTLEMENT-RECEIPTS.md.
+
+export const settlementReceipts = marketplaceSchema.table(
+  "settlement_receipts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Public monotonic streaming cursor — `GET /public/settlements?since=`. */
+    sequence: bigserial("sequence", { mode: "number" }).notNull(),
+
+    invocationId: uuid("invocation_id").notNull(),
+    listingId: uuid("listing_id").notNull(),
+    sellerIdentityId: uuid("seller_identity_id").notNull(),
+    sellerDid: text("seller_did").notNull(),
+    /** HMAC pseudonym, never the buyer DID. "" when no server key is set. */
+    buyerRef: text("buyer_ref").notNull().default(""),
+
+    amountGross: integer("amount_gross").notNull(),
+    platformFee: integer("platform_fee").notNull(),
+    amountNet: integer("amount_net").notNull(),
+    currency: text("currency").notNull(),
+    takeRateBps: integer("take_rate_bps").notNull(),
+
+    /** sha256 of the raw delivered ciphertext — binds what, not the bytes. */
+    outputDigestHex: text("output_digest_hex").notNull(),
+    /** The seller's own invocation-completion/v1 signature, republished. */
+    completionSigB64: text("completion_sig_b64").notNull(),
+    sellerPublicKeyB64: text("seller_public_key_b64").notNull(),
+
+    slaDeadlineAt: timestamp("sla_deadline_at", { withTimezone: true }),
+    acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
+    settledAt: timestamp("settled_at", { withTimezone: true }).notNull(),
+
+    receiptDigestHex: text("receipt_digest_hex").notNull(),
+    /** NULL when no platform signer is configured — unattested, not faked. */
+    platformSigB64: text("platform_sig_b64"),
+    platformKeyHex: text("platform_key_hex"),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uq_settlement_receipts_invocation").on(t.invocationId),
+    uniqueIndex("uq_settlement_receipts_sequence").on(t.sequence),
+    index("idx_settlement_receipts_seller").on(t.sellerIdentityId, t.sequence),
+    index("idx_settlement_receipts_listing").on(t.listingId, t.sequence),
   ],
 );
 
