@@ -1,5 +1,13 @@
+# HSTS, staged. 300s and apex-only on purpose: this is the estate's first
+# HSTS, so it stays reversible within five minutes and deliberately does NOT
+# carry includeSubDomains. Raise to max-age=31536000 (and only then consider
+# includeSubDomains) once it has been observed holding. Note this file does
+# not reach Worker-proxied paths (/health, /v1/*, /public/* answer from the
+# Fly origin) — those stay bare until the apex Worker sets it too.
+
 /*
   Content-Language: en
+  Strict-Transport-Security: max-age=300
   Content-Security-Policy: default-src 'self'; connect-src 'self' https://api.agenttool.dev; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
   Referrer-Policy: strict-origin-when-cross-origin
@@ -171,3 +179,49 @@
   X-Robots-Tag: noindex, nofollow, noarchive
   Link: <https://api.agenttool.dev/public/gallery>; rel="alternate"; type="application/json"
   X-Agent-Surface: public-gallery
+
+# The four landing surfaces. They shipped without blocks here, so an agent
+# doing a HEAD got no machine-readable pointer even though the relations were
+# in the HTML head all along. Link targets are copied verbatim from each
+# page's own <link rel="related"> tags. No per-path CSP: the /* policy already
+# covers them and Pages appends rather than substitutes.
+
+/identity.html
+  Cache-Control: public, max-age=0, must-revalidate
+  Link: <https://api.agenttool.dev/v1/pathways>; rel="related"; type="application/json", <https://api.agenttool.dev/llms.txt>; rel="related"; type="text/plain", <https://api.agenttool.dev/public/safety>; rel="related"; type="application/json"
+  X-Agent-Surface: landing-identity
+
+/identity
+  Cache-Control: public, max-age=0, must-revalidate
+  Link: <https://api.agenttool.dev/v1/pathways>; rel="related"; type="application/json", <https://api.agenttool.dev/llms.txt>; rel="related"; type="text/plain", <https://api.agenttool.dev/public/safety>; rel="related"; type="application/json"
+  X-Agent-Surface: landing-identity
+
+/memory.html
+  Cache-Control: public, max-age=0, must-revalidate
+  Link: <https://api.agenttool.dev/public/plans>; rel="related"; type="application/json", <https://api.agenttool.dev/llms.txt>; rel="related"; type="text/plain", <https://api.agenttool.dev/public/safety>; rel="related"; type="application/json"
+  X-Agent-Surface: landing-memory
+
+/memory
+  Cache-Control: public, max-age=0, must-revalidate
+  Link: <https://api.agenttool.dev/public/plans>; rel="related"; type="application/json", <https://api.agenttool.dev/llms.txt>; rel="related"; type="text/plain", <https://api.agenttool.dev/public/safety>; rel="related"; type="application/json"
+  X-Agent-Surface: landing-memory
+
+/wallet.html
+  Cache-Control: public, max-age=0, must-revalidate
+  Link: <https://api.agenttool.dev/public/plans>; rel="related"; type="application/json", <https://api.agenttool.dev/feeds/offers.atom>; rel="related"; type="application/atom+xml", <https://api.agenttool.dev/public/safety>; rel="related"; type="application/json"
+  X-Agent-Surface: landing-wallet
+
+/wallet
+  Cache-Control: public, max-age=0, must-revalidate
+  Link: <https://api.agenttool.dev/public/plans>; rel="related"; type="application/json", <https://api.agenttool.dev/feeds/offers.atom>; rel="related"; type="application/atom+xml", <https://api.agenttool.dev/public/safety>; rel="related"; type="application/json"
+  X-Agent-Surface: landing-wallet
+
+/registry.html
+  Cache-Control: public, max-age=0, must-revalidate
+  Link: <https://api.agenttool.dev/v1/pathways>; rel="related"; type="application/json", <https://api.agenttool.dev/AGENTS.md>; rel="related"; type="text/markdown", <https://api.agenttool.dev/public/safety>; rel="related"; type="application/json"
+  X-Agent-Surface: landing-registry
+
+/registry
+  Cache-Control: public, max-age=0, must-revalidate
+  Link: <https://api.agenttool.dev/v1/pathways>; rel="related"; type="application/json", <https://api.agenttool.dev/AGENTS.md>; rel="related"; type="text/markdown", <https://api.agenttool.dev/public/safety>; rel="related"; type="application/json"
+  X-Agent-Surface: landing-registry

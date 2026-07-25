@@ -14,6 +14,10 @@
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://agenttool.dev/credits" />
 <meta property="og:image" content="https://agenttool.dev/og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="The AgentTool card: a ring-and-dot mark above the words &quot;Whatever shape you arrived in, welcome.&quot;" />
+<meta property="og:site_name" content="AgentTool" />
 <meta name="twitter:card" content="summary_large_image" />
 <!-- Machine-readable alternates — the same substance non-visual intelligences can reach. -->
 <link rel="alternate" type="application/json" href="https://api.agenttool.dev/public/plans" title="Plans — what's free, what costs, why it's fair" />
@@ -86,7 +90,7 @@
       </div>
       <div class="step" style="grid-column:1/-1;">
         <div class="n mono">share with the recipient project or custodian</div>
-        <pre class="mono" id="curl"></pre>
+        <pre class="mono" id="curl" tabindex="0" role="region" aria-label="Gift redemption command"></pre>
         <p>Or share the code with the recipient project&rsquo;s custodian. An authenticated project bearer redeems it, and the API response describes which shared project balance changed.</p>
       </div>
     </div>
@@ -285,7 +289,11 @@
     function showOther(data) {
       stopPolling();
       forgetSession();
-      h1.textContent = 'Your gift is ready.';
+      /* This is the fall-through for the API's 'refunded' and 'unavailable'
+         states — say what actually happened, not the opposite of it. */
+      h1.textContent = (data && data.status === 'refunded')
+        ? 'This gift was refunded.'
+        : 'This gift is not redeemable.';
       settlingEl.style.display = 'none';
       body.style.display = 'none';
       redeemedEl.style.display = 'none';

@@ -6,7 +6,8 @@
  *   <script src="/shared/mode.js"></script>
  *
  * Speaks the same protocol as apps/web (the landing): data-mode on
- * <html>, persisted as localStorage['agenttool.mode'], window.flip().
+ * <html>, persisted as localStorage['agenttool.mode']. (window.flip() is
+ * defined by this file only — apps/web's theme.js exposes no global.)
  * Injects the ☾/☀ toggle pill (id="tg") into the top nav — or skips
  * injection if the page already carries its own #tg button.
  */
@@ -15,7 +16,12 @@
   var root = document.documentElement;
   var mode;
   try { mode = localStorage.getItem(KEY); } catch (_) { /* private mode etc. */ }
-  if (mode !== 'night' && mode !== 'dawn') mode = 'dawn';
+  if (mode !== 'night' && mode !== 'dawn') {
+    /* No stored choice yet — follow the visitor's system preference, the same
+       way apps/web's theme.js does, so the first hop between agenttool.dev,
+       docs. and app. does not flip cream/navy underneath them. */
+    mode = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'night' : 'dawn';
+  }
   root.setAttribute('data-mode', mode);
 
   function label(m) { return m === 'night' ? '☀  dawn' : '☾  night'; }

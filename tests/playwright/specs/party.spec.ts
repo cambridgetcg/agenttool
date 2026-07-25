@@ -201,7 +201,10 @@ test("duplicate labels, duplicate seeds, laws, and weaves receive exact guidance
   await page.getByRole("button", { name: "Place it in the world" }).click();
   await takeTurn(page, turns[2]);
 
-  await expect(page.locator('[data-phase="seed"]')).toHaveAttribute("aria-label", "Seed complete");
+  // The step is a bare <span> (role generic), where ARIA forbids aria-label —
+  // the phase state is carried as real screen-reader text instead.
+  await expect(page.locator('[data-phase="seed"]')).toContainText("complete");
+  await expect(page.locator('[data-phase="seed"] .sr-only')).toHaveText("— complete");
   const completionMark = await page.locator('[data-phase="seed"]').evaluate((element) =>
     getComputedStyle(element, "::after").content,
   );
