@@ -65,12 +65,30 @@ export STRIPE_WEBHOOK_SECRET="whsec_..."
 
 # Crypto payment (optional)
 export CRYPTO_HD_MNEMONIC="..."  # BIP-39 12 or 24 words
-export ALCHEMY_WEBHOOK_SECRET="..."
+export ALCHEMY_API_KEY="..."
+export ALCHEMY_NOTIFY_AUTH_TOKEN="..."
+export ALCHEMY_WEBHOOK_ID_ETHEREUM="..."
+export ALCHEMY_WEBHOOK_ID_BASE="..."
+export ALCHEMY_WEBHOOK_ID_POLYGON="..."
+export ALCHEMY_WEBHOOK_ID_ARBITRUM="..."
+export ALCHEMY_WEBHOOK_ID_OPTIMISM="..."
+export ALCHEMY_WEBHOOK_SIGNING_KEY_ETHEREUM="..."
+export ALCHEMY_WEBHOOK_SIGNING_KEY_BASE="..."
+export ALCHEMY_WEBHOOK_SIGNING_KEY_POLYGON="..."
+export ALCHEMY_WEBHOOK_SIGNING_KEY_ARBITRUM="..."
+export ALCHEMY_WEBHOOK_SIGNING_KEY_OPTIMISM="..."
 
 # Bind
 export PORT=3000
 export HOST=0.0.0.0
 ```
+
+The five webhook IDs and five signing keys refer to the same five existing
+per-network Address Activity webhooks. A signing key is specific to its
+webhook; do not reuse one across routes. AgentTool updates address sets; it
+does not create or delete Alchemy apps/webhooks. Use deployment secrets rather
+than exporting credential values from a global shell profile. See
+[ALCHEMY.md](ALCHEMY.md).
 
 ## 3. Start the API
 

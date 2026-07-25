@@ -4,6 +4,7 @@
  *  auth surface). The duplicates that the original economy service had in
  *  its own DB are intentionally NOT ported — the monolith joins via tools. */
 
+import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
@@ -226,7 +227,17 @@ export const depositAddresses = economySchema.table(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    uniqueIndex("uq_deposit_wallet_chain_token").on(
+      t.walletId,
+      t.chain,
+      t.token,
+    ),
     uniqueIndex("idx_deposit_chain_addr").on(t.chain, t.address),
+    uniqueIndex("idx_deposit_evm_chain_addr_ci")
+      .on(t.chain, sql`lower(${t.address})`)
+      .where(
+        sql`${t.chain} IN ('ethereum', 'base', 'polygon', 'arbitrum', 'optimism')`,
+      ),
     index("idx_deposit_wallet").on(t.walletId),
   ],
 );
@@ -283,7 +294,7 @@ export const cryptoWebhookEvents = economySchema.table(
     id: uuid("id").primaryKey().defaultRandom(),
     chain: text("chain").notNull(),
     txHash: text("tx_hash").notNull(),
-    logIndex: integer("log_index"),               // for multi-transfer txs
+    logIndex: integer("log_index").notNull(),     // canonical per-transfer identity
     walletId: uuid("wallet_id").references(() => wallets.id),
     creditsAdded: bigint("credits_added", { mode: "number" }),
     rawPayload: jsonb("raw_payload").notNull(),

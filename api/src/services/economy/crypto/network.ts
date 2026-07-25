@@ -110,6 +110,9 @@ export type EvmRpcEndpointSource =
 export interface EvmRpcEndpoint {
   url: string;
   source: EvmRpcEndpointSource;
+}
+
+interface ResolvedEvmRpcEndpoint extends EvmRpcEndpoint {
   authorization?: string;
 }
 
@@ -128,7 +131,7 @@ export interface EvmRpcEndpoint {
  *  must explicitly set ALCHEMY_API_KEY (or per-chain override) before
  *  any mainnet broadcast can happen. The point is to make
  *  silent-mainnet-via-public-RPC impossible. */
-export function evmRpcEndpoint(chain: EvmChain): EvmRpcEndpoint {
+function resolveEvmRpcEndpoint(chain: EvmChain): ResolvedEvmRpcEndpoint {
   const network = activeNetwork();
 
   // 1. Per-chain explicit override — wins over everything.
@@ -169,10 +172,17 @@ export function evmRpcEndpoint(chain: EvmChain): EvmRpcEndpoint {
   );
 }
 
+/** Return provider identity without returning credential-bearing headers.
+ *  Callers that need a viem transport must use `evmRpcTransport`. */
+export function evmRpcEndpoint(chain: EvmChain): EvmRpcEndpoint {
+  const { url, source } = resolveEvmRpcEndpoint(chain);
+  return { url, source };
+}
+
 /** Build a viem HTTP transport from the resolved endpoint. Alchemy credentials
  *  are applied only as an Authorization header and never enter the URL. */
 export function evmRpcTransport(chain: EvmChain): HttpTransport {
-  const endpoint = evmRpcEndpoint(chain);
+  const endpoint = resolveEvmRpcEndpoint(chain);
   if (!endpoint.authorization) {
     return http(endpoint.url);
   }
@@ -184,15 +194,6 @@ export function evmRpcTransport(chain: EvmChain): HttpTransport {
     },
   });
 }
-
-/** Return only the resolved endpoint URL. Prefer `evmRpcTransport` for viem
- *  clients so provider authentication cannot accidentally be omitted. */
-export function rpcUrl(chain: EvmChain): string {
-  return evmRpcEndpoint(chain).url;
-}
-
-/** @deprecated kept for any callers that still import the old name. Prefer rpcUrl. */
-export const alchemyRpcUrl = rpcUrl;
 
 // ── Solana ──────────────────────────────────────────────────────────────
 

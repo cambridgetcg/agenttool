@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { economyConfig } from "../src/services/economy/config";
 import {
+  activeUsdcAddress,
   evmRpcEndpoint,
   evmRpcTransport,
 } from "../src/services/economy/crypto/network";
@@ -49,9 +50,9 @@ describe("Alchemy EVM RPC authentication", () => {
     expect(endpoint).toEqual({
       url: "https://eth-sepolia.g.alchemy.com/v2",
       source: "alchemy",
-      authorization: `Bearer ${TEST_API_KEY}`,
     });
     expect(endpoint.url).not.toContain(TEST_API_KEY);
+    expect(JSON.stringify(endpoint)).not.toContain(TEST_API_KEY);
 
     const configured = evmRpcTransport("ethereum")({
       chain: undefined,
@@ -90,9 +91,19 @@ describe("Alchemy EVM RPC authentication", () => {
   test("keeps the unauthenticated testnet fallback credential-free", () => {
     const endpoint = evmRpcEndpoint("ethereum");
     expect(endpoint.source).toBe("public-testnet");
-    expect(endpoint.authorization).toBeUndefined();
     expect(endpoint.url).toBe(
       "https://ethereum-sepolia-rpc.publicnode.com",
+    );
+  });
+
+  test("resolves the deposit contract from the same active network", () => {
+    expect(activeUsdcAddress("base")).toBe(
+      "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    );
+
+    payoutConfig.network = "mainnet";
+    expect(activeUsdcAddress("base")).toBe(
+      "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     );
   });
 });

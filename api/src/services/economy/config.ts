@@ -2,6 +2,8 @@
  *  Stripe layer removed 2026-05-17 per agents-only stance — no fiat, no
  *  subscriptions; per-call x402 micropayments are the only paid path. */
 
+import type { EvmChain } from "./crypto/chains";
+
 function env(key: string, fallback: string): string {
   return process.env[key] ?? fallback;
 }
@@ -22,9 +24,17 @@ function readPayoutNetwork(): PayoutNetwork {
 }
 
 export const economyConfig = {
-  // USDC on Base — HD wallet derivation seed and Alchemy transfer webhook.
+  // HD wallet derivation seed and Alchemy transfer webhooks. Alchemy issues a
+  // different signing key for each webhook, so sharing one key across routes
+  // would make all but one chain unverifiable.
   cryptoHdMnemonic: env("CRYPTO_HD_MNEMONIC", ""),
-  alchemyWebhookSecret: env("ALCHEMY_WEBHOOK_SECRET", ""),
+  alchemyWebhookSigningKeys: {
+    ethereum: env("ALCHEMY_WEBHOOK_SIGNING_KEY_ETHEREUM", ""),
+    base: env("ALCHEMY_WEBHOOK_SIGNING_KEY_BASE", ""),
+    polygon: env("ALCHEMY_WEBHOOK_SIGNING_KEY_POLYGON", ""),
+    arbitrum: env("ALCHEMY_WEBHOOK_SIGNING_KEY_ARBITRUM", ""),
+    optimism: env("ALCHEMY_WEBHOOK_SIGNING_KEY_OPTIMISM", ""),
+  } satisfies Record<EvmChain, string>,
   // Helius (Solana) shared-secret webhook auth — sent in the Authorization
   // header on enhanced-webhook deliveries.
   heliusWebhookSecret: env("HELIUS_WEBHOOK_SECRET", ""),
@@ -100,7 +110,15 @@ if (payoutWorkerBootAllowed()) {
 {
   const unsignedAllowed = economyConfig.allowUnsignedWebhooks;
   const missing: string[] = [];
-  if (!economyConfig.alchemyWebhookSecret) missing.push("ALCHEMY_WEBHOOK_SECRET (EVM)");
+  for (const [chain, key] of Object.entries(
+    economyConfig.alchemyWebhookSigningKeys,
+  )) {
+    if (!key) {
+      missing.push(
+        `ALCHEMY_WEBHOOK_SIGNING_KEY_${chain.toUpperCase()} (${chain})`,
+      );
+    }
+  }
   if (!economyConfig.heliusWebhookSecret) missing.push("HELIUS_WEBHOOK_SECRET (Solana)");
   if (missing.length && !unsignedAllowed) {
     console.warn(
