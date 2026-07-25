@@ -12,8 +12,8 @@ import {
   createPublicClient,
   createWalletClient,
   encodeFunctionData,
-  http,
   keccak256,
+  TransactionNotFoundError,
   type Address,
   type Hex,
 } from "viem";
@@ -25,7 +25,7 @@ import {
   activeChainId,
   activeMnemonic,
   activeUsdcAddress,
-  rpcUrl,
+  evmRpcTransport,
 } from "./network";
 
 /** Minimal ABI fragment for ERC-20 `transfer(to, amount)`. */
@@ -77,12 +77,13 @@ export async function buildAndSignUsdcTransfer(
   const account = privateKeyToAccount(bytesToHex0x(keypair.privateKey));
   const usdcAddress = activeUsdcAddress(p.chain) as Address;
   const chainId = activeChainId(p.chain);
-  const url = rpcUrl(p.chain);
 
-  const publicClient = createPublicClient({ transport: http(url) });
+  const publicClient = createPublicClient({
+    transport: evmRpcTransport(p.chain),
+  });
   const walletClient = createWalletClient({
     account,
-    transport: http(url),
+    transport: evmRpcTransport(p.chain),
   });
 
   const data = encodeFunctionData({
@@ -132,7 +133,7 @@ export async function submitSignedTx(
   serialized: Hex,
 ): Promise<Hex> {
   const publicClient = createPublicClient({
-    transport: http(rpcUrl(chain)),
+    transport: evmRpcTransport(chain),
   });
   return await publicClient.sendRawTransaction({
     serializedTransaction: serialized,
@@ -141,19 +142,22 @@ export async function submitSignedTx(
 
 /** Check whether a tx hash exists on chain. Used for crash-recovery: if the
  *  worker's submit call errored but the tx actually landed (network blip
- *  post-submit), we can detect it and avoid double-spending on retry. */
+ *  post-submit), we can detect it and avoid double-spending on retry. RPC
+ *  lookup failures throw so callers cannot mistake provider unavailability
+ *  for positive proof that the transaction is absent. */
 export async function txExistsOnChain(
   chain: EvmChain,
   txHash: Hex,
 ): Promise<boolean> {
   const publicClient = createPublicClient({
-    transport: http(rpcUrl(chain)),
+    transport: evmRpcTransport(chain),
   });
   try {
     const tx = await publicClient.getTransaction({ hash: txHash });
     return Boolean(tx);
-  } catch {
-    return false;
+  } catch (err) {
+    if (err instanceof TransactionNotFoundError) return false;
+    throw err;
   }
 }
 
@@ -170,7 +174,7 @@ export async function confirmTx(
   threshold: number,
 ): Promise<ConfirmResult> {
   const publicClient = createPublicClient({
-    transport: http(rpcUrl(chain)),
+    transport: evmRpcTransport(chain),
   });
   let receipt;
   try {

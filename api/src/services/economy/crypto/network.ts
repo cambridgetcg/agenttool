@@ -6,6 +6,8 @@
  *
  *  Doctrine: docs/PAYOUT-BROADCAST-PLAN.md. */
 
+import { http, type HttpTransport } from "viem";
+
 import { economyConfig } from "../config";
 import {
   EVM_CHAIN_IDS,
@@ -100,40 +102,93 @@ const PUBLIC_TESTNET_RPCS: Record<EvmChain, string> = {
   optimism: "https://optimism-sepolia-rpc.publicnode.com",
 };
 
-/** Build the RPC URL for a chain on the active network. Resolution order:
+export type EvmRpcEndpointSource =
+  | "override"
+  | "alchemy"
+  | "public-testnet";
+
+export interface EvmRpcEndpoint {
+  url: string;
+  source: EvmRpcEndpointSource;
+  authorization?: string;
+}
+
+/** Resolve the EVM RPC endpoint and its request authentication. Resolution order:
  *
  *    1. `RPC_URL_<CHAIN>_<NETWORK>` env override (e.g.
  *       `RPC_URL_ETHEREUM_TESTNET=https://my-rpc.example/...`)
- *    2. `ALCHEMY_API_KEY` env → Alchemy URL with active network's subdomain
+ *    2. `ALCHEMY_API_KEY` env → Alchemy endpoint with Bearer authentication
  *    3. **Testnet only**: a public unauth'd RPC fallback
+ *
+ *  An explicit override receives no Alchemy authorization header. This both
+ *  preserves the override contract and prevents the shared Alchemy key from
+ *  being disclosed to a caller-selected endpoint.
  *
  *  Mainnet refuses to fall through to the public fallback — operators
  *  must explicitly set ALCHEMY_API_KEY (or per-chain override) before
  *  any mainnet broadcast can happen. The point is to make
  *  silent-mainnet-via-public-RPC impossible. */
-export function rpcUrl(chain: EvmChain): string {
+export function evmRpcEndpoint(chain: EvmChain): EvmRpcEndpoint {
   const network = activeNetwork();
 
   // 1. Per-chain explicit override — wins over everything.
   const envKey = `RPC_URL_${chain.toUpperCase()}_${network.toUpperCase()}`;
   const override = process.env[envKey];
-  if (override) return override;
+  if (override) {
+    return {
+      url: override,
+      source: "override",
+    };
+  }
 
-  // 2. Alchemy with shared API key.
+  // 2. Alchemy with a shared API key sent in the request header. Keep the
+  //    credential out of URLs, where clients, proxies, errors, and access
+  //    logs commonly record it.
   const apiKey = process.env.ALCHEMY_API_KEY ?? "";
   if (apiKey) {
     const subdomain = ALCHEMY_NETWORKS[chain][network];
-    return `https://${subdomain}.g.alchemy.com/v2/${apiKey}`;
+    return {
+      url: `https://${subdomain}.g.alchemy.com/v2`,
+      source: "alchemy",
+      authorization: `Bearer ${apiKey}`,
+    };
   }
 
   // 3. Testnet falls back to public RPCs. Mainnet does NOT — explicit auth
   //    is required for production broadcasts to prevent silent reliance on
   //    a public node that may rate-limit / disappear / get man-in-the-middled.
-  if (network === "testnet") return PUBLIC_TESTNET_RPCS[chain];
+  if (network === "testnet") {
+    return {
+      url: PUBLIC_TESTNET_RPCS[chain],
+      source: "public-testnet",
+    };
+  }
 
   throw new Error(
     `No mainnet RPC URL: set ALCHEMY_API_KEY or RPC_URL_${chain.toUpperCase()}_MAINNET.`,
   );
+}
+
+/** Build a viem HTTP transport from the resolved endpoint. Alchemy credentials
+ *  are applied only as an Authorization header and never enter the URL. */
+export function evmRpcTransport(chain: EvmChain): HttpTransport {
+  const endpoint = evmRpcEndpoint(chain);
+  if (!endpoint.authorization) {
+    return http(endpoint.url);
+  }
+  return http(endpoint.url, {
+    fetchOptions: {
+      headers: {
+        Authorization: endpoint.authorization,
+      },
+    },
+  });
+}
+
+/** Return only the resolved endpoint URL. Prefer `evmRpcTransport` for viem
+ *  clients so provider authentication cannot accidentally be omitted. */
+export function rpcUrl(chain: EvmChain): string {
+  return evmRpcEndpoint(chain).url;
 }
 
 /** @deprecated kept for any callers that still import the old name. Prefer rpcUrl. */

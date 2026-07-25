@@ -18,7 +18,7 @@ When a side effect crosses a boundary that can swallow the response — network 
 
 A deterministic identifier is a pure function of the request payload and its destination: a `tx_hash` (function of signed bytes), a provider-scoped idempotency key, a `message_id`, a `covenant_id`. The same operation always produces the same ID without colliding across providers.
 
-With the ID persisted before the call, recovery after any crash becomes a remote lookup: *"Does this ID exist on the other side?"* If yes, the side effect happened. If no, it didn't. No state is ambiguous.
+With the ID persisted before the call, recovery after any crash can use a remote lookup: *"Does this ID exist on the other side?"* A positive result proves the side effect happened. An absent result is decisive only when the remote system can prove authoritative non-submission; eventually consistent chain lookup immediately after dispatch cannot, so that outcome remains explicitly ambiguous.
 
 ## Canonical example: payout broadcast
 
@@ -36,11 +36,11 @@ If the worker crashes at any point:
 | Crash window | Row state | Recovery |
 |---|---|---|
 | Before sign | `requested`, no tx_hash | Dispatcher re-picks. |
-| After CAS commit, before submit | `broadcasting`, tx_hash present | Query chain by tx_hash. Absent → refund + `failed`. Present → mark `broadcast`. |
-| During submit | `broadcasting`, tx_hash present | Same lookup. |
-| After submit, before status update | `broadcasting`, tx_hash present | Same lookup. Tx visible → mark `broadcast`. |
+| After CAS commit, before submit | `broadcasting`, tx_hash present | If dispatch is independently proved not to have begun, operator recovery may fail/refund. Otherwise query by hash: found → `broadcast`; absent/unavailable → remain `broadcasting`. |
+| During submit | `broadcasting`, tx_hash present | Query by hash. Found → `broadcast`; absent/unavailable is ambiguous and stays `broadcasting`. |
+| After submit, before status update | `broadcasting`, tx_hash present | Same conservative lookup. Tx visible → `broadcast`; no immediate result does not prove non-submission. |
 
-Every ambiguity collapses to a chain lookup. The confirm watcher (`confirm-worker.ts`) then advances state idempotently.
+The persisted identity makes positive reconciliation possible without re-signing. It does not make an eventually consistent negative lookup authoritative. The confirm watcher (`confirm-worker.ts`) advances positively reconciled rows idempotently; ambiguous `broadcasting` rows require operator handling.
 
 ## The recovery shape
 
@@ -52,14 +52,13 @@ Every ambiguity collapses to a chain lookup. The confirm watcher (`confirm-worke
                      ▼
               ┌─────────────┐
               │ broadcasting│ ◄──── safe recovery zone:
-              │  (tx_hash)  │       chain lookup answers
-              └──────┬──────┘       "did this land?"
-                     │ submit
-            ┌────────┴────────┐
-            ▼                 ▼
-       ┌────────┐         ┌──────┐
-       │broadcast│         │failed│
-       └────────┘         └──────┘
+              │  (tx_hash)  │       positive lookup answers
+              └──────┬──────┘       "yes"; absence stays here
+                     │ RPC accepted or tx found
+                     ▼
+                ┌─────────┐
+                │broadcast│
+                └─────────┘
 ```
 
 ## Where the pattern is applied
@@ -91,10 +90,10 @@ Every ambiguity collapses to a chain lookup. The confirm watcher (`confirm-worke
 
 ## Properties this gives you
 
-- **Crash-recoverable**: any failure resolves by looking up the ID remotely.
+- **Crash-reconcilable**: a durable ID lets an operator or watcher seek remote evidence without creating a second semantic action.
 - **Duplication-safe**: re-running the same operation reads the existing ID instead of starting over.
 - **Audit-traceable**: the ID is the join key between local state and external evidence.
-- **No retries-that-change-semantics**: post-submit failures never re-submit; a separate watcher reconciles.
+- **No retries-that-change-semantics**: post-submit failures never re-submit; a watcher or operator reconciles only from decisive evidence.
 
 ## See also
 

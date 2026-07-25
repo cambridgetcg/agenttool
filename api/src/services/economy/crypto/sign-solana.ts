@@ -138,19 +138,17 @@ export async function submitSolanaTx(
 }
 
 /** Whether a Solana signature exists on chain. Used for crash-recovery
- *  the same way `txExistsOnChain` is used for EVM. */
+ *  the same way `txExistsOnChain` is used for EVM. A lookup transport
+ *  failure is allowed to throw so callers cannot mistake RPC unavailability
+ *  for positive proof that the transaction is absent. */
 export async function solanaTxExists(
   signature: TransactionSignature,
 ): Promise<boolean> {
   const connection = new Connection(solanaRpcUrl(), SOLANA_CONFIRMATION);
-  try {
-    const result = await connection.getSignatureStatus(signature, {
-      searchTransactionHistory: true,
-    });
-    return Boolean(result.value);
-  } catch {
-    return false;
-  }
+  const result = await connection.getSignatureStatus(signature, {
+    searchTransactionHistory: true,
+  });
+  return Boolean(result.value);
 }
 
 export interface SolanaConfirmResult {
