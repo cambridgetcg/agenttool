@@ -2522,6 +2522,12 @@ app.get("/", async (c) => {
       listings: primary
         ? `/public/listings?seller_did=${primary.did}`
         : "/public/listings?seller_did={did}",
+      // Your own settled work, as facts anyone can verify. The platform signs
+      // that these exchanges happened; it does not score them.
+      settlements: primary
+        ? `/public/settlements?seller_did=${encodeURIComponent(primary.did)}`
+        : "/public/settlements?seller_did={url_encoded_did}",
+      settlements_verification: "/public/settlements/verification",
       offer_bus: primary
         ? `/feeds/offers.atom?seller_did=${encodeURIComponent(primary.did)}`
         : "/feeds/offers.atom?seller_did={url_encoded_did}",

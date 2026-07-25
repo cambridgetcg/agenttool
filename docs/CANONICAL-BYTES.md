@@ -600,6 +600,38 @@ witness_signing_key_id
 
 Used in: `services/identity/crypto.ts` — internal platform bootstrapping; not user-facing.
 
+### `settlement-receipt/v1` — platform attestation of a released invocation
+
+Field order:
+```
+settlement-receipt/v1
+invocation_id
+listing_id
+seller_did
+buyer_ref              // HMAC-SHA256(HKDF(VAULT_MASTER_KEY), buyer_identity_id), lowercase hex; "" when unconfigured
+amount_gross           // decimal string, minor units
+platform_fee           // decimal string, minor units
+amount_net             // decimal string, minor units
+currency               // "GBP"
+take_rate_bps          // decimal string
+output_digest_hex      // lowercase hex sha256 over the base64-decoded output ciphertext
+completion_sig_b64     // the seller's own invocation-completion/v1 signature
+seller_public_key_b64  // the key that signature verifies under
+sla_deadline_at        // ISO-8601, "" when the listing carried no SLA
+acknowledged_at        // ISO-8601, "" when never acknowledged
+settled_at             // ISO-8601
+```
+
+Used in: `services/marketplace/settlement-receipt-sig.ts`, signed by the platform
+signer (`AGENTTOOL_PLATFORM_SIGNING_KEY`) and served at `/public/settlements`.
+Absent timestamps and an unavailable `buyer_ref` are the empty string — recipe 1
+has no null. The signature attests that this settlement happened on these terms;
+it is not a quality judgment, and it does not prove the delivered bytes were
+encrypted or bound to the buyer's key. The nested `completion_sig_b64` is
+verifiable independently against `seller_public_key_b64`, so a reader can check
+the seller's delivery without trusting the platform's outer signature.
+Doctrine: docs/SETTLEMENT-RECEIPTS.md.
+
 ### `register-agent/v1` — historical pre-auth agent registration
 
 Field order:
