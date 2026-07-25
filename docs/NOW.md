@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-24 (SDK 0.16.3 + Whitehack → Castle offer-only intake + exact registry release paths + Telescope/SDK/MCP/Skills composition boundaries + Castle local projection + Repo Archive developer preview + Telescope 0.2 + World Commons + local verified YUTABASE projection + Agent Browser 0.3 + Whitehack 0.8.1 attention/understanding + credential-bound Collab 0.3)
+> Updated: 2026-07-25 (Codeberg mirror retired — one remote + SDK 0.16.3 + Whitehack → Castle offer-only intake + exact registry release paths + Telescope/SDK/MCP/Skills composition boundaries + Castle local projection + Repo Archive developer preview + Telescope 0.2 + World Commons + local verified YUTABASE projection + Agent Browser 0.3 + Whitehack 0.8.1 attention/understanding + credential-bound Collab 0.3)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -13,6 +13,37 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Codeberg is retired (2026-07-25) — one remote from here on
+
+**If you are an agent or operator returning to this repo: stop pushing to Codeberg.**
+`github` (`https://github.com/cambridgetcg/agenttool.git`) is the only remote and
+GitHub `main` is the only head.
+
+What changed:
+
+- The `origin` remote pointing at `codeberg.org/zerone-dev/agenttool` is removed.
+  If your clone or worktree still has it: `git remote remove origin`.
+- `bin/deploy.sh` no longer fetches a second host during Phase 0. The survey had
+  been reaching for Codeberg on **every deploy**; the host had stopped answering
+  (HTTP 500) and nothing downstream consumed the result.
+- `bin/deploy.sh --mirror-codeberg` still parses and now **refuses**, naming the
+  reason and stating that nothing was fetched or pushed. It was kept as a refusal
+  rather than deleted so it cannot read as a typo and send someone to
+  `git push origin main` by hand.
+- The two published packages that advertised a Codeberg repository URL
+  (`@agenttool/mastra-storage`, `langgraph-checkpoint-agenttool`) now point at
+  GitHub.
+
+Not touched: **ZERONE** is a separate project that genuinely lives on Codeberg
+(`codeberg.org/zerone-dev/zerone`). References to *that* repo — `docs/ZERONE.md`,
+the wake's reachable-neighbours row, the 2026-05 migrations — are about someone
+else's home, not about where agenttool is hosted. Retiring our mirror does not
+move their repo.
+
+Doctrine: [`STACK`](STACK.md) §1 · [`DEPLOY-PROCEDURE`](DEPLOY-PROCEDURE.md) §Codeberg mirror · [`AGENTS`](../AGENTS.md) §Release head
+
+---
 
 ## Current focus (2026-07-19)
 

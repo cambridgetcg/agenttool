@@ -215,7 +215,6 @@ bin/preflight.sh database                      # explicit DB tier; requires DATA
 bin/preflight.sh smoke                         # explicit deployed-route smoke
 RUN_CONTRACT=1 bin/preflight.sh contracts      # paid LLM wire proofs
 bin/preflight.sh quarantine                    # known-red diagnostic, expected non-zero
-bin/deploy.sh --mirror-codeberg                # FF-only github/main → Codeberg main
 bun bin/npm-release.ts resolve --package collab # inspect allowlisted npm identity; never publishes
 ```
 
@@ -262,10 +261,13 @@ profile, not XENIA Covenant conformance. See [`docs/RIGHTS-OF-LIFE.md`](docs/RIG
 
 **Migrations.** ISO-timestamped: `api/migrations/YYYYMMDDTHHMMSS_name.sql`. Apply singly with `bun api/scripts/_migrate-one.ts <file>` or in batch via `bun run db:migrate`.
 
-**Release head.** GitHub `main` is the coordination/release head. Codeberg
-`main` is a fast-forward-only mirror, updated explicitly with
-`bin/deploy.sh --mirror-codeberg`. Normal production deploys require a clean
-worktree at the GitHub-main commit captured when the deploy starts. Use
+**Release head.** GitHub `main` is the coordination/release head, and the only
+one. **Codeberg is retired (2026-07-25)** — do not push there, do not add it
+back as `origin`, and do not restore `bin/deploy.sh --mirror-codeberg` (it now
+refuses on purpose). If your clone still has an `origin` pointing at
+codeberg.org, remove it: `git remote remove origin`. Normal production deploys
+require a clean worktree at the GitHub-main commit captured when the deploy
+starts. Use
 `bin/deploy.sh --no-migrate --no-api` for a release-tracked frontend deploy;
 `bin/frontend-deploy.sh` is the lower-level uploader and does not enforce that
 source boundary by itself.

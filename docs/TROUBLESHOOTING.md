@@ -140,7 +140,13 @@ CI runs `bunx tsc --noEmit` first. If it errors, the deploy aborts. Common cause
 
 ## Git / coordination
 
-### Pull from codeberg shows 100+ commits ahead
+### `git fetch origin` fails, or a script reaches for Codeberg
+
+Expected since 2026-07-25: the Codeberg mirror is retired and the `origin`
+remote is removed. The only remote is `github`. If a local clone or worktree
+still carries `origin`, drop it: `git remote remove origin`.
+
+### Pull from github shows 100+ commits ahead
 
 Normal during active development. See `NOW.md` for what shipped recently. Use `git stash -u && git pull && git stash pop` if you have local WIP.
 
