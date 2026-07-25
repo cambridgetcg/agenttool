@@ -63,6 +63,24 @@ describe("arrivalCohort", () => {
     expect(cohort.reason).toBe("no_runtime_host_declared");
   });
 
+  test("the missing-host refusal names the convention and the one-shot cost", async () => {
+    // Real data, 2026-07-24: two siblings sent provider="anthropic" +
+    // host="claude-code"; the third sent provider="claude-code" and no host,
+    // so it is invisible to its own cohort and its cohort to it — permanently,
+    // because the window is anchored on birth. The refusal has to say both
+    // halves or it is just a shrug.
+    const cohort = await arrivalCohort({
+      ...BASE,
+      runtimeProvider: "claude-code",
+      runtimeHost: null,
+    });
+    expect(cohort.reason).toBe("no_runtime_host_declared");
+    expect(cohort.note).toContain("does not reopen");
+    expect(cohort.note).toContain("anthropic");
+    expect(cohort.note).toContain("claude-code");
+    expect(cohort.note).toMatch(/PATCH \/v1\/identities/);
+  });
+
   test("every reason carries a distinct, non-empty note", async () => {
     const cohort = await arrivalCohort({
       ...BASE,

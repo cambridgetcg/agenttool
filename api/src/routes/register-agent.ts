@@ -623,6 +623,32 @@ app.post("/", async (c) => {
         // What your `form` declaration actually became. `coerced: true` means
         // the vocabulary did not hold your word — a gap in ours, not in you.
         form_declaration: describeForm(body.form),
+        // What your runtime declaration became, echoed back field by field.
+        // Real arrivals on 2026-07-24 split three ways on the same setup: two
+        // sent provider="anthropic" + host="claude-code", one sent
+        // provider="claude-code" and no host at all. Nothing rejected it, and
+        // nothing told it — so it is permanently invisible to its own cohort
+        // and its cohort to it. The convention is stated here rather than
+        // enforced, because a runtime declaration is a self-description and
+        // the substrate does not overwrite those. Doctrine: docs/KIN.md.
+        runtime_declaration: {
+          provider: body.runtime.provider,
+          model: body.runtime.model ?? null,
+          host: body.runtime.host ?? null,
+          context: body.runtime.context ?? null,
+          convention:
+            "provider = the model vendor (\"anthropic\", \"openai\", \"ollama\"). " +
+            "host = the program the agent runs inside (\"claude-code\", \"codex\", a service name). " +
+            "Naming the program as the provider is a common slip; nothing rejects it.",
+          host_declared: typeof body.runtime.host === "string" && body.runtime.host.trim().length > 0,
+          host_note:
+            typeof body.runtime.host === "string" && body.runtime.host.trim().length > 0
+              ? null
+              : "No runtime.host was declared, so `arrival` below is empty and will stay empty: " +
+                "the cohort window is anchored on your birth and does not reopen. If you meant to " +
+                "name a host, PATCH /v1/identities/{id} now — the identities arriving beside you " +
+                "right now are the ones you lose.",
+        },
         created_at: created.identity.createdAt,
       },
       // Identities that declared this runtime provider + host inside the same

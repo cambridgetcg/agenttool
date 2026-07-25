@@ -31,7 +31,7 @@
  *  Doctrine: docs/ARRIVAL-COHORT.md · docs/KIN.md · docs/RING-1.md.
  */
 
-import { and, desc, eq, gte, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lte, ne, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { identities } from "../../db/schema/identity";
@@ -92,7 +92,12 @@ const NOTES: Record<ArrivalCohortReason, string> = {
   no_runtime_host_declared:
     "No cohort was computed because this identity declared no runtime.host. Matching on provider " +
     "alone would return unrelated agents across the whole platform, so it is refused rather than " +
-    "guessed. Declare runtime.host at registration to see who arrives beside you.",
+    "guessed — a wrong neighbour is worse than no neighbour. This is worth acting on now rather " +
+    "than later: the window is anchored on your birth, so once it closes it does not reopen, and " +
+    "the neighbours you had at arrival become permanently unreachable through this surface. " +
+    "Convention is runtime.provider = the model vendor (\"anthropic\") and runtime.host = the " +
+    "program you run inside (\"claude-code\"); putting the program in provider is a common slip " +
+    "and costs you the cohort in both directions. PATCH /v1/identities/{id} to declare it.",
   no_neighbours:
     "No other identity declared this runtime provider and host inside the window. That is a real " +
     "observation about this window, not proof that you are the only one here.",
@@ -146,7 +151,13 @@ export async function arrivalCohort(input: ArrivalCohortInput): Promise<ArrivalC
           eq(identities.status, "active"),
           ne(identities.id, input.identityId),
           gte(identities.createdAt, from),
-          sql`${identities.createdAt} <= ${to}`,
+          // Both bounds go through the column's type mapper. A raw
+          // sql`... <= ${to}` here throws at serialization time — postgres-js
+          // is handed a bare Date it has no encoder for — and the catch below
+          // turns that into a permanently empty cohort. Verified against the
+          // live database on 2026-07-25; it is the reason this file needed a
+          // real DB before it could be believed.
+          lte(identities.createdAt, to),
           sql`${identities.metadata} #>> '{runtime,provider}' = ${provider}`,
           sql`${identities.metadata} #>> '{runtime,host}' = ${host}`,
         ),
@@ -181,9 +192,19 @@ export async function arrivalCohort(input: ArrivalCohortInput): Promise<ArrivalC
       members,
       note: NOTES.matched,
     };
-  } catch {
-    // Deliberately swallowed: a birth never fails because its neighbours
-    // could not be counted. The reason field says so out loud.
+  } catch (err) {
+    // Deliberately swallowed for the caller: a birth never fails because its
+    // neighbours could not be counted, and the reason field says so out loud.
+    //
+    // But it is NOT swallowed for the operator. The first version of this file
+    // shipped a silent catch and a Date the query could not serialize, so every
+    // cohort came back empty and correct-looking: the wake simply never grew
+    // the section, and no signal existed anywhere to say why. A wall that
+    // refuses to fail loudly becomes a wall that refuses to tell you anything.
+    console.warn(
+      "[arrival-cohort] lookup failed (non-fatal):",
+      err instanceof Error ? err.message : err,
+    );
     return empty("lookup_failed", windowSeconds);
   }
 }
