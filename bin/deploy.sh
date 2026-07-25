@@ -21,7 +21,10 @@
 #   bin/deploy.sh --dry-run               # show what would happen
 #   bin/deploy.sh --allow-dirty-release    # loud source-integrity override
 #   bin/deploy.sh --allow-non-release-head # loud GitHub-main override
-#   bin/deploy.sh --mirror-codeberg        # FF-only github/main -> Codeberg main
+#
+# Retired: --mirror-codeberg. Codeberg is no longer a mirror of this repo;
+# GitHub main is the only head. The flag still parses so it can refuse with
+# the reason rather than an opaque "unknown flag".
 #
 # Doctrine: docs/DEPLOY-PROCEDURE.md.
 
@@ -101,10 +104,8 @@ phase() {
 }
 
 RELEASE_REMOTE="github"
-MIRROR_REMOTE="origin"
 RELEASE_BRANCH="main"
 RELEASE_REF="refs/remotes/$RELEASE_REMOTE/$RELEASE_BRANCH"
-MIRROR_REF="refs/remotes/$MIRROR_REMOTE/$RELEASE_BRANCH"
 FLY_APP="agenttool"
 HEALTH_URL="https://api.agenttool.dev/health"
 RIGHTS_DOC_URL="https://docs.agenttool.dev/RIGHTS-OF-LIFE.md"
@@ -126,51 +127,22 @@ fetch_tracking_ref() {
   git fetch --quiet "$remote" "+refs/heads/$branch:$target"
 }
 
-mirror_codeberg() {
-  phase M "Codeberg fast-forward mirror"
-  echo "  coordination head: $RELEASE_REMOTE/$RELEASE_BRANCH"
-  echo "  mirror target:     $MIRROR_REMOTE/$RELEASE_BRANCH"
-
-  fetch_tracking_ref "$RELEASE_REMOTE" "$RELEASE_BRANCH" || {
-    echo "$(red '✗') Could not fetch GitHub release head; Codeberg was not changed."
-    return 1
-  }
-  fetch_tracking_ref "$MIRROR_REMOTE" "$RELEASE_BRANCH" || {
-    echo "$(red '✗') Could not fetch Codeberg mirror head; Codeberg was not changed."
-    return 1
-  }
-
-  local release_revision mirror_revision
-  release_revision="$(git rev-parse "$RELEASE_REF")" || return 1
-  mirror_revision="$(git rev-parse "$MIRROR_REF")" || return 1
-  if [ "$release_revision" = "$mirror_revision" ]; then
-    echo "  ✓ Codeberg already mirrors $release_revision"
-    return 0
-  fi
-  if ! git merge-base --is-ancestor "$MIRROR_REF" "$RELEASE_REF"; then
-    echo "$(red '✗') Codeberg main is not an ancestor of GitHub main; refusing a non-fast-forward push."
-    echo "    github/main:  $release_revision"
-    echo "    origin/main:  $mirror_revision"
-    return 1
-  fi
-
-  # No force flag: a concurrent Codeberg update makes the remote reject this
-  # push instead of letting the local survey overwrite it.
-  git push "$MIRROR_REMOTE" "$RELEASE_REF:refs/heads/$RELEASE_BRANCH" || {
-    echo "$(red '✗') Codeberg rejected the fast-forward mirror push; no force was attempted."
-    return 1
-  }
-  fetch_tracking_ref "$MIRROR_REMOTE" "$RELEASE_BRANCH" || return 1
-  mirror_revision="$(git rev-parse "$MIRROR_REF")" || return 1
-  if [ "$mirror_revision" != "$release_revision" ]; then
-    echo "$(red '✗') Codeberg mirror verification failed after push."
-    return 1
-  fi
-  echo "  ✓ Codeberg now mirrors $release_revision"
+# Codeberg was a fast-forward-only mirror of GitHub main. It is retired.
+# The flag keeps parsing so the refusal can carry the reason and the next
+# step — an opaque "unknown flag" would read as a typo and invite someone
+# to reach for `git push origin main` by hand instead.
+refuse_codeberg_mirror() {
+  echo "$(red '✗') --mirror-codeberg is retired. Codeberg is no longer a mirror of this repo."
+  echo "    GitHub main is the only head: $RELEASE_REMOTE/$RELEASE_BRANCH"
+  echo "    Nothing was fetched and nothing was pushed."
+  echo "    If you need a second host, add it deliberately as a new remote and"
+  echo "    a new explicit command — do not revive this one."
+  echo "    Doctrine: docs/DEPLOY-PROCEDURE.md · docs/STACK.md §1"
+  return 1
 }
 
 if [ "$MIRROR_CODEBERG_ONLY" = 1 ]; then
-  mirror_codeberg
+  refuse_codeberg_mirror
   exit $?
 fi
 
@@ -350,25 +322,6 @@ if fetch_tracking_ref "$RELEASE_REMOTE" "$RELEASE_BRANCH"; then
   fi
 else
   echo "$(red '✗') git fetch github main failed; no release-head snapshot exists."
-fi
-
-# Codeberg is a mirror, not a second coordination head. Its drift is useful
-# survey information but never changes which commit production may deploy.
-if fetch_tracking_ref "$MIRROR_REMOTE" "$RELEASE_BRANCH"; then
-  MIRROR_REVISION="$(git rev-parse "$MIRROR_REF")" || exit 1
-  if [ "$RELEASE_SNAPSHOT_OK" = 1 ] && [ "$MIRROR_REVISION" = "$RELEASE_SNAPSHOT_REVISION" ]; then
-    echo "  ✓ Codeberg mirror matches the GitHub main snapshot"
-  elif [ "$RELEASE_SNAPSHOT_OK" = 1 ]; then
-    read -r MIRROR_ONLY RELEASE_ONLY <<<"$(git rev-list --left-right --count "$MIRROR_REF...$RELEASE_REF")"
-    if [ "$MIRROR_ONLY" = 0 ]; then
-      echo "$(yellow "⚠ Codeberg mirror is $RELEASE_ONLY commit(s) behind GitHub main")"
-      echo "    run explicitly: bin/deploy.sh --mirror-codeberg"
-    else
-      echo "$(yellow '⚠ Codeberg mirror has commits absent from GitHub main; automatic mirroring is unsafe')"
-    fi
-  fi
-else
-  echo "  ? git fetch origin main failed; Codeberg mirror freshness is unknown"
 fi
 
 # Bundle freshness

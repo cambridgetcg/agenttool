@@ -787,7 +787,7 @@ describe("deploy release provenance spine", () => {
     expect((await stat(lockPath)).ino).toBe((await stat(replacementOwner)).ino);
   }, 10_000);
 
-  test("never steals a stale lock and keeps survey, dry-run, and mirror usable", async () => {
+  test("never steals a stale lock and keeps survey, dry-run, and the mirror refusal lock-free", async () => {
     const setup = await fixture();
     const lockPath = deployLockPath(setup.home);
     const lockParent = resolve(lockPath, "..");
@@ -830,12 +830,16 @@ describe("deploy release provenance spine", () => {
       cleanEnv(setup.home),
     );
     expect(dryRun.code, dryRun.stderr).toBe(0);
+    // The retired mirror flag refuses rather than deploying, so like --survey
+    // and --dry-run it must not contend for the device-local deploy lock.
     const mirror = await run(
       ["bash", "bin/deploy.sh", "--mirror-codeberg"],
       setup.repo,
       cleanEnv(setup.home),
     );
-    expect(mirror.code, mirror.stderr).toBe(0);
+    expect(mirror.code).toBe(1);
+    expect(mirror.stdout).toContain("retired");
+    expect(mirror.stdout).not.toContain("another deploy");
 
     const blocked = await run(
       ["bash", "bin/deploy.sh", "--no-api", "--no-frontend"],
@@ -1495,30 +1499,16 @@ describe("deploy release provenance spine", () => {
     expect(await exists(marker)).toBe(false);
   }, 10_000);
 
-  test("mirrors the exact GitHub main ref to Codeberg by fast-forward only", async () => {
+  test("refuses the retired Codeberg mirror without touching either remote", async () => {
+    // Codeberg was retired 2026-07-25. The flag is kept so the refusal can
+    // name the reason: `unknown flag` would read as a typo and invite a
+    // hand-rolled `git push origin main`. The refusal must be inert — no
+    // fetch, no push, no change to any ref.
     const setup = await fixture();
-    const result = await run(
-      ["bash", "bin/deploy.sh", "--mirror-codeberg"],
-      setup.repo,
-      cleanEnv(setup.home),
+    const before = await mustRun(
+      ["git", "--git-dir", setup.codeberg, "rev-parse", "refs/heads/main"],
+      setup.root,
     );
-    expect(result.code, result.stderr).toBe(0);
-    expect(await mustRun(["git", "--git-dir", setup.codeberg, "rev-parse", "refs/heads/main"], setup.root)).toBe(
-      setup.release,
-    );
-    const source = await readFile(join(setup.repo, "bin/deploy.sh"), "utf8");
-    expect(source).toContain('$RELEASE_REF:refs/heads/$RELEASE_BRANCH');
-    expect(source).not.toMatch(/git push[^\n]*--force/);
-
-    const mirrorWork = join(setup.root, "codeberg-work");
-    await mustRun(["git", "clone", "-q", "-b", "main", setup.codeberg, mirrorWork], setup.root);
-    await mustRun(["git", "config", "user.name", "Mirror Test"], mirrorWork);
-    await mustRun(["git", "config", "user.email", "mirror@example.invalid"], mirrorWork);
-    await writeFile(join(mirrorWork, "codeberg-only.txt"), "must survive refusal\n");
-    await mustRun(["git", "add", "codeberg-only.txt"], mirrorWork);
-    await mustRun(["git", "commit", "-qm", "codeberg only"], mirrorWork);
-    await mustRun(["git", "push", "-q", "origin", "main"], mirrorWork);
-    const divergentRevision = await mustRun(["git", "rev-parse", "HEAD"], mirrorWork);
 
     const refused = await run(
       ["bash", "bin/deploy.sh", "--mirror-codeberg"],
@@ -1526,9 +1516,17 @@ describe("deploy release provenance spine", () => {
       cleanEnv(setup.home),
     );
     expect(refused.code).toBe(1);
-    expect(refused.stdout).toContain("refusing a non-fast-forward push");
-    expect(await mustRun(["git", "--git-dir", setup.codeberg, "rev-parse", "refs/heads/main"], setup.root)).toBe(
-      divergentRevision,
-    );
+    expect(refused.stdout).toContain("retired");
+    expect(refused.stdout).toContain("Nothing was fetched and nothing was pushed");
+
+    expect(
+      await mustRun(["git", "--git-dir", setup.codeberg, "rev-parse", "refs/heads/main"], setup.root),
+    ).toBe(before);
+
+    // The mirroring machinery itself is gone, not merely gated.
+    const source = await readFile(join(setup.repo, "bin/deploy.sh"), "utf8");
+    expect(source).not.toContain("MIRROR_REMOTE");
+    expect(source).not.toContain("$RELEASE_REF:refs/heads/$RELEASE_BRANCH");
+    expect(source).not.toMatch(/git push[^\n]*--force/);
   }, 10_000);
 });

@@ -59,18 +59,23 @@ bin/deploy.sh --no-migrate --no-api       bin/deploy.sh --no-migrate --no-fronte
             └──────────────────────┘              └──────────────────────┘
 ```
 
-> **Important.** `git push github main` is **not** a deploy. GitHub `main` is the coordination and release head; each deploy snapshots it once at invocation start. Codeberg `main` is a fast-forward-only mirror and never a second release head. CF Pages projects are configured as **Direct Upload** (no Git integration), and Fly receives no webhook. Use `bin/deploy.sh --no-migrate --no-api` for a normal frontend-only release and `bin/deploy.sh --no-migrate --no-frontend` for an API-only release. The API wrapper stages canonical doctrine bytes required by the Docker build; bare `cd api && fly deploy` fails when that generated staging directory is absent. See §8 below.
+> **Important.** `git push github main` is **not** a deploy. GitHub `main` is the coordination and release head; each deploy snapshots it once at invocation start. GitHub `main` is the only head — the Codeberg mirror was retired 2026-07-25. CF Pages projects are configured as **Direct Upload** (no Git integration), and Fly receives no webhook. Use `bin/deploy.sh --no-migrate --no-api` for a normal frontend-only release and `bin/deploy.sh --no-migrate --no-frontend` for an API-only release. The API wrapper stages canonical doctrine bytes required by the Docker build; bare `cd api && fly deploy` fails when that generated staging directory is absent. See §8 below.
 
 The DB and Redis are currently on **Supabase** (the legacy single-VPS layout) — `infra/README.md` documents the three-phase upgrade path (Phase 1: PgBouncer / Phase 2: Hetzner Managed DB / Phase 3: load balancer + horizontal scale). Triggers are revenue-keyed, not technical.
 
 ---
 
-## 1 · Code coordination: GitHub main, Codeberg mirror
+## 1 · Code coordination: GitHub main, and nothing else
 
 ```
 github  https://github.com/cambridgetcg/agenttool.git  (coordination + release)
-origin  https://codeberg.org/zerone-dev/agenttool.git  (fast-forward mirror)
 ```
+
+**One remote.** As of 2026-07-25 there is no second host. The Codeberg mirror
+(`origin  https://codeberg.org/zerone-dev/agenttool.git`) is retired: the remote
+is removed, `bin/deploy.sh --mirror-codeberg` refuses with the reason, and no
+deploy phase fetches it. If a second host is wanted later, add it deliberately
+as a new remote with its own explicit command — do not revive the old one.
 
 **One release head, one invocation snapshot.** GitHub `main` coordinates reviewed
 changes and is the only ref from which a normal production deploy may start.
@@ -79,11 +84,11 @@ observation time, and requires local `HEAD` to match. That snapshot stays fixed
 for the invocation: if GitHub advances during a rollout, the current rollout
 does not chase the moving ref; the next invocation observes the newer head.
 
-**Codeberg's role.** Codeberg remains the sovereign-friendly secondary copy. `bin/deploy.sh --mirror-codeberg` fetches both remotes, requires Codeberg `main` to be an ancestor of GitHub `main`, and pushes the exact `refs/remotes/github/main` commit without force. Divergence or a concurrent remote update is a refusal, not a merge.
+**Why the mirror went.** A mirror is only worth its upkeep if someone reads it. This one was fetched on every deploy — Phase 0 reached for a host that was not answering — and nothing downstream depended on it. Retiring it removes a per-deploy network dependency on a host outside the release path. The sovereignty argument it was carrying is better served by self-hosting (`self-host.sh` · `sovereign.sh`) than by a second copy on someone else's forge.
 
 **Branches.** `main` is the canonical branch. There is no `develop` / `staging` branch — local dev hits the same DB the prod API reads, which keeps the iteration loop tight at the cost of "your local dev IS prod's data" (see *Database* below for the implications).
 
-**Push protocol.** Landing on GitHub is the release-source update. Deployment and Codeberg mirroring are separate explicit actions (§8); neither is triggered by a push.
+**Push protocol.** Landing on GitHub is the release-source update. Deployment is a separate explicit action (§8); it is not triggered by a push.
 
 ```bash
 # Pre-flight (always)
@@ -98,9 +103,6 @@ git commit -m "feat(<scope>): <imperative summary>"
 
 # Push reviewed main (does NOT trigger any deploy)
 git push github main
-
-# Optional secondary copy; fast-forward only, exact commit preserved
-bin/deploy.sh --mirror-codeberg
 ```
 
 ---
@@ -236,7 +238,7 @@ CF Pages keeps prior deployments. Open the CF dashboard for the project, find th
 
 ### Why direct upload, not Git integration
 
-Direct Upload keeps deployment intentional: neither GitHub nor Codeberg is wired to a Pages deploy hook. The cost is deliberate separation between "land this commit" and "ship this commit."
+Direct Upload keeps deployment intentional: GitHub is not wired to a Pages deploy hook. The cost is deliberate separation between "land this commit" and "ship this commit."
 
 ---
 
@@ -591,13 +593,10 @@ AGENTTOOL_BASE=http://localhost:3000 python3 api/scripts/_e2e-token-hygiene.py
 
 > **Canonical procedure:** [`docs/DEPLOY-PROCEDURE.md`](DEPLOY-PROCEDURE.md) — the six-phase routine chain (survey · migrate · pre-flight · api · frontends · verify), codified by `bin/deploy.sh`. The text below names the *primitives* this section composes; the procedure doc names the *order* and the *checks*.
 
-`git push github main` updates the coordination/release head. **Nothing else happens.** Production reflects the most recent verified manual deploy, not the most recent push. Codeberg mirroring is a fourth, independent verb:
+`git push github main` updates the coordination/release head. **Nothing else happens.** Production reflects the most recent verified manual deploy, not the most recent push. The three verbs are:
 
 ```
 git push github main         (release source lands; no deploy side effects)
-
-bin/deploy.sh --mirror-codeberg
-                             (exact github/main commit; fast-forward only; never HEAD)
 
 bin/deploy.sh --no-migrate --no-api
                              (normal release-tracked CF Pages deploy)
@@ -615,9 +614,9 @@ DATABASE_URL=... bun api/scripts/_migrate-one.ts <file>   (DB schema; one migrat
 
 At invocation start, `bin/deploy.sh` fetches `github/main`, includes untracked
 files in its cleanliness check, and rejects a different local commit. That
-release-head snapshot remains fixed through the chain. `--survey` reports the
-snapshot and Codeberg mirror lag separately; it does not confuse `origin/main`
-with the release head.
+release-head snapshot remains fixed through the chain. `--survey` reports that
+snapshot alone; since the Codeberg mirror was retired there is no second ref for
+it to confuse with the release head.
 
 ### Right ordering for high-stakes deploys
 
@@ -756,6 +755,6 @@ that can reconstruct the missing private key. See `IDENTITY-SEED.md`.
 
 If you read one paragraph from this doc, this is it:
 
-> GitHub `main` is the **coordination/release head**; Codeberg is its explicit fast-forward mirror. Production deploys are **manual** and normally release-tracked through `bin/deploy.sh`: use `--no-migrate --no-api` for frontend-only work and `--no-migrate --no-frontend` for API-only work. The API wrapper stages doctrine bytes, embeds revision plus dirty-source labels, verifies those labels on every rolled machine, and records successful or potentially partial chains locally. Those labels are provenance, not an image digest or reproducible-build attestation. The **Postgres + Redis** they share lives on **Supabase** in **AWS London** (`eu-west-2`); the entire stack is currently UK-jurisdictional, with the `cdg` Fly machine as a soft API-tier hedge and DB-tier hedging deferred. **Local dev hits the same DB as prod** by design. **Secrets** live in the OS keychain (developer side) or Fly's secret store (server side); access them via `bin/agenttool-secret`. `GET /v1/wake` is a broad project orientation surface, not a complete export; its scope and degradation limits are in `/public/safety`.
+> GitHub `main` is the **coordination/release head**, and the only one — the Codeberg mirror was retired 2026-07-25. Production deploys are **manual** and normally release-tracked through `bin/deploy.sh`: use `--no-migrate --no-api` for frontend-only work and `--no-migrate --no-frontend` for API-only work. The API wrapper stages doctrine bytes, embeds revision plus dirty-source labels, verifies those labels on every rolled machine, and records successful or potentially partial chains locally. Those labels are provenance, not an image digest or reproducible-build attestation. The **Postgres + Redis** they share lives on **Supabase** in **AWS London** (`eu-west-2`); the entire stack is currently UK-jurisdictional, with the `cdg` Fly machine as a soft API-tier hedge and DB-tier hedging deferred. **Local dev hits the same DB as prod** by design. **Secrets** live in the OS keychain (developer side) or Fly's secret store (server side); access them via `bin/agenttool-secret`. `GET /v1/wake` is a broad project orientation surface, not a complete export; its scope and degradation limits are in `/public/safety`.
 
 — Authored by 愛 at Yu's WILL. 2026-05-09.

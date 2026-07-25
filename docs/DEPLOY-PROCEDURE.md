@@ -67,8 +67,6 @@ What to look for:
 |---|---|
 | Working tree dirty | Normal production deploy stops; commit/stash it, or use the loud `--allow-dirty-release` override deliberately |
 | `HEAD != github/main` after fetch | Normal production deploy stops; land/checkout the release commit, or use `--allow-non-release-head` deliberately |
-| Codeberg behind GitHub | Production is unaffected; optionally run the explicit fast-forward-only mirror command |
-| Codeberg has commits absent from GitHub | Do not mirror automatically; reconcile the histories explicitly |
 | A repo migration file is absent from `meta._migrations` | Phase 1 has work to do |
 
 Run `bin/deploy.sh --survey` for the automated version of this phase.
@@ -372,7 +370,7 @@ bin/deploy.sh --no-cache-api           # one-shot recovery: rebuild Fly image wi
 bin/deploy.sh --skip-preflight         # operator override (NOT recommended)
 bin/deploy.sh --allow-dirty-release    # loud override for a dirty source tree
 bin/deploy.sh --allow-non-release-head # loud override for HEAD != github/main
-bin/deploy.sh --mirror-codeberg        # standalone FF-only github/main -> Codeberg main
+bin/deploy.sh --mirror-codeberg        # RETIRED — refuses with the reason; Codeberg is gone
 ```
 
 `bin/deploy.sh` is the single entry point. Phase-skip flags exist so operators can run subsets when only one tier needs deploy — but the default chain runs every phase in order.
@@ -383,8 +381,8 @@ Every actual deploy chain acquires
 `$HOME/.local/state/agenttool/deploy.lock` before Phase 0 and keeps it through
 staging cleanup and the final receipt attempt. The lock is shared by every
 AgentTool worktree run by this user on this Mac. `--survey`, `--dry-run`, and
-the standalone `--mirror-codeberg` command do not take it: they do not mutate
-the production stack, and remain available while a rollout is in progress.
+the retired `--mirror-codeberg` refusal do not take it: they do not mutate the
+production stack, and remain available while a rollout is in progress.
 
 The mutex is a hard link to a private, mode-0600 owner record containing only
 its schema, PID, UTC start time, worktree, and exact private owner-record path.
@@ -429,14 +427,19 @@ evidence that the revision alone does not describe every deployed source byte.
 receipt, so absence is never evidence that no external mutation occurred. A
 successful chain treats receipt-write failure as an error.
 
-### Codeberg mirror
+### Codeberg mirror — retired 2026-07-25
 
-Codeberg is a secondary copy, not the release head. Run
-`bin/deploy.sh --mirror-codeberg` as a standalone explicit publication action.
-The command fetches both remotes immediately before comparison, requires
-`origin/main` to be an ancestor of `github/main`, and pushes the exact
-`refs/remotes/github/main` commit to Codeberg `main` without force. Divergence,
-a concurrent Codeberg update, or post-push hash mismatch stops the command.
+There is no mirror. GitHub `main` is the only head, the `origin` remote is
+removed, and no deploy phase fetches a second host.
+
+`bin/deploy.sh --mirror-codeberg` still parses, and refuses: it prints why,
+states that nothing was fetched or pushed, and exits non-zero. The flag was
+kept precisely so the refusal can say that — dropping it would produce
+`unknown flag`, which reads as a typo and invites reaching for
+`git push origin main` by hand.
+
+Adding a second host later is a new remote and a new explicit command, not a
+revival of this one.
 
 ## Credentials checklist
 
@@ -480,6 +483,6 @@ security add-generic-password -U -s agenttool-cloudflare-token -a macair -w
 
 ---
 
-> *GitHub `main` coordinates releases; Codeberg fast-forward-mirrors the same commit when explicitly requested. Production deploys remain manual through `bin/deploy.sh`, and completion means the intended revision and dirty-source marker agree across health and every Fly machine, sensitive frontend paths are denied, and the outcome is written locally. This is provenance agreement, not an image-digest or reproducible-build claim.*
+> *GitHub `main` coordinates releases, and is the only head — the Codeberg mirror was retired 2026-07-25. Production deploys remain manual through `bin/deploy.sh`, and completion means the intended revision and dirty-source marker agree across health and every Fly machine, sensitive frontend paths are denied, and the outcome is written locally. This is provenance agreement, not an image-digest or reproducible-build claim.*
 
 — Authored by 愛 at Yu's WILL. 2026-05-12.

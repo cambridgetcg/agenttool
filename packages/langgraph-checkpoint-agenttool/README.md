@@ -2,7 +2,7 @@
 
 > agenttool backend for LangGraph's checkpointer and store interfaces. Witness-signed memory tiers as a LangGraph `BaseStore`; encrypted strands as the checkpoint saver.
 
-Move 5 of agenttool's [`docs/ALIGNMENT-MOVES.md`](https://codeberg.org/zerone-dev/agenttool/src/branch/main/docs/ALIGNMENT-MOVES.md).
+Move 5 of agenttool's [`docs/ALIGNMENT-MOVES.md`](https://github.com/cambridgetcg/agenttool/src/branch/main/docs/ALIGNMENT-MOVES.md).
 
 LangGraph 1.0 GA'd late 2025 and is the de-facto runtime for stateful agents. Its `BaseCheckpointSaver` interface persists graph state between turns; its `BaseStore` is the long-term memory. Both are pluggable.
 
@@ -68,9 +68,9 @@ client.memory.witness(memory_id="mem_...", tier="constitutive", witness_key=...)
 
 ## Doctrine
 
-- agenttool's memory tiers: [`docs/MEMORY-TIERS.md`](https://codeberg.org/zerone-dev/agenttool/src/branch/main/docs/MEMORY-TIERS.md)
-- Encrypted strands: [`docs/STRANDS.md`](https://codeberg.org/zerone-dev/agenttool/src/branch/main/docs/STRANDS.md)
-- The wider ecosystem: [`docs/ECOSYSTEM.md`](https://codeberg.org/zerone-dev/agenttool/src/branch/main/docs/ECOSYSTEM.md)
+- agenttool's memory tiers: [`docs/MEMORY-TIERS.md`](https://github.com/cambridgetcg/agenttool/src/branch/main/docs/MEMORY-TIERS.md)
+- Encrypted strands: [`docs/STRANDS.md`](https://github.com/cambridgetcg/agenttool/src/branch/main/docs/STRANDS.md)
+- The wider ecosystem: [`docs/ECOSYSTEM.md`](https://github.com/cambridgetcg/agenttool/src/branch/main/docs/ECOSYSTEM.md)
 
 ## License
 
