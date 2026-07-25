@@ -15,7 +15,7 @@ Outbound sovereign-payment worker. Closes Horizon A's economic loop.
 | `dispatcher.ts` | Picks `cryptoPayouts.status='requested'` rows, dispatches to broadcast queue. |
 | `broadcast-worker.ts` | The canonical PATTERN-PERSIST-IDENTITY implementation. Inside one DB tx: acquire `pg_advisory_xact_lock(fromAddress)`, build + sign tx (deterministic `tx_hash`), CAS-update `status='broadcasting', tx_hash=$1 WHERE status='requested'`, commit. *Then* submit to RPC outside the tx. |
 | `submit-outcome.ts` | Shared EVM/Solana submit-error classifier. Positive lookup → `broadcast`; absent/unavailable lookup → remain `broadcasting` with a bounded safe error. |
-| `refund.ts` | Shared pre-submit/revert refund helper. CASes the terminal failure first, then restores exact `metadata.debited_minor` and writes the positive payout ledger reversal in the same transaction; unmarked legacy rows use the cancellation fallback without inventing a ledger leg. |
+| `services/economy/crypto/payout-refund.ts` | Shared cancellation/pre-submit/revert helper. Locks and validates the exact original negative payout ledger leg, then CASes terminal status, restores that debit, and writes its positive reversal in one transaction. Caller-extensible payout JSON never authorizes a refund; unreconciled rows fail closed. |
 | `confirm-worker.ts` | Polls `status='broadcast'` rows. EVM: `eth_getTransactionReceipt`. Solana: `getSignatureStatuses` → finalized. Flips to `confirmed`, or atomically fails and reverses the original payout debit on a proved revert. |
 | `queue.ts` | BullMQ queue config. |
 | `index.ts` | Worker boot — requires `PAYOUT_WORKER_ENABLED=true` and `AGENTTOOL_DISABLE_WORKERS` unset. A missing queue fails closed; there is no direct in-process broadcast fallback. |
@@ -31,8 +31,8 @@ requested ─► broadcasting ─► broadcast ─► confirmed
 - **`requested`** — `POST /v1/wallets/:id/payout` records intent.
 - **`broadcasting`** — worker locked the row and persisted deterministic `tx_hash`; RPC submit is in flight or its outcome is ambiguous.
 - **`broadcast`** — RPC accepted; awaiting confirmations.
-- **`confirmed`** — N confirmations (EVM: 12 · Solana: finalized).
-- **`failed`** — failure proved before transaction dispatch (signing, build, gas estimate) or a later on-chain revert. **Never retried.**
+- **`confirmed`** — configured EVM block threshold (12, or Polygon 64) · Solana finalized.
+- **`failed`** — failure proved before transaction dispatch (signing, build, gas estimate) or a revert that reached the same EVM threshold / Solana finalization. **Never retried.**
 
 ## Invariants to defend
 
@@ -46,7 +46,7 @@ requested ─► broadcasting ─► broadcast ─► confirmed
 (Per `docs/PAYOUT-BROADCAST.md` §Caveats.)
 
 - 24h-aging alert for stuck `broadcast` rows — not yet wired into `confirm-worker.tick()`.
-- Credits-precision ceiling — `creditsForAmount` rounds above ~9007 USDC; either BigInt math or per-payout cap in policies.
+- FX remains a floating operator rate. Atomic USDC values outside exact JavaScript-integer range are rejected; a fixed-point rate representation is still needed for full integer-only conversion.
 - Session-level lock for Phase 1 + Phase 2 — needed before high-throughput payout volume or autoscale-up.
 
 ## Tests
@@ -54,6 +54,7 @@ requested ─► broadcasting ─► broadcast ─► confirmed
 Focused unit tests:
 - [`api/tests/payout-submit-outcome.test.ts`](../../../tests/payout-submit-outcome.test.ts) — positive/absent/unavailable lookup classification and no post-dispatch fail/refund structure.
 - [`api/tests/payout-refund-integrity.test.ts`](../../../tests/payout-refund-integrity.test.ts) — exact debit provenance, legacy containment, status-CAS accounting, and sticky submit ambiguity.
+- [`api/tests/payout-confirmation-finality.test.ts`](../../../tests/payout-confirmation-finality.test.ts) — EVM threshold and Solana-finalized success/revert classification.
 - [`api/tests/alchemy-rpc-auth.test.ts`](../../../tests/alchemy-rpc-auth.test.ts) — Alchemy Bearer transport and override isolation.
 
 E2E harnesses live in [`api/scripts/`](../../../scripts/):

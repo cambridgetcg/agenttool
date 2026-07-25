@@ -20,7 +20,7 @@ import {
 import { confirmTx } from "../../services/economy/crypto/sign-evm";
 import { confirmSolanaTx } from "../../services/economy/crypto/sign-solana";
 import { EVM_CONFIRMATION_THRESHOLDS } from "../../services/economy/crypto/network";
-import { refundPayoutAndFail } from "./refund";
+import { refundPayoutAndFail } from "../../services/economy/crypto/payout-refund";
 
 const POLL_INTERVAL_MS = 30_000;
 const POLL_BATCH_SIZE = 50;
@@ -32,10 +32,9 @@ type Row = typeof cryptoPayouts.$inferSelect;
 /** Atomic refund + status='failed', gated on CAS so concurrent confirmers
  *  can't double-refund. */
 async function refundAndFail(row: Row, errReason: string) {
-  const result = await db.transaction((tx) =>
+  return db.transaction((tx) =>
     refundPayoutAndFail(tx, row, "broadcast", errReason),
   );
-  return result.refunded ? result.refundMinor : null;
 }
 
 async function confirmEvmRow(row: Row) {
@@ -58,10 +57,17 @@ async function confirmEvmRow(row: Row) {
       `[payout-confirm] ${row.id}: confirmed at block ${result.blockNumber} (${chain})`,
     );
   } else if (result.status === "reverted") {
-    const refundMinor = await refundAndFail(row, "tx_reverted_onchain");
-    if (refundMinor !== null) {
+    const reversal = await refundAndFail(row, "tx_reverted_onchain");
+    if (reversal.refunded) {
       console.warn(
-        `[payout-confirm] ${row.id}: reverted on-chain (${chain}); refunded ${refundMinor} pence`,
+        `[payout-confirm] ${row.id}: reverted on-chain (${chain}); refunded ${reversal.refundMinor} pence`,
+      );
+    } else if (
+      reversal.reason === "ledger_unreconciled" &&
+      reversal.terminal
+    ) {
+      console.error(
+        `[payout-confirm] ${row.id}: finalized revert (${chain}) but refund ledger is unreconciled; manual review required`,
       );
     }
   }
@@ -86,10 +92,17 @@ async function confirmSolanaRow(row: Row) {
       `[payout-confirm] ${row.id}: confirmed at slot ${result.slot} (solana)`,
     );
   } else if (result.status === "reverted") {
-    const refundMinor = await refundAndFail(row, "tx_reverted_onchain");
-    if (refundMinor !== null) {
+    const reversal = await refundAndFail(row, "tx_reverted_onchain");
+    if (reversal.refunded) {
       console.warn(
-        `[payout-confirm] ${row.id}: reverted on-chain (solana); refunded ${refundMinor} pence`,
+        `[payout-confirm] ${row.id}: reverted on-chain (solana); refunded ${reversal.refundMinor} pence`,
+      );
+    } else if (
+      reversal.reason === "ledger_unreconciled" &&
+      reversal.terminal
+    ) {
+      console.error(
+        `[payout-confirm] ${row.id}: finalized revert (solana) but refund ledger is unreconciled; manual review required`,
       );
     }
   }

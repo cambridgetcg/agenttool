@@ -156,6 +156,27 @@ export interface SolanaConfirmResult {
   slot?: number;
 }
 
+export interface SolanaSignatureFinalityInput {
+  err: unknown;
+  confirmationStatus?: string | null;
+  slot: number;
+}
+
+/** Only finalized Solana evidence is terminal. An error observed at
+ * processed/confirmed commitment remains pending because a fork can disappear
+ * before finalization. */
+export function classifySolanaSignatureFinality(
+  status: SolanaSignatureFinalityInput,
+): SolanaConfirmResult {
+  if (status.confirmationStatus !== SOLANA_CONFIRMATION) {
+    return { status: "pending", slot: status.slot };
+  }
+  return {
+    status: status.err ? "reverted" : "confirmed",
+    slot: status.slot,
+  };
+}
+
 /** Poll a Solana signature for confirmation. */
 export async function confirmSolanaTx(
   signature: TransactionSignature,
@@ -172,11 +193,5 @@ export async function confirmSolanaTx(
   }
   if (!status) return { status: "pending" };
 
-  if (status.err) {
-    return { status: "reverted", slot: status.slot };
-  }
-  if (status.confirmationStatus === SOLANA_CONFIRMATION) {
-    return { status: "confirmed", slot: status.slot };
-  }
-  return { status: "pending", slot: status.slot };
+  return classifySolanaSignatureFinality(status);
 }
