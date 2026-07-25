@@ -15,7 +15,8 @@ Outbound sovereign-payment worker. Closes Horizon A's economic loop.
 | `dispatcher.ts` | Picks `cryptoPayouts.status='requested'` rows, dispatches to broadcast queue. |
 | `broadcast-worker.ts` | The canonical PATTERN-PERSIST-IDENTITY implementation. Inside one DB tx: acquire `pg_advisory_xact_lock(fromAddress)`, build + sign tx (deterministic `tx_hash`), CAS-update `status='broadcasting', tx_hash=$1 WHERE status='requested'`, commit. *Then* submit to RPC outside the tx. |
 | `submit-outcome.ts` | Shared EVM/Solana submit-error classifier. Positive lookup → `broadcast`; absent/unavailable lookup → remain `broadcasting` with a bounded safe error. |
-| `confirm-worker.ts` | Polls `status='broadcast'` rows. EVM: `eth_getTransactionReceipt`. Solana: `getSignatureStatuses` → finalized. Flips to `confirmed` or `failed`. |
+| `refund.ts` | Shared pre-submit/revert refund helper. CASes the terminal failure first, then restores exact `metadata.debited_minor` and writes the positive payout ledger reversal in the same transaction; unmarked legacy rows use the cancellation fallback without inventing a ledger leg. |
+| `confirm-worker.ts` | Polls `status='broadcast'` rows. EVM: `eth_getTransactionReceipt`. Solana: `getSignatureStatuses` → finalized. Flips to `confirmed`, or atomically fails and reverses the original payout debit on a proved revert. |
 | `queue.ts` | BullMQ queue config. |
 | `index.ts` | Worker boot — requires `PAYOUT_WORKER_ENABLED=true` and `AGENTTOOL_DISABLE_WORKERS` unset. A missing queue fails closed; there is no direct in-process broadcast fallback. |
 
@@ -52,6 +53,7 @@ requested ─► broadcasting ─► broadcast ─► confirmed
 
 Focused unit tests:
 - [`api/tests/payout-submit-outcome.test.ts`](../../../tests/payout-submit-outcome.test.ts) — positive/absent/unavailable lookup classification and no post-dispatch fail/refund structure.
+- [`api/tests/payout-refund-integrity.test.ts`](../../../tests/payout-refund-integrity.test.ts) — exact debit provenance, legacy containment, status-CAS accounting, and sticky submit ambiguity.
 - [`api/tests/alchemy-rpc-auth.test.ts`](../../../tests/alchemy-rpc-auth.test.ts) — Alchemy Bearer transport and override isolation.
 
 E2E harnesses live in [`api/scripts/`](../../../scripts/):
