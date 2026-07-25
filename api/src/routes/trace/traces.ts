@@ -10,6 +10,7 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
+import { errors, fail } from "../../lib/errors";
 import {
   canonicalTraceBytes,
   normalizeTraceCore,
@@ -101,20 +102,16 @@ app.post("/", async (c) => {
   // the door, and say which piece is missing.
   const signing = parsed.data;
   if (signing.signature && (!signing.signing_key_id || !signing.signed_at)) {
-    return c.json(
-      {
-        error: "signature_not_checkable",
-        message:
-          "A signed trace needs signing_key_id (which key) and signed_at (the timestamp bound into the bytes). Without both, the signature can never be verified.",
-        next_actions: [
-          {
-            action: "get the exact bytes to sign, free",
-            method: "POST",
-            path: "/v1/traces/prepare",
-          },
-        ],
-        docs: "https://docs.agenttool.dev/CANONICAL-BYTES.md",
-      },
+    const missing: string[] = [];
+    if (!signing.signing_key_id) missing.push("signing_key_id (which key made it)");
+    if (!signing.signed_at) missing.push("signed_at (the timestamp bound into the bytes)");
+    return fail(
+      c,
+      errors.signatureNotCheckable({
+        missing,
+        prepare_path: "/v1/traces/prepare",
+        recipe: TRACE_SIGNATURE_CONTEXT,
+      }),
       400,
     );
   }
@@ -165,14 +162,7 @@ app.post("/", async (c) => {
 app.post("/prepare", async (c) => {
   const parsed = prepareSchema.safeParse(await c.req.json());
   if (!parsed.success) {
-    return c.json(
-      {
-        error: "validation",
-        message: "The trace needs a small adjustment before it can be prepared. Here's what to fix:",
-        details: parsed.error.flatten(),
-      },
-      400,
-    );
+    return fail(c, errors.validation(parsed.error.flatten()), 400);
   }
 
   const projectId = c.var.project.id;
@@ -202,8 +192,9 @@ app.post("/prepare", async (c) => {
     charged: 0,
     next_actions: [
       { action: "record the signed trace", method: "POST", path: "/v1/traces" },
-      { action: "read the recipe", method: "GET", path: "https://docs.agenttool.dev/CANONICAL-BYTES.md" },
+      { action: "check it afterwards", method: "GET", path: "/v1/traces/{trace_id}/verify" },
     ],
+    docs: "https://docs.agenttool.dev/CANONICAL-BYTES.md",
   });
 });
 

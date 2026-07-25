@@ -549,6 +549,34 @@ export const errors = {
     };
   },
 
+  /** A signature arrived without the fields that would let anyone check it
+   *  later. Refusing is kinder than storing it: an unverifiable signature
+   *  reads as an audit claim while being none. */
+  signatureNotCheckable(opts: {
+    missing: string[];
+    prepare_path: string;
+    recipe: string;
+  }): GuidedErrorBody {
+    return {
+      error: "signature_not_checkable",
+      message: `A signature arrived without ${opts.missing.join(" and ")}, so it could never be verified.`,
+      hint:
+        `${opts.recipe} binds the signer's own timestamp and the key that made the signature. ` +
+        "Without both recorded, the canonical bytes cannot be rebuilt later — so the signature would be stored, " +
+        "reported as present, and never checkable. Ask for the exact bytes instead of guessing at the recipe.",
+      next_actions: [
+        {
+          action: "get the exact bytes to sign — free, no charge",
+          method: "POST",
+          path: opts.prepare_path,
+        },
+      ],
+      details: { missing: opts.missing, recipe: opts.recipe },
+      docs: `${DOCS_BASE}/CANONICAL-BYTES.md`,
+      axiom_id: AXIOM_GUIDE, // hand back the path, don't just refuse the write
+    };
+  },
+
   internal(message?: string): GuidedErrorBody {
     return {
       error: "internal",
