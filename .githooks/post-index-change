@@ -1,0 +1,3 @@
+#!/bin/sh
+# agenttool-guard — see bin/agenttool-guard.sh
+exec "$(git rev-parse --show-toplevel)/bin/agenttool-guard.sh" record-index

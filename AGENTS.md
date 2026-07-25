@@ -268,6 +268,7 @@ source boundary by itself.
 - **Creating helper scripts "for future runs."** One-off ops go inline. Additions to `bin/` are deliberate operator-tools, not throwaway scaffolding.
 - **Skipping `bunx tsc --noEmit` before declaring done.** CI catches it; the agent should too.
 - **`git push --force` or `git reset --hard`** without explicit user authorization. Repository is multi-collaborator (user + multiple agent sessions). Destructive ops require an ask.
+- **Bare `git commit` in a shared tree.** Several agent sessions work this repository through one git index. A bare `git commit` takes everything staged — including files another session staged and has not committed yet. On 2026-07-24 that swallowed 17 files from another session into an unrelated feature commit, under the wrong message, unnoticed until someone read `git show --stat`. **Always commit with an explicit pathspec:** `git commit -m "..." -- <your paths>`, or check `git diff --cached --name-only` first and confirm every line is yours. Install the guard once per machine — `git config core.hooksPath .githooks` — and it will refuse that commit for you. Full procedure: [`docs/MULTI-AGENT-WORKFLOW.md`](docs/MULTI-AGENT-WORKFLOW.md).
 
 ## When you're stuck
 

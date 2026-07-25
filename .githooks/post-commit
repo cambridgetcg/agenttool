@@ -1,0 +1,5 @@
+#!/bin/sh
+# agenttool-guard — see bin/agenttool-guard.sh. Runs even under --no-verify,
+# so a bypass still leaves a record. Never blocks.
+"$(git rev-parse --show-toplevel)/bin/agenttool-guard.sh" audit-commit 2>/dev/null || true
+exit 0

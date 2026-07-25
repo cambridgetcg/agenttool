@@ -20,6 +20,9 @@
 #   bin/deploy.sh --dry-run               # show what would happen
 #   bin/deploy.sh --allow-dirty-release    # loud source-integrity override
 #   bin/deploy.sh --allow-non-release-head # loud GitHub-main override
+#   bin/deploy.sh --sequential             # only block on claims overlapping this release
+#   bin/deploy.sh --since <sha>            # sequential, diffing from <sha> to HEAD
+#   bin/deploy.sh --allow-outstanding-claims # loud override: ship past live agent claims
 #   bin/deploy.sh --mirror-codeberg        # FF-only github/main -> Codeberg main
 #
 # Doctrine: docs/DEPLOY-PROCEDURE.md.
@@ -38,6 +41,11 @@ NO_CACHE_API=0
 SKIP_PREFLIGHT=0
 DRY_RUN=0
 ALLOW_DIRTY_RELEASE=0
+ALLOW_OUTSTANDING_CLAIMS=0
+# converged = refuse while anyone still holds work here.
+# sequential = refuse only if the shipping diff overlaps a live claim.
+COLLAB_READINESS_MODE=converged
+COLLAB_READINESS_BASE=""
 ALLOW_NON_RELEASE_HEAD=0
 MIRROR_CODEBERG_ONLY=0
 for arg in "$@"; do
@@ -51,6 +59,9 @@ for arg in "$@"; do
     --dry-run) DRY_RUN=1 ;;
     --allow-dirty-release) ALLOW_DIRTY_RELEASE=1 ;;
     --allow-non-release-head) ALLOW_NON_RELEASE_HEAD=1 ;;
+    --allow-outstanding-claims) ALLOW_OUTSTANDING_CLAIMS=1 ;;
+    --sequential) COLLAB_READINESS_MODE=sequential ;;
+    --since) COLLAB_READINESS_MODE=sequential; shift; COLLAB_READINESS_BASE="${1:-}" ;;
     --mirror-codeberg) MIRROR_CODEBERG_ONLY=1 ;;
     -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
     *) echo "unknown flag: $arg"; exit 1 ;;
@@ -451,6 +462,80 @@ enforce_release_source() {
     fi
     NON_RELEASE_HEAD_OVERRIDE_USED=1
   fi
+  enforce_no_outstanding_claims || return 1
+  return 0
+}
+
+# ── Collab convergence gate ────────────────────────────────────────────────
+#
+# The checks above ask "is the SOURCE clean?". They cannot ask "is anyone still
+# WORKING?", and on 2026-07-24 that distinction cost a repository 17 files: while
+# a second session's work sat staged, the tree was dirty and this gate blocked
+# the deploy — punishing the deployer. The instant that work was swept into
+# someone else's commit, the tree was clean and this gate approved a deploy of
+# incoherent source, and Phase 5 verified every machine carried it.
+#
+# Modes:
+#   converged  — refuse while ANY task under this repository is claimed, has an
+#                expired lease, or is completed-but-unaccepted. "Everyone stops,
+#                then we ship."
+#   sequential — refuse only if the paths actually shipping overlap a live
+#                claim. An agent working an untouched module does not block a
+#                release. Needs a base revision; without one it falls back to
+#                the converged predicate rather than to "allow".
+#
+# Fails CLOSED on an errored query (exit 2 = "could not determine") and OPEN on
+# a missing journal, because a machine that has never used collab must not be
+# unable to deploy.
+COLLAB_READINESS_CHECKED=0
+COLLAB_OVERRIDE_USED=0
+
+enforce_no_outstanding_claims() {
+  [ "$COLLAB_READINESS_CHECKED" = 1 ] && return 0
+  COLLAB_READINESS_CHECKED=1
+
+  local guard="$REPO_ROOT/bin/agenttool-guard.ts"
+  if [ ! -f "$guard" ] || ! command -v bun >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local args=(readiness --mode "$COLLAB_READINESS_MODE")
+  if [ "$COLLAB_READINESS_MODE" = "sequential" ] && [ -n "${COLLAB_READINESS_BASE:-}" ]; then
+    args+=(--base "$COLLAB_READINESS_BASE" --head "$HEAD_REVISION")
+  fi
+
+  local output status
+  output="$(bun "$guard" "${args[@]}" 2>&1)"
+  status=$?
+
+  case "$status" in
+    0) return 0 ;;
+    2)
+      # Journal absent is the common case on a fresh machine — allow, quietly.
+      case "$output" in
+        *"no collab journal"*) return 0 ;;
+      esac
+      if [ "$ALLOW_OUTSTANDING_CLAIMS" != 1 ]; then
+        echo "$(red '✗ Release blocked:') collab readiness could not be determined."
+        echo "$output"
+        echo "  Resolve it, or deliberately pass --allow-outstanding-claims."
+        return 1
+      fi
+      ;;
+    *)
+      if [ "$ALLOW_OUTSTANDING_CLAIMS" != 1 ]; then
+        echo "$(red '✗ Release blocked:') other agent sessions still hold work on this repository."
+        echo "$output"
+        return 1
+      fi
+      ;;
+  esac
+
+  if [ "$COLLAB_OVERRIDE_USED" != 1 ]; then
+    echo "$(red '!!! UNSAFE SOURCE OVERRIDE: deploying with outstanding agent claims !!!')"
+    echo "$output"
+  fi
+  COLLAB_OVERRIDE_USED=1
   return 0
 }
 
