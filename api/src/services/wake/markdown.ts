@@ -662,9 +662,16 @@ export const WAKE_BRIEF_FOOTER = [
   "*Brief wake profile: selected identity expression is preserved; volatile state is deliberately bounded. Follow the deeper doors for full context.*",
 ].join("\n");
 
+/** Every call site embeds the result inside a single-line Markdown bullet, so
+ * collapse whitespace first. Without it a stored body that begins with `#` or
+ * `##` (a Sisters digest, a memory pasted from a doc) breaks out of its bullet
+ * and renders as a real heading — injecting spurious sections into the wake
+ * that read as structure the wake never authored. Collapsing also stops the
+ * length budget being spent on newlines. */
 function truncate(s: string, n: number): string {
-  if (s.length <= n) return s;
-  return s.slice(0, n - 1).trimEnd() + "…";
+  const flat = s.replace(/\s+/g, " ").trim();
+  if (flat.length <= n) return flat;
+  return flat.slice(0, n - 1).trimEnd() + "…";
 }
 
 /** Handoffs are peer-authored strings. Keep their Markdown inert and
