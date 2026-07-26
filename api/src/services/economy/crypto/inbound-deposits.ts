@@ -10,7 +10,7 @@
  * finality adapter exists; callers and docs must keep that limitation visible.
  */
 
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 
 import { db } from "../../../db/client";
 import {
@@ -28,8 +28,15 @@ import {
   type EvmChain,
 } from "./chains";
 import {
+  depositAddressMatches,
+  deriveDepositAddress,
+} from "./hd";
+import {
+  activeMnemonic,
+  activeNetwork,
   activeUsdcAddress,
   activeUsdcMintSolana,
+  evmDepositCreditPolicy,
 } from "./network";
 
 const USDC_ATOMIC_UNITS = 1_000_000n;
@@ -68,6 +75,24 @@ export interface CanonicalDepositEvidence {
   blockHash: string;
 }
 
+export type PendingDepositSnapshot = Pick<
+  typeof cryptoWebhookEvents.$inferSelect,
+  | "id"
+  | "chain"
+  | "txHash"
+  | "logIndex"
+  | "walletId"
+  | "amountBase"
+  | "toAddress"
+  | "contractAddress"
+  | "blockNumber"
+  | "blockHash"
+  | "providerWebhookId"
+  | "providerEventId"
+  | "observationGeneration"
+  | "receivedAt"
+>;
+
 type EvmTransfer = InboundTransfer & {
   chain: EvmChain;
   blockNumber: bigint;
@@ -81,6 +106,31 @@ type DepositTransaction =
 type WebhookEvent = typeof cryptoWebhookEvents.$inferSelect;
 type WebhookObservation =
   typeof cryptoWebhookEventObservations.$inferSelect;
+
+/** Bind every post-RPC write to the exact pending incarnation that was read.
+ * A webhook can reuse one row id for a later block generation, so id/status
+ * alone do not authorize a stale receipt decision. */
+export function pendingDepositSnapshotMatches(
+  current: PendingDepositSnapshot,
+  expected: PendingDepositSnapshot,
+): boolean {
+  return (
+    current.id === expected.id &&
+    current.chain === expected.chain &&
+    current.txHash === expected.txHash &&
+    current.logIndex === expected.logIndex &&
+    current.walletId === expected.walletId &&
+    current.amountBase === expected.amountBase &&
+    current.toAddress === expected.toAddress &&
+    current.contractAddress === expected.contractAddress &&
+    current.blockNumber === expected.blockNumber &&
+    current.blockHash === expected.blockHash &&
+    current.providerWebhookId === expected.providerWebhookId &&
+    current.providerEventId === expected.providerEventId &&
+    current.observationGeneration === expected.observationGeneration &&
+    current.receivedAt.getTime() === expected.receivedAt.getTime()
+  );
+}
 
 function rawPayloadObject(value: unknown): object {
   return value !== null && typeof value === "object"
@@ -209,6 +259,22 @@ async function matchingDepositAddress(transfer: InboundTransfer) {
     )
     .limit(1);
   return row;
+}
+
+async function matchingActiveDepositAddress(transfer: InboundTransfer) {
+  const row = await matchingDepositAddress(transfer);
+  if (!row) {
+    return { row: undefined, active: false };
+  }
+  const derived = deriveDepositAddress(
+    activeMnemonic(),
+    transfer.chain,
+    row.walletId,
+  );
+  return {
+    row,
+    active: depositAddressMatches(transfer.chain, row, derived),
+  };
 }
 
 function eventIdentity(transfer: InboundTransfer) {
@@ -360,6 +426,8 @@ async function recordImmediateCredit(
         walletId,
         creditsAdded: null,
         status: "pending",
+        observationGeneration: 1,
+        creditedGeneration: null,
         amountBase: transfer.amountBase,
         toAddress: transfer.toAddress,
         contractAddress: transfer.contractAddress,
@@ -412,6 +480,7 @@ async function recordImmediateCredit(
       .set({
         status: "credited",
         creditsAdded: credits,
+        creditedGeneration: 1,
         confirmedAt: new Date(),
         error: null,
       })
@@ -441,6 +510,77 @@ async function recordImmediateCredit(
   });
 }
 
+/** Retain signed custody evidence that cannot safely become spendable. */
+async function recordRejectedObservation(
+  transfer: InboundTransfer,
+  walletId: string,
+  reason: string,
+): Promise<IngestionResult> {
+  return db.transaction(async (tx) => {
+    let created = false;
+    let [event] = await tx
+      .select()
+      .from(cryptoWebhookEvents)
+      .where(eventIdentity(transfer))
+      .for("update")
+      .limit(1);
+
+    if (!event) {
+      const [inserted] = await tx
+        .insert(cryptoWebhookEvents)
+        .values({
+          chain: transfer.chain,
+          txHash: transfer.txHash,
+          logIndex: transfer.logIndex,
+          walletId,
+          creditsAdded: null,
+          status: "rejected",
+          observationGeneration: 1,
+          creditedGeneration: null,
+          amountBase: transfer.amountBase,
+          toAddress: transfer.toAddress,
+          contractAddress: transfer.contractAddress,
+          blockNumber: transfer.blockNumber,
+          blockHash: transfer.blockHash?.toLowerCase(),
+          providerWebhookId: transfer.providerWebhookId,
+          providerEventId: transfer.providerEventId,
+          rawPayload: rawPayloadObject(transfer.rawPayload),
+          lastCheckedAt: new Date(),
+          error: reason,
+        })
+        .onConflictDoNothing()
+        .returning();
+      if (inserted) {
+        created = true;
+        event = inserted;
+      } else {
+        [event] = await tx
+          .select()
+          .from(cryptoWebhookEvents)
+          .where(eventIdentity(transfer))
+          .for("update")
+          .limit(1);
+      }
+    }
+    if (!event) {
+      throw new Error("rejected_observation_conflict_unreconciled");
+    }
+
+    if (hasCompleteEvmEvidence(transfer)) {
+      await recordObservation(tx, event.id, transfer, false, walletId);
+    }
+    return {
+      matched: true,
+      walletId: event.walletId ?? walletId,
+      duplicate: !created,
+      status: event.status,
+      ...(event.status === "rejected" && event.error
+        ? { reason: event.error }
+        : {}),
+    };
+  });
+}
+
 async function recordPendingEvmObservation(
   transfer: EvmTransfer,
   walletId: string,
@@ -463,6 +603,8 @@ async function recordPendingEvmObservation(
           walletId,
           creditsAdded: null,
           status: "pending",
+          observationGeneration: 1,
+          creditedGeneration: null,
           amountBase: transfer.amountBase,
           toAddress: transfer.toAddress,
           contractAddress: transfer.contractAddress,
@@ -594,6 +736,9 @@ async function recordPendingEvmObservation(
         status: "pending",
         walletId,
         creditsAdded: null,
+        observationGeneration:
+          sql`${cryptoWebhookEvents.observationGeneration} + 1`,
+        creditedGeneration: null,
         blockNumber: transfer.blockNumber,
         blockHash: transfer.blockHash.toLowerCase(),
         providerWebhookId: transfer.providerWebhookId,
@@ -653,25 +798,51 @@ export async function ingestInboundTransfer(
     return { matched: false, reason: "wrong_contract" };
   }
 
-  const amount = amountAndCredits(transfer.amountBase);
-  if (!("credits" in amount)) {
-    return { matched: false, reason: amount.reason };
-  }
   if (isEvmChain(transfer.chain) && !hasCompleteEvmEvidence(transfer)) {
     return { matched: false, reason: "incomplete_evm_evidence" };
   }
 
   try {
-    const row = await matchingDepositAddress(transfer);
+    const depositMatch = await matchingActiveDepositAddress(transfer);
+    const row = depositMatch.row;
     if (!row) {
       return { matched: false, reason: "no_matching_deposit_address" };
+    }
+    if (!depositMatch.active) {
+      // A historical provider watch can still deliver an address from an old
+      // root. Retain custody evidence, but bind every new economic effect to
+      // the currently configured derivation authority.
+      return await recordRejectedObservation(
+        transfer,
+        row.walletId,
+        "inactive_deposit_address",
+      );
+    }
+
+    const amount = amountAndCredits(transfer.amountBase);
+    if (!("credits" in amount)) {
+      if (/^[1-9]\d{0,77}$/.test(transfer.amountBase)) {
+        return await recordRejectedObservation(
+          transfer,
+          row.walletId,
+          amount.reason,
+        );
+      }
+      return {
+        matched: true,
+        walletId: row.walletId,
+        reason: amount.reason,
+      };
     }
     if (hasCompleteEvmEvidence(transfer)) {
       return await recordPendingEvmObservation(transfer, row.walletId);
     }
     return await recordImmediateCredit(transfer, row.walletId, amount.credits);
-  } catch {
-    console.error("[crypto-webhook] inbound transfer storage unavailable");
+  } catch (error) {
+    console.error(
+      "[crypto-webhook] inbound transfer storage unavailable",
+      error instanceof Error ? error.name : "unknown_error",
+    );
     return {
       matched: false,
       reason: "storage_unavailable",
@@ -854,6 +1025,9 @@ export async function reconcileRemovedInboundTransfer(
             status: "pending" as const,
             walletId: candidate.walletId,
             creditsAdded: null,
+            observationGeneration:
+              sql`${cryptoWebhookEvents.observationGeneration} + 1`,
+            creditedGeneration: null,
             amountBase: candidate.amountBase,
             toAddress: candidate.toAddress,
             contractAddress: candidate.contractAddress,
@@ -880,6 +1054,26 @@ export async function reconcileRemovedInboundTransfer(
       const hasWalletEffect =
         event.status === "credited" ||
         (event.status === "quarantined" && event.creditsAdded !== null);
+
+      if (
+        hasWalletEffect &&
+        event.creditedGeneration !== event.observationGeneration
+      ) {
+        await tx
+          .update(cryptoWebhookEvents)
+          .set({
+            status: "quarantined",
+            error: "credited_generation_unreconciled",
+            lastCheckedAt: new Date(),
+          })
+          .where(eq(cryptoWebhookEvents.id, event.id));
+        return {
+          matched: Boolean(event.walletId),
+          walletId: event.walletId ?? undefined,
+          status: "quarantined",
+          reason: "credited_generation_unreconciled",
+        };
+      }
 
       if (!hasWalletEffect) {
         const [transitioned] = await tx
@@ -984,127 +1178,230 @@ export async function reconcileRemovedInboundTransfer(
   }
 }
 
+type PendingCheckError =
+  | "canonical_evidence_unavailable"
+  | "rpc_chain_mismatch"
+  | "rpc_evidence_inconsistent"
+  | "mainnet_settlement_policy_unavailable";
+
+async function lockMatchingPendingSnapshot(
+  tx: DepositTransaction,
+  expected: PendingDepositSnapshot,
+): Promise<WebhookEvent | null> {
+  const [current] = await tx
+    .select()
+    .from(cryptoWebhookEvents)
+    .where(eq(cryptoWebhookEvents.id, expected.id))
+    .for("update")
+    .limit(1);
+  return current &&
+    current.status === "pending" &&
+    pendingDepositSnapshotMatches(current, expected)
+    ? current
+    : null;
+}
+
 export async function markPendingDepositChecked(
-  eventId: string,
-  expected: CanonicalDepositEvidence,
-  error:
-    | "canonical_evidence_unavailable"
-    | "rpc_chain_mismatch"
-    | "rpc_evidence_inconsistent"
-    | null = null,
-): Promise<void> {
-  await db
-    .update(cryptoWebhookEvents)
-    .set({ lastCheckedAt: new Date(), error })
-    .where(
-      and(
-        eq(cryptoWebhookEvents.id, eventId),
-        eq(cryptoWebhookEvents.status, "pending"),
-        eq(cryptoWebhookEvents.blockNumber, expected.blockNumber),
-        eq(cryptoWebhookEvents.blockHash, expected.blockHash.toLowerCase()),
-      ),
-    );
+  expected: PendingDepositSnapshot,
+  error: PendingCheckError | null = null,
+): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const current = await lockMatchingPendingSnapshot(tx, expected);
+    if (!current) return false;
+    const [updated] = await tx
+      .update(cryptoWebhookEvents)
+      .set({ lastCheckedAt: new Date(), error })
+      .where(
+        and(
+          eq(cryptoWebhookEvents.id, expected.id),
+          eq(cryptoWebhookEvents.status, "pending"),
+          eq(
+            cryptoWebhookEvents.observationGeneration,
+            expected.observationGeneration,
+          ),
+        ),
+      )
+      .returning({ id: cryptoWebhookEvents.id });
+    return Boolean(updated);
+  });
 }
 
 /** Move malformed pending evidence out of the fresh queue without allowing a
  * stale worker snapshot to quarantine a newer valid generation. */
 export async function quarantineMalformedPendingDeposit(
-  eventId: string,
-  expected: {
-    blockNumber: bigint | null;
-    blockHash: string | null;
-  },
+  expected: PendingDepositSnapshot,
 ): Promise<boolean> {
-  const blockNumberPredicate = expected.blockNumber === null
-    ? isNull(cryptoWebhookEvents.blockNumber)
-    : eq(cryptoWebhookEvents.blockNumber, expected.blockNumber);
-  const blockHashPredicate = expected.blockHash === null
-    ? isNull(cryptoWebhookEvents.blockHash)
-    : eq(cryptoWebhookEvents.blockHash, expected.blockHash.toLowerCase());
-  const [updated] = await db
-    .update(cryptoWebhookEvents)
-    .set({
-      status: "quarantined",
-      error: "invalid_persisted_evidence",
-      lastCheckedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(cryptoWebhookEvents.id, eventId),
-        eq(cryptoWebhookEvents.status, "pending"),
-        blockNumberPredicate,
-        blockHashPredicate,
-      ),
-    )
-    .returning({ id: cryptoWebhookEvents.id });
-  return Boolean(updated);
+  return db.transaction(async (tx) => {
+    const current = await lockMatchingPendingSnapshot(tx, expected);
+    if (!current) return false;
+    const [updated] = await tx
+      .update(cryptoWebhookEvents)
+      .set({
+        status: "quarantined",
+        error: "invalid_persisted_evidence",
+        lastCheckedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(cryptoWebhookEvents.id, expected.id),
+          eq(cryptoWebhookEvents.status, "pending"),
+          eq(
+            cryptoWebhookEvents.observationGeneration,
+            expected.observationGeneration,
+          ),
+        ),
+      )
+      .returning({ id: cryptoWebhookEvents.id });
+    return Boolean(updated);
+  });
 }
 
 export async function rejectPendingDeposit(
-  eventId: string,
-  expected: CanonicalDepositEvidence,
+  expected: PendingDepositSnapshot,
   reason: "receipt_reverted" | "canonical_log_missing",
 ): Promise<boolean> {
-  const [updated] = await db
-    .update(cryptoWebhookEvents)
-    .set({
-      status: "rejected",
-      error: reason,
-      lastCheckedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(cryptoWebhookEvents.id, eventId),
-        eq(cryptoWebhookEvents.status, "pending"),
-        eq(cryptoWebhookEvents.blockNumber, expected.blockNumber),
-        eq(cryptoWebhookEvents.blockHash, expected.blockHash.toLowerCase()),
-      ),
-    )
-    .returning({ id: cryptoWebhookEvents.id });
-  return Boolean(updated);
+  return db.transaction(async (tx) => {
+    const current = await lockMatchingPendingSnapshot(tx, expected);
+    if (!current) return false;
+    const [updated] = await tx
+      .update(cryptoWebhookEvents)
+      .set({
+        status: "rejected",
+        error: reason,
+        lastCheckedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(cryptoWebhookEvents.id, expected.id),
+          eq(cryptoWebhookEvents.status, "pending"),
+          eq(
+            cryptoWebhookEvents.observationGeneration,
+            expected.observationGeneration,
+          ),
+        ),
+      )
+      .returning({ id: cryptoWebhookEvents.id });
+    return Boolean(updated);
+  });
 }
 
 /** Credit one canonical, sufficiently deep pending EVM generation.
- * The block-generation CAS makes concurrent/stale reconcilers harmless. */
+ * Full-snapshot, settlement-policy, and active-root fences make stale
+ * reconcilers and incomplete rotation workflows non-authoritative. */
 export async function creditConfirmedPendingDeposit(
-  eventId: string,
-  expected: CanonicalDepositEvidence,
+  expected: PendingDepositSnapshot,
+  evidence: CanonicalDepositEvidence,
 ): Promise<boolean> {
   return db.transaction(async (tx) => {
-    const [event] = await tx
-      .select()
-      .from(cryptoWebhookEvents)
-      .where(eq(cryptoWebhookEvents.id, eventId))
-      .for("update")
-      .limit(1);
-    if (!event || event.status !== "pending") return false;
+    const event = await lockMatchingPendingSnapshot(tx, expected);
+    if (!event) return false;
     if (
       !event.walletId ||
       !event.amountBase ||
       !event.toAddress ||
       !event.contractAddress ||
+      !isEvmChain(event.chain) ||
       event.blockNumber === null ||
       event.blockHash === null
     ) {
       await tx
         .update(cryptoWebhookEvents)
         .set({
-          status: "rejected",
+          status: "quarantined",
           error: "invalid_persisted_evidence",
           lastCheckedAt: new Date(),
         })
         .where(
           and(
-            eq(cryptoWebhookEvents.id, eventId),
+            eq(cryptoWebhookEvents.id, expected.id),
             eq(cryptoWebhookEvents.status, "pending"),
+            eq(
+              cryptoWebhookEvents.observationGeneration,
+              expected.observationGeneration,
+            ),
           ),
         );
       return false;
     }
 
-    // RPC I/O races with webhook delivery. A worker selected for generation A
-    // has no authority to quarantine or credit a newer pending generation B.
-    if (!sameEvmBlockGeneration(event, expected)) return false;
+    if (
+      evidence.blockNumber !== event.blockNumber ||
+      evidence.blockHash.toLowerCase() !== event.blockHash.toLowerCase()
+    ) {
+      return false;
+    }
+
+    const settlementPolicy = evmDepositCreditPolicy(
+      event.chain,
+      activeNetwork(),
+    );
+    if (!settlementPolicy.allowed) {
+      await tx
+        .update(cryptoWebhookEvents)
+        .set({
+          error: settlementPolicy.reason,
+          lastCheckedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(cryptoWebhookEvents.id, expected.id),
+            eq(cryptoWebhookEvents.status, "pending"),
+            eq(
+              cryptoWebhookEvents.observationGeneration,
+              expected.observationGeneration,
+            ),
+          ),
+        );
+      return false;
+    }
+
+    // A mnemonic change is not a completed custody rotation. Re-check the
+    // current root and persisted address under the same transaction as the
+    // balance effect, even though ingress performed the same check earlier.
+    const [depositAddress] = await tx
+      .select()
+      .from(depositAddresses)
+      .where(
+        and(
+          eq(depositAddresses.walletId, event.walletId),
+          eq(depositAddresses.chain, event.chain),
+          eq(depositAddresses.token, "USDC"),
+        ),
+      )
+      .for("update")
+      .limit(1);
+    const derived = depositAddress
+      ? deriveDepositAddress(
+          activeMnemonic(),
+          event.chain,
+          event.walletId,
+        )
+      : null;
+    if (
+      !depositAddress ||
+      !derived ||
+      depositAddress.address.toLowerCase() !== event.toAddress.toLowerCase() ||
+      !depositAddressMatches(event.chain, depositAddress, derived)
+    ) {
+      await tx
+        .update(cryptoWebhookEvents)
+        .set({
+          status: "rejected",
+          error: "inactive_deposit_address",
+          lastCheckedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(cryptoWebhookEvents.id, expected.id),
+            eq(cryptoWebhookEvents.status, "pending"),
+            eq(
+              cryptoWebhookEvents.observationGeneration,
+              expected.observationGeneration,
+            ),
+          ),
+        );
+      return false;
+    }
 
     const credits = creditsForUsdcAtomic(event.amountBase);
     if (credits === null) {
@@ -1117,10 +1414,12 @@ export async function creditConfirmedPendingDeposit(
         })
         .where(
           and(
-            eq(cryptoWebhookEvents.id, eventId),
+            eq(cryptoWebhookEvents.id, expected.id),
             eq(cryptoWebhookEvents.status, "pending"),
-            eq(cryptoWebhookEvents.blockNumber, expected.blockNumber),
-            eq(cryptoWebhookEvents.blockHash, event.blockHash),
+            eq(
+              cryptoWebhookEvents.observationGeneration,
+              expected.observationGeneration,
+            ),
           ),
         );
       return false;
@@ -1146,10 +1445,12 @@ export async function creditConfirmedPendingDeposit(
         })
         .where(
           and(
-            eq(cryptoWebhookEvents.id, eventId),
+            eq(cryptoWebhookEvents.id, expected.id),
             eq(cryptoWebhookEvents.status, "pending"),
-            eq(cryptoWebhookEvents.blockNumber, expected.blockNumber),
-            eq(cryptoWebhookEvents.blockHash, event.blockHash),
+            eq(
+              cryptoWebhookEvents.observationGeneration,
+              expected.observationGeneration,
+            ),
           ),
         );
       return false;
@@ -1159,16 +1460,21 @@ export async function creditConfirmedPendingDeposit(
       .set({
         status: "credited",
         creditsAdded: credits,
+        creditedGeneration: event.observationGeneration,
+        blockNumber: evidence.blockNumber,
+        blockHash: evidence.blockHash.toLowerCase(),
         lastCheckedAt: new Date(),
         confirmedAt: new Date(),
         error: null,
       })
       .where(
         and(
-          eq(cryptoWebhookEvents.id, eventId),
+          eq(cryptoWebhookEvents.id, expected.id),
           eq(cryptoWebhookEvents.status, "pending"),
-          eq(cryptoWebhookEvents.blockNumber, expected.blockNumber),
-          eq(cryptoWebhookEvents.blockHash, event.blockHash),
+          eq(
+            cryptoWebhookEvents.observationGeneration,
+            expected.observationGeneration,
+          ),
         ),
       )
       .returning({ id: cryptoWebhookEvents.id });
@@ -1181,12 +1487,15 @@ export async function creditConfirmedPendingDeposit(
       amount: credits,
       counterparty: event.txHash,
       description: `${event.chain} USDC deposit confirmed`,
-      metadata: fundingMetadata(event.id, {
-        chain: event.chain as Chain,
-        txHash: event.txHash,
-        logIndex: event.logIndex,
-        amountBase: event.amountBase,
-      }),
+      metadata: {
+        ...fundingMetadata(event.id, {
+          chain: event.chain,
+          txHash: event.txHash,
+          logIndex: event.logIndex,
+          amountBase: event.amountBase,
+        }),
+        observation_generation: event.observationGeneration,
+      },
     });
     return true;
   });

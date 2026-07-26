@@ -42,6 +42,7 @@ import {
   listPayouts,
   reconcileRemovedInboundTransfer,
   requestPayout,
+  type InboundTransfer,
   verifyAndBind,
 } from "../../services/economy/crypto";
 import {
@@ -56,6 +57,7 @@ import {
   activeNetwork,
   activeUsdcAddress,
   activeUsdcMintSolana,
+  EvmDepositSettlementPolicyError,
 } from "../../services/economy/crypto/network";
 
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -286,6 +288,22 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
       // disclosing any address.
       readyRows = await resolveReadyDepositAddressRows(walletId, rows);
     } catch (error) {
+      if (error instanceof EvmDepositSettlementPolicyError) {
+        return fail(
+          c,
+          errors.refusal({
+            error: error.code,
+            chain: error.chain,
+            retryable: false,
+            message: error.message,
+            hint:
+              "Use the chain's testnet flow, or choose Ethereum mainnet until a chain-specific settlement policy is implemented.",
+            consequence:
+              "No stored address was disclosed and no mainnet non-L1 deposit can become spendable.",
+          }),
+          503,
+        );
+      }
       if (error instanceof DepositWatchNotReadyError) {
         return fail(
           c,
@@ -329,7 +347,7 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
         ? "Solana rows do not prove Helius watch registration; confirm provider configuration before sending funds."
         : null,
       finality_warning:
-        "EVM deposits remain pending until exact canonical receipt/log depth and block-generation checks pass. L2 depth is not L1 settlement finality; Solana deposit finality remains unreconciled.",
+        "EVM deposits remain pending until exact canonical receipt/log depth and block-generation checks pass. Mainnet non-L1 address disclosure and credit are disabled because L2 depth is not L1 settlement; Solana deposit finality remains unreconciled.",
     });
   }
 
@@ -347,6 +365,22 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
       token,
     );
   } catch (error) {
+    if (error instanceof EvmDepositSettlementPolicyError) {
+      return fail(
+        c,
+        errors.refusal({
+          error: error.code,
+          chain: error.chain,
+          retryable: false,
+          message: error.message,
+          hint:
+            "Use the chain's testnet flow, or choose Ethereum mainnet until a chain-specific settlement policy is implemented.",
+          consequence:
+            "No address was created or disclosed and no mainnet non-L1 deposit can become spendable.",
+        }),
+        503,
+      );
+    }
     if (error instanceof DepositWatchNotReadyError) {
       return fail(
         c,
@@ -400,7 +434,7 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
       ? "pending_until_chain_depth"
       : "solana_unreconciled",
     instructions: isEvmChain(result.chain as string)
-      ? "Send USDC to this address from any wallet. The chain-specific Alchemy watch was independently observed active, correctly targeted, and containing this address. A signed delivery is stored pending; credits become spendable only after the exact canonical receipt/log and block generation reach the configured depth. L2 depth is not a claim of L1 settlement finality."
+      ? "Send USDC to this address from any wallet. The chain-specific Alchemy watch was independently observed active, correctly targeted, and containing this address. A signed delivery is stored pending; credits become spendable only after the exact canonical receipt/log and block generation reach the configured depth. Mainnet non-L1 address disclosure and credit stay disabled until a chain-specific settlement policy exists."
       : "Do not send production funds until an operator confirms that the active-network Helius webhook watches this address. Signed ingress exists, but address-watch readiness, deposit finality, and reversal are not yet reconciled.",
   });
 });
@@ -504,29 +538,22 @@ const payoutSchema = z.object({
 });
 
 router.post("/wallets/:walletId/payout", async (c) => {
-  // Startup and request acceptance share one predicate. Otherwise the global
-  // off-switch could prevent worker boot while this route still debits credits
-  // and leaves a payout stuck at status='requested'.
-  if (!payoutWorkerBootAllowed()) {
-    const globallyDisabled =
-      process.env.AGENTTOOL_DISABLE_WORKERS === "1";
-    return c.json(
-      {
-        error: "payout_broadcast_not_available",
-        payout_worker_enabled: economyConfig.payout.workerEnabled,
-        global_workers_disabled: globallyDisabled,
+  // This route has a permanent PostgreSQL request gate. Keep its capability
+  // marker even when the outer best-effort Redis response cache is disabled.
+  c.header("X-Idempotency-Supported", "Idempotency-Key");
+  const idempotencyKey = c.req.header("Idempotency-Key");
+
+  if (!idempotencyKey) {
+    return fail(
+      c,
+      errors.refusal({
+        error: "payout_idempotency_key_required",
         message:
-          (globallyDisabled
-            ? "The global worker off-switch is active on this instance. "
-            : "The payout broadcast worker is not enabled on this instance. ") +
-          "Until it is, payout requests would lock credits indefinitely. " +
-          "If you have a payout already in 'requested' state, cancel it via " +
-          "POST /v1/wallets/:walletId/payouts/:payoutId/cancel. " +
-          "Payout acceptance requires PAYOUT_WORKER_ENABLED=true and " +
-          "AGENTTOOL_DISABLE_WORKERS to be unset. See " +
-          "docs/PAYOUT-BROADCAST-PLAN.md.",
-      },
-      503,
+          "Payout creation requires Idempotency-Key so a lost response can never cause a second debit.",
+        hint:
+          "Send 8-256 visible ASCII characters and reuse that key only for this exact payout input.",
+      }),
+      400,
     );
   }
   const walletId = c.req.param("walletId");
@@ -550,20 +577,89 @@ router.post("/wallets/:walletId/payout", async (c) => {
       amountBase: parsed.data.amount_base,
       destinationAddress: parsed.data.destination_address,
       metadata: parsed.data.metadata,
+      idempotencyKey,
+      payoutBroadcastConfigured: payoutWorkerBootAllowed(),
     });
+    if (result.replayed) {
+      c.header("Idempotent-Replay", "true");
+    }
     return c.json(
       {
         ...result,
         note:
-          "Payout recorded and equivalent credits debited. " +
-          "The opt-in worker progresses requested → broadcasting → broadcast " +
-          "→ confirmed. Ambiguous submission remains broadcasting for operator " +
-          "reconciliation and is never automatically retried or refunded.",
+          "Current durable payout state returned. A new requested payout has " +
+          "an atomic debit; replay may instead show a later confirmed, failed, " +
+          "or cancelled state. Ambiguous submission remains broadcasting for " +
+          "operator reconciliation and is never automatically retried or refunded.",
       },
       202,
     );
   } catch (err) {
     const msg = (err as Error).message;
+    if (msg === "payout_broadcast_not_available") {
+      const globallyDisabled =
+        process.env.AGENTTOOL_DISABLE_WORKERS === "1";
+      return fail(
+        c,
+        errors.refusal({
+          error: msg,
+          payout_worker_enabled: economyConfig.payout.workerEnabled,
+          global_workers_disabled: globallyDisabled,
+          message:
+            (globallyDisabled
+              ? "The global worker off-switch is active on this instance. "
+              : "The payout broadcast worker is not enabled on this instance. ") +
+            "A new payout was not reserved or debited. Existing durable requests remain replayable.",
+          hint:
+            "Enable PAYOUT_WORKER_ENABLED and unset AGENTTOOL_DISABLE_WORKERS before retrying this exact key and body.",
+        }),
+        503,
+      );
+    }
+    if (msg === "payout_idempotency_key_invalid") {
+      return fail(
+        c,
+        errors.refusal({
+          error: msg,
+          message:
+            "Idempotency-Key must contain 8-256 visible ASCII characters with no spaces.",
+          hint:
+            "Send 8-256 visible ASCII characters and reuse that key only for this exact payout input.",
+        }),
+        400,
+      );
+    }
+    if (
+      msg === "payout_idempotency_conflict" ||
+      msg === "payout_idempotency_unreconciled"
+    ) {
+      return fail(
+        c,
+        errors.refusal({
+          error: msg,
+          message:
+            msg === "payout_idempotency_conflict"
+              ? "This Idempotency-Key already identifies different payout input. Nothing from this request was applied."
+              : "The durable payout request identity could not be reconciled safely. No second debit was attempted.",
+          hint:
+            msg === "payout_idempotency_conflict"
+              ? "Reuse the original exact input, or choose a fresh Idempotency-Key for a different payout."
+              : "Do not change or automatically rotate the key; inspect the payout list or ask the operator to reconcile storage.",
+        }),
+        409,
+      );
+    }
+    if (msg === "payout_wallet_inactive") {
+      return fail(
+        c,
+        errors.refusal({
+          error: msg,
+          message: "Frozen and closed wallets cannot create payouts.",
+          hint: "Resolve the wallet status before retrying this exact request.",
+        }),
+        409,
+      );
+    }
     if (msg === "insufficient_balance") {
       // Errors-as-instructions — see docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
       return fail(c, errors.insufficientBalance(), 402);
@@ -598,12 +694,15 @@ router.post("/wallets/:walletId/payout", async (c) => {
       );
     }
     if (msg === "payout_daily_total_unavailable") {
-      return c.json(
-        {
+      return fail(
+        c,
+        errors.refusal({
           error: msg,
           message:
             "The payout ceiling could not be checked safely, so no debit was made. Retry once storage is healthy.",
-        },
+          hint:
+            "Keep the same Idempotency-Key and exact request body when retrying after storage recovers.",
+        }),
         503,
       );
     }
@@ -641,6 +740,7 @@ router.get("/wallets/:walletId/payouts", async (c) => {
     payouts: rows.map((r) => ({
       id: r.id,
       chain: r.chain,
+      network: r.network,
       token: r.token,
       amount_base: r.amountBase,
       destination_address: r.destinationAddress,
@@ -887,9 +987,21 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
     }
     const solanaUsdcMint = activeUsdcMintSolana();
     const txns = parsed as unknown[];
+    const validatedTransfers: Array<{
+      txSignature: string;
+      mint: string;
+      evidence: InboundTransfer;
+    }> = [];
 
+    // Validate the complete signed envelope before the first economic effect.
+    // A malformed later item must not turn a 400 response into a partially
+    // credited batch.
     for (const candidate of txns) {
-      if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+      if (
+        !candidate ||
+        typeof candidate !== "object" ||
+        Array.isArray(candidate)
+      ) {
         return fail(
           c,
           errors.refusal({
@@ -907,7 +1019,11 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
         : [];
       let logIndex = 0;
       for (const transfer of tokenTransfers) {
-        if (!transfer || typeof transfer !== "object" || Array.isArray(transfer)) {
+        if (
+          !transfer ||
+          typeof transfer !== "object" ||
+          Array.isArray(transfer)
+        ) {
           return fail(
             c,
             errors.refusal({
@@ -942,34 +1058,67 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
             400,
           );
         }
-        const result = await ingestTransfer({
-          chain: "solana",
-          txHash: txSignature,
-          logIndex,
-          toAddress,
-          contractAddress: solanaUsdcMint,
-          token: "USDC",
-          amountBase,
-          rawPayload: t,
+        validatedTransfers.push({
+          txSignature,
+          mint,
+          evidence: {
+            chain: "solana",
+            txHash: txSignature,
+            logIndex,
+            toAddress,
+            contractAddress: solanaUsdcMint,
+            token: "USDC",
+            amountBase,
+            rawPayload: t,
+          },
         });
-        if (result.retryable) {
-          return fail(
-            c,
-            errors.refusal({
-              received: false,
-              error: "ingestion_unavailable",
-              retryable: true,
-              message:
-                "The signed webhook could not be committed. Return is non-2xx so the provider can redeliver it.",
-              hint:
-                "Retry the identical signed delivery; no credit was acknowledged.",
-            }),
-            503,
-          );
-        }
-        ingested.push({ txSignature, mint, ...result });
         logIndex += 1;
       }
+    }
+
+    if (
+      validatedTransfers.length > 0 &&
+      !economyConfig.allowUnreconciledSolanaDeposits
+    ) {
+      return fail(
+        c,
+        errors.refusal({
+          received: false,
+          error: "solana_deposit_finality_unavailable",
+          retryable: false,
+          message:
+            "Signed Helius activity is not sufficient for production balance credit without raw-atomic identity and fork reconciliation.",
+          hint:
+            "Do not send Solana deposits yet. Operators may enable the explicitly unreconciled development adapter only with CRYPTO_ALLOW_UNRECONCILED_SOLANA_DEPOSITS=1.",
+          consequence:
+            "No wallet balance or deposit event was changed.",
+        }),
+        503,
+      );
+    }
+
+    for (const transfer of validatedTransfers) {
+      const result = await ingestTransfer(transfer.evidence);
+      if (result.retryable) {
+        return fail(
+          c,
+          errors.refusal({
+            received: false,
+            error: "ingestion_unavailable",
+            retryable: true,
+            message:
+              "The signed webhook batch did not finish committing. Return is non-2xx so the provider can redeliver it.",
+            hint:
+              "Retry the identical signed delivery. Any earlier committed item is deduplicated by its durable event identity.",
+          }),
+          503,
+        );
+      }
+      ingested.push({
+        txSignature: transfer.txSignature,
+        mint: transfer.mint,
+        ...result,
+      });
     }
 
     return c.json({ received: true, processed: ingested });
@@ -1062,6 +1211,11 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
   const expectedContract = activeUsdcAddress(
     chainParam as EvmChain,
   ).toLowerCase();
+  const validatedEvmTransfers: Array<{
+    normalizedTxHash: string;
+    removed: boolean;
+    evidence: InboundTransfer;
+  }> = [];
 
   for (const candidate of transfers) {
     if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
@@ -1195,9 +1349,20 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
       providerWebhookId,
       providerEventId,
     } as const;
-    const result = log.removed
-      ? await reconcileRemoved(transferEvidence)
-      : await ingestTransfer(transferEvidence);
+    validatedEvmTransfers.push({
+      normalizedTxHash,
+      removed: log.removed,
+      evidence: transferEvidence,
+    });
+  }
+
+  // As with Helius, validate the complete provider envelope before the first
+  // durable observation. Provider redelivery remains item-idempotent if a
+  // later storage call fails after an earlier valid item commits.
+  for (const transfer of validatedEvmTransfers) {
+    const result = transfer.removed
+      ? await reconcileRemoved(transfer.evidence)
+      : await ingestTransfer(transfer.evidence);
     if (result.retryable) {
       return fail(
         c,
@@ -1213,7 +1378,7 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
         503,
       );
     }
-    ingested.push({ txHash: normalizedTxHash, ...result });
+    ingested.push({ txHash: transfer.normalizedTxHash, ...result });
   }
 
   return c.json({ received: true, processed: ingested });

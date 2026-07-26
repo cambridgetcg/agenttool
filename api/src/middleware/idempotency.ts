@@ -134,8 +134,15 @@ function markIdempotencySkipped(
   c: Context<ProjectContext>,
   reason: "cache-unavailable" | "non-json-response" | "sensitive-response",
 ): void {
-  c.res.headers.delete("X-Idempotency-Supported");
-  c.res.headers.set("X-Idempotency-Skipped", reason);
+  // A route may provide its own durable database-backed request gate. Do not
+  // erase that stronger capability merely because this optional Redis
+  // response cache is unavailable or declines the response.
+  const durableRoute =
+    c.res.headers.get("X-Idempotency-Supported") === "Idempotency-Key";
+  if (!durableRoute) {
+    c.res.headers.delete("X-Idempotency-Supported");
+    c.res.headers.set("X-Idempotency-Skipped", reason);
+  }
   if (reason === "sensitive-response") {
     c.res.headers.set("Cache-Control", "private, no-store");
   }
@@ -261,6 +268,8 @@ function privateReplayTombstone(c: Context<ProjectContext>) {
 export interface IdempotencyOptions {
   /** Store and replay successful response bodies. Disable for intimate state. */
   replayResponses?: boolean;
+  /** Let a route-owned durable gate be the sole request-identity authority. */
+  bypass?: (c: Context<ProjectContext>) => boolean;
 }
 
 function isIdempotencyStore(value: unknown): value is IdempotencyStore {
@@ -277,8 +286,13 @@ function isIdempotencyStore(value: unknown): value is IdempotencyStore {
  * Redis takes the atomic fingerprint path below. */
 function legacyIdempotency(
   store: IdempotencyStore,
+  options: IdempotencyOptions,
 ): MiddlewareHandler<ProjectContext> {
   return async (c, next) => {
+    if (options.bypass?.(c)) {
+      await next();
+      return;
+    }
     const passThrough = async (): Promise<void> => {
       await next();
       await markPassThroughCapability(c, store);
@@ -377,10 +391,14 @@ export function idempotency(
   const store = (passedStore ? input : redisConnection) as IdempotencyStore | null;
   const replayResponses = options.replayResponses ?? true;
   if (store && typeof store.set !== "function") {
-    return legacyIdempotency(store);
+    return legacyIdempotency(store, options);
   }
 
   return async (c, next) => {
+    if (options.bypass?.(c)) {
+      await next();
+      return;
+    }
     const passThrough = async (): Promise<void> => {
       await next();
       await markPassThroughCapability(c, store);

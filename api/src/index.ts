@@ -479,7 +479,17 @@ app.use(
   }),
 );
 app.use("/v1/identities/*", idempotency());
-app.use("/v1/wallets/*", idempotency());
+app.use(
+  "/v1/wallets/*",
+  idempotency({
+    // POST .../payout has a permanent PostgreSQL identity gate over canonical
+    // business input. A raw-byte Redis cache would conflict on equivalent JSON
+    // and could replay stale payout state before that durable gate runs.
+    bypass: (c) =>
+      c.req.method === "POST" &&
+      /^\/v1\/wallets\/[^/]+\/payout$/u.test(c.req.path),
+  }),
+);
 app.use("/v1/vault/*", idempotency());
 app.use("/v1/bootstrap/*", idempotency());
 app.use("/v1/chronicle/*", idempotency());

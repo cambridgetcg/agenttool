@@ -710,26 +710,140 @@ export const cryptoPayouts = economySchema.table(
       .references(() => wallets.id),
     projectId: uuid("project_id").notNull(),    // logical FK → tools.projects.id
     chain: text("chain").notNull(),
+    /** Durable chain-environment identity. Legacy rows remain null until
+     * reconciled; workers never infer their network from process config. */
+    network: text("network"),
     token: text("token").notNull(),
     // amount in token base-units (USDC has 6 decimals → 1.5 USDC = 1500000)
     amountBase: numeric("amount_base", { precision: 78, scale: 0 }).notNull(),
     destinationAddress: text("destination_address").notNull(),
-    status: text("status").notNull().default("requested"), // requested | signing | broadcast | confirmed | failed | cancelled
+    status: text("status").notNull().default("requested"), // requested | broadcasting | broadcast | confirmed | failed | cancelled
     txHash: text("tx_hash"),
+    // Durable EVM nonce evidence. The worker writes this tuple in the same
+    // requested → broadcasting CAS as txHash, before RPC submission.
+    // Solana and legacy rows keep all three fields null.
+    evmChainId: numeric("evm_chain_id", { precision: 20, scale: 0 }),
+    evmSourceAddress: text("evm_source_address"),
+    evmNonce: numeric("evm_nonce", { precision: 20, scale: 0 }),
     error: text("error"),
     metadata: jsonb("metadata").default({}),
     requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Durable dispatcher fairness. Pre-submit source contention defers only
+     * this request; replicas order due rows by least-recent real attempt. */
+    dispatchAfter: timestamp("dispatch_after", { withTimezone: true }),
+    lastDispatchAttemptAt: timestamp("last_dispatch_attempt_at", {
+      withTimezone: true,
+    }),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
   },
   (t) => [
     index("idx_payouts_wallet").on(t.walletId),
     index("idx_payouts_status").on(t.status),
+    index("idx_crypto_payouts_network_status")
+      .on(t.network, t.status, t.requestedAt)
+      .where(
+        sql`${t.status} IN ('requested', 'broadcasting', 'broadcast')`,
+      ),
+    index("idx_crypto_payouts_dispatch_due")
+      .on(
+        sql`COALESCE(${t.lastDispatchAttemptAt}, ${t.requestedAt})`,
+        t.requestedAt.asc(),
+        t.dispatchAfter.asc().nullsFirst(),
+      )
+      .where(sql`${t.status} = 'requested'`),
+    index("idx_payouts_confirm_due")
+      .on(
+        t.network,
+        t.status,
+        t.lastCheckedAt.asc().nullsFirst(),
+        t.requestedAt.asc(),
+      )
+      .where(sql`${t.status} IN ('broadcasting', 'broadcast')`),
     uniqueIndex("uq_crypto_payout_chain_tx_hash")
       .on(
         t.chain,
         sql`CASE WHEN ${t.chain} = 'solana' THEN ${t.txHash} ELSE lower(${t.txHash}) END`,
       )
       .where(sql`${t.txHash} IS NOT NULL`),
+    uniqueIndex("uq_crypto_payouts_evm_source_nonce")
+      .on(
+        t.evmChainId,
+        sql`lower(${t.evmSourceAddress})`,
+        t.evmNonce,
+      )
+      .where(sql`${t.evmNonce} IS NOT NULL`),
+    index("idx_crypto_payouts_evm_unresolved_source")
+      .on(t.evmChainId, sql`lower(${t.evmSourceAddress})`)
+      .where(
+        sql`${t.status} = 'broadcasting' AND ${t.evmNonce} IS NOT NULL`,
+      ),
+    check(
+      "crypto_payouts_network_check",
+      sql`${t.network} IS NULL OR ${t.network} IN ('testnet', 'mainnet')`,
+    ),
+    check(
+      "crypto_payouts_evm_nonce_evidence_check",
+      sql`
+        (
+          ${t.evmChainId} IS NULL
+          AND ${t.evmSourceAddress} IS NULL
+          AND ${t.evmNonce} IS NULL
+        )
+        OR
+        (
+          ${t.evmChainId} IS NOT NULL
+          AND ${t.evmSourceAddress} IS NOT NULL
+          AND ${t.evmNonce} IS NOT NULL
+          AND ${t.evmChainId} BETWEEN 1 AND 9007199254740991
+          AND ${t.evmSourceAddress} ~ '^0x[0-9A-Fa-f]{40}$'
+          AND ${t.evmNonce} BETWEEN 0 AND 9007199254740991
+        )
+      `,
+    ),
+    check(
+      "crypto_payouts_evm_broadcasting_evidence_check",
+      sql`
+        NOT (
+          ${t.status} = 'broadcasting'
+          AND ${t.chain} IN ('ethereum', 'base', 'polygon', 'arbitrum', 'optimism')
+        )
+        OR
+        (
+          ${t.txHash} IS NOT NULL
+          AND ${t.txHash} ~ '^0x[0-9A-Fa-f]{64}$'
+          AND ${t.evmChainId} IS NOT NULL
+          AND ${t.evmSourceAddress} IS NOT NULL
+          AND ${t.evmNonce} IS NOT NULL
+        )
+      `,
+    ),
+  ],
+);
+
+/** Permanent request identity for POST /v1/wallets/:id/payout.
+ *
+ * The raw Idempotency-Key is never stored. `payoutId` is nullable only while
+ * the surrounding transaction creates the payout; a deferred database
+ * trigger refuses any committed reservation without a result identity. */
+export const payoutRequestIdempotency = economySchema.table(
+  "payout_request_idempotency",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id").notNull(),
+    idempotencyKeySha256: text("idempotency_key_sha256").notNull(),
+    requestSha256: text("request_sha256").notNull(),
+    payoutId: uuid("payout_id").references(() => cryptoPayouts.id, {
+      onDelete: "restrict",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uq_payout_request_idempotency_project_key_sha256").on(
+      t.projectId,
+      t.idempotencyKeySha256,
+    ),
+    uniqueIndex("uq_payout_request_idempotency_payout").on(t.payoutId),
   ],
 );
 
@@ -770,6 +884,12 @@ export const cryptoWebhookEvents = economySchema.table(
     blockHash: text("block_hash"),
     providerWebhookId: text("provider_webhook_id"),
     providerEventId: text("provider_event_id"),
+    /** Monotonic incarnation token for the current mutable projection. The
+     * immutable observation table remains the full delivery history. */
+    observationGeneration: integer("observation_generation").notNull().default(1),
+    /** Generation whose evidence authorized the current credited state.
+     * Database constraints make generation-unaware confirmers fail closed. */
+    creditedGeneration: integer("credited_generation"),
     rawPayload: jsonb("raw_payload").notNull(),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
     lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
@@ -816,6 +936,26 @@ export const cryptoWebhookEvents = economySchema.table(
     check(
       "crypto_webhook_events_credited_effect_check",
       sql`${t.status} <> 'credited' OR ${t.creditsAdded} IS NOT NULL`,
+    ),
+    check(
+      "crypto_webhook_events_observation_generation_check",
+      sql`${t.observationGeneration} > 0`,
+    ),
+    check(
+      "crypto_webhook_events_credited_generation_positive_check",
+      sql`${t.creditedGeneration} IS NULL OR ${t.creditedGeneration} > 0`,
+    ),
+    check(
+      "crypto_webhook_events_pending_generation_check",
+      sql`${t.status} <> 'pending' OR ${t.creditedGeneration} IS NULL`,
+    ),
+    check(
+      "crypto_webhook_events_credited_generation_check",
+      sql`${t.status} <> 'credited'
+        OR (
+          ${t.creditedGeneration} IS NOT NULL
+          AND ${t.creditedGeneration} = ${t.observationGeneration}
+        )`,
     ),
   ],
 );

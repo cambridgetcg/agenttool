@@ -31,6 +31,7 @@ const cfg = economyConfig as unknown as {
   alchemyWebhookSigningKeys: Record<EvmChain, string>;
   heliusWebhookSecret: string;
   allowUnsignedWebhooks: boolean;
+  allowUnreconciledSolanaDeposits: boolean;
   cryptoNetwork: "" | "testnet" | "mainnet";
   payout: { network: string };
 };
@@ -38,6 +39,7 @@ const original = {
   alchemy: { ...cfg.alchemyWebhookSigningKeys },
   helius: cfg.heliusWebhookSecret,
   allowUnsigned: cfg.allowUnsignedWebhooks,
+  allowUnreconciledSolana: cfg.allowUnreconciledSolanaDeposits,
   cryptoNetwork: cfg.cryptoNetwork,
   payoutNetwork: cfg.payout.network,
   webhookIds: Object.fromEntries(
@@ -52,11 +54,14 @@ beforeEach(() => {
   // mainnet; the network-specific case below opts into testnet itself.
   cfg.cryptoNetwork = "mainnet";
   cfg.payout.network = "";
+  cfg.allowUnreconciledSolanaDeposits = false;
 });
 afterEach(() => {
   Object.assign(cfg.alchemyWebhookSigningKeys, original.alchemy);
   cfg.heliusWebhookSecret = original.helius;
   cfg.allowUnsignedWebhooks = original.allowUnsigned;
+  cfg.allowUnreconciledSolanaDeposits =
+    original.allowUnreconciledSolana;
   cfg.cryptoNetwork = original.cryptoNetwork;
   cfg.payout.network = original.payoutNetwork;
   for (const [name, value] of Object.entries(original.webhookIds)) {
@@ -272,6 +277,7 @@ describe("Helius (Solana) webhook signature gate", () => {
     cfg.heliusWebhookSecret = "s3cret";
     cfg.allowUnsignedWebhooks = false;
     cfg.cryptoNetwork = "testnet";
+    cfg.allowUnreconciledSolanaDeposits = true;
     const observedContracts: string[] = [];
     const testnetRouter = createCryptoWebhookRouter(async (transfer) => {
       observedContracts.push(transfer.contractAddress);
@@ -331,6 +337,7 @@ describe("Helius (Solana) webhook signature gate", () => {
   test("reconstructs Helius human USDC units without flooring floating-point products", async () => {
     cfg.heliusWebhookSecret = "s3cret";
     cfg.allowUnsignedWebhooks = false;
+    cfg.allowUnreconciledSolanaDeposits = true;
     const observedAmounts: string[] = [];
     const exactRouter = createCryptoWebhookRouter(async (transfer) => {
       observedAmounts.push(transfer.amountBase);
@@ -394,6 +401,80 @@ describe("Helius (Solana) webhook signature gate", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
       error: "invalid_usdc_activity",
+    });
+    expect(ingestionCalls).toBe(0);
+  });
+
+  test("validates the whole Helius batch before its first balance effect", async () => {
+    cfg.heliusWebhookSecret = "s3cret";
+    cfg.allowUnsignedWebhooks = false;
+    cfg.allowUnreconciledSolanaDeposits = true;
+    let ingestionCalls = 0;
+    const validatingRouter = createCryptoWebhookRouter(async () => {
+      ingestionCalls += 1;
+      return { matched: true };
+    });
+
+    const res = await validatingRouter.request("/solana", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "s3cret",
+      },
+      body: JSON.stringify([
+        {
+          signature: "valid-first",
+          tokenTransfers: [
+            {
+              mint: activeUsdcMintSolana(),
+              tokenAmount: 1,
+              toUserAccount: "solana-recipient",
+            },
+          ],
+        },
+        "malformed-later-item",
+      ]),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "invalid_activity" });
+    expect(ingestionCalls).toBe(0);
+  });
+
+  test("keeps unreconciled Solana balance credit off by default", async () => {
+    cfg.heliusWebhookSecret = "s3cret";
+    cfg.allowUnsignedWebhooks = false;
+    cfg.allowUnreconciledSolanaDeposits = false;
+    let ingestionCalls = 0;
+    const guardedRouter = createCryptoWebhookRouter(async () => {
+      ingestionCalls += 1;
+      return { matched: true };
+    });
+
+    const res = await guardedRouter.request("/solana", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "s3cret",
+      },
+      body: JSON.stringify([
+        {
+          signature: "production-shaped-transfer",
+          tokenTransfers: [
+            {
+              mint: activeUsdcMintSolana(),
+              tokenAmount: 1,
+              toUserAccount: "solana-recipient",
+            },
+          ],
+        },
+      ]),
+    });
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({
+      error: "solana_deposit_finality_unavailable",
+      consequence: "No wallet balance or deposit event was changed.",
     });
     expect(ingestionCalls).toBe(0);
   });

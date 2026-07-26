@@ -13,6 +13,7 @@ import {
   cryptoPayouts,
   depositAddresses,
   onchainIdentities,
+  payoutRequestIdempotency,
   policies,
   transactions,
   wallets,
@@ -31,8 +32,13 @@ import {
   type Chain,
   type EvmChain,
 } from "./chains";
-import { deriveDepositAddress, isChainSupported } from "./hd";
 import {
+  depositAddressMatches,
+  deriveDepositAddress,
+  isChainSupported,
+} from "./hd";
+import {
+  assertEvmDepositCreditSupported,
   activeMnemonic,
   activeNetwork,
 } from "./network";
@@ -53,7 +59,7 @@ import {
   verifySolanaSignature,
 } from "./sign";
 
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 // ── Deposit address ────────────────────────────────────────────────────
 
@@ -133,17 +139,6 @@ export class DepositWatchNotReadyError extends Error {
   }
 }
 
-export function depositAddressMatches(
-  chain: Chain,
-  stored: { address: string; derivationPath: string },
-  derived: { address: string; derivation_path: string },
-): boolean {
-  const addressMatches = isEvmChain(chain)
-    ? stored.address.toLowerCase() === derived.address.toLowerCase()
-    : stored.address === derived.address;
-  return addressMatches && stored.derivationPath === derived.derivation_path;
-}
-
 /**
  * Resolve the current public watch identity only when authenticated ingress is
  * possible for this exact chain. The signing key crosses this boundary as a
@@ -192,6 +187,9 @@ export async function getOrCreateDepositAddress(
 ): Promise<{ address: string; derivation_path: string; chain: Chain; token: string }> {
   if (token !== "USDC") {
     throw new TypeError("Only USDC deposit addresses are supported.");
+  }
+  if (isEvmChain(chain)) {
+    assertEvmDepositCreditSupported(chain);
   }
 
   if (!isChainSupported(chain)) {
@@ -442,6 +440,100 @@ export interface PayoutRequest {
   amountBase: string;          // base units (USDC: 1 USDC = "1000000")
   destinationAddress: string;
   metadata?: Record<string, unknown>;
+  /** Required durable request identity. The plaintext is never persisted. */
+  idempotencyKey: string;
+  /** Configuration gate only: this does not prove Redis connectivity or live
+   * worker readiness. Existing durable requests replay before this gate; a
+   * new request is not reserved or debited while it is false. */
+  payoutBroadcastConfigured: boolean;
+}
+
+export interface PayoutRequestOutcome {
+  id: string;
+  status: string;
+  broadcast_pending: boolean;
+  replayed: boolean;
+}
+
+export const PAYOUT_IDEMPOTENCY_KEY_PATTERN = /^[!-~]{8,256}$/u;
+
+function canonicalJson(value: unknown, path = "metadata"): string {
+  if (value === null) return "null";
+  if (typeof value === "string" || typeof value === "boolean") {
+    return JSON.stringify(value);
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new TypeError(`${path} must contain only finite JSON numbers`);
+    }
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    const entries: string[] = [];
+    for (let index = 0; index < value.length; index += 1) {
+      if (!Object.prototype.hasOwnProperty.call(value, index)) {
+        throw new TypeError(`${path} must not contain sparse arrays`);
+      }
+      entries.push(canonicalJson(value[index], `${path}[${index}]`));
+    }
+    return `[${entries.join(",")}]`;
+  }
+  if (typeof value === "object") {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new TypeError(`${path} must contain only plain JSON objects`);
+    }
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map(
+        (key) =>
+          `${JSON.stringify(key)}:${canonicalJson(record[key], `${path}.${key}`)}`,
+      )
+      .join(",")}}`;
+  }
+  throw new TypeError(`${path} must contain only JSON values`);
+}
+
+/** A stable fingerprint of the recognized business input, not HTTP/auth bytes. */
+export function payoutRequestSha256(
+  input: Pick<
+    PayoutRequest,
+    | "walletId"
+    | "chain"
+    | "token"
+    | "amountBase"
+    | "destinationAddress"
+    | "metadata"
+  >,
+): string {
+  const canonicalRequest =
+    `{"amount_base":${JSON.stringify(input.amountBase)}` +
+    `,"chain":${JSON.stringify(input.chain)}` +
+    `,"destination_address":${JSON.stringify(input.destinationAddress)}` +
+    `,"metadata":${canonicalJson(input.metadata ?? {})}` +
+    `,"token":${JSON.stringify(input.token)}` +
+    `,"wallet_id":${JSON.stringify(input.walletId)}}`;
+  return createHash("sha256")
+    .update("agenttool:payout-request:v1\0")
+    .update(canonicalRequest)
+    .digest("hex");
+}
+
+export function payoutIdempotencyKeySha256(key: string): string {
+  return createHash("sha256")
+    .update("agenttool:payout-idempotency-key:v1\0")
+    .update(key)
+    .digest("hex");
+}
+
+function payoutStillPending(status: string): boolean {
+  return (
+    status === "requested" ||
+    status === "signing" ||
+    status === "broadcasting" ||
+    status === "broadcast"
+  );
 }
 
 export type PayoutPolicyDecision =
@@ -601,17 +693,97 @@ export async function checkPayoutPolicy(p: {
  *      a refund from caller-extensible JSON or a fresh token/FX conversion. */
 export async function requestPayout(
   p: PayoutRequest,
-): Promise<{ id: string; status: string; broadcast_pending: true }> {
+  database: Pick<typeof db, "transaction"> = db,
+): Promise<PayoutRequestOutcome> {
+  if (!PAYOUT_IDEMPOTENCY_KEY_PATTERN.test(p.idempotencyKey)) {
+    throw new Error("payout_idempotency_key_invalid");
+  }
   if (!(SUPPORTED_PAYOUT_TOKENS as readonly string[]).includes(p.token)) {
     throw new Error(`token ${p.token} not yet supported for payout`);
   }
-  // Option A explicit FX: earned value is GBP pence; a payout of `amountBase`
-  // USDC costs the wallet `penceRequired` at the operator rate. penceForUsdcPayout
-  // throws `payout_fx_rate_unset` (rate ≤ 0) or `amount_base_must_be_positive`.
-  const rate = economyConfig.payout.gbpUsdRate;
-  const penceRequired = penceForUsdcPayout(p.amountBase, rate);
+  const idempotencyKeySha256 = payoutIdempotencyKeySha256(p.idempotencyKey);
+  const requestSha256 = payoutRequestSha256(p);
 
-  return await db.transaction(async (tx) => {
+  return await database.transaction(async (tx) => {
+    const [reservation] = await tx
+      .insert(payoutRequestIdempotency)
+      .values({
+        projectId: p.projectId,
+        idempotencyKeySha256,
+        requestSha256,
+      })
+      .onConflictDoNothing({
+        target: [
+          payoutRequestIdempotency.projectId,
+          payoutRequestIdempotency.idempotencyKeySha256,
+        ],
+      })
+      .returning({ id: payoutRequestIdempotency.id });
+
+    if (!reservation) {
+      // PostgreSQL waits for the concurrent unique-key contender to commit
+      // before ON CONFLICT returns. Re-read that durable winner and return its
+      // current payout state without re-running policy or touching balance.
+      const [existingReservation] = await tx
+        .select()
+        .from(payoutRequestIdempotency)
+        .where(
+          and(
+            eq(payoutRequestIdempotency.projectId, p.projectId),
+            eq(
+              payoutRequestIdempotency.idempotencyKeySha256,
+              idempotencyKeySha256,
+            ),
+          ),
+        )
+        .for("update");
+      if (!existingReservation) {
+        throw new Error("payout_idempotency_unreconciled");
+      }
+      if (existingReservation.requestSha256 !== requestSha256) {
+        throw new Error("payout_idempotency_conflict");
+      }
+      if (!existingReservation.payoutId) {
+        throw new Error("payout_idempotency_unreconciled");
+      }
+      const [existingPayout] = await tx
+        .select({
+          id: cryptoPayouts.id,
+          status: cryptoPayouts.status,
+        })
+        .from(cryptoPayouts)
+        .where(
+          and(
+            eq(cryptoPayouts.id, existingReservation.payoutId),
+            eq(cryptoPayouts.projectId, p.projectId),
+          ),
+        );
+      if (!existingPayout) {
+        throw new Error("payout_idempotency_unreconciled");
+      }
+      return {
+        id: existingPayout.id,
+        status: existingPayout.status,
+        broadcast_pending: payoutStillPending(existingPayout.status),
+        replayed: true,
+      };
+    }
+
+    // Resolve replay before live configuration/policy checks. A new request,
+    // however, is rolled back without a reservation or debit when broadcasting
+    // is not configured.
+    if (!p.payoutBroadcastConfigured) {
+      throw new Error("payout_broadcast_not_available");
+    }
+
+    // Bind this intent to one durable chain environment before any debit.
+    const payoutNetwork = activeNetwork();
+
+    // Option A explicit FX: earned value is GBP pence; a payout of `amountBase`
+    // USDC costs the wallet `penceRequired` at the operator rate.
+    const rate = economyConfig.payout.gbpUsdRate;
+    const penceRequired = penceForUsdcPayout(p.amountBase, rate);
+
     // Lock the wallet: the earned wall and the debit are computed under it so
     // concurrent payouts/reinvests serialise and can't each spend the same
     // earned pennies (mirrors reinvestFromWallet).
@@ -621,6 +793,7 @@ export async function requestPayout(
       .where(eq(wallets.id, p.walletId))
       .for("update");
     if (!wallet) throw new Error("wallet_not_found");
+    if (wallet.status !== "active") throw new Error("payout_wallet_inactive");
     // Option A pins payout to GBP wallets, so `balance` is unambiguously pence
     // and directly comparable to the earned wall. Mirrors the reinvest guard.
     if (wallet.currency !== "GBP") throw new Error("payout_requires_gbp_wallet");
@@ -700,7 +873,13 @@ export async function requestPayout(
     const debit = await tx
       .update(wallets)
       .set({ balance: sqlMinus(penceRequired) })
-      .where(and(eq(wallets.id, p.walletId), sqlBalanceAtLeast(penceRequired)))
+      .where(
+        and(
+          eq(wallets.id, p.walletId),
+          eq(wallets.status, "active"),
+          sqlBalanceAtLeast(penceRequired),
+        ),
+      )
       .returning({ balance: wallets.balance });
     if (debit.length === 0) throw new Error("insufficient_balance");
 
@@ -710,6 +889,7 @@ export async function requestPayout(
         walletId: p.walletId,
         projectId: p.projectId,
         chain: p.chain,
+        network: payoutNetwork,
         token: p.token,
         amountBase: p.amountBase,
         destinationAddress: p.destinationAddress,
@@ -737,10 +917,26 @@ export async function requestPayout(
       metadata: { payout_id: inserted!.id, amount_base: p.amountBase, token: p.token },
     });
 
+    const completedReservation = await tx
+      .update(payoutRequestIdempotency)
+      .set({ payoutId: inserted!.id })
+      .where(
+        and(
+          eq(payoutRequestIdempotency.id, reservation.id),
+          eq(payoutRequestIdempotency.requestSha256, requestSha256),
+          sql`${payoutRequestIdempotency.payoutId} IS NULL`,
+        ),
+      )
+      .returning({ id: payoutRequestIdempotency.id });
+    if (completedReservation.length !== 1) {
+      throw new Error("payout_idempotency_unreconciled");
+    }
+
     return {
       id: inserted!.id,
       status: "requested",
       broadcast_pending: true as const,
+      replayed: false,
     };
   });
 }
@@ -843,6 +1039,7 @@ function sqlBalanceAtLeast(n: number) {
 
 // Re-exports for routes
 export { isChain, isEvmChain } from "./chains";
+export { depositAddressMatches } from "./hd";
 export {
   ingestInboundTransfer,
   reconcileRemovedInboundTransfer,
