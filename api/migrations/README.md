@@ -33,7 +33,7 @@ Every migration begins with:
 --
 -- Doctrine: docs/<DOCTRINE-DOC>.md (with subsection if relevant)
 -- Spec (if any): docs/superpowers/specs/<spec-file>.md
--- Apply: psql "$DATABASE_URL" -f api/migrations/<file>.sql
+-- Apply: bin/migrate-pending.sh
 ```
 
 The `Doctrine:` line lets a reader land here and click out to *why* the schema change exists. Don't skip it for non-trivial migrations.

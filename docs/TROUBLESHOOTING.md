@@ -22,11 +22,19 @@ This is pre-existing **local WIP** (Phase 2.2 Billing area). It's been flagged i
 
 ### Bun complains about missing `usageEvents` / billing table
 
-Migration not applied. Run `bun run db:migrate` from `api/`. Or apply one file: `bun api/scripts/_migrate-one.ts api/migrations/<file>.sql`.
+Migration may be pending. From the repository root, run
+`bin/migrate-pending.sh --dry-run`, inspect the exact backlog, and apply it
+through `bin/migrate-pending.sh`. Exit `42` means the backlog requires the
+exclusive maintenance cutover in `DEPLOY-PROCEDURE.md`; do not bypass it with
+the one-file runner.
 
 ### `[wake] <X> query failed` warnings on boot
 
-The wake renderer is defensive — each subsystem fetch is wrapped in try/catch and logs a warning when a table doesn't exist. Suggests a migration is pending. Run `bun run db:migrate`. The warning text includes the migration filename.
+The wake renderer is defensive — each subsystem fetch is wrapped in try/catch
+and logs a warning when a table doesn't exist. This suggests a migration is
+pending. Run `bin/migrate-pending.sh --dry-run` from the repository root and
+follow its checked apply or maintenance instructions. The warning text
+includes the migration filename.
 
 ### Redis connection refused
 

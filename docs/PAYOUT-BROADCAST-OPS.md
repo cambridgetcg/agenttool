@@ -9,7 +9,8 @@
 ## TL;DR
 
 ```
-1. Run migrations 0021..0024.
+1. Require a clean checked migration inventory; use the exclusive cutover for
+   any protected backlog.
 2. Generate testnet mnemonic; fund index-0 with testnet SOL/ETH/USDC.
 3. Set env (testnet); run e2e harnesses; verify on explorers.
 4. Set env (mainnet); manual smoke at 0.01 USDC; verify on explorers.
@@ -22,15 +23,19 @@
 
 ### Migrations
 
-Apply in order (idempotent; safe to re-run):
+Survey the complete repository/journal inventory; do not replay an old payout
+subset with raw `psql`:
 
 ```bash
-psql "$DATABASE_URL" -f api/migrations/0021_payout_cancellable.sql
-psql "$DATABASE_URL" -f api/migrations/20260508T230839_payout_broadcasting_status.sql
-psql "$DATABASE_URL" -f api/migrations/20260508T232231_payout_policies.sql
+bin/migrate-pending.sh --dry-run
 ```
 
-(0022 is the vault migration — run if not already applied; unrelated to payouts. The attestation-marketplace migration (`20260509T131433_attestation_marketplace.sql`) is also unrelated to payouts.)
+An empty result proves source/journal inventory compatibility, not schema
+parity. Ordinary pending files use `bin/migrate-pending.sh`. Exit `42` means a
+payout/crypto writer boundary changed: keep workers and webhook ingress off,
+follow the exclusive maintenance sequence in `DEPLOY-PROCEDURE.md`, and do not
+enable testnet or mainnet until the final clean survey and compatible deployed
+revision are verified.
 
 ### Env vars
 

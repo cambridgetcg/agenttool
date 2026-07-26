@@ -21,11 +21,11 @@ with a valuable credential. The separately negotiated
 [`agentcred.evm-jsonrpc-read/0.1`](./JSONRPC-READ-0.1.md) profile adds a
 method-aware EVM read surface without widening generic `http.fetch`.
 
-Repository source is version 0.2.0. The independently verifiable LOVE catalog
-still records the immutable 0.1.0 release; source version 0.2.0 is not evidence
-that an npm or LOVE release exists. npm is an optional convenience mirror whose
-exact availability must be checked independently; a LOVE manifest binds the
-artifact size, SHA-256, and source revision.
+Repository source and the independently verifiable LOVE catalog are version
+0.2.0. Its manifest binds the artifact size, SHA-256, source revision, and
+exact docs/GitHub mirror locators. npm remains an optional convenience whose
+exact-version availability must be checked independently; source or a mutable
+registry tag is not release evidence.
 
 ## What the preview does
 
