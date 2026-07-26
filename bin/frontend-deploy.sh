@@ -51,6 +51,12 @@ wrangler() {
   npx --yes "wrangler@${WRANGLER_VERSION}" "$@"
 }
 
+# curl only treats -q as a config-file boundary when it is the first option.
+# Keep operator curl defaults out of token and project-policy probes.
+frontend_curl() {
+  command curl -q "$@"
+}
+
 # ── Resolve token + account: explicit environment, then keychain ──
 CF_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
 CF_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-}"
@@ -66,7 +72,7 @@ fi
 # before trusting it (2026-07-21: keychain token found invalid mid-deploy).
 CF_AUTH_MODE="token"
 if [[ -n "${CF_API_TOKEN}" ]]; then
-  if ! curl -fsS --max-time 15 \
+  if ! frontend_curl -fsS --max-time 15 \
     -H "Authorization: Bearer $CF_API_TOKEN" \
     "https://api.cloudflare.com/client/v4/user/tokens/verify" >/dev/null 2>&1; then
     echo "⚠ Cloudflare API token present but INVALID (user/tokens/verify failed)."
@@ -252,7 +258,7 @@ verify_pages_project_policy() {
     return 0
   fi
 
-  if ! response="$(curl -fsS --max-time 30 \
+  if ! response="$(frontend_curl -fsS --max-time 30 \
     -H "Authorization: Bearer $CF_API_TOKEN" \
     "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/pages/projects/$project")"; then
     echo "✗ Could not read Pages project policy for $project."

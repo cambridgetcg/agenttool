@@ -196,11 +196,12 @@ The dashboard uploads after Fly. This ordering means a failed web step cannot
 be followed by docs or Fly, while a failed dashboard phase cannot leave API
 discovery pointing at a missing or stale game.
 
-Release probes start curl with `-q`, so a user `~/.curlrc` cannot silently add
-redirect following or alter the request. This does not disable configured
-proxies, DNS behavior, or network intermediaries. Each Rights byte or header
-probe makes one transfer per outer convergence attempt; curl does not add a
-nested retry loop inside the 25-attempt release loop.
+The orchestrator's HTTP probes and the low-level uploader's Cloudflare REST
+probes start curl with `-q`, so a user `~/.curlrc` cannot silently add redirect
+following or alter those requests. This does not disable configured proxies,
+DNS behavior, or network intermediaries. Each Rights byte or header probe makes
+one transfer per outer convergence attempt; curl does not add a nested retry
+loop inside the 25-attempt release loop.
 
 `--no-frontend` skips the Pages upload; it does not bypass this prerequisite.
 An API-only release proceeds only when the committed Rights and game bytes
@@ -309,11 +310,13 @@ copies its `_worker.js` and `_routes.json` forms into each project root, so only
 Cloudflare Pages → Settings → Runtime must set production and preview to **fail
 closed**; otherwise daily Functions allowance exhaustion can serve static
 assets on those routes. The uploader verifies both values when it has the
-required keychain API token, along with `production_branch=main`, for every
-requested target before the first upload. OAuth-only authentication is refused
-because it cannot perform that check. The uploader does not change the setting
-or claim to purge old cache entries. Post-deploy checks separately prove
-literal fence activation and encoded-alias denial.
+required API token, along with `production_branch=main`, for every requested
+target before the first upload. An explicit `--oauth-fallback` is a break-glass
+path: it checks only that each project is visible to the Wrangler session,
+loudly reports that the REST policy check was skipped, and therefore does not
+prove those settings for that run. The uploader does not change the setting or
+claim to purge old cache entries. Post-deploy checks separately prove literal
+fence activation and encoded-alias denial.
 
 The script reads credentials from macOS keychain (account=`macair`):
 

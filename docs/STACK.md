@@ -130,11 +130,11 @@ On the Workers Free plan, the Pages production and preview Function
 runtimes must be configured to fail closed, or daily Functions allowance
 exhaustion can serve static assets for those routes. The uploader accepts
 `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`, then falls back to their
-macOS keychain entries. Whichever credential is active must read the Pages REST
-policy as well as upload: the script verifies fail-closed settings and the
-`main` production branch for every target before any upload. A Wrangler OAuth
-session is therefore usable only when its access token is explicitly exported
-and passes that same policy check; merely being logged in does not bypass it.
+macOS keychain entries. In the default token mode, that credential must read the
+Pages REST policy as well as upload: the script verifies fail-closed settings
+and the `main` production branch for every target before any upload. An explicit
+`--oauth-fallback` is a weaker break-glass mode: it checks project visibility,
+loudly says the policy check was skipped, and does not prove those settings.
 The uploader does not mutate the setting or purge zone cache. Phase 5 proves current live
 denial and fence activation on literal paths, plus denial of encoded aliases.
 

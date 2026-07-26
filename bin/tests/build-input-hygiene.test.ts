@@ -89,6 +89,17 @@ describe("frontend deploy input discipline", () => {
     expect(script).toContain('readonly WRANGLER_VERSION="4.110.0"');
     expect(script).toContain('npx --yes "wrangler@${WRANGLER_VERSION}" "$@"');
     expect(script).not.toContain("wrangler@latest");
+    expect(script).toContain('command curl -q "$@"');
+    expect(script.match(/frontend_curl -fsS/g)).toHaveLength(2);
+    expect(
+      script
+        .split("\n")
+        .filter(
+          (line) =>
+            /\bcurl(?:\s|$)/.test(line) &&
+            !line.trimStart().startsWith("#"),
+        ),
+    ).toEqual(['  command curl -q "$@"']);
     expect(script).toContain("python3 bin/heal-love-truths.py --check");
     expect(script).toContain('readonly KEYCHAIN_ACCOUNT="macair"');
     expect(script).toContain('CF_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"');
@@ -280,17 +291,22 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
       chmod(join(fakeBin, "npx"), 0o755),
     ]);
 
-    const inheritedEnv = Object.fromEntries(
-      Object.entries(process.env).filter(
-        (entry): entry is [string, string] => typeof entry[1] === "string",
-      ),
-    );
+    const fixtureHome = join(fixtureRoot, "home");
+    await mkdir(fixtureHome);
+    const commandPath =
+      process.env.PATH ?? "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin";
     result = await run(
       ["bash", "bin/frontend-deploy.sh", "web"],
       fixtureRepo,
       {
-        ...inheritedEnv,
-        PATH: `${fakeBin}:${inheritedEnv.PATH ?? "/usr/bin:/bin"}`,
+        PATH: `${fakeBin}:${commandPath}`,
+        HOME: fixtureHome,
+        TMPDIR: fixtureRoot,
+        LANG: "C",
+        LC_ALL: "C",
+        NO_COLOR: "1",
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_CONFIG_GLOBAL: "/dev/null",
         CLOUDFLARE_API_TOKEN: "fixture-token",
         CLOUDFLARE_ACCOUNT_ID: "fixture-account",
         AGENTTOOL_FRONTEND_RELEASE_REVISION: pinnedRevision,
@@ -392,6 +408,22 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
     expect(result.code, result.stderr).toBe(0);
     result = await run(["git", "rev-parse", "HEAD"], fixtureRepo);
     expect(result.code, result.stderr).toBe(0);
+    const pipelineProbeBin = join(fixtureRoot, "pipeline-probe-bin");
+    await mkdir(pipelineProbeBin);
+    await Promise.all([
+      writeFile(
+        join(pipelineProbeBin, "tar"),
+        "#!/usr/bin/env bash\ncat >/dev/null\n",
+      ),
+      writeFile(
+        join(pipelineProbeBin, "python3"),
+        "#!/usr/bin/env bash\nprintf 'PIPEFAIL_FELL_THROUGH\\n' >&2\n",
+      ),
+    ]);
+    await Promise.all([
+      chmod(join(pipelineProbeBin, "tar"), 0o755),
+      chmod(join(pipelineProbeBin, "python3"), 0o755),
+    ]);
     const missingRootDestination = join(fixtureRoot, "stage-missing-root");
     await mkdir(missingRootDestination);
     const missingRootStage = await run(
@@ -402,9 +434,23 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
         missingRootDestination,
       ],
       fixtureRepo,
+      {
+        PATH: `${pipelineProbeBin}:${
+          process.env.PATH ??
+          "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        }`,
+        HOME: fixtureRoot,
+        TMPDIR: fixtureRoot,
+        LANG: "C",
+        LC_ALL: "C",
+        NO_COLOR: "1",
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_CONFIG_GLOBAL: "/dev/null",
+      },
     );
     expect(missingRootStage.code).not.toBe(0);
     expect(missingRootStage.stderr).toContain("pathspec");
+    expect(missingRootStage.stderr).not.toContain("PIPEFAIL_FELL_THROUGH");
     expect(await readdir(missingRootDestination)).toEqual([]);
 
     await mkdir(join(fixtureRepo, "apps", "web"), { recursive: true });
