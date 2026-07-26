@@ -90,6 +90,8 @@ readonly QUARANTINED_DOCTRINE_TESTS=(
 # executable fixture cannot enter the hermetic process boundary unnoticed.
 readonly TEST_SUPPORT_FILES=(
   tests/fixtures/onboarding-sdk-v0.16.ts
+  tests/fixtures/provider-directory-canon-evaluations-v1.json
+  tests/fixtures/provider-directory-canon-evaluations-v1.schema.json
   tests/fixtures/static-parser-noncooperative.ts
 )
 
