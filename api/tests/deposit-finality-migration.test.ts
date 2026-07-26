@@ -55,7 +55,13 @@ describe("crypto deposit finality migration", () => {
     }
     expect(service).toContain('reason: "stale_removed_generation"');
     expect(service).toContain("classifyRemovedGeneration(event, transfer)");
-    expect(service).toContain("eq(cryptoWebhookEvents.blockHash, event.blockHash)");
+    expect(service).toContain(
+      "pendingDepositSnapshotMatches(current, expected)",
+    );
+    expect(service).toContain(
+      "current.observationGeneration === expected.observationGeneration",
+    );
+    expect(service).toContain("current.blockHash === expected.blockHash");
     expect(service).toContain("NOT EXISTS (");
     expect(service).not.toContain("MAX_REORG_CANDIDATES");
     expect(service.indexOf("const [transitioned]")).toBeLessThan(
