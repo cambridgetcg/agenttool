@@ -23,6 +23,7 @@ import {
   Keypair,
   PublicKey,
   Transaction,
+  type FetchFn,
   type TransactionSignature,
 } from "@solana/web3.js";
 import {
@@ -53,6 +54,36 @@ export interface SignedSolanaTx {
   fromAddress: string;
   toAddress: string;
   mintAddress: string;
+}
+
+function fetchWithDeadline(timeoutMs: number): FetchFn {
+  const boundedFetch = async (
+    input: Parameters<FetchFn>[0],
+    init: Parameters<FetchFn>[1],
+  ) => {
+    const controller = new AbortController();
+    const upstream = init?.signal;
+    const abortFromUpstream = () => controller.abort(upstream?.reason);
+    if (upstream?.aborted) {
+      abortFromUpstream();
+    } else {
+      upstream?.addEventListener("abort", abortFromUpstream, { once: true });
+    }
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(input, {
+        ...init,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+      upstream?.removeEventListener("abort", abortFromUpstream);
+    }
+  };
+  // Bun adds a static `preconnect` property to typeof fetch. Solana only calls
+  // the function, so retain its portable FetchFn boundary without inventing a
+  // second global side channel.
+  return boundedFetch as FetchFn;
 }
 
 export async function buildAndSignSolanaUsdcTransfer(
@@ -180,8 +211,12 @@ export function classifySolanaSignatureFinality(
 /** Poll a Solana signature for confirmation. */
 export async function confirmSolanaTx(
   signature: TransactionSignature,
+  timeoutMs = 10_000,
 ): Promise<SolanaConfirmResult> {
-  const connection = new Connection(solanaRpcUrl(), SOLANA_CONFIRMATION);
+  const connection = new Connection(solanaRpcUrl(), {
+    commitment: SOLANA_CONFIRMATION,
+    fetch: fetchWithDeadline(timeoutMs),
+  });
   let status;
   try {
     const result = await connection.getSignatureStatus(signature, {

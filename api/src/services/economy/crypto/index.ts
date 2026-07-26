@@ -32,9 +32,15 @@ import {
   type Chain,
   type EvmChain,
 } from "./chains";
-import { deriveDepositAddress, isChainSupported } from "./hd";
 import {
+  depositAddressMatches,
+  deriveDepositAddress,
+  isChainSupported,
+} from "./hd";
+import {
+  assertEvmDepositCreditSupported,
   activeMnemonic,
+  activeNetwork,
 } from "./network";
 import { ensureAlchemyAddressWatched } from "./alchemy-notify";
 import { reversePayoutDebit } from "./payout-refund";
@@ -59,17 +65,6 @@ export class DepositAddressInvariantError extends Error {
   }
 }
 
-export function depositAddressMatches(
-  chain: Chain,
-  stored: { address: string; derivationPath: string },
-  derived: { address: string; derivation_path: string },
-): boolean {
-  const addressMatches = isEvmChain(chain)
-    ? stored.address.toLowerCase() === derived.address.toLowerCase()
-    : stored.address === derived.address;
-  return addressMatches && stored.derivationPath === derived.derivation_path;
-}
-
 export async function getOrCreateDepositAddress(
   walletId: string,
   chain: Chain,
@@ -77,6 +72,9 @@ export async function getOrCreateDepositAddress(
 ): Promise<{ address: string; derivation_path: string; chain: Chain; token: string }> {
   if (token !== "USDC") {
     throw new TypeError("Only USDC deposit addresses are supported.");
+  }
+  if (isEvmChain(chain)) {
+    assertEvmDepositCreditSupported(chain);
   }
 
   // Already minted?
@@ -307,6 +305,10 @@ export interface PayoutRequest {
   metadata?: Record<string, unknown>;
   /** Required durable request identity. The plaintext is never persisted. */
   idempotencyKey: string;
+  /** Configuration gate only: this does not prove Redis connectivity or live
+   * worker readiness. Existing durable requests replay before this gate; a
+   * new request is not reserved or debited while it is false. */
+  payoutBroadcastConfigured: boolean;
 }
 
 export interface PayoutRequestOutcome {
@@ -631,8 +633,19 @@ export async function requestPayout(
     }
 
     // Replay resolution deliberately happens before live configuration and
-    // policy checks: changing an FX rate or freezing a wallet must not turn an
-    // already-committed request into a second attempt. For a new request,
+    // policy/worker checks: changing an FX rate, freezing a wallet, or pausing
+    // the broadcaster must not hide an already-committed request. For a new
+    // request, refuse before any economic read or effect. Throwing inside this
+    // transaction also rolls back the incomplete idempotency reservation.
+    if (!p.payoutBroadcastConfigured) {
+      throw new Error("payout_broadcast_not_available");
+    }
+
+    // Bind the durable intent before any debit. Replay deliberately returns
+    // above without consulting live configuration, but a new payout must
+    // never inherit whichever global network happens to be active later.
+    const payoutNetwork = activeNetwork();
+
     // Option A converts USDC base units into earned GBP pence and fails closed
     // if the operator has not supplied a valid rate.
     const rate = economyConfig.payout.gbpUsdRate;
@@ -743,6 +756,7 @@ export async function requestPayout(
         walletId: p.walletId,
         projectId: p.projectId,
         chain: p.chain,
+        network: payoutNetwork,
         token: p.token,
         amountBase: p.amountBase,
         destinationAddress: p.destinationAddress,
@@ -892,6 +906,7 @@ function sqlBalanceAtLeast(n: number) {
 
 // Re-exports for routes
 export { isChain, isEvmChain } from "./chains";
+export { depositAddressMatches } from "./hd";
 export {
   ingestInboundTransfer,
   reconcileRemovedInboundTransfer,

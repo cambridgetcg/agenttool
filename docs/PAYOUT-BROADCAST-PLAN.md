@@ -25,13 +25,13 @@ Decide once, stamp on the design.
 | 1 | Worker placement | **In-process BullMQ inside `api/`** with a separate worker entry-point file. Same Fly app. | Redis + BullMQ already wired. HD mnemonic stays in one process boundary. One less deployable to operate. Splitting later is trivial. |
 | 2 | EVM lib | **`viem`** (~80KB, tree-shakeable, ESM, TS-first) | Lighter than ethers; aligns with Bun stack; modern Alchemy support. |
 | 3 | Solana libs | **`@solana/web3.js` + `@solana/spl-token`** | Standard; only real choice. |
-| 4 | Network split | **`PAYOUT_NETWORK=testnet\|mainnet`** global flag; **refuse-to-boot** if unset; separate `CRYPTO_HD_MNEMONIC_TESTNET`; per-chain `CHAIN_RPC_URL_<chain>[_TESTNET]`. | Single global gate. No accidental mainnet calls. Forces explicit operator intent. |
+| 4 | Network split | **`PAYOUT_NETWORK=testnet\|mainnet`** global flag; **refuse-to-boot** if unset; separate `CRYPTO_HD_MNEMONIC_TESTNET`; per-chain RPC configuration; immutable nullable-on-legacy `crypto_payouts.network`. | New work is durably bound and wrong-network workers fail closed. Workers must still be off and active rows reconciled before a global flip, which strands rather than transports old-network work. Concurrent networks need separate worker pools. |
 | 5 | Dispatch model | **Cron poll every 10s**: `SELECT id FROM crypto_payouts WHERE status='requested' LIMIT N` → enqueue. | Simpler than `pg_notify` listener; payout latency budget is minutes, not sub-second. |
 | 6 | Crash idempotency | **DB lock + deterministic tx_hash + write-before-submit**: lock row, build+sign, **compute `tx_hash`**, write `tx_hash` + `status='broadcasting'`, commit, then submit to RPC. | After a crash, the hash provides a stable reconciliation key: positive chain evidence proves submission without a second broadcast, while absent/unavailable evidence remains explicit. Without the persisted hash, even positive reconciliation would be unavailable. |
-| 7 | Confirmation thresholds | ETH/Base/Arbitrum/Optimism: **12 blocks** · Polygon: **64 blocks** · Solana: **`finalized` commitment**. | Standard exchange-grade. Configurable per-chain via env. |
+| 7 | Confirmation thresholds | ETH/Base/Arbitrum/Optimism: **12 blocks** · Polygon: **64 blocks** · Solana: **`finalized` commitment**. | Current fixed code policy for the testnet workflow; it is not an environment-configurable or L1-settlement guarantee. |
 | 8 | Retry rules | **No automatic retries.** Failures proved before transaction dispatch (sign/build/RPC preparation reads) fail + refund. Once `sendRawTransaction` begins, any error is ambiguous: found lookup → `broadcast`; absent/unavailable lookup → remain `broadcasting` for operator reconciliation. | Doctrine wall — the first submit might still land, and immediate lookup absence is not authoritative → retry or refund could double-spend value. |
 | 9 | Refund path | `requested → failed` (pre-broadcast): atomic credit-back, `transactions.type='payout_refund'` row. `broadcast → failed` (revert): same, post-confirmation. | Schema already supports it; worker has to wire it. |
-| 10 | Witness-on-high-value | **Defer to its own slice.** Default v1: no threshold. | Real wall but composes cleanly on top of broadcast. Doesn't gate v1. |
+| 10 | Witness-on-high-value | **Defer the authorization flow.** The default policy has no threshold; if an operator configures one, matching requests refuse with `payout_dual_control_required`. | The current system fails closed but does not collect or verify a second signature. |
 
 ---
 
@@ -169,8 +169,11 @@ Testnet credentials (separate Fly secrets, **never reused** for mainnet):
 ## Walls / non-goals (this pass)
 
 - **No mainnet payouts until Slices 0–6 pass on testnet.** `PAYOUT_NETWORK=testnet` is the gate.
-- **No witness-on-high-value flow.** Deferred to its own slice; default v1 has no threshold.
-- **No cross-chain payouts.** Schema enforces wallet's chain; cross-chain composes through a future bridge primitive.
+- **No witness-on-high-value flow.** Deferred to its own slice; a configured
+  threshold is a refusal boundary, not a signature flow.
+- **No cross-chain inference.** The request selects one supported chain and
+  that chain's builder; neither the schema nor route proves the destination is
+  native to it. Cross-chain composition requires a future bridge primitive.
 - **No retries that change semantics post-RPC-submit.**
 - **No automated refund for reorg-deeper-than-threshold.** Manual ops escalation if it ever fires.
 - **No batched payouts (one tx, multiple recipients).** Future composition.
@@ -180,16 +183,17 @@ Testnet credentials (separate Fly secrets, **never reused** for mainnet):
 
 ## Acceptance criteria (campaign-level)
 
-Inheriting `PAYOUT-BROADCAST.md` §"Acceptance criteria when this ships," plus:
+Inheriting `PAYOUT-BROADCAST.md` §"Production-enable acceptance criteria," plus:
 
 1. ✓ `POST /v1/wallets/:id/payout` end-to-end on Sepolia in <60s to broadcast, ~3min to confirmed.
 2. ✓ Same on Solana devnet: <30s to broadcast, ~30s to finalized.
-3. ✓ Recipient agenttool wallet credits via existing webhook (sovereign agent-to-agent loop closed).
+3. ✓ EVM testnet recipient credit through the existing Alchemy path. This is
+   not a production Solana inbound-finality claim.
 4. ✓ Worker crash mid-flight is reconcilable by persisted hash without automatic double-broadcast; inconclusive lookup remains `broadcasting`.
 5. ✓ Pre-submit failure refunds credits atomically with `transactions.payout_refund` row.
 6. ✓ `PAYOUT_NETWORK=testnet` mode prevents mainnet RPC (smoke-tested via mock interceptor).
 7. ✓ Per-wallet policies enforced before debit.
-8. ✓ Manual mainnet smoke (0.01 USDC) confirmed on Etherscan + Solscan.
+8. ◯ Manual mainnet smoke (≤0.01 USDC) remains operator-gated and unverified.
 
 ---
 
@@ -200,7 +204,9 @@ These need decisions before Slice 0 lands. Recommended answer in **bold**.
 1. **Worker placement** — in-process BullMQ vs separate `bin/agenttool-payout`? **In-process.** Same Fly app; one boundary for the HD mnemonic.
 2. **`PAYOUT_NETWORK` boot-refuse pattern** — refuse-to-start if unset, or default to `testnet`? **Refuse-to-start.** Forces explicit operator intent.
 3. **Slice 0's safety pre-pass** — include the 503 guard + cancel route now, or skip? **Include.** Closes the credit-freeze wall today regardless of when the worker lands.
-4. **Witness-on-high-value v1** — no threshold (deferred entirely), or stub a threshold that's effectively unreachable? **No threshold.** Defer the flow to its own slice.
+4. **Witness-on-high-value v1** — the authorization flow remains deferred.
+   Default policy has no threshold; a configured threshold now refuses rather
+   than pretending a second signature was verified.
 5. **Mainnet smoke amount** — 0.01 USDC, or some other minimal? **Operator's call.** Recommend ≤ 0.01 USDC.
 6. **24h-no-confirmation policy** — auto-fail+refund, or alert+manual? **Alert+manual.** Auto-fail risks the case where the tx eventually does land.
 7. **Cross-instance recipient** — if A on instance-1 pays B on instance-2, is the chain itself the only coordination needed (B's webhook on instance-2 fires independently), or do we need cross-instance signaling? **Chain-only.** Confirm via test plan covering an instance-pair.

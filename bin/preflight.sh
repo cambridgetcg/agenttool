@@ -12,6 +12,7 @@
 #   bin/preflight.sh api             # API/protocol hermetic gate
 #   bin/preflight.sh packages        # data + ADDS + sync + archive + broker + collab + Browser + projection + local projector + Skills + TypeScript SDK + Wallet + Telescope + Alchemy gate
 #   bin/preflight.sh database        # requires DATABASE_URL
+#   bin/preflight.sh crypto-fences   # requires a dedicated disposable PostgreSQL database
 #   bin/preflight.sh smoke           # requires smoke-test environment
 #   RUN_CONTRACT=1 bin/preflight.sh contracts  # requires provider key(s)
 #
@@ -77,7 +78,8 @@ sanitize_hermetic_env() {
     AGENTTOOL_YUTABASE_PROJECT_ID AGENTTOOL_YUTABASE_REPOSITORY_ID \
     AGENTTOOL_YUTABASE_TEST_DATABASE_URL \
     ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT \
-    DATABASE_URL DATABASE_SESSION_URL POSTGRES_URL REDIS_URL \
+    DATABASE_URL DATABASE_SESSION_URL POSTGRES_URL \
+    CRYPTO_FENCE_TEST_DATABASE_URL REDIS_URL \
     OTEL_EXPORTER_OTLP_ENDPOINT OTEL_EXPORTER_OTLP_TRACES_ENDPOINT \
     OTEL_EXPORTER_OTLP_HEADERS OTEL_EXPORTER_OTLP_TRACES_HEADERS \
     OTEL_RESOURCE_ATTRIBUTES OTEL_SERVICE_NAME \
@@ -171,17 +173,31 @@ case "$MODE" in
     [ "$#" -eq 1 ] || die "database accepts no additional arguments"
     [ -n "${DATABASE_URL:-}" ] || die "database mode requires DATABASE_URL"
     require_bun
-    unset REDIS_URL ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT
+    unset CRYPTO_FENCE_TEST_DATABASE_URL REDIS_URL
+    unset ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT
     export AGENTTOOL_DISABLE_WORKERS=1
     api_typecheck
     run "database integration test tier" bash bin/run-test-tier.sh database
+    ;;
+  crypto-fences)
+    [ "$#" -eq 1 ] || die "crypto-fences accepts no additional arguments"
+    [ -n "${CRYPTO_FENCE_TEST_DATABASE_URL:-}" ] ||
+      die "crypto-fences mode requires CRYPTO_FENCE_TEST_DATABASE_URL"
+    require_bun
+    unset DATABASE_URL DATABASE_SESSION_URL POSTGRES_URL REDIS_URL
+    unset ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT
+    export AGENTTOOL_DISABLE_WORKERS=1
+    api_typecheck
+    run "crypto migration fences against a dedicated disposable database" \
+      bash bin/run-test-tier.sh crypto-fences
     ;;
   database-quarantine)
     [ "$#" -eq 1 ] || die "database-quarantine accepts no additional arguments"
     [ -n "${DATABASE_URL:-}" ] ||
       die "database-quarantine mode requires DATABASE_URL"
     require_bun
-    unset REDIS_URL ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT
+    unset CRYPTO_FENCE_TEST_DATABASE_URL REDIS_URL
+    unset ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT
     export AGENTTOOL_DISABLE_WORKERS=1
     api_typecheck
     run "known-red database tests (diagnostic; failures expected)" \
@@ -202,7 +218,8 @@ case "$MODE" in
     if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${OPENAI_API_KEY:-}" ] && [ -z "${OLLAMA_API_KEY:-}" ]; then
       die "contracts mode requires ANTHROPIC_API_KEY, OPENAI_API_KEY, and/or OLLAMA_API_KEY"
     fi
-    unset DATABASE_URL DATABASE_SESSION_URL POSTGRES_URL REDIS_URL
+    unset DATABASE_URL DATABASE_SESSION_URL POSTGRES_URL
+    unset CRYPTO_FENCE_TEST_DATABASE_URL REDIS_URL
     unset OTEL_EXPORTER_OTLP_ENDPOINT OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
     unset OTEL_EXPORTER_OTLP_HEADERS OTEL_EXPORTER_OTLP_TRACES_HEADERS
     export AGENTTOOL_DISABLE_WORKERS=1

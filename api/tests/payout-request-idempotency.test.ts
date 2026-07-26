@@ -29,6 +29,7 @@ const payoutInput = {
   ...request,
   projectId: "00000000-0000-4000-8000-000000000010",
   idempotencyKey: "payout-attempt-0001",
+  payoutBroadcastConfigured: true,
 };
 
 type PayoutDatabase = NonNullable<Parameters<typeof requestPayout>[1]>;
@@ -167,6 +168,58 @@ describe("durable payout request identity", () => {
     expect(fake.economicReads()).toBe(0);
   });
 
+  test("same input remains replayable while payout broadcast is paused", async () => {
+    const fake = replayDatabase(payoutRequestSha256(payoutInput), "broadcast");
+
+    await expect(
+      requestPayout(
+        { ...payoutInput, payoutBroadcastConfigured: false },
+        fake.database,
+      ),
+    ).resolves.toEqual({
+      id: "00000000-0000-4000-8000-000000000021",
+      status: "broadcast",
+      broadcast_pending: true,
+      replayed: true,
+    });
+    expect(fake.economicReads()).toBe(0);
+  });
+
+  test("new input rolls back before economic reads when broadcast is paused", async () => {
+    let economicReads = 0;
+    const tx = {
+      insert: (table: unknown) => {
+        if (table !== payoutRequestIdempotency) {
+          economicReads += 1;
+          throw new Error("unexpected economic insert");
+        }
+        return {
+          values: () => ({
+            onConflictDoNothing: () => ({
+              returning: async () => [{ id: "new-reservation" }],
+            }),
+          }),
+        };
+      },
+      select: () => {
+        economicReads += 1;
+        throw new Error("unexpected economic read");
+      },
+    };
+    const database = {
+      transaction: async (operation: (transaction: typeof tx) => unknown) =>
+        operation(tx),
+    } as unknown as PayoutDatabase;
+
+    await expect(
+      requestPayout(
+        { ...payoutInput, payoutBroadcastConfigured: false },
+        database,
+      ),
+    ).rejects.toThrow("payout_broadcast_not_available");
+    expect(economicReads).toBe(0);
+  });
+
   test("same key with changed input conflicts before any economic read", async () => {
     const fake = replayDatabase(payoutRequestSha256(payoutInput));
 
@@ -193,6 +246,7 @@ describe("durable payout request identity", () => {
 
     const reservationInsert = payout.indexOf(".insert(payoutRequestIdempotency)");
     const replayReturn = payout.indexOf("replayed: true");
+    const workerGate = payout.indexOf("!p.payoutBroadcastConfigured");
     const fxRead = payout.indexOf("economyConfig.payout.gbpUsdRate");
     const walletLock = payout.indexOf(".from(wallets)");
     const activeGate = payout.indexOf('wallet.status !== "active"');
@@ -205,7 +259,8 @@ describe("durable payout request identity", () => {
 
     expect(reservationInsert).toBeGreaterThan(-1);
     expect(replayReturn).toBeGreaterThan(reservationInsert);
-    expect(fxRead).toBeGreaterThan(replayReturn);
+    expect(workerGate).toBeGreaterThan(replayReturn);
+    expect(fxRead).toBeGreaterThan(workerGate);
     expect(walletLock).toBeGreaterThan(fxRead);
     expect(activeGate).toBeGreaterThan(walletLock);
     expect(policy).toBeGreaterThan(activeGate);

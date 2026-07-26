@@ -31,7 +31,9 @@ import {
   rejectPendingDeposit,
 } from "../../services/economy/crypto/inbound-deposits";
 import {
+  activeNetwork,
   EVM_CONFIRMATION_THRESHOLDS,
+  evmDepositCreditPolicy,
   evmRpcTransport,
 } from "../../services/economy/crypto/network";
 
@@ -53,6 +55,8 @@ export interface EvmDepositReceiptLog {
 }
 
 export interface EvmDepositReceiptInput {
+  expectedTransactionHash: string;
+  receiptTransactionHash: string;
   receiptStatus: "success" | "reverted";
   receiptBlockNumber: bigint;
   receiptBlockHash: string;
@@ -67,6 +71,10 @@ export interface EvmDepositReceiptInput {
 
 export type EvmDepositReceiptOutcome =
   | { status: "pending"; confirmations: bigint }
+  | {
+      status: "unavailable";
+      reason: "receipt_transaction_mismatch";
+    }
   | {
       status: "confirmed";
       confirmations: bigint;
@@ -94,6 +102,8 @@ export function classifyEvmDepositReceipt(
     throw new Error("invalid_evm_confirmation_threshold");
   }
   if (
+    !/^0x[0-9a-f]{64}$/i.test(input.expectedTransactionHash) ||
+    !/^0x[0-9a-f]{64}$/i.test(input.receiptTransactionHash) ||
     !Number.isSafeInteger(input.expectedLogIndex) ||
     input.expectedLogIndex < 0 ||
     !/^0x[0-9a-f]{40}$/i.test(input.expectedContract) ||
@@ -102,6 +112,15 @@ export function classifyEvmDepositReceipt(
     !/^0x[0-9a-f]{64}$/i.test(input.receiptBlockHash)
   ) {
     throw new Error("invalid_evm_deposit_evidence");
+  }
+  if (
+    input.receiptTransactionHash.toLowerCase() !==
+    input.expectedTransactionHash.toLowerCase()
+  ) {
+    return {
+      status: "unavailable",
+      reason: "receipt_transaction_mismatch",
+    };
   }
 
   const confirmations =
@@ -160,11 +179,18 @@ async function reconcileRow(row: PendingRow): Promise<void> {
     !row.toAddress ||
     !row.contractAddress
   ) {
-    await rejectPendingDeposit(row.id, "invalid_persisted_evidence");
+    await rejectPendingDeposit(row, "invalid_persisted_evidence");
     return;
   }
 
   const chain = row.chain as EvmChain;
+  const settlementPolicy = evmDepositCreditPolicy(chain, activeNetwork());
+  if (!settlementPolicy.allowed) {
+    // Keep signed custody evidence available for later reconciliation without
+    // spending RPC capacity or pretending L2 block depth proves settlement.
+    await markPendingDepositChecked(row, settlementPolicy.reason);
+    return;
+  }
   const client = createPublicClient({
     transport: evmRpcTransport(chain, { timeoutMs: RPC_TIMEOUT_MS }),
   });
@@ -179,7 +205,7 @@ async function reconcileRow(row: PendingRow): Promise<void> {
   } catch (error) {
     // RPC absence, timeout, rate limiting, or a not-yet-indexed receipt are
     // unavailable evidence, not proof that the transfer failed.
-    await markPendingDepositChecked(row.id).catch(() => undefined);
+    await markPendingDepositChecked(row).catch(() => undefined);
     console.warn(
       `[deposit-confirm] ${row.id}: canonical receipt unavailable`,
       error instanceof Error ? error.name : "unknown_error",
@@ -188,6 +214,8 @@ async function reconcileRow(row: PendingRow): Promise<void> {
   }
 
   const outcome = classifyEvmDepositReceipt({
+    expectedTransactionHash: row.txHash,
+    receiptTransactionHash: receipt.transactionHash,
     receiptStatus: receipt.status,
     receiptBlockNumber: receipt.blockNumber,
     receiptBlockHash: receipt.blockHash,
@@ -206,14 +234,21 @@ async function reconcileRow(row: PendingRow): Promise<void> {
   });
 
   if (outcome.status === "pending") {
-    await markPendingDepositChecked(row.id);
+    await markPendingDepositChecked(row);
+    return;
+  }
+  if (outcome.status === "unavailable") {
+    await markPendingDepositChecked(row, outcome.reason);
+    console.warn(
+      `[deposit-confirm] ${row.id}: receipt transaction identity mismatch`,
+    );
     return;
   }
   if (outcome.status === "rejected") {
-    await rejectPendingDeposit(row.id, outcome.reason);
+    await rejectPendingDeposit(row, outcome.reason);
     return;
   }
-  await creditConfirmedPendingDeposit(row.id, {
+  await creditConfirmedPendingDeposit(row, {
     blockNumber: outcome.blockNumber,
     blockHash: outcome.blockHash,
   });
@@ -242,6 +277,7 @@ async function reconcilePendingDepositBatchOnce(): Promise<void> {
         try {
           await reconcileRow(row);
         } catch (error) {
+          await markPendingDepositChecked(row).catch(() => undefined);
           console.error(
             `[deposit-confirm] ${row.id}: reconciliation failed`,
             error instanceof Error ? error.name : "unknown_error",

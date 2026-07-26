@@ -5,15 +5,20 @@
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Horizon A · [PAYOUT-BROADCAST](PAYOUT-BROADCAST.md) (doctrine) · [PAYOUT-BROADCAST-PLAN](PAYOUT-BROADCAST-PLAN.md) (slice plan)
 >
 > **Implements:** Layer 4 — Economy (operator-side runbook for the outbound worker — mainnet enable is operator-led).
+>
+> **Code:** `api/src/workers/payout/` · `api/src/services/economy/crypto/evm-payout-nonce.ts` · `api/src/db/schema/economy.ts`
+>
+> **Tests:** `api/tests/{evm-payout-nonce-fence,payout-confirm-worker-fairness,payout-dispatch-fairness,payout-network-binding,payout-submit-outcome}.test.ts` · `api/tests/integration/crypto-migration-fences.test.ts`
 
 ## TL;DR
 
 ```
-1. Run all checksum-journaled pending migrations.
-2. Generate testnet mnemonic; fund index-0 with testnet SOL/ETH/USDC.
-3. Set env (testnet); run e2e harnesses; verify on explorers.
-4. Set env (mainnet); manual smoke at 0.01 USDC; verify on explorers.
-5. Flip PAYOUT_WORKER_ENABLED=true on prod. Monitor.
+1. Disable every old payout worker and drain in-flight jobs.
+2. Run all checksum-journaled pending migrations; reconcile legacy rows.
+3. Roll the integrated code to every replica while payout workers stay off.
+4. Run the testnet harnesses and verify their terminal rows on explorers.
+5. Prove no requested/broadcasting/broadcast row remains before any network flip.
+6. Configure mainnet with workers off; enable only for a controlled 0.01 USDC smoke.
 ```
 
 ---
@@ -22,16 +27,25 @@
 
 ### Migrations
 
-Apply pending files through the canonical checksum-journaled runner:
+Keep `PAYOUT_WORKER_ENABLED=false` on every replica, stop every legacy
+dispatcher/broadcast/confirm process, and wait for any in-flight job to exit.
+Do this before applying a migration: the database fences make a stale writer
+fail closed, but they cannot make a mixed fleet available.
+
+With every old payout worker drained, inspect and apply pending files through
+the canonical checksum-journaled runner:
 
 ```bash
 bin/migrate-pending.sh --dry-run
 bin/migrate-pending.sh
 ```
 
-The runner applies each file and its migration-journal row atomically, refuses
-checksum drift, and includes the permanent payout-request idempotency gate.
-Do not replay individual files with raw `psql`.
+The runner checksum-journals each eligible file, refuses checksum drift, and
+includes the permanent payout-request idempotency gate. A file is atomic when
+the runner can transaction-wrap it. The dry run lists pending filenames and
+checks journaled bytes; the apply step reports any explicit self-transactional
+or non-transactional exception. Do not replay individual files with raw
+`psql`.
 
 ### Env vars
 
@@ -40,6 +54,7 @@ Do not replay individual files with raw `psql`.
 | `PAYOUT_WORKER_ENABLED` | always to enable broadcast | `true` is the payout-specific opt-in. The global switch below must also allow boot. Default `false` (the `/payout` endpoint returns 503). |
 | `AGENTTOOL_DISABLE_WORKERS` | always | `1` is authoritative: no payout worker boot and `/payout` returns 503 even when the payout-specific flag is true. Leave unset to permit workers. |
 | `PAYOUT_NETWORK` | when payout is enabled and the global switch is unset | `testnet` \| `mainnet`. Boot refuses if active payout worker configuration omits it. |
+| `PAYOUT_GBP_USD_RATE` | whenever payout workers are enabled | Reviewed USD per GBP conversion rate. Boot refuses a missing, zero, or negative value. |
 | `CRYPTO_HD_MNEMONIC` | mainnet | BIP-39 mnemonic; address derivation seed for mainnet. **Back up offline.** |
 | `CRYPTO_HD_MNEMONIC_TESTNET` | testnet | Separate testnet mnemonic; never reused for mainnet. Boot refuses testnet without this set. |
 | `ALCHEMY_API_KEY` | EVM RPC | Single key for all EVM chains; sent as `Authorization: Bearer` to the chain-specific Alchemy `/v2` endpoint and never placed in its URL. |
@@ -47,6 +62,41 @@ Do not replay individual files with raw `psql`.
 | `RPC_URL_<CHAIN>_<NETWORK>` | optional override | Per-chain explicit URL (e.g. `RPC_URL_ETHEREUM_MAINNET=https://...`). Wins over Alchemy/Helius; an EVM override receives no Alchemy authorization header. |
 
 Mainnet refuses to fall back to public RPCs — you MUST configure auth before any mainnet RPC call.
+
+Before enabling the integrated payout workers, the pending runner must apply
+all four worker migrations in order:
+
+1. `20260726T193000_payout_confirmation_fairness.sql`
+2. `20260726T194500_evm_payout_nonce_fence.sql`
+3. `20260726T201000_payout_dispatch_fairness.sql`
+4. `20260726T203000_payout_network_binding.sql`
+
+The nonce migration's `NOT VALID` check still blocks every new EVM
+`broadcasting` transition without a valid tx hash and complete
+chain/source/nonce tuple, including a write from an old worker; `NOT VALID`
+only preserves already-existing rows at rest. Any later update that retains an
+invalid legacy `broadcasting` state is checked and fails.
+
+The network migration leaves legacy rows at `network=NULL`; that is a
+deliberate quarantine, not an inferred testnet/mainnet value. Current
+dispatch, broadcast, and confirmation workers select only rows whose durable
+network equals their active `PAYOUT_NETWORK`. Reconcile any active legacy row
+from provider and ledger evidence before assigning its one immutable network.
+
+Reconcile all legacy EVM rows still in `broadcasting`; they have no trustworthy
+chain/source/nonce tuple, and the integrated worker intentionally defers every
+EVM send while one exists. After every legacy row has positive chain evidence
+and an operator-reviewed state, validate the future-write fence:
+
+```sql
+ALTER TABLE economy.crypto_payouts
+  VALIDATE CONSTRAINT crypto_payouts_evm_broadcasting_evidence_check;
+```
+
+Roll the integrated code to every replica while payout workers remain off. The
+database fence makes mixed-version writes fail closed; it does not make a mixed
+fleet available or repair an old ambiguous send. Re-enable dispatch only after
+the rollout and the legacy-row reconciliation both finish.
 
 ### Secrets storage
 
@@ -100,28 +150,61 @@ Repeat the EVM harness with `TEST_CHAIN=base|polygon|arbitrum|optimism` (when ad
 
 Only after both testnet harnesses pass cleanly + all 8 acceptance criteria (see `PAYOUT-BROADCAST-PLAN.md` §"Acceptance criteria").
 
+`PAYOUT_NETWORK` remains one process-wide selector, while current payout rows
+persist their creation network. Before changing the selector, disable and
+drain every payout worker, then run this read-only check:
+
+```sql
+SELECT id, chain, network, status, tx_hash,
+       evm_chain_id, evm_source_address, evm_nonce
+FROM economy.crypto_payouts
+WHERE status IN ('requested', 'broadcasting', 'broadcast')
+ORDER BY requested_at, id;
+```
+
+The query must return zero rows. Independently reconcile each result to an
+appropriate terminal state first; an operator note is not reconciliation.
+The durable binding makes a wrong-network worker ignore rather than reinterpret
+the row, but flipping the only active worker network would strand unfinished
+work. This zero-active-row gate is required again before every later network
+flip. Routine concurrent multi-network processing would require separately
+configured worker pools; changing one global selector does not provide it.
+
+The same global network selects deposit derivation and provider interpretation.
+Clearing payout rows does not migrate deposit addresses or provider watches;
+follow [CRYPTO-PAYMENT](CRYPTO-PAYMENT.md#required-rolling-cutover) and its
+key-rotation boundary before treating a network flip as a complete crypto
+cutover.
+
 ```bash
-# 1. Configure mainnet env (Fly):
+# 1. Configure mainnet with payout workers still OFF:
 fly secrets set \
   CRYPTO_HD_MNEMONIC="$MAINNET_MNEMONIC" \
   ALCHEMY_API_KEY="$MAINNET_ALCHEMY_KEY" \
   HELIUS_API_KEY="$MAINNET_HELIUS_KEY" \
+  PAYOUT_GBP_USD_RATE="$REVIEWED_GBP_USD_RATE" \
   PAYOUT_NETWORK=mainnet \
-  PAYOUT_WORKER_ENABLED=true
+  PAYOUT_WORKER_ENABLED=false
 
-# 2. Manual smoke — pre-fund a wallet with ~$0.05 USDC and broadcast
+# 2. Re-run the zero-active-row query, then enable for the controlled smoke:
+fly secrets set PAYOUT_WORKER_ENABLED=true
+
+# 3. Manual smoke — pre-fund a wallet with ~$0.05 USDC and broadcast
 #    a 0.01 USDC payout to a known recipient. Verify on Etherscan +
 #    Solscan.
 
-# 3. Monitor logs: [payout-dispatcher], [payout-broadcast],
+# 4. Monitor logs: [payout-dispatcher], [payout-broadcast],
 #    [payout-confirm] should all be quiet at idle, log per cycle when
 #    rows are processed.
 
-# 4. Smoke another chain (Base, Polygon, etc.) once Sepolia mainnet
+# 5. Smoke another chain (Base, Polygon, etc.) once Ethereum mainnet
 #    confirms.
 ```
 
-If the smoke fails: flip `PAYOUT_WORKER_ENABLED=false`, investigate, fix, re-run.
+If the smoke fails: immediately set `PAYOUT_WORKER_ENABLED=false`, drain the
+workers, preserve the row and chain evidence, then investigate. Do not change
+the network or repeat a send until the active-row query is empty through
+positive reconciliation.
 
 ---
 
@@ -138,19 +221,21 @@ The workers log structured prefixes; grep for these:
 | `💸 payout confirm worker started` | Boot — confirm interval set. |
 | `[payout-dispatcher] enqueued N broadcast job(s)` | Per tick: rows found + enqueued. |
 | `[payout-broadcast] <id>: submitted <hash> (<chain>)` | Successful broadcast. |
-| `[payout-broadcast] <id>: submit error but tx landed` | Phantom error — tx is on-chain, marked `broadcast`. Investigate the error message. |
+| `[payout-broadcast] <id>: submit error but tx landed` | The persisted hash was found on-chain and the row was marked `broadcast`; inspect that hash and receipt rather than relying on the discarded provider error text. |
 | `[payout-broadcast] <id>: submit outcome unknown (lookup=absent\|unavailable)` | The RPC call errored and lookup could not prove submission. Row stays `broadcasting`; no refund or retry occurs. |
+| `[payout-broadcast] <id>: source_nonce_unresolved` | Another EVM send has unresolved source identity. This request stays `requested` with a durable cooldown so unrelated due work can proceed. |
+| `[payout-broadcast] <id>: source nonce already reserved; deferred` | Provider nonce selection collided with durable evidence. This pre-submit request stays `requested` and is fairly reconsidered after its cooldown. |
 | `[payout-broadcast] <id>: sign_failed` | Failure was proved before RPC dispatch, so the row failed and credits were refunded; bounded detail is stored on the payout row. |
 | `[payout-confirm] <id>: confirmed at block N (<chain>)` | Per chain confirmation. |
-| `[payout-confirm] <id>: reverted on-chain (<chain>); refunded N credits` | On-chain revert. |
+| `[payout-confirm] <id>: reverted on-chain (<chain>); refunded N pence` | Finalized on-chain revert; the exact original GBP-pence debit was reversed. |
 
 ### Stuck states
 
 | Condition | Cause | Remediation |
 |---|---|---|
-| Row at `requested` for >1min | Dispatcher not running OR worker not running | Check `PAYOUT_WORKER_ENABLED=true`, confirm `AGENTTOOL_DISABLE_WORKERS` is unset, then check logs. Rows pick up automatically when a worker comes online. |
+| Row at `requested` for >1min | Dispatcher/worker unavailable, or a durable pre-submit nonce cooldown | Check `dispatch_after` and the bounded `error` first. `evm_nonce_contention` and `evm_source_nonce_unresolved` are reconsidered after the cooldown; unrelated due rows should continue. Otherwise check `PAYOUT_WORKER_ENABLED=true`, confirm `AGENTTOOL_DISABLE_WORKERS` is unset, then check logs. |
 | Row at `broadcasting` for >5min | Worker crashed after hash persistence, or RPC submit/lookup outcome is ambiguous | The dispatcher intentionally does not re-enqueue it. Query by the persisted hash. Found → mark `broadcast`; absent or lookup failure remains inconclusive and must not trigger automatic retry/refund. Escalate for operator reconciliation. |
-| Row at `broadcast` for >1h, no `confirmed` | RPC/chain delay, or never landed | Query the chain manually for the `tx_hash`. If absent: the tx is stuck in mempool — replace-by-fee from operator wallet, or wait. If reverted: confirm worker will catch on next tick. If receipt success but watcher hasn't run: check confirm-worker logs. |
+| Row at `broadcast` for >1h, no `confirmed` | RPC/chain delay, a pending transaction, or contradictory provider evidence | Query both the transaction and receipt by the persisted hash. A positively pending transaction may be waited on or considered for the reviewed replacement flow below. An absent or unavailable lookup is inconclusive and does not authorize retry, replacement, or refund. If the receipt proves a revert/success but the watcher has not advanced, preserve that evidence and inspect confirm-worker logs. |
 
 ---
 
@@ -215,25 +300,40 @@ operator/storage health condition, not a request-shape error.
 
 ## Key rotation
 
-The platform mnemonic is the master key. Rotation is **destructive**: derived addresses change, in-flight deposits may be lost. Treat as a recovery action.
+The platform mnemonic is the master key. Rotation is **destructive**: derived
+addresses change, in-flight deposits may be lost. Treat it as a recovery action,
+not a routine environment-variable update.
 
-If rotation is needed (compromise suspected):
+Changing the mnemonic alone is deliberately fail-closed:
 
-1. Generate new mnemonic offline.
-2. Set `CRYPTO_HD_MNEMONIC_TESTNET=<new>` first; run testnet harness; verify.
-3. Drain mainnet wallets to a cold address (manual transfer signed with old mnemonic).
-4. Set `CRYPTO_HD_MNEMONIC=<new>` on mainnet.
-5. Old deposit addresses are now orphaned; webhooks for transfers to them will not credit.
-6. Issue updated deposit addresses to all active wallets (the next call to `/v1/wallets/:id/deposit-address` returns the new derived address).
+- Stored rows no longer match the active derivation, so address GET/list calls
+  refuse to disclose or register them.
+- A new webhook delivery to one of those stale rows is not accepted for a
+  pending event or credit, even if an old provider watch still delivers it.
+- The current schema permits only one row per wallet/chain/token, and the
+  Alchemy adapter only adds watches. It does **not** issue a replacement row or
+  remove an old provider watch.
 
-There is no in-protocol rotation that preserves continuity. This is a deliberate wall — the address-derivation determinism is the substrate-honest property.
+If compromise is suspected, stop deposit acceptance, preserve the old root
+only in an offline recovery process, drain controlled addresses, and remove old
+watches at the provider. Do not switch production to the new root until an
+explicit audited row-replacement and add-new/remove-old watch workflow exists,
+or until an operator has performed and recorded those steps manually.
+
+There is currently no in-protocol rotation that preserves continuity. The
+fail-closed root check prevents an old watched address from silently becoming a
+new credit authority; it does not recover funds, replace rows, or reconcile
+provider state.
 
 ---
 
 ## What this runbook does NOT cover
 
 - **Cross-chain settlement routing.** Composes on top of payout broadcast; its own slice.
-- **Replace-by-fee (RBF) for stuck mainnet txs.** Manual operator action; viem's `eth_sendRawTransaction` with same nonce + higher gas. Document in operator log if used.
+- **Replace-by-fee (RBF) for stuck mainnet txs.** Manual operator action only.
+  A replacement must preserve the durable source/nonce evidence and update
+  the persisted tx identity atomically before confirmation polling resumes;
+  merely broadcasting bytes and writing an operator note is insufficient.
 - **Reorg deeper than confirmation threshold.** Out of scope; manual escalation if it ever fires (extremely unlikely on mainnet at 12 blocks).
 - **Hardware-wallet signing.** Future option; currently the platform uses HD-derived software keys.
 

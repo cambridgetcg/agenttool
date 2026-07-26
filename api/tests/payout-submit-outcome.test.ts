@@ -2,9 +2,26 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { resolveSubmitError } from "../src/workers/payout/submit-outcome";
+import {
+  resolveSubmitError,
+  submittedIdentityMatches,
+} from "../src/workers/payout/submit-outcome";
 
 describe("payout RPC submit ambiguity", () => {
+  test("accepts only the locally persisted submit identity", () => {
+    const evm = `0x${"a".repeat(64)}`;
+    expect(submittedIdentityMatches("evm", evm, evm.toUpperCase().replace("0X", "0x")))
+      .toBe(true);
+    expect(
+      submittedIdentityMatches("evm", evm, `0x${"b".repeat(64)}`),
+    ).toBe(false);
+    expect(submittedIdentityMatches("evm", evm, "0x01")).toBe(false);
+    expect(submittedIdentityMatches("solana", "signature-a", "signature-a"))
+      .toBe(true);
+    expect(submittedIdentityMatches("solana", "signature-a", "signature-b"))
+      .toBe(false);
+  });
+
   test("marks broadcast only when lookup positively finds the transaction", async () => {
     await expect(resolveSubmitError(async () => true)).resolves.toEqual({
       nextStatus: "broadcast",
@@ -59,10 +76,18 @@ describe("payout RPC submit ambiguity", () => {
     const solanaSubmitPhase = source.slice(secondPhase);
     for (const submitPhase of [evmSubmitPhase, solanaSubmitPhase]) {
       expect(submitPhase).toContain("resolveSubmitError");
+      expect(submitPhase).toContain("submittedIdentityMatches");
+      expect(submitPhase).toContain("markPersistedIdentityBroadcast");
+      expect(submitPhase).toContain(
+        "recordPersistedIdentitySubmitAmbiguity",
+      );
       expect(submitPhase).not.toContain('.set({ status: "failed"');
       expect(submitPhase).not.toContain(".update(wallets)");
       expect(submitPhase).not.toContain("creditsForAmount");
       expect(submitPhase).not.toContain("submit_failed:");
     }
+    expect(source).toContain("eq(cryptoPayouts.txHash, txHash)");
+    expect(source.match(/eq\(cryptoPayouts\.txHash, txHash\)/g)?.length ?? 0)
+      .toBeGreaterThanOrEqual(2);
   });
 });

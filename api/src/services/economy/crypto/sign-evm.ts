@@ -20,6 +20,7 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 
 import type { EvmChain } from "./chains";
+import { assertSafeEvmNonce } from "./evm-payout-nonce";
 import { deriveEvmKeypair } from "./hd";
 import {
   activeChainId,
@@ -57,6 +58,17 @@ export interface SignedTx {
   contractAddress: Address;
   chainId: number;
   nonce: number;
+}
+
+export function evmTransactionIdentityMatches(
+  expected: string,
+  observed: string,
+): boolean {
+  return (
+    /^0x[0-9a-f]{64}$/i.test(expected) &&
+    /^0x[0-9a-f]{64}$/i.test(observed) &&
+    expected.toLowerCase() === observed.toLowerCase()
+  );
 }
 
 function bytesToHex0x(b: Uint8Array): Hex {
@@ -104,13 +116,14 @@ export async function buildAndSignUsdcTransfer(
     }),
     publicClient.getGasPrice(),
   ]);
+  const safeNonce = assertSafeEvmNonce(nonce);
 
   const serialized = await walletClient.signTransaction({
     chain: null,
     to: usdcAddress,
     data,
     gas,
-    nonce: Number(nonce),
+    nonce: safeNonce,
     gasPrice,
     chainId,
   });
@@ -122,7 +135,7 @@ export async function buildAndSignUsdcTransfer(
     toAddress: p.destinationAddress,
     contractAddress: usdcAddress,
     chainId,
-    nonce: Number(nonce),
+    nonce: safeNonce,
   };
 }
 
@@ -154,7 +167,11 @@ export async function txExistsOnChain(
   });
   try {
     const tx = await publicClient.getTransaction({ hash: txHash });
-    return Boolean(tx);
+    if (!tx) return false;
+    if (!evmTransactionIdentityMatches(txHash, tx.hash)) {
+      throw new Error("evm_transaction_identity_mismatch");
+    }
+    return true;
   } catch (err) {
     if (err instanceof TransactionNotFoundError) return false;
     throw err;
@@ -165,9 +182,12 @@ export interface ConfirmResult {
   status: "pending" | "confirmed" | "reverted";
   blockNumber?: bigint;
   confirmations?: bigint;
+  evidenceError?: "receipt_transaction_mismatch";
 }
 
 export interface EvmReceiptFinalityInput {
+  expectedTransactionHash: string;
+  receiptTransactionHash: string;
   receiptStatus: "success" | "reverted";
   receiptBlockNumber: bigint;
   currentBlockNumber: bigint;
@@ -182,6 +202,23 @@ export function classifyEvmReceiptFinality(
 ): ConfirmResult {
   if (!Number.isSafeInteger(input.threshold) || input.threshold < 1) {
     throw new Error("invalid_evm_confirmation_threshold");
+  }
+  if (
+    !/^0x[0-9a-f]{64}$/i.test(input.expectedTransactionHash) ||
+    !/^0x[0-9a-f]{64}$/i.test(input.receiptTransactionHash)
+  ) {
+    throw new Error("invalid_evm_transaction_identity");
+  }
+  if (
+    !evmTransactionIdentityMatches(
+      input.expectedTransactionHash,
+      input.receiptTransactionHash,
+    )
+  ) {
+    return {
+      status: "pending",
+      evidenceError: "receipt_transaction_mismatch",
+    };
   }
 
   const confirmations =
@@ -207,12 +244,13 @@ export async function confirmTx(
   chain: EvmChain,
   txHash: Hex,
   threshold: number,
+  timeoutMs = 10_000,
 ): Promise<ConfirmResult> {
   if (!Number.isSafeInteger(threshold) || threshold < 1) {
     throw new Error("invalid_evm_confirmation_threshold");
   }
   const publicClient = createPublicClient({
-    transport: evmRpcTransport(chain),
+    transport: evmRpcTransport(chain, { timeoutMs }),
   });
   let receipt;
   try {
@@ -224,6 +262,8 @@ export async function confirmTx(
 
   const currentBlock = await publicClient.getBlockNumber();
   return classifyEvmReceiptFinality({
+    expectedTransactionHash: txHash,
+    receiptTransactionHash: receipt.transactionHash,
     receiptStatus: receipt.status,
     receiptBlockNumber: receipt.blockNumber,
     currentBlockNumber: currentBlock,

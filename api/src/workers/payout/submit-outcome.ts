@@ -21,6 +21,24 @@ export type SubmitErrorResolution =
       safeError: string;
     };
 
+/** Bind a provider's submit acknowledgement to the locally computed,
+ * durably persisted transaction identity. A mismatched acknowledgement is
+ * ambiguous evidence, never permission to advance to `broadcast`. */
+export function submittedIdentityMatches(
+  family: "evm" | "solana",
+  expected: string,
+  observed: string,
+): boolean {
+  if (family === "evm") {
+    return (
+      /^0x[0-9a-f]{64}$/i.test(expected) &&
+      /^0x[0-9a-f]{64}$/i.test(observed) &&
+      expected.toLowerCase() === observed.toLowerCase()
+    );
+  }
+  return expected.length > 0 && observed === expected;
+}
+
 function safeUnknownError(
   lookup: Exclude<SubmitLookupOutcome, "found">,
 ): string {

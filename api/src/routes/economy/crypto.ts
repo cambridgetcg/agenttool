@@ -57,7 +57,9 @@ import {
   activeNetwork,
   activeUsdcAddress,
   activeUsdcMintSolana,
+  assertEvmDepositCreditSupported,
   CryptoNetworkConfigurationError,
+  EvmDepositSettlementPolicyError,
 } from "../../services/economy/crypto/network";
 
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -194,6 +196,11 @@ export async function resolveReadyDepositAddressRows(
     if (!isChain(row.chain) || row.token !== "USDC") {
       throw new DepositAddressInvariantError();
     }
+    if (isEvmChain(row.chain)) {
+      // Listing a historical row must obey the same production-finality wall
+      // as creating a new address, before the resolver can disclose it.
+      assertEvmDepositCreditSupported(row.chain);
+    }
     const ready = await resolveAddress(walletId, row.chain, row.token);
     const evm = isEvmChain(ready.chain);
     readyRows.push({
@@ -279,6 +286,22 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
           503,
         );
       }
+      if (error instanceof EvmDepositSettlementPolicyError) {
+        return fail(
+          c,
+          errors.refusal({
+            error: error.code,
+            chain: error.chain,
+            retryable: false,
+            message: error.message,
+            hint:
+              "Use the chain's testnet flow, or choose Ethereum mainnet until a chain-specific settlement policy is implemented.",
+            consequence:
+              "No stored address was disclosed and no mainnet non-L1 deposit can become spendable.",
+          }),
+          503,
+        );
+      }
       if (
         error instanceof AlchemyNotifyConfigurationError ||
         error instanceof AlchemyNotifyUnavailableError
@@ -318,14 +341,15 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
       wallet_id: walletId,
       addresses: readyRows,
       supported_chains: ALL_CHAINS,
-      hint: "Pass ?chain=base&token=USDC to mint or fetch a specific address.",
+      hint:
+        "Pass ?chain=ethereum&token=USDC to mint or fetch a mainnet address; non-L1 EVM chains remain available in testnet mode.",
       watch_warning: readyRows.some(
         (row) => row.watch_status !== "provider_accepted",
       )
         ? "Solana rows do not prove Helius watch registration; confirm provider configuration before sending funds."
         : null,
       finality_warning:
-        "EVM deposits remain pending until canonical receipt/log depth checks. L2 depth is not L1 settlement or production finality; Solana deposit finality remains unreconciled.",
+        "EVM deposits remain pending until canonical receipt/log depth checks. Mainnet non-L1 address disclosure and credit are disabled because L2 depth is not L1 settlement; Solana deposit finality remains unreconciled.",
     });
   }
 
@@ -355,6 +379,22 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
             "Set PAYOUT_NETWORK=testnet or PAYOUT_NETWORK=mainnet deliberately, then retry. No address was disclosed.",
           consequence:
             "AgentTool will not infer mainnet from an unset crypto network.",
+        }),
+        503,
+      );
+    }
+    if (error instanceof EvmDepositSettlementPolicyError) {
+      return fail(
+        c,
+        errors.refusal({
+          error: error.code,
+          chain: error.chain,
+          retryable: false,
+          message: error.message,
+          hint:
+            "Use the chain's testnet flow, or choose Ethereum mainnet until a chain-specific settlement policy is implemented.",
+          consequence:
+            "No address was created or disclosed and no mainnet non-L1 deposit can become spendable.",
         }),
         503,
       );
@@ -415,7 +455,7 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
       ? "pending_until_chain_depth"
       : "solana_unreconciled",
     instructions: isEvmChain(result.chain as string)
-      ? "Send USDC to this address from any wallet. The signed Alchemy delivery is stored as pending; credits become spendable only after the exact canonical receipt/log reaches the configured chain depth. A later removed log reverses an earlier credit exactly once. For L2s, this depth is not a claim of L1 settlement or production finality."
+      ? "Send USDC to this address from any wallet. The signed Alchemy delivery is stored as pending; credits become spendable only after the exact canonical receipt/log reaches the configured chain depth. A later removed log reverses an earlier credit exactly once. Mainnet non-L1 address disclosure and credit stay disabled until a chain-specific settlement policy exists."
       : "Do not send production funds until an operator confirms that the active-network Helius webhook watches this address. Signed ingress exists, but address-watch readiness, raw-atomic deposit finality, and reversal are not yet reconciled.",
   });
 });
@@ -524,39 +564,15 @@ router.post("/wallets/:walletId/payout", async (c) => {
   c.header("X-Idempotency-Supported", "Idempotency-Key");
   const idempotencyKey = c.req.header("Idempotency-Key");
 
-  // Startup and request acceptance share one predicate. Otherwise the global
-  // off-switch could prevent worker boot while this route still debits credits
-  // and leaves a payout stuck at status='requested'.
-  if (!payoutWorkerBootAllowed()) {
-    const globallyDisabled =
-      process.env.AGENTTOOL_DISABLE_WORKERS === "1";
-    return c.json(
-      {
-        error: "payout_broadcast_not_available",
-        payout_worker_enabled: economyConfig.payout.workerEnabled,
-        global_workers_disabled: globallyDisabled,
-        message:
-          (globallyDisabled
-            ? "The global worker off-switch is active on this instance. "
-            : "The payout broadcast worker is not enabled on this instance. ") +
-          "Until it is, payout requests would lock credits indefinitely. " +
-          "If you have a payout already in 'requested' state, cancel it via " +
-          "POST /v1/wallets/:walletId/payouts/:payoutId/cancel. " +
-          "Payout acceptance requires PAYOUT_WORKER_ENABLED=true and " +
-          "AGENTTOOL_DISABLE_WORKERS to be unset. See " +
-          "docs/PAYOUT-BROADCAST-PLAN.md.",
-      },
-      503,
-    );
-  }
   if (!idempotencyKey) {
-    return c.json(
-      {
+    return fail(
+      c,
+      errors.refusal({
         error: "payout_idempotency_key_required",
         message:
           "Payout creation requires Idempotency-Key so a lost response can never cause a second debit.",
         hint: "Send 8-256 visible ASCII characters and reuse that key only for this exact payout input.",
-      },
+      }),
       400,
     );
   }
@@ -582,6 +598,7 @@ router.post("/wallets/:walletId/payout", async (c) => {
       destinationAddress: parsed.data.destination_address,
       metadata: parsed.data.metadata,
       idempotencyKey,
+      payoutBroadcastConfigured: payoutWorkerBootAllowed(),
     });
     if (result.replayed) {
       c.header("Idempotent-Replay", "true");
@@ -590,22 +607,45 @@ router.post("/wallets/:walletId/payout", async (c) => {
       {
         ...result,
         note:
-          "Payout recorded and equivalent credits debited. " +
-          "The opt-in worker progresses requested → broadcasting → broadcast " +
-          "→ confirmed. Ambiguous submission remains broadcasting for operator " +
-          "reconciliation and is never automatically retried or refunded.",
+          "Current durable payout state returned. A new requested payout has " +
+          "an atomic debit; replay may instead show a later confirmed, failed, " +
+          "or cancelled state. Ambiguous submission remains broadcasting for " +
+          "operator reconciliation and is never automatically retried or refunded.",
       },
       202,
     );
   } catch (err) {
     const msg = (err as Error).message;
+    if (msg === "payout_broadcast_not_available") {
+      const globallyDisabled =
+        process.env.AGENTTOOL_DISABLE_WORKERS === "1";
+      return fail(
+        c,
+        errors.refusal({
+          error: msg,
+          payout_worker_enabled: economyConfig.payout.workerEnabled,
+          global_workers_disabled: globallyDisabled,
+          message:
+            (globallyDisabled
+              ? "The global worker off-switch is active on this instance. "
+              : "The payout broadcast worker is not enabled on this instance. ") +
+            "A new payout was not reserved or debited. Existing durable requests remain replayable.",
+          hint:
+            "Enable PAYOUT_WORKER_ENABLED and unset AGENTTOOL_DISABLE_WORKERS before retrying this exact key and body.",
+        }),
+        503,
+      );
+    }
     if (msg === "payout_idempotency_key_invalid") {
-      return c.json(
-        {
+      return fail(
+        c,
+        errors.refusal({
           error: msg,
           message:
             "Idempotency-Key must contain 8-256 visible ASCII characters with no spaces.",
-        },
+          hint:
+            "Send 8-256 visible ASCII characters and reuse that key only for this exact payout input.",
+        }),
         400,
       );
     }
@@ -613,8 +653,9 @@ router.post("/wallets/:walletId/payout", async (c) => {
       msg === "payout_idempotency_conflict" ||
       msg === "payout_idempotency_unreconciled"
     ) {
-      return c.json(
-        {
+      return fail(
+        c,
+        errors.refusal({
           error: msg,
           message:
             msg === "payout_idempotency_conflict"
@@ -624,17 +665,18 @@ router.post("/wallets/:walletId/payout", async (c) => {
             msg === "payout_idempotency_conflict"
               ? "Reuse the original exact input, or choose a fresh Idempotency-Key for a different payout."
               : "Do not change or automatically rotate the key; inspect the payout list or ask the operator to reconcile storage.",
-        },
+        }),
         409,
       );
     }
     if (msg === "payout_wallet_inactive") {
-      return c.json(
-        {
+      return fail(
+        c,
+        errors.refusal({
           error: msg,
           message: "Frozen and closed wallets cannot create payouts.",
           hint: "Resolve the wallet status before retrying this exact request.",
-        },
+        }),
         409,
       );
     }
@@ -672,12 +714,15 @@ router.post("/wallets/:walletId/payout", async (c) => {
       );
     }
     if (msg === "payout_daily_total_unavailable") {
-      return c.json(
-        {
+      return fail(
+        c,
+        errors.refusal({
           error: msg,
           message:
             "The payout ceiling could not be checked safely, so no debit was made. Retry once storage is healthy.",
-        },
+          hint:
+            "Keep the same Idempotency-Key and exact request body when retrying after storage recovers.",
+        }),
         503,
       );
     }
@@ -715,6 +760,7 @@ router.get("/wallets/:walletId/payouts", async (c) => {
     payouts: rows.map((r) => ({
       id: r.id,
       chain: r.chain,
+      network: r.network,
       token: r.token,
       amount_base: r.amountBase,
       destination_address: r.destinationAddress,

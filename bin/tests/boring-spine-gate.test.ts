@@ -145,7 +145,11 @@ describe("boring test spine", () => {
               : "hermetic",
         );
       }
-      if (path.startsWith("tests/integration/")) expect(tier).toBe("database");
+      if (path === "tests/integration/crypto-migration-fences.test.ts") {
+        expect(tier).toBe("crypto-fences");
+      } else if (path.startsWith("tests/integration/")) {
+        expect(tier).toBe("database");
+      }
     }
 
     const topLevel = actualFiles.filter(
@@ -175,7 +179,9 @@ describe("boring test spine", () => {
     );
     for (const { path, marked } of databaseMarked) {
       if (!marked) continue;
-      expect(["database", "database-quarantine"]).toContain(classified.get(path)?.[0]);
+      expect(["database", "crypto-fences", "database-quarantine"]).toContain(
+        classified.get(path)?.[0],
+      );
     }
   });
 
@@ -189,6 +195,9 @@ describe("boring test spine", () => {
 
     expect(preflight).toContain('readonly MODE="${1:-hermetic}"');
     expect(preflight).toContain("database mode requires DATABASE_URL");
+    expect(preflight).toContain(
+      "crypto-fences mode requires CRYPTO_FENCE_TEST_DATABASE_URL",
+    );
     expect(preflight).toContain("database-quarantine mode requires DATABASE_URL");
     expect(preflight).toContain("smoke mode requires AGENTTOOL_BASE");
     expect(preflight).toContain("contracts mode requires RUN_CONTRACT=1");
@@ -200,6 +209,7 @@ describe("boring test spine", () => {
     expect(preflight).not.toContain("SKIP_PARITY");
     expect(runner).toContain('in_list "$path" "${QUARANTINED_DOCTRINE_TESTS[@]}"');
     expect(runner).toContain("run_tier database-quarantine");
+    expect(runner).toContain("run_tier crypto-fences");
     expect(runner).not.toContain("run_tier quarantine database-quarantine");
     expect(runner).toContain("readonly TEST_SUPPORT_FILES=(");
     expect(runner).toContain("tests/fixtures/static-parser-noncooperative.ts");
@@ -244,11 +254,13 @@ describe("boring test spine", () => {
     const help = run(["bash", "bin/preflight.sh", "--help"]);
     expect(help.code, help.stderr).toBe(0);
     expect(help.stdout).toContain("database-quarantine");
+    expect(help.stdout).toContain("crypto-fences");
     expect(help.stdout).toContain("legacy-delta");
 
     const withoutExternalAuthority = { ...process.env };
     for (const variable of [
       "DATABASE_URL",
+      "CRYPTO_FENCE_TEST_DATABASE_URL",
       "AGENTTOOL_BASE",
       "AGENTTOOL_API_KEY",
       "AGENTTOOL_IDENTITY_ID",
@@ -260,6 +272,10 @@ describe("boring test spine", () => {
     }
     for (const [mode, message] of [
       ["database", "database mode requires DATABASE_URL"],
+      [
+        "crypto-fences",
+        "crypto-fences mode requires CRYPTO_FENCE_TEST_DATABASE_URL",
+      ],
       ["database-quarantine", "database-quarantine mode requires DATABASE_URL"],
       ["smoke", "smoke mode requires AGENTTOOL_BASE"],
       ["contracts", "contracts mode requires RUN_CONTRACT=1"],

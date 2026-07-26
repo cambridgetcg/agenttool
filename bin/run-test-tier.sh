@@ -123,6 +123,7 @@ classify() {
   case "$path" in
     tests/adapters/*.test.ts) echo hermetic ;;
     tests/contract/*.test.ts) echo contract ;;
+    tests/integration/crypto-migration-fences.test.ts) echo crypto-fences ;;
     tests/doctrine/*.test.ts)
       if has_database_env_access "$API_ROOT/$path"; then
         if in_list "$path" "${QUARANTINED_DOCTRINE_TESTS[@]}"; then
@@ -202,7 +203,8 @@ sanitize_non_external_env() {
     AGENTTOOL_ENABLE_UNSAFE_EXECUTE AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS \
     AGENT_DATA_NODE_TOKEN AGENT_DATA_NODE_URL AT_API_KEY \
     ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT \
-    DATABASE_URL DATABASE_SESSION_URL POSTGRES_URL REDIS_URL \
+    DATABASE_URL DATABASE_SESSION_URL POSTGRES_URL \
+    CRYPTO_FENCE_TEST_DATABASE_URL REDIS_URL \
     OTEL_EXPORTER_OTLP_ENDPOINT OTEL_EXPORTER_OTLP_TRACES_ENDPOINT \
     OTEL_EXPORTER_OTLP_HEADERS OTEL_EXPORTER_OTLP_TRACES_HEADERS \
     OTEL_RESOURCE_ATTRIBUTES OTEL_SERVICE_NAME \
@@ -253,14 +255,25 @@ case "$MODE" in
     ;;
   database)
     [ -n "${DATABASE_URL:-}" ] || die "database tier requires DATABASE_URL"
-    unset REDIS_URL ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT
+    unset CRYPTO_FENCE_TEST_DATABASE_URL REDIS_URL
+    unset ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT
     export AGENTTOOL_DISABLE_WORKERS=1
     run_tier database
+    ;;
+  crypto-fences)
+    [ -n "${CRYPTO_FENCE_TEST_DATABASE_URL:-}" ] ||
+      die "crypto-fences tier requires CRYPTO_FENCE_TEST_DATABASE_URL"
+    unset DATABASE_URL DATABASE_SESSION_URL POSTGRES_URL
+    unset REDIS_URL
+    unset ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT
+    export AGENTTOOL_DISABLE_WORKERS=1
+    run_tier crypto-fences
     ;;
   database-quarantine)
     [ -n "${DATABASE_URL:-}" ] ||
       die "database-quarantine tier requires DATABASE_URL"
-    unset REDIS_URL ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT
+    unset CRYPTO_FENCE_TEST_DATABASE_URL REDIS_URL
+    unset ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT
     export AGENTTOOL_DISABLE_WORKERS=1
     run_tier database-quarantine
     ;;
@@ -269,7 +282,8 @@ case "$MODE" in
     if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${OPENAI_API_KEY:-}" ] && [ -z "${OLLAMA_API_KEY:-}" ]; then
       die "contract tier requires a provider API key"
     fi
-    unset DATABASE_URL DATABASE_SESSION_URL POSTGRES_URL REDIS_URL
+    unset DATABASE_URL DATABASE_SESSION_URL POSTGRES_URL
+    unset CRYPTO_FENCE_TEST_DATABASE_URL REDIS_URL
     unset OTEL_EXPORTER_OTLP_ENDPOINT OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
     unset OTEL_EXPORTER_OTLP_HEADERS OTEL_EXPORTER_OTLP_TRACES_HEADERS
     export AGENTTOOL_DISABLE_WORKERS=1
@@ -280,6 +294,6 @@ case "$MODE" in
     run_tier quarantine
     ;;
   *)
-    die "usage: bin/run-test-tier.sh <list|hermetic|database|database-quarantine|contracts|quarantine>"
+    die "usage: bin/run-test-tier.sh <list|hermetic|database|crypto-fences|database-quarantine|contracts|quarantine>"
     ;;
 esac

@@ -5,6 +5,10 @@
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Layer 4 (active work) · [BUSINESS-MODEL](BUSINESS-MODEL.md) (rings)
 >
 > **Implements:** Layer 4 — Economy (inbound sovereign deposit contract). Sister doctrine: [PAYOUT-BROADCAST](PAYOUT-BROADCAST.md) (outbound side).
+>
+> **Code:** `api/src/routes/economy/crypto.ts` · `api/src/services/economy/crypto/` · `api/src/workers/deposit/confirm-worker.ts` · `api/src/db/schema/economy.ts`
+>
+> **Tests:** `api/tests/{crypto-webhook-fail-closed,deposit-finality}.test.ts` · `api/tests/integration/crypto-migration-fences.test.ts`
 
 ## The contract
 
@@ -12,10 +16,15 @@ A sovereign agent doesn't have a credit card. It has a wallet. The wallet may li
 
 This document began as the Phase 3b/3c plan. The derivation, signed ingress,
 payout, confirmation, and policy code now exist, but production provider
-configuration and migration rollout remain deliberately incomplete. EVM
+configuration and the compatible-replica rollout remain operator-gated. Repo
+presence is not deployment proof: verify `meta._migrations`, reconcile legacy
+rows, and verify every running replica before enabling crypto workers. EVM
 deposits now have a pending/confirmation/reorg lifecycle; Solana does not yet
 have an equivalent raw-atomic finality boundary. Fixed L2 block depth is not
-yet L1 settlement or a production-finality claim.
+yet L1 settlement or a production-finality claim, so mainnet Base, Polygon,
+Arbitrum, and Optimism address disclosure and deposit credit are
+programmatically disabled. Testnet flows remain available; Ethereum mainnet
+keeps the receipt-depth boundary.
 
 ---
 
@@ -27,9 +36,9 @@ yet L1 settlement or a production-finality claim.
 | List all deposit addresses for a wallet | Implemented; every stored row is revalidated and every EVM watch is reasserted before the list is disclosed | `GET /v1/wallets/:id/deposit-address` |
 | Onchain identity binding via signed message | Implemented (EVM EIP-191; Solana ed25519) | `POST /v1/wallets/:id/onchain/{challenge,verify}` · `GET /v1/wallets/:id/onchain` |
 | Inbound transfer ingestion | EVM: signed pending observation + receipt-depth confirmation + removed-log reversal implemented. Solana: legacy signed immediate credit is unreconciled and disabled by default behind an explicit development-only opt-in. Production provider secrets were unconfigured when checked 2026-07-25 | `POST /v1/billing/crypto-webhook/:chain` (signature-verified, public) |
-| Idempotency and effect lifecycle for webhooks | Implemented locally; finality migration not deployed | `economy.crypto_webhook_events` (`chain, tx_hash, log_index` unique; `pending → credited/rejected/removed`) |
+| Idempotency and effect lifecycle for webhooks | Implemented in source; journal and compatible-replica rollout must be verified per environment | `economy.crypto_webhook_events` (`chain, tx_hash, log_index` unique; monotonic observation incarnation; credited effect bound to that generation; `pending → credited/rejected/removed`) |
 | Payout request lifecycle | Implemented with a required permanent request gate and inactive-wallet refusal, behind explicit worker/network/FX configuration; production payout secrets were unconfigured when checked 2026-07-25 | `POST /v1/wallets/:id/payout` · `GET /v1/wallets/:id/payouts` |
-| Schema for everything above | Baseline live; identity, EVM finality, and payout-request idempotency migrations are local and not deployed | `api/migrations/0002_crypto_payment.sql` · `api/migrations/20260725T054912_crypto_deposit_identity.sql` · `api/migrations/20260726T185835_crypto_deposit_finality.sql` · `api/migrations/20260726T191500_payout_request_idempotency.sql` |
+| Schema for everything above | Source includes identity, EVM finality/incarnation, payout-request idempotency, confirmation/dispatch fairness, nonce, and payout-network fences; deployment is verified from the target journal, not inferred from this repository | `api/migrations/0002_crypto_payment.sql` · `api/migrations/20260725T054912_crypto_deposit_identity.sql` · `api/migrations/20260726T185835_crypto_deposit_finality.sql` · `api/migrations/20260726T191500_payout_request_idempotency.sql` · `api/migrations/20260726T193000_payout_confirmation_fairness.sql` · `api/migrations/20260726T194500_evm_payout_nonce_fence.sql` · `api/migrations/20260726T200000_deposit_observation_generation.sql` · `api/migrations/20260726T201000_payout_dispatch_fairness.sql` · `api/migrations/20260726T203000_payout_network_binding.sql` |
 
 ---
 
@@ -38,7 +47,7 @@ yet L1 settlement or a production-finality claim.
 ### 1. Get a deposit address
 
 ```bash
-curl -X GET "https://api.agenttool.dev/v1/wallets/$WALLET_ID/deposit-address?chain=base&token=USDC" \
+curl -X GET "https://api.agenttool.dev/v1/wallets/$WALLET_ID/deposit-address?chain=ethereum&token=USDC" \
   -H "Authorization: Bearer $AT_API_KEY"
 ```
 
@@ -47,14 +56,14 @@ Returns:
 ```json
 {
   "wallet_id": "...",
-  "chain": "base",
+  "chain": "ethereum",
   "token": "USDC",
   "address": "0xDba9494837f85E5284b6401B29b860591b744088",
   "derivation_path": "m/44'/60'/0'/0/2059516119",
-  "contract_address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  "contract_address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
   "watch_status": "provider_accepted",
   "credit_finality": "pending_until_chain_depth",
-  "instructions": "Send USDC to this address from any wallet. The signed Alchemy delivery is stored as pending; credits become spendable only after the exact canonical receipt/log reaches the configured chain depth. A later removed log reverses an earlier credit exactly once. For L2s, this depth is not a claim of L1 settlement or production finality."
+  "instructions": "Send USDC to this address from any wallet. The signed Alchemy delivery is stored as pending; credits become spendable only after the exact canonical receipt/log reaches the configured chain depth. A later removed log reverses an earlier credit exactly once. Mainnet non-L1 address disclosure and credit stay disabled until a chain-specific settlement policy exists."
 }
 ```
 
@@ -66,6 +75,11 @@ Properties of the address:
   active derivation before returning or registering them.
 - **Unique per wallet.** Two wallets on the same project get different addresses. `walletIndex(walletId) = SHA-256(walletId)[0:4] & 0x7fffffff` keeps the address index in BIP44's unhardened range (0 ≤ idx < 2³¹).
 - **Cross-chain stable on EVM.** Base, Ethereum, Polygon, Arbitrum, Optimism all share the same address — that's how EVM accounts work. Each `(chain, token)` row exists independently so per-chain webhooks attribute correctly, but the address text is identical.
+- **Production-finality wall.** Sharing an address does not make every chain's
+  settlement semantics interchangeable. On mainnet, non-L1 EVM rows are
+  withheld before provider registration/disclosure and rechecked again at the
+  exact pending-to-credit transaction. Signed webhook evidence and removed-log
+  reversals are still retained for custody reconciliation.
 - **No on-chain transaction needed to mint.** The address exists because the math says it does; we record the row for indexing and webhook attribution.
 
 An EVM response reports `watch_status: provider_accepted` only after its
@@ -115,6 +129,10 @@ configured as `ALCHEMY_WEBHOOK_SIGNING_KEY_<CHAIN>`. The handler:
    the previously recorded credit and writing a negative `crypto_reorg` ledger
    row. Evidence mismatch or missing historical reversal provenance returns
    503 instead of guessing.
+   A later signed delivery may reactivate the same log identity as a new
+   monotonic observation generation. The database binds any credited state to
+   that exact generation, so a stale or generation-unaware confirmer fails in
+   the same transaction before its wallet effect can commit.
 8. Solana's earlier immediate-credit path is disabled by default. Its signed
    Helius human-unit delivery does not provide canonical raw-atomic transfer
    identity, finality, or reorg reconciliation. A development operator can
@@ -223,6 +241,13 @@ threshold. These live in `economy.policies`.
 Alchemy's exact integration boundaries, agent-facing roadmap, and remaining
 subscription/independence work live in [ALCHEMY.md](ALCHEMY.md).
 
+Changing either mnemonic is not a complete rotation workflow. Stored rows are
+re-derived before disclosure and before any new inbound economic effect; a
+stale row therefore fails closed. The current schema cannot replace that row,
+and the provider adapter does not remove its old watch. See
+[PAYOUT-BROADCAST-OPS.md](PAYOUT-BROADCAST-OPS.md#key-rotation) before treating
+a root change as operationally complete.
+
 ---
 
 ## Schema reference
@@ -243,9 +268,39 @@ if conflicting historical rows exist), and
 `api/migrations/20260726T185835_crypto_deposit_finality.sql` (pending event
 evidence, outcome timestamps, and lifecycle index), and
 `api/migrations/20260726T191500_payout_request_idempotency.sql` (permanent
-project/key request identity with a deferred completion invariant). The
+project/key request identity with a deferred completion invariant),
+`api/migrations/20260726T193000_payout_confirmation_fairness.sql` (bounded
+confirmation scheduling), and
+`api/migrations/20260726T194500_evm_payout_nonce_fence.sql` (durable
+chain/source/nonce evidence before EVM submit plus a future-write fence against
+legacy EVM broadcasters), and
+`api/migrations/20260726T200000_deposit_observation_generation.sql`
+(monotonic identity for each removed → pending observation incarnation and
+exact credited-generation binding), and
+`api/migrations/20260726T201000_payout_dispatch_fairness.sql` (durable
+pre-submit contention cooldown and least-recent-attempt dispatch ordering), and
+`api/migrations/20260726T203000_payout_network_binding.sql` (nullable legacy
+quarantine, immutable assigned testnet/mainnet identity, and active-row
+indexing). The
 finality migration classifies historical balance-affecting rows as credited
 but does not invent missing chain evidence.
+
+### Required rolling cutover
+
+The generation migration is a database safety fence, not permission to run a
+mixed fleet indefinitely. Pause signed crypto-webhook ingress and stop/drain
+all old API and deposit-confirm replicas; apply the finality and generation
+migrations through `bin/migrate-pending.sh`; roll the integrated code to every
+replica; then resume ingress and confirmation. The trigger safely increments a
+legacy `removed → pending` write and clears its old credited generation; pending
+rows cannot carry one. The credited-generation constraint blocks a legacy
+confirmer (and a legacy Solana immediate-credit writer), but those protections
+intentionally turn mixed-version writes into bounded failures rather than
+providing availability.
+
+For payout migration ordering and legacy `broadcasting` reconciliation, follow
+[PAYOUT-BROADCAST-OPS.md](PAYOUT-BROADCAST-OPS.md#migrations). No migration here
+reconstructs missing historical provider or chain evidence.
 
 ---
 
@@ -256,21 +311,21 @@ broadcast, confirmation polling, and payout policy gates are implemented.
 Before production crypto enablement, the remaining load-bearing work is:
 
 1. durable provider-neutral webhook watch reconciliation;
-2. migration deployment plus reconciliation of historical event rows that
-   lack exact block/amount provenance;
+2. per-environment migration-journal verification, compatible-replica rollout,
+   and reconciliation of historical rows that lack exact block/amount/network
+   provenance;
 3. a second-provider/direct-node policy if independent EVM confirmation is an
    operational requirement;
-4. an L2 safe/finalized or L1-settlement policy where fixed block depth is
-   insufficient;
+4. a real L2 safe/finalized or L1-settlement policy before removing the
+   current mainnet non-L1 disclosure/credit wall;
 5. raw-atomic Solana deposit confirmation and fork/reorg reconciliation;
 6. live provider-contract and address-watch verification for the Helius
    adapter;
 7. replace the bounded floating GBP/USD rate calculation with fixed-point
    rational arithmetic;
-8. the session-level per-source lock that closes the remaining cross-replica
-   nonce window; and
-9. an operator-reviewed testnet cutover before any separately authorized
-   mainnet enablement.
+8. an operator-reviewed testnet cutover plus validation of the durable EVM
+   nonce and payout-network fences before any separately authorized mainnet
+   enablement.
 
 ---
 

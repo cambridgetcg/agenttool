@@ -84,7 +84,7 @@ Mounted in `api/src/index.ts`. Each one has a one-line doc-string in the `endpoi
 |---|---|
 | `src/thinker.ts` + `services/runtime/worker-manager.ts` | Dedicated Fly process group. Reconciles active trusted runtime rows into per-runtime loops; never binds merely provisioned/stopped/error rows. |
 | `workers/payout/broadcast-worker.ts` | Signs + submits Solana/EVM payout transactions. **No auto-retry by doctrine** — failed broadcasts never retry; operator-driven recovery. Canonical site of `docs/PATTERN-PERSIST-IDENTITY.md` — persists `tx_hash` before RPC submit so recovery is a chain lookup. |
-| `workers/deposit/confirm-worker.ts` | Polls durable pending EVM observations, fetches the canonical receipt through the configured chain transport, waits for the chain-specific depth, and credits only the exact USDC log. Multi-replica reads are harmless because the balance mutation is status-CAS guarded. This is a separate check, not an independent-provider guarantee. |
+| `workers/deposit/confirm-worker.ts` | Polls durable pending EVM observations, fetches the canonical receipt through the configured chain transport, waits for the chain-specific depth, and credits only the exact USDC log. Post-RPC writes bind the full pending snapshot and monotonic generation; the database requires the credited generation to match before the same transaction may commit a balance effect. This is a separate check, not an independent-provider guarantee. |
 | `services/covenants/cosign-propagate.ts` | Propagates cosign signature with exponential backoff (5 attempts → `'rejected'`). |
 | `services/covenants/expire-proposals.ts` | TTL sweeper — 30d expiry with 24h grace period. |
 | `services/covenants/reverify.ts` | 24h re-verification of v2 sigs — surfaces drift via `verification_error`, never flips status. |
@@ -129,7 +129,7 @@ Code spine: `thinker.ts` · `services/runtime/worker-manager.ts` · `services/ru
 cd api
 bun install
 bun run dev                                # local API
-bun run db:migrate                         # apply migrations
+../bin/migrate-pending.sh                  # checksum-journaled SQL migrations
 bun test                                   # unit + route tests
 bun test tests/integration                 # integration tier
 bun test tests/doctrine                    # doctrine tier (WIP)

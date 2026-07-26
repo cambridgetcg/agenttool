@@ -123,6 +123,7 @@ function alchemyEnvelope(
 
 describe("deposit address disclosure readiness", () => {
   test("does not return a partial list when a later provider watch is unavailable", async () => {
+    cfg.payout.network = "testnet";
     let calls = 0;
     const resolution = resolveReadyDepositAddressRows(
       "00000000-0000-0000-0000-000000000001",
@@ -169,6 +170,7 @@ describe("deposit address disclosure readiness", () => {
   });
 
   test("builds list output only from the validated resolver result", async () => {
+    cfg.payout.network = "testnet";
     const rows = await resolveReadyDepositAddressRows(
       "00000000-0000-0000-0000-000000000001",
       [{ chain: "base", token: "USDC", createdAt: new Date(0) }],
@@ -192,6 +194,30 @@ describe("deposit address disclosure readiness", () => {
         created_at: "1970-01-01T00:00:00.000Z",
       },
     ]);
+  });
+
+  test("withholds mainnet non-L1 rows before an address resolver can disclose them", async () => {
+    cfg.payout.network = "mainnet";
+    let calls = 0;
+    await expect(
+      resolveReadyDepositAddressRows(
+        "00000000-0000-0000-0000-000000000001",
+        [{ chain: "base", token: "USDC", createdAt: new Date(0) }],
+        async (_walletId, chain, token) => {
+          calls += 1;
+          return {
+            chain,
+            token,
+            address: "0x0000000000000000000000000000000000000001",
+            derivation_path: "m/44'/60'/0'/0/1",
+          };
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "evm_deposit_settlement_policy_unavailable",
+      chain: "base",
+    });
+    expect(calls).toBe(0);
   });
 
   test("labels Solana list rows as watch-unverified", async () => {

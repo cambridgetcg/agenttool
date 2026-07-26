@@ -16,6 +16,7 @@ every `*.test.ts` must appear exactly once.
 |---|---|---|---|---|
 | **Hermetic** | current-green top-level, doctrine, and adapter files | Deterministic API, route, doctrine, and adapter behavior with known external-service env removed | free, fast | required CI |
 | **Database** | `integration/` plus explicitly classified legacy top-level/doctrine files | DB-touching behavior against an operator-supplied database | stateful, slow | explicit |
+| **Crypto fences** | `integration/crypto-migration-fences.test.ts` | Rolling-upgrade constraints against a dedicated empty disposable PostgreSQL database | destructive to that disposable database | explicit |
 | **Contract** | `contract/` | Real Anthropic/OpenAI/Ollama Cloud wire proofs | paid, provider-dependent | explicit |
 | **Quarantine** | named current-red non-DB files | Visible diagnostic backlog; never treated as a green release gate | free | explicit, expected red |
 | **Database quarantine** | named current-red DB files | Same backlog discipline, but with `DATABASE_URL` present so assertions cannot silently skip | stateful | explicit, expected red |
@@ -35,6 +36,7 @@ bin/preflight.sh                          # API + data + ADDS + SDK; no service 
 bin/preflight.sh api                      # API/typecheck/operator slice
 bin/preflight.sh packages                 # data + ADDS + SDK slice
 bin/preflight.sh database                 # requires DATABASE_URL
+bin/preflight.sh crypto-fences            # requires CRYPTO_FENCE_TEST_DATABASE_URL for an empty disposable DB
 bin/preflight.sh smoke                    # requires deployed-smoke environment
 RUN_CONTRACT=1 bin/preflight.sh contracts # requires an Anthropic, OpenAI, or Ollama key
 bin/preflight.sh quarantine               # diagnostic; known failures remain non-zero

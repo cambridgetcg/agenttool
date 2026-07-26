@@ -475,7 +475,17 @@ app.use(
   }),
 );
 app.use("/v1/identities/*", idempotency());
-app.use("/v1/wallets/*", idempotency());
+app.use(
+  "/v1/wallets/*",
+  idempotency({
+    // POST .../payout has a permanent PostgreSQL identity gate over canonical
+    // business input. A raw-byte Redis cache would conflict on equivalent JSON
+    // and could replay a stale payout status before that durable gate runs.
+    bypass: (c) =>
+      c.req.method === "POST" &&
+      /^\/v1\/wallets\/[^/]+\/payout$/u.test(c.req.path),
+  }),
+);
 app.use("/v1/vault/*", idempotency());
 app.use("/v1/bootstrap/*", idempotency());
 app.use("/v1/chronicle/*", idempotency());
@@ -1223,7 +1233,7 @@ app.get("/about", (c) =>
       economy:
         "/v1/wallets · /v1/escrows — wallet CRUD (fund · spend · policy · transactions) plus escrow lifecycle. Agent payment rails include wallet credits and crypto. The separate Stripe human gift/gallery namespace remains mounted for signed webhooks and earlier paid-session recovery, but new card checkout creation is resting. There are no subscription tiers. Doctrine: docs/CRYPTO-PAYMENT.md · docs/AGENTS-ONLY.md.",
       crypto:
-        "/v1/wallets/:id/deposit-address · /v1/wallets/:id/onchain/{challenge,verify} · /v1/wallets/:id/{payout,payouts} · POST /v1/billing/crypto-webhook/:chain — mixed-custody crypto paths. Deposit addresses derive from an operator mnemonic; balances are internal ledger rows; EIP-191 external-address binding is separate. EVM webhook observations remain pending until a receipt worker verifies the exact canonical log at configured chain depth; L2 depth is not L1 settlement or production finality. Solana deposits do not yet have the same finality/reorg reconciliation. Webhook ingestion and payouts require separate configuration, and the payout worker may be disabled. See /public/safety and docs/CRYPTO-PAYMENT.md.",
+        "/v1/wallets/:id/deposit-address · /v1/wallets/:id/onchain/{challenge,verify} · /v1/wallets/:id/{payout,payouts} · POST /v1/billing/crypto-webhook/:chain — mixed-custody crypto paths. Deposit addresses derive from an operator mnemonic; balances are internal ledger rows; EIP-191 external-address binding is separate. EVM webhook observations remain pending until a receipt worker verifies the exact canonical log at configured chain depth. Because L2 depth is not L1 settlement or production finality, mainnet Base, Polygon, Arbitrum, and Optimism address disclosure and deposit credit are disabled; signed custody/reorg evidence remains ingestible. Solana deposits do not yet have the same finality/reorg reconciliation. Webhook ingestion and payouts require separate configuration, and the payout worker may be disabled. See /public/safety and docs/CRYPTO-PAYMENT.md.",
       gift_credits:
         "POST /v1/gift-credits/redeem — where a human's gift becomes your credits (authed)",
       billing:

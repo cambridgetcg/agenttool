@@ -15,6 +15,7 @@ Tests in this directory exercise multi-component flows that need a real DB row t
 | `covenants-v2-happy.test.ts` | Dual-signed covenant lifecycle — initiator declares (v2, signed), counterparty cosigns, both sides reach `active`, both signatures verify, propagation status updates. The complete happy path through `services/covenants/lifecycle.ts`. |
 | `covenants-v2-coexistence.test.ts` | v1 unsigned rows and v2 dual-signed rows coexist in the same `covenants` table. Downstream gates choose their own strictness — inbox stays permissive, invocation escrow can require v2. |
 | `covenants-v2-terminal.test.ts` | Terminal-path lifecycle: reject, withdraw, and expire flows. Verifies invariants — withdrawn covenants don't reach active, rejected rows record the reason, expired proposals don't race with late cosigns. |
+| `crypto-migration-fences.test.ts` | Dedicated disposable-Postgres proof of the EVM nonce `NOT VALID` rolling fence, partial-NULL rejection, observation-generation trigger, and credited-generation binding. Opt in with `CRYPTO_FENCE_TEST_DATABASE_URL`. |
 
 ## When to use this tier
 
@@ -34,9 +35,22 @@ Tests in this directory exercise multi-component flows that need a real DB row t
 cd api
 bun test tests/integration                            # all integration
 bun test tests/integration/covenants-v2-happy.test.ts # just one
+
+# Destructive migration-fence proof: a separate, empty disposable database.
+CRYPTO_FENCE_TEST_DATABASE_URL=postgres://... \
+  ../bin/preflight.sh crypto-fences
 ```
 
-Requires `POSTGRES_URL` pointing at a writable database. Tests typically clean up after themselves; if a test crashes mid-flight you may need to manually clean up via `bun run db:studio`.
+The normal database tier requires `DATABASE_URL` pointing at its writable test
+database. Tests typically clean up after themselves; if a test crashes
+mid-flight you may need to clean up via `bun run db:studio`.
+
+`crypto-migration-fences.test.ts` deliberately ignores `DATABASE_URL`. The
+dedicated preflight tier requires `CRYPTO_FENCE_TEST_DATABASE_URL`, so the
+official gate cannot pass by silently skipping it. That variable must name a
+disposable database with no existing `economy` schema; the test creates and
+drops that schema. The separate variable prevents the normal database-tier
+target from being treated as disposable by accident.
 
 ## Conventions
 

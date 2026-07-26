@@ -134,6 +134,11 @@ The pg-schema names sometimes differ from the file names: `continuitySchema → 
 | `escrows` | Marketplace escrow accounts. Settle via release/refund/dispute. |
 | `billing_events` | Stripe-side events (top-ups, refunds, webhooks). Distinct from `tools.billing_events` — different table, different schema. |
 | `subscriptions` | Legacy subscription rows retained in schema. Current billing has no live free/seed/grow/scale subscription route or active plan gate. |
+| `deposit_addresses` | Per-wallet/chain/token derived deposit identity. Stored EVM rows are re-derived against the active network root before disclosure and credit. |
+| `onchain_identities` | Verified wallet-to-external-address bindings; separate from platform-controlled deposit/payout keys. |
+| `crypto_payouts` | Durable outbound payout lifecycle, immutable assigned testnet/mainnet identity (legacy NULL is quarantined), exact tx identity, EVM chain/source/nonce fence, and fair dispatch/confirmation timestamps. |
+| `payout_request_idempotency` | Permanent project plus hashed caller-key reservation bound to one canonical payout request and result identity. Raw idempotency keys are not stored. |
+| `crypto_webhook_events` | Exact inbound chain/log identity, pending/finality/reorg lifecycle, monotonic observation generation, and credited-generation fence. |
 
 ### runtime (`agent_runtime/` pg schema)
 
@@ -220,7 +225,10 @@ Every row in this monolith is reachable from a `project_id`. Cross-instance fede
 
 Lives in `api/migrations/`. Naming: ISO-timestamped `YYYYMMDDTHHMMSS_<name>.sql`. Earlier files used sequential `0001`–`0027` numbering; that scheme is being phased out as of 2026-05.
 
-Tooling: Drizzle Kit (`drizzle.config.ts`). Apply with `bun run db:migrate` from `api/`, or single-file via `bun api/scripts/_migrate-one.ts <file>`.
+Drizzle schema generation remains available through `bun run db:generate`.
+Apply hand-written SQL with the checksum-journaled
+`bin/migrate-pending.sh`, or one explicit file with
+`bun api/scripts/_migrate-one.ts <file>`.
 
 ## What's NOT in these schemas
 

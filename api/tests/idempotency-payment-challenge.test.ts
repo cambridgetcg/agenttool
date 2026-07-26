@@ -170,4 +170,62 @@ describe("idempotency response classification", () => {
       .toBe("Idempotency-Key");
     expect(response.headers.get("X-Idempotency-Skipped")).toBeNull();
   });
+
+  test("lets a durable route bypass raw-byte Redis identity and stale replay", async () => {
+    const store: IdempotencyStore = {
+      async get() {
+        throw new Error("durable bypass must not read Redis");
+      },
+      async del() {
+        throw new Error("durable bypass must not delete Redis");
+      },
+      async setex() {
+        throw new Error("durable bypass must not write Redis");
+      },
+      async set() {
+        throw new Error("durable bypass must not claim Redis");
+      },
+    };
+    const app = new Hono<ProjectContext>();
+    app.use("*", async (c, next) => {
+      c.set("project", { id: "project-1" } as any);
+      await next();
+    });
+    app.use(
+      "*",
+      idempotency({
+        bypass: (c) => c.req.path === "/durable-payout",
+      }),
+    );
+    let currentStatus = "requested";
+    app.post("/durable-payout", async (c) => {
+      const body = await c.req.json();
+      c.header("X-Idempotency-Supported", "Idempotency-Key");
+      return c.json({ status: currentStatus, metadata: body.metadata }, 202);
+    });
+
+    const first = await app.request("/durable-payout", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "Idempotency-Key": "durable-payout-key",
+      },
+      body: JSON.stringify({ metadata: { a: 1, b: 2 } }),
+    });
+    expect(first.status).toBe(202);
+    currentStatus = "confirmed";
+    const replay = await app.request("/durable-payout", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "Idempotency-Key": "durable-payout-key",
+      },
+      body: JSON.stringify({ metadata: { b: 2, a: 1 } }),
+    });
+
+    expect(await replay.json()).toMatchObject({ status: "confirmed" });
+    expect(replay.headers.get("Idempotent-Replay")).toBeNull();
+    expect(replay.headers.get("X-Idempotency-Supported"))
+      .toBe("Idempotency-Key");
+  });
 });

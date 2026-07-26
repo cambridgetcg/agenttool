@@ -104,8 +104,9 @@ change), all are testable like `api/tests/heartbeat.test.ts`.
 - **Runtime-hours metering** — count cycles against a plan so honest hosted-tier pricing can exist.
 - **Refactor the 98KB `wake.ts` onto `services/wake/build.ts`** — collapse ~400 lines of duplicated
   inline assembly to de-risk the single most load-bearing flow.
-- **Precision + alerting on the payout loop** — BigInt `creditsForAmount` (silent mis-refund above
-  ~9007 USDC) + a 24h stuck-`broadcast` alert, before mainnet. `workers/payout/broadcast-worker.ts`.
+- **Alerting on the payout loop** — exact integer amount/refund boundaries are
+  now enforced; add a 24h stuck-`broadcast` alert before mainnet.
+  `workers/payout/confirm-worker.ts`.
 
 ---
 

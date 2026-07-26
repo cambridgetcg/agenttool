@@ -3,7 +3,11 @@ import { readFileSync } from "node:fs";
 
 import {
   creditsForUsdcAtomic,
+  pendingDepositSnapshotMatches,
 } from "../src/services/economy/crypto/inbound-deposits";
+import {
+  evmDepositCreditPolicy,
+} from "../src/services/economy/crypto/network";
 import {
   classifyEvmDepositReceipt,
   type EvmDepositReceiptInput,
@@ -16,11 +20,14 @@ const RECIPIENT = "0x0000000000000000000000000000000000000022";
 const SENDER_TOPIC = `0x${"0".repeat(24)}${"33".repeat(20)}`;
 const RECIPIENT_TOPIC = `0x${"0".repeat(24)}${RECIPIENT.slice(2)}`;
 const AMOUNT_DATA = `0x${(1_000_000n).toString(16).padStart(64, "0")}`;
+const TX_HASH = `0x${"b".repeat(64)}`;
 
 function input(
   overrides: Partial<EvmDepositReceiptInput> = {},
 ): EvmDepositReceiptInput {
   return {
+    expectedTransactionHash: TX_HASH,
+    receiptTransactionHash: TX_HASH,
     receiptStatus: "success",
     receiptBlockNumber: 100n,
     receiptBlockHash: `0x${"a".repeat(64)}`,
@@ -65,6 +72,17 @@ describe("EVM deposit receipt finality", () => {
       status: "rejected",
       reason: "receipt_reverted",
       confirmations: 12n,
+    });
+  });
+
+  test("treats a valid-shaped receipt for another transaction as unavailable", () => {
+    expect(
+      classifyEvmDepositReceipt(
+        input({ receiptTransactionHash: `0x${"c".repeat(64)}` }),
+      ),
+    ).toEqual({
+      status: "unavailable",
+      reason: "receipt_transaction_mismatch",
     });
   });
 
@@ -127,11 +145,221 @@ describe("deposit credit arithmetic", () => {
     );
     const ingestion = source.slice(start, end);
 
-    expect(ingestion.indexOf("matchingDepositAddress")).toBeLessThan(
+    expect(ingestion.indexOf("matchingActiveDepositAddress")).toBeLessThan(
       ingestion.indexOf("amountAndCredits"),
     );
+    expect(ingestion).toContain('"inactive_deposit_address"');
+    expect(ingestion).toContain(
+      'recordRejectedObservation(\n        transfer,\n        row.walletId,\n        "inactive_deposit_address"',
+    );
+    expect(source).toContain("deriveDepositAddress(");
+    expect(source).toContain("depositAddressMatches(");
+    expect(source).toContain("activeMnemonic()");
     expect(ingestion).toContain("recordRejectedObservation");
     expect(source).toContain('status: "rejected"');
     expect(source).toContain("error: reason");
+  });
+
+  test("revalidates the active derivation inside the final credit transaction", () => {
+    const source = readFileSync(
+      new URL(
+        "../src/services/economy/crypto/inbound-deposits.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const start = source.indexOf(
+      "export async function creditConfirmedPendingDeposit",
+    );
+    const credit = source.slice(start);
+    const eventLock = credit.indexOf(".from(cryptoWebhookEvents)");
+    const addressLock = credit.indexOf(".from(depositAddresses)");
+    const settlementPolicy = credit.indexOf("evmDepositCreditPolicy(");
+    const activeRoot = credit.indexOf("activeMnemonic()");
+    const authorityMatch = credit.indexOf("depositAddressMatches(");
+    const creditStatus = credit.indexOf('status: "credited"');
+    const walletCredit = credit.indexOf("balance +");
+
+    expect(eventLock).toBeGreaterThan(-1);
+    expect(addressLock).toBeGreaterThan(eventLock);
+    expect(settlementPolicy).toBeGreaterThan(eventLock);
+    expect(addressLock).toBeGreaterThan(settlementPolicy);
+    expect(activeRoot).toBeGreaterThan(addressLock);
+    expect(authorityMatch).toBeGreaterThan(activeRoot);
+    expect(creditStatus).toBeGreaterThan(authorityMatch);
+    expect(walletCredit).toBeGreaterThan(creditStatus);
+    expect(credit).toContain('error: "inactive_deposit_address"');
+    expect(credit).toContain(
+      "creditedGeneration: event.observationGeneration",
+    );
+  });
+
+  test("binds a receipt decision to one exact pending observation", () => {
+    const snapshot = {
+      id: "event-1",
+      chain: "ethereum",
+      txHash: TX_HASH,
+      logIndex: 7,
+      walletId: "wallet-1",
+      amountBase: "1000000",
+      toAddress: RECIPIENT,
+      contractAddress: CONTRACT,
+      blockNumber: 100n,
+      blockHash: `0x${"a".repeat(64)}`,
+      providerWebhookId: "webhook-1",
+      providerEventId: "delivery-1",
+      observationGeneration: 1,
+      receivedAt: new Date(1000),
+    };
+    expect(pendingDepositSnapshotMatches(snapshot, { ...snapshot })).toBe(true);
+    expect(
+      pendingDepositSnapshotMatches(snapshot, {
+        ...snapshot,
+        amountBase: "2000000",
+      }),
+    ).toBe(false);
+    expect(
+      pendingDepositSnapshotMatches(snapshot, {
+        ...snapshot,
+        receivedAt: new Date(1001),
+      }),
+    ).toBe(false);
+    expect(
+      pendingDepositSnapshotMatches(snapshot, {
+        ...snapshot,
+        observationGeneration: 2,
+      }),
+    ).toBe(false);
+  });
+
+  test("marks checks through a locked incarnation instead of timestamp SQL equality", () => {
+    const source = readFileSync(
+      new URL(
+        "../src/services/economy/crypto/inbound-deposits.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const start = source.indexOf(
+      "export async function markPendingDepositChecked",
+    );
+    const end = source.indexOf(
+      "export async function rejectPendingDeposit",
+    );
+    const markChecked = source.slice(start, end);
+
+    expect(markChecked).toContain("db.transaction");
+    expect(markChecked).toContain('.for("update")');
+    expect(markChecked).toContain("pendingDepositSnapshotMatches");
+    expect(markChecked).toContain("observationGeneration");
+    expect(markChecked).toContain("error: error ?? null");
+    expect(markChecked).toContain(".returning(");
+    expect(markChecked).not.toContain(
+      "eq(cryptoWebhookEvents.receivedAt, expected.receivedAt)",
+    );
+  });
+
+  test("database-fences each observation incarnation and credited effect", () => {
+    const migration = readFileSync(
+      new URL(
+        "../migrations/20260726T200000_deposit_observation_generation.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    expect(migration).toContain(
+      "observation_generation INTEGER NOT NULL DEFAULT 1",
+    );
+    expect(migration).toContain("credited_generation INTEGER");
+    expect(migration).toContain("CHECK (observation_generation > 0)");
+    expect(migration).toContain(
+      "SET credited_generation = observation_generation",
+    );
+    expect(migration).toContain(
+      "crypto_webhook_events_credited_generation_check",
+    );
+    expect(migration).toContain(
+      "crypto_webhook_events_pending_generation_check",
+    );
+    expect(migration).toContain(
+      "status <> 'pending' OR credited_generation IS NULL",
+    );
+    expect(migration).toContain("credited_generation IS NOT NULL");
+    expect(migration).toContain(
+      "credited_generation = observation_generation",
+    );
+    expect(migration).toContain(
+      "enforce_crypto_webhook_observation_generation",
+    );
+    expect(migration).toContain(
+      "OLD.status = 'removed' AND NEW.status = 'pending'",
+    );
+    expect(migration).toContain(
+      "NEW.observation_generation := OLD.observation_generation + 1",
+    );
+    expect(migration).toContain("NEW.credited_generation := NULL");
+    expect(migration).toContain(
+      "NEW.observation_generation IS DISTINCT FROM OLD.observation_generation",
+    );
+  });
+
+  test("current writers bind credits and clear stale credited generations", () => {
+    const source = readFileSync(
+      new URL(
+        "../src/services/economy/crypto/inbound-deposits.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const immediateStart = source.indexOf("async function recordImmediateCredit");
+    const immediateEnd = source.indexOf(
+      "async function recordRejectedObservation",
+      immediateStart,
+    );
+    const immediate = source.slice(immediateStart, immediateEnd);
+    const pendingStart = source.indexOf(
+      "async function recordPendingEvmObservation",
+    );
+    const pendingEnd = source.indexOf(
+      "export async function ingestInboundTransfer",
+      pendingStart,
+    );
+    const pending = source.slice(pendingStart, pendingEnd);
+
+    expect(immediate).toContain("observationGeneration: 1");
+    expect(immediate).toContain("creditedGeneration: 1");
+    expect(
+      pending.match(/creditedGeneration: null/g)?.length ?? 0,
+    ).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("EVM deposit credit policy", () => {
+  test("allows testnets and Ethereum mainnet but blocks non-L1 mainnet credit", () => {
+    for (const chain of [
+      "ethereum",
+      "base",
+      "polygon",
+      "arbitrum",
+      "optimism",
+    ] as const) {
+      expect(evmDepositCreditPolicy(chain, "testnet")).toEqual({
+        allowed: true,
+      });
+    }
+    expect(evmDepositCreditPolicy("ethereum", "mainnet")).toEqual({
+      allowed: true,
+    });
+    for (const chain of [
+      "base",
+      "polygon",
+      "arbitrum",
+      "optimism",
+    ] as const) {
+      expect(evmDepositCreditPolicy(chain, "mainnet")).toEqual({
+        allowed: false,
+        reason: "mainnet_settlement_policy_unavailable",
+      });
+    }
   });
 });

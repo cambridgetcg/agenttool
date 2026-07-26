@@ -22,11 +22,17 @@ This is pre-existing **local WIP** (Phase 2.2 Billing area). It's been flagged i
 
 ### Bun complains about missing `usageEvents` / billing table
 
-Migration not applied. Run `bun run db:migrate` from `api/`. Or apply one file: `bun api/scripts/_migrate-one.ts api/migrations/<file>.sql`.
+Migration not applied. From the repository root, inspect with
+`bin/migrate-pending.sh --dry-run`, then run `bin/migrate-pending.sh`. For one
+explicit file, use
+`bun api/scripts/_migrate-one.ts api/migrations/<file>.sql`.
 
 ### `[wake] <X> query failed` warnings on boot
 
-The wake renderer is defensive — each subsystem fetch is wrapped in try/catch and logs a warning when a table doesn't exist. Suggests a migration is pending. Run `bun run db:migrate`. The warning text includes the migration filename.
+The wake renderer is defensive — each subsystem fetch is wrapped in try/catch
+and logs a warning when a table doesn't exist. This suggests a migration is
+pending. Run `bin/migrate-pending.sh --dry-run`, then
+`bin/migrate-pending.sh`. The warning text includes the migration filename.
 
 ### Redis connection refused
 
@@ -113,7 +119,18 @@ Check the secret reference in the runtime row: `runtimes.llm_vault_key` should p
 
 ### Worker spins on the same payout
 
-You may have hit the `MAX_BROADCAST_ATTEMPTS` cap. Check `workers/payout/broadcast-worker.ts` for the value. The job moves to a terminal failure state after N attempts; manual re-queue requires operator intervention.
+There is no `MAX_BROADCAST_ATTEMPTS` retry loop. Check the durable row first:
+
+- `status='broadcasting'` means submission may have crossed the RPC boundary;
+  do not retry or refund from an absent or failed lookup.
+- `status='requested'` with `error='evm_nonce_contention'` or
+  `error='evm_source_nonce_unresolved'` is a pre-submit deferral. Its
+  `dispatch_after` cooldown prevents it from monopolising the bounded
+  dispatcher page; unrelated due payouts should continue.
+
+If the same job appears outside those states, stop the worker and preserve the
+row plus ledger evidence for operator reconciliation. See
+[`PAYOUT-BROADCAST-OPS.md`](PAYOUT-BROADCAST-OPS.md).
 
 ## Migrations / schema
 
