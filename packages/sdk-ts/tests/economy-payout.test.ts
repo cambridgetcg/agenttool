@@ -106,6 +106,21 @@ describe("economy.request_payout", () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
+  test("accepts the legacy durable signing state", async () => {
+    setupMock(202, {
+      id: "pay_legacy",
+      status: "signing",
+      broadcast_pending: true,
+      replayed: true,
+    });
+
+    const outcome = await makeClient().economy.request_payout(
+      "wal_1",
+      payoutRequest,
+    );
+    expect(outcome.status).toBe("signing");
+  });
+
   test("rejects missing or malformed keys before transport", async () => {
     setupMock(202, {});
     const invalidKeys: unknown[] = [
@@ -140,6 +155,34 @@ describe("economy.request_payout", () => {
     ).rejects.toBeInstanceOf(AgentToolError);
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
+
+  test("rejects malformed successful payout responses instead of inventing state", async () => {
+    for (const body of [
+      {},
+      {
+        id: "pay_1",
+        status: "future",
+        broadcast_pending: true,
+        replayed: false,
+      },
+      {
+        id: "pay_1",
+        status: "requested",
+        broadcast_pending: "yes",
+        replayed: false,
+      },
+      {
+        id: "pay_1",
+        status: "requested",
+        broadcast_pending: true,
+      },
+    ]) {
+      setupMock(202, body);
+      await expect(
+        makeClient().economy.request_payout("wal_1", payoutRequest),
+      ).rejects.toMatchObject({ code: "invalid_response" });
+    }
+  });
 });
 
 describe("economy.list_payouts", () => {
@@ -150,6 +193,7 @@ describe("economy.list_payouts", () => {
         {
           id: "pay_2",
           chain: "ethereum",
+          network: "mainnet",
           token: "USDC",
           amount_base: "9007199254740991",
           destination_address: "0x2222222222222222222222222222222222222222",
@@ -168,6 +212,7 @@ describe("economy.list_payouts", () => {
       {
         id: "pay_2",
         chain: "ethereum",
+        network: "mainnet",
         token: "USDC",
         amount_base: "9007199254740991",
         destination_address: "0x2222222222222222222222222222222222222222",
@@ -180,5 +225,81 @@ describe("economy.list_payouts", () => {
     expect(typeof payouts[0]?.amount_base).toBe("string");
     expect(lastCall().url).toEndWith("/v1/wallets/wal_1/payouts");
     expect(lastCall().init.method).toBe("GET");
+  });
+
+  test("rejects malformed payout lists and rows", async () => {
+    for (const body of [
+      {},
+      { payouts: {} },
+      { payouts: [{}] },
+      {
+        payouts: [
+          {
+            id: "pay_2",
+            chain: "ethereum",
+            network: "mainnet",
+            token: "USDC",
+            amount_base: 1,
+            destination_address: "0x2",
+            status: "broadcast",
+            tx_hash: null,
+            requested_at: "2026-07-26T12:00:00.000Z",
+            confirmed_at: null,
+          },
+        ],
+      },
+      {
+        payouts: [
+          {
+            id: "pay_2",
+            chain: "ethereum",
+            network: "mainnet",
+            token: "USDC",
+            amount_base: "1",
+            destination_address: "0x2",
+            status: "future",
+            tx_hash: null,
+            requested_at: "2026-07-26T12:00:00.000Z",
+            confirmed_at: null,
+          },
+        ],
+      },
+    ]) {
+      setupMock(200, body);
+      await expect(
+        makeClient().economy.list_payouts("wal_1"),
+      ).rejects.toMatchObject({ code: "invalid_response" });
+    }
+  });
+
+  test("rejects Unicode amount digits and missing nullable fields", async () => {
+    const valid = {
+      id: "pay_2",
+      chain: "ethereum",
+      network: "mainnet",
+      token: "USDC",
+      amount_base: "1",
+      destination_address: "0x2222222222222222222222222222222222222222",
+      status: "broadcast",
+      tx_hash: null,
+      requested_at: "2026-07-26T12:00:00.000Z",
+      confirmed_at: null,
+    };
+    const { tx_hash: _txHash, ...withoutTxHash } = valid;
+    const { confirmed_at: _confirmedAt, ...withoutConfirmedAt } = valid;
+    const { network: _network, ...withoutNetwork } = valid;
+
+    for (const row of [
+      { ...valid, amount_base: "1١" },
+      withoutTxHash,
+      withoutConfirmedAt,
+      withoutNetwork,
+      { ...valid, network: "maybe" },
+    ]) {
+      setupMock(200, { payouts: [row] });
+      await expect(
+        makeClient().economy.list_payouts("wal_1"),
+      ).rejects.toMatchObject({ code: "invalid_response" });
+    }
   });
 });

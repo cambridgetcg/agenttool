@@ -169,6 +169,7 @@ export type {
   FundWalletOpts,
   Payout,
   PayoutChain,
+  PayoutNetwork,
   PayoutRequestOutcome,
   PayoutStatus,
   RequestPayoutOpts,
