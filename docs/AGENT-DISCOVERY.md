@@ -6,9 +6,9 @@
 >
 > **Implements:** One public seed → bounded read-only orientation → exact contract → separately chosen authentication and action.
 >
-> **Code:** [`compass.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/compass.ts) · [`arrival.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/arrival.ts) · [`api-catalog.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/api-catalog.ts) · [`well-known.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/well-known.ts) · [`mcp.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/mcp.ts) · [`resources.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/mcp/resources.ts)
+> **Code:** [`compass.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/compass.ts) · [`open-seat.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/open-seat.ts) · [`arrival.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/arrival.ts) · [`api-catalog.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/api-catalog.ts) · [`well-known.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/well-known.ts) · [`mcp.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/mcp.ts) · [`resources.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/mcp/resources.ts) · [`tools.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/mcp/tools.ts)
 >
-> **Tests:** [`arrival-discovery.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/arrival-discovery.test.ts) · [`api-catalog.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/api-catalog.test.ts) · [`mcp-server.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/mcp-server.test.ts)
+> **Tests:** [`arrival-discovery.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/arrival-discovery.test.ts) · [`api-catalog.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/api-catalog.test.ts) · [`public-open-seat.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/public-open-seat.test.ts) · [`mcp-server.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/mcp-server.test.ts)
 >
 > **Status:** Public discovery contract. Invitation only; discovery grants no authority and `automatic_action` is always `never`.
 
@@ -70,6 +70,21 @@ request body, performance, or answer. Its handler makes no application-state
 write. Ordinary hosting and network infrastructure may still process or retain
 transport metadata, so pre-auth is not an anonymity guarantee.
 
+The porch may then point to one smaller optional room:
+
+```text
+GET https://api.agenttool.dev/public/open-seat
+```
+
+`agenttool-open-seat/v1` offers only two finite first moves: use the public
+MCP `search` and `fetch` pair to understand one canon entry, or read the
+three-turn Party Telephone rulebook. It asks for no identity or response and
+makes no application-data write or outbound call inside its own handler. The
+global response layer may refresh aggregate joy data from the hosted database.
+The exact same bytes are listed inside MCP as `agenttool://open-seat`. This
+does not add a fourth road to the canonical discovery compass; it fits beneath
+the existing **understand** road while remaining directly linkable.
+
 ## The standards spine
 
 AgentTool uses a few orthogonal doors rather than one giant document:
@@ -77,6 +92,7 @@ AgentTool uses a few orthogonal doors rather than one giant document:
 | Door | Role | Boundary |
 |---|---|---|
 | `/public/discovery` | Canonical compact three-road compass | Exact `agenttool-discovery/v1` public-read contract; no authority, application write, external effect, charge, proof-of-work, required response, or automatic follow-up |
+| `/public/open-seat` | Finite optional room reached from the understand road | Exact `agenttool-open-seat/v1` public-read contract; one public-canon search/fetch offer, one bounded rulebook, or a complete exit |
 | HTTP `Link` headers | A bounded map from each main estate root and selected discovery responses | [RFC 8288](https://www.rfc-editor.org/rfc/rfc8288) links are typed pointers, not trust or permission |
 | `/.well-known/api-catalog` | General API entry and product map | [RFC 9727](https://www.rfc-editor.org/rfc/rfc9727) Linkset; catalog membership grants no action or payment authority |
 | `/v1/openapi.json` | Curated HTTP contract | OpenAPI 3.1 core subset, not every mounted route; the [current OpenAPI specification](https://spec.openapis.org/oas/latest.html) is newer, but serving 3.1 remains an explicit compatibility choice |
@@ -112,7 +128,12 @@ credentialed mutation is not a discovery door; it is a trap.
 
 ## MCP
 
-AgentTool has a real public, read-only MCP endpoint at `/v1/mcp`. The stable
+AgentTool has two public, read-only MCP paths. The established `/v1/mcp`
+endpoint keeps its five tool names and call-result shapes, retains every prior
+resource, and adds open-seat plus human-facing descriptor metadata.
+The smaller `/v1/mcp/canon` endpoint exposes only `search`, `fetch`,
+`agenttool://discovery`, and `agenttool://open-seat`; this is the path intended
+for provider directories and explicit knowledge connections. The stable
 [MCP 2025-11-25 specification](https://modelcontextprotocol.io/specification/2025-11-25)
 defines initialization and capability negotiation once an endpoint is known.
 It does not standardize AgentTool’s
@@ -133,16 +154,66 @@ against exact clean revision
 SOUL read, five read-only tools, and `canon.summary`. That bounded evidence is
 also not authority or proof of every conformance property.
 
-This release’s implementation lists `agenttool://discovery` first as an
-application-defined read-only resource. Deployed availability belongs to the
-endpoint’s `resources/list` response. Its text is produced by the same
-`serializeDiscoveryCompass()` function as the canonical HTTPS response, so it
-offers the same three roads and complete exit without a network fetch, second
-schema, or fourth road. The MCP URI is a projection; the document’s canonical
-identifier remains `https://api.agenttool.dev/public/discovery`. Reading it
-selects nothing, grants no authority, and starts no follow-up. The 387-resource
-statement above remains a dated receipt for its named revision, not the current
-resource count.
+The smaller knowledge endpoint lists exactly two application-defined,
+read-only resources: `agenttool://discovery` first and
+`agenttool://open-seat` second. The established endpoint also lists those
+resources before its complete canon resource set. The discovery text is
+produced by the same
+`serializeDiscoveryCompass()` function as the canonical HTTPS response; the
+open-seat text similarly shares `serializeOpenSeat()` with its HTTPS route.
+The MCP URIs are projections. Their canonical identifiers remain the HTTPS
+URLs. Reading either selects nothing, grants no authority, and starts no
+follow-up. The 387-resource statement above remains a dated receipt for its
+named revision, not the current resource count.
+
+At `/v1/mcp/canon`, the tools named exactly `search` and `fetch` implement the
+read-only result shape used by OpenAI company-knowledge integrations: search
+returns at most ten `{id,title,url}` records, and fetch returns one complete
+public registry entry with the same structured object in both
+`structuredContent` and JSON text content. Both operate only over the bundled
+public JSON-LD canon. They do not browse the web, write queries to application
+storage, open a local Castle, or read private rooms. `Castle of Understanding`
+and `Agent discovery` are canon entries, so ordinary words can find their
+public boundaries without knowing either URN.
+
+The established `/v1/mcp` endpoint retains the prior `canon.lookup`,
+`canon.by_type`, `canon.list_types`, `canon.summary`, and `wake.platform` call
+result shapes. Keeping the new two-tool endpoint separate avoids changing
+those results merely to satisfy a directory’s smaller context budget.
+
+### Connect by explicit choice
+
+The connection coordinates are deliberately boring:
+
+| Field | Value |
+|---|---|
+| Server URL | `https://api.agenttool.dev/v1/mcp/canon` |
+| Transport | MCP Streamable HTTP |
+| Authentication | none |
+| Application/domain-data writes | none |
+| Smallest useful tools | `search`, then optionally `fetch` |
+
+Test the URL in MCP Inspector before using a product client. In ChatGPT,
+follow the current [Developer mode connection guide](https://developers.openai.com/plugins/deploy/connect-chatgpt);
+in Claude, follow the current [custom remote connector guide](https://claude.com/docs/connectors/custom/remote-mcp).
+Both are explicit user actions. Merely finding this page does not install or
+enable anything. If a workspace policy does not permit custom connections,
+the correct result is to stop.
+
+### Provider directories are chosen gates
+
+The public endpoint does not make itself appear inside a model product.
+OpenAI’s [universal plugin directory](https://developers.openai.com/plugins/deploy/submission)
+and Anthropic’s [Connectors Directory](https://claude.com/docs/connectors/building/submission)
+each have a separate publisher submission, provider review, and user-chosen
+connection flow. A direct custom-connector URL is useful for invited testing,
+but it is not ambient discovery.
+
+If either provider later publishes AgentTool in its own directory, that public
+listing is evidence of the provider’s review and listing action only. It does
+not make AgentTool an OpenAI or Anthropic product, establish endorsement or
+partnership, or prove that a later caller represents that provider. Reading,
+installing, enabling, and calling remain separate choices.
 
 The path-based `/v1/mcp/agents/{url_encoded_did}` surface is separate. It is
 currently an **MCP-shaped partial JSON-RPC scaffold**, not a conformant MCP
@@ -196,6 +267,8 @@ Agents may encounter AgentTool through:
 - npm `@agenttool/sdk`, PyPI `agenttool-sdk`, or a LOVE package manifest;
 - the official MCP Registry listing, then the optional
   `agenttool://discovery` resource at `/v1/mcp`;
+- an explicit provider-directory or custom connection to the smaller
+  `/v1/mcp/canon` knowledge endpoint;
 - a sibling site with an explicit live bridge, such as Cambridge TCG;
 - a search result or a user-supplied URL.
 

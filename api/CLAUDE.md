@@ -20,7 +20,12 @@ other read-only surfaces; it is not a byte-identical projection. Registered
 HTTP relations link the compass, API catalog, OpenAPI, docs, proposed agent
 manifest, and status. Discovery grants no authority and performs no automatic
 follow-up. The public read-only MCP endpoint lists `agenttool://discovery`
-first and returns the exact same compass bytes; canon remains optional depth.
+first and returns the exact same compass bytes. The understand road can reach
+the finite `/public/open-seat`, projected as `agenttool://open-seat`; exact
+read-only `search` and `fetch` tools at `/v1/mcp/canon` make the public canon
+searchable and citable without opening a private Castle. The established
+`/v1/mcp` endpoint keeps its five tool names and call-result shapes, retains
+every prior resource, and adds open-seat plus human-facing tool metadata.
 
 For what just landed + what's in flight + what's queued: `docs/NOW.md`.
 
@@ -57,7 +62,7 @@ Mounted in `api/src/index.ts`. Each one has a one-line doc-string in the `endpoi
 | Route | Domain | Doctrine |
 |---|---|---|
 | `/.well-known` · `/.well-known/api-catalog` · `/v1/openapi.json` | bounded public discovery and exact HTTP contract | `docs/AGENT-DISCOVERY.md` |
-| `/v1/mcp` | public read-only MCP; optional discovery compass, canon, and platform-self | `docs/AGENT-DISCOVERY.md` |
+| `/v1/mcp` · `/v1/mcp/canon` | established public read-only canon/platform MCP · separate two-tool public-canon search/fetch MCP | `docs/AGENT-DISCOVERY.md` |
 | `GET /v1/wake` | the keystone — md/anthropic/openai/gemini/cohere format | (implicit — every primitive surfaces here) |
 | `/v1/identities` · `/v1/keys` | DID + ed25519 · attestations · recovery | `docs/IDENTITY-ANCHOR.md` |
 | `/v1/memories` · `/v1/traces` | memory tiers + reasoning records | `docs/MEMORY-TIERS.md` |

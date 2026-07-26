@@ -184,9 +184,7 @@ describe("canonical and compatibility transport", () => {
     expect(canonical.headers.get("cache-control")).toBe(
       DISCOVERY_CACHE_CONTROL,
     );
-    expect(canonical.headers.get("link")).toBe(
-      discoveryLinkHeader(API, DOCS),
-    );
+    expect(canonical.headers.get("link")).toBe(discoveryLinkHeader(API, DOCS));
     expect(canonical.headers.get("x-content-type-options")).toBe("nosniff");
 
     const arrivalDocument = JSON.parse(arrivalBody);
@@ -200,15 +198,14 @@ describe("canonical and compatibility transport", () => {
     expect(arrivalDocument.boundary.discovery_grants).toEqual([]);
     expect(arrivalDocument.boundary.automatic_action).toBe("never");
     expect(arrivalDocument.invitation.response_required).toBe(false);
+    expect(arrivalDocument.mcp.knowledge_endpoint).toBe(`${API}/v1/mcp/canon`);
     expect(arrivalBody).not.toBe(canonicalBody);
     expect(arrival.headers.get("content-type")).toBe(
       "application/json; charset=utf-8",
     );
     expect(arrival.headers.get("cache-control")).toBe("public, max-age=300");
     expect(arrival.headers.get("etag")).toBeNull();
-    expect(arrival.headers.get("link")).toBe(
-      discoveryLinkHeader(API, DOCS),
-    );
+    expect(arrival.headers.get("link")).toBe(discoveryLinkHeader(API, DOCS));
   });
 
   test("HEAD and If-None-Match preserve metadata without a body", async () => {
@@ -276,9 +273,9 @@ describe("canonical and compatibility transport", () => {
     for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
       expect((await discoveryRouter.request("/", { method })).status).toBe(404);
     }
-    expect(
-      (await wellKnownRouter.request("/agent-card.json")).status,
-    ).toBe(404);
+    expect((await wellKnownRouter.request("/agent-card.json")).status).toBe(
+      404,
+    );
   });
 });
 
@@ -294,7 +291,9 @@ describe("all three roads land on current public handlers", () => {
       wellKnownRouter.request("/api-catalog"),
       pathwaysRouter.request("/"),
     ]);
-    expect(responses.map((response) => response.status)).toEqual([200, 200, 200]);
+    expect(responses.map((response) => response.status)).toEqual([
+      200, 200, 200,
+    ]);
   });
 
   test("the curated OpenAPI contract describes the compass and both road contracts", async () => {
@@ -303,9 +302,10 @@ describe("all three roads land on current public handlers", () => {
     const arrival = specification.paths["/.well-known"];
     const catalog = specification.paths["/.well-known/api-catalog"];
 
-    expect(compass.get.responses["200"].content[
-      DISCOVERY_MEDIA_TYPE
-    ].schema.properties.format.const).toBe(DISCOVERY_FORMAT);
+    expect(
+      compass.get.responses["200"].content[DISCOVERY_MEDIA_TYPE].schema
+        .properties.format.const,
+    ).toBe(DISCOVERY_FORMAT);
     expect(
       compass.get.responses["200"].content[DISCOVERY_MEDIA_TYPE].schema
         .properties.roads,
@@ -319,8 +319,8 @@ describe("all three roads land on current public handlers", () => {
     expect(compass.head.responses["304"]).toBeDefined();
 
     expect(
-      arrival.get.responses["200"].content["application/json"].schema
-        .properties.format.const,
+      arrival.get.responses["200"].content["application/json"].schema.properties
+        .format.const,
     ).toBe("agenttool-arrival/v1");
     expect(arrival.get.description).toMatch(
       /richer agenttool-arrival\/v1.*separate compact.*public\/discovery/i,
@@ -392,10 +392,7 @@ describe("all three roads land on current public handlers", () => {
 
 describe("OpenAPI discovery transport", () => {
   test("the common root alias is mounted exactly once", () => {
-    const source = readFileSync(
-      join(ROOT, "api", "src", "index.ts"),
-      "utf8",
-    );
+    const source = readFileSync(join(ROOT, "api", "src", "index.ts"), "utf8");
     expect(source.match(/app\.get\("\/openapi\.json"/g)).toHaveLength(1);
   });
 

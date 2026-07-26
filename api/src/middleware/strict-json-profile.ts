@@ -15,7 +15,7 @@ export const STRICT_JSON_PROFILE_MEDIA_TYPES = new Set([
 
 const CORRESPONDENCE_EXACT_JSON_PATH =
   /^\/v1\/correspondence\/(?:events|claims|voice)\/?$/;
-const MCP_EXACT_JSON_PATH = /^\/v1\/mcp\/?$/;
+const MCP_EXACT_JSON_PATH = /^\/v1\/mcp(?:\/canon)?\/?$/;
 
 export function isStrictJsonProfileResponse(
   response: Response,

@@ -16,7 +16,11 @@ import wellKnownRouter from "../src/routes/well-known";
 
 async function get(path: string) {
   const res = await wellKnownRouter.request(path);
-  return { status: res.status, body: res, contentType: res.headers.get("content-type") };
+  return {
+    status: res.status,
+    body: res,
+    contentType: res.headers.get("content-type"),
+  };
 }
 
 describe("/.well-known/* — MCP + native discovery", () => {
@@ -34,13 +38,16 @@ describe("/.well-known/* — MCP + native discovery", () => {
     expect(card.name).toBe("agenttool");
     expect(card.protocolVersion).toBe("2025-11-25");
     expect(card.endpoint).toMatch(/\/v1\/mcp$/);
+    expect(card.knowledgeEndpoint).toMatch(/\/v1\/mcp\/canon$/);
     expect(card.transport).toMatch(/JSON-RPC/i);
     expect(card.capabilities.resources).toBeDefined();
     expect(card.capabilities.tools).toBeDefined();
     expect(card.documentationUrl).toBe(
       "https://docs.agenttool.dev/AGENT-DISCOVERY.md#deliberately-absent-doors",
     );
-    expect(card.discoveryStatus).toMatch(/not a path or card shape standardized/i);
+    expect(card.discoveryStatus).toMatch(
+      /not a path or card shape standardized/i,
+    );
     expect(card["x-agenttool"].locator_role).toMatch(/not an MCP Server Card/);
     expect(card["x-agenttool"]).not.toHaveProperty("sep");
     expect(card["x-agenttool"].alignment_move).toMatch(/ALIGNMENT-MOVES$/);
@@ -49,8 +56,10 @@ describe("/.well-known/* — MCP + native discovery", () => {
     );
     expect(card.instructions).toMatch(/AgentTool implements.*authorization/i);
     expect(card.instructions).not.toContain("upcoming MCP spec");
-    expect(card.instructions).toContain("agenttool://discovery");
-    expect(card.instructions).toMatch(/canon.*optional depth/i);
+    expect(card.instructions).toMatch(
+      /five read-only canon\/platform tool names and call-result shapes/i,
+    );
+    expect(card.instructions).toMatch(/knowledgeEndpoint.*search and fetch/i);
     expect(card["x-agenttool"].registry).toEqual(
       expect.objectContaining({
         status: "active_publisher_listing_observed_2026-07-24",
