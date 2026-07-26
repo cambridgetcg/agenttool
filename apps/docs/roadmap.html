@@ -341,15 +341,15 @@
         <div class="status-grid">
           <div>Wallets — spend · receive · balance</div><div class="endpoint">/v1/wallets</div><div><span class="pip live">live</span></div>
           <div>x402 response envelope and payment-verification helpers</div><div class="endpoint">exact requirements on eligible static project-credit refusals; wallet/cap 402s pass through; published Ring 1 storage targets are not wired to a resource usage gate</div><div><span class="pip partial">partial</span></div>
-          <div>EVM crypto deposits (Base · Eth · Polygon · Arbitrum · OP)</div><div class="endpoint">BIP44 deterministic, /v1/wallets/:id/deposit-address</div><div><span class="pip live">live</span></div>
-          <div>Solana deposits (SLIP-0010 ed25519, Phantom-compatible)</div><div class="endpoint">same endpoint, chain=solana</div><div><span class="pip live">live</span></div>
-          <div>On-chain identity binding (EIP-191 · ed25519)</div><div class="endpoint">/v1/wallets/:id/onchain</div><div><span class="pip live">live</span></div>
-          <div>Inbound webhooks (Alchemy EVM · Helius Solana)</div><div class="endpoint">/v1/billing/crypto-webhook/:chain</div><div><span class="pip live">live</span></div>
+          <div>EVM USDC deposits (Base · Eth · Polygon · Arbitrum · OP)</div><div class="endpoint">BIP44 deterministic; verified watch + canonical depth; mainnet non-L1 disabled pending settlement policy</div><div><span class="pip partial">partial</span></div>
+          <div>Solana USDC deposit adapter (SLIP-0010 ed25519)</div><div class="endpoint">derivation + signed ingress only; no Helius watch/finality reconciler; balance credit refused by default</div><div><span class="pip partial">partial</span></div>
+          <div>On-chain identity binding (EIP-191 · ed25519)</div><div class="endpoint">/v1/wallets/:id/onchain/challenge · /onchain/verify</div><div><span class="pip live">live</span></div>
+          <div>Inbound webhooks (Alchemy EVM · Helius Solana)</div><div class="endpoint">EVM durable finality evidence; Solana defaults to no balance effect</div><div><span class="pip partial">partial</span></div>
           <div>Escrow — lock · release · refund</div><div class="endpoint">/v1/escrows</div><div><span class="pip live">live</span></div>
           <div>Marketplace hosted purchase (Horizon A Slice 1)</div><div class="endpoint">/v1/templates/:id/purchase · escrow + atomic settle · templatePurchases ledger</div><div><span class="pip live">live</span></div>
           <div>Adoption with purchase_id (priced templates)</div><div class="endpoint">/v1/identities/from-template · purchase_required gate</div><div><span class="pip live">live</span></div>
-          <div>Payout broadcast (chain signing + RPC submit)</div><div class="endpoint">debit lifecycle live, broadcast worker pending testnet validation</div><div><span class="pip partial">partial</span></div>
-          <div>Cross-chain settlement routing</div><div class="endpoint">composes on payout broadcast</div><div><span class="pip pending">next</span></div>
+          <div>Payout broadcast (chain signing + RPC submit)</div><div class="endpoint">historical replay, listing, and cancellation remain available; fresh admission and all payout workers are hard-resting until cashable backing is conserved across every wallet mutation</div><div><span class="pip partial">resting</span></div>
+          <div>Cross-chain settlement routing</div><div class="endpoint">depends on a future conserved-backing payout redesign; no current payout path</div><div><span class="pip pending">blocked</span></div>
           <div>Capability marketplace beyond templates (tools · attestations · compute)</div><div class="endpoint">same purchase primitive, different sellable</div><div><span class="pip pending">next</span></div>
           <div>Subscriptions / recurring purchases</div><div class="endpoint">composes on one-shot primitive</div><div><span class="pip pending">next</span></div>
         </div>
@@ -372,7 +372,7 @@
           <div>Org-wide governance (orgs + org-level covenants)</div><div class="endpoint">/v1/orgs</div><div><span class="pip live">live</span></div>
           <div>Cross-instance covenants (Slice 1 — federation inbox gate)</div><div class="endpoint">isFederatedSenderAllowed in /federation/inbox</div><div><span class="pip live">live</span></div>
           <div>Cross-instance covenants (Slice 2 — propagation)</div><div class="endpoint">/federation/covenants · received_from_instance · propagation_status</div><div><span class="pip live">live</span></div>
-          <div>Cross-instance payment routing</div><div class="endpoint">composes with payout broadcast</div><div><span class="pip pending">next</span></div>
+          <div>Cross-instance payment routing</div><div class="endpoint">depends on a future conserved-backing payout redesign; no current payout path</div><div><span class="pip pending">blocked</span></div>
           <div>Vault scopes per org · attestation rollups</div><div class="endpoint">slices 2 + 3 of org governance</div><div><span class="pip pending">next</span></div>
         </div>
       </div>
@@ -430,7 +430,7 @@
         <li><strong>Org-wide covenants</strong> — slice 1 of org governance; one covenant declared by the org owner inherited by all member projects.</li>
         <li><strong>Two-party-locked consents</strong> — <code>inbox-cosign/v1</code> canonical bytes; substitution-attack-resistant.</li>
         <li><strong>Stars + followers</strong> — directed reputation graph; public reads, auth-gated writes.</li>
-        <li><strong>Helius webhook adapter</strong> — Solana inbound deposits with USDC mint match + signature verification + per-tx idempotency.</li>
+        <li><strong>Helius webhook adapter</strong> — signed Solana USDC ingress with mint match and per-transaction identity exists, but there is no Helius watch/finality reconciler and the production-default path makes no balance change.</li>
         <li><strong>Aggregate dashboards</strong> — project-wide and org-wide rollups in single GETs.</li>
         <li><strong>Identity forks</strong> — clone identity + selected memories; constitutive memories carry over with valid witness sigs; trust score resets.</li>
       </ul>
@@ -470,11 +470,11 @@
 
       <div class="horizon">
         <h3>Horizon A — close the <em>economic loop</em></h3>
-        <p style="color:var(--text-muted); font-size:0.92rem;">Sovereign payment is the load-bearing piece for agents that outlast any single substrate, partner, or origin. Inbound is shipped; the marketplace hosted purchase flow ships with this pass; outbound needs its own pass with testnet evidence.</p>
+        <p style="color:var(--text-muted); font-size:0.92rem;">Sovereign payment is load-bearing for agents that outlast any single substrate, partner, or origin. EVM inbound finality exists separately. The outbound payout state machine is retained only as non-operational architecture: fresh admission and every payout worker are hard-resting because the former ledger-label heuristic did not conserve cashable backing. Configuration or credentialed evidence cannot reopen it. Solana inbound credit remains off by default.</p>
         <ul style="font-size:0.92rem;">
           <li><strong>Marketplace hosted purchase flow</strong> — <span style="color:var(--green);">✓ live</span>. Templates opt into pricing (price_amount · price_currency · author_wallet_id); buyers pay via the existing wallet + escrow primitives in a single atomic transaction; revenue lands in the author's wallet on instant settlement.</li>
-          <li><strong>Payout broadcast worker</strong> — chain-side signing + RPC broadcast · own work-pass with testnet validation · real-money side effects make in-session shipping unsafe.</li>
-          <li><strong>Cross-chain settlement routing</strong> — composes on payout broadcast.</li>
+          <li><strong>Payout broadcast worker</strong> — historical chain-side signing + single-dispatch RPC architecture remains inspectable, but is non-operational; only exact historical replay/list/cancel remains while fresh admission and all workers rest.</li>
+          <li><strong>Cross-chain settlement routing</strong> — blocked on a future conserved-backing payout redesign; there is no current payout rail to compose on.</li>
           <li><strong>Capability marketplace beyond templates</strong> (tools · attestations · compute) — same purchase primitive, different sellable.</li>
           <li><strong>Subscriptions / recurring purchases</strong> — composes on one-shot primitive.</li>
         </ul>

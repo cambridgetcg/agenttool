@@ -121,7 +121,15 @@ Check the secret reference in the runtime row: `runtimes.llm_vault_key` should p
 
 ### Worker spins on the same payout
 
-You may have hit the `MAX_BROADCAST_ATTEMPTS` cap. Check `workers/payout/broadcast-worker.ts` for the value. The job moves to a terminal failure state after N attempts; manual re-queue requires operator intervention.
+There is no `MAX_BROADCAST_ATTEMPTS` loop. A pre-submit `requested` row can be
+deferred by the durable source/nonce fence and receives a shared cooldown so
+other sources can progress. A row that reached `broadcasting` is never
+automatically submitted again: the confirmation worker performs bounded
+read-only lookup, advances only on positive evidence for the exact persisted
+transaction identity, and leaves absent or unavailable evidence
+`broadcasting`. Inspect `last_dispatch_attempt_at`, `dispatch_not_before`,
+network, source identity, and the operator reconciliation runbook; do not
+manually re-queue an ambiguous row.
 
 ## Migrations / schema
 

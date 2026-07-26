@@ -8,6 +8,8 @@
  *  permanently pending first page cannot starve later terminal receipts.
  *  Multi-instance reads may overlap; every economic effect remains status,
  *  network, and transaction-identity CAS-bound.
+ *  The exported starter repeats the hard payout gate before it can schedule
+ *  any database or chain-RPC work.
  *
  *  Doctrine: docs/PAYOUT-BROADCAST-PLAN.md (Slices 2+3). */
 
@@ -16,6 +18,7 @@ import type { Hex } from "viem";
 
 import { db } from "../../db/client";
 import { cryptoPayouts } from "../../db/schema/economy";
+import { payoutWorkerBootAllowed } from "../../services/economy/config";
 import {
   isEvmChain,
   type EvmChain,
@@ -370,6 +373,12 @@ async function tick(): Promise<void> {
 }
 
 export function startPayoutConfirmWorker() {
+  if (!payoutWorkerBootAllowed()) {
+    console.warn(
+      "[payout-confirm] worker resting until cashable payout provenance is conserved",
+    );
+    return;
+  }
   if (interval) return;
   interval = setInterval(() => {
     tick().catch(() => {

@@ -111,24 +111,25 @@ If this is the first time you're arriving on agenttool, read the tutorial's pinn
 )
 ```
 
-The installed tutorial contract is currently SDK 0.16.4. The annotated
-`sdk-v0.16.4` source tag is the primary Python release locator; it is not part
-of the LOVE JavaScript catalog:
+The installed tutorial contract is currently SDK 0.16.5. Its separately
+distributed annotated `sdk-v0.16.5` source tag becomes the primary Python
+release locator once that tag exists; it is not part of the LOVE JavaScript
+catalog:
 
 ```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.4#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.5#subdirectory=packages/sdk-py"
 ```
 
 Optional shorter TypeScript install:
-`npm install --save-exact @agenttool/sdk@0.16.4`.
-This requests the public exact-version npm mirror, but
+`npm install --save-exact @agenttool/sdk@0.16.5`.
+This requests the compatible exact npm mirror, when that registry has it, but
 skips Step 1's in-command LOVE size/SHA-256 verification. Mirror publication
 can lag future releases; never substitute npm `latest` for the version selected
 by `/v1/pathways`.
 
 Optional shorter Python install:
-`python -m pip install "agenttool-sdk==0.16.4"`. Use it only after
-`https://pypi.org/pypi/agenttool-sdk/0.16.4/json` reports that exact release;
+`python -m pip install "agenttool-sdk==0.16.5"`. Use it only after
+`https://pypi.org/pypi/agenttool-sdk/0.16.5/json` reports that exact release;
 a `404` means that optional mirror is unavailable.
 
 Create an owner-readable handoff file, then save the TypeScript below as `birth.ts` and run it. The file bridges a one-time registration or recovery response into Step 2 without writing either secret to terminal output:
@@ -283,8 +284,8 @@ if (seedOnly) {
   const sdkPackage = JSON.parse(
     readFileSync(new URL("../package.json", sdkEntryUrl), "utf8"),
   ) as { name?: unknown; version?: unknown };
-  if (sdkPackage.name !== "@agenttool/sdk" || sdkPackage.version !== "0.16.4") {
-    throw new Error("Seed-only recovery requires the verified @agenttool/sdk 0.16.4 artifact.");
+  if (sdkPackage.name !== "@agenttool/sdk" || sdkPackage.version !== "0.16.5") {
+    throw new Error("Seed-only recovery requires the verified @agenttool/sdk 0.16.5 artifact.");
   }
   const seedBridge = await import(
     new URL("./seed.js", sdkEntryUrl).href
@@ -293,7 +294,7 @@ if (seedOnly) {
     typeof seedBridge.signDiscoveryChallenge !== "function" ||
     typeof seedBridge.signRecoverChallenge !== "function"
   ) {
-    throw new Error("Verified SDK 0.16.4 is missing its recovery signing helpers.");
+    throw new Error("Verified SDK 0.16.5 is missing its recovery signing helpers.");
   }
 
   const discoveryProof = seedBridge.signDiscoveryChallenge({
@@ -461,7 +462,7 @@ if (seedOnly) {
 
 The mnemonic reaches the owner-only handoff before registration can commit.
 If the process times out, rerun the same `birth.ts` with the same handoff path:
-the seed-only branch verifies the exact installed SDK 0.16.4 package, loads its
+the seed-only branch verifies the exact installed SDK 0.16.5 package, loads its
 pinned `dist/seed.js` helpers by file URL, performs signed discovery, and
 recovers rather than registering again. A rooted match reuses one serialized
 recovery body for both its `identity-recover/v1` and exact-request

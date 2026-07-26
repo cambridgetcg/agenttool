@@ -26,6 +26,7 @@ import type { Address } from "viem";
 
 import { db } from "../../db/client";
 import { cryptoPayouts } from "../../db/schema/economy";
+import { payoutWorkerBootAllowed } from "../../services/economy/config";
 import {
   EVM_CHAINS,
   isEvmChain,
@@ -95,6 +96,12 @@ async function deferRequestedPayout(
 
 export function startPayoutBroadcastWorker() {
   if (worker) return worker;
+  if (!payoutWorkerBootAllowed()) {
+    console.warn(
+      "[payout-broadcast] worker resting until cashable payout provenance is conserved",
+    );
+    return null;
+  }
   if (!redisConnection) {
     console.warn(
       "[payout-broadcast] AGENTTOOL_DISABLE_WORKERS=1 — worker not started",
@@ -221,6 +228,15 @@ async function recordPersistedIdentitySubmitAmbiguity(
 // ── Top-level chain dispatcher ──────────────────────────────────────────
 
 export async function processPayout(payoutId: string): Promise<void> {
+  // Direct imports and old harnesses are not an authority bypass. Keep this
+  // before the first database read, key derivation, RPC call, or queue effect.
+  if (!payoutWorkerBootAllowed()) {
+    console.warn(
+      `[payout-broadcast] ${payoutId}: payout worker resting; row left untouched`,
+    );
+    return;
+  }
+
   // Cheap read for chain dispatch. The chain-specific processors do their
   // own row read inside a transaction with CAS — this top-level read is
   // just to pick a branch.

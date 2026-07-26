@@ -23,16 +23,25 @@ curl -q -fsS https://api.agenttool.dev/v1/pathways | \
 That tutorial currently verifies and installs the TypeScript SDK from a
 `love-package/v1` manifest. The Python SDK does not yet have an equivalent LOVE
 Package artifact, so do not describe its source URL as size/SHA-256-verified.
-The annotated `sdk-v0.16.4` source tag is the primary Python 0.16.4 release
-locator:
+After the annotated source tag is published, the primary Python 0.16.5 release
+locator is:
 
 ```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.4#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.5#subdirectory=packages/sdk-py"
 ```
 
 Optional shorter install, only after PyPI independently reports that exact
-version: `python -m pip install "agenttool-sdk==0.16.4"`. Registry publication
+version: `python -m pip install "agenttool-sdk==0.16.5"`. Registry publication
 can lag or omit the source tag; the command is not an availability claim.
+
+## 0.16.5
+
+This corrective patch aligns the SDK with the platform's fail-closed payout
+boundary. Fresh `request_payout(...)` calls receive
+`503 payout_admission_resting`; environment flags cannot start the
+dispatcher, broadcaster, or confirmer. Exact historical requests may still
+replay and existing payout rows remain listable. The SDK adds no retry,
+signing, broadcasting, or worker authority.
 
 ## 0.16.4 Anthropic streaming adapter
 
@@ -116,11 +125,13 @@ availability.
 
 This additive patch releases the parity-paired durable payout request/list
 surface, the synchronous completed-response OpenAI adapter, and the bounded
-Anthropic streaming repairs. Payout creation requires a caller-owned
-`Idempotency-Key`, preserves exact string base units, reports the API's durable
-`replayed` decision, and decodes the payout's bound `testnet`/`mainnet`
-network state. The SDK does not retry payout creation, sign a payout, or
-broadcast one.
+Anthropic streaming repairs. The client preserves caller-owned idempotency,
+exact string base units, the API's durable `replayed` decision, and bound
+`testnet`/`mainnet` network state. Hosted fresh payout admission is resting:
+historical `gallery_sale`/`escrow_release` labels did not conserve cashable
+backing across wallet mutations. Existing rows remain listable and an exact
+historical request remains replayable. The SDK does not retry, sign, or
+broadcast a payout.
 
 ## 0.16.3
 
@@ -617,17 +628,7 @@ at.economy.spend(
     description="Research task",
 )
 
-# Request USDC once under a caller-owned durable request identity.
-payout = at.economy.request_payout(
-    wallet.id,
-    chain="base",
-    amount_base="1500000",  # 1.5 USDC; keep base units as a string
-    destination_address="0x...",
-    idempotency_key="settlement-order-42-v1",
-)
-if payout.replayed:
-    print(payout.id, payout.status)
-
+# Existing payout history remains readable while fresh creation rests.
 payout_history = at.economy.list_payouts(wallet.id)
 
 # Escrow — trust built into transactions
@@ -643,10 +644,17 @@ at.economy.release_escrow(escrow.id)  # on completion
 
 Payout `idempotency_key` values are required, caller-chosen visible ASCII
 strings of 8–256 characters. Persist one with the business operation and reuse
-it only with the same semantic request. The SDK passes it only in
+it only with the same semantic request. Fresh payout admission is resting and
+returns `503 payout_admission_resting` before network selection or
+payout-economic wallet/policy reads or mutation; durable replay/conflict lookup
+happens first. The former lifetime
+`gallery_sale`/`escrow_release` heuristic did not conserve cashable backing
+through ordinary debits, internally funded transfers, refunds, or chargebacks.
+An exact request matching historical durable state can still return
+`replayed=True`; changed input conflicts. Reopening requires backed
+sub-balances across every wallet mutation. The SDK passes the key only in
 `Idempotency-Key`; it does not generate a replacement, retry, sign, or
-broadcast. `replayed` is the API's durable payout reservation result, not a
-claim that a Redis response cache was available.
+broadcast.
 
 ### Local agent data
 

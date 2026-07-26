@@ -304,9 +304,11 @@ work can occur, but the generation compare-and-set protects the wallet effect.
 Durable alerts for pending age, quarantine, rejection, and negative balances
 are not implemented.
 
-Solana does not have this contract yet. Signed Helius ingestion still performs
-an immediate exact-integer credit without equivalent raw-atomic independent
-finality/reorg reconciliation or durable watch convergence.
+Solana does not have this contract yet. Signed Helius ingress has no equivalent
+raw-atomic independent finality/reorg reconciliation or durable watch
+convergence, so production refuses its balance effect by default. Immediate
+exact-integer credit exists only behind the explicit
+`CRYPTO_ALLOW_UNRECONCILED_SOLANA_DEPOSITS=1` development opt-in.
 
 ## Configuration
 

@@ -6,7 +6,7 @@
  *  This module owns the *business logic*. HTTP shape lives in
  *  api/src/routes/economy/crypto.ts. */
 
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 
 import { db } from "../../../db/client";
 import {
@@ -15,15 +15,8 @@ import {
   onchainIdentities,
   payoutRequestIdempotency,
   policies,
-  transactions,
-  wallets,
 } from "../../../db/schema/economy";
 import { economyConfig } from "../config";
-import {
-  EARNED_INFLOW_TYPES,
-  drawableWallPence,
-  penceForUsdcPayout,
-} from "../earned";
 import {
   EVM_CHAIN_IDS,
   USDC_ADDRESSES,
@@ -442,10 +435,6 @@ export interface PayoutRequest {
   metadata?: Record<string, unknown>;
   /** Required durable request identity. The plaintext is never persisted. */
   idempotencyKey: string;
-  /** Configuration gate only: this does not prove Redis connectivity or live
-   * worker readiness. Existing durable requests replay before this gate; a
-   * new request is not reserved or debited while it is false. */
-  payoutBroadcastConfigured: boolean;
 }
 
 export interface PayoutRequestOutcome {
@@ -456,6 +445,7 @@ export interface PayoutRequestOutcome {
 }
 
 export const PAYOUT_IDEMPOTENCY_KEY_PATTERN = /^[!-~]{8,256}$/u;
+export const PAYOUT_ADMISSION_RESTING_ERROR = "payout_admission_resting";
 
 function canonicalJson(value: unknown, path = "metadata"): string {
   if (value === null) return "null";
@@ -589,10 +579,10 @@ export function parseDailyPayoutTotal(result: unknown): bigint {
   return BigInt(total);
 }
 
-/**
- * Pure policy evaluator with injected readers. `requestPayout` supplies
- * transaction-backed readers after taking the wallet row lock; the exported
- * advisory check below supplies ordinary database readers.
+/** Pure advisory policy evaluator with injected readers.
+ *
+ * Fresh payout admission is resting independently of this decision. Keeping
+ * policy inspection available does not authorize a debit or chain transfer.
  */
 export async function evaluatePayoutPolicy(
   p: {
@@ -653,9 +643,8 @@ export async function evaluatePayoutPolicy(
 
 /** Per-wallet advisory payout policy check (Slice 6).
  *
- * This is useful to preview a decision, but it does not reserve ceiling
- * capacity. `requestPayout` repeats the evaluation inside its wallet-locked
- * transaction; only that transactional decision authorizes a debit.
+ * This can preview retained policy configuration, but it does not reserve
+ * capacity or authorize a payout while fresh admission is resting.
  */
 export async function checkPayoutPolicy(p: {
   walletId: string;
@@ -679,18 +668,19 @@ export async function checkPayoutPolicy(p: {
   });
 }
 
-/** Record a payout intent. This debits the wallet in GBP pence (earned-gated,
- *  FX-converted) and writes a −debit "payout" ledger leg; the opt-in
- *  payout-broadcast worker performs signing and dispatch.
+/** Resolve an existing durable payout request or refuse fresh admission.
  *
- *  CONTRACT for that worker (it must uphold both, or money leaks):
- *   1. Compare-and-swap `requested → broadcasting` BEFORE it broadcasts USDC,
- *      so a concurrent cancelPayout (which only touches `requested` rows)
- *      cannot refund a payout that is already going out on-chain.
- *   2. On terminal FAILURE, reverse atomically exactly like cancelPayout does:
- *      lock and validate the original negative payout ledger leg, credit that
- *      exact amount back, and insert its linked positive reversal. Never infer
- *      a refund from caller-extensible JSON or a fresh token/FX conversion. */
+ * The former admission heuristic treated lifetime `gallery_sale` and
+ * `escrow_release` labels as cashable value. Ordinary wallet debits did not
+ * consume that allowance, and an internally funded escrow release could make
+ * unbacked value appear earned. Fresh creation therefore rests until cashable
+ * backing is conserved through every debit, transfer, refund, and chargeback.
+ *
+ * The tentative idempotency reservation below is inside this transaction. A
+ * fresh request throws and rolls it back before network selection or
+ * payout-economic wallet/policy reads or mutation. A durable
+ * same-input reservation still resolves its current payout state; changed
+ * input still conflicts. */
 export async function requestPayout(
   p: PayoutRequest,
   database: Pick<typeof db, "transaction"> = db,
@@ -769,175 +759,7 @@ export async function requestPayout(
       };
     }
 
-    // Resolve replay before live configuration/policy checks. A new request,
-    // however, is rolled back without a reservation or debit when broadcasting
-    // is not configured.
-    if (!p.payoutBroadcastConfigured) {
-      throw new Error("payout_broadcast_not_available");
-    }
-
-    // Bind this intent to one durable chain environment before any debit.
-    const payoutNetwork = activeNetwork();
-
-    // Option A explicit FX: earned value is GBP pence; a payout of `amountBase`
-    // USDC costs the wallet `penceRequired` at the operator rate.
-    const rate = economyConfig.payout.gbpUsdRate;
-    const penceRequired = penceForUsdcPayout(p.amountBase, rate);
-
-    // Lock the wallet: the earned wall and the debit are computed under it so
-    // concurrent payouts/reinvests serialise and can't each spend the same
-    // earned pennies (mirrors reinvestFromWallet).
-    const [wallet] = await tx
-      .select()
-      .from(wallets)
-      .where(eq(wallets.id, p.walletId))
-      .for("update");
-    if (!wallet) throw new Error("wallet_not_found");
-    if (wallet.status !== "active") throw new Error("payout_wallet_inactive");
-    // Option A pins payout to GBP wallets, so `balance` is unambiguously pence
-    // and directly comparable to the earned wall. Mirrors the reinvest guard.
-    if (wallet.currency !== "GBP") throw new Error("payout_requires_gbp_wallet");
-
-    // The wallet lock serializes policy admission for this wallet. In the
-    // default READ COMMITTED isolation level, a contender waits here and its
-    // later daily-total SELECT observes the prior committed payout. Keeping
-    // this check outside the transaction allowed two concurrent requests to
-    // both see spare ceiling and both debit.
-    const decision = await evaluatePayoutPolicy(
-      {
-        walletId: p.walletId,
-        destinationAddress: p.destinationAddress,
-        amountBase: BigInt(p.amountBase),
-      },
-      {
-        readPolicy: async () => {
-          const [policy] = await tx
-            .select()
-            .from(policies)
-            .where(eq(policies.walletId, p.walletId));
-          return policy;
-        },
-        readTodayTotal: async () =>
-          parseDailyPayoutTotal(
-            await tx.execute<{ total: string }>(
-              dailyPayoutTotalQuery(p.walletId),
-            ),
-          ),
-      },
-    );
-    if (!decision.ok) {
-      const err = new Error(decision.error);
-      if (decision.detail) {
-        (err as Error & { detail?: string }).detail = decision.detail;
-      }
-      throw err;
-    }
-
-    // The shared earned wall (GBP pence): earned − reinvested − paidout. The
-    // birth credit (type "fund") and USDC deposits are NOT in EARNED_INFLOW_TYPES,
-    // so they are not cashable — this is what closes the mint-hole.
-    const [earnedRow] = await tx
-      .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
-      .from(transactions)
-      .where(
-        and(
-          eq(transactions.walletId, p.walletId),
-          inArray(transactions.type, EARNED_INFLOW_TYPES as unknown as string[]),
-        ),
-      );
-    const [reinvestRow] = await tx
-      .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
-      .from(transactions)
-      .where(and(eq(transactions.walletId, p.walletId), eq(transactions.type, "reinvest")));
-    const [paidOutRow] = await tx
-      .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
-      .from(transactions)
-      .where(and(eq(transactions.walletId, p.walletId), eq(transactions.type, "payout")));
-
-    const earned = Number(earnedRow?.total ?? 0); // positive
-    const reinvested = -Number(reinvestRow?.total ?? 0); // reinvest legs negative
-    const paidOut = -Number(paidOutRow?.total ?? 0); // payout legs negative
-    const payoutable = drawableWallPence(earned, reinvested, paidOut);
-
-    if (penceRequired > payoutable) {
-      const err = new Error("payout_exceeds_earned");
-      (err as Error & { detail?: string }).detail =
-        `earned=${earned} reinvested=${reinvested} paid_out=${paidOut} ` +
-        `available_pence=${Math.max(0, payoutable)} required_pence=${penceRequired}. ` +
-        `Only earned revenue (gallery sales + escrow releases) is payable; ` +
-        `free-funded and birth-credit balance is not.`;
-      throw err;
-    }
-
-    // Atomic balance debit (backstop; the earned wall above is the binding gate).
-    const debit = await tx
-      .update(wallets)
-      .set({ balance: sqlMinus(penceRequired) })
-      .where(
-        and(
-          eq(wallets.id, p.walletId),
-          eq(wallets.status, "active"),
-          sqlBalanceAtLeast(penceRequired),
-        ),
-      )
-      .returning({ balance: wallets.balance });
-    if (debit.length === 0) throw new Error("insufficient_balance");
-
-    const [inserted] = await tx
-      .insert(cryptoPayouts)
-      .values({
-        walletId: p.walletId,
-        projectId: p.projectId,
-        chain: p.chain,
-        network: payoutNetwork,
-        token: p.token,
-        amountBase: p.amountBase,
-        destinationAddress: p.destinationAddress,
-        status: "requested",
-        // Informational quote only. Refund authority lives exclusively in the
-        // server-written negative transactions ledger leg below; this
-        // caller-extensible JSON is never trusted for accounting.
-        metadata: {
-          ...(p.metadata ?? {}),
-          quoted_gbp_usd_rate: rate,
-        },
-      })
-      .returning({ id: cryptoPayouts.id });
-
-    // Ledger leg (negative = value leaving) so the earned wall stays
-    // self-consistent and future payouts/reinvests count this one.
-    await tx.insert(transactions).values({
-      walletId: p.walletId,
-      type: "payout",
-      amount: -penceRequired,
-      counterparty: p.destinationAddress,
-      description:
-        `payout requested — ${penceRequired} pence for ${Number(p.amountBase) / 1_000_000} ` +
-        `${p.token} @ ${rate} USD/GBP`,
-      metadata: { payout_id: inserted!.id, amount_base: p.amountBase, token: p.token },
-    });
-
-    const completedReservation = await tx
-      .update(payoutRequestIdempotency)
-      .set({ payoutId: inserted!.id })
-      .where(
-        and(
-          eq(payoutRequestIdempotency.id, reservation.id),
-          eq(payoutRequestIdempotency.requestSha256, requestSha256),
-          sql`${payoutRequestIdempotency.payoutId} IS NULL`,
-        ),
-      )
-      .returning({ id: payoutRequestIdempotency.id });
-    if (completedReservation.length !== 1) {
-      throw new Error("payout_idempotency_unreconciled");
-    }
-
-    return {
-      id: inserted!.id,
-      status: "requested",
-      broadcast_pending: true as const,
-      replayed: false,
-    };
+    throw new Error(PAYOUT_ADMISSION_RESTING_ERROR);
   });
 }
 
@@ -1027,15 +849,6 @@ export async function cancelPayout(
 }
 
 const SUPPORTED_PAYOUT_TOKENS = ["USDC"] as const;
-
-// ── Helpers (sql expressions for atomic balance arithmetic) ────────────
-
-function sqlMinus(n: number) {
-  return sql`balance - ${n}`;
-}
-function sqlBalanceAtLeast(n: number) {
-  return sql`${wallets.balance} >= ${n}`;
-}
 
 // Re-exports for routes
 export { isChain, isEvmChain } from "./chains";

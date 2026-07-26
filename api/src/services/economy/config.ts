@@ -12,7 +12,7 @@ const PAYOUT_NETWORKS = ["testnet", "mainnet"] as const;
 type PayoutNetwork = (typeof PAYOUT_NETWORKS)[number] | "";
 
 function readCryptoNetwork(
-  variable: "CRYPTO_NETWORK" | "PAYOUT_NETWORK",
+  variable: "CRYPTO_NETWORK",
 ): PayoutNetwork {
   const v = env(variable, "");
   if (v === "" || (PAYOUT_NETWORKS as readonly string[]).includes(v)) {
@@ -23,6 +23,18 @@ function readCryptoNetwork(
       "|",
     )} (got: '${v}'). See docs/PAYOUT-BROADCAST-PLAN.md.`,
   );
+}
+
+/** `PAYOUT_NETWORK` is retained only as a legacy deposit-network fallback
+ * while payout admission and workers are hard-resting. A stale payout-only
+ * value must not prevent unrelated API paths from starting. Invalid values
+ * become unavailable and crypto operations still fail closed when they try to
+ * select a network. */
+function readRestingPayoutNetwork(): PayoutNetwork {
+  const value = env("PAYOUT_NETWORK", "");
+  return (PAYOUT_NETWORKS as readonly string[]).includes(value)
+    ? (value as PayoutNetwork)
+    : "";
 }
 
 export const economyConfig = {
@@ -59,15 +71,13 @@ export const economyConfig = {
   // the safe posture is the default (no config required to be secure).
   allowUnsignedWebhooks: env("CRYPTO_WEBHOOK_ALLOW_UNSIGNED", "") === "1",
 
-  // Payout broadcast worker (Horizon A — see docs/PAYOUT-BROADCAST-PLAN.md).
-  // Default OFF: the /v1/wallets/:id/payout endpoint returns 503 until the
-  // operator opts in. When `workerEnabled` is true and the global worker
-  // switch is unset, `network` MUST be 'testnet' or 'mainnet'
-  // (boot-time-validated below) — no accidental mainnet calls with the
-  // testnet seed (or vice versa).
+  // Retained payout configuration for durable history and a future conserved
+  // provenance design. Fresh admission and worker boot are unconditionally
+  // resting below; no environment flag can reopen them. Legacy payout-only
+  // settings are inert and cannot make unrelated service startup fail.
   payout: {
     workerEnabled: env("PAYOUT_WORKER_ENABLED", "false") === "true",
-    network: readCryptoNetwork("PAYOUT_NETWORK"),
+    network: readRestingPayoutNetwork(),
     cryptoHdMnemonicTestnet: env("CRYPTO_HD_MNEMONIC_TESTNET", ""),
     // Option A explicit FX: USD per 1 GBP (e.g. 1.27 → £1 = $1.27). Earned
     // value settles in GBP pence; payout converts to the requested USDC at this
@@ -77,52 +87,18 @@ export const economyConfig = {
   },
 } as const;
 
-if (
-  economyConfig.cryptoNetwork !== "" &&
-  economyConfig.payout.network !== "" &&
-  economyConfig.cryptoNetwork !== economyConfig.payout.network
-) {
-  throw new Error(
-    "[economyConfig] CRYPTO_NETWORK and PAYOUT_NETWORK must match when both are set; refusing mixed-network crypto operations.",
-  );
-}
-
-/** Both the payout-specific opt-in and the global worker switch must allow
- * payout workers to run. Keep this predicate shared by startup and the
- * payout-request route so the API cannot accept work that startup refuses. */
+/** Economic payout is resting until cashable backing is conserved through
+ * every debit, transfer, refund, and chargeback.
+ *
+ * Keep the legacy parameters so callers/tests compiled against the old helper
+ * cannot turn an argument into authority. Neither environment nor caller input
+ * can reopen worker boot in this release.
+ */
 export function payoutWorkerBootAllowed(
-  payoutEnabled = economyConfig.payout.workerEnabled,
-  globalWorkersDisabled = process.env.AGENTTOOL_DISABLE_WORKERS === "1",
+  _payoutEnabled = economyConfig.payout.workerEnabled,
+  _globalWorkersDisabled = process.env.AGENTTOOL_DISABLE_WORKERS === "1",
 ): boolean {
-  return payoutEnabled && !globalWorkersDisabled;
-}
-
-// Boot-time gate — when worker boot is allowed, refuse to start without a
-// network or (for testnet) a separate testnet mnemonic. The global off-switch
-// makes payout configuration inactive, so missing payout-only values do not
-// prevent an API-only process from starting.
-if (payoutWorkerBootAllowed()) {
-  if (economyConfig.payout.network === "") {
-    throw new Error(
-      "[economyConfig] PAYOUT_WORKER_ENABLED=true requires PAYOUT_NETWORK=testnet|mainnet (currently unset). See docs/PAYOUT-BROADCAST-PLAN.md.",
-    );
-  }
-  if (
-    economyConfig.payout.network === "testnet" &&
-    !economyConfig.payout.cryptoHdMnemonicTestnet
-  ) {
-    throw new Error(
-      "[economyConfig] PAYOUT_NETWORK=testnet requires CRYPTO_HD_MNEMONIC_TESTNET (kept separate from CRYPTO_HD_MNEMONIC mainnet seed). See docs/PAYOUT-BROADCAST-PLAN.md.",
-    );
-  }
-  if (!(economyConfig.payout.gbpUsdRate > 0)) {
-    // Fail closed: earned value is GBP pence; without an explicit GBP→USD rate
-    // a payout would either assume par (£1=$1) or reuse a mis-valued credit
-    // constant. Refuse to boot rather than cash out at a rate nobody set.
-    throw new Error(
-      "[economyConfig] PAYOUT_WORKER_ENABLED=true requires PAYOUT_GBP_USD_RATE > 0 (USD per 1 GBP, e.g. 1.27). Earned value settles in GBP; payout converts at this rate. See docs/PAYOUT-BROADCAST-PLAN.md.",
-    );
-  }
+  return false;
 }
 
 if (economyConfig.allowUnreconciledSolanaDeposits) {

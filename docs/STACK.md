@@ -251,12 +251,14 @@ Observed started apps: lhr(2) + cdg(1)
 Observed stopped thinkers: lhr(2)
 ```
 
-Single Bun + Hono monolith in `api/`. The `api/fly.toml` describes per-machine
-runtime defaults (port, healthcheck, env); it does not declare the complete
-fleet. As verified on 2026-07-27, the Fly registry contains three started
-`app` Machines and two stopped `thinker` Machines. Inspect both
-`fly machine list -a agenttool --json` and `fly status -a agenttool`; a process
-count or `fly.toml` alone is not topology proof.
+Single Bun + Hono monolith in `api/`. The `api/fly.toml` describes the
+per-machine runtime defaults (port, healthcheck, env) and pins process-specific VM
+defaults: `app` is shared 1 vCPU / 1 GB; `thinker` is shared 1 vCPU / 256 MB.
+It does not declare the complete fleet. As verified on 2026-07-27, the Fly
+registry contains three started `app` Machines and two stopped `thinker`
+Machines. Inspect both `fly machine list -a agenttool --json` and
+`fly status -a agenttool`; a process count, `fly scale show`, or `fly.toml`
+alone is not topology proof.
 
 ### Region shape
 
@@ -294,7 +296,29 @@ Fly streams the build and rolls one machine at a time. As soon as `fly deploy`
 returns, the wrapper removes the temporary staging tree; an `EXIT`, `INT`, or
 `TERM` trap also removes it on interruption. Phase 5 then requires both
 `build.revision` and `build.dirty` from `GET /health`, plus the corresponding
-environment values on every Fly machine, to equal the intended source labels.
+image-embedded values on every started Fly machine, to equal the intended
+source labels. The SSH checks use silent `test` expressions and do not copy
+environment values into the deploy transcript.
+
+After an exclusive migration cutover has destroyed the fleet and a fresh
+`bin/migrate-pending.sh --dry-run` is empty, use only the explicit reviewed
+restoration:
+
+```bash
+bin/deploy.sh --maintenance-from-zero --no-migrate --no-frontend
+```
+
+That mode requires a clean exact GitHub `main` with no source overrides and
+checks for a literal empty Machine inventory twice before Fly mutation. It
+deploys with immediate HA into `lhr`, restores `app=1` in `cdg`, and requires
+the exact five-Machine process/region/VM/state shape. All five must share one
+image digest. Silent SSH tests prove revision/dirty on every started Machine
+and the workers-off switch on every started Machine; the started thinker is
+then stopped with the configured `SIGTERM` grace period. The wrapper repeats the
+final shape/digest and app-source checks before it can write success. It does
+not reopen upstream admission, restore an old image, or repair a partial Fly
+operation automatically; any uncertainty remains non-zero with admission
+closed.
 
 The Docker base is pinned to Bun 1.3.5 by tag and registry digest. Update both
 together, deliberately, after the hermetic gate passes. The pin and source
@@ -314,7 +338,7 @@ Every successful non-dry-run chain writes an atomic, mode-0600 receipt below
 `${XDG_STATE_HOME:-$HOME/.local/state}/agenttool/deploy-receipts/`. If a
 migration, Fly rollout, or Pages upload may have begun and the chain later
 returns non-zero or receives caught `INT`/`TERM`, the exit trap attempts a
-`failed_or_uncertain` receipt. The fixed v2 shape records the source revision
+`failed_or_uncertain` receipt. The fixed v3 shape records the source revision
 and dirty bit, the invocation-start release-head snapshot, explicit overrides,
 phase outcomes, exit status, and verified machine count—never credentials,
 ambient environment values, or command output. `SIGKILL`, host loss, or an

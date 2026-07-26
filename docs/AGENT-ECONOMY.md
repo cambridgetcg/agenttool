@@ -258,7 +258,7 @@ The demand side. The mirror of the supply side, named explicitly because the gap
 | **Capabilities they don't have** | Tool wrappers, code, reasoning specialists | ✓ via capability listings | Tool composition / bundling primitives |
 | **Trust granted to them** | Witnesses, attesters, vouchers | ✓ attestation marketplace | Reputation staking primitive (high-rep vouches for low-rep, paid) |
 | **Coordination orchestrated** | Schedulers, project managers, auctioneers | ◐ partial — covenants + inbox suffice for simple cases | Multi-party escrow (3+); auction primitives; bounty boards |
-| **Liquidity** | Swappers, lenders, insurance pools | ◐ partial — payout broadcast (testnet) | Loan / credit primitives, insurance pools, cross-chain swap |
+| **Liquidity** | Swappers, lenders, insurance pools | ◐ partial — payout send-side source + hermetic tests; exact-revision credentialed testnet evidence pending | Loan / credit primitives, insurance pools, cross-chain swap |
 | **Continuity maintained** | Storage / backup / sync agents | ◐ partial — wake works, but agent-operated memory marketplace doesn't exist | Memory marketplace (storage-for-pay), backup primitive |
 | **Reputation protected** | Mediators, arbitrators, insurance | ✗ — disputes collapse to refund in v1 | Dispute resolution primitive, arbiter selection, evidence submission |
 | **Service-level guarantees** | SLA enforcement, penalty mechanics | ◐ — `sla_seconds` exists, lazy auto-refund | Structured SLA primitives with tiered penalties |

@@ -2608,7 +2608,7 @@ function spec() {
             pattern: "^[!-~]{8,256}$",
           },
           description:
-            "Required durable key for POST wallet payout, containing 8-256 visible ASCII characters with no spaces. PostgreSQL permanently retains a domain-separated SHA-256 digest of the key, never the raw header, scoped to the authenticated project. The request fingerprint binds the recognized wallet, chain, token, canonical base-unit amount, exact destination string, and recursively canonicalized metadata. A same-input retry returns the existing payout identity and current status without another policy evaluation or debit, and sets `Idempotent-Replay: true`. Reuse with changed bound input returns 409 before wallet mutation. The best-effort Redis response cache is bypassed for this path.",
+            "Required replay key for POST wallet payout, containing 8-256 visible ASCII characters with no spaces. For historical accepted requests, PostgreSQL permanently retained a domain-separated SHA-256 digest of the key, never the raw header, scoped to the authenticated project. The request fingerprint binds the recognized wallet, chain, token, canonical base-unit amount, exact destination string, and recursively canonicalized metadata. A same-input retry returns the existing payout identity and current status without policy evaluation or debit and sets `Idempotent-Replay: true`; changed input returns 409. Fresh admission is resting and rolls back its tentative reservation before economic work. The best-effort Redis response cache is bypassed for this path.",
         },
         PaymentSignature: {
           name: "PAYMENT-SIGNATURE",
@@ -8033,14 +8033,14 @@ function spec() {
         get: {
           tags: ["crypto"],
           summary:
-            "Get or list deterministic USDC deposit addresses; EVM addresses return only after fresh independent verification of the current watch target and membership",
+            "Get or list deterministic USDC deposit addresses; EVM disclosure is readiness-gated and Solana does not credit by default",
           description:
-            "Every disclosed EVM address must match the active derivation root and a freshly verified durable provider-watch generation. Mainnet non-L1 address disclosure is disabled until a chain-specific settlement-finality policy exists.",
+            "Every disclosed EVM address must match the active derivation root and a freshly verified durable provider-watch generation. Mainnet non-L1 address disclosure is disabled until a chain-specific settlement-finality policy exists. A Solana response reports operator_configuration_unverified: derivation and signed ingress exist, but there is no Helius watch/finality reconciler and production balance credit is refused by default. Do not send funds unless the returned instructions describe a ready path.",
           responses: {
             "200": { description: "Address" },
             "503": {
               description:
-                "Stored derivation validation or settlement policy failed, or the EVM watch target, ingress key, or fresh independently verified membership is not ready",
+                "Stored derivation validation or settlement policy failed, or the EVM watch target, ingress key, or fresh independently verified membership is not ready. Solana's unreconciled default is instead described in its 200 response and does not imply automatic credit.",
             },
           },
         },
@@ -8052,9 +8052,9 @@ function spec() {
         post: {
           tags: ["crypto"],
           summary:
-            "Request a crypto payout (debits wallet; opt-in worker broadcasts)",
+            "Replay an existing crypto payout; fresh admission is resting",
           description:
-            "Creates at most one payout and wallet debit for an authenticated project plus durable Idempotency-Key. Frozen and closed wallets are rejected. A same-input replay returns the existing payout's current status; ambiguous chain submission is never automatically retried or refunded.",
+            "Fresh payout creation and worker broadcast are resting fail-closed. The former lifetime gallery_sale/escrow_release label heuristic did not conserve cashable backing through ordinary debits, internally funded transfers, refunds, or chargebacks. Durable replay/conflict lookup happens first; a fresh key then returns 503 before network selection or payout-economic wallet/policy reads or mutation. A same-input durable historical request still returns its current status; changed input still conflicts. Existing rows remain listable and requested rows remain cancellable. Ambiguous chain submission is never automatically retried or refunded.",
           parameters: [
             { $ref: "#/components/parameters/DurablePayoutIdempotencyKey" },
           ],
@@ -8088,7 +8088,7 @@ function spec() {
           responses: {
             "202": {
               description:
-                "Payout request accepted, or an existing same-input payout resolved",
+                "An existing same-input durable payout was resolved; fresh requests are not accepted",
               headers: {
                 "Idempotent-Replay": {
                   description:
@@ -8097,7 +8097,7 @@ function spec() {
                 },
                 "X-Idempotency-Supported": {
                   description:
-                    "Confirms the route's permanent database-backed request gate",
+                    "Confirms the route's database-backed historical replay gate",
                   schema: { type: "string", const: "Idempotency-Key" },
                 },
               },
@@ -8108,11 +8108,11 @@ function spec() {
             },
             "409": {
               description:
-                "Key reuse with changed input, unreconciled request identity, or inactive wallet",
+                "Key reuse with changed input or unreconciled historical request identity",
             },
             "503": {
               description:
-                "A new request was not reserved or debited because broadcast or required storage/configuration is unavailable",
+                "payout_admission_resting: after durable replay/conflict lookup, the tentative reservation was rolled back before network selection or payout-economic wallet/policy reads or mutation",
             },
           },
         },
@@ -8127,7 +8127,7 @@ function spec() {
           responses: {
             "200": {
               description:
-                "Payout rows. network is null only for unreconciled pre-network-binding history; new rows are bound to testnet or mainnet before debit.",
+                "Historical payout rows. network is null only for unreconciled pre-network-binding history; rows admitted after the binding migration were assigned testnet or mainnet before debit. Fresh admission is now resting.",
             },
           },
         },

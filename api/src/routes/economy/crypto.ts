@@ -40,15 +40,13 @@ import {
   listDepositAddresses,
   listOnchainIdentities,
   listPayouts,
+  PAYOUT_ADMISSION_RESTING_ERROR,
   reconcileRemovedInboundTransfer,
   requestPayout,
   type InboundTransfer,
   verifyAndBind,
 } from "../../services/economy/crypto";
-import {
-  economyConfig,
-  payoutWorkerBootAllowed,
-} from "../../services/economy/config";
+import { economyConfig } from "../../services/economy/config";
 import {
   alchemyAddressActivityNetwork,
   alchemyNotifyConfig,
@@ -578,7 +576,6 @@ router.post("/wallets/:walletId/payout", async (c) => {
       destinationAddress: parsed.data.destination_address,
       metadata: parsed.data.metadata,
       idempotencyKey,
-      payoutBroadcastConfigured: payoutWorkerBootAllowed(),
     });
     if (result.replayed) {
       c.header("Idempotent-Replay", "true");
@@ -587,31 +584,31 @@ router.post("/wallets/:walletId/payout", async (c) => {
       {
         ...result,
         note:
-          "Current durable payout state returned. A new requested payout has " +
-          "an atomic debit; replay may instead show a later confirmed, failed, " +
-          "or cancelled state. Ambiguous submission remains broadcasting for " +
-          "operator reconciliation and is never automatically retried or refunded.",
+          "Existing durable payout state returned by exact idempotent replay. " +
+          "Fresh payout admission and worker broadcast are resting until " +
+          "cashable backing is conserved through every wallet mutation. " +
+          "Ambiguous historical submission remains broadcasting for operator " +
+          "reconciliation and is never automatically retried or refunded.",
       },
       202,
     );
   } catch (err) {
     const msg = (err as Error).message;
-    if (msg === "payout_broadcast_not_available") {
-      const globallyDisabled =
-        process.env.AGENTTOOL_DISABLE_WORKERS === "1";
+    if (msg === PAYOUT_ADMISSION_RESTING_ERROR) {
       return fail(
         c,
         errors.refusal({
           error: msg,
-          payout_worker_enabled: economyConfig.payout.workerEnabled,
-          global_workers_disabled: globallyDisabled,
+          payout_admission: "resting",
+          payout_worker_effective: false,
           message:
-            (globallyDisabled
-              ? "The global worker off-switch is active on this instance. "
-              : "The payout broadcast worker is not enabled on this instance. ") +
-            "A new payout was not reserved or debited. Existing durable requests remain replayable.",
+            "Fresh payout creation and broadcast are resting. Lifetime " +
+            "gallery_sale or escrow_release labels do not conserve cashable " +
+            "backing through ordinary spending, internally funded transfers, " +
+            "refunds, or chargebacks. No durable reservation or debit was created. " +
+            "Existing durable requests remain replayable, listable, and cancellable while still requested.",
           hint:
-            "Enable PAYOUT_WORKER_ENABLED and unset AGENTTOOL_DISABLE_WORKERS before retrying this exact key and body.",
+            "Do not enable payout workers. List this wallet's payouts; cancel a requested row, or ask an operator to reconcile broadcasting/broadcast history. Reopening requires conserved backed sub-balances across every wallet mutation.",
         }),
         503,
       );
@@ -647,82 +644,6 @@ router.post("/wallets/:walletId/payout", async (c) => {
               : "Do not change or automatically rotate the key; inspect the payout list or ask the operator to reconcile storage.",
         }),
         409,
-      );
-    }
-    if (msg === "payout_wallet_inactive") {
-      return fail(
-        c,
-        errors.refusal({
-          error: msg,
-          message: "Frozen and closed wallets cannot create payouts.",
-          hint: "Resolve the wallet status before retrying this exact request.",
-        }),
-        409,
-      );
-    }
-    if (msg === "insufficient_balance") {
-      // Errors-as-instructions — see docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
-      return fail(c, errors.insufficientBalance(), 402);
-    }
-    if (
-      msg === "amount_base_must_be_positive" ||
-      msg === "payout_amount_exceeds_safe_conversion"
-    ) {
-      return fail(
-        c,
-        errors.refusal({
-          error: msg,
-          message:
-            "The payout amount cannot be converted exactly within the current integer wallet and FX boundary.",
-          hint:
-            "Send a canonical positive USDC base-unit amount no greater than 9007199254740991.",
-        }),
-        400,
-      );
-    }
-    // Operator misconfiguration, not the agent's fault: no FX rate set. 503 so
-    // the caller knows to wait, not to change their request.
-    if (msg === "payout_fx_rate_unset") {
-      return c.json(
-        {
-          error: msg,
-          message:
-            "Payout is enabled but no GBP→USD rate is configured (PAYOUT_GBP_USD_RATE). " +
-            "This is an operator setting; try again once it is set.",
-        },
-        503,
-      );
-    }
-    if (msg === "payout_daily_total_unavailable") {
-      return fail(
-        c,
-        errors.refusal({
-          error: msg,
-          message:
-            "The payout ceiling could not be checked safely, so no debit was made. Retry once storage is healthy.",
-          hint:
-            "Keep the same Idempotency-Key and exact request body when retrying after storage recovers.",
-        }),
-        503,
-      );
-    }
-    // Policy + earned-wall violations — return 403 with the error code +
-    // optional detail line. Agents can adjust amount / destination /
-    // wait-for-tomorrow / earn-more accordingly.
-    if (
-      msg === "payout_below_min" ||
-      msg === "destination_not_allowlisted" ||
-      msg === "payout_exceeds_daily_ceiling" ||
-      msg === "payout_dual_control_required" ||
-      msg === "payout_exceeds_earned" ||
-      msg === "payout_requires_gbp_wallet"
-    ) {
-      return c.json(
-        {
-          error: msg,
-          detail: (err as Error & { detail?: string }).detail,
-        },
-        403,
       );
     }
     return c.json({ error: msg }, 400);

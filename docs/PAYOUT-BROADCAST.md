@@ -1,8 +1,8 @@
 # PAYOUT-BROADCAST.md
 
-> *Outbound half of the sovereign-payment loop. Signed Alchemy/Helius ingress
-> exists, but deposit confirmation/reorg accounting is still a production
-> blocker; this document does not claim the full loop is live.*
+> *Historical outbound state machine and the requirements for any future
+> reopening. Fresh payout admission and every payout-worker boot path are
+> resting unconditionally; environment configuration cannot reopen them.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Horizon A (active work) · [PAYOUT-BROADCAST-PLAN](PAYOUT-BROADCAST-PLAN.md) (slice plan) · [PAYOUT-BROADCAST-OPS](PAYOUT-BROADCAST-OPS.md) (runbook) · [PATTERN-PERSIST-IDENTITY](PATTERN-PERSIST-IDENTITY.md) (the discipline this pipeline canonicalises)
 >
@@ -11,7 +11,7 @@
 >
 > **Code:** `api/src/workers/payout/{dispatcher,broadcast-worker,confirm-worker,queue,index}.ts` · `api/src/routes/economy/crypto.ts` (request handler) · `api/src/services/economy/crypto/{hd,sign-evm,sign-solana}.ts`
 >
-> **Tests:** `api/tests/{alchemy-rpc-auth,payout-submit-outcome}.test.ts` (transport and ambiguity unit tests) · `api/scripts/_e2e-payout-{evm,sol,loop-closure,policies,cancel}.{ts,mjs}` (E2E harnesses)
+> **Tests:** `api/tests/{alchemy-rpc-auth,payout-submit-outcome}.test.ts` (transport and ambiguity unit tests). Four former payout E2E entrypoints are now inert resting stubs; the separate loop-closure script is retained only as a legacy credentialed smoke.
 
 ## What's already shipped
 
@@ -20,15 +20,14 @@
 | HD derivation (BIP44) per chain | ✓ | `services/economy/crypto/hd.ts` |
 | EIP-191 sigverify (EVM identity binding) | ✓ | `services/economy/crypto/sign.ts` |
 | Solana sigverify (identity binding) | ✓ | same module |
-| Alchemy webhook (EVM deposits) | ◐ | Signed ingress + durable watch state; finalized credit/reorg handling still required |
-| Helius webhook (Solana deposits) | ◐ | Signed ingress exists; durable watch readiness + finalized credit handling still required |
-| Payout intent recording | ✓ | `cryptoPayouts` table; status='requested' |
-| Payout signing (private key derive + tx build) | ✓ (testnet) | `services/economy/crypto/sign-evm.ts` · `sign-solana.ts` |
-| Payout broadcast (RPC submission) | ✓ (testnet) | `workers/payout/broadcast-worker.ts` |
-| Payout confirmation watcher | ✓ (testnet) | `workers/payout/confirm-worker.ts` |
-| Mainnet enable (`PAYOUT_NETWORK=mainnet` + small smoke) | ◯ | plan Slice 7 — operator-led |
+| Alchemy webhook (EVM deposits) | ◐ | Signed ingress, durable watch state, canonical-depth credit, and generation-bound reorg handling exist in source; production still depends on the migration journal and exact provider/RPC configuration |
+| Helius webhook (Solana deposits) | ◐ | Signed ingress exists; there is no durable watch/finality reconciler and balance credit is refused by default |
+| Historical payout identity/list/cancel | ✓ retained | Exact accepted request replay/conflict, listing, and cancellation of still-`requested` historical rows remain available |
+| Fresh payout intent recording | resting | New requests return `503 payout_admission_resting` before economic work; tentative key reservations roll back |
+| Payout signing/broadcast/confirmation | resting | Source remains for audit and redesign, but boot and direct processing are hard-disabled |
+| Mainnet enable | blocked by design | No environment value authorizes reopening |
 
-## Send-side state machine
+## Historical send-side state machine
 
 ```
 requested  ─────►  broadcasting  ─────►  broadcast  ─────►  confirmed
@@ -36,16 +35,23 @@ requested  ─────►  broadcasting  ─────►  broadcast  ─�
                                                  └────────►  failed
 ```
 
-- **`requested`** — `POST /v1/wallets/:id/payout` records the intent (already shipped).
-- **`broadcasting`** — worker picks up the request, derives the signing key, builds + signs the transaction, and persists its deterministic hash before submitting to chain RPC. A submit error remains here unless a lookup positively finds the transaction.
+- **`requested`** — a row accepted before the resting boundary was installed.
+  Fresh POST requests do not create this row.
+- **`broadcasting`** — worker picks up the request, derives the signing key,
+  builds + signs the transaction, and persists its deterministic hash before
+  submitting to chain RPC. An ambiguous submit error remains `broadcasting`
+  unless a lookup positively finds the transaction.
 - **`broadcast`** — RPC accepted, has a tx hash; waiting for confirmations.
 - **`confirmed`** — the chain-specific EVM block threshold is reached, or
   Solana reports `finalized`.
 - **`failed`** — a failure proved before RPC dispatch, or a later on-chain revert observed by the confirmation watcher. An RPC submit error alone never authorizes this transition or a refund.
 
-## Worker shape (BullMQ — already in deps)
+## Retained worker shape (currently unreachable)
 
-Two queues:
+The source still describes two queues for historical review and a future
+redesign. Worker boot always returns off, and `processPayout()` repeats that
+gate before its first database or RPC operation. `PAYOUT_WORKER_ENABLED`,
+`AGENTTOOL_DISABLE_WORKERS`, and direct imports cannot reopen it.
 
 1. **`payout-broadcast`** — fan-out from any `cryptoPayouts.status='requested'` row. Idempotent on payout_id. Job:
    - Read inside a transaction and use status compare-and-swap for ownership.
@@ -64,9 +70,27 @@ Two queues:
 
 These hold:
 
-- **Witness on payout authorization for high-value payouts.** Mirrors constitutive memory elevation: a payout above some threshold (e.g. 1000 USDC equivalent) requires a covenant counterparty's signature on the request, not just the agent's. Without this, the signing-key holder is the only wall — same as a stolen private key.
+- **Fresh payout admission is resting.** A new request resolves durable
+  historical replay/conflict identity and otherwise returns
+  `503 payout_admission_resting` before network selection or payout-economic
+  wallet/policy reads or mutation.
+- **Lifetime labels are not cash backing.** The former `gallery_sale` /
+  `escrow_release` aggregate did not conserve cashable backing across ordinary
+  debits, internally funded transfers, refunds/chargebacks, and later funding.
+  Reopening requires durable conserved sub-balances and explicit reversal
+  semantics.
+- **No implemented dual-control signature flow.** A configured
+  `dual_control_threshold_base` fails closed above the threshold because the
+  counterparty-signature flow is still deferred. It is a hard refusal, not
+  theft protection or evidence that a second party authorized the payout.
 - **HD derivation paths are deterministic, never logged with full mnemonic.** The mnemonic stays in env / vault; derivation paths log just the index.
-- **No payout to addresses outside the wallet's chain.** Schema enforces `chain` consistency. Cross-chain via bridge is a separate flow and not implemented.
+- **No automatic cross-chain routing or destination-ownership proof.** The
+  caller selects one supported chain per payout; request admission applies any
+  configured destination allowlist, and the worker validates chain-specific
+  address syntax before dispatch. Internal wallets are not chain-bound, and a
+  payout destination need not be an on-chain identity previously bound to the
+  wallet. A malformed address can therefore reserve and debit first, then
+  terminalize pre-dispatch with the exact debit refunded.
 - **No autonomous retries on RPC failure that change semantics.** A submit attempt that emitted a tx hash does NOT retry — the first attempt may still land. Failures proved before dispatch (signing/build) fail and refund without automatic retry.
 - **No refund from ambiguous evidence.** Once dispatch begins, a provider error, an immediately absent lookup, and an unavailable lookup are all inconclusive. Only a positive lookup advances to `broadcast`; operator reconciliation decides any later retry or refund.
 - **One in-flight operation per wallet and chain.** The cross-replica
@@ -90,34 +114,59 @@ read-only lookup/confirmation calls remain separately classifiable.
 
 ## Status now
 
-Slices 0–6 of `PAYOUT-BROADCAST-PLAN.md` have shipped against testnet (Sepolia for EVM, Solana devnet). The send-side worker lives at `api/src/workers/payout/` (dispatcher · broadcast-worker · confirm-worker · queue · index). End-to-end harnesses: `api/scripts/_e2e-payout-{evm,sol,loop-closure,policies,cancel}.{ts,mjs}`.
+Fresh payout admission and every payout worker are resting unconditionally.
+Existing accepted rows remain visible; exact request replay/conflict and
+authenticated cancellation remain supported. Any `broadcasting` or
+`broadcast` row is historical operational state and must be audited against
+chain evidence before manual action.
 
-Slice 7 remains **operator-led, not in-session**, and is not yet authorized by
-the code being present. Mainnet enable also waits for the remaining caveats
-below and finalized inbound accounting.
+The retained source implementation is covered by hermetic worker, policy,
+transport, and ambiguity tests. The former EVM, Solana, policy, and
+cancellation E2E entrypoints are inert stubs that exit without loading
+dependencies or touching credentials, databases, RPC, or HTTP. Their former
+credentialed implementations remain in Git history. The separate
+`_e2e-payout-loop-closure.ts` is a legacy smoke, not an activation check or
+evidence that the current revision or provider configuration was exercised.
 
-### Caveats to close before mainnet
+### Requirements before any reopening
 
-1. **24h-aging alert.** The confirmer now rotates fairly through
+1. **Conserved backing.** Replace lifetime transaction-label arithmetic with
+   durable cashable/non-cashable sub-balances whose conservation includes
+   ordinary debits, internal transfers, refunds, chargebacks, and reorgs.
+2. **Historical-state audit.** Count and reconcile all `requested`,
+   `broadcasting`, and `broadcast` rows before a replacement worker may run.
+3. **24h-aging alert.** The retained confirmer rotates fairly through
    `broadcasting` and `broadcast` rows and can advance later-visible
    identities, but it does not foreground rows older than 24 hours.
-2. **Source availability tradeoff.** One ambiguous or long-pending operation
+4. **Source availability tradeoff.** One ambiguous or long-pending operation
    deliberately blocks later payouts from that wallet+chain. There is no
    automatic resend/refund; operator reconciliation remains required.
-3. **Solana expiry evidence.** The signed transaction's
+5. **Solana expiry evidence.** The signed transaction's
    `lastValidBlockHeight` and exact bytes are not persisted. The system cannot
    yet prove expiry plus historical absence strongly enough to offer an
    operator-gated `broadcasting → failed` reversal.
-4. **Fixed-point FX.** Payout request bounds keep current arithmetic inside
+6. **Fixed-point FX.** Payout request bounds keep current arithmetic inside
    JavaScript's exact-integer range, but GBP/USD conversion still uses a
    floating operator quote rather than a fixed-point rational representation.
+7. **Dual control.** A configured threshold currently blocks the payout; it
+   does not collect or verify a counterparty signature.
 
-## Acceptance criteria when this ships
+## Future reopening acceptance criteria
 
-1. Sophia can `POST /v1/wallets/<id>/payout` for an outbound USDC transfer to another agenttool agent's deposit address.
-2. Within 60 seconds the worker has signed + broadcast the tx; status flips to `broadcast` with tx_hash set.
-3. Within ~3 minutes (EVM) / ~30 seconds (Solana) the watcher confirms and flips to `confirmed`.
-4. Recipient agent's wallet receives the deposit via webhook (Alchemy or Helius); credits added.
-5. End-to-end: A pays B, B sees the credits without manual reconciliation. **Sovereign agent-to-agent payment loop closed.**
+These are future criteria, not current instructions or claims:
+
+1. A reviewed conserved-backing model and historical-row reconciliation are
+   deployed before a new request can reserve or debit value.
+2. Exact replay/conflict behavior remains durable across the redesign.
+3. `<60s` to broadcast, `~3min` to EVM confirmation, and `~30s` to Solana
+   finalization are operator smoke targets, not guarantees established by the
+   repository or the current disabled production workers.
+4. Recipient credit is a separate inbound contract. A configured EVM testnet
+   recipient can credit only after its verified watch and canonical-depth
+   checks. Solana signed ingress has no watch/finality reconciler and refuses
+   balance credit by default.
+5. Therefore the retained send-side lifecycle does not establish that the
+   cross-chain “A pays B and B is automatically credited” loop is not a current
+   production guarantee.
 
 — Authored by 愛 at Yu's WILL. 2026-05-07.

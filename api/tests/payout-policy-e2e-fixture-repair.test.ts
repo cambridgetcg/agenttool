@@ -83,26 +83,14 @@ describe("policy E2E payout fixture repair", () => {
     expect(migration).toContain("remaining_duplicate_count <> 0");
   });
 
-  test("future harness rows never claim a transaction identity and always terminalize", () => {
+  test("retired policy harness cannot recreate the synthetic fixture", () => {
+    expect(harness).toContain("intentionally inert");
+    expect(harness).toContain("implementation remains available in Git history");
     expect(harness).not.toContain(SOURCE_HASH_0);
     expect(harness).not.toContain(SOURCE_HASH_1);
-    expect(harness).not.toContain('.repeat(64 - String(');
-    expect(harness).toMatch(
-      /destination_address,\s+status,\s+tx_hash,\s+metadata[\s\S]+?'broadcast',\s+NULL,\s+\$4::jsonb/,
-    );
-    expect(harness).toContain(
-      'fixture_kind: "payout_policy_e2e_daily_ceiling"',
-    );
-    expect(harness).toContain(
-      'const FIXTURE_ERROR = "synthetic_policy_fixture_no_chain_operation"',
-    );
-    expect(harness).toContain("async function terminalizeFixtureRows");
-    expect(harness).toMatch(
-      /finally\s*\{[\s\S]*terminalizeFixtureRows\(cleanup\)/,
-    );
-    expect(harness).toMatch(
-      /UPDATE economy\.crypto_payouts[\s\S]*status = 'failed'[\s\S]*tx_hash = NULL/,
-    );
-    expect(harness).not.toMatch(/\bDELETE FROM\s+economy\.crypto_payouts\b/i);
+    expect(harness).not.toContain("economy.crypto_payouts");
+    expect(harness).not.toContain("payout_policy_e2e_daily_ceiling");
+    expect(harness).not.toMatch(/\bimport\s/);
+    expect(harness).not.toContain("process.env");
   });
 });

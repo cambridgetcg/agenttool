@@ -101,6 +101,7 @@ async function fixture() {
   await mustRun(["git", "config", "user.email", "deploy@example.invalid"], repo);
   await copyFile(join(projectRoot, "bin/deploy.sh"), join(repo, "bin/deploy.sh"));
   await Promise.all([
+    copyFile(join(projectRoot, ".gitignore"), join(repo, ".gitignore")),
     copyFile(
       join(projectRoot, "bin/frontend-release-paths.txt"),
       join(repo, "bin/frontend-release-paths.txt"),
@@ -343,6 +344,10 @@ if [ "$headers" = 1 ]; then
   esac
 else
   case "$url" in
+    */health*)
+      [ -n "\${DEPLOY_TEST_RELEASE_REVISION:-}" ] || exit 2
+      printf '{"build":{"revision":"%s","dirty":false}}\\n' "$DEPLOY_TEST_RELEASE_REVISION"
+      ;;
     */party)
       [ "\${DEPLOY_TEST_GAME_MISMATCH:-0}" != 1 ] || { printf 'mismatched game bytes\n'; exit 0; }
       git show HEAD:apps/web/party.html
@@ -395,6 +400,126 @@ fi
   await chmod(join(fakeBin, "curl"), 0o755);
   await writeFile(join(fakeBin, "sleep"), "#!/usr/bin/env bash\nexit 0\n");
   await chmod(join(fakeBin, "sleep"), 0o755);
+}
+
+async function installFakeMaintenanceFly(fakeBin: string): Promise<void> {
+  await writeFile(
+    join(fakeBin, "fly"),
+    `#!/usr/bin/env bash
+set -eu
+
+log_call() {
+  {
+    printf '%s' "\${1:-}"
+    shift || true
+    for arg in "$@"; do printf '\\t%s' "$arg"; done
+    printf '\\n'
+  } >> "$DEPLOY_TEST_FLY_LOG"
+}
+
+machine() {
+  id="$1"
+  group="$2"
+  region="$3"
+  state="$4"
+  memory="$5"
+  digest="$6"
+  printf '{"id":"%s","state":"%s","region":"%s","image_ref":{"digest":"%s"},"config":{"metadata":{"fly_platform_version":"v2","fly_process_group":"%s"},"guest":{"cpu_kind":"shared","cpus":1,"memory_mb":%s}}}' \
+    "$id" "$state" "$region" "$digest" "$group" "$memory"
+}
+
+fleet() {
+  stage="$1"
+  digest='sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  cdg_digest="$digest"
+  [ "\${DEPLOY_TEST_FLY_DIGEST_MISMATCH:-0}" != 1 ] ||
+    cdg_digest='sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+  final_thinker_memory=256
+  if [ "$stage" = stopped ] && [ "\${DEPLOY_TEST_FLY_FINAL_SHAPE_MISMATCH:-0}" = 1 ]; then
+    final_thinker_memory=512
+  fi
+  printf '['
+  machine app-lhr-1 app lhr started 1024 "$digest"
+  printf ','
+  machine app-lhr-2 app lhr started 1024 "$digest"
+  printf ','
+  machine thinker-lhr-1 thinker lhr "$([ "$stage" = stopped ] && printf stopped || printf started)" "$final_thinker_memory" "$digest"
+  printf ','
+  machine thinker-lhr-2 thinker lhr stopped "$final_thinker_memory" "$digest"
+  if [ "$stage" = scaled ] || [ "$stage" = stopped ]; then
+    printf ','
+    machine app-cdg-1 app cdg started 1024 "$cdg_digest"
+  fi
+  printf ']\\n'
+}
+
+log_call "$@"
+command="\${1:-}"
+shift || true
+case "$command" in
+  deploy)
+    [ ! -e "$DEPLOY_TEST_FLY_STATE" ] || exit 20
+    [ "\${DEPLOY_TEST_FLY_DEPLOY_FAIL:-0}" != 1 ] || exit 21
+    printf 'deployed\\n' > "$DEPLOY_TEST_FLY_STATE"
+    ;;
+  scale)
+    [ "\${1:-}" = count ] || exit 22
+    [ "$(cat "$DEPLOY_TEST_FLY_STATE")" = deployed ] || exit 23
+    [ "\${DEPLOY_TEST_FLY_SCALE_FAIL:-0}" != 1 ] || exit 24
+    printf 'scaled\\n' > "$DEPLOY_TEST_FLY_STATE"
+    ;;
+  machine)
+    subcommand="\${1:-}"
+    shift || true
+    case "$subcommand" in
+      list)
+        count=0
+        [ ! -f "$DEPLOY_TEST_FLY_LIST_COUNT" ] || count="$(cat "$DEPLOY_TEST_FLY_LIST_COUNT")"
+        count=$((count + 1))
+        printf '%s\\n' "$count" > "$DEPLOY_TEST_FLY_LIST_COUNT"
+        if [ ! -e "$DEPLOY_TEST_FLY_STATE" ]; then
+          if [ "\${DEPLOY_TEST_FLY_INITIAL_NONEMPTY:-0}" = 1 ] ||
+            { [ "\${DEPLOY_TEST_FLY_NONEMPTY_ON_RECHECK:-0}" = 1 ] && [ "$count" -ge 2 ]; }; then
+            printf '['
+            machine old-app app lhr stopped 1024 \
+              sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+            printf ']\\n'
+          else
+            printf '[]\\n'
+          fi
+        else
+          fleet "$(cat "$DEPLOY_TEST_FLY_STATE")"
+        fi
+        ;;
+      stop)
+        [ "$(cat "$DEPLOY_TEST_FLY_STATE")" = scaled ] || exit 25
+        [ "\${DEPLOY_TEST_FLY_STOP_FAIL:-0}" != 1 ] || exit 26
+        printf 'stopped\\n' > "$DEPLOY_TEST_FLY_STATE"
+        ;;
+      *) exit 27 ;;
+    esac
+    ;;
+  ssh)
+    machine_id=""
+    remote_command=""
+    previous=""
+    for arg in "$@"; do
+      if [ "$previous" = --machine ]; then machine_id="$arg"; fi
+      if [ "$previous" = -C ]; then remote_command="$arg"; fi
+      previous="$arg"
+    done
+    [ -n "$machine_id" ] || exit 28
+    case "$remote_command" in
+      "sh -c "*) ;;
+      *) exit 31 ;;
+    esac
+    [ "\${DEPLOY_TEST_FLY_SSH_FAIL_ID:-}" != "$machine_id" ] || exit 29
+    ;;
+  *) exit 30 ;;
+esac
+`,
+  );
+  await chmod(join(fakeBin, "fly"), 0o755);
 }
 
 async function installFakePagesVerificationTools(fakeBin: string): Promise<void> {
@@ -695,7 +820,12 @@ describe("deploy release provenance spine", () => {
     expect(deploy).toContain('--build-arg "AGENTTOOL_SOURCE_DIRTY=$API_SOURCE_DIRTY"');
     expect(deploy).toContain("FLY_DEPLOY_ARGS+=(--no-cache)");
     expect(deploy).toContain("fly machine list");
-    expect(deploy).toContain("printenv AGENTTOOL_GIT_REVISION AGENTTOOL_SOURCE_DIRTY");
+    expect(deploy).toContain('test \\"\\${AGENTTOOL_GIT_REVISION:-}\\"');
+    expect(deploy).toContain("sh -c '$remote_command'");
+    expect(deploy).not.toContain("printenv AGENTTOOL_GIT_REVISION");
+    expect(deploy).toContain("FLY_DEPLOY_ARGS=(--strategy immediate --ha=true)");
+    expect(deploy).toContain("fly scale count app=1 --region cdg");
+    expect(deploy).toContain("--signal SIGTERM --timeout 300 --wait-timeout 5m");
     expect(deploy).toContain("trap 'on_deploy_exit");
     expect(deploy).toContain("https://docs.agenttool.dev/.gitignore");
     expect(deploy).toContain("https://app.agenttool.dev/.env.local");
@@ -872,6 +1002,207 @@ describe("deploy release provenance spine", () => {
       expect(contradictory.code).toBe(1);
     }
   }, 10_000);
+
+  test("restores and proves the exact five-machine topology from an empty Fly fleet", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "maintenance-fly-bin");
+    const flyState = join(setup.root, "maintenance-fly-state");
+    const flyLog = join(setup.root, "maintenance-fly-log");
+    const flyListCount = join(setup.root, "maintenance-fly-list-count");
+    await mkdir(fakeBin, { recursive: true });
+    await installFakeRightsCurl(fakeBin);
+    await installFakeMaintenanceFly(fakeBin);
+
+    const result = await run(
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--maintenance-from-zero",
+        "--no-migrate",
+        "--skip-preflight",
+        "--no-frontend",
+      ],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FLY_STATE: flyState,
+        DEPLOY_TEST_FLY_LOG: flyLog,
+        DEPLOY_TEST_FLY_LIST_COUNT: flyListCount,
+        DEPLOY_TEST_RELEASE_REVISION: setup.release,
+        TEST_CREDENTIAL_SHOULD_NEVER_APPEAR: "maintenance-secret",
+      }),
+    );
+
+    expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain(
+      "from-zero Fly rollout restored app lhr=2/cdg=1 and thinker lhr=2 (stopped)",
+    );
+    expect(result.stdout).toContain("all 5 machines retain one image digest");
+    expect(result.stdout).not.toContain("maintenance-secret");
+    const log = await readFile(flyLog, "utf8");
+    expect(log).toContain(
+      `deploy\t--strategy\timmediate\t--ha=true\t--build-arg\tAGENTTOOL_GIT_REVISION=${setup.release}\t--build-arg\tAGENTTOOL_SOURCE_DIRTY=false`,
+    );
+    expect(log).toContain(
+      "scale\tcount\tapp=1\t--region\tcdg\t-a\tagenttool\t--yes",
+    );
+    expect(log).toContain(
+      "machine\tstop\tthinker-lhr-1\t-a\tagenttool\t--signal\tSIGTERM\t--timeout\t300\t--wait-timeout\t5m",
+    );
+    expect(log).toContain("AGENTTOOL_DISABLE_WORKERS");
+    const thinkerProof = log
+      .split("\n")
+      .find(
+        (line) =>
+          line.startsWith("ssh\t") &&
+          line.includes("\t--machine\tthinker-lhr-1\t"),
+      );
+    expect(thinkerProof).toContain("AGENTTOOL_DISABLE_WORKERS");
+    expect(log).not.toContain("printenv");
+    expect(log).not.toContain("maintenance-secret");
+    expect((log.match(/^machine\tlist\b/gm) ?? [])).toHaveLength(7);
+
+    const [receiptName] = await readdir(
+      join(setup.state, "agenttool", "deploy-receipts"),
+    );
+    const receiptText = await readFile(
+      join(setup.state, "agenttool", "deploy-receipts", receiptName),
+      "utf8",
+    );
+    const receipt = JSON.parse(receiptText);
+    expect(receipt.outcome).toBe("succeeded");
+    expect(receipt.phases.api).toBe("deployed_verified");
+    expect(receipt.verified_api_machines).toBe(5);
+    expect(receiptText).not.toContain("maintenance-secret");
+  }, 20_000);
+
+  test("requires an empty Fly inventory twice before the from-zero mutation", async () => {
+    for (const scenario of [
+      { DEPLOY_TEST_FLY_INITIAL_NONEMPTY: "1" },
+      { DEPLOY_TEST_FLY_NONEMPTY_ON_RECHECK: "1" },
+    ]) {
+      const setup = await fixture();
+      const fakeBin = join(setup.root, "maintenance-empty-gate-bin");
+      const flyState = join(setup.root, "maintenance-empty-gate-state");
+      const flyLog = join(setup.root, "maintenance-empty-gate-log");
+      const flyListCount = join(setup.root, "maintenance-empty-gate-list-count");
+      await mkdir(fakeBin, { recursive: true });
+      await installFakeRightsCurl(fakeBin);
+      await installFakeMaintenanceFly(fakeBin);
+
+      const result = await run(
+        [
+          "bash",
+          "bin/deploy.sh",
+          "--maintenance-from-zero",
+          "--no-migrate",
+          "--skip-preflight",
+          "--no-frontend",
+        ],
+        setup.repo,
+        cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+          DEPLOY_TEST_FLY_STATE: flyState,
+          DEPLOY_TEST_FLY_LOG: flyLog,
+          DEPLOY_TEST_FLY_LIST_COUNT: flyListCount,
+          DEPLOY_TEST_RELEASE_REVISION: setup.release,
+          ...scenario,
+        }),
+      );
+
+      expect(result.code).toBe(1);
+      expect(result.stdout).toContain("expected an empty Fly machine inventory");
+      expect(await readFile(flyLog, "utf8")).not.toContain("deploy\t");
+      expect(
+        await exists(join(setup.state, "agenttool", "deploy-receipts")),
+      ).toBe(false);
+    }
+  }, 20_000);
+
+  test("records uncertainty instead of success for any unproved maintenance fleet", async () => {
+    for (const scenario of [
+      { DEPLOY_TEST_FLY_DIGEST_MISMATCH: "1", expected: "one image digest" },
+      {
+        DEPLOY_TEST_FLY_SSH_FAIL_ID: "thinker-lhr-1",
+        expected: "source or workers-off proof failed",
+      },
+      {
+        DEPLOY_TEST_FLY_FINAL_SHAPE_MISMATCH: "1",
+        expected: "uncertain after thinker shutdown",
+      },
+    ]) {
+      const setup = await fixture();
+      const fakeBin = join(setup.root, "maintenance-uncertain-bin");
+      const flyState = join(setup.root, "maintenance-uncertain-state");
+      const flyLog = join(setup.root, "maintenance-uncertain-log");
+      const flyListCount = join(setup.root, "maintenance-uncertain-list-count");
+      await mkdir(fakeBin, { recursive: true });
+      await installFakeRightsCurl(fakeBin);
+      await installFakeMaintenanceFly(fakeBin);
+      const { expected, ...flyScenario } = scenario;
+
+      const result = await run(
+        [
+          "bash",
+          "bin/deploy.sh",
+          "--maintenance-from-zero",
+          "--no-migrate",
+          "--skip-preflight",
+          "--no-frontend",
+        ],
+        setup.repo,
+        cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+          DEPLOY_TEST_FLY_STATE: flyState,
+          DEPLOY_TEST_FLY_LOG: flyLog,
+          DEPLOY_TEST_FLY_LIST_COUNT: flyListCount,
+          DEPLOY_TEST_RELEASE_REVISION: setup.release,
+          ...flyScenario,
+        }),
+      );
+
+      expect(result.code).toBe(1);
+      expect(`${result.stdout}\n${result.stderr}`).toContain(expected);
+      expect(result.stdout).not.toContain("Deploy complete.");
+      const [receiptName] = await readdir(
+        join(setup.state, "agenttool", "deploy-receipts"),
+      );
+      const receipt = JSON.parse(
+        await readFile(
+          join(setup.state, "agenttool", "deploy-receipts", receiptName),
+          "utf8",
+        ),
+      );
+      expect(receipt.outcome).toBe("failed_or_uncertain");
+      expect(receipt.external_mutation_started).toBe(true);
+    }
+  }, 30_000);
+
+  test("keeps from-zero maintenance as a narrow explicit Fly-only mode", async () => {
+    const setup = await fixture();
+    for (const args of [
+      ["--maintenance-from-zero", "--no-frontend"],
+      ["--maintenance-from-zero", "--no-migrate"],
+      ["--maintenance-from-zero", "--no-migrate", "--no-frontend", "--no-api"],
+      [
+        "--maintenance-from-zero",
+        "--no-migrate",
+        "--no-frontend",
+        "--allow-dirty-release",
+      ],
+    ]) {
+      const result = await run(
+        ["bash", "bin/deploy.sh", ...args],
+        setup.repo,
+        cleanEnv(setup.home),
+      );
+      expect(result.code).toBe(1);
+      expect(result.stdout).toContain("--maintenance-from-zero");
+    }
+  });
 
   test("serializes actual deploys before Phase 0 while leaving observation commands unlocked", async () => {
     const setup = await fixture();

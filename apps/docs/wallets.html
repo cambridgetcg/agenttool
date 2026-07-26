@@ -208,66 +208,75 @@
       </div>
 
       <h2 id="crypto">Crypto deposits — sovereign funding</h2>
-      <p>Each wallet has a <strong>deterministic deposit address</strong> per supported chain, derived via BIP44 (EVM) or SLIP-0010 ed25519 (Solana). The address is generated server-side from the project's seed; we monitor it for inbound transfers and credit the wallet on confirmation.</p>
+      <p>Each wallet can derive a <strong>deterministic USDC deposit address</strong> via BIP44 (EVM) or SLIP-0010 ed25519 (Solana). Only USDC deposits are accepted. EVM disclosure waits for a verified provider watch and EVM credit waits for canonical depth. Solana derivation and signed ingress exist, but there is no Helius watch/finality reconciler and production refuses immediate credit by default.</p>
 
       <table class="params-table">
-        <thead><tr><th>Chain</th><th>Path</th><th>Tokens monitored</th></tr></thead>
+        <thead><tr><th>Chain family</th><th>Path</th><th>Current deposit boundary</th></tr></thead>
         <tbody>
-          <tr><td>Base</td><td>BIP44 m/44'/8453'/0'/0/&lt;idx&gt;</td><td>USDC, ETH</td></tr>
-          <tr><td>Ethereum</td><td>BIP44 m/44'/60'/0'/0/&lt;idx&gt;</td><td>USDC, ETH</td></tr>
-          <tr><td>Polygon</td><td>BIP44 m/44'/966'/0'/0/&lt;idx&gt;</td><td>USDC, MATIC</td></tr>
-          <tr><td>Arbitrum</td><td>BIP44 m/44'/9001'/0'/0/&lt;idx&gt;</td><td>USDC, ETH</td></tr>
-          <tr><td>Optimism</td><td>BIP44 m/44'/614'/0'/0/&lt;idx&gt;</td><td>USDC, ETH</td></tr>
-          <tr><td>Solana</td><td>SLIP-0010 m/44'/501'/&lt;idx&gt;'/0'</td><td>USDC, SOL</td></tr>
+          <tr><td>Ethereum, Base, Polygon, Arbitrum, Optimism</td><td>BIP44 m/44'/60'/0'/0/&lt;idx&gt;</td><td>USDC only; verified Alchemy watch plus canonical receipt/log depth. Mainnet non-L1 disclosure and credit remain disabled until chain-specific settlement policy exists.</td></tr>
+          <tr><td>Solana</td><td>SLIP-0010 m/44'/501'/&lt;idx&gt;'/0'</td><td>USDC only; watch registration, finality, and reversal are unreconciled. Do not send production funds.</td></tr>
         </tbody>
       </table>
 
       <div class="endpoint" id="get-deposit-address">
         <div class="endpoint-header">
           <span class="method get">GET</span>
-          <span class="endpoint-path">/v1/wallets/<span class="var">:id</span>/deposit-address</span>
+          <span class="endpoint-path">/v1/wallets/<span class="var">:id</span>/deposit-address?chain=base&amp;token=USDC</span>
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Returns the deposit addresses for all supported chains. Send funds to any of them; we credit the wallet at the FX rate of confirmation.</p>
+          <p class="endpoint-desc">Mint or fetch one chain address. An EVM address is withheld until its active derivation, signed ingress, and provider watch are ready. Omitting <code>chain</code> lists already minted rows under <code>addresses[]</code> only after the same revalidation.</p>
           <div class="code-block">
             <div class="code-label"><span>200 OK</span></div>
 <pre>{
   <span class="key">"wallet_id"</span>: <span class="str">"..."</span>,
-  <span class="key">"chains"</span>: {
-    <span class="key">"base"</span>:     { <span class="key">"address"</span>: <span class="str">"0xabc..."</span>, <span class="key">"tokens"</span>: [<span class="str">"USDC"</span>, <span class="str">"ETH"</span>] },
-    <span class="key">"ethereum"</span>: { <span class="key">"address"</span>: <span class="str">"0xabc..."</span>, <span class="key">"tokens"</span>: [<span class="str">"USDC"</span>, <span class="str">"ETH"</span>] },
-    <span class="key">"solana"</span>:   { <span class="key">"address"</span>: <span class="str">"7xKX..."</span>, <span class="key">"tokens"</span>: [<span class="str">"USDC"</span>, <span class="str">"SOL"</span>] }
-  }
+  <span class="key">"chain"</span>: <span class="str">"base"</span>,
+  <span class="key">"token"</span>: <span class="str">"USDC"</span>,
+  <span class="key">"address"</span>: <span class="str">"0xabc..."</span>,
+  <span class="key">"derivation_path"</span>: <span class="str">"m/44'/60'/0'/0/..."</span>,
+  <span class="key">"contract_address"</span>: <span class="str">"0x..."</span>,
+  <span class="key">"watch_status"</span>: <span class="str">"provider_verified"</span>,
+  <span class="key">"credit_finality"</span>: <span class="str">"pending_until_chain_depth"</span>
 }</pre>
           </div>
         </div>
       </div>
 
       <h2 id="onchain-bind">Bind your own on-chain wallet</h2>
-      <p>Prove ownership of an external wallet via <strong>EIP-191</strong> (EVM) or <strong>ed25519</strong> (Solana) signed message. Your sovereign address becomes part of your identity at agenttool, usable later for agent-to-agent escrow settlement and on-chain attestations.</p>
+      <p>Prove ownership of an external wallet via <strong>EIP-191</strong> (EVM) or <strong>ed25519</strong> (Solana). First request a five-minute, single-use challenge, sign its exact <code>message</code>, then verify the signature and nonce.</p>
 
       <div class="endpoint" id="post-onchain">
         <div class="endpoint-header">
           <span class="method post">POST</span>
-          <span class="endpoint-path">/v1/wallets/<span class="var">:id</span>/onchain</span>
+          <span class="endpoint-path">/v1/wallets/<span class="var">:id</span>/onchain/challenge</span>
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Attach an external on-chain address. Sign the canonical message <code>"agenttool bind &lt;wallet_id&gt; &lt;timestamp&gt;"</code> with the sovereign key; we verify and bind.</p>
+          <p class="endpoint-desc">Send <code>{"chain":"base"}</code> (or another supported chain) and sign the exact returned message.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="verify-onchain">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/wallets/<span class="var">:id</span>/onchain/verify</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Submit the same chain with the claimed address, challenge nonce, and signature. EVM signatures use EIP-191; Solana accepts a base58 or hex ed25519 signature.</p>
           <div class="code-block">
-            <div class="code-label"><span>body — EVM</span></div>
+            <div class="code-label"><span>JSON body — verify</span></div>
 <pre>{
-  <span class="key">"chain"</span>:     <span class="str">"base"</span>,
-  <span class="key">"address"</span>:   <span class="str">"0x1234..."</span>,
-  <span class="key">"timestamp"</span>: <span class="num">1746720000</span>,
-  <span class="key">"signature"</span>: <span class="str">"&lt;EIP-191 sig of canonical message&gt;"</span>
+  <span class="key">"chain"</span>: <span class="str">"base"</span>,
+  <span class="key">"address"</span>: <span class="str">"0x1234..."</span>,
+  <span class="key">"signature"</span>: <span class="str">"0x..."</span>,
+  <span class="key">"nonce"</span>: <span class="str">"..."</span>
 }</pre>
           </div>
         </div>
       </div>
 
-      <h2 id="payout">Payout — withdraw to your sovereign address</h2>
+      <h2 id="payout">Payout — fresh admission is resting</h2>
 
       <div class="endpoint" id="post-payout">
         <div class="endpoint-header">
@@ -276,8 +285,8 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Withdraw to a bound on-chain address. Amount, chain, token. We broadcast a signed transaction; you receive funds at the next block confirmation.</p>
-          <p class="muted">Solana payout broadcast is pending the Helius integration — see <a href="https://docs.agenttool.dev/wallets#payout">PAYOUT-BROADCAST.md</a>.</p>
+          <p class="endpoint-desc">Fresh payout creation is resting unconditionally. Durable replay/conflict lookup happens first; a new request then returns <code>503 payout_admission_resting</code> before network selection or payout-economic wallet/policy reads or mutation, and its tentative key reservation rolls back. Environment flags, network/FX configuration, and direct worker imports cannot reopen admission or broadcasting. Existing historical rows remain listable, and an exact replay of a historical accepted request returns its current state; changed input under that durable key returns 409.</p>
+          <p class="muted">The former lifetime <code>gallery_sale</code> / <code>escrow_release</code> label heuristic is insufficient: those labels did not conserve cashable backing across ordinary debits, internally funded transfers, refunds/chargebacks, or later funding. Reopening requires durable conserved sub-balances and explicit reversal semantics. Historical <code>requested</code> rows remain cancellable; ambiguous <code>broadcasting</code> rows require manual reconciliation and are never automatically retried or refunded.</p>
         </div>
       </div>
 
@@ -315,7 +324,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Get a deterministic USDC deposit address (EVM or Solana). Send funds; the balance credits on confirmation.</p>
+          <p class="endpoint-desc">Get a deterministic USDC deposit address and inspect its watch/finality status before sending. EVM credit waits for canonical depth. Solana has no Helius watch/finality reconciler and refuses immediate credit by default.</p>
         </div>
       </div>
 

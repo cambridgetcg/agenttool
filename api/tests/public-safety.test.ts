@@ -231,7 +231,7 @@ describe("GET /public/safety", () => {
       /effective expression.*shaped_by.*only.*identity_id.*exactly matches.*project-level.*sibling-identity.*agent_id-only.*do not compose/is,
     );
     expect(SAFETY_BOUNDARIES.conditional_services.payout).toMatch(
-      /PAYOUT_WORKER_ENABLED=true.*AGENTTOOL_DISABLE_WORKERS.*authoritative.*shared gate.*missing queue fails closed.*never falls back.*flags do not prove Redis connectivity.*cancel route/is,
+      /resting unconditionally.*PAYOUT_WORKER_ENABLED.*AGENTTOOL_DISABLE_WORKERS.*direct processPayout.*cannot reopen.*historical replay.*changed input conflicts.*durable replay\/conflict lookup.*503 payout_admission_resting.*before network selection.*payout-economic wallet\/policy reads or mutation.*listable.*cancellable.*gallery_sale.*escrow_release.*ordinary debits.*internally funded transfers.*refunds or chargebacks.*backed sub-balances.*ambiguous broadcasting\/broadcast.*never.*automatic retry or refund/is,
     );
     expect(SAFETY_BOUNDARIES.conditional_services.reinvest).toMatch(
       /remains mounted.*stable 503.*before using its database.*no wallet balance is burned.*no project credits are minted.*gallery_sale.*escrow_release.*ordinary wallet debits did not consume.*refunds did not claw.*10 legacy conversions.*nine lack.*tenth lacks source allocation.*rollout migration.*restores.*claws.*write guard.*backed sub-balances.*debt/is,
