@@ -337,10 +337,30 @@ case "$url" in
     fi
     ;;
   */party)
-    cat apps/web/party.html
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'cache-control: public, max-age=0, must-revalidate' \
+        "content-security-policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" \
+        'referrer-policy: no-referrer' \
+        'link: <https://agenttool.dev/party.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/play>; rel="related"; type="application/json"' \
+        'x-agent-surface: local-party-game' \
+        ''
+    else
+      cat apps/web/party.html
+    fi
     ;;
   */party.json)
-    cat apps/web/party.json
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'cache-control: public, max-age=0, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-agent-surface: local-party-rules' \
+        ''
+    else
+      cat apps/web/party.json
+    fi
     ;;
   */party.js)
     cat apps/web/party.js
@@ -949,7 +969,7 @@ describe("deploy release provenance spine", () => {
     }
   });
 
-  test("requires changed game inputs and verifies both local game header rows", async () => {
+  test("requires changed game inputs and verifies every local game header row", async () => {
     const deploy = await readFile(join(projectRoot, "bin/deploy.sh"), "utf8");
     const gameAssets = [
       ["party.html", "party"],
@@ -970,14 +990,17 @@ describe("deploy release provenance spine", () => {
     }
 
     expect(deploy).toMatch(
-      /required_frontend_inputs=\([\s\S]*apps\/web\/party\.html[\s\S]*apps\/web\/party\.json[\s\S]*apps\/web\/party\.js[\s\S]*apps\/web\/party\.css[\s\S]*apps\/web\/sky\.html[\s\S]*apps\/web\/sky\.json[\s\S]*apps\/web\/sky\.js[\s\S]*apps\/web\/sky\.css[\s\S]*\)/,
+      /REQUIRED_FRONTEND_INPUTS=\([\s\S]*apps\/web\/party\.html[\s\S]*apps\/web\/party\.json[\s\S]*apps\/web\/party\.js[\s\S]*apps\/web\/party\.css[\s\S]*apps\/web\/sky\.html[\s\S]*apps\/web\/sky\.json[\s\S]*apps\/web\/sky\.js[\s\S]*apps\/web\/sky\.css[\s\S]*\)/,
     );
-    expect(deploy.match(/required_frontend_inputs=\(/g)).toHaveLength(1);
+    expect(deploy.match(/REQUIRED_FRONTEND_INPUTS=\(/g)).toHaveLength(1);
     expect(
       deploy.match(/Required frontend release input is missing: \$local_path/g),
     ).toHaveLength(1);
     expect(deploy).toContain(
       "Required frontend release input is missing: $local_path",
+    );
+    expect(deploy).toContain(
+      '"party|Lantern Relay|local-party-game|local-party-rules"',
     );
     expect(deploy).toContain(
       '"room|ROOM ∞|local-room-game|local-room-rules"',
@@ -988,6 +1011,52 @@ describe("deploy release provenance spine", () => {
     expect(deploy).toContain('"X-Agent-Surface" "$game_surface"');
     expect(deploy).toContain('"X-Agent-Surface" "$rules_surface"');
   });
+
+  test("refuses a missing game input before any production mutation", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "missing-game-input-bin");
+    const migrationMarker = join(setup.root, "migration-ran");
+    const preflightMarker = join(setup.root, "preflight-ran");
+    const frontendMarker = join(setup.root, "frontend-ran");
+    const flyMarker = join(setup.root, "fly-ran");
+    await mkdir(fakeBin, { recursive: true });
+    await writeFile(
+      join(fakeBin, "fly"),
+      "#!/usr/bin/env bash\nset -eu\ntouch \"$DEPLOY_TEST_FLY_MARKER\"\n",
+    );
+    await chmod(join(fakeBin, "fly"), 0o755);
+    await unlink(join(setup.repo, "apps/web/sky.css"));
+
+    const result = await run(
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--skip-preflight",
+        "--allow-dirty-release",
+      ],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        MIGRATION_MARKER: migrationMarker,
+        PREFLIGHT_MARKER: preflightMarker,
+        DEPLOY_TEST_FRONTEND_MARKER: frontendMarker,
+        DEPLOY_TEST_FLY_MARKER: flyMarker,
+      }),
+    );
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain(
+      "Required frontend release input is missing: apps/web/sky.css",
+    );
+    expect(result.stdout).not.toContain("Phase 1");
+    expect(await exists(migrationMarker)).toBe(false);
+    expect(await exists(preflightMarker)).toBe(false);
+    expect(await exists(frontendMarker)).toBe(false);
+    expect(await exists(flyMarker)).toBe(false);
+    expect(await exists(deployLockPath(setup.home))).toBe(false);
+    expect(await exists(join(setup.state, "agenttool", "deploy-receipts"))).toBe(false);
+  }, 10_000);
 
   test("publishes Rights of Life prerequisites before API discovery and verifies exact static contracts", async () => {
     const [deploy, headers, publicDoc, canonDoc, publicSchema, canonSchema] =

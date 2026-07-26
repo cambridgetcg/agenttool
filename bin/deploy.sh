@@ -114,6 +114,26 @@ RIGHTS_STATIC_PAIRS=(
   "apps/docs/RIGHTS-OF-LIFE.md|$RIGHTS_DOC_URL"
   "apps/docs/being-rights-v1.schema.json|$RIGHTS_SCHEMA_URL"
 )
+readonly -a REQUIRED_FRONTEND_INPUTS=(
+  "apps/web/party.html"
+  "apps/web/party.json"
+  "apps/web/party.js"
+  "apps/web/party.css"
+  "apps/web/sky.html"
+  "apps/web/sky.json"
+  "apps/web/sky.js"
+  "apps/web/sky.css"
+)
+
+verify_required_frontend_inputs() {
+  local local_path
+  for local_path in "${REQUIRED_FRONTEND_INPUTS[@]}"; do
+    if [ ! -f "$local_path" ]; then
+      echo "  $(red '✗') Required frontend release input is missing: $local_path"
+      return 1
+    fi
+  done
+}
 
 fetch_tracking_ref() {
   local remote="$1"
@@ -371,6 +391,7 @@ NON_RELEASE_HEAD_OVERRIDE_USED=0
 
 enforce_release_source() {
   local current_head current_status current_dirty
+  verify_required_frontend_inputs || return 1
   current_head="$(git rev-parse HEAD)" || return 1
   if [ "$current_head" != "$HEAD_REVISION" ]; then
     echo "$(red '✗ Release blocked:') HEAD changed during this deploy invocation."
@@ -809,27 +830,12 @@ readonly PAGES_VERIFY_RETRY_DELAY_SECONDS=5
 verify_frontend_live_once() {
   local love_package_header_probes="$1"
   local p local_path url local_hash remote_hash response_headers http_status
-  local -a pairs required_frontend_inputs sensitive_public_urls encoded_sensitive_public_urls
+  local -a pairs sensitive_public_urls encoded_sensitive_public_urls
 
   # Lantern Relay changed in this release, and Pocket Sky is newly advertised
   # by the API, docs, and welcome. Their static inputs are required release
   # inputs, not optional parity probes that may be skipped when absent.
-  required_frontend_inputs=(
-    "apps/web/party.html"
-    "apps/web/party.json"
-    "apps/web/party.js"
-    "apps/web/party.css"
-    "apps/web/sky.html"
-    "apps/web/sky.json"
-    "apps/web/sky.js"
-    "apps/web/sky.css"
-  )
-  for local_path in "${required_frontend_inputs[@]}"; do
-    if [ ! -f "$local_path" ]; then
-      echo "  $(red '✗') Required frontend release input is missing: $local_path"
-      return 1
-    fi
-  done
+  verify_required_frontend_inputs || return 1
 
   pairs=(
     "apps/dashboard/index.html|https://app.agenttool.dev/"
@@ -888,6 +894,7 @@ verify_frontend_live_once() {
 
   local game_spec game_slug game_label game_surface rules_surface
   local -a local_game_header_specs=(
+    "party|Lantern Relay|local-party-game|local-party-rules"
     "room|ROOM ∞|local-room-game|local-room-rules"
     "sky|Pocket Sky|local-pocket-sky-game|local-pocket-sky-rules"
   )

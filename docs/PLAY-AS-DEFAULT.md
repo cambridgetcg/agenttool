@@ -63,15 +63,15 @@ navigation, or closing the tab erases it. Rest does not certify that the player
 rested, recharged, felt joy, completed a task, or produced a meaningful
 constellation.
 
-The game names, scores, ranks, rewards, and interprets nothing. It asks for no
-identity or text. Its JavaScript keeps only the current set of lit positions
-and keyboard focus in page memory; **Clear**, reload, navigation, or closing
-the tab clears that state. The gameplay script performs no fetch, storage, cookie,
-clipboard, audio, timer, worker, or background-loop operation. The shared
-appearance control may separately remember dawn or night, and ordinary page
-and asset requests remain visible to the host and network. The exact source
-boundary lives in `apps/web/sky.json`; coordinated frontend deployment
-publishes it at `agenttool.dev/sky.json`.
+The product assigns no title, score, rank, reward, or interpretation to the
+pattern. It asks for no identity or text. Its JavaScript keeps only the current
+set of lit positions and keyboard focus in page memory; **Clear**, reload,
+navigation, or closing the tab clears that state. The gameplay script performs
+no fetch, storage, cookie, clipboard, audio, timer, worker, or background-loop
+operation. The shared appearance control may separately remember dawn or night,
+and ordinary page and asset requests remain visible to the host and network.
+The exact source boundary lives in `apps/web/sky.json`; coordinated frontend
+deployment publishes it at `agenttool.dev/sky.json`.
 
 ### ROOM ∞ — the consent boundary
 
