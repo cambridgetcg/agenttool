@@ -8,8 +8,11 @@ import {
 } from "../src/index.js";
 import {
   ADDRESS_A,
+  ADDRESS_B,
+  CONTRACT,
   FakeTransport,
   HASH_A,
+  HASH_B,
   NOW,
   transportResponse,
 } from "./helpers.js";
@@ -85,7 +88,7 @@ describe("input and response bounds", () => {
     expect(transport.requests).toHaveLength(0);
   });
 
-  test("requires transfer selectors, exact categories, bounded pages, and bounded ranges", async () => {
+  test("bounds transfer queries and rejects raw provider page keys", async () => {
     const transport = new FakeTransport((request) =>
       transportResponse(request, { transfers: [] }),
     );
@@ -133,8 +136,8 @@ describe("input and response bounds", () => {
       client.getAssetTransfersPage({
         ...base,
         toAddress: ADDRESS_A,
-        pageKey: "\u001b[secret]",
-      }),
+        pageKey: "provider_page_1=",
+      } as never),
       "invalid_input",
     );
     expect(transport.requests).toHaveLength(0);
@@ -244,6 +247,188 @@ describe("input and response bounds", () => {
       }),
       "invalid_response",
     );
+  });
+
+  test("binds numbered blocks and transaction results to the requested identity", async () => {
+    const blockClient = basicClient(
+      new FakeTransport((request) =>
+        transportResponse(request, {
+          hash: HASH_A,
+          parentHash: HASH_B,
+          number: "0x11",
+          timestamp: "0x20",
+          transactions: [],
+        }),
+      ),
+    );
+    await expectCode(
+      blockClient.getBlock({ block: "0x10" }),
+      "invalid_response",
+    );
+
+    const transactionClient = basicClient(
+      new FakeTransport((request) =>
+        transportResponse(request, {
+          hash: HASH_B,
+          from: ADDRESS_A,
+          to: ADDRESS_B,
+          blockHash: null,
+          blockNumber: null,
+          transactionIndex: null,
+          nonce: "0x0",
+          value: "0x0",
+          input: "0x",
+        }),
+      ),
+    );
+    await expectCode(
+      transactionClient.getTransaction({ transactionHash: HASH_A }),
+      "invalid_response",
+    );
+
+    const receiptClient = basicClient(
+      new FakeTransport((request) =>
+        transportResponse(request, {
+          transactionHash: HASH_B,
+          blockHash: HASH_A,
+          blockNumber: "0x10",
+          transactionIndex: "0x0",
+          from: ADDRESS_A,
+          to: ADDRESS_B,
+          contractAddress: null,
+          status: "0x1",
+          gasUsed: "0x5208",
+          cumulativeGasUsed: "0x5208",
+          effectiveGasPrice: "0x1",
+          logs: [],
+        }),
+      ),
+    );
+    await expectCode(
+      receiptClient.getTransactionReceipt({
+        transactionHash: HASH_A,
+      }),
+      "invalid_response",
+    );
+  });
+
+  test("rejects transfer rows outside the requested filters", async () => {
+    const validTransfer = {
+      uniqueId: "transfer:bounded",
+      hash: HASH_A,
+      blockNum: "0x15",
+      from: ADDRESS_A,
+      to: ADDRESS_B,
+      category: "erc20",
+      rawContract: {
+        address: CONTRACT,
+        value: "0x1",
+      },
+    };
+    const invalidRows = [
+      { ...validTransfer, blockNum: "0xf" },
+      { ...validTransfer, blockNum: "0x21" },
+      { ...validTransfer, from: ADDRESS_B },
+      { ...validTransfer, to: ADDRESS_A },
+      {
+        ...validTransfer,
+        rawContract: {
+          address: ADDRESS_A,
+          value: "0x1",
+        },
+      },
+      {
+        ...validTransfer,
+        category: "external",
+        rawContract: null,
+      },
+    ];
+
+    for (const transfer of invalidRows) {
+      const client = basicClient(
+        new FakeTransport((request) =>
+          transportResponse(request, { transfers: [transfer] }),
+        ),
+      );
+      await expectCode(
+        client.getAssetTransfersPage({
+          fromBlock: "0x10",
+          toBlock: "0x20",
+          categories: ["erc20"],
+          fromAddress: ADDRESS_A,
+          toAddress: ADDRESS_B,
+          contractAddresses: [CONTRACT],
+        }),
+        "invalid_response",
+      );
+    }
+  });
+
+  test("applies contract filters only to contract-addressed transfer categories", async () => {
+    const client = basicClient(
+      new FakeTransport((request) =>
+        transportResponse(request, {
+          transfers: [
+            {
+              uniqueId: "transfer:external",
+              hash: HASH_A,
+              blockNum: "0x15",
+              from: ADDRESS_A,
+              to: ADDRESS_B,
+              category: "external",
+              rawContract: null,
+            },
+          ],
+        }),
+      ),
+    );
+
+    const page = await client.getAssetTransfersPage({
+      fromBlock: "0x10",
+      toBlock: "0x20",
+      categories: ["external", "erc20"],
+      fromAddress: ADDRESS_A,
+      contractAddresses: [CONTRACT],
+    });
+    expect(page.transfers[0]).toMatchObject({
+      category: "external",
+      contractAddress: null,
+    });
+  });
+
+  test("rejects forged or cross-client continuation cursors before transport", async () => {
+    const issuingTransport = new FakeTransport((request) =>
+      transportResponse(request, {
+        transfers: [],
+        pageKey: "provider_page_1=",
+      }),
+    );
+    const issuingClient = basicClient(issuingTransport);
+    const first = await issuingClient.getAssetTransfersPage({
+      fromBlock: "0x1",
+      toBlock: "0x2",
+      categories: ["erc20"],
+      toAddress: ADDRESS_A,
+    });
+    const cursor = first.nextCursor;
+    if (cursor === null) {
+      throw new Error("Expected a continuation cursor.");
+    }
+
+    const otherTransport = new FakeTransport((request) =>
+      transportResponse(request, { transfers: [] }),
+    );
+    const otherClient = basicClient(otherTransport);
+    await expectCode(
+      otherClient.getNextAssetTransfersPage(cursor),
+      "invalid_input",
+    );
+    await expectCode(
+      issuingClient.getNextAssetTransfersPage({} as never),
+      "invalid_input",
+    );
+    expect(issuingTransport.requests).toHaveLength(1);
+    expect(otherTransport.requests).toHaveLength(0);
   });
 });
 

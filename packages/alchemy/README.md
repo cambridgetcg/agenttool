@@ -82,9 +82,13 @@ closed method set does not include `alchemy_getAssetTransfers`; that operation
 needs a separately reviewed, equally closed Data API transport rather than a
 fallback to generic HTTP.
 
-The client stops waiting and aborts the injected signal at its deadline. A
-transport that cannot cancel already-dispatched work may still finish that
-work and consume provider or capability quota; cancellation is not rollback.
+The reference agentcred broker limits each granted response to 32 KiB, which is
+stricter than this package's 2 MiB transport ceiling. A large block, code, or
+transaction result can therefore fail at the broker before reaching the
+package's own response checks. Its `callEvmJsonRpcRead` method also has no
+per-use signal or deadline argument. The package can stop waiting at its
+deadline, but an already-dispatched broker call may still finish and consume
+provider or capability quota; cancellation is not rollback.
 
 The fixed network descriptors cover Ethereum, Base, Polygon, Arbitrum, and
 Optimism mainnets plus Sepolia/Amoy variants. They expose Alchemy's network
@@ -105,6 +109,11 @@ const page = await alchemy.getAssetTransfersPage({
   toAddress: "0x1111111111111111111111111111111111111111",
   pageSize: 50,
 });
+
+const nextPage =
+  page.nextCursor === null
+    ? null
+    : await alchemy.getNextAssetTransfersPage(page.nextCursor);
 ```
 
 Every call:
@@ -118,6 +127,10 @@ Every call:
 - asks the transport to enforce a 2 MiB raw-response ceiling and independently
   checks the parsed JSON result's depth, node count, and serialized size;
 - caps byte-heavy code and transaction input fields;
+- fails closed when a non-null numbered block has a different block number, a
+  transaction or receipt has a different transaction hash, or a transfer falls
+  outside the requested block, address, category, or category-applicable
+  contract filters;
 - returns only a validated subset of block, transaction, receipt, and transfer
   data, omitting floating human values and enriched token metadata; and
 - never includes provider response text or transport exceptions in public
@@ -126,12 +139,22 @@ Every call:
 Transfer calls return one page only. They require an explicit numeric start
 block, at least one address/contract selector, one or more closed categories,
 at most 100 items, at most 20 contract filters, and at most a 100,000-block
-span when both ends are numbered. The caller must deliberately pass the
-returned `nextPageKey` to fetch another page; there is no automatic crawl or
-retry. Provider page keys are opaque and short-lived. `internal` transfers are
-accepted only on Ethereum Mainnet and Polygon Mainnet, matching Alchemy's
-documented support; other category/network coverage can still vary and a
-provider error is not converted into an empty result.
+span when both ends are numbered. Each call to `getAssetTransfersPage` or
+`getNextAssetTransfersPage` makes exactly one provider call; there is no
+automatic crawl or retry.
+
+A page exposes only `nextCursor` to the high-level client caller, never the
+provider's raw `pageKey`. That key stays confined to package internals and the
+closed request/result boundary seen by the trusted injected transport. The
+cursor is opaque, process-local continuation state bound to the normalized
+query, network, and client instance that issued it. It has no readable
+continuation fields, cannot preserve its state through serialization, cannot
+be reused with another client, and cannot resume after a process restart. The
+caller must deliberately pass it to `getNextAssetTransfersPage`; after a
+restart, begin again with a validated query. `internal` transfers are accepted
+only on Ethereum Mainnet and Polygon Mainnet, matching Alchemy's documented
+support; other category/network coverage can still vary and a provider error
+is not converted into an empty result.
 
 ## Provenance and freshness
 

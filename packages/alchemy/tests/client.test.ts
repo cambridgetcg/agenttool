@@ -147,7 +147,6 @@ describe("bounded named reads", () => {
       toAddress: ADDRESS_B,
       contractAddresses: [CONTRACT],
       pageSize: 25,
-      pageKey: "page_0=",
     });
 
     expect(chain.chainId).toBe(1);
@@ -216,9 +215,7 @@ describe("bounded named reads", () => {
         contractAddresses: [CONTRACT],
         excludeZeroValue: true,
         pageSize: 25,
-        pageKey: "page_0=",
       },
-      nextPageKey: "next_page-1=",
       transfers: [
         {
           transferId: "transfer:1",
@@ -280,9 +277,11 @@ describe("bounded named reads", () => {
         maxCount: "0x19",
         toAddress: ADDRESS_B,
         contractAddresses: [CONTRACT],
-        pageKey: "page_0=",
       },
     ]);
+    expect("pageKey" in transfers.query).toBe(false);
+    expect("nextPageKey" in transfers).toBe(false);
+    expect(transfers.nextCursor).not.toBeNull();
   });
 
   test("returns null for not-yet-observed blocks, transactions, and receipts", async () => {
@@ -341,6 +340,78 @@ describe("bounded named reads", () => {
     });
   });
 
+  test("keeps continuation state opaque and bound to the original normalized query", async () => {
+    const transport = new FakeTransport((request) =>
+      transportResponse(
+        request,
+        transport.requests.length === 1
+          ? {
+              transfers: [],
+              pageKey: "provider_page_1=",
+            }
+          : { transfers: [] },
+      ),
+    );
+    const client = createAlchemyReadClient({
+      network: "ethereum-mainnet",
+      transport,
+      now: () => NOW,
+    });
+
+    const first = await client.getAssetTransfersPage({
+      fromBlock: "0x1",
+      toBlock: "0x2",
+      categories: ["erc20"],
+      toAddress: ADDRESS_B.toUpperCase().replace(
+        "0X",
+        "0x",
+      ) as typeof ADDRESS_B,
+      contractAddresses: [CONTRACT],
+      pageSize: 25,
+    });
+    const cursor = first.nextCursor;
+    expect(cursor).not.toBeNull();
+    if (cursor === null) {
+      throw new Error("Expected a continuation cursor.");
+    }
+    expect(Object.keys(cursor)).toEqual([]);
+    expect(Object.getOwnPropertySymbols(cursor)).toEqual([]);
+    expect(Object.getPrototypeOf(cursor)).toBeNull();
+    expect(Object.isFrozen(cursor)).toBe(true);
+    expect(JSON.stringify(cursor)).toBe("{}");
+
+    const second = await client.getNextAssetTransfersPage(cursor);
+    expect(second.query).toEqual(first.query);
+    expect(second.nextCursor).toBeNull();
+    expect(transport.requests.map((request) => request.call.params)).toEqual([
+      [
+        {
+          fromBlock: "0x1",
+          toBlock: "0x2",
+          category: ["erc20"],
+          excludeZeroValue: true,
+          withMetadata: false,
+          maxCount: "0x19",
+          toAddress: ADDRESS_B,
+          contractAddresses: [CONTRACT],
+        },
+      ],
+      [
+        {
+          fromBlock: "0x1",
+          toBlock: "0x2",
+          category: ["erc20"],
+          excludeZeroValue: true,
+          withMetadata: false,
+          maxCount: "0x19",
+          toAddress: ADDRESS_B,
+          contractAddresses: [CONTRACT],
+          pageKey: "provider_page_1=",
+        },
+      ],
+    ]);
+  });
+
   test("treats the provider's empty page key as end of pagination", async () => {
     const transport = new FakeTransport((request) =>
       transportResponse(request, {
@@ -360,7 +431,7 @@ describe("bounded named reads", () => {
       categories: ["erc20"],
       toAddress: ADDRESS_B,
     });
-    expect(page.nextPageKey).toBeNull();
+    expect(page.nextCursor).toBeNull();
   });
 
   test("preserves bounded ERC-1155 batch token/value identity", async () => {

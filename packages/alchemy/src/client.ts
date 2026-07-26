@@ -19,6 +19,7 @@ import type {
   AlchemyTransferCategory,
   AlchemyTransportRequest,
   AlchemyTransportResponse,
+  AssetTransfersCursor,
   AssetTransfersPageObservation,
   AssetTransfersQuery,
   BalanceObservation,
@@ -108,6 +109,22 @@ interface InvocationResult {
   readonly result: unknown;
   readonly provenance: ObservationProvenance;
 }
+
+interface NormalizedTransfersRequest {
+  readonly params: AlchemyAssetTransfersRpcParams;
+  readonly pageSize: number;
+  readonly categories: ReadonlySet<AlchemyTransferCategory>;
+  readonly contractAddresses: ReadonlySet<string>;
+  readonly query: NormalizedAssetTransfersQuery;
+}
+
+interface TransferCursorState {
+  readonly owner: object;
+  readonly request: NormalizedTransfersRequest;
+  readonly pageKey: string;
+}
+
+const TRANSFER_CURSOR_STATES = new WeakMap<object, TransferCursorState>();
 
 class DeadlineSignal extends Error {}
 
@@ -404,18 +421,6 @@ function parseTransferCategory(value: unknown): AlchemyTransferCategory {
   return value as AlchemyTransferCategory;
 }
 
-function normalizePageKey(value: unknown): string {
-  if (
-    typeof value !== "string" ||
-    value.length === 0 ||
-    utf8Bytes(value) > MAX_TRANSFER_CURSOR_BYTES ||
-    !TRANSFER_CURSOR_PATTERN.test(value)
-  ) {
-    return invalidInput();
-  }
-  return value;
-}
-
 function parsePageKey(value: unknown): string {
   const pageKey = requireBoundedResponseString(
     value,
@@ -427,14 +432,39 @@ function parsePageKey(value: unknown): string {
   return pageKey;
 }
 
+function issueTransferCursor(
+  owner: object,
+  request: NormalizedTransfersRequest,
+  pageKey: string,
+): AssetTransfersCursor {
+  const cursor = Object.freeze(
+    Object.create(null) as Record<string, never>,
+  ) as unknown as AssetTransfersCursor;
+  TRANSFER_CURSOR_STATES.set(cursor, {
+    owner,
+    request,
+    pageKey,
+  });
+  return cursor;
+}
+
+function readTransferCursor(
+  owner: object,
+  cursor: unknown,
+): TransferCursorState {
+  if (typeof cursor !== "object" || cursor === null) {
+    return invalidInput();
+  }
+  const state = TRANSFER_CURSOR_STATES.get(cursor);
+  if (state === undefined || state.owner !== owner) {
+    return invalidInput();
+  }
+  return state;
+}
+
 function normalizeTransfersQuery(
   value: unknown,
-): {
-  readonly params: AlchemyAssetTransfersRpcParams;
-  readonly pageSize: number;
-  readonly categories: ReadonlySet<AlchemyTransferCategory>;
-  readonly query: NormalizedAssetTransfersQuery;
-} {
+): NormalizedTransfersRequest {
   const query = requireInputRecord(value);
   assertExactInputKeys(query, [
     "fromBlock",
@@ -445,7 +475,6 @@ function normalizeTransfersQuery(
     "contractAddresses",
     "excludeZeroValue",
     "pageSize",
-    "pageKey",
   ]);
   const fromBlock = normalizeHexQuantity(query.fromBlock);
   let toBlock: HexQuantity | "latest" | "indexed";
@@ -530,9 +559,6 @@ function normalizeTransfersQuery(
   ) {
     return invalidInput();
   }
-  const pageKey =
-    query.pageKey === undefined ? undefined : normalizePageKey(query.pageKey);
-
   const params: AlchemyAssetTransfersRpcParams = {
     fromBlock,
     toBlock,
@@ -543,12 +569,12 @@ function normalizeTransfersQuery(
     ...(fromAddress === undefined ? {} : { fromAddress }),
     ...(toAddress === undefined ? {} : { toAddress }),
     ...(contractAddresses === undefined ? {} : { contractAddresses }),
-    ...(pageKey === undefined ? {} : { pageKey }),
   };
   return {
     params: Object.freeze(params),
     pageSize,
     categories: categorySet,
+    contractAddresses: new Set(contractAddresses ?? []),
     query: Object.freeze({
       fromBlock,
       toBlock,
@@ -558,18 +584,17 @@ function normalizeTransfersQuery(
       contractAddresses: contractAddresses ?? Object.freeze([]),
       excludeZeroValue: params.excludeZeroValue,
       pageSize,
-      pageKey: pageKey ?? null,
     }),
   };
 }
 
 function parseTransfer(
   value: unknown,
-  requestedCategories: ReadonlySet<AlchemyTransferCategory>,
+  request: NormalizedTransfersRequest,
 ): AlchemyAssetTransfer {
   const transfer = requireResponseRecord(value);
   const category = parseTransferCategory(transfer.category);
-  if (!requestedCategories.has(category)) {
+  if (!request.categories.has(category)) {
     return invalidResponse();
   }
   const rawContract =
@@ -628,6 +653,39 @@ function parseTransfer(
     return invalidResponse();
   }
   const blockNumberHex = parseHexQuantity(transfer.blockNum);
+  const from = parseAddress(transfer.from);
+  const to = parseNullableAddress(transfer.to);
+  const blockNumber = BigInt(blockNumberHex);
+  if (blockNumber < BigInt(request.query.fromBlock)) {
+    return invalidResponse();
+  }
+  if (
+    request.query.toBlock !== "latest" &&
+    request.query.toBlock !== "indexed" &&
+    blockNumber > BigInt(request.query.toBlock)
+  ) {
+    return invalidResponse();
+  }
+  if (
+    request.query.fromAddress !== null &&
+    from !== request.query.fromAddress
+  ) {
+    return invalidResponse();
+  }
+  if (
+    request.query.toAddress !== null &&
+    to !== request.query.toAddress
+  ) {
+    return invalidResponse();
+  }
+  if (
+    request.contractAddresses.size > 0 &&
+    CONTRACT_FILTER_CATEGORIES.has(category) &&
+    (contractAddress === null ||
+      !request.contractAddresses.has(contractAddress))
+  ) {
+    return invalidResponse();
+  }
   const transferId = requireBoundedResponseString(
     transfer.uniqueId,
     MAX_TRANSFER_ID_BYTES,
@@ -640,8 +698,8 @@ function parseTransfer(
     transactionHash: parseHash(transfer.hash),
     blockNumber: quantityToDecimal(blockNumberHex),
     blockNumberHex,
-    from: parseAddress(transfer.from),
-    to: parseNullableAddress(transfer.to),
+    from,
+    to,
     category,
     contractAddress,
     rawValueHex,
@@ -919,9 +977,17 @@ class ReadClient implements AlchemyReadClient {
       blockFreshness(block),
       options,
     );
+    const observedBlock = parseBlock(invocation.result);
+    if (
+      observedBlock !== null &&
+      block.startsWith("0x") &&
+      observedBlock.numberHex !== block
+    ) {
+      return invalidResponse();
+    }
     return {
       blockReference: block,
-      block: parseBlock(invocation.result),
+      block: observedBlock,
       provenance: invocation.provenance,
     };
   }
@@ -971,6 +1037,9 @@ class ReadClient implements AlchemyReadClient {
       options,
     );
     const transaction = parseTransaction(invocation.result);
+    if (transaction !== null && transaction.hash !== transactionHash) {
+      return invalidResponse();
+    }
     return {
       transactionHash,
       transaction,
@@ -1005,6 +1074,9 @@ class ReadClient implements AlchemyReadClient {
       options,
     );
     const receipt = parseReceipt(invocation.result);
+    if (receipt !== null && receipt.transactionHash !== transactionHash) {
+      return invalidResponse();
+    }
     return {
       transactionHash,
       receipt,
@@ -1051,30 +1123,60 @@ class ReadClient implements AlchemyReadClient {
     query: AssetTransfersQuery,
     options?: AlchemyReadCallOptions,
   ): Promise<AssetTransfersPageObservation> {
-    const normalized = normalizeTransfersQuery(query);
+    return this.#readAssetTransfersPage(
+      normalizeTransfersQuery(query),
+      undefined,
+      options,
+    );
+  }
+
+  async getNextAssetTransfersPage(
+    cursor: AssetTransfersCursor,
+    options?: AlchemyReadCallOptions,
+  ): Promise<AssetTransfersPageObservation> {
+    const state = readTransferCursor(this, cursor);
+    return this.#readAssetTransfersPage(
+      state.request,
+      state.pageKey,
+      options,
+    );
+  }
+
+  async #readAssetTransfersPage(
+    request: NormalizedTransfersRequest,
+    pageKey: string | undefined,
+    options: AlchemyReadCallOptions | undefined,
+  ): Promise<AssetTransfersPageObservation> {
     if (
-      normalized.categories.has("internal") &&
+      request.categories.has("internal") &&
       !INTERNAL_TRANSFER_NETWORKS.has(this.#network)
     ) {
       return invalidInput();
     }
+    const params =
+      pageKey === undefined
+        ? request.params
+        : Object.freeze({
+            ...request.params,
+            pageKey,
+          });
     const invocation = await this.#invoke(
       {
         method: "alchemy_getAssetTransfers",
-        params: [normalized.params],
+        params: [params],
       },
-      blockFreshness(normalized.params.toBlock, "alchemy-index"),
+      blockFreshness(request.params.toBlock, "alchemy-index"),
       options,
     );
     const result = requireResponseRecord(invocation.result);
     if (
       !Array.isArray(result.transfers) ||
-      result.transfers.length > normalized.pageSize
+      result.transfers.length > request.pageSize
     ) {
       return invalidResponse();
     }
     const transfers = result.transfers.map((transfer) =>
-      parseTransfer(transfer, normalized.categories),
+      parseTransfer(transfer, request),
     );
     const nextPageKey =
       result.pageKey === undefined ||
@@ -1083,9 +1185,12 @@ class ReadClient implements AlchemyReadClient {
         ? null
         : parsePageKey(result.pageKey);
     return {
-      query: normalized.query,
+      query: request.query,
       transfers: Object.freeze(transfers),
-      nextPageKey,
+      nextCursor:
+        nextPageKey === null
+          ? null
+          : issueTransferCursor(this, request, nextPageKey),
       provenance: invocation.provenance,
     };
   }

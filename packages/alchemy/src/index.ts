@@ -34,6 +34,7 @@ export type {
   AlchemyTransportResponse,
   AssetTransfersPageObservation,
   AssetTransfersQuery,
+  AssetTransfersCursor,
   BalanceObservation,
   BlockNumberObservation,
   BlockObservation,

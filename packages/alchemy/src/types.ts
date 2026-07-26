@@ -300,7 +300,6 @@ export interface AssetTransfersQuery {
   readonly contractAddresses?: readonly EvmAddress[];
   readonly excludeZeroValue?: boolean;
   readonly pageSize?: number;
-  readonly pageKey?: string;
 }
 
 export interface NormalizedAssetTransfersQuery {
@@ -312,7 +311,19 @@ export interface NormalizedAssetTransfersQuery {
   readonly contractAddresses: readonly EvmAddress[];
   readonly excludeZeroValue: boolean;
   readonly pageSize: number;
-  readonly pageKey: string | null;
+}
+
+declare const ASSET_TRANSFERS_CURSOR_BRAND: unique symbol;
+
+/**
+ * Opaque, process-local continuation state issued by one Alchemy read client.
+ *
+ * A cursor can be used only with the same client instance that issued it. It
+ * contains no publicly readable provider page key or mutable query fields.
+ */
+export interface AssetTransfersCursor {
+  readonly [ASSET_TRANSFERS_CURSOR_BRAND]:
+    "agenttool.alchemy.asset-transfers-cursor/0.1";
 }
 
 export interface AlchemyAssetTransfer {
@@ -337,7 +348,7 @@ export interface Erc1155TransferValue {
 export interface AssetTransfersPageObservation {
   readonly query: NormalizedAssetTransfersQuery;
   readonly transfers: readonly AlchemyAssetTransfer[];
-  readonly nextPageKey: string | null;
+  readonly nextCursor: AssetTransfersCursor | null;
   readonly provenance: ObservationProvenance;
 }
 
@@ -386,6 +397,10 @@ export interface AlchemyReadClient {
   ): Promise<CodeObservation>;
   getAssetTransfersPage(
     query: AssetTransfersQuery,
+    options?: AlchemyReadCallOptions,
+  ): Promise<AssetTransfersPageObservation>;
+  getNextAssetTransfersPage(
+    cursor: AssetTransfersCursor,
     options?: AlchemyReadCallOptions,
   ): Promise<AssetTransfersPageObservation>;
 }
