@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { getTableConfig } from "drizzle-orm/pg-core";
+import { readFileSync } from "node:fs";
 
 import {
   cryptoWebhookEvents,
@@ -85,5 +86,23 @@ describe("Alchemy deposit identity invariants", () => {
 
   test("requires a non-null provider log identity for webhook deduplication", () => {
     expect(cryptoWebhookEvents.logIndex.notNull).toBe(true);
+  });
+
+  test("persists desired watch state instead of mutating Alchemy on the request path", () => {
+    const source = readFileSync(
+      new URL("../src/services/economy/crypto/index.ts", import.meta.url),
+      "utf8",
+    );
+    const start = source.indexOf(
+      "export async function getOrCreateDepositAddress",
+    );
+    const end = source.indexOf("export async function listDepositAddresses");
+    const issuance = source.slice(start, end);
+
+    expect(issuance).toContain("persistDepositAddressAndDesiredWatch");
+    expect(issuance).not.toContain("ensureAlchemyAddressWatched");
+    expect(issuance.indexOf('watch.status !== "converged"')).toBeGreaterThan(
+      issuance.indexOf("persistDepositAddressAndDesiredWatch"),
+    );
   });
 });

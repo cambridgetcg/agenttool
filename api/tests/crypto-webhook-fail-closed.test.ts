@@ -10,9 +10,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { economyConfig } from "../src/services/economy/config";
 import {
   ALCHEMY_WEBHOOK_ID_ENV,
-  AlchemyNotifyUnavailableError,
   alchemyAddressActivityNetwork,
 } from "../src/services/economy/crypto/alchemy-notify";
+import { DepositWatchNotReadyError } from "../src/services/economy/crypto";
 import {
   USDC_SOL_MINT,
   type EvmChain,
@@ -91,7 +91,7 @@ function alchemyEnvelope(
 }
 
 describe("deposit address disclosure readiness", () => {
-  test("does not return a partial list when a later provider watch is unavailable", async () => {
+  test("does not return a partial list when a later durable watch is unverified", async () => {
     let calls = 0;
     const resolution = resolveReadyDepositAddressRows(
       "00000000-0000-0000-0000-000000000001",
@@ -101,7 +101,7 @@ describe("deposit address disclosure readiness", () => {
       ],
       async (_walletId, chain, token) => {
         calls += 1;
-        if (calls === 2) throw new AlchemyNotifyUnavailableError(503);
+        if (calls === 2) throw new DepositWatchNotReadyError("retry_wait");
         return {
           chain,
           token,
@@ -112,7 +112,7 @@ describe("deposit address disclosure readiness", () => {
     );
 
     await expect(resolution).rejects.toBeInstanceOf(
-      AlchemyNotifyUnavailableError,
+      DepositWatchNotReadyError,
     );
     expect(calls).toBe(2);
   });
@@ -156,7 +156,7 @@ describe("deposit address disclosure readiness", () => {
         address: "0x0000000000000000000000000000000000000002",
         derivation_path: "m/44'/60'/0'/0/2",
         contract_address: activeUsdcAddress("base"),
-        watch_status: "provider_accepted",
+        watch_status: "provider_verified",
         credit_finality: "unreconciled",
         created_at: "1970-01-01T00:00:00.000Z",
       },

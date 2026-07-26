@@ -36,10 +36,14 @@ import {
 import { deriveDepositAddress, isChainSupported } from "./hd";
 import {
   activeMnemonic,
+  activeNetwork,
   activeUsdcAddress,
   activeUsdcMintSolana,
 } from "./network";
-import { ensureAlchemyAddressWatched } from "./alchemy-notify";
+import {
+  DepositWatchInvariantError,
+  persistDepositAddressAndDesiredWatch,
+} from "./deposit-watch";
 import { reversePayoutDebit } from "./payout-refund";
 import {
   buildChallenge,
@@ -59,6 +63,25 @@ export class DepositAddressInvariantError extends Error {
       "The stored or winning deposit address does not match this wallet's active derivation root. No address was returned or registered.",
     );
     this.name = "DepositAddressInvariantError";
+  }
+}
+
+export class DepositWatchNotReadyError extends Error {
+  readonly code: "deposit_watch_pending" | "deposit_watch_blocked";
+  readonly retryable: boolean;
+  readonly watchStatus: string;
+
+  constructor(watchStatus: string) {
+    const blocked = watchStatus === "blocked";
+    super(
+      blocked
+        ? "The durable provider watch is blocked and requires operator repair."
+        : "The durable provider watch has not yet been independently verified.",
+    );
+    this.name = "DepositWatchNotReadyError";
+    this.code = blocked ? "deposit_watch_blocked" : "deposit_watch_pending";
+    this.retryable = !blocked;
+    this.watchStatus = watchStatus;
   }
 }
 
@@ -82,44 +105,6 @@ export async function getOrCreateDepositAddress(
     throw new TypeError("Only USDC deposit addresses are supported.");
   }
 
-  // Already minted?
-  const existing = await db
-    .select()
-    .from(depositAddresses)
-    .where(
-      and(
-        eq(depositAddresses.walletId, walletId),
-        eq(depositAddresses.chain, chain),
-        eq(depositAddresses.token, token),
-      ),
-    )
-    .limit(1);
-
-  if (existing[0]) {
-    const expected = deriveDepositAddress(activeMnemonic(), chain, walletId);
-    if (!depositAddressMatches(chain, existing[0], expected)) {
-      // Existing rows minted under a different mnemonic/network are not safe
-      // to advertise: the active payout signer may not control them.
-      throw new DepositAddressInvariantError();
-    }
-    if (isEvmChain(chain)) {
-      // The provider update is idempotent. Reassert it on every read so a
-      // transient registration failure can be repaired by retrying this
-      // endpoint, and so an existing DB row is never mistaken for proof that
-      // Alchemy is actually watching the address.
-      await ensureAlchemyAddressWatched({
-        chain,
-        address: existing[0].address,
-      });
-    }
-    return {
-      address: existing[0].address,
-      derivation_path: existing[0].derivationPath,
-      chain,
-      token,
-    };
-  }
-
   if (!isChainSupported(chain)) {
     throw new Error(
       `Chain ${chain} is recognised but deposit derivation is unavailable.`,
@@ -135,6 +120,47 @@ export async function getOrCreateDepositAddress(
     walletId,
   );
 
+  if (isEvmChain(chain)) {
+    // The deposit row and desired provider/network watch are one database
+    // decision. Provider I/O happens later in the leased reconciler, never
+    // inside this transaction. We disclose the address only after a later
+    // independent observation proves the active Address Activity subscription
+    // has the intended callback and membership for this generation.
+    let watch;
+    try {
+      watch = await persistDepositAddressAndDesiredWatch({
+        walletId,
+        chain,
+        token: "USDC",
+        address: derived.address,
+        derivationPath: derived.derivation_path,
+        provider: "alchemy",
+        network: activeNetwork(),
+        desiredState: "watching",
+      });
+    } catch (error) {
+      if (error instanceof DepositWatchInvariantError) {
+        throw new DepositAddressInvariantError();
+      }
+      throw error;
+    }
+    if (
+      watch.status !== "converged" ||
+      watch.observedState !== "watching"
+    ) {
+      throw new DepositWatchNotReadyError(watch.status);
+    }
+    return {
+      address: watch.address,
+      derivation_path: derived.derivation_path,
+      chain,
+      token,
+    };
+  }
+
+  // Solana keeps the existing local-only issuance path until a Helius
+  // desired/observed adapter exists. Creating a durable Helius intent that no
+  // worker can reconcile would add a permanently blocked row, not readiness.
   await db
     .insert(depositAddresses)
     .values({
@@ -163,17 +189,6 @@ export async function getOrCreateDepositAddress(
     .limit(1);
   if (!persisted || !depositAddressMatches(chain, persisted, derived)) {
     throw new DepositAddressInvariantError();
-  }
-
-  if (isEvmChain(chain)) {
-    // Do not return deposit instructions until the corresponding Alchemy
-    // Address Activity webhook has accepted this address. If registration is
-    // unavailable, the DB row remains safe and the next identical GET retries
-    // the idempotent provider update.
-    await ensureAlchemyAddressWatched({
-      chain,
-      address: persisted.address,
-    });
   }
 
   return {

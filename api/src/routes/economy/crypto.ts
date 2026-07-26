@@ -30,6 +30,7 @@ import {
 import {
   cancelPayout,
   DepositAddressInvariantError,
+  DepositWatchNotReadyError,
   getOrCreateDepositAddress,
   ingestInboundTransfer,
   issueChallenge,
@@ -44,8 +45,6 @@ import {
   payoutWorkerBootAllowed,
 } from "../../services/economy/config";
 import {
-  AlchemyNotifyConfigurationError,
-  AlchemyNotifyUnavailableError,
   alchemyAddressActivityNetwork,
   alchemyNotifyConfig,
 } from "../../services/economy/crypto/alchemy-notify";
@@ -162,7 +161,7 @@ interface ReadyDepositAddress {
   address: string;
   derivation_path: string;
   contract_address: string | null;
-  watch_status: "provider_accepted" | "operator_configuration_unverified";
+  watch_status: "provider_verified" | "operator_configuration_unverified";
   credit_finality: "unreconciled";
   created_at: string;
 }
@@ -191,7 +190,7 @@ export async function resolveReadyDepositAddressRows(
           ? activeUsdcMintSolana()
           : null,
       watch_status: evm
-        ? "provider_accepted"
+        ? "provider_verified"
         : "operator_configuration_unverified",
       credit_finality: "unreconciled",
       created_at: row.createdAt.toISOString(),
@@ -246,18 +245,18 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
       // disclosing any address.
       readyRows = await resolveReadyDepositAddressRows(walletId, rows);
     } catch (error) {
-      if (
-        error instanceof AlchemyNotifyConfigurationError ||
-        error instanceof AlchemyNotifyUnavailableError
-      ) {
+      if (error instanceof DepositWatchNotReadyError) {
         return fail(
           c,
           errors.refusal({
             error: error.code,
-            retryable: error instanceof AlchemyNotifyUnavailableError,
+            retryable: error.retryable,
+            watch_status: error.watchStatus,
             message: error.message,
             hint:
-              "Retry this exact deposit-address list after the operator restores every listed chain's Alchemy watch configuration.",
+              error.retryable
+                ? "Retry this exact list after the durable reconciler independently verifies every EVM watch."
+                : "An operator must repair the blocked provider-watch configuration, then enqueue a new desired generation.",
             consequence:
               "No deposit address was disclosed because at least one stored EVM address is not yet confirmed as watched.",
           }),
@@ -287,7 +286,7 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
       supported_chains: ALL_CHAINS,
       hint: "Pass ?chain=base&token=USDC to mint or fetch a specific address.",
       watch_warning: readyRows.some(
-        (row) => row.watch_status !== "provider_accepted",
+        (row) => row.watch_status !== "provider_verified",
       )
         ? "Solana rows do not prove Helius watch registration; confirm provider configuration before sending funds."
         : null,
@@ -310,21 +309,21 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
       token,
     );
   } catch (error) {
-    if (
-      error instanceof AlchemyNotifyConfigurationError ||
-      error instanceof AlchemyNotifyUnavailableError
-    ) {
+    if (error instanceof DepositWatchNotReadyError) {
       return fail(
         c,
         errors.refusal({
           error: error.code,
           chain: chainParam,
-          retryable: error instanceof AlchemyNotifyUnavailableError,
+          retryable: error.retryable,
+          watch_status: error.watchStatus,
           message: error.message,
           hint:
-            "Retry this exact deposit-address request after the operator restores the chain's Alchemy watch configuration.",
+            error.retryable
+              ? "Retry this exact request after the durable reconciler independently verifies the Alchemy watch."
+              : "An operator must repair the blocked provider-watch configuration, then enqueue a new desired generation.",
           consequence:
-            "The deposit address exists locally, but AgentTool will not claim automatic detection until its Alchemy watch registration succeeds.",
+            "The deposit address exists locally, but AgentTool will not disclose it or claim automatic detection until the watch converges.",
         }),
         503,
       );
@@ -360,11 +359,11 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
         ? activeUsdcMintSolana()
         : null,
     watch_status: isEvmChain(result.chain as string)
-      ? "provider_accepted"
+      ? "provider_verified"
       : "operator_configuration_unverified",
     credit_finality: "unreconciled",
     instructions: isEvmChain(result.chain as string)
-      ? "Send USDC to this address from any wallet. The chain-specific Alchemy watch accepted the address, but deposit finality and reorg reversal are not yet reconciled; do not treat credited value as production-final."
+      ? "Send USDC to this address from any wallet. The chain-specific Alchemy watch was independently observed active, correctly targeted, and containing this address; deposit finality and reorg reversal are still unreconciled, so do not treat credited value as production-final."
       : "Do not send production funds until an operator confirms that the active-network Helius webhook watches this address. Signed ingress exists, but address-watch readiness, deposit finality, and reversal are not yet reconciled.",
   });
 });
