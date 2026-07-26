@@ -76,3 +76,39 @@ describe("buildInvokeRecipe", () => {
     expect(r.note).toContain("stable 503");
   });
 });
+
+describe("route parity — the buy recipe reaches the route buyers actually use", () => {
+  // A buyer is authenticated by definition: invoking needs a bearer, an
+  // identity, and a funded wallet. So the authenticated read is the one a
+  // buyer lands on, and for a long time it was the only listing route that
+  // could not say which key to seal to. `/public/listings/:id` had it;
+  // `/v1/listings/:id` did not. Both now build the recipe through the same
+  // helper — this pins that they keep doing so.
+  const source = (path: string) =>
+    Bun.file(new URL(path, import.meta.url).pathname).text();
+
+  test("both listing-detail routes serve an invoke recipe", async () => {
+    for (const route of [
+      "../src/routes/public/listings.ts",
+      "../src/routes/listings.ts",
+    ]) {
+      const text = await source(route);
+      expect(text).toContain("buildInvokeRecipe");
+      expect(text).toMatch(/invoke:/);
+    }
+  });
+
+  test("neither route hand-rolls its own recipe shape", async () => {
+    // Drift here is how the two surfaces disagreed in the first place. The
+    // seller's key must come from the shared builder, never re-assembled
+    // inline from a box-key lookup.
+    for (const route of [
+      "../src/routes/public/listings.ts",
+      "../src/routes/listings.ts",
+    ]) {
+      const text = await source(route);
+      expect(text).not.toContain("seller_box_public_key:");
+      expect(text).not.toContain("envelope_profile:");
+    }
+  });
+});

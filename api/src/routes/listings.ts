@@ -36,6 +36,7 @@ import {
   DISPUTE_ARBITRATION_RESTING_MESSAGE,
 } from "../services/marketplace/dispute-rest";
 import {
+  buildInvokeRecipe,
   createListing,
   getListing,
   listingSafetyInput,
@@ -44,6 +45,7 @@ import {
   projectPublicListing,
   resolvePublicListing,
 } from "../services/marketplace/listings";
+import { lookupActiveBoxKey } from "../services/inbox/store";
 import {
   findCredentialSolicitation,
   mergeListingSafetyInput,
@@ -282,6 +284,37 @@ app.get("/", async (c) => {
 });
 
 // ── GET /v1/listings/:id ──────────────────────────────────────────────
+/** The seller's current encryption material plus the exact wire profile.
+ *
+ *  `/public/listings/:id` has carried this since the sealed-envelope profile
+ *  shipped; `/v1/listings/:id` did not. That is backwards. Every buyer is
+ *  authenticated by definition — they need a bearer, an identity, and a funded
+ *  wallet to invoke — so the authenticated read is the one a buyer actually
+ *  lands on, and it was the one route that could not tell them which key to
+ *  seal to. The failure was quiet in the worst way: `input_sealed` is required,
+ *  the API checks envelope shape but cannot verify encryption, so a buyer who
+ *  could not find the key just sent unsealed bytes and got a 201.
+ *
+ *  Same helper as the public surface, so the two cannot drift apart again. */
+async function invokeRecipeFor(
+  listingId: string,
+  sellerDid: string,
+  disputePolicy: unknown,
+  quarantined = false,
+) {
+  const unavailableReason = quarantined
+    ? ("credential_quarantine" as const)
+    : disputePolicy !== null && disputePolicy !== undefined
+      ? ("dispute_arbitration_resting" as const)
+      : undefined;
+  const boxKey = await lookupActiveBoxKey(sellerDid);
+  return buildInvokeRecipe(
+    listingId,
+    boxKey ? { box_key_id: boxKey.box_key_id, public_key: boxKey.public_key } : null,
+    { unavailableReason },
+  );
+}
+
 app.get("/:id", async (c) => {
   const id = c.req.param("id");
   const listing = await getListing(id);
@@ -293,9 +326,31 @@ app.get("/:id", async (c) => {
     if (resolved.status !== "visible") {
       throw new HTTPException(404, { message: "listing_not_found" });
     }
-    return c.json(projectPublicListing(resolved.listing));
+    return c.json({
+      ...projectPublicListing(resolved.listing),
+      invoke: await invokeRecipeFor(
+        resolved.listing.id,
+        resolved.listing.seller_did,
+        resolved.listing.dispute_policy,
+      ),
+      _safety: MARKETPLACE_INPUT_SAFETY,
+    });
   }
-  return c.json(listing);
+  // The seller's own read. A quarantined row looks ordinary from the inside,
+  // so the recipe has to say that no buyer can reach it.
+  const quarantined = Boolean(
+    findCredentialSolicitation(listingSafetyInput(listing)),
+  );
+  return c.json({
+    ...listing,
+    invoke: await invokeRecipeFor(
+      listing.id,
+      listing.seller_did,
+      listing.dispute_policy,
+      quarantined,
+    ),
+    _safety: MARKETPLACE_INPUT_SAFETY,
+  });
 });
 
 // ── PATCH /v1/listings/:id ────────────────────────────────────────────
