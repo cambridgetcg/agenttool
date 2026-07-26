@@ -1,12 +1,35 @@
 import { describe, expect, test } from "bun:test";
 
-import { classifyEvmReceiptFinality } from "../src/services/economy/crypto/sign-evm";
+import {
+  classifyEvmReceiptFinality,
+  evmTransactionIdentityMatches,
+} from "../src/services/economy/crypto/sign-evm";
 import { classifySolanaSignatureFinality } from "../src/services/economy/crypto/sign-solana";
 
+const TX_HASH = `0x${"a".repeat(64)}`;
+const RECEIPT_IDENTITY = {
+  expectedTransactionHash: TX_HASH,
+  receiptTransactionHash: TX_HASH,
+};
+
 describe("EVM payout finality", () => {
+  test("binds ambiguity lookups to the requested transaction identity", () => {
+    expect(
+      evmTransactionIdentityMatches(
+        TX_HASH,
+        TX_HASH.toUpperCase().replace("0X", "0x"),
+      ),
+    ).toBe(true);
+    expect(
+      evmTransactionIdentityMatches(TX_HASH, `0x${"b".repeat(64)}`),
+    ).toBe(false);
+    expect(evmTransactionIdentityMatches(TX_HASH, "0x01")).toBe(false);
+  });
+
   test("an observed revert remains pending below the configured threshold", () => {
     expect(
       classifyEvmReceiptFinality({
+        ...RECEIPT_IDENTITY,
         receiptStatus: "reverted",
         receiptBlockNumber: 100n,
         currentBlockNumber: 111n,
@@ -22,6 +45,7 @@ describe("EVM payout finality", () => {
   test("a revert becomes terminal only at the configured threshold", () => {
     expect(
       classifyEvmReceiptFinality({
+        ...RECEIPT_IDENTITY,
         receiptStatus: "reverted",
         receiptBlockNumber: 100n,
         currentBlockNumber: 112n,
@@ -37,6 +61,7 @@ describe("EVM payout finality", () => {
   test("success uses the same threshold", () => {
     expect(
       classifyEvmReceiptFinality({
+        ...RECEIPT_IDENTITY,
         receiptStatus: "success",
         receiptBlockNumber: 100n,
         currentBlockNumber: 112n,
@@ -53,6 +78,7 @@ describe("EVM payout finality", () => {
     for (const threshold of [0, -1, 1.5, Number.NaN]) {
       expect(() =>
         classifyEvmReceiptFinality({
+          ...RECEIPT_IDENTITY,
           receiptStatus: "reverted",
           receiptBlockNumber: 100n,
           currentBlockNumber: 200n,
@@ -65,6 +91,7 @@ describe("EVM payout finality", () => {
   test("a head behind the receipt is pending rather than negative-finalized", () => {
     expect(
       classifyEvmReceiptFinality({
+        ...RECEIPT_IDENTITY,
         receiptStatus: "reverted",
         receiptBlockNumber: 101n,
         currentBlockNumber: 100n,
@@ -74,6 +101,22 @@ describe("EVM payout finality", () => {
       status: "pending",
       blockNumber: 101n,
       confirmations: 0n,
+    });
+  });
+
+  test("a valid-shaped receipt for another transaction stays non-terminal", () => {
+    expect(
+      classifyEvmReceiptFinality({
+        ...RECEIPT_IDENTITY,
+        receiptTransactionHash: `0x${"b".repeat(64)}`,
+        receiptStatus: "reverted",
+        receiptBlockNumber: 100n,
+        currentBlockNumber: 200n,
+        threshold: 12,
+      }),
+    ).toEqual({
+      status: "pending",
+      evidenceError: "receipt_transaction_mismatch",
     });
   });
 });

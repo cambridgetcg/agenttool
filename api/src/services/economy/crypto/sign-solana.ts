@@ -73,34 +73,41 @@ const SOLANA_RPC_TIMEOUT_MS = 10_000;
  * signature; aborting the local fetch is never interpreted as proof that the
  * validator did not receive the transaction.
  */
-const boundedSolanaFetch = async (
-  input: Parameters<FetchFn>[0],
-  init?: Parameters<FetchFn>[1],
-): Promise<Awaited<ReturnType<FetchFn>>> => {
-  const controller = new AbortController();
-  const upstreamSignal = init?.signal;
-  const relayAbort = () => controller.abort();
-  if (upstreamSignal?.aborted) {
-    controller.abort();
-  } else {
-    upstreamSignal?.addEventListener("abort", relayAbort, { once: true });
-  }
-  const timer = setTimeout(() => controller.abort(), SOLANA_RPC_TIMEOUT_MS);
+function boundedSolanaFetch(timeoutMs: number): FetchFn {
+  const boundedFetch = async (
+    input: Parameters<FetchFn>[0],
+    init?: Parameters<FetchFn>[1],
+  ): Promise<Awaited<ReturnType<FetchFn>>> => {
+    const controller = new AbortController();
+    const upstreamSignal = init?.signal;
+    const relayAbort = () => controller.abort(upstreamSignal?.reason);
+    if (upstreamSignal?.aborted) {
+      relayAbort();
+    } else {
+      upstreamSignal?.addEventListener("abort", relayAbort, { once: true });
+    }
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  try {
-    return await fetch(input, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-    upstreamSignal?.removeEventListener("abort", relayAbort);
-  }
-};
+    try {
+      return await fetch(input, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+      upstreamSignal?.removeEventListener("abort", relayAbort);
+    }
+  };
 
-function solanaConnection(disableRateLimitRetry = false): Connection {
+  // Bun augments the global fetch type with a static `preconnect` member;
+  // web3.js calls only the function surface described by FetchFn.
+  return boundedFetch as FetchFn;
+}
+
+function solanaConnection(
+  disableRateLimitRetry = false,
+  timeoutMs = SOLANA_RPC_TIMEOUT_MS,
+): Connection {
   return new Connection(solanaRpcUrl(), {
     commitment: SOLANA_CONFIRMATION,
-    // Bun augments the global fetch type with a static `preconnect` member;
-    // web3.js calls only the function surface described by FetchFn.
-    fetch: boundedSolanaFetch as FetchFn,
+    fetch: boundedSolanaFetch(timeoutMs),
     disableRetryOnRateLimit: disableRateLimitRetry,
   });
 }
@@ -227,8 +234,9 @@ export async function submitSolanaTx(
  *  for positive proof that the transaction is absent. */
 export async function solanaTxExists(
   signature: TransactionSignature,
+  timeoutMs = SOLANA_RPC_TIMEOUT_MS,
 ): Promise<boolean> {
-  const connection = solanaConnection();
+  const connection = solanaConnection(false, timeoutMs);
   const result = await connection.getSignatureStatus(signature, {
     searchTransactionHistory: true,
   });
@@ -264,8 +272,9 @@ export function classifySolanaSignatureFinality(
 /** Poll a Solana signature for confirmation. */
 export async function confirmSolanaTx(
   signature: TransactionSignature,
+  timeoutMs = SOLANA_RPC_TIMEOUT_MS,
 ): Promise<SolanaConfirmResult> {
-  const connection = solanaConnection();
+  const connection = solanaConnection(false, timeoutMs);
   let status;
   try {
     const result = await connection.getSignatureStatus(signature, {

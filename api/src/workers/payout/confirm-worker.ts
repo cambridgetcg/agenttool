@@ -1,16 +1,17 @@
 /** Payout-confirm worker — periodic, independent polls of `broadcasting` and
- *  `broadcast` rows. A positive deterministic-ID lookup advances an ambiguous
- *  `broadcasting` row; absent or unavailable evidence leaves it untouched.
- *  `broadcast` rows are flipped to `confirmed` once the chain threshold is
- *  met, or `failed` + refund on a finalized revert.
+ *  `broadcast` rows on the active durable network. A positive deterministic-ID
+ *  lookup advances an ambiguous `broadcasting` row; absent or unavailable
+ *  evidence never authorizes a retry, refund, or state transition.
  *
- *  Pattern: setInterval (not BullMQ) because the work is a pure DB+RPC
- *  scan with no per-job state. Multi-instance safe — concurrent ticks just
- *  redundantly poll; the DB updates are idempotent (CAS via status check).
+ *  `broadcast` rows are ordered by their persisted least-recent check time.
+ *  Each process admits one batch at a time and uses bounded concurrency, so a
+ *  permanently pending first page cannot starve later terminal receipts.
+ *  Multi-instance reads may overlap; every economic effect remains status,
+ *  network, and transaction-identity CAS-bound.
  *
  *  Doctrine: docs/PAYOUT-BROADCAST-PLAN.md (Slices 2+3). */
 
-import { and, asc, eq, gt } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
 import type { Hex } from "viem";
 
 import { db } from "../../db/client";
@@ -27,24 +28,26 @@ import {
   confirmSolanaTx,
   solanaTxExists,
 } from "../../services/economy/crypto/sign-solana";
-import { EVM_CONFIRMATION_THRESHOLDS } from "../../services/economy/crypto/network";
+import {
+  activeNetwork,
+  EVM_CONFIRMATION_THRESHOLDS,
+} from "../../services/economy/crypto/network";
 import { refundPayoutAndFail } from "../../services/economy/crypto/payout-refund";
 
 const POLL_INTERVAL_MS = 30_000;
 const POLL_BATCH_SIZE = 50;
+const POLL_CONCURRENCY = 5;
+const RPC_TIMEOUT_MS = 10_000;
 
 let interval: ReturnType<typeof setInterval> | null = null;
+let batchInFlight: Promise<void> | null = null;
+let broadcastingCursor: string | null = null;
 
 type Row = typeof cryptoPayouts.$inferSelect;
-type ScanStatus = "broadcasting" | "broadcast";
+type PayoutNetwork = "mainnet" | "testnet";
 
-const scanCursors: Record<ScanStatus, string | null> = {
-  broadcasting: null,
-  broadcast: null,
-};
-
-/** A full page continues after its final UUID. A short page has reached the
- *  end of the current keyspace and wraps to the beginning on the next tick. */
+/** A full ambiguity page continues after its final UUID. A short page has
+ * reached the end of the active network keyspace and wraps next tick. */
 export function nextPayoutScanCursor(
   rows: ReadonlyArray<Pick<Row, "id">>,
   batchSize = POLL_BATCH_SIZE,
@@ -53,60 +56,118 @@ export function nextPayoutScanCursor(
   return rows.at(-1)?.id ?? null;
 }
 
-async function selectPayoutBatch(
-  status: ScanStatus,
+async function selectBroadcastingBatch(
+  network: PayoutNetwork,
   afterId: string | null,
 ): Promise<Row[]> {
-  const statusFilter = eq(cryptoPayouts.status, status);
+  const identity = and(
+    eq(cryptoPayouts.status, "broadcasting"),
+    eq(cryptoPayouts.network, network),
+  );
   return db
     .select()
     .from(cryptoPayouts)
     .where(
       afterId
-        ? and(statusFilter, gt(cryptoPayouts.id, afterId))
-        : statusFilter,
+        ? and(identity, gt(cryptoPayouts.id, afterId))
+        : identity,
     )
     .orderBy(asc(cryptoPayouts.id))
     .limit(POLL_BATCH_SIZE);
 }
 
-/** Independent in-memory cursors keep either state from monopolising the
- *  other. A depleted keyset wraps immediately; process restarts safely begin
- *  from the deterministic first UUID again. */
-async function nextPayoutBatch(status: ScanStatus): Promise<Row[]> {
-  const previousCursor = scanCursors[status];
-  let rows = await selectPayoutBatch(status, previousCursor);
-
+/** Ambiguous rows retain PR164's independent keyset scan. A restart begins at
+ * the first UUID again, while the broadcast-confirmation queue below uses its
+ * durable database timestamp for cross-replica fairness. */
+async function nextBroadcastingBatch(
+  network: PayoutNetwork,
+): Promise<Row[]> {
+  const previousCursor = broadcastingCursor;
+  let rows = await selectBroadcastingBatch(network, previousCursor);
   if (rows.length === 0 && previousCursor !== null) {
-    rows = await selectPayoutBatch(status, null);
+    rows = await selectBroadcastingBatch(network, null);
   }
-
-  scanCursors[status] = nextPayoutScanCursor(rows);
+  broadcastingCursor = nextPayoutScanCursor(rows);
   return rows;
 }
 
-/** Atomic refund + status='failed', gated on CAS so concurrent confirmers
- *  can't double-refund. */
+/** Atomic refund + status='failed', guarded by a fresh locked identity read so
+ * concurrent confirmers cannot refund a stale row. */
 async function refundAndFail(row: Row, errReason: string) {
-  return db.transaction((tx) =>
-    refundPayoutAndFail(tx, row, "broadcast", errReason),
-  );
+  return db.transaction(async (tx) => {
+    const [current] = await tx
+      .select()
+      .from(cryptoPayouts)
+      .where(eq(cryptoPayouts.id, row.id))
+      .for("update")
+      .limit(1);
+    if (
+      !current ||
+      current.status !== "broadcast" ||
+      current.txHash !== row.txHash ||
+      current.network !== row.network ||
+      current.network !== activeNetwork()
+    ) {
+      return {
+        refunded: false,
+        reason: "status_race_lost",
+        terminal: false,
+      } as const;
+    }
+    return refundPayoutAndFail(tx, current, "broadcast", errReason);
+  });
+}
+
+async function markBroadcastChecked(
+  row: Row,
+  evidenceError?: string | null,
+): Promise<void> {
+  if (!row.network) return;
+  const txIdentity =
+    row.txHash === null
+      ? isNull(cryptoPayouts.txHash)
+      : eq(cryptoPayouts.txHash, row.txHash);
+  await db
+    .update(cryptoPayouts)
+    .set({
+      lastCheckedAt: new Date(),
+      ...(evidenceError === undefined ? {} : { error: evidenceError }),
+    })
+    .where(
+      and(
+        eq(cryptoPayouts.id, row.id),
+        eq(cryptoPayouts.status, "broadcast"),
+        eq(cryptoPayouts.network, row.network),
+        txIdentity,
+      ),
+    );
 }
 
 async function confirmEvmRow(row: Row) {
-  if (!row.txHash) return;
+  if (!row.txHash || !row.network) return;
   const chain = row.chain as EvmChain;
   const threshold = EVM_CONFIRMATION_THRESHOLDS[chain];
 
-  const result = await confirmTx(chain, row.txHash as Hex, threshold);
+  const result = await confirmTx(
+    chain,
+    row.txHash as Hex,
+    threshold,
+    RPC_TIMEOUT_MS,
+  );
   if (result.status === "confirmed") {
     const confirmed = await db
       .update(cryptoPayouts)
-      .set({ status: "confirmed", confirmedAt: new Date() })
+      .set({
+        status: "confirmed",
+        confirmedAt: new Date(),
+        lastCheckedAt: new Date(),
+        error: null,
+      })
       .where(
         and(
           eq(cryptoPayouts.id, row.id),
           eq(cryptoPayouts.status, "broadcast"),
+          eq(cryptoPayouts.network, row.network),
           eq(cryptoPayouts.txHash, row.txHash),
         ),
       )
@@ -130,22 +191,29 @@ async function confirmEvmRow(row: Row) {
         `[payout-confirm] ${row.id}: finalized revert (${chain}) but refund ledger is unreconciled; manual review required`,
       );
     }
+  } else {
+    await markBroadcastChecked(row, result.evidenceError ?? null);
   }
-  // 'pending' → leave for next tick.
 }
 
 async function confirmSolanaRow(row: Row) {
-  if (!row.txHash) return;
+  if (!row.txHash || !row.network) return;
 
-  const result = await confirmSolanaTx(row.txHash);
+  const result = await confirmSolanaTx(row.txHash, RPC_TIMEOUT_MS);
   if (result.status === "confirmed") {
     const confirmed = await db
       .update(cryptoPayouts)
-      .set({ status: "confirmed", confirmedAt: new Date() })
+      .set({
+        status: "confirmed",
+        confirmedAt: new Date(),
+        lastCheckedAt: new Date(),
+        error: null,
+      })
       .where(
         and(
           eq(cryptoPayouts.id, row.id),
           eq(cryptoPayouts.status, "broadcast"),
+          eq(cryptoPayouts.network, row.network),
           eq(cryptoPayouts.txHash, row.txHash),
         ),
       )
@@ -169,23 +237,26 @@ async function confirmSolanaRow(row: Row) {
         `[payout-confirm] ${row.id}: finalized revert (solana) but refund ledger is unreconciled; manual review required`,
       );
     }
+  } else {
+    await markBroadcastChecked(row, null);
   }
-  // 'pending' → leave for next tick.
 }
 
-/** Resolve only persisted deterministic identities. An absent lookup is not
- *  evidence of non-submission, and an unavailable provider is not evidence at
- *  all, so both paths leave every field unchanged. */
+/** Resolve only the persisted deterministic identity. A negative lookup is
+ * not evidence of non-submission; only a positive result may advance state. */
 async function reconcileBroadcastingRow(row: Row) {
-  if (!row.txHash) return;
+  if (!row.txHash || !row.network) return;
 
   let found = false;
   if (isEvmChain(row.chain)) {
-    found = await txExistsOnChain(row.chain, row.txHash as Hex);
+    found = await txExistsOnChain(
+      row.chain,
+      row.txHash as Hex,
+      RPC_TIMEOUT_MS,
+    );
   } else if (row.chain === "solana") {
-    found = await solanaTxExists(row.txHash);
+    found = await solanaTxExists(row.txHash, RPC_TIMEOUT_MS);
   }
-
   if (!found) return;
 
   const advanced = await db
@@ -195,6 +266,7 @@ async function reconcileBroadcastingRow(row: Row) {
       and(
         eq(cryptoPayouts.id, row.id),
         eq(cryptoPayouts.status, "broadcasting"),
+        eq(cryptoPayouts.network, row.network),
         eq(cryptoPayouts.txHash, row.txHash),
       ),
     )
@@ -207,44 +279,93 @@ async function reconcileBroadcastingRow(row: Row) {
   }
 }
 
-async function reconcileBroadcastingRows() {
-  const broadcasting = await nextPayoutBatch("broadcasting");
+async function runBounded(
+  rows: readonly Row[],
+  visit: (row: Row) => Promise<void>,
+): Promise<void> {
+  let cursor = 0;
+  const consumers = Array.from(
+    { length: Math.min(POLL_CONCURRENCY, rows.length) },
+    async () => {
+      while (cursor < rows.length) {
+        const row = rows[cursor++];
+        if (!row) return;
+        await visit(row);
+      }
+    },
+  );
+  await Promise.all(consumers);
+}
 
-  for (const row of broadcasting) {
+async function reconcileBroadcastingRows(
+  network: PayoutNetwork,
+): Promise<void> {
+  const broadcasting = await nextBroadcastingBatch(network);
+  await runBounded(broadcasting, async (row) => {
     try {
       await reconcileBroadcastingRow(row);
     } catch {
       // Provider errors can contain credential-bearing URLs or vendor detail.
-      // More importantly, lookup failure has no state-machine authority.
+      // Lookup failure has no state-machine authority.
       console.warn(
         `[payout-confirm] ${row.id}: expected-transaction lookup unavailable; left broadcasting`,
       );
     }
-  }
+  });
 }
 
-async function tick() {
-  await reconcileBroadcastingRows();
+async function confirmBroadcastRows(network: PayoutNetwork): Promise<void> {
+  const broadcast = await db
+    .select()
+    .from(cryptoPayouts)
+    .where(
+      and(
+        eq(cryptoPayouts.status, "broadcast"),
+        eq(cryptoPayouts.network, network),
+      ),
+    )
+    .orderBy(
+      sql`${cryptoPayouts.lastCheckedAt} ASC NULLS FIRST`,
+      cryptoPayouts.requestedAt,
+    )
+    .limit(POLL_BATCH_SIZE);
 
-  const broadcast = await nextPayoutBatch("broadcast");
-
-  for (const row of broadcast) {
-    if (!row.txHash) continue;
-
+  await runBounded(broadcast, async (row) => {
     try {
-      if (isEvmChain(row.chain)) {
+      if (!row.txHash) {
+        await markBroadcastChecked(row);
+      } else if (isEvmChain(row.chain)) {
         await confirmEvmRow(row);
       } else if (row.chain === "solana") {
         await confirmSolanaRow(row);
+      } else {
+        await markBroadcastChecked(row);
       }
-      // unknown chain → leave for ops to investigate.
     } catch {
-      // RPC errors can contain credential-bearing endpoint URLs. The payout
-      // identity is enough to reconcile; provider detail stays out of logs.
+      // Move an unavailable row behind other due work without retaining
+      // credential-bearing provider details.
+      await markBroadcastChecked(row).catch(() => undefined);
       console.error(
         `[payout-confirm] ${row.id}: confirmation lookup unavailable; state unchanged`,
       );
     }
+  });
+}
+
+async function confirmBatchOnce(): Promise<void> {
+  const network = activeNetwork();
+  await reconcileBroadcastingRows(network);
+  await confirmBroadcastRows(network);
+}
+
+async function tick(): Promise<void> {
+  if (batchInFlight) return batchInFlight;
+  const current = confirmBatchOnce();
+  batchInFlight = current;
+  try {
+    await current;
+  } finally {
+    if (batchInFlight === current) batchInFlight = null;
   }
 }
 

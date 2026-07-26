@@ -7,14 +7,46 @@ const source = readFileSync(
 );
 
 describe("payout source serialization", () => {
-  test("blocks both ambiguous and accepted in-flight operations", () => {
-    expect(source).toContain(
-      'const SOURCE_IN_FLIGHT_STATUSES = ["broadcasting", "broadcast"]',
+  test("EVM locks a namespaced chain/source and persists nonce evidence", () => {
+    const evmStart = source.indexOf("async function processEvmPayout");
+    const solanaStart = source.indexOf("async function processSolanaPayout");
+    const branch = source.slice(evmStart, solanaStart);
+
+    const scope = branch.indexOf("evmPayoutNonceScope");
+    const lock = branch.indexOf("pg_advisory_xact_lock", scope);
+    const unresolved = branch.indexOf(
+      'eq(cryptoPayouts.status, "broadcasting")',
+      lock,
     );
-    expect(source.match(/inArray\(cryptoPayouts\.status/g)?.length).toBe(2);
+    const signing = branch.indexOf("buildAndSignUsdcTransfer", unresolved);
+    const evidence = branch.indexOf("evmPayoutNonceEvidence", signing);
+    const persist = branch.indexOf("...nonceEvidence", evidence);
+
+    expect(scope).toBeGreaterThan(-1);
+    expect(lock).toBeGreaterThan(scope);
+    expect(unresolved).toBeGreaterThan(lock);
+    expect(signing).toBeGreaterThan(unresolved);
+    expect(evidence).toBeGreaterThan(signing);
+    expect(persist).toBeGreaterThan(evidence);
+    expect(branch).toContain("nonceScope.advisoryLockKey");
+    expect(branch).toContain('reason: "source_nonce_unresolved"');
   });
 
-  test("both chains lock and check durable state before signing", () => {
+  test("Solana serializes signing and binds the payout operation identity", () => {
+    const branch = source.slice(
+      source.indexOf("async function processSolanaPayout"),
+    );
+    const lock = branch.indexOf("pg_advisory_xact_lock");
+    const signing = branch.indexOf("buildAndSignSolanaUsdcTransfer");
+    const persist = branch.indexOf('status: "broadcasting"');
+
+    expect(lock).toBeGreaterThan(-1);
+    expect(signing).toBeGreaterThan(lock);
+    expect(persist).toBeGreaterThan(signing);
+    expect(branch).toContain("payoutId: row.id");
+  });
+
+  test("both Phase 1 CASes bind the active durable network", () => {
     const evmStart = source.indexOf("async function processEvmPayout");
     const solanaStart = source.indexOf("async function processSolanaPayout");
     const branches = [
@@ -23,30 +55,10 @@ describe("payout source serialization", () => {
     ];
 
     for (const branch of branches) {
-      const lock = branch.indexOf("pg_advisory_xact_lock");
-      const gate = branch.indexOf("const [sourceInFlight]");
-      const signing = branch.indexOf("buildAndSign");
-      const persist = branch.indexOf('status: "broadcasting"');
-
-      expect(lock).toBeGreaterThan(-1);
-      expect(gate).toBeGreaterThan(lock);
-      expect(signing).toBeGreaterThan(gate);
-      expect(persist).toBeGreaterThan(signing);
-      expect(branch).toContain("eq(cryptoPayouts.walletId, row.walletId)");
-      expect(branch).toContain("eq(cryptoPayouts.chain, row.chain)");
-      expect(branch).toContain("ne(cryptoPayouts.id, row.id)");
-      expect(branch).toContain('reason: "source_in_flight"');
+      expect(branch).toContain("row.network !== workerNetwork");
+      expect(branch).toContain(
+        "eq(cryptoPayouts.network, workerNetwork)",
+      );
     }
-  });
-
-  test("the gate leaves the waiting payout requested without submitting", () => {
-    const firstGate = source.indexOf("if (sourceInFlight)");
-    const firstSign = source.indexOf("buildAndSign", firstGate);
-    const gateBody = source.slice(firstGate, firstSign);
-
-    expect(gateBody).toContain('reason: "source_in_flight"');
-    expect(gateBody).not.toContain("submitSignedTx");
-    expect(gateBody).not.toContain("submitSolanaTx");
-    expect(gateBody).not.toContain(".update(cryptoPayouts)");
   });
 });

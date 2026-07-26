@@ -31,6 +31,24 @@ function safeUnknownError(
   );
 }
 
+/** Bind a provider's submit acknowledgement to the locally computed,
+ * durably persisted transaction identity. EVM hashes must be full 32-byte
+ * hex values; Solana signatures remain case-sensitive opaque identifiers. */
+export function submittedIdentityMatches(
+  kind: SubmitIdentityKind,
+  expected: string,
+  observed: string,
+): boolean {
+  if (kind === "evm") {
+    return (
+      /^0x[0-9a-f]{64}$/i.test(expected) &&
+      /^0x[0-9a-f]{64}$/i.test(observed) &&
+      expected.toLowerCase() === observed.toLowerCase()
+    );
+  }
+  return expected.length > 0 && observed === expected;
+}
+
 /** Require the RPC's returned operation id to identify the bytes we signed.
  *
  * EVM transaction hashes are hexadecimal and case-insensitive. Solana
@@ -44,9 +62,7 @@ export function assertExpectedSubmitIdentity(
 ): void {
   const matches =
     typeof actual === "string" &&
-    (kind === "evm"
-      ? actual.toLowerCase() === expected.toLowerCase()
-      : actual === expected);
+    submittedIdentityMatches(kind, expected, actual);
 
   if (!matches) {
     throw new Error("submit_identity_mismatch");

@@ -8,11 +8,12 @@
  *
  *  Doctrine: docs/PAYOUT-BROADCAST-PLAN.md (Slices 1+3). */
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { cryptoPayouts } from "../../db/schema/economy";
 import { ALL_CHAINS } from "../../services/economy/crypto/chains";
+import { activeNetwork } from "../../services/economy/crypto/network";
 import { payoutBroadcastQueue } from "./queue";
 
 const POLL_INTERVAL_MS = 10_000;
@@ -21,14 +22,27 @@ const BATCH_SIZE = 50;
 let interval: ReturnType<typeof setInterval> | null = null;
 
 async function tick() {
+  const now = new Date();
+  const network = activeNetwork();
   const requested = await db
     .select({ id: cryptoPayouts.id })
     .from(cryptoPayouts)
     .where(
       and(
         eq(cryptoPayouts.status, "requested"),
+        eq(cryptoPayouts.network, network),
         inArray(cryptoPayouts.chain, ALL_CHAINS as readonly string[] as string[]),
+        or(
+          isNull(cryptoPayouts.dispatchAfter),
+          lte(cryptoPayouts.dispatchAfter, now),
+        ),
       ),
+    )
+    // A contended source receives a durable cooldown. Once due, its previous
+    // attempt time competes fairly with never-attempted rows' request time.
+    .orderBy(
+      sql`COALESCE(${cryptoPayouts.lastDispatchAttemptAt}, ${cryptoPayouts.requestedAt})`,
+      cryptoPayouts.requestedAt,
     )
     .limit(BATCH_SIZE);
 
