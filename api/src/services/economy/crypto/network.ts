@@ -44,7 +44,8 @@ export const EVM_TESTNET_CHAIN_IDS: Record<EvmChain, number> = {
   optimism: 11155420, // Optimism Sepolia
 };
 
-/** Confirmation thresholds (blocks of finality before status='confirmed'). */
+/** Conservative block-depth thresholds before a pending deposit may be
+ * credited. For L2s this is chain-local depth, not L1 settlement finality. */
 export const EVM_CONFIRMATION_THRESHOLDS: Record<EvmChain, number> = {
   ethereum: 12,
   base:     12,

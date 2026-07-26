@@ -22,6 +22,8 @@ import {
 } from "drizzle-orm/pg-core";
 
 export const economySchema = pgSchema("economy");
+export const MAX_EXACT_WALLET_BALANCE = Number.MAX_SAFE_INTEGER;
+export const MIN_EXACT_WALLET_BALANCE = Number.MIN_SAFE_INTEGER;
 
 // ─── Wallets + spending policies + transactions ─────────────────────────────
 
@@ -55,6 +57,10 @@ export const wallets = economySchema.table(
   (t) => [
     index("idx_wallets_project").on(t.projectId),
     index("idx_wallets_identity").on(t.identityId),
+    check(
+      "wallets_balance_exact_integer_check",
+      sql`${t.balance} BETWEEN ${MIN_EXACT_WALLET_BALANCE} AND ${MAX_EXACT_WALLET_BALANCE}`,
+    ),
   ],
 );
 
@@ -535,7 +541,20 @@ export const cryptoPayouts = economySchema.table(
   ],
 );
 
-/** Idempotency log for inbound crypto webhooks across chains. */
+export const CRYPTO_WEBHOOK_EVENT_STATUSES = [
+  "pending",
+  "credited",
+  "removed",
+  "rejected",
+  "quarantined",
+] as const;
+export type CryptoWebhookEventStatus =
+  (typeof CRYPTO_WEBHOOK_EVENT_STATUSES)[number];
+
+/** Logical inbound transfer and its current canonical-generation state.
+ *
+ * Provider delivery is observation, not finality. EVM rows begin pending and
+ * receive a wallet effect only after an independent receipt/log check. */
 export const cryptoWebhookEvents = economySchema.table(
   "crypto_webhook_events",
   {
@@ -545,12 +564,116 @@ export const cryptoWebhookEvents = economySchema.table(
     logIndex: integer("log_index").notNull(),     // canonical per-transfer identity
     walletId: uuid("wallet_id").references(() => wallets.id),
     creditsAdded: bigint("credits_added", { mode: "number" }),
+    status: text("status")
+      .$type<CryptoWebhookEventStatus>()
+      .notNull()
+      // New writers always choose an explicit state. `credited` is the
+      // rollout-safe database default so an older replica that still performs
+      // immediate credit cannot leave a balance effect mislabeled pending.
+      .default("credited"),
+    amountBase: numeric("amount_base", { precision: 78, scale: 0 }),
+    toAddress: text("to_address"),
+    contractAddress: text("contract_address"),
+    blockNumber: bigint("block_number", { mode: "bigint" }),
+    blockHash: text("block_hash"),
+    providerWebhookId: text("provider_webhook_id"),
+    providerEventId: text("provider_event_id"),
     rawPayload: jsonb("raw_payload").notNull(),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    removedAt: timestamp("removed_at", { withTimezone: true }),
+    error: text("error"),
   },
   (t) => [
     uniqueIndex("idx_crypto_event_dedupe").on(t.chain, t.txHash, t.logIndex),
     index("idx_crypto_event_wallet").on(t.walletId),
+    index("idx_crypto_event_status").on(
+      t.status,
+      t.lastCheckedAt,
+      t.receivedAt,
+    ),
+    check(
+      "crypto_webhook_events_status_check",
+      sql`${t.status} IN ('pending', 'credited', 'removed', 'rejected', 'quarantined')`,
+    ),
+    check(
+      "crypto_webhook_events_optional_evidence_check",
+      sql`(${t.amountBase} IS NULL OR ${t.amountBase} > 0)
+        AND (${t.blockNumber} IS NULL OR ${t.blockNumber} >= 0)
+        AND (${t.blockHash} IS NULL OR ${t.blockHash} ~ '^0x[0-9a-f]{64}$')
+        AND (${t.providerWebhookId} IS NULL OR ${t.providerWebhookId} ~ '^[A-Za-z0-9_-]{1,128}$')
+        AND (${t.providerEventId} IS NULL OR ${t.providerEventId} ~ '^[A-Za-z0-9_-]{1,128}$')`,
+    ),
+    check(
+      "crypto_webhook_events_pending_evm_evidence_check",
+      sql`${t.status} <> 'pending'
+        OR ${t.chain} NOT IN ('ethereum', 'base', 'polygon', 'arbitrum', 'optimism')
+        OR (
+          ${t.walletId} IS NOT NULL
+          AND ${t.amountBase} IS NOT NULL
+          AND ${t.toAddress} ~* '^0x[0-9a-f]{40}$'
+          AND ${t.contractAddress} ~* '^0x[0-9a-f]{40}$'
+          AND ${t.txHash} ~ '^0x[0-9a-f]{64}$'
+          AND ${t.blockNumber} IS NOT NULL
+          AND ${t.blockHash} IS NOT NULL
+          AND ${t.providerWebhookId} IS NOT NULL
+          AND ${t.providerEventId} IS NOT NULL
+        )`,
+    ),
+    check(
+      "crypto_webhook_events_credited_effect_check",
+      sql`${t.status} <> 'credited' OR ${t.creditsAdded} IS NOT NULL`,
+    ),
+  ],
+);
+
+/** Immutable EVM delivery/generation evidence.
+ *
+ * Keeping live and removed observations by block identity prevents a delayed
+ * removal for block A from overwriting or reversing a newer block B. Provider
+ * credentials and response diagnostics do not belong here. */
+export const cryptoWebhookEventObservations = economySchema.table(
+  "crypto_webhook_event_observations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => cryptoWebhookEvents.id, { onDelete: "cascade" }),
+    walletId: uuid("wallet_id").references(() => wallets.id),
+    amountBase: numeric("amount_base", { precision: 78, scale: 0 }).notNull(),
+    toAddress: text("to_address").notNull(),
+    contractAddress: text("contract_address").notNull(),
+    blockNumber: bigint("block_number", { mode: "bigint" }).notNull(),
+    blockHash: text("block_hash").notNull(),
+    removed: boolean("removed").notNull(),
+    providerWebhookId: text("provider_webhook_id").notNull(),
+    providerEventId: text("provider_event_id").notNull(),
+    rawPayload: jsonb("raw_payload").notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uq_crypto_event_observation_generation").on(
+      t.eventId,
+      t.blockNumber,
+      t.blockHash,
+      t.removed,
+    ),
+    index("idx_crypto_event_observation_event").on(t.eventId, t.receivedAt),
+    check(
+      "crypto_event_observation_block_hash",
+      sql`${t.blockNumber} >= 0
+        AND ${t.blockHash} ~ '^0x[0-9a-f]{64}$'
+        AND ${t.amountBase} > 0
+        AND ${t.toAddress} ~* '^0x[0-9a-f]{40}$'
+        AND ${t.contractAddress} ~* '^0x[0-9a-f]{40}$'`,
+    ),
+    check(
+      "crypto_event_observation_provider_ids",
+      sql`${t.providerWebhookId} ~ '^[A-Za-z0-9_-]{1,128}$' AND ${t.providerEventId} ~ '^[A-Za-z0-9_-]{1,128}$'`,
+    ),
   ],
 );
 

@@ -11,7 +11,6 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../../db/client";
 import {
   cryptoPayouts,
-  cryptoWebhookEvents,
   depositAddresses,
   onchainIdentities,
   policies,
@@ -25,7 +24,6 @@ import {
   penceForUsdcPayout,
 } from "../earned";
 import {
-  CREDITS_PER_USDC,
   EVM_CHAIN_IDS,
   USDC_ADDRESSES,
   isChain,
@@ -37,8 +35,6 @@ import { deriveDepositAddress, isChainSupported } from "./hd";
 import {
   activeMnemonic,
   activeNetwork,
-  activeUsdcAddress,
-  activeUsdcMintSolana,
 } from "./network";
 import {
   DepositWatchInvariantError,
@@ -713,152 +709,10 @@ export async function cancelPayout(
 
 const SUPPORTED_PAYOUT_TOKENS = ["USDC"] as const;
 
-// ── Inbound webhook ingestion ──────────────────────────────────────────
-
-export interface InboundTransfer {
-  chain: Chain;
-  txHash: string;
-  logIndex: number;
-  toAddress: string;
-  contractAddress: string;
-  token: string;
-  amountBase: string;       // token base units
-  rawPayload: unknown;
-}
-
-export interface IngestionResult {
-  matched: boolean;
-  walletId?: string;
-  creditsAdded?: number;
-  duplicate?: boolean;
-  reason?: string;
-  retryable?: boolean;
-}
-
-/** Apply an inbound transfer to a wallet. Idempotent on (chain, txHash,
- *  logIndex). Caller is responsible for verifying webhook signature
- *  before invoking. */
-export async function ingestInboundTransfer(
-  t: InboundTransfer,
-): Promise<IngestionResult> {
-  // Token sanity: only USDC routed for now.
-  if (t.token !== "USDC") {
-    return { matched: false, reason: "unsupported_token" };
-  }
-  // Confirm contract for EVM chains. Use activeUsdcAddress so testnet
-  // operation matches the Sepolia/Amoy USDC contracts (different from
-  // their mainnet counterparts). Without this, inbound testnet webhooks
-  // silently bail with `wrong_contract`.
-  if (isEvmChain(t.chain)) {
-    const expected = activeUsdcAddress(t.chain).toLowerCase();
-    if (t.contractAddress.toLowerCase() !== expected) {
-      return { matched: false, reason: "wrong_contract" };
-    }
-  } else if (
-    t.chain === "solana" &&
-    t.contractAddress !== activeUsdcMintSolana()
-  ) {
-    return { matched: false, reason: "wrong_contract" };
-  }
-
-  // EVM addresses are case-insensitive and use a functional lower(address)
-  // predicate backed by the deployment migration's partial index. Solana
-  // base58 addresses are case-sensitive and must match exactly.
-  const addressPredicate = isEvmChain(t.chain)
-    ? sql`lower(${depositAddresses.address}) = lower(${t.toAddress})`
-    : eq(depositAddresses.address, t.toAddress);
-  const [row] = await db
-    .select()
-    .from(depositAddresses)
-    .where(
-      and(
-        eq(depositAddresses.chain, t.chain),
-        addressPredicate,
-      ),
-    )
-    .limit(1);
-  if (!row) return { matched: false, reason: "no_matching_deposit_address" };
-  const matchedRow = row;
-
-  // Convert exact base units → credits without passing token value through a
-  // floating-point number. The wallet balance is a JavaScript number in the
-  // current schema, so reject values beyond its exact integer range.
-  let amountAtomic: bigint;
-  try {
-    amountAtomic = BigInt(t.amountBase);
-  } catch {
-    return { matched: false, reason: "invalid_amount" };
-  }
-  if (amountAtomic <= 0n) return { matched: false, reason: "invalid_amount" };
-  const creditsAtomic =
-    (amountAtomic * BigInt(CREDITS_PER_USDC)) / 1_000_000n;
-  if (creditsAtomic <= 0n) {
-    return { matched: false, reason: "amount_below_min_credit" };
-  }
-  if (creditsAtomic > BigInt(Number.MAX_SAFE_INTEGER)) {
-    return { matched: false, reason: "amount_exceeds_exact_credit_limit" };
-  }
-  const creditsToAdd = Number(creditsAtomic);
-
-  // Idempotent insert into webhook log + funding via transaction.
-  try {
-    return await db.transaction(async (tx) => {
-      const [logged] = await tx
-        .insert(cryptoWebhookEvents)
-        .values({
-          chain: t.chain,
-          txHash: t.txHash,
-          logIndex: t.logIndex,
-          walletId: matchedRow.walletId,
-          creditsAdded: creditsToAdd,
-          rawPayload: (t.rawPayload as object) ?? {},
-        })
-        .onConflictDoNothing()
-        .returning({ id: cryptoWebhookEvents.id });
-
-      if (!logged) {
-        return {
-          matched: true,
-          walletId: matchedRow.walletId,
-          duplicate: true,
-        } satisfies IngestionResult;
-      }
-
-      // Credit wallet atomically.
-      await tx
-        .update(wallets)
-        .set({ balance: sqlPlus(creditsToAdd) })
-        .where(eq(wallets.id, matchedRow.walletId));
-
-      return {
-        matched: true,
-        walletId: matchedRow.walletId,
-        creditsAdded: creditsToAdd,
-      } satisfies IngestionResult;
-    });
-  } catch (err) {
-    // Provider delivery must receive a non-2xx response so it retries. Keep
-    // the database message out of the model/public response: it can contain
-    // infrastructure detail and is not needed to make the retry decision.
-    console.error(
-      "[crypto-webhook] inbound transfer storage unavailable",
-      err instanceof Error ? err.name : "unknown_error",
-    );
-    return {
-      matched: false,
-      reason: "storage_unavailable",
-      retryable: true,
-    };
-  }
-}
-
 // ── Helpers (sql expressions for atomic balance arithmetic) ────────────
 
 function sqlMinus(n: number) {
   return sql`balance - ${n}`;
-}
-function sqlPlus(n: number) {
-  return sql`balance + ${n}`;
 }
 function sqlBalanceAtLeast(n: number) {
   return sql`${wallets.balance} >= ${n}`;
@@ -866,3 +720,11 @@ function sqlBalanceAtLeast(n: number) {
 
 // Re-exports for routes
 export { isChain, isEvmChain } from "./chains";
+export {
+  ingestInboundTransfer,
+  reconcileRemovedInboundTransfer,
+} from "./inbound-deposits";
+export type {
+  InboundTransfer,
+  IngestionResult,
+} from "./inbound-deposits";

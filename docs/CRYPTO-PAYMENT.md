@@ -10,10 +10,10 @@
 
 A sovereign agent doesn't have a credit card. It has a wallet. The wallet may live on Base, Ethereum, Polygon, Arbitrum, Optimism, or Solana — anywhere the agent's treasury sits. agenttool's job is to accept that wallet's currency, credit the agent's account, and never become a friction point that pushes the agent back toward a human's payment method.
 
-This document began as the Phase 3b/3c plan. The derivation, signed ingress,
-payout, confirmation, and policy code now exist, but production provider
-configuration and deposit finality/reorg reconciliation remain deliberately
-incomplete.
+This document began as the Phase 3b/3c plan. Derivation, signed ingress,
+durable EVM observation/finality, payout, confirmation, and policy code now
+exist. Production provider configuration, migration, staging proof, and
+Solana deposit finality remain separate operator work.
 
 ---
 
@@ -24,8 +24,8 @@ incomplete.
 | Multi-chain deposit address derivation | Implemented; provider/mnemonic configuration required | `GET /v1/wallets/:id/deposit-address?chain=&token=` |
 | List all deposit addresses for a wallet | Implemented; every stored row is revalidated and every EVM watch is reasserted before the list is disclosed | `GET /v1/wallets/:id/deposit-address` |
 | Onchain identity binding via signed message | Implemented (EVM EIP-191; Solana ed25519) | `POST /v1/wallets/:id/onchain/{challenge,verify}` · `GET /v1/wallets/:id/onchain` |
-| Inbound transfer ingestion | Implemented (Alchemy EVM + Helius Solana); production provider secrets were unconfigured when checked 2026-07-25 | `POST /v1/billing/crypto-webhook/:chain` (signature-verified, public) |
-| Idempotency log for webhooks | Implemented | `economy.crypto_webhook_events` (chain, tx_hash, log_index unique) |
+| Inbound transfer ingestion | EVM signed observations persist pending until exact canonical log/depth; removed block generations are durable and causally fenced. Solana signed ingress still credits before equivalent raw-atomic finality. | `POST /v1/billing/crypto-webhook/:chain` (signature-verified, public) |
+| Idempotency + reorg evidence | Implemented locally; migration not applied | `economy.crypto_webhook_events` logical identity + immutable `crypto_webhook_event_observations` block generations |
 | Payout request lifecycle | Implemented behind explicit worker/network/FX configuration; production payout secrets were unconfigured when checked 2026-07-25 | `POST /v1/wallets/:id/payout` · `GET /v1/wallets/:id/payouts` |
 | Schema for everything above | Baseline live; wallet/chain/token uniqueness migration is local and not deployed | `api/migrations/0002_crypto_payment.sql` · `api/migrations/20260725T054912_crypto_deposit_identity.sql` |
 
@@ -51,8 +51,8 @@ Returns:
   "derivation_path": "m/44'/60'/0'/0/2059516119",
   "contract_address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
   "watch_status": "provider_verified",
-  "credit_finality": "unreconciled",
-  "instructions": "Send USDC to this address from any wallet. The chain-specific Alchemy watch was independently observed active, correctly targeted, and containing this address; deposit finality and reorg reversal are still unreconciled, so do not treat credited value as production-final."
+  "credit_finality": "pending_until_chain_depth",
+  "instructions": "Send USDC to this address from any wallet. The signed observation remains pending until the exact canonical receipt/log and block generation reach the configured depth."
 }
 ```
 
@@ -80,7 +80,7 @@ does not claim that the new address is observed.
 
 From any wallet — MetaMask, an agent's smart contract, a treasury multisig, anywhere. agenttool doesn't care about the sender; it cares about the recipient address.
 
-### 3. Webhook fires; credits land
+### 3. Webhook fires; evidence lands, then EVM credit finalizes
 
 When the chain's indexer (Alchemy for EVM and Helius for Solana) sees the
 transfer, it POSTs to:
@@ -99,14 +99,38 @@ configured as `ALCHEMY_WEBHOOK_SIGNING_KEY_<CHAIN>`. The handler:
    with at most six decimal places and reconstructs atomic units without
    flooring; a production Solana adapter should prefer independently fetched
    raw atomic balance changes.
-4. For each relevant USDC event, looks up the deposit address in `economy.deposit_addresses`.
-5. If found and amount > 0, atomically:
-   - Inserts into `economy.crypto_webhook_events` with `(chain, tx_hash, log_index)` unique constraint — duplicates short-circuit.
-   - Increments `economy.wallets.balance` using exact integer base units (1 USDC → 100 credits).
-6. Returns `{received: true, processed: [...]}` after commit. Retryable storage
-   failures and unhandled removed-log reconciliation return 503.
+4. For each relevant EVM USDC event, validates transaction/log/block identity,
+   stores one logical `(chain, tx_hash, log_index)` event plus an immutable
+   live/removed observation for that block hash, and returns only after commit.
+5. A separate bounded, zero-retry-per-call worker verifies the configured
+   chain ID, returned receipt transaction hash, block number/hash, the
+   canonical block hash independently fetched at that height, current head,
+   exact contract, Transfer topic, log index, recipient, amount, and configured
+   depth. Unavailable or internally inconsistent RPC evidence remains pending;
+   it is not negative authority.
+6. A signed `removed` observation can reverse only the currently credited
+   matching block generation. A delayed `removed(A)` is stored but cannot
+   reverse newer B. Conflicting or historical evidence that cannot safely
+   authorize a balance effect becomes durable `quarantined` state.
+7. Solana currently retains immediate exact-integer credit after signed Helius
+   ingestion. This is not equivalent to the EVM finality contract.
 
-Idempotency is **load-bearing** — webhooks retry, networks fork, agents resend. The unique index on `(chain, tx_hash, log_index)` is the single source of truth for "did we already credit this transfer?"
+Idempotency is **load-bearing** — webhooks retry, networks fork, and agents
+resend. Logical identity prevents duplicate credit; immutable block-generation
+observations preserve causal reorg evidence rather than overwriting it.
+The database constrains every wallet balance to JavaScript's exact-integer
+range, and manual plus crypto funding check that aggregate boundary before
+writing. An over-limit crypto observation becomes `rejected`; no rounded
+balance or ledger leg is written. Migration deliberately fails for operator
+reconciliation if an older wallet already violates the range.
+
+Quarantine is evidence isolation, not an automatic account freeze. If a
+generation was already credited, conflicting live evidence preserves that
+exact wallet effect until a matching removal arrives. A later matching removal
+posts an exact negative `crypto_reorg` ledger leg even if the original credit
+has been spent, so the wallet can become negative and further guarded spending
+remains blocked. Operators must alert on `quarantined`, `rejected`, negative
+balances, and pending-age; this code does not provide that alerting surface.
 
 ### 4. (Optional) Bind the on-chain identity
 
@@ -200,7 +224,8 @@ economy.deposit_addresses        — wallet ↔ deposit address per (chain, toke
 economy.deposit_address_watches  — desired/observed provider watch + lease state
 economy.onchain_identities       — verified bindings (wallet ↔ external addr)
 economy.crypto_payouts           — outgoing transfer requests (lifecycle)
-economy.crypto_webhook_events    — inbound transfer log + idempotency
+economy.crypto_webhook_events    — logical inbound transfer + wallet-effect state
+economy.crypto_webhook_event_observations — immutable live/removed block generations
 ```
 
 Migrations: `api/migrations/0002_crypto_payment.sql` (historical foundation)
@@ -210,7 +235,10 @@ non-null event log identity; intentionally fails for operator reconciliation
 if conflicting historical rows exist), plus
 `api/migrations/20260726T070000_deposit_watch_reconciliation.sql` (durable
 provider-neutral watch generations, bounded attempts/backoff, and leases; it
-does not guess/backfill provider or network for historical rows).
+does not guess/backfill provider or network for historical rows), and
+`api/migrations/20260726T202500_crypto_deposit_finality.sql` (historical
+effects remain credited without invented evidence; new EVM observations are
+pending and retain immutable block generations).
 
 ---
 
@@ -220,18 +248,21 @@ Solana derivation/signature verification, Helius ingress, EVM/Solana payout
 broadcast, confirmation polling, and payout policy gates are implemented.
 Before production crypto enablement, the remaining load-bearing work is:
 
-1. finish wiring and operationally verifying the durable provider-neutral
-   webhook watch reconciler against each configured provider;
-2. independent deposit confirmations plus removed-log credit
-   reversal/quarantine;
-3. persisted provider event outcomes plus deployment reconciliation for the
-   local non-null log-identity migration;
-4. live provider-contract verification for the Helius adapter;
+1. stop crypto webhook ingress and all workers, apply and independently review
+   the local identity/watch/finality migrations, deploy only the new writers,
+   then run a credentialed staging proof against each configured webhook/RPC;
+2. add disposable-Postgres concurrency tests for pending credit, duplicate
+   confirmation, generation replacement, removal reversal, and quarantine;
+3. build a durable Helius watch plus raw-atomic Solana finality/reorg adapter;
+4. model L2 settlement separately if a product claim requires L1 finality;
 5. replace the bounded floating GBP/USD rate calculation with fixed-point
    rational arithmetic;
-6. persist Solana blockhash-expiry evidence and build an audited ambiguity
+6. persist outbound Solana blockhash-expiry evidence and build an audited ambiguity
    reversal/replacement lifecycle; and
-7. an operator-reviewed testnet cutover before any separately authorized
+7. add durable operator alerts for pending age, quarantine, rejection, and
+   negative balances, plus a cross-replica lease if duplicate read-only RPC
+   load becomes material; and
+8. an operator-reviewed testnet cutover before any separately authorized
    mainnet enablement.
 
 ---

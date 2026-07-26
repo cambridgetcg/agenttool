@@ -88,13 +88,40 @@ function alchemyEnvelope(
   chain: EvmChain,
   activity: Array<Record<string, unknown>> = [],
 ) {
+  const canonicalActivity = activity.map((item) => {
+    const log =
+      item.log && typeof item.log === "object" && !Array.isArray(item.log)
+        ? (item.log as Record<string, unknown>)
+        : item.log;
+    const rawContract =
+      item.rawContract &&
+      typeof item.rawContract === "object" &&
+      !Array.isArray(item.rawContract)
+        ? (item.rawContract as Record<string, unknown>)
+        : {};
+    return {
+      blockNum: "0x1",
+      ...item,
+      ...(log && typeof log === "object"
+        ? {
+            log: {
+              blockNumber: "0x1",
+              blockHash: `0x${"a".repeat(64)}`,
+              transactionHash: item.hash,
+              address: rawContract.address,
+              ...log,
+            },
+          }
+        : {}),
+    };
+  });
   return {
     webhookId: `wh_test_${chain}`,
     id: `whevt_test_${chain}`,
     type: "ADDRESS_ACTIVITY",
     event: {
       network: alchemyAddressActivityNetwork(chain, activeNetwork()),
-      activity,
+      activity: canonicalActivity,
     },
   };
 }
@@ -166,7 +193,7 @@ describe("deposit address disclosure readiness", () => {
         derivation_path: "m/44'/60'/0'/0/2",
         contract_address: activeUsdcAddress("base"),
         watch_status: "provider_verified",
-        credit_finality: "unreconciled",
+        credit_finality: "pending_until_chain_depth",
         created_at: "1970-01-01T00:00:00.000Z",
       },
     ]);
@@ -188,7 +215,7 @@ describe("deposit address disclosure readiness", () => {
       chain: "solana",
       contract_address: activeUsdcMintSolana(),
       watch_status: "operator_configuration_unverified",
-      credit_finality: "unreconciled",
+      credit_finality: "solana_unreconciled",
     });
   });
 });
@@ -555,9 +582,29 @@ describe("signed webhook storage acknowledgement", () => {
     expect(await res.json()).toMatchObject({ error: "invalid_payload" });
   });
 
-  test("does not acknowledge a removed USDC log without reconciliation", async () => {
+  test("acknowledges a removed USDC log only after durable reconciliation", async () => {
     configureAlchemy("base");
     cfg.allowUnsignedWebhooks = false;
+    let liveCalls = 0;
+    let removedCalls = 0;
+    const reconcilingRouter = createCryptoWebhookRouter(
+      async () => {
+        liveCalls += 1;
+        return { matched: true };
+      },
+      async (transfer) => {
+        removedCalls += 1;
+        expect(transfer.blockNumber).toBe(1n);
+        expect(transfer.blockHash).toBe(`0x${"a".repeat(64)}`);
+        expect(transfer.providerWebhookId).toBe("wh_test_base");
+        expect(transfer.providerEventId).toBe("whevt_test_base");
+        return {
+          matched: true,
+          reversed: true,
+          status: "removed",
+        };
+      },
+    );
     const body = alchemyEnvelope("base", [
       {
         toAddress: "0x0000000000000000000000000000000000000001",
@@ -573,7 +620,7 @@ describe("signed webhook storage acknowledgement", () => {
     const raw = JSON.stringify(body);
     const sig = createHmac("sha256", "hmac-key").update(raw).digest("hex");
 
-    const res = await cryptoWebhookRouter.request("/base", {
+    const res = await reconcilingRouter.request("/base", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -582,12 +629,18 @@ describe("signed webhook storage acknowledgement", () => {
       body: raw,
     });
 
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
-      received: false,
-      error: "reorg_reconciliation_unavailable",
-      retryable: true,
+      received: true,
+      processed: [
+        {
+          reversed: true,
+          status: "removed",
+        },
+      ],
     });
+    expect(liveCalls).toBe(0);
+    expect(removedCalls).toBe(1);
   });
 
   test("rejects coercible or non-canonical Alchemy log indexes before ingestion", async () => {
@@ -681,6 +734,79 @@ describe("signed webhook storage acknowledgement", () => {
 
     expect(res.status).toBe(200);
     expect(observedLogIndex).toBe(2_147_483_647);
+  });
+
+  test("rejects inconsistent or oversized Alchemy block and receipt identity", async () => {
+    configureAlchemy("base");
+    cfg.allowUnsignedWebhooks = false;
+    let ingestionCalls = 0;
+    const strictRouter = createCryptoWebhookRouter(async () => {
+      ingestionCalls += 1;
+      return { matched: true };
+    });
+    const txHash = `0x${"7".repeat(64)}`;
+    const contractAddress = activeUsdcAddress("base");
+    const mutations: Array<Record<string, unknown>> = [
+      { blockNum: "0x2" },
+      { log: { transactionHash: `0x${"8".repeat(64)}` } },
+      {
+        log: {
+          address: "0x0000000000000000000000000000000000000001",
+        },
+      },
+      { log: { blockNumber: "0x8000000000000000" } },
+      { log: { blockHash: `0x${"a".repeat(63)}` } },
+      {
+        rawContract: {
+          address: contractAddress,
+          rawValue: `0x${"f".repeat(65)}`,
+          decimals: 6,
+        },
+      },
+    ];
+
+    for (const mutation of mutations) {
+      const body = alchemyEnvelope("base", [
+        {
+          toAddress: "0x0000000000000000000000000000000000000001",
+          rawContract: {
+            address: contractAddress,
+            rawValue: "0xf4240",
+            decimals: 6,
+          },
+          hash: txHash,
+          log: { logIndex: "0x1", removed: false },
+          ...mutation,
+          ...(mutation.log
+            ? {
+                log: {
+                  logIndex: "0x1",
+                  removed: false,
+                  ...(mutation.log as Record<string, unknown>),
+                },
+              }
+            : {}),
+        },
+      ]);
+      const raw = JSON.stringify(body);
+      const sig = createHmac("sha256", "hmac-key")
+        .update(raw)
+        .digest("hex");
+      const res = await strictRouter.request("/base", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-alchemy-signature": sig,
+        },
+        body: raw,
+      });
+      expect(res.status, JSON.stringify(mutation)).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: "invalid_usdc_activity",
+      });
+    }
+
+    expect(ingestionCalls).toBe(0);
   });
 
   test("classifies malformed removed activity as invalid rather than endlessly retryable", async () => {

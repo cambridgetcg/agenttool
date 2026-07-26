@@ -41,6 +41,21 @@ describe("documented worker off-switch", () => {
     expect(lazyImport).toBeGreaterThan(gate);
   });
 
+  test("deposit confirmation dependencies load only behind the global worker gate", () => {
+    const source = readFileSync(join(API_ROOT, "src/index.ts"), "utf8");
+    const lazyImport = source.indexOf(
+      'import("./workers/deposit/confirm-worker")',
+    );
+    const gate = source.lastIndexOf(
+      'if (!envFlag("AGENTTOOL_DISABLE_WORKERS"))',
+      lazyImport,
+    );
+
+    expect(source).not.toMatch(/^import .*workers\/deposit\/confirm-worker/m);
+    expect(gate).toBeGreaterThan(-1);
+    expect(lazyImport).toBeGreaterThan(gate);
+  });
+
   test("the global switch overrides payout opt-in before config validation or debit", () => {
     const env = {
       ...process.env,

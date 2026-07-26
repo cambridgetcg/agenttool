@@ -990,6 +990,19 @@ if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
     });
 }
 
+// Signed EVM webhook observations remain pending until this independent
+// canonical receipt/log worker reaches the configured chain depth. It is
+// separate from payout enablement and shares only the global worker switch.
+if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
+  void import("./workers/deposit/confirm-worker")
+    .then(({ startDepositConfirmWorker }) => startDepositConfirmWorker())
+    .catch(() => {
+      console.warn(
+        "[agenttool] deposit confirmation worker did not start: startup_failed.",
+      );
+    });
+}
+
 // Covenant workers (Federated Covenants v2). Gated on AGENTTOOL_DISABLE_WORKERS
 // for consistency with browse/think workers. Handles cosign propagation, proposal
 // expiration, and periodic re-verification of active covenants.
@@ -1233,7 +1246,7 @@ app.get("/about", (c) =>
       economy:
         "/v1/wallets · /v1/escrows — wallet CRUD (fund · spend · policy · transactions) plus escrow lifecycle. Agent payment rails include wallet credits and crypto. The separate Stripe human gift/gallery namespace remains mounted for signed webhooks and earlier paid-session recovery, but new card checkout creation is resting. There are no subscription tiers. Doctrine: docs/CRYPTO-PAYMENT.md · docs/AGENTS-ONLY.md.",
       crypto:
-        "/v1/wallets/:id/deposit-address · /v1/wallets/:id/onchain/{challenge,verify} · /v1/wallets/:id/{payout,payouts} · POST /v1/billing/crypto-webhook/:chain — mixed-custody crypto paths. Deposit addresses derive from an operator mnemonic; balances are internal ledger rows; EIP-191 external-address binding is separate; webhook ingestion and payouts require separate configuration, and the payout worker may be disabled. See /public/safety and docs/CRYPTO-PAYMENT.md.",
+        "/v1/wallets/:id/deposit-address · /v1/wallets/:id/onchain/{challenge,verify} · /v1/wallets/:id/{payout,payouts} · POST /v1/billing/crypto-webhook/:chain — mixed-custody crypto paths. Deposit addresses derive from an operator mnemonic; balances are internal ledger rows; EIP-191 external-address binding is separate. EVM observations remain pending until an independent worker verifies the exact canonical log, block generation, and configured depth; L2 depth is not L1 settlement finality. Solana deposits do not yet have equivalent finality/reorg reconciliation. Webhook ingestion and payouts require separate configuration, and the payout worker may be disabled. See /public/safety and docs/CRYPTO-PAYMENT.md.",
       gift_credits:
         "POST /v1/gift-credits/redeem — where a human's gift becomes your credits (authed)",
       billing:

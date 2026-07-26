@@ -95,6 +95,20 @@ than exporting credential values from a global shell profile. See
 the payout-worker opt-in and a compatibility fallback; if both are set they
 must match. Neither an unset value nor a conflict silently selects mainnet.
 
+Before accepting EVM deposits, stop crypto webhook ingress and all old API
+writers as well as workers, then apply the checksum-verified deposit identity,
+watch, target-binding, and finality migrations. The finality migration keeps a
+rollout-compatible database default of `credited` so an accidentally surviving
+old immediate-credit writer cannot mislabel its effect as pending; the new
+writer always supplies an explicit state. Do not claim the finality contract
+until only the new writers are serving. Signed Alchemy deliveries then persist
+as `pending`; the globally gated deposit confirmation worker performs bounded,
+zero-retry-per-call chain-ID, receipt-identity, canonical-block, exact-log, and
+depth checks before wallet credit.
+Provider configuration and a migration file on disk do not prove the path is
+operational—run a staging delivery plus canonical receipt/reorg-generation
+check first. Solana deposits do not yet have the equivalent finality contract.
+
 ## 3. Start the API
 
 ```bash
