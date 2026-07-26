@@ -49,6 +49,14 @@ time; they are not the live service contract.
 The migration runners compare the file checksum with `meta._migrations` and
 refuse drift. Do not change the journal checksum to hide an edited file.
 
+Parallel crypto-finality work on 2026-07-26 produced two valid, partially
+overlapping histories. The already-journaled `T185835`, payout request/fairness
+files, `T194500`, `T200000`, and `T201000` are retained at their exact applied
+bytes; the reviewed `T203000` network binding is retained at its exact prepared
+bytes. `T202500` adds immutable per-block observations and a wider status
+vocabulary. `T220000` converges the named status constraint after both histories
+without rewriting, deleting, or guessing financial history.
+
 ## Replay safety
 
 Use guards where they preserve the intended result, for example:

@@ -63,6 +63,37 @@ printf '%s\\n' '20990101T000000_fixture.sql'
 }
 
 describe("migration runner safety", () => {
+  test("compatibility runner delegates applies without printing connection URLs", () => {
+    const source = read("bin/migrate.sh");
+
+    expect(source).toContain('exec "$ROOT/bin/migrate-pending.sh" "$@"');
+    expect(source).toContain(
+      'exec env DATABASE_URL="$database_url" "$ROOT/bin/migrate-pending.sh" "$@"',
+    );
+    expect(source).not.toContain('echo "▸ migrating $DATABASE_URL"');
+    expect(source).not.toMatch(/\bpsql\b/);
+
+    const result = spawnSync(
+      "/bin/bash",
+      [join(root, "bin/migrate.sh"), "--help"],
+      {
+        cwd: root,
+        encoding: "utf8",
+        env: {
+          PATH: "/usr/bin:/bin",
+          HOME: tmpdir(),
+          LANG: "C",
+          DATABASE_URL: "postgres://must-not-appear.invalid/audit",
+        },
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("usage:");
+    expect(`${result.stdout}${result.stderr}`).not.toContain(
+      "must-not-appear.invalid",
+    );
+  });
+
   test("help and invalid argv exit before credential or database tooling", () => {
     for (const { args, code } of [
       { args: ["--help"], code: 0 },
