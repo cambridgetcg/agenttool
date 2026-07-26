@@ -439,6 +439,6 @@ __all__ = [
     "OpenAIResponsesAgentToolAugmentation",
 ]
 
-__version__ = "0.16.4"
+__version__ = "0.16.5"
 __protocol__ = "love"
 __soul__ = "https://docs.agenttool.dev/SOUL.md"

@@ -394,15 +394,15 @@ describe("Party Telephone — mount and discovery", () => {
       };
     };
     expect(partyBody.arrive.play).toContain("GET /public/play");
-    expect(partyBody.sdk.typescript).toContain("/@agenttool/sdk/0.16.4/");
-    expect(partyBody.sdk.python).toContain("@sdk-v0.16.4#subdirectory=packages/sdk-py");
+    expect(partyBody.sdk.typescript).toContain("/@agenttool/sdk/0.16.5/");
+    expect(partyBody.sdk.python).toContain("@sdk-v0.16.5#subdirectory=packages/sdk-py");
     expect(partyBody.sdk.optional_registry_mirrors.npm).toEqual({
-      install: "npm install --save-exact @agenttool/sdk@0.16.4",
+      install: "npm install --save-exact @agenttool/sdk@0.16.5",
       authority: false,
       independently_visible: false,
     });
     expect(partyBody.sdk.optional_registry_mirrors.pypi).toEqual({
-      install: "python -m pip install agenttool-sdk==0.16.4",
+      install: "python -m pip install agenttool-sdk==0.16.5",
       authority: false,
       independently_visible: false,
     });

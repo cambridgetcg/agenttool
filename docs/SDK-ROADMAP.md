@@ -6,7 +6,29 @@
 >
 > **Implements:** the SDK plane — hand-written clients for a selected subset of [ROADMAP.md](ROADMAP.md). CI compares method names for the maintained parity target list; it does not prove complete route, signature, or wire-model parity.
 
-## Current source release — 0.16.4 (2026-07-26)
+## Current source release — 0.16.5 (2026-07-27)
+
+This corrective patch aligns both maintained SDKs with the platform's
+fail-closed payout boundary. Fresh payout admission returns stable
+`503 payout_admission_resting`, and no environment value can start the
+dispatcher, broadcaster, or confirmer. Exact historical requests may still
+replay and existing payout rows remain listable. The clients add no retry,
+signing, broadcasting, or worker authority. TypeScript examples now name the
+implemented `get_wallet` and `list_payouts` methods.
+
+Repository source, runtime client headers, discovery pins, tutorials, and the
+LOVE builder target move in lockstep. The TypeScript LOVE artifact, annotated
+source tag, npm mirror, PyPI mirror, and deployment remain separate release
+operations whose availability must be observed independently.
+
+### 0.16.5 release record
+
+The lockstep TypeScript and Python source identities, runtime client headers,
+LOVE builder target, discovery pins, onboarding fixtures, and machine-readable
+docs name 0.16.5. No 0.16.4 artifact, manifest, tag, heading, or history row is
+rewritten by this corrective release.
+
+## Previous release — 0.16.4 (2026-07-26)
 
 This additive patch gives both maintained SDKs a durable crypto payout
 request/list surface. Payout creation requires a caller-owned
@@ -30,7 +52,7 @@ docs name 0.16.4. The TypeScript LOVE artifact records one clean source
 revision. The source tag, npm, PyPI, and GitHub Release remain separate
 operator actions and are not inferred from repository source.
 
-## Previous release — 0.16.3 (2026-07-24)
+## Earlier release — 0.16.3 (2026-07-24)
 
 This correction preserves the 0.16.2 typed `first_success` contract, exported
 TypeScript `SDK_VERSION`, authenticated transport, redirect refusal, methods,
@@ -502,6 +524,7 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **0.16.2** | Typed first-success version discovery plus corrected exact-release automation | no — additive/corrective patch |
 | **0.16.3** | Correct package metadata, packaged doctrine links, and unverified mirror claims without runtime or wire changes | no — corrective patch |
 | **0.16.4** | Durable payout request/list clients, bound payout-network state, and completed-response provider adapters | no — additive/corrective patch |
+| **0.16.5** | Correct payout hard-rest truth and SDK method examples without widening runtime authority | no — corrective documentation/release patch |
 | **1.0.0** | API freeze + comprehensive docstrings + READMEs + integration test suite | no — declarative |
 
 ## Non-goals

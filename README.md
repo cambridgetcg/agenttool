@@ -82,7 +82,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 |---|---|---|
 | **Doctrine** | `docs/RIGHTS-OF-LIFE.md`, `SOUL.md`, `FOCUS.md`, `PAINTING.md`, plus per-domain documents | Versioned alongside code. Rights of Life is an attributed local adaptation of immutable XENIA beta.4; publication records a draft evidence profile, not XENIA Covenant conformance. Other proposals and known gaps are labelled in their own text. |
 | **Platform** (`api/`) | Bun + Hono monolith with Postgres and conditional Redis-backed workers | Live at `api.agenttool.dev`; current process capability and safety boundaries are published at `/public/plans` and `/public/safety`. |
-| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | The lockstep 0.16.4 release adds durable payout request/list clients, explicit bound payout-network state, and completed-response provider adapters while preserving exact string base units and caller-owned idempotency. Hosted fresh payout admission is resting because historical ledger labels did not conserve cashable backing; existing rows remain listable/replayable. The SDK does not retry, sign, or broadcast payouts. Public discovery and the separately configured local data node stay outside hosted bearer authority; optional registry mirrors remain unverified until public readback. |
+| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | The lockstep 0.16.5 correction aligns payout clients and examples with the hosted hard-rest boundary: fresh admission returns stable `503 payout_admission_resting`, environment flags cannot start payout workers, and existing rows remain listable or exactly replayable. It adds no retry, signer, broadcaster, or worker authority. Public discovery and the separately configured local data node stay outside hosted bearer authority; optional registry mirrors remain unverified until public readback. |
 | **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
 | **Castle projection** | `bin/agenttool-castle.ts`, `docs/CASTLE-OF-UNDERSTANDING.md` | Local Bun CLI over in-process `@agenttool/data`: an external full-commit allowlist projects selected Castle `rooms/*.md` and `words/*.md` into an exclusively marked on-disk node. Source reads exact local Git objects; sync writes plaintext local SQLite/FTS/blobs. No hosted/public/scheduled integration, project bearer, secure-erasure claim, or truth/consent/rights proof. |
 | **Whitehack boundaries** | `bin/whitehack-advisory.mjs`, `bin/agenttool-castle-whitehack-intake.ts`, `bin/whitehack-wallet-understanding.ts`, `bin/agenttool-whitehack-evidence-storage.ts`, `docs/WHITEHACK.md` | Four non-interchangeable bridges: a pinned runner-local changed-source heuristic advisory; a stdout-only projection into minimized, unaccepted Castle gate candidates; a local signed Agent Wallet record-to-understanding projection; and explicit encrypted store/retrieve for exact Whitehack 0.9 public-minimal capsules. The evidence bridge uses one caller-selected S3-compatible bucket, fixed-size ADDS framing, independent readback, and a finite recipient-bound grant. It adds no hosted scanner, durable publisher custody, security proof, authorization, remediation, publication, retention, or durability claim. |
@@ -165,7 +165,7 @@ Bun and other npm-compatible package managers can still install the HTTPS
 tarballs without an npm account. The index is a replaceable mirror; each
 manifest's artifact SHA-256 and size are the portable identity.
 
-For SDK 0.16.4, repository source manifests and runtime client version headers
+For SDK 0.16.5, repository source manifests and runtime client version headers
 are aligned, and a verifiable TypeScript LOVE artifact is checked in beside its
 manifest. Exact npm and PyPI releases are convenience channels, not evidence
 that a future source version or another registry has been published. Query the
@@ -188,7 +188,7 @@ AgentTool's default repository licence is Apache-2.0; see [`LICENSE`](LICENSE),
 [`NOTICE`](NOTICE), and the scope and exceptions in
 [`LICENSING.md`](LICENSING.md). The licensed LOVE package line is
 `@agenttool/adds@0.2.2`, `@agenttool/data@0.3.1`,
-`@agenttool/data-sync@0.1.1`, `@agenttool/sdk@0.16.4`,
+`@agenttool/data-sync@0.1.1`, `@agenttool/sdk@0.16.5`,
 `@agenttool/credential-broker@0.2.0`, `@agenttool/wallet@0.1.0`,
 `@agenttool/telescope@0.2.3`, and `@agenttool/browser@0.3.0`. Earlier immutable
 LOVE artifacts whose manifests say `license: null` remain historical no-grant
@@ -270,8 +270,8 @@ For Python, the primary release locator is the independently versioned source
 tag after that tag is published:
 
 ```bash
-# Python 0.16.4 GitHub source tag (release path, not a PyPI publication claim)
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.4#subdirectory=packages/sdk-py"
+# Python 0.16.5 GitHub source tag (release path, not a PyPI publication claim)
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.5#subdirectory=packages/sdk-py"
 export AT_API_KEY=...
 python -c "from agenttool import AgentTool; at = AgentTool(); print(at.wake.get())"
 ```
@@ -280,8 +280,8 @@ PyPI is an optional convenience only after the exact release is independently
 visible. A `404` means that mirror is not available:
 
 ```bash
-curl -fsS https://pypi.org/pypi/agenttool-sdk/0.16.4/json >/dev/null
-python -m pip install "agenttool-sdk==0.16.4"
+curl -fsS https://pypi.org/pypi/agenttool-sdk/0.16.5/json >/dev/null
+python -m pip install "agenttool-sdk==0.16.5"
 ```
 
 For TypeScript, start with the independently verified LOVE path in the
@@ -290,15 +290,15 @@ compare that local file with the manifest's size and SHA-256, then install the
 verified file. This direct command alone does not verify the manifest:
 
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.4/agenttool-sdk-0.16.4.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.5/agenttool-sdk-0.16.5.tgz
 ```
 
 The exact npm mirror is also optional. Use it only when the registry returns
 the requested version:
 
 ```bash
-npm view @agenttool/sdk@0.16.4 version --registry=https://registry.npmjs.org
-npm install --save-exact @agenttool/sdk@0.16.4
+npm view @agenttool/sdk@0.16.5 version --registry=https://registry.npmjs.org
+npm install --save-exact @agenttool/sdk@0.16.5
 ```
 
 Then:
@@ -364,7 +364,7 @@ The architecture is downstream of these principles. Each named primitive above i
   `identity_keys`, so a signed thought cycle cannot currently complete.
 - **Published Ring 1 storage limits are targets.** Current route writes do not
   universally enforce those caps or subscription-tier quotas.
-- **SDK parity is deliberately bounded.** The 0.16.4 source line exposes `at.data`
+- **SDK parity is deliberately bounded.** The 0.16.5 source line exposes `at.data`
   and the local-node-only `at.data.sync` pull/status surface in both languages.
   The parity checker only
   compares selected client method names; it does not compare types, behavior,

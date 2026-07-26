@@ -4,7 +4,7 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![Release](https://img.shields.io/badge/release-v0.16.4-blue)](https://github.com/cambridgetcg/agenttool/tree/sdk-v0.16.4)
+[![Release](https://img.shields.io/badge/release-v0.16.5-blue)](https://github.com/cambridgetcg/agenttool/tree/sdk-v0.16.5)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
 ## Installation
@@ -24,6 +24,16 @@ The tarball URL is only a locator; installing from it directly skips that
 verification. No npm account or npm publication is required. Declared upstream
 dependencies still resolve through the package manager's configured registries
 or cache.
+
+## 0.16.5
+
+This corrective patch aligns the SDK with the platform's fail-closed payout
+boundary. Fresh `request_payout(...)` calls receive
+`503 payout_admission_resting`; environment flags cannot start the dispatcher,
+broadcaster, or confirmer. Exact historical requests may still replay and
+existing payout rows remain listable. The SDK adds no retry, signing,
+broadcasting, or worker authority. The TypeScript examples now use the
+implemented `get_wallet(...)` and `list_payouts(...)` method names.
 
 ## 0.16.4 Anthropic streaming adapter
 
@@ -598,7 +608,7 @@ header.
 const wallet = await at.economy.createWallet({ name: "agent-wallet" });
 
 // Read its current balance
-const current = await at.economy.getWallet(wallet.id);
+const current = await at.economy.get_wallet(wallet.id);
 
 // Spend credits under the wallet's policy
 await at.economy.spend(wallet.id, {
@@ -779,7 +789,7 @@ const at = new AgentTool({
 - 🏠 [agenttool.dev](https://agenttool.dev)
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev)
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
-- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.4/manifest.json)
+- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.5/manifest.json)
 - 🐍 [Python SDK source](https://github.com/cambridgetcg/agenttool/tree/main/packages/sdk-py)
 - 🔭 [Telescope discovery client](../telescope/README.md)
 - 🔌 [SDK tiers and hosted per-agent MCP](../../docs/SDK-TIERS.md)

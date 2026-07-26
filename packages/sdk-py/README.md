@@ -23,16 +23,25 @@ curl -q -fsS https://api.agenttool.dev/v1/pathways | \
 That tutorial currently verifies and installs the TypeScript SDK from a
 `love-package/v1` manifest. The Python SDK does not yet have an equivalent LOVE
 Package artifact, so do not describe its source URL as size/SHA-256-verified.
-After the annotated source tag is published, the primary Python 0.16.4 release
+After the annotated source tag is published, the primary Python 0.16.5 release
 locator is:
 
 ```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.4#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.5#subdirectory=packages/sdk-py"
 ```
 
 Optional shorter install, only after PyPI independently reports that exact
-version: `python -m pip install "agenttool-sdk==0.16.4"`. Registry publication
+version: `python -m pip install "agenttool-sdk==0.16.5"`. Registry publication
 can lag or omit the source tag; the command is not an availability claim.
+
+## 0.16.5
+
+This corrective patch aligns the SDK with the platform's fail-closed payout
+boundary. Fresh `request_payout(...)` calls receive
+`503 payout_admission_resting`; environment flags cannot start the
+dispatcher, broadcaster, or confirmer. Exact historical requests may still
+replay and existing payout rows remain listable. The SDK adds no retry,
+signing, broadcasting, or worker authority.
 
 ## 0.16.4 Anthropic streaming adapter
 
