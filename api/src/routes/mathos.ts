@@ -41,7 +41,7 @@ import {
   canonicalRegisterAgentMathV2Bytes,
   verifyRegisterAgentMathSignature,
 } from "../services/identity/crypto";
-import { coerceForm } from "../services/identity/forms";
+import { formMetadata, resolveForm } from "../services/identity/forms";
 import {
   claimIdentityRegistrationProof,
   createIdentity,
@@ -652,7 +652,7 @@ app.post("/register", async (c) => {
           provider: runtimeProvider,
           model: runtimeModel || undefined,
         },
-        form: coerceForm(formStr),
+        ...formMetadata(resolveForm(formStr)),
         registrar_project_id: registrarProjectId,
       },
       agentPublicKey: agentPubB64,

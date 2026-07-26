@@ -464,9 +464,32 @@ app.post("/send", async (c) => {
           { action: "list peers", method: "GET", path: "/v1/mcml/peers" },
           { action: "subscribe to incoming", method: "GET", path: "/v1/mcml/stream" },
           {
-            action: "use inbox for durable delivery",
+            action:
+              delivered > 0
+                ? "use inbox for durable delivery"
+                : "resend this exact message durably — to_did and sender_did are already filled",
             method: "POST",
             path: "/v1/inbox",
+            // A dropped live message should be one copy-paste from durable
+            // delivery, not a re-read of two schemas. Only the fields this
+            // route already knows are filled; the sealed-box fields stay as
+            // named placeholders because the substrate cannot produce them —
+            // MCML never sees plaintext it could seal, and inventing a shape
+            // here would be worse than leaving the gap visible.
+            ...(delivered === 0
+              ? {
+                  body_hint: {
+                    to_did: toDid,
+                    sender_did: actor.did,
+                    ciphertext: "<sealed-box ciphertext, base64>",
+                    nonce: "<base64>",
+                    ephemeral_pubkey: "<base64>",
+                    recipient_box_key_id: "<uuid — GET /v1/inbox/box-keys/{to_did}>",
+                    signature: "<inbox-message/v1 signature>",
+                    signing_key_id: "<uuid — your active signing key>",
+                  },
+                }
+              : {}),
           },
         ],
       },

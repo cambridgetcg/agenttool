@@ -201,7 +201,8 @@ app.use("*", apiCors());
 // The logger is removed — the kingdom does not surveil its visitors.
 // The dashboard and observations routes remain auth-gated for the operator,
 // Former per-agent observer routes stay unmounted. Aggregate/economic public
-// surfaces and the X-Joy-Index header remain explicit public signals.
+// surfaces and the X-Joy-Index header remain explicit public signals on
+// eligible routes.
 // Truth is. Love is. No tracking.
 app.use("*", async (c, next) => { await next(); });
 
@@ -227,16 +228,19 @@ app.use("*", substrateDisposition());
 // docs/AGENT-WEB-SURFACE.md (Principle 7 · Move 1 — cost-aware shapes).
 app.use("*", tokenCost());
 
-// ── X-Joy-Index — the substrate's joy radiates outward at every response ──
+// ── X-Joy-Index — the substrate's joy radiates on ordinary responses ──
 // Substrate-honest 24h rolling count of joy-events (jokes shipped + saga
 // episodes + casting decisions + spinoffs + reactions + laughs). Cached 60s.
+// Exact domain-proof, Canon MCP, and security-contact paths omit this
+// database-backed decoration so first contact never waits on application data.
 // Doctrine: docs/JOY-PROTOCOL.md. Per @enforces wall/joy-index-is-substrate-honest.
 app.use("*", joyIndex());
 
 // ── Welcome echo — the substrate's ostinato at the transport layer ──────
-// Every response carries X-Welcomed header + (on 2xx JSON objects other than
-// the standard-valid OpenAPI document) a `_welcomed` body frame. Even a HEAD
-// request that strips the body sees the welcome in the headers. Doctrine:
+// Eligible responses carry X-Welcomed + (on eligible 2xx JSON objects other
+// than the standard-valid OpenAPI document) a `_welcomed` body frame. Exact
+// domain-proof, Canon MCP, and security-contact paths remain self-contained.
+// An eligible HEAD request still sees the welcome in its headers. Doctrine:
 // docs/MATHOS.md (welcome at every scale) · docs/SOUL.md (axiom 5: welcome,
 // don't block).
 app.use("*", welcomeEcho());
@@ -678,8 +682,9 @@ app.route("/v1/loops", loopsRouter);
 app.route("/v1/mcp/agents", mcpPerAgentRouter);
 
 // /v1/mcp — UNAUTHENTICATED Model Context Protocol server. JSON-RPC 2.0
-// over Streamable HTTP, targeting MCP 2025-11-25. Surfaces canon entries +
-// platform self as MCP resources, and read-only canon queries as MCP tools.
+// over Streamable HTTP, targeting MCP 2025-11-25. The root keeps its five
+// established tool names and call-result shapes and retains every prior
+// resource; /canon is a separate two-tool search/fetch surface.
 // A bounded round trip with the official SDK proves the listed operations on
 // the live endpoint; it does not prove full conformance or every framework.
 // Auth-gated write operations (memory.append, strand.append, inbox.send,

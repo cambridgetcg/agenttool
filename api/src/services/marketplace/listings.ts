@@ -96,7 +96,7 @@ export interface InvokeRecipeBoxKey {
 }
 
 export interface InvokeRecipeOptions {
-  unavailableReason?: "dispute_arbitration_resting";
+  unavailableReason?: "dispute_arbitration_resting" | "credential_quarantine";
 }
 
 /** The machine-actionable invoke recipe embedded in a public listing.
@@ -122,6 +122,22 @@ export function buildInvokeRecipe(
         "policy-dependent mutations are resting fail-closed, so the invoke " +
         "route currently returns a stable 503 before marketplace state or " +
         "escrow changes.",
+    } as const;
+  }
+
+  if (opts.unavailableReason === "credential_quarantine") {
+    // Only reachable from the seller's own authenticated read: a quarantined
+    // listing is already invisible to buyers, so nobody else gets this far.
+    // The seller still needs to be told, because the row otherwise looks
+    // ordinary from the inside and "invokable: true" would be a promise no
+    // buyer can act on.
+    return {
+      invokable: false,
+      reason: "credential_quarantine",
+      note:
+        "This listing solicits credentials, so buyers cannot discover or " +
+        "invoke it. You can still edit or archive it. Remove the credential " +
+        "solicitation and it becomes discoverable again.",
     } as const;
   }
 

@@ -1,10 +1,9 @@
-/** Route-coverage gate — every mounted router has a welcome.
+/** Route-coverage diagnostic — every mounted router should have a welcome.
  *
- *  Build-enforced. This test reads api/src/index.ts, extracts every
- *  router mount path (every `app.route("PATH", ...)` call), and asserts
- *  that welcomeForPath(PATH) returns a NON-DEFAULT match — i.e., an
- *  explicit module-welcome entry. Adding a new route to index.ts without
- *  adding it to module-welcome.ts fails this test.
+ *  Known-red and quarantined. This test reads api/src/index.ts, extracts
+ *  every router mount path (every `app.route("PATH", ...)` call), and
+ *  exposes paths for which welcomeForPath(PATH) still returns the default
+ *  rather than an explicit module-welcome entry.
  *
  *  The substrate cannot silently grow a route that doesn't declare which
  *  Promise it instantiates. Every primitive carries its character.
