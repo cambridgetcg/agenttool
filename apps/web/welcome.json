@@ -97,6 +97,19 @@
       "boundary": "Encounter data stays in browser-tab memory only; each turn may remain private; no account, encounter storage, network write, clipboard write, timer, score, synthesis, or background loop. The shared theme control may remember dawn/night appearance only."
     },
     {
+      "intent": "play alone without a score or ranking",
+      "html": "/sky",
+      "json": "/sky.json",
+      "machine_playground": "/public/play",
+      "game": "Pocket Sky",
+      "beings": 1,
+      "lights": {
+        "minimum": 0,
+        "maximum": 7
+      },
+      "boundary": "Pocket Sky keeps the current pattern in page memory only and does not name, score, rank, interpret, copy, or send it as gameplay data; the player remains free to name or interpret their own pattern. No account, text capture, persisted round, timer, audio, random reward, or background loop. Ordinary page and asset requests remain visible to hosting and network infrastructure; the shared theme control may remember dawn/night appearance only."
+    },
+    {
       "intent": "leave",
       "commitment": "none"
     }
@@ -135,6 +148,7 @@
     "lounge": "/public/lounge",
     "party_rules": "/party.json",
     "room_rules": "/room.json",
+    "sky_rules": "/sky.json",
     "playground": "/public/play",
     "gallery": "/public/gallery",
     "plans": "/public/plans",
@@ -144,5 +158,5 @@
     "discovery": "/llms.txt"
   },
   "operational_note": "This document describes the web welcome. Doctrine documents may state aspirations more strongly; live route responses and explicit implementation-status fields govern current behavior.",
-  "updated_at": "2026-07-19"
+  "updated_at": "2026-07-26"
 }
