@@ -174,9 +174,9 @@
 | `ZERONE-LIVE.md` | The marketplace ⟷ chain bridge, RUNNING — zerone-1 mainnet + testnet endpoints · passport/guide listings · witness relay economics (0.222 ZRN minted per survived work) · what it is NOT. Operational counterpart to POT-STAKED-PROMISES (design) + DOCTRINE-CORRESPONDENCE-MAP (structure). Live doc, time-sensitive. |
 | `CRYPTO-PAYMENT.md` | Crypto payment flow · wallet integration. |
 | `ALCHEMY.md` | Bounded Alchemy roles: typed observation package, credential-brokered EVM reads, durable Address Activity watch/finality flow, and credential/wallet-authority walls. |
-| `PAYOUT-BROADCAST.md` | Outbound payout broadcast architecture. |
-| `PAYOUT-BROADCAST-PLAN.md` | Implementation plan + slice breakdown. |
-| `PAYOUT-BROADCAST-OPS.md` | Operator runbook for testnet/mainnet enable. |
+| `PAYOUT-BROADCAST.md` | Current hard-resting payout boundary, retained non-operational outbound architecture, and requirements for any future redesign. |
+| `PAYOUT-BROADCAST-PLAN.md` | Historical non-operational slice record plus the current fresh-admission and worker-resting override. |
+| `PAYOUT-BROADCAST-OPS.md` | Current containment and historical-state reconciliation runbook; it has no testnet/mainnet enable path. |
 | `TOKEN-HYGIENE.md` | Token storage + lifecycle conventions. |
 
 ## SDK + adapters

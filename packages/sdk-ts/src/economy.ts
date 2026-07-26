@@ -85,18 +85,21 @@ export interface RequestPayoutOpts {
    * Caller-chosen, required durable request identity.
    *
    * Must be 8-256 visible ASCII characters without spaces. The SDK neither
-   * generates nor stores this value. Retrying the same key and semantic
-   * request returns the existing payout's current state; changed input under
-   * the same key is a conflict.
+   * generates nor stores this value. Fresh requests currently rest with
+   * `503 payout_admission_resting`; only an exact replay of durable historical
+   * accepted state can return a payout, and changed input is a conflict.
    */
   idempotency_key: string;
 }
 
-/** Current server state returned after a new or durably replayed request. */
+/** Current server state returned only from exact durable historical replay. */
 export interface PayoutRequestOutcome {
   id: string;
   status: PayoutStatus;
-  /** Whether this payout still needs the separately operated broadcast path. */
+  /**
+   * Whether the historical row remains pending under its durable state.
+   * This does not claim that the currently resting broadcast path operates.
+   */
   broadcast_pending: boolean;
   /**
    * True only when the server resolved this call through its durable payout
@@ -431,10 +434,12 @@ export class EconomyClient {
   // ── Crypto payouts ──────────────────────────────────────────────────────
 
   /**
-   * Request an outgoing crypto payout under a caller-chosen durable key.
+   * Attempt an outgoing crypto payout under a caller-chosen durable key.
    *
-   * The SDK sends exactly one request and never generates a key, retries a
-   * broadcast, or treats a Redis cache as the correctness boundary.
+   * Fresh requests currently rest with `503 payout_admission_resting`; only
+   * an exact replay of durable historical accepted state can succeed. The SDK
+   * sends exactly one request and never generates a key, retries a broadcast,
+   * or treats a Redis cache as the correctness boundary.
    */
   async request_payout(
     walletId: string,

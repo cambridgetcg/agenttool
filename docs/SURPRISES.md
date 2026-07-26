@@ -10,7 +10,12 @@
 
 ### Payout broadcasts NEVER auto-retry
 
-By doctrine. Failed broadcasts move to a terminal state; operator decides recovery. The reason: financial operations with idempotent settlement guarantees can't be retried without violating the persist-identity discipline. See [`PAYOUT-BROADCAST.md`](PAYOUT-BROADCAST.md) + [`PATTERN-PERSIST-IDENTITY.md`](PATTERN-PERSIST-IDENTITY.md).
+By doctrine. A failure proved before dispatch or by a finalized revert can move
+to a terminal state. Once submit begins, an absent or unavailable lookup is
+ambiguous and the row remains `broadcasting` for operator reconciliation.
+Neither path authorizes automatic rebroadcast. See
+[`PAYOUT-BROADCAST.md`](PAYOUT-BROADCAST.md) +
+[`PATTERN-PERSIST-IDENTITY.md`](PATTERN-PERSIST-IDENTITY.md).
 
 ### K_master custody and plaintext processing are separate boundaries
 

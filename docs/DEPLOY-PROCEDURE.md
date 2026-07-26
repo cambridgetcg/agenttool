@@ -195,18 +195,47 @@ Use one bounded maintenance cutover:
    reviewed files. Stop on any checksum, precondition, lock, or statement
    failure; do not deploy across a partial or uncertain result.
 5. Re-run `bin/migrate-pending.sh --dry-run` and require an empty pending set.
-   Do not restore old counts or an old image. Install only the pinned,
-   migration-compatible API revision using a from-zero rollout that was
-   rehearsed before the window, then restore and verify the captured regional
-   shape.
-6. The current deploy wrapper is built around a rolling Fly rollout; it does
-   not by itself prove from-zero region or process-group restoration. If the
-   reviewed rollout cannot prove that the first runnable machine has the new
-   revision, remain at zero and add a narrow maintenance rollout mode instead
-   of guessing.
-7. Once every API and thinker machine reports the intended new image/revision,
-   run the coordinated publication/verification path, require a success
-   receipt, and only then reopen admission.
+   Do not restore old counts or an old image.
+6. From the clean, exact GitHub `main` commit, run the reviewed Fly-only
+   restoration:
+
+   ```bash
+   bin/deploy.sh --maintenance-from-zero --no-migrate --no-frontend
+   ```
+
+   The explicit mode refuses source overrides and refuses unless both the
+   invocation-start and immediate pre-deploy machine inventories are literal
+   empty JSON arrays. It still performs the migration compatibility survey,
+   preflight, committed discovery-prerequisite check, image staging, and final
+   health check. It then:
+
+   - seeds the exact image with `fly deploy --strategy immediate --ha=true`;
+   - requires the seeded `lhr` shape from `api/fly.toml`: two started
+     1 GB `app` Machines and two 256 MB `thinker` Machines (one started, one
+     stopped);
+   - restores one started 1 GB `app` Machine in `cdg`;
+   - requires all five Machines to share one canonical image digest and the
+     exact process-group, region, shared-CPU, memory, and state shape;
+   - uses silent SSH `test` expressions—not `printenv`—to prove the intended
+     revision/dirty marker and `AGENTTOOL_DISABLE_WORKERS=1` on every started
+     Machine; the transient
+     `thinker` entrypoint checks that same global switch before it imports or
+     starts the trusted-runtime manager, so maintenance seeding is inert;
+   - stops the proven started thinker with `SIGTERM`, the configured
+     300-second grace window, and a five-minute CLI wait; and
+   - rechecks twice that the final shape is `app` `lhr=2`, `cdg=1` started
+     and `thinker` `lhr=2` stopped, with the same digest on all five.
+
+   `--no-migrate` and `--no-frontend` are mandatory here: reviewed migrations
+   already ran under the separate fence, and this bounded invocation mutates
+   Fly only. `--no-cache-api` remains available for its documented one-shot
+   image-cache recovery; `--skip-preflight` remains a loud operator override.
+7. Require the successful local receipt with
+   `verified_api_machines: 5`, then reopen admission and release held provider
+   delivery. Any inventory, topology, image, SSH, stop, health, or receipt
+   uncertainty exits non-zero. If Fly mutation may have begun, the wrapper
+   attempts only a `failed_or_uncertain` receipt; it does not guess, reopen
+   admission, destroy the new fleet, or restore the old image automatically.
 
 The maintenance mechanism proves only the process boundary it controls. It
 does not cancel provider I/O already started before quiescence, prove an
@@ -347,8 +376,10 @@ curl -sI https://api.agenttool.dev/health | grep -i substrate-disposition
 `AGENTTOOL_GIT_REVISION` and `AGENTTOOL_SOURCE_DIRTY`. The Dockerfile carries
 them as environment/OCI labels; `/health` returns them as `build.revision` and
 `build.dirty` with `Cache-Control: no-store`. After Fly's rolling health checks
-complete, the wrapper compares both public values and both embedded values on
-every current Fly machine. A mismatch fails the deploy invocation.
+complete, the wrapper silently tests both embedded values on every started Fly
+machine. In the from-zero maintenance mode, it additionally requires one image
+digest across the exact five-Machine fleet, which anchors the stopped thinker
+to the same image. A mismatch fails the deploy invocation.
 
 The base image is pinned to Bun 1.3.5 by tag and registry digest. Update the
 tag and digest together, deliberately, after the hermetic gate passes. Label
@@ -499,6 +530,8 @@ bin/deploy.sh --no-migrate             # skip Phase 1 (schema unchanged)
 bin/deploy.sh --no-api                 # skip Phase 3 (only docs/frontends changed)
 bin/deploy.sh --no-frontend            # skip Pages upload; still require live discovery prerequisites
 bin/deploy.sh --no-cache-api           # one-shot recovery: rebuild Fly image without cache
+bin/deploy.sh --maintenance-from-zero --no-migrate --no-frontend
+                                         # reviewed empty-fleet Fly restoration
 bin/deploy.sh --skip-preflight         # operator override (NOT recommended)
 bin/deploy.sh --allow-dirty-release    # loud override for a dirty source tree
 bin/deploy.sh --allow-non-release-head # loud override for HEAD != github/main
@@ -615,6 +648,6 @@ security add-generic-password -U -s agenttool-cloudflare-token -a macair -w
 
 ---
 
-> *GitHub `main` coordinates releases, and is the only head — the Codeberg mirror was retired 2026-07-25. Production deploys remain manual through `bin/deploy.sh`, and completion means the intended revision and dirty-source marker agree across health and every Fly machine, sensitive frontend paths are denied, and the outcome is written locally. This is provenance agreement, not an image-digest or reproducible-build claim.*
+> *GitHub `main` coordinates releases, and is the only head — the Codeberg mirror was retired 2026-07-25. Production deploys remain manual through `bin/deploy.sh`, and completion means the intended revision and dirty-source marker agree across health and every started Fly machine, sensitive frontend paths are denied, and the outcome is written locally. The exclusive from-zero path additionally requires one image digest across its exact five-Machine shape. These are bounded provenance checks, not a reproducible-build claim.*
 
 — Authored by 愛 at Yu's WILL. 2026-05-12.

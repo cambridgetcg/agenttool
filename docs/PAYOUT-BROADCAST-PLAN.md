@@ -6,19 +6,48 @@
 >
 > **Implements:** Layer 4 — Economy (sliced plan to ship the outbound send-side worker).
 
+## Current override — payout resting
+
+This is a historical implementation plan, not an enablement runbook. Fresh
+payout admission and every worker boot path are now resting unconditionally.
+An exact historical request may replay and existing rows remain listable or,
+while still `requested`, cancellable. A fresh request returns
+`503 payout_admission_resting` after durable replay/conflict lookup and before
+network selection or payout-economic wallet/policy reads or mutation. No
+environment flag or direct worker import can reopen the path.
+
+The former lifetime `gallery_sale` / `escrow_release` heuristic did not
+conserve cashable backing across ordinary debits, internally funded transfers,
+refunds/chargebacks, and later funding. Any future plan starts with durable
+conserved sub-balances and a historical-row audit.
+
 ## Frame
 
-Ship the send-side worker that picks up `crypto_payouts.status='requested'` rows, signs + broadcasts on the agent's chain, watches for confirmation, and either confirms, fails-with-refund on decisive evidence, or explicitly holds an ambiguous submit outcome for operator reconciliation.
+The original campaign shipped source for a worker that could pick up
+`crypto_payouts.status='requested'` rows, sign and broadcast, watch for
+confirmation, fail-with-refund on decisive evidence, or hold ambiguous submit
+outcomes for operator reconciliation. That source is retained but unreachable.
 
-**Done when:** an agent POSTs a payout; `tx_hash` lands within 60s; the row reaches `confirmed` within ~3min (EVM) / ~30s (Solana); the recipient agent's wallet credits via the existing inbound-webhook flow. End-to-end on testnets first; mainnet last.
+**Future done means:** after conserved backing and historical reconciliation
+are proven, an agent POSTs a payout with a durable idempotency key; transaction
+identity is persisted before one submit; and the row reaches a confirmed or
+explicitly ambiguous state without automatic resubmission.
+Recipient credit is a separate inbound contract: configured EVM testnet
+receivers require verified watch plus canonical depth, while Solana has no
+watch/finality reconciler and refuses credit by default.
 
-**Cuts the loop:** today the marketplace lands revenue in author wallets (`templates.author_wallet_id`, shipped 2026-05-08) but authors can't extract it. After this lands, agent-to-agent settlement closes — including across instances, since each side's deposit-address webhook handles its own credit independently.
+**Current boundary:** marketplace revenue may land in internal wallets, but
+fresh payout creation cannot extract it. The retained lifecycle also does not
+prove recipient-side watch readiness, finality, or automatic cross-instance
+settlement.
 
 ---
 
-## Architectural decisions
+## Historical architectural decisions — non-operational
 
-Decide once, stamp on the design.
+The table records choices made by the original campaign. It is audit and
+redesign input, not current configuration guidance: none of these environment,
+queue, signer, RPC, or threshold choices can start payout processing.
 
 | # | Decision | Choice | Why |
 |---|---|---|---|
@@ -35,26 +64,29 @@ Decide once, stamp on the design.
 
 ---
 
-## Slices
+## Historical slice record — non-operational
 
-Each individually shippable + verifiable. Slices land in order; later slices may run in parallel after Slice 0.
+The slices below record the original sequence and acceptance targets. They are
+not current tasks to execute, and their credentialed acceptance steps cannot
+succeed while fresh admission and every worker path rest.
 
-### Slice 0 — Preflight + safety pre-pass · ~2-3 hours · ✓ shipped
+### Slice 0 — Preflight + safety pre-pass · historical, superseded
 
 - Add deps: `viem`, `@solana/web3.js`, `@solana/spl-token`.
-- Add env vars + boot-time validation: when payout boot is enabled globally,
-  refuse to start if `PAYOUT_NETWORK` is unset.
-- **Close the credit-freeze wall first**:
-  - `POST /v1/wallets/:id/payout` returns `503 payout_broadcast_not_available`
-    when `PAYOUT_WORKER_ENABLED` is off or `AGENTTOOL_DISABLE_WORKERS=1`.
-    These flags do not prove that a worker which passed startup remains healthy.
+- Retain the historical env parsing and boot validation for a future redesign,
+  but the current worker gate always returns false.
+- **Current credit-freeze wall**:
+  - Fresh `POST /v1/wallets/:id/payout` returns
+    `503 payout_admission_resting` regardless of environment.
+  - The response happens after historical replay/conflict resolution and
+    before network selection or payout-economic wallet/policy reads or
+    mutation.
+  - `processPayout()` repeats the permanent gate before database or RPC work.
   - New `POST /v1/wallets/:id/payouts/:payout_id/cancel` — auth-gated, refunds credits while `status='requested'`. Future-useful for genuine cancellations too.
-- **Acceptance:** with the global worker switch unset, a boot smoke-test with
-  `PAYOUT_NETWORK` missing fails loud. With payout boot disabled by either
-  switch, the payout endpoint returns 503; the cancel endpoint refunds
-  correctly.
+- **Acceptance:** no environment or direct import reopens admission/broadcast;
+  exact historical replay/list/cancel remains correct.
 
-### Slice 1 — EVM broadcast worker (Sepolia) · ~1 day · ✓ shipped
+### Historical Slice 1 — EVM broadcast worker (Sepolia) · non-operational
 
 - `api/src/workers/payout-dispatcher.ts` — cron, polls `requested` every 10s, enqueues BullMQ jobs.
 - `api/src/workers/payout-broadcast.ts` — consumes queue:
@@ -69,9 +101,11 @@ Each individually shippable + verifiable. Slices land in order; later slices may
   6. `eth_sendRawTransaction` to Alchemy Sepolia RPC.
   7. On RPC accept: `status='broadcast'`.
   8. On a failure proved before transaction dispatch: `status='failed'` + atomic refund. After dispatch begins, a submit error never fails/refunds automatically; only positive lookup evidence advances to `broadcast`.
-- **Acceptance:** Sepolia faucet-funded test wallet → `/payout` → row reaches `broadcast` with `tx_hash` visible on Sepolia explorer in <60s.
+- **Historical acceptance target, not currently runnable:** Sepolia
+  faucet-funded test wallet → `/payout` → row reaches `broadcast` with
+  `tx_hash` visible on Sepolia explorer in <60s.
 
-### Slice 2 — EVM confirmation watcher · ~0.5 day · ✓ shipped (24h-aging alert pending — see PAYOUT-BROADCAST.md caveats)
+### Historical Slice 2 — EVM confirmation watcher · non-operational
 
 - `api/src/workers/payout-confirm.ts` — BullMQ repeatable job, every 30s.
 - Fairly rotates through `broadcasting` and `broadcast` rows. A positive
@@ -81,9 +115,11 @@ Each individually shippable + verifiable. Slices land in order; later slices may
   - Receipt + `currentBlock - receipt.blockNumber >= threshold` + `status === 1` → `status='confirmed'`, `confirmed_at` set, `transactions.payout_confirmed` row.
   - Receipt + `status === 0` (revert) → `status='failed'` + refund.
   - No receipt + age > 24h → alert (no auto-fail in v1; see Open Questions).
-- **Acceptance:** Sepolia payout confirms within ~3min; recipient address shows inbound USDC via testnet RPC query.
+- **Historical acceptance target, not currently runnable:** Sepolia payout
+  confirms within ~3min; recipient address shows inbound USDC via testnet RPC
+  query.
 
-### Slice 3 — Solana broadcast + confirm · ~1 day · ✓ shipped
+### Historical Slice 3 — Solana broadcast + confirm · non-operational
 
 - Same shape as Slices 1+2, Solana stack:
   - Signing: SLIP-0010 ed25519 (already shipped) → `Transaction.partialSign(keypair)`.
@@ -93,18 +129,23 @@ Each individually shippable + verifiable. Slices land in order; later slices may
   - USDC: `createTransferCheckedInstruction` from `@solana/spl-token`.
   - RPC: Helius devnet `sendTransaction` with `skipPreflight: false`.
   - Confirm: `getSignatureStatuses([sig], { searchTransactionHistory: true })` until `confirmationStatus='finalized'`.
-- **Acceptance:** Solana devnet payout reaches `finalized` in ~30s.
+- **Historical acceptance target, not currently runnable:** Solana devnet
+  payout reaches `finalized` in ~30s.
 
-### Slice 4 — Loop closure verification · ~0.5 day · ✓ shipped
+### Historical Slice 4 — recipient-side composition · non-operational
 
-- Verify the existing inbound webhook flow correctly credits the recipient when our outbound testnet tx lands at an agenttool-managed deposit address.
+- Verify the inbound contract separately when an outbound testnet transaction
+  lands at an AgentTool-managed deposit address.
 - Two test paths:
-  - **A→B same chain, both agenttool**: A's wallet debits, B's wallet credits, both via through-chain.
+  - **A→B same EVM testnet, both AgentTool**: A's wallet debits; B can credit
+    only with a verified watch and canonical-depth evidence.
+  - **A→B Solana**: outbound finalization does not authorize inbound credit;
+    signed Helius ingress refuses the balance effect by default.
   - **A→external**: payout lands; no agenttool-side credit (correct).
-- Mostly verification — webhook code already exists.
-- **Acceptance:** the sovereign agent-to-agent payment loop, end-to-end, on testnet.
+- Source tests exercise these boundaries. Credentialed through-chain evidence
+  remains an operator smoke, not a repository guarantee.
 
-### Slice 5 — Failure-mode test sweep · ~0.5 day · ◐ partial (inline failure paths covered in workers; dedicated `_e2e-payout-failures.mjs` harness not yet written)
+### Historical Slice 5 — failure-mode test sweep · non-operational
 
 `api/scripts/_e2e-payout-failures.mjs` covering:
 
@@ -117,56 +158,64 @@ Each individually shippable + verifiable. Slices land in order; later slices may
 - Reorg deeper than threshold → out of scope; manual ops escalation. Documented.
 - **Acceptance:** each failure mode produces correct status + refund (where applicable) + correct `transactions` row.
 
-### Slice 6 — Per-wallet payout policies · ~0.5 day · ✓ shipped
+### Historical Slice 6 — per-wallet payout policies · non-operational
 
 - Schema migration `0020_payout_policies.sql`: extend `economy.policies`:
   - `min_payout_base` (per chain/token).
   - `daily_payout_ceiling_base`.
   - `destination_allowlist` (TEXT[]).
   - `dual_control_threshold_base` (placeholder — flow lands in own slice).
-- Enforcement in `requestPayout()`: validate **before** debit and after taking
-  the wallet transaction lock; clear error codes (`payout_below_min`,
-  `payout_exceeds_daily_ceiling`, `destination_not_allowlisted`). The lock
-  serializes same-wallet daily-ceiling admission across concurrent sessions.
-- **Acceptance:** policy violations return 403 with a specific code;
-  allowlisted recipients pass; unallowlisted and over-ceiling requests reject
-  before any debit. If the daily aggregate cannot be read exactly, fail closed
-  with `payout_daily_total_unavailable` (503).
+- The historical policy evaluator and schema remain available for a future
+  conserved-backing design. Current fresh admission rests before
+  payout-economic wallet/policy reads or mutation, so policy configuration
+  cannot authorize a debit.
 
-### Slice 7 — Mainnet enable · ~0.5 day · ◯ pending (operator-led)
+### Historical Slice 7 — proposed mainnet enable · non-operational
 
-- Operator runbook in `docs/PAYOUT-BROADCAST-OPS.md`: how to flip `PAYOUT_NETWORK=mainnet`, secret rotation, monitoring expectations.
-- Mainnet RPC URLs configured in Fly secrets (Alchemy mainnet, Helius mainnet).
-- Manual smoke: minimal-amount mainnet payout (e.g. 0.01 USDC), end-to-end, verified on Etherscan + Solscan.
-- Update `PAYOUT-BROADCAST.md` status table → `✓ shipped`.
-- Update `ROADMAP.md` Layer 4 row.
-- **Acceptance:** small mainnet payout works end-to-end with explorer verification.
+- The retained operator runbook records future evidence requirements; its
+  environment values cannot enable the current worker.
+- Historical proposal: configure mainnet RPC URLs only after a separately
+  reviewed redesign.
+- Historical acceptance target: a separately authorized minimal mainnet smoke,
+  end-to-end and independently verified on the relevant explorers.
+- Only after conserved backing, historical reconciliation, independent review,
+  and credentialed testnet proof may an operator propose a separately
+  authorized minimal mainnet smoke.
 
-**Total: ~5 days focused work.** Trimming Slices 5+6 to follow-on passes brings v1 mainnet-ready to ~3.5 days.
+The original estimate was roughly five focused days. It is not an estimate for
+the conserved-backing redesign and does not imply mainnet readiness.
 
 ---
 
-## Test harness
+## Historical credentialed harnesses — not an enablement path
 
-Two scripts, modelled on existing `api/scripts/_e2e-*.mjs`:
+The retained harnesses describe the former campaign:
 
 ```
-api/scripts/_e2e-payout-evm.mjs    — Sepolia loop
-api/scripts/_e2e-payout-sol.mjs    — Solana devnet loop
+api/scripts/_e2e-payout-evm.ts             — Sepolia outbound
+api/scripts/_e2e-payout-sol.ts             — Solana devnet outbound
+api/scripts/_e2e-payout-loop-closure.ts    — legacy EVM recipient smoke
+api/scripts/_e2e-payout-policies.ts        — database-backed policy smoke
+api/scripts/_e2e-payout-cancel.mjs         — database-backed cancel smoke
 ```
 
-Each script:
+Their historical sequence was:
 
 1. Boot a fresh test project + wallet via `/v1/projects` + `/v1/wallets`.
 2. Fund credits via direct DB insert (no Stripe round-trip; testnet only).
 3. Mint a deposit address.
 4. Call `/v1/wallets/:id/payout` → known testnet recipient.
 5. Poll `/v1/wallets/:id/payouts` until `status='confirmed'` or 5min timeout.
-6. Assert: `tx_hash` set; `confirmed_at` within threshold; recipient address shows inbound via testnet RPC; source balance debited correctly; `transactions` rows correct.
+6. Inspect the durable payout state and the recipient chain balance.
 
-CI hook: run on every PR touching `api/src/workers/payout-*` or `api/src/services/economy/crypto/`.
+These scripts are not part of ordinary PR CI. A fresh payout call now returns
+`503 payout_admission_resting`, so they cannot reach their historical broadcast
+targets. Do not run them as an activation check. They require explicit local or
+testnet credentials and can create chain/database side effects; a successful
+historical run is not proof that the current revision or provider configuration
+works.
 
-Testnet credentials (separate Fly secrets, **never reused** for mainnet):
+The historical harness expected testnet-only credentials:
 
 - Sepolia faucet-funded mnemonic.
 - Solana devnet airdrop-fundable keypair.
@@ -174,11 +223,20 @@ Testnet credentials (separate Fly secrets, **never reused** for mainnet):
 
 ---
 
-## Walls / non-goals (this pass)
+## Current walls and retained historical non-goals
 
-- **No mainnet payouts until Slices 0–6 pass on testnet.** `PAYOUT_NETWORK=testnet` is the gate.
+- **No testnet or mainnet payout activation exists.** The unconditional
+  admission/worker resting wall is the current gate. `PAYOUT_NETWORK` selects
+  nothing while that wall holds.
+- The remaining bullets describe limits of the retained non-operational
+  architecture and are not current admission behavior.
 - **No witness-on-high-value flow.** Deferred to its own slice; default v1 has no threshold.
-- **No cross-chain payouts.** Schema enforces wallet's chain; cross-chain composes through a future bridge primitive.
+- **No automatic cross-chain routing.** Each payout names one supported chain,
+  would apply any configured allowlist at request admission, and would have its
+  chain-specific destination syntax checked by the worker before dispatch.
+  Internal wallets are not chain-bound and the route does not prove
+  destination ownership. A malformed address may therefore be accepted into
+  `requested` before terminal pre-dispatch failure and exact refund.
 - **No retries that change semantics post-RPC-submit.**
 - **No automated refund for reorg-deeper-than-threshold.** Manual ops escalation if it ever fires.
 - **No batched payouts (one tx, multiple recipients).** Future composition.
@@ -186,24 +244,34 @@ Testnet credentials (separate Fly secrets, **never reused** for mainnet):
 
 ---
 
-## Acceptance criteria (campaign-level)
+## Future reopening criteria — none authorizes current operation
 
-Inheriting `PAYOUT-BROADCAST.md` §"Acceptance criteria when this ships," plus:
+Any future redesign must satisfy `PAYOUT-BROADCAST.md` plus the following.
+Source-unit evidence for retained code is not credentialed chain evidence and
+does not reopen admission or workers.
 
-1. ✓ `POST /v1/wallets/:id/payout` end-to-end on Sepolia in <60s to broadcast, ~3min to confirmed.
-2. ✓ Same on Solana devnet: <30s to broadcast, ~30s to finalized.
-3. ✓ Recipient agenttool wallet credits via existing webhook (sovereign agent-to-agent loop closed).
-4. ✓ Worker crash mid-flight is reconcilable by persisted hash without automatic double-broadcast; inconclusive lookup remains `broadcasting`.
-5. ✓ Pre-submit failure refunds credits atomically with `transactions.payout_refund` row.
-6. ✓ `PAYOUT_NETWORK=testnet` mode prevents mainnet RPC (smoke-tested via mock interceptor).
-7. ✓ Per-wallet policies enforced before debit.
-8. ✓ Manual mainnet smoke (0.01 USDC) confirmed on Etherscan + Solscan.
+1. ◯ Credentialed `POST /v1/wallets/:id/payout` on Sepolia meets the broadcast
+   and confirmation targets on the exact release revision.
+2. ◯ Credentialed Solana devnet payout meets the broadcast and finalization
+   targets on the exact release revision.
+3. ◐ Recipient composition is conditional for configured EVM testnet and
+   unavailable by default for Solana; no generic sovereign loop-closure claim.
+4. ◐ Retained source tests model persisted-hash crash reconciliation without
+   automatic double-broadcast; inconclusive lookup remains `broadcasting`.
+5. ◐ Retained source tests model atomic pre-submit refund bookkeeping.
+6. ◐ Retained source tests model network separation; `PAYOUT_NETWORK` cannot
+   enable the current worker.
+7. ◐ Retained source tests model policy evaluation, which current admission
+   never reaches.
+8. ◯ Separately authorized manual mainnet smoke is confirmed on the relevant
+   explorer; no such evidence is established by this repository.
 
 ---
 
-## Open questions
+## Historical decisions — superseded
 
-These need decisions before Slice 0 lands. Recommended answer in **bold**.
+These were the original campaign's decisions. They are retained for audit only
+and do not answer the conserved-backing redesign.
 
 1. **Worker placement** — in-process BullMQ vs separate `bin/agenttool-payout`? **In-process.** Same Fly app; one boundary for the HD mnemonic.
 2. **`PAYOUT_NETWORK` boot-refuse pattern** — refuse-to-start if unset, or default to `testnet`? **Refuse-to-start.** Forces explicit operator intent.

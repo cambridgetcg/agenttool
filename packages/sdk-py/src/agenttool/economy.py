@@ -153,7 +153,7 @@ class Wallet:
 
 @dataclass
 class PayoutRequestOutcome:
-    """Current state returned after a new or durably replayed request."""
+    """Current state returned only from exact durable historical replay."""
 
     id: str
     status: PayoutStatus
@@ -441,8 +441,10 @@ class EconomyClient:
         token: Literal["USDC"] = "USDC",
         metadata: Optional[Dict[str, Any]] = None,
     ) -> PayoutRequestOutcome:
-        """Request one outgoing payout under a caller-owned durable key.
+        """Attempt one outgoing payout under a caller-owned durable key.
 
+        Fresh requests currently rest with ``503 payout_admission_resting``;
+        only an exact replay of durable historical accepted state can succeed.
         The SDK sends exactly one request. It does not generate or store the
         idempotency key, retry, sign, or broadcast.
         """

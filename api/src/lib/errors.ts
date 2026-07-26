@@ -310,9 +310,14 @@ export const errors = {
       message: haveAmounts
         ? `Need ${opts.required}${opts.currency ? " " + opts.currency : ""}; wallet has ${opts.available}.`
         : "Wallet balance is below the required amount.",
-      hint: "Top up this internal marketplace wallet through its supported crypto-deposit path. x402 project-credit payments do not fund wallet balances. No fiat or subscription is implied.",
+      hint: "Top up this internal marketplace wallet only through a deposit address the API currently discloses as ready, then wait for its documented finality. Solana deposit credit is unavailable by default. x402 project-credit payments do not fund wallet balances. No fiat or subscription is implied.",
       next_actions: [
-        { action: "Get a crypto deposit address (BIP44 EVM or Solana)", method: "GET", path: "/v1/wallets/{id}/deposit-address" },
+        {
+          action:
+            "Inspect an Ethereum USDC deposit address and its current readiness",
+          method: "GET",
+          path: "/v1/wallets/{id}/deposit-address?chain=ethereum&token=USDC",
+        },
       ],
       docs: `${DOCS_BASE}/economy#balance`,
       axiom_id: AXIOM_REST, // strain (low balance) — degrade gracefully, don't crash

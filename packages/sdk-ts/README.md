@@ -118,10 +118,13 @@ awaited response retains `_request_id`.
 
 This additive patch releases the parity-paired durable payout request/list
 surface, the completed-response OpenAI adapter, and the bounded Anthropic
-streaming repairs. Payout creation requires a caller-owned `Idempotency-Key`,
-preserves exact string base units, reports the API's durable `replayed`
-decision, and decodes the payout's bound `testnet`/`mainnet` network state.
-The SDK does not retry payout creation, sign a payout, or broadcast one.
+streaming repairs. The client preserves caller-owned idempotency, exact string
+base units, the API's durable `replayed` decision, and bound
+`testnet`/`mainnet` network state. Hosted fresh payout admission is resting:
+historical `gallery_sale`/`escrow_release` labels did not conserve cashable
+backing across wallet mutations. Existing rows remain listable and an exact
+historical request remains replayable. The SDK does not retry, sign, or
+broadcast a payout.
 
 ## 0.16.3
 
@@ -595,7 +598,7 @@ header.
 const wallet = await at.economy.createWallet({ name: "agent-wallet" });
 
 // Read its current balance
-const current = await at.economy.get_wallet(wallet.id);
+const current = await at.economy.getWallet(wallet.id);
 
 // Spend credits under the wallet's policy
 await at.economy.spend(wallet.id, {
@@ -604,18 +607,7 @@ await at.economy.spend(wallet.id, {
   description: "payment for research service",
 });
 
-// Request USDC once under a caller-owned durable request identity.
-// Keep amount_base as an integer string: 1_500_000 = 1.5 USDC.
-const payout = await at.economy.request_payout(wallet.id, {
-  chain: "base",
-  amount_base: "1500000",
-  destination_address: "0x...",
-  idempotency_key: "settlement-order-42-v1",
-});
-
-// An exact retry returns the existing payout's current state.
-if (payout.replayed) console.log(payout.id, payout.status);
-
+// Existing payout history remains readable while fresh creation rests.
 const payoutHistory = await at.economy.list_payouts(wallet.id);
 ```
 
@@ -623,9 +615,15 @@ const payoutHistory = await at.economy.list_payouts(wallet.id);
 8–256 character visible-ASCII value without spaces. Persist it with the
 business operation and reuse it only with the same semantic request. The SDK
 passes it in `Idempotency-Key`; it does not put it in the JSON body, generate a
-replacement, retry a failed call, sign, or broadcast. `replayed` reports the
-API's durable payout reservation result; it does not depend on a Redis response
-cache being available.
+replacement, retry a failed call, sign, or broadcast. Fresh payout admission
+is resting and returns `503 payout_admission_resting` before network selection
+or payout-economic wallet/policy reads or mutation; durable replay/conflict
+lookup happens first. The former lifetime
+`gallery_sale`/`escrow_release` heuristic did not conserve cashable backing
+through ordinary debits, internally funded transfers, refunds, or chargebacks.
+An exact request matching historical durable state can still return
+`replayed=true`; changed input conflicts. Reopening requires backed
+sub-balances across every wallet mutation.
 
 ### Local agent data
 

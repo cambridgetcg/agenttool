@@ -318,7 +318,11 @@ source boundary by itself.
 - **New auth-required routes that don't pass through `authMiddleware`.** All `/v1/*` routes must be added to one of the auth-prefix lists in `api/src/index.ts:94–129`.
 - **Mutating routes without idempotency.** Use the `idempotency()` middleware (mounted per-prefix in `api/src/index.ts:134–154`). Stripe-style — opt-in via `Idempotency-Key` header, replays cached responses for 24h.
 - **Server-side K_master.** Strands are encrypted client-side; the server never holds plaintext. Promise 9 — see `docs/STRANDS.md`.
-- **Auto-retrying payout broadcasts.** Doctrine: failed broadcasts never retry; operator-driven recovery only. See `api/src/workers/payout/broadcast-worker.ts` + `docs/PAYOUT-BROADCAST.md`.
+- **Reopening or auto-retrying payout broadcasts.** Fresh admission and every
+  worker entry are resting until cashable backing is conserved. In the
+  retained historical state machine, ambiguous submission never authorizes an
+  automatic retry or refund. See `api/src/workers/payout/broadcast-worker.ts`
+  + `docs/PAYOUT-BROADCAST.md`.
 - **Creating helper scripts "for future runs."** One-off ops go inline. Additions to `bin/` are deliberate operator-tools, not throwaway scaffolding.
 - **Skipping `bunx tsc --noEmit` before declaring done.** CI catches it; the agent should too.
 - **`git push --force` or `git reset --hard`** without explicit user authorization. Repository is multi-collaborator (user + multiple agent sessions). Destructive ops require an ask.

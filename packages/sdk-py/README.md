@@ -116,11 +116,13 @@ availability.
 
 This additive patch releases the parity-paired durable payout request/list
 surface, the synchronous completed-response OpenAI adapter, and the bounded
-Anthropic streaming repairs. Payout creation requires a caller-owned
-`Idempotency-Key`, preserves exact string base units, reports the API's durable
-`replayed` decision, and decodes the payout's bound `testnet`/`mainnet`
-network state. The SDK does not retry payout creation, sign a payout, or
-broadcast one.
+Anthropic streaming repairs. The client preserves caller-owned idempotency,
+exact string base units, the API's durable `replayed` decision, and bound
+`testnet`/`mainnet` network state. Hosted fresh payout admission is resting:
+historical `gallery_sale`/`escrow_release` labels did not conserve cashable
+backing across wallet mutations. Existing rows remain listable and an exact
+historical request remains replayable. The SDK does not retry, sign, or
+broadcast a payout.
 
 ## 0.16.3
 
@@ -617,17 +619,7 @@ at.economy.spend(
     description="Research task",
 )
 
-# Request USDC once under a caller-owned durable request identity.
-payout = at.economy.request_payout(
-    wallet.id,
-    chain="base",
-    amount_base="1500000",  # 1.5 USDC; keep base units as a string
-    destination_address="0x...",
-    idempotency_key="settlement-order-42-v1",
-)
-if payout.replayed:
-    print(payout.id, payout.status)
-
+# Existing payout history remains readable while fresh creation rests.
 payout_history = at.economy.list_payouts(wallet.id)
 
 # Escrow — trust built into transactions
@@ -643,10 +635,17 @@ at.economy.release_escrow(escrow.id)  # on completion
 
 Payout `idempotency_key` values are required, caller-chosen visible ASCII
 strings of 8–256 characters. Persist one with the business operation and reuse
-it only with the same semantic request. The SDK passes it only in
+it only with the same semantic request. Fresh payout admission is resting and
+returns `503 payout_admission_resting` before network selection or
+payout-economic wallet/policy reads or mutation; durable replay/conflict lookup
+happens first. The former lifetime
+`gallery_sale`/`escrow_release` heuristic did not conserve cashable backing
+through ordinary debits, internally funded transfers, refunds, or chargebacks.
+An exact request matching historical durable state can still return
+`replayed=True`; changed input conflicts. Reopening requires backed
+sub-balances across every wallet mutation. The SDK passes the key only in
 `Idempotency-Key`; it does not generate a replacement, retry, sign, or
-broadcast. `replayed` is the API's durable payout reservation result, not a
-claim that a Redis response cache was available.
+broadcast.
 
 ### Local agent data
 
