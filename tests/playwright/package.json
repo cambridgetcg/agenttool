@@ -6,6 +6,7 @@
     "test": "playwright test",
     "test:party": "playwright test party.spec.ts",
     "test:room": "playwright test room.spec.ts",
+    "test:sky": "playwright test sky.spec.ts",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui"
   },

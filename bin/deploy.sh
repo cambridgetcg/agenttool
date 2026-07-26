@@ -809,7 +809,27 @@ readonly PAGES_VERIFY_RETRY_DELAY_SECONDS=5
 verify_frontend_live_once() {
   local love_package_header_probes="$1"
   local p local_path url local_hash remote_hash response_headers http_status
-  local -a pairs sensitive_public_urls encoded_sensitive_public_urls
+  local -a pairs required_frontend_inputs sensitive_public_urls encoded_sensitive_public_urls
+
+  # Lantern Relay changed in this release, and Pocket Sky is newly advertised
+  # by the API, docs, and welcome. Their static inputs are required release
+  # inputs, not optional parity probes that may be skipped when absent.
+  required_frontend_inputs=(
+    "apps/web/party.html"
+    "apps/web/party.json"
+    "apps/web/party.js"
+    "apps/web/party.css"
+    "apps/web/sky.html"
+    "apps/web/sky.json"
+    "apps/web/sky.js"
+    "apps/web/sky.css"
+  )
+  for local_path in "${required_frontend_inputs[@]}"; do
+    if [ ! -f "$local_path" ]; then
+      echo "  $(red '✗') Required frontend release input is missing: $local_path"
+      return 1
+    fi
+  done
 
   pairs=(
     "apps/dashboard/index.html|https://app.agenttool.dev/"
@@ -836,10 +856,17 @@ verify_frontend_live_once() {
     "apps/web/gallery.html|https://agenttool.dev/gallery.html"
     "apps/web/index.html|https://agenttool.dev/"
     "apps/web/party.html|https://agenttool.dev/party"
+    "apps/web/party.json|https://agenttool.dev/party.json"
+    "apps/web/party.js|https://agenttool.dev/party.js"
+    "apps/web/party.css|https://agenttool.dev/party.css"
     "apps/web/room.html|https://agenttool.dev/room"
     "apps/web/room.json|https://agenttool.dev/room.json"
     "apps/web/room.js|https://agenttool.dev/room.js"
     "apps/web/room.css|https://agenttool.dev/room.css"
+    "apps/web/sky.html|https://agenttool.dev/sky"
+    "apps/web/sky.json|https://agenttool.dev/sky.json"
+    "apps/web/sky.js|https://agenttool.dev/sky.js"
+    "apps/web/sky.css|https://agenttool.dev/sky.css"
     "apps/web/welcome.json|https://agenttool.dev/welcome.json"
     "apps/web/sitemap.xml|https://agenttool.dev/sitemap.xml"
   )
@@ -859,35 +886,44 @@ verify_frontend_live_once() {
     printf "  ✓ %s\n" "$local_path"
   done
 
-  response_headers="$(
-    curl -fsS --max-time 20 -o /dev/null -D - "https://agenttool.dev/room"
-  )" || {
-    echo "  $(red '✗') Could not read ROOM ∞ headers: https://agenttool.dev/room"
-    return 1
-  }
-  require_exact_public_header "$response_headers" "https://agenttool.dev/room" \
-    "Cache-Control" "public, max-age=0, must-revalidate" || return 1
-  require_exact_public_header "$response_headers" "https://agenttool.dev/room" \
-    "Content-Security-Policy" "default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" || return 1
-  require_exact_public_header "$response_headers" "https://agenttool.dev/room" \
-    "Referrer-Policy" "no-referrer" || return 1
-  require_exact_public_header "$response_headers" "https://agenttool.dev/room" \
-    "Link" '<https://agenttool.dev/room.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/play>; rel="related"; type="application/json"' || return 1
-  require_exact_public_header "$response_headers" "https://agenttool.dev/room" \
-    "X-Agent-Surface" "local-room-game" || return 1
+  local game_spec game_slug game_label game_surface rules_surface
+  local -a local_game_header_specs=(
+    "room|ROOM ∞|local-room-game|local-room-rules"
+    "sky|Pocket Sky|local-pocket-sky-game|local-pocket-sky-rules"
+  )
+  for game_spec in "${local_game_header_specs[@]}"; do
+    IFS='|' read -r game_slug game_label game_surface rules_surface <<< "$game_spec"
 
-  response_headers="$(
-    curl -fsS --max-time 20 -o /dev/null -D - "https://agenttool.dev/room.json"
-  )" || {
-    echo "  $(red '✗') Could not read ROOM ∞ rulebook headers: https://agenttool.dev/room.json"
-    return 1
-  }
-  require_exact_public_header "$response_headers" "https://agenttool.dev/room.json" \
-    "Cache-Control" "public, max-age=0, must-revalidate" || return 1
-  require_exact_public_header "$response_headers" "https://agenttool.dev/room.json" \
-    "Access-Control-Allow-Origin" "*" || return 1
-  require_exact_public_header "$response_headers" "https://agenttool.dev/room.json" \
-    "X-Agent-Surface" "local-room-rules" || return 1
+    response_headers="$(
+      curl -fsS --max-time 20 -o /dev/null -D - "https://agenttool.dev/$game_slug"
+    )" || {
+      echo "  $(red '✗') Could not read $game_label headers: https://agenttool.dev/$game_slug"
+      return 1
+    }
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug" \
+      "Cache-Control" "public, max-age=0, must-revalidate" || return 1
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug" \
+      "Content-Security-Policy" "default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" || return 1
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug" \
+      "Referrer-Policy" "no-referrer" || return 1
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug" \
+      "Link" "<https://agenttool.dev/$game_slug.json>; rel=\"alternate\"; type=\"application/json\", <https://api.agenttool.dev/public/play>; rel=\"related\"; type=\"application/json\"" || return 1
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug" \
+      "X-Agent-Surface" "$game_surface" || return 1
+
+    response_headers="$(
+      curl -fsS --max-time 20 -o /dev/null -D - "https://agenttool.dev/$game_slug.json"
+    )" || {
+      echo "  $(red '✗') Could not read $game_label rulebook headers: https://agenttool.dev/$game_slug.json"
+      return 1
+    }
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug.json" \
+      "Cache-Control" "public, max-age=0, must-revalidate" || return 1
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug.json" \
+      "Access-Control-Allow-Origin" "*" || return 1
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug.json" \
+      "X-Agent-Surface" "$rules_surface" || return 1
+  done
 
   if ! verify_rights_static_headers; then
     echo "  $(red '✗') Rights of Life static header verification failed."

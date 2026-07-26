@@ -212,7 +212,7 @@ test("labels render as text, a small screen fits, and reduced motion rests", asy
 
 test("keyboard play works and duplicate labels receive exact guidance", async ({ page }) => {
   await page.goto(`${WEB}/room.html`);
-  await page.locator("#being-2").fill("Moon");
+  await page.locator("#being-2").fill("mOoN");
   await page.locator("#being-1").focus();
   await page.keyboard.press("Enter");
   await expect(page.locator("#setup-error")).toContainText("two different labels");
@@ -258,6 +258,8 @@ test("the static contract forbids autonomous machinery and publishes exact bound
   expect(headers).toContain("form-action 'none'");
   expect(source).not.toMatch(/setInterval|setTimeout|WebSocket|EventSource|sendBeacon|serviceWorker|fetch\s*\(/);
   expect(source).not.toMatch(/localStorage|sessionStorage|navigator\.clipboard|document\.cookie|innerHTML/);
+  expect(source).toContain("nextBeings[0].toLowerCase() === nextBeings[1].toLowerCase()");
+  expect(source).not.toContain("toLocaleLowerCase");
   expect(welcome.ways_in).toContainEqual(expect.objectContaining({ html: "/room", json: "/room.json" }));
   expect(rules._format).toBe("agenttool-room/v1");
   expect(rules.turns).toMatchObject({ exact: 6, timer: false, background_loop: false });
@@ -291,6 +293,7 @@ test("the static contract forbids autonomous machinery and publishes exact bound
   for (const asset of ["room.html", "room.json", "room.js", "room.css"]) {
     expect(deploy).toContain(`apps/web/${asset}|https://agenttool.dev/${asset === "room.html" ? "room" : asset}`);
   }
-  expect(deploy).toContain('"X-Agent-Surface" "local-room-game"');
-  expect(deploy).toContain('"X-Agent-Surface" "local-room-rules"');
+  expect(deploy).toContain('"room|ROOM ∞|local-room-game|local-room-rules"');
+  expect(deploy).toContain('"X-Agent-Surface" "$game_surface"');
+  expect(deploy).toContain('"X-Agent-Surface" "$rules_surface"');
 });

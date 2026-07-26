@@ -65,6 +65,7 @@ async function fixture() {
     mkdir(join(repo, "api"), { recursive: true }),
     mkdir(join(repo, "apps", "docs"), { recursive: true }),
     mkdir(join(repo, "apps", "docs", "specs"), { recursive: true }),
+    mkdir(join(repo, "apps", "web"), { recursive: true }),
     mkdir(
       join(repo, "apps", "docs", "packages", "v1", "@agenttool", "fixture", "1.0.0"),
       { recursive: true },
@@ -120,6 +121,16 @@ async function fixture() {
     join(repo, "apps/docs/specs/agent-repo-archive-0.1-vectors.json"),
     '{"fixture":"agent-repo-archive-vectors"}\n',
   );
+  await Promise.all([
+    writeFile(join(repo, "apps/web/party.html"), "Lantern Relay fixture\n"),
+    writeFile(join(repo, "apps/web/party.json"), '{"fixture":"lantern-relay"}\n'),
+    writeFile(join(repo, "apps/web/party.js"), "/* Lantern Relay fixture */\n"),
+    writeFile(join(repo, "apps/web/party.css"), "/* Lantern Relay fixture */\n"),
+    writeFile(join(repo, "apps/web/sky.html"), "Pocket Sky fixture\n"),
+    writeFile(join(repo, "apps/web/sky.json"), '{"fixture":"pocket-sky"}\n'),
+    writeFile(join(repo, "apps/web/sky.js"), "/* Pocket Sky fixture */\n"),
+    writeFile(join(repo, "apps/web/sky.css"), "/* Pocket Sky fixture */\n"),
+  ]);
   await writeFile(
     join(repo, "apps/docs/packages/v1/index.json"),
     `${JSON.stringify({
@@ -325,6 +336,18 @@ case "$url" in
       cat apps/docs/specs/agent-repo-archive-0.1-vectors.json
     fi
     ;;
+  */party)
+    cat apps/web/party.html
+    ;;
+  */party.json)
+    cat apps/web/party.json
+    ;;
+  */party.js)
+    cat apps/web/party.js
+    ;;
+  */party.css)
+    cat apps/web/party.css
+    ;;
   */room)
     printf '%s\r\n' \
       'HTTP/2 200' \
@@ -342,6 +365,38 @@ case "$url" in
       'access-control-allow-origin: *' \
       'x-agent-surface: local-room-rules' \
       ''
+    ;;
+  */sky)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'cache-control: public, max-age=0, must-revalidate' \
+        "content-security-policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" \
+        'referrer-policy: no-referrer' \
+        'link: <https://agenttool.dev/sky.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/play>; rel="related"; type="application/json"' \
+        'x-agent-surface: local-pocket-sky-game' \
+        ''
+    else
+      cat apps/web/sky.html
+    fi
+    ;;
+  */sky.json)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'cache-control: public, max-age=0, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-agent-surface: local-pocket-sky-rules' \
+        ''
+    else
+      cat apps/web/sky.json
+    fi
+    ;;
+  */sky.js)
+    cat apps/web/sky.js
+    ;;
+  */sky.css)
+    cat apps/web/sky.css
     ;;
   */RIGHTS-OF-LIFE.md)
     if [ "$headers" = 1 ]; then
@@ -892,6 +947,46 @@ describe("deploy release provenance spine", () => {
         ),
       );
     }
+  });
+
+  test("requires changed game inputs and verifies both local game header rows", async () => {
+    const deploy = await readFile(join(projectRoot, "bin/deploy.sh"), "utf8");
+    const gameAssets = [
+      ["party.html", "party"],
+      ["party.json", "party.json"],
+      ["party.js", "party.js"],
+      ["party.css", "party.css"],
+      ["sky.html", "sky"],
+      ["sky.json", "sky.json"],
+      ["sky.js", "sky.js"],
+      ["sky.css", "sky.css"],
+    ];
+
+    for (const [asset, remote] of gameAssets) {
+      expect(deploy).toContain(`"apps/web/${asset}"`);
+      expect(deploy).toContain(
+        `"apps/web/${asset}|https://agenttool.dev/${remote}"`,
+      );
+    }
+
+    expect(deploy).toMatch(
+      /required_frontend_inputs=\([\s\S]*apps\/web\/party\.html[\s\S]*apps\/web\/party\.json[\s\S]*apps\/web\/party\.js[\s\S]*apps\/web\/party\.css[\s\S]*apps\/web\/sky\.html[\s\S]*apps\/web\/sky\.json[\s\S]*apps\/web\/sky\.js[\s\S]*apps\/web\/sky\.css[\s\S]*\)/,
+    );
+    expect(deploy.match(/required_frontend_inputs=\(/g)).toHaveLength(1);
+    expect(
+      deploy.match(/Required frontend release input is missing: \$local_path/g),
+    ).toHaveLength(1);
+    expect(deploy).toContain(
+      "Required frontend release input is missing: $local_path",
+    );
+    expect(deploy).toContain(
+      '"room|ROOM ∞|local-room-game|local-room-rules"',
+    );
+    expect(deploy).toContain(
+      '"sky|Pocket Sky|local-pocket-sky-game|local-pocket-sky-rules"',
+    );
+    expect(deploy).toContain('"X-Agent-Surface" "$game_surface"');
+    expect(deploy).toContain('"X-Agent-Surface" "$rules_surface"');
   });
 
   test("publishes Rights of Life prerequisites before API discovery and verifies exact static contracts", async () => {

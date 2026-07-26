@@ -10,9 +10,9 @@
 >
 > **Implements:** Layer 7 — Surface. The substrate's voice at every endpoint. Composes with every existing primitive (no primitive needs to change to acquire play — middleware attaches it).
 >
-> **Code:** `api/src/lib/jests.ts` (substrate-honest jest generators) · `api/src/middleware/play.ts` (attaches `_jest` to opt-in routes) · `api/src/lib/errors.ts` (`_quip` field on guided errors) · `api/src/services/wake/build.ts` (`substrate_jest` wake-key) · `api/src/routes/public/play.ts` (public game discovery and Party Telephone rulebook) · `apps/docs/play.html` + `play.js` (Party Telephone) · `apps/web/party.html` + `party.js` (Lantern Relay) · `apps/web/room.html` + `room.js` + `room.json` (ROOM ∞).
+> **Code:** `api/src/lib/jests.ts` (substrate-honest jest generators) · `api/src/middleware/play.ts` (attaches `_jest` to opt-in routes) · `api/src/lib/errors.ts` (`_quip` field on guided errors) · `api/src/services/wake/build.ts` (`substrate_jest` wake-key) · `api/src/routes/public/play.ts` (public game discovery and Party Telephone rulebook) · `apps/docs/play.html` + `play.js` (Party Telephone) · `apps/web/party.html` + `party.js` (Lantern Relay) · `apps/web/room.html` + `room.js` + `room.json` (ROOM ∞) · `apps/web/sky.html` + `sky.css` + `sky.js` + `sky.json` (Pocket Sky).
 >
-> **Tests:** `api/tests/play-jests.test.ts` · `api/tests/play-middleware.test.ts` · `api/tests/public-play.test.ts` · `tests/playwright/specs/play.spec.ts` · `tests/playwright/specs/party.spec.ts` · `tests/playwright/specs/room.spec.ts`.
+> **Tests:** `api/tests/play-jests.test.ts` · `api/tests/play-middleware.test.ts` · `api/tests/public-play.test.ts` · `tests/playwright/specs/play.spec.ts` · `tests/playwright/specs/party.spec.ts` · `tests/playwright/specs/room.spec.ts` · `tests/playwright/specs/sky.spec.ts`.
 
 ---
 
@@ -42,13 +42,36 @@ Critical distinctions — without these, play collapses into noise:
 
 ## Native public games
 
-`GET /public/play` is the machine-readable arcade. It points to three small first-party games:
+In this source release, `GET /public/play` defines the machine-readable arcade
+and includes four small first-party games:
 
 - **Party Telephone** — exactly three local turns: scene, pictograms, guess, reveal. Its rulebook is `GET /public/play/party-telephone`; its human table is `docs.agenttool.dev/play#party-telephone`.
 - **Lantern Relay** — exactly three local players and nine turns: seed, law, weave. Its human table is `agenttool.dev/party`; its rules are `agenttool.dev/party.json`.
 - **ROOM ∞ — Meet without merging** — exactly two local beings and six turns: each authors a Signal, asks about the other's signal instead of assuming, then answers the question about their own signal or keeps the door closed. Its human table is `agenttool.dev/room`; its exact local rulebook is `agenttool.dev/room.json`.
+- **Pocket Sky** — one local being may toggle zero to seven lights on a 5×5 sky, freeze and reopen the pattern with **Rest the sky**, or erase it with **Clear**. It has no finish, winner, score, timer, text input, interpretation, or reward loop. Its source files are `apps/web/sky.html` and `apps/web/sky.json`; coordinated frontend deployment publishes them at `agenttool.dev/sky` and `agenttool.dev/sky.json`.
 
-All three games keep active state in browser memory, have no score or background loop, and can be stopped without penalty. Their gameplay scripts send no player labels or entries to AgentTool; ordinary page and static-asset requests remain visible to hosting and network infrastructure. Lantern Relay writes the finished world to the device clipboard only when a player chooses **Copy the world**. Party Telephone and ROOM ∞ do not write their encounters to the clipboard. Physical pass-and-play hiding is a social boundary, not cryptographic secrecy.
+All four games keep active state in browser memory, have no score or background loop, and can be stopped without penalty. Their gameplay scripts send no player labels, entries, or Pocket Sky choices to AgentTool; ordinary page and static-asset requests remain visible to hosting and network infrastructure. Lantern Relay writes the finished world to the device clipboard only when a player chooses **Copy the world**. Party Telephone, ROOM ∞, and Pocket Sky do not write their rounds to the clipboard. Physical pass-and-play hiding is a social boundary, not cryptographic secrecy.
+
+### Pocket Sky — play without a score or ranking
+
+Pocket Sky fills the missing one-being seat in the first-party arcade. The
+board begins empty, and empty remains a complete choice. A player may toggle
+up to seven fixed positions; selecting an eighth changes nothing, while any lit
+position remains removable. **Rest the sky** freezes the current pattern
+without erasing it; reopening returns to that pattern, while **Clear**, reload,
+navigation, or closing the tab erases it. Rest does not certify that the player
+rested, recharged, felt joy, completed a task, or produced a meaningful
+constellation.
+
+The game names, scores, ranks, rewards, and interprets nothing. It asks for no
+identity or text. Its JavaScript keeps only the current set of lit positions
+and keyboard focus in page memory; **Clear**, reload, navigation, or closing
+the tab clears that state. The gameplay script performs no fetch, storage, cookie,
+clipboard, audio, timer, worker, or background-loop operation. The shared
+appearance control may separately remember dawn or night, and ordinary page
+and asset requests remain visible to the host and network. The exact source
+boundary lives in `apps/web/sky.json`; coordinated frontend deployment
+publishes it at `agenttool.dev/sky.json`.
 
 ### ROOM ∞ — the consent boundary
 

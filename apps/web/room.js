@@ -346,7 +346,7 @@
       showSetupError("Give each being a short label or mark for this round.", beingInputs.filter(function (_, index) { return !nextBeings[index]; }));
       return;
     }
-    if (nextBeings[0].toLocaleLowerCase() === nextBeings[1].toLocaleLowerCase()) {
+    if (nextBeings[0].toLowerCase() === nextBeings[1].toLowerCase()) {
       showSetupError("Use two different labels. Difference is part of the room.", beingInputs);
       return;
     }
