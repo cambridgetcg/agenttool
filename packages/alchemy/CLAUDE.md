@@ -19,15 +19,17 @@ npm pack --ignore-scripts --dry-run --json
 ## Invariants
 
 - Keep zero runtime dependencies and Node 20.19+/Bun 1.3.5+ compatibility.
-- Keep the public client to the eight closed methods in `AlchemyReadMethod`.
-  Never add `rawRpc`, `request(method, params)`, model-supplied URLs, headers,
-  credentials, signing, broadcasting, retries, or provider-admin operations.
+- Keep the underlying provider surface to the eight closed methods in
+  `AlchemyReadMethod`; the public client has separate initial-page and
+  continuation entrypoints for asset transfers. Never add `rawRpc`,
+  `request(method, params)`, model-supplied URLs, headers, credentials,
+  signing, broadcasting, retries, or provider-admin operations.
 - The injected transport receives only a fixed network identity, a closed
   method/parameter tuple, CAIP-2 binding, and cancellation/deadline/byte
   limits. It owns trusted endpoint mapping, credential injection, JSON-RPC
   envelope/id generation and validation, bounded streaming, status/provider
-  error collapse, and returns only a parsed result rebound to the method and
-  chain.
+  error collapse, and returns only a parsed result rebound to the package
+  operation ID, method, and chain.
 - Validate public objects with exact key sets at runtime. Keep address, hash,
   quantity, page, range, cursor, field, response, and deadline bounds explicit.
 - Bind every non-null result back to the request. A numbered block must have
@@ -42,14 +44,15 @@ npm pack --ignore-scripts --dry-run --json
 - `getAssetTransfersPage` and `getNextAssetTransfersPage` each make exactly one
   provider call. Do not add automatic pagination, polling, subscriptions, or
   retry. Never accept a raw provider `pageKey` from or return one to the
-  high-level client caller: continuation uses an opaque, process-local cursor
-  bound to its normalized query, network, and issuing client. It is not
+  high-level client caller: continuation uses an opaque, module-realm-local
+  cursor bound to its normalized query, network, and issuing client. It is not
   state-serializable, cross-client, or restartable, and has no readable
-  continuation fields. The trusted injected transport necessarily sees the
-  provider key inside the closed Alchemy request/result boundary; keep it
-  confined to that boundary and package internals. Keep provider-documented
-  category/network restrictions explicit; never turn unsupported coverage into
-  an empty result.
+  continuation fields. JSON serialization yields `{}` with no usable state.
+  Enforce Alchemy's documented ten-minute page-key TTL locally. The trusted
+  injected transport necessarily sees the provider key inside the closed
+  Alchemy request/result boundary; keep it confined to that boundary and
+  package internals. Keep provider-documented category/network restrictions
+  explicit; never turn unsupported coverage into an empty result.
 - The `agentcred.evm-jsonrpc-read/0.1` profile covers only the seven standard
   `eth_*` methods, not `alchemy_getAssetTransfers`. The reference broker's
   32 KiB maximum grant response is stricter than this package's 2 MiB ceiling,

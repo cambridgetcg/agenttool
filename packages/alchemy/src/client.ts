@@ -38,6 +38,7 @@ import type {
   GetCodeInput,
   GetTransactionInput,
   HexQuantity,
+  JsonValue,
   NormalizedAssetTransfersQuery,
   ObservationFreshness,
   ObservationProvenance,
@@ -76,6 +77,7 @@ export const MAX_ALCHEMY_CALL_DURATION_MS = 30_000;
 export const MAX_ALCHEMY_TRANSFER_PAGE_SIZE = 100;
 export const MAX_ALCHEMY_TRANSFER_BLOCK_SPAN = 100_000;
 export const MAX_ALCHEMY_TRANSFER_CONTRACTS = 20;
+export const ALCHEMY_TRANSFER_CURSOR_TTL_MS = 10 * 60 * 1_000;
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const MAX_TRANSFER_CURSOR_BYTES = 1_024;
@@ -106,8 +108,9 @@ const TRANSFER_CATEGORIES: readonly AlchemyTransferCategory[] = [
 const TRANSFER_CATEGORY_SET = new Set<string>(TRANSFER_CATEGORIES);
 
 interface InvocationResult {
-  readonly result: unknown;
+  readonly result: JsonValue;
   readonly provenance: ObservationProvenance;
+  readonly requestedAtMs: number;
 }
 
 interface NormalizedTransfersRequest {
@@ -122,6 +125,7 @@ interface TransferCursorState {
   readonly owner: object;
   readonly request: NormalizedTransfersRequest;
   readonly pageKey: string;
+  readonly expiresAtMs: number;
 }
 
 const TRANSFER_CURSOR_STATES = new WeakMap<object, TransferCursorState>();
@@ -133,7 +137,32 @@ function freezeCall(call: AlchemyReadCall): AlchemyReadCall {
   return Object.freeze(call);
 }
 
-function jsonResultBytes(value: unknown): number {
+function rethrowSanitizedResponseError(error: unknown): never {
+  let code: AlchemyReadError["code"] | undefined;
+  try {
+    if (error instanceof AlchemyReadError) {
+      const candidate = error.code;
+      if (
+        candidate === "invalid_input" ||
+        candidate === "invalid_response" ||
+        candidate === "response_too_large" ||
+        candidate === "chain_mismatch"
+      ) {
+        code = candidate;
+      }
+    }
+  } catch {
+    return invalidResponse();
+  }
+  if (code !== undefined) {
+    throw new AlchemyReadError(code);
+  }
+  return invalidResponse();
+}
+
+function normalizeJsonResult(
+  value: unknown,
+): { readonly result: JsonValue; readonly bytes: number } {
   const stack: Array<{ value: unknown; depth: number }> = [
     { value, depth: 0 },
   ];
@@ -203,7 +232,10 @@ function jsonResultBytes(value: unknown): number {
   if (bytes > MAX_ALCHEMY_RESPONSE_BYTES) {
     throw new AlchemyReadError("response_too_large");
   }
-  return bytes;
+  return {
+    result: JSON.parse(encoded) as JsonValue,
+    bytes,
+  };
 }
 
 function blockFreshness(
@@ -436,6 +468,7 @@ function issueTransferCursor(
   owner: object,
   request: NormalizedTransfersRequest,
   pageKey: string,
+  issuedAtMs: number,
 ): AssetTransfersCursor {
   const cursor = Object.freeze(
     Object.create(null) as Record<string, never>,
@@ -444,6 +477,7 @@ function issueTransferCursor(
     owner,
     request,
     pageKey,
+    expiresAtMs: issuedAtMs + ALCHEMY_TRANSFER_CURSOR_TTL_MS,
   });
   return cursor;
 }
@@ -845,62 +879,80 @@ class ReadClient implements AlchemyReadClient {
       externalSignal?.removeEventListener("abort", onExternalAbort);
     }
 
-    const responseRecord = requireResponseRecord(response);
-    assertExactResponseKeys(responseRecord, [
-      "chainId",
-      "method",
-      "result",
-      "auditId",
-      "redactions",
-    ]);
-    if (!Object.hasOwn(responseRecord, "result")) {
-      return invalidResponse();
-    }
-    if (response.chainId !== this.#configuredCaip2) {
-      throw new AlchemyReadError("chain_mismatch");
-    }
-    if (response.method !== call.method) {
-      return invalidResponse();
-    }
-    const hasAuditId = Object.hasOwn(responseRecord, "auditId");
-    const hasRedactions = Object.hasOwn(responseRecord, "redactions");
-    if (hasAuditId !== hasRedactions) {
-      return invalidResponse();
-    }
-    let transportAuditId: string | null = null;
-    let transportRedactions: number | null = null;
-    if (hasAuditId && hasRedactions) {
-      transportAuditId = requireBoundedResponseString(
-        response.auditId,
-        MAX_TRANSPORT_AUDIT_ID_BYTES,
-      );
-      if (!TRANSPORT_AUDIT_ID_PATTERN.test(transportAuditId)) {
+    try {
+      const responseRecord = requireResponseRecord(response);
+      assertExactResponseKeys(responseRecord, [
+        "operationId",
+        "chainId",
+        "method",
+        "result",
+        "auditId",
+        "redactions",
+      ]);
+      if (!Object.hasOwn(responseRecord, "result")) {
         return invalidResponse();
       }
-      transportRedactions = requireResponseInteger(
-        response.redactions,
-        0,
-        1_000_000,
-      );
+      const responseOperationId = responseRecord.operationId;
+      if (
+        !Number.isSafeInteger(responseOperationId) ||
+        responseOperationId !== operationId
+      ) {
+        return invalidResponse();
+      }
+      const responseChainId = responseRecord.chainId;
+      if (responseChainId !== this.#configuredCaip2) {
+        throw new AlchemyReadError("chain_mismatch");
+      }
+      const responseMethod = responseRecord.method;
+      if (responseMethod !== call.method) {
+        return invalidResponse();
+      }
+      const hasAuditId = Object.hasOwn(responseRecord, "auditId");
+      const hasRedactions = Object.hasOwn(responseRecord, "redactions");
+      if (hasAuditId !== hasRedactions) {
+        return invalidResponse();
+      }
+      let transportAuditId: string | null = null;
+      let transportRedactions: number | null = null;
+      if (hasAuditId && hasRedactions) {
+        const responseAuditId = responseRecord.auditId;
+        const responseRedactions = responseRecord.redactions;
+        transportAuditId = requireBoundedResponseString(
+          responseAuditId,
+          MAX_TRANSPORT_AUDIT_ID_BYTES,
+        );
+        if (!TRANSPORT_AUDIT_ID_PATTERN.test(transportAuditId)) {
+          return invalidResponse();
+        }
+        transportRedactions = requireResponseInteger(
+          responseRedactions,
+          0,
+          1_000_000,
+        );
+      }
+      const responseResult = responseRecord.result;
+      const normalized = normalizeJsonResult(responseResult);
+      const receivedAtMs = Math.max(requestedAtMs, this.#readClock());
+      return {
+        result: normalized.result,
+        requestedAtMs,
+        provenance: {
+          provider: "alchemy",
+          network: this.#network,
+          configuredChainId: this.#configuredChainId,
+          method: call.method,
+          requestId: operationId,
+          requestedAt: new Date(requestedAtMs).toISOString(),
+          receivedAt: new Date(receivedAtMs).toISOString(),
+          resultBytes: normalized.bytes,
+          transportAuditId,
+          transportRedactions,
+          freshness,
+        },
+      };
+    } catch (error) {
+      return rethrowSanitizedResponseError(error);
     }
-    const resultBytes = jsonResultBytes(response.result);
-    const receivedAtMs = Math.max(requestedAtMs, this.#readClock());
-    return {
-      result: response.result,
-      provenance: {
-        provider: "alchemy",
-        network: this.#network,
-        configuredChainId: this.#configuredChainId,
-        method: call.method,
-        requestId: operationId,
-        requestedAt: new Date(requestedAtMs).toISOString(),
-        receivedAt: new Date(receivedAtMs).toISOString(),
-        resultBytes,
-        transportAuditId,
-        transportRedactions,
-        freshness,
-      },
-    };
   }
 
   #readClock(): number {
@@ -1135,6 +1187,10 @@ class ReadClient implements AlchemyReadClient {
     options?: AlchemyReadCallOptions,
   ): Promise<AssetTransfersPageObservation> {
     const state = readTransferCursor(this, cursor);
+    if (this.#readClock() >= state.expiresAtMs) {
+      TRANSFER_CURSOR_STATES.delete(cursor);
+      return invalidInput();
+    }
     return this.#readAssetTransfersPage(
       state.request,
       state.pageKey,
@@ -1190,7 +1246,12 @@ class ReadClient implements AlchemyReadClient {
       nextCursor:
         nextPageKey === null
           ? null
-          : issueTransferCursor(this, request, nextPageKey),
+          : issueTransferCursor(
+              this,
+              request,
+              nextPageKey,
+              invocation.requestedAtMs,
+            ),
       provenance: invocation.provenance,
     };
   }

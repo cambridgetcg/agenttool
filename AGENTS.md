@@ -25,7 +25,7 @@ projection planner (`packages/correspondence-yutabase/`), a private
 loopback-only durable projector into a rebuildable local YUTABASE sidecar
 (`packages/correspondence-yutabase-projector/`), source reference
 primitives for capability-bounded agent wallets (`packages/wallet/`), a
-developer-preview bounded Alchemy read/reconciliation adapter
+developer-preview bounded Alchemy observation client
 (`packages/alchemy/`), a
 read-only portable Agent Skills inspector (`packages/skills/`), a local-first
 agent browser (`packages/browser/`), and three static apps

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  ALCHEMY_TRANSFER_CURSOR_TTL_MS,
   AlchemyReadError,
   MAX_ALCHEMY_RESPONSE_BYTES,
   createAlchemyReadClient,
@@ -222,6 +223,14 @@ describe("input and response bounds", () => {
     );
     await expectCode(wrongMethod.getChainId(), "invalid_response");
 
+    const wrongOperation = basicClient(
+      new FakeTransport((request) => ({
+        ...transportResponse(request, "0x1"),
+        operationId: request.operationId + 1,
+      })),
+    );
+    await expectCode(wrongOperation.getChainId(), "invalid_response");
+
     const wrongChain = basicClient(
       new FakeTransport((request) => ({
         ...transportResponse(request, "0x1"),
@@ -430,6 +439,37 @@ describe("input and response bounds", () => {
     expect(issuingTransport.requests).toHaveLength(1);
     expect(otherTransport.requests).toHaveLength(0);
   });
+
+  test("expires continuation cursors locally at the provider page-key TTL", async () => {
+    let now = NOW;
+    const transport = new FakeTransport((request) =>
+      transportResponse(request, {
+        transfers: [],
+        pageKey: "provider_page_1=",
+      }),
+    );
+    const client = createAlchemyReadClient({
+      network: "ethereum-mainnet",
+      transport,
+      now: () => now,
+    });
+    const first = await client.getAssetTransfersPage({
+      fromBlock: "0x1",
+      toBlock: "0x2",
+      categories: ["erc20"],
+      toAddress: ADDRESS_A,
+    });
+    if (first.nextCursor === null) {
+      throw new Error("Expected a continuation cursor.");
+    }
+
+    now += ALCHEMY_TRANSFER_CURSOR_TTL_MS;
+    await expectCode(
+      client.getNextAssetTransfersPage(first.nextCursor),
+      "invalid_input",
+    );
+    expect(transport.requests).toHaveLength(1);
+  });
 });
 
 describe("cancellation, failures, and sanitization", () => {
@@ -484,6 +524,47 @@ describe("cancellation, failures, and sanitization", () => {
     );
     expect(resultError.message).not.toContain("sensitive");
     expect(JSON.stringify(resultError)).not.toContain("sensitive");
+
+    const accessorResult = basicClient(
+      new FakeTransport((request) => {
+        const response = transportResponse(request, "0x1");
+        Object.defineProperty(response, "result", {
+          enumerable: true,
+          get() {
+            throw new Error("credential-shaped-sensitive-accessor-text");
+          },
+        });
+        return response;
+      }),
+    );
+    const accessorError = await expectCode(
+      accessorResult.getBlockNumber(),
+      "invalid_response",
+    );
+    expect(accessorError.message).not.toContain("sensitive");
+
+    const mutatedAccessorResult = basicClient(
+      new FakeTransport((request) => {
+        const response = transportResponse(request, "0x1");
+        Object.defineProperty(response, "result", {
+          enumerable: true,
+          get() {
+            const unsafe = new AlchemyReadError("invalid_response");
+            unsafe.message =
+              "credential-shaped-sensitive-mutated-error-text";
+            throw unsafe;
+          },
+        });
+        return response;
+      }),
+    );
+    const mutatedAccessorError = await expectCode(
+      mutatedAccessorResult.getBlockNumber(),
+      "invalid_response",
+    );
+    expect(mutatedAccessorError.message).toBe(
+      "Alchemy response was invalid.",
+    );
 
     const transportFailure = basicClient(
       new FakeTransport(() => {

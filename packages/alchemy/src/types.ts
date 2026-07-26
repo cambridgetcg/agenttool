@@ -123,6 +123,8 @@ export interface AlchemyTransportRequest {
 }
 
 export interface AlchemyTransportResponse {
+  /** Exact package-generated operation ID from the corresponding request. */
+  readonly operationId: number;
   readonly chainId: EvmChainId;
   readonly method: AlchemyReadMethod;
   readonly result: JsonValue;
@@ -136,7 +138,8 @@ export interface AlchemyTransportResponse {
  * Implementations map the fixed `network` value to a trusted endpoint, add
  * credentials outside this package, generate and validate the JSON-RPC
  * envelope, enforce the byte/deadline limits while reading, and return only a
- * parsed result bound to the requested method and CAIP-2 chain.
+ * parsed result bound to the package operation ID, requested method, and
+ * CAIP-2 chain.
  */
 export interface AlchemyReadTransport {
   send(request: AlchemyTransportRequest): Promise<AlchemyTransportResponse>;
@@ -316,10 +319,11 @@ export interface NormalizedAssetTransfersQuery {
 declare const ASSET_TRANSFERS_CURSOR_BRAND: unique symbol;
 
 /**
- * Opaque, process-local continuation state issued by one Alchemy read client.
+ * Opaque, module-realm-local continuation state issued by one Alchemy client.
  *
  * A cursor can be used only with the same client instance that issued it. It
- * contains no publicly readable provider page key or mutable query fields.
+ * contains no publicly readable provider page key or mutable query fields,
+ * and expires locally with the provider's documented page-key lifetime.
  */
 export interface AssetTransfersCursor {
   readonly [ASSET_TRANSFERS_CURSOR_BRAND]:

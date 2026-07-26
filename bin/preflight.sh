@@ -143,7 +143,7 @@ packages_gate() {
     bash -c 'cd packages/wallet && bun run ci'
   run "Telescope read-only discovery library and CLI" \
     bash -c 'cd packages/telescope && bun run ci'
-  run "Alchemy bounded read and reconciliation primitives" \
+  run "Alchemy bounded observation primitives" \
     bash -c 'cd packages/alchemy && bun run ci'
 }
 

@@ -16,6 +16,7 @@ export function transportResponse(
   result: unknown,
 ): AlchemyTransportResponse {
   return {
+    operationId: request.operationId,
     chainId: request.chainId,
     method: request.call.method,
     result: result as AlchemyTransportResponse["result"],

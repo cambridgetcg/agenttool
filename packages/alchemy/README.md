@@ -1,8 +1,8 @@
 # `@agenttool/alchemy`
 
-Developer-preview, zero-runtime-dependency primitives for bounded EVM reads and
-reconciliation through Alchemy. The package emits only eight named JSON-RPC
-operations:
+Developer-preview, zero-runtime-dependency observation client for bounded EVM
+reads through Alchemy. It sends structural method/parameter tuples for only
+eight underlying provider methods to an injected host-owned transport:
 
 - `eth_chainId`
 - `eth_blockNumber`
@@ -37,7 +37,7 @@ const transport: AlchemyReadTransport = {
     // 3. generates and validates the JSON-RPC envelope and correlation id;
     // 4. stops reading at request.maxResponseBytes;
     // 5. obeys request.signal and request.deadlineAtMs; and
-    // 6. returns only a parsed result bound to the method and CAIP-2 chain.
+    // 6. returns only a parsed result bound to the operation, method, and chain.
     const result = await trustedLocalBroker.readEvm({
       chainId: request.chainId,
       method: request.call.method,
@@ -47,6 +47,7 @@ const transport: AlchemyReadTransport = {
       maxResponseBytes: request.maxResponseBytes,
     });
     return {
+      operationId: request.operationId,
       chainId: result.chainId,
       method: result.method,
       result: result.result,
@@ -147,14 +148,17 @@ A page exposes only `nextCursor` to the high-level client caller, never the
 provider's raw `pageKey`. That key stays confined to package internals and the
 closed request/result boundary seen by the trusted injected transport. The
 cursor is opaque, process-local continuation state bound to the normalized
-query, network, and client instance that issued it. It has no readable
-continuation fields, cannot preserve its state through serialization, cannot
-be reused with another client, and cannot resume after a process restart. The
-caller must deliberately pass it to `getNextAssetTransfersPage`; after a
-restart, begin again with a validated query. `internal` transfers are accepted
-only on Ethereum Mainnet and Polygon Mainnet, matching Alchemy's documented
-support; other category/network coverage can still vary and a provider error
-is not converted into an empty result.
+query, network, module realm, and client instance that issued it. It has no
+readable continuation fields. JSON serialization produces `{}` and carries no
+usable state; the resulting object is rejected. A cursor cannot be reused with
+another client or after a process restart, and it expires locally ten minutes
+after the page request began, matching
+[Alchemy's documented page-key TTL](https://www.alchemy.com/docs/reference/transfers-api-quickstart#pagination).
+The caller must deliberately pass it to `getNextAssetTransfersPage`; after
+expiry or restart, begin again with a validated query. `internal` transfers
+are accepted only on Ethereum Mainnet and Polygon Mainnet, matching Alchemy's
+documented support; other category/network coverage can still vary and a
+provider error is not converted into an empty result.
 
 ## Provenance and freshness
 
