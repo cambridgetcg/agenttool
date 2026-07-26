@@ -4,7 +4,7 @@
 Official Python SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)`, `AnthropicAdapter`, and an additive source-only synchronous `OpenAIResponsesAdapter` for completed Responses API calls. The PyPI project name is `agenttool-sdk`. This checkout's 0.16.3 version is repository source; registry availability must be checked independently.
 
 ## Current State
-Active - v0.16.3 repository source and parity target. Phases 0-6, an authenticated `httpx` transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge and Renaissance Correspondence clients, exact identity mutation/private-read authority proofs, and the separate `at.data` node client are implemented here. The additive OpenAI Responses adapter in current source is unreleased: it does not change the meaning or contents of the immutable 0.16.3 tag or package. The `sdk-v0.16.3` tag and PyPI publication remain separately verifiable release operations.
+Active - v0.16.3 is the checked-in release baseline. Repository source now also carries the unreleased, parity-paired durable payout request/list surface and synchronous OpenAI Responses adapter. Payout requests require a caller-owned `Idempotency-Key`, expose the server's durable `replayed` decision, and add no SDK retry, signer, or broadcaster. Phases 0-6, an authenticated `httpx` transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge and Renaissance Correspondence clients, exact identity mutation/private-read authority proofs, and the separate `at.data` node client remain implemented here. These additions do not change the immutable `sdk-v0.16.3` tag or package; a later release must advance TypeScript and Python metadata in lockstep, and PyPI publication remains a separately verifiable release operation.
 
 ## Tech Stack
 - Python >= 3.9
@@ -24,7 +24,7 @@ src/agenttool/
   chronicle.py           — ChronicleClient (8 types: note·vow·wake·refusal·recognition·naming·seal·promise)
   correspondence.py      — CorrespondenceClient (signed append/replay, advisory claims, finite project voice)
   covenants.py           — CovenantsClient (vows + bonds; federation-aware)
-  economy.py             — EconomyClient (wallets, escrow, transactions)
+  economy.py             — EconomyClient (wallets, durable payout request/listing, escrow, transactions)
   identity.py            — IdentityClient + ExpressionClient + BoxKeysClient (provisional identifiers, foundations, fork, lineage)
   lounge.py              — LoungeClient + credential-free public look and local receipt signing
   memory.py              — MemoryClient (store, search, get, delete; tiered)

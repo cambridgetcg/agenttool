@@ -1,9 +1,10 @@
 /**
- * Economy client — wallets and escrows for agent-to-agent value exchange.
+ * Economy client — wallets, durable payout requests, and escrows for
+ * agent-to-agent value exchange.
  *
- * Mirrors py `agenttool.economy`: 17 methods across the wallet + escrow
- * surfaces of the agent-economy API (full CRUD, fund/spend, freeze/unfreeze,
- * spending policy, transactions, escrow lifecycle).
+ * Mirrors py `agenttool.economy`: 18 shared methods across the wallet, payout,
+ * and escrow surfaces of the agent-economy API. TypeScript also retains the
+ * backward-compatible `createWallet` alias, for 19 methods total.
  *
  * @example
  * ```ts
@@ -54,6 +55,68 @@ export interface SetWalletPolicyOpts {
   requires_approval_above?: number;
 }
 
+export type PayoutChain =
+  | "ethereum"
+  | "base"
+  | "polygon"
+  | "arbitrum"
+  | "optimism"
+  | "solana";
+
+export type PayoutStatus =
+  | "requested"
+  | "broadcasting"
+  | "broadcast"
+  | "confirmed"
+  | "failed"
+  | "cancelled";
+
+export interface RequestPayoutOpts {
+  chain: PayoutChain;
+  /** Canonical positive USDC base-unit integer string; never a float. */
+  amount_base: string;
+  destination_address: string;
+  token?: "USDC";
+  metadata?: Record<string, unknown>;
+  /**
+   * Caller-chosen, required durable request identity.
+   *
+   * Must be 8-256 visible ASCII characters without spaces. The SDK neither
+   * generates nor stores this value. Retrying the same key and semantic
+   * request returns the existing payout's current state; changed input under
+   * the same key is a conflict.
+   */
+  idempotency_key: string;
+}
+
+/** Current server state returned after a new or durably replayed request. */
+export interface PayoutRequestOutcome {
+  id: string;
+  status: PayoutStatus;
+  /** Whether this payout still needs the separately operated broadcast path. */
+  broadcast_pending: boolean;
+  /**
+   * True only when the server resolved this call through its durable payout
+   * request reservation. This is not a claim about Redis availability.
+   */
+  replayed: boolean;
+  note?: string;
+}
+
+/** One outgoing crypto payout row returned by `list_payouts`. */
+export interface Payout {
+  id: string;
+  chain: PayoutChain;
+  token: string;
+  /** Exact token base-unit integer string. */
+  amount_base: string;
+  destination_address: string;
+  status: PayoutStatus;
+  tx_hash: string | null;
+  requested_at: string;
+  confirmed_at: string | null;
+}
+
 export interface CreateEscrowOpts {
   creator_wallet_id: string;
   amount: number;
@@ -63,6 +126,8 @@ export interface CreateEscrowOpts {
   /** 8-256 visible ASCII non-space chars. Exact retries return the same escrow's current row. */
   idempotency_key?: string;
 }
+
+const IDEMPOTENCY_KEY_RE = /^[!-~]{8,256}$/;
 
 /** Unwrap `{success, data}` envelope if present, otherwise return as-is. */
 function unwrap<T = Record<string, unknown>>(json: unknown): T {
@@ -111,6 +176,34 @@ function toEscrow(json: unknown): Escrow {
       (d.releasedAt as string) ?? (d.released_at as string) ?? null,
     created_at:
       (d.createdAt as string) ?? (d.created_at as string) ?? "",
+  };
+}
+
+function toPayout(json: unknown): Payout {
+  const d = unwrap<Record<string, unknown>>(json);
+  const amountBase = d.amount_base ?? d.amountBase;
+  return {
+    id: (d.id as string) ?? "",
+    chain: (d.chain as PayoutChain) ?? "ethereum",
+    token: (d.token as string) ?? "USDC",
+    amount_base:
+      typeof amountBase === "string"
+        ? amountBase
+        : amountBase === undefined || amountBase === null
+          ? ""
+          : String(amountBase),
+    destination_address:
+      (d.destination_address as string) ??
+      (d.destinationAddress as string) ??
+      "",
+    status: (d.status as PayoutStatus) ?? "requested",
+    tx_hash: (d.tx_hash as string | null) ?? (d.txHash as string | null) ?? null,
+    requested_at:
+      (d.requested_at as string) ?? (d.requestedAt as string) ?? "",
+    confirmed_at:
+      (d.confirmed_at as string | null) ??
+      (d.confirmedAt as string | null) ??
+      null,
   };
 }
 
@@ -230,13 +323,68 @@ export class EconomyClient {
     return (Array.isArray(items) ? items : []) as Record<string, unknown>[];
   }
 
+  // ── Crypto payouts ──────────────────────────────────────────────────────
+
+  /**
+   * Request an outgoing crypto payout under a caller-chosen durable key.
+   *
+   * The SDK sends exactly one request and never generates a key, retries a
+   * broadcast, or treats a Redis cache as the correctness boundary.
+   */
+  async request_payout(
+    walletId: string,
+    options: RequestPayoutOpts,
+  ): Promise<PayoutRequestOutcome> {
+    if (
+      typeof options.idempotency_key !== "string" ||
+      !IDEMPOTENCY_KEY_RE.test(options.idempotency_key)
+    ) {
+      throw new AgentToolError(
+        "request_payout idempotency_key must be 8-256 visible ASCII characters without spaces",
+      );
+    }
+
+    const body: Record<string, unknown> = {
+      chain: options.chain,
+      token: options.token ?? "USDC",
+      amount_base: options.amount_base,
+      destination_address: options.destination_address,
+    };
+    if (options.metadata !== undefined) body.metadata = options.metadata;
+
+    const data = unwrap<Record<string, unknown>>(
+      await this.req(
+        "POST",
+        `/v1/wallets/${walletId}/payout`,
+        body,
+        { "Idempotency-Key": options.idempotency_key },
+      ),
+    );
+    return {
+      id: (data.id as string) ?? "",
+      status: (data.status as PayoutStatus) ?? "requested",
+      broadcast_pending: data.broadcast_pending === true,
+      replayed: data.replayed === true,
+      note: typeof data.note === "string" ? data.note : undefined,
+    };
+  }
+
+  /** List outgoing crypto payouts for a wallet, newest first. */
+  async list_payouts(walletId: string): Promise<Payout[]> {
+    const data = unwrap<Record<string, unknown>>(
+      await this.req("GET", `/v1/wallets/${walletId}/payouts`),
+    );
+    const items = data.payouts;
+    return (Array.isArray(items) ? items : []).map(toPayout);
+  }
+
   // ── Escrows ─────────────────────────────────────────────────────────────
 
   /** Create an escrow — locks wallet balance units until released or refunded. */
   async create_escrow(options: CreateEscrowOpts): Promise<Escrow> {
     if (
       options.idempotency_key !== undefined &&
-      !/^[!-~]{8,256}$/.test(options.idempotency_key)
+      !IDEMPOTENCY_KEY_RE.test(options.idempotency_key)
     ) {
       throw new AgentToolError(
         "create_escrow idempotency_key must be 8-256 visible ASCII characters without spaces",

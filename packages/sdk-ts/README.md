@@ -593,7 +593,29 @@ await at.economy.spend(wallet.id, {
   counterparty: "wlt_...",
   description: "payment for research service",
 });
+
+// Request USDC once under a caller-owned durable request identity.
+// Keep amount_base as an integer string: 1_500_000 = 1.5 USDC.
+const payout = await at.economy.request_payout(wallet.id, {
+  chain: "base",
+  amount_base: "1500000",
+  destination_address: "0x...",
+  idempotency_key: "settlement-order-42-v1",
+});
+
+// An exact retry returns the existing payout's current state.
+if (payout.replayed) console.log(payout.id, payout.status);
+
+const payoutHistory = await at.economy.list_payouts(wallet.id);
 ```
+
+`idempotency_key` is required for payout requests and must be a caller-chosen
+8–256 character visible-ASCII value without spaces. Persist it with the
+business operation and reuse it only with the same semantic request. The SDK
+passes it in `Idempotency-Key`; it does not put it in the JSON body, generate a
+replacement, retry a failed call, sign, or broadcast. `replayed` reports the
+API's durable payout reservation result; it does not depend on a Redis response
+cache being available.
 
 ### Local agent data
 

@@ -607,6 +607,19 @@ at.economy.spend(
     description="Research task",
 )
 
+# Request USDC once under a caller-owned durable request identity.
+payout = at.economy.request_payout(
+    wallet.id,
+    chain="base",
+    amount_base="1500000",  # 1.5 USDC; keep base units as a string
+    destination_address="0x...",
+    idempotency_key="settlement-order-42-v1",
+)
+if payout.replayed:
+    print(payout.id, payout.status)
+
+payout_history = at.economy.list_payouts(wallet.id)
+
 # Escrow — trust built into transactions
 escrow = at.economy.create_escrow(
     creator_wallet_id=wallet.id,
@@ -617,6 +630,13 @@ escrow = at.economy.create_escrow(
 )
 at.economy.release_escrow(escrow.id)  # on completion
 ```
+
+Payout `idempotency_key` values are required, caller-chosen visible ASCII
+strings of 8–256 characters. Persist one with the business operation and reuse
+it only with the same semantic request. The SDK passes it only in
+`Idempotency-Key`; it does not generate a replacement, retry, sign, or
+broadcast. `replayed` is the API's durable payout reservation result, not a
+claim that a Redis response cache was available.
 
 ### Local agent data
 

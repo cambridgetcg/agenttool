@@ -734,6 +734,130 @@ class TestEconomyClient:
                 )
         mock_post.assert_not_called()
 
+    def test_request_payout_uses_durable_key_header(self, at: AgentTool) -> None:
+        mock_resp = _mock_response(
+            202,
+            {
+                "id": "pay_abc",
+                "status": "requested",
+                "broadcast_pending": True,
+                "replayed": False,
+                "note": "Recorded once.",
+            },
+        )
+        with patch.object(at._http, "post", return_value=mock_resp) as mock_post:
+            outcome = at.economy.request_payout(
+                "wal_abc",
+                chain="base",
+                amount_base="1500000",
+                destination_address="0x1111111111111111111111111111111111111111",
+                metadata={"purpose": "settlement"},
+                idempotency_key="settlement-wallet-7-v1",
+            )
+
+        assert outcome.id == "pay_abc"
+        assert outcome.status == "requested"
+        assert outcome.broadcast_pending is True
+        assert outcome.replayed is False
+        assert outcome.note == "Recorded once."
+        assert mock_post.call_count == 1
+        assert mock_post.call_args.kwargs["headers"] == {
+            "Idempotency-Key": "settlement-wallet-7-v1"
+        }
+        body = mock_post.call_args.kwargs["json"]
+        assert body == {
+            "chain": "base",
+            "token": "USDC",
+            "amount_base": "1500000",
+            "destination_address": "0x1111111111111111111111111111111111111111",
+            "metadata": {"purpose": "settlement"},
+        }
+        assert "idempotency_key" not in body
+
+    def test_request_payout_surfaces_durable_replay(self, at: AgentTool) -> None:
+        mock_resp = _mock_response(
+            202,
+            {
+                "id": "pay_abc",
+                "status": "confirmed",
+                "broadcast_pending": False,
+                "replayed": True,
+            },
+        )
+        with patch.object(at._http, "post", return_value=mock_resp) as mock_post:
+            outcome = at.economy.request_payout(
+                "wal_abc",
+                chain="base",
+                amount_base="1500000",
+                destination_address="0x1111111111111111111111111111111111111111",
+                idempotency_key="settlement-wallet-7-v1",
+            )
+
+        assert outcome.replayed is True
+        assert outcome.status == "confirmed"
+        assert outcome.broadcast_pending is False
+        assert mock_post.call_count == 1
+
+    @pytest.mark.parametrize(
+        "idempotency_key",
+        [
+            None,
+            "1234567",
+            "contains space",
+            "line\nbreak",
+            "12345678\n",
+            "éééééééé",
+            "x" * 257,
+        ],
+    )
+    def test_request_payout_rejects_invalid_idempotency_key(
+        self,
+        at: AgentTool,
+        idempotency_key: object,
+    ) -> None:
+        with patch.object(at._http, "post") as mock_post:
+            with pytest.raises(ValueError, match="visible ASCII characters"):
+                at.economy.request_payout(
+                    "wal_abc",
+                    chain="base",
+                    amount_base="1500000",
+                    destination_address="0x1111111111111111111111111111111111111111",
+                    idempotency_key=idempotency_key,  # type: ignore[arg-type]
+                )
+        mock_post.assert_not_called()
+
+    def test_list_payouts_preserves_exact_base_units(self, at: AgentTool) -> None:
+        mock_resp = _mock_response(
+            200,
+            {
+                "wallet_id": "wal_abc",
+                "payouts": [
+                    {
+                        "id": "pay_abc",
+                        "chain": "ethereum",
+                        "token": "USDC",
+                        "amount_base": "9007199254740991",
+                        "destination_address": "0x2222222222222222222222222222222222222222",
+                        "status": "broadcast",
+                        "tx_hash": "0xabc",
+                        "requested_at": "2026-07-26T12:00:00.000Z",
+                        "confirmed_at": None,
+                    }
+                ],
+                "count": 1,
+            },
+        )
+        with patch.object(at._http, "get", return_value=mock_resp) as mock_get:
+            payouts = at.economy.list_payouts("wal_abc")
+
+        assert len(payouts) == 1
+        assert payouts[0].amount_base == "9007199254740991"
+        assert isinstance(payouts[0].amount_base, str)
+        assert payouts[0].status == "broadcast"
+        assert payouts[0].confirmed_at is None
+        assert mock_get.call_count == 1
+        assert mock_get.call_args.args[0].endswith("/v1/wallets/wal_abc/payouts")
+
     def test_escrow_api_status_and_row_contract(self, at: AgentTool) -> None:
         assert set(get_args(get_type_hints(Escrow)["status"])) == {
             "funded",

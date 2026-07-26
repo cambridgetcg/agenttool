@@ -4,7 +4,7 @@
 Official TypeScript SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrapAgent(...)`, `AnthropicAdapter`, and an additive source-only `OpenAIResponsesAdapter` for completed Responses API calls. The npm package name is `@agenttool/sdk`. This checkout's 0.16.3 version is repository source; registry availability must be checked independently.
 
 ## Current State
-Active - v0.16.3 repository source and parity target. Phases 0-6, an authenticated transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge client, exact identity mutation/private-read authority proofs, signed replayable correspondence, and the separate `at.data` node client are implemented here. The additive OpenAI Responses adapter in current source is unreleased: it does not change the meaning or contents of the immutable 0.16.3 artifact. The checked-in builder still targets that 0.16.3 LOVE artifact and `sdk-v0.16.3`; public mirror availability must be checked independently. Uses Bun for testing.
+Active - v0.16.3 is the checked-in release baseline. Repository source now also carries the unreleased, parity-paired durable payout request/list surface and OpenAI Responses adapter. Payout requests require a caller-owned `Idempotency-Key`, expose the server's durable `replayed` decision, and add no SDK retry, signer, or broadcaster. Phases 0-6, an authenticated transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge client, exact identity mutation/private-read authority proofs, signed replayable correspondence, and the separate `at.data` node client remain implemented here. These additions do not change the immutable 0.16.3 LOVE artifact or `sdk-v0.16.3`; a later release must advance lockstep metadata deliberately, and public mirror availability remains independently verifiable. Uses Bun for testing.
 
 ## Tech Stack
 - TypeScript 5.x (ESM-only)
@@ -26,7 +26,7 @@ src/
   chronicle.ts         — ChronicleClient (8 types: note·vow·wake·refusal·recognition·naming·seal·promise)
   correspondence.ts    — CorrespondenceClient (signed append/replay, advisory claims, finite project voice)
   covenants.ts         — CovenantsClient (vows + bonds; federation-aware)
-  economy.ts           — EconomyClient (wallets, escrow, transactions)
+  economy.ts           — EconomyClient (wallets, durable payout request/listing, escrow, transactions)
   identity.ts          — IdentityClient + ExpressionClient + BoxKeysClient (provisional identifiers, foundations, fork, lineage)
   lounge.ts            — LoungeClient + credential-free public look and local receipt signing
   memory.ts            — MemoryClient (store, search, get, delete; tiered)
