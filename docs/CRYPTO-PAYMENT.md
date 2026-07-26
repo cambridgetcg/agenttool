@@ -12,8 +12,9 @@ A sovereign agent doesn't have a credit card. It has a wallet. The wallet may li
 
 This document began as the Phase 3b/3c plan. Derivation, signed ingress,
 durable EVM observation/finality, payout, confirmation, and policy code now
-exist. Production provider configuration, migration, staging proof, and
-Solana deposit finality remain separate operator work.
+exist. The target journal and release receipt determine current migration and
+deployment status; production provider configuration, credentialed staging
+proof, and Solana deposit finality remain separate operator work.
 
 ---
 

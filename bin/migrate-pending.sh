@@ -159,7 +159,11 @@ try {
     const filesOnDisk = new Set(files);
     for (const row of rows) {
       const filename = String(row.filename);
-      if (!filesOnDisk.has(filename)) continue;
+      if (!filesOnDisk.has(filename)) {
+        throw new Error(
+          `migration source missing for journaled file: ${filename}`,
+        );
+      }
       const bytes = await Bun.file(`migrations/${filename}`).arrayBuffer();
       const actual = createHash("sha256").update(new Uint8Array(bytes)).digest("hex");
       if (actual !== row.checksum) {
@@ -196,7 +200,7 @@ QUIESCENCE_PENDING_COUNT=$(
 )
 
 if [ "$PENDING_COUNT" -eq 0 ]; then
-  echo "✓ no repo migration files pending and journal checksums match for files present; it does not prove database schema parity or account for journal rows whose files are absent."
+  echo "✓ migration inventory clean: no repo files pending; every journaled filename has source; checksums match. This does not prove database schema parity or detect out-of-band DDL."
   exit 0
 fi
 
@@ -254,4 +258,4 @@ if [ -n "$FAILED" ]; then
 fi
 
 echo ""
-echo "✓ no repo migration files pending and journal checksums match for files present; it does not prove database schema parity or account for journal rows whose files are absent."
+echo "✓ migration inventory clean: no repo files pending; every journaled filename has source; checksums match. This does not prove database schema parity or detect out-of-band DDL."

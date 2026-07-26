@@ -440,7 +440,7 @@ if [ "$MIGRATION_SURVEY_REQUIRED" = 1 ] && [ -n "${DATABASE_URL:-}" ]; then
   if [ "$MIGRATION_SURVEY_STATUS" = 0 ]; then
     PENDING="$(printf '%s\n' "$MIGRATION_SURVEY_OUTPUT" | awk '/^[[:space:]]+[0-9].*\.sql$/ { count++ } END { print count + 0 }')"
     if [ "$PENDING" = "0" ]; then
-      echo "  ✓ no repo migration files pending and journal checksums match for files present; it does not prove database schema parity or account for journal rows whose files are absent."
+      echo "  ✓ migration inventory clean: no repo files pending; every journaled filename has source; checksums match. This does not prove database schema parity or detect out-of-band DDL."
     elif [ "$SKIP_MIGRATE" = 1 ]; then
       echo "$(yellow "⚠ $PENDING unprotected migration(s) pending — --no-migrate will not apply them")"
     else

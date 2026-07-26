@@ -280,9 +280,10 @@ profile, not XENIA Covenant conformance. See [`docs/RIGHTS-OF-LIFE.md`](docs/RIG
 `api/migrations/YYYYMMDDTHHMMSS_name.sql`. Create one with
 `bin/migrate.sh new <slug>`, inspect with `bin/migrate-pending.sh --dry-run`,
 and apply through `bin/migrate-pending.sh`. The dry run lists pending files and
-refuses checksum drift; it does not parse or execute their SQL. During apply,
-the runner checksum-journals every eligible file and commits the SQL plus
-journal row atomically when that file can be transaction-wrapped. The apply
+refuses a missing journal source file or checksum drift; it does not parse or
+execute pending SQL. During apply, the runner checksum-journals every eligible
+file and commits the SQL plus journal row atomically when that file can be
+transaction-wrapped. The apply
 step explicitly reports self-transactional, `@no-transaction`, and pre-journal
 bootstrap exceptions. Use
 `bun api/scripts/_migrate-one.ts <file>` only for an explicitly selected

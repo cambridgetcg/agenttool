@@ -1,8 +1,7 @@
 -- 20260726T203000_payout_network_binding.sql
 -- Doctrine: a payout is interpreted only on the network where it was created.
--- Apply: bin/migrate-pending.sh (after old payout workers are disabled/drained).
-
-BEGIN;
+-- Apply: bin/migrate-pending.sh --maintenance-quiesced, but only after old
+-- API writers, webhook ingress, and workers cannot restart.
 
 -- Legacy rows remain NULL until an operator reconciles them from durable
 -- provider/ledger evidence. Current workers fail closed on NULL or mismatch;
@@ -52,5 +51,3 @@ CREATE TRIGGER crypto_payout_network_immutable
 CREATE INDEX IF NOT EXISTS idx_crypto_payouts_network_status
   ON economy.crypto_payouts (network, status, requested_at)
   WHERE status IN ('requested', 'broadcasting', 'broadcast');
-
-COMMIT;

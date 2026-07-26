@@ -86,12 +86,16 @@ instead of treating missing output as “0 pending.”
 
 ## Phase 1 — Repo migration files and journal
 
-**Question:** which repo migration files are absent from the journal, and do
-checksums match for journaled files that are still present in the repo?
+**Question:** which repo migration files are absent from the journal, does
+every journal row still have exact source in the repo, and do checksums match?
 
 The journal table `meta._migrations` holds one row per applied migration (filename + sha256 of file contents at apply time). A migration file present in `api/migrations/` but absent from the journal is **pending**.
 
-A clean result means exactly: no repo migration files pending and journal checksums match for files present; it does not prove database schema parity or account for journal rows whose files are absent. The check does not inspect live tables, columns, constraints, indexes, policies, or out-of-band DDL.
+A clean result means exactly: no repo migration files are pending, every
+journaled filename has source in the repo, and every journal checksum matches
+those source bytes. A journal row whose source is absent is a hard failure.
+This does not prove database schema parity: the check does not inspect live
+tables, columns, constraints, indexes, policies, or out-of-band DDL.
 
 ```bash
 # Auto-detect + apply pending migrations in timestamp order.
@@ -461,7 +465,9 @@ DATABASE_URL=$(bin/agenttool-secret get agenttool-database-url) \
   bin/migrate-pending.sh --dry-run
 ```
 
-When nothing is pending, this reports: no repo migration files pending and journal checksums match for files present; it does not prove database schema parity or account for journal rows whose files are absent.
+When nothing is pending, this reports that no repo migration files are
+pending, every journaled filename has source, and checksums match. It still
+does not prove database schema parity or detect out-of-band DDL.
 
 Exit `42` means at least one pending file is in
 `api/migrations/quiescence-required.txt`; the ordinary deploy must remain

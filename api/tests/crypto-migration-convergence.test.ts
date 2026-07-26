@@ -22,7 +22,7 @@ const frozenDigests = {
   "20260726T201000_payout_dispatch_fairness.sql":
     "708eade75ddd94715fd0f2709bca8ead3333e62908d61289804359c23bfaa442",
   "20260726T203000_payout_network_binding.sql":
-    "054d7f1f0b7e09b8e5d4bb33ea8ad7d72fe8cfae3a0c5d3820d0d5e4f375107b",
+    "512b06d875e520615702f0d5413ca69bd049c0c825118e927f06ec51b6d8e9b4",
 } as const;
 
 describe("crypto migration history convergence", () => {

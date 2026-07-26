@@ -21,6 +21,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { shouldWrapInTransaction } from "../scripts/_migrate-one";
 
 const root = join(import.meta.dir, "../..");
 
@@ -209,10 +210,25 @@ describe("migration runner safety", () => {
     expect(policy).toContain("Do not change the journal checksum");
   });
 
-  test("pending scan refuses checksum drift before choosing files", () => {
+  test("the recovered production-journaled collab relay source stays byte exact", () => {
+    const migration = read(
+      "api/migrations/20260723T210000_collab_relay.sql",
+    );
+    expect(createHash("sha256").update(migration).digest("hex")).toBe(
+      "01e9cf0cb09b2f33ad2e87d72d08cd5dab8f4391c322c703af61ee4eb2d0bb99",
+    );
+  });
+
+  test("pending scan refuses missing journal source or checksum drift before choosing files", () => {
     const source = read("bin/migrate-pending.sh");
     expect(source).toContain("SELECT filename, checksum FROM meta._migrations");
     expect(source).toContain('createHash("sha256")');
+    expect(source).toContain(
+      "migration source missing for journaled file: ${filename}",
+    );
+    expect(source).not.toContain(
+      "if (!filesOnDisk.has(filename)) continue;",
+    );
     expect(source).toContain("migration checksum drift");
   });
 
@@ -381,16 +397,17 @@ describe("migration runner safety", () => {
     );
   });
 
-  test("0.11 rollout migrations use the runner's atomic migration+journal transaction", () => {
+  test("reviewed rollout migrations use the runner's atomic migration+journal transaction", () => {
     for (const filename of [
       "20260713T120000_attestation_receipt_integrity.sql",
       "20260713T130000_managed_escrow_ownership.sql",
       "20260713T140000_reinvest_resting_reconciliation.sql",
       "20260713T150000_dispute_arbitration_resting.sql",
       "20260713T160000_generic_escrow_idempotency.sql",
+      "20260726T203000_payout_network_binding.sql",
     ]) {
       const source = read(`api/migrations/${filename}`);
-      expect(source.trimStart()).not.toMatch(/^BEGIN\b/i);
+      expect(shouldWrapInTransaction(source)).toBe(true);
       expect(source.trimEnd()).not.toMatch(/COMMIT\s*;$/i);
       expect(source).not.toContain("@no-transaction");
     }

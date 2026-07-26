@@ -78,8 +78,9 @@ Otherwise `snake_case` everywhere. Time fields end in `_at` (ISO 8601 UTC string
 - **Create**: `bin/migrate.sh new <slug>`.
 - **Apply singly**: `bun api/scripts/_migrate-one.ts <file>`.
 - **Inspect/apply in batch**: `bin/migrate-pending.sh --dry-run`, then
-  `bin/migrate-pending.sh`. The dry run lists pending files and checks journaled
-  bytes; it does not classify transaction behavior. During apply, the
+  `bin/migrate-pending.sh`. The dry run lists pending files, requires source for
+  every journaled filename, and checks journaled bytes; it does not classify
+  transaction behavior. During apply, the
   checksum-journaled runner commits each transaction-wrappable SQL file with
   its journal row and explicitly reports self-transactional,
   `@no-transaction`, and pre-journal bootstrap exceptions where that atomic

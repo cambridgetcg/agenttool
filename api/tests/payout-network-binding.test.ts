@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { shouldWrapInTransaction } from "../scripts/_migrate-one";
 
 function read(relative: string): string {
   return readFileSync(new URL(relative, import.meta.url), "utf8");
@@ -15,6 +16,9 @@ const confirmer = read("../src/workers/payout/confirm-worker.ts");
 
 describe("durable payout network identity", () => {
   test("migration preserves legacy rows and freezes assigned identity", () => {
+    expect(shouldWrapInTransaction(migration)).toBe(true);
+    expect(migration.trimEnd()).not.toMatch(/COMMIT\s*;$/i);
+    expect(migration).not.toContain("@no-transaction");
     expect(migration).toContain("ADD COLUMN IF NOT EXISTS network TEXT");
     expect(migration).toContain(
       "CHECK (network IS NULL OR network IN ('testnet', 'mainnet'))",
