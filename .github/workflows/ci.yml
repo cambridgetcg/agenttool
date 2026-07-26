@@ -63,7 +63,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for workspace in api packages/data packages/data-protocol packages/repo-archive packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope; do
+          for workspace in api packages/data packages/data-protocol packages/repo-archive packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope packages/search; do
             (cd "$workspace" && bun install --frozen-lockfile)
           done
       - name: Build local data-sync and projector peers
@@ -79,7 +79,7 @@ jobs:
           set -euo pipefail
           (cd packages/data-sync && bun install --frozen-lockfile)
           (cd packages/correspondence-yutabase-projector && bun install --frozen-lockfile)
-      - name: Run hermetic data, ADDS, sync, archive, broker, collab, Browser, projection, local projector, Skills, SDK, Wallet, and Telescope gate
+      - name: Run hermetic data, ADDS, sync, archive, broker, collab, Browser, projection, local projector, Skills, SDK, Wallet, Telescope, and Search gate
         run: bash bin/preflight.sh packages
       - name: Smoke the packed TypeScript SDK under Node and Bun
         working-directory: packages/sdk-ts

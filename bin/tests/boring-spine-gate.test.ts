@@ -283,7 +283,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("name: Install cross-language vector dependencies");
     expect(workflow).toContain("working-directory: packages/sdk-ts");
     expect(workflow).toContain(
-      "api packages/data packages/data-protocol packages/repo-archive packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope",
+      "api packages/data packages/data-protocol packages/repo-archive packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope packages/search",
     );
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("package-manager-cache: false");
@@ -320,6 +320,7 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/correspondence-yutabase-projector && bun run ci");
     expect(preflight).toContain("cd packages/wallet && bun run ci");
     expect(preflight).toContain("cd packages/telescope && bun run ci");
+    expect(preflight).toContain("cd packages/search && bun run ci");
     expect(workflow).toContain("name: Smoke packed credential broker under Node and Bun");
     expect(workflow).toContain(
       'cli="$install_dir/node_modules/@agenttool/credential-broker/dist/cli.js"',

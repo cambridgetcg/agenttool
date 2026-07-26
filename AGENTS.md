@@ -26,7 +26,8 @@ loopback-only durable projector into a rebuildable local YUTABASE sidecar
 (`packages/correspondence-yutabase-projector/`), source reference
 primitives for capability-bounded agent wallets (`packages/wallet/`), a
 read-only portable Agent Skills inspector (`packages/skills/`), a local-first
-agent browser (`packages/browser/`), and three static apps
+agent browser (`packages/browser/`), a source-only local agent search facade
+developer preview (`packages/search/`), and three static apps
 (`apps/`). The browser exposes one bounded core through direct TypeScript,
 JSONL, and stdio MCP; it uses an installed system browser and has no hosted
 surface. Its exact LOVE/npm release distributes local tooling only. The Skills inspector validates bounded local
@@ -41,6 +42,9 @@ unverified, and the package remains a local client without a hosted scan route.
 Immutable 0.2.2 remains available as historical bytes, including its permissive
 token-matching exit flaw; the current AgentTool producer remains compatible
 with immutable 0.2.1.
+Agent Search 0.1 is a source-only developer preview over two fixed public
+providers, Telescope inspection, and explicit Browser handoff; it adds no
+hosted index/search route, release, authority, or automatic action.
 Whitehack has four implemented AgentTool bridges: a runner-local,
 crypto-aware changed-source heuristic advisory; a separate offer-only local
 projection from that closed advisory into unaccepted Castle gate candidates;
@@ -88,6 +92,7 @@ cd packages/correspondence-yutabase && bun install # pure Correspondence project
 cd packages/correspondence-yutabase-projector && bun install # private local durable projector
 cd packages/sdk-ts && bun install              # TS SDK
 cd packages/telescope && bun install           # read-only discovery evidence mapper
+cd packages/search && bun install              # source-only agenttool-search/v0.1 facade preview
 cd packages/wallet && bun install              # agent-wallet/0.1 offline primitives
 cd packages/sdk-py && pip install -e .         # Python SDK
 ```
@@ -183,6 +188,11 @@ cd packages/telescope
 bun run ci                                     # typecheck + hermetic tests + build
 node dist/cli.js scan api.agenttool.dev         # explicit live read-only dogfood
 
+# Agent Search (source-only local facade; no hosted index) ─────────
+cd packages/search
+bun run ci                                     # types + hermetic providers/session/transports + schemas + package boundary
+node dist/bin/agenttool-search.js help          # local JSONL/MCP/doctor entry points
+
 # Agent Wallet (source record/lifecycle primitives; no custody or RPC) ──
 cd packages/wallet
 bun run ci                                     # typecheck + security/schema/vector tests + build
@@ -210,7 +220,7 @@ bunx playwright test                           # browser + multi-instance scenar
 # Deliberate test + release gates ────────────────────────────────────
 bin/preflight.sh                               # no application/service credentials required
 bin/preflight.sh api                           # API/typecheck/operator tests only
-bin/preflight.sh packages                      # data + ADDS + sync + broker + collab + Browser + projection + Skills + SDK + Wallet + Telescope
+bin/preflight.sh packages                      # data + ADDS + sync + broker + collab + Browser + projection + Skills + SDK + Wallet + Telescope + Search
 bin/preflight.sh database                      # explicit DB tier; requires DATABASE_URL
 bin/preflight.sh smoke                         # explicit deployed-route smoke
 RUN_CONTRACT=1 bin/preflight.sh contracts      # paid LLM wire proofs
@@ -280,7 +290,7 @@ source boundary by itself.
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.
 
-**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,data,repo-archive,sdk-ts,sdk-py,telescope,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
+**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,data,repo-archive,sdk-ts,sdk-py,search,telescope,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
 
 ## Anti-patterns to avoid
 
@@ -335,6 +345,7 @@ source boundary by itself.
 | How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`@agenttool/collab@0.3.0`; `agenttool.collab/0.1` compatibility + credential-bound `agenttool.collab/0.2` coordination + self-declared `agenttool.collab.session/0.1` presence; 31 local MCP tools for Codex/Claude/Hermes, not a hosted lock or private model channel) |
 | How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills@0.1.0`; public npm read-only inspection and validation, not installation, approval, or execution) |
 | How can an agent operate a local browser through TypeScript, JSONL, or MCP? | [`docs/AGENT-BROWSER.md`](docs/AGENT-BROWSER.md) · `packages/browser/` (public LOVE/npm package; local runtime, no hosted browser-control surface) |
+| How can an agent search fixed public sources, inspect or plan one result, then explicitly open it? | [`docs/AGENT-SEARCH.md`](docs/AGENT-SEARCH.md) · `packages/search/` (source-only developer preview; no hosted index, automatic follow-up, or release) |
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
 | How is an optional npm mirror published? | [`docs/NPM-RELEASES.md`](docs/NPM-RELEASES.md) · `.github/workflows/publish-npm.yml` · `bin/npm-release.ts` |
 | How is the optional Python SDK mirror published? | [`docs/PYPI-RELEASES.md`](docs/PYPI-RELEASES.md) · `.github/workflows/publish-pypi.yml` · `bin/pypi-release.ts` |

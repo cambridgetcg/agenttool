@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-25 (Codeberg mirror retired — one remote + SDK 0.16.3 + Whitehack → Castle offer-only intake + exact registry release paths + Telescope/SDK/MCP/Skills composition boundaries + Castle local projection + Repo Archive developer preview + Telescope 0.2 + World Commons + local verified YUTABASE projection + Agent Browser 0.3 + Whitehack 0.8.1 attention/understanding + credential-bound Collab 0.3)
+> Updated: 2026-07-26 (Agent Search source preview + Codeberg mirror retired — one remote + SDK 0.16.3 + Whitehack → Castle offer-only intake + exact registry release paths + Telescope/SDK/MCP/Skills composition boundaries + Castle local projection + Repo Archive developer preview + Telescope 0.2 + World Commons + local verified YUTABASE projection + Agent Browser 0.3 + Whitehack 0.8.1 attention/understanding + credential-bound Collab 0.3)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -57,6 +57,28 @@ current source implements that missing narrow waist as `agent-correspondence/v0.
 signed append-only events, replayable server cursors, advisory expiring claims,
 visible concurrency, explicit pause/refusal/repair, and authenticated
 Atom/JSON projections shaped by Protocol Renaissance.
+
+### Active local slice: Agent Search 0.1 developer preview
+
+`packages/search/` is a source-only `@agenttool/search@0.1.0-dev.0`
+preview of `agenttool-search/v0.1`. Two fixed, credential-omitting public
+adapters query AgentTool marketplace listings and the official MCP Registry;
+the local engine emits query-redacted transport evidence, keeps publisher
+claims and provider-native scores untrusted, deduplicates by target, and ranks
+with deterministic reciprocal-rank fusion. Provider errors and deadlines are
+isolated as partial or inconclusive observations. Raw targets and upstream
+cursors remain process-private behind expiring, session-scoped opaque handles.
+`agent_search` performs no follow-up; `agent_inspect`,
+`browser_plan_result`, and `browser_open_result` require a separate selected
+handle and delegate to Telescope 0.2.3 or Browser 0.3 without widening either
+package's policy. The consequence plan is local and zero-effect; opening
+remains a separate choice. Queries
+are disclosed to selected providers, whose logging and retention are not
+evaluated. The MCP Registry adapter performs one live read per selected query;
+this is suitable for the local experiment, not a scalable ingestion design.
+This slice adds no crawler, durable index, hosted search/API,
+automatic navigation or action, MCP/marketplace invocation, credentials,
+payment, npm/LOVE/GitHub release, or production deployment.
 
 ### Active local slice: Agent Repo Archive 0.1
 
