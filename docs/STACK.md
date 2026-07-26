@@ -634,28 +634,31 @@ it to confuse with the release head.
 Schema-touching changes need the migration applied **before** the api code that reads new columns ships, otherwise the api crashes on startup. Discovery changes need their committed docs and game surfaces exact **before** the api advertises them. UI-touching changes that depend on new api fields need the api up **before** the dashboard ships, otherwise the dashboard sees old responses. The coordinated wrapper enforces those boundaries in this default order:
 
 ```bash
-# 1. Migration first
-DATABASE_URL=$(bin/agenttool-secret get agenttool-database-url) \
-  bun api/scripts/_migrate-one.ts api/migrations/<file>
-
-# 2. Land the exact release commit on GitHub main
+# 1. Land the exact release commit on GitHub main
 git add api/migrations/<file> api/src/...
 git commit -m "feat(api): <something using new column>"
 git push github main
 
-# 3. Publish web, publish docs, verify both, roll Fly/API, then publish dashboard
-bin/deploy.sh --no-migrate
+# 2. Survey/apply ordinary migrations, test, publish prerequisites, roll Fly,
+#    publish the dashboard, and verify exact live provenance.
+bin/deploy.sh
 fly status -a agenttool                     # confirm every machine is green
 
-# 4. Smoke the api with credentials scoped to the child process
+# 3. Smoke the api with credentials scoped to the child process
 AGENTTOOL_BASE=https://api.agenttool.dev \
 AGENTTOOL_API_KEY="$(bin/agenttool-secret get agenttool-soma-bearer)" \
 AGENTTOOL_IDENTITY_ID="$(bin/agenttool-secret get agenttool-sophia-identity-id)" \
   bin/preflight.sh smoke
 
-# 5. Smoke the frontend
+# 4. Smoke the frontend
 curl -sI https://app.agenttool.dev/dashboard.html | head -1
 ```
+
+This default order does not apply when the migration is listed in
+`api/migrations/quiescence-required.txt`. The orchestrator and pending runner
+refuse that set before mutation; use the exclusive maintenance cutover in
+`DEPLOY-PROCEDURE.md`. A direct one-file runner is not proof that old writers
+were stopped.
 
 The split is deliberate: web and docs go first because the api may advertise
 them, while the dashboard goes last because it may depend on the new api.

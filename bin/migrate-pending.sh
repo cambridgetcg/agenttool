@@ -11,11 +11,15 @@
 #   bin/migrate-pending.sh                  # apply all pending
 #   bin/migrate-pending.sh --dry-run        # list pending without applying
 #   bin/migrate-pending.sh --help           # print this contract
+#   bin/migrate-pending.sh --maintenance-quiesced
+#                                            # assert an exclusive cutover
 #
 # Safe properties:
 #   - Order is alphabetical (= timestamp order for YYYYMMDDTHHMMSS files)
 #   - Each apply goes through _migrate-one.ts (checksum verification +
 #     journal recording)
+#   - Quiescence-required files refuse before the first apply unless the
+#     operator explicitly asserts an exclusive maintenance boundary
 #   - Halts on first failure; no partial state silently swallowed
 #   - Idempotent: re-running after a successful pass is a no-op
 
@@ -26,44 +30,85 @@ usage() {
 usage:
   bin/migrate-pending.sh
   bin/migrate-pending.sh --dry-run
+  bin/migrate-pending.sh --maintenance-quiesced
+  bin/migrate-pending.sh --dry-run --maintenance-quiesced
   bin/migrate-pending.sh --help
 
 With no arguments, applies every pending checksum-journaled migration.
 --dry-run inspects the journal and lists pending files without applying them.
+--maintenance-quiesced asserts that the operator established the exclusive
+cutover required by api/migrations/quiescence-required.txt. It permits those
+files; it does not inspect or prove machine, writer, worker, or ingress state.
 EOF
 }
 
 # Parse the complete argv before resolving DATABASE_URL. Unknown or extra
 # arguments must never turn a typo (especially `--help`) into a live apply.
 DRY_RUN=0
-case "$#" in
-  0)
-    ;;
-  1)
-    case "$1" in
-      --dry-run)
-        DRY_RUN=1
-        ;;
-      -h|--help)
-        usage
-        exit 0
-        ;;
-      *)
-        echo "error: unknown argument: $1" >&2
+MAINTENANCE_QUIESCED=0
+if [ "$#" -gt 2 ]; then
+  echo "error: expected at most two supported options" >&2
+  usage >&2
+  exit 2
+fi
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run)
+      if [ "$DRY_RUN" = 1 ]; then
+        echo "error: duplicate argument: --dry-run" >&2
         usage >&2
         exit 2
-        ;;
-    esac
-    ;;
-  *)
-    echo "error: expected no arguments or exactly one supported option" >&2
-    usage >&2
-    exit 2
-    ;;
-esac
+      fi
+      DRY_RUN=1
+      ;;
+    --maintenance-quiesced)
+      if [ "$MAINTENANCE_QUIESCED" = 1 ]; then
+        echo "error: duplicate argument: --maintenance-quiesced" >&2
+        usage >&2
+        exit 2
+      fi
+      MAINTENANCE_QUIESCED=1
+      ;;
+    -h|--help)
+      if [ "$#" = 1 ]; then
+        usage
+        exit 0
+      fi
+      echo "error: --help cannot be combined with other arguments" >&2
+      usage >&2
+      exit 2
+      ;;
+    *)
+      echo "error: unknown argument: $arg" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
+
+QUIESCENCE_REQUIRED_EXIT=42
+QUIESCENCE_REQUIRED_FILE="$REPO_ROOT/api/migrations/quiescence-required.txt"
+if [ ! -s "$QUIESCENCE_REQUIRED_FILE" ]; then
+  echo "✗ missing quiescence policy manifest: $QUIESCENCE_REQUIRED_FILE" >&2
+  exit 1
+fi
+if ! LC_ALL=C sort -cu "$QUIESCENCE_REQUIRED_FILE" 2>/dev/null; then
+  echo "✗ quiescence policy manifest must be sorted and contain no duplicates" >&2
+  exit 1
+fi
+while IFS= read -r migration || [ -n "$migration" ]; do
+  if [[ ! "$migration" =~ ^[0-9]{8}T[0-9]{6}_[a-z0-9_]+\.sql$ ]]; then
+    echo "✗ invalid quiescence policy entry: $migration" >&2
+    exit 1
+  fi
+  if [ ! -f "$REPO_ROOT/api/migrations/$migration" ]; then
+    echo "✗ quiescence policy entry has no migration file: $migration" >&2
+    exit 1
+  fi
+done < "$QUIESCENCE_REQUIRED_FILE"
 
 # ── Resolve DATABASE_URL ──────────────────────────────────────────────
 if [ -z "${DATABASE_URL:-}" ]; then
@@ -80,7 +125,8 @@ export DATABASE_URL
 
 # ── Compute pending: files − meta._migrations rows ─────────────────────
 PENDING_FILE="$(mktemp -t agenttool-pending.XXXXXX)"
-trap 'rm -f "$PENDING_FILE"' EXIT
+QUIESCENCE_PENDING_FILE="$(mktemp -t agenttool-quiescence-pending.XXXXXX)"
+trap 'rm -f "$PENDING_FILE" "$QUIESCENCE_PENDING_FILE"' EXIT
 
 cd "$REPO_ROOT/api"
 bun -e '
@@ -143,6 +189,11 @@ try {
 cd "$REPO_ROOT"
 
 PENDING_COUNT=$(wc -l < "$PENDING_FILE" | tr -d ' ')
+grep -Fxf "$QUIESCENCE_REQUIRED_FILE" "$PENDING_FILE" \
+  > "$QUIESCENCE_PENDING_FILE" || true
+QUIESCENCE_PENDING_COUNT=$(
+  wc -l < "$QUIESCENCE_PENDING_FILE" | tr -d ' '
+)
 
 if [ "$PENDING_COUNT" -eq 0 ]; then
   echo "✓ no repo migration files pending and journal checksums match for files present; it does not prove database schema parity or account for journal rows whose files are absent."
@@ -152,6 +203,21 @@ fi
 echo "▸ $PENDING_COUNT pending migration(s):"
 sed 's/^/    /' "$PENDING_FILE"
 echo ""
+
+if [ "$QUIESCENCE_PENDING_COUNT" -gt 0 ]; then
+  echo "✗ $QUIESCENCE_PENDING_COUNT pending migration(s) require an exclusive maintenance cutover:"
+  sed 's/^/    /' "$QUIESCENCE_PENDING_FILE"
+  echo ""
+  if [ "$MAINTENANCE_QUIESCED" = 0 ]; then
+    echo "Refusing before the first migration."
+    echo "After stopping old API writers, webhook ingress, and workers so they cannot restart,"
+    echo "re-run with --maintenance-quiesced as an operator assertion."
+    echo "That assertion permits the files; it does not prove the maintenance boundary."
+    exit "$QUIESCENCE_REQUIRED_EXIT"
+  fi
+  echo "⚠ --maintenance-quiesced is an operator assertion, not a machine-state check."
+  echo ""
+fi
 
 if [ "$DRY_RUN" = 1 ]; then
   echo "(dry-run — no migrations applied)"

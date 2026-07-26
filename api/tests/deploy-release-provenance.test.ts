@@ -120,7 +120,7 @@ async function fixture() {
   );
   await writeFile(
     join(repo, "bin/migrate-pending.sh"),
-    "#!/usr/bin/env bash\nif [ \"${1:-}\" != --dry-run ] && [ -n \"${MIGRATION_MARKER:-}\" ]; then touch \"$MIGRATION_MARKER\"; fi\n[ \"${FAIL_MIGRATE:-0}\" != 1 ] || exit 7\nexit 0\n",
+    "#!/usr/bin/env bash\nif [ \"${1:-}\" = --dry-run ] && [ -n \"${DEPLOY_TEST_PENDING_MIGRATIONS:-}\" ]; then for migration in ${DEPLOY_TEST_PENDING_MIGRATIONS}; do printf '    %s\\n' \"$migration\"; done; [ \"${DEPLOY_TEST_PROTECTED_PENDING:-0}\" != 1 ] || exit 42; fi\nif [ \"${1:-}\" != --dry-run ] && [ -n \"${MIGRATION_MARKER:-}\" ]; then touch \"$MIGRATION_MARKER\"; fi\n[ \"${FAIL_MIGRATE:-0}\" != 1 ] || exit 7\nexit 0\n",
   );
   await writeFile(
     join(repo, "bin/stage-doctrine-docs.sh"),
@@ -2383,8 +2383,10 @@ describe("deploy release provenance spine", () => {
     expect(receipt.release_head_snapshot.revision).toBe(setup.release);
   }, 10_000);
 
-  test("reports failed migration surveys honestly and receipts uncertain mutations", async () => {
+  test("blocks failed migration surveys before any release mutation", async () => {
     const setup = await fixture();
+    const migrationMarker = join(setup.root, "migration-started");
+    const preflightMarker = join(setup.root, "preflight-started");
     const result = await run(
       ["bash", "bin/deploy.sh", "--skip-preflight", "--no-api", "--no-frontend"],
       setup.repo,
@@ -2392,20 +2394,147 @@ describe("deploy release provenance spine", () => {
         XDG_STATE_HOME: setup.state,
         DATABASE_URL: "postgres://unreachable.invalid/test",
         FAIL_MIGRATE: "1",
+        MIGRATION_MARKER: migrationMarker,
+        PREFLIGHT_MARKER: preflightMarker,
       }),
     );
     expect(result.code).toBe(1);
     expect(result.stdout).toContain("migration survey failed");
     expect(result.stdout).not.toContain("DB schema parity with repo");
-    const [name] = await readdir(join(setup.state, "agenttool", "deploy-receipts"));
-    const receipt = JSON.parse(
-      await readFile(join(setup.state, "agenttool", "deploy-receipts", name), "utf8"),
-    );
-    expect(receipt.outcome).toBe("failed_or_uncertain");
-    expect(receipt.exit_status).toBe(1);
-    expect(receipt.external_mutation_started).toBe(true);
-    expect(receipt.phases.migrations).toBe("failed_or_uncertain");
+    expect(await exists(migrationMarker)).toBe(false);
+    expect(await exists(preflightMarker)).toBe(false);
+    expect(
+      await exists(join(setup.state, "agenttool", "deploy-receipts")),
+    ).toBe(false);
     expect(await exists(deployLockPath(setup.home))).toBe(false);
+  });
+
+  test("blocks quiescence-required migrations before any release mutation", async () => {
+    const setup = await fixture();
+    const migrationMarker = join(setup.root, "migration-started");
+    const preflightMarker = join(setup.root, "preflight-started");
+    const quiescenceMigrations = [
+      "20260725T054912_crypto_deposit_identity.sql",
+      "20260726T070000_deposit_watch_reconciliation.sql",
+      "20260726T191500_payout_operation_identity.sql",
+      "20260726T202500_crypto_deposit_finality.sql",
+      "20260726T211500_deposit_watch_target_binding.sql",
+      "20260726T214500_deposit_watch_target_registry.sql",
+    ];
+    const env = cleanEnv(setup.home, {
+      XDG_STATE_HOME: setup.state,
+      DEPLOY_TEST_PENDING_MIGRATIONS: quiescenceMigrations.join(" "),
+      DEPLOY_TEST_PROTECTED_PENDING: "1",
+      MIGRATION_MARKER: migrationMarker,
+      PREFLIGHT_MARKER: preflightMarker,
+    });
+
+    for (const args of [
+      ["--no-api", "--no-frontend"],
+      ["--no-migrate", "--no-frontend"],
+    ]) {
+      const result = await run(["bash", "bin/deploy.sh", ...args], setup.repo, env);
+      expect(result.code).toBe(1);
+      expect(result.stdout).toContain(
+        "pending migrations require an exclusive maintenance cutover",
+      );
+      for (const migration of quiescenceMigrations) {
+        expect(result.stdout).toContain(migration);
+      }
+      expect(result.stdout).toContain(
+        "The ordinary deploy cannot prove that API writers, webhook ingress, and workers stay quiescent.",
+      );
+    }
+    expect(await exists(migrationMarker)).toBe(false);
+    expect(await exists(preflightMarker)).toBe(false);
+    expect(
+      await exists(join(setup.state, "agenttool", "deploy-receipts")),
+    ).toBe(false);
+    expect(await exists(deployLockPath(setup.home))).toBe(false);
+
+    const survey = await run(
+      ["bash", "bin/deploy.sh", "--survey"],
+      setup.repo,
+      env,
+    );
+    expect(survey.code).toBe(1);
+    expect(survey.stdout).toContain(
+      "pending migrations require an exclusive maintenance cutover",
+    );
+    expect(await exists(deployLockPath(setup.home))).toBe(false);
+
+    const frontendOnly = await run(
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--no-migrate",
+        "--no-api",
+        "--no-frontend",
+        "--skip-preflight",
+      ],
+      setup.repo,
+      env,
+    );
+    expect(frontendOnly.code, frontendOnly.stderr).toBe(0);
+    expect(frontendOnly.stdout).toContain(
+      "migration compatibility survey skipped (frontend-only release)",
+    );
+  });
+
+  test("blocks an API release when the migration survey credential is unavailable", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "fake-bin");
+    await mkdir(fakeBin, { recursive: true });
+    await writeFile(
+      join(fakeBin, "security"),
+      "#!/usr/bin/env bash\nexit 44\n",
+    );
+    await chmod(join(fakeBin, "security"), 0o755);
+
+    const result = await run(
+      ["bash", "bin/deploy.sh", "--no-migrate", "--no-frontend"],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        DATABASE_URL: "",
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+      }),
+    );
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain("DATABASE_URL not resolved");
+    expect(result.stdout).toContain(
+      "migration or API publication cannot safely proceed",
+    );
+    expect(
+      await exists(join(setup.state, "agenttool", "deploy-receipts")),
+    ).toBe(false);
+    expect(await exists(deployLockPath(setup.home))).toBe(false);
+  });
+
+  test("continues to apply ordinary pending migrations", async () => {
+    const setup = await fixture();
+    const migrationMarker = join(setup.root, "migration-started");
+    const result = await run(
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--skip-preflight",
+        "--no-api",
+        "--no-frontend",
+      ],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        DEPLOY_TEST_PENDING_MIGRATIONS:
+          "20260724T120000_ordinary_additive_fixture.sql",
+        MIGRATION_MARKER: migrationMarker,
+      }),
+    );
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toContain(
+      "1 migration(s) pending — Phase 1 will apply them",
+    );
+    expect(await exists(migrationMarker)).toBe(true);
   });
 
   test("cleans staged API inputs and receipts uncertainty when interrupted during Fly", async () => {

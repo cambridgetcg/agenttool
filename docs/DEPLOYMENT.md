@@ -118,6 +118,11 @@ must match. Neither an unset value nor a conflict silently selects mainnet.
 Before accepting EVM deposits, stop crypto webhook ingress and old API
 writers, and drain old workers before applying the checksum-verified deposit
 identity, watch, target-binding, target-registry, and finality migrations.
+Those files are classified in
+`api/migrations/quiescence-required.txt`; the canonical exclusive maintenance
+sequence and its limits are in `docs/DEPLOY-PROCEDURE.md`. Source presence is
+not environment status: use the target database's migration journal, deployed
+`/health.build.revision`, worker configuration, and recorded provider proof.
 The target-registry schema keeps rolling old-binary writes fail closed for
 address disclosure and durable convergence, but an old worker can still claim
 a newly inserted revisionless row during mixed-version overlap. Keep every old

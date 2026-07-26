@@ -70,6 +70,21 @@ These guards do not make every migration safe to replay directly. Use the
 checked runners: a matching journal row skips the file, a mismatched checksum
 stops, and a new ordinary migration plus its journal row commit atomically.
 
+## Quiescence-required migrations
+
+[`quiescence-required.txt`](quiescence-required.txt) is the sorted policy
+manifest for migrations that cannot share a rollout window with old API
+writers, webhook ingress, or workers. It is not a migration and is not recorded
+in `meta._migrations`.
+
+When one of its files is pending, `bin/migrate-pending.sh` reports the pending
+set and exits `42` before the first apply. After an operator has established the
+exclusive cutover in `docs/DEPLOY-PROCEDURE.md`, the
+`--maintenance-quiesced` assertion permits the checked runner to proceed. The
+flag does not inspect Fly, disable provider delivery, drain work, or prove that
+another writer is absent. The one-file local and Fly runners also do not prove
+quiescence; do not use them to bypass this policy.
+
 ## Invariants to defend
 
 1. **Never edit a committed migration.** Always add a new one. Editing existing files breaks reproducibility across environments.

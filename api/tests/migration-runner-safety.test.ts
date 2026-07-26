@@ -10,6 +10,15 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import {
+  access,
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -218,6 +227,104 @@ describe("migration runner safety", () => {
     expect(source).toContain(
       "const pending = orderedFiles.filter((f) => !applied.has(f))",
     );
+  });
+
+  test("quiescence policy is exact, sorted, unique, and points to real migrations", async () => {
+    const expected = [
+      "20260725T054912_crypto_deposit_identity.sql",
+      "20260726T070000_deposit_watch_reconciliation.sql",
+      "20260726T185835_crypto_deposit_finality.sql",
+      "20260726T191000_payout_policy_e2e_fixture_repair.sql",
+      "20260726T191500_payout_operation_identity.sql",
+      "20260726T191500_payout_request_idempotency.sql",
+      "20260726T193000_payout_confirmation_fairness.sql",
+      "20260726T194500_evm_payout_nonce_fence.sql",
+      "20260726T200000_deposit_observation_generation.sql",
+      "20260726T201000_payout_dispatch_fairness.sql",
+      "20260726T202500_crypto_deposit_finality.sql",
+      "20260726T203000_payout_network_binding.sql",
+      "20260726T211500_deposit_watch_target_binding.sql",
+      "20260726T214500_deposit_watch_target_registry.sql",
+      "20260726T220000_crypto_finality_convergence.sql",
+    ];
+    const entries = read("api/migrations/quiescence-required.txt")
+      .trim()
+      .split("\n");
+    expect(entries).toEqual(expected);
+    expect(entries).toEqual([...entries].sort());
+    expect(new Set(entries).size).toBe(entries.length);
+    for (const filename of entries) {
+      expect(filename).toMatch(/^[0-9]{8}T[0-9]{6}_[a-z0-9_]+\.sql$/);
+      await access(join(root, "api", "migrations", filename));
+    }
+  });
+
+  test("pending runner refuses protected files until the maintenance assertion", async () => {
+    const fixture = await mkdtemp(join(tmpdir(), "agenttool-migration-policy-"));
+    const fakeBin = join(fixture, "bin");
+    const applyLog = join(fixture, "apply.log");
+    const protectedMigration =
+      "20260726T202500_crypto_deposit_finality.sql";
+    await mkdir(fakeBin, { recursive: true });
+    await writeFile(
+      join(fakeBin, "bun"),
+      [
+        "#!/usr/bin/env bash",
+        "set -eu",
+        'if [ "${1:-}" = -e ]; then',
+        '  printf "%s\\n" "$DEPLOY_TEST_PENDING_MIGRATIONS"',
+        "  exit 0",
+        "fi",
+        'printf "%s\\n" "${2##*/}" >> "$DEPLOY_TEST_APPLY_LOG"',
+        "",
+      ].join("\n"),
+    );
+    await chmod(join(fakeBin, "bun"), 0o755);
+
+    const run = async (args: string[]) => {
+      const child = Bun.spawn(
+        ["bash", "bin/migrate-pending.sh", ...args],
+        {
+          cwd: root,
+          env: {
+            PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+            HOME: fixture,
+            LANG: "C",
+            DATABASE_URL: "postgres://fixture.invalid/migration_policy",
+            DEPLOY_TEST_PENDING_MIGRATIONS: protectedMigration,
+            DEPLOY_TEST_APPLY_LOG: applyLog,
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      const [stdout, stderr, code] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      return { stdout, stderr, code };
+    };
+
+    try {
+      const survey = await run(["--dry-run"]);
+      expect(survey.code, survey.stderr).toBe(42);
+      expect(survey.stdout).toContain(protectedMigration);
+      expect(survey.stdout).toContain("Refusing before the first migration");
+
+      const refusedApply = await run([]);
+      expect(refusedApply.code, refusedApply.stderr).toBe(42);
+      await expect(access(applyLog)).rejects.toThrow();
+
+      const assertedApply = await run(["--maintenance-quiesced"]);
+      expect(assertedApply.code, assertedApply.stderr).toBe(0);
+      expect(assertedApply.stdout).toContain(
+        "--maintenance-quiesced is an operator assertion",
+      );
+      expect(await readFile(applyLog, "utf8")).toBe(`${protectedMigration}\n`);
+    } finally {
+      await rm(fixture, { recursive: true, force: true });
+    }
   });
 
   test("local and Fly runners serialize migration sessions", () => {
