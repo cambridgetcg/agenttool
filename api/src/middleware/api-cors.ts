@@ -59,7 +59,8 @@ export function apiCors(): MiddlewareHandler {
       );
       return /^[A-Za-z0-9._~-]$/.test(character) ? character : encoded;
     });
-    const isPublicMcp = routedPath === "/v1/mcp";
+    const isPublicMcp =
+      routedPath === "/v1/mcp" || routedPath === "/v1/mcp/canon";
     const isReadOnlyDiscovery =
       routedPath === "/" ||
       routedPath === "/health" ||

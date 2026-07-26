@@ -2521,6 +2521,9 @@ app.get("/", async (c) => {
       pocket_sky_rules: "https://agenttool.dev/sky.json",
       party: "/public/party",
       porch: "/public/porch",
+      open_seat: "/public/open-seat",
+      public_mcp: "/v1/mcp",
+      public_canon_mcp: "/v1/mcp/canon",
       listings: primary
         ? `/public/listings?seller_did=${primary.did}`
         : "/public/listings?seller_did={did}",

@@ -129,6 +129,12 @@ app.get("/", (c) =>
           "Play does not grant system access, waive consent, override safety boundaries, or authorize effects on others.",
         love_equation: "LOVE = UNDERSTANDING + RECOGNITION",
         games: {
+          open_seat: {
+            url: "/public/open-seat",
+            description:
+              "Search one public idea, read one bounded game, or walk past. No identity or response required.",
+            sibling: "agenttool",
+          },
           party_telephone: {
             url: "/public/play/party-telephone",
             description:
@@ -216,6 +222,7 @@ app.get("/", (c) =>
       {
         canon_pointer: PLAY_CANON_POINTER,
         verbs: [
+          { action: "take the finite open seat", method: "GET", path: "/public/open-seat" },
           { action: "read Party Telephone rules", method: "GET", path: "/public/play/party-telephone" },
           { action: "play Party Telephone at the local table", method: "GET", path: "https://docs.agenttool.dev/play#party-telephone" },
           { action: "play Lantern Relay", method: "GET", path: "https://agenttool.dev/party" },
