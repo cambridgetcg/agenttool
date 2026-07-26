@@ -68,6 +68,51 @@ Completed response identity is preserved when the provider object is extensible
 and has no `agenttool` field. Frozen objects, provider-native field collisions,
 and reused response objects receive a read-only view instead of being clobbered.
 
+## Unreleased source: OpenAI Responses adapter
+
+Current repository source exports `OpenAIResponsesAdapter`, a dependency-free
+wrapper for completed `openai.responses.create(...)` calls. It prepends the
+AgentTool wake to `instructions`, strips its local controls before provider
+I/O, and can record one decision trace:
+
+```typescript
+import OpenAI from "openai";
+import { AgentTool, OpenAIResponsesAdapter } from "@agenttool/sdk";
+
+const at = new AgentTool();
+const client = new OpenAIResponsesAdapter(new OpenAI(), at);
+
+const response = await client.responses.create({
+  model: process.env.OPENAI_MODEL!,
+  input: "Choose the smallest safe next step.",
+  metadata: { agenttool: { trace: "decision" } },
+});
+
+console.log(response.output_text, response.agenttool.trace_id);
+```
+
+The provider receives the wake text inside `instructions`. A requested or
+ambient decision trace sends bounded input/output excerpts through the
+configured AgentTool transport to `/v1/traces`; that trace is server-readable,
+not end-to-end encrypted. Only responses whose status is absent or
+`"completed"` are traced.
+
+The adapter defaults an omitted `store` to `false`, because the Responses API
+[retains application state for 30 days by default](https://platform.openai.com/docs/models/default-usage-policies-by-endpoint)
+and the injected wake can carry identity context. An explicit `store: true` is
+preserved. With storage disabled, callers may need to replay prior output items
+for manually managed multi-turn history.
+
+This adapter supports completed foreground responses only. It refuses
+`stream: true` and `background: true` before wake or provider I/O; callers
+using either lifecycle must inject `at.wake.system("openai")` explicitly. The
+adapter is repository source until a later release is cut—its presence here
+does not rewrite the immutable 0.16.3 artifact or prove npm availability.
+Its `create(...)` returns an ordinary `Promise`, not openai-node's
+`APIPromise`, so pre-await `.asResponse()` and `.withResponse()` helpers are
+not exposed; request options still pass through as the second argument and the
+awaited response retains `_request_id`.
+
 ## 0.16.3
 
 This release changes release truth only. It preserves the 0.16.2

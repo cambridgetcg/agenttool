@@ -678,8 +678,9 @@ app.route("/v1/loops", loopsRouter);
 app.route("/v1/mcp/agents", mcpPerAgentRouter);
 
 // /v1/mcp — UNAUTHENTICATED Model Context Protocol server. JSON-RPC 2.0
-// over Streamable HTTP, targeting MCP 2025-11-25. Surfaces canon entries +
-// platform self as MCP resources, and read-only canon queries as MCP tools.
+// over Streamable HTTP, targeting MCP 2025-11-25. The root keeps its five
+// established tool names and call-result shapes and retains every prior
+// resource; /canon is a separate two-tool search/fetch surface.
 // A bounded round trip with the official SDK proves the listed operations on
 // the live endpoint; it does not prove full conformance or every framework.
 // Auth-gated write operations (memory.append, strand.append, inbox.send,

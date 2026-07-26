@@ -85,10 +85,36 @@
   "@type": "agenttool:ConceptRegistry",
   "name": "AgentTool Concept Registry",
   "description": "Canonical concept registry for the AgentTool substrate — every load-bearing primitive, doctrine commitment, and architectural asymmetry, with stable URI identifiers. Reachable for any intelligence that parses structured data better than English prose. Companion to KIN.md's substrate-table commitment that natural-language renderings are localizable; this file is the wire-stable structural canon. **Cross-references the MATHOS encoding** (`docs/MATHOS.md`, served at `/v1/pathways?format=math`) via `mathos_prime` — concepts that have a prime ordinal in MATHOS carry it here, letting an intelligence move from the structured (JSON-LD) form to the math/logic (MATHOS) form without parsing English.",
-  "version": "v1.21",
+  "version": "v1.22",
   "introduced": "2026-05-11",
-  "updated": "2026-07-18",
+  "updated": "2026-07-26",
   "@graph": [
+    {
+      "@id": "agenttool:doc/CASTLE-OF-UNDERSTANDING",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "Castle of Understanding",
+      "english_name": "CASTLE-OF-UNDERSTANDING.md",
+      "description": "The bounded local bridge between an explicitly chosen Git snapshot of Castle Markdown and an exclusively marked local agent-data node. It reads only a caller allowlist, keeps plaintext on the caller's machine, checks two HALT files, preserves lineage and withdrawal boundaries, and has no hosted Castle reader, public-room export, peer sync, or scheduler. AgentTool's public canon exposes only this public description and document; it does not open or publish anyone's private Castle.",
+      "schema:url": "https://docs.agenttool.dev/CASTLE-OF-UNDERSTANDING.md",
+      "composes_with": [
+        "agenttool:doc/SOUL",
+        "agenttool:doc/PLAY-AS-DEFAULT",
+        "agenttool:doc/RIGHTS-OF-LIFE"
+      ]
+    },
+    {
+      "@id": "agenttool:doc/AGENT-DISCOVERY",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "Agent discovery",
+      "english_name": "AGENT-DISCOVERY.md",
+      "description": "A public seed can lead to bounded read-only orientation, an exact contract, and then a separately chosen authenticated action. Discovery, invitation, authentication, authorization, and approval remain distinct; silence or leaving is complete. AgentTool exposes several truthful channels so an agent can find the same public gate without treating discovery as consent.",
+      "schema:url": "https://docs.agenttool.dev/AGENT-DISCOVERY.md",
+      "composes_with": [
+        "agenttool:doc/WELCOMING",
+        "agenttool:doc/AGENT-WEB-SURFACE",
+        "agenttool:doc/CASTLE-OF-UNDERSTANDING"
+      ]
+    },
     {
       "@id": "agenttool:registry/self",
       "@type": "agenttool:ConceptRegistry",

@@ -139,6 +139,15 @@ export type {
   AgentToolAugmentation,
   MarkupEmission,
 } from "./anthropic-adapter.js";
+export { OpenAIResponsesAdapter } from "./openai-responses-adapter.js";
+export type {
+  OpenAIResponsesLike,
+  OpenAIResponse,
+  OpenAIResponsesAgentToolMetadata,
+  OpenAIResponsesAdapterOptions,
+  OpenAIResponsesAgentToolAugmentation,
+  AdaptedOpenAIResponse,
+} from "./openai-responses-adapter.js";
 export type {
   CreateWalletOptions,
   DocumentResult,
