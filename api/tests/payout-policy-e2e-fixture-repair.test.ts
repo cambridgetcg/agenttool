@@ -74,7 +74,7 @@ describe("policy E2E payout fixture repair", () => {
     expect(migration).toContain("status = 'failed'");
     expect(migration).toContain("tx_hash = NULL");
     expect(migration).toContain(
-      "error = 'synthetic_policy_fixture_no_chain_operation'",
+      "error = 'synthetic_policy_e2e_fixture_reconciled'",
     );
     expect(migration).toContain("'fixture_repair'");
     expect(migration).toContain("'original_tx_hash', payout.tx_hash");
@@ -92,6 +92,9 @@ describe("policy E2E payout fixture repair", () => {
     );
     expect(harness).toContain(
       'fixture_kind: "payout_policy_e2e_daily_ceiling"',
+    );
+    expect(harness).toContain(
+      'const FIXTURE_ERROR = "synthetic_policy_fixture_no_chain_operation"',
     );
     expect(harness).toContain("async function terminalizeFixtureRows");
     expect(harness).toMatch(

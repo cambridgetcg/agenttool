@@ -28,7 +28,7 @@ const SOURCE_HASH_0 =
 const SOURCE_HASH_1 =
   "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff1";
 const DESTINATION = "0x000000000000000000000000000000000000dEaD";
-const REPAIR_ERROR = "synthetic_policy_fixture_no_chain_operation";
+const REPAIR_ERROR = "synthetic_policy_e2e_fixture_reconciled";
 
 let admin: Sql | undefined;
 let ownsSchemas = false;
