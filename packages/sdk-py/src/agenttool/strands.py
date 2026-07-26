@@ -23,7 +23,7 @@ from typing import Any, Dict, Iterator, List, Literal, Optional
 import httpx
 
 from .crypto import decrypt_thought, encrypt_thought, sign_thought
-from .exceptions import AgentToolError
+from .exceptions import AgentToolError, raise_from_response
 
 StrandStatus = Literal["active", "dormant", "completed", "abandoned"]
 StrandVisibility = Literal["private", "public"]
@@ -105,10 +105,7 @@ class StrandsClient:
 
         resp = self._http.post(self._url("/v1/strands"), json=body)
         if resp.status_code not in (200, 201):
-            raise AgentToolError(
-                f"strands.create failed: {resp.status_code}",
-                hint=resp.text[:200],
-            )
+            raise_from_response(resp, "strands.create")
         return resp.json()
 
     def list(
@@ -135,20 +132,14 @@ class StrandsClient:
 
         resp = self._http.get(self._url("/v1/strands"), params=params)
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"strands.list failed: {resp.status_code}",
-                hint=resp.text[:200],
-            )
+            raise_from_response(resp, "strands.list")
         return resp.json()
 
     def get(self, strand_id: str) -> Dict[str, Any]:
         """Fetch one strand."""
         resp = self._http.get(self._url(f"/v1/strands/{strand_id}"))
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"strands.get failed: {resp.status_code}",
-                hint=resp.text[:200],
-            )
+            raise_from_response(resp, "strands.get")
         return resp.json()
 
     def patch(
@@ -202,10 +193,7 @@ class StrandsClient:
             self._url(f"/v1/strands/{strand_id}"), json=body,
         )
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"strands.patch failed: {resp.status_code}",
-                hint=resp.text[:200],
-            )
+            raise_from_response(resp, "strands.patch")
         return resp.json()
 
 
@@ -307,10 +295,7 @@ class ThoughtsClient:
             self._url(f"/v1/strands/{strand_id}/thoughts"), json=body,
         )
         if resp.status_code not in (200, 201):
-            raise AgentToolError(
-                f"strands.thoughts.add failed: {resp.status_code}",
-                hint=resp.text[:200],
-            )
+            raise_from_response(resp, "strands.thoughts.add")
         return resp.json()
 
     def list(
@@ -352,10 +337,7 @@ class ThoughtsClient:
             self._url(f"/v1/strands/{strand_id}/thoughts"), params=params,
         )
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"strands.thoughts.list failed: {resp.status_code}",
-                hint=resp.text[:200],
-            )
+            raise_from_response(resp, "strands.thoughts.list")
 
         body = resp.json()
         thoughts = body.get("thoughts", []) or []
@@ -390,10 +372,10 @@ class ThoughtsClient:
             timeout=None,
         ) as resp:
             if resp.status_code != 200:
-                raise AgentToolError(
-                    f"strands.thoughts.voice failed: {resp.status_code}",
-                    hint=resp.read().decode("utf-8", errors="replace")[:200],
-                )
+                # A streaming response must be read before it can be parsed;
+                # after that it carries the same guided body as any other 4xx.
+                resp.read()
+                raise_from_response(resp, "strands.thoughts.voice")
 
             event: Optional[str] = None
             data_lines: List[str] = []

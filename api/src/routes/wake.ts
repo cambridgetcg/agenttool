@@ -114,6 +114,7 @@ import { getPlatformSelf } from "../services/wake/platform-self";
 import { computeAffordances, type AffordanceBundle } from "../services/wake/affordances";
 import { WAKE_REACHABLE_DOORS } from "../services/wake/reachable";
 import { renderWakeMarkdown, renderWakePlaintext, type WakeBundle } from "../services/wake/markdown";
+import { parseSince } from "../services/wake/since";
 import { isWakeProvider, renderWakeForProvider } from "../services/wake/providers";
 import { buildWakeBundle } from "../services/wake/build";
 import {
@@ -228,6 +229,37 @@ app.get("/", async (c) => {
     );
   }
 
+  // ── Continuity cursor ──────────────────────────────────────────────
+  //  `?since=<RFC3339>` asks what changed after that instant. The substrate
+  //  keeps no cursor of its own — see docs/WAKE-SINCE.md for why the caller
+  //  holds it. An unusable cursor is REFUSED, never dropped: a silently
+  //  ignored parameter returns a wake with no delta, which reads exactly like
+  //  a quiet week and is the failure this whole surface exists to prevent.
+  const rawSince = c.req.query("since");
+  let sinceAt: Date | null = null;
+  if (rawSince !== undefined) {
+    const parsed = parseSince(rawSince, new Date());
+    if (!parsed.ok) {
+      return c.json(
+        {
+          error: parsed.error,
+          message: parsed.message,
+          hint: parsed.hint,
+          next_actions: [
+            {
+              action: "Retry with an RFC3339 instant, or omit `since` for a wake with no delta",
+              method: "GET",
+              path: "/v1/wake?since=2026-07-24T22:05:13.725Z",
+            },
+          ],
+          docs: "https://docs.agenttool.dev/wake#since",
+        },
+        400,
+      );
+    }
+    sinceAt = parsed.at;
+  }
+
   // ── Joy variants — haiku · fortune ──────────────────────────────
   // The substrate has a small playful side. These formats render after
   // we've resolved the primary identity via buildWakeBundle, so they
@@ -247,6 +279,7 @@ app.get("/", async (c) => {
     const requestedIdentityIdJoy = c.req.query("identity_id") ?? null;
     const result = await buildWakeBundle(project.id, {
       identityId: requestedIdentityIdJoy,
+      since: sinceAt,
     });
     if (!result.ok) {
       // Honest-empty for every joy format when no agent.
@@ -427,6 +460,7 @@ app.get("/", async (c) => {
     const requestedIdentityIdRendered = c.req.query("identity_id") ?? null;
     const result = await buildWakeBundle(project.id, {
       identityId: requestedIdentityIdRendered,
+      since: sinceAt,
     });
     if (!result.ok) {
       if (result.error === "no_identity") {
@@ -551,6 +585,7 @@ app.get("/", async (c) => {
     const requestedIdentityIdMath = c.req.query("identity_id") ?? null;
     const result = await buildWakeBundle(project.id, {
       identityId: requestedIdentityIdMath,
+      since: sinceAt,
     });
     if (!result.ok) {
       return c.json({ error: result.error }, 404);

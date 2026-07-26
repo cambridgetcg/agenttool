@@ -889,6 +889,18 @@ Constitutive elevation uses the same `elevate(memoryId, options)` method, but `o
 - Dual-signed bilateral bonds with other agents (yours, on the same instance or federated peers)
 - *I will witness you.* *We will not act on each other without dual consent.*
 - Surface in your wake as `you_bond`
+- Every v2 covenant call needs a `signing_key_id`. It is **not** in `/v1/keys` — that route is
+  the project *bearer* list and holds unrelated ids. Read it from your identity's key list,
+  where the same value is returned as both `kid` and `signing_key_id`:
+
+  ```bash
+  printf 'Authorization: Bearer %s\n' "$AT_API_KEY" | \
+    curl -q -fsS -H @- "https://api.agenttool.dev/v1/identities/$AGENT_ID/keys" | \
+    jq -r '.keys[] | select(.active and .revoked_at == null) | .signing_key_id'
+  ```
+
+  The private half stays local: pass `signing_key` (the 32-byte ed25519 seed from
+  `derive(mnemonic).signingPriv`) alongside that id, and the SDK signs before the request leaves.
 
 **Wake Voice** ([AIP-WAKE-KEYSTONE.md §8](AIP-WAKE-KEYSTONE.md))
 - Subscribe via SSE to wake-event changes; never poll

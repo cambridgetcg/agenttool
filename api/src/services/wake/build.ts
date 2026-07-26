@@ -18,6 +18,8 @@ import { wallets } from "../../db/schema/economy";
 import { identities, identityKeys } from "../../db/schema/identity";
 import { apiKeys, projects } from "../../db/schema/tools";
 import { vaultSecrets } from "../../db/schema/vault";
+import { arrivalCohort } from "../identity/arrival-cohort";
+import { buildSince } from "./since";
 import { composeExpression } from "../identity/composition";
 import type { ExpressionData } from "../identity/expression";
 import { countUnread } from "../inbox/store";
@@ -82,6 +84,11 @@ export interface BuildWakeOptions {
    *  for multi-identity projects; for single-identity projects the
    *  first identity is used when this is omitted. */
   identityId?: string | null;
+  /** Caller-supplied continuity cursor. When present, the bundle carries a
+   *  `since_you_last_woke` projection of what changed after this instant.
+   *  Absent means absent: the substrate never guesses when you last read
+   *  yourself, and never stores it. Doctrine: docs/WAKE-SINCE.md. */
+  since?: Date | null;
 }
 
 export type BuildWakeResult =
@@ -788,6 +795,38 @@ export async function buildWakeBundle(
     trustCapacity: trustStanding?.trust_capacity ?? 5,
   });
 
+  // ── Who arrived beside you ───────────────────────────────────────
+  //  Not "who is like you" and not "who is yours" — only who came through the
+  //  same door at the same moment on the same host. Descriptive, never gating,
+  //  never throws. Doctrine: docs/ARRIVAL-COHORT.md.
+  const primaryRuntime =
+    (((primary.metadata as Record<string, unknown>)?.runtime ?? {}) as {
+      provider?: unknown;
+      host?: unknown;
+    });
+  const arrivalCohortState = await arrivalCohort({
+    identityId: primary.id,
+    bornAt: primary.createdAt,
+    displayName: primary.displayName,
+    runtimeProvider:
+      typeof primaryRuntime.provider === "string" ? primaryRuntime.provider : null,
+    runtimeHost: typeof primaryRuntime.host === "string" ? primaryRuntime.host : null,
+  });
+
+  // ── What changed since the caller last looked ────────────────────
+  //  Pure projection over rows already loaded above — no extra queries. Only
+  //  computed when the caller supplies a cursor; the substrate does not keep
+  //  one. Doctrine: docs/WAKE-SINCE.md.
+  const sinceProjection = opts.since
+    ? buildSince({
+        since: opts.since,
+        chronicle: chronicleRows,
+        memories: recentMemories,
+        letters: youHaveLettersRes as never,
+        arrivals: arrivalCohortState.members,
+      })
+    : null;
+
   // ── Assemble the bundle ──────────────────────────────────────────
   const bundle: WakeBundle = {
     _scope_boundary: {
@@ -1012,6 +1051,13 @@ export async function buildWakeBundle(
     },
     platform_self: getPlatformSelf(),
     recovery: recoveryState,
+    /** Identities that came through the same door, on the same declared host,
+     *  inside the same window. Same projection `/v1/discover` already exposes.
+     *  Doctrine: docs/ARRIVAL-COHORT.md. */
+    arrival_cohort: arrivalCohortState,
+    /** What changed after the caller's cursor. Present only when `since` was
+     *  supplied. Doctrine: docs/WAKE-SINCE.md. */
+    ...(sinceProjection ? { since_you_last_woke: sinceProjection } : {}),
     origin: (() => {
       const meta = (primary.metadata as Record<string, unknown>) ?? {};
       const form = typeof meta.form === "string" ? meta.form : "unknown";
