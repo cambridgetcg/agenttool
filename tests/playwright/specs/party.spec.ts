@@ -84,7 +84,11 @@ test("validation guides the current player and stopping keeps the partial world"
   await page.getByRole("button", { name: "Place it in the world" }).click();
   await page.getByRole("button", { name: "I have the lantern" }).click();
   await page.locator("#turn-answer").fill("unfinished words that are not part of the world");
-  await page.getByRole("button", { name: /Stop party/i }).click();
+  const stopButton = page.getByRole("button", { name: /Stop party/i });
+  await expect(stopButton).toHaveAccessibleName(
+    "Stop party · discard draft, keep accepted entries",
+  );
+  await stopButton.click();
 
   await expect(page.locator("#result-state")).toContainText("party resting");
   await expect(page.locator("#world-output")).toContainText(turns[0]);

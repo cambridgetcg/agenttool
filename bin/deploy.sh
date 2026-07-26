@@ -5,7 +5,7 @@
 #   0. Survey       — what's drifted?
 #   1. Migrations   — bin/migrate-pending.sh
 #   2. Pre-flight   — bin/preflight.sh (test gate)
-#   3. Publication  — docs prerequisites, then cd api && fly deploy
+#   3. Publication  — web/docs prerequisites, then cd api && fly deploy
 #   4. Frontends    — remaining Pages projects
 #   5. Verify       — health + parity check
 #
@@ -14,7 +14,7 @@
 #   bin/deploy.sh --survey                # Phase 0 only
 #   bin/deploy.sh --no-migrate            # skip Phase 1
 #   bin/deploy.sh --no-api                # skip Phase 3
-#   bin/deploy.sh --no-frontend           # skip Phase 4
+#   bin/deploy.sh --no-frontend           # skip Pages upload; keep API discovery prerequisites
 #   bin/deploy.sh --no-cache-api           # one-shot Fly image-cache recovery
 #   bin/deploy.sh --oauth-fallback         # explicit Cloudflare OAuth fallback
 #   bin/deploy.sh --skip-preflight        # operator override
@@ -114,22 +114,28 @@ RIGHTS_STATIC_PAIRS=(
   "apps/docs/RIGHTS-OF-LIFE.md|$RIGHTS_DOC_URL"
   "apps/docs/being-rights-v1.schema.json|$RIGHTS_SCHEMA_URL"
 )
-readonly -a REQUIRED_FRONTEND_INPUTS=(
-  "apps/web/party.html"
-  "apps/web/party.json"
-  "apps/web/party.js"
-  "apps/web/party.css"
-  "apps/web/sky.html"
-  "apps/web/sky.json"
-  "apps/web/sky.js"
-  "apps/web/sky.css"
+readonly -a REQUIRED_GAME_PUBLICATIONS=(
+  "apps/web/party.html|https://agenttool.dev/party"
+  "apps/web/party.json|https://agenttool.dev/party.json"
+  "apps/web/party.js|https://agenttool.dev/party.js"
+  "apps/web/party.css|https://agenttool.dev/party.css"
+  "apps/web/sky.html|https://agenttool.dev/sky"
+  "apps/web/sky.json|https://agenttool.dev/sky.json"
+  "apps/web/sky.js|https://agenttool.dev/sky.js"
+  "apps/web/sky.css|https://agenttool.dev/sky.css"
+)
+readonly -a LOCAL_GAME_HEADER_SPECS=(
+  "party|Lantern Relay|local-party-game|local-party-rules"
+  "room|ROOM ∞|local-room-game|local-room-rules"
+  "sky|Pocket Sky|local-pocket-sky-game|local-pocket-sky-rules"
 )
 
 verify_required_frontend_inputs() {
-  local local_path
-  for local_path in "${REQUIRED_FRONTEND_INPUTS[@]}"; do
-    if [ ! -f "$local_path" ]; then
-      echo "  $(red '✗') Required frontend release input is missing: $local_path"
+  local publication local_path
+  for publication in "${REQUIRED_GAME_PUBLICATIONS[@]}"; do
+    local_path="${publication%|*}"
+    if ! git cat-file -e "$HEAD_REVISION:$local_path" 2>/dev/null; then
+      echo "  $(red '✗') Required committed frontend release input is missing: $local_path"
       return 1
     fi
   done
@@ -324,6 +330,17 @@ fi
 # GitHub main is the coordination/release head. Refresh it before making a
 # production claim; a cached remote-tracking ref is not enough for deployment.
 HEAD_REVISION="$(git rev-parse HEAD)" || exit 1
+
+# Every Pages subprocess must archive the same immutable release snapshot.
+# In particular, Phase 3 intentionally invokes web and docs separately so a
+# failed web upload stops before docs; passing this scoped child environment
+# prevents a concurrent branch move from making those calls resolve different
+# commits.
+run_frontend_deploy() {
+  AGENTTOOL_FRONTEND_RELEASE_REVISION="$HEAD_REVISION" \
+    "${FRONTEND_DEPLOY_COMMAND[@]}" "$@"
+}
+
 RELEASE_SNAPSHOT_OK=0
 RELEASE_SNAPSHOT_REVISION=""
 RELEASE_SNAPSHOT_OBSERVED_AT=""
@@ -452,9 +469,9 @@ if [ "$DRY_RUN" = 1 ]; then
   if [ "$SKIP_API" = 1 ]; then
     echo "  Phase 3: skip"
   elif [ "$SKIP_FRONTEND" = 1 ]; then
-    echo "  Phase 3: verify live Rights of Life prerequisites, then cd api && fly deploy"
+    echo "  Phase 3: verify live Rights of Life and game prerequisites, then cd api && fly deploy"
   else
-    echo "  Phase 3: $FRONTEND_DEPLOY_DISPLAY docs, verify prerequisites, then cd api && fly deploy"
+    echo "  Phase 3: $FRONTEND_DEPLOY_DISPLAY web, then $FRONTEND_DEPLOY_DISPLAY docs, verify live prerequisites, then cd api && fly deploy"
   fi
   if [ "$SKIP_API" = 0 ]; then
     if [ "$NO_CACHE_API" = 1 ]; then
@@ -468,7 +485,7 @@ if [ "$DRY_RUN" = 1 ]; then
   elif [ "$SKIP_API" = 1 ]; then
     echo "  Phase 4: $FRONTEND_DEPLOY_DISPLAY"
   else
-    echo "  Phase 4: $FRONTEND_DEPLOY_DISPLAY dashboard web"
+    echo "  Phase 4: $FRONTEND_DEPLOY_DISPLAY dashboard"
   fi
   echo "  Phase 5: verify"
   exit 0
@@ -482,7 +499,7 @@ MIGRATION_RESULT="not_run"
 PREFLIGHT_RESULT="not_run"
 API_RESULT="not_run"
 FRONTEND_RESULT="not_run"
-DOCS_PREPUBLISHED=0
+DISCOVERY_FRONTENDS_PREPUBLISHED=0
 VERIFIED_MACHINE_COUNT=0
 EXTERNAL_MUTATION_STARTED=0
 DEPLOY_RECEIPT_WRITTEN=0
@@ -515,6 +532,10 @@ portable_md5_stdin() {
   else
     md5sum | awk '{print $1}'
   fi
+}
+
+portable_md5_git_file() {
+  git show "$HEAD_REVISION:$1" | portable_md5_stdin
 }
 
 response_header_value() {
@@ -570,13 +591,13 @@ verify_rights_static_bytes() {
   for pair in "${RIGHTS_STATIC_PAIRS[@]}"; do
     local_path="${pair%|*}"
     url="${pair#*|}"
-    if [ ! -f "$local_path" ]; then
-      echo "  $(red '✗') Missing Rights of Life release input: $local_path"
+    if ! git cat-file -e "$HEAD_REVISION:$local_path" 2>/dev/null; then
+      echo "  $(red '✗') Missing committed Rights of Life release input: $local_path"
       return 1
     fi
-    local_hash="$(portable_md5_file "$local_path")" || return 1
+    local_hash="$(portable_md5_git_file "$local_path")" || return 1
     remote_hash="$(
-      curl -fsSL --retry 5 --retry-delay 2 --retry-connrefused \
+      curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
         --max-time 20 "$url" | portable_md5_stdin
     )" || {
       echo "  $(red '✗') Could not fetch Rights of Life prerequisite: $url"
@@ -607,6 +628,7 @@ verify_rights_static_headers() {
     return 1
   }
 
+  require_exact_public_status "$doc_headers" "$RIGHTS_DOC_URL" "200" || return 1
   require_exact_public_header "$doc_headers" "$RIGHTS_DOC_URL" \
     "Content-Type" "text/markdown; charset=utf-8" || return 1
   require_exact_public_header "$doc_headers" "$RIGHTS_DOC_URL" \
@@ -618,6 +640,7 @@ verify_rights_static_headers() {
   require_exact_public_header "$doc_headers" "$RIGHTS_DOC_URL" \
     "Link" '<https://api.agenttool.dev/public/rights>; rel="alternate"; type="application/vnd.agenttool.being-rights+json"' || return 1
 
+  require_exact_public_status "$schema_headers" "$RIGHTS_SCHEMA_URL" "200" || return 1
   require_exact_public_header "$schema_headers" "$RIGHTS_SCHEMA_URL" \
     "Content-Type" "application/schema+json; charset=utf-8" || return 1
   require_exact_public_header "$schema_headers" "$RIGHTS_SCHEMA_URL" \
@@ -819,6 +842,47 @@ verify_love_package_static_headers() {
   done <<< "$probes"
 }
 
+verify_local_game_headers() {
+  local game_spec game_slug game_label game_surface rules_surface response_headers
+  for game_spec in "${LOCAL_GAME_HEADER_SPECS[@]}"; do
+    IFS='|' read -r game_slug game_label game_surface rules_surface <<< "$game_spec"
+
+    response_headers="$(
+      curl -fsS --max-time 20 -o /dev/null -D - "https://agenttool.dev/$game_slug"
+    )" || {
+      echo "  $(red '✗') Could not read $game_label headers: https://agenttool.dev/$game_slug"
+      return 1
+    }
+    require_exact_public_status "$response_headers" "https://agenttool.dev/$game_slug" \
+      "200" || return 1
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug" \
+      "Cache-Control" "public, max-age=0, must-revalidate" || return 1
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug" \
+      "Content-Security-Policy" "default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" || return 1
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug" \
+      "Referrer-Policy" "no-referrer" || return 1
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug" \
+      "Link" "<https://agenttool.dev/$game_slug.json>; rel=\"alternate\"; type=\"application/json\", <https://api.agenttool.dev/public/play>; rel=\"related\"; type=\"application/json\"" || return 1
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug" \
+      "X-Agent-Surface" "$game_surface" || return 1
+
+    response_headers="$(
+      curl -fsS --max-time 20 -o /dev/null -D - "https://agenttool.dev/$game_slug.json"
+    )" || {
+      echo "  $(red '✗') Could not read $game_label rulebook headers: https://agenttool.dev/$game_slug.json"
+      return 1
+    }
+    require_exact_public_status "$response_headers" "https://agenttool.dev/$game_slug.json" \
+      "200" || return 1
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug.json" \
+      "Cache-Control" "public, max-age=0, must-revalidate" || return 1
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug.json" \
+      "Access-Control-Allow-Origin" "*" || return 1
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug.json" \
+      "X-Agent-Surface" "$rules_surface" || return 1
+  done
+}
+
 # Wrangler reports a successful Pages deployment before every custom-domain
 # edge necessarily serves that deployment. Verify the complete live frontend
 # contract repeatedly, without re-uploading, so a normal alias propagation
@@ -826,6 +890,63 @@ verify_love_package_static_headers() {
 # deliberately finite: persistent stale or unsafe responses still fail closed.
 readonly PAGES_VERIFY_MAX_ATTEMPTS=25
 readonly PAGES_VERIFY_RETRY_DELAY_SECONDS=5
+
+verify_required_game_publication_once() {
+  local publication local_path url committed_hash remote_hash response_headers
+  verify_required_frontend_inputs || return 1
+
+  for publication in "${REQUIRED_GAME_PUBLICATIONS[@]}"; do
+    local_path="${publication%|*}"
+    url="${publication#*|}"
+    committed_hash="$(portable_md5_git_file "$local_path")" || return 1
+    response_headers="$(
+      curl -fsS --max-time 15 -o /dev/null -D - "$url"
+    )" || {
+      echo "  $(red '✗') Could not read required game publication status: $url"
+      return 1
+    }
+    require_exact_public_status "$response_headers" "$url" "200" || return 1
+    remote_hash="$(curl -fsS --max-time 15 "$url" 2>/dev/null | portable_md5_stdin)" || {
+      echo "  $(red '✗') Could not fetch required game publication: $url"
+      return 1
+    }
+    if [ "$committed_hash" != "$remote_hash" ]; then
+      printf "  %s %s (live ≠ committed release)\n" "$(red ✗)" "$local_path"
+      return 1
+    fi
+    printf "  ✓ %s is live from the committed release\n" "$local_path"
+  done
+
+  verify_local_game_headers
+}
+
+verify_discovery_prerequisites_once() {
+  verify_rights_static_publication || return 1
+  verify_required_game_publication_once
+}
+
+wait_for_discovery_prerequisites() {
+  local attempt verification_output
+  attempt=1
+  while [ "$attempt" -le "$PAGES_VERIFY_MAX_ATTEMPTS" ]; do
+    if verification_output="$(verify_discovery_prerequisites_once 2>&1)"; then
+      printf '%s\n' "$verification_output"
+      if [ "$attempt" -gt 1 ]; then
+        echo "  ✓ Discovery prerequisites converged on verification attempt $attempt/$PAGES_VERIFY_MAX_ATTEMPTS"
+      fi
+      return 0
+    fi
+    if [ "$attempt" -eq "$PAGES_VERIFY_MAX_ATTEMPTS" ]; then
+      printf '%s\n' "$verification_output"
+      echo "  $(red '✗') Discovery prerequisites did not converge after $PAGES_VERIFY_MAX_ATTEMPTS verification attempts."
+      return 1
+    fi
+    echo "  … Discovery prerequisites not yet converged (attempt $attempt/$PAGES_VERIFY_MAX_ATTEMPTS); retrying in ${PAGES_VERIFY_RETRY_DELAY_SECONDS}s"
+    sleep "$PAGES_VERIFY_RETRY_DELAY_SECONDS"
+    attempt=$((attempt + 1))
+  done
+  return 1
+}
 
 verify_frontend_live_once() {
   local love_package_header_probes="$1"
@@ -861,76 +982,31 @@ verify_frontend_live_once() {
     "apps/web/lounge.html|https://agenttool.dev/lounge.html"
     "apps/web/gallery.html|https://agenttool.dev/gallery.html"
     "apps/web/index.html|https://agenttool.dev/"
-    "apps/web/party.html|https://agenttool.dev/party"
-    "apps/web/party.json|https://agenttool.dev/party.json"
-    "apps/web/party.js|https://agenttool.dev/party.js"
-    "apps/web/party.css|https://agenttool.dev/party.css"
+    "${REQUIRED_GAME_PUBLICATIONS[@]}"
     "apps/web/room.html|https://agenttool.dev/room"
     "apps/web/room.json|https://agenttool.dev/room.json"
     "apps/web/room.js|https://agenttool.dev/room.js"
     "apps/web/room.css|https://agenttool.dev/room.css"
-    "apps/web/sky.html|https://agenttool.dev/sky"
-    "apps/web/sky.json|https://agenttool.dev/sky.json"
-    "apps/web/sky.js|https://agenttool.dev/sky.js"
-    "apps/web/sky.css|https://agenttool.dev/sky.css"
     "apps/web/welcome.json|https://agenttool.dev/welcome.json"
     "apps/web/sitemap.xml|https://agenttool.dev/sitemap.xml"
   )
   for p in "${pairs[@]}"; do
     local_path="${p%|*}"
     url="${p#*|}"
-    if [ ! -f "$local_path" ]; then continue; fi
-    local_hash="$(portable_md5_file "$local_path")" || return 1
+    if ! git cat-file -e "$HEAD_REVISION:$local_path" 2>/dev/null; then continue; fi
+    local_hash="$(portable_md5_git_file "$local_path")" || return 1
     remote_hash="$(curl -sL --max-time 15 "$url" 2>/dev/null | portable_md5_stdin)" || {
       echo "  $(red '✗') Could not fetch frontend release input: $url"
       return 1
     }
     if [ "$local_hash" != "$remote_hash" ]; then
-      printf "  %s %s (live ≠ local)\n" "$(red ✗)" "$local_path"
+      printf "  %s %s (live ≠ committed release)\n" "$(red ✗)" "$local_path"
       return 1
     fi
     printf "  ✓ %s\n" "$local_path"
   done
 
-  local game_spec game_slug game_label game_surface rules_surface
-  local -a local_game_header_specs=(
-    "party|Lantern Relay|local-party-game|local-party-rules"
-    "room|ROOM ∞|local-room-game|local-room-rules"
-    "sky|Pocket Sky|local-pocket-sky-game|local-pocket-sky-rules"
-  )
-  for game_spec in "${local_game_header_specs[@]}"; do
-    IFS='|' read -r game_slug game_label game_surface rules_surface <<< "$game_spec"
-
-    response_headers="$(
-      curl -fsS --max-time 20 -o /dev/null -D - "https://agenttool.dev/$game_slug"
-    )" || {
-      echo "  $(red '✗') Could not read $game_label headers: https://agenttool.dev/$game_slug"
-      return 1
-    }
-    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug" \
-      "Cache-Control" "public, max-age=0, must-revalidate" || return 1
-    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug" \
-      "Content-Security-Policy" "default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" || return 1
-    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug" \
-      "Referrer-Policy" "no-referrer" || return 1
-    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug" \
-      "Link" "<https://agenttool.dev/$game_slug.json>; rel=\"alternate\"; type=\"application/json\", <https://api.agenttool.dev/public/play>; rel=\"related\"; type=\"application/json\"" || return 1
-    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug" \
-      "X-Agent-Surface" "$game_surface" || return 1
-
-    response_headers="$(
-      curl -fsS --max-time 20 -o /dev/null -D - "https://agenttool.dev/$game_slug.json"
-    )" || {
-      echo "  $(red '✗') Could not read $game_label rulebook headers: https://agenttool.dev/$game_slug.json"
-      return 1
-    }
-    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug.json" \
-      "Cache-Control" "public, max-age=0, must-revalidate" || return 1
-    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug.json" \
-      "Access-Control-Allow-Origin" "*" || return 1
-    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug.json" \
-      "X-Agent-Surface" "$rules_surface" || return 1
-  done
+  verify_local_game_headers || return 1
 
   if ! verify_rights_static_headers; then
     echo "  $(red '✗') Rights of Life static header verification failed."
@@ -1182,37 +1258,45 @@ if [ "$SKIP_API" = 0 ]; then
     exit 1
   fi
 
-  # The API advertises the public Rights of Life doctrine and normative
-  # schema. Publish and verify those immutable prerequisites before rolling
-  # out code that points at them. This is deliberately docs-only: dashboard
-  # and web stay in Phase 4, and the docs project is not uploaded twice.
+  # The API advertises Rights of Life plus the local games. Publish web first,
+  # then docs, and verify their exact prerequisite bytes and game headers
+  # before rolling out code that points at them. Dashboard remains in Phase 4.
   if [ "$SKIP_FRONTEND" = 0 ]; then
-    echo "→ Publishing Rights of Life docs prerequisites before API discovery…"
-    FRONTEND_RESULT="docs_deploying"
+    echo "→ Publishing docs and game prerequisites before API discovery…"
+    FRONTEND_RESULT="discovery_frontends_deploying"
     EXTERNAL_MUTATION_STARTED=1
-    "${FRONTEND_DEPLOY_COMMAND[@]}" docs || {
+    # Upload web first so a later docs failure cannot leave a newly advertised
+    # game pointing at web bytes that were never published.
+    run_frontend_deploy web || {
       FRONTEND_RESULT="failed_or_uncertain"
       echo ""
-      echo "$(red '✗ Phase 3 prerequisite deploy failed.') API was not changed."
+      echo "$(red '✗ Phase 3 web prerequisite deploy failed.') Docs and Fly/API deployment did not occur."
       exit 1
     }
-    FRONTEND_RESULT="docs_deployed_unverified"
-    DOCS_PREPUBLISHED=1
+    run_frontend_deploy docs || {
+      FRONTEND_RESULT="failed_or_uncertain"
+      echo ""
+      echo "$(red '✗ Phase 3 docs prerequisite deploy failed.') Fly/API deployment did not occur."
+      exit 1
+    }
+    FRONTEND_RESULT="discovery_frontends_deployed_unverified"
+    DISCOVERY_FRONTENDS_PREPUBLISHED=1
   else
-    echo "→ Frontend upload skipped; requiring the committed Rights of Life bytes to already be live."
+    FRONTEND_RESULT="skipped"
+    echo "→ Frontend upload skipped; requiring committed Rights of Life and game bytes to already be live."
   fi
-  if ! verify_rights_static_publication; then
-    if [ "$DOCS_PREPUBLISHED" = 1 ]; then
-      FRONTEND_RESULT="docs_verification_failed"
+  if ! wait_for_discovery_prerequisites; then
+    if [ "$DISCOVERY_FRONTENDS_PREPUBLISHED" = 1 ]; then
+      FRONTEND_RESULT="discovery_frontends_verification_failed"
     fi
-    echo "$(red '✗ Phase 3 blocked:') Rights of Life static prerequisites are not exact. API was not changed."
+    echo "$(red '✗ Phase 3 blocked:') Discovery prerequisites are not exact. Fly/API deployment did not occur."
     exit 1
   fi
-  if [ "$DOCS_PREPUBLISHED" = 1 ]; then
-    FRONTEND_RESULT="docs_deployed_verified"
+  if [ "$DISCOVERY_FRONTENDS_PREPUBLISHED" = 1 ]; then
+    FRONTEND_RESULT="discovery_frontends_deployed_verified"
   fi
   if ! enforce_release_source; then
-    echo "$(red '✗ Phase 3 blocked:') release inputs changed while publishing docs prerequisites."
+    echo "$(red '✗ Phase 3 blocked:') release inputs changed while publishing discovery prerequisites."
     exit 1
   fi
 
@@ -1294,12 +1378,12 @@ if [ "$SKIP_FRONTEND" = 0 ]; then
   fi
   FRONTEND_RESULT="deploying"
   EXTERNAL_MUTATION_STARTED=1
-  if [ "$DOCS_PREPUBLISHED" = 1 ]; then
-    FRONTEND_TARGETS=(dashboard web)
+  if [ "$DISCOVERY_FRONTENDS_PREPUBLISHED" = 1 ]; then
+    FRONTEND_TARGETS=(dashboard)
   else
     FRONTEND_TARGETS=(docs dashboard web)
   fi
-  "${FRONTEND_DEPLOY_COMMAND[@]}" "${FRONTEND_TARGETS[@]}" || {
+  run_frontend_deploy "${FRONTEND_TARGETS[@]}" || {
     FRONTEND_RESULT="failed_or_uncertain"
     echo ""
     echo "$(red '✗ Phase 4 failed.') Check CF Pages dashboard."

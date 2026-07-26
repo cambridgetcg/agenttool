@@ -1,5 +1,14 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, readlink, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readlink,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -7,9 +16,14 @@ import { pathToFileURL } from "node:url";
 const repoRoot = resolve(import.meta.dir, "../..");
 const cleanup: string[] = [];
 
-async function run(command: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+async function run(
+  command: string[],
+  cwd = repoRoot,
+  env?: Record<string, string>,
+): Promise<{ code: number; stdout: string; stderr: string }> {
   const child = Bun.spawn(command, {
-    cwd: repoRoot,
+    cwd,
+    ...(env ? { env } : {}),
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -86,6 +100,15 @@ describe("frontend deploy input discipline", () => {
     expect(script.indexOf("wrangler whoami")).toBeGreaterThan(
       script.indexOf('elif [[ "$OAUTH_FALLBACK" = 1 ]]'),
     );
+    expect(script).toContain(
+      'PINNED_RELEASE_REVISION="${AGENTTOOL_FRONTEND_RELEASE_REVISION:-}"',
+    );
+    expect(script).toContain(
+      'git rev-parse --verify "${PINNED_RELEASE_REVISION}^{commit}"',
+    );
+    expect(script).toContain(
+      'if [[ "$COMMIT_HASH" != "$PINNED_RELEASE_REVISION" ]]',
+    );
     expect(script).toContain('git archive --format=tar "$COMMIT_HASH" --');
     expect(script).toContain(
       "apps/_shared apps/docs apps/dashboard apps/web docs infra/pages packages/data/schema",
@@ -123,6 +146,107 @@ describe("frontend deploy input discipline", () => {
       .filter((line) => line.includes("heal-love-truths.py") && line.includes("--write"));
     expect(executableWriteCalls).toEqual([]);
   });
+
+  test("archives an orchestrator-pinned commit even when the worktree HEAD differs", async () => {
+    const fixtureRoot = await mkdtemp(join(tmpdir(), "agenttool-pages-pin-"));
+    const fixtureRepo = join(fixtureRoot, "repo");
+    const fakeBin = join(fixtureRoot, "bin");
+    const wranglerLog = join(fixtureRoot, "wrangler.log");
+    cleanup.push(fixtureRoot);
+
+    let result = await run(
+      ["git", "clone", "-q", "--shared", repoRoot, fixtureRepo],
+    );
+    expect(result.code, result.stderr).toBe(0);
+    for (const command of [
+      ["git", "config", "user.name", "Frontend Pin Test"],
+      ["git", "config", "user.email", "frontend-pin@example.invalid"],
+      ["git", "config", "commit.gpgsign", "false"],
+    ]) {
+      result = await run(command, fixtureRepo);
+      expect(result.code, result.stderr).toBe(0);
+    }
+
+    const partyPath = join(fixtureRepo, "apps/web/party.html");
+    await writeFile(partyPath, "pinned frontend fixture A\n");
+    result = await run(["git", "add", "apps/web/party.html"], fixtureRepo);
+    expect(result.code, result.stderr).toBe(0);
+    result = await run(["git", "commit", "-qm", "frontend fixture A"], fixtureRepo);
+    expect(result.code, result.stderr).toBe(0);
+    result = await run(["git", "rev-parse", "HEAD"], fixtureRepo);
+    expect(result.code, result.stderr).toBe(0);
+    const pinnedRevision = result.stdout.trim();
+
+    await writeFile(partyPath, "ambient frontend fixture B\n");
+    result = await run(["git", "add", "apps/web/party.html"], fixtureRepo);
+    expect(result.code, result.stderr).toBe(0);
+    result = await run(["git", "commit", "-qm", "frontend fixture B"], fixtureRepo);
+    expect(result.code, result.stderr).toBe(0);
+    await copyFile(
+      join(repoRoot, "bin/frontend-deploy.sh"),
+      join(fixtureRepo, "bin/frontend-deploy.sh"),
+    );
+    await chmod(join(fixtureRepo, "bin/frontend-deploy.sh"), 0o755);
+
+    await mkdir(fakeBin);
+    await Bun.write(
+      join(fakeBin, "curl"),
+      `#!/usr/bin/env bash
+set -eu
+case "$*" in
+  *user/tokens/verify*) printf '{"success":true}\\n' ;;
+  *pages/projects/*)
+    printf '{"success":true,"result":{"production_branch":"main","deployment_configs":{"production":{"fail_open":false},"preview":{"fail_open":false}}}}\\n'
+    ;;
+  *) exit 2 ;;
+esac
+`,
+    );
+    await Bun.write(
+      join(fakeBin, "npx"),
+      `#!/usr/bin/env bash
+set -eu
+printf '%s\\n' "$*" > "$DEPLOY_TEST_WRANGLER_LOG"
+source_dir=""
+for arg in "$@"; do
+  case "$arg" in */apps/web) source_dir="$arg" ;; esac
+done
+[ -n "$source_dir" ]
+grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_WRANGLER_LOG"
+`,
+    );
+    await Promise.all([
+      chmod(join(fakeBin, "curl"), 0o755),
+      chmod(join(fakeBin, "npx"), 0o755),
+    ]);
+
+    const inheritedEnv = Object.fromEntries(
+      Object.entries(process.env).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string",
+      ),
+    );
+    result = await run(
+      ["bash", "bin/frontend-deploy.sh", "web"],
+      fixtureRepo,
+      {
+        ...inheritedEnv,
+        PATH: `${fakeBin}:${inheritedEnv.PATH ?? "/usr/bin:/bin"}`,
+        CLOUDFLARE_API_TOKEN: "fixture-token",
+        CLOUDFLARE_ACCOUNT_ID: "fixture-account",
+        AGENTTOOL_FRONTEND_RELEASE_REVISION: pinnedRevision,
+        DEPLOY_TEST_WRANGLER_LOG: wranglerLog,
+      },
+    );
+
+    expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain(
+      `Pages input is pinned release commit ${pinnedRevision}`,
+    );
+    const wrangler = await readFile(wranglerLog, "utf8");
+    expect(wrangler).toContain(`--commit-hash=${pinnedRevision}`);
+    expect(wrangler).toContain("pinned frontend fixture A");
+    expect(wrangler).not.toContain("ambient frontend fixture B");
+  }, 15_000);
 
   test("keeps every Pages header file inside the platform rule boundary", async () => {
     for (const app of ["docs", "dashboard", "web"]) {

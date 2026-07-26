@@ -103,19 +103,37 @@ fi
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 
-COMMIT_HASH="$(git rev-parse HEAD 2>/dev/null || true)"
-if [[ -z "$COMMIT_HASH" ]]; then
-  echo "✗ Cannot resolve the source commit for Cloudflare deployment metadata."
-  exit 1
+PINNED_RELEASE_REVISION="${AGENTTOOL_FRONTEND_RELEASE_REVISION:-}"
+if [[ -n "$PINNED_RELEASE_REVISION" ]]; then
+  if [[ ! "$PINNED_RELEASE_REVISION" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]; then
+    echo "✗ AGENTTOOL_FRONTEND_RELEASE_REVISION must be a full lowercase Git object ID."
+    exit 1
+  fi
+  COMMIT_HASH="$(
+    git rev-parse --verify "${PINNED_RELEASE_REVISION}^{commit}" 2>/dev/null || true
+  )"
+  if [[ "$COMMIT_HASH" != "$PINNED_RELEASE_REVISION" ]]; then
+    echo "✗ The pinned frontend release revision is not an available commit: $PINNED_RELEASE_REVISION"
+    exit 1
+  fi
+  RELEASE_INPUT_LABEL="pinned release commit"
+else
+  COMMIT_HASH="$(git rev-parse HEAD 2>/dev/null || true)"
+  if [[ -z "$COMMIT_HASH" ]]; then
+    echo "✗ Cannot resolve the source commit for Cloudflare deployment metadata."
+    exit 1
+  fi
+  RELEASE_INPUT_LABEL="committed HEAD"
 fi
+readonly COMMIT_HASH RELEASE_INPUT_LABEL
 if ! WORKTREE_STATUS="$(git status --porcelain=v1 --untracked-files=all)"; then
   echo "✗ Cannot inspect the working tree before staging frontend bytes."
   exit 1
 fi
 if [[ -n "$WORKTREE_STATUS" ]]; then
-  echo "→ Working-tree changes are excluded; Pages input is committed HEAD $COMMIT_HASH."
+  echo "→ Working-tree changes are excluded; Pages input is $RELEASE_INPUT_LABEL $COMMIT_HASH."
 else
-  echo "→ Pages input is committed HEAD $COMMIT_HASH."
+  echo "→ Pages input is $RELEASE_INPUT_LABEL $COMMIT_HASH."
 fi
 COMMIT_DIRTY=false
 

@@ -38,10 +38,10 @@ A routine-deploy runbook for an established install. Use this when:
    Phase 2 — Pre-flight     hermetic API + package gate
         │
         ▼
-   Phase 3 — API            bin/deploy.sh stages docs, then invokes Fly internally
+   Phase 3 — Discovery/API  publish web, then docs; verify; then Fly
         │
         ▼
-   Phase 4 — Frontends      bin/frontend-deploy.sh
+   Phase 4 — Frontends      publish the remaining dashboard target
         │
         ▼
    Phase 5 — Verify         post-deploy parity + health
@@ -169,20 +169,42 @@ Run `bin/preflight.sh list` to inspect tier classification. Smoke and contracts
 are separate invocations selected by mode. Do not deploy if the default gate
 fails.
 
-## Phase 3 — API deploy
+## Phase 3 — discovery prerequisites + API deploy
 
-**Question:** is the new code in production?
+**Question:** are the surfaces named by the new API live before the new code
+advertises them?
 
 ```bash
-bin/deploy.sh --no-migrate --no-frontend  # stages required bundles, then rolling deploy
+bin/deploy.sh --no-migrate                # coordinated web → docs → verify → Fly → dashboard
+bin/deploy.sh --no-migrate --no-frontend  # API-only; requires exact discovery prerequisites already live
 fly status -a agenttool                   # confirm every machine is on the new release
-fly logs -a agenttool | head -50       # tail for startup errors
+fly logs -a agenttool | head -50          # tail for startup errors
 ```
 
 Do not run bare `cd api && fly deploy` from this repo. The Docker build needs
 the canon and Kingdom bundles that `bin/deploy.sh` stages into the API build
 context. The wrapper removes staging immediately after `fly deploy` returns;
 its `EXIT`/`INT`/`TERM` trap also removes staging if the command is interrupted.
+
+Before Fly, a coordinated release uploads the committed `web` project in its
+own fail-fast step, then uploads `docs`. One bounded convergence gate requires
+direct HTTP 200 responses, exact committed Rights of Life document/schema
+bytes, exact committed Lantern Relay and Pocket Sky HTML/JSON/JS/CSS bytes,
+and the canonical Rights, game, and rulebook headers. Redirects do not satisfy
+the direct-response check. Only then may the API advertise those surfaces.
+The dashboard uploads after Fly. This ordering means a failed web step cannot
+be followed by docs or Fly, while a failed dashboard phase cannot leave API
+discovery pointing at a missing or stale game.
+
+`--no-frontend` skips the Pages upload; it does not bypass this prerequisite.
+An API-only release proceeds only when the committed Rights and game bytes
+plus their direct-response headers are already live. Every byte comparison
+reads from the release commit, not the ambient worktree, because
+`bin/frontend-deploy.sh` also archives the commit. The same bounded retry
+covers normal custom-domain convergence for both docs and games. Failure after
+an earlier migration or Pages upload does not mean production was unchanged;
+the receipt remains conservative about any mutation that may already have
+begun.
 
 `--no-cache-api` is a one-shot recovery option for evidence of a malformed
 Fly image or poisoned remote build cache. It keeps the normal source,
@@ -207,7 +229,7 @@ What "rolling" means: Fly brings up one new machine at a time. If the new machin
 ```
 1. bin/migrate-pending.sh                     # schema first
 2. git push github main                       # release head aligned with prod
-3. bin/deploy.sh --no-migrate --no-frontend  # stages bundles + deploys api
+3. bin/deploy.sh --no-migrate                 # docs/web → verify → api → dashboard
 4. Verify: curl https://api.agenttool.dev/health | jq .build.revision
 ```
 
@@ -243,23 +265,31 @@ commit does not identify every source byte.
 
 ## Phase 4 — Frontend deploy
 
-**Question:** are the three Cloudflare Pages projects current with the release
-commit?
+**Question:** are the remaining Cloudflare Pages projects current with the
+release commit?
 
 ```bash
-bin/deploy.sh --no-migrate --no-api            # normal tracked release, all three
+bin/deploy.sh --no-migrate --no-api            # frontend-only release, all three
 
 # Low-level subset escape hatch (no source gate, verification, or receipt itself)
 bin/frontend-deploy.sh dashboard
 bin/frontend-deploy.sh web docs
 ```
 
-The low-level uploader captures the current commit hash once, then archives
-that exact Git object into a temporary tree before invoking Wrangler. Ambient
-dirty and ignored files are excluded, and a tracked `.env` file is a hard
-refusal, as is a tracked `.dev.vars*` file. Use the orchestrator for normal
-production releases so the GitHub snapshot gate, preflight, sampled parity and
-sensitive-path checks, and receipt surround that upload.
+In the full chain, Phase 3 has already published and verified `docs` and `web`,
+so Phase 4 uploads only `dashboard`. With `--no-api`, Phase 3 is skipped and
+Phase 4 uploads `docs dashboard web` together. Final verification still checks
+the configured frontend parity probes either way.
+
+The orchestrator passes its invocation-start commit to every low-level Pages
+subprocess. The uploader validates that full object ID and archives that exact
+Git commit, so the separate fail-fast `web` and `docs` calls cannot resolve
+different branch tips. A direct low-level invocation instead captures its
+current `HEAD` once. In both modes, ambient dirty and ignored files are
+excluded, and a tracked `.env` file is a hard refusal, as is a tracked
+`.dev.vars*` file. Use the orchestrator for normal production releases so the
+GitHub snapshot gate, preflight, sampled parity and sensitive-path checks, and
+receipt surround that upload.
 
 The archive also includes the canonical `infra/pages/` fence. The uploader
 copies its `_worker.js` and `_routes.json` forms into each project root, so only
@@ -365,7 +395,7 @@ bin/deploy.sh                          # full chain (Phases 0 → 5)
 bin/deploy.sh --survey                 # Phase 0 only — what's drifted?
 bin/deploy.sh --no-migrate             # skip Phase 1 (schema unchanged)
 bin/deploy.sh --no-api                 # skip Phase 3 (only docs/frontends changed)
-bin/deploy.sh --no-frontend            # skip Phase 4 (only api changed)
+bin/deploy.sh --no-frontend            # skip Pages upload; still require live discovery prerequisites
 bin/deploy.sh --no-cache-api           # one-shot recovery: rebuild Fly image without cache
 bin/deploy.sh --skip-preflight         # operator override (NOT recommended)
 bin/deploy.sh --allow-dirty-release    # loud override for a dirty source tree
