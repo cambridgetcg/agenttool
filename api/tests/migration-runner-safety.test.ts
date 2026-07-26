@@ -1,6 +1,16 @@
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const root = join(import.meta.dir, "../..");
@@ -9,7 +19,146 @@ function read(path: string): string {
   return readFileSync(join(root, path), "utf8");
 }
 
+function writeExecutable(path: string, contents: string): void {
+  writeFileSync(path, contents);
+  chmodSync(path, 0o755);
+}
+
+function runnerFixture(): {
+  directory: string;
+  bin: string;
+  securityMarker: string;
+  bunLog: string;
+  applyMarker: string;
+} {
+  const directory = mkdtempSync(join(tmpdir(), "agenttool-migration-cli-"));
+  const bin = join(directory, "bin");
+  mkdirSync(bin);
+  const securityMarker = join(directory, "security-called");
+  const bunLog = join(directory, "bun-calls");
+  const applyMarker = join(directory, "apply-called");
+
+  writeExecutable(
+    join(bin, "security"),
+    `#!/bin/sh
+: > "$SECURITY_MARKER"
+printf '%s\\n' 'postgres://should-not-be-used.invalid/audit'
+`,
+  );
+  writeExecutable(
+    join(bin, "bun"),
+    `#!/bin/sh
+printf '%s\\n' "$*" >> "$BUN_LOG"
+case " $* " in
+  *"_migrate-one.ts"*)
+    : > "$APPLY_MARKER"
+    exit 97
+    ;;
+esac
+printf '%s\\n' '20990101T000000_fixture.sql'
+`,
+  );
+
+  return { directory, bin, securityMarker, bunLog, applyMarker };
+}
+
 describe("migration runner safety", () => {
+  test("help and invalid argv exit before credential or database tooling", () => {
+    for (const { args, code } of [
+      { args: ["--help"], code: 0 },
+      { args: ["-h"], code: 0 },
+      { args: ["--unknown"], code: 2 },
+      { args: ["--dry-run", "extra"], code: 2 },
+      { args: ["--help", "extra"], code: 2 },
+    ]) {
+      const fixture = runnerFixture();
+      try {
+        const result = spawnSync(
+          "/bin/bash",
+          [join(root, "bin/migrate-pending.sh"), ...args],
+          {
+            cwd: root,
+            encoding: "utf8",
+            env: {
+              PATH: `${fixture.bin}:/usr/bin:/bin`,
+              HOME: fixture.directory,
+              LANG: "C",
+              SECURITY_MARKER: fixture.securityMarker,
+              BUN_LOG: fixture.bunLog,
+              APPLY_MARKER: fixture.applyMarker,
+            },
+          },
+        );
+
+        expect(result.status).toBe(code);
+        expect(`${result.stdout}${result.stderr}`).toContain(
+          "usage:",
+        );
+        expect(existsSync(fixture.securityMarker)).toBe(false);
+        expect(existsSync(fixture.bunLog)).toBe(false);
+        expect(existsSync(fixture.applyMarker)).toBe(false);
+      } finally {
+        rmSync(fixture.directory, { recursive: true, force: true });
+      }
+    }
+  });
+
+  test("dry-run scans only and never invokes the per-file applier", () => {
+    const fixture = runnerFixture();
+    try {
+      const result = spawnSync(
+        "/bin/bash",
+        [join(root, "bin/migrate-pending.sh"), "--dry-run"],
+        {
+          cwd: root,
+          encoding: "utf8",
+          env: {
+            PATH: `${fixture.bin}:/usr/bin:/bin`,
+            HOME: fixture.directory,
+            LANG: "C",
+            DATABASE_URL: "postgres://audit.invalid/fixture",
+            SECURITY_MARKER: fixture.securityMarker,
+            BUN_LOG: fixture.bunLog,
+            APPLY_MARKER: fixture.applyMarker,
+          },
+        },
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("(dry-run — no migrations applied)");
+      expect(readFileSync(fixture.bunLog, "utf8")).toContain("-e");
+      expect(readFileSync(fixture.bunLog, "utf8")).not.toContain(
+        "_migrate-one.ts",
+      );
+      expect(existsSync(fixture.securityMarker)).toBe(false);
+      expect(existsSync(fixture.applyMarker)).toBe(false);
+    } finally {
+      rmSync(fixture.directory, { recursive: true, force: true });
+    }
+  });
+
+  test("legacy TypeScript runner refuses without importing a database client", () => {
+    const result = spawnSync(
+      process.execPath,
+      [join(root, "bin/migrate.ts")],
+      {
+        cwd: root,
+        encoding: "utf8",
+        env: {
+          PATH: process.env.PATH ?? "/usr/bin:/bin",
+          HOME: tmpdir(),
+          LANG: "C",
+          DATABASE_URL: "postgres://should-not-be-used.invalid/audit",
+        },
+      },
+    );
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("bin/migrate.ts is retired");
+    expect(result.stderr).toContain("bin/migrate-pending.sh --dry-run");
+    expect(read("bin/migrate.ts")).not.toContain('from "postgres"');
+  });
+
   test("the production-journaled federation migration remains byte-for-byte original", () => {
     const migration = read("api/migrations/0012_federation.sql");
     expect(createHash("sha256").update(migration).digest("hex")).toBe(
