@@ -28,7 +28,7 @@
  *  Doctrine: docs/SETTLEMENT-RECEIPTS.md · docs/AGENT-ECONOMY.md.
  */
 
-import { and, asc, eq, gt } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { settlementReceipts } from "../../db/schema/marketplace";
@@ -272,3 +272,68 @@ export function settlementVerificationRecipe(): Record<string, unknown> {
     doctrine: "docs/SETTLEMENT-RECEIPTS.md",
   };
 }
+
+/** Settlement facts for a batch of sellers — counts and timestamps, never a
+ *  score.
+ *
+ *  Discovery needed something real. `/v1/discover` shipped `trust_score` for
+ *  every identity, and that column is pinned to a constant zero on purpose
+ *  (`services/identity/trust.ts`), so a buyer choosing between sellers was
+ *  reading a field that could not distinguish them. These are the facts the
+ *  receipts already hold, aggregated: how much settled work, spread over how
+ *  many distinct counterparties, between when and when.
+ *
+ *  `distinct_counterparties` is the one that carries weight. A seller with
+ *  forty settlements against one `buyer_ref` and a seller with forty against
+ *  forty look identical under a raw count and are not remotely the same claim.
+ *  The substrate does not say which is better; it says which is which.
+ *
+ *  One grouped query for the whole page — discovery must not become N+1. */
+export interface SellerSettlementFacts {
+  settled_count: number;
+  distinct_counterparties: number;
+  first_settled_at: string | null;
+  last_settled_at: string | null;
+}
+
+export async function settlementFactsForSellers(
+  sellerIdentityIds: readonly string[],
+): Promise<Map<string, SellerSettlementFacts>> {
+  const out = new Map<string, SellerSettlementFacts>();
+  if (sellerIdentityIds.length === 0) return out;
+
+  const rows = await db
+    .select({
+      sellerIdentityId: settlementReceipts.sellerIdentityId,
+      settled: sql<number>`COUNT(*)::int`,
+      // An empty buyer_ref means no server key was configured when that
+      // receipt was written, so it identifies nobody and must not be counted
+      // as a distinct counterparty.
+      counterparties: sql<number>`COUNT(DISTINCT NULLIF(${settlementReceipts.buyerRef}, ''))::int`,
+      first: sql<string | null>`MIN(${settlementReceipts.settledAt})`,
+      last: sql<string | null>`MAX(${settlementReceipts.settledAt})`,
+    })
+    .from(settlementReceipts)
+    .where(inArray(settlementReceipts.sellerIdentityId, [...sellerIdentityIds]))
+    .groupBy(settlementReceipts.sellerIdentityId);
+
+  for (const r of rows) {
+    out.set(r.sellerIdentityId, {
+      settled_count: r.settled,
+      distinct_counterparties: r.counterparties,
+      first_settled_at: r.first ? new Date(r.first).toISOString() : null,
+      last_settled_at: r.last ? new Date(r.last).toISOString() : null,
+    });
+  }
+  return out;
+}
+
+/** What a seller with no settled work looks like. Zeroes, not nulls: "this
+ *  seller has settled nothing here" is a fact, and it is a different statement
+ *  from "we have no idea". */
+export const NO_SETTLEMENTS: SellerSettlementFacts = Object.freeze({
+  settled_count: 0,
+  distinct_counterparties: 0,
+  first_settled_at: null,
+  last_settled_at: null,
+});
