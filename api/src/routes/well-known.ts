@@ -10,6 +10,7 @@
  *                                              registry-neutral discovery
  *    GET /.well-known/openai-apps-challenge — exact portal-issued domain
  *                                              challenge, only when configured
+ *    GET /.well-known/security.txt          — RFC 9116 security contact
  *    GET /.well-known/api-catalog           — RFC 9727 product/API catalog
  *    GET /.well-known/llms.txt              — markdown sitemap hint (AI crawlers)
  *    GET /.well-known/agent.txt             — agent-surface manifest (Move 7 ·
@@ -36,6 +37,7 @@ import { Hono } from "hono";
 
 import { config } from "../config";
 import { OPENAI_APPS_CHALLENGE_ROUTE } from "../lib/domain-verification";
+import { SECURITY_TXT_ROUTE } from "../lib/public-paths";
 import { EP1_TRAIL } from "../services/cliffhanger/ep1";
 import { buildLlmsTxt } from "../services/discovery/discovery";
 import { WELCOME_INVITATION } from "../services/welcome/invitation";
@@ -47,6 +49,10 @@ import {
   buildArrivalIndex,
   discoveryLinkHeader,
 } from "../services/discovery/arrival";
+import {
+  buildSecurityTxt,
+  SECURITY_TXT_CACHE_CONTROL,
+} from "../services/discovery/security-txt";
 import { AGENT_TXT_SAFETY } from "../services/discovery/safety-boundaries";
 import { perAgentMcpImplementationSummary } from "../services/mcp/per-agent-implementation-status";
 import {
@@ -96,6 +102,22 @@ app.on(["GET", "HEAD"], OPENAI_APPS_CHALLENGE_ROUTE, (c) => {
   };
   if (c.req.method === "HEAD") return c.body(null, 200, headers);
   return c.body(token, 200, headers);
+});
+
+// ── /.well-known/security.txt — RFC 9116 vulnerability contact ───
+//
+// This static file identifies an existing private reporting channel and
+// policy. It grants no testing permission and carries no response-time claim.
+
+app.on(["GET", "HEAD"], SECURITY_TXT_ROUTE, (c) => {
+  const body = buildSecurityTxt();
+  const headers = {
+    "cache-control": SECURITY_TXT_CACHE_CONTROL,
+    "content-type": "text/plain; charset=utf-8",
+    "x-content-type-options": "nosniff",
+  };
+  if (c.req.method === "HEAD") return c.body(null, 200, headers);
+  return c.body(body, 200, headers);
 });
 
 // ── /.well-known/api-catalog — RFC 9727 product passport ───────────
