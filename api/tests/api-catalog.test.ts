@@ -41,14 +41,15 @@ function targets(context: ApiCatalogLinkContext): ApiCatalogLinkTarget[] {
 }
 
 describe("RFC 9727 product passport document", () => {
-  test("is Linkset JSON with one catalog membership context and six products", () => {
+  test("is Linkset JSON with one catalog membership context and seven products", () => {
     const document = buildApiCatalog(API, DOCS);
     expect(Object.keys(document)).toEqual(["linkset"]);
-    expect(document.linkset).toHaveLength(7);
+    expect(document.linkset).toHaveLength(8);
 
     const membership = document.linkset[0]!;
     expect(membership.anchor).toBe(`${API}/.well-known/api-catalog`);
     expect(membership.item?.map((item) => item.href)).toEqual([
+      `${API}/v1/mcp/canon`,
       `${API}/v1/scrape`,
       `${API}/v1/document`,
       `${API}/public/listings`,
@@ -76,6 +77,49 @@ describe("RFC 9727 product passport document", () => {
       /canonical exact three-road.*no authority.*no follow-up/i,
     );
     expect(membership.status?.[0]?.href).toBe(`${API}/health`);
+  });
+
+  test("describes public canon MCP without inventing GET, payment, or authority", () => {
+    const document = buildApiCatalog(API, DOCS);
+    const membership = document.linkset[0]!;
+    const item = membership.item?.find(
+      (candidate) => candidate.href === `${API}/v1/mcp/canon`,
+    );
+    const context = document.linkset.find(
+      (candidate) => candidate.anchor === `${API}/v1/mcp/canon`,
+    );
+
+    expect(item).toEqual({
+      href: `${API}/v1/mcp/canon`,
+      title:
+        "Public canon MCP — Streamable HTTP POST; no authentication; exactly two read-only tools: search and fetch",
+    });
+    expect(context?.["service-desc"]).toBeUndefined();
+    expect(context?.["service-doc"]).toEqual([
+      {
+        href: `${DOCS}/AGENT-DISCOVERY.md`,
+        type: "text/markdown",
+        title:
+          "Public canon MCP connection, tool, storage, and authority boundary",
+      },
+    ]);
+    expect(context?.["service-meta"]).toEqual([
+      {
+        href: `${API}/.well-known/mcp/server-card.json`,
+        type: "application/json",
+        title:
+          "Experimental AgentTool MCP locator; not standardized discovery and grants no authority",
+      },
+    ]);
+    expect(context?.status?.[0]?.href).toBe(`${API}/health`);
+    expect(context?.payment).toBeUndefined();
+
+    const serialized = JSON.stringify({ item, context });
+    expect(serialized).not.toMatch(/\bGET\b/);
+    expect(serialized).toMatch(/two read-only tools: search and fetch/i);
+    expect(serialized).toMatch(/not standardized discovery/i);
+    expect(serialized).toMatch(/grants no authority/i);
+    expect(serialized).not.toMatch(/OpenAI|Anthropic|provider/i);
   });
 
   test("uses only registered relations and absolute credential-free HTTPS URLs", () => {
