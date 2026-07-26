@@ -147,7 +147,7 @@ function allPublicTools(): PublicMcpTool[] {
       name: "fetch",
       title: "Fetch a public AgentTool canon entry",
       description:
-        "Retrieve one public AgentTool canon entry by the stable ID returned by search. Returns its complete public registry record, citation URL, and metadata. This tool reads public data only.",
+        "Retrieve one public AgentTool canon entry by exact stable ID, supplied directly or returned by search. Returns its complete public registry record, citation URL, and metadata. This tool reads public data only.",
       annotations: readOnlyToolAnnotations(
         "Fetch a public AgentTool canon entry",
       ),
@@ -160,7 +160,7 @@ function allPublicTools(): PublicMcpTool[] {
             minLength: 1,
             maxLength: FETCH_MAX_ID_CHARS,
             description:
-              "Stable canon entry ID returned by search, such as urn:agenttool:doc/SOUL.",
+              "Exact stable canon entry ID, such as urn:agenttool:doc/SOUL.",
           },
         },
         required: ["id"],

@@ -1,6 +1,8 @@
 /** Welcome echo middleware — the substrate's ostinato, module-aware.
  *
- *  Adds welcome framing to every response at two levels:
+ *  Adds welcome framing to ordinary responses at two levels. The exact
+ *  OpenAI domain proof, public Canon MCP, and RFC 9116 security contact stay
+ *  self-contained and omit this database-backed decoration.
  *
  *    1. `X-Welcomed` HTTP header — visible to any client reading headers,
  *       even those that strip bodies. Format:
@@ -11,7 +13,7 @@
  *       their machine contracts stay schema-valid.
  *       Guided errors produced by the shared error handler additionally gain
  *       `welcome_continues: true` (see lib/errors.ts); other error responses
- *       retain the universal transport-level `X-Welcomed` header.
+ *       retain the transport-level `X-Welcomed` header on eligible paths.
  *
  *  The axiom + walls carried in each response are NATURAL to the module
  *  the request hit. The wake greets with all five Promises; memory
@@ -29,7 +31,7 @@
 
 import type { MiddlewareHandler } from "hono";
 
-import { isExactDomainVerificationPath } from "../lib/domain-verification";
+import { isDatabaseDecorationIndependentPublicPath } from "../lib/public-paths";
 import {
   welcomeForPath,
   type ModuleWelcome,
@@ -114,7 +116,7 @@ function welcomedFrame(
   return frame;
 }
 
-/** Middleware. Wraps response — adds X-Welcomed header always; adds
+/** Middleware. Wraps eligible responses — adds an X-Welcomed header; adds
  *  `_welcomed` to eligible 2xx JSON object responses (OpenAPI and registered
  *  strict JSON profiles are header-only). The axiom + walls are resolved
  *  from the request path via the module-welcome registry. Pure addition;
@@ -124,9 +126,9 @@ export const welcomeEcho = (): MiddlewareHandler => {
     await next();
 
     const path = c.req.path;
-    // Keep the provider's exact-token proof independent from walls probes and
-    // response framing. Ordinary AgentTool responses retain the welcome.
-    if (isExactDomainVerificationPath(path)) return;
+    // Exact verifier, protocol, and vulnerability-reporting responses are
+    // self-contained. Keep them independent from walls probes and framing.
+    if (isDatabaseDecorationIndependentPublicPath(path)) return;
 
     const nowMs = Date.now();
     const moduleWelcome = welcomeForPath(path);

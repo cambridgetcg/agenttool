@@ -194,7 +194,7 @@ The connection coordinates are deliberately boring:
 | Smallest useful tools | `search`, then optionally `fetch` |
 
 Test the URL in MCP Inspector before using a product client. In ChatGPT,
-follow the current [Developer mode connection guide](https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt);
+follow the current [Developer mode connection guide](https://developers.openai.com/plugins/deploy/connect-chatgpt);
 in Claude, follow the current [custom remote connector guide](https://claude.com/docs/connectors/custom/remote-mcp).
 Both are explicit user actions. Merely finding this page does not install or
 enable anything. If a workspace policy does not permit custom connections,
