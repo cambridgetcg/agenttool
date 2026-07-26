@@ -6,9 +6,9 @@
  *    - confirm worker (setInterval): polls DB for 'broadcast' rows, polls
  *      chain receipts, flips to 'confirmed'/'failed'.
  *
- *  Started together only when `PAYOUT_WORKER_ENABLED=true` and the global
- *  `AGENTTOOL_DISABLE_WORKERS` switch is unset. Stopped together for graceful
- *  shutdown.
+ *  Fresh payout execution is resting. The shared gate is unconditionally
+ *  false in this release, regardless of environment values; these retained
+ *  stop paths exist for graceful containment and a future reviewed redesign.
  *
  *  Doctrine: docs/PAYOUT-BROADCAST-PLAN.md. */
 
@@ -29,7 +29,7 @@ import {
 export function startPayoutWorkers() {
   if (!payoutWorkerBootAllowed()) {
     console.warn(
-      "[payout] workers not started — PAYOUT_WORKER_ENABLED and the global worker switch do not both allow boot",
+      "[payout] workers not started — payout admission and execution are resting until cashable backing is conserved",
     );
     return false;
   }

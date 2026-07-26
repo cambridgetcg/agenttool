@@ -152,8 +152,8 @@ describe("daily payout total boundary", () => {
   });
 });
 
-describe("requestPayout serialization seam", () => {
-  test("locks the wallet before the authorizing policy decision and debit", () => {
+describe("requestPayout resting seam", () => {
+  test("retained advisory policy cannot authorize a fresh debit", () => {
     const source = readFileSync(
       new URL("../src/services/economy/crypto/index.ts", import.meta.url),
       "utf8",
@@ -163,13 +163,14 @@ describe("requestPayout serialization seam", () => {
     const request = source.slice(requestStart, requestEnd);
 
     const transaction = request.indexOf("database.transaction");
-    const walletLock = request.indexOf('.for("update")');
-    const policyDecision = request.indexOf("evaluatePayoutPolicy");
-    const debit = request.indexOf(".update(wallets)");
+    const replay = request.indexOf("replayed: true");
+    const resting = request.indexOf("PAYOUT_ADMISSION_RESTING_ERROR");
 
     expect(transaction).toBeGreaterThan(-1);
-    expect(walletLock).toBeGreaterThan(transaction);
-    expect(policyDecision).toBeGreaterThan(walletLock);
-    expect(debit).toBeGreaterThan(policyDecision);
+    expect(replay).toBeGreaterThan(transaction);
+    expect(resting).toBeGreaterThan(replay);
+    expect(request).not.toContain("evaluatePayoutPolicy");
+    expect(request).not.toContain(".update(wallets)");
+    expect(request).not.toContain(".insert(cryptoPayouts)");
   });
 });

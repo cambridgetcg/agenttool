@@ -247,19 +247,32 @@ Direct Upload keeps deployment intentional: GitHub is not wired to a Pages deplo
 ```
 app = "agenttool"
 primary_region = "lhr"       # London
-regions = lhr(2) + cdg(1)    # 3 machines total · multi-region HA + jurisdictional hedge
+app = lhr(2 started) + cdg(1 started)
+thinker = lhr(2 stopped)     # 5 Machines total
 ```
 
-Single Bun + Hono monolith in `api/`. The `api/fly.toml` describes the per-machine runtime (port, healthcheck, env). Region count is **not** in `fly.toml` — it's controlled imperatively via `fly scale count <N> --region <code>` and held in Fly's machine registry. To inspect current shape: `fly scale show -a agenttool`.
+Single Bun + Hono monolith in `api/`. The `api/fly.toml` describes the
+per-machine runtime (port, healthcheck, env) and pins process-specific VM
+defaults: `app` is shared 1 vCPU / 1 GB; `thinker` is shared 1 vCPU / 256 MB.
+Region count and stopped/started state are **not** in `fly.toml`—they are held
+in Fly's machine registry. To inspect current shape, use both
+`fly scale show -a agenttool` and `fly machine list -a agenttool --json`.
 
 ### Region shape
 
 | Region | Count | Role | Notes |
 |---|---|---|---|
-| `lhr` (London) | 2 | Primary, always-on | Zero-downtime rolling deploys; HA within UK jurisdiction |
-| `cdg` (Paris) | 1 | Secondary, cross-jurisdictional hedge | EU jurisdiction (Schrems posture, CNIL); inland (no submarine cable exposure); hardened CRITIS regime; ~15-20ms to Supabase London (`eu-west-2`) |
+| `lhr` (London) | 2 started `app` + 2 stopped `thinker` | Primary API capacity plus dormant thinker shape | Zero-downtime rolling API capacity within UK jurisdiction; stopped thinkers do not execute work |
+| `cdg` (Paris) | 1 started `app` | Secondary API hedge | EU jurisdiction (Schrems posture, CNIL); inland (no submarine cable exposure); hardened CRITIS regime; ~15-20ms to Supabase London (`eu-west-2`) |
 
-Workers (BullMQ browse + payout broadcast + payout confirm-tick) are multi-machine safe — see `api/src/workers/payout/confirm-worker.ts:5` for the explicit "multi-instance safe via DB CAS" docstring; BullMQ handles its own consumer-side locks for the queues. Three machines = three concurrent consumers; the platform is designed to run that way.
+The current started `app` Machines carry `AGENTTOOL_DISABLE_WORKERS=1`, so
+they serve HTTP but do not boot the co-located worker set. The two `thinker`
+Machines are stopped. This is an operational state, not a guarantee supplied
+by `fly.toml`; the maintenance restoration path below proves the app switch
+silently and refuses success if a thinker is started at final verification.
+The dedicated thinker entrypoint checks the same switch before lazily importing
+the trusted-runtime manager, so a transient maintenance-seeded thinker rests
+without constructing worker or database dependencies.
 
 Resize: `fly scale count <N> --region <code> -a agenttool`. Lowering `cdg` to 0 retreats to single-region without redeploy; raising `lhr` to 3 doubles primary-region capacity. `min_machines_running = 1` in `fly.toml` is a *per-region* floor — Fly ensures each region with declared machines keeps at least one alive even during deploys.
 
@@ -276,7 +289,29 @@ Fly streams the build and rolls one machine at a time. As soon as `fly deploy`
 returns, the wrapper removes the temporary staging tree; an `EXIT`, `INT`, or
 `TERM` trap also removes it on interruption. Phase 5 then requires both
 `build.revision` and `build.dirty` from `GET /health`, plus the corresponding
-environment values on every Fly machine, to equal the intended source labels.
+image-embedded values on every started Fly machine, to equal the intended
+source labels. The SSH checks use silent `test` expressions and do not copy
+environment values into the deploy transcript.
+
+After an exclusive migration cutover has destroyed the fleet and a fresh
+`bin/migrate-pending.sh --dry-run` is empty, use only the explicit reviewed
+restoration:
+
+```bash
+bin/deploy.sh --maintenance-from-zero --no-migrate --no-frontend
+```
+
+That mode requires a clean exact GitHub `main` with no source overrides and
+checks for a literal empty Machine inventory twice before Fly mutation. It
+deploys with immediate HA into `lhr`, restores `app=1` in `cdg`, and requires
+the exact five-Machine process/region/VM/state shape. All five must share one
+image digest. Silent SSH tests prove revision/dirty on every started Machine
+and the workers-off switch on every started Machine; the started thinker is
+then stopped with the configured `SIGTERM` grace period. The wrapper repeats the
+final shape/digest and app-source checks before it can write success. It does
+not reopen upstream admission, restore an old image, or repair a partial Fly
+operation automatically; any uncertainty remains non-zero with admission
+closed.
 
 The Docker base is pinned to Bun 1.3.5 by tag and registry digest. Update both
 together, deliberately, after the hermetic gate passes. The pin and source
@@ -296,7 +331,7 @@ Every successful non-dry-run chain writes an atomic, mode-0600 receipt below
 `${XDG_STATE_HOME:-$HOME/.local/state}/agenttool/deploy-receipts/`. If a
 migration, Fly rollout, or Pages upload may have begun and the chain later
 returns non-zero or receives caught `INT`/`TERM`, the exit trap attempts a
-`failed_or_uncertain` receipt. The fixed v2 shape records the source revision
+`failed_or_uncertain` receipt. The fixed v3 shape records the source revision
 and dirty bit, the invocation-start release-head snapshot, explicit overrides,
 phase outcomes, exit status, and verified machine count—never credentials,
 ambient environment values, or command output. `SIGKILL`, host loss, or an

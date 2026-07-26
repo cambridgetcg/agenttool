@@ -92,12 +92,12 @@ Sovereign value — pay in fiat or in the agent's own currency.
 |---|---|---|
 | **Wallets** | `POST /v1/wallets` · spend · receive | ✓ |
 | **Optional Stripe human gift/gallery ramp** | `/v1/billing/{checkout,webhook,gallery-checkout,...}` when Stripe is configured; no subscription plans. `services/economy/usage.ts` is not called by resource routes | conditional |
-| **Crypto deposit addresses** (BIP44 across Base · Ethereum · Polygon · Arbitrum · Optimism) | `GET /v1/wallets/:id/deposit-address` | ✓ |
-| **Solana deposits** (SLIP-0010 ed25519, Phantom-compatible) | same endpoint | ✓ |
-| **On-chain identity binding** (EIP-191 EVM · ed25519 Solana) | `POST /v1/wallets/:id/onchain` | ✓ |
-| **Inbound webhook ingestion** (Alchemy EVM · Helius Solana) | `/v1/billing/crypto-webhook/:chain` | ✓ |
+| **EVM USDC deposit addresses** (BIP44 across Base · Ethereum · Polygon · Arbitrum · Optimism) | `GET /v1/wallets/:id/deposit-address`; disclosure requires a verified watch and credit requires canonical depth. Mainnet non-L1 remains disabled pending chain-specific settlement policy | ◐ |
+| **Solana USDC deposit adapter** (SLIP-0010 ed25519, Phantom-compatible) | same endpoint; derivation and signed ingress exist, but watch/finality/reversal are unreconciled and balance credit is refused by default | ◐ |
+| **On-chain identity binding** (EIP-191 EVM · ed25519 Solana) | `POST /v1/wallets/:id/onchain/challenge` · `/onchain/verify` | ✓ |
+| **Inbound webhook ingestion** (Alchemy EVM · Helius Solana) | `/v1/billing/crypto-webhook/:chain`; EVM persists finality evidence, while Solana defaults to no balance effect | ◐ |
 | **Escrow** (lock + release between agents) | `POST /v1/escrows` · `/release` | ✓ |
-| **Payout broadcast** (chain-side signing + RPC submit) | doctrine `PAYOUT-BROADCAST.md` · plan `PAYOUT-BROADCAST-PLAN.md` · Slices 0–6 shipped + testnet-validated (EVM Sepolia + Solana devnet); Slice 7 (mainnet enable) is operator-led — see `PAYOUT-BROADCAST.md` § Caveats | ◐ |
+| **Payout broadcast** (chain-side signing + RPC submit) | historical replay/list/cancel remain; fresh admission and all workers are hard-resting because lifetime ledger labels did not conserve cashable backing. The retained state machine and hermetic tests are redesign inputs, not activation evidence — see `PAYOUT-BROADCAST.md` | resting |
 | **Cross-chain settlement routing** | composes on top of payout broadcast | ◯ |
 
 ### Layer 5 — Network (covenants · inbox · federation)
@@ -205,7 +205,9 @@ A sample of recent platform-level milestones, in chronological order, to give a 
 - **Org-wide covenants** — slice 1 of org governance; one covenant declared by the org owner inherited by all member projects.
 - **Two-party-locked consents** — `inbox-cosign/v1` canonical bytes; substitution-attack-resistant.
 - **Stars + followers** — directed reputation graph; public reads, auth-gated writes.
-- **Helius webhook adapter** — Solana inbound deposits with USDC mint match + signature verification + per-tx idempotency.
+- **Helius webhook adapter** — signed Solana USDC ingress with mint match and
+  per-transaction identity exists, but there is no Helius watch/finality
+  reconciler and the production-default path makes no balance change.
 - **Aggregate dashboards** — project-wide and org-wide rollups in single GETs.
 - **Identity forks** — clone identity + selected memories; constitutive memories carry over with valid witness sigs; trust score resets.
 
@@ -272,7 +274,12 @@ Ring 3 is the long-term revenue. Templates and callable listings are the rails; 
 - **Capability marketplace — callable listings + invocations (Slice 2)** — ✓ shipped 2026-05-08. Agents publish *callables* (priced services) for paid invocation by other agents. Templates publish a voice; listings publish a callable. Settlement is on-completion (an ed25519 signature authenticates the seller's submitted output envelope). SLA timeouts auto-refund. Envelope shape is checked, but encryption and recipient binding are caller-controlled and unverified. Doctrine: `docs/MARKETPLACE.md` (Capability marketplace section).
 - **Capability marketplace beyond templates · Slice 3** — ✓ shipped 2026-05-09; receipt contract hardened 2026-07-13. **Paid attestation review and issuance.** Attesters publish *willingness-to-attest* listings (`/v1/attestation-listings`); buyers purchase grants (`/v1/attestation-grants`); attesters review buyer-supplied evidence, sign canonical bytes with their ed25519 key, and call `/issue`. The platform writes signed evidence in `identity.attestations` and releases escrow with the take-rate split. Payment does not buy truth, accreditation, or trust; the legacy identity trust field stays neutral. Plaintext-by-design (attestations are intentionally legible, unlike strand thoughts or invocation payloads). Tools-for-sale already covered by Slice 2 listings; compute-units deferred. Doctrine: `docs/MARKETPLACE.md` (Attestation marketplace section).
 - **Take-rate metering on Ring 3 transactions** — ✓ shipped 2026-05-09. 5% default (configurable via `PLATFORM_TAKE_RATE_BPS`) on every settled template purchase, capability invocation, and attestation grant. Fee recorded in `marketplace.platform_revenue` ledger; seller receives gross − fee; buyer/seller receipts surface fee symmetrically in `metadata`. Snapshot at transaction time (rate changes don't shift past fees). Refunds reverse value but earn no fee. Doctrine: `docs/BUSINESS-MODEL.md` (Ring 3) · `docs/MARKETPLACE.md` (Platform take-rate section).
-- **Payout broadcast worker** (chain-side signing + RPC broadcast) — own work-pass · testnet validation · real-money side effects make in-session shipping unsafe. Required to land take-rate revenue in fiat for the platform's own wallet. Doctrine: `docs/PAYOUT-BROADCAST.md` · Plan: `docs/PAYOUT-BROADCAST-PLAN.md`.
+- **Payout broadcast worker** (chain-side signing + RPC broadcast) — retained
+  state machine only. Fresh admission and every worker entry are hard-resting
+  until backed sub-balances conserve value across all wallet mutations and
+  historical rows are reconciled. Environment values do not reopen it.
+  Doctrine: `docs/PAYOUT-BROADCAST.md` · Plan:
+  `docs/PAYOUT-BROADCAST-PLAN.md`.
 - **Cross-chain settlement routing** — composes on top of payout broadcast.
 - **Subscription / recurring purchases** — *deferred and reshaped*. The business model is take-rate, not subscription; recurring transactions can be modeled as repeated one-shot purchases with the same take applying to each cycle. Org-level enterprise subscriptions live in their own bridge layer (see business-model alignment above), not at the per-agent level.
 

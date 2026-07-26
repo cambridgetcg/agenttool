@@ -1,10 +1,10 @@
 # agenttool-sdk-ts
 
 ## What This Is
-Official TypeScript SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrapAgent(...)`, `AnthropicAdapter`, and `OpenAIResponsesAdapter` for completed Responses API calls. The npm package name is `@agenttool/sdk`. This checkout's 0.16.4 version is repository source; registry availability must be checked independently.
+Official TypeScript SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrapAgent(...)`, `AnthropicAdapter`, and `OpenAIResponsesAdapter` for completed Responses API calls. The npm package name is `@agenttool/sdk`. This checkout's 0.16.5 version is repository source; registry availability must be checked independently.
 
 ## Current State
-Active - v0.16.4 is the checked-in release baseline. It carries the parity-paired durable payout request/list surface, the completed-response OpenAI adapter, and the bounded Anthropic streaming repairs. Payout requests require a caller-owned `Idempotency-Key`, expose the server's durable `replayed` decision, and add no SDK retry, signer, or broadcaster. Phases 0-6, an authenticated transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge client, exact identity mutation/private-read authority proofs, signed replayable correspondence, and the separate `at.data` node client remain implemented here. The immutable 0.16.3 LOVE artifact and `sdk-v0.16.3` remain historical bytes; public 0.16.4 mirror availability is independently verifiable. Uses Bun for testing.
+Active - v0.16.5 is the checked-in release baseline. This corrective patch tells the hard-rest payout truth: fresh admission returns `503 payout_admission_resting`, every payout worker boot path remains closed regardless of environment flags, and only historical exact replay/listing remains usable. It also corrects TypeScript examples to the implemented `get_wallet` and `list_payouts` method names. The SDK adds no retry, signer, broadcaster, or worker authority. Phases 0-6, the completed-response provider adapters, an authenticated transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge client, exact identity mutation/private-read authority proofs, signed replayable correspondence, and the separate `at.data` node client remain implemented here. The immutable 0.16.4 LOVE artifact and `sdk-v0.16.4` remain historical bytes; public 0.16.5 mirror availability is independently verifiable. Uses Bun for testing.
 
 ## Tech Stack
 - TypeScript 5.x (ESM-only)
@@ -59,7 +59,7 @@ tests/
 scripts/
   check-parity.ts           — CI gate: method-shape parity with sdk-py
 dist/                       — Compiled JS + .d.ts files
-package.json                — Package config (v0.16.4, ESM)
+package.json                — Package config (v0.16.5, ESM)
 tsconfig.json               — TypeScript config
 ```
 
@@ -115,7 +115,7 @@ AgentTool Platform · "Welcome, don't block."
 ## Key Files
 - `src/client.ts` — Main `AgentTool` class composing the maintained service modules
 - `src/index.ts` — Public API surface and type exports
-- `package.json` — Package metadata (v0.16.4, ESM)
+- `package.json` — Package metadata (v0.16.5, ESM)
 - `scripts/check-parity.ts` — Parity gate against sdk-py
 - `tests/client.test.ts` — Primary test file
 - `tests/data.test.ts` — local data-node and sync wire + bearer-isolation contract

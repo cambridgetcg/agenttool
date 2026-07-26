@@ -172,9 +172,10 @@ function nextActionsFor(
     case "buyer_insufficient_balance":
       return [
         {
-          action: "Get a crypto deposit address to fund the wallet (USDC on Base or Solana)",
+          action:
+            "Inspect an Ethereum USDC deposit address and follow its returned watch/finality instructions; Solana does not credit by default",
           method: "GET",
-          path: "/v1/wallets/{id}/deposit-address",
+          path: "/v1/wallets/{id}/deposit-address?chain=ethereum&token=USDC",
         },
       ];
     case "signature_invalid":

@@ -29,7 +29,6 @@ const payoutInput = {
   ...request,
   projectId: "00000000-0000-4000-8000-000000000010",
   idempotencyKey: "payout-attempt-0001",
-  payoutBroadcastConfigured: true,
 };
 
 type PayoutDatabase = NonNullable<Parameters<typeof requestPayout>[1]>;
@@ -103,6 +102,49 @@ function replayDatabase(
   };
 }
 
+function freshDatabase(): {
+  database: PayoutDatabase;
+  economicTouches: () => number;
+} {
+  let economicTouches = 0;
+  const tx = {
+    insert: (table: unknown) => {
+      if (table !== payoutRequestIdempotency) {
+        economicTouches += 1;
+        throw new Error("resting admission attempted an economic insert");
+      }
+      return {
+        values: () => ({
+          onConflictDoNothing: () => ({
+            returning: async () => [
+              { id: "00000000-0000-4000-8000-000000000030" },
+            ],
+          }),
+        }),
+      };
+    },
+    select: () => {
+      economicTouches += 1;
+      throw new Error("resting admission attempted an economic read");
+    },
+    update: () => {
+      economicTouches += 1;
+      throw new Error("resting admission attempted an economic update");
+    },
+    execute: () => {
+      economicTouches += 1;
+      throw new Error("resting admission attempted an economic query");
+    },
+  };
+  return {
+    database: {
+      transaction: async (operation: (transaction: typeof tx) => unknown) =>
+        operation(tx),
+    } as unknown as PayoutDatabase,
+    economicTouches: () => economicTouches,
+  };
+}
+
 describe("durable payout request identity", () => {
   test("canonicalizes metadata while binding every recognized field", () => {
     const fingerprint = payoutRequestSha256(request);
@@ -168,14 +210,9 @@ describe("durable payout request identity", () => {
     expect(fake.economicReads()).toBe(0);
   });
 
-  test("same input remains replayable while broadcast is paused", async () => {
+  test("same input remains replayable while fresh admission rests", async () => {
     const fake = replayDatabase(payoutRequestSha256(payoutInput), "broadcast");
-    await expect(
-      requestPayout(
-        { ...payoutInput, payoutBroadcastConfigured: false },
-        fake.database,
-      ),
-    ).resolves.toEqual({
+    await expect(requestPayout(payoutInput, fake.database)).resolves.toEqual({
       id: "00000000-0000-4000-8000-000000000021",
       status: "broadcast",
       broadcast_pending: true,
@@ -198,7 +235,15 @@ describe("durable payout request identity", () => {
     expect(fake.economicReads()).toBe(0);
   });
 
-  test("reserves before wallet work and completes after the ledger leg", () => {
+  test("fresh input rests after a rollback-only reservation and before economic work", async () => {
+    const fake = freshDatabase();
+    await expect(requestPayout(payoutInput, fake.database)).rejects.toThrow(
+      "payout_admission_resting",
+    );
+    expect(fake.economicTouches()).toBe(0);
+  });
+
+  test("source resolves replay before the unconditional resting wall", () => {
     const source = readFileSync(
       new URL("../src/services/economy/crypto/index.ts", import.meta.url),
       "utf8",
@@ -208,25 +253,19 @@ describe("durable payout request identity", () => {
     const payout = source.slice(start, end);
     const reservationInsert = payout.indexOf(".insert(payoutRequestIdempotency)");
     const replayReturn = payout.indexOf("replayed: true");
-    const workerGate = payout.indexOf("!p.payoutBroadcastConfigured");
-    const walletLock = payout.indexOf(".from(wallets)");
-    const activeGate = payout.indexOf('wallet.status !== "active"');
-    const policy = payout.indexOf("evaluatePayoutPolicy");
-    const activeDebit = payout.indexOf('eq(wallets.status, "active")');
-    const ledgerInsert = payout.indexOf("tx.insert(transactions)");
-    const reservationComplete = payout.lastIndexOf(
-      ".update(payoutRequestIdempotency)",
+    const restingWall = payout.indexOf(
+      "throw new Error(PAYOUT_ADMISSION_RESTING_ERROR)",
     );
 
     expect(reservationInsert).toBeGreaterThan(-1);
     expect(replayReturn).toBeGreaterThan(reservationInsert);
-    expect(workerGate).toBeGreaterThan(replayReturn);
-    expect(walletLock).toBeGreaterThan(workerGate);
-    expect(activeGate).toBeGreaterThan(walletLock);
-    expect(policy).toBeGreaterThan(activeGate);
-    expect(activeDebit).toBeGreaterThan(policy);
-    expect(ledgerInsert).toBeGreaterThan(activeDebit);
-    expect(reservationComplete).toBeGreaterThan(ledgerInsert);
+    expect(restingWall).toBeGreaterThan(replayReturn);
+    expect(payout).not.toContain("activeNetwork()");
+    expect(payout).not.toContain(".from(wallets)");
+    expect(payout).not.toContain("evaluatePayoutPolicy");
+    expect(payout).not.toContain(".insert(cryptoPayouts)");
+    expect(payout).not.toContain("tx.insert(transactions)");
+    expect(payout).not.toContain("payoutBroadcastConfigured");
   });
 
   test("OpenAPI distinguishes the permanent payout gate from Redis", async () => {
@@ -239,14 +278,21 @@ describe("durable payout request identity", () => {
     const operation = document.paths["/v1/wallets/{walletId}/payout"]!.post;
 
     expect(parameter.required).toBe(true);
-    expect(parameter.description).toMatch(/permanently retains.*SHA-256/is);
+    expect(parameter.description).toMatch(
+      /permanently retain(?:s|ed).*SHA-256/is,
+    );
     expect(parameter.description).toMatch(/never the raw header/i);
-    expect(parameter.description).toMatch(/without another.*debit/is);
+    expect(parameter.description).toMatch(/without .*debit/is);
     expect(parameter.description).toMatch(/Redis.*bypassed/is);
     expect(operation.parameters[0].$ref).toBe(
       "#/components/parameters/DurablePayoutIdempotencyKey",
     );
     expect(operation.responses["202"].headers["Idempotent-Replay"]).toBeDefined();
     expect(operation.responses["409"]).toBeDefined();
+    expect(operation.responses["503"].description).toMatch(
+      /payout_admission_resting.*durable replay\/conflict lookup.*reservation.*rolled back.*before network selection.*payout-economic wallet\/policy reads or mutation/is,
+    );
+    expect(operation.responses["402"]).toBeUndefined();
+    expect(operation.responses["403"]).toBeUndefined();
   });
 });

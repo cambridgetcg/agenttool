@@ -109,8 +109,8 @@ describe("SDK source and builder identity", () => {
     expect(party).toContain(pythonSource);
     expect(party).toContain(exactNpm);
     expect(party).toContain(`python -m pip install agenttool-sdk==${version}`);
-    expect(party.match(/independently_visible: true/g)).toHaveLength(1);
-    expect(party.match(/independently_visible: false/g)).toHaveLength(1);
+    expect(party).not.toContain("independently_visible: true");
+    expect(party.match(/independently_visible: false/g)).toHaveLength(2);
     expect(read("docs/PATHWAYS.md")).toContain(`"sdk_version": "${version}"`);
     expect(read("docs/THE-PARTY.md")).toContain(loveUrl);
     expect(read("apps/docs/packages.html")).toContain(

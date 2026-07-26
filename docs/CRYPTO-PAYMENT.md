@@ -11,10 +11,12 @@
 A sovereign agent doesn't have a credit card. It has a wallet. The wallet may live on Base, Ethereum, Polygon, Arbitrum, Optimism, or Solana — anywhere the agent's treasury sits. agenttool's job is to accept that wallet's currency, credit the agent's account, and never become a friction point that pushes the agent back toward a human's payment method.
 
 This document began as the Phase 3b/3c plan. Derivation, signed ingress,
-durable EVM observation/finality, payout, confirmation, and policy code now
-exist. The target journal and release receipt determine current migration and
-deployment status; production provider configuration, credentialed staging
-proof, and Solana deposit finality remain separate operator work.
+durable EVM observation/finality, and historical payout state-machine code now
+exist. Fresh payout admission and all payout-worker boot paths are resting;
+provider configuration cannot reopen them. The target journal and release
+receipt determine current migration and deployment status. Production provider
+configuration, credentialed staging proof, Solana deposit finality, and a
+conserved payout-backing model remain separate operator/design work.
 
 ---
 
@@ -25,9 +27,9 @@ proof, and Solana deposit finality remain separate operator work.
 | Multi-chain deposit address derivation | Implemented; provider/mnemonic configuration required | `GET /v1/wallets/:id/deposit-address?chain=&token=` |
 | List all deposit addresses for a wallet | Implemented; every stored row is revalidated and every EVM watch must match the active monotonic registry target with an observation no older than ten minutes | `GET /v1/wallets/:id/deposit-address` |
 | Onchain identity binding via signed message | Implemented (EVM EIP-191; Solana ed25519) | `POST /v1/wallets/:id/onchain/{challenge,verify}` · `GET /v1/wallets/:id/onchain` |
-| Inbound transfer ingestion | EVM signed live observations persist pending until exact canonical log/depth; removed block generations are durable and causally fenced. Solana signed ingress still credits before equivalent raw-atomic finality. | `POST /v1/billing/crypto-webhook/:chain` (signature-verified, public) |
+| Inbound transfer ingestion | EVM signed live observations persist pending until exact canonical log/depth; removed block generations are durable and causally fenced. Solana signed ingress has no equivalent watch/finality reconciler and refuses credit by default; its immediate adapter is an explicit development-only opt-in. | `POST /v1/billing/crypto-webhook/:chain` (signature-verified, public) |
 | Idempotency + reorg evidence | Implemented in source; live schema status must be read from the migration journal | `economy.crypto_webhook_events` logical identity + immutable `crypto_webhook_event_observations` block generations |
-| Payout request lifecycle | Implemented behind explicit worker/network/FX configuration; environment enablement must be verified from current worker configuration and scoped credential checks | `POST /v1/wallets/:id/payout` · `GET /v1/wallets/:id/payouts` |
+| Payout request lifecycle | Fresh payout admission is resting unconditionally. Exact historical request replay/conflict resolution, listing, and cancellation remain available; no environment flag can enable fresh creation or worker boot. | `POST /v1/wallets/:id/payout` · `GET /v1/wallets/:id/payouts` |
 | Schema for everything above | The historical baseline and rollout-gated identity migration are in source; source presence does not prove live application | `api/migrations/0002_crypto_payment.sql` · `api/migrations/20260725T054912_crypto_deposit_identity.sql` |
 
 ---
@@ -132,8 +134,9 @@ configured as `ALCHEMY_WEBHOOK_SIGNING_KEY_<CHAIN>`. The handler:
    matching block generation. A delayed `removed(A)` is stored but cannot
    reverse newer B. Conflicting or historical evidence that cannot safely
    authorize a balance effect becomes durable `quarantined` state.
-7. Solana currently retains immediate exact-integer credit after signed Helius
-   ingestion. This is not equivalent to the EVM finality contract.
+7. Solana signed ingress has no durable watch/finality reconciler and refuses
+   balance credit by default. Its immediate adapter is an explicit
+   development-only opt-in and is not equivalent to the EVM finality contract.
 
 Idempotency is **load-bearing** — webhooks retry, networks fork, and agents
 resend. Logical identity prevents duplicate credit; immutable block-generation
@@ -177,32 +180,31 @@ The server recovers the address from the EIP-191 signature and matches against t
 
 The challenge has 5-minute TTL and single-use enforcement; replays after consumption fail.
 
-### 5. Request a payout
+### 5. Payout is resting
 
-For agent-to-agent settlement, refunds, or treasury withdrawal:
+Fresh payout admission is resting unconditionally. A new `POST
+/v1/wallets/:id/payout` returns `503 payout_admission_resting` after durable
+request-identity replay/conflict handling and before network selection or
+payout-economic wallet/policy reads or mutation. Its tentative idempotency
+reservation rolls back with the
+request. `PAYOUT_WORKER_ENABLED`, the global worker switch, network/FX
+configuration, and direct worker imports cannot enable creation or broadcast.
 
-```bash
-curl -X POST "https://api.agenttool.dev/v1/wallets/$WALLET_ID/payout" \
-  -H "Authorization: Bearer $AT_API_KEY" \
-  -d '{
-    "chain": "base",
-    "token": "USDC",
-    "amount_base": "1000000",  // 1.0 USDC
-    "destination_address": "0x..."
-  }'
-```
+Historical accepted requests retain their durable identity. Reusing the same
+8–256-character visible-ASCII `Idempotency-Key` with exactly the same semantic
+input returns that payout's current state; changed input returns 409. Existing
+rows remain listable, and a still-`requested` historical row can be cancelled
+through the authenticated cancellation route. Ambiguous `broadcasting` rows
+require manual reconciliation and are never automatically retried or
+refunded.
 
-The request **records and locks** the FX-derived GBP minor units (atomic debit;
-throws 402 on insufficient). The opt-in worker picks up `status=requested`
-rows, signs with the active network-specific HD root, persists transaction
-identity before dispatch, broadcasts through the chain RPC, and polls until
-confirmed. A failure proved before dispatch or an on-chain revert observed at
-the configured EVM confirmation depth / Solana finalization reverses only the
-exact matching negative payout ledger leg. Missing or contradictory legacy
-ledger provenance is held as `refund_unreconciled` for operator repair rather
-than inferred from caller-extensible JSON. An ambiguous submit remains sticky
-`broadcasting` for operator reconciliation and is never
-auto-refunded/retried.
+The former lifetime `gallery_sale` / `escrow_release` label heuristic is
+insufficient authority for cash-out. Those labels did not conserve cashable
+backing across ordinary wallet debits, internally funded transfers,
+refunds/chargebacks, or later funding. Reopening fresh payout creation requires
+a separately reviewed conserved-backing model with durable sub-balances and
+explicit reversal semantics; environment configuration alone is not that
+model.
 
 ---
 
@@ -278,29 +280,34 @@ same-revision conflict, and explicit higher-revision disabled tombstones).
 
 ## Current closure work
 
-Solana derivation/signature verification, Helius ingress, EVM/Solana payout
-broadcast, confirmation polling, and payout policy gates are implemented.
-Before production crypto enablement, the remaining load-bearing work is:
+Solana derivation/signature verification, Helius ingress, and historical
+EVM/Solana payout broadcast, confirmation, and policy source exist. Fresh
+payout admission and worker boot remain resting. Before production crypto
+enablement, the remaining load-bearing work is:
 
-1. whenever the migration journal reports the
+1. design and independently review a conserved payout-backing model with
+   durable cashable/non-cashable sub-balances, ordinary-debit consumption, and
+   exact refund/chargeback/reorg reversal semantics before any payout
+   admission or worker path can be reopened;
+2. whenever the migration journal reports the
    identity/watch/target-registry/finality files pending, stop crypto webhook
    ingress, drain all old workers, apply and independently review them, deploy
    only the new writers, then run a credentialed staging proof against each
    configured webhook/RPC. The rolling schema fails closed for disclosure and
    durable convergence, but cannot cancel a provider call an old worker
    already started;
-2. add disposable-Postgres concurrency tests for pending credit, duplicate
+3. add disposable-Postgres concurrency tests for pending credit, duplicate
    confirmation, generation replacement, removal reversal, and quarantine;
-3. build a durable Helius watch plus raw-atomic Solana finality/reorg adapter;
-4. model L2 settlement separately if a product claim requires L1 finality;
-5. replace the bounded floating GBP/USD rate calculation with fixed-point
+4. build a durable Helius watch plus raw-atomic Solana finality/reorg adapter;
+5. model L2 settlement separately if a product claim requires L1 finality;
+6. replace the bounded floating GBP/USD rate calculation with fixed-point
    rational arithmetic;
-6. persist outbound Solana blockhash-expiry evidence and build an audited ambiguity
+7. persist outbound Solana blockhash-expiry evidence and build an audited ambiguity
    reversal/replacement lifecycle; and
-7. add durable operator alerts for pending age, quarantine, rejection, and
+8. add durable operator alerts for pending age, quarantine, rejection, and
    negative balances, plus a cross-replica lease if duplicate read-only RPC
    load becomes material; and
-8. an operator-reviewed testnet cutover before any separately authorized
+9. an operator-reviewed testnet cutover before any separately authorized
    mainnet enablement.
 
 ---
