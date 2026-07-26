@@ -12,8 +12,9 @@ A sovereign agent doesn't have a credit card. It has a wallet. The wallet may li
 
 This document began as the Phase 3b/3c plan. Derivation, signed ingress,
 durable EVM observation/finality, payout, confirmation, and policy code now
-exist. Production provider configuration, migration, staging proof, and
-Solana deposit finality remain separate operator work.
+exist. The target journal and release receipt determine current migration and
+deployment status; production provider configuration, credentialed staging
+proof, and Solana deposit finality remain separate operator work.
 
 ---
 
@@ -25,9 +26,9 @@ Solana deposit finality remain separate operator work.
 | List all deposit addresses for a wallet | Implemented; every stored row is revalidated and every EVM watch must match the active monotonic registry target with an observation no older than ten minutes | `GET /v1/wallets/:id/deposit-address` |
 | Onchain identity binding via signed message | Implemented (EVM EIP-191; Solana ed25519) | `POST /v1/wallets/:id/onchain/{challenge,verify}` · `GET /v1/wallets/:id/onchain` |
 | Inbound transfer ingestion | EVM signed live observations persist pending until exact canonical log/depth; removed block generations are durable and causally fenced. Solana signed ingress still credits before equivalent raw-atomic finality. | `POST /v1/billing/crypto-webhook/:chain` (signature-verified, public) |
-| Idempotency + reorg evidence | Implemented locally; migration not applied | `economy.crypto_webhook_events` logical identity + immutable `crypto_webhook_event_observations` block generations |
-| Payout request lifecycle | Implemented behind explicit worker/network/FX configuration; production payout secrets were unconfigured when checked 2026-07-25 | `POST /v1/wallets/:id/payout` · `GET /v1/wallets/:id/payouts` |
-| Schema for everything above | Baseline live; wallet/chain/token uniqueness migration is local and not deployed | `api/migrations/0002_crypto_payment.sql` · `api/migrations/20260725T054912_crypto_deposit_identity.sql` |
+| Idempotency + reorg evidence | Implemented in source; live schema status must be read from the migration journal | `economy.crypto_webhook_events` logical identity + immutable `crypto_webhook_event_observations` block generations |
+| Payout request lifecycle | Implemented behind explicit worker/network/FX configuration; environment enablement must be verified from current worker configuration and scoped credential checks | `POST /v1/wallets/:id/payout` · `GET /v1/wallets/:id/payouts` |
+| Schema for everything above | The historical baseline and rollout-gated identity migration are in source; source presence does not prove live application | `api/migrations/0002_crypto_payment.sql` · `api/migrations/20260725T054912_crypto_deposit_identity.sql` |
 
 ---
 
@@ -257,7 +258,12 @@ non-null event log identity; intentionally fails for operator reconciliation
 if conflicting historical rows exist), plus
 `api/migrations/20260726T070000_deposit_watch_reconciliation.sql` (durable
 provider-neutral watch generations, bounded attempts/backoff, and leases; it
-does not guess/backfill provider or network for historical rows), and
+does not guess/backfill provider or network for historical rows),
+`api/migrations/20260726T191000_payout_policy_e2e_fixture_repair.sql`
+(fails closed unless any payout-operation duplicates are exactly the known
+synthetic policy-harness residue, then terminalizes only those rows), and
+`api/migrations/20260726T191500_payout_operation_identity.sql` (requires payout
+workers disabled and makes a persisted chain operation singular), and
 `api/migrations/20260726T202500_crypto_deposit_finality.sql` (historical
 effects remain credited without invented evidence; new EVM observations are
 pending and retain immutable block generations), and
@@ -276,8 +282,9 @@ Solana derivation/signature verification, Helius ingress, EVM/Solana payout
 broadcast, confirmation polling, and payout policy gates are implemented.
 Before production crypto enablement, the remaining load-bearing work is:
 
-1. stop crypto webhook ingress, drain all old workers, apply and independently
-   review the local identity/watch/target-registry/finality migrations, deploy
+1. whenever the migration journal reports the
+   identity/watch/target-registry/finality files pending, stop crypto webhook
+   ingress, drain all old workers, apply and independently review them, deploy
    only the new writers, then run a credentialed staging proof against each
    configured webhook/RPC. The rolling schema fails closed for disclosure and
    durable convergence, but cannot cancel a provider call an old worker

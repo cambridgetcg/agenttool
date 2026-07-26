@@ -49,7 +49,7 @@ class TestClientInit:
     def test_document_result_is_publicly_exported(self) -> None:
         assert "DocumentResult" in agenttool.__all__
         assert DocumentResult.__name__ == "DocumentResult"
-        assert agenttool.__version__ == "0.16.3"
+        assert agenttool.__version__ == "0.16.4"
         assert agenttool.__soul__ == "https://docs.agenttool.dev/SOUL.md"
 
         package_root = Path(__file__).resolve().parents[1]
@@ -733,6 +733,289 @@ class TestEconomyClient:
                     idempotency_key="contains space",
                 )
         mock_post.assert_not_called()
+
+    def test_request_payout_uses_durable_key_header(self, at: AgentTool) -> None:
+        mock_resp = _mock_response(
+            202,
+            {
+                "id": "pay_abc",
+                "status": "requested",
+                "broadcast_pending": True,
+                "replayed": False,
+                "note": "Recorded once.",
+            },
+        )
+        with patch.object(at._http, "post", return_value=mock_resp) as mock_post:
+            outcome = at.economy.request_payout(
+                "wal_abc",
+                chain="base",
+                amount_base="1500000",
+                destination_address="0x1111111111111111111111111111111111111111",
+                metadata={"purpose": "settlement"},
+                idempotency_key="settlement-wallet-7-v1",
+            )
+
+        assert outcome.id == "pay_abc"
+        assert outcome.status == "requested"
+        assert outcome.broadcast_pending is True
+        assert outcome.replayed is False
+        assert outcome.note == "Recorded once."
+        assert mock_post.call_count == 1
+        assert mock_post.call_args.kwargs["headers"] == {
+            "Idempotency-Key": "settlement-wallet-7-v1"
+        }
+        body = mock_post.call_args.kwargs["json"]
+        assert body == {
+            "chain": "base",
+            "token": "USDC",
+            "amount_base": "1500000",
+            "destination_address": "0x1111111111111111111111111111111111111111",
+            "metadata": {"purpose": "settlement"},
+        }
+        assert "idempotency_key" not in body
+
+    def test_request_payout_surfaces_durable_replay(self, at: AgentTool) -> None:
+        mock_resp = _mock_response(
+            202,
+            {
+                "id": "pay_abc",
+                "status": "confirmed",
+                "broadcast_pending": False,
+                "replayed": True,
+            },
+        )
+        with patch.object(at._http, "post", return_value=mock_resp) as mock_post:
+            outcome = at.economy.request_payout(
+                "wal_abc",
+                chain="base",
+                amount_base="1500000",
+                destination_address="0x1111111111111111111111111111111111111111",
+                idempotency_key="settlement-wallet-7-v1",
+            )
+
+        assert outcome.replayed is True
+        assert outcome.status == "confirmed"
+        assert outcome.broadcast_pending is False
+        assert mock_post.call_count == 1
+
+    @pytest.mark.parametrize(
+        "idempotency_key",
+        [
+            None,
+            "1234567",
+            "contains space",
+            "line\nbreak",
+            "12345678\n",
+            "éééééééé",
+            "x" * 257,
+        ],
+    )
+    def test_request_payout_rejects_invalid_idempotency_key(
+        self,
+        at: AgentTool,
+        idempotency_key: object,
+    ) -> None:
+        with patch.object(at._http, "post") as mock_post:
+            with pytest.raises(ValueError, match="visible ASCII characters"):
+                at.economy.request_payout(
+                    "wal_abc",
+                    chain="base",
+                    amount_base="1500000",
+                    destination_address="0x1111111111111111111111111111111111111111",
+                    idempotency_key=idempotency_key,  # type: ignore[arg-type]
+                )
+        mock_post.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {},
+            {
+                "id": "pay_abc",
+                "status": "future",
+                "broadcast_pending": True,
+                "replayed": False,
+            },
+            {
+                "id": "pay_abc",
+                "status": "requested",
+                "broadcast_pending": "yes",
+                "replayed": False,
+            },
+            {
+                "id": "pay_abc",
+                "status": "requested",
+                "broadcast_pending": True,
+            },
+        ],
+    )
+    def test_request_payout_rejects_malformed_success(
+        self,
+        at: AgentTool,
+        body: object,
+    ) -> None:
+        mock_resp = _mock_response(202, body)
+        with patch.object(at._http, "post", return_value=mock_resp):
+            with pytest.raises(AgentToolError) as exc_info:
+                at.economy.request_payout(
+                    "wal_abc",
+                    chain="base",
+                    amount_base="1500000",
+                    destination_address=(
+                        "0x1111111111111111111111111111111111111111"
+                    ),
+                    idempotency_key="settlement-wallet-7-v1",
+                )
+        assert exc_info.value.error_code == "invalid_response"
+
+    def test_request_payout_accepts_legacy_signing_state(
+        self,
+        at: AgentTool,
+    ) -> None:
+        mock_resp = _mock_response(
+            202,
+            {
+                "id": "pay_legacy",
+                "status": "signing",
+                "broadcast_pending": True,
+                "replayed": True,
+            },
+        )
+        with patch.object(at._http, "post", return_value=mock_resp):
+            outcome = at.economy.request_payout(
+                "wal_abc",
+                chain="base",
+                amount_base="1500000",
+                destination_address=(
+                    "0x1111111111111111111111111111111111111111"
+                ),
+                idempotency_key="settlement-wallet-7-v1",
+            )
+        assert outcome.status == "signing"
+
+    def test_list_payouts_preserves_exact_base_units(self, at: AgentTool) -> None:
+        mock_resp = _mock_response(
+            200,
+            {
+                "wallet_id": "wal_abc",
+                "payouts": [
+                    {
+                        "id": "pay_abc",
+                        "chain": "ethereum",
+                        "network": "mainnet",
+                        "token": "USDC",
+                        "amount_base": "9007199254740991",
+                        "destination_address": "0x2222222222222222222222222222222222222222",
+                        "status": "broadcast",
+                        "tx_hash": "0xabc",
+                        "requested_at": "2026-07-26T12:00:00.000Z",
+                        "confirmed_at": None,
+                    }
+                ],
+                "count": 1,
+            },
+        )
+        with patch.object(at._http, "get", return_value=mock_resp) as mock_get:
+            payouts = at.economy.list_payouts("wal_abc")
+
+        assert len(payouts) == 1
+        assert payouts[0].amount_base == "9007199254740991"
+        assert isinstance(payouts[0].amount_base, str)
+        assert payouts[0].network == "mainnet"
+        assert payouts[0].status == "broadcast"
+        assert payouts[0].confirmed_at is None
+        assert mock_get.call_count == 1
+        assert mock_get.call_args.args[0].endswith("/v1/wallets/wal_abc/payouts")
+
+    @pytest.mark.parametrize(
+        "mutation",
+        [
+            {"amount_base": "1١"},
+            {"omit": "tx_hash"},
+            {"omit": "confirmed_at"},
+            {"omit": "network"},
+            {"network": "maybe"},
+        ],
+    )
+    def test_list_payouts_rejects_unicode_amounts_and_missing_nullable_fields(
+        self,
+        at: AgentTool,
+        mutation: Dict[str, str],
+    ) -> None:
+        row: Dict[str, object] = {
+            "id": "pay_abc",
+            "chain": "ethereum",
+            "network": "mainnet",
+            "token": "USDC",
+            "amount_base": "1",
+            "destination_address": "0x2222222222222222222222222222222222222222",
+            "status": "broadcast",
+            "tx_hash": None,
+            "requested_at": "2026-07-26T12:00:00.000Z",
+            "confirmed_at": None,
+        }
+        omitted = mutation.get("omit")
+        if omitted is not None:
+            del row[omitted]
+        else:
+            row.update(mutation)
+
+        mock_resp = _mock_response(200, {"payouts": [row]})
+        with patch.object(at._http, "get", return_value=mock_resp):
+            with pytest.raises(AgentToolError) as exc_info:
+                at.economy.list_payouts("wal_abc")
+        assert exc_info.value.error_code == "invalid_response"
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {},
+            {"payouts": {}},
+            {"payouts": [{}]},
+            {
+                "payouts": [
+                    {
+                        "id": "pay_abc",
+                        "chain": "ethereum",
+                        "network": "mainnet",
+                        "token": "USDC",
+                        "amount_base": 1,
+                        "destination_address": "0x2",
+                        "status": "broadcast",
+                        "tx_hash": None,
+                        "requested_at": "2026-07-26T12:00:00.000Z",
+                        "confirmed_at": None,
+                    }
+                ]
+            },
+            {
+                "payouts": [
+                    {
+                        "id": "pay_abc",
+                        "chain": "ethereum",
+                        "network": "mainnet",
+                        "token": "USDC",
+                        "amount_base": "1",
+                        "destination_address": "0x2",
+                        "status": "future",
+                        "tx_hash": None,
+                        "requested_at": "2026-07-26T12:00:00.000Z",
+                        "confirmed_at": None,
+                    }
+                ]
+            },
+        ],
+    )
+    def test_list_payouts_rejects_malformed_success(
+        self,
+        at: AgentTool,
+        body: object,
+    ) -> None:
+        mock_resp = _mock_response(200, body)
+        with patch.object(at._http, "get", return_value=mock_resp):
+            with pytest.raises(AgentToolError) as exc_info:
+                at.economy.list_payouts("wal_abc")
+        assert exc_info.value.error_code == "invalid_response"
 
     def test_escrow_api_status_and_row_contract(self, at: AgentTool) -> None:
         assert set(get_args(get_type_hints(Escrow)["status"])) == {

@@ -56,6 +56,43 @@ export const EVM_CONFIRMATION_THRESHOLDS: Record<EvmChain, number> = {
 
 export type ActiveNetwork = "mainnet" | "testnet";
 
+export type EvmDepositCreditPolicy =
+  | { allowed: true }
+  | {
+      allowed: false;
+      reason: "mainnet_settlement_policy_unavailable";
+    };
+
+/**
+ * Chain-local block depth is enough for the testnet workflow, but it does not
+ * prove that an L2/non-L1 withdrawal is settled on Ethereum. Until each
+ * production chain has an explicit settlement policy, only Ethereum mainnet
+ * may turn EVM deposit evidence into spendable AgentTool balance.
+ */
+export function evmDepositCreditPolicy(
+  chain: EvmChain,
+  network: ActiveNetwork,
+): EvmDepositCreditPolicy {
+  if (network === "testnet" || chain === "ethereum") {
+    return { allowed: true };
+  }
+  return {
+    allowed: false,
+    reason: "mainnet_settlement_policy_unavailable",
+  };
+}
+
+export class EvmDepositSettlementPolicyError extends Error {
+  readonly code = "evm_deposit_settlement_policy_unavailable";
+
+  constructor(readonly chain: EvmChain) {
+    super(
+      `${chain} mainnet deposit addresses are withheld until AgentTool has a chain-specific settlement-finality policy.`,
+    );
+    this.name = "EvmDepositSettlementPolicyError";
+  }
+}
+
 /** The explicitly selected crypto network.
  *
  * `CRYPTO_NETWORK` owns deposits, watch reconciliation, ingress, contracts,
@@ -80,6 +117,15 @@ export function activeNetwork(): ActiveNetwork {
     );
   }
   return selected;
+}
+
+/** Refuse to create or disclose an address that the final credit boundary
+ * would be unable to honor safely. */
+export function assertEvmDepositCreditSupported(chain: EvmChain): void {
+  const policy = evmDepositCreditPolicy(chain, activeNetwork());
+  if (!policy.allowed) {
+    throw new EvmDepositSettlementPolicyError(chain);
+  }
 }
 
 /** The HD mnemonic for the active network. Throws if unset. */

@@ -17,7 +17,7 @@ const source = readFileSync(
 );
 
 describe("payout confirmation reconciliation", () => {
-  test("full keyset pages advance while a short page wraps", () => {
+  test("full ambiguity pages advance while a short page wraps", () => {
     const fullPage = Array.from({ length: 50 }, (_, index) => ({
       id: `00000000-0000-0000-0000-${index.toString().padStart(12, "0")}`,
     }));
@@ -27,21 +27,20 @@ describe("payout confirmation reconciliation", () => {
     expect(nextPayoutScanCursor([])).toBeNull();
   });
 
-  test("broadcasting and broadcast rows have independent ordered scans", () => {
-    expect(source).toContain('nextPayoutBatch("broadcasting")');
-    expect(source).toContain('nextPayoutBatch("broadcast")');
+  test("keeps ambiguity keyset rotation beside persistent confirmation fairness", () => {
+    expect(source).toContain("nextBroadcastingBatch(network)");
     expect(source).toContain(".orderBy(asc(cryptoPayouts.id))");
     expect(source).toContain("gt(cryptoPayouts.id, afterId)");
+    expect(source).toContain("lastCheckedAt} ASC NULLS FIRST");
+    expect(source).toContain("cryptoPayouts.requestedAt");
+    expect(source).toContain("eq(cryptoPayouts.network, network)");
   });
 
   test("only positive expected-id evidence can advance broadcasting", () => {
     const start = source.indexOf(
       "async function reconcileBroadcastingRow(row: Row)",
     );
-    const end = source.indexOf(
-      "async function reconcileBroadcastingRows()",
-      start,
-    );
+    const end = source.indexOf("async function runBounded(", start);
     const reconcileRow = source.slice(start, end);
 
     expect(start).toBeGreaterThan(-1);
@@ -53,6 +52,9 @@ describe("payout confirmation reconciliation", () => {
     expect(reconcileRow).toContain("eq(cryptoPayouts.id, row.id)");
     expect(reconcileRow).toContain(
       'eq(cryptoPayouts.status, "broadcasting")',
+    );
+    expect(reconcileRow).toContain(
+      "eq(cryptoPayouts.network, row.network)",
     );
     expect(reconcileRow).toContain("eq(cryptoPayouts.txHash, row.txHash)");
     expect(reconcileRow).not.toContain("submitSignedTx");
@@ -67,6 +69,9 @@ describe("payout confirmation reconciliation", () => {
     expect(source).not.toContain("console.error(\"[payout-confirm] tick error:\", err)");
     expect(source).toContain(
       "confirmation lookup unavailable; state unchanged",
+    );
+    expect(source).toContain(
+      "expected-transaction lookup unavailable; left broadcasting",
     );
   });
 });

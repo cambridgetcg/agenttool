@@ -4,7 +4,7 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![Release](https://img.shields.io/badge/release-v0.16.3-blue)](https://github.com/cambridgetcg/agenttool/tree/sdk-v0.16.3)
+[![Release](https://img.shields.io/badge/release-v0.16.4-blue)](https://github.com/cambridgetcg/agenttool/tree/sdk-v0.16.4)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
 ## Installation
@@ -25,10 +25,11 @@ verification. No npm account or npm publication is required. Declared upstream
 dependencies still resolve through the package manager's configured registries
 or cache.
 
-## Current source: Anthropic streaming adapter
+## 0.16.4 Anthropic streaming adapter
 
-This checkout contains an unreleased repair to `AnthropicAdapter`; it is not a
-claim about the immutable 0.16.3 artifact or any package registry.
+Version 0.16.4 contains a bounded repair to `AnthropicAdapter`. The source tag
+and LOVE artifact are authoritative; npm availability must still be observed
+independently.
 
 - `adapter.messages.create({ ..., stream: true })` injects wake, removes the
   local `metadata.agenttool` extension, and otherwise passes provider events
@@ -68,7 +69,7 @@ Completed response identity is preserved when the provider object is extensible
 and has no `agenttool` field. Frozen objects, provider-native field collisions,
 and reused response objects receive a read-only view instead of being clobbered.
 
-## Unreleased source: OpenAI Responses adapter
+## 0.16.4 OpenAI Responses adapter
 
 Current repository source exports `OpenAIResponsesAdapter`, a dependency-free
 wrapper for completed `openai.responses.create(...)` calls. It prepends the
@@ -106,12 +107,21 @@ for manually managed multi-turn history.
 This adapter supports completed foreground responses only. It refuses
 `stream: true` and `background: true` before wake or provider I/O; callers
 using either lifecycle must inject `at.wake.system("openai")` explicitly. The
-adapter is repository source until a later release is cut—its presence here
-does not rewrite the immutable 0.16.3 artifact or prove npm availability.
+adapter is part of the 0.16.4 source and LOVE package. That does not rewrite
+the immutable 0.16.3 artifact or prove npm availability.
 Its `create(...)` returns an ordinary `Promise`, not openai-node's
 `APIPromise`, so pre-await `.asResponse()` and `.withResponse()` helpers are
 not exposed; request options still pass through as the second argument and the
 awaited response retains `_request_id`.
+
+## 0.16.4
+
+This additive patch releases the parity-paired durable payout request/list
+surface, the completed-response OpenAI adapter, and the bounded Anthropic
+streaming repairs. Payout creation requires a caller-owned `Idempotency-Key`,
+preserves exact string base units, reports the API's durable `replayed`
+decision, and decodes the payout's bound `testnet`/`mainnet` network state.
+The SDK does not retry payout creation, sign a payout, or broadcast one.
 
 ## 0.16.3
 
@@ -593,7 +603,29 @@ await at.economy.spend(wallet.id, {
   counterparty: "wlt_...",
   description: "payment for research service",
 });
+
+// Request USDC once under a caller-owned durable request identity.
+// Keep amount_base as an integer string: 1_500_000 = 1.5 USDC.
+const payout = await at.economy.request_payout(wallet.id, {
+  chain: "base",
+  amount_base: "1500000",
+  destination_address: "0x...",
+  idempotency_key: "settlement-order-42-v1",
+});
+
+// An exact retry returns the existing payout's current state.
+if (payout.replayed) console.log(payout.id, payout.status);
+
+const payoutHistory = await at.economy.list_payouts(wallet.id);
 ```
+
+`idempotency_key` is required for payout requests and must be a caller-chosen
+8–256 character visible-ASCII value without spaces. Persist it with the
+business operation and reuse it only with the same semantic request. The SDK
+passes it in `Idempotency-Key`; it does not put it in the JSON body, generate a
+replacement, retry a failed call, sign, or broadcast. `replayed` reports the
+API's durable payout reservation result; it does not depend on a Redis response
+cache being available.
 
 ### Local agent data
 
@@ -749,7 +781,7 @@ const at = new AgentTool({
 - 🏠 [agenttool.dev](https://agenttool.dev)
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev)
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
-- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.3/manifest.json)
+- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.4/manifest.json)
 - 🐍 [Python SDK source](https://github.com/cambridgetcg/agenttool/tree/main/packages/sdk-py)
 - 🔭 [Telescope discovery client](../telescope/README.md)
 - 🔌 [SDK tiers and hosted per-agent MCP](../../docs/SDK-TIERS.md)

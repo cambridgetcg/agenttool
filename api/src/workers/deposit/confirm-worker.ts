@@ -27,7 +27,9 @@ import {
 } from "../../services/economy/crypto/inbound-deposits";
 import {
   activeChainId,
+  activeNetwork,
   EVM_CONFIRMATION_THRESHOLDS,
+  evmDepositCreditPolicy,
   evmRpcTransport,
 } from "../../services/economy/crypto/network";
 
@@ -229,10 +231,6 @@ async function fetchCanonicalRpcEvidence(
 }
 
 async function reconcileRow(row: PendingRow): Promise<void> {
-  const snapshot = {
-    blockNumber: row.blockNumber,
-    blockHash: row.blockHash,
-  };
   if (
     !isEvmChain(row.chain) ||
     !/^0x[0-9a-f]{64}$/i.test(row.txHash) ||
@@ -243,11 +241,18 @@ async function reconcileRow(row: PendingRow): Promise<void> {
     !row.blockHash ||
     !/^0x[0-9a-f]{64}$/i.test(row.blockHash)
   ) {
-    await quarantineMalformedPendingDeposit(row.id, snapshot);
+    await quarantineMalformedPendingDeposit(row);
     return;
   }
 
   const chain = row.chain as EvmChain;
+  const settlementPolicy = evmDepositCreditPolicy(chain, activeNetwork());
+  if (!settlementPolicy.allowed) {
+    // Keep signed custody evidence pending without spending RPC capacity or
+    // claiming that local L2 depth proves Ethereum settlement finality.
+    await markPendingDepositChecked(row, settlementPolicy.reason);
+    return;
+  }
   const expectedGeneration = {
     blockNumber: row.blockNumber,
     blockHash: row.blockHash,
@@ -260,8 +265,7 @@ async function reconcileRow(row: PendingRow): Promise<void> {
     );
   } catch {
     await markPendingDepositChecked(
-      row.id,
-      expectedGeneration,
+      row,
       "canonical_evidence_unavailable",
     ).catch(() => undefined);
     console.warn(
@@ -271,8 +275,7 @@ async function reconcileRow(row: PendingRow): Promise<void> {
   }
   if (rpcEvidence.kind === "wrong_chain") {
     await markPendingDepositChecked(
-      row.id,
-      expectedGeneration,
+      row,
       "rpc_chain_mismatch",
     );
     console.warn("[deposit-confirm] RPC chain mismatch; state unchanged");
@@ -305,21 +308,19 @@ async function reconcileRow(row: PendingRow): Promise<void> {
 
   if (outcome.status === "pending") {
     await markPendingDepositChecked(
-      row.id,
-      expectedGeneration,
+      row,
       outcome.reason ?? null,
     );
     return;
   }
   if (outcome.status === "rejected") {
-    await rejectPendingDeposit(
-      row.id,
-      expectedGeneration,
-      outcome.reason,
-    );
+    await rejectPendingDeposit(row, outcome.reason);
     return;
   }
-  await creditConfirmedPendingDeposit(row.id, expectedGeneration);
+  await creditConfirmedPendingDeposit(row, {
+    blockNumber: outcome.blockNumber,
+    blockHash: outcome.blockHash,
+  });
 }
 
 /** Reserve half of each bounded poll for unseen rows and half for the oldest

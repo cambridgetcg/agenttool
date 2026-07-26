@@ -5,22 +5,38 @@ import { join } from "node:path";
 import {
   assertExpectedSubmitIdentity,
   resolveSubmitError,
+  submittedIdentityMatches,
 } from "../src/workers/payout/submit-outcome";
 
 describe("payout RPC submit ambiguity", () => {
-  test("accepts only the expected chain-specific submitted identity", () => {
-    expect(() =>
-      assertExpectedSubmitIdentity("evm", "0xabc123", "0xAbC123"),
-    ).not.toThrow();
-    expect(() =>
-      assertExpectedSubmitIdentity("solana", "AbC123", "AbC123"),
-    ).not.toThrow();
+  test("accepts only strict chain-specific submitted identities", () => {
+    const evm = `0x${"a".repeat(64)}`;
+    const otherEvm = `0x${"b".repeat(64)}`;
+    expect(
+      submittedIdentityMatches(
+        "evm",
+        evm,
+        evm.toUpperCase().replace("0X", "0x"),
+      ),
+    ).toBe(true);
+    expect(submittedIdentityMatches("evm", evm, otherEvm)).toBe(false);
+    expect(submittedIdentityMatches("evm", evm, "0x01")).toBe(false);
+    expect(
+      submittedIdentityMatches("solana", "signature-a", "signature-a"),
+    ).toBe(true);
+    expect(
+      submittedIdentityMatches("solana", "signature-a", "signature-b"),
+    ).toBe(false);
 
     expect(() =>
-      assertExpectedSubmitIdentity("evm", "0xabc123", "0xdef456"),
-    ).toThrow("submit_identity_mismatch");
+      assertExpectedSubmitIdentity(
+        "evm",
+        evm,
+        evm.toUpperCase().replace("0X", "0x"),
+      ),
+    ).not.toThrow();
     expect(() =>
-      assertExpectedSubmitIdentity("solana", "AbC123", "abc123"),
+      assertExpectedSubmitIdentity("evm", evm, otherEvm),
     ).toThrow("submit_identity_mismatch");
   });
 
@@ -94,7 +110,10 @@ describe("payout RPC submit ambiguity", () => {
     for (const submitPhase of [evmSubmitPhase, solanaSubmitPhase]) {
       expect(submitPhase).toContain("resolveSubmitError");
       expect(submitPhase).toContain("assertExpectedSubmitIdentity");
-      expect(submitPhase).toContain("markExpectedPayoutBroadcast");
+      expect(submitPhase).toContain("markPersistedIdentityBroadcast");
+      expect(submitPhase).toContain(
+        "recordPersistedIdentitySubmitAmbiguity",
+      );
       expect(submitPhase).not.toContain('.set({ status: "failed"');
       expect(submitPhase).not.toContain(".update(wallets)");
       expect(submitPhase).not.toContain("creditsForAmount");
@@ -102,7 +121,7 @@ describe("payout RPC submit ambiguity", () => {
     }
   });
 
-  test("broadcast success is a CAS bound to the persisted expected identity", () => {
+  test("broadcast success and ambiguity writes bind persisted identity and network", () => {
     const source = readFileSync(
       join(
         __dirname,
@@ -115,19 +134,23 @@ describe("payout RPC submit ambiguity", () => {
       "utf8",
     );
     const helperStart = source.indexOf(
-      "async function markExpectedPayoutBroadcast",
+      "async function markPersistedIdentityBroadcast",
     );
     const dispatcherStart = source.indexOf(
       "// ── Top-level chain dispatcher",
       helperStart,
     );
-    const helper = source.slice(helperStart, dispatcherStart);
+    const helpers = source.slice(helperStart, dispatcherStart);
 
     expect(helperStart).toBeGreaterThan(-1);
     expect(dispatcherStart).toBeGreaterThan(helperStart);
-    expect(helper).toContain('eq(cryptoPayouts.status, "broadcasting")');
-    expect(helper).toContain("eq(cryptoPayouts.txHash, expectedTxHash)");
-    expect(helper).toContain(".returning({ id: cryptoPayouts.id })");
-    expect(helper).toContain("return updated.length === 1");
+    expect(helpers).toContain('eq(cryptoPayouts.status, "broadcasting")');
+    expect(helpers.match(/eq\(cryptoPayouts\.txHash, txHash\)/g)?.length ?? 0)
+      .toBeGreaterThanOrEqual(2);
+    expect(
+      helpers.match(/eq\(cryptoPayouts\.network, network\)/g)?.length ?? 0,
+    ).toBeGreaterThanOrEqual(2);
+    expect(helpers).toContain(".returning({ id: cryptoPayouts.id })");
+    expect(helpers).toContain("return updated.length === 1");
   });
 });

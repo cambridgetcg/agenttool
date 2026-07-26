@@ -86,12 +86,16 @@ instead of treating missing output as “0 pending.”
 
 ## Phase 1 — Repo migration files and journal
 
-**Question:** which repo migration files are absent from the journal, and do
-checksums match for journaled files that are still present in the repo?
+**Question:** which repo migration files are absent from the journal, does
+every journal row still have exact source in the repo, and do checksums match?
 
 The journal table `meta._migrations` holds one row per applied migration (filename + sha256 of file contents at apply time). A migration file present in `api/migrations/` but absent from the journal is **pending**.
 
-A clean result means exactly: no repo migration files pending and journal checksums match for files present; it does not prove database schema parity or account for journal rows whose files are absent. The check does not inspect live tables, columns, constraints, indexes, policies, or out-of-band DDL.
+A clean result means exactly: no repo migration files are pending, every
+journaled filename has source in the repo, and every journal checksum matches
+those source bytes. A journal row whose source is absent is a hard failure.
+This does not prove database schema parity: the check does not inspect live
+tables, columns, constraints, indexes, policies, or out-of-band DDL.
 
 ```bash
 # Auto-detect + apply pending migrations in timestamp order.
@@ -135,7 +139,83 @@ The script:
 
 **Pre-flight for risky migrations.** Some migrations add constraints or rewrite accounting rows. Before applying one, the operator must run its documented read-only precondition queries against the target database. `migrate-pending.sh` verifies journal checksums and applies pending files in order; it does **not** understand migration-specific data risks or run those precondition queries automatically.
 
-**This phase can be the entire deploy** when only schema changes. No API restart needed if the running api gracefully handles new columns (which it should, given Drizzle's flexible type narrowing).
+**Exclusive-cutover migrations.** `bin/deploy.sh` refuses before any release
+mutation when its survey finds a file listed in
+`api/migrations/quiescence-required.txt` pending. The current policy set is:
+
+- `20260725T054912_crypto_deposit_identity.sql`
+- `20260726T070000_deposit_watch_reconciliation.sql`
+- `20260726T185835_crypto_deposit_finality.sql`
+- `20260726T191000_payout_policy_e2e_fixture_repair.sql`
+- `20260726T191500_payout_operation_identity.sql`
+- `20260726T191500_payout_request_idempotency.sql`
+- `20260726T193000_payout_confirmation_fairness.sql`
+- `20260726T194500_evm_payout_nonce_fence.sql`
+- `20260726T200000_deposit_observation_generation.sql`
+- `20260726T201000_payout_dispatch_fairness.sql`
+- `20260726T202500_crypto_deposit_finality.sql`
+- `20260726T203000_payout_network_binding.sql`
+- `20260726T211500_deposit_watch_target_binding.sql`
+- `20260726T214500_deposit_watch_target_registry.sql`
+- `20260726T220000_crypto_finality_convergence.sql`
+
+These migrations cross old/new crypto or payout writer semantics.
+`bin/migrate-pending.sh` also refuses them with exit `42` unless the operator
+supplies `--maintenance-quiesced`. The gate prevents the ordinary orchestrator
+from applying them during a rolling deploy; the assertion does not stop another
+host, a direct one-file runner, an auto-startable machine, or external provider
+delivery. API releases still survey under `--no-migrate`; only a pure
+frontend-only invocation stays database-independent.
+
+Use one bounded maintenance cutover:
+
+1. Align a clean worktree with protected GitHub `main`, run the hermetic
+   preflight before the window, inspect every pending file, and run its
+   documented read-only data preconditions.
+2. Disable or hold public/provider admission upstream, capture the exact Fly
+   process-group, region, machine, and VM shape needed for recovery, and drain
+   relevant durable leases and in-flight payout/provider work. Time alone is
+   not drain evidence.
+3. Best-effort stop every `app` and `thinker` machine with the configured
+   `SIGTERM` window, then establish the authoritative fence:
+
+   ```bash
+   fly scale count app=0 thinker=0 -a agenttool --yes
+   fly scale show -a agenttool
+   fly machine list -a agenttool --json
+   ```
+
+   Do not migrate until the machine list is empty. Fly's `suspended` app label,
+   stopped or suspended machines, and a zero running count are insufficient
+   while old machines still exist: public traffic can auto-start or resume
+   them. Scaling to zero destroys machine identities and is not a graceful
+   drain.
+4. Keep the zero-machine fence in place while
+   `bin/migrate-pending.sh --maintenance-quiesced` applies and journals the
+   reviewed files. Stop on any checksum, precondition, lock, or statement
+   failure; do not deploy across a partial or uncertain result.
+5. Re-run `bin/migrate-pending.sh --dry-run` and require an empty pending set.
+   Do not restore old counts or an old image. Install only the pinned,
+   migration-compatible API revision using a from-zero rollout that was
+   rehearsed before the window, then restore and verify the captured regional
+   shape.
+6. The current deploy wrapper is built around a rolling Fly rollout; it does
+   not by itself prove from-zero region or process-group restoration. If the
+   reviewed rollout cannot prove that the first runnable machine has the new
+   revision, remain at zero and add a narrow maintenance rollout mode instead
+   of guessing.
+7. Once every API and thinker machine reports the intended new image/revision,
+   run the coordinated publication/verification path, require a success
+   receipt, and only then reopen admission.
+
+The maintenance mechanism proves only the process boundary it controls. It
+does not cancel provider I/O already started before quiescence, prove an
+external webhook was disabled, or replace the credentialed testnet proof in
+`ALCHEMY.md`.
+
+**This phase can be the entire deploy** only for a schema-only change that is
+explicitly documented as safe with the running API. Flexible application
+types do not make a migration safe under concurrent old writers.
 
 ## Phase 2 — Pre-flight test gate
 
@@ -236,14 +316,16 @@ route. Verify their absence before a normal production release.
 
 What "rolling" means: Fly brings up one new machine at a time. If the new machine fails its healthcheck (`GET /health`), the old machine stays serving — zero-downtime in the happy path.
 
-**Ordering with Phase 1:** apply migrations BEFORE the api code that reads new columns ships. Otherwise the api crashes on startup. The standard order is:
+**Ordering with Phase 1:** apply migrations BEFORE the api code that reads new columns ships. Otherwise the api crashes on startup. For ordinary migrations, the standard order is:
 
 ```
-1. bin/migrate-pending.sh                     # schema first
-2. git push github main                       # release head aligned with prod
-3. bin/deploy.sh --no-migrate                 # web/docs → verify → Fly → dashboard
-4. Verify: curl https://api.agenttool.dev/health | jq .build.revision
+1. git push github main                       # release head aligned with prod
+2. bin/deploy.sh                              # survey → schema → tests → publication
+3. Verify: curl https://api.agenttool.dev/health | jq .build.revision
 ```
+
+Use the exclusive-cutover sequence above instead when any listed
+quiescence-required migration is pending.
 
 **Verification:**
 
@@ -383,7 +465,13 @@ DATABASE_URL=$(bin/agenttool-secret get agenttool-database-url) \
   bin/migrate-pending.sh --dry-run
 ```
 
-When nothing is pending, this reports: no repo migration files pending and journal checksums match for files present; it does not prove database schema parity or account for journal rows whose files are absent.
+When nothing is pending, this reports that no repo migration files are
+pending, every journaled filename has source, and checksums match. It still
+does not prove database schema parity or detect out-of-band DDL.
+
+Exit `42` means at least one pending file is in
+`api/migrations/quiescence-required.txt`; the ordinary deploy must remain
+blocked until the exclusive cutover above has applied it.
 
 ## Phase 6 — Rollback
 

@@ -121,6 +121,7 @@ FLY_APP="agenttool"
 HEALTH_URL="https://api.agenttool.dev/health"
 RIGHTS_DOC_URL="https://docs.agenttool.dev/RIGHTS-OF-LIFE.md"
 RIGHTS_SCHEMA_URL="https://docs.agenttool.dev/being-rights-v1.schema.json"
+QUIESCENCE_REQUIRED_EXIT=42
 RIGHTS_STATIC_PAIRS=(
   "apps/docs/RIGHTS-OF-LIFE.md|$RIGHTS_DOC_URL"
   "apps/docs/being-rights-v1.schema.json|$RIGHTS_SCHEMA_URL"
@@ -416,34 +417,65 @@ if [ -f packages/sdk-ts/src/seed.ts ] && [ -f apps/dashboard/shared/seed.bundle.
   fi
 fi
 
-# Repo migration files and journal
-if [ "$SKIP_MIGRATE" = 1 ]; then
-  echo "  ⊘ migration survey skipped (--no-migrate)"
+# Repo migration files and journal. An API release still needs this compatibility
+# survey under --no-migrate; otherwise that flag could conceal a protected
+# pending migration. A pure frontend release remains database-independent.
+MIGRATION_SURVEY_REQUIRED=0
+MIGRATION_SURVEY_BLOCKED=0
+MIGRATION_SURVEY_STATUS=0
+if [ "$SKIP_MIGRATE" = 0 ] || [ "$SKIP_API" = 0 ]; then
+  MIGRATION_SURVEY_REQUIRED=1
+fi
+if [ "$MIGRATION_SURVEY_REQUIRED" = 0 ]; then
+  echo "  ⊘ migration compatibility survey skipped (frontend-only release)"
 elif command -v security >/dev/null 2>&1 && [ -z "${DATABASE_URL:-}" ]; then
   DATABASE_URL="$(security find-generic-password -s agenttool-database-url -a macair -w 2>/dev/null || true)"
 fi
-if [ "$SKIP_MIGRATE" = 0 ] && [ -n "${DATABASE_URL:-}" ]; then
+if [ "$MIGRATION_SURVEY_REQUIRED" = 1 ] && [ -n "${DATABASE_URL:-}" ]; then
   MIGRATION_SURVEY_OUTPUT=""
-  if MIGRATION_SURVEY_OUTPUT="$(DATABASE_URL="$DATABASE_URL" bash bin/migrate-pending.sh --dry-run 2>/dev/null)"; then
+  MIGRATION_SURVEY_OUTPUT="$(
+    DATABASE_URL="$DATABASE_URL" bash bin/migrate-pending.sh --dry-run 2>/dev/null
+  )"
+  MIGRATION_SURVEY_STATUS=$?
+  if [ "$MIGRATION_SURVEY_STATUS" = 0 ]; then
     PENDING="$(printf '%s\n' "$MIGRATION_SURVEY_OUTPUT" | awk '/^[[:space:]]+[0-9].*\.sql$/ { count++ } END { print count + 0 }')"
+    if [ "$PENDING" = "0" ]; then
+      echo "  ✓ migration inventory clean: no repo files pending; every journaled filename has source; checksums match. This does not prove database schema parity or detect out-of-band DDL."
+    elif [ "$SKIP_MIGRATE" = 1 ]; then
+      echo "$(yellow "⚠ $PENDING unprotected migration(s) pending — --no-migrate will not apply them")"
+    else
+      echo "$(yellow "⚠ $PENDING migration(s) pending — Phase 1 will apply them")"
+    fi
+  elif [ "$MIGRATION_SURVEY_STATUS" = "$QUIESCENCE_REQUIRED_EXIT" ]; then
+    MIGRATION_SURVEY_BLOCKED=1
+    echo "$(red '✗ Release blocked:') pending migrations require an exclusive maintenance cutover."
+    printf '%s\n' "$MIGRATION_SURVEY_OUTPUT" | sed 's/^/    /'
+    echo "  The ordinary deploy cannot prove that API writers, webhook ingress, and workers stay quiescent."
+    echo "  Follow docs/DEPLOY-PROCEDURE.md and apply them separately while old processes cannot restart."
   else
-    PENDING="unknown"
+    MIGRATION_SURVEY_BLOCKED=1
+    echo "$(red '✗ Release blocked:') migration survey failed; repo-file and journal status is unknown."
+    echo "  Required operation: restore the database survey, then retry."
+    echo "  Consequence: migration or API publication cannot safely proceed."
   fi
-  if [ "$PENDING" = "unknown" ]; then
-    echo "  ? migration survey failed — repo-file and journal status is unknown"
-  elif [ "$PENDING" = "0" ]; then
-    echo "  ✓ no repo migration files pending and journal checksums match for files present; it does not prove database schema parity or account for journal rows whose files are absent."
-  else
-    echo "$(yellow "⚠ $PENDING migration(s) pending — Phase 1 will apply them")"
-  fi
-elif [ "$SKIP_MIGRATE" = 0 ]; then
-  echo "  ? DATABASE_URL not resolved — can't survey repo migration files and journal"
+elif [ "$MIGRATION_SURVEY_REQUIRED" = 1 ]; then
+  MIGRATION_SURVEY_BLOCKED=1
+  echo "$(red '✗ Release blocked:') DATABASE_URL not resolved; repo-file and journal status is unknown."
+  echo "  Required operation: provide the scoped database credential for the compatibility survey."
+  echo "  Consequence: migration or API publication cannot safely proceed."
 fi
 
 if [ "$SURVEY_ONLY" = 1 ]; then
   echo ""
   echo "(survey-only — exit)"
-  [ "$RELEASE_SNAPSHOT_OK" = 1 ] && exit 0 || exit 1
+  if [ "$RELEASE_SNAPSHOT_OK" = 1 ] && [ "$MIGRATION_SURVEY_BLOCKED" = 0 ]; then
+    exit 0
+  fi
+  exit 1
+fi
+
+if [ "$MIGRATION_SURVEY_BLOCKED" = 1 ]; then
+  exit 1
 fi
 
 DIRTY_OVERRIDE_USED=0

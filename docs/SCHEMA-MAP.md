@@ -220,7 +220,11 @@ Every row in this monolith is reachable from a `project_id`. Cross-instance fede
 
 Lives in `api/migrations/`. Naming: ISO-timestamped `YYYYMMDDTHHMMSS_<name>.sql`. Earlier files used sequential `0001`–`0027` numbering; that scheme is being phased out as of 2026-05.
 
-Tooling: Drizzle Kit (`drizzle.config.ts`). Apply with `bun run db:migrate` from `api/`, or single-file via `bun api/scripts/_migrate-one.ts <file>`.
+Tooling: Drizzle Kit (`drizzle.config.ts`) generates schema changes. Inspect
+and apply committed SQL from the repository root with
+`bin/migrate-pending.sh --dry-run`, then `bin/migrate-pending.sh`. Exit `42`
+requires the exclusive maintenance cutover in `DEPLOY-PROCEDURE.md`; the
+single-file runner is not a bypass.
 
 ## What's NOT in these schemas
 

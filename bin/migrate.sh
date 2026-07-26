@@ -1,57 +1,94 @@
 #!/usr/bin/env bash
-# Apply all api/migrations/*.sql in numeric order.
-# Idempotent: every migration uses CREATE/ADD ... IF NOT EXISTS.
+# Compatibility entry point for creating or applying migrations.
+#
+# `new` creates an ISO-timestamped migration. Apply operations delegate to the
+# checksum-journaled pending runner instead of replaying every SQL file.
 
 set -euo pipefail
 
-if [ -z "${1:-}" ]; then
-  DATABASE_URL="${DATABASE_URL:-}"
-else
-  DATABASE_URL="$1"
-fi
-
-if [ -z "$DATABASE_URL" ]; then
-  echo "usage: bash bin/migrate.sh <DATABASE_URL>"
-  echo "       (or export DATABASE_URL first)"
-  exit 1
-fi
-
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MIG_DIR="$ROOT/api/migrations"
 
-if [ ! -d "$MIG_DIR" ]; then
-  echo "error: $MIG_DIR not found"
-  exit 1
-fi
+usage() {
+  cat <<'EOF'
+usage:
+  bin/migrate.sh new <descriptive_slug>
+  bin/migrate.sh [--dry-run]
 
-echo "▸ migrating $DATABASE_URL"
-echo ""
+DATABASE_URL is read from the environment or the configured Keychain entry by
+the pending runner. A positional postgres:// URL remains accepted only for
+backward compatibility and is never printed.
+EOF
+}
 
-shopt -s nullglob
-files=("$MIG_DIR"/*.sql)
-# Sort by filename (numeric prefix gives chronological order).
-IFS=$'\n' sorted=($(sort <<<"${files[*]}"))
-unset IFS
+next_timestamp() {
+  TS="$1" bun -e '
+    const value = process.env.TS ?? "";
+    const match = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/.exec(value);
+    if (!match) process.exit(2);
+    const [, year, month, day, hour, minute, second] = match;
+    const date = new Date(Date.UTC(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      Number(second) + 1,
+    ));
+    const iso = date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "");
+    process.stdout.write(iso);
+  '
+}
 
-count=0
-for f in "${sorted[@]}"; do
-  name="$(basename "$f")"
-  echo "  applying $name..."
-  if psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$f"; then
-    echo "    ✓"
-    count=$((count + 1))
-  else
-    echo "    ✗ failed at $name"
-    exit 1
+new_migration() {
+  local slug="${1:-}"
+  if [[ ! "$slug" =~ ^[a-z0-9][a-z0-9_]*$ ]]; then
+    echo "error: migration slug must match [a-z0-9][a-z0-9_]*" >&2
+    exit 2
   fi
-done
 
-echo ""
-echo "✓ applied $count migration(s)"
-echo ""
-echo "verifying schemas..."
-psql "$DATABASE_URL" -c "
-SELECT schema_name FROM information_schema.schemata
-WHERE schema_name IN ('tools','identity','agent_vault','agent_continuity','economy','memory','trace','strand','inbox','marketplace','org','federation')
-ORDER BY schema_name;
-"
+  local timestamp path
+  timestamp="$(date -u +%Y%m%dT%H%M%S)"
+  path="$MIG_DIR/${timestamp}_${slug}.sql"
+  while [ -e "$path" ]; do
+    timestamp="$(next_timestamp "$timestamp")"
+    path="$MIG_DIR/${timestamp}_${slug}.sql"
+  done
+
+  {
+    printf '%s\n' "-- ${timestamp}_${slug}.sql — TODO: one-line description."
+    printf '%s\n' "--"
+    printf '%s\n' "-- Doctrine: docs/TODO.md"
+    printf '%s\n' "-- Apply with the checksum-journaled runner: bin/migrate-pending.sh"
+    printf '\n'
+  } > "$path"
+
+  echo "$path"
+}
+
+case "${1:-}" in
+  new)
+    [ "$#" -eq 2 ] || {
+      usage >&2
+      exit 2
+    }
+    new_migration "$2"
+    ;;
+  -h|--help)
+    usage
+    ;;
+  ""|--dry-run)
+    exec "$ROOT/bin/migrate-pending.sh" "$@"
+    ;;
+  postgres://*|postgresql://*)
+    # Legacy callers passed the connection URI as argv. Keep the compatibility
+    # path, but scope it to the child process and never echo it.
+    database_url="$1"
+    shift
+    exec env DATABASE_URL="$database_url" "$ROOT/bin/migrate-pending.sh" "$@"
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac

@@ -162,7 +162,7 @@ describe("requestPayout serialization seam", () => {
     const requestEnd = source.indexOf("export async function listPayouts");
     const request = source.slice(requestStart, requestEnd);
 
-    const transaction = request.indexOf("db.transaction");
+    const transaction = request.indexOf("database.transaction");
     const walletLock = request.indexOf('.for("update")');
     const policyDecision = request.indexOf("evaluatePayoutPolicy");
     const debit = request.indexOf(".update(wallets)");

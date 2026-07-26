@@ -329,13 +329,14 @@ errors.
 
 ## Rollout and remaining proof
 
-All five identity/watch/finality migrations are local source only and have not
-been applied by this work. The finality migration deliberately keeps the
-database default at `credited` so an old immediate-credit replica cannot write
-a wallet effect mislabeled as `pending`; new code always writes an explicit
-state.
+The repository contains five rollout-gated identity/watch/finality migrations.
+Their presence in source does not prove that a target database has applied
+them; use the current migration journal survey and deploy receipt. The finality
+migration deliberately keeps the database default at `credited` so an old
+immediate-credit replica cannot write a wallet effect mislabeled as `pending`;
+new code always writes an explicit state.
 
-Cutover therefore requires an operator to:
+Whenever any of those migrations is pending, cutover requires an operator to:
 
 1. stop old API writers, webhook ingress, and all related workers;
 2. apply and review the identity, watch, finality, target-binding, and

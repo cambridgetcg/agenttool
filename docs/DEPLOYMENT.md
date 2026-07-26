@@ -8,36 +8,36 @@
 
 ## Prereqs
 
-- **Postgres 15+** (with `pgvector` and `pgcrypto` extensions available)
+- **Postgres 15+** with `pgvector`, `pgcrypto`, `pg_cron`, and `pg_net`
+  available; the full history is not compatible with a bare Postgres image
 - **Redis 7+** (BullMQ + Hono SSE; LISTEN/NOTIFY uses Postgres directly)
 - **Bun** runtime on the API host
 - **An Anthropic or OpenAI API key** for the smoke-test (orchestrator stores it in vault)
 
 ## 1. Apply migrations to a fresh database
 
-Order matters. `0000_bootstrap.sql` creates the base tables; `0001-0012` are additive.
+Order matters. The checksum-journaled runner puts the journal creator first,
+then applies every remaining file in lexicographic order. Do not replay a
+partial prefix with raw `psql` and then run the batch runner: that loses the
+proof of which bytes were already applied.
 
 ```bash
 export DATABASE_URL="postgres://user:pass@host:5432/agenttool"
 
-# Foundations
-psql "$DATABASE_URL" -f api/migrations/0000_bootstrap.sql
+# A fresh target has no old API writers, provider ingress, or workers. The
+# first survey lists the full backlog and exits 42 because protected files are
+# present. Inspect that list before making the explicit maintenance assertion.
+bin/migrate-pending.sh --dry-run
+bin/migrate-pending.sh --maintenance-quiesced
 
-# Additive layers in numeric order
-for f in api/migrations/0001_*.sql api/migrations/0002_*.sql api/migrations/0003_*.sql \
-         api/migrations/0004_*.sql api/migrations/0005_*.sql api/migrations/0006_*.sql \
-         api/migrations/0007_*.sql api/migrations/0008_*.sql api/migrations/0009_*.sql \
-         api/migrations/0010_*.sql api/migrations/0011_*.sql api/migrations/0012_*.sql; do
-  echo "applying $f"
-  psql "$DATABASE_URL" -f "$f" || exit 1
-done
+# Require a clean source/journal inventory after application.
+bin/migrate-pending.sh --dry-run
 ```
 
-Or use the helper:
-
-```bash
-bash bin/migrate.sh "$DATABASE_URL"
-```
+`--maintenance-quiesced` is an operator assertion, not a process check. Use it
+for a fresh install only while nothing can write to that database and no
+provider callback targets it. Established environments must use the fenced
+cutover in [DEPLOY-PROCEDURE.md](DEPLOY-PROCEDURE.md).
 
 **Verify schemas exist** after migration:
 
@@ -118,6 +118,11 @@ must match. Neither an unset value nor a conflict silently selects mainnet.
 Before accepting EVM deposits, stop crypto webhook ingress and old API
 writers, and drain old workers before applying the checksum-verified deposit
 identity, watch, target-binding, target-registry, and finality migrations.
+Those files are classified in
+`api/migrations/quiescence-required.txt`; the canonical exclusive maintenance
+sequence and its limits are in `docs/DEPLOY-PROCEDURE.md`. Source presence is
+not environment status: use the target database's migration journal, deployed
+`/health.build.revision`, worker configuration, and recorded provider proof.
 The target-registry schema keeps rolling old-binary writes fail closed for
 address disclosure and durable convergence, but an old worker can still claim
 a newly inserted revisionless row during mixed-version overlap. Keep every old

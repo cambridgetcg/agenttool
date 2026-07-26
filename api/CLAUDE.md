@@ -135,7 +135,7 @@ Code spine: `thinker.ts` · `services/runtime/worker-manager.ts` · `services/ru
 cd api
 bun install
 bun run dev                                # local API
-bun run db:migrate                         # apply migrations
+../bin/migrate-pending.sh --dry-run        # inspect checked migration inventory
 bun test                                   # unit + route tests
 bun test tests/integration                 # integration tier
 bun test tests/doctrine                    # doctrine tier (WIP)

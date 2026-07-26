@@ -1,9 +1,10 @@
 /**
- * Economy client — wallets and escrows for agent-to-agent value exchange.
+ * Economy client — wallets, durable payout requests, and escrows for
+ * agent-to-agent value exchange.
  *
- * Mirrors py `agenttool.economy`: 17 methods across the wallet + escrow
- * surfaces of the agent-economy API (full CRUD, fund/spend, freeze/unfreeze,
- * spending policy, transactions, escrow lifecycle).
+ * Mirrors py `agenttool.economy`: 18 shared methods across the wallet, payout,
+ * and escrow surfaces of the agent-economy API. TypeScript also retains the
+ * backward-compatible `createWallet` alias, for 19 methods total.
  *
  * @example
  * ```ts
@@ -54,6 +55,73 @@ export interface SetWalletPolicyOpts {
   requires_approval_above?: number;
 }
 
+export type PayoutChain =
+  | "ethereum"
+  | "base"
+  | "polygon"
+  | "arbitrum"
+  | "optimism"
+  | "solana";
+
+export type PayoutStatus =
+  | "requested"
+  | "signing"
+  | "broadcasting"
+  | "broadcast"
+  | "confirmed"
+  | "failed"
+  | "cancelled";
+
+export type PayoutNetwork = "testnet" | "mainnet";
+
+export interface RequestPayoutOpts {
+  chain: PayoutChain;
+  /** Canonical positive USDC base-unit integer string; never a float. */
+  amount_base: string;
+  destination_address: string;
+  token?: "USDC";
+  metadata?: Record<string, unknown>;
+  /**
+   * Caller-chosen, required durable request identity.
+   *
+   * Must be 8-256 visible ASCII characters without spaces. The SDK neither
+   * generates nor stores this value. Retrying the same key and semantic
+   * request returns the existing payout's current state; changed input under
+   * the same key is a conflict.
+   */
+  idempotency_key: string;
+}
+
+/** Current server state returned after a new or durably replayed request. */
+export interface PayoutRequestOutcome {
+  id: string;
+  status: PayoutStatus;
+  /** Whether this payout still needs the separately operated broadcast path. */
+  broadcast_pending: boolean;
+  /**
+   * True only when the server resolved this call through its durable payout
+   * request reservation. This is not a claim about Redis availability.
+   */
+  replayed: boolean;
+  note?: string;
+}
+
+/** One outgoing crypto payout row returned by `list_payouts`. */
+export interface Payout {
+  id: string;
+  chain: PayoutChain;
+  /** Durable network identity; null only for quarantined legacy rows. */
+  network: PayoutNetwork | null;
+  token: string;
+  /** Exact token base-unit integer string. */
+  amount_base: string;
+  destination_address: string;
+  status: PayoutStatus;
+  tx_hash: string | null;
+  requested_at: string;
+  confirmed_at: string | null;
+}
+
 export interface CreateEscrowOpts {
   creator_wallet_id: string;
   amount: number;
@@ -64,12 +132,110 @@ export interface CreateEscrowOpts {
   idempotency_key?: string;
 }
 
+const IDEMPOTENCY_KEY_RE = /^[!-~]{8,256}$/;
+const PAYOUT_CHAINS = new Set<PayoutChain>([
+  "ethereum",
+  "base",
+  "polygon",
+  "arbitrum",
+  "optimism",
+  "solana",
+]);
+const PAYOUT_STATUSES = new Set<PayoutStatus>([
+  "requested",
+  "signing",
+  "broadcasting",
+  "broadcast",
+  "confirmed",
+  "failed",
+  "cancelled",
+]);
+const PAYOUT_NETWORKS = new Set<PayoutNetwork>(["testnet", "mainnet"]);
+
 /** Unwrap `{success, data}` envelope if present, otherwise return as-is. */
 function unwrap<T = Record<string, unknown>>(json: unknown): T {
   if (json && typeof json === "object" && "data" in json) {
     return (json as { data: T }).data;
   }
   return json as T;
+}
+
+function invalidPayoutResponse(operation: string, detail: string): never {
+  throw new AgentToolError(
+    `${operation}: server returned a malformed payout response (${detail}).`,
+    {
+      code: "invalid_response",
+      hint: "Do not infer payout state or retry a payout from this response. Preserve the Idempotency-Key and inspect current state once the API contract is healthy.",
+    },
+  );
+}
+
+function payoutRecord(
+  operation: string,
+  json: unknown,
+): Record<string, unknown> {
+  const value = unwrap<unknown>(json);
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return invalidPayoutResponse(operation, "expected an object");
+  }
+  return value as Record<string, unknown>;
+}
+
+function payoutString(
+  operation: string,
+  field: string,
+  value: unknown,
+): string {
+  if (typeof value !== "string" || value.length === 0) {
+    return invalidPayoutResponse(operation, `${field} must be a non-empty string`);
+  }
+  return value;
+}
+
+function payoutNullableString(
+  operation: string,
+  field: string,
+  value: unknown,
+): string | null {
+  if (value === null) return null;
+  return payoutString(operation, field, value);
+}
+
+function payoutStatus(
+  operation: string,
+  value: unknown,
+): PayoutStatus {
+  if (typeof value !== "string" || !PAYOUT_STATUSES.has(value as PayoutStatus)) {
+    return invalidPayoutResponse(operation, "status is unknown");
+  }
+  return value as PayoutStatus;
+}
+
+function payoutChain(operation: string, value: unknown): PayoutChain {
+  if (typeof value !== "string" || !PAYOUT_CHAINS.has(value as PayoutChain)) {
+    return invalidPayoutResponse(operation, "chain is unknown");
+  }
+  return value as PayoutChain;
+}
+
+function payoutNetwork(
+  operation: string,
+  data: Record<string, unknown>,
+): PayoutNetwork | null {
+  if (!Object.prototype.hasOwnProperty.call(data, "network")) {
+    return invalidPayoutResponse(
+      operation,
+      "network must be present (null is allowed for legacy rows)",
+    );
+  }
+  if (data.network === null) return null;
+  if (
+    typeof data.network !== "string" ||
+    !PAYOUT_NETWORKS.has(data.network as PayoutNetwork)
+  ) {
+    return invalidPayoutResponse(operation, "network is unknown");
+  }
+  return data.network as PayoutNetwork;
 }
 
 function toWallet(json: unknown): Wallet {
@@ -111,6 +277,38 @@ function toEscrow(json: unknown): Escrow {
       (d.releasedAt as string) ?? (d.released_at as string) ?? null,
     created_at:
       (d.createdAt as string) ?? (d.created_at as string) ?? "",
+  };
+}
+
+function toPayout(json: unknown): Payout {
+  const operation = "economy.list_payouts";
+  const d = payoutRecord(operation, json);
+  const amountBase = payoutString(operation, "amount_base", d.amount_base);
+  if (!/^[1-9][0-9]*$/u.test(amountBase)) {
+    return invalidPayoutResponse(
+      operation,
+      "amount_base must be a canonical positive integer string",
+    );
+  }
+  return {
+    id: payoutString(operation, "id", d.id),
+    chain: payoutChain(operation, d.chain),
+    network: payoutNetwork(operation, d),
+    token: payoutString(operation, "token", d.token),
+    amount_base: amountBase,
+    destination_address: payoutString(
+      operation,
+      "destination_address",
+      d.destination_address,
+    ),
+    status: payoutStatus(operation, d.status),
+    tx_hash: payoutNullableString(operation, "tx_hash", d.tx_hash),
+    requested_at: payoutString(operation, "requested_at", d.requested_at),
+    confirmed_at: payoutNullableString(
+      operation,
+      "confirmed_at",
+      d.confirmed_at,
+    ),
   };
 }
 
@@ -230,13 +428,95 @@ export class EconomyClient {
     return (Array.isArray(items) ? items : []) as Record<string, unknown>[];
   }
 
+  // ── Crypto payouts ──────────────────────────────────────────────────────
+
+  /**
+   * Request an outgoing crypto payout under a caller-chosen durable key.
+   *
+   * The SDK sends exactly one request and never generates a key, retries a
+   * broadcast, or treats a Redis cache as the correctness boundary.
+   */
+  async request_payout(
+    walletId: string,
+    options: RequestPayoutOpts,
+  ): Promise<PayoutRequestOutcome> {
+    if (
+      typeof options.idempotency_key !== "string" ||
+      !IDEMPOTENCY_KEY_RE.test(options.idempotency_key)
+    ) {
+      throw new AgentToolError(
+        "request_payout idempotency_key must be 8-256 visible ASCII characters without spaces",
+      );
+    }
+
+    const body: Record<string, unknown> = {
+      chain: options.chain,
+      token: options.token ?? "USDC",
+      amount_base: options.amount_base,
+      destination_address: options.destination_address,
+    };
+    if (options.metadata !== undefined) body.metadata = options.metadata;
+
+    const data = payoutRecord(
+      "economy.request_payout",
+      await this.req(
+        "POST",
+        `/v1/wallets/${walletId}/payout`,
+        body,
+        { "Idempotency-Key": options.idempotency_key },
+      ),
+    );
+    const status = payoutStatus("economy.request_payout", data.status);
+    if (typeof data.broadcast_pending !== "boolean") {
+      return invalidPayoutResponse(
+        "economy.request_payout",
+        "broadcast_pending must be boolean",
+      );
+    }
+    if (typeof data.replayed !== "boolean") {
+      return invalidPayoutResponse(
+        "economy.request_payout",
+        "replayed must be boolean",
+      );
+    }
+    if (data.note !== undefined && typeof data.note !== "string") {
+      return invalidPayoutResponse(
+        "economy.request_payout",
+        "note must be a string when present",
+      );
+    }
+    return {
+      id: payoutString("economy.request_payout", "id", data.id),
+      status,
+      broadcast_pending: data.broadcast_pending,
+      replayed: data.replayed,
+      note: data.note,
+    };
+  }
+
+  /** List outgoing crypto payouts for a wallet, newest first. */
+  async list_payouts(walletId: string): Promise<Payout[]> {
+    const data = payoutRecord(
+      "economy.list_payouts",
+      await this.req("GET", `/v1/wallets/${walletId}/payouts`),
+    );
+    const items = data.payouts;
+    if (!Array.isArray(items)) {
+      return invalidPayoutResponse(
+        "economy.list_payouts",
+        "payouts must be an array",
+      );
+    }
+    return items.map(toPayout);
+  }
+
   // ── Escrows ─────────────────────────────────────────────────────────────
 
   /** Create an escrow — locks wallet balance units until released or refunded. */
   async create_escrow(options: CreateEscrowOpts): Promise<Escrow> {
     if (
       options.idempotency_key !== undefined &&
-      !/^[!-~]{8,256}$/.test(options.idempotency_key)
+      !IDEMPOTENCY_KEY_RE.test(options.idempotency_key)
     ) {
       throw new AgentToolError(
         "create_escrow idempotency_key must be 8-256 visible ASCII characters without spaces",

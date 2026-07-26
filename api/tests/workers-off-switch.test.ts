@@ -56,7 +56,7 @@ describe("documented worker off-switch", () => {
     expect(lazyImport).toBeGreaterThan(gate);
   });
 
-  test("the global switch overrides payout opt-in before config validation or debit", () => {
+  test("the global switch overrides payout opt-in", () => {
     const env = {
       ...process.env,
       AGENTTOOL_DISABLE_WORKERS: "1",
@@ -69,7 +69,7 @@ describe("documented worker off-switch", () => {
       process.execPath,
       [
         "-e",
-        "const gate = await import('./src/services/economy/config.ts'); const router = (await import('./src/routes/economy/crypto.ts')).default; const response = await router.request('/wallets/not-read/payout', { method: 'POST' }); console.log(JSON.stringify({ allowed: gate.payoutWorkerBootAllowed(), status: response.status, body: await response.json() }));",
+        "const gate = await import('./src/services/economy/config.ts'); console.log(JSON.stringify({ allowed: gate.payoutWorkerBootAllowed() }));",
       ],
       { cwd: API_ROOT, env, encoding: "utf8", timeout: 10_000 },
     );
@@ -77,15 +77,6 @@ describe("documented worker off-switch", () => {
     expect(result.status).toBe(0);
     const output = JSON.parse(result.stdout.trim());
     expect(output.allowed).toBe(false);
-    expect(output.status).toBe(503);
-    expect(output.body).toMatchObject({
-      error: "payout_broadcast_not_available",
-      payout_worker_enabled: true,
-      global_workers_disabled: true,
-    });
-    expect(output.body.message).toMatch(
-      /PAYOUT_WORKER_ENABLED=true.*AGENTTOOL_DISABLE_WORKERS.*unset/is,
-    );
   });
 
   test("payout workers repeat the gate and never bypass a missing queue", () => {

@@ -167,6 +167,12 @@ export type {
   CreateEscrowOpts,
   CreateWalletOpts,
   FundWalletOpts,
+  Payout,
+  PayoutChain,
+  PayoutNetwork,
+  PayoutRequestOutcome,
+  PayoutStatus,
+  RequestPayoutOpts,
   SetWalletPolicyOpts,
   SpendOpts,
 } from "./economy.js";

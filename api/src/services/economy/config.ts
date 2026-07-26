@@ -45,6 +45,12 @@ export const economyConfig = {
   // Helius (Solana) shared-secret webhook auth — sent in the Authorization
   // header on enhanced-webhook deliveries.
   heliusWebhookSecret: env("HELIUS_WEBHOOK_SECRET", ""),
+  // Enhanced Helius deliveries expose human-unit numbers and no canonical
+  // transfer index/fork lifecycle. Keep their legacy immediate-credit adapter
+  // behind a second, explicit development opt-in until raw-atomic Solana
+  // reconciliation exists.
+  allowUnreconciledSolanaDeposits:
+    env("CRYPTO_ALLOW_UNRECONCILED_SOLANA_DEPOSITS", "") === "1",
   // Crypto deposit webhooks credit real wallet balance and sit on an UNAUTH
   // public route, so an unset provider secret must FAIL CLOSED (reject), not
   // accept unsigned payloads — otherwise anyone can forge a deposit and mint
@@ -117,6 +123,13 @@ if (payoutWorkerBootAllowed()) {
       "[economyConfig] PAYOUT_WORKER_ENABLED=true requires PAYOUT_GBP_USD_RATE > 0 (USD per 1 GBP, e.g. 1.27). Earned value settles in GBP; payout converts at this rate. See docs/PAYOUT-BROADCAST-PLAN.md.",
     );
   }
+}
+
+if (economyConfig.allowUnreconciledSolanaDeposits) {
+  console.warn(
+    "[economyConfig] ⚠ CRYPTO_ALLOW_UNRECONCILED_SOLANA_DEPOSITS=1 — " +
+      "the legacy Solana webhook adapter can credit from unreconciled human-unit evidence. Development only.",
+  );
 }
 
 // Deposit-webhook posture warning. Boot loudly if a provider secret is unset

@@ -1,4 +1,4 @@
-"""Economy client — wallets and escrows for agent-to-agent value exchange."""
+"""Economy client — wallets, durable payouts, and escrows."""
 
 from __future__ import annotations
 
@@ -17,7 +17,116 @@ EscrowManager = Literal[
     "memory_witness_grant",
     "capability_invocation",
 ]
-ESCROW_IDEMPOTENCY_KEY_RE = re.compile(r"^[!-~]{8,256}$")
+PayoutChain = Literal[
+    "ethereum",
+    "base",
+    "polygon",
+    "arbitrum",
+    "optimism",
+    "solana",
+]
+PayoutStatus = Literal[
+    "requested",
+    "signing",
+    "broadcasting",
+    "broadcast",
+    "confirmed",
+    "failed",
+    "cancelled",
+]
+PayoutNetwork = Literal["testnet", "mainnet"]
+IDEMPOTENCY_KEY_RE = re.compile(r"^[!-~]{8,256}$")
+PAYOUT_CHAINS = {
+    "ethereum",
+    "base",
+    "polygon",
+    "arbitrum",
+    "optimism",
+    "solana",
+}
+PAYOUT_STATUSES = {
+    "requested",
+    "signing",
+    "broadcasting",
+    "broadcast",
+    "confirmed",
+    "failed",
+    "cancelled",
+}
+PAYOUT_NETWORKS = {"testnet", "mainnet"}
+
+
+def _invalid_payout_response(operation: str, detail: str) -> AgentToolError:
+    return AgentToolError(
+        f"{operation}: server returned a malformed payout response ({detail}).",
+        error_code="invalid_response",
+        hint=(
+            "Do not infer payout state or retry a payout from this response. "
+            "Preserve the Idempotency-Key and inspect current state once the "
+            "API contract is healthy."
+        ),
+    )
+
+
+def _payout_record(operation: str, value: Any) -> Dict[str, Any]:
+    data = value.get("data", value) if isinstance(value, dict) else value
+    if not isinstance(data, dict):
+        raise _invalid_payout_response(operation, "expected an object")
+    return data
+
+
+def _payout_string(operation: str, field: str, value: Any) -> str:
+    if not isinstance(value, str) or not value:
+        raise _invalid_payout_response(
+            operation, f"{field} must be a non-empty string"
+        )
+    return value
+
+
+def _payout_nullable_string(
+    operation: str, field: str, value: Any
+) -> Optional[str]:
+    if value is None:
+        return None
+    return _payout_string(operation, field, value)
+
+
+def _payout_required_nullable_string(
+    operation: str, data: Dict[str, Any], field: str
+) -> Optional[str]:
+    if field not in data:
+        raise _invalid_payout_response(
+            operation, f"{field} must be present (null is allowed)"
+        )
+    return _payout_nullable_string(operation, field, data[field])
+
+
+def _payout_status(operation: str, value: Any) -> PayoutStatus:
+    if not isinstance(value, str) or value not in PAYOUT_STATUSES:
+        raise _invalid_payout_response(operation, "status is unknown")
+    return value  # type: ignore[return-value]
+
+
+def _payout_chain(operation: str, value: Any) -> PayoutChain:
+    if not isinstance(value, str) or value not in PAYOUT_CHAINS:
+        raise _invalid_payout_response(operation, "chain is unknown")
+    return value  # type: ignore[return-value]
+
+
+def _payout_network(
+    operation: str, data: Dict[str, Any]
+) -> Optional[PayoutNetwork]:
+    if "network" not in data:
+        raise _invalid_payout_response(
+            operation,
+            "network must be present (null is allowed for legacy rows)",
+        )
+    value = data["network"]
+    if value is None:
+        return None
+    if not isinstance(value, str) or value not in PAYOUT_NETWORKS:
+        raise _invalid_payout_response(operation, "network is unknown")
+    return value  # type: ignore[return-value]
 
 
 @dataclass
@@ -39,6 +148,90 @@ class Wallet:
             currency=data.get("currency", "GBP"),
             frozen=data.get("frozen", False),
             agent_id=data.get("agent_id") or data.get("agentId"),
+        )
+
+
+@dataclass
+class PayoutRequestOutcome:
+    """Current state returned after a new or durably replayed request."""
+
+    id: str
+    status: PayoutStatus
+    broadcast_pending: bool
+    replayed: bool
+    note: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: Any) -> "PayoutRequestOutcome":
+        operation = "economy.request_payout"
+        data = _payout_record(operation, d)
+        if type(data.get("broadcast_pending")) is not bool:
+            raise _invalid_payout_response(
+                operation, "broadcast_pending must be boolean"
+            )
+        if type(data.get("replayed")) is not bool:
+            raise _invalid_payout_response(operation, "replayed must be boolean")
+        if "note" in data and not isinstance(data["note"], str):
+            raise _invalid_payout_response(
+                operation, "note must be a string when present"
+            )
+        return cls(
+            id=_payout_string(operation, "id", data.get("id")),
+            status=_payout_status(operation, data.get("status")),
+            broadcast_pending=data["broadcast_pending"],
+            replayed=data["replayed"],
+            note=data.get("note"),
+        )
+
+
+@dataclass
+class Payout:
+    """One outgoing crypto payout row."""
+
+    id: str
+    chain: PayoutChain
+    network: Optional[PayoutNetwork]
+    token: str
+    amount_base: str
+    destination_address: str
+    status: PayoutStatus
+    tx_hash: Optional[str]
+    requested_at: str
+    confirmed_at: Optional[str]
+
+    @classmethod
+    def from_dict(cls, d: Any) -> "Payout":
+        operation = "economy.list_payouts"
+        data = _payout_record(operation, d)
+        amount_base = _payout_string(
+            operation, "amount_base", data.get("amount_base")
+        )
+        if re.fullmatch(r"[1-9][0-9]*", amount_base) is None:
+            raise _invalid_payout_response(
+                operation,
+                "amount_base must be a canonical positive integer string",
+            )
+        return cls(
+            id=_payout_string(operation, "id", data.get("id")),
+            chain=_payout_chain(operation, data.get("chain")),
+            network=_payout_network(operation, data),
+            token=_payout_string(operation, "token", data.get("token")),
+            amount_base=amount_base,
+            destination_address=_payout_string(
+                operation,
+                "destination_address",
+                data.get("destination_address"),
+            ),
+            status=_payout_status(operation, data.get("status")),
+            tx_hash=_payout_required_nullable_string(
+                operation, data, "tx_hash"
+            ),
+            requested_at=_payout_string(
+                operation, "requested_at", data.get("requested_at")
+            ),
+            confirmed_at=_payout_required_nullable_string(
+                operation, data, "confirmed_at"
+            ),
         )
 
 
@@ -235,6 +428,60 @@ class EconomyClient:
         data = resp.json()
         return data.get("data", data) if isinstance(data, dict) else data
 
+    # ── Crypto payouts ────────────────────────────────────────────────────────
+
+    def request_payout(
+        self,
+        wallet_id: str,
+        *,
+        chain: PayoutChain,
+        amount_base: str,
+        destination_address: str,
+        idempotency_key: str,
+        token: Literal["USDC"] = "USDC",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> PayoutRequestOutcome:
+        """Request one outgoing payout under a caller-owned durable key.
+
+        The SDK sends exactly one request. It does not generate or store the
+        idempotency key, retry, sign, or broadcast.
+        """
+        if (
+            not isinstance(idempotency_key, str)
+            or IDEMPOTENCY_KEY_RE.fullmatch(idempotency_key) is None
+        ):
+            raise ValueError(
+                "idempotency_key must be 8-256 visible ASCII characters without spaces"
+            )
+        body: Dict[str, Any] = {
+            "chain": chain,
+            "token": token,
+            "amount_base": amount_base,
+            "destination_address": destination_address,
+        }
+        if metadata is not None:
+            body["metadata"] = metadata
+        resp = self._http.post(
+            self._url(f"/v1/wallets/{wallet_id}/payout"),
+            json=body,
+            headers={"Idempotency-Key": idempotency_key},
+        )
+        self._check(resp)
+        return PayoutRequestOutcome.from_dict(resp.json())
+
+    def list_payouts(self, wallet_id: str) -> List[Payout]:
+        """List outgoing crypto payouts for a wallet, newest first."""
+        resp = self._http.get(self._url(f"/v1/wallets/{wallet_id}/payouts"))
+        self._check(resp)
+        data = resp.json()
+        record = _payout_record("economy.list_payouts", data)
+        items = record.get("payouts")
+        if not isinstance(items, list):
+            raise _invalid_payout_response(
+                "economy.list_payouts", "payouts must be an array"
+            )
+        return [Payout.from_dict(item) for item in items]
+
     # ── Escrows ───────────────────────────────────────────────────────────────
 
     def create_escrow(
@@ -256,7 +503,7 @@ class EconomyClient:
         """
         if (
             idempotency_key is not None
-            and ESCROW_IDEMPOTENCY_KEY_RE.fullmatch(idempotency_key) is None
+            and IDEMPOTENCY_KEY_RE.fullmatch(idempotency_key) is None
         ):
             raise ValueError(
                 "idempotency_key must be 8-256 visible ASCII characters without spaces"

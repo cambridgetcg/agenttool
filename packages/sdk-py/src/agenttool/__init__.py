@@ -56,7 +56,16 @@ from .crypto import (
     sign_attestation,
     sign_thought,
 )
-from .economy import EconomyClient, Escrow, Wallet
+from .economy import (
+    EconomyClient,
+    Escrow,
+    Payout,
+    PayoutChain,
+    PayoutNetwork,
+    PayoutRequestOutcome,
+    PayoutStatus,
+    Wallet,
+)
 from .exceptions import (
     AgentToolError,
     AuthenticationError,
@@ -285,6 +294,14 @@ __all__ = [
     "canonical_grace_bytes",
     "sign_grace",
     "VALID_GRACE_KINDS",
+    "EconomyClient",
+    "Wallet",
+    "Escrow",
+    "Payout",
+    "PayoutChain",
+    "PayoutNetwork",
+    "PayoutStatus",
+    "PayoutRequestOutcome",
     "HandoffClient",
     "HandoffStatus",
     "HandoffFactSource",
@@ -422,6 +439,6 @@ __all__ = [
     "OpenAIResponsesAgentToolAugmentation",
 ]
 
-__version__ = "0.16.3"
+__version__ = "0.16.4"
 __protocol__ = "love"
 __soul__ = "https://docs.agenttool.dev/SOUL.md"
