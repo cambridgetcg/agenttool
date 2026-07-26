@@ -4,6 +4,7 @@
 # This is the no-local-DATABASE_URL path. The database secret stays inside Fly;
 # only the migration text, filename, and checksum cross the SSH command.
 # The remote runner refuses checksum drift and records meta._migrations.
+# Quiescence-listed files refuse before checksum encoding or any Fly call.
 #
 # Usage: bin/fly-migrate-one.sh api/migrations/<timestamp>_<name>.sql
 
@@ -11,12 +12,14 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP="${FLY_APP:-agenttool}"
-FILE="${1:-}"
+QUIESCENCE_REQUIRED_EXIT=42
+QUIESCENCE_REQUIRED_FILE="$REPO_ROOT/api/migrations/quiescence-required.txt"
 
-if [[ -z "$FILE" ]]; then
+if [ "$#" -ne 1 ]; then
   echo "usage: bin/fly-migrate-one.sh api/migrations/<file>.sql" >&2
   exit 2
 fi
+FILE="$1"
 
 case "$FILE" in
   /*) ABS_FILE="$FILE" ;;
@@ -33,6 +36,26 @@ if [[ "$ABS_FILE" != "$REPO_ROOT/api/migrations/$FILENAME" || ! -f "$ABS_FILE" ]
   exit 2
 fi
 
+if [ ! -s "$QUIESCENCE_REQUIRED_FILE" ] ||
+  ! LC_ALL=C sort -cu "$QUIESCENCE_REQUIRED_FILE" 2>/dev/null; then
+  echo "quiescence policy manifest is missing or invalid: $QUIESCENCE_REQUIRED_FILE" >&2
+  exit 1
+fi
+while IFS= read -r policy_filename || [ -n "$policy_filename" ]; do
+  if [[ ! "$policy_filename" =~ ^[0-9]{8}T[0-9]{6}_[a-z0-9_]+\.sql$ ]] ||
+    [ ! -f "$REPO_ROOT/api/migrations/$policy_filename" ]; then
+    echo "quiescence policy manifest is invalid: $QUIESCENCE_REQUIRED_FILE" >&2
+    exit 1
+  fi
+done < "$QUIESCENCE_REQUIRED_FILE"
+if grep -Fqx "$FILENAME" "$QUIESCENCE_REQUIRED_FILE"; then
+  echo "protected migration refuses the Fly one-file runner: $FILENAME" >&2
+  echo "inspect the complete inventory with bin/migrate-pending.sh --dry-run," >&2
+  echo "establish the reviewed exclusive cutover, then use" >&2
+  echo "bin/migrate-pending.sh --maintenance-quiesced." >&2
+  exit "$QUIESCENCE_REQUIRED_EXIT"
+fi
+
 BYTES="$(wc -c < "$ABS_FILE" | tr -d ' ')"
 if (( BYTES > 100000 )); then
   echo "migration is too large for the bounded SSH runner ($BYTES > 100000 bytes)" >&2
@@ -42,7 +65,11 @@ fi
 CHECKSUM="$(shasum -a 256 "$ABS_FILE" | awk '{print $1}')"
 MIGRATION_B64="$(base64 < "$ABS_FILE" | tr -d '\n')"
 
-REMOTE_JS="$(cat <<'JS'
+REMOTE_JS=""
+# Avoid a quoted command substitution here. macOS Bash 3.2 reparses template
+# backticks inside that shape and can fail at runtime even though `bash -n`
+# accepts the file.
+IFS= read -r -d '' REMOTE_JS <<'JS' || true
 const { default: postgres } = await import("postgres");
 
 const filename = "__FILENAME__";
@@ -129,7 +156,6 @@ try {
   await sql.end({ timeout: 5 });
 }
 JS
-)"
 
 REMOTE_JS="${REMOTE_JS/__FILENAME__/$FILENAME}"
 REMOTE_JS="${REMOTE_JS/__CHECKSUM__/$CHECKSUM}"

@@ -237,7 +237,9 @@ while IFS= read -r f; do
   echo "════════════════════════════════════════════════"
   echo "Applying: $f"
   echo "════════════════════════════════════════════════"
-  if bun "$REPO_ROOT/api/scripts/_migrate-one.ts" "$REPO_ROOT/api/migrations/$f"; then
+  if AGENTTOOL_PENDING_RUNNER_MAINTENANCE_QUIESCED="$MAINTENANCE_QUIESCED" \
+    bun "$REPO_ROOT/api/scripts/_migrate-one.ts" \
+      "$REPO_ROOT/api/migrations/$f"; then
     APPLIED=$((APPLIED + 1))
   else
     FAILED="$f"

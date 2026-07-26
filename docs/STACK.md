@@ -403,7 +403,7 @@ Plus Supabase-managed: `auth` (unused — agenttool uses DID + bearer, not Supab
 ### Migration application
 
 ```bash
-# Each migration file applied via the helper:
+# Ordinary migration applied via the one-file helper:
 DATABASE_URL=$(bin/agenttool-secret get agenttool-database-url) \
   bun api/scripts/_migrate-one.ts api/migrations/<file>
 ```
@@ -411,6 +411,14 @@ DATABASE_URL=$(bin/agenttool-secret get agenttool-database-url) \
 Naming: `0000` through `0022` are pre-2026-05-08 sequential numbering; everything after uses `YYYYMMDDTHHMMSS_<slug>.sql` timestamps to prevent parallel-session collisions (see `DEVELOPMENT.md` §1).
 
 **Journal**: `meta._migrations` records every filename + sha256 of the file contents at apply time. `_migrate-one.ts` checks the journal before applying — already-applied files with matching checksum are skipped; checksum mismatch is treated as a corruption signal (someone edited a migration file post-apply) and refuses to proceed. Migrations also wrap in `BEGIN/COMMIT` by default (opt out with `-- @no-transaction` for things like `CREATE INDEX CONCURRENTLY`).
+
+The local and Fly one-file helpers validate
+`api/migrations/quiescence-required.txt` and refuse listed files before
+credential/database or Fly access. Missing or malformed policy also fails
+closed, including for ordinary one-file runs. Protected migrations use the
+complete pending inventory and the exclusive-cutover procedure; this guard
+prevents accidental bypass but does not authenticate the operator or make raw
+SQL impossible.
 
 Bootstrap procedure (one-time, when introducing the journal):
 
@@ -620,7 +628,7 @@ bin/deploy.sh --no-migrate --no-frontend
                               then stages doctrine bytes and rolls Fly)
                              (~3-5 minutes; old machines serve until new ones healthcheck-green)
 
-DATABASE_URL=... bun api/scripts/_migrate-one.ts <file>   (DB schema; one migration at a time)
+DATABASE_URL=... bun api/scripts/_migrate-one.ts <file>   (ordinary DB migration only)
 ```
 
 At invocation start, `bin/deploy.sh` fetches `github/main`, includes untracked
@@ -657,8 +665,8 @@ curl -sI https://app.agenttool.dev/dashboard.html | head -1
 This default order does not apply when the migration is listed in
 `api/migrations/quiescence-required.txt`. The orchestrator and pending runner
 refuse that set before mutation; use the exclusive maintenance cutover in
-`DEPLOY-PROCEDURE.md`. A direct one-file runner is not proof that old writers
-were stopped.
+`DEPLOY-PROCEDURE.md`. Both direct one-file runners refuse listed files; that
+accidental-bypass guard is not proof that old writers were stopped.
 
 The split is deliberate: web and docs go first because the api may advertise
 them, while the dashboard goes last because it may depend on the new api.

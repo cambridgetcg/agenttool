@@ -102,12 +102,12 @@ tables, columns, constraints, indexes, policies, or out-of-band DDL.
 # Reads DATABASE_URL from env or keychain (agenttool-database-url, account=macair).
 bin/migrate-pending.sh
 
-# Or apply one file at a time:
+# Or apply one ordinary file at a time:
 DATABASE_URL=... bun api/scripts/_migrate-one.ts api/migrations/<file>.sql
 ```
 
 On a machine that deliberately has no local database credential, apply one
-reviewed migration through an existing Fly machine instead:
+reviewed ordinary migration through an existing Fly machine instead:
 
 ```bash
 bin/fly-migrate-one.sh api/migrations/<file>.sql
@@ -119,7 +119,13 @@ database URL never returns to the local machine. It is one-file-at-a-time by
 design; inspect the file and the pending set before each call, then deploy with
 `--no-migrate`.
 
-The script:
+Both one-file helpers refuse every filename in
+`api/migrations/quiescence-required.txt`. The local helper refuses before
+reading credentials or opening a database connection; the Fly helper refuses
+before checksum encoding or any `fly` call. Missing or malformed policy fails
+closed. They are ordinary-migration tools, not an exclusive-cutover path.
+
+The pending script:
 
 1. Lists `api/migrations/*.sql`.
 2. Queries `meta._migrations` for applied filenames.
@@ -141,72 +147,72 @@ The script:
 
 **Exclusive-cutover migrations.** `bin/deploy.sh` refuses before any release
 mutation when its survey finds a file listed in
-`api/migrations/quiescence-required.txt` pending. The current policy set is:
-
-- `20260725T054912_crypto_deposit_identity.sql`
-- `20260726T070000_deposit_watch_reconciliation.sql`
-- `20260726T185835_crypto_deposit_finality.sql`
-- `20260726T191000_payout_policy_e2e_fixture_repair.sql`
-- `20260726T191500_payout_operation_identity.sql`
-- `20260726T191500_payout_request_idempotency.sql`
-- `20260726T193000_payout_confirmation_fairness.sql`
-- `20260726T194500_evm_payout_nonce_fence.sql`
-- `20260726T200000_deposit_observation_generation.sql`
-- `20260726T201000_payout_dispatch_fairness.sql`
-- `20260726T202500_crypto_deposit_finality.sql`
-- `20260726T203000_payout_network_binding.sql`
-- `20260726T211500_deposit_watch_target_binding.sql`
-- `20260726T214500_deposit_watch_target_registry.sql`
-- `20260726T220000_crypto_finality_convergence.sql`
+`api/migrations/quiescence-required.txt` pending. That sorted manifest is the
+sole policy list; do not copy it into runbooks.
 
 These migrations cross old/new crypto or payout writer semantics.
 `bin/migrate-pending.sh` also refuses them with exit `42` unless the operator
 supplies `--maintenance-quiesced`. The gate prevents the ordinary orchestrator
-from applying them during a rolling deploy; the assertion does not stop another
-host, a direct one-file runner, an auto-startable machine, or external provider
-delivery. API releases still survey under `--no-migrate`; only a pure
-frontend-only invocation stays database-independent.
+from applying them during a rolling deploy. Direct one-file runners also
+refuse them, but this is an accidental-bypass guard rather than authentication:
+the assertion does not stop another host, deliberately forged process state,
+raw SQL, an auto-startable machine, or external provider delivery. API
+releases still survey under `--no-migrate`; only a pure frontend-only
+invocation stays database-independent.
 
 Use one bounded maintenance cutover:
 
-1. Align a clean worktree with protected GitHub `main`, run the hermetic
-   preflight before the window, inspect every pending file, and run its
-   documented read-only data preconditions.
-2. Disable or hold public/provider admission upstream, capture the exact Fly
-   process-group, region, machine, and VM shape needed for recovery, and drain
-   relevant durable leases and in-flight payout/provider work. Time alone is
-   not drain evidence.
-3. Best-effort stop every `app` and `thinker` machine with the configured
-   `SIGTERM` window, then establish the authoritative fence:
+1. Before the window, align a clean worktree with protected GitHub `main`, run
+   the hermetic preflight, build and pin the exact migration-compatible image,
+   inspect every pending file, and run its documented read-only preconditions.
+   Run `bin/migrate-pending.sh --dry-run`; require exit `42` and the exact
+   reviewed pending set.
+2. Capture the exact current machine IDs and every material property: process
+   group, region, VM shape, image, schedule, restart/autostart behavior,
+   standby relationships, ingress, and worker flags. Machine identity is part
+   of the topology. Do **not** use `fly scale count ...=0`, destroy, or
+   recreate as a fencing shortcut; those operations discard identities and
+   are not rollback.
+3. Use a separately reviewed and rehearsed identity-preserving maintenance
+   mechanism to hold public/provider admission, fence restart/autostart and
+   schedules, drain durable leases plus in-flight provider/payout work, and
+   stop the captured machines in place. Time alone, a suspended label, or a
+   zero-running count is not drain or writer-exclusion evidence.
+4. Before SQL, prove the same exact machine IDs still exist and cannot resume
+   old writers; prove admission is held, relevant durable work and database
+   leases/locks are empty, and future app processes will start with workers
+   disabled. If any proof is unavailable, stop without applying.
+5. Exercise the pending runner in this order:
 
    ```bash
-   fly scale count app=0 thinker=0 -a agenttool --yes
-   fly scale show -a agenttool
-   fly machine list -a agenttool --json
+   bin/migrate-pending.sh --dry-run
+   bin/migrate-pending.sh --dry-run --maintenance-quiesced
+   bin/migrate-pending.sh --maintenance-quiesced
+   bin/migrate-pending.sh --dry-run
    ```
 
-   Do not migrate until the machine list is empty. Fly's `suspended` app label,
-   stopped or suspended machines, and a zero running count are insufficient
-   while old machines still exist: public traffic can auto-start or resume
-   them. Scaling to zero destroys machine identities and is not a graceful
-   drain.
-4. Keep the zero-machine fence in place while
-   `bin/migrate-pending.sh --maintenance-quiesced` applies and journals the
-   reviewed files. Stop on any checksum, precondition, lock, or statement
-   failure; do not deploy across a partial or uncertain result.
-5. Re-run `bin/migrate-pending.sh --dry-run` and require an empty pending set.
-   Do not restore old counts or an old image. Install only the pinned,
-   migration-compatible API revision using a from-zero rollout that was
-   rehearsed before the window, then restore and verify the captured regional
-   shape.
-6. The current deploy wrapper is built around a rolling Fly rollout; it does
-   not by itself prove from-zero region or process-group restoration. If the
-   reviewed rollout cannot prove that the first runnable machine has the new
-   revision, remain at zero and add a narrow maintenance rollout mode instead
-   of guessing.
-7. Once every API and thinker machine reports the intended new image/revision,
-   run the coordinated publication/verification path, require a success
-   receipt, and only then reopen admission.
+   The first two inventories must name the same reviewed files. The apply must
+   stop on any checksum, precondition, lock, or statement failure. The final
+   inventory must be empty; it proves repository/journal parity, not schema
+   semantics or writer exclusion.
+   Once any protected SQL commits, the cutover is forward-only: never start or
+   restore an old writer image. Keep admission and workers held while fixing
+   forward with a migration-compatible image.
+6. Update those same machine IDs in place to the pinned image, checking
+   topology and image/revision after each update. Start and health-check the
+   intended app machines one at a time with workers still disabled; verify
+   exact immutable image, source revision, dirty=false, release metadata, and
+   all health checks before restoring the captured service behavior.
+7. Run the coordinated publication/verification path, require a success
+   receipt and final exact-ID topology proof, then deliberately reopen
+   admission and any reviewed workers.
+
+The current `bin/deploy.sh` is a routine rolling rollout. It does not establish
+the exclusive captured-fleet fence, preserve stopped process groups as a
+maintenance rollout contract, or prove the per-machine sequence above. No
+checked identity-preserving maintenance implementation currently exists in
+this repository. Prepare and independently review that narrow mechanism before
+the window; if it is absent or unrehearsed, stop instead of improvising.
 
 The maintenance mechanism proves only the process boundary it controls. It
 does not cancel provider I/O already started before quiescence, prove an
@@ -476,6 +482,13 @@ blocked until the exclusive cutover above has applied it.
 ## Phase 6 — Rollback
 
 ### API
+
+The command below is a routine code rollback only. Never use it to restore an
+old writer after any quiescence-required SQL commits. Keep admission and
+workers held and fix forward with a compatible image; restarting the old
+writer can recreate the unsafe mixed semantics the cutover excluded. For
+code-only releases or ordinary migrations, independently prove full runtime
+and schema compatibility before rolling back.
 
 ```bash
 fly releases list -a agenttool

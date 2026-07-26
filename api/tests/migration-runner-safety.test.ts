@@ -291,6 +291,10 @@ describe("migration runner safety", () => {
         '  printf "%s\\n" "$DEPLOY_TEST_PENDING_MIGRATIONS"',
         "  exit 0",
         "fi",
+        'if [ "${AGENTTOOL_PENDING_RUNNER_MAINTENANCE_QUIESCED:-}" != 1 ]; then',
+        '  printf "%s\\n" "missing pending-runner maintenance assertion" >&2',
+        "  exit 96",
+        "fi",
         'printf "%s\\n" "${2##*/}" >> "$DEPLOY_TEST_APPLY_LOG"',
         "",
       ].join("\n"),
@@ -340,6 +344,117 @@ describe("migration runner safety", () => {
       expect(await readFile(applyLog, "utf8")).toBe(`${protectedMigration}\n`);
     } finally {
       await rm(fixture, { recursive: true, force: true });
+    }
+  });
+
+  test("direct one-file runners refuse protected migrations before credentials or Fly", () => {
+    const fixture = mkdtempSync(
+      join(tmpdir(), "agenttool-one-file-policy-"),
+    );
+    const fakeBin = join(fixture, "bin");
+    const securityMarker = join(fixture, "security-called");
+    const flyMarker = join(fixture, "fly-called");
+    const protectedMigration = join(
+      root,
+      "api/migrations/20260726T203000_payout_network_binding.sql",
+    );
+    mkdirSync(fakeBin);
+    writeExecutable(
+      join(fakeBin, "security"),
+      `#!/bin/sh
+: > "$SECURITY_MARKER"
+printf '%s\\n' 'postgres://must-not-be-used.invalid/audit'
+`,
+    );
+    writeExecutable(
+      join(fakeBin, "fly"),
+      `#!/bin/sh
+: > "$FLY_MARKER"
+exit 97
+`,
+    );
+
+    try {
+      const local = spawnSync(
+        process.execPath,
+        [join(root, "api/scripts/_migrate-one.ts"), protectedMigration],
+        {
+          cwd: root,
+          encoding: "utf8",
+          env: {
+            PATH: `${fakeBin}:/usr/bin:/bin`,
+            HOME: fixture,
+            LANG: "C",
+            SECURITY_MARKER: securityMarker,
+            AGENTTOOL_PENDING_RUNNER_MAINTENANCE_QUIESCED: "",
+          },
+        },
+      );
+      expect(local.status).toBe(42);
+      expect(local.stderr).toContain(
+        "protected migration refuses direct one-file application",
+      );
+      expect(local.stderr).toContain(
+        "bin/migrate-pending.sh --maintenance-quiesced",
+      );
+      expect(existsSync(securityMarker)).toBe(false);
+      expect(`${local.stdout}${local.stderr}`).not.toContain(
+        "must-not-be-used.invalid",
+      );
+
+      const fly = spawnSync(
+        "/bin/bash",
+        [
+          join(root, "bin/fly-migrate-one.sh"),
+          protectedMigration,
+        ],
+        {
+          cwd: root,
+          encoding: "utf8",
+          env: {
+            PATH: `${fakeBin}:/usr/bin:/bin`,
+            HOME: fixture,
+            LANG: "C",
+            FLY_MARKER: flyMarker,
+          },
+        },
+      );
+      expect(fly.status).toBe(42);
+      expect(fly.stderr).toContain(
+        "protected migration refuses the Fly one-file runner",
+      );
+      expect(fly.stderr).toContain(
+        "bin/migrate-pending.sh --maintenance-quiesced",
+      );
+      expect(existsSync(flyMarker)).toBe(false);
+
+      const ordinaryFly = spawnSync(
+        "/bin/bash",
+        [
+          join(root, "bin/fly-migrate-one.sh"),
+          join(
+            root,
+            "api/migrations/20260509T170000_meta_migrations.sql",
+          ),
+        ],
+        {
+          cwd: root,
+          encoding: "utf8",
+          env: {
+            PATH: `${fakeBin}:/usr/bin:/bin`,
+            HOME: fixture,
+            LANG: "C",
+            FLY_MARKER: flyMarker,
+          },
+        },
+      );
+      expect(ordinaryFly.status, ordinaryFly.stderr).toBe(97);
+      expect(ordinaryFly.stdout).toContain(
+        "Applying 20260509T170000_meta_migrations.sql through Fly app",
+      );
+      expect(existsSync(flyMarker)).toBe(true);
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
     }
   });
 
