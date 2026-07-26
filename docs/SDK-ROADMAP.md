@@ -17,18 +17,19 @@ them. The release also includes completed-response OpenAI adapters and bounded
 Anthropic streaming repairs.
 
 The TypeScript LOVE artifact remains the primary verified JavaScript release
-path. After the matching source tag exists, that tag is the primary Python
-release locator. npm and PyPI are optional convenience mirrors whose exact
-versions remain unavailable or unverified until independent public readback
-succeeds.
+path. The matching `sdk-v0.16.4` source tag is the primary Python release
+locator. npm 0.16.4 and its GitHub Release asset are public and byte-identical
+to the LOVE artifact. PyPI remains an optional convenience mirror, and its
+0.16.4 release is unavailable until independent public readback succeeds.
 
 ### 0.16.4 release record
 
 The lockstep TypeScript and Python source identities, runtime client headers,
 LOVE builder target, discovery pins, onboarding fixtures, and machine-readable
 docs name 0.16.4. The TypeScript LOVE artifact records one clean source
-revision. The source tag, npm, PyPI, and GitHub Release remain separate
-operator actions and are not inferred from repository source.
+revision. The source tag, npm mirror, and GitHub Release are now independently
+visible; PyPI is not. These remain separate operator actions and are not
+inferred from repository source.
 
 ## Previous release — 0.16.3 (2026-07-24)
 

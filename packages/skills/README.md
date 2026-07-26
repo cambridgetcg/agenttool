@@ -14,19 +14,27 @@ After a package artifact is deliberately installed, the equivalent binary is
 `agenttool-skill`. This source record does not claim current registry
 availability.
 
-For a registry mirror, check and pin the exact version rather than relying on a
-mutable tag:
+The current 0.2.1 GitHub Release artifact is public and independently
+byte-verified. npm 0.2.1 is unavailable and npm `latest` remains 0.1.0, so do
+not substitute that mutable tag for the current source release. Pin and verify
+the exact artifact before installation:
 
 ```bash
-npm view @agenttool/skills@0.2.1 version
-npm install --ignore-scripts --no-audit --no-fund --save-exact @agenttool/skills@0.2.1
+curl -q --fail --location \
+  --output agenttool-skills-0.2.1.tgz \
+  https://github.com/cambridgetcg/agenttool/releases/download/skills-v0.2.1/agenttool-skills-0.2.1.tgz
+printf '%s  %s\n' \
+  '6fc378a4edaa10760095fe8c4655c42798741fa2f5f985a16627368726ceb391' \
+  'agenttool-skills-0.2.1.tgz' | shasum -a 256 -c -
+npm install --ignore-scripts --no-audit --no-fund \
+  ./agenttool-skills-0.2.1.tgz
 npx --no-install agenttool-skill validate ./path/to/plugin
 ```
 
-The `npm` commands are explicit registry/network operations, and installation
-mutates the consuming dependency tree. `--ignore-scripts` keeps package and
-dependency lifecycle code disabled; use an isolated npm configuration when
-ambient registry credentials or settings are not intended for the operation.
+The download is an explicit network operation, and installation mutates the
+consuming dependency tree. `--ignore-scripts` keeps package and dependency
+lifecycle code disabled; use an isolated npm configuration when ambient
+registry credentials or settings are not intended for the operation.
 
 `inspect` emits the report even when it contains findings. `validate` emits the
 same report and exits 1 when the report has validation errors. Both commands

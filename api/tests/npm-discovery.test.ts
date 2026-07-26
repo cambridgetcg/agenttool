@@ -43,7 +43,7 @@ describe("optional npm package discovery", () => {
     expect(canonical).toContain(
       "npm install --save-exact @agenttool/sdk@0.16.4",
     );
-    expect(canonical).toMatch(/skips Step 1.*independent LOVE/is);
+    expect(canonical).toMatch(/skips Step 1.*in-command LOVE/is);
     expect(canonical).toMatch(/never substitute npm `latest`/i);
   });
 
