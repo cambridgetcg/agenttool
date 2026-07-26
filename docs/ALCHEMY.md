@@ -2,11 +2,11 @@
 
 > **Compass:** [CRYPTO-PAYMENT](CRYPTO-PAYMENT.md) (inbound funding) · [PAYOUT-BROADCAST](PAYOUT-BROADCAST.md) (outbound lifecycle) · [AGENT-WALLET-0.1](specs/AGENT-WALLET-0.1.md) (authority boundary) · [ECOSYSTEM](ECOSYSTEM.md) (wider protocol map)
 >
-> **Implements:** A bounded provider seam for EVM RPC, Address Activity watch registration, signed webhook ingress, pending deposit confirmation, and removed-log reconciliation.
+> **Implements:** A bounded provider seam for EVM RPC, Address Activity watch registration, signed webhook ingress, pending deposit confirmation, removed-log reconciliation, and developer-preview named read primitives.
 >
-> **Code:** `api/src/services/economy/crypto/alchemy-notify.ts` · `api/src/services/economy/crypto/network.ts` · `api/src/services/economy/crypto/inbound-deposits.ts` · `api/src/workers/deposit/confirm-worker.ts` · `api/src/routes/economy/crypto.ts` · `api/migrations/20260725T054912_crypto_deposit_identity.sql` · `api/migrations/20260726T185835_crypto_deposit_finality.sql`
+> **Code:** `api/src/services/economy/crypto/alchemy-notify.ts` · `api/src/services/economy/crypto/network.ts` · `api/src/services/economy/crypto/inbound-deposits.ts` · `api/src/workers/deposit/confirm-worker.ts` · `api/src/routes/economy/crypto.ts` · `api/migrations/20260725T054912_crypto_deposit_identity.sql` · `api/migrations/20260726T185835_crypto_deposit_finality.sql` · `packages/alchemy/src/` · `packages/credential-broker/src/jsonrpc.ts`
 >
-> **Tests:** `api/tests/alchemy-notify.test.ts` · `api/tests/alchemy-deposit-invariants.test.ts` · `api/tests/crypto-webhook-fail-closed.test.ts` · `api/tests/deposit-finality.test.ts` · `api/tests/deposit-finality-migration.test.ts` · `api/tests/alchemy-rpc-auth.test.ts` · `api/tests/payout-refund-integrity.test.ts` · `api/tests/payout-submit-outcome.test.ts`
+> **Tests:** `api/tests/alchemy-notify.test.ts` · `api/tests/alchemy-deposit-invariants.test.ts` · `api/tests/crypto-webhook-fail-closed.test.ts` · `api/tests/deposit-finality.test.ts` · `api/tests/deposit-finality-migration.test.ts` · `api/tests/alchemy-rpc-auth.test.ts` · `api/tests/payout-refund-integrity.test.ts` · `api/tests/payout-submit-outcome.test.ts` · `packages/alchemy/tests/` · `packages/credential-broker/tests/jsonrpc-read.test.ts`
 
 ## Decision
 
@@ -109,9 +109,9 @@ The receipt check is separate from webhook delivery, but by default both may
 use Alchemy infrastructure. It is therefore confirmation-depth and
 canonical-log reconciliation, not independent-provider consensus. Base,
 Optimism, and Arbitrum depth is also not a claim of L1 settlement, a
-safe/finalized L2 tag, or production finality. Solana
-still uses immediate credit from a signed Helius enhanced-webhook delivery and
-does not yet have equivalent raw-atomic finality or reorg reversal.
+safe/finalized L2 tag, or production finality. Solana does not yet have
+equivalent raw-atomic finality or reorg reversal; its legacy immediate-credit
+adapter is disabled by default behind a development-only opt-in.
 
 ## Agent-facing integration
 
@@ -135,30 +135,48 @@ raw private keys, or opaque wallet-session authority into the journal.
 
 ### Deterministic services and reusable tools
 
-A future local `@agenttool/alchemy` adapter should expose named operations, not
-arbitrary JSON-RPC:
+The developer-preview `@agenttool/alchemy` package exposes a deliberately
+smaller set of named observations, not arbitrary JSON-RPC:
 
 ```text
-alchemy.read.balance
-alchemy.read.receipt
-alchemy.read.logs
-alchemy.read.transfers
-alchemy.read.token_metadata
-alchemy.read.price
-alchemy.simulate.asset_changes
-alchemy.simulate.execution
+eth_chainId
+eth_blockNumber
+eth_getBlockByNumber
+eth_getBalance
+eth_getTransactionByHash
+eth_getTransactionReceipt
+eth_getCode
+alchemy_getAssetTransfers (one bounded page)
 ```
 
-It should accept an injected `fetch`/transport. On a developer machine,
-`@agenttool/credential-broker` now has a negotiated
-`agentcred.evm-jsonrpc-read/0.1` primitive for the seven bounded core reads
-needed beneath that adapter. It fixes the owner-approved HTTPS origin and
-`/v2` path, builds the JSON-RPC envelope and ID inside the broker, validates
-method-specific params, and injects an Alchemy key only as a Bearer header.
-The agent supplies no URL, headers, raw body, batch, notification, or arbitrary
-method. This primitive is not yet the named `@agenttool/alchemy` adapter above,
-and the portable broker remains a same-user developer preview rather than a
-universal process-isolation or trusted-consent guarantee.
+It accepts an injected structural transport that receives a fixed network and
+CAIP-2 identity, one closed method/parameter tuple, an `AbortSignal`, an
+absolute deadline, and a response-byte limit. The package never accepts a URL,
+API key, header, signer, wallet, generic request method, or provider-admin
+token. The host transport maps the network to a trusted origin, injects
+credentials outside the package, generates and validates the JSON-RPC
+envelope/correlation ID, bounds the response while reading it, collapses
+provider diagnostics, and returns only a parsed result rebound to the requested
+method and chain.
+
+On a developer machine, `@agenttool/credential-broker` implements the
+negotiated `agentcred.evm-jsonrpc-read/0.1` profile for the seven core `eth_*`
+reads. It fixes the owner-approved HTTPS origin and `/v2` path, constructs the
+JSON-RPC envelope and ID inside the broker, validates method-specific params,
+and injects the Alchemy key only as a Bearer header. The agent supplies no URL,
+headers, raw body, batch, notification, or arbitrary method. The profile
+intentionally excludes `alchemy_getAssetTransfers`; that eighth package
+operation requires its own equally closed host transport. The portable broker
+remains a same-user developer preview, not a universal process-isolation or
+trusted-consent guarantee.
+
+The package independently bounds and validates the parsed result, returns only
+typed subsets, and sanitizes transport failures. Its provenance
+distinguishes configured chain identity from observed data, live RPC from the
+Alchemy transfer index, provider-head evidence from provider-asserted
+safe/finalized tags, and numbered blocks whose finality remains unknown.
+Transfer calls require an explicit start block and address/contract selector,
+return at most 100 entries, and never auto-page or retry.
 
 State-changing tools remain a later, separate adapter implementing Agent
 Wallet's signer/broadcaster boundary. Every call needs an exact intent,
@@ -238,11 +256,12 @@ Collab records, or model-facing errors.
   admission is now evaluated after taking the wallet transaction lock, so
   concurrent requests for one wallet cannot independently spend the same
   remaining ceiling.
-- Keep the negotiated credential-broker primitive, any named read adapter,
-  and a future local MCP projection capability-bounded: injected transport,
-  explicit methods, bounded responses, no provider-key return, and no hidden
-  signing/broadcast authority. Simulation remains a separately named
-  authority.
+- Decide whether the developer-preview named read package needs a separately
+  reviewed local MCP projection. The core package itself exposes no MCP,
+  provider credential, generic RPC, simulation, signer, or broadcaster.
+- Expand beyond the current eight read operations only with operation-specific
+  parameter/result schemas and evidence semantics; do not add a generic RPC
+  escape hatch.
 
 Until those items land, Alchemy is a useful replaceable infrastructure
 provider, not a source of truth, identity, consent, or transaction authority.

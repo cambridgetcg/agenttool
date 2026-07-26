@@ -1,0 +1,172 @@
+# `@agenttool/alchemy`
+
+Developer-preview, zero-runtime-dependency primitives for bounded EVM reads and
+reconciliation through Alchemy. The package emits only eight named JSON-RPC
+operations:
+
+- `eth_chainId`
+- `eth_blockNumber`
+- `eth_getBlockByNumber` with transaction hashes only
+- `eth_getBalance`
+- `eth_getTransactionByHash`
+- `eth_getTransactionReceipt`
+- `eth_getCode`
+- one bounded page of `alchemy_getAssetTransfers`
+
+There is deliberately no generic RPC/request escape hatch. This package does
+not accept a URL, API key, bearer header, signer, wallet, or provider-admin
+token. It does not sign, simulate, broadcast, retry, subscribe, create or
+modify webhooks, administer Alchemy, or expose the legacy `alchemy-sdk` or
+Account Kit.
+
+## Host-owned transport
+
+The caller injects one structural transport:
+
+```ts
+import {
+  createAlchemyReadClient,
+  type AlchemyReadTransport,
+} from "@agenttool/alchemy";
+
+const transport: AlchemyReadTransport = {
+  async send(request) {
+    // This trusted host adapter:
+    // 1. maps request.network to one fixed Alchemy origin;
+    // 2. obtains and injects credentials without returning them to the agent;
+    // 3. generates and validates the JSON-RPC envelope and correlation id;
+    // 4. stops reading at request.maxResponseBytes;
+    // 5. obeys request.signal and request.deadlineAtMs; and
+    // 6. returns only a parsed result bound to the method and CAIP-2 chain.
+    const result = await trustedLocalBroker.readEvm({
+      chainId: request.chainId,
+      method: request.call.method,
+      params: request.call.params,
+      signal: request.signal,
+      deadlineAtMs: request.deadlineAtMs,
+      maxResponseBytes: request.maxResponseBytes,
+    });
+    return {
+      chainId: result.chainId,
+      method: result.method,
+      result: result.result,
+      auditId: result.auditId,
+      redactions: result.redactions,
+    };
+  },
+};
+
+const alchemy = createAlchemyReadClient({
+  network: "ethereum-mainnet",
+  transport,
+});
+
+const balance = await alchemy.getBalance({
+  address: "0x1111111111111111111111111111111111111111",
+  block: "safe",
+});
+```
+
+`trustedLocalBroker` is host application code, not an export from this
+package. It must choose the endpoint from the fixed `request.network` enum;
+never let model input select a URL. The transport boundary keeps credentials
+out of the package and chat, but it does not by itself provide process
+isolation or protect credentials from another process running as the same OS
+user.
+
+The negotiated `agentcred.evm-jsonrpc-read/0.1` profile is one suitable
+transport for the seven standard `eth_*` operations: it generates the
+envelope/id inside the broker, fixes the owner-approved origin and `/v2` path,
+injects Bearer authentication, and collapses provider diagnostics. Its current
+closed method set does not include `alchemy_getAssetTransfers`; that operation
+needs a separately reviewed, equally closed Data API transport rather than a
+fallback to generic HTTP.
+
+The client stops waiting and aborts the injected signal at its deadline. A
+transport that cannot cancel already-dispatched work may still finish that
+work and consume provider or capability quota; cancellation is not rollback.
+
+The fixed network descriptors cover Ethereum, Base, Polygon, Arbitrum, and
+Optimism mainnets plus Sepolia/Amoy variants. They expose Alchemy's network
+slug, not a credential-bearing URL.
+
+## Bounded observations
+
+```ts
+const receipt = await alchemy.getTransactionReceipt({
+  transactionHash:
+    "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+});
+
+const page = await alchemy.getAssetTransfersPage({
+  fromBlock: "0x1400000",
+  toBlock: "indexed",
+  categories: ["erc20"],
+  toAddress: "0x1111111111111111111111111111111111111111",
+  pageSize: 50,
+});
+```
+
+Every call:
+
+- rejects unknown input fields and malformed addresses, hashes, quantities,
+  and block references, then lowercases validated hex identities;
+- accepts only `latest`, `safe`, `finalized`, or a canonical numbered block
+  for ordinary RPC reads—never `pending`;
+- has a 30-second maximum call window and accepts an `AbortSignal` plus an
+  absolute `deadlineAtMs`;
+- asks the transport to enforce a 2 MiB raw-response ceiling and independently
+  checks the parsed JSON result's depth, node count, and serialized size;
+- caps byte-heavy code and transaction input fields;
+- returns only a validated subset of block, transaction, receipt, and transfer
+  data, omitting floating human values and enriched token metadata; and
+- never includes provider response text or transport exceptions in public
+  errors.
+
+Transfer calls return one page only. They require an explicit numeric start
+block, at least one address/contract selector, one or more closed categories,
+at most 100 items, at most 20 contract filters, and at most a 100,000-block
+span when both ends are numbered. The caller must deliberately pass the
+returned `nextPageKey` to fetch another page; there is no automatic crawl or
+retry. Provider page keys are opaque and short-lived. `internal` transfers are
+accepted only on Ethereum Mainnet and Polygon Mainnet, matching Alchemy's
+documented support; other category/network coverage can still vary and a
+provider error is not converted into an empty result.
+
+## Provenance and freshness
+
+Every observation includes:
+
+- the configured network and chain ID;
+- the exact closed RPC method;
+- local request and receipt times, parsed-result size, and any bounded
+  transport audit/redaction receipt; and
+- a freshness record distinguishing live RPC from Alchemy's indexed transfer
+  data.
+
+`configuredChainId` is the package's fixed mapping, not proof of the endpoint
+used by the injected transport. `getChainId()` checks its observed result
+against that mapping. Other calls do not secretly add a chain-ID request.
+
+`latest` is labelled as reorg-sensitive provider-head evidence. `safe` and
+`finalized` are labelled as provider assertions, not independent finality
+proof. Numbered blocks retain unknown finality. Transfer results are always
+labelled as index-backed and possibly lagging, including when their upper
+bound is `latest` or `indexed`.
+
+Use independent providers, confirmation/reorg policy, and durable canonical
+identities when an observation changes money or authority. Alchemy remains
+replaceable infrastructure evidence—not identity, consent, finality, or a
+source of truth.
+
+## Commands
+
+```bash
+bun install --frozen-lockfile
+bun run ci
+npm pack --ignore-scripts --dry-run --json
+```
+
+Version `0.1.0-dev.0` is source metadata only until an operator explicitly
+publishes immutable reviewed bytes. Building or packing locally is not a
+release.
