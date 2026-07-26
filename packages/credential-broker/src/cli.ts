@@ -83,24 +83,54 @@ function parseConfig(value: unknown): BrokerConfig {
     if (!isRecord(policy)) {
       throw new AgentCredError("invalid_request", "Broker policy is invalid.");
     }
-    onlyKeys(
-      policy,
-      [
-        "credential",
-        "origin",
-        "methods",
-        "pathPrefixes",
-        "queryNames",
-        "headerValues",
-        "allowPaymentSignature",
-        "maxTtlSeconds",
-        "maxUses",
-        "maxRequestBytes",
-        "maxResponseBytes",
-        "allowPrivateNetwork",
-      ],
-      "Broker policy",
-    );
+    if (policy.operation === "jsonrpc.read") {
+      onlyKeys(
+        policy,
+        [
+          "operation",
+          "profile",
+          "credential",
+          "origin",
+          "chainId",
+          "methods",
+          "maxTtlSeconds",
+          "maxUses",
+          "maxRequestBytes",
+          "maxResponseBytes",
+          "allowPrivateNetwork",
+        ],
+        "JSON-RPC broker policy",
+      );
+      if (
+        typeof policy.credential !== "string" ||
+        credentials[policy.credential]?.auth.kind !== "bearer"
+      ) {
+        throw new AgentCredError(
+          "invalid_request",
+          "JSON-RPC policy requires a bearer credential mapping.",
+        );
+      }
+    } else {
+      onlyKeys(
+        policy,
+        [
+          "operation",
+          "credential",
+          "origin",
+          "methods",
+          "pathPrefixes",
+          "queryNames",
+          "headerValues",
+          "allowPaymentSignature",
+          "maxTtlSeconds",
+          "maxUses",
+          "maxRequestBytes",
+          "maxResponseBytes",
+          "allowPrivateNetwork",
+        ],
+        "Broker policy",
+      );
+    }
   }
   // PolicyConsent re-normalizes and bounds every request. Instantiate here so
   // malformed owner config fails before the daemon starts.

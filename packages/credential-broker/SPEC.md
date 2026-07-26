@@ -189,6 +189,15 @@ The only request `type` values implemented in `0.1` are:
 | `grant.use` | `http.result` | spend one capability use on a brokered fetch |
 | `grant.revoke` | `grant.revoked` | surrender the connection-bound capability |
 
+An updated client and broker MAY negotiate a separately named extension in
+`hello` while keeping this base envelope and lifecycle. An extension MUST
+define its exact profile name, operation, payloads, validation order, result
+type, and authority boundary. Its operation is not part of base
+`agentcred/0.1` and MUST be rejected unless that exact profile was selected on
+the connection. This package implements
+[`agentcred.evm-jsonrpc-read/0.1`](./JSONRPC-READ-0.1.md); it does not widen
+`http.fetch` into arbitrary JSON-RPC.
+
 `grant.status`, `grant.renew`, and `sign` are reserved for a future negotiated
 revision. They are not valid `agentcred/0.1` request types and clients MUST NOT
 send them. The current server rejects unsupported types, normally by closing
@@ -206,15 +215,18 @@ the connection during request parsing.
   "type": "hello",
   "payload": {
     "clientNonce": "non-authoritative-random-client-nonce",
-    "clientName": "example-agent-host"
+    "clientName": "example-agent-host",
+    "extensions": ["agentcred.evm-jsonrpc-read/0.1"]
   }
 }
 ```
 
 `clientNonce` is required and contains 16 to 256 characters. It provides
 freshness material only; it is not client authentication. `clientName` is
-optional untrusted metadata. The success payload contains the broker's opaque
-`sessionId` and negotiated concurrency limit:
+optional untrusted metadata. `extensions` is an optional bounded array of
+profile names offered by the client; offering one grants no authority. Unknown
+names are ignored. The success payload contains the broker's opaque
+`sessionId`, negotiated concurrency limit, and selected extension names:
 
 ```json
 {
@@ -225,7 +237,8 @@ optional untrusted metadata. The success payload contains the broker's opaque
   "type": "hello.ready",
   "payload": {
     "sessionId": "opaque-session-id",
-    "maxInFlight": 4
+    "maxInFlight": 4,
+    "extensions": ["agentcred.evm-jsonrpc-read/0.1"]
   }
 }
 ```
@@ -234,9 +247,14 @@ optional untrusted metadata. The success payload contains the broker's opaque
 negotiated connection limit; it does not deliberately trigger a connection
 close and revoke all of its grants.
 
+Base clients may omit `extensions`, and base-compatible brokers select none.
+An updated client talking to an older broker treats an absent response field
+as an empty selection.
+
 ## 7. Grant request and lifecycle
 
-`grant.request` currently supports only `operation: "http.fetch"`:
+Base `agentcred/0.1` `grant.request` supports only
+`operation: "http.fetch"`:
 
 ```json
 {

@@ -1,10 +1,20 @@
 import { AgentCredError, type AgentCredErrorCode } from "./errors.js";
 import {
+  AGENTCRED_EVM_JSONRPC_READ_PROFILE,
   AGENTCRED_PROTOCOL,
   DEFAULT_MAX_BODY_BYTES,
+  type AgentCredExtension,
+  type BrokerEvmJsonRpcReadCall,
   type BrokerHttpRequest,
+  type EvmJsonRpcReadGrantRequest,
   type GrantRequest,
+  type HttpGrantRequest,
 } from "./types.js";
+import {
+  normalizeEvmChainId,
+  normalizeEvmJsonRpcReadMethods,
+  parseEvmJsonRpcReadCall,
+} from "./jsonrpc-validation.js";
 
 export interface WireRequest {
   v: typeof AGENTCRED_PROTOCOL;
@@ -19,7 +29,12 @@ export interface WireSuccess {
   id: string;
   seq: number;
   ok: true;
-  type: "hello.ready" | "grant.ready" | "http.result" | "grant.revoked";
+  type:
+    | "hello.ready"
+    | "grant.ready"
+    | "http.result"
+    | "jsonrpc.result"
+    | "grant.revoked";
   payload: Record<string, unknown>;
 }
 
@@ -64,6 +79,17 @@ function stringArray(value: unknown, name: string, maxItems = 32, allowEmpty = f
   return value.map((item, index) => string(item, `${name}[${index}]`, 2048));
 }
 
+function onlyKeys(
+  value: Record<string, unknown>,
+  allowed: readonly string[],
+  name: string,
+): void {
+  const allow = new Set(allowed);
+  if (Object.keys(value).some((key) => !allow.has(key))) {
+    throw new AgentCredError("invalid_request", `${name} contains an unknown field.`);
+  }
+}
+
 export function parseWireRequest(value: unknown): WireRequest {
   const raw = record(value, "request");
   if (raw.v !== AGENTCRED_PROTOCOL) {
@@ -82,8 +108,35 @@ export function parseWireRequest(value: unknown): WireRequest {
   };
 }
 
-export function parseGrantRequest(value: unknown): GrantRequest {
-  const raw = record(value, "grant request");
+export interface HelloRequest {
+  clientNonce: string;
+  clientName?: string;
+  extensions: string[];
+}
+
+export function parseHelloRequest(value: unknown): HelloRequest {
+  const raw = record(value, "hello");
+  const output: HelloRequest = {
+    clientNonce: string(raw.clientNonce, "hello.clientNonce", 256),
+    extensions: [],
+  };
+  if (output.clientNonce.length < 16) {
+    throw new AgentCredError("invalid_request", "hello.clientNonce is invalid.");
+  }
+  if (raw.clientName !== undefined) {
+    output.clientName = string(raw.clientName, "hello.clientName", 256);
+  }
+  if (raw.extensions !== undefined) {
+    const extensions = stringArray(raw.extensions, "hello.extensions", 16, true);
+    if (extensions.some((extension) => extension.length > 128)) {
+      throw new AgentCredError("invalid_request", "hello.extensions is invalid.");
+    }
+    output.extensions = [...new Set(extensions)];
+  }
+  return output;
+}
+
+function parseHttpGrantRequest(raw: Record<string, unknown>): HttpGrantRequest {
   const scope = record(raw.scope, "scope");
   const methods = stringArray(scope.methods, "scope.methods", 6);
   const allowedMethods = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]);
@@ -91,13 +144,13 @@ export function parseGrantRequest(value: unknown): GrantRequest {
     throw new AgentCredError("invalid_request", "scope.methods contains an unsupported method.");
   }
 
-  const request: GrantRequest = {
+  const request: HttpGrantRequest = {
     alias: string(raw.alias, "alias", 128),
     credential: string(raw.credential, "credential", 256),
-    operation: string(raw.operation, "operation") as "http.fetch",
+    operation: "http.fetch",
     scope: {
       origin: string(scope.origin, "scope.origin", 2048),
-      methods: methods as GrantRequest["scope"]["methods"],
+      methods: methods as HttpGrantRequest["scope"]["methods"],
       pathPrefixes: stringArray(scope.pathPrefixes, "scope.pathPrefixes", 32),
       ttlSeconds: integer(scope.ttlSeconds, "scope.ttlSeconds", 1, 86_400),
       maxUses: integer(scope.maxUses, "scope.maxUses", 1, 10_000),
@@ -125,9 +178,6 @@ export function parseGrantRequest(value: unknown): GrantRequest {
     }
     request.scope.allowPaymentSignature = scope.allowPaymentSignature;
   }
-  if (request.operation !== "http.fetch") {
-    throw new AgentCredError("unsupported", "Only http.fetch is available in agentcred/0.1.");
-  }
   if (raw.rationale !== undefined) request.rationale = string(raw.rationale, "rationale", 1000);
   if (scope.maxRequestBytes !== undefined) {
     request.scope.maxRequestBytes = integer(scope.maxRequestBytes, "scope.maxRequestBytes", 0, DEFAULT_MAX_BODY_BYTES);
@@ -142,6 +192,82 @@ export function parseGrantRequest(value: unknown): GrantRequest {
     request.scope.allowPrivateNetwork = scope.allowPrivateNetwork;
   }
   return request;
+}
+
+function parseEvmJsonRpcReadGrantRequest(
+  raw: Record<string, unknown>,
+): EvmJsonRpcReadGrantRequest {
+  onlyKeys(
+    raw,
+    ["alias", "credential", "operation", "scope", "rationale"],
+    "JSON-RPC grant request",
+  );
+  const scope = record(raw.scope, "scope");
+  onlyKeys(
+    scope,
+    [
+      "profile",
+      "origin",
+      "chainId",
+      "methods",
+      "ttlSeconds",
+      "maxUses",
+      "maxRequestBytes",
+      "maxResponseBytes",
+      "allowPrivateNetwork",
+    ],
+    "JSON-RPC grant scope",
+  );
+  if (scope.profile !== AGENTCRED_EVM_JSONRPC_READ_PROFILE) {
+    throw new AgentCredError("unsupported", "JSON-RPC grant profile is not supported.");
+  }
+  const request: EvmJsonRpcReadGrantRequest = {
+    alias: string(raw.alias, "alias", 128),
+    credential: string(raw.credential, "credential", 256),
+    operation: "jsonrpc.read",
+    scope: {
+      profile: AGENTCRED_EVM_JSONRPC_READ_PROFILE,
+      origin: string(scope.origin, "scope.origin", 2048),
+      chainId: normalizeEvmChainId(scope.chainId, "scope.chainId"),
+      methods: normalizeEvmJsonRpcReadMethods(scope.methods, "scope.methods"),
+      ttlSeconds: integer(scope.ttlSeconds, "scope.ttlSeconds", 1, 86_400),
+      maxUses: integer(scope.maxUses, "scope.maxUses", 1, 10_000),
+    },
+  };
+  if (raw.rationale !== undefined) {
+    request.rationale = string(raw.rationale, "rationale", 1000);
+  }
+  if (scope.maxRequestBytes !== undefined) {
+    request.scope.maxRequestBytes = integer(
+      scope.maxRequestBytes,
+      "scope.maxRequestBytes",
+      0,
+      DEFAULT_MAX_BODY_BYTES,
+    );
+  }
+  if (scope.maxResponseBytes !== undefined) {
+    request.scope.maxResponseBytes = integer(
+      scope.maxResponseBytes,
+      "scope.maxResponseBytes",
+      0,
+      DEFAULT_MAX_BODY_BYTES,
+    );
+  }
+  if (scope.allowPrivateNetwork !== undefined) {
+    if (typeof scope.allowPrivateNetwork !== "boolean") {
+      throw new AgentCredError("invalid_request", "scope.allowPrivateNetwork must be boolean.");
+    }
+    request.scope.allowPrivateNetwork = scope.allowPrivateNetwork;
+  }
+  return request;
+}
+
+export function parseGrantRequest(value: unknown): GrantRequest {
+  const raw = record(value, "grant request");
+  const operation = string(raw.operation, "operation");
+  if (operation === "http.fetch") return parseHttpGrantRequest(raw);
+  if (operation === "jsonrpc.read") return parseEvmJsonRpcReadGrantRequest(raw);
+  throw new AgentCredError("unsupported", "Grant operation is not supported.");
 }
 
 export function parseHttpRequest(value: unknown): BrokerHttpRequest {
@@ -171,6 +297,24 @@ export function parseHttpRequest(value: unknown): BrokerHttpRequest {
 
 export function parseCapability(payload: Record<string, unknown>): string {
   return string(payload.capability, "capability", 128);
+}
+
+export function parseEvmJsonRpcReadUse(
+  payload: Record<string, unknown>,
+): { capability: string; request: BrokerEvmJsonRpcReadCall } {
+  onlyKeys(payload, ["capability", "request"], "JSON-RPC grant use");
+  return {
+    capability: parseCapability(payload),
+    request: parseEvmJsonRpcReadCall(payload.request),
+  };
+}
+
+export function negotiateExtensions(
+  offered: readonly string[],
+): AgentCredExtension[] {
+  return offered.includes(AGENTCRED_EVM_JSONRPC_READ_PROFILE)
+    ? [AGENTCRED_EVM_JSONRPC_READ_PROFILE]
+    : [];
 }
 
 export function safeWireFailure(

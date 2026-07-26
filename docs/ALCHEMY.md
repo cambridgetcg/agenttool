@@ -150,10 +150,15 @@ alchemy.simulate.execution
 ```
 
 It should accept an injected `fetch`/transport. On a developer machine,
-`@agenttool/credential-broker` can inject an Alchemy key as a Bearer header for
-one exact HTTPS origin and path without returning the key to the agent. The
-portable broker is still a same-user developer preview, not a universal
-process-isolation or trusted-consent guarantee.
+`@agenttool/credential-broker` now has a negotiated
+`agentcred.evm-jsonrpc-read/0.1` primitive for the seven bounded core reads
+needed beneath that adapter. It fixes the owner-approved HTTPS origin and
+`/v2` path, builds the JSON-RPC envelope and ID inside the broker, validates
+method-specific params, and injects an Alchemy key only as a Bearer header.
+The agent supplies no URL, headers, raw body, batch, notification, or arbitrary
+method. This primitive is not yet the named `@agenttool/alchemy` adapter above,
+and the portable broker remains a same-user developer preview rather than a
+universal process-isolation or trusted-consent guarantee.
 
 State-changing tools remain a later, separate adapter implementing Agent
 Wallet's signer/broadcaster boundary. Every call needs an exact intent,
@@ -233,9 +238,11 @@ Collab records, or model-facing errors.
   admission is now evaluated after taking the wallet transaction lock, so
   concurrent requests for one wallet cannot independently spend the same
   remaining ceiling.
-- Keep any named read adapter and local MCP surface capability-bounded:
-  injected transport, explicit methods, bounded responses, no provider-key
-  return, and no hidden signing/broadcast authority.
+- Keep the negotiated credential-broker primitive, any named read adapter,
+  and a future local MCP projection capability-bounded: injected transport,
+  explicit methods, bounded responses, no provider-key return, and no hidden
+  signing/broadcast authority. Simulation remains a separately named
+  authority.
 
 Until those items land, Alchemy is a useful replaceable infrastructure
 provider, not a source of truth, identity, consent, or transaction authority.

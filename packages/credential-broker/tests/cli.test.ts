@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { chmod, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { AGENTCRED_EVM_JSONRPC_READ_PROFILE } from "../src/index.js";
 
 const roots: string[] = [];
 
@@ -53,6 +54,65 @@ describe("strict owner-held CLI config", () => {
     const result = check(path);
     expect(result.exitCode).toBe(0);
     expect(result.stdout.toString()).toBe("agentcred config: ok\n");
+  });
+
+  test("accepts an explicit bearer-only JSON-RPC read policy", async () => {
+    const root = await mkdtemp(join(tmpdir(), "agentcred-cli-"));
+    roots.push(root);
+    await chmod(root, 0o700);
+    const raw = config(root);
+    raw.policies = [
+      {
+        operation: "jsonrpc.read",
+        profile: AGENTCRED_EVM_JSONRPC_READ_PROFILE,
+        credential: "agenttool/default",
+        origin: "https://eth-mainnet.g.alchemy.com",
+        chainId: "eip155:1",
+        methods: ["eth_chainId", "eth_getBalance"],
+        maxTtlSeconds: 60,
+        maxUses: 2,
+        maxRequestBytes: 1024,
+        maxResponseBytes: 4096,
+      },
+    ];
+    const path = join(root, "config.json");
+    await writeFile(path, JSON.stringify(raw), { mode: 0o600 });
+
+    const result = check(path);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.toString()).toBe("agentcred config: ok\n");
+  });
+
+  test("rejects a JSON-RPC policy backed by a custom credential header", async () => {
+    const root = await mkdtemp(join(tmpdir(), "agentcred-cli-"));
+    roots.push(root);
+    await chmod(root, 0o700);
+    const raw = config(root);
+    const credentials = raw.credentials as Record<string, Record<string, unknown>>;
+    credentials["agenttool/default"]!.auth = {
+      kind: "header",
+      headerName: "x-api-key",
+    };
+    raw.policies = [
+      {
+        operation: "jsonrpc.read",
+        profile: AGENTCRED_EVM_JSONRPC_READ_PROFILE,
+        credential: "agenttool/default",
+        origin: "https://eth-mainnet.g.alchemy.com",
+        chainId: "eip155:1",
+        methods: ["eth_chainId"],
+        maxTtlSeconds: 60,
+        maxUses: 1,
+      },
+    ];
+    const path = join(root, "config.json");
+    await writeFile(path, JSON.stringify(raw), { mode: 0o600 });
+
+    const result = check(path);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr.toString()).toBe(
+      "agentcred: JSON-RPC policy requires a bearer credential mapping.\n",
+    );
   });
 
   test("rejects secret-like unknown fields instead of silently retaining them", async () => {
