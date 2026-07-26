@@ -217,6 +217,10 @@ Error codes (HTTP 403) returned to the agent on policy violation:
 | `payout_exceeds_daily_ceiling` | UTC-day total + this payout exceeds `payout_daily_ceiling_base`. Sum excludes `failed` and `cancelled` rows. |
 | `payout_dual_control_required` | Amount ≥ `payout_dual_control_threshold_base`. Dual-control flow not yet implemented; below-threshold payouts are accepted unconditionally. |
 
+If the service cannot read the daily aggregate exactly, it returns
+`payout_daily_total_unavailable` (HTTP 503) and performs no debit. This is an
+operator/storage health condition, not a request-shape error.
+
 ---
 
 ## Key rotation
