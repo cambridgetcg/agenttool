@@ -164,10 +164,15 @@ private key, or broadcast operation. It is intentionally not mounted on public
 HTTP or MCP yet; the provider quota and credential remain API-internal.
 
 On a developer machine,
-`@agenttool/credential-broker` can inject an Alchemy key as a Bearer header for
-one exact HTTPS origin and path without returning the key to the agent. The
-portable broker is still a same-user developer preview, not a universal
-process-isolation or trusted-consent guarantee.
+`@agenttool/credential-broker` now has a negotiated
+`agentcred.evm-jsonrpc-read/0.1` primitive for the seven bounded core reads
+needed beneath that adapter. It fixes the owner-approved HTTPS origin and
+`/v2` path, builds the JSON-RPC envelope and ID inside the broker, validates
+method-specific params, and injects an Alchemy key only as a Bearer header.
+The agent supplies no URL, headers, raw body, batch, notification, or arbitrary
+method. This primitive is not yet the named `@agenttool/alchemy` adapter above,
+and the portable broker remains a same-user developer preview rather than a
+universal process-isolation or trusted-consent guarantee.
 
 State-changing tools remain a later, separate adapter implementing Agent
 Wallet's signer/broadcaster boundary. Every call needs an exact intent,
@@ -235,8 +240,9 @@ Collab records, or model-facing errors.
   admission is now evaluated after taking the wallet transaction lock, so
   concurrent requests for one wallet cannot independently spend the same
   remaining ceiling.
-- Decide whether to expose a project-authenticated subset of the internal
-  named adapter. Do not mount arbitrary RPC or provider administration on MCP.
+- Build the named read adapter on top of the bounded credential-broker
+  primitive, then decide whether to expose a project-authenticated subset. Do
+  not mount arbitrary RPC or provider administration on MCP.
 - Run a credentialed staging wire proof of webhook metadata, pagination,
   PATCH-then-GET convergence, and callback delivery before claiming the worker
   is operational. Hermetic tests do not prove provider/account state.
