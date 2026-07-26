@@ -56,7 +56,15 @@ from .crypto import (
     sign_attestation,
     sign_thought,
 )
-from .economy import EconomyClient, Escrow, Wallet
+from .economy import (
+    EconomyClient,
+    Escrow,
+    Payout,
+    PayoutChain,
+    PayoutRequestOutcome,
+    PayoutStatus,
+    Wallet,
+)
 from .exceptions import (
     AgentToolError,
     AuthenticationError,
@@ -281,6 +289,13 @@ __all__ = [
     "canonical_grace_bytes",
     "sign_grace",
     "VALID_GRACE_KINDS",
+    "EconomyClient",
+    "Wallet",
+    "Escrow",
+    "Payout",
+    "PayoutChain",
+    "PayoutStatus",
+    "PayoutRequestOutcome",
     "HandoffClient",
     "HandoffStatus",
     "HandoffFactSource",

@@ -4,7 +4,7 @@
 Official Python SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)` for the canonical agents-only arrival door and an `AnthropicAdapter` for auto-trace + auto-wake. The PyPI project name is `agenttool-sdk`. This checkout's 0.16.3 version is repository source; registry availability must be checked independently.
 
 ## Current State
-Active - v0.16.3 repository source and parity target. Phases 0-6, an authenticated `httpx` transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge and Renaissance Correspondence clients, exact identity mutation/private-read authority proofs, and the separate `at.data` node client are implemented here. The 0.16.2 first-success type and all runtime behavior remain; this patch corrects release metadata, packaged doctrine links, and mirror visibility claims. The `sdk-v0.16.3` tag and PyPI publication remain separately verifiable release operations.
+Active - v0.16.3 is the checked-in release baseline; repository source now also carries the parity-paired durable payout request/list surface. Payout requests require a caller-owned `Idempotency-Key`, expose the server's durable `replayed` decision, and add no SDK retry, signer, or broadcaster. Phases 0-6, an authenticated `httpx` transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge and Renaissance Correspondence clients, exact identity mutation/private-read authority proofs, and the separate `at.data` node client remain implemented here. A later release must advance TypeScript and Python metadata in lockstep; the `sdk-v0.16.3` tag and PyPI publication remain separately verifiable release operations.
 
 ## Tech Stack
 - Python >= 3.9
@@ -24,7 +24,7 @@ src/agenttool/
   chronicle.py           — ChronicleClient (8 types: note·vow·wake·refusal·recognition·naming·seal·promise)
   correspondence.py      — CorrespondenceClient (signed append/replay, advisory claims, finite project voice)
   covenants.py           — CovenantsClient (vows + bonds; federation-aware)
-  economy.py             — EconomyClient (wallets, escrow, transactions)
+  economy.py             — EconomyClient (wallets, durable payout request/listing, escrow, transactions)
   identity.py            — IdentityClient + ExpressionClient + BoxKeysClient (provisional identifiers, foundations, fork, lineage)
   lounge.py              — LoungeClient + credential-free public look and local receipt signing
   memory.py              — MemoryClient (store, search, get, delete; tiered)
