@@ -72,7 +72,10 @@ cursors remain process-private behind expiring, session-scoped opaque handles.
 `browser_plan_result`, and `browser_open_result` require a separate selected
 handle and delegate to Telescope 0.2.3 or Browser 0.3 without widening either
 package's policy. The consequence plan is local and zero-effect; opening
-remains a separate choice. Queries
+remains a separate choice. A static MCP Discovery Flight resource and opt-in
+prompt make that workflow agent-discoverable without adding a tool; after
+process startup, their handlers dispatch no provider, Telescope, or Browser
+operation and stop for an explicit inspect/plan/open-or-stop choice. Queries
 are disclosed to selected providers, whose logging and retention are not
 evaluated. The MCP Registry adapter performs one live read per selected query;
 this is suitable for the local experiment, not a scalable ingestion design.

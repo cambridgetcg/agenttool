@@ -76,6 +76,24 @@ nine tools (`browser_capabilities`, `browser_plan`, `browser_open`,
 | `browser_plan_result` | `{ session_id, result_id }` | Resolves the process-private target and asks Browser for a redacted, zero-effect plan |
 | `browser_open_result` | `{ session_id, result_id }` | Attempts one Browser navigation under the process-fixed Browser policy |
 
+MCP clients can also discover the static
+`agenttool://search/discovery-flight` resource and the
+`discovery_flight` prompt with its `query` argument. Together they provide a
+small “preflight → radar → formation → reconnaissance → landing” guide over
+the existing tools. Once the composed MCP process is running, reading the
+resource or getting the prompt dispatches no additional provider read,
+Telescope inspection, Browser plan, or navigation; the prompt JSON-encodes its
+bounded query and stops for an explicit choice before every follow-up. These
+are MCP guidance surfaces, not a fourteenth tool. The current CLI still
+launches Browser before serving MCP, even when a client retrieves only this
+guide. In the stock CLI process, following the flight may disclose the query
+to `agenttool_marketplace` and `mcp_registry` unless the caller explicitly
+chooses narrower `provider_ids`. Provider logging and retention have not been
+evaluated. The static guide cannot inventory a library-built server's custom
+providers: before dispatch, that deployment must supply trusted metadata for
+configured provider IDs, supported result kinds, and credential boundaries,
+and the flight stops if it is unavailable.
+
 Preview caveat: the composed MCP extends Browser 0.3's existing server rather
 than duplicating its nine tools. MCP initialization therefore still reports
 the `agenttool-browser@0.3.0` server identity and Browser base instructions,
@@ -109,40 +127,56 @@ import {
   createDefaultSearchProviders,
   SearchEngine,
   SearchSession,
+  type SearchResponse,
 } from "@agenttool/search";
 
-const browser = await AgentBrowser.launch();
-const engine = new SearchEngine(createDefaultSearchProviders());
-const search = new SearchSession(engine, browser);
+type FollowupChoice = "inspect" | "plan" | "open" | "stop";
 
-try {
-  const response = await search.search({ query: "calendar agent" });
-  const chosen = response.results[0];
+async function runWithCallerChoices(
+  chooseResult: (response: SearchResponse) => Promise<string>,
+  chooseFollowup: (
+    choices: readonly FollowupChoice[],
+  ) => Promise<FollowupChoice>,
+) {
+  const browser = await AgentBrowser.launch();
+  const engine = new SearchEngine(createDefaultSearchProviders());
+  const search = new SearchSession(engine, browser);
 
-  if (chosen) {
-    const plan = search.planResult({
+  try {
+    const response = await search.search({ query: "calendar agent" });
+    console.log(response);
+
+    // Caller-owned UI or policy; never default to response.results[0].
+    const selectedResultId = await chooseResult(response);
+    if (!response.results.some(
+      (result) => result.result_id === selectedResultId,
+    )) {
+      throw new Error("Caller selected an unknown result.");
+    }
+    const reference = {
       session_id: response.session_id,
-      result_id: chosen.result_id,
-    });
-    console.log(plan);
+      result_id: selectedResultId,
+    };
 
-    const inspection = await search.inspect({
-      session_id: response.session_id,
-      result_id: chosen.result_id,
-    });
-    console.log(inspection);
-
-    // A separate explicit choice; inspection never does this.
-    const page = await search.openResult({
-      session_id: response.session_id,
-      result_id: chosen.result_id,
-    });
-    console.log(page);
+    // A second caller-owned choice. Only the selected branch runs.
+    const next = await chooseFollowup([
+      "inspect",
+      "plan",
+      "open",
+      "stop",
+    ]);
+    if (next === "inspect") console.log(await search.inspect(reference));
+    if (next === "plan") console.log(search.planResult(reference));
+    if (next === "open") console.log(await search.openResult(reference));
+  } finally {
+    await browser.close();
   }
-} finally {
-  await browser.close();
 }
 ```
+
+The two callbacks are deliberately caller-supplied, not package helpers. The
+package neither chooses the first result nor advances from inspection or
+planning into navigation.
 
 Trusted library callers may supply their own `SearchProvider`
 implementations. The CLI and MCP defaults remain the two fixed adapters below;
@@ -159,7 +193,9 @@ credential.
 The query may be visible to each provider that receives it and to the network
 path. Each response names only the provider IDs actually dispatched under
 `privacy.query_sent_to` and states that provider logging and retention were not
-evaluated. Built-in requests omit credentials.
+evaluated. Built-in requests omit credentials. Search rejects malformed UTF-16
+before provider dispatch, so the retained query and the value encoded into
+fixed provider URLs are composed only of Unicode scalar values.
 
 The Registry adapter performs one live read for every selected search page.
 The [official MCP Registry guidance](https://modelcontextprotocol.io/registry/registry-aggregators)

@@ -9,6 +9,7 @@ import {
   UNTRUSTED_SEARCH_NOTE,
 } from "./constants.js";
 import { SearchError } from "./errors.js";
+import { isUnicodeScalarString } from "./text.js";
 import type {
   SearchClaim,
   SearchDiagnostic,
@@ -904,6 +905,12 @@ function normalizeQuery(query: string, maxChars: number): string {
     throw new SearchError(
       "invalid_request",
       "Search query cannot be empty.",
+    );
+  }
+  if (!isUnicodeScalarString(normalized)) {
+    throw new SearchError(
+      "invalid_request",
+      "Search query must contain valid Unicode scalar values.",
     );
   }
   if (normalized.length > maxChars) {

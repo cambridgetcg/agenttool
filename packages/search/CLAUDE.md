@@ -33,7 +33,8 @@ contract. Do not replace Telescope 0.2.3 with the older npm package.
   model-selected base URL, arbitrary header, bearer, cookie, or credential.
 - State query disclosure before every provider call. Preserve
   `privacy.query_sent_to`; never claim provider logging or retention was
-  evaluated.
+  evaluated. Reject ill-formed UTF-16 before dispatch so the retained query and
+  provider URL encoding cannot disagree.
 - Keep transport evidence separate from publisher assertions and local
   derivations. Evidence URLs are query-redacted and remote bodies and raw
   exception text do not cross the response boundary.
@@ -69,6 +70,17 @@ contract. Do not replace Telescope 0.2.3 with the older npm package.
   `browser_capabilities` and `browser_plan`; do not reimplement or widen them.
   The additional public MCP tools are exactly `agent_search`, `agent_inspect`,
   `browser_plan_result`, and `browser_open_result`.
+- Keep Discovery Flight at the static
+  `agenttool://search/discovery-flight` resource and the opt-in
+  `discovery_flight` MCP prompt. Their handlers must dispatch no provider,
+  Telescope, or Browser operation. Keep the query bounded, Unicode-scalar,
+  and JSON-encoded as data, and preserve an explicit stop before every
+  follow-up. It is guidance over the thirteen tools, not another tool or JSONL
+  operation. Do not hide the CLI's current eager Browser launch behind a
+  zero-effect retrieval claim. Warn before dispatch that provider logging and
+  retention are not evaluated. Do not present stock provider IDs as an
+  inventory for a custom library-built server; require trusted deployment
+  metadata for its IDs, supported kinds, and credential boundaries, or stop.
 - Keep JSONL at one request/one response per line, versioned
   `agenttool-search-jsonl/0.1`, with the same nine Browser plus four Search
   operations. Protocol output belongs on stdout; diagnostics belong on stderr.
@@ -91,6 +103,8 @@ contract. Do not replace Telescope 0.2.3 with the older npm package.
 - `src/providers/` — fixed AgentTool marketplace and official MCP Registry
   adapters.
 - `src/session.ts` — explicit Telescope and Browser handoffs.
+- `src/discovery-flight.ts` — non-dispatching MCP workflow guide and bounded
+  prompt formatter.
 - `src/mcp.ts` and `src/jsonl.ts` — aligned local transports.
 - `schema/` — static response and inspection contracts.
 - `tests/` — hermetic protocol, provider, transport, schema, and package

@@ -70,6 +70,23 @@ The stdio MCP surface adds `agent_search`, `agent_inspect`,
 tools. The JSONL surface exposes the same thirteen operations under
 `agenttool-search-jsonl/0.1`. Neither transport adds a hosted route.
 
+The MCP surface also adds one static
+`agenttool://search/discovery-flight` resource and one opt-in
+`discovery_flight` prompt with a `query` argument. They describe a compact
+preflight → search → local shortlist → explicit inspect/plan/open-or-stop
+journey over the existing tools. Once the composed MCP process is running,
+their handlers dispatch no additional provider, Telescope, or Browser
+operation. The bounded query is JSON-encoded as data inside the prompt, and the
+guide requires another explicit choice before every follow-up. Neither surface
+changes the thirteen-tool or JSONL contracts. The current Search CLI still
+launches Browser before serving MCP, including a guide-only client session.
+In the stock CLI process, following the flight may disclose the query to
+`agenttool_marketplace` and `mcp_registry` unless the caller explicitly
+chooses narrower `provider_ids`. Provider logging and retention have not been
+evaluated. The static guide cannot inventory a library-built server's custom
+providers: that deployment must supply trusted provider IDs, supported result
+kinds, and credential boundaries before dispatch, or the flight stops.
+
 The composed MCP deliberately extends Browser 0.3's public server builder.
 Consequently the initialize response and base instructions still identify
 `agenttool-browser@0.3.0`, while the Search CLI and advertised tool set
@@ -252,6 +269,10 @@ The query is sent to every provider named by
 metadata. `provider_logging_and_retention: "not_evaluated"` is a required
 field, not boilerplate. Do not put a secret, bearer, private path, or
 confidential task description in a search query.
+
+Query input must contain only Unicode scalar values. Ill-formed UTF-16 is
+rejected before provider dispatch so URL encoding cannot silently replace a
+surrogate while the response retains a different query.
 
 Provider requests are bounded reads to fixed public origins. They omit
 credentials, refuse redirects and non-JSON or content-encoded responses, and

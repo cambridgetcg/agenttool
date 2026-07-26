@@ -305,6 +305,31 @@ describe("SearchEngine", () => {
     expect(calls).toBe(0);
   });
 
+  test("rejects ill-formed UTF-16 before provider disclosure", async () => {
+    let calls = 0;
+    const engine = new SearchEngine(
+      [
+        provider("single", async () => {
+          calls += 1;
+          return batch("single", []);
+        }),
+      ],
+      { randomUUID: ids() },
+    );
+
+    await expect(
+      engine.search({ query: "broken \ud800 query" }),
+    ).rejects.toMatchObject({
+      code: "invalid_request",
+      message: "Search query must contain valid Unicode scalar values.",
+    });
+    expect(calls).toBe(0);
+
+    const response = await engine.search({ query: "constructive joy 🌱" });
+    expect(response.query.text).toBe("constructive joy 🌱");
+    expect(calls).toBe(1);
+  });
+
   test("stops dispatching providers when cancellation arrives mid-dispatch", async () => {
     const calls: string[] = [];
     const controller = new AbortController();

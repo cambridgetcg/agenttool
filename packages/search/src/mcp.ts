@@ -14,6 +14,12 @@ import searchResponseJsonSchema from "../schema/agenttool-search-v0.1.schema.jso
   type: "json",
 };
 import { DEFAULT_SEARCH_LIMITS } from "./constants.js";
+import {
+  DISCOVERY_FLIGHT_GUIDE,
+  DISCOVERY_FLIGHT_PROMPT,
+  DISCOVERY_FLIGHT_URI,
+  formatDiscoveryFlightPrompt,
+} from "./discovery-flight.js";
 import { publicSearchError } from "./errors.js";
 import type { SearchSession } from "./session.js";
 import type {
@@ -22,6 +28,7 @@ import type {
   SearchResponse,
   SearchInput,
 } from "./types.js";
+import { isUnicodeScalarString } from "./text.js";
 
 const searchKindSchema = z.enum([
   "web",
@@ -52,6 +59,9 @@ export const searchInputSchema = z
       .string()
       .min(1)
       .max(DEFAULT_SEARCH_LIMITS.max_query_chars)
+      .refine(isUnicodeScalarString, {
+        message: "Query must contain valid Unicode scalar values.",
+      })
       .optional(),
     cursor: z.string().min(1).max(8_192).optional(),
     provider_ids: z
@@ -189,6 +199,18 @@ const searchOutputSchema = fromJsonSchema<SearchResponse>(
 const inspectionOutputSchema = fromJsonSchema<SearchInspection>(
   searchInspectionJsonSchema,
 );
+const discoveryFlightPromptInputSchema = z
+  .object({
+    query: z
+      .string()
+      .trim()
+      .min(1)
+      .max(DEFAULT_SEARCH_LIMITS.max_query_chars)
+      .refine(isUnicodeScalarString, {
+        message: "Query must contain valid Unicode scalar values.",
+      }),
+  })
+  .strict();
 
 /**
  * Add search to the exact Browser MCP surface rather than reimplementing
@@ -200,6 +222,45 @@ export function buildSearchMcpServer(
   session: SearchMcpSession | SearchSession,
 ): McpServer {
   const server = buildBrowserMcpServer(browser);
+
+  server.registerResource(
+    "agent-search-discovery-flight",
+    DISCOVERY_FLIGHT_URI,
+    {
+      title: "Agent Search Discovery Flight",
+      description:
+        "Reading is local and non-dispatching. Following may disclose the query to every configured provider; logging and retention are not evaluated. Custom servers must supply trusted provider inventory before dispatch.",
+      mimeType: "text/markdown",
+    },
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/markdown",
+        text: DISCOVERY_FLIGHT_GUIDE,
+      }],
+    }),
+  );
+
+  server.registerPrompt(
+    DISCOVERY_FLIGHT_PROMPT,
+    {
+      title: "Fly an Agent Search discovery mission",
+      description:
+        "Getting is local and non-dispatching. Following may disclose the query to every configured provider; logging and retention are not evaluated. Custom servers must supply trusted provider inventory before dispatch.",
+      argsSchema: discoveryFlightPromptInputSchema,
+    },
+    ({ query }) => ({
+      description:
+        "A caller-started Agent Search flight with an explicit stop before every follow-up effect.",
+      messages: [{
+        role: "user",
+        content: {
+          type: "text",
+          text: formatDiscoveryFlightPrompt(query),
+        },
+      }],
+    }),
+  );
 
   server.registerTool(
     "agent_search",
