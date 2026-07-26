@@ -471,6 +471,13 @@ describe("Alchemy deposit-watch reconciler", () => {
           after: null,
         }),
       ],
+      [
+        addressPage({
+          data: [ADDRESS],
+          totalCount: 0,
+          after: null,
+        }),
+      ],
     ]) {
       let membershipPage = 0;
       const fakeFetch = (async (input: string | URL | Request) => {

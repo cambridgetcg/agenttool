@@ -652,6 +652,9 @@ async function observeMembership(
         throw new ProviderFault("rejected");
       }
     }
+    if (observedAddresses.size > page.totalCount) {
+      throw new ProviderFault("unstable");
+    }
 
     if (observedAddresses.has(expectedAddress)) return true;
     if (page.after === null) {
