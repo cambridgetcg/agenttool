@@ -1,0 +1,499 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:provider-adapter-evidence:v1",
+  "title": "AgentTool provider adapter evidence v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "format",
+    "asOf",
+    "repository",
+    "sources",
+    "vocabulary",
+    "normalization",
+    "flows",
+    "controls",
+    "cases",
+    "proofLimits"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "./evidence.schema.json"
+    },
+    "format": {
+      "const": "agenttool-provider-adapter-evidence/v1"
+    },
+    "asOf": {
+      "type": "string",
+      "format": "date"
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url",
+        "commit",
+        "digestAlgorithm"
+      ],
+      "properties": {
+        "url": {
+          "const": "https://github.com/cambridgetcg/agenttool"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "digestAlgorithm": {
+          "const": "sha256"
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    },
+    "vocabulary": {
+      "$ref": "#/$defs/vocabulary"
+    },
+    "normalization": {
+      "$ref": "#/$defs/normalization"
+    },
+    "flows": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/flow"
+      }
+    },
+    "controls": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/control"
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/case"
+      }
+    },
+    "proofLimits": {
+      "type": "array",
+      "minItems": 5,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "$defs": {
+    "provider": {
+      "enum": [
+        "openai",
+        "anthropic"
+      ]
+    },
+    "language": {
+      "enum": [
+        "typescript",
+        "python"
+      ]
+    },
+    "lifecycle": {
+      "enum": [
+        "completed",
+        "low-level-stream",
+        "managed-stream",
+        "refused"
+      ]
+    },
+    "boundary": {
+      "enum": [
+        "agenttool.wake",
+        "agenttool.write",
+        "provider.openai.responses",
+        "provider.anthropic.messages",
+        "provider.anthropic.stream",
+        "adapter"
+      ]
+    },
+    "operation": {
+      "enum": [
+        "system",
+        "create",
+        "stream",
+        "final-message",
+        "abort",
+        "result",
+        "refuse"
+      ]
+    },
+    "dataClass": {
+      "enum": [
+        "wake-text",
+        "caller-instructions",
+        "caller-prompt",
+        "provider-metadata",
+        "provider-response",
+        "provider-stream-event",
+        "prompt-excerpt",
+        "response-excerpt",
+        "parsed-chronicle",
+        "parsed-trace",
+        "local-receipt"
+      ]
+    },
+    "flowEndpoint": {
+      "enum": [
+        "provider-client",
+        "agenttool-wake",
+        "agenttool-traces",
+        "agenttool-chronicle",
+        "caller-process",
+        "adapter-process"
+      ]
+    },
+    "controlKind": {
+      "enum": [
+        "enforced-local",
+        "requested-upstream"
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "provider",
+        "language",
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^(openai|anthropic)-(typescript|python)$"
+        },
+        "provider": {
+          "$ref": "#/$defs/provider"
+        },
+        "language": {
+          "$ref": "#/$defs/language"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^packages/sdk-(ts|py)/"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "vocabulary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providers",
+        "languages",
+        "lifecycles",
+        "boundaries",
+        "operations",
+        "dataClasses",
+        "flowEndpoints",
+        "controlKinds"
+      ],
+      "properties": {
+        "providers": {
+          "const": [
+            "openai",
+            "anthropic"
+          ]
+        },
+        "languages": {
+          "const": [
+            "typescript",
+            "python"
+          ]
+        },
+        "lifecycles": {
+          "const": [
+            "completed",
+            "low-level-stream",
+            "managed-stream",
+            "refused"
+          ]
+        },
+        "boundaries": {
+          "const": [
+            "agenttool.wake",
+            "agenttool.write",
+            "provider.openai.responses",
+            "provider.anthropic.messages",
+            "provider.anthropic.stream",
+            "adapter"
+          ]
+        },
+        "operations": {
+          "const": [
+            "system",
+            "create",
+            "stream",
+            "final-message",
+            "abort",
+            "result",
+            "refuse"
+          ]
+        },
+        "dataClasses": {
+          "const": [
+            "wake-text",
+            "caller-instructions",
+            "caller-prompt",
+            "provider-metadata",
+            "provider-response",
+            "provider-stream-event",
+            "prompt-excerpt",
+            "response-excerpt",
+            "parsed-chronicle",
+            "parsed-trace",
+            "local-receipt"
+          ]
+        },
+        "flowEndpoints": {
+          "const": [
+            "provider-client",
+            "agenttool-wake",
+            "agenttool-traces",
+            "agenttool-chronicle",
+            "caller-process",
+            "adapter-process"
+          ]
+        },
+        "controlKinds": {
+          "const": [
+            "enforced-local",
+            "requested-upstream"
+          ]
+        }
+      }
+    },
+    "normalization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fieldNames",
+        "omittedIdentityId",
+        "omittedWakeProfile",
+        "payloadRule",
+        "resultRule"
+      ],
+      "properties": {
+        "fieldNames": {
+          "const": "camelCase"
+        },
+        "omittedIdentityId": {
+          "type": "null"
+        },
+        "omittedWakeProfile": {
+          "const": "full"
+        },
+        "payloadRule": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resultRule": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "flow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "providers",
+        "lifecycles",
+        "when",
+        "dataClasses",
+        "source",
+        "destination"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$"
+        },
+        "providers": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/provider"
+          }
+        },
+        "lifecycles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/lifecycle"
+          }
+        },
+        "when": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataClasses": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/dataClass"
+          }
+        },
+        "source": {
+          "$ref": "#/$defs/flowEndpoint"
+        },
+        "destination": {
+          "$ref": "#/$defs/flowEndpoint"
+        }
+      }
+    },
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "providers",
+        "kind",
+        "statement"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$"
+        },
+        "providers": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/provider"
+          }
+        },
+        "kind": {
+          "$ref": "#/$defs/controlKind"
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "provider",
+        "lifecycle",
+        "fixture",
+        "proves",
+        "expectedTranscript"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$"
+        },
+        "provider": {
+          "$ref": "#/$defs/provider"
+        },
+        "lifecycle": {
+          "$ref": "#/$defs/lifecycle"
+        },
+        "fixture": {
+          "type": "string",
+          "pattern": "^[a-z0-9.-]+$"
+        },
+        "proves": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$"
+          }
+        },
+        "expectedTranscript": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/event"
+          }
+        }
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "boundary",
+        "operation",
+        "payload"
+      ],
+      "properties": {
+        "boundary": {
+          "$ref": "#/$defs/boundary"
+        },
+        "operation": {
+          "$ref": "#/$defs/operation"
+        },
+        "payload": {
+          "$ref": "#/$defs/jsonObject"
+        }
+      }
+    },
+    "jsonObject": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/jsonValue"
+      }
+    },
+    "jsonValue": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/jsonValue"
+          }
+        },
+        {
+          "$ref": "#/$defs/jsonObject"
+        }
+      ]
+    }
+  }
+}

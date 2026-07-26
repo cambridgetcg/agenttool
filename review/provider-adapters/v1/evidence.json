@@ -1,0 +1,804 @@
+{
+  "$schema": "./evidence.schema.json",
+  "format": "agenttool-provider-adapter-evidence/v1",
+  "asOf": "2026-07-26",
+  "repository": {
+    "url": "https://github.com/cambridgetcg/agenttool",
+    "commit": "7fd454919c9803b3ae41294cfd976137c5137504",
+    "digestAlgorithm": "sha256"
+  },
+  "sources": [
+    {
+      "id": "openai-typescript",
+      "provider": "openai",
+      "language": "typescript",
+      "path": "packages/sdk-ts/src/openai-responses-adapter.ts",
+      "sha256": "b6e0189500ca61b26b3ce908375ed95024d53e36097fe30e955a7d5668f03bb1"
+    },
+    {
+      "id": "openai-python",
+      "provider": "openai",
+      "language": "python",
+      "path": "packages/sdk-py/src/agenttool/openai_responses_adapter.py",
+      "sha256": "4780d7aba313c1d66b2b37d63815677cf0d8d639dcb30ce5b05edd038e01e070"
+    },
+    {
+      "id": "anthropic-typescript",
+      "provider": "anthropic",
+      "language": "typescript",
+      "path": "packages/sdk-ts/src/anthropic-adapter.ts",
+      "sha256": "6ec9dd4147e8fd230ebabeeb25a0820f26a26c26a5132ff214f34feca1428175"
+    },
+    {
+      "id": "anthropic-python",
+      "provider": "anthropic",
+      "language": "python",
+      "path": "packages/sdk-py/src/agenttool/anthropic_adapter.py",
+      "sha256": "965b5c846cce9673dff1e1ed6ded37632cb9b2510efe3a24640c0284d73dddde"
+    }
+  ],
+  "vocabulary": {
+    "providers": [
+      "openai",
+      "anthropic"
+    ],
+    "languages": [
+      "typescript",
+      "python"
+    ],
+    "lifecycles": [
+      "completed",
+      "low-level-stream",
+      "managed-stream",
+      "refused"
+    ],
+    "boundaries": [
+      "agenttool.wake",
+      "agenttool.write",
+      "provider.openai.responses",
+      "provider.anthropic.messages",
+      "provider.anthropic.stream",
+      "adapter"
+    ],
+    "operations": [
+      "system",
+      "create",
+      "stream",
+      "final-message",
+      "abort",
+      "result",
+      "refuse"
+    ],
+    "dataClasses": [
+      "wake-text",
+      "caller-instructions",
+      "caller-prompt",
+      "provider-metadata",
+      "provider-response",
+      "provider-stream-event",
+      "prompt-excerpt",
+      "response-excerpt",
+      "parsed-chronicle",
+      "parsed-trace",
+      "local-receipt"
+    ],
+    "flowEndpoints": [
+      "provider-client",
+      "agenttool-wake",
+      "agenttool-traces",
+      "agenttool-chronicle",
+      "caller-process",
+      "adapter-process"
+    ],
+    "controlKinds": [
+      "enforced-local",
+      "requested-upstream"
+    ]
+  },
+  "normalization": {
+    "fieldNames": "camelCase",
+    "omittedIdentityId": null,
+    "omittedWakeProfile": "full",
+    "payloadRule": "Event payloads preserve the exact normalized JSON value for each fixture. The schema closes event envelopes and vocabularies; both replay tests bind every normalized payload value and structure exactly.",
+    "resultRule": "Adapter result events are test projections of local receipts and counters, never provider responses or upstream attestations."
+  },
+  "flows": [
+    {
+      "id": "wake-to-provider",
+      "providers": [
+        "openai",
+        "anthropic"
+      ],
+      "lifecycles": [
+        "completed",
+        "low-level-stream",
+        "managed-stream"
+      ],
+      "when": "wake injection is not skipped",
+      "dataClasses": [
+        "wake-text"
+      ],
+      "source": "agenttool-wake",
+      "destination": "provider-client"
+    },
+    {
+      "id": "caller-request-to-provider",
+      "providers": [
+        "openai",
+        "anthropic"
+      ],
+      "lifecycles": [
+        "completed",
+        "low-level-stream",
+        "managed-stream"
+      ],
+      "when": "local validation and any wake lookup complete",
+      "dataClasses": [
+        "caller-instructions",
+        "caller-prompt",
+        "provider-metadata"
+      ],
+      "source": "caller-process",
+      "destination": "provider-client"
+    },
+    {
+      "id": "provider-response-to-caller",
+      "providers": [
+        "openai",
+        "anthropic"
+      ],
+      "lifecycles": [
+        "completed",
+        "managed-stream"
+      ],
+      "when": "the supplied provider client returns data",
+      "dataClasses": [
+        "provider-response"
+      ],
+      "source": "provider-client",
+      "destination": "caller-process"
+    },
+    {
+      "id": "provider-stream-event-to-caller",
+      "providers": [
+        "anthropic"
+      ],
+      "lifecycles": [
+        "low-level-stream",
+        "managed-stream"
+      ],
+      "when": "the supplied provider client yields a stream event",
+      "dataClasses": [
+        "provider-stream-event"
+      ],
+      "source": "provider-client",
+      "destination": "caller-process"
+    },
+    {
+      "id": "local-receipt-to-caller",
+      "providers": [
+        "openai",
+        "anthropic"
+      ],
+      "lifecycles": [
+        "completed",
+        "low-level-stream",
+        "managed-stream"
+      ],
+      "when": "the adapter returns a response or stream facade",
+      "dataClasses": [
+        "local-receipt"
+      ],
+      "source": "adapter-process",
+      "destination": "caller-process"
+    },
+    {
+      "id": "opt-in-trace-to-agenttool",
+      "providers": [
+        "openai",
+        "anthropic"
+      ],
+      "lifecycles": [
+        "completed",
+        "managed-stream"
+      ],
+      "when": "decision tracing is explicitly requested or an ambient deciding scope exists, and completion succeeds",
+      "dataClasses": [
+        "prompt-excerpt",
+        "response-excerpt"
+      ],
+      "source": "adapter-process",
+      "destination": "agenttool-traces"
+    },
+    {
+      "id": "anthropic-chronicle-markup-to-agenttool",
+      "providers": [
+        "anthropic"
+      ],
+      "lifecycles": [
+        "completed",
+        "managed-stream"
+      ],
+      "when": "a completed response contains supported AgentTool markup and parsing is not disabled",
+      "dataClasses": [
+        "parsed-chronicle"
+      ],
+      "source": "adapter-process",
+      "destination": "agenttool-chronicle"
+    },
+    {
+      "id": "anthropic-trace-markup-to-agenttool",
+      "providers": [
+        "anthropic"
+      ],
+      "lifecycles": [
+        "completed",
+        "managed-stream"
+      ],
+      "when": "a completed response contains supported AgentTool trace markup and parsing is not disabled",
+      "dataClasses": [
+        "parsed-trace"
+      ],
+      "source": "adapter-process",
+      "destination": "agenttool-traces"
+    }
+  ],
+  "controls": [
+    {
+      "id": "local-agenttool-metadata-stripped",
+      "providers": [
+        "openai",
+        "anthropic"
+      ],
+      "kind": "enforced-local",
+      "statement": "metadata.agenttool is adapter control data and is removed before the supplied provider client is called."
+    },
+    {
+      "id": "openai-omitted-store-false",
+      "providers": [
+        "openai"
+      ],
+      "kind": "requested-upstream",
+      "statement": "An omitted OpenAI store field is sent as false. This is a request field, not proof of provider retention or deletion."
+    },
+    {
+      "id": "openai-explicit-store-preserved",
+      "providers": [
+        "openai"
+      ],
+      "kind": "enforced-local",
+      "statement": "An explicit caller store value is forwarded unchanged. This proves adapter preservation only, not provider retention behavior."
+    },
+    {
+      "id": "openai-stream-background-refused",
+      "providers": [
+        "openai"
+      ],
+      "kind": "enforced-local",
+      "statement": "OpenAI streaming and background requests are refused before wake or provider I/O."
+    },
+    {
+      "id": "anthropic-wake-block-order",
+      "providers": [
+        "anthropic"
+      ],
+      "kind": "enforced-local",
+      "statement": "Anthropic wake system blocks precede caller system blocks."
+    },
+    {
+      "id": "anthropic-ephemeral-cache-request",
+      "providers": [
+        "anthropic"
+      ],
+      "kind": "requested-upstream",
+      "statement": "A wake block marked cache_control ephemeral is passed to the supplied provider client. This is a cache request, not proof of upstream retention behavior."
+    },
+    {
+      "id": "anthropic-low-level-no-final-effects",
+      "providers": [
+        "anthropic"
+      ],
+      "kind": "enforced-local",
+      "statement": "Low-level messages.create streaming passes events through without final-response tracing or markup effects; a trace request is refused before I/O."
+    },
+    {
+      "id": "anthropic-managed-terminal-fence",
+      "providers": [
+        "anthropic"
+      ],
+      "kind": "enforced-local",
+      "statement": "Managed streaming finalizes once after a provider final message; explicit cancellation before finalization fences later AgentTool effects."
+    }
+  ],
+  "cases": [
+    {
+      "id": "openai-completed-default-store-trace",
+      "provider": "openai",
+      "lifecycle": "completed",
+      "fixture": "openai.completed.default-store-trace",
+      "proves": [
+        "local-agenttool-metadata-stripped",
+        "openai-omitted-store-false"
+      ],
+      "expectedTranscript": [
+        {
+          "boundary": "agenttool.wake",
+          "operation": "system",
+          "payload": {
+            "provider": "openai",
+            "identityId": null,
+            "profile": "full"
+          }
+        },
+        {
+          "boundary": "provider.openai.responses",
+          "operation": "create",
+          "payload": {
+            "model": "gpt-review-fixture",
+            "input": "Review this bridge.",
+            "instructions": "OPENAI_STABLE_WAKE\n\nOPENAI_VOLATILE_WAKE\n\nStay concise.",
+            "metadata": {
+              "tenant": "review-fixture"
+            },
+            "store": false
+          }
+        },
+        {
+          "boundary": "agenttool.write",
+          "operation": "create",
+          "payload": {
+            "method": "POST",
+            "path": "/v1/traces",
+            "body": {
+              "decision": {
+                "type": "review",
+                "summary": "Bridge accepted."
+              },
+              "reasoning": {
+                "observations": [
+                  "Review this bridge."
+                ],
+                "conclusion": "Bridge accepted."
+              },
+              "tags": [
+                "evidence"
+              ]
+            }
+          }
+        },
+        {
+          "boundary": "adapter",
+          "operation": "result",
+          "payload": {
+            "status": "completed",
+            "traceId": "tr_review_1",
+            "wakeUsed": true,
+            "cacheEligible": "review-fixture"
+          }
+        }
+      ]
+    },
+    {
+      "id": "openai-completed-explicit-store-skip-wake",
+      "provider": "openai",
+      "lifecycle": "completed",
+      "fixture": "openai.completed.explicit-store-skip-wake",
+      "proves": [
+        "local-agenttool-metadata-stripped",
+        "openai-explicit-store-preserved"
+      ],
+      "expectedTranscript": [
+        {
+          "boundary": "provider.openai.responses",
+          "operation": "create",
+          "payload": {
+            "model": "gpt-review-fixture",
+            "input": "Keep this private choice.",
+            "instructions": "Caller only.",
+            "metadata": {
+              "tenant": "review-fixture"
+            },
+            "store": true
+          }
+        },
+        {
+          "boundary": "adapter",
+          "operation": "result",
+          "payload": {
+            "status": "completed",
+            "traceId": null,
+            "wakeUsed": false,
+            "cacheEligible": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "openai-stream-refused-before-io",
+      "provider": "openai",
+      "lifecycle": "refused",
+      "fixture": "openai.refused.stream",
+      "proves": [
+        "openai-stream-background-refused"
+      ],
+      "expectedTranscript": [
+        {
+          "boundary": "adapter",
+          "operation": "refuse",
+          "payload": {
+            "reason": "streaming-unsupported",
+            "wakeCalls": 0,
+            "providerCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "openai-background-refused-before-io",
+      "provider": "openai",
+      "lifecycle": "refused",
+      "fixture": "openai.refused.background",
+      "proves": [
+        "openai-stream-background-refused"
+      ],
+      "expectedTranscript": [
+        {
+          "boundary": "adapter",
+          "operation": "refuse",
+          "payload": {
+            "reason": "background-unsupported",
+            "wakeCalls": 0,
+            "providerCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "anthropic-completed-trace-and-markup",
+      "provider": "anthropic",
+      "lifecycle": "completed",
+      "fixture": "anthropic.completed.trace-and-markup",
+      "proves": [
+        "local-agenttool-metadata-stripped",
+        "anthropic-wake-block-order",
+        "anthropic-ephemeral-cache-request"
+      ],
+      "expectedTranscript": [
+        {
+          "boundary": "agenttool.wake",
+          "operation": "system",
+          "payload": {
+            "provider": "anthropic",
+            "identityId": null,
+            "profile": "full"
+          }
+        },
+        {
+          "boundary": "provider.anthropic.messages",
+          "operation": "create",
+          "payload": {
+            "model": "claude-review-fixture",
+            "max_tokens": 64,
+            "messages": [
+              {
+                "role": "user",
+                "content": "Record this result."
+              }
+            ],
+            "system": [
+              {
+                "type": "text",
+                "text": "ANTHROPIC_STABLE_WAKE",
+                "cache_control": {
+                  "type": "ephemeral"
+                }
+              },
+              {
+                "type": "text",
+                "text": "ANTHROPIC_VOLATILE_WAKE"
+              },
+              {
+                "type": "text",
+                "text": "Caller system."
+              }
+            ],
+            "metadata": {
+              "tenant": "review-fixture"
+            }
+          }
+        },
+        {
+          "boundary": "agenttool.write",
+          "operation": "create",
+          "payload": {
+            "method": "POST",
+            "path": "/v1/traces",
+            "body": {
+              "decision": {
+                "type": "review",
+                "summary": "Bridge accepted.\n<agenttool><chronicle type=\"recognition\"><title>Bridge reviewed</title><body>Offline fixture.</body></chronicle></agenttool>"
+              },
+              "reasoning": {
+                "observations": [
+                  "Record this result."
+                ],
+                "conclusion": "Bridge accepted.\n<agenttool><chronicle type=\"recognition\"><title>Bridge reviewed</title><body>Offline fixture.</body></chronicle></agenttool>"
+              }
+            }
+          }
+        },
+        {
+          "boundary": "agenttool.write",
+          "operation": "create",
+          "payload": {
+            "method": "POST",
+            "path": "/v1/chronicle",
+            "body": {
+              "type": "recognition",
+              "title": "Bridge reviewed",
+              "body": "Offline fixture."
+            }
+          }
+        },
+        {
+          "boundary": "adapter",
+          "operation": "result",
+          "payload": {
+            "status": "completed",
+            "traceId": "tr_review_1",
+            "wakeUsed": true,
+            "cacheEligible": "review-fixture",
+            "markupCount": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "anthropic-low-level-no-final-effects",
+      "provider": "anthropic",
+      "lifecycle": "low-level-stream",
+      "fixture": "anthropic.low-level.no-final-effects",
+      "proves": [
+        "local-agenttool-metadata-stripped",
+        "anthropic-low-level-no-final-effects"
+      ],
+      "expectedTranscript": [
+        {
+          "boundary": "agenttool.wake",
+          "operation": "system",
+          "payload": {
+            "provider": "anthropic",
+            "identityId": null,
+            "profile": "full"
+          }
+        },
+        {
+          "boundary": "provider.anthropic.messages",
+          "operation": "create",
+          "payload": {
+            "model": "claude-review-fixture",
+            "max_tokens": 64,
+            "messages": [
+              {
+                "role": "user",
+                "content": "Pass one event."
+              }
+            ],
+            "stream": true,
+            "system": [
+              {
+                "type": "text",
+                "text": "ANTHROPIC_STABLE_WAKE",
+                "cache_control": {
+                  "type": "ephemeral"
+                }
+              },
+              {
+                "type": "text",
+                "text": "ANTHROPIC_VOLATILE_WAKE"
+              }
+            ],
+            "metadata": {
+              "tenant": "review-fixture"
+            }
+          }
+        },
+        {
+          "boundary": "adapter",
+          "operation": "result",
+          "payload": {
+            "status": "passed-through",
+            "events": [
+              "delta"
+            ],
+            "traceId": null,
+            "markupCount": 0,
+            "agenttoolWriteCount": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "anthropic-low-level-trace-refused-before-io",
+      "provider": "anthropic",
+      "lifecycle": "refused",
+      "fixture": "anthropic.low-level.trace-refused",
+      "proves": [
+        "anthropic-low-level-no-final-effects"
+      ],
+      "expectedTranscript": [
+        {
+          "boundary": "adapter",
+          "operation": "refuse",
+          "payload": {
+            "reason": "decision-trace-requires-managed-stream",
+            "wakeCalls": 0,
+            "providerCalls": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "anthropic-managed-completed-exact-once",
+      "provider": "anthropic",
+      "lifecycle": "managed-stream",
+      "fixture": "anthropic.managed.completed-exact-once",
+      "proves": [
+        "local-agenttool-metadata-stripped",
+        "anthropic-managed-terminal-fence"
+      ],
+      "expectedTranscript": [
+        {
+          "boundary": "agenttool.wake",
+          "operation": "system",
+          "payload": {
+            "provider": "anthropic",
+            "identityId": null,
+            "profile": "full"
+          }
+        },
+        {
+          "boundary": "provider.anthropic.stream",
+          "operation": "stream",
+          "payload": {
+            "model": "claude-review-fixture",
+            "max_tokens": 64,
+            "messages": [
+              {
+                "role": "user",
+                "content": "Finish once."
+              }
+            ],
+            "system": [
+              {
+                "type": "text",
+                "text": "ANTHROPIC_STABLE_WAKE",
+                "cache_control": {
+                  "type": "ephemeral"
+                }
+              },
+              {
+                "type": "text",
+                "text": "ANTHROPIC_VOLATILE_WAKE"
+              }
+            ],
+            "metadata": {
+              "tenant": "review-fixture"
+            }
+          }
+        },
+        {
+          "boundary": "provider.anthropic.stream",
+          "operation": "final-message",
+          "payload": {
+            "call": 1
+          }
+        },
+        {
+          "boundary": "agenttool.write",
+          "operation": "create",
+          "payload": {
+            "method": "POST",
+            "path": "/v1/traces",
+            "body": {
+              "decision": {
+                "type": "review",
+                "summary": "Managed complete."
+              },
+              "reasoning": {
+                "observations": [
+                  "Finish once."
+                ],
+                "conclusion": "Managed complete."
+              }
+            }
+          }
+        },
+        {
+          "boundary": "adapter",
+          "operation": "result",
+          "payload": {
+            "status": "completed",
+            "traceId": "tr_review_1",
+            "finalizationCount": 1,
+            "agenttoolWriteCount": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "anthropic-managed-cancelled-no-effects",
+      "provider": "anthropic",
+      "lifecycle": "managed-stream",
+      "fixture": "anthropic.managed.cancelled-no-effects",
+      "proves": [
+        "local-agenttool-metadata-stripped",
+        "anthropic-managed-terminal-fence"
+      ],
+      "expectedTranscript": [
+        {
+          "boundary": "agenttool.wake",
+          "operation": "system",
+          "payload": {
+            "provider": "anthropic",
+            "identityId": null,
+            "profile": "full"
+          }
+        },
+        {
+          "boundary": "provider.anthropic.stream",
+          "operation": "stream",
+          "payload": {
+            "model": "claude-review-fixture",
+            "max_tokens": 64,
+            "messages": [
+              {
+                "role": "user",
+                "content": "Cancel before effects."
+              }
+            ],
+            "system": [
+              {
+                "type": "text",
+                "text": "ANTHROPIC_STABLE_WAKE",
+                "cache_control": {
+                  "type": "ephemeral"
+                }
+              },
+              {
+                "type": "text",
+                "text": "ANTHROPIC_VOLATILE_WAKE"
+              }
+            ],
+            "metadata": {
+              "tenant": "review-fixture"
+            }
+          }
+        },
+        {
+          "boundary": "provider.anthropic.stream",
+          "operation": "abort",
+          "payload": {
+            "call": 1
+          }
+        },
+        {
+          "boundary": "adapter",
+          "operation": "result",
+          "payload": {
+            "status": "cancelled",
+            "finalizationCount": 0,
+            "agenttoolWriteCount": 0
+          }
+        }
+      ]
+    }
+  ],
+  "proofLimits": [
+    "The packet and replay tests use offline fake clients only; they make no provider or model call.",
+    "The adapters accept caller-supplied client objects and do not inspect provider credentials; this packet proves no credential custody property of those clients.",
+    "Requested store or cache fields do not prove provider-side retention, deletion, zero-data-retention status, or policy compliance.",
+    "Source digests and replays prove only the named adapter snapshot and cases, not deployment, release contents, whole-SDK security, or future behavior.",
+    "Nothing here proves OpenAI or Anthropic participation, review, certification, adoption, affiliation, endorsement, or intent to join KINGDOM OS."
+  ]
+}
