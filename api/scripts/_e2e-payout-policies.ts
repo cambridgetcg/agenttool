@@ -7,12 +7,11 @@
  *       flow not yet implemented; threshold is a hard ceiling for v1)
  *    3. destination_not_allowlisted — destination not in allowlist
  *    4. payout_exceeds_daily_ceiling — rolling 24h sum exceeds ceiling
- *    5. happy path — all gates satisfied → 202 + credits debited
  *
- *  We don't need actual chain broadcast for this e2e (we're testing the
- *  service-layer policy enforcement). The eventual worker pickup will fail
- *  on chain (no funds at the test wallet's derived address) but that's OK
- *  — we only care that the API correctly classified the policy decision.
+ *  No chain operation is created. The daily-ceiling fixture rows use
+ *  `status='broadcast'` only so the policy query counts them; they carry a
+ *  null tx_hash plus explicit fixture metadata and are terminalized in the
+ *  outer finally path.
  *
  *  Run: cd api && bun scripts/_e2e-payout-policies.ts
  */
@@ -24,6 +23,67 @@ import postgres from "postgres";
 const BASE = process.env.AGENTTOOL_BASE ?? "http://localhost:3000";
 const ALLOWED_DEST = "0x000000000000000000000000000000000000dEaD";
 const FORBIDDEN_DEST = "0x0000000000000000000000000000000000000123";
+const FIXTURE_ERROR = "synthetic_policy_fixture_no_chain_operation";
+const FIXTURE_SEED_METADATA = {
+  fixture_kind: "payout_policy_e2e_daily_ceiling",
+  fixture_version: 1,
+  lifecycle: "seeded",
+  source: "api/scripts/_e2e-payout-policies.ts",
+} as const;
+const FIXTURE_TERMINAL_METADATA = {
+  ...FIXTURE_SEED_METADATA,
+  lifecycle: "terminal",
+  outcome: FIXTURE_ERROR,
+} as const;
+
+interface FixtureCleanup {
+  databaseUrl: string;
+  payoutIds: string[];
+}
+
+let pendingFixtureCleanup: FixtureCleanup | undefined;
+
+async function terminalizeFixtureRows(
+  cleanup: FixtureCleanup,
+): Promise<void> {
+  if (cleanup.payoutIds.length === 0) return;
+
+  const uniqueIds = [...new Set(cleanup.payoutIds)];
+  const sql = postgres(cleanup.databaseUrl, {
+    max: 1,
+    prepare: false,
+  });
+  try {
+    const terminalized = await sql.unsafe<Array<{ id: string }>>(
+      `UPDATE economy.crypto_payouts
+       SET status = 'failed',
+           tx_hash = NULL,
+           error = $2,
+           metadata = $3::jsonb
+       WHERE id = ANY($1::uuid[])
+         AND metadata = $4::jsonb
+       RETURNING id`,
+      [
+        uniqueIds,
+        FIXTURE_ERROR,
+        JSON.stringify(FIXTURE_TERMINAL_METADATA),
+        JSON.stringify(FIXTURE_SEED_METADATA),
+      ],
+    );
+    if (terminalized.length !== uniqueIds.length) {
+      throw new Error(
+        `fixture_cleanup_mismatch: expected=${uniqueIds.length} actual=${terminalized.length}`,
+      );
+    }
+    log(
+      "synthetic daily-ceiling rows terminalized",
+      true,
+      `count=${terminalized.length}`,
+    );
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+}
 
 function readDatabaseUrl(): string {
   if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
@@ -78,7 +138,7 @@ async function main() {
     name: `e2e-policies-${Date.now()}`,
   });
   log("POST /v1/register · 201", reg.status === 201);
-  if (reg.status !== 201) process.exit(1);
+  if (reg.status !== 201) throw new Error("project_registration_failed");
   const apiKey = reg.data.project.api_key;
   const identityId = reg.data.agent.id;
 
@@ -108,7 +168,7 @@ async function main() {
   const url = readDatabaseUrl();
   if (!url) {
     log("DATABASE_URL accessible", false, "missing");
-    process.exit(1);
+    throw new Error("database_url_missing");
   }
   const sql = postgres(url, { max: 1, prepare: false });
   try {
@@ -223,26 +283,35 @@ async function main() {
   console.log("");
   console.log("  ▸ wall: payout_exceeds_daily_ceiling");
   const sql2 = postgres(url, { max: 1, prepare: false });
+  const fixturePayoutIds: string[] = [];
+  pendingFixtureCleanup = {
+    databaseUrl: url,
+    payoutIds: fixturePayoutIds,
+  };
   try {
-    for (let i = 0; i < 2; i++) {
-      await sql2.unsafe(
+    for (let remaining = 2; remaining > 0; remaining -= 1) {
+      const inserted = await sql2.unsafe<Array<{ id: string }>>(
         `INSERT INTO economy.crypto_payouts
            (wallet_id, project_id, chain, token, amount_base,
-            destination_address, status, tx_hash, requested_at)
+            destination_address, status, tx_hash, metadata, requested_at)
          VALUES ($1, $2, 'ethereum', 'USDC', '4000000',
-                 $3, 'broadcast', $4, NOW())`,
+                 $3, 'broadcast', NULL, $4::jsonb, NOW())
+         RETURNING id`,
         [
           walletId,
           reg.data.project.id,
           ALLOWED_DEST,
-          // Synthetic tx_hash — not a real chain tx, but the daily-sum
-          // query doesn't care; status NOT IN ('failed','cancelled') is
-          // the only filter.
-          `0x${"f".repeat(64 - String(i).length)}${i}`,
+          JSON.stringify(FIXTURE_SEED_METADATA),
         ],
       );
+      const payoutId = inserted[0]?.id;
+      if (!payoutId) throw new Error("fixture_insert_missing_id");
+      fixturePayoutIds.push(payoutId);
     }
-    log("seeded two prior broadcasts (8M total)", true);
+    log(
+      "seeded two identity-free prior broadcasts (8M total)",
+      true,
+    );
   } finally {
     await sql2.end({ timeout: 5 });
   }
@@ -282,12 +351,22 @@ async function main() {
   console.log("");
   if (process.exitCode === 1) {
     console.log("  ✗ FAILED — see ✗ above");
-    process.exit(1);
+    throw new Error("payout_policy_assertions_failed");
   }
-  console.log("  ✓ all assertions passed");
 }
 
-main().catch((e) => {
+async function run(): Promise<void> {
+  try {
+    await main();
+  } finally {
+    const cleanup = pendingFixtureCleanup;
+    pendingFixtureCleanup = undefined;
+    if (cleanup) await terminalizeFixtureRows(cleanup);
+  }
+  console.log("  ✓ all assertions passed; fixture rows terminalized");
+}
+
+run().catch((e) => {
   console.error("\ne2e crashed:", e);
-  process.exit(1);
+  process.exitCode = 1;
 });
