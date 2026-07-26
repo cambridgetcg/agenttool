@@ -4,7 +4,7 @@
  *  in the same shape. This test ensures the echo doesn't drift silently:
  *
  *    1. The middleware adds `_welcomed` to 2xx JSON object responses
- *    2. The middleware adds `X-Welcomed` HTTP header to every response
+ *    2. The middleware adds `X-Welcomed` to every eligible response
  *    3. Every error builder carries `axiom_id` referencing one of the
  *       five Promise primes
  *    4. The math-tier greeting's promise primes match the named axiom
@@ -106,7 +106,7 @@ describe("welcomeEcho middleware — body + header echo", () => {
     expect(body._welcomed).toBeUndefined();
   });
 
-  test("every response (even 4xx) carries X-Welcomed header", async () => {
+  test("every ordinary test response (even 4xx) carries X-Welcomed", async () => {
     const app = buildApp();
     for (const path of ["/ok-object", "/ok-array", "/ok-text", "/error-4xx"]) {
       const res = await app.request(path);

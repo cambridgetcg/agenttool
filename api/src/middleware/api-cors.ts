@@ -8,6 +8,7 @@
 import type { MiddlewareHandler } from "hono";
 import { cors } from "hono/cors";
 
+import { isDatabaseDecorationIndependentPublicPath } from "../lib/public-paths";
 import { isAllowedPublicMcpOrigin } from "../services/mcp/http-boundary";
 import { welcomeHeaderForPath } from "./welcome";
 
@@ -99,10 +100,15 @@ export function apiCors(): MiddlewareHandler {
     }
 
     // Hono's CORS middleware answers a valid preflight immediately, before
-    // downstream response framing runs. Preserve that short circuit while
-    // still carrying the transport-level welcome promised on every response.
-    const headers = response instanceof Response ? response.headers : c.res.headers;
-    if (c.req.method === "OPTIONS" && !headers.has("X-Welcomed")) {
+    // downstream response framing runs. Preserve that short circuit and add
+    // the ordinary transport-level welcome only on eligible paths.
+    const headers =
+      response instanceof Response ? response.headers : c.res.headers;
+    if (
+      c.req.method === "OPTIONS" &&
+      !isDatabaseDecorationIndependentPublicPath(routedPath) &&
+      !headers.has("X-Welcomed")
+    ) {
       headers.set("X-Welcomed", welcomeHeaderForPath(path));
     }
 

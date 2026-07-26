@@ -283,7 +283,9 @@ describe("static tool OpenAPI contracts", () => {
     });
     expect(componentHeaders.Welcomed).toMatchObject({
       schema: { type: "string" },
-      description: expect.stringMatching(/every response.*OpenAPI/is),
+      description: expect.stringMatching(
+        /ordinary responses.*OpenAPI.*absent.*domain proof.*Canon MCP.*security contact/is,
+      ),
     });
     expect(componentParameters.PaymentSignature).toMatchObject({
       name: "PAYMENT-SIGNATURE",

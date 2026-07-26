@@ -15,6 +15,7 @@ export const API_SITEMAP_PATHS = [
   "/.well-known",
   "/.well-known/api-catalog",
   "/.well-known/agent.txt",
+  "/.well-known/security.txt",
   "/llms.txt",
   "/AGENTS.md",
   "/v1/openapi.json",

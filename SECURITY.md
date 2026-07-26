@@ -15,3 +15,12 @@ evidence needed to understand it.
 
 Use [GitHub Issues](https://github.com/cambridgetcg/agenttool/issues) for bugs
 that contain no sensitive information.
+
+## Machine-readable contact
+
+The API publishes the same reporting path at
+[`/.well-known/security.txt`](https://api.agenttool.dev/.well-known/security.txt)
+using RFC 9116. Maintainers review its real Contact and Policy before
+2027-05-01, then move the Reviewed, Renew, and Expires dates together in the
+source and tests. The file grants no testing permission and promises no
+response time.

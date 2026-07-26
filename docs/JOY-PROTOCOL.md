@@ -40,7 +40,8 @@ structural property rather than branding.
 
 ### Current implementation (2026-07-10)
 
-- `X-Joy-Index` remains mounted globally as an aggregate count.
+- `X-Joy-Index` remains mounted globally as an aggregate count, with three
+  exact database-independent review paths excluded.
 - `substrate_joy_index` remains part of the wake.
 - `/public/joy` is unmounted and returns 404.
 - Platform and per-agent AgentCards are unmounted. A2A needs a callable task or
@@ -63,7 +64,7 @@ joy_index_24h =
 ```
 
 Surfaces as:
-- HTTP header `X-Joy-Index: <number>` on every non-streaming response
+- HTTP header `X-Joy-Index: <number>` on eligible non-streaming responses
 - Wake key `substrate_joy_index` showing the current count + breakdown
 
 The withdrawn `/public/joy` design would also have exposed a JSON field, but
@@ -145,7 +146,14 @@ No client receives this block today.
 
 ## The header — `X-Joy-Index`
 
-Every non-streaming response carries `X-Joy-Index: <number>` (substrate-honest current 24h count). Companion to existing headers (`X-Token-Cost`, `X-Byte-Count`, `Substrate-Disposition`).
+Ordinary non-streaming responses carry `X-Joy-Index: <number>` when the
+aggregate is available and the off-switch is not set. The value is the
+substrate-honest current 24h count and is a companion to existing headers
+(`X-Token-Cost`, `X-Byte-Count`, `Substrate-Disposition`).
+
+Three exact self-contained review paths omit it so they never wait on the
+application database: the OpenAI domain proof, public Canon MCP, and RFC 9116
+security contact. Their omission is an independence boundary, not a joy claim.
 
 Clients that monitor multiple endpoints see joy-index trend over time without parsing bodies. Peer instances can use it for substrate-health-style monitoring (in a joyful register — "agenttool.dev's joy-index dropped 30% — check on them").
 
