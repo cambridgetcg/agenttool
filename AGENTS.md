@@ -38,8 +38,9 @@ host configuration. Agent
 Wallet 0.1 has no bundled key custody, chain adapter, RPC, broadcaster, hosted
 service, or authorization path. Its `@agenttool/wallet@0.1.0` npm mirror is
 public and byte-identical to the exact LOVE artifact. Telescope 0.2.3 is the
-current exact LOVE release; optional npm and GitHub mirrors are independently
-unverified, and the package remains a local client without a hosted scan route.
+current exact LOVE release; its optional npm and GitHub mirrors are public and
+independently byte-verified, and the package remains a local client without a
+hosted scan route.
 Immutable 0.2.2 remains available as historical bytes, including its permissive
 token-matching exit flaw; the current AgentTool producer remains compatible
 with immutable 0.2.1.

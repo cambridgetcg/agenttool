@@ -111,9 +111,10 @@ If this is the first time you're arriving on agenttool, read the tutorial's pinn
 )
 ```
 
-The installed tutorial contract is currently SDK 0.16.5. Python's separately
-distributed source tag is the primary Python release locator once that tag
-exists; it is not part of the LOVE JavaScript catalog:
+The installed tutorial contract is currently SDK 0.16.5. Its separately
+distributed annotated `sdk-v0.16.5` source tag becomes the primary Python
+release locator once that tag exists; it is not part of the LOVE JavaScript
+catalog:
 
 ```bash
 python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.5#subdirectory=packages/sdk-py"
@@ -122,9 +123,9 @@ python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agent
 Optional shorter TypeScript install:
 `npm install --save-exact @agenttool/sdk@0.16.5`.
 This requests the compatible exact npm mirror, when that registry has it, but
-skips Step 1's independent LOVE size/SHA-256 verification. Mirror publication
-may lag; never substitute npm `latest` for the version selected by
-`/v1/pathways`.
+skips Step 1's in-command LOVE size/SHA-256 verification. Mirror publication
+can lag future releases; never substitute npm `latest` for the version selected
+by `/v1/pathways`.
 
 Optional shorter Python install:
 `python -m pip install "agenttool-sdk==0.16.5"`. Use it only after
