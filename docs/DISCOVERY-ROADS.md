@@ -60,7 +60,7 @@ both hosts + llms-full.txt, agent.txt, RFC 9727 api-catalog, WebFinger,
 welcome.json) parses; the MCP card is explicitly an experimental,
 AgentTool-specific locator rather than standardized discovery. The pre-auth
 orientation trio (porch / welcome / pathways), a curated OpenAPI 3.1 subset,
-the lockstep SDK source and verified LOVE artifact at 0.16.3, teaching 404s,
+the lockstep SDK source and verified LOVE artifact at 0.16.4, teaching 404s,
 deliberate crawlability, and exact-name search are present. npm and PyPI still
 served 0.16.0 when rechecked on 2026-07-24; registry publication is separate
 from source and artifact truth. Search position and snippets are dated

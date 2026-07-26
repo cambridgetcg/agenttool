@@ -1,10 +1,10 @@
 # agenttool-sdk-py
 
 ## What This Is
-Official Python SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)`, `AnthropicAdapter`, and an additive source-only synchronous `OpenAIResponsesAdapter` for completed Responses API calls. The PyPI project name is `agenttool-sdk`. This checkout's 0.16.3 version is repository source; registry availability must be checked independently.
+Official Python SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)`, `AnthropicAdapter`, and a synchronous `OpenAIResponsesAdapter` for completed Responses API calls. The PyPI project name is `agenttool-sdk`. This checkout's 0.16.4 version is repository source; registry availability must be checked independently.
 
 ## Current State
-Active - v0.16.3 is the checked-in release baseline. Repository source now also carries the unreleased, parity-paired durable payout request/list surface and synchronous OpenAI Responses adapter. Payout requests require a caller-owned `Idempotency-Key`, expose the server's durable `replayed` decision, and add no SDK retry, signer, or broadcaster. Phases 0-6, an authenticated `httpx` transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge and Renaissance Correspondence clients, exact identity mutation/private-read authority proofs, and the separate `at.data` node client remain implemented here. These additions do not change the immutable `sdk-v0.16.3` tag or package; a later release must advance TypeScript and Python metadata in lockstep, and PyPI publication remains a separately verifiable release operation.
+Active - v0.16.4 is the checked-in release baseline. It carries the parity-paired durable payout request/list surface, the synchronous completed-response OpenAI adapter, and bounded Anthropic streaming repairs. Payout requests require a caller-owned `Idempotency-Key`, expose the server's durable `replayed` decision, and add no SDK retry, signer, or broadcaster. Phases 0-6, an authenticated `httpx` transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge and Renaissance Correspondence clients, exact identity mutation/private-read authority proofs, and the separate `at.data` node client remain implemented here. The immutable `sdk-v0.16.3` tag remains historical bytes; PyPI availability for 0.16.4 remains a separately verifiable release operation.
 
 ## Tech Stack
 - Python >= 3.9
@@ -16,7 +16,7 @@ Active - v0.16.3 is the checked-in release baseline. Repository source now also 
 ## Project Structure
 ```
 src/agenttool/
-  __init__.py            — Public surface + __version__ ("0.16.3")
+  __init__.py            — Public surface + __version__ ("0.16.4")
   client.py              — AgentTool (composes hosted clients + at.deciding sugar)
   authority.py           — Exact local identity mutation and private-read authority proof helpers
   _context.py            — AmbientContext for auto-trace ambient state
@@ -110,7 +110,7 @@ AgentTool Platform · "Welcome, don't block."
 
 ## Key Files
 - `src/agenttool/client.py` — Main `AgentTool` class composing the maintained service clients
-- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.16.3"`)
+- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.16.4"`)
 - `pyproject.toml` — Package metadata + `force-include` SOUL.md in wheel
 - `tests/test_client.py` — Primary test file
 - `tests/test_data.py` — local data-node and sync wire + bearer-isolation contract
