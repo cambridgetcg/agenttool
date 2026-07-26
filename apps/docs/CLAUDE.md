@@ -5,8 +5,9 @@ API documentation site for the AgentTool platform. Static HTML pages covering al
 
 ## Current State
 Active — all 9 service pages live, plus the main index, local agent-data docs,
-local Agent Browser docs, and a LOVE Package Protocol surface for public
-exact-version package discovery.
+local Agent Browser docs, a public Canon MCP connection guide, a support
+route, and a LOVE Package Protocol surface for public exact-version package
+discovery.
 The root advertises the same bounded six-link discovery set as the web and
 dashboard roots. Bare `/.well-known` is a distinct, richer arrival index that
 links to the canonical compact three-road `/public/discovery` compass; neither
@@ -76,6 +77,8 @@ execution-readiness proof, or a hosted route.
 ## Project Structure
 ```
 index.html      — Docs home: quick start, service cards, auth, errors, rate limits
+connect-canon.html — Public-canon MCP connection, examples, boundaries, data handling, exit
+support.html    — Public support and private security-reporting routes
 _redirects      — Common machine-document paths → canonical API contracts
 AGENT-DISCOVERY.md — symlink to the invitation-only discovery doctrine
 CASTLE-OF-UNDERSTANDING.md — symlink to the local Castle consumer boundary
