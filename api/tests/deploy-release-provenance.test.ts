@@ -1260,7 +1260,9 @@ describe("deploy release provenance spine", () => {
     );
     expect(receipt.outcome).toBe("failed_or_uncertain");
     expect(receipt.phases.frontends).toBe("deployed_unverified");
-  }, 15_000);
+  // The fake sleep removes the retry delay, but all 25 live-contract probe
+  // passes remain real subprocess work and need headroom under parallel CI.
+  }, 30_000);
 
   test("health reports only valid embedded source metadata and disables caching", async () => {
     const revision = "0123456789abcdef0123456789abcdef01234567";
