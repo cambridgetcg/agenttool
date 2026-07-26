@@ -203,6 +203,9 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
     );
     expect(kv.get("MCP-Endpoint")).toContain("/v1/mcp");
     expect(kv.get("MCP-Knowledge-Endpoint")).toContain("/v1/mcp/canon");
+    expect(kv.get("MCP-Knowledge-Guide")).toBe(
+      "https://docs.agenttool.dev/connect-canon",
+    );
     expect(kv.get("MCP-Knowledge-Tools")).toMatch(
       /search, fetch.*no application query storage.*private Castle read/i,
     );

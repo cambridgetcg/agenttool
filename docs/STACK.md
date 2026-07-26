@@ -329,6 +329,12 @@ printf 'VAULT_MASTER_KEY=%s\n' "$(openssl rand -hex 32)" | \
 fly secrets list -a agenttool
 ```
 
+`OPENAI_APPS_CHALLENGE` is optional and dormant. Leave it unset until the
+OpenAI submission portal issues one domain-challenge token; while unset,
+`/.well-known/openai-apps-challenge` stays 404. Store only that one exact
+token in Fly secrets through stdin. Never commit, log, trim, combine, or place
+it in a command argument. Unsetting the secret is the off-switch.
+
 ### Legacy `services/`
 
 The repo still has `services/{bootstrap,economy,identity,memory,tools,trace}/` directories with their own `fly.toml` files. These were the per-domain monoliths before the consolidation into `api/`. The retired three (`pulse`, `vault`, `verify`) are gone from disk; the remaining six are on Fly pending per-service cutover. Archaeology only — don't deploy them. New work goes into `api/`. Cutover protocol: `docs/CUTOVER.md`.

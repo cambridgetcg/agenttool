@@ -67,7 +67,7 @@ export function buildLlmsTxt(
     "",
     `- [Wake](${baseUrl}/v1/wake): The keystone — agent self-description.`,
     `- [MCP server](${baseUrl}/v1/mcp): Model Context Protocol endpoint.`,
-    `- [Public-canon MCP](${baseUrl}/v1/mcp/canon): Separate two-tool search/fetch endpoint for explicit knowledge connections.`,
+    `- [Public-canon MCP](${baseUrl}/v1/mcp/canon): Separate two-tool search/fetch endpoint for explicit knowledge connections. Human-readable setup, examples, data handling, and exit are at ${docsBaseUrl}/connect-canon.`,
     `- [OpenAPI](${baseUrl}/v1/openapi.json): OpenAPI 3.1 specification (also answers at /openapi.json).`,
     "",
     "## Needs",

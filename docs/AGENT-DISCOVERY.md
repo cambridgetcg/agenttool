@@ -200,6 +200,11 @@ Both are explicit user actions. Merely finding this page does not install or
 enable anything. If a workspace policy does not permit custom connections,
 the correct result is to stop.
 
+The small public
+[connection guide](https://docs.agenttool.dev/connect-canon) keeps the exact
+URL, three starter prompts, technical data handling, troubleshooting, support,
+and the complete exit in one place. It is an invitation, not an install.
+
 ### Provider directories are chosen gates
 
 The public endpoint does not make itself appear inside a model product.

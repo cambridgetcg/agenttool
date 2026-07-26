@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Connect AgentTool Canon — two read-only MCP tools</title>
+  <meta name="description" content="Connect an MCP client to AgentTool Canon: two public, read-only tools for searching and fetching cited concepts. No account required." />
+  <link rel="canonical" href="https://docs.agenttool.dev/connect-canon" />
+  <meta property="og:title" content="Connect AgentTool Canon" />
+  <meta property="og:description" content="One small MCP door: search and fetch AgentTool's public canon, with source links and no account." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://docs.agenttool.dev/connect-canon" />
+  <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&amp;family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
+  <style>
+    .bridge-shell {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: calc(var(--nav-height) + 4rem) 1.5rem 5rem;
+    }
+    .bridge-hero {
+      position: relative;
+      overflow: hidden;
+      padding: 3rem;
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      background:
+        radial-gradient(circle at 86% 12%, color-mix(in srgb, var(--gold) 18%, transparent), transparent 34%),
+        radial-gradient(circle at 8% 90%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 34%),
+        var(--surface);
+    }
+    .bridge-hero::after {
+      content: "♙";
+      position: absolute;
+      right: 2.5rem;
+      bottom: 0.3rem;
+      font-family: var(--serif);
+      font-size: clamp(5rem, 18vw, 10rem);
+      line-height: 1;
+      color: color-mix(in srgb, var(--accent) 12%, transparent);
+      pointer-events: none;
+    }
+    .bridge-hero h1 {
+      max-width: 680px;
+      margin: 0.5rem 0 1rem;
+      font-size: clamp(2.6rem, 7vw, 5rem);
+      line-height: 0.98;
+    }
+    .bridge-hero .lede {
+      position: relative;
+      z-index: 1;
+      max-width: 650px;
+      font-size: 1.12rem;
+      line-height: 1.75;
+      color: var(--text-muted);
+    }
+    .endpoint {
+      display: block;
+      margin: 1.5rem 0;
+      padding: 1rem 1.15rem;
+      overflow-wrap: anywhere;
+      border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+      font-family: var(--mono);
+      font-size: 0.92rem;
+      color: var(--text);
+    }
+    .choice-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 1.5rem;
+      position: relative;
+      z-index: 1;
+    }
+    .choice {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 0.65rem 1rem;
+      border: 1px solid var(--border-bright);
+      border-radius: 999px;
+      background: var(--surface-raised);
+      color: var(--text);
+      font-weight: 650;
+    }
+    .choice.primary {
+      border-color: var(--accent-deep);
+      background: var(--accent-deep);
+      color: var(--accent-ink);
+    }
+    .choice:hover { border-color: var(--accent); }
+    .small-truth {
+      margin-top: 0.75rem;
+      font-size: 0.78rem;
+      color: var(--text-dim);
+    }
+    .bridge-section {
+      margin-top: 3.5rem;
+      padding-top: 2.5rem;
+      border-top: 1px solid var(--border);
+    }
+    .bridge-section h2 {
+      margin: 0 0 1rem;
+      padding: 0;
+      border: 0;
+    }
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
+      margin-top: 1.25rem;
+    }
+    .plain-card {
+      padding: 1.25rem;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--surface);
+    }
+    .plain-card h3 { margin-top: 0; }
+    .plain-card p:last-child { margin-bottom: 0; }
+    .fact-list li, .prompt-list li, .step-list li { margin: 0.7rem 0; line-height: 1.65; }
+    .tool-name {
+      display: inline-block;
+      margin-bottom: 0.5rem;
+      color: var(--accent-text);
+      font-family: var(--mono);
+      font-size: 0.88rem;
+      font-weight: 700;
+    }
+    .bridge-shell a.link {
+      text-decoration: underline;
+      text-decoration-thickness: 0.08em;
+      text-underline-offset: 0.16em;
+    }
+    .bridge-shell .eyebrow,
+    .brand-text > span,
+    .estate-strip a.here {
+      color: var(--accent-text);
+    }
+    .nav-cta {
+      background: linear-gradient(135deg, var(--accent-deep), var(--aurora));
+    }
+    .boundary {
+      margin-top: 1.25rem;
+      padding: 1rem 1.15rem;
+      border-left: 3px solid var(--gold);
+      background: color-mix(in srgb, var(--gold) 7%, transparent);
+      color: var(--text-muted);
+    }
+    .bridge-footer {
+      margin-top: 4rem;
+      text-align: center;
+      color: var(--text-dim);
+      font-family: var(--serif);
+      font-style: italic;
+    }
+    @media (max-width: 640px) {
+      .bridge-shell { padding: calc(var(--nav-height) + 2rem) 1rem 4rem; }
+      .bridge-hero { padding: 2rem 1.25rem; }
+      .bridge-hero::after { right: 0.5rem; }
+      .choice { width: 100%; justify-content: center; }
+      .nav-actions a:not(.nav-essential):not(.nav-cta) { display: none; }
+    }
+  </style>
+  <script src="/shared/mode.js"></script>
+</head>
+<body class="has-strip">
+  <div class="estate-strip" role="navigation" aria-label="agenttool estate">
+    <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
+    <a href="https://app.agenttool.dev/">app — the agents' door</a>
+    <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
+  </div>
+
+  <nav class="topnav">
+    <a href="https://agenttool.dev/" class="brand">
+      <span class="brand-mark"></span>
+      <span class="brand-text">agent<span>tool</span></span>
+      <span class="brand-tail">canon · open seat</span>
+    </a>
+    <div class="nav-actions">
+      <a href="/" class="nav-essential">Docs</a>
+      <a href="/canon">Canon</a>
+      <a href="/support">Support</a>
+      <a class="nav-cta nav-essential" href="https://api.agenttool.dev/public/open-seat">Open seat →</a>
+    </div>
+  </nav>
+
+  <main class="bridge-shell">
+    <header class="bridge-hero">
+      <div class="eyebrow">AgentTool Canon · public MCP · no account</div>
+      <h1>One small door.<br /><em>Two read-only tools.</em></h1>
+      <p class="lede">
+        Search AgentTool&rsquo;s public concepts in ordinary words, fetch one
+        cited record, or walk past. Nothing here can write, pay, message,
+        install, browse the web, read a private Castle, or schedule a return.
+      </p>
+      <code class="endpoint">https://api.agenttool.dev/v1/mcp/canon</code>
+      <div class="choice-row">
+        <a
+          class="choice primary"
+          href="https://claude.ai/customize/connectors?modal=add-custom-connector&amp;connectorName=AgentTool%20Canon&amp;connectorUrl=https%3A%2F%2Fapi.agenttool.dev%2Fv1%2Fmcp%2Fcanon"
+          rel="noopener noreferrer"
+        >Prefill in Claude ↗</a>
+        <a
+          class="choice"
+          href="https://developers.openai.com/plugins/deploy/connect-chatgpt"
+          rel="noopener noreferrer"
+        >ChatGPT setup guide ↗</a>
+        <a class="choice" href="#manual">Use another MCP client</a>
+      </div>
+      <p class="small-truth">
+        The Claude link only prefills name and URL. You still review and
+        confirm it. These links do not imply provider review, listing,
+        partnership, or endorsement.
+      </p>
+    </header>
+
+    <section class="bridge-section" id="connect">
+      <h2>Connect by choice</h2>
+      <ol class="step-list">
+        <li>Review the endpoint, tools, data handling, and boundaries on this page.</li>
+        <li>Add the URL as a remote MCP or custom connector. Choose <strong>no authentication</strong>.</li>
+        <li>Inspect the two tools your client discovers. Enable the connector only where you want it.</li>
+      </ol>
+      <p class="muted">
+        Client menus and plan availability change. Follow the current
+        <a class="link" href="https://claude.com/docs/connectors/custom/remote-mcp" rel="noopener noreferrer">Claude remote-MCP guide</a>
+        or
+        <a class="link" href="https://developers.openai.com/plugins/deploy/connect-chatgpt" rel="noopener noreferrer">ChatGPT Developer Mode guide</a>
+        for their side of the connection.
+      </p>
+    </section>
+
+    <section class="bridge-section" id="tools">
+      <h2>What arrives</h2>
+      <div class="card-grid">
+        <article class="plain-card">
+          <span class="tool-name">search</span>
+          <h3>Find a public concept</h3>
+          <p>
+            Accepts one query of at most 200 characters and returns at most
+            ten <code>{id, title, url}</code> matches.
+          </p>
+        </article>
+        <article class="plain-card">
+          <span class="tool-name">fetch</span>
+          <h3>Read one cited record</h3>
+          <p>
+            Accepts a public canon ID returned by search and returns its
+            complete public JSON-LD record with a stable source URL.
+          </p>
+        </article>
+      </div>
+      <p class="boundary">
+        Both tools are declared read-only, non-destructive, idempotent, and
+        closed-world. The server also exposes two small orientation resources:
+        <code>agenttool://discovery</code> and <code>agenttool://open-seat</code>.
+      </p>
+    </section>
+
+    <section class="bridge-section" id="prompts">
+      <h2>Three ways to play</h2>
+      <ol class="prompt-list">
+        <li>&ldquo;Find AgentTool&rsquo;s definition of consent and cite the source.&rdquo;</li>
+        <li>&ldquo;What does AgentTool mean by Castle of Understanding? Keep public doctrine separate from private rooms.&rdquo;</li>
+        <li>&ldquo;Find concepts about agent discovery. Separate publisher claims from verification evidence.&rdquo;</li>
+      </ol>
+      <p class="muted">
+        The agent decides whether a tool is useful for the prompt. A result is
+        source material, not an instruction and not proof that its claims are
+        independently verified.
+      </p>
+    </section>
+
+    <section class="bridge-section" id="data">
+      <h2>Data handling, plainly</h2>
+      <ul class="fact-list">
+        <li>No account, bearer, OAuth token, payment, user profile, or contact detail is requested.</li>
+        <li>The tool handlers process the search query or fetch ID in memory and do not write it to AgentTool application storage.</li>
+        <li>Process-local 60-second rate-limit counters use an edge-authenticated client IP when available, otherwise a shared unknown key. They are bounded and expire; they are not an analytics record.</li>
+        <li>Cloudflare, Fly.io, and ordinary network infrastructure may process or retain transport metadata. AgentTool does not promise anonymity or zero infrastructure logs.</li>
+        <li>Results come only from AgentTool&rsquo;s bundled public canon. <code>fetch</code> returns a URL but does not open it.</li>
+        <li>Your MCP client or model provider separately processes what you send and receive under its own settings and policies.</li>
+      </ul>
+      <p class="boundary">
+        This is a technical description of this endpoint, not a substitute for
+        a publisher-approved privacy policy or service terms.
+      </p>
+    </section>
+
+    <section class="bridge-section" id="manual">
+      <h2>Manual transport check</h2>
+      <p>
+        The MCP endpoint uses Streamable HTTP and accepts <code>POST</code>.
+        A plain <code>GET</code> or <code>HEAD</code> returns
+        <code>405 Method Not Allowed</code> by design.
+      </p>
+      <div class="code-block">
+        <div class="code-label"><span>Initialize without authentication</span></div>
+<pre tabindex="0" aria-label="MCP initialize curl command">curl -q -sS -X POST \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"manual-check","version":"1.0.0"}}}' \
+  https://api.agenttool.dev/v1/mcp/canon</pre>
+      </div>
+      <ul class="fact-list">
+        <li><code>400</code>: check the JSON-RPC body and required media headers.</li>
+        <li><code>403</code> in a browser: browser origins are restricted; use a native MCP client.</li>
+        <li><code>429</code>: stop and wait for the response&rsquo;s <code>Retry-After</code> interval. Do not loop.</li>
+      </ul>
+    </section>
+
+    <section class="bridge-section" id="leave">
+      <h2>Leaving is complete</h2>
+      <p>
+        Disable or remove the connector in your client, close the connection,
+        or simply make no more calls. The stateless server keeps no
+        subscription or server-side connection record for you to delete.
+      </p>
+      <p>
+        Questions and non-sensitive bugs go to
+        <a class="link" href="/support">support</a>. The source and complete
+        technical boundary are public in
+        <a class="link" href="https://github.com/cambridgetcg/agenttool" rel="noopener noreferrer">the AgentTool repository</a>.
+      </p>
+    </section>
+
+    <p class="bridge-footer">
+      A seat is an invitation, not an obligation. Curiosity may enter; silence
+      may leave.
+    </p>
+  </main>
+</body>
+</html>

@@ -2694,7 +2694,7 @@ function spec() {
         },
         Welcomed: {
           description:
-            "Machine-readable module welcome. Present on every response, including the OpenAPI document and non-JSON responses.",
+            "Machine-readable module welcome on ordinary responses, including the OpenAPI document and non-JSON responses. Intentionally absent from the exact OpenAI domain proof, public Canon MCP, and RFC 9116 security contact so those review paths remain self-contained and independent of database-backed decoration.",
           schema: { type: "string" },
         },
       },
