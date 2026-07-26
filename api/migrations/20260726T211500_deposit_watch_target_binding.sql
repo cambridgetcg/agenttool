@@ -28,7 +28,7 @@ ALTER TABLE economy.deposit_address_watches
   DROP CONSTRAINT IF EXISTS deposit_watch_target_fingerprint,
   ADD CONSTRAINT deposit_watch_target_fingerprint
     CHECK (
-      (target_fingerprint IS NULL AND status = 'blocked')
+      (target_fingerprint IS NULL AND status <> 'converged')
       OR target_fingerprint ~ '^[0-9a-f]{64}$'
     ),
   DROP CONSTRAINT IF EXISTS deposit_watch_observation_shape,
@@ -79,7 +79,7 @@ ALTER TABLE economy.deposit_address_watches
     );
 
 COMMENT ON COLUMN economy.deposit_address_watches.target_fingerprint IS
-  'SHA-256 of canonical public target facts only: provider, chain/network, provider target id, and callback URL. Never derive from an auth token, signing key, or other credential.';
+  'SHA-256 of canonical public target facts only: provider, chain/network, provider target id, and callback URL. NULL is a non-converged migration/rolling-deploy state ignored by the target-aware worker. Never derive from an auth token, signing key, or other credential.';
 
 COMMENT ON COLUMN economy.deposit_address_watches.observed_target_fingerprint IS
   'Public target fingerprint independently observed for observed_generation. Equality with target_fingerprint is required for convergence.';

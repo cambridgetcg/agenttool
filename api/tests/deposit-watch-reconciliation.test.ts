@@ -279,6 +279,13 @@ describe("deposit watch durable schema", () => {
       ),
       "utf8",
     );
+    const service = readFileSync(
+      new URL(
+        "../src/services/economy/crypto/deposit-watch.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    );
 
     expect(migration).toContain("target_fingerprint");
     expect(migration).toContain("observed_target_fingerprint");
@@ -286,7 +293,13 @@ describe("deposit watch durable schema", () => {
     expect(migration).toContain("observed_state = 'unknown'");
     expect(migration).toContain("status = 'blocked'");
     expect(migration).toContain(
+      "target_fingerprint IS NULL AND status <> 'converged'",
+    );
+    expect(migration).toContain(
       "observed_target_fingerprint = target_fingerprint",
+    );
+    expect(service).toContain(
+      "WHERE watch.target_fingerprint IS NOT NULL",
     );
     expect(migration).not.toMatch(
       /auth_token|signing_key\s*=|secret\s*=/i,

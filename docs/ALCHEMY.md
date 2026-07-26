@@ -110,6 +110,9 @@ target facts only: provider, chain/network, existing webhook ID, and callback
 URL. Notify auth tokens and ingress signing keys are neither inputs to that
 digest nor durable fields. A rolling worker with an older target refuses
 provider I/O and retries rather than touching its old webhook.
+Target-less rows created during a migration/old-replica overlap cannot become
+`converged`, and the target-aware worker does not claim them; the next request
+binds the current target and starts a fresh generation.
 The worker updates an existing per-chain Address Activity webhook and never
 creates, deletes, retargets, or activates one. A provider PATCH acknowledgement
 becomes `accepted_unverified` and is scheduled for a later independent GET.

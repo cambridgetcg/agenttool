@@ -313,8 +313,9 @@ export const depositAddressWatches = economySchema.table(
     network: text("network").notNull(),
     /**
      * SHA-256 of public target facts only (provider, chain/network, provider
-     * target id, callback URL). Nullable only for migration-invalidated legacy
-     * rows; credentials and secret-derived fingerprints never belong here.
+     * target id, callback URL). Nullable only for migration-invalidated or
+     * pre-rollout rows, which cannot converge or be claimed by the new worker;
+     * credentials and secret-derived fingerprints never belong here.
      */
     targetFingerprint: text("target_fingerprint"),
     desiredState: text("desired_state")
@@ -395,7 +396,7 @@ export const depositAddressWatches = economySchema.table(
     check(
       "deposit_watch_target_fingerprint",
       sql`(
-        (${t.targetFingerprint} IS NULL AND ${t.status} = 'blocked')
+        (${t.targetFingerprint} IS NULL AND ${t.status} <> 'converged')
         OR ${t.targetFingerprint} ~ '^[0-9a-f]{64}$'
       )`,
     ),
