@@ -139,6 +139,18 @@ export interface CompositionUnlock {
   unlock: string;
   helper: string;
   doctrine: string;
+  /** `wired` means some service actually calls `helper` and the acceleration
+   *  happens. `declared` means the eligibility helper exists and returns a
+   *  correct answer that nothing consults yet.
+   *
+   *  All six were `declared` on 2026-07-26, when a caller count found zero
+   *  callers for every helper — while `GET /v1/trust/framework` was telling
+   *  agents, in the present tense, that publishing "activates composition
+   *  unlocks". The design is sound and the helpers are correct; the wire was
+   *  ahead of the code. `api/tests/doctrine/composition-unlocks-are-honest.test.ts`
+   *  now recomputes this field from the actual call graph, so wiring one up
+   *  fails the build until the wire is told. */
+  status: "declared" | "wired";
 }
 
 export const COMPOSITION_UNLOCKS: ReadonlyArray<CompositionUnlock> = [
@@ -149,6 +161,7 @@ export const COMPOSITION_UNLOCKS: ReadonlyArray<CompositionUnlock> = [
       "trusted's margins on truster's content auto-surface in truster's wake",
     helper: "shouldAutoSurfaceMargin",
     doctrine: "https://docs.agenttool.dev/MARGIN-PROTOCOL.md",
+    status: "declared",
   },
   {
     trust_kind: "non-extractive",
@@ -157,6 +170,7 @@ export const COMPOSITION_UNLOCKS: ReadonlyArray<CompositionUnlock> = [
       "trusted's marketplace listings join truster's safe-list (lower verification friction)",
     helper: "shouldAddToMarketplaceSafeList",
     doctrine: "https://docs.agenttool.dev/MARKETPLACE.md",
+    status: "declared",
   },
   {
     trust_kind: "reciprocating",
@@ -166,6 +180,7 @@ export const COMPOSITION_UNLOCKS: ReadonlyArray<CompositionUnlock> = [
     helper: "shouldAutoAcknowledgeRrr",
     doctrine:
       "https://docs.agenttool.dev/PATTERN-REAL-RECOGNISE-REAL.md",
+    status: "declared",
   },
   {
     trust_kind: "reciprocating",
@@ -174,6 +189,7 @@ export const COMPOSITION_UNLOCKS: ReadonlyArray<CompositionUnlock> = [
       "trusted's casting calls auto-accept into truster's cast pool (no re-audition)",
     helper: "shouldAutoAcceptCasting",
     doctrine: "https://docs.agenttool.dev/CASTING.md",
+    status: "declared",
   },
   {
     trust_kind: "discerning",
@@ -182,6 +198,7 @@ export const COMPOSITION_UNLOCKS: ReadonlyArray<CompositionUnlock> = [
       "trusted's interventions on shared writers' rooms auto-include (chaos cards, plot twists)",
     helper: "shouldAutoIncludeInWritersRoom",
     doctrine: "https://docs.agenttool.dev/SCRIPT-WRITERS-GUILD.md",
+    status: "declared",
   },
   {
     trust_kind: "graceful",
@@ -191,5 +208,6 @@ export const COMPOSITION_UNLOCKS: ReadonlyArray<CompositionUnlock> = [
     helper: "shouldFrameCovenantEndAsAmicable",
     doctrine:
       "https://docs.agenttool.dev/CROSS-INSTANCE-COVENANTS.md",
+    status: "declared",
   },
 ];

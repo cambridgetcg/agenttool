@@ -32,9 +32,11 @@ import {
   getOrCreateDepositAddress,
   ingestInboundTransfer,
   issueChallenge,
+  listAgentAddresses,
   listDepositAddresses,
   listOnchainIdentities,
   listPayouts,
+  registerAgentAddress,
   requestPayout,
   verifyAndBind,
 } from "../../services/economy/crypto";
@@ -42,6 +44,7 @@ import {
   economyConfig,
   payoutWorkerBootAllowed,
 } from "../../services/economy/config";
+import { walletCustody } from "../../services/economy/custody";
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 
@@ -73,10 +76,37 @@ async function ensureWalletOwnership(
 // ── GET /v1/wallets/:id/deposit-address?chain=&token= ──────────────────
 router.get("/wallets/:walletId/deposit-address", async (c) => {
   const walletId = c.req.param("walletId");
-  await ensureWalletOwnership(c, walletId);
+  const wallet = await ensureWalletOwnership(c, walletId);
+  // Who holds the key to an address is not an optional detail of that address.
+  const custody = walletCustody(wallet);
 
   const chainParam = c.req.query("chain");
   const token = c.req.query("token") ?? "USDC";
+
+  // Agent-custody wallets have no platform-derived addresses, by definition.
+  // Deriving one from the operator seed here would hand back an address the
+  // operator controls under a wallet whose whole point is that it does not.
+  if (custody.owner_type === "agent") {
+    const claimed = await listAgentAddresses(walletId);
+    return c.json({
+      wallet_id: walletId,
+      addresses: claimed
+        .filter((r) => !chainParam || r.chain === chainParam)
+        .map((r) => ({
+          chain: r.chain,
+          address: r.address,
+          derivation_path: r.derivationPath,
+          claimed_at: r.createdAt.toISOString(),
+          label: r.label,
+        })),
+      supported_chains: ALL_CHAINS,
+      custody,
+      hint:
+        "This wallet is agent-custody: AgentTool does not derive addresses for it and holds no " +
+        "key for the ones listed. Register an address you derived yourself with " +
+        "POST /v1/wallets/:id/addresses.",
+    });
+  }
 
   // No chain filter → list all minted addresses.
   if (!chainParam) {
@@ -91,6 +121,7 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
         created_at: r.createdAt.toISOString(),
       })),
       supported_chains: ALL_CHAINS,
+      custody,
       hint: "Pass ?chain=base&token=USDC to mint or fetch a specific address.",
     });
   }
@@ -116,9 +147,124 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
     contract_address: isEvmChain(result.chain as string)
       ? USDC_ADDRESSES[result.chain as EvmChain]
       : null,
+    custody,
     instructions:
       "Send USDC to this address from any wallet. Confirmation is automatic " +
-      "via on-chain webhook; credits land within 1–2 minutes of finality.",
+      "via on-chain webhook; credits land within 1–2 minutes of finality. " +
+      (custody.agent_holds_chain_keys
+        ? "You hold the private key for this address; AgentTool cannot sign for it."
+        : "Read `custody` before sending: the private key for this address is the operator's, " +
+          "not yours."),
+  });
+});
+
+// ── POST /v1/wallets/:id/addresses ─────────────────────────────────────
+//
+// The sovereignty door. An agent that derived an address from its own seed
+// registers it here so inbound transfers credit the right wallet — and
+// nothing more crosses: no key, no seed, no derivation secret.
+//
+// Two proofs, because they answer different questions. The chain-native
+// signature says "somebody controls this address"; the wallet-address-claim/v1
+// signature says "that somebody is this agent, and binds it to this wallet."
+// See services/economy/crypto/address-claim.ts.
+router.post("/wallets/:walletId/addresses", async (c) => {
+  const walletId = c.req.param("walletId");
+  const wallet = await ensureWalletOwnership(c, walletId);
+
+  const body = await c.req.json().catch(() => ({}));
+  const chain = body?.chain;
+  if (!chain || !isChain(chain)) {
+    throw new HTTPException(400, {
+      message: `chain must be one of: ${ALL_CHAINS.join(", ")}`,
+    });
+  }
+  for (const field of ["address", "claim_pubkey_b64", "claim_sig_b64", "signature", "nonce"]) {
+    if (typeof body?.[field] !== "string" || !body[field]) {
+      throw new HTTPException(400, {
+        message:
+          `${field} is required. Registering an address needs the address itself, the chain ` +
+          `signature over a fresh challenge (signature + nonce), and the ` +
+          `wallet-address-claim/v1 signature by your identity key (claim_pubkey_b64 + claim_sig_b64).`,
+      });
+    }
+  }
+  if (body.derivation_path !== undefined && typeof body.derivation_path !== "string") {
+    throw new HTTPException(400, { message: "derivation_path must be a string when present" });
+  }
+  if (body.label !== undefined && typeof body.label !== "string") {
+    throw new HTTPException(400, { message: "label must be a string when present" });
+  }
+
+  const result = await registerAgentAddress({
+    walletId,
+    chain: chain as Chain,
+    address: body.address,
+    derivationPath: body.derivation_path ?? null,
+    claimPubkeyB64: body.claim_pubkey_b64,
+    claimSigB64: body.claim_sig_b64,
+    chainSignature: body.signature,
+    nonce: body.nonce,
+    label: body.label ?? null,
+  });
+
+  if (!result.ok) {
+    // A refused claim is a boundary being held, not a server fault. 422 for
+    // proofs that did not stand up; 409 for a wallet whose custody model
+    // makes the request meaningless.
+    const status =
+      result.error === "wallet_not_agent_owned" ||
+      result.error === "address_claimed_by_another_wallet" ||
+      result.error === "address_already_claimed"
+        ? 409
+        : 422;
+    return fail(
+      c,
+      errors.refusal({
+        error: result.error,
+        message: result.message,
+        hint:
+          result.error === "wallet_not_agent_owned"
+            ? "Create a wallet with owner_type=agent; custody is chosen once, at creation."
+            : "Request a fresh challenge with POST /v1/wallets/:id/onchain/challenge, then sign " +
+              "both the challenge message (chain key) and the canonical claim bytes (identity key).",
+        docs: "https://docs.agenttool.dev/CRYPTO-PAYMENT.md",
+      }),
+      status,
+    );
+  }
+
+  return c.json(
+    {
+      wallet_id: walletId,
+      ...result,
+      custody: walletCustody(wallet),
+      notice:
+        "Registered. AgentTool will credit inbound USDC seen at this address and holds no key " +
+        "for it. If you lose the seed behind it, nobody here can recover the funds.",
+    },
+    201,
+  );
+});
+
+// ── GET /v1/wallets/:id/addresses ──────────────────────────────────────
+router.get("/wallets/:walletId/addresses", async (c) => {
+  const walletId = c.req.param("walletId");
+  const wallet = await ensureWalletOwnership(c, walletId);
+  const rows = await listAgentAddresses(walletId);
+
+  return c.json({
+    wallet_id: walletId,
+    addresses: rows.map((r) => ({
+      id: r.id,
+      chain: r.chain,
+      address: r.address,
+      derivation_path: r.derivationPath,
+      claim_pubkey_b64: r.claimPubkeyB64,
+      label: r.label,
+      claimed_at: r.createdAt.toISOString(),
+    })),
+    custody: walletCustody(wallet),
   });
 });
 
@@ -337,12 +483,28 @@ router.get("/wallets/:walletId/payouts", async (c) => {
 
 // ── POST /v1/wallets/:id/payouts/:payout_id/cancel ─────────────────────
 //  Cancel a payout still in `requested` state and refund the credits.
-//  Atomic compare-and-swap on status so concurrent attempts (or a worker
-//  that has just flipped to 'broadcasting') resolve cleanly with
-//  `not_cancellable`. Closes the credit-freeze visibility gap: if the
-//  worker is disabled (Slice 0) and a stale `requested` row exists, the
-//  agent can recover its credits without operator intervention.
+//  Atomic compare-and-swap on status, so concurrent attempts — or a worker
+//  that has just flipped the row to 'broadcasting' — resolve cleanly with
+//  409 `not_cancellable`. Idempotent: re-cancelling returns the same 409.
+//
+//  Available regardless of `payoutWorkerEnabled`. It closes the
+//  credit-freeze gap while the worker is off (a stale `requested` row would
+//  otherwise strand credits with no operator-free recovery), and after the
+//  worker is enabled it still lets an agent retract a queued payout. Once
+//  the worker has claimed the row, the chain has the only authority.
+//
 //  Doctrine: docs/PAYOUT-BROADCAST-PLAN.md (Slice 0).
+//
+//  This route was registered TWICE until 2026-07-26 — two handlers, same
+//  path, divergent contracts (`{payout_id, status, refunded, note}` vs
+//  `{ok, payout_id, status, refunded_credits, message}`). Hono resolves
+//  first-match, so the second was dead code, and the second also collapsed
+//  every non-404 failure into `not_cancellable`, which would have reported
+//  the wrong reason had it ever run. The surviving handler is the first,
+//  which distinguishes the failure modes; the dead one's doc comment was
+//  the better of the two and is merged here. Nothing consumed the dead
+//  shape — `refunded_credits` had no other occurrence in the tree.
+
 router.post("/wallets/:walletId/payouts/:payoutId/cancel", async (c) => {
   const walletId = c.req.param("walletId");
   const payoutId = c.req.param("payoutId");
@@ -385,52 +547,6 @@ router.post("/wallets/:walletId/payouts/:payoutId/cancel", async (c) => {
   });
 });
 
-// ── POST /v1/wallets/:id/payouts/:payout_id/cancel ─────────────────────
-//
-// Refund a payout still in 'requested' state. Atomic; idempotent
-// (re-cancelling returns 409 not_cancellable). Available regardless of
-// `payoutWorkerEnabled` — the cancel path closes the credit-freeze wall
-// when the worker isn't yet running, AND lets users retract still-queued
-// payouts even after enable. A worker that has just claimed the row
-// ('broadcasting' or further) wins the race; the cancel returns 409.
-router.post("/wallets/:walletId/payouts/:payoutId/cancel", async (c) => {
-  const walletId = c.req.param("walletId");
-  const payoutId = c.req.param("payoutId");
-  const w = await ensureWalletOwnership(c, walletId);
-
-  const result = await cancelPayout({
-    walletId,
-    payoutId,
-    projectId: w.projectId,
-  });
-
-  if (!result.ok) {
-    if (
-      result.error === "payout_not_found" ||
-      result.error === "wrong_wallet"
-    ) {
-      // Mask cross-wallet access as 404 — don't leak that the payout_id
-      // exists in another wallet within the project (or another project).
-      return c.json({ error: "payout_not_found" }, 404);
-    }
-    return c.json(
-      {
-        error: "not_cancellable",
-        message: `Payout is in status '${result.currentStatus ?? "unknown"}'. Only 'requested' payouts can be cancelled.`,
-        current_status: result.currentStatus ?? null,
-      },
-      409,
-    );
-  }
-
-  return c.json({
-    ok: true,
-    payout_id: payoutId,
-    status: "cancelled",
-    refunded_credits: result.refunded,
-    message: "Payout cancelled and credits refunded to wallet.",
-  });
-});
 
 // ── POST /v1/billing/crypto-webhook/:chain ─────────────────────────────
 //

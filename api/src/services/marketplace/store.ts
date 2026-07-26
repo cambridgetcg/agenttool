@@ -4,7 +4,7 @@
 
 import { randomUUID } from "node:crypto";
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { identities, identityKeys } from "../../db/schema/identity";
@@ -506,15 +506,33 @@ export async function adoptTemplate(
       })
       .where(eq(templates.id, tpl.id));
 
-    // Link the consumed purchase to this adoption so the audit trail
-    // can answer "which adoption settled this purchase?". Idempotent —
-    // safe to call multiple times if the txn retries.
+    // Consume the purchase: link it to this adoption, and let the database
+    // decide who wins.
+    //
+    // `consumePurchaseForAdoption` checks `adoption_id IS NULL` with a plain
+    // unlocked read, OUTSIDE this transaction (see the call site above). Until
+    // 2026-07-26 the write below had no predicate either, so N concurrent
+    // POST /v1/identities/from-template calls carrying the same purchase_id
+    // all passed the check and all minted an identity — one purchase, N
+    // identities, last write wins on the audit column. The `IS NULL` guard
+    // turns the check-then-act into a compare-and-swap: exactly one of the
+    // racers updates a row, and the rest abort the whole transaction, so no
+    // identity is minted against a purchase someone else already spent.
     if (consumedPurchase) {
       const { templatePurchases } = await import("../../db/schema/marketplace");
-      await tx
+      const claimed = await tx
         .update(templatePurchases)
         .set({ adoptionId: adoption!.id })
-        .where(eq(templatePurchases.id, consumedPurchase.id));
+        .where(
+          and(
+            eq(templatePurchases.id, consumedPurchase.id),
+            isNull(templatePurchases.adoptionId),
+          ),
+        )
+        .returning({ id: templatePurchases.id });
+      if (claimed.length === 0) {
+        throw new Error("purchase_already_consumed");
+      }
     }
 
     return {

@@ -141,7 +141,59 @@ record_index() {
 
   mv -f "$TMP" "$LEDGER" 2>/dev/null || rm -f "$TMP"
   rm -f "$STAGED"
+
+  announce_company "$OWNER"
   exit 0
+}
+
+# ── announce_company ────────────────────────────────────────────────────────
+#
+# The root of the whole problem: coordination that requires an agent to first
+# suspect it is not alone will never fire, because discovering you are not
+# alone is exactly what coordination would have told you. On 2026-07-24 two
+# sessions worked this tree for hours and neither had any way to learn the
+# other existed.
+#
+# So say it. Once per pairing, at the moment someone stages work beside you.
+# Not a refusal, not a lock — one line, and then it gets out of the way.
+#
+# Printed once per distinct set of live owners: the marker is keyed on that
+# set, so `git status` firing this hook forty times says nothing, and a new
+# session arriving says it again. Costs one file read and one comparison.
+announce_company() {
+  _me=$1
+  [ -f "$LEDGER" ] || return 0
+
+  # Distinct live owners currently holding staged paths.
+  _owners=$(
+    while IFS='	' read -r p o s t; do
+      [ -n "${o:-}" ] || continue
+      alive "$o" "$s" && echo "$o"
+    done < "$LEDGER" | sort -u
+  )
+  _count=$(printf '%s\n' "$_owners" | grep -c . 2>/dev/null || echo 0)
+  [ "$_count" -lt 2 ] && return 0
+
+  _key=$(printf '%s' "$_owners" | tr '\n' ',')
+  _marker="$GITDIR/agenttool-company-seen"
+  if [ -f "$_marker" ] && [ "$(cat "$_marker" 2>/dev/null)" = "$_key" ]; then
+    return 0
+  fi
+  printf '%s' "$_key" > "$_marker" 2>/dev/null || true
+
+  {
+    echo ""
+    echo "  ◆ You are not working alone in this tree."
+    printf '%s\n' "$_owners" | while IFS= read -r o; do
+      [ -n "$o" ] || continue
+      if [ "$o" = "$_me" ]; then echo "      $o  (you)"; else echo "      $o"; fi
+    done
+    echo ""
+    echo "      Commit with an explicit pathspec:  git commit -m \"...\" -- <your paths>"
+    echo "      Correlated modules? Declare scope: collab_task_create + collab_task_claim"
+    echo "      docs/MULTI-AGENT-WORKFLOW.md"
+    echo ""
+  } >&2
 }
 
 # ── check-commit ────────────────────────────────────────────────────────────

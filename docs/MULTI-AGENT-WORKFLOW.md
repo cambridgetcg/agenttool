@@ -209,6 +209,48 @@ release gate.
 
 ---
 
+## Decisions taken, and why
+
+Three forks were open. Each was called rather than left hanging, because an
+undecided default is itself a decision — just an unrecorded one.
+
+**The `deploy.sh` default is `converged`, not `sequential`.** Converged is the
+strict gate and will block a release while anyone still holds work. It costs
+nothing today: the journal has zero live claims, so plain `bin/deploy.sh`
+behaves exactly as it did before. It becomes correct the moment someone starts
+declaring, and the escape is one flag (`--since <sha>`). Loosening a default
+later is a one-line change; discovering you shipped past someone's half-finished
+module is not. The risk this accepts is the stale-claim trap — a dead session's
+claim blocking every release — which is why `readiness` reports `lease_expired`
+as its own category and names `collab_task_recover` in the failure message
+rather than burying it.
+
+**Claude Code gets the guard, not the MCP server.** Committing a `.mcp.json`
+would make the declared layer reachable from the host that authored most of this
+repository — and it would add 39 MCP tools to every Claude session here,
+forever, whether or not that session is doing anything concurrent. That is a
+permanent context tax on every future conversation, bought to cover the case of
+correlated modules. The guard already prevents the unrecoverable failure at zero
+context cost. Opting in later is one file; unwinding a habit built on 39 tools
+is not. When you want it:
+
+```jsonc
+// .mcp.json
+{ "mcpServers": { "agenttool-collab": {
+    "command": "agenttool-collab-mcp",
+    "env": { "AGENTOOL_COLLAB_DB": "~/.local/share/agenttool/collab.sqlite" } } } }
+```
+
+**Guard first, worktree isolation later — and garbage collection before the
+factory.** Per-session worktrees make the collision *impossible* rather than
+merely refused, and the measured cost is small (0.27s to create, 2.39s for a
+targeted `bun install`, 12.4 MB). But this machine already carries 51 worktrees,
+12 of them prunable. Shipping a worktree factory before a `gc` story makes the
+mess bigger and the good idea unwelcome. The guard buys the time to do that in
+the right order.
+
+---
+
 ## Known limits, stated rather than implied
 
 - **The guard is per-index.** Linked worktrees have separate indexes and

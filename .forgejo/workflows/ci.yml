@@ -89,6 +89,9 @@ jobs:
             tests/doctrine/walls-code-annotation-bijection.test.ts \
             tests/doctrine/commitments-code-annotation-bijection.test.ts \
             tests/doctrine/annotations-do-not-lie.test.ts \
+            tests/doctrine/composition-unlocks-are-honest.test.ts \
+            tests/doctrine/routes-are-registered-once.test.ts \
+            tests/doctrine/env-prefix-is-one-spelling.test.ts \
             tests/doctrine/ledger-conservation.test.ts \
             tests/doctrine/saga-is-free.test.ts \
             tests/substrate-tasks-lifecycle.test.ts \

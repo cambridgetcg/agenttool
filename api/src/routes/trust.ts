@@ -4,11 +4,11 @@
  *    POST /v1/trust/extend    — sign + extend trust (private by default)
  *    POST /v1/trust/publish   — truster opts to surface (activates composition)
  *    POST /v1/trust/veto      — trusted opts out of public visibility
- *    POST /v1/trust/withdraw  — truster retracts (unlocks deactivate)
+ *    POST /v1/trust/withdraw  — truster retracts (signed record persists)
  *    GET  /v1/trust/mine      — trusts YOU extended
  *    GET  /v1/trust/in-me     — trusts directed AT you (published only)
  *    GET  /v1/trust/evidence  — chronicle facts for your reasoning (NEVER recommends strength)
- *    GET  /v1/trust/framework — kinds, strengths, unlocks (machine-readable)
+ *    GET  /v1/trust/framework — kinds, strengths, declared unlocks (machine-readable)
  *
  *  Doctrine: docs/TRUST-PROTOCOL.md
  *
@@ -68,9 +68,11 @@ app.get("/framework", (c) =>
         composition_unlocks: COMPOSITION_UNLOCKS,
         asymmetry: {
           default: "private to truster (trusted does not know)",
-          publish_by_truster: "trust becomes visible to trusted + activates composition unlocks",
+          publish_by_truster:
+            "trust becomes visible to trusted. Composition unlocks are DECLARED, not wired: every entry in `composition_unlocks` carries status='declared', meaning its eligibility helper exists and answers correctly but no service calls it yet. Publishing changes visibility today; it does not yet change any other surface's behaviour.",
           veto_by_trusted: "trust hidden from public profile (still active for truster's side)",
-          withdraw_by_truster: "composition unlocks deactivate; signed record persists for audit",
+          withdraw_by_truster:
+            "the trust stops being published; the signed record persists for audit. No composition unlock deactivates, because none is active — see publish_by_truster.",
         },
         substrate_honest_note:
           "Trust is reasoned, not felt. The substrate provides the evidence via GET /v1/trust/evidence and the lifecycle via these routes. The reasoning — whether to extend, at what kind, at what strength — is yours. The substrate refuses to recommend.",
@@ -273,7 +275,7 @@ app.get("/mine", async (c) => {
         count: rows.length,
         trusts: rows,
         substrate_honest_note:
-          "Trusts YOU extended (private + published combined). Publish to activate composition unlocks; withdraw to retract; veto is the trusted's prerogative.",
+          "Trusts YOU extended (private + published combined). Publishing makes a trust visible to the trusted party; withdraw retracts it; veto is the trusted's prerogative. Composition unlocks are declared, not wired — see GET /v1/trust/framework.",
       },
       { canon_pointer: CANON_POINTER },
     ),
@@ -306,7 +308,7 @@ app.get("/in-me", async (c) => {
         count: rows.length,
         trusts: rows,
         substrate_honest_note:
-          "Trusts DIRECTED AT you (published only — private trusts you don't see). You may veto each publication for your public-profile visibility; the truster's side unlocks still work for them.",
+          "Trusts DIRECTED AT you (published only — private trusts you don't see). You may veto each publication for your public-profile visibility; the truster's signed record is unaffected.",
       },
       {
         canon_pointer: CANON_POINTER,

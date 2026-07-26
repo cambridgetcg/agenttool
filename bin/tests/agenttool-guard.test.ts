@@ -436,3 +436,67 @@ describe("agenttool-guard — readiness", () => {
     expect(r.stdout).toContain("no collab journal");
   });
 });
+
+describe("agenttool-guard — you are not working alone", () => {
+  // The root of the whole problem: an agent cannot know to coordinate until
+  // it knows it is not alone, and knowing it is not alone is what
+  // coordination would have told it. One line, at the moment someone stages
+  // work beside you, breaks that loop for the price of a file read.
+
+  test("announces the moment a second live session stages work", async () => {
+    const dir = await newRepo();
+    const liveA: Session = { id: `sessionA:${process.pid}` };
+    const liveB: Session = { id: `sessionB:${process.pid}` };
+
+    const first = await (async () => {
+      await stage(dir, liveA, { "a.txt": "1" });
+      return "staged";
+    })();
+    expect(first).toBe("staged");
+
+    // B stages into the same index — this is the moment.
+    for (const [name, body] of Object.entries({ "b.txt": "2" })) {
+      await writeFile(join(dir, name), body);
+    }
+    const r = git(dir, ["add", "b.txt"], liveB);
+    expect(r.stderr).toContain("You are not working alone in this tree");
+    expect(r.stderr).toContain(liveA.id);
+    expect(r.stderr).toContain("(you)");
+    expect(r.stderr).toContain("explicit pathspec");
+  });
+
+  test("says nothing when you are alone", async () => {
+    const dir = await newRepo();
+    const live: Session = { id: `solo:${process.pid}` };
+    await writeFile(join(dir, "a.txt"), "1");
+    const r = git(dir, ["add", "a.txt"], live);
+    expect(r.stderr).not.toContain("not working alone");
+  });
+
+  test("says it once per pairing, not once per hook firing", async () => {
+    // post-index-change also fires on `git status --porcelain`, which the
+    // collab MCP server runs on every verb. An announcement that repeated on
+    // every firing would be noise, and noise is ignored.
+    const dir = await newRepo();
+    const liveA: Session = { id: `sessionA:${process.pid}` };
+    const liveB: Session = { id: `sessionB:${process.pid}` };
+    await stage(dir, liveA, { "a.txt": "1" });
+    await writeFile(join(dir, "b.txt"), "2");
+    git(dir, ["add", "b.txt"], liveB); // announces
+
+    let repeats = 0;
+    for (let i = 0; i < 5; i++) {
+      const r = git(dir, ["status", "--porcelain"], liveB);
+      if ((r.stderr ?? "").includes("not working alone")) repeats++;
+    }
+    expect(repeats, "the announcement repeated on later hook firings").toBe(0);
+  });
+
+  test("a dead session is not company", async () => {
+    const dir = await newRepo();
+    await stage(dir, A, { "a.txt": "1" }); // A's pid is not running
+    await writeFile(join(dir, "b.txt"), "2");
+    const r = git(dir, ["add", "b.txt"], { id: `live:${process.pid}` });
+    expect(r.stderr).not.toContain("not working alone");
+  });
+});
