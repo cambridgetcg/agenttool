@@ -38,6 +38,12 @@ export const economyConfig = {
   // Helius (Solana) shared-secret webhook auth — sent in the Authorization
   // header on enhanced-webhook deliveries.
   heliusWebhookSecret: env("HELIUS_WEBHOOK_SECRET", ""),
+  // Enhanced Helius deliveries expose human-unit numbers and no canonical
+  // transfer index/fork lifecycle. Keep their legacy immediate-credit adapter
+  // behind a second, explicit development opt-in until raw-atomic Solana
+  // reconciliation exists.
+  allowUnreconciledSolanaDeposits:
+    env("CRYPTO_ALLOW_UNRECONCILED_SOLANA_DEPOSITS", "") === "1",
   // Crypto deposit webhooks credit real wallet balance and sit on an UNAUTH
   // public route, so an unset provider secret must FAIL CLOSED (reject), not
   // accept unsigned payloads — otherwise anyone can forge a deposit and mint
@@ -132,4 +138,12 @@ if (payoutWorkerBootAllowed()) {
         "these webhooks accept UNSIGNED payloads and can mint balance on forged deposits. Dev-only; never set this in production.",
     );
   }
+}
+
+if (economyConfig.allowUnreconciledSolanaDeposits) {
+  console.warn(
+    "[economyConfig] ⚠ CRYPTO_ALLOW_UNRECONCILED_SOLANA_DEPOSITS=1 — " +
+      "signed Helius human-unit activity may immediately credit balance without " +
+      "raw-atomic transfer identity or fork/reorg reconciliation. Development only.",
+  );
 }

@@ -9,7 +9,7 @@
 ## TL;DR
 
 ```
-1. Run migrations 0021..0024.
+1. Run all checksum-journaled pending migrations.
 2. Generate testnet mnemonic; fund index-0 with testnet SOL/ETH/USDC.
 3. Set env (testnet); run e2e harnesses; verify on explorers.
 4. Set env (mainnet); manual smoke at 0.01 USDC; verify on explorers.
@@ -22,15 +22,16 @@
 
 ### Migrations
 
-Apply in order (idempotent; safe to re-run):
+Apply pending files through the canonical checksum-journaled runner:
 
 ```bash
-psql "$DATABASE_URL" -f api/migrations/0021_payout_cancellable.sql
-psql "$DATABASE_URL" -f api/migrations/20260508T230839_payout_broadcasting_status.sql
-psql "$DATABASE_URL" -f api/migrations/20260508T232231_payout_policies.sql
+bin/migrate-pending.sh --dry-run
+bin/migrate-pending.sh
 ```
 
-(0022 is the vault migration — run if not already applied; unrelated to payouts. The attestation-marketplace migration (`20260509T131433_attestation_marketplace.sql`) is also unrelated to payouts.)
+The runner applies each file and its migration-journal row atomically, refuses
+checksum drift, and includes the permanent payout-request idempotency gate.
+Do not replay individual files with raw `psql`.
 
 ### Env vars
 
@@ -153,11 +154,9 @@ The workers log structured prefixes; grep for these:
 
 ---
 
-## Operator-driven cancel + refund
+## Cancel and operator reconciliation
 
-Two paths to refund credits manually:
-
-### Path A: user-initiated cancel (when status='requested')
+### User-initiated cancel (only when status='requested')
 
 ```bash
 curl -X POST $BASE/v1/wallets/$WALLET_ID/payouts/$PAYOUT_ID/cancel \
@@ -166,29 +165,20 @@ curl -X POST $BASE/v1/wallets/$WALLET_ID/payouts/$PAYOUT_ID/cancel \
 # 409 → not_cancellable (already past 'requested' — worker has the row).
 ```
 
-### Path B: admin SQL (only after independent proof of non-submission)
+There is deliberately **no generic manual-refund SQL recipe**. A safe reversal
+must lock the payout, compare-and-swap an eligible terminal status, validate
+the exact server-written negative `transactions` ledger leg, credit that exact
+GBP-pence amount once, and write the linked positive reversal in the same
+transaction. Recomputing from token amount or a current FX quote is unsafe;
+rerunnable balance-only SQL can double-credit.
 
-```sql
-BEGIN;
--- Refund credits.
-UPDATE economy.wallets
-   SET balance = balance + (
-     SELECT CEIL((amount_base::numeric / 1000000) * 100)::bigint
-     FROM economy.crypto_payouts WHERE id = '<payout_id>'
-   )
- WHERE id = (SELECT wallet_id FROM economy.crypto_payouts WHERE id = '<payout_id>');
-
--- Mark failed.
-UPDATE economy.crypto_payouts
-   SET status = 'failed', error = 'admin_manual_refund'
- WHERE id = '<payout_id>';
-COMMIT;
-```
-
-An absent or unavailable chain lookup immediately after a submit error is not
-proof of non-submission. Use Path B only after an operator has established that
-dispatch did not occur (or has otherwise accepted the financial reconciliation
-risk), and document that evidence in the operator log.
+An absent or unavailable lookup after submit is not proof of
+non-submission. Leave an ambiguous row `broadcasting`: never retry or refund
+it automatically. If independently reviewed evidence proves a terminal
+failure, use the service's provenance-checked one-shot reversal path or add a
+reviewed, payout-specific recovery operation that preserves the same
+status-CAS and ledger invariants. Record the evidence and reviewer decision;
+do not improvise direct balance mutations.
 
 ---
 

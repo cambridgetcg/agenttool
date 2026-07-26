@@ -2522,6 +2522,19 @@ function spec() {
           description:
             "Optional durable key for POST /v1/escrows, containing 8-256 visible ASCII characters with no spaces. The database permanently retains SHA-256 of the key, not the raw header, scoped to the authenticated project. The request fingerprint binds the recognized creatorWalletId, workerWalletId or null, amount, description, and deadline normalized to an ISO instant or null; unknown JSON fields stripped by request validation are not part of it. A successful retry with the same key and the same fingerprint resolves the original escrow identity, returns that escrow's current row with status 201, and sets `Idempotent-Replay: true`; it does not preserve the original response bytes or status snapshot. Reuse with changed bound input returns 409 before wallet mutation. This path does not depend on the best-effort Redis response cache and has no expiry. Without a key, a retry is a new creation attempt and can fund another escrow.",
         },
+        DurablePayoutIdempotencyKey: {
+          name: "Idempotency-Key",
+          in: "header",
+          required: true,
+          schema: {
+            type: "string",
+            minLength: 8,
+            maxLength: 256,
+            pattern: "^[!-~]{8,256}$",
+          },
+          description:
+            "Required durable key for POST wallet payout, containing 8-256 visible ASCII characters with no spaces. PostgreSQL permanently retains a domain-separated SHA-256 digest of the key, never the raw header, scoped to the authenticated project. The request fingerprint binds the recognized wallet, chain, token, canonical base-unit amount, exact destination string, and recursively canonicalized metadata; unknown JSON fields stripped by validation are not part of it. A retry with the same key and input returns the existing payout identity and current status without another policy evaluation or debit, and sets `Idempotent-Replay: true`. Reuse with changed bound input returns 409 before wallet mutation. Redis is only an optional response-cache optimization and is not this route's correctness boundary.",
+        },
         PaymentSignature: {
           name: "PAYMENT-SIGNATURE",
           in: "header",
@@ -7956,7 +7969,11 @@ function spec() {
           tags: ["crypto"],
           summary:
             "Request a crypto payout (debits wallet; opt-in worker broadcasts)",
-          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+          description:
+            "Creates at most one payout and wallet debit for an authenticated project plus durable Idempotency-Key. Frozen and closed wallets are rejected. A same-input replay returns the existing payout's current status; ambiguous chain submission is never automatically retried or refunded.",
+          parameters: [
+            { $ref: "#/components/parameters/DurablePayoutIdempotencyKey" },
+          ],
           requestBody: {
             required: true,
             content: {
@@ -7984,7 +8001,32 @@ function spec() {
               },
             },
           },
-          responses: { "202": { description: "Payout request accepted" } },
+          responses: {
+            "202": {
+              description:
+                "Payout request accepted, or an existing same-input payout resolved",
+              headers: {
+                "Idempotent-Replay": {
+                  description:
+                    "true when this response resolved an existing durable payout request",
+                  schema: { type: "string", const: "true" },
+                },
+                "X-Idempotency-Supported": {
+                  description:
+                    "Confirms the route's permanent database-backed request gate",
+                  schema: { type: "string", const: "Idempotency-Key" },
+                },
+              },
+            },
+            "400": {
+              description:
+                "Missing or invalid Idempotency-Key, body, chain, token, amount, or destination",
+            },
+            "409": {
+              description:
+                "Key reuse with changed input, unreconciled request identity, or inactive wallet",
+            },
+          },
         },
       },
 

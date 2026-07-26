@@ -147,4 +147,27 @@ describe("idempotency response classification", () => {
     expect(handlerCalls).toBe(1);
     expect(setCalls).toBe(1);
   });
+
+  test("does not erase a route's durable idempotency marker when Redis is absent", async () => {
+    const app = new Hono<ProjectContext>();
+    app.use("*", async (c, next) => {
+      c.set("project", { id: "project-1" } as any);
+      await next();
+    });
+    app.use("*", idempotency(null));
+    app.post("/durable", (c) => {
+      c.header("X-Idempotency-Supported", "Idempotency-Key");
+      return c.json({ id: "durable-operation-1" }, 201);
+    });
+
+    const response = await app.request("/durable", {
+      method: "POST",
+      headers: { "Idempotency-Key": "durable-key-1" },
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.headers.get("X-Idempotency-Supported"))
+      .toBe("Idempotency-Key");
+    expect(response.headers.get("X-Idempotency-Skipped")).toBeNull();
+  });
 });

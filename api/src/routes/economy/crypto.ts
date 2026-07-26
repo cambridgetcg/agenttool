@@ -7,8 +7,10 @@
  *
  *  Doctrine: docs/CRYPTO-PAYMENT.md.
  *  Payout broadcast, Solana derivation/signature verification, and Alchemy +
- *  Helius ingress exist. Deposit finality/reorg reconciliation remains a
- *  production blocker. */
+ *  Helius ingress exist. EVM observations remain pending until canonical-log
+ *  confirmation and signed removed logs reverse credited value exactly once.
+ *  Solana raw-atomic finality/reorg reconciliation remains a production
+ *  blocker. */
 
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
@@ -36,7 +38,9 @@ import {
   listDepositAddresses,
   listOnchainIdentities,
   listPayouts,
+  reconcileRemovedInboundTransfer,
   requestPayout,
+  type InboundTransfer,
   verifyAndBind,
 } from "../../services/economy/crypto";
 import {
@@ -53,6 +57,7 @@ import {
   activeNetwork,
   activeUsdcAddress,
   activeUsdcMintSolana,
+  CryptoNetworkConfigurationError,
 } from "../../services/economy/crypto/network";
 
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -86,6 +91,17 @@ function parseAlchemyLogIndex(value: unknown): number | null {
 
   const parsed = BigInt(value);
   return parsed <= 2_147_483_647n ? Number(parsed) : null;
+}
+
+function parseAlchemyBlockNumber(value: unknown): bigint | null {
+  if (
+    typeof value !== "string" ||
+    value.length > 18 ||
+    !/^0x(?:0|[1-9a-f][0-9a-f]*)$/i.test(value)
+  ) {
+    return null;
+  }
+  return BigInt(value);
 }
 
 function parseHeliusUsdcAmount(value: unknown): string | null {
@@ -163,7 +179,7 @@ interface ReadyDepositAddress {
   derivation_path: string;
   contract_address: string | null;
   watch_status: "provider_accepted" | "operator_configuration_unverified";
-  credit_finality: "unreconciled";
+  credit_finality: "pending_until_chain_depth" | "solana_unreconciled";
   created_at: string;
 }
 
@@ -193,7 +209,9 @@ export async function resolveReadyDepositAddressRows(
       watch_status: evm
         ? "provider_accepted"
         : "operator_configuration_unverified",
-      credit_finality: "unreconciled",
+      credit_finality: evm
+        ? "pending_until_chain_depth"
+        : "solana_unreconciled",
       created_at: row.createdAt.toISOString(),
     });
   }
@@ -246,6 +264,21 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
       // disclosing any address.
       readyRows = await resolveReadyDepositAddressRows(walletId, rows);
     } catch (error) {
+      if (error instanceof CryptoNetworkConfigurationError) {
+        return fail(
+          c,
+          errors.refusal({
+            error: error.code,
+            retryable: false,
+            message: error.message,
+            hint:
+              "Set PAYOUT_NETWORK=testnet or PAYOUT_NETWORK=mainnet deliberately, then retry. No stored address was disclosed.",
+            consequence:
+              "AgentTool will not infer mainnet from an unset crypto network.",
+          }),
+          503,
+        );
+      }
       if (
         error instanceof AlchemyNotifyConfigurationError ||
         error instanceof AlchemyNotifyUnavailableError
@@ -292,7 +325,7 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
         ? "Solana rows do not prove Helius watch registration; confirm provider configuration before sending funds."
         : null,
       finality_warning:
-        "Deposit confirmation and reorg reversal remain unreconciled on every chain.",
+        "EVM deposits remain pending until canonical receipt/log depth checks. L2 depth is not L1 settlement or production finality; Solana deposit finality remains unreconciled.",
     });
   }
 
@@ -310,6 +343,22 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
       token,
     );
   } catch (error) {
+    if (error instanceof CryptoNetworkConfigurationError) {
+      return fail(
+        c,
+        errors.refusal({
+          error: error.code,
+          chain: chainParam,
+          retryable: false,
+          message: error.message,
+          hint:
+            "Set PAYOUT_NETWORK=testnet or PAYOUT_NETWORK=mainnet deliberately, then retry. No address was disclosed.",
+          consequence:
+            "AgentTool will not infer mainnet from an unset crypto network.",
+        }),
+        503,
+      );
+    }
     if (
       error instanceof AlchemyNotifyConfigurationError ||
       error instanceof AlchemyNotifyUnavailableError
@@ -362,10 +411,12 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
     watch_status: isEvmChain(result.chain as string)
       ? "provider_accepted"
       : "operator_configuration_unverified",
-    credit_finality: "unreconciled",
+    credit_finality: isEvmChain(result.chain as string)
+      ? "pending_until_chain_depth"
+      : "solana_unreconciled",
     instructions: isEvmChain(result.chain as string)
-      ? "Send USDC to this address from any wallet. The chain-specific Alchemy watch accepted the address, but deposit finality and reorg reversal are not yet reconciled; do not treat credited value as production-final."
-      : "Do not send production funds until an operator confirms that the active-network Helius webhook watches this address. Signed ingress exists, but address-watch readiness, deposit finality, and reversal are not yet reconciled.",
+      ? "Send USDC to this address from any wallet. The signed Alchemy delivery is stored as pending; credits become spendable only after the exact canonical receipt/log reaches the configured chain depth. A later removed log reverses an earlier credit exactly once. For L2s, this depth is not a claim of L1 settlement or production finality."
+      : "Do not send production funds until an operator confirms that the active-network Helius webhook watches this address. Signed ingress exists, but address-watch readiness, raw-atomic deposit finality, and reversal are not yet reconciled.",
   });
 });
 
@@ -468,6 +519,11 @@ const payoutSchema = z.object({
 });
 
 router.post("/wallets/:walletId/payout", async (c) => {
+  // This route has a permanent PostgreSQL request gate. Keep its capability
+  // marker even when the outer best-effort Redis response cache is disabled.
+  c.header("X-Idempotency-Supported", "Idempotency-Key");
+  const idempotencyKey = c.req.header("Idempotency-Key");
+
   // Startup and request acceptance share one predicate. Otherwise the global
   // off-switch could prevent worker boot while this route still debits credits
   // and leaves a payout stuck at status='requested'.
@@ -493,6 +549,17 @@ router.post("/wallets/:walletId/payout", async (c) => {
       503,
     );
   }
+  if (!idempotencyKey) {
+    return c.json(
+      {
+        error: "payout_idempotency_key_required",
+        message:
+          "Payout creation requires Idempotency-Key so a lost response can never cause a second debit.",
+        hint: "Send 8-256 visible ASCII characters and reuse that key only for this exact payout input.",
+      },
+      400,
+    );
+  }
   const walletId = c.req.param("walletId");
   const w = await ensureWalletOwnership(c, walletId);
 
@@ -514,7 +581,11 @@ router.post("/wallets/:walletId/payout", async (c) => {
       amountBase: parsed.data.amount_base,
       destinationAddress: parsed.data.destination_address,
       metadata: parsed.data.metadata,
+      idempotencyKey,
     });
+    if (result.replayed) {
+      c.header("Idempotent-Replay", "true");
+    }
     return c.json(
       {
         ...result,
@@ -528,6 +599,45 @@ router.post("/wallets/:walletId/payout", async (c) => {
     );
   } catch (err) {
     const msg = (err as Error).message;
+    if (msg === "payout_idempotency_key_invalid") {
+      return c.json(
+        {
+          error: msg,
+          message:
+            "Idempotency-Key must contain 8-256 visible ASCII characters with no spaces.",
+        },
+        400,
+      );
+    }
+    if (
+      msg === "payout_idempotency_conflict" ||
+      msg === "payout_idempotency_unreconciled"
+    ) {
+      return c.json(
+        {
+          error: msg,
+          message:
+            msg === "payout_idempotency_conflict"
+              ? "This Idempotency-Key already identifies different payout input. Nothing from this request was applied."
+              : "The durable payout request identity could not be reconciled safely. No second debit was attempted.",
+          hint:
+            msg === "payout_idempotency_conflict"
+              ? "Reuse the original exact input, or choose a fresh Idempotency-Key for a different payout."
+              : "Do not change or automatically rotate the key; inspect the payout list or ask the operator to reconcile storage.",
+        },
+        409,
+      );
+    }
+    if (msg === "payout_wallet_inactive") {
+      return c.json(
+        {
+          error: msg,
+          message: "Frozen and closed wallets cannot create payouts.",
+          hint: "Resolve the wallet status before retrying this exact request.",
+        },
+        409,
+      );
+    }
     if (msg === "insufficient_balance") {
       // Errors-as-instructions — see docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
       return fail(c, errors.insufficientBalance(), 402);
@@ -699,6 +809,8 @@ router.post("/wallets/:walletId/payouts/:payoutId/cancel", async (c) => {
 
 export function createCryptoWebhookRouter(
   ingestTransfer: typeof ingestInboundTransfer = ingestInboundTransfer,
+  reconcileRemoved: typeof reconcileRemovedInboundTransfer =
+    reconcileRemovedInboundTransfer,
 ) {
   const cryptoWebhookRouter = new Hono();
 
@@ -847,9 +959,36 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
         400,
       );
     }
-    const solanaUsdcMint = activeUsdcMintSolana();
+    let solanaUsdcMint: string;
+    try {
+      solanaUsdcMint = activeUsdcMintSolana();
+    } catch (error) {
+      if (error instanceof CryptoNetworkConfigurationError) {
+        return fail(
+          c,
+          errors.refusal({
+            received: false,
+            error: error.code,
+            retryable: false,
+            message: error.message,
+            hint:
+              "Configure the exact crypto network before retrying this signed delivery.",
+          }),
+          503,
+        );
+      }
+      throw error;
+    }
     const txns = parsed as unknown[];
+    const validatedTransfers: Array<{
+      txSignature: string;
+      mint: string;
+      evidence: InboundTransfer;
+    }> = [];
 
+    // Validate the complete signed envelope before the first economic effect.
+    // A malformed later item must not turn a 400 response into a partially
+    // credited batch.
     for (const candidate of txns) {
       if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
         return fail(
@@ -904,34 +1043,67 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
             400,
           );
         }
-        const result = await ingestTransfer({
-          chain: "solana",
-          txHash: txSignature,
-          logIndex,
-          toAddress,
-          contractAddress: solanaUsdcMint,
-          token: "USDC",
-          amountBase,
-          rawPayload: t,
+        validatedTransfers.push({
+          txSignature,
+          mint,
+          evidence: {
+            chain: "solana",
+            txHash: txSignature,
+            logIndex,
+            toAddress,
+            contractAddress: solanaUsdcMint,
+            token: "USDC",
+            amountBase,
+            rawPayload: t,
+          },
         });
-        if (result.retryable) {
-          return fail(
-            c,
-            errors.refusal({
-              received: false,
-              error: "ingestion_unavailable",
-              retryable: true,
-              message:
-                "The signed webhook could not be committed. Return is non-2xx so the provider can redeliver it.",
-              hint:
-                "Retry the identical signed delivery; no credit was acknowledged.",
-            }),
-            503,
-          );
-        }
-        ingested.push({ txSignature, mint, ...result });
         logIndex += 1;
       }
+    }
+
+    if (
+      validatedTransfers.length > 0 &&
+      !economyConfig.allowUnreconciledSolanaDeposits
+    ) {
+      return fail(
+        c,
+        errors.refusal({
+          received: false,
+          error: "solana_deposit_finality_unavailable",
+          retryable: false,
+          message:
+            "Signed Helius activity is not sufficient for production balance credit without raw-atomic identity and fork reconciliation.",
+          hint:
+            "Do not send Solana deposits yet. Operators may enable the explicitly unreconciled development adapter only with CRYPTO_ALLOW_UNRECONCILED_SOLANA_DEPOSITS=1.",
+          consequence:
+            "No wallet balance or deposit event was changed.",
+        }),
+        503,
+      );
+    }
+
+    for (const transfer of validatedTransfers) {
+      const result = await ingestTransfer(transfer.evidence);
+      if (result.retryable) {
+        return fail(
+          c,
+          errors.refusal({
+            received: false,
+            error: "ingestion_unavailable",
+            retryable: true,
+            message:
+              "The signed webhook batch did not finish committing. Return is non-2xx so the provider can redeliver it.",
+            hint:
+              "Retry the identical signed delivery. Any earlier committed item is deduplicated by its durable event identity.",
+          }),
+          503,
+        );
+      }
+      ingested.push({
+        txSignature: transfer.txSignature,
+        mint: transfer.mint,
+        ...result,
+      });
     }
 
     return c.json({ received: true, processed: ingested });
@@ -950,6 +1122,10 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
     );
   }
   const payload = parsed as Record<string, unknown>;
+  const providerEventId =
+    typeof payload.id === "string" ? payload.id : "";
+  const providerWebhookId =
+    typeof payload.webhookId === "string" ? payload.webhookId : "";
   const expectedWebhookId =
     alchemyNotifyConfig().webhookIds[chainParam as EvmChain];
   if (!expectedWebhookId) {
@@ -982,12 +1158,33 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
     );
   }
   const event = payload.event as Record<string, unknown>;
+  let configuredNetwork;
+  try {
+    configuredNetwork = activeNetwork();
+  } catch (error) {
+    if (error instanceof CryptoNetworkConfigurationError) {
+      return fail(
+        c,
+        errors.refusal({
+          received: false,
+          error: error.code,
+          retryable: false,
+          message: error.message,
+          hint:
+            "Configure the exact crypto network before retrying this signed delivery.",
+        }),
+        503,
+      );
+    }
+    throw error;
+  }
   const expectedNetwork = alchemyAddressActivityNetwork(
     chainParam as EvmChain,
-    activeNetwork(),
+    configuredNetwork,
   );
   if (
-    payload.webhookId !== expectedWebhookId ||
+    providerWebhookId !== expectedWebhookId ||
+    !/^[A-Za-z0-9_-]{1,128}$/.test(providerEventId) ||
     payload.type !== "ADDRESS_ACTIVITY" ||
     event.network !== expectedNetwork
   ) {
@@ -1019,7 +1216,15 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
   const expectedContract = activeUsdcAddress(
     chainParam as EvmChain,
   ).toLowerCase();
+  const validatedTransfers: Array<{
+    txHash: string;
+    removed: boolean;
+    evidence: InboundTransfer;
+  }> = [];
 
+  // Validate every activity before persisting the first one. Provider retries
+  // may repeat a partially committed *valid* batch after storage failure, but
+  // durable event identity makes that safe; malformed batches have no effect.
   for (const candidate of transfers) {
     if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
       return fail(
@@ -1091,11 +1296,18 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
     // reject any missing, coercible, negative, or oversized identity.
     const rawLogIndex = log?.logIndex;
     const logIndex = parseAlchemyLogIndex(rawLogIndex);
+    const blockNumber = parseAlchemyBlockNumber(
+      log?.blockNumber ?? transfer.blockNum,
+    );
+    const blockHash =
+      typeof log?.blockHash === "string" ? log.blockHash : "";
 
     if (
       !isAddress(toAddress) ||
       !/^0x[0-9a-f]{64}$/i.test(txHash) ||
       logIndex === null ||
+      blockNumber === null ||
+      !/^0x[0-9a-f]{64}$/i.test(blockHash) ||
       typeof log?.removed !== "boolean" ||
       decimals !== 6 ||
       !/^0x[0-9a-f]+$/i.test(rawValue)
@@ -1114,26 +1326,6 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
       );
     }
 
-    // A removed USDC log may be reversing a previously credited event. Check
-    // its canonical identity first; malformed data must not create an endless
-    // retryable response. Valid removed evidence remains unacknowledged until
-    // the reconciler can reverse or quarantine the earlier credit.
-    if (log?.removed === true) {
-      return fail(
-        c,
-        errors.refusal({
-          received: false,
-          error: "reorg_reconciliation_unavailable",
-          retryable: true,
-          message:
-            "A removed USDC log requires credit reversal or quarantine, which is not implemented.",
-          hint:
-            "Retry the same delivery after the operator enables reorg reconciliation; the event was not acknowledged.",
-        }),
-        503,
-      );
-    }
-
     // Use Alchemy's exact raw token amount rather than its human-unit JSON
     // number. Passing through Number/Math.floor can round large or fractional
     // transfers before the idempotent credit is written.
@@ -1142,16 +1334,30 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
     const amountBase = amountAtomic.toString(10);
     const normalizedTxHash = txHash.toLowerCase();
 
-    const result = await ingestTransfer({
-      chain: chainParam,
+    validatedTransfers.push({
       txHash: normalizedTxHash,
-      logIndex,
-      toAddress,
-      contractAddress: rawContract,
-      token: "USDC",
-      amountBase,
-      rawPayload: transfer,
+      removed: log.removed,
+      evidence: {
+        chain: chainParam,
+        txHash: normalizedTxHash,
+        logIndex,
+        toAddress,
+        contractAddress: rawContract,
+        token: "USDC",
+        amountBase,
+        rawPayload: transfer,
+        blockNumber,
+        blockHash: blockHash.toLowerCase(),
+        providerWebhookId,
+        providerEventId,
+      },
     });
+  }
+
+  for (const transfer of validatedTransfers) {
+    const result = transfer.removed
+      ? await reconcileRemoved(transfer.evidence)
+      : await ingestTransfer(transfer.evidence);
     if (result.retryable) {
       return fail(
         c,
@@ -1160,14 +1366,14 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
           error: "ingestion_unavailable",
           retryable: true,
           message:
-            "The signed webhook could not be committed. Return is non-2xx so the provider can redeliver it.",
+            "The signed webhook batch did not finish committing. Return is non-2xx so the provider can redeliver it.",
           hint:
-            "Retry the identical signed delivery; no credit was acknowledged.",
+            "Retry the identical signed delivery. Any earlier committed item is deduplicated by its durable event identity.",
         }),
         503,
       );
     }
-    ingested.push({ txHash: normalizedTxHash, ...result });
+    ingested.push({ txHash: transfer.txHash, ...result });
   }
 
   return c.json({ received: true, processed: ingested });

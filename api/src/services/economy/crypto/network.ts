@@ -1,8 +1,7 @@
 /** Network-aware helpers for crypto operations. Switch between mainnet
- *  and testnet behavior based on `economyConfig.payout.network`. When the
- *  network is unset (the default), behavior is mainnet — preserving existing
- *  semantics for deployments that haven't opted into the payout broadcast
- *  worker yet.
+ *  and testnet behavior based on `economyConfig.payout.network`. An unset
+ *  network fails closed: deposit disclosure and webhook attribution must not
+ *  silently become mainnet merely because the payout worker is disabled.
  *
  *  Doctrine: docs/PAYOUT-BROADCAST-PLAN.md. */
 
@@ -57,10 +56,23 @@ export const EVM_CONFIRMATION_THRESHOLDS: Record<EvmChain, number> = {
 
 export type ActiveNetwork = "mainnet" | "testnet";
 
-/** The network this instance is operating against. Defaults to mainnet
- *  when `payout.network` is unset (preserves existing behavior). */
+export class CryptoNetworkConfigurationError extends Error {
+  readonly code = "crypto_network_unconfigured";
+
+  constructor() {
+    super(
+      "PAYOUT_NETWORK must explicitly select testnet or mainnet before crypto addresses, contracts, or provider events can be interpreted.",
+    );
+    this.name = "CryptoNetworkConfigurationError";
+  }
+}
+
+/** The explicitly selected network this instance is operating against. */
 export function activeNetwork(): ActiveNetwork {
-  return economyConfig.payout.network === "testnet" ? "testnet" : "mainnet";
+  if (economyConfig.payout.network === "") {
+    throw new CryptoNetworkConfigurationError();
+  }
+  return economyConfig.payout.network;
 }
 
 /** The HD mnemonic for the active network. Throws if unset. */
@@ -181,12 +193,20 @@ export function evmRpcEndpoint(chain: EvmChain): EvmRpcEndpoint {
 
 /** Build a viem HTTP transport from the resolved endpoint. Alchemy credentials
  *  are applied only as an Authorization header and never enter the URL. */
-export function evmRpcTransport(chain: EvmChain): HttpTransport {
+export function evmRpcTransport(
+  chain: EvmChain,
+  options: { timeoutMs?: number } = {},
+): HttpTransport {
   const endpoint = resolveEvmRpcEndpoint(chain);
+  const timeout =
+    options.timeoutMs === undefined
+      ? undefined
+      : Math.max(1, Math.trunc(options.timeoutMs));
   if (!endpoint.authorization) {
-    return http(endpoint.url);
+    return http(endpoint.url, { timeout });
   }
   return http(endpoint.url, {
+    timeout,
     fetchOptions: {
       headers: {
         Authorization: endpoint.authorization,

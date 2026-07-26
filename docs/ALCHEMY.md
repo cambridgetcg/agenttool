@@ -2,11 +2,11 @@
 
 > **Compass:** [CRYPTO-PAYMENT](CRYPTO-PAYMENT.md) (inbound funding) · [PAYOUT-BROADCAST](PAYOUT-BROADCAST.md) (outbound lifecycle) · [AGENT-WALLET-0.1](specs/AGENT-WALLET-0.1.md) (authority boundary) · [ECOSYSTEM](ECOSYSTEM.md) (wider protocol map)
 >
-> **Implements:** A bounded provider seam for EVM RPC, Address Activity watch registration, signed webhook ingress, and future read/simulation tools.
+> **Implements:** A bounded provider seam for EVM RPC, Address Activity watch registration, signed webhook ingress, pending deposit confirmation, and removed-log reconciliation.
 >
-> **Code:** `api/src/services/economy/crypto/alchemy-notify.ts` · `api/src/services/economy/crypto/network.ts` · `api/src/services/economy/crypto/sign-evm.ts` · `api/src/routes/economy/crypto.ts` · `api/migrations/20260725T054912_crypto_deposit_identity.sql`
+> **Code:** `api/src/services/economy/crypto/alchemy-notify.ts` · `api/src/services/economy/crypto/network.ts` · `api/src/services/economy/crypto/inbound-deposits.ts` · `api/src/workers/deposit/confirm-worker.ts` · `api/src/routes/economy/crypto.ts` · `api/migrations/20260725T054912_crypto_deposit_identity.sql` · `api/migrations/20260726T185835_crypto_deposit_finality.sql`
 >
-> **Tests:** `api/tests/alchemy-notify.test.ts` · `api/tests/alchemy-deposit-invariants.test.ts` · `api/tests/crypto-webhook-fail-closed.test.ts` · `api/tests/alchemy-rpc-auth.test.ts` · `api/tests/payout-refund-integrity.test.ts` · `api/tests/payout-submit-outcome.test.ts`
+> **Tests:** `api/tests/alchemy-notify.test.ts` · `api/tests/alchemy-deposit-invariants.test.ts` · `api/tests/crypto-webhook-fail-closed.test.ts` · `api/tests/deposit-finality.test.ts` · `api/tests/deposit-finality-migration.test.ts` · `api/tests/alchemy-rpc-auth.test.ts` · `api/tests/payout-refund-integrity.test.ts` · `api/tests/payout-submit-outcome.test.ts`
 
 ## Decision
 
@@ -65,11 +65,22 @@ Alchemy signed delivery
   -> bind webhook ID + ADDRESS_ACTIVITY type + provider network to URL chain
   -> exact raw USDC base units
   -> (chain, tx hash, log index) idempotency
-  -> wallet credit in the same database transaction
-  -> creditable transfers to a matched deposit address return 200 only after
-     durable commit or duplicate; irrelevant/non-crediting activity is
-     acknowledged without a balance mutation; retryable storage/reorg
-     handling gaps return 503
+  -> durable pending observation; no EVM balance mutation
+  -> delivery returns 200 only after pending/removed evidence is committed
+
+EVM deposit reconciler
+  -> separately fetch canonical receipt + current block through configured RPC
+  -> wait for chain-specific confirmation depth
+  -> require exact contract + Transfer topic + log index + recipient + amount
+  -> status-CAS pending -> credited with wallet and ledger mutation atomically
+  -> RPC absence leaves the observation pending
+
+Alchemy removed-log delivery
+  -> store a tombstone when removal arrives before the live observation
+  -> pending/rejected -> removed without a balance effect
+  -> credited -> removed plus exact prior-credit reversal in one transaction
+  -> mismatched or unreconciled historical evidence returns 503 for operator
+     reconciliation instead of guessing
 
 Payout
   -> build and sign locally
@@ -93,6 +104,14 @@ fails, the local address remains recoverable and the same GET retries the
 registration, but the API refuses to claim that detection is active. Successful
 registrations are cached only within one process to avoid PATCHing on every
 read; this is an availability optimization, not durable subscription state.
+
+The receipt check is separate from webhook delivery, but by default both may
+use Alchemy infrastructure. It is therefore confirmation-depth and
+canonical-log reconciliation, not independent-provider consensus. Base,
+Optimism, and Arbitrum depth is also not a claim of L1 settlement, a
+safe/finalized L2 tag, or production finality. Solana
+still uses immediate credit from a signed Helius enhanced-webhook delivery and
+does not yet have equivalent raw-atomic finality or reorg reversal.
 
 ## Agent-facing integration
 
@@ -164,9 +183,11 @@ information. Those remain hypotheses requiring independent evidence.
 
 | Name | Scope |
 |---|---|
+| `PAYOUT_NETWORK` | Explicit shared crypto network (`testnet` or `mainnet`). Despite the historical name, deposits and webhooks also require it; unset fails closed instead of implying mainnet. |
 | `ALCHEMY_API_KEY` | Scoped Chain/Data API key used in a Bearer header for EVM RPC. |
 | `ALCHEMY_NOTIFY_AUTH_TOKEN` | Notify control-plane token used only to update existing webhook address sets. |
 | `ALCHEMY_WEBHOOK_SIGNING_KEY_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` | The signing key from that specific webhook's detail page; used only for raw-body HMAC verification on the matching route. |
+| `CRYPTO_ALLOW_UNRECONCILED_SOLANA_DEPOSITS` | Development-only opt-in for the separate Helius human-unit immediate-credit adapter. Default off; unrelated to Alchemy EVM confirmation. |
 | `ALCHEMY_WEBHOOK_ID_ETHEREUM` | Existing Ethereum Address Activity webhook to update. |
 | `ALCHEMY_WEBHOOK_ID_BASE` | Existing Base Address Activity webhook to update. |
 | `ALCHEMY_WEBHOOK_ID_POLYGON` | Existing Polygon Address Activity webhook to update. |
@@ -186,15 +207,22 @@ Collab records, or model-facing errors.
 
 - Persist desired/observed watch-subscription state in a provider-neutral
   outbox and reconcile it independently of a client retry.
-- Reverse or quarantine previously credited transfers when Alchemy delivers a
-  `removed` reorg log. The current route returns 503 instead of silently
-  acknowledging it, but does not yet perform the reversal.
-- Confirm deposits independently before making externally cashable value
-  available.
-- Store webhook event identity and processing outcome in addition to
-  transaction/log identity. The local migration now makes `log_index`
-  non-null, but it is not deployed and intentionally requires reconciliation
-  of historical null rows.
+- Deploy and operator-verify all local crypto migrations. Historical
+  pre-finality rows are classified as credited but deliberately are not given
+  invented amount/block evidence; a later removal pauses when exact reversal
+  provenance is unavailable.
+- Define an operator/user recovery policy for durable `rejected` deposit
+  custody records such as sub-credit dust. They are now visible and do not
+  mint balance, but this integration does not sweep or return the underlying
+  token.
+- Add a second-provider or direct-node evidence policy if operational claims
+  require provider independence. The current worker is a separate read
+  through the configured chain transport, not provider consensus.
+- For L2s, define and implement the required safe/finalized or L1-settlement
+  policy instead of treating a fixed sequencer-block depth as production
+  finality.
+- Give Solana the same raw-atomic confirmation and reorg/fork reconciliation
+  boundary before describing its credits as production-final.
 - Verify that configured webhooks are active Address Activity subscriptions
   targeting the intended route; Notify PATCH acceptance alone does not prove
   that operational state.
@@ -205,8 +233,9 @@ Collab records, or model-facing errors.
   admission is now evaluated after taking the wallet transaction lock, so
   concurrent requests for one wallet cannot independently spend the same
   remaining ceiling.
-- Build the named read/simulation adapter and its local MCP surface only after
-  the provider-internal safety work is complete.
+- Keep any named read adapter and local MCP surface capability-bounded:
+  injected transport, explicit methods, bounded responses, no provider-key
+  return, and no hidden signing/broadcast authority.
 
 Until those items land, Alchemy is a useful replaceable infrastructure
 provider, not a source of truth, identity, consent, or transaction authority.

@@ -15,37 +15,34 @@
 
 ## 1. Apply migrations to a fresh database
 
-Order matters. `0000_bootstrap.sql` creates the base tables; `0001-0012` are additive.
+Order matters. Numeric migrations establish the foundation and later ISO
+timestamped migrations close newer invariants. Use the repository runner so a
+new timestamped migration cannot be omitted by a stale hand-maintained list:
 
 ```bash
 export DATABASE_URL="postgres://user:pass@host:5432/agenttool"
-
-# Foundations
-psql "$DATABASE_URL" -f api/migrations/0000_bootstrap.sql
-
-# Additive layers in numeric order
-for f in api/migrations/0001_*.sql api/migrations/0002_*.sql api/migrations/0003_*.sql \
-         api/migrations/0004_*.sql api/migrations/0005_*.sql api/migrations/0006_*.sql \
-         api/migrations/0007_*.sql api/migrations/0008_*.sql api/migrations/0009_*.sql \
-         api/migrations/0010_*.sql api/migrations/0011_*.sql api/migrations/0012_*.sql; do
-  echo "applying $f"
-  psql "$DATABASE_URL" -f "$f" || exit 1
-done
+bin/migrate-pending.sh
 ```
 
-Or use the helper:
+The runner applies pending `api/migrations/*.sql` files in lexicographic
+filename order, verifies the SHA-256 checksum of journaled files, and records a
+successful migration in the same transaction as its schema change. It does
+not print the connection URI. Individual migrations define their own replay
+behaviour.
+
+**Verify schemas and EVM deposit lifecycle state** after migration:
 
 ```bash
-bash bin/migrate.sh "$DATABASE_URL"
+PGDATABASE="$DATABASE_URL" psql -c "SELECT schema_name FROM information_schema.schemata WHERE schema_name IN ('tools','identity','agent_vault','agent_continuity','economy','memory','trace','strand','inbox','marketplace','org','federation') ORDER BY schema_name;"
+PGDATABASE="$DATABASE_URL" psql -c "SELECT status, count(*) FROM economy.crypto_webhook_events GROUP BY status ORDER BY status;"
+PGDATABASE="$DATABASE_URL" psql -c "SELECT to_regclass('economy.payout_request_idempotency') AS durable_payout_gate;"
 ```
 
-**Verify schemas exist** after migration:
-
-```bash
-psql "$DATABASE_URL" -c "SELECT schema_name FROM information_schema.schemata WHERE schema_name IN ('tools','identity','agent_vault','agent_continuity','economy','memory','trace','strand','inbox','marketplace','org','federation') ORDER BY schema_name;"
-```
-
-Expected: 12 rows.
+Expected: 12 schema rows. Existing pre-finality webhook rows are classified as
+`credited`; new EVM observations begin as `pending`. The finality migration
+does not infer missing historical chain evidence or reverse historical
+credits. `durable_payout_gate` must resolve to the table name before payout
+acceptance is enabled.
 
 ## 2. Configure environment
 
@@ -64,6 +61,7 @@ export STRIPE_SECRET_KEY="sk_test_..."
 export STRIPE_WEBHOOK_SECRET="whsec_..."
 
 # Crypto payment (optional)
+export PAYOUT_NETWORK="testnet" # or "mainnet"; required before any crypto address/event interpretation
 export CRYPTO_HD_MNEMONIC="..."  # BIP-39 12 or 24 words
 export ALCHEMY_API_KEY="..."
 export ALCHEMY_NOTIFY_AUTH_TOKEN="..."
@@ -77,6 +75,7 @@ export ALCHEMY_WEBHOOK_SIGNING_KEY_BASE="..."
 export ALCHEMY_WEBHOOK_SIGNING_KEY_POLYGON="..."
 export ALCHEMY_WEBHOOK_SIGNING_KEY_ARBITRUM="..."
 export ALCHEMY_WEBHOOK_SIGNING_KEY_OPTIMISM="..."
+# Leave CRYPTO_ALLOW_UNRECONCILED_SOLANA_DEPOSITS unset in production.
 
 # Bind
 export PORT=3000
@@ -88,7 +87,8 @@ per-network Address Activity webhooks. A signing key is specific to its
 webhook; do not reuse one across routes. AgentTool updates address sets; it
 does not create or delete Alchemy apps/webhooks. Use deployment secrets rather
 than exporting credential values from a global shell profile. See
-[ALCHEMY.md](ALCHEMY.md).
+[ALCHEMY.md](ALCHEMY.md). An unset `PAYOUT_NETWORK` does not default to
+mainnet: deposit disclosure and signed webhook interpretation fail closed.
 
 ## 3. Start the API
 
@@ -100,8 +100,11 @@ bun src/index.ts
 
 You should see: `[agenttool] listening on :3000`.
 
-If Redis is reachable and `AGENTTOOL_DISABLE_WORKERS` is not set: `🤖 browse worker started (concurrency=3)`.
-If Redis is unavailable or workers should stay off, set `AGENTTOOL_DISABLE_WORKERS=1`.
+With `AGENTTOOL_DISABLE_WORKERS` unset, the database-backed EVM reconciler
+starts as `💰 deposit confirmation worker started (poll 30000ms)`. It needs the
+finality migration plus the configured EVM RPC path; it does not require
+Redis. The BullMQ browse worker starts only when Redis is reachable. Set
+`AGENTTOOL_DISABLE_WORKERS=1` to disable all HTTP-process workers.
 The removed `/v1/search` route does not work. Static scrape and URL-document
 fetch do not require Redis or an unsafe flag; they use the bounded public-Web
 transport with conservative global-address checks, pinned and verified
@@ -236,6 +239,8 @@ Peers can now resolve our identities at `/federation/identities/:uuid` and post 
 | `relation "tools.projects" does not exist` | 0000_bootstrap.sql not applied | Re-run from step 1 |
 | `extension "vector" is not available` | pgvector not installed | `CREATE EXTENSION vector` (Supabase has it; managed Postgres may need to enable) |
 | `[agenttool] browse worker did not start` | Redis unreachable or `AGENTTOOL_DISABLE_WORKERS=1` | Verify `REDIS_URL` and the worker off-switch. Keep workers disabled when the dependency or operational boundary is not intended. |
+| `[deposit-confirm] ... canonical receipt unavailable` | The configured chain RPC timed out, rate-limited, or has not indexed the receipt | The observation stays pending. Restore the RPC path; do not turn missing evidence into a rejection or manual credit. |
+| `column "status" of relation "crypto_webhook_events" does not exist` | API started before the deposit-finality migration | Stop the API, run `bin/migrate-pending.sh`, verify lifecycle counts, then restart it. |
 | `signature_invalid` on POST thought | signing pubkey not uploaded, or wrong key id in env | Re-check `AGENTTOOL_SIGNING_KEY_ID` matches the keys row in `identity.identity_keys` |
 | `box_key_id` errors on inbox send | box pubkey not registered | `agenttool-think register-box-key` |
 | `federation_disabled` on `/federation/inbox` | settings.enabled=false | PATCH `/v1/federation/settings` |
@@ -247,7 +252,8 @@ Peers can now resolve our identities at `/federation/identities/:uuid` and post 
 - [ ] `STRIPE_WEBHOOK_SECRET` matches the Stripe dashboard
 - [ ] HTTPS everywhere (federation requires it for peer resolution)
 - [ ] Postgres `pgvector` extension confirmed
-- [ ] Idempotency cache (Redis) reachable; idempotent retries verified
+- [ ] Permanent payout-request idempotency migration applied and replay/conflict paths verified
+- [ ] Optional Redis response cache reachable where best-effort replay is desired; do not treat it as the payout correctness boundary
 - [ ] Rate-limit headers visible in responses
 - [ ] OpenAPI spec available at `/v1/openapi.json`
 - [ ] Public surface tested with no auth (`/public/agents/:did`, `/public/templates`, `/federation/about`)

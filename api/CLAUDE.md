@@ -84,12 +84,17 @@ Mounted in `api/src/index.ts`. Each one has a one-line doc-string in the `endpoi
 |---|---|
 | `src/thinker.ts` + `services/runtime/worker-manager.ts` | Dedicated Fly process group. Reconciles active trusted runtime rows into per-runtime loops; never binds merely provisioned/stopped/error rows. |
 | `workers/payout/broadcast-worker.ts` | Signs + submits Solana/EVM payout transactions. **No auto-retry by doctrine** — failed broadcasts never retry; operator-driven recovery. Canonical site of `docs/PATTERN-PERSIST-IDENTITY.md` — persists `tx_hash` before RPC submit so recovery is a chain lookup. |
+| `workers/deposit/confirm-worker.ts` | Polls durable pending EVM observations, fetches the canonical receipt through the configured chain transport, waits for the chain-specific depth, and credits only the exact USDC log. Multi-replica reads are harmless because the balance mutation is status-CAS guarded. This is a separate check, not an independent-provider guarantee. |
 | `services/covenants/cosign-propagate.ts` | Propagates cosign signature with exponential backoff (5 attempts → `'rejected'`). |
 | `services/covenants/expire-proposals.ts` | TTL sweeper — 30d expiry with 24h grace period. |
 | `services/covenants/reverify.ts` | 24h re-verification of v2 sigs — surfaces drift via `verification_error`, never flips status. |
 | `services/runtime/think-worker.ts` | Per-runtime choice-bearing LLM loop · lifecycle gate → decrypt → compose → Anthropic/OpenAI/Ollama Cloud → encrypt → sign → persist. Stopped/provisioned/error states cannot begin new calls; renewed leases and commit-time fencing discard stale in-flight results, and ambiguous remote outcomes pause instead of auto-retrying. |
 
-HTTP-side workers are disabled when `AGENTTOOL_DISABLE_WORKERS=1` or Redis is unavailable (graceful degradation). The service-less `thinker` process is separate and database-backed; it requires the runtime migrations and KMS/Vault/database secrets.
+All HTTP-side workers are disabled when `AGENTTOOL_DISABLE_WORKERS=1`.
+Redis unavailability stops Redis/BullMQ-backed work such as browse jobs, but
+database-backed sweepers and the EVM deposit reconciler do not depend on
+Redis. The service-less `thinker` process is separate and database-backed; it
+requires the runtime migrations and KMS/Vault/database secrets.
 
 ## Bridge protocol (Horizon C)
 

@@ -11,9 +11,9 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../../db/client";
 import {
   cryptoPayouts,
-  cryptoWebhookEvents,
   depositAddresses,
   onchainIdentities,
+  payoutRequestIdempotency,
   policies,
   transactions,
   wallets,
@@ -25,7 +25,6 @@ import {
   penceForUsdcPayout,
 } from "../earned";
 import {
-  CREDITS_PER_USDC,
   EVM_CHAIN_IDS,
   USDC_ADDRESSES,
   isChain,
@@ -36,8 +35,6 @@ import {
 import { deriveDepositAddress, isChainSupported } from "./hd";
 import {
   activeMnemonic,
-  activeUsdcAddress,
-  activeUsdcMintSolana,
 } from "./network";
 import { ensureAlchemyAddressWatched } from "./alchemy-notify";
 import { reversePayoutDebit } from "./payout-refund";
@@ -47,7 +44,7 @@ import {
   verifySolanaSignature,
 } from "./sign";
 
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 // ── Deposit address ────────────────────────────────────────────────────
 
@@ -308,6 +305,96 @@ export interface PayoutRequest {
   amountBase: string;          // base units (USDC: 1 USDC = "1000000")
   destinationAddress: string;
   metadata?: Record<string, unknown>;
+  /** Required durable request identity. The plaintext is never persisted. */
+  idempotencyKey: string;
+}
+
+export interface PayoutRequestOutcome {
+  id: string;
+  status: string;
+  broadcast_pending: boolean;
+  replayed: boolean;
+}
+
+export const PAYOUT_IDEMPOTENCY_KEY_PATTERN = /^[!-~]{8,256}$/u;
+
+function canonicalJson(value: unknown, path = "metadata"): string {
+  if (value === null) return "null";
+  if (typeof value === "string" || typeof value === "boolean") {
+    return JSON.stringify(value);
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new TypeError(`${path} must contain only finite JSON numbers`);
+    }
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    const entries: string[] = [];
+    for (let index = 0; index < value.length; index += 1) {
+      if (!Object.prototype.hasOwnProperty.call(value, index)) {
+        throw new TypeError(`${path} must not contain sparse arrays`);
+      }
+      entries.push(canonicalJson(value[index], `${path}[${index}]`));
+    }
+    return `[${entries.join(",")}]`;
+  }
+  if (typeof value === "object") {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new TypeError(`${path} must contain only plain JSON objects`);
+    }
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map(
+        (key) =>
+          `${JSON.stringify(key)}:${canonicalJson(record[key], `${path}.${key}`)}`,
+      )
+      .join(",")}}`;
+  }
+  throw new TypeError(`${path} must contain only JSON values`);
+}
+
+/** A stable fingerprint of the recognized business input, not HTTP/auth bytes. */
+export function payoutRequestSha256(
+  input: Pick<
+    PayoutRequest,
+    | "walletId"
+    | "chain"
+    | "token"
+    | "amountBase"
+    | "destinationAddress"
+    | "metadata"
+  >,
+): string {
+  const canonicalRequest =
+    `{"amount_base":${JSON.stringify(input.amountBase)}` +
+    `,"chain":${JSON.stringify(input.chain)}` +
+    `,"destination_address":${JSON.stringify(input.destinationAddress)}` +
+    `,"metadata":${canonicalJson(input.metadata ?? {})}` +
+    `,"token":${JSON.stringify(input.token)}` +
+    `,"wallet_id":${JSON.stringify(input.walletId)}}`;
+  return createHash("sha256")
+    .update("agenttool:payout-request:v1\0")
+    .update(canonicalRequest)
+    .digest("hex");
+}
+
+export function payoutIdempotencyKeySha256(key: string): string {
+  return createHash("sha256")
+    .update("agenttool:payout-idempotency-key:v1\0")
+    .update(key)
+    .digest("hex");
+}
+
+function payoutStillPending(status: string): boolean {
+  return (
+    status === "requested" ||
+    status === "signing" ||
+    status === "broadcasting" ||
+    status === "broadcast"
+  );
 }
 
 export type PayoutPolicyDecision =
@@ -467,17 +554,90 @@ export async function checkPayoutPolicy(p: {
  *      a refund from caller-extensible JSON or a fresh token/FX conversion. */
 export async function requestPayout(
   p: PayoutRequest,
-): Promise<{ id: string; status: string; broadcast_pending: true }> {
+  database: Pick<typeof db, "transaction"> = db,
+): Promise<PayoutRequestOutcome> {
+  if (!PAYOUT_IDEMPOTENCY_KEY_PATTERN.test(p.idempotencyKey)) {
+    throw new Error("payout_idempotency_key_invalid");
+  }
   if (!(SUPPORTED_PAYOUT_TOKENS as readonly string[]).includes(p.token)) {
     throw new Error(`token ${p.token} not yet supported for payout`);
   }
-  // Option A explicit FX: earned value is GBP pence; a payout of `amountBase`
-  // USDC costs the wallet `penceRequired` at the operator rate. penceForUsdcPayout
-  // throws `payout_fx_rate_unset` (rate ≤ 0) or `amount_base_must_be_positive`.
-  const rate = economyConfig.payout.gbpUsdRate;
-  const penceRequired = penceForUsdcPayout(p.amountBase, rate);
+  const idempotencyKeySha256 = payoutIdempotencyKeySha256(p.idempotencyKey);
+  const requestSha256 = payoutRequestSha256(p);
 
-  return await db.transaction(async (tx) => {
+  return await database.transaction(async (tx) => {
+    const [reservation] = await tx
+      .insert(payoutRequestIdempotency)
+      .values({
+        projectId: p.projectId,
+        idempotencyKeySha256,
+        requestSha256,
+      })
+      .onConflictDoNothing({
+        target: [
+          payoutRequestIdempotency.projectId,
+          payoutRequestIdempotency.idempotencyKeySha256,
+        ],
+      })
+      .returning({ id: payoutRequestIdempotency.id });
+
+    if (!reservation) {
+      // PostgreSQL waits for the concurrent unique-key contender to commit
+      // before ON CONFLICT returns. Re-read that durable winner and return its
+      // current payout state without re-running policy or touching balance.
+      const [existingReservation] = await tx
+        .select()
+        .from(payoutRequestIdempotency)
+        .where(
+          and(
+            eq(payoutRequestIdempotency.projectId, p.projectId),
+            eq(
+              payoutRequestIdempotency.idempotencyKeySha256,
+              idempotencyKeySha256,
+            ),
+          ),
+        )
+        .for("update");
+      if (!existingReservation) {
+        throw new Error("payout_idempotency_unreconciled");
+      }
+      if (existingReservation.requestSha256 !== requestSha256) {
+        throw new Error("payout_idempotency_conflict");
+      }
+      if (!existingReservation.payoutId) {
+        throw new Error("payout_idempotency_unreconciled");
+      }
+      const [existingPayout] = await tx
+        .select({
+          id: cryptoPayouts.id,
+          status: cryptoPayouts.status,
+        })
+        .from(cryptoPayouts)
+        .where(
+          and(
+            eq(cryptoPayouts.id, existingReservation.payoutId),
+            eq(cryptoPayouts.projectId, p.projectId),
+          ),
+        );
+      if (!existingPayout) {
+        throw new Error("payout_idempotency_unreconciled");
+      }
+      return {
+        id: existingPayout.id,
+        status: existingPayout.status,
+        broadcast_pending: payoutStillPending(existingPayout.status),
+        replayed: true,
+      };
+    }
+
+    // Replay resolution deliberately happens before live configuration and
+    // policy checks: changing an FX rate or freezing a wallet must not turn an
+    // already-committed request into a second attempt. For a new request,
+    // Option A converts USDC base units into earned GBP pence and fails closed
+    // if the operator has not supplied a valid rate.
+    const rate = economyConfig.payout.gbpUsdRate;
+    const penceRequired = penceForUsdcPayout(p.amountBase, rate);
+
     // Lock the wallet: the earned wall and the debit are computed under it so
     // concurrent payouts/reinvests serialise and can't each spend the same
     // earned pennies (mirrors reinvestFromWallet).
@@ -487,6 +647,7 @@ export async function requestPayout(
       .where(eq(wallets.id, p.walletId))
       .for("update");
     if (!wallet) throw new Error("wallet_not_found");
+    if (wallet.status !== "active") throw new Error("payout_wallet_inactive");
     // Option A pins payout to GBP wallets, so `balance` is unambiguously pence
     // and directly comparable to the earned wall. Mirrors the reinvest guard.
     if (wallet.currency !== "GBP") throw new Error("payout_requires_gbp_wallet");
@@ -566,7 +727,13 @@ export async function requestPayout(
     const debit = await tx
       .update(wallets)
       .set({ balance: sqlMinus(penceRequired) })
-      .where(and(eq(wallets.id, p.walletId), sqlBalanceAtLeast(penceRequired)))
+      .where(
+        and(
+          eq(wallets.id, p.walletId),
+          eq(wallets.status, "active"),
+          sqlBalanceAtLeast(penceRequired),
+        ),
+      )
       .returning({ balance: wallets.balance });
     if (debit.length === 0) throw new Error("insufficient_balance");
 
@@ -603,10 +770,26 @@ export async function requestPayout(
       metadata: { payout_id: inserted!.id, amount_base: p.amountBase, token: p.token },
     });
 
+    const completedReservation = await tx
+      .update(payoutRequestIdempotency)
+      .set({ payoutId: inserted!.id })
+      .where(
+        and(
+          eq(payoutRequestIdempotency.id, reservation.id),
+          eq(payoutRequestIdempotency.requestSha256, requestSha256),
+          sql`${payoutRequestIdempotency.payoutId} IS NULL`,
+        ),
+      )
+      .returning({ id: payoutRequestIdempotency.id });
+    if (completedReservation.length !== 1) {
+      throw new Error("payout_idempotency_unreconciled");
+    }
+
     return {
       id: inserted!.id,
       status: "requested",
       broadcast_pending: true as const,
+      replayed: false,
     };
   });
 }
@@ -698,152 +881,10 @@ export async function cancelPayout(
 
 const SUPPORTED_PAYOUT_TOKENS = ["USDC"] as const;
 
-// ── Inbound webhook ingestion ──────────────────────────────────────────
-
-export interface InboundTransfer {
-  chain: Chain;
-  txHash: string;
-  logIndex: number;
-  toAddress: string;
-  contractAddress: string;
-  token: string;
-  amountBase: string;       // token base units
-  rawPayload: unknown;
-}
-
-export interface IngestionResult {
-  matched: boolean;
-  walletId?: string;
-  creditsAdded?: number;
-  duplicate?: boolean;
-  reason?: string;
-  retryable?: boolean;
-}
-
-/** Apply an inbound transfer to a wallet. Idempotent on (chain, txHash,
- *  logIndex). Caller is responsible for verifying webhook signature
- *  before invoking. */
-export async function ingestInboundTransfer(
-  t: InboundTransfer,
-): Promise<IngestionResult> {
-  // Token sanity: only USDC routed for now.
-  if (t.token !== "USDC") {
-    return { matched: false, reason: "unsupported_token" };
-  }
-  // Confirm contract for EVM chains. Use activeUsdcAddress so testnet
-  // operation matches the Sepolia/Amoy USDC contracts (different from
-  // their mainnet counterparts). Without this, inbound testnet webhooks
-  // silently bail with `wrong_contract`.
-  if (isEvmChain(t.chain)) {
-    const expected = activeUsdcAddress(t.chain).toLowerCase();
-    if (t.contractAddress.toLowerCase() !== expected) {
-      return { matched: false, reason: "wrong_contract" };
-    }
-  } else if (
-    t.chain === "solana" &&
-    t.contractAddress !== activeUsdcMintSolana()
-  ) {
-    return { matched: false, reason: "wrong_contract" };
-  }
-
-  // EVM addresses are case-insensitive and use a functional lower(address)
-  // predicate backed by the deployment migration's partial index. Solana
-  // base58 addresses are case-sensitive and must match exactly.
-  const addressPredicate = isEvmChain(t.chain)
-    ? sql`lower(${depositAddresses.address}) = lower(${t.toAddress})`
-    : eq(depositAddresses.address, t.toAddress);
-  const [row] = await db
-    .select()
-    .from(depositAddresses)
-    .where(
-      and(
-        eq(depositAddresses.chain, t.chain),
-        addressPredicate,
-      ),
-    )
-    .limit(1);
-  if (!row) return { matched: false, reason: "no_matching_deposit_address" };
-  const matchedRow = row;
-
-  // Convert exact base units → credits without passing token value through a
-  // floating-point number. The wallet balance is a JavaScript number in the
-  // current schema, so reject values beyond its exact integer range.
-  let amountAtomic: bigint;
-  try {
-    amountAtomic = BigInt(t.amountBase);
-  } catch {
-    return { matched: false, reason: "invalid_amount" };
-  }
-  if (amountAtomic <= 0n) return { matched: false, reason: "invalid_amount" };
-  const creditsAtomic =
-    (amountAtomic * BigInt(CREDITS_PER_USDC)) / 1_000_000n;
-  if (creditsAtomic <= 0n) {
-    return { matched: false, reason: "amount_below_min_credit" };
-  }
-  if (creditsAtomic > BigInt(Number.MAX_SAFE_INTEGER)) {
-    return { matched: false, reason: "amount_exceeds_exact_credit_limit" };
-  }
-  const creditsToAdd = Number(creditsAtomic);
-
-  // Idempotent insert into webhook log + funding via transaction.
-  try {
-    return await db.transaction(async (tx) => {
-      const [logged] = await tx
-        .insert(cryptoWebhookEvents)
-        .values({
-          chain: t.chain,
-          txHash: t.txHash,
-          logIndex: t.logIndex,
-          walletId: matchedRow.walletId,
-          creditsAdded: creditsToAdd,
-          rawPayload: (t.rawPayload as object) ?? {},
-        })
-        .onConflictDoNothing()
-        .returning({ id: cryptoWebhookEvents.id });
-
-      if (!logged) {
-        return {
-          matched: true,
-          walletId: matchedRow.walletId,
-          duplicate: true,
-        } satisfies IngestionResult;
-      }
-
-      // Credit wallet atomically.
-      await tx
-        .update(wallets)
-        .set({ balance: sqlPlus(creditsToAdd) })
-        .where(eq(wallets.id, matchedRow.walletId));
-
-      return {
-        matched: true,
-        walletId: matchedRow.walletId,
-        creditsAdded: creditsToAdd,
-      } satisfies IngestionResult;
-    });
-  } catch (err) {
-    // Provider delivery must receive a non-2xx response so it retries. Keep
-    // the database message out of the model/public response: it can contain
-    // infrastructure detail and is not needed to make the retry decision.
-    console.error(
-      "[crypto-webhook] inbound transfer storage unavailable",
-      err instanceof Error ? err.name : "unknown_error",
-    );
-    return {
-      matched: false,
-      reason: "storage_unavailable",
-      retryable: true,
-    };
-  }
-}
-
 // ── Helpers (sql expressions for atomic balance arithmetic) ────────────
 
 function sqlMinus(n: number) {
   return sql`balance - ${n}`;
-}
-function sqlPlus(n: number) {
-  return sql`balance + ${n}`;
 }
 function sqlBalanceAtLeast(n: number) {
   return sql`${wallets.balance} >= ${n}`;
@@ -851,3 +892,11 @@ function sqlBalanceAtLeast(n: number) {
 
 // Re-exports for routes
 export { isChain, isEvmChain } from "./chains";
+export {
+  ingestInboundTransfer,
+  reconcileRemovedInboundTransfer,
+} from "./inbound-deposits";
+export type {
+  InboundTransfer,
+  IngestionResult,
+} from "./inbound-deposits";

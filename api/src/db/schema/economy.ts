@@ -287,6 +287,32 @@ export const cryptoPayouts = economySchema.table(
   ],
 );
 
+/** Permanent request identity for POST /v1/wallets/:id/payout.
+ *
+ * The raw Idempotency-Key is never stored. `payoutId` is nullable only while
+ * the surrounding transaction creates the payout; a deferred database
+ * trigger refuses any committed reservation without a result identity. */
+export const payoutRequestIdempotency = economySchema.table(
+  "payout_request_idempotency",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id").notNull(),
+    idempotencyKeySha256: text("idempotency_key_sha256").notNull(),
+    requestSha256: text("request_sha256").notNull(),
+    payoutId: uuid("payout_id").references(() => cryptoPayouts.id, {
+      onDelete: "restrict",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uq_payout_request_idempotency_project_key_sha256").on(
+      t.projectId,
+      t.idempotencyKeySha256,
+    ),
+    uniqueIndex("uq_payout_request_idempotency_payout").on(t.payoutId),
+  ],
+);
+
 /** Idempotency log for inbound crypto webhooks across chains. */
 export const cryptoWebhookEvents = economySchema.table(
   "crypto_webhook_events",
@@ -297,12 +323,35 @@ export const cryptoWebhookEvents = economySchema.table(
     logIndex: integer("log_index").notNull(),     // canonical per-transfer identity
     walletId: uuid("wallet_id").references(() => wallets.id),
     creditsAdded: bigint("credits_added", { mode: "number" }),
+    /** EVM observations are persisted as pending before any wallet mutation.
+     * Existing pre-finality rows migrate as credited because their historical
+     * balance effect already happened. */
+    status: text("status")
+      .$type<"pending" | "credited" | "removed" | "rejected">()
+      .notNull()
+      .default("pending"),
+    amountBase: numeric("amount_base", { precision: 78, scale: 0 }),
+    toAddress: text("to_address"),
+    contractAddress: text("contract_address"),
+    blockNumber: bigint("block_number", { mode: "bigint" }),
+    blockHash: text("block_hash"),
+    providerWebhookId: text("provider_webhook_id"),
+    providerEventId: text("provider_event_id"),
     rawPayload: jsonb("raw_payload").notNull(),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    removedAt: timestamp("removed_at", { withTimezone: true }),
+    error: text("error"),
   },
   (t) => [
     uniqueIndex("idx_crypto_event_dedupe").on(t.chain, t.txHash, t.logIndex),
     index("idx_crypto_event_wallet").on(t.walletId),
+    index("idx_crypto_event_status").on(
+      t.status,
+      t.lastCheckedAt,
+      t.receivedAt,
+    ),
   ],
 );
 

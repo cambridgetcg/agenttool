@@ -5,7 +5,7 @@
  *  JSON parse or DB touch, so they need no database.
  *
  *  Pins: fix/crypto-webhook-fail-closed (Helius/Alchemy fail-open mint-hole). */
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { economyConfig } from "../src/services/economy/config";
 import {
@@ -30,12 +30,15 @@ import { createHmac } from "node:crypto";
 const cfg = economyConfig as unknown as {
   alchemyWebhookSigningKeys: Record<EvmChain, string>;
   heliusWebhookSecret: string;
+  allowUnreconciledSolanaDeposits: boolean;
   allowUnsignedWebhooks: boolean;
   payout: { network: string };
 };
 const original = {
   alchemy: { ...cfg.alchemyWebhookSigningKeys },
   helius: cfg.heliusWebhookSecret,
+  allowUnreconciledSolanaDeposits:
+    cfg.allowUnreconciledSolanaDeposits,
   allowUnsigned: cfg.allowUnsignedWebhooks,
   network: cfg.payout.network,
   webhookIds: Object.fromEntries(
@@ -45,9 +48,18 @@ const original = {
     ]),
   ) as Record<string, string | undefined>,
 };
+beforeEach(() => {
+  // Every crypto interpretation now requires an explicit network. Most cases
+  // in this file exercise mainnet-shaped provider payloads; individual
+  // testnet cases override this deliberately.
+  cfg.payout.network = "mainnet";
+  cfg.allowUnreconciledSolanaDeposits = true;
+});
 afterEach(() => {
   Object.assign(cfg.alchemyWebhookSigningKeys, original.alchemy);
   cfg.heliusWebhookSecret = original.helius;
+  cfg.allowUnreconciledSolanaDeposits =
+    original.allowUnreconciledSolanaDeposits;
   cfg.allowUnsignedWebhooks = original.allowUnsigned;
   cfg.payout.network = original.network;
   for (const [name, value] of Object.entries(original.webhookIds)) {
@@ -79,13 +91,32 @@ function alchemyEnvelope(
   chain: EvmChain,
   activity: Array<Record<string, unknown>> = [],
 ) {
+  const canonicalActivity = activity.map((item) => {
+    const log =
+      item.log && typeof item.log === "object" && !Array.isArray(item.log)
+        ? item.log as Record<string, unknown>
+        : item.log;
+    return {
+      blockNum: "0x1",
+      ...item,
+      ...(log && typeof log === "object"
+        ? {
+            log: {
+              blockNumber: "0x1",
+              blockHash: `0x${"a".repeat(64)}`,
+              ...log,
+            },
+          }
+        : {}),
+    };
+  });
   return {
     webhookId: `wh_test_${chain}`,
     id: `whevt_test_${chain}`,
     type: "ADDRESS_ACTIVITY",
     event: {
       network: alchemyAddressActivityNetwork(chain, activeNetwork()),
-      activity,
+      activity: canonicalActivity,
     },
   };
 }
@@ -157,7 +188,7 @@ describe("deposit address disclosure readiness", () => {
         derivation_path: "m/44'/60'/0'/0/2",
         contract_address: activeUsdcAddress("base"),
         watch_status: "provider_accepted",
-        credit_finality: "unreconciled",
+        credit_finality: "pending_until_chain_depth",
         created_at: "1970-01-01T00:00:00.000Z",
       },
     ]);
@@ -179,7 +210,7 @@ describe("deposit address disclosure readiness", () => {
       chain: "solana",
       contract_address: activeUsdcMintSolana(),
       watch_status: "operator_configuration_unverified",
-      credit_finality: "unreconciled",
+      credit_finality: "solana_unreconciled",
     });
   });
 });
@@ -361,6 +392,79 @@ describe("Helius (Solana) webhook signature gate", () => {
     });
     expect(ingestionCalls).toBe(0);
   });
+
+  test("validates the whole Helius batch before its first balance effect", async () => {
+    cfg.heliusWebhookSecret = "s3cret";
+    cfg.allowUnsignedWebhooks = false;
+    let ingestionCalls = 0;
+    const validatingRouter = createCryptoWebhookRouter(async () => {
+      ingestionCalls += 1;
+      return { matched: true };
+    });
+
+    const res = await validatingRouter.request("/solana", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "s3cret",
+      },
+      body: JSON.stringify([
+        {
+          signature: "valid-first",
+          tokenTransfers: [
+            {
+              mint: activeUsdcMintSolana(),
+              tokenAmount: 1,
+              toUserAccount: "solana-recipient",
+            },
+          ],
+        },
+        "malformed-later-item",
+      ]),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "invalid_activity" });
+    expect(ingestionCalls).toBe(0);
+  });
+
+  test("keeps unreconciled Solana balance credit off by default", async () => {
+    cfg.heliusWebhookSecret = "s3cret";
+    cfg.allowUnsignedWebhooks = false;
+    cfg.allowUnreconciledSolanaDeposits = false;
+    let ingestionCalls = 0;
+    const guardedRouter = createCryptoWebhookRouter(async () => {
+      ingestionCalls += 1;
+      return { matched: true };
+    });
+
+    const res = await guardedRouter.request("/solana", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "s3cret",
+      },
+      body: JSON.stringify([
+        {
+          signature: "production-shaped-transfer",
+          tokenTransfers: [
+            {
+              mint: activeUsdcMintSolana(),
+              tokenAmount: 1,
+              toUserAccount: "solana-recipient",
+            },
+          ],
+        },
+      ]),
+    });
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({
+      error: "solana_deposit_finality_unavailable",
+      consequence: "No wallet balance or deposit event was changed.",
+    });
+    expect(ingestionCalls).toBe(0);
+  });
 });
 
 describe("Alchemy (EVM) webhook signature gate", () => {
@@ -527,6 +631,44 @@ describe("signed webhook storage acknowledgement", () => {
     expect(observedLogIndex).toBe(0);
   });
 
+  test("validates the whole Alchemy batch before its first durable observation", async () => {
+    configureAlchemy("base");
+    cfg.allowUnsignedWebhooks = false;
+    let ingestionCalls = 0;
+    const validatingRouter = createCryptoWebhookRouter(async () => {
+      ingestionCalls += 1;
+      return { matched: true };
+    });
+    const body = alchemyEnvelope("base", [
+      {
+        toAddress: "0x0000000000000000000000000000000000000001",
+        rawContract: {
+          address: activeUsdcAddress("base"),
+          rawValue: "0xf4240",
+          decimals: 6,
+        },
+        hash: `0x${"1".repeat(64)}`,
+        log: { logIndex: "0x0", removed: false },
+      },
+    ]);
+    (body.event.activity as unknown[]).push("malformed-later-item");
+    const raw = JSON.stringify(body);
+    const sig = createHmac("sha256", "hmac-key").update(raw).digest("hex");
+
+    const res = await validatingRouter.request("/base", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-alchemy-signature": sig,
+      },
+      body: raw,
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "invalid_activity" });
+    expect(ingestionCalls).toBe(0);
+  });
+
   test("rejects a signed null Alchemy payload without throwing", async () => {
     configureAlchemy("base");
     cfg.allowUnsignedWebhooks = false;
@@ -546,9 +688,29 @@ describe("signed webhook storage acknowledgement", () => {
     expect(await res.json()).toMatchObject({ error: "invalid_payload" });
   });
 
-  test("does not acknowledge a removed USDC log without reconciliation", async () => {
+  test("acknowledges a removed USDC log only after durable reconciliation", async () => {
     configureAlchemy("base");
     cfg.allowUnsignedWebhooks = false;
+    let liveCalls = 0;
+    let removedCalls = 0;
+    const reconcilingRouter = createCryptoWebhookRouter(
+      async () => {
+        liveCalls += 1;
+        return { matched: true };
+      },
+      async (transfer) => {
+        removedCalls += 1;
+        expect(transfer.blockNumber).toBe(1n);
+        expect(transfer.blockHash).toBe(`0x${"a".repeat(64)}`);
+        expect(transfer.providerWebhookId).toBe("wh_test_base");
+        expect(transfer.providerEventId).toBe("whevt_test_base");
+        return {
+          matched: true,
+          reversed: true,
+          status: "removed",
+        };
+      },
+    );
     const body = alchemyEnvelope("base", [
       {
         toAddress: "0x0000000000000000000000000000000000000001",
@@ -564,7 +726,7 @@ describe("signed webhook storage acknowledgement", () => {
     const raw = JSON.stringify(body);
     const sig = createHmac("sha256", "hmac-key").update(raw).digest("hex");
 
-    const res = await cryptoWebhookRouter.request("/base", {
+    const res = await reconcilingRouter.request("/base", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -573,12 +735,18 @@ describe("signed webhook storage acknowledgement", () => {
       body: raw,
     });
 
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
-      received: false,
-      error: "reorg_reconciliation_unavailable",
-      retryable: true,
+      received: true,
+      processed: [
+        {
+          reversed: true,
+          status: "removed",
+        },
+      ],
     });
+    expect(liveCalls).toBe(0);
+    expect(removedCalls).toBe(1);
   });
 
   test("rejects coercible or non-canonical Alchemy log indexes before ingestion", async () => {

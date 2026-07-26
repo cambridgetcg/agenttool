@@ -134,8 +134,15 @@ function markIdempotencySkipped(
   c: Context<ProjectContext>,
   reason: "cache-unavailable" | "non-json-response" | "sensitive-response",
 ): void {
-  c.res.headers.delete("X-Idempotency-Supported");
-  c.res.headers.set("X-Idempotency-Skipped", reason);
+  // A route may provide its own durable database-backed request gate. Do not
+  // erase that stronger capability merely because this optional Redis
+  // response cache is unavailable or declines the response.
+  const durableRoute =
+    c.res.headers.get("X-Idempotency-Supported") === "Idempotency-Key";
+  if (!durableRoute) {
+    c.res.headers.delete("X-Idempotency-Supported");
+    c.res.headers.set("X-Idempotency-Skipped", reason);
+  }
   if (reason === "sensitive-response") {
     c.res.headers.set("Cache-Control", "private, no-store");
   }

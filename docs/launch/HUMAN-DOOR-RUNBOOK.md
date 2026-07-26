@@ -34,7 +34,7 @@ psql "$PROD_DATABASE_URL" -v ON_ERROR_STOP=1 -f api/migrations/20260702T122146_g
 If that psql path is not available, the fallback is:
 
 ```bash
-bash bin/migrate.sh "$PROD_DATABASE_URL"
+DATABASE_URL="$PROD_DATABASE_URL" bin/migrate-pending.sh
 ```
 
 Verify the migration landed:

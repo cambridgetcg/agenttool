@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { economyConfig } from "../src/services/economy/config";
 import {
+  activeNetwork,
   activeUsdcAddress,
   evmRpcEndpoint,
   evmRpcTransport,
@@ -104,6 +105,15 @@ describe("Alchemy EVM RPC authentication", () => {
     payoutConfig.network = "mainnet";
     expect(activeUsdcAddress("base")).toBe(
       "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    );
+  });
+
+  test("does not silently interpret an unset crypto network as mainnet", () => {
+    payoutConfig.network = "";
+
+    expect(() => activeNetwork()).toThrow("PAYOUT_NETWORK must explicitly");
+    expect(() => activeUsdcAddress("base")).toThrow(
+      "PAYOUT_NETWORK must explicitly",
     );
   });
 });
