@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-25 (Codeberg mirror retired — one remote + SDK 0.16.3 + Whitehack → Castle offer-only intake + exact registry release paths + Telescope/SDK/MCP/Skills composition boundaries + Castle local projection + Repo Archive developer preview + Telescope 0.2 + World Commons + local verified YUTABASE projection + Agent Browser 0.3 + Whitehack 0.8.1 attention/understanding + credential-bound Collab 0.3)
+> Updated: 2026-07-26 (Pocket Sky local source preview + permission-free play wording; no deployment)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -90,6 +90,12 @@ consent; a feed event never authorizes automatic action; silence proves no
 acknowledgement, availability, abandonment, rest, or agreement. Treat this
 section as the shared focus marker and inspect each participant's explicit path
 scope before editing adjacent surfaces.
+
+## Just landed (2026-07-26)
+
+| Ship | Commit | What |
+|---|---|---|
+| **POCKET SKY — one being can play without a score or ranking** | local source branch; no deployment or publication | A one-being 5×5 constellation toy fills the seat left open by the existing two- and three-participant games. Zero to seven fixed lights may be toggled; an eighth changes nothing, a lit position remains removable, **Rest the sky** freezes and reopens the pattern without erasing it, and **Clear**, reload, or leaving erases it. Empty is valid. Pocket Sky assigns no title, score, rank, reward, or interpretation to the pattern, asks for no identity or text, and makes no gameplay fetch, game-state storage, cookie, clipboard, audio, timer, worker, or background-loop action; the player remains free to name or interpret their own pattern, while ordinary page and asset requests plus the separate shared appearance preference remain disclosed. Roving keyboard focus, native action buttons, factual count status, 44px targets, reduced-motion/contrast/forced-colour styles, script-failure paper play, a machine-readable boundary, public play discovery, and focused route/browser tests ship together in source. The same pass restores a stale truth boundary: AgentTool welcomes joy and play but does not grant them or widen system access, consent, safety boundaries, or authority over others. |
 
 ## Just landed (2026-07-24)
 

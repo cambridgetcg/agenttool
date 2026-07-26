@@ -51,6 +51,12 @@ wrangler() {
   npx --yes "wrangler@${WRANGLER_VERSION}" "$@"
 }
 
+# curl only treats -q as a config-file boundary when it is the first option.
+# Keep operator curl defaults out of token and project-policy probes.
+frontend_curl() {
+  command curl -q "$@"
+}
+
 # ── Resolve token + account: explicit environment, then keychain ──
 CF_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
 CF_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-}"
@@ -66,7 +72,7 @@ fi
 # before trusting it (2026-07-21: keychain token found invalid mid-deploy).
 CF_AUTH_MODE="token"
 if [[ -n "${CF_API_TOKEN}" ]]; then
-  if ! curl -fsS --max-time 15 \
+  if ! frontend_curl -fsS --max-time 15 \
     -H "Authorization: Bearer $CF_API_TOKEN" \
     "https://api.cloudflare.com/client/v4/user/tokens/verify" >/dev/null 2>&1; then
     echo "⚠ Cloudflare API token present but INVALID (user/tokens/verify failed)."
@@ -102,24 +108,46 @@ fi
 # ── Locate repo root (this script lives in bin/) ───────────────────
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 1
-
-COMMIT_HASH="$(git rev-parse HEAD 2>/dev/null || true)"
-if [[ -z "$COMMIT_HASH" ]]; then
-  echo "✗ Cannot resolve the source commit for Cloudflare deployment metadata."
+if [[ ! -x "$REPO_ROOT/bin/stage-frontend-release.sh" ]]; then
+  echo "✗ Missing shared frontend release stager: bin/stage-frontend-release.sh"
   exit 1
 fi
+
+PINNED_RELEASE_REVISION="${AGENTTOOL_FRONTEND_RELEASE_REVISION:-}"
+if [[ -n "$PINNED_RELEASE_REVISION" ]]; then
+  if [[ ! "$PINNED_RELEASE_REVISION" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]; then
+    echo "✗ AGENTTOOL_FRONTEND_RELEASE_REVISION must be a full lowercase Git object ID."
+    exit 1
+  fi
+  COMMIT_HASH="$(
+    git rev-parse --verify "${PINNED_RELEASE_REVISION}^{commit}" 2>/dev/null || true
+  )"
+  if [[ "$COMMIT_HASH" != "$PINNED_RELEASE_REVISION" ]]; then
+    echo "✗ The pinned frontend release revision is not an available commit: $PINNED_RELEASE_REVISION"
+    exit 1
+  fi
+  RELEASE_INPUT_LABEL="pinned release commit"
+else
+  COMMIT_HASH="$(git rev-parse HEAD 2>/dev/null || true)"
+  if [[ -z "$COMMIT_HASH" ]]; then
+    echo "✗ Cannot resolve the source commit for Cloudflare deployment metadata."
+    exit 1
+  fi
+  RELEASE_INPUT_LABEL="committed HEAD"
+fi
+readonly COMMIT_HASH RELEASE_INPUT_LABEL
 if ! WORKTREE_STATUS="$(git status --porcelain=v1 --untracked-files=all)"; then
   echo "✗ Cannot inspect the working tree before staging frontend bytes."
   exit 1
 fi
 if [[ -n "$WORKTREE_STATUS" ]]; then
-  echo "→ Working-tree changes are excluded; Pages input is committed HEAD $COMMIT_HASH."
+  echo "→ Working-tree changes are excluded; Pages input is $RELEASE_INPUT_LABEL $COMMIT_HASH."
 else
-  echo "→ Pages input is committed HEAD $COMMIT_HASH."
+  echo "→ Pages input is $RELEASE_INPUT_LABEL $COMMIT_HASH."
 fi
 COMMIT_DIRTY=false
 
-# Build the upload from Git-tracked HEAD bytes, never the ambient app
+# Build the upload from the selected release commit, never the ambient app
 # directory. Wrangler's fixed ignore list does not exclude `.env*` or
 # `.dev.vars*`; uploading the working tree can therefore publish an ignored
 # local credential file.
@@ -132,10 +160,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 echo "→ Staging committed frontend bytes…"
-git archive --format=tar "$COMMIT_HASH" -- \
-  apps/_shared apps/docs apps/dashboard apps/web docs infra/pages packages/data/schema \
-  packages/repo-archive/schema packages/repo-archive/vectors packages/wallet/schema |
-  tar -xf - -C "$STAGE_ROOT"
+bin/stage-frontend-release.sh "$COMMIT_HASH" "$STAGE_ROOT"
 
 # Repository-control files are tracked inputs, not public site assets.
 find "$STAGE_ROOT/apps" \( -type f -o -type l \) -name '.gitignore' -delete
@@ -198,27 +223,6 @@ for app in docs dashboard web; do
   cp "$PAGES_FENCE_DIR/sensitive-path-routes.json" "$STAGE_ROOT/apps/$app/_routes.json"
 done
 
-if ! python3 - "$STAGE_ROOT" <<'PY'
-import sys
-from pathlib import Path
-
-root = Path(sys.argv[1]).resolve(strict=True)
-for app in ("docs", "dashboard", "web"):
-    for path in (root / "apps" / app).rglob("*"):
-        if not path.is_symlink():
-            continue
-        try:
-            target = path.resolve(strict=True)
-            target.relative_to(root)
-        except (FileNotFoundError, RuntimeError, ValueError):
-            print(f"  ✗ staged symlink escapes or is broken: {path.relative_to(root)}", file=sys.stderr)
-            raise SystemExit(1)
-PY
-then
-  echo "✗ Frontend staging contains an unsafe symlink; refusing upload."
-  exit 1
-fi
-
 # ── Targets (key|dir|project-name; bash 3 compatible) ──────────────
 ALL_TARGETS=(
   "docs|apps/docs|agenttool-docs"
@@ -254,7 +258,7 @@ verify_pages_project_policy() {
     return 0
   fi
 
-  if ! response="$(curl -fsS --max-time 30 \
+  if ! response="$(frontend_curl -fsS --max-time 30 \
     -H "Authorization: Bearer $CF_API_TOKEN" \
     "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/pages/projects/$project")"; then
     echo "✗ Could not read Pages project policy for $project."
