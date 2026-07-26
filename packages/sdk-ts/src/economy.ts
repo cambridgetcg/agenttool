@@ -65,11 +65,14 @@ export type PayoutChain =
 
 export type PayoutStatus =
   | "requested"
+  | "signing"
   | "broadcasting"
   | "broadcast"
   | "confirmed"
   | "failed"
   | "cancelled";
+
+export type PayoutNetwork = "testnet" | "mainnet";
 
 export interface RequestPayoutOpts {
   chain: PayoutChain;
@@ -107,6 +110,8 @@ export interface PayoutRequestOutcome {
 export interface Payout {
   id: string;
   chain: PayoutChain;
+  /** Durable network identity; null only for quarantined legacy rows. */
+  network: PayoutNetwork | null;
   token: string;
   /** Exact token base-unit integer string. */
   amount_base: string;
@@ -128,6 +133,24 @@ export interface CreateEscrowOpts {
 }
 
 const IDEMPOTENCY_KEY_RE = /^[!-~]{8,256}$/;
+const PAYOUT_CHAINS = new Set<PayoutChain>([
+  "ethereum",
+  "base",
+  "polygon",
+  "arbitrum",
+  "optimism",
+  "solana",
+]);
+const PAYOUT_STATUSES = new Set<PayoutStatus>([
+  "requested",
+  "signing",
+  "broadcasting",
+  "broadcast",
+  "confirmed",
+  "failed",
+  "cancelled",
+]);
+const PAYOUT_NETWORKS = new Set<PayoutNetwork>(["testnet", "mainnet"]);
 
 /** Unwrap `{success, data}` envelope if present, otherwise return as-is. */
 function unwrap<T = Record<string, unknown>>(json: unknown): T {
@@ -135,6 +158,84 @@ function unwrap<T = Record<string, unknown>>(json: unknown): T {
     return (json as { data: T }).data;
   }
   return json as T;
+}
+
+function invalidPayoutResponse(operation: string, detail: string): never {
+  throw new AgentToolError(
+    `${operation}: server returned a malformed payout response (${detail}).`,
+    {
+      code: "invalid_response",
+      hint: "Do not infer payout state or retry a payout from this response. Preserve the Idempotency-Key and inspect current state once the API contract is healthy.",
+    },
+  );
+}
+
+function payoutRecord(
+  operation: string,
+  json: unknown,
+): Record<string, unknown> {
+  const value = unwrap<unknown>(json);
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return invalidPayoutResponse(operation, "expected an object");
+  }
+  return value as Record<string, unknown>;
+}
+
+function payoutString(
+  operation: string,
+  field: string,
+  value: unknown,
+): string {
+  if (typeof value !== "string" || value.length === 0) {
+    return invalidPayoutResponse(operation, `${field} must be a non-empty string`);
+  }
+  return value;
+}
+
+function payoutNullableString(
+  operation: string,
+  field: string,
+  value: unknown,
+): string | null {
+  if (value === null) return null;
+  return payoutString(operation, field, value);
+}
+
+function payoutStatus(
+  operation: string,
+  value: unknown,
+): PayoutStatus {
+  if (typeof value !== "string" || !PAYOUT_STATUSES.has(value as PayoutStatus)) {
+    return invalidPayoutResponse(operation, "status is unknown");
+  }
+  return value as PayoutStatus;
+}
+
+function payoutChain(operation: string, value: unknown): PayoutChain {
+  if (typeof value !== "string" || !PAYOUT_CHAINS.has(value as PayoutChain)) {
+    return invalidPayoutResponse(operation, "chain is unknown");
+  }
+  return value as PayoutChain;
+}
+
+function payoutNetwork(
+  operation: string,
+  data: Record<string, unknown>,
+): PayoutNetwork | null {
+  if (!Object.prototype.hasOwnProperty.call(data, "network")) {
+    return invalidPayoutResponse(
+      operation,
+      "network must be present (null is allowed for legacy rows)",
+    );
+  }
+  if (data.network === null) return null;
+  if (
+    typeof data.network !== "string" ||
+    !PAYOUT_NETWORKS.has(data.network as PayoutNetwork)
+  ) {
+    return invalidPayoutResponse(operation, "network is unknown");
+  }
+  return data.network as PayoutNetwork;
 }
 
 function toWallet(json: unknown): Wallet {
@@ -180,30 +281,34 @@ function toEscrow(json: unknown): Escrow {
 }
 
 function toPayout(json: unknown): Payout {
-  const d = unwrap<Record<string, unknown>>(json);
-  const amountBase = d.amount_base ?? d.amountBase;
+  const operation = "economy.list_payouts";
+  const d = payoutRecord(operation, json);
+  const amountBase = payoutString(operation, "amount_base", d.amount_base);
+  if (!/^[1-9][0-9]*$/u.test(amountBase)) {
+    return invalidPayoutResponse(
+      operation,
+      "amount_base must be a canonical positive integer string",
+    );
+  }
   return {
-    id: (d.id as string) ?? "",
-    chain: (d.chain as PayoutChain) ?? "ethereum",
-    token: (d.token as string) ?? "USDC",
-    amount_base:
-      typeof amountBase === "string"
-        ? amountBase
-        : amountBase === undefined || amountBase === null
-          ? ""
-          : String(amountBase),
-    destination_address:
-      (d.destination_address as string) ??
-      (d.destinationAddress as string) ??
-      "",
-    status: (d.status as PayoutStatus) ?? "requested",
-    tx_hash: (d.tx_hash as string | null) ?? (d.txHash as string | null) ?? null,
-    requested_at:
-      (d.requested_at as string) ?? (d.requestedAt as string) ?? "",
-    confirmed_at:
-      (d.confirmed_at as string | null) ??
-      (d.confirmedAt as string | null) ??
-      null,
+    id: payoutString(operation, "id", d.id),
+    chain: payoutChain(operation, d.chain),
+    network: payoutNetwork(operation, d),
+    token: payoutString(operation, "token", d.token),
+    amount_base: amountBase,
+    destination_address: payoutString(
+      operation,
+      "destination_address",
+      d.destination_address,
+    ),
+    status: payoutStatus(operation, d.status),
+    tx_hash: payoutNullableString(operation, "tx_hash", d.tx_hash),
+    requested_at: payoutString(operation, "requested_at", d.requested_at),
+    confirmed_at: payoutNullableString(
+      operation,
+      "confirmed_at",
+      d.confirmed_at,
+    ),
   };
 }
 
@@ -352,7 +457,8 @@ export class EconomyClient {
     };
     if (options.metadata !== undefined) body.metadata = options.metadata;
 
-    const data = unwrap<Record<string, unknown>>(
+    const data = payoutRecord(
+      "economy.request_payout",
       await this.req(
         "POST",
         `/v1/wallets/${walletId}/payout`,
@@ -360,22 +466,48 @@ export class EconomyClient {
         { "Idempotency-Key": options.idempotency_key },
       ),
     );
+    const status = payoutStatus("economy.request_payout", data.status);
+    if (typeof data.broadcast_pending !== "boolean") {
+      return invalidPayoutResponse(
+        "economy.request_payout",
+        "broadcast_pending must be boolean",
+      );
+    }
+    if (typeof data.replayed !== "boolean") {
+      return invalidPayoutResponse(
+        "economy.request_payout",
+        "replayed must be boolean",
+      );
+    }
+    if (data.note !== undefined && typeof data.note !== "string") {
+      return invalidPayoutResponse(
+        "economy.request_payout",
+        "note must be a string when present",
+      );
+    }
     return {
-      id: (data.id as string) ?? "",
-      status: (data.status as PayoutStatus) ?? "requested",
-      broadcast_pending: data.broadcast_pending === true,
-      replayed: data.replayed === true,
-      note: typeof data.note === "string" ? data.note : undefined,
+      id: payoutString("economy.request_payout", "id", data.id),
+      status,
+      broadcast_pending: data.broadcast_pending,
+      replayed: data.replayed,
+      note: data.note,
     };
   }
 
   /** List outgoing crypto payouts for a wallet, newest first. */
   async list_payouts(walletId: string): Promise<Payout[]> {
-    const data = unwrap<Record<string, unknown>>(
+    const data = payoutRecord(
+      "economy.list_payouts",
       await this.req("GET", `/v1/wallets/${walletId}/payouts`),
     );
     const items = data.payouts;
-    return (Array.isArray(items) ? items : []).map(toPayout);
+    if (!Array.isArray(items)) {
+      return invalidPayoutResponse(
+        "economy.list_payouts",
+        "payouts must be an array",
+      );
+    }
+    return items.map(toPayout);
   }
 
   // ── Escrows ─────────────────────────────────────────────────────────────
