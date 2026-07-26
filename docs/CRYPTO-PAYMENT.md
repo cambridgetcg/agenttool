@@ -50,9 +50,9 @@ Returns:
   "address": "0xDba9494837f85E5284b6401B29b860591b744088",
   "derivation_path": "m/44'/60'/0'/0/2059516119",
   "contract_address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-  "watch_status": "provider_accepted",
+  "watch_status": "provider_verified",
   "credit_finality": "unreconciled",
-  "instructions": "Send USDC to this address from any wallet. The chain-specific Alchemy watch accepted the address, but deposit finality and reorg reversal are not yet reconciled; do not treat credited value as production-final."
+  "instructions": "Send USDC to this address from any wallet. The chain-specific Alchemy watch was independently observed active, correctly targeted, and containing this address; deposit finality and reorg reversal are still unreconciled, so do not treat credited value as production-final."
 }
 ```
 
@@ -66,11 +66,15 @@ Properties of the address:
 - **Cross-chain stable on EVM.** Base, Ethereum, Polygon, Arbitrum, Optimism all share the same address — that's how EVM accounts work. Each `(chain, token)` row exists independently so per-chain webhooks attribute correctly, but the address text is identical.
 - **No on-chain transaction needed to mint.** The address exists because the math says it does; we record the row for indexing and webhook attribution.
 
-An EVM response reports `watch_status: provider_accepted` only after its
-chain-specific Alchemy watch update succeeds. A Solana response instead
-reports `operator_configuration_unverified`: derivation and signed Helius
-ingress exist, but the API has no provider watch-registration adapter and does
-not claim that the new address is observed.
+An EVM response reports `watch_status: provider_verified` only after the
+durable reconciler independently observes the exact active Address Activity
+webhook, expected network and callback URL, plus this address's membership.
+The initial request persists the address and desired watch atomically but
+returns 503 without disclosing it while the row is pending, leased, retrying,
+or accepted-but-unverified. A PATCH 200 is never enough by itself. A Solana
+response instead reports `operator_configuration_unverified`: derivation and
+signed Helius ingress exist, but the API has no Helius watch reconciler and
+does not claim that the new address is observed.
 
 ### 2. Send USDC to it
 
@@ -173,9 +177,10 @@ This is the same posture as Stripe — Stripe is *our* payment infra, not a serv
 | `CRYPTO_HD_MNEMONIC` | Mainnet deposit address derivation and payout signing | 12 or 24 word BIP-39 mnemonic. **Back this up offline.** Losing it means losing all derived addresses (and the funds at them). |
 | `CRYPTO_HD_MNEMONIC_TESTNET` | Testnet deposit address derivation and payout signing | Kept separate from the mainnet root. Address creation and signing select the same active root. |
 | `ALCHEMY_API_KEY` | EVM RPC | Sent in an `Authorization: Bearer` header rather than the RPC URL. Use a scoped app/access key. |
-| `ALCHEMY_NOTIFY_AUTH_TOKEN` | EVM address-watch registration | Notify control-plane token. Used only to idempotently add a derived address to an existing per-chain webhook. |
+| `ALCHEMY_NOTIFY_AUTH_TOKEN` | EVM address-watch reconciliation | Notify control-plane token. Used only to inspect exact webhook metadata/membership and idempotently change one desired address membership. |
+| `AGENTTOOL_PUBLIC_URL` | EVM callback verification | Explicit HTTPS API origin. The worker derives the per-chain webhook route from it and will not guess a production callback. |
 | `ALCHEMY_WEBHOOK_SIGNING_KEY_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` | EVM inbound transfer ingestion | HMAC-SHA256 signing key from that specific webhook's detail page. Configure each webhook to POST to its matching `/v1/billing/crypto-webhook/<chain>` route; never reuse one key for all five. |
-| `ALCHEMY_WEBHOOK_ID_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` | EVM address-watch registration | Existing Address Activity webhook ID for each chain. The API refuses to promise automatic detection when the relevant registration is unconfigured or fails. |
+| `ALCHEMY_WEBHOOK_ID_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` | EVM address-watch reconciliation | Existing Address Activity webhook ID for each chain. The API refuses to disclose an EVM deposit address until the relevant active-network target converges. |
 | `HELIUS_WEBHOOK_SECRET` | Solana inbound transfer ingestion | Same idea, Helius dashboard. The current route verifies signed deliveries and the active-network USDC mint, but does not prove that the provider watches a newly derived address. |
 
 Per-wallet settings (set on the wallet, not env): minimum payout amount,
@@ -191,6 +196,7 @@ reorg/subscription reconciliation work live in [ALCHEMY.md](ALCHEMY.md).
 
 ```
 economy.deposit_addresses        — wallet ↔ deposit address per (chain, token)
+economy.deposit_address_watches  — desired/observed provider watch + lease state
 economy.onchain_identities       — verified bindings (wallet ↔ external addr)
 economy.crypto_payouts           — outgoing transfer requests (lifecycle)
 economy.crypto_webhook_events    — inbound transfer log + idempotency
@@ -200,7 +206,10 @@ Migrations: `api/migrations/0002_crypto_payment.sql` (historical foundation)
 and `api/migrations/20260725T054912_crypto_deposit_identity.sql` (logical
 wallet/chain/token uniqueness, canonical case-insensitive EVM identity, and
 non-null event log identity; intentionally fails for operator reconciliation
-if conflicting historical rows exist).
+if conflicting historical rows exist), plus
+`api/migrations/20260726T070000_deposit_watch_reconciliation.sql` (durable
+provider-neutral watch generations, bounded attempts/backoff, and leases; it
+does not guess/backfill provider or network for historical rows).
 
 ---
 
@@ -210,19 +219,18 @@ Solana derivation/signature verification, Helius ingress, EVM/Solana payout
 broadcast, confirmation polling, and payout policy gates are implemented.
 Before production crypto enablement, the remaining load-bearing work is:
 
-1. durable provider-neutral webhook watch reconciliation;
+1. finish wiring and operationally verifying the durable provider-neutral
+   webhook watch reconciler against each configured provider;
 2. independent deposit confirmations plus removed-log credit
    reversal/quarantine;
 3. persisted provider event outcomes plus deployment reconciliation for the
    local non-null log-identity migration;
 4. live provider-contract verification for the Helius adapter;
-5. move daily payout-ceiling admission under the same wallet transaction/lock
-   so concurrent requests cannot both pass the aggregate check;
-6. replace the bounded floating GBP/USD rate calculation with fixed-point
+5. replace the bounded floating GBP/USD rate calculation with fixed-point
    rational arithmetic;
-7. the session-level per-source lock that closes the remaining cross-replica
-   nonce window; and
-8. an operator-reviewed testnet cutover before any separately authorized
+6. persist Solana blockhash-expiry evidence and build an audited ambiguity
+   reversal/replacement lifecycle; and
+7. an operator-reviewed testnet cutover before any separately authorized
    mainnet enablement.
 
 ---

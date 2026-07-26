@@ -2,11 +2,21 @@
 
 > **Compass:** [CRYPTO-PAYMENT](CRYPTO-PAYMENT.md) (inbound funding) · [PAYOUT-BROADCAST](PAYOUT-BROADCAST.md) (outbound lifecycle) · [AGENT-WALLET-0.1](specs/AGENT-WALLET-0.1.md) (authority boundary) · [ECOSYSTEM](ECOSYSTEM.md) (wider protocol map)
 >
-> **Implements:** A bounded provider seam for EVM RPC, Address Activity watch registration, signed webhook ingress, and future read/simulation tools.
+> **Implements:** A bounded provider seam for EVM RPC, durable Address
+> Activity watch reconciliation, signed webhook ingress, and closed internal
+> read/simulation operations.
 >
-> **Code:** `api/src/services/economy/crypto/alchemy-notify.ts` · `api/src/services/economy/crypto/network.ts` · `api/src/services/economy/crypto/sign-evm.ts` · `api/src/routes/economy/crypto.ts` · `api/migrations/20260725T054912_crypto_deposit_identity.sql`
+> **Code:** `api/src/services/economy/crypto/alchemy-internal-adapter.ts` ·
+> `api/src/services/economy/crypto/alchemy-watch-reconciler.ts` ·
+> `api/src/services/economy/crypto/deposit-watch.ts` ·
+> `api/src/workers/deposit-watch/` · `api/src/routes/economy/crypto.ts` ·
+> `api/migrations/20260726T070000_deposit_watch_reconciliation.sql`
 >
-> **Tests:** `api/tests/alchemy-notify.test.ts` · `api/tests/alchemy-deposit-invariants.test.ts` · `api/tests/crypto-webhook-fail-closed.test.ts` · `api/tests/alchemy-rpc-auth.test.ts` · `api/tests/payout-refund-integrity.test.ts` · `api/tests/payout-submit-outcome.test.ts`
+> **Tests:** `api/tests/alchemy-internal-adapter.test.ts` ·
+> `api/tests/alchemy-watch-reconciler.test.ts` ·
+> `api/tests/deposit-watch-reconciliation.test.ts` ·
+> `api/tests/alchemy-watch-worker-config.test.ts` ·
+> `api/tests/crypto-webhook-fail-closed.test.ts`
 
 ## Decision
 
@@ -31,7 +41,7 @@ AgentTool's provider quota or credential through public MCP.
 | [Chain APIs](https://www.alchemy.com/docs/chains) | EVM and non-EVM JSON-RPC, receipts, logs, subscriptions | Chain and method coverage varies. A provider response is evidence, not chain finality by itself. |
 | [Data APIs](https://www.alchemy.com/docs/data) | Transfers, token balances/metadata, prices, portfolios, NFTs | Indexed/enriched data can lag, omit unsupported cases, or include untrusted off-chain metadata. |
 | [Webhooks](https://www.alchemy.com/docs/reference/webhooks-overview) | Push address/contract activity without polling | Verify raw-body HMAC, deduplicate, acknowledge only after durable commit, and reconcile reorgs. |
-| [Transaction Simulation](https://www.alchemy.com/docs/reference/simulation) | Asset-change and execution evidence before a proposal reaches a signer | A snapshot prediction is not authorization or a guarantee of later execution. |
+| [Transaction Simulation](https://www.alchemy.com/docs/reference/simulation) | Asset-change and execution evidence before a proposal reaches a signer | A snapshot prediction is not authorization or a guarantee of later execution. Alchemy marks these endpoints for deprecation on 2026-09-30, so AgentTool exposes the date in every simulation result and keeps the seam replaceable. |
 | [Wallet APIs](https://www.alchemy.com/docs/wallets/quickstart) | Prepared calls, smart accounts, batching, session permissions, sponsorship | State-changing use belongs behind `@agenttool/wallet`; never give a model a root session or an unrestricted send tool. |
 | [Hosted MCP](https://www.alchemy.com/docs/alchemy-mcp-server) | Fast interactive research from an OAuth-capable coding client | The hosted server includes admin and state-changing wallet tools as well as reads. Do not treat the whole server as a read-only capability. |
 | [Alchemy CLI](https://www.alchemy.com/docs/alchemy-cli) | Operator queries, JSON output, device/browser authentication | Some commands send, swap, approve, pay, or mutate account configuration. `--json --no-interactive` makes a command machine-readable, not harmless. |
@@ -55,9 +65,11 @@ provider path is live.
 ```text
 GET deposit-address
   -> derive network-specific address
-  -> persist local address
-  -> idempotently add address to the chain's Alchemy webhook
-  -> return automatic-deposit instructions only after provider acceptance
+  -> atomically persist local address + desired provider/network watch
+  -> leased worker verifies exact webhook id/type/network/active/callback
+  -> independently GET bounded paginated address membership
+  -> if opposite: idempotent PATCH, record accepted_unverified, retry GET later
+  -> return automatic-deposit instructions only after observed convergence
 
 Alchemy signed delivery
   -> independently count the actual stream up to 1 MiB
@@ -86,13 +98,14 @@ URL. This reduces accidental leakage through URL logs and errors; it does not
 make a key non-secret. When enabled, the service must receive its scoped key
 through the deployment secret boundary.
 
-Address registration is deliberately idempotent. The current narrow adapter
-updates an existing per-chain Address Activity webhook and never creates,
-deletes, or reconfigures an Alchemy app or webhook. If provider registration
-fails, the local address remains recoverable and the same GET retries the
-registration, but the API refuses to claim that detection is active. Successful
-registrations are cached only within one process to avoid PATCHing on every
-read; this is an availability optimization, not durable subscription state.
+Address registration is deliberately idempotent. Desired and observed state,
+generation, attempts, bounded backoff, and short leases live in
+`economy.deposit_address_watches`; credentials and provider bodies do not.
+The worker updates an existing per-chain Address Activity webhook and never
+creates, deletes, retargets, or activates one. A provider PATCH acknowledgement
+becomes `accepted_unverified` and is scheduled for a later independent GET.
+Only exact current-generation observation becomes `converged`; even that does
+not prove future delivery or chain finality.
 
 ## Agent-facing integration
 
@@ -116,7 +129,7 @@ raw private keys, or opaque wallet-session authority into the journal.
 
 ### Deterministic services and reusable tools
 
-A future local `@agenttool/alchemy` adapter should expose named operations, not
+The API now contains a closed internal adapter with six named operations, not
 arbitrary JSON-RPC:
 
 ```text
@@ -124,13 +137,17 @@ alchemy.read.balance
 alchemy.read.receipt
 alchemy.read.logs
 alchemy.read.transfers
-alchemy.read.token_metadata
-alchemy.read.price
 alchemy.simulate.asset_changes
 alchemy.simulate.execution
 ```
 
-It should accept an injected `fetch`/transport. On a developer machine,
+It accepts an injected `fetch`/transport, fixed Alchemy HTTPS origins,
+Bearer-only key delivery, request/response size limits, and a deadline. It
+does not accept a caller-selected endpoint or method, raw/signed transaction,
+private key, or broadcast operation. It is intentionally not mounted on public
+HTTP or MCP yet; the provider quota and credential remain API-internal.
+
+On a developer machine,
 `@agenttool/credential-broker` can inject an Alchemy key as a Bearer header for
 one exact HTTPS origin and path without returning the key to the agent. The
 portable broker is still a same-user developer preview, not a universal
@@ -166,6 +183,7 @@ information. Those remain hypotheses requiring independent evidence.
 |---|---|
 | `ALCHEMY_API_KEY` | Scoped Chain/Data API key used in a Bearer header for EVM RPC. |
 | `ALCHEMY_NOTIFY_AUTH_TOKEN` | Notify control-plane token used only to update existing webhook address sets. |
+| `AGENTTOOL_PUBLIC_URL` | Explicit HTTPS API origin used to verify each webhook callback target. The watch worker does not guess the production URL. |
 | `ALCHEMY_WEBHOOK_SIGNING_KEY_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` | The signing key from that specific webhook's detail page; used only for raw-body HMAC verification on the matching route. |
 | `ALCHEMY_WEBHOOK_ID_ETHEREUM` | Existing Ethereum Address Activity webhook to update. |
 | `ALCHEMY_WEBHOOK_ID_BASE` | Existing Base Address Activity webhook to update. |
@@ -184,8 +202,6 @@ Collab records, or model-facing errors.
 
 ## Remaining work before stronger claims
 
-- Persist desired/observed watch-subscription state in a provider-neutral
-  outbox and reconcile it independently of a client retry.
 - Reverse or quarantine previously credited transfers when Alchemy delivers a
   `removed` reorg log. The current route returns 503 instead of silently
   acknowledging it, but does not yet perform the reversal.
@@ -195,9 +211,6 @@ Collab records, or model-facing errors.
   transaction/log identity. The local migration now makes `log_index`
   non-null, but it is not deployed and intentionally requires reconciliation
   of historical null rows.
-- Verify that configured webhooks are active Address Activity subscriptions
-  targeting the intended route; Notify PATCH acceptance alone does not prove
-  that operational state.
 - Add bounded retries with `Retry-After`, jitter, and telemetry for read-only
   provider calls. Never automatically retry ambiguous broadcasts.
 - Before enabling payouts, replace the bounded floating FX quote with
@@ -205,8 +218,11 @@ Collab records, or model-facing errors.
   admission is now evaluated after taking the wallet transaction lock, so
   concurrent requests for one wallet cannot independently spend the same
   remaining ceiling.
-- Build the named read/simulation adapter and its local MCP surface only after
-  the provider-internal safety work is complete.
+- Decide whether to expose a project-authenticated subset of the internal
+  named adapter. Do not mount arbitrary RPC or provider administration on MCP.
+- Run a credentialed staging wire proof of webhook metadata, pagination,
+  PATCH-then-GET convergence, and callback delivery before claiming the worker
+  is operational. Hermetic tests do not prove provider/account state.
 
 Until those items land, Alchemy is a useful replaceable infrastructure
 provider, not a source of truth, identity, consent, or transaction authority.

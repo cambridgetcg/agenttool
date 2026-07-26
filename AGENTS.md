@@ -98,7 +98,7 @@ Environment vars (set in shell or `.env` per workspace — there is no `.env.exa
 - `REDIS_URL` — Redis (BullMQ + SSE backplane)
 - `STRIPE_SECRET_KEY` · `STRIPE_WEBHOOK_SECRET` — payments
 - `ALCHEMY_API_KEY` — scoped EVM RPC key, sent in a Bearer header
-- `ALCHEMY_NOTIFY_AUTH_TOKEN` · `ALCHEMY_WEBHOOK_ID_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` — idempotent registration of derived EVM deposit addresses on existing Address Activity webhooks
+- `ALCHEMY_NOTIFY_AUTH_TOKEN` · `ALCHEMY_WEBHOOK_ID_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` · explicit `AGENTTOOL_PUBLIC_URL` — durable PATCH-then-GET reconciliation of derived EVM deposit addresses on exact existing Address Activity webhooks
 - `ALCHEMY_WEBHOOK_SIGNING_KEY_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` — webhook-specific raw-body HMAC verification for inbound EVM deposit events
 - `VAULT_MASTER_KEY` — HKDF root for server-encrypted vault entries
 - `ANTHROPIC_API_KEY` · `OPENAI_API_KEY` · `OLLAMA_API_KEY` — for adapter + opt-in contract tests

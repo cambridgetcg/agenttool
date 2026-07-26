@@ -966,6 +966,30 @@ if (payoutWorkerBootAllowed()) {
     });
 }
 
+// Durable Alchemy deposit-watch reconciliation. The worker is globally gated
+// here and starts only when the Notify token plus an explicit
+// AGENTTOOL_PUBLIC_URL are configured. Missing configuration leaves desired
+// rows pending; it never guesses a production callback or falls back to the
+// old request-time provider mutation path.
+if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
+  void import("./workers/deposit-watch/alchemy")
+    .then(({ startAlchemyDepositWatchWorker }) => {
+      const result = startAlchemyDepositWatchWorker();
+      if (result === "unconfigured") {
+        console.warn(
+          "[agenttool] Alchemy deposit-watch worker did not start: configure ALCHEMY_NOTIFY_AUTH_TOKEN and explicit AGENTTOOL_PUBLIC_URL; desired watches remain pending.",
+        );
+      }
+    })
+    .catch(() => {
+      // Fixed diagnostic only: module/provider exception text could contain
+      // infrastructure detail and is not needed for the startup decision.
+      console.warn(
+        "[agenttool] Alchemy deposit-watch worker did not start: startup_failed.",
+      );
+    });
+}
+
 // Covenant workers (Federated Covenants v2). Gated on AGENTTOOL_DISABLE_WORKERS
 // for consistency with browse/think workers. Handles cosign propagation, proposal
 // expiration, and periodic re-verification of active covenants.
