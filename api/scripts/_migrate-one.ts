@@ -118,8 +118,10 @@ function firstExecutableSql(text: string): string {
 }
 
 export function shouldWrapInTransaction(text: string): boolean {
-  // Opt-out marker (e.g. for CREATE INDEX CONCURRENTLY).
-  if (/^--\s*@no-transaction\b/m.test(text)) return false;
+  // Opt-out marker (e.g. for CREATE INDEX CONCURRENTLY). Require a dedicated
+  // marker line: prose such as "`@no-transaction` is NOT set" must not
+  // silently weaken migration atomicity.
+  if (/^--[ \t]+@no-transaction[ \t]*$/m.test(text)) return false;
   // Legacy migrations that already manage their own BEGIN/COMMIT. Only
   // inspect the first executable statement so a later PL/pgSQL `BEGIN` does
   // not accidentally change transaction behavior.
