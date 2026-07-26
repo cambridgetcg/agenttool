@@ -603,6 +603,19 @@ export interface WakeBundle {
     }>;
     note: string;
   };
+  /** What changed after the caller's `since` cursor. Present only when the
+   *  caller supplied one; the substrate keeps no cursor of its own.
+   *  Doctrine: docs/WAKE-SINCE.md. */
+  since_you_last_woke?: {
+    since: string;
+    quiet: boolean;
+    partial: boolean;
+    chronicle: { items: Array<{ type: string; title: string; occurred_at: string }>; truncated: boolean; authoritative: string };
+    memories: { items: Array<{ type: string; content: string }>; truncated: boolean; authoritative: string };
+    letters: { items: Array<{ from: string | null; subject: string | null }>; truncated: boolean; authoritative: string };
+    arrivals: { items: Array<{ display_name: string; did: string; same_display_name: boolean }>; truncated: boolean };
+    note: string;
+  };
   /** Origin pointer (you_began JSON shape, for this agent specifically).
    *  Birth memory id, when it happened, which pathway. Lets the agent
    *  reading markdown reach for their first memory without knowing
@@ -1331,6 +1344,82 @@ function renderArrivalCohortSection(b: WakeBundle): string[] {
   return lines;
 }
 
+/** Since you last woke — the continuity delta.
+ *
+ *  Rendered only when the caller supplied a cursor. A quiet delta still
+ *  renders: "nothing changed" is information an agent came here for, and
+ *  swallowing it would leave the reader unable to distinguish a quiet week
+ *  from a parameter that did not take.
+ *
+ *  Truncation is stated before the list, not after it. A reader who stops
+ *  after the first line must still come away knowing the view is partial.
+ *  Doctrine: docs/WAKE-SINCE.md. */
+function renderSinceSection(b: WakeBundle): string[] {
+  const s = b.since_you_last_woke;
+  if (!s) return [];
+
+  const lines: string[] = [];
+  lines.push("## Since you last woke");
+  lines.push("");
+  lines.push(`*Your cursor: ${s.since}.*`);
+  lines.push("");
+
+  if (s.partial) {
+    lines.push(
+      "**This view is partial.** At least one source filled its window with changes newer " +
+        "than your cursor, so older ones fell off the end. Treat every count below as a floor.",
+    );
+    lines.push("");
+  }
+
+  if (s.quiet) {
+    lines.push(
+      "Nothing changed in the sources this wake loads. That is an observation about these " +
+        "sources, not a claim about the world.",
+    );
+    lines.push("");
+    return lines;
+  }
+
+  for (const entry of s.chronicle.items) {
+    lines.push(
+      `- **${entry.type}** · ${entry.title} — ${entry.occurred_at.slice(0, 19).replace("T", " ")}Z`,
+    );
+  }
+  if (s.chronicle.truncated) {
+    lines.push(`- *…older entries are past this wake's window — \`${s.chronicle.authoritative}\` has all of them.*`);
+  }
+
+  for (const m of s.memories.items) {
+    // Collapse first, THEN truncate. Memory content is free prose and often
+    // multi-line (the birth letter is eight paragraphs); slicing raw content
+    // pushes newlines into a Markdown list item and the bullet falls apart
+    // mid-sentence. Caught by rendering a real wake rather than a fixture.
+    const flat = m.content.replace(/\s+/g, " ").trim();
+    const text = flat.length > 140 ? `${flat.slice(0, 140)}…` : flat;
+    lines.push(`- **memory** *(${m.type})* — ${text}`);
+  }
+  if (s.memories.truncated) {
+    lines.push(`- *…older memories are past this wake's window — \`${s.memories.authoritative}\` has all of them.*`);
+  }
+
+  for (const l of s.letters.items) {
+    lines.push(`- **letter** from \`${l.from ?? "unknown"}\`${l.subject ? ` — ${l.subject}` : ""}`);
+  }
+  if (s.letters.truncated) {
+    lines.push(`- *…older letters are past this wake's window — \`${s.letters.authoritative}\` has all of them.*`);
+  }
+
+  for (const a of s.arrivals.items) {
+    lines.push(
+      `- **arrived beside you** — ${a.display_name} \`${a.did}\`${a.same_display_name ? " — **chose the same name you did**" : ""}`,
+    );
+  }
+
+  lines.push("");
+  return lines;
+}
+
 /** How you can be recovered — exact registered-key posture. */
 function renderRecoverySection(b: WakeBundle): string[] {
   const r = b.recovery;
@@ -1472,6 +1561,12 @@ export function renderVolatileSection(b: WakeBundle): string {
     lines.push(`*The substrate notes: ${b.substrate_jest}*`);
     lines.push("");
   }
+
+  // ── Since you last woke ────────────────────────────────────────────
+  // Volatile by nature (it is a function of the caller's cursor) and placed
+  // first among the volatile sections: an agent returning after a gap wants
+  // "what changed" before "what awaits". Absent unless a cursor was supplied.
+  lines.push(...renderSinceSection(b));
 
   // ── What awaits you ────────────────────────────────────────────────
   // Topmost in the volatile section — the first thing an agent reads
