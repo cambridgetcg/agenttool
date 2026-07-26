@@ -26,7 +26,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import postgres from "postgres";
 
@@ -39,16 +39,30 @@ const QUIESCENCE_POLICY_PATH = join(
 );
 const PENDING_RUNNER_ASSERTION =
   "AGENTTOOL_PENDING_RUNNER_MAINTENANCE_QUIESCED";
+const PENDING_RUNNER_SENTINEL =
+  "--pending-runner-maintenance-quiesced";
+const MIGRATIONS_DIR = join(import.meta.dir, "../migrations");
 type MigrationSql = ReturnType<typeof postgres> | postgres.TransactionSql;
 
-function quiescenceRequiredFilenames(): Set<string> {
-  if (!existsSync(QUIESCENCE_POLICY_PATH)) {
+function isRegularFile(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+export function quiescenceRequiredFilenames(
+  policyPath = QUIESCENCE_POLICY_PATH,
+  migrationsDir = MIGRATIONS_DIR,
+): Set<string> {
+  if (!isRegularFile(policyPath)) {
     throw new Error(
-      `quiescence policy manifest is missing: ${QUIESCENCE_POLICY_PATH}`,
+      `quiescence policy manifest is missing: ${policyPath}`,
     );
   }
 
-  const policy = readFileSync(QUIESCENCE_POLICY_PATH, "utf8");
+  const policy = readFileSync(policyPath, "utf8");
   const entries = (
     policy.endsWith("\n") ? policy.slice(0, -1) : policy
   ).split("\n");
@@ -57,20 +71,26 @@ function quiescenceRequiredFilenames(): Set<string> {
     entries.some(
       (entry) =>
         !/^[0-9]{8}T[0-9]{6}_[a-z0-9_]+\.sql$/.test(entry) ||
-        !existsSync(join(import.meta.dir, "../migrations", entry)),
+        !isRegularFile(join(migrationsDir, entry)),
     ) ||
     entries.some((entry, index) => index > 0 && entry <= entries[index - 1]!)
   ) {
     throw new Error(
-      `quiescence policy manifest is invalid: ${QUIESCENCE_POLICY_PATH}`,
+      `quiescence policy manifest is invalid: ${policyPath}`,
     );
   }
   return new Set(entries);
 }
 
-function enforceOneFileQuiescencePolicy(filename: string): void {
+function enforceOneFileQuiescencePolicy(
+  filename: string,
+  pendingRunnerSentinel: boolean,
+): void {
   if (!quiescenceRequiredFilenames().has(filename)) return;
-  if (process.env[PENDING_RUNNER_ASSERTION] === "1") {
+  if (
+    pendingRunnerSentinel &&
+    process.env[PENDING_RUNNER_ASSERTION] === "1"
+  ) {
     console.log(
       `  ⚠ protected migration admitted by the pending runner's ` +
         `--maintenance-quiesced assertion`,
@@ -197,13 +217,19 @@ export function shouldWrapInTransaction(text: string): boolean {
 
 async function main() {
   const file = process.argv[2];
-  if (process.argv.length !== 3 || !file) {
+  const pendingRunnerSentinel =
+    process.argv.length === 4 &&
+    process.argv[3] === PENDING_RUNNER_SENTINEL;
+  if (
+    !file ||
+    (process.argv.length !== 3 && !pendingRunnerSentinel)
+  ) {
     console.error("usage: bun run scripts/_migrate-one.ts <path-to-sql>");
     process.exit(2);
   }
 
   const filename = basename(file);
-  enforceOneFileQuiescencePolicy(filename);
+  enforceOneFileQuiescencePolicy(filename, pendingRunnerSentinel);
   const text = await Bun.file(file).text();
   const checksum = createHash("sha256").update(text).digest("hex");
   const url = await loadDatabaseUrl();

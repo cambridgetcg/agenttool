@@ -54,6 +54,12 @@ if grep -Fqx "$FILENAME" "$QUIESCENCE_REQUIRED_FILE"; then
   echo "establish the reviewed exclusive cutover, then use" >&2
   echo "bin/migrate-pending.sh --maintenance-quiesced." >&2
   exit "$QUIESCENCE_REQUIRED_EXIT"
+else
+  GREP_STATUS=$?
+  if [ "$GREP_STATUS" -ne 1 ]; then
+    echo "failed to compare migration with the quiescence policy" >&2
+    exit 1
+  fi
 fi
 
 BYTES="$(wc -c < "$ABS_FILE" | tr -d ' ')"

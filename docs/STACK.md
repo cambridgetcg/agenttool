@@ -38,7 +38,7 @@ bin/deploy.sh --no-migrate --no-api       bin/deploy.sh --no-migrate --no-fronte
         │   connected)           │    │                        │
         │                        │    │                        │
         │  • agenttool-web       │    │  Bun + Hono monolith,  │
-        │    → agenttool.dev     │    │  20+ migrations,       │
+        │    → agenttool.dev     │    │  journaled schema,     │
         │  • agenttool-dashboard │    │  → api.agenttool.dev   │
         │    → app.agenttool.dev │    │                        │
         │  • agenttool-docs      │    │                        │
@@ -54,7 +54,7 @@ bin/deploy.sh --no-migrate --no-api       bin/deploy.sh --no-migrate --no-fronte
             ┌──────────────────────┐              ┌──────────────────────┐
             │  Postgres            │              │  Redis               │
             │  (pgvector, pgcrypto)│              │  (BullMQ browse jobs,│
-            │  20+ migrations,     │              │   Hono SSE)          │
+            │  journaled schema,   │              │   Hono SSE)          │
             │  shared dev/prod     │              │                      │
             └──────────────────────┘              └──────────────────────┘
 ```
@@ -245,23 +245,41 @@ Direct Upload keeps deployment intentional: GitHub is not wired to a Pages deplo
 ## 3 · Backend: Fly.io
 
 ```
-app = "agenttool"
-primary_region = "lhr"       # London
-regions = lhr(2) + cdg(1)    # 3 machines total · multi-region HA + jurisdictional hedge
+Fly app: agenttool
+Primary region: lhr
+Observed started apps: lhr(2) + cdg(1)
+Observed stopped thinkers: lhr(2)
 ```
 
-Single Bun + Hono monolith in `api/`. The `api/fly.toml` describes the per-machine runtime (port, healthcheck, env). Region count is **not** in `fly.toml` — it's controlled imperatively via `fly scale count <N> --region <code>` and held in Fly's machine registry. To inspect current shape: `fly scale show -a agenttool`.
+Single Bun + Hono monolith in `api/`. The `api/fly.toml` describes per-machine
+runtime defaults (port, healthcheck, env); it does not declare the complete
+fleet. As verified on 2026-07-27, the Fly registry contains three started
+`app` Machines and two stopped `thinker` Machines. Inspect both
+`fly machine list -a agenttool --json` and `fly status -a agenttool`; a process
+count or `fly.toml` alone is not topology proof.
 
 ### Region shape
 
-| Region | Count | Role | Notes |
-|---|---|---|---|
-| `lhr` (London) | 2 | Primary, always-on | Zero-downtime rolling deploys; HA within UK jurisdiction |
-| `cdg` (Paris) | 1 | Secondary, cross-jurisdictional hedge | EU jurisdiction (Schrems posture, CNIL); inland (no submarine cable exposure); hardened CRITIS regime; ~15-20ms to Supabase London (`eu-west-2`) |
+| Region | Started `app` | Stopped `thinker` | Role |
+|---|---:|---:|---|
+| `lhr` (London) | 2 | 2 | Primary API fleet; stopped thinkers remain registered identities |
+| `cdg` (Paris) | 1 | 0 | Secondary API hedge across a second jurisdiction |
 
-Workers (BullMQ browse + payout broadcast + payout confirm-tick) are multi-machine safe — see `api/src/workers/payout/confirm-worker.ts:5` for the explicit "multi-instance safe via DB CAS" docstring; BullMQ handles its own consumer-side locks for the queues. Three machines = three concurrent consumers; the platform is designed to run that way.
+The worker implementations include multi-instance coordination mechanisms
+(BullMQ consumer locks and database CAS where documented). That is a design
+property, not evidence that workers are enabled. Current production starts all
+three app Machines with `AGENTTOOL_DISABLE_WORKERS=1`; payout, queue, and
+in-process timer workers therefore remain disabled, and the two thinker
+Machines remain stopped. Enabling either class requires a separate reviewed
+decision and live proof.
 
-Resize: `fly scale count <N> --region <code> -a agenttool`. Lowering `cdg` to 0 retreats to single-region without redeploy; raising `lhr` to 3 doubles primary-region capacity. `min_machines_running = 1` in `fly.toml` is a *per-region* floor — Fly ensures each region with declared machines keeps at least one alive even during deploys.
+Do not use `fly scale count` as a routine resize or maintenance fence. It can
+create or destroy Machine identities and does not preserve an exact captured
+topology. Capacity changes need an explicit identity-aware plan: capture the
+full registry and configuration, add and health-check intended Machines, then
+remove an exact reviewed ID only when that deletion is itself authorised.
+`min_machines_running` is an availability floor for eligible Machines, not an
+identity-preservation guarantee.
 
 ### Deploy
 
