@@ -3,21 +3,23 @@
 > **Compass:** [CRYPTO-PAYMENT](CRYPTO-PAYMENT.md) (inbound funding) · [PAYOUT-BROADCAST](PAYOUT-BROADCAST.md) (outbound lifecycle) · [AGENT-WALLET-0.1](specs/AGENT-WALLET-0.1.md) (authority boundary) · [ECOSYSTEM](ECOSYSTEM.md) (wider protocol map)
 >
 > **Implements:** A bounded provider seam for EVM RPC, durable Address
-> Activity watch reconciliation, signed webhook ingress, and closed internal
-> read/simulation operations.
+> Activity watch reconciliation, signed webhook ingress, and
+> developer-preview named read/reconciliation primitives.
 >
 > **Code:** `api/src/services/economy/crypto/alchemy-internal-adapter.ts` ·
 > `api/src/services/economy/crypto/alchemy-watch-reconciler.ts` ·
 > `api/src/services/economy/crypto/deposit-watch.ts` ·
 > `api/src/workers/deposit-watch/` · `api/src/routes/economy/crypto.ts` ·
 > `api/migrations/20260726T070000_deposit_watch_reconciliation.sql` ·
-> `api/migrations/20260726T211500_deposit_watch_target_binding.sql`
+> `api/migrations/20260726T211500_deposit_watch_target_binding.sql` ·
+> `packages/alchemy/src/`
 >
 > **Tests:** `api/tests/alchemy-internal-adapter.test.ts` ·
 > `api/tests/alchemy-watch-reconciler.test.ts` ·
 > `api/tests/deposit-watch-reconciliation.test.ts` ·
 > `api/tests/alchemy-watch-worker-config.test.ts` ·
-> `api/tests/crypto-webhook-fail-closed.test.ts`
+> `api/tests/crypto-webhook-fail-closed.test.ts` ·
+> `packages/alchemy/tests/`
 
 ## Decision
 
@@ -145,34 +147,41 @@ raw private keys, or opaque wallet-session authority into the journal.
 
 ### Deterministic services and reusable tools
 
-The API now contains a closed internal adapter with six named operations, not
-arbitrary JSON-RPC:
+The developer-preview `@agenttool/alchemy` package exposes a deliberately
+smaller set of named observations, not arbitrary JSON-RPC:
 
 ```text
-alchemy.read.balance
-alchemy.read.receipt
-alchemy.read.logs
-alchemy.read.transfers
-alchemy.simulate.asset_changes
-alchemy.simulate.execution
+eth_chainId
+eth_blockNumber
+eth_getBlockByNumber
+eth_getBalance
+eth_getTransactionByHash
+eth_getTransactionReceipt
+eth_getCode
+alchemy_getAssetTransfers (one bounded page)
 ```
 
-It accepts an injected `fetch`/transport, fixed Alchemy HTTPS origins,
-Bearer-only key delivery, request/response size limits, and a deadline. It
-does not accept a caller-selected endpoint or method, raw/signed transaction,
-private key, or broadcast operation. It is intentionally not mounted on public
-HTTP or MCP yet; the provider quota and credential remain API-internal.
+It accepts an injected structural transport that receives a fixed network and
+CAIP-2 identity, one closed method/parameter tuple, an `AbortSignal`, an
+absolute deadline, and a response-byte limit. The package never accepts a URL,
+API key, header, signer, wallet, generic request method, or provider-admin
+token. The host transport maps the network to a trusted origin, injects
+credentials outside the package, generates and validates the JSON-RPC
+envelope/correlation ID, bounds the response while reading it, collapses
+provider diagnostics, and returns only a parsed result rebound to the requested
+method and chain. On a developer machine,
+`@agenttool/credential-broker` can perform that exact-origin Bearer injection
+without returning the key to the agent. The portable broker is still a
+same-user developer preview, not a universal process-isolation or
+trusted-consent guarantee.
 
-On a developer machine,
-`@agenttool/credential-broker` now has a negotiated
-`agentcred.evm-jsonrpc-read/0.1` primitive for the seven bounded core reads
-needed beneath that adapter. It fixes the owner-approved HTTPS origin and
-`/v2` path, builds the JSON-RPC envelope and ID inside the broker, validates
-method-specific params, and injects an Alchemy key only as a Bearer header.
-The agent supplies no URL, headers, raw body, batch, notification, or arbitrary
-method. This primitive is not yet the named `@agenttool/alchemy` adapter above,
-and the portable broker remains a same-user developer preview rather than a
-universal process-isolation or trusted-consent guarantee.
+The package independently bounds and validates the parsed result, returns only
+typed subsets, and sanitizes transport failures. Its provenance
+distinguishes configured chain identity from observed data, live RPC from the
+Alchemy transfer index, provider-head evidence from provider-asserted
+safe/finalized tags, and numbered blocks whose finality remains unknown.
+Transfer calls require an explicit start block and address/contract selector,
+return at most 100 entries, and never auto-page or retry.
 
 State-changing tools remain a later, separate adapter implementing Agent
 Wallet's signer/broadcaster boundary. Every call needs an exact intent,
@@ -240,12 +249,15 @@ Collab records, or model-facing errors.
   admission is now evaluated after taking the wallet transaction lock, so
   concurrent requests for one wallet cannot independently spend the same
   remaining ceiling.
-- Build the named read adapter on top of the bounded credential-broker
-  primitive, then decide whether to expose a project-authenticated subset. Do
-  not mount arbitrary RPC or provider administration on MCP.
 - Run a credentialed staging wire proof of webhook metadata, pagination,
   PATCH-then-GET convergence, and callback delivery before claiming the worker
   is operational. Hermetic tests do not prove provider/account state.
+- Decide whether the developer-preview named read package needs a separately
+  reviewed local MCP projection. The core package itself exposes no MCP,
+  provider credential, generic RPC, simulation, signer, or broadcaster.
+- Expand beyond the current eight read operations only with operation-specific
+  parameter/result schemas and evidence semantics; do not add a generic RPC
+  escape hatch.
 
 Until those items land, Alchemy is a useful replaceable infrastructure
 provider, not a source of truth, identity, consent, or transaction authority.

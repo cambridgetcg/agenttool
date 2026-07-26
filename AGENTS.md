@@ -25,6 +25,8 @@ projection planner (`packages/correspondence-yutabase/`), a private
 loopback-only durable projector into a rebuildable local YUTABASE sidecar
 (`packages/correspondence-yutabase-projector/`), source reference
 primitives for capability-bounded agent wallets (`packages/wallet/`), a
+developer-preview bounded Alchemy read/reconciliation adapter
+(`packages/alchemy/`), a
 read-only portable Agent Skills inspector (`packages/skills/`), a local-first
 agent browser (`packages/browser/`), and three static apps
 (`apps/`). The browser exposes one bounded core through direct TypeScript,
@@ -89,6 +91,7 @@ cd packages/correspondence-yutabase-projector && bun install # private local dur
 cd packages/sdk-ts && bun install              # TS SDK
 cd packages/telescope && bun install           # read-only discovery evidence mapper
 cd packages/wallet && bun install              # agent-wallet/0.1 offline primitives
+cd packages/alchemy && bun install             # bounded Alchemy observation primitives
 cd packages/sdk-py && pip install -e .         # Python SDK
 ```
 
@@ -192,6 +195,11 @@ node dist/cli.js scan api.agenttool.dev         # explicit live read-only dogfoo
 # Agent Wallet (source record/lifecycle primitives; no custody or RPC) ──
 cd packages/wallet
 bun run ci                                     # typecheck + security/schema/vector tests + build
+
+# Alchemy (bounded reads only; injected host transport) ─────────────
+cd packages/alchemy
+bun run ci                                     # typecheck + fake-transport tests + build + Node smoke
+npm pack --ignore-scripts --dry-run --json      # package boundary; does not publish or call Alchemy
 
 # Whitehack (advisory + Castle + wallet + encrypted evidence) ───────
 (cd tools/whitehack-advisory \
