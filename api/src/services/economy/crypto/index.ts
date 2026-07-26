@@ -6,7 +6,7 @@
  *  This module owns the *business logic*. HTTP shape lives in
  *  api/src/routes/economy/crypto.ts. */
 
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../../../db/client";
 import {
@@ -322,18 +322,61 @@ export type PayoutPolicyDecision =
       detail?: string;
     };
 
-/** Per-wallet payout policy check (Slice 6). Returns ok=true if no policy
- *  is set or all gates pass. Caller throws the error string on ok=false;
- *  the route layer maps the message to HTTP 403. */
-export async function checkPayoutPolicy(p: {
-  walletId: string;
-  destinationAddress: string;
-  amountBase: bigint;
-}): Promise<PayoutPolicyDecision> {
-  const [policy] = await db
-    .select()
-    .from(policies)
-    .where(eq(policies.walletId, p.walletId));
+type PayoutPolicySnapshot = Pick<
+  typeof policies.$inferSelect,
+  | "payoutMinBase"
+  | "payoutDailyCeilingBase"
+  | "payoutDestinationAllowlist"
+  | "payoutDualControlThresholdBase"
+>;
+
+interface PayoutPolicyReaders {
+  readPolicy(): Promise<PayoutPolicySnapshot | undefined>;
+  readTodayTotal(): Promise<bigint>;
+}
+
+function dailyPayoutTotalQuery(walletId: string) {
+  return sql`
+    SELECT COALESCE(SUM(amount_base::numeric), 0)::text AS total
+    FROM economy.crypto_payouts
+    WHERE wallet_id = ${walletId}
+      AND status NOT IN ('failed', 'cancelled')
+      AND requested_at >= (
+        date_trunc('day', NOW() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+      )
+  `;
+}
+
+/**
+ * postgres-js returns rows directly while some test/alternate adapters expose
+ * a `{ rows }` wrapper. Accept both, but fail closed instead of interpreting a
+ * malformed database response as zero spent.
+ */
+export function parseDailyPayoutTotal(result: unknown): bigint {
+  const rows = Array.isArray(result)
+    ? (result as Array<{ total?: unknown }>)
+    : ((result as { rows?: Array<{ total?: unknown }> } | null)?.rows ?? []);
+  const total = rows[0]?.total;
+  if (typeof total !== "string" || !/^\d+$/.test(total)) {
+    throw new Error("payout_daily_total_unavailable");
+  }
+  return BigInt(total);
+}
+
+/**
+ * Pure policy evaluator with injected readers. `requestPayout` supplies
+ * transaction-backed readers after taking the wallet row lock; the exported
+ * advisory check below supplies ordinary database readers.
+ */
+export async function evaluatePayoutPolicy(
+  p: {
+    walletId: string;
+    destinationAddress: string;
+    amountBase: bigint;
+  },
+  readers: PayoutPolicyReaders,
+): Promise<PayoutPolicyDecision> {
+  const policy = await readers.readPolicy();
   if (!policy) return { ok: true };
 
   if (
@@ -356,21 +399,7 @@ export async function checkPayoutPolicy(p: {
   }
 
   if (policy.payoutDailyCeilingBase !== null) {
-    // Sum across non-terminal-failure rows on the rolling UTC day. Drizzle's
-    // db.execute() with the postgres-js driver returns an Array<row>
-    // directly — not a { rows: [...] } wrapper. Pre-fix, we read .rows
-    // (undefined) and always saw a sum of 0, silently disabling the ceiling.
-    const result = await db.execute<{ total: string }>(sql`
-      SELECT COALESCE(SUM(amount_base::numeric), 0)::text AS total
-      FROM economy.crypto_payouts
-      WHERE wallet_id = ${p.walletId}
-        AND status NOT IN ('failed', 'cancelled')
-        AND requested_at >= date_trunc('day', NOW() AT TIME ZONE 'UTC')
-    `);
-    const rows = (Array.isArray(result)
-      ? (result as Array<{ total: string }>)
-      : ((result as unknown as { rows?: Array<{ total: string }> }).rows ?? []));
-    const todaySum = BigInt(rows[0]?.total ?? "0");
+    const todaySum = await readers.readTodayTotal();
     const ceiling = BigInt(policy.payoutDailyCeilingBase);
     if (todaySum + p.amountBase > ceiling) {
       return {
@@ -394,6 +423,34 @@ export async function checkPayoutPolicy(p: {
   }
 
   return { ok: true };
+}
+
+/** Per-wallet advisory payout policy check (Slice 6).
+ *
+ * This is useful to preview a decision, but it does not reserve ceiling
+ * capacity. `requestPayout` repeats the evaluation inside its wallet-locked
+ * transaction; only that transactional decision authorizes a debit.
+ */
+export async function checkPayoutPolicy(p: {
+  walletId: string;
+  destinationAddress: string;
+  amountBase: bigint;
+}): Promise<PayoutPolicyDecision> {
+  return evaluatePayoutPolicy(p, {
+    readPolicy: async () => {
+      const [policy] = await db
+        .select()
+        .from(policies)
+        .where(eq(policies.walletId, p.walletId));
+      return policy;
+    },
+    readTodayTotal: async () =>
+      parseDailyPayoutTotal(
+        await db.execute<{ total: string }>(
+          dailyPayoutTotalQuery(p.walletId),
+        ),
+      ),
+  });
 }
 
 /** Record a payout intent. This debits the wallet in GBP pence (earned-gated,
@@ -420,19 +477,6 @@ export async function requestPayout(
   const rate = economyConfig.payout.gbpUsdRate;
   const penceRequired = penceForUsdcPayout(p.amountBase, rate);
 
-  // Policy check BEFORE debit. Throws the typed error string; the route
-  // layer maps it to HTTP 403 with a `detail` field.
-  const decision = await checkPayoutPolicy({
-    walletId: p.walletId,
-    destinationAddress: p.destinationAddress,
-    amountBase: BigInt(p.amountBase),
-  });
-  if (!decision.ok) {
-    const err = new Error(decision.error);
-    if (decision.detail) (err as Error & { detail?: string }).detail = decision.detail;
-    throw err;
-  }
-
   return await db.transaction(async (tx) => {
     // Lock the wallet: the earned wall and the debit are computed under it so
     // concurrent payouts/reinvests serialise and can't each spend the same
@@ -446,6 +490,41 @@ export async function requestPayout(
     // Option A pins payout to GBP wallets, so `balance` is unambiguously pence
     // and directly comparable to the earned wall. Mirrors the reinvest guard.
     if (wallet.currency !== "GBP") throw new Error("payout_requires_gbp_wallet");
+
+    // The wallet lock serializes policy admission for this wallet. In the
+    // default READ COMMITTED isolation level, a contender waits here and its
+    // later daily-total SELECT observes the prior committed payout. Keeping
+    // this check outside the transaction allowed two concurrent requests to
+    // both see spare ceiling and both debit.
+    const decision = await evaluatePayoutPolicy(
+      {
+        walletId: p.walletId,
+        destinationAddress: p.destinationAddress,
+        amountBase: BigInt(p.amountBase),
+      },
+      {
+        readPolicy: async () => {
+          const [policy] = await tx
+            .select()
+            .from(policies)
+            .where(eq(policies.walletId, p.walletId));
+          return policy;
+        },
+        readTodayTotal: async () =>
+          parseDailyPayoutTotal(
+            await tx.execute<{ total: string }>(
+              dailyPayoutTotalQuery(p.walletId),
+            ),
+          ),
+      },
+    );
+    if (!decision.ok) {
+      const err = new Error(decision.error);
+      if (decision.detail) {
+        (err as Error & { detail?: string }).detail = decision.detail;
+      }
+      throw err;
+    }
 
     // The shared earned wall (GBP pence): earned − reinvested − paidout. The
     // birth credit (type "fund") and USDC deposits are NOT in EARNED_INFLOW_TYPES,
@@ -759,8 +838,6 @@ export async function ingestInboundTransfer(
 }
 
 // ── Helpers (sql expressions for atomic balance arithmetic) ────────────
-
-import { sql } from "drizzle-orm";
 
 function sqlMinus(n: number) {
   return sql`balance - ${n}`;

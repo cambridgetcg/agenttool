@@ -561,6 +561,16 @@ router.post("/wallets/:walletId/payout", async (c) => {
         503,
       );
     }
+    if (msg === "payout_daily_total_unavailable") {
+      return c.json(
+        {
+          error: msg,
+          message:
+            "The payout ceiling could not be checked safely, so no debit was made. Retry once storage is healthy.",
+        },
+        503,
+      );
+    }
     // Policy + earned-wall violations — return 403 with the error code +
     // optional detail line. Agents can adjust amount / destination /
     // wait-for-tomorrow / earn-more accordingly.

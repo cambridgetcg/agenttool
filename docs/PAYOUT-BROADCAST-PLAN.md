@@ -116,8 +116,14 @@ Each individually shippable + verifiable. Slices land in order; later slices may
   - `daily_payout_ceiling_base`.
   - `destination_allowlist` (TEXT[]).
   - `dual_control_threshold_base` (placeholder — flow lands in own slice).
-- Enforcement in `requestPayout()`: validate **before** debit; clear error codes (`payout_below_min`, `payout_exceeds_daily_ceiling`, `destination_not_allowlisted`).
-- **Acceptance:** policy violations return 400 with specific code; allowlisted recipients pass; unallowlisted reject before any debit.
+- Enforcement in `requestPayout()`: validate **before** debit and after taking
+  the wallet transaction lock; clear error codes (`payout_below_min`,
+  `payout_exceeds_daily_ceiling`, `destination_not_allowlisted`). The lock
+  serializes same-wallet daily-ceiling admission across concurrent sessions.
+- **Acceptance:** policy violations return 403 with a specific code;
+  allowlisted recipients pass; unallowlisted and over-ceiling requests reject
+  before any debit. If the daily aggregate cannot be read exactly, fail closed
+  with `payout_daily_total_unavailable` (503).
 
 ### Slice 7 — Mainnet enable · ~0.5 day · ◯ pending (operator-led)
 

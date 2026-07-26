@@ -200,9 +200,11 @@ Collab records, or model-facing errors.
   that operational state.
 - Add bounded retries with `Retry-After`, jitter, and telemetry for read-only
   provider calls. Never automatically retry ambiguous broadcasts.
-- Before enabling payouts, serialize the daily-ceiling check under the wallet
-  transaction/lock, replace the bounded floating FX quote with fixed-point
-  arithmetic, and close the cross-replica nonce lock.
+- Before enabling payouts, replace the bounded floating FX quote with
+  fixed-point arithmetic and close the cross-replica nonce lock. Daily-ceiling
+  admission is now evaluated after taking the wallet transaction lock, so
+  concurrent requests for one wallet cannot independently spend the same
+  remaining ceiling.
 - Build the named read/simulation adapter and its local MCP surface only after
   the provider-internal safety work is complete.
 
