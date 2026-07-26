@@ -359,20 +359,20 @@ describe("negotiated EVM JSON-RPC read profile", () => {
     const request = jsonRpcReadGrantRequest();
     request.scope.maxUses = 7;
     const handle = await fixture.client.requestGrant(request);
+    const hash = `0x${"11".repeat(32)}` as `0x${string}`;
     const results: Record<string, JsonValue> = {
       eth_chainId: "0x1",
       eth_blockNumber: "0x2a",
       eth_getBlockByNumber: { number: "0x2a" },
       eth_getBalance: "0x0",
       eth_getCode: "0x6000",
-      eth_getTransactionByHash: null,
-      eth_getTransactionReceipt: { status: "0x1" },
+      eth_getTransactionByHash: { hash: `0x${"11".repeat(32).toUpperCase()}` },
+      eth_getTransactionReceipt: { transactionHash: hash, status: "0x1" },
     };
     fixture.transport.handler = (outbound) => {
       const envelope = requestEnvelope(outbound);
       return rpcResponse(outbound, results[envelope.method as string]!);
     };
-    const hash = `0x${"11".repeat(32)}` as `0x${string}`;
     const calls: BrokerEvmJsonRpcReadCall[] = [
       { chainId: "eip155:1", method: "eth_chainId", params: [] },
       { chainId: "eip155:1", method: "eth_blockNumber", params: [] },
@@ -411,6 +411,101 @@ describe("negotiated EVM JSON-RPC read profile", () => {
       });
     }
     expect(fixture.transport.calls).toHaveLength(7);
+  });
+
+  test("binds block, transaction and receipt objects to the requested identity", async () => {
+    const requestedHash = `0x${"11".repeat(32)}` as `0x${string}`;
+    const wrongHash = `0x${"22".repeat(32)}` as `0x${string}`;
+    const cases: Array<{
+      call: BrokerEvmJsonRpcReadCall;
+      result: JsonValue;
+    }> = [
+      {
+        call: {
+          chainId: "eip155:1",
+          method: "eth_getBlockByNumber",
+          params: ["0x2a", false],
+        },
+        result: { number: "0x2b" },
+      },
+      {
+        call: {
+          chainId: "eip155:1",
+          method: "eth_getTransactionByHash",
+          params: [requestedHash],
+        },
+        result: { hash: wrongHash },
+      },
+      {
+        call: {
+          chainId: "eip155:1",
+          method: "eth_getTransactionReceipt",
+          params: [requestedHash],
+        },
+        result: { transactionHash: wrongHash },
+      },
+    ];
+
+    for (const item of cases) {
+      const fixture = await makeBroker();
+      fixtures.push(fixture);
+      fixture.transport.handler = (request) => rpcResponse(request, item.result);
+      const request = jsonRpcReadGrantRequest();
+      request.scope.methods = [item.call.method];
+      request.scope.maxUses = 1;
+      const handle = await fixture.client.requestGrant(request);
+
+      await expect(
+        fixture.client.callEvmJsonRpcRead(handle, item.call),
+      ).rejects.toMatchObject({ code: "request_failed" });
+    }
+  });
+
+  test("a local JSON-RPC timeout does not recall work, while session close cancels it", async () => {
+    const fixture = await makeBroker();
+    fixtures.push(fixture);
+    const client = new AgentCredClient({
+      socketPath: fixture.socketPath,
+      timeoutMs: 50,
+      clientName: "jsonrpc-timeout-test",
+    });
+    await client.connect();
+    try {
+      const request = jsonRpcReadGrantRequest();
+      request.scope.methods = ["eth_blockNumber"];
+      request.scope.maxUses = 1;
+      const handle = await client.requestGrant(request);
+      fixture.transport.gate = new Promise<void>(() => undefined);
+
+      const pending = client.callEvmJsonRpcRead(handle, {
+        chainId: "eip155:1",
+        method: "eth_blockNumber",
+        params: [],
+      });
+      for (
+        let attempt = 0;
+        attempt < 50 && fixture.transport.calls.length === 0;
+        attempt += 1
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+      }
+      expect(fixture.transport.calls).toHaveLength(1);
+      await expect(pending).rejects.toMatchObject({ code: "request_failed" });
+      expect(client.connected).toBe(true);
+      expect(fixture.transport.calls[0]?.signal?.aborted).toBe(false);
+
+      client.close();
+      for (
+        let attempt = 0;
+        attempt < 50 && !fixture.transport.calls[0]?.signal?.aborted;
+        attempt += 1
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+      }
+      expect(fixture.transport.calls[0]?.signal?.aborted).toBe(true);
+    } finally {
+      client.close();
+    }
   });
 
   test("chain and method must both fit the grant", async () => {

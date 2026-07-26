@@ -21,10 +21,11 @@ with a valuable credential. The separately negotiated
 [`agentcred.evm-jsonrpc-read/0.1`](./JSONRPC-READ-0.1.md) profile adds a
 method-aware EVM read surface without widening generic `http.fetch`.
 
-Version 0.1.0 is licensed under Apache-2.0 and distributed through the
-independently verifiable LOVE package catalog. npm is an optional convenience
-mirror whose exact availability must be checked independently; the LOVE
-manifest binds the artifact size, SHA-256, and source revision.
+Repository source is version 0.2.0. The independently verifiable LOVE catalog
+still records the immutable 0.1.0 release; source version 0.2.0 is not evidence
+that an npm or LOVE release exists. npm is an optional convenience mirror whose
+exact availability must be checked independently; a LOVE manifest binds the
+artifact size, SHA-256, and source revision.
 
 ## What the preview does
 
@@ -89,8 +90,11 @@ manifest binds the artifact size, SHA-256, and source revision.
   caller-supplied signature within the origin/method/path/use boundary. Prefer
   a fresh, short-lived, one-use grant for one exact paid tool path and a
   trusted consent surface that checks the payment terms before signing.
-- Aborting the caller-side `fetch` rejects locally, but does not recall an
-  operation already dispatched to the broker or undo an upstream side effect.
+- Aborting caller-side `fetch` rejects locally, but does not recall an operation
+  already dispatched to the broker or undo an upstream side effect.
+  `callEvmJsonRpcRead()` has no per-use abort signal in this preview: its local
+  timeout stops waiting, while closing the session propagates cancellation to
+  in-flight broker work.
 - The JSONL audit stops at 10 MiB rather than rotating. The server emits one
   safe operator notification and denies subsequent grants/uses by default;
   deploy a managed `AuditSink` for rotation or tamper evidence.

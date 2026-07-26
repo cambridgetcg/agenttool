@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/credential-broker",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local capability broker for agents to use credentials without receiving secret values",
   "license": "Apache-2.0",
   "type": "module",

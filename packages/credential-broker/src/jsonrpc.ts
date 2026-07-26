@@ -136,8 +136,7 @@ export async function performBrokerEvmJsonRpcRead(
       const result = parseEvmJsonRpcReadResponse(
         decodeJson(responseBody),
         rpcId,
-        call.method,
-        call.chainId,
+        call,
       );
       const normalized = jsonUtf8(result, "JSON-RPC result");
       try {

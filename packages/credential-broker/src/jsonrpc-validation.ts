@@ -270,10 +270,10 @@ function assertJsonValue(
 }
 
 function validateMethodResult(
-  method: EvmJsonRpcReadMethod,
+  call: Readonly<BrokerEvmJsonRpcReadCall>,
   result: unknown,
-  chainId: EvmChainId,
 ): JsonValue {
+  const { method, chainId } = call;
   switch (method) {
     case "eth_chainId": {
       try {
@@ -304,14 +304,65 @@ function validateMethodResult(
         throw new AgentCredError("request_failed", "Upstream byte result is invalid.");
       }
       return result;
-    case "eth_getBlockByNumber":
-    case "eth_getTransactionByHash":
-    case "eth_getTransactionReceipt":
+    case "eth_getBlockByNumber": {
       if (result !== null && (!result || typeof result !== "object" || Array.isArray(result))) {
         throw new AgentCredError("request_failed", "Upstream object result is invalid.");
       }
       assertJsonValue(result, { nodes: 0 });
+      if (result === null) return result;
+      const block = result as Record<string, unknown>;
+      try {
+        canonicalQuantity(block.number, "eth_getBlockByNumber result.number");
+      } catch {
+        throw new AgentCredError("request_failed", "Upstream block identity is invalid.");
+      }
+      const requestedBlock = call.params[0];
+      if (!BLOCK_TAGS.has(requestedBlock) && block.number !== requestedBlock) {
+        throw new AgentCredError(
+          "request_failed",
+          "Upstream block identity does not match the request.",
+        );
+      }
       return result;
+    }
+    case "eth_getTransactionByHash": {
+      if (result !== null && (!result || typeof result !== "object" || Array.isArray(result))) {
+        throw new AgentCredError("request_failed", "Upstream object result is invalid.");
+      }
+      assertJsonValue(result, { nodes: 0 });
+      if (result === null) return result;
+      const transaction = result as Record<string, unknown>;
+      if (
+        typeof transaction.hash !== "string" ||
+        !EVM_HASH.test(transaction.hash) ||
+        transaction.hash.toLowerCase() !== call.params[0].toLowerCase()
+      ) {
+        throw new AgentCredError(
+          "request_failed",
+          "Upstream transaction identity does not match the request.",
+        );
+      }
+      return result;
+    }
+    case "eth_getTransactionReceipt": {
+      if (result !== null && (!result || typeof result !== "object" || Array.isArray(result))) {
+        throw new AgentCredError("request_failed", "Upstream object result is invalid.");
+      }
+      assertJsonValue(result, { nodes: 0 });
+      if (result === null) return result;
+      const receipt = result as Record<string, unknown>;
+      if (
+        typeof receipt.transactionHash !== "string" ||
+        !EVM_HASH.test(receipt.transactionHash) ||
+        receipt.transactionHash.toLowerCase() !== call.params[0].toLowerCase()
+      ) {
+        throw new AgentCredError(
+          "request_failed",
+          "Upstream receipt identity does not match the request.",
+        );
+      }
+      return result;
+    }
   }
 }
 
@@ -319,8 +370,7 @@ function validateMethodResult(
 export function parseEvmJsonRpcReadResponse(
   value: unknown,
   expectedId: string,
-  method: EvmJsonRpcReadMethod,
-  chainId: EvmChainId,
+  call: Readonly<BrokerEvmJsonRpcReadCall>,
 ): JsonValue {
   const raw = record(value, "Upstream JSON-RPC response", "request_failed");
   if (raw.jsonrpc !== "2.0" || raw.id !== expectedId) {
@@ -337,5 +387,5 @@ export function parseEvmJsonRpcReadResponse(
   if (!Object.hasOwn(raw, "result")) {
     throw new AgentCredError("request_failed", "Upstream JSON-RPC response has no result.");
   }
-  return validateMethodResult(method, raw.result, chainId);
+  return validateMethodResult(call, raw.result);
 }

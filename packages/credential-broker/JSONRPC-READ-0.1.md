@@ -97,11 +97,11 @@ The complete `0.1` method set is:
 |---|---|---|
 | `eth_chainId` | `[]` | canonical hex quantity equal to the grant chain |
 | `eth_blockNumber` | `[]` | canonical bounded hex quantity |
-| `eth_getBlockByNumber` | `[blockReference, false]` | object or `null` |
+| `eth_getBlockByNumber` | `[blockReference, false]` | object with canonical `number`, or `null`; a numeric request must match exactly |
 | `eth_getBalance` | `[address, blockReference]` | canonical bounded hex quantity |
 | `eth_getCode` | `[address, blockReference]` | even-length hex bytes |
-| `eth_getTransactionByHash` | `[32-byte hash]` | object or `null` |
-| `eth_getTransactionReceipt` | `[32-byte hash]` | object or `null` |
+| `eth_getTransactionByHash` | `[32-byte hash]` | object with matching `hash`, or `null` |
+| `eth_getTransactionReceipt` | `[32-byte hash]` | object with matching `transactionHash`, or `null` |
 
 An address is exactly `0x` plus 40 hexadecimal digits. A hash is exactly `0x`
 plus 64 hexadecimal digits. A block reference is `latest`, `safe`,
@@ -161,8 +161,10 @@ errors, grant receipt, and public handle contain no credential value.
 The broker validates the call and grant before use reservation, DNS,
 credential lookup, or transport. It then applies the base profile's DNS answer
 validation, address pinning, TLS hostname and certificate validation, timeout,
-no-redirect, no-compression, byte-limit, cancellation, and exact-secret
-redaction controls. It does not retry the request.
+no-redirect, no-compression, byte-limit, connection-close cancellation, and
+exact-secret redaction controls. It does not retry the request. The reference
+client has no per-use abort signal for this profile: a client timeout stops
+waiting but does not recall work already dispatched to the broker.
 
 ## 5. Response
 
@@ -196,9 +198,11 @@ Success has wire type `jsonrpc.result`:
 ```
 
 The result remains untrusted provider data. Object results receive bounded
-JSON depth and node checks, but this profile does not claim that a receipt,
-transaction, or block is canonical, finalized, complete, or independently
-verified.
+JSON depth and node checks. A non-null transaction or receipt must carry the
+requested transaction hash, and a non-null block must carry a canonical block
+number; a numbered block request must match that number exactly. These are
+request/response identity checks, not claims that a receipt, transaction, or
+block is canonical, finalized, complete, or independently verified.
 
 ## 6. Audit and non-guarantees
 
@@ -217,6 +221,7 @@ This extension inherits every threat boundary and honest non-guarantee in
 - exact-byte redaction is not general information-flow control;
 - an allowed read can expose private query intent to the provider and consume
   provider quota;
+- a client-side timeout stops waiting but cannot recall dispatched work;
 - provider data is evidence, not chain consensus or identity proof; and
 - this profile grants no signing, simulation, transaction broadcast, wallet
   session, payment, webhook administration, or Alchemy account authority.
