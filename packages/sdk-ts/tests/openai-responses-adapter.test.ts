@@ -138,6 +138,21 @@ describe("OpenAIResponsesAdapter — wake instructions", () => {
     expect(fake.state.lastParams?.instructions).toBe(
       "STABLE_WAKE\n\nVOLATILE_WAKE",
     );
+    expect(fake.state.lastParams?.store).toBe(false);
+  });
+
+  test("preserves an explicit provider storage choice", async () => {
+    const stub = makeStubAt();
+    const fake = makeFakeOpenAI();
+    const adapter = new OpenAIResponsesAdapter(fake.client, stub.at);
+
+    await adapter.responses.create({
+      model: "gpt-test",
+      input: "hello",
+      store: true,
+    });
+
+    expect(fake.state.lastParams?.store).toBe(true);
   });
 
   test("skip_wake preserves caller instructions and avoids wake I/O", async () => {

@@ -9,9 +9,11 @@ For each completed, non-streaming response it can:
 * expose a local ``response.agenttool`` receipt.
 
 ``metadata.agenttool`` is removed before the provider call. All other request
-fields are preserved. Streaming and background execution are refused before
-wake or provider I/O because this completed-response wrapper cannot preserve
-either lifecycle honestly.
+fields are preserved. Because wake text may carry identity context, an omitted
+``store`` defaults to ``False``; an explicit caller value is preserved.
+Streaming and background execution are refused before wake or provider I/O
+because this completed-response wrapper cannot preserve either lifecycle
+honestly.
 
 The module has no runtime dependency on the ``openai`` package.
 """
@@ -20,6 +22,7 @@ from __future__ import annotations
 
 import inspect
 import re
+import sys
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol
 
@@ -138,6 +141,7 @@ class OpenAIResponsesAdapter:
             _merge_instructions("", params.get("instructions"))
 
         forward_params = dict(params)
+        forward_params.setdefault("store", False)
         wake_meta: Optional[dict[str, Any]] = None
         skip_wake = bool(meta.get("skip_wake"))
 
@@ -260,6 +264,7 @@ class OpenAIResponsesAdapter:
             print(
                 "[agenttool-openai-responses-adapter] "
                 f"auto-trace failed: {error}",
+                file=sys.stderr,
                 flush=True,
             )
             return None

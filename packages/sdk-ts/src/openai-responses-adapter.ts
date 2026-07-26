@@ -10,7 +10,9 @@
  *   3. return the provider response with a local `.agenttool` receipt.
  *
  * `metadata.agenttool` is adapter control data. It is removed before the
- * provider call. All other request fields are preserved.
+ * provider call. All other request fields are preserved. Because wake text
+ * may carry identity context, omitted `store` defaults to `false`; an explicit
+ * caller value is preserved.
  *
  * Streaming and background execution are deliberately refused before wake
  * or provider I/O. Neither lifecycle can honestly carry a completed-response
@@ -155,6 +157,7 @@ export class OpenAIResponsesAdapter {
 
         let wakeMeta: WakeProviderMeta | null = null;
         const forwardParams: Record<string, unknown> = { ...params };
+        if (params.store === undefined) forwardParams.store = false;
 
         if (!meta.skip_wake) {
           const shape = await self.at.wake.system("openai", {

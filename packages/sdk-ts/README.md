@@ -54,6 +54,12 @@ configured AgentTool transport to `/v1/traces`; that trace is server-readable,
 not end-to-end encrypted. Only responses whose status is absent or
 `"completed"` are traced.
 
+The adapter defaults an omitted `store` to `false`, because the Responses API
+[retains application state for 30 days by default](https://platform.openai.com/docs/models/default-usage-policies-by-endpoint)
+and the injected wake can carry identity context. An explicit `store: true` is
+preserved. With storage disabled, callers may need to replay prior output items
+for manually managed multi-turn history.
+
 This adapter supports completed foreground responses only. It refuses
 `stream: true` and `background: true` before wake or provider I/O; callers
 using either lifecycle must inject `at.wake.system("openai")` explicitly. The

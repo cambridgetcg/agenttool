@@ -130,6 +130,18 @@ def test_wake_alone_when_caller_instructions_are_absent():
 
     assert fake.last_params is not None
     assert fake.last_params["instructions"] == "STABLE_WAKE\n\nVOLATILE_WAKE"
+    assert fake.last_params["store"] is False
+
+
+def test_preserves_explicit_provider_storage_choice():
+    at = _StubAt()
+    fake = _FakeOpenAI()
+    adapter = OpenAIResponsesAdapter(fake, at)
+
+    adapter.responses.create(model="gpt-test", input="hello", store=True)
+
+    assert fake.last_params is not None
+    assert fake.last_params["store"] is True
 
 
 def test_skip_wake_preserves_instructions_and_avoids_wake_io():
@@ -555,7 +567,7 @@ def test_ambient_deciding_context_triggers_and_parents_trace():
     assert response.agenttool.trace_id == "tr_openai_test"
 
 
-def test_trace_failure_keeps_completed_provider_response():
+def test_trace_failure_keeps_completed_provider_response(capsys):
     def fail_trace(method: str, path: str, body: Any) -> Any:
         raise RuntimeError("trace store unavailable")
 
@@ -572,3 +584,6 @@ def test_trace_failure_keeps_completed_provider_response():
     assert response.id == "resp_test"
     assert response.output_text == "provider answer"
     assert response.agenttool.trace_id is None
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "auto-trace failed: trace store unavailable" in captured.err
