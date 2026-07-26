@@ -48,11 +48,24 @@ claim about the immutable 0.16.3 source tag or any package registry.
   `adapter.messages.stream(...)` when final-message work is required.
 - The provider's `messages.stream(...)` context-manager shape is preserved.
   `get_final_message()` obtains the provider's completed message and applies
-  trace and markup work exactly once. Ending iteration early or closing the
-  stream delegates cleanup and does not manufacture a final message.
+  trace and markup work exactly once. Concurrent final-message readers wait for
+  that one operation and receive the same response or the same error. Trace
+  metadata, ambient trace context, and the last user observation are copied
+  when the provider call starts, so later caller mutation cannot change the
+  durable trace.
+- Ending iteration early or closing the stream does not manufacture a final
+  message. Closure, cancellation, or an iterator failure is terminal: a later
+  read cannot turn it into completion or emit AgentTool side effects. Manual
+  `close()` or `abort()` selects one adapter-visible cleanup layer and runs it
+  once. On context exit, the provider manager's `__exit__` remains
+  authoritative and is also called once; because that manager is opaque, it
+  may internally repeat cleanup already requested manually.
 
 Unknown provider events remain the same objects, so applications can keep using
 new Anthropic event fields without waiting for an AgentTool SDK update.
+Extensible final-message objects also keep their provider identity and type;
+immutable SDK models and dictionaries use a forwarding wrapper for the local
+`agenttool` receipt.
 
 ## 0.16.3
 
