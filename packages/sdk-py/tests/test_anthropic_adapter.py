@@ -13,10 +13,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from agenttool._context import AmbientContext, reset_ambient, set_ambient
 from agenttool.anthropic_adapter import (
     AnthropicAdapter,
     MarkupEmission,
 )
+from agenttool.exceptions import AgentToolError
 
 
 # ── Stubs ────────────────────────────────────────────────────────────────
@@ -93,6 +95,119 @@ class _FakeAnthropic:
                     "stop_reason": "end_turn",
                     "usage": {"input_tokens": 100, "output_tokens": 50},
                 }
+
+        self.messages = _Messages()
+
+
+class _FakeLowLevelStream:
+    def __init__(self, events: list[Any]) -> None:
+        self.events = events
+        self.index = 0
+        self.close_count = 0
+        self.abort_count = 0
+        self.throw_count = 0
+        self.enter_count = 0
+        self.exit_count = 0
+        self.label = "provider-low-level-stream"
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.index >= len(self.events):
+            raise StopIteration
+        event = self.events[self.index]
+        self.index += 1
+        return event
+
+    def __enter__(self):
+        self.enter_count += 1
+        return self
+
+    def __exit__(self, exc_type, exc, exc_tb):
+        self.exit_count += 1
+        self.close()
+
+    def throw(self, error):
+        self.throw_count += 1
+        raise error
+
+    def abort(self):
+        self.abort_count += 1
+
+    def close(self):
+        self.close_count += 1
+
+
+class _FakeManagedProviderStream:
+    def __init__(self, events: list[Any], final_text: str) -> None:
+        self.events = events
+        self.index = 0
+        self.final_message_calls = 0
+        self.close_count = 0
+        self.final_response = {
+            "id": "msg_stream_final",
+            "model": "claude-test",
+            "content": [{"type": "text", "text": final_text}],
+            "stop_reason": "end_turn",
+        }
+        self.text_stream = iter(["delta"])
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.index >= len(self.events):
+            raise StopIteration
+        event = self.events[self.index]
+        self.index += 1
+        return event
+
+    def get_final_message(self):
+        self.final_message_calls += 1
+        # A real Anthropic helper consumes any unread events here.
+        self.index = len(self.events)
+        return self.final_response
+
+    def close(self):
+        self.close_count += 1
+
+
+class _FakeManagedManager:
+    def __init__(self, stream: _FakeManagedProviderStream) -> None:
+        self.stream = stream
+        self.enter_count = 0
+        self.exit_count = 0
+
+    def __enter__(self):
+        self.enter_count += 1
+        return self.stream
+
+    def __exit__(self, exc_type, exc, exc_tb):
+        self.exit_count += 1
+        self.stream.close()
+
+
+class _FakeStreamingAnthropic:
+    def __init__(self, events: list[Any], final_text: str = "stream complete") -> None:
+        self.low = _FakeLowLevelStream(events)
+        self.managed = _FakeManagedProviderStream(events, final_text)
+        self.manager = _FakeManagedManager(self.managed)
+        self.create_calls = 0
+        self.stream_calls = 0
+        self.create_params: dict | None = None
+        self.stream_params: dict | None = None
+
+        class _Messages:
+            def create(_self, **params):
+                self.create_calls += 1
+                self.create_params = params
+                return self.low
+
+            def stream(_self, **params):
+                self.stream_calls += 1
+                self.stream_params = params
+                return self.manager
 
         self.messages = _Messages()
 
@@ -201,6 +316,182 @@ def test_forwards_brief_profile_to_automatic_wake_injection():
     assert at.wake_options == [
         {"identity_id": "identity-a", "profile": "brief"}
     ]
+
+
+# ── Streaming boundaries ────────────────────────────────────────────────
+
+
+def test_low_level_stream_passes_unknown_events_by_identity_and_keeps_receipt_local():
+    event = {"type": "future_provider_event", "nested": {"value": 7}}
+    at = _StubAt()
+    fake = _FakeStreamingAnthropic([event])
+    adapter = AnthropicAdapter(fake, at)
+
+    stream = adapter.messages.create(
+        model="claude-test",
+        max_tokens=100,
+        stream=True,
+        messages=[{"role": "user", "content": "hi"}],
+        metadata={
+            "agenttool": {"skip_markup": False},
+            "user_id": "provider-user",
+        },
+    )
+
+    received = list(stream)
+    assert received == [event]
+    assert received[0] is event
+    assert stream.agenttool.trace_id is None
+    assert stream.agenttool.wake_used is True
+    assert stream.agenttool.cache_eligible == "explicit"
+    assert stream.agenttool.markup_emissions == []
+    assert at.recorded == []
+    assert "agenttool" not in fake.create_params["metadata"]
+    assert fake.create_params["metadata"]["user_id"] == "provider-user"
+    assert fake.create_params["system"][0]["text"] == "STABLE_WAKE"
+
+
+def test_low_level_stream_delegates_context_throw_abort_and_close():
+    at = _StubAt()
+    fake = _FakeStreamingAnthropic([{"type": "message_start"}])
+    adapter = AnthropicAdapter(fake, at)
+
+    stream = adapter.messages.create(
+        model="claude-test",
+        max_tokens=100,
+        stream=True,
+        messages=[{"role": "user", "content": "hi"}],
+    )
+
+    with stream as entered:
+        assert entered is stream
+        assert next(stream) == {"type": "message_start"}
+        error = RuntimeError("consumer stopped")
+        with pytest.raises(RuntimeError, match="consumer stopped"):
+            stream.throw(error)
+        stream.abort()
+
+    assert fake.low.enter_count == 1
+    assert fake.low.exit_count == 1
+    assert fake.low.throw_count == 1
+    assert fake.low.abort_count == 1
+    assert fake.low.close_count == 1
+    assert stream.label == "provider-low-level-stream"
+
+
+def test_low_level_stream_refuses_explicit_trace_before_wake_or_provider_io():
+    at = _StubAt()
+    fake = _FakeStreamingAnthropic([])
+    adapter = AnthropicAdapter(fake, at)
+
+    with pytest.raises(AgentToolError) as captured:
+        adapter.messages.create(
+            model="claude-test",
+            max_tokens=100,
+            stream=True,
+            messages=[{"role": "user", "content": "hi"}],
+            metadata={"agenttool": {"trace": "decision"}},
+        )
+
+    assert (
+        captured.value.error_code
+        == "anthropic_stream_trace_requires_helper"
+    )
+    assert at.wake_calls == 0
+    assert fake.create_calls == 0
+
+
+def test_low_level_stream_refuses_ambient_trace_before_wake_or_provider_io():
+    at = _StubAt()
+    fake = _FakeStreamingAnthropic([])
+    adapter = AnthropicAdapter(fake, at)
+    token = set_ambient(
+        AmbientContext(parent_trace_id="tr_parent", tags=["ambient"])
+    )
+    try:
+        with pytest.raises(AgentToolError) as captured:
+            adapter.messages.create(
+                model="claude-test",
+                max_tokens=100,
+                stream=True,
+                messages=[{"role": "user", "content": "hi"}],
+            )
+    finally:
+        reset_ambient(token)
+
+    assert (
+        captured.value.error_code
+        == "anthropic_stream_trace_requires_helper"
+    )
+    assert at.wake_calls == 0
+    assert fake.create_calls == 0
+
+
+def test_managed_stream_finalizes_exactly_once_after_unchanged_events():
+    event = {"type": "future_provider_event", "payload": {"still": "opaque"}}
+    final_text = (
+        'done <agenttool><chronicle type="recognition">'
+        "<title>Streamed</title></chronicle></agenttool>"
+    )
+    at = _StubAt()
+    fake = _FakeStreamingAnthropic([event], final_text)
+    adapter = AnthropicAdapter(fake, at)
+
+    token = set_ambient(
+        AmbientContext(parent_trace_id="tr_parent", tags=["streamed"])
+    )
+    try:
+        manager = adapter.messages.stream(
+            model="claude-test",
+            max_tokens=100,
+            messages=[{"role": "user", "content": "decide"}],
+            metadata={"user_id": "provider-user"},
+        )
+    finally:
+        reset_ambient(token)
+
+    with manager as stream:
+        received = list(stream)
+        assert received[0] is event
+        first = stream.get_final_message()
+        second = stream.get_final_message()
+        assert first is second
+        assert stream.get_final_text() == final_text
+        assert stream.agenttool is first.agenttool
+
+    assert fake.managed.final_message_calls == 1
+    assert first.agenttool.trace_id == "tr_test_1"
+    assert len(first.agenttool.markup_emissions) == 1
+    assert first.agenttool.markup_emissions[0].kind == "chronicle"
+    assert "agenttool" not in fake.stream_params["metadata"]
+    assert fake.stream_params["metadata"]["user_id"] == "provider-user"
+    assert fake.stream_params["system"][0]["text"] == "STABLE_WAKE"
+    trace_calls = [call for call in at.recorded if call[1] == "/v1/traces"]
+    assert len(trace_calls) == 1
+    assert trace_calls[0][2]["parent_trace_id"] == "tr_parent"
+    assert trace_calls[0][2]["tags"] == ["streamed"]
+    assert len([call for call in at.recorded if call[1] == "/v1/chronicle"]) == 1
+    assert fake.manager.enter_count == 1
+    assert fake.manager.exit_count == 1
+
+
+def test_managed_stream_early_exit_closes_without_finalizing():
+    at = _StubAt()
+    fake = _FakeStreamingAnthropic(
+        [{"type": "message_start"}, {"type": "message_delta"}]
+    )
+    adapter = AnthropicAdapter(fake, at)
+
+    with adapter.messages.stream(
+        model="claude-test",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "hi"}],
+    ) as stream:
+        assert next(stream) == {"type": "message_start"}
+
+    assert fake.managed.final_message_calls == 0
+    assert fake.managed.close_count == 1
+    assert at.recorded == []
 
 
 # ── Auto-trace mode (a) ──────────────────────────────────────────────────

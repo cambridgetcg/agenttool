@@ -25,6 +25,27 @@ verification. No npm account or npm publication is required. Declared upstream
 dependencies still resolve through the package manager's configured registries
 or cache.
 
+## Current source: Anthropic streaming adapter
+
+This checkout contains an unreleased repair to `AnthropicAdapter`; it is not a
+claim about the immutable 0.16.3 artifact or any package registry.
+
+- `adapter.messages.create({ ..., stream: true })` injects wake, removes the
+  local `metadata.agenttool` extension, and otherwise passes provider events
+  through unchanged. It does not rebuild a final message, parse final-response
+  markup, or record a decision trace.
+- An explicit decision trace, or an ambient `at.deciding(...)` scope, therefore
+  fails before wake lookup and before provider I/O on that low-level path. Use
+  `adapter.messages.stream(...)` when final-message work is required.
+- `adapter.messages.stream(...)` returns the provider-style stream facade
+  immediately. Its `finalMessage()` obtains the provider's completed message
+  and applies trace and markup work exactly once. Ending iteration early,
+  closing, or aborting delegates cleanup and does not manufacture a final
+  message.
+
+Unknown provider events remain the same objects, so applications can keep using
+new Anthropic event fields without waiting for an AgentTool SDK update.
+
 ## 0.16.3
 
 This release changes release truth only. It preserves the 0.16.2

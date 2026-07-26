@@ -1,9 +1,8 @@
 """
 AnthropicAdapter — Tier 2 of the agenttool path.
 
-A thin wrapper over the official ``anthropic`` Python SDK. Every
-``messages.create()`` call gets two superpowers without changing the
-call shape:
+A thin wrapper over the official ``anthropic`` Python SDK. Messages calls
+get two superpowers without changing provider stream events:
 
   1. Auto-injects the agent's wake doc as ``system=``, fetched once from
      ``/v1/wake?format=anthropic`` and cached for 5 minutes (matches
@@ -31,8 +30,18 @@ The agent decides what's load-bearing by writing the tag; the shim does
 the plumbing.
 
 Posture: zero dependency on the ``anthropic`` package. The adapter takes
-any object with a ``messages.create(**kwargs)`` method, so it works with
-the official SDK, Bedrock client, or a custom HTTP client.
+any object with a ``messages.create(**kwargs)`` method and optionally a
+``messages.stream(**kwargs)`` helper, so it works with the official SDK,
+Bedrock client, or a custom HTTP client.
+
+Streaming boundary:
+
+* Low-level ``messages.create(stream=True)`` is a transparent event-stream
+  pass-through. It injects wake and strips local metadata, but does not
+  reconstruct a final response. Decision tracing therefore fails before wake
+  or provider I/O on that path, and final-response markup is not emitted.
+* ``messages.stream(...)`` uses the provider's completed Message. Tracing and
+  markup finalize exactly once when that final Message becomes available.
 
 Doctrine: docs/IDENTITY-ANCHOR.md.
 """
@@ -45,6 +54,7 @@ from typing import Any, Optional, Protocol
 
 from ._context import get_ambient
 from .client import AgentTool
+from .exceptions import AgentToolError
 from .wake import WakeProfile
 
 
@@ -120,13 +130,16 @@ class AgentToolAugmentation:
 
 
 class _MessagesProxy:
-    """Inner helper exposing ``adapter.messages.create(**kwargs)``."""
+    """Expose the two supported Anthropic Messages call shapes."""
 
     def __init__(self, adapter: "AnthropicAdapter") -> None:
         self._adapter = adapter
 
     def create(self, **params: Any) -> Any:
         return self._adapter._do_create(params)
+
+    def stream(self, **params: Any) -> Any:
+        return self._adapter._do_stream(params)
 
 
 class AnthropicAdapter:
@@ -182,10 +195,93 @@ class AnthropicAdapter:
         self.messages = _MessagesProxy(self)
 
     def _do_create(self, params: dict) -> Any:
-        metadata = dict(params.get("metadata") or {})
-        meta = dict(metadata.get("agenttool") or {})
+        meta, ambient = self._inspect_request(params)
+        low_level_streaming = params.get("stream") is True
+        if low_level_streaming and (
+            meta.get("trace") == "decision" or ambient is not None
+        ):
+            raise AgentToolError(
+                "Decision tracing is unavailable for messages.create(stream=True).",
+                error_code="anthropic_stream_trace_requires_helper",
+                hint=(
+                    "Use adapter.messages.stream(...) and get_final_message(), "
+                    "or remove the decision-trace request."
+                ),
+            )
 
-        # 1. Auto-inject wake unless skipped.
+        forward_params, wake_meta = self._prepare_request(params, meta)
+        response = self._anthropic.messages.create(**forward_params)
+
+        if low_level_streaming:
+            if not _is_stream_like(response):
+                raise AgentToolError(
+                    "Anthropic returned a non-iterable value for a streaming request.",
+                    error_code="anthropic_stream_invalid",
+                    hint=(
+                        "Check that the wrapped client implements the "
+                        "Anthropic streaming contract."
+                    ),
+                )
+            return _LowLevelStreamProxy(
+                response,
+                self._empty_augmentation(meta, wake_meta),
+            )
+
+        return self._finalize_response(
+            params,
+            response,
+            meta,
+            ambient,
+            wake_meta,
+        )
+
+    def _do_stream(self, params: dict) -> Any:
+        provider_stream = getattr(self._anthropic.messages, "stream", None)
+        if not callable(provider_stream):
+            raise AgentToolError(
+                "The wrapped Anthropic client does not expose messages.stream(...).",
+                error_code="anthropic_stream_helper_unavailable",
+                hint=(
+                    "Use a client with the Anthropic final-message stream helper, "
+                    "or use messages.create(stream=True) without decision tracing."
+                ),
+            )
+
+        # Capture ambient state now. Finalization can happen after the
+        # surrounding deciding() context has exited.
+        meta, ambient = self._inspect_request(params)
+        forward_params, wake_meta = self._prepare_request(params, meta)
+        manager = provider_stream(**forward_params)
+        if not hasattr(manager, "__enter__") or not hasattr(manager, "__exit__"):
+            raise AgentToolError(
+                "Anthropic messages.stream(...) returned no context manager.",
+                error_code="anthropic_stream_helper_invalid",
+                hint=(
+                    "The wrapped helper must provide a context manager whose "
+                    "stream exposes get_final_message()."
+                ),
+            )
+        return _ManagedStreamManagerProxy(
+            manager,
+            self,
+            params,
+            meta,
+            ambient,
+            wake_meta,
+        )
+
+    @staticmethod
+    def _inspect_request(params: dict) -> tuple[dict, Any]:
+        metadata = _as_dict(params.get("metadata"))
+        meta = _as_dict(metadata.get("agenttool"))
+        return meta, get_ambient()
+
+    def _prepare_request(
+        self,
+        params: dict,
+        meta: dict,
+    ) -> tuple[dict, Optional[dict]]:
+        metadata = _as_dict(params.get("metadata"))
         wake_meta: Optional[dict] = None
         injected_system: Any = params.get("system")
         skip_wake = bool(meta.get("skip_wake"))
@@ -206,7 +302,7 @@ class AnthropicAdapter:
             user_blocks = _normalize_system(params.get("system"))
             injected_system = list(shape["system"]) + user_blocks
 
-        # 2. Strip our metadata.agenttool extension before forwarding.
+        # Strip our metadata.agenttool extension before provider I/O.
         forward_metadata = {k: v for k, v in metadata.items() if k != "agenttool"}
         forward_params = dict(params)
         if not skip_wake:
@@ -215,26 +311,46 @@ class AnthropicAdapter:
             forward_params["metadata"] = forward_metadata
         elif "metadata" in forward_params:
             del forward_params["metadata"]
+        return forward_params, wake_meta
 
-        # 3. Make the actual Anthropic call.
-        response = self._anthropic.messages.create(**forward_params)
-
-        # 4. Auto-trace if opted in OR if we're inside a `with
-        #    at.deciding(...)` block — the ambient context implies every
-        #    call inside is part of the framing decision.
-        trace_id: Optional[str] = None
-        ambient = get_ambient()
-        should_trace = meta.get("trace") == "decision" or ambient is not None
-        if should_trace:
-            trace_id = self._record_decision_trace(params, response, meta)
-
-        # 5. Parse <agenttool> markup unless disabled.
-        skip_markup = self._disable_markup_parsing or bool(meta.get("skip_markup"))
-        emissions: list[MarkupEmission] = (
-            [] if skip_markup else self._parse_and_emit_markup(response)
+    @staticmethod
+    def _empty_augmentation(
+        meta: dict,
+        wake_meta: Optional[dict],
+    ) -> AgentToolAugmentation:
+        return AgentToolAugmentation(
+            trace_id=None,
+            wake_used=not bool(meta.get("skip_wake")),
+            cache_eligible=(wake_meta or {}).get("cache_eligible"),
+            markup_emissions=[],
         )
 
-        # 6. Augment the response with .agenttool. We always wrap rather
+    def _finalize_response(
+        self,
+        params: dict,
+        response: Any,
+        meta: dict,
+        ambient: Any,
+        wake_meta: Optional[dict],
+    ) -> Any:
+        trace_id: Optional[str] = None
+        should_trace = meta.get("trace") == "decision" or ambient is not None
+        if should_trace:
+            trace_id = self._record_decision_trace(
+                params,
+                response,
+                meta,
+                ambient,
+            )
+
+        skip_markup = self._disable_markup_parsing or bool(meta.get("skip_markup"))
+        emissions: list[MarkupEmission] = (
+            []
+            if skip_markup
+            else self._parse_and_emit_markup(response, ambient)
+        )
+
+        # Always wrap rather
         #    than setattr-on-response: the Anthropic SDK returns frozen
         #    Pydantic models in v2, which reject __setattr__; raw dicts
         #    (used in tests / lightweight clients) don't support attr
@@ -243,7 +359,7 @@ class AnthropicAdapter:
         #    shape.
         aug = AgentToolAugmentation(
             trace_id=trace_id,
-            wake_used=not skip_wake,
+            wake_used=not bool(meta.get("skip_wake")),
             cache_eligible=(wake_meta or {}).get("cache_eligible"),
             markup_emissions=emissions,
         )
@@ -254,6 +370,7 @@ class AnthropicAdapter:
         params: dict,
         response: Any,
         meta: dict,
+        ambient: Any,
     ) -> Optional[str]:
         conclusion = _extract_response_text(response).strip() or "(empty response)"
         user_text = _extract_last_user_text(params).strip()
@@ -270,7 +387,6 @@ class AnthropicAdapter:
         }
         # Merge ambient context (`with at.deciding(...)`) — explicit
         # values on `meta` win; ambient fills gaps. Tags are unioned.
-        ambient = get_ambient()
         explicit_tags = list(meta.get("tags") or [])
         ambient_tags = list(ambient.tags) if ambient else []
         merged_tags = list(dict.fromkeys(explicit_tags + ambient_tags))
@@ -298,7 +414,11 @@ class AnthropicAdapter:
             )
             return None
 
-    def _parse_and_emit_markup(self, response: Any) -> list[MarkupEmission]:
+    def _parse_and_emit_markup(
+        self,
+        response: Any,
+        ambient: Any,
+    ) -> list[MarkupEmission]:
         text = _extract_response_text(response)
         envelope = _AGENTTOOL_ENVELOPE.search(text)
         if not envelope:
@@ -384,7 +504,6 @@ class AnthropicAdapter:
             # Markup-emitted traces inherit ambient parent + tags too,
             # so a <trace> tag inside `with at.deciding(...)` chains
             # to the framing decision the same way auto-trace does.
-            ambient = get_ambient()
             if ambient is not None:
                 if ambient.parent_trace_id:
                     post["parent_trace_id"] = ambient.parent_trace_id
@@ -413,6 +532,217 @@ class AnthropicAdapter:
                 )
 
         return emissions
+
+
+class _LowLevelStreamProxy:
+    """Transparent proxy for ``messages.create(stream=True)``.
+
+    No event is inspected or accumulated. Iteration and lifecycle methods
+    delegate to the provider object; ``agenttool`` is a local receipt only.
+    """
+
+    def __init__(self, stream: Any, agenttool: AgentToolAugmentation) -> None:
+        self.__dict__["_stream"] = stream
+        self.__dict__["_active"] = stream
+        self.__dict__["_iterator"] = iter(stream)
+        self.__dict__["agenttool"] = agenttool
+
+    def __iter__(self) -> "_LowLevelStreamProxy":
+        return self
+
+    def __next__(self) -> Any:
+        return next(self.__dict__["_iterator"])
+
+    def __enter__(self) -> "_LowLevelStreamProxy":
+        stream = self.__dict__["_stream"]
+        enter = getattr(stream, "__enter__", None)
+        if callable(enter):
+            active = enter()
+            self.__dict__["_active"] = active
+            self.__dict__["_iterator"] = iter(active)
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, exc_tb: Any) -> Any:
+        stream = self.__dict__["_stream"]
+        exit_method = getattr(stream, "__exit__", None)
+        if callable(exit_method):
+            return exit_method(exc_type, exc, exc_tb)
+        self.close()
+        return None
+
+    def send(self, value: Any) -> Any:
+        send = getattr(self.__dict__["_iterator"], "send", None)
+        if not callable(send):
+            send = getattr(self.__dict__["_active"], "send", None)
+        if not callable(send):
+            raise AttributeError("wrapped Anthropic stream has no send()")
+        return send(value)
+
+    def throw(self, *args: Any) -> Any:
+        throw = getattr(self.__dict__["_iterator"], "throw", None)
+        if not callable(throw):
+            throw = getattr(self.__dict__["_active"], "throw", None)
+        if not callable(throw):
+            raise AttributeError("wrapped Anthropic stream has no throw()")
+        return throw(*args)
+
+    def close(self) -> Any:
+        close = getattr(self.__dict__["_active"], "close", None)
+        if callable(close):
+            return close()
+        return None
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.__dict__["_active"], name)
+
+
+class _ManagedStreamManagerProxy:
+    """Preserve Anthropic's sync context-manager stream helper."""
+
+    def __init__(
+        self,
+        manager: Any,
+        adapter: AnthropicAdapter,
+        params: dict,
+        meta: dict,
+        ambient: Any,
+        wake_meta: Optional[dict],
+    ) -> None:
+        self._manager = manager
+        self._adapter = adapter
+        self._params = params
+        self._meta = meta
+        self._ambient = ambient
+        self._wake_meta = wake_meta
+        self._stream: Optional[_ManagedMessageStreamProxy] = None
+
+    def __enter__(self) -> "_ManagedMessageStreamProxy":
+        provider_stream = self._manager.__enter__()
+        if not callable(getattr(provider_stream, "get_final_message", None)):
+            # The provider request has already started at this boundary; close
+            # it before reporting the invalid helper shape.
+            close = getattr(provider_stream, "close", None)
+            if callable(close):
+                close()
+            raise AgentToolError(
+                "Anthropic stream context returned no get_final_message().",
+                error_code="anthropic_stream_helper_invalid",
+                hint=(
+                    "Use a client implementing the current Anthropic "
+                    "MessageStream helper."
+                ),
+            )
+        self._stream = _ManagedMessageStreamProxy(
+            provider_stream,
+            self._adapter,
+            self._params,
+            self._meta,
+            self._ambient,
+            self._wake_meta,
+        )
+        return self._stream
+
+    def __exit__(self, exc_type: Any, exc: Any, exc_tb: Any) -> Any:
+        return self._manager.__exit__(exc_type, exc, exc_tb)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._manager, name)
+
+
+class _ManagedMessageStreamProxy:
+    """Delegate events while finalizing one provider-completed Message."""
+
+    def __init__(
+        self,
+        stream: Any,
+        adapter: AnthropicAdapter,
+        params: dict,
+        meta: dict,
+        ambient: Any,
+        wake_meta: Optional[dict],
+    ) -> None:
+        self.__dict__["_stream"] = stream
+        self.__dict__["_iterator"] = iter(stream)
+        self.__dict__["_adapter"] = adapter
+        self.__dict__["_params"] = params
+        self.__dict__["_meta"] = meta
+        self.__dict__["_ambient"] = ambient
+        self.__dict__["_wake_meta"] = wake_meta
+        self.__dict__["_finalization_started"] = False
+        self.__dict__["_final_response"] = None
+        self.__dict__["_final_error"] = None
+        self.__dict__["agenttool"] = adapter._empty_augmentation(meta, wake_meta)
+        self.__dict__["text_stream"] = self._iter_text()
+
+    def __iter__(self) -> "_ManagedMessageStreamProxy":
+        return self
+
+    def __next__(self) -> Any:
+        try:
+            return next(self.__dict__["_iterator"])
+        except StopIteration:
+            self._finalize_once()
+            raise
+
+    def __enter__(self) -> "_ManagedMessageStreamProxy":
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, exc_tb: Any) -> Any:
+        self.close()
+        return None
+
+    def get_final_message(self) -> Any:
+        return self._finalize_once()
+
+    def get_final_text(self) -> str:
+        return _extract_final_text(self._finalize_once())
+
+    def until_done(self) -> None:
+        self._finalize_once()
+
+    def close(self) -> Any:
+        close = getattr(self.__dict__["_stream"], "close", None)
+        if callable(close):
+            return close()
+        return None
+
+    def _iter_text(self) -> Any:
+        text_stream = iter(getattr(self.__dict__["_stream"], "text_stream"))
+        while True:
+            try:
+                yield next(text_stream)
+            except StopIteration:
+                self._finalize_once()
+                return
+
+    def _finalize_once(self) -> Any:
+        if self.__dict__["_finalization_started"]:
+            error = self.__dict__["_final_error"]
+            if error is not None:
+                raise error
+            return self.__dict__["_final_response"]
+
+        self.__dict__["_finalization_started"] = True
+        try:
+            # This is the only call site for the provider helper's final
+            # Message. It may consume remaining events when called early.
+            final_message = self.__dict__["_stream"].get_final_message()
+            adapted = self.__dict__["_adapter"]._finalize_response(
+                self.__dict__["_params"],
+                final_message,
+                self.__dict__["_meta"],
+                self.__dict__["_ambient"],
+                self.__dict__["_wake_meta"],
+            )
+            self.__dict__["_final_response"] = adapted
+            self.__dict__["agenttool"] = adapted.agenttool
+            return adapted
+        except BaseException as exc:
+            self.__dict__["_final_error"] = exc
+            raise
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.__dict__["_stream"], name)
 
 
 class _ResponseWithAgentTool:
@@ -465,6 +795,17 @@ class _ResponseWithAgentTool:
 # ── Helpers ──────────────────────────────────────────────────────────────
 
 
+def _as_dict(value: Any) -> dict:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _is_stream_like(value: Any) -> bool:
+    return (
+        not isinstance(value, (dict, str, bytes, bytearray, list, tuple))
+        and callable(getattr(value, "__iter__", None))
+    )
+
+
 def _normalize_system(s: Any) -> list[dict]:
     """Normalise an arbitrary ``system=`` value into Anthropic's
     array-of-blocks shape."""
@@ -502,6 +843,33 @@ def _extract_response_text(response: Any) -> str:
                 if isinstance(t, str):
                     parts.append(t)
     return "\n".join(p for p in parts if p)
+
+
+def _extract_final_text(response: Any) -> str:
+    """Match Anthropic's sync MessageStream.get_final_text(): concatenate
+    final text blocks without separators after exact-once finalization."""
+    blocks = (
+        response.get("content")
+        if isinstance(response, dict)
+        else getattr(response, "content", None)
+    )
+    parts: list[str] = []
+    for block in blocks or []:
+        if isinstance(block, dict):
+            if block.get("type") == "text" and isinstance(block.get("text"), str):
+                parts.append(block["text"])
+        elif (
+            getattr(block, "type", None) == "text"
+            and isinstance(getattr(block, "text", None), str)
+        ):
+            parts.append(block.text)
+    if not parts:
+        raise AgentToolError(
+            "Anthropic stream ended without a text content block.",
+            error_code="anthropic_stream_no_text",
+            hint="Read get_final_message().content for non-text response blocks.",
+        )
+    return "".join(parts)
 
 
 def _extract_last_user_text(params: dict) -> str:

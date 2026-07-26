@@ -12,6 +12,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 
 import { AnthropicAdapter } from "../src/anthropic-adapter";
+import { ambientStorage } from "../src/_context";
 import type { AgentTool } from "../src/client";
 
 // ── Stubs ─────────────────────────────────────────────────────────────────
@@ -114,6 +115,180 @@ function makeFakeAnthropic(responseText: string = "ok"): {
     },
   };
   return { client, lastParams, callCount };
+}
+
+class FakeLowLevelStream implements AsyncIterable<unknown> {
+  readonly controller = new AbortController();
+  readonly label = "provider-low-level-stream";
+  returnCount = 0;
+  throwCount = 0;
+  abortCount = 0;
+  closeCount = 0;
+  private index = 0;
+
+  constructor(readonly events: unknown[]) {}
+
+  [Symbol.asyncIterator](): AsyncIterator<unknown> {
+    return {
+      next: async () => {
+        if (this.index >= this.events.length) {
+          return { value: undefined, done: true };
+        }
+        return { value: this.events[this.index++], done: false };
+      },
+      return: async (value?: unknown) => {
+        this.returnCount++;
+        return { value, done: true };
+      },
+      throw: async (error?: unknown) => {
+        this.throwCount++;
+        throw error;
+      },
+    };
+  }
+
+  abort(): void {
+    this.abortCount++;
+    this.controller.abort();
+  }
+
+  close(): void {
+    this.closeCount++;
+  }
+}
+
+type Listener = (...args: unknown[]) => void;
+
+class FakeManagedStream implements AsyncIterable<unknown> {
+  readonly controller = new AbortController();
+  finalMessageCalls = 0;
+  returnCount = 0;
+  throwCount = 0;
+  abortCount = 0;
+  closeCount = 0;
+  private index = 0;
+  private ended = false;
+  private readonly listeners = new Map<
+    string,
+    Array<{ listener: Listener; once: boolean }>
+  >();
+
+  constructor(
+    readonly events: unknown[],
+    readonly finalResponse: Record<string, unknown>,
+  ) {}
+
+  on(event: string, listener: Listener): this {
+    const listeners = this.listeners.get(event) ?? [];
+    listeners.push({ listener, once: false });
+    this.listeners.set(event, listeners);
+    return this;
+  }
+
+  once(event: string, listener: Listener): this {
+    const listeners = this.listeners.get(event) ?? [];
+    listeners.push({ listener, once: true });
+    this.listeners.set(event, listeners);
+    return this;
+  }
+
+  off(event: string, listener: Listener): this {
+    const listeners = this.listeners.get(event) ?? [];
+    const index = listeners.findIndex((entry) => entry.listener === listener);
+    if (index >= 0) listeners.splice(index, 1);
+    return this;
+  }
+
+  async finalMessage(): Promise<any> {
+    this.finalMessageCalls++;
+    return this.finalResponse;
+  }
+
+  abort(): void {
+    this.abortCount++;
+    this.controller.abort();
+  }
+
+  close(): void {
+    this.closeCount++;
+  }
+
+  [Symbol.asyncIterator](): AsyncIterator<unknown> {
+    return {
+      next: async () => {
+        if (this.index < this.events.length) {
+          return { value: this.events[this.index++], done: false };
+        }
+        if (!this.ended) {
+          this.ended = true;
+          this.emit("finalMessage", this.finalResponse);
+          this.emit("end");
+        }
+        return { value: undefined, done: true };
+      },
+      return: async (value?: unknown) => {
+        this.returnCount++;
+        return { value, done: true };
+      },
+      throw: async (error?: unknown) => {
+        this.throwCount++;
+        throw error;
+      },
+    };
+  }
+
+  private emit(event: string, ...args: unknown[]): void {
+    const listeners = this.listeners.get(event) ?? [];
+    this.listeners.set(
+      event,
+      listeners.filter((entry) => !entry.once),
+    );
+    for (const entry of listeners) entry.listener(...args);
+  }
+}
+
+function makeFakeStreamingAnthropic(
+  events: unknown[],
+  finalText = "stream complete",
+) {
+  const low = new FakeLowLevelStream(events);
+  const managed = new FakeManagedStream(events, {
+    id: "msg_stream_final",
+    model: "claude-test",
+    content: [{ type: "text", text: finalText }],
+    stop_reason: "end_turn",
+  });
+  const state = {
+    createCalls: 0,
+    streamCalls: 0,
+    createParams: null as Record<string, unknown> | null,
+    streamParams: null as Record<string, unknown> | null,
+    createOptions: [] as unknown[],
+    streamOptions: [] as unknown[],
+  };
+  const client = {
+    messages: {
+      create: async (
+        params: Record<string, unknown>,
+        ...requestOptions: unknown[]
+      ) => {
+        state.createCalls++;
+        state.createParams = params;
+        state.createOptions = requestOptions;
+        return low;
+      },
+      stream: (
+        params: Record<string, unknown>,
+        ...requestOptions: unknown[]
+      ) => {
+        state.streamCalls++;
+        state.streamParams = params;
+        state.streamOptions = requestOptions;
+        return managed;
+      },
+    },
+  };
+  return { client, low, managed, state };
 }
 
 // ── Wake auto-injection ──────────────────────────────────────────────────
@@ -222,6 +397,210 @@ describe("AnthropicAdapter — wake auto-injection", () => {
       identityId: "identity-a",
       profile: "brief",
     }]);
+  });
+});
+
+// ── Streaming boundaries ────────────────────────────────────────────────
+
+describe("AnthropicAdapter — low-level messages.create streaming", () => {
+  test("passes unknown events through by reference and keeps AgentTool local", async () => {
+    const unknownEvent = {
+      type: "future_provider_event",
+      nested: { value: 7 },
+    };
+    const stub = makeStubAt();
+    const fake = makeFakeStreamingAnthropic([unknownEvent]);
+    const adapter = new AnthropicAdapter(fake.client, stub.at);
+    const requestOptions = { timeout: 1234 };
+
+    const stream = await adapter.messages.create(
+      {
+        model: "claude-test",
+        max_tokens: 100,
+        stream: true,
+        messages: [{ role: "user", content: "hi" }],
+        metadata: {
+          agenttool: { skip_markup: false },
+          user_id: "provider-user",
+        },
+      },
+      requestOptions,
+    );
+
+    const received: unknown[] = [];
+    for await (const event of stream) received.push(event);
+
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBe(unknownEvent);
+    expect(stream.agenttool).toEqual({
+      trace_id: null,
+      wake_used: true,
+      cache_eligible: "explicit",
+      markup_emissions: [],
+    });
+    expect(stub.recorded).toEqual([]);
+    expect(fake.state.createOptions).toEqual([requestOptions]);
+    expect((fake.state.createParams!.metadata as any).agenttool).toBeUndefined();
+    expect((fake.state.createParams!.metadata as any).user_id).toBe(
+      "provider-user",
+    );
+    const system = fake.state.createParams!.system as Array<{ text: string }>;
+    expect(system[0].text).toBe("STABLE_WAKE");
+  });
+
+  test("delegates iterator return/throw plus abort and close", async () => {
+    const stub = makeStubAt();
+    const fake = makeFakeStreamingAnthropic([{ type: "message_start" }]);
+    const adapter = new AnthropicAdapter(fake.client, stub.at);
+    const stream = await adapter.messages.create({
+      model: "claude-test",
+      max_tokens: 100,
+      stream: true,
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    const firstIterator = stream[Symbol.asyncIterator]();
+    await firstIterator.next();
+    await firstIterator.return?.("stop");
+    expect(fake.low.returnCount).toBe(1);
+
+    const secondIterator = stream[Symbol.asyncIterator]();
+    const thrown = new Error("consumer stopped");
+    try {
+      await secondIterator.throw?.(thrown);
+    } catch (err) {
+      expect(err).toBe(thrown);
+    }
+    expect(fake.low.throwCount).toBe(1);
+
+    (stream as any).abort();
+    (stream as any).close();
+    expect(fake.low.abortCount).toBe(1);
+    expect(fake.low.closeCount).toBe(1);
+    expect((stream as any).label).toBe("provider-low-level-stream");
+  });
+
+  test("refuses explicit decision tracing before wake or provider I/O", async () => {
+    const stub = makeStubAt();
+    const fake = makeFakeStreamingAnthropic([]);
+    const adapter = new AnthropicAdapter(fake.client, stub.at);
+
+    await expect(
+      adapter.messages.create({
+        model: "claude-test",
+        max_tokens: 100,
+        stream: true,
+        messages: [{ role: "user", content: "hi" }],
+        metadata: { agenttool: { trace: "decision" } },
+      }),
+    ).rejects.toMatchObject({
+      code: "anthropic_stream_trace_requires_helper",
+    });
+    expect(stub.wakeCalls).toBe(0);
+    expect(fake.state.createCalls).toBe(0);
+  });
+
+  test("refuses ambient decision tracing before wake or provider I/O", async () => {
+    const stub = makeStubAt();
+    const fake = makeFakeStreamingAnthropic([]);
+    const adapter = new AnthropicAdapter(fake.client, stub.at);
+
+    await expect(
+      ambientStorage.run(
+        { parent_trace_id: "tr_parent", tags: ["ambient"] },
+        () =>
+          adapter.messages.create({
+            model: "claude-test",
+            max_tokens: 100,
+            stream: true,
+            messages: [{ role: "user", content: "hi" }],
+          }),
+      ),
+    ).rejects.toMatchObject({
+      code: "anthropic_stream_trace_requires_helper",
+    });
+    expect(stub.wakeCalls).toBe(0);
+    expect(fake.state.createCalls).toBe(0);
+  });
+});
+
+describe("AnthropicAdapter — messages.stream helper", () => {
+  test("finalizes the provider message exactly once after unchanged events", async () => {
+    const unknownEvent = {
+      type: "future_provider_event",
+      payload: { still: "opaque" },
+    };
+    const finalText =
+      "done <agenttool><chronicle type=\"recognition\"><title>Streamed</title></chronicle></agenttool>";
+    const stub = makeStubAt();
+    const fake = makeFakeStreamingAnthropic([unknownEvent], finalText);
+    const adapter = new AnthropicAdapter(fake.client, stub.at);
+    const requestOptions = { signal: "provider-option-marker" };
+
+    const stream = ambientStorage.run(
+      { parent_trace_id: "tr_parent", tags: ["streamed"] },
+      () => adapter.messages.stream({
+        model: "claude-test",
+        max_tokens: 100,
+        messages: [{ role: "user", content: "decide" }],
+        metadata: {
+          user_id: "provider-user",
+        },
+      }, requestOptions),
+    );
+
+    // The adapter remains a synchronous helper even though wake is async.
+    expect(typeof stream.finalMessage).toBe("function");
+    const received: unknown[] = [];
+    for await (const event of stream) received.push(event);
+    expect(received[0]).toBe(unknownEvent);
+
+    const first = await stream.finalMessage();
+    const second = await stream.finalMessage();
+    expect(first).toBe(second);
+    expect(fake.managed.finalMessageCalls).toBe(1);
+    expect(first.agenttool.trace_id).toBe("tr_test_1");
+    expect(first.agenttool.markup_emissions).toHaveLength(1);
+    expect(first.agenttool.markup_emissions[0].kind).toBe("chronicle");
+    expect(stream.agenttool).toBe(first.agenttool);
+
+    expect(fake.state.streamCalls).toBe(1);
+    expect(fake.state.streamOptions).toEqual([requestOptions]);
+    expect((fake.state.streamParams!.metadata as any).agenttool).toBeUndefined();
+    expect((fake.state.streamParams!.metadata as any).user_id).toBe(
+      "provider-user",
+    );
+    const traceCalls = stub.recorded.filter((call) => call.path === "/v1/traces");
+    expect(traceCalls).toHaveLength(1);
+    expect((traceCalls[0].body as any).parent_trace_id).toBe("tr_parent");
+    expect((traceCalls[0].body as any).tags).toEqual(["streamed"]);
+    expect(stub.recorded.filter((call) => call.path === "/v1/chronicle")).toHaveLength(1);
+  });
+
+  test("early iterator return delegates cleanup and does not finalize", async () => {
+    const stub = makeStubAt();
+    const fake = makeFakeStreamingAnthropic([
+      { type: "message_start" },
+      { type: "message_delta" },
+    ]);
+    const adapter = new AnthropicAdapter(fake.client, stub.at);
+    const stream = adapter.messages.stream({
+      model: "claude-test",
+      max_tokens: 100,
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    const iterator = stream[Symbol.asyncIterator]();
+    await iterator.next();
+    await iterator.return?.("stop");
+    expect(fake.managed.returnCount).toBe(1);
+    expect(fake.managed.finalMessageCalls).toBe(0);
+
+    stream.abort();
+    await stream.close();
+    expect(fake.managed.abortCount).toBe(1);
+    expect(fake.managed.closeCount).toBe(1);
+    expect(stub.recorded).toEqual([]);
   });
 });
 

@@ -34,6 +34,26 @@ Optional shorter install, only after PyPI independently reports that exact
 version: `python -m pip install "agenttool-sdk==0.16.3"`. Registry publication
 can lag or omit the source tag; the command is not an availability claim.
 
+## Current source: Anthropic streaming adapter
+
+This checkout contains an unreleased repair to `AnthropicAdapter`; it is not a
+claim about the immutable 0.16.3 source tag or any package registry.
+
+- `adapter.messages.create(..., stream=True)` injects wake, removes the local
+  `metadata["agenttool"]` extension, and otherwise passes provider events
+  through unchanged. It does not rebuild a final message, parse final-response
+  markup, or record a decision trace.
+- An explicit decision trace, or an ambient `at.deciding(...)` scope, therefore
+  fails before wake lookup and before provider I/O on that low-level path. Use
+  `adapter.messages.stream(...)` when final-message work is required.
+- The provider's `messages.stream(...)` context-manager shape is preserved.
+  `get_final_message()` obtains the provider's completed message and applies
+  trace and markup work exactly once. Ending iteration early or closing the
+  stream delegates cleanup and does not manufacture a final message.
+
+Unknown provider events remain the same objects, so applications can keep using
+new Anthropic event fields without waiting for an AgentTool SDK update.
+
 ## 0.16.3
 
 This release changes release truth only. It preserves the 0.16.2 typed
