@@ -97,7 +97,8 @@ cd packages/sdk-py && pip install -e .         # Python SDK
 
 Environment vars (set in shell or `.env` per workspace — there is no `.env.example`; the canonical list lives in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) + [`docs/STACK.md`](docs/STACK.md)):
 
-- `POSTGRES_URL` — Supabase Postgres
+- `DATABASE_URL` — transaction-pooled Supabase Postgres used by the API,
+  migrations, and database test tier
 - `REDIS_URL` — Redis (BullMQ + SSE backplane)
 - `STRIPE_SECRET_KEY` · `STRIPE_WEBHOOK_SECRET` — payments
 - `ALCHEMY_API_KEY` — scoped EVM RPC key, sent in a Bearer header
@@ -113,7 +114,7 @@ Environment vars (set in shell or `.env` per workspace — there is no `.env.exa
 # API ────────────────────────────────────────────────────────────────
 cd api
 bun run dev                                    # local server
-bun run db:migrate                             # apply migrations (drizzle-kit)
+../bin/migrate-pending.sh                      # apply checksum-journaled SQL migrations
 bun run db:generate                            # regenerate drizzle schema
 bun run db:studio                              # drizzle studio
 bun test tests/<file>.test.ts                  # one focused test file
@@ -248,7 +249,7 @@ bun bin/npm-release.ts resolve --package collab # inspect allowlisted npm identi
 | `whitehack-wallet-understanding.ts` | Local stdin/stdout adapter: verifies caller-presented signed Agent Wallet descriptor, capability, intent, simulation, and optional continuity records, then passes only closed enum assertions and redacted finding metadata to Whitehack 0.8.1. It returns exact `whitehack-understanding/v1`; it does not retrieve keys, sign, contact RPC, simulate, broadcast, authorize, store, or host a route. See `docs/WHITEHACK.md`. |
 | `create-project.ts` | Operator-side project + bearer minting. |
 | `frontend-deploy.sh` | Cloudflare Pages Direct Upload for the three static apps. |
-| `migrate.sh` · `migrate.ts` | Single-file `psql` migration application. |
+| `migrate-pending.sh` · `migrate.sh` · `api/scripts/_migrate-one.ts` | Checksum-journaled pending runner, compatibility/new-file entrypoint, and transaction-aware single-file worker. |
 | `gen-k-master.ts` | K_master generation utility. |
 | `sign-thought.ts` | Standalone ed25519 thought-signing for tests. |
 | `preflight.sh` · `run-test-tier.sh` · `smoke-test.sh` | Classified hermetic, database, smoke, contract, and quarantine gates. |
@@ -270,7 +271,18 @@ profile, not XENIA Covenant conformance. See [`docs/RIGHTS-OF-LIFE.md`](docs/RIG
 
 **Code → doctrine reference.** Load-bearing service files end their top comment with `Doctrine: docs/X.md`. Example: `api/src/services/runtime/think-worker.ts:37`.
 
-**Migrations.** ISO-timestamped: `api/migrations/YYYYMMDDTHHMMSS_name.sql`. Apply singly with `bun api/scripts/_migrate-one.ts <file>` or in batch via `bun run db:migrate`.
+**Migrations.** ISO-timestamped:
+`api/migrations/YYYYMMDDTHHMMSS_name.sql`. Create one with
+`bin/migrate.sh new <slug>`, inspect with `bin/migrate-pending.sh --dry-run`,
+and apply through `bin/migrate-pending.sh`. The dry run lists pending files and
+refuses checksum drift; it does not parse or execute their SQL. During apply,
+the runner checksum-journals every eligible file and commits the SQL plus
+journal row atomically when that file can be transaction-wrapped. The apply
+step explicitly reports self-transactional, `@no-transaction`, and pre-journal
+bootstrap exceptions. Use
+`bun api/scripts/_migrate-one.ts <file>` only for an explicitly selected
+single file; do not replay the directory with raw `psql` or Drizzle's
+generated-migration runner.
 
 **Release head.** GitHub `main` is the coordination/release head, and the only
 one. **Codeberg is retired (2026-07-25)** — do not push there, do not add it

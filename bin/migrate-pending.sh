@@ -10,6 +10,7 @@
 # Usage:
 #   bin/migrate-pending.sh                  # apply all pending
 #   bin/migrate-pending.sh --dry-run        # list pending without applying
+#   bin/migrate-pending.sh --help           # print this contract
 #
 # Safe properties:
 #   - Order is alphabetical (= timestamp order for YYYYMMDDTHHMMSS files)
@@ -19,6 +20,47 @@
 #   - Idempotent: re-running after a successful pass is a no-op
 
 set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+usage:
+  bin/migrate-pending.sh
+  bin/migrate-pending.sh --dry-run
+  bin/migrate-pending.sh --help
+
+With no arguments, applies every pending checksum-journaled migration.
+--dry-run inspects the journal and lists pending files without applying them.
+EOF
+}
+
+# Parse the complete argv before resolving DATABASE_URL. Unknown or extra
+# arguments must never turn a typo (especially `--help`) into a live apply.
+DRY_RUN=0
+case "$#" in
+  0)
+    ;;
+  1)
+    case "$1" in
+      --dry-run)
+        DRY_RUN=1
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "error: unknown argument: $1" >&2
+        usage >&2
+        exit 2
+        ;;
+    esac
+    ;;
+  *)
+    echo "error: expected no arguments or exactly one supported option" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
@@ -35,9 +77,6 @@ if [ -z "${DATABASE_URL:-}" ]; then
   exit 1
 fi
 export DATABASE_URL
-
-DRY_RUN=0
-[ "${1:-}" = "--dry-run" ] && DRY_RUN=1
 
 # ── Compute pending: files − meta._migrations rows ─────────────────────
 PENDING_FILE="$(mktemp -t agenttool-pending.XXXXXX)"
