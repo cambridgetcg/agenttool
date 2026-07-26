@@ -10,7 +10,7 @@
 # Usage:
 #   bin/preflight.sh                 # api + packages, hermetic
 #   bin/preflight.sh api             # API/protocol hermetic gate
-#   bin/preflight.sh packages        # data + ADDS + sync + archive + broker + collab + Browser + projection + local projector + Skills + TypeScript SDK + Wallet + Telescope gate
+#   bin/preflight.sh packages        # data + ADDS + sync + archive + broker + collab + Browser + projection + local projector + Skills + TypeScript SDK + Wallet + Telescope + Alchemy gate
 #   bin/preflight.sh database        # requires DATABASE_URL
 #   bin/preflight.sh smoke           # requires smoke-test environment
 #   RUN_CONTRACT=1 bin/preflight.sh contracts  # requires provider key(s)
@@ -82,6 +82,25 @@ sanitize_hermetic_env() {
     OTEL_EXPORTER_OTLP_HEADERS OTEL_EXPORTER_OTLP_TRACES_HEADERS \
     OTEL_RESOURCE_ATTRIBUTES OTEL_SERVICE_NAME \
     STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET VAULT_MASTER_KEY \
+    ALCHEMY_API_KEY ALCHEMY_NOTIFY_AUTH_TOKEN \
+    ALCHEMY_WEBHOOK_SIGNING_KEY_ETHEREUM \
+    ALCHEMY_WEBHOOK_SIGNING_KEY_BASE \
+    ALCHEMY_WEBHOOK_SIGNING_KEY_POLYGON \
+    ALCHEMY_WEBHOOK_SIGNING_KEY_ARBITRUM \
+    ALCHEMY_WEBHOOK_SIGNING_KEY_OPTIMISM \
+    ALCHEMY_WEBHOOK_ID_ETHEREUM ALCHEMY_WEBHOOK_ID_BASE \
+    ALCHEMY_WEBHOOK_ID_POLYGON ALCHEMY_WEBHOOK_ID_ARBITRUM \
+    ALCHEMY_WEBHOOK_ID_OPTIMISM \
+    HELIUS_API_KEY HELIUS_WEBHOOK_SECRET \
+    CRYPTO_HD_MNEMONIC CRYPTO_HD_MNEMONIC_TESTNET \
+    CRYPTO_WEBHOOK_ALLOW_UNSIGNED \
+    PAYOUT_WORKER_ENABLED PAYOUT_NETWORK PAYOUT_GBP_USD_RATE \
+    RPC_URL_ETHEREUM_MAINNET RPC_URL_ETHEREUM_TESTNET \
+    RPC_URL_BASE_MAINNET RPC_URL_BASE_TESTNET \
+    RPC_URL_POLYGON_MAINNET RPC_URL_POLYGON_TESTNET \
+    RPC_URL_ARBITRUM_MAINNET RPC_URL_ARBITRUM_TESTNET \
+    RPC_URL_OPTIMISM_MAINNET RPC_URL_OPTIMISM_TESTNET \
+    RPC_URL_SOLANA_MAINNET RPC_URL_SOLANA_TESTNET \
     SMOKE_DID
   export AGENTTOOL_DISABLE_WORKERS=1
 }
@@ -124,6 +143,8 @@ packages_gate() {
     bash -c 'cd packages/wallet && bun run ci'
   run "Telescope read-only discovery library and CLI" \
     bash -c 'cd packages/telescope && bun run ci'
+  run "Alchemy bounded observation primitives" \
+    bash -c 'cd packages/alchemy && bun run ci'
 }
 
 case "$MODE" in

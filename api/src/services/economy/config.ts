@@ -2,6 +2,8 @@
  *  Stripe layer removed 2026-05-17 per agents-only stance — no fiat, no
  *  subscriptions; per-call x402 micropayments are the only paid path. */
 
+import type { EvmChain } from "./crypto/chains";
+
 function env(key: string, fallback: string): string {
   return process.env[key] ?? fallback;
 }
@@ -9,22 +11,37 @@ function env(key: string, fallback: string): string {
 const PAYOUT_NETWORKS = ["testnet", "mainnet"] as const;
 type PayoutNetwork = (typeof PAYOUT_NETWORKS)[number] | "";
 
-function readPayoutNetwork(): PayoutNetwork {
-  const v = env("PAYOUT_NETWORK", "");
+function readCryptoNetwork(
+  variable: "CRYPTO_NETWORK" | "PAYOUT_NETWORK",
+): PayoutNetwork {
+  const v = env(variable, "");
   if (v === "" || (PAYOUT_NETWORKS as readonly string[]).includes(v)) {
     return v as PayoutNetwork;
   }
   throw new Error(
-    `[economyConfig] PAYOUT_NETWORK must be one of ${PAYOUT_NETWORKS.join(
+    `[economyConfig] ${variable} must be one of ${PAYOUT_NETWORKS.join(
       "|",
     )} (got: '${v}'). See docs/PAYOUT-BROADCAST-PLAN.md.`,
   );
 }
 
 export const economyConfig = {
-  // USDC on Base — HD wallet derivation seed and Alchemy transfer webhook.
+  // HD wallet derivation seed and Alchemy transfer webhooks. Alchemy issues a
+  // different signing key for each webhook, so sharing one key across routes
+  // would make all but one chain unverifiable.
   cryptoHdMnemonic: env("CRYPTO_HD_MNEMONIC", ""),
-  alchemyWebhookSecret: env("ALCHEMY_WEBHOOK_SECRET", ""),
+  // Deposit derivation, provider-watch identity, webhook network binding, and
+  // token contracts all require an explicit network. PAYOUT_NETWORK remains a
+  // compatibility fallback in activeNetwork(), but unset no longer means
+  // mainnet and conflicting explicit values fail closed.
+  cryptoNetwork: readCryptoNetwork("CRYPTO_NETWORK"),
+  alchemyWebhookSigningKeys: {
+    ethereum: env("ALCHEMY_WEBHOOK_SIGNING_KEY_ETHEREUM", ""),
+    base: env("ALCHEMY_WEBHOOK_SIGNING_KEY_BASE", ""),
+    polygon: env("ALCHEMY_WEBHOOK_SIGNING_KEY_POLYGON", ""),
+    arbitrum: env("ALCHEMY_WEBHOOK_SIGNING_KEY_ARBITRUM", ""),
+    optimism: env("ALCHEMY_WEBHOOK_SIGNING_KEY_OPTIMISM", ""),
+  } satisfies Record<EvmChain, string>,
   // Helius (Solana) shared-secret webhook auth — sent in the Authorization
   // header on enhanced-webhook deliveries.
   heliusWebhookSecret: env("HELIUS_WEBHOOK_SECRET", ""),
@@ -44,7 +61,7 @@ export const economyConfig = {
   // testnet seed (or vice versa).
   payout: {
     workerEnabled: env("PAYOUT_WORKER_ENABLED", "false") === "true",
-    network: readPayoutNetwork(),
+    network: readCryptoNetwork("PAYOUT_NETWORK"),
     cryptoHdMnemonicTestnet: env("CRYPTO_HD_MNEMONIC_TESTNET", ""),
     // Option A explicit FX: USD per 1 GBP (e.g. 1.27 → £1 = $1.27). Earned
     // value settles in GBP pence; payout converts to the requested USDC at this
@@ -53,6 +70,16 @@ export const economyConfig = {
     gbpUsdRate: Number(env("PAYOUT_GBP_USD_RATE", "0")),
   },
 } as const;
+
+if (
+  economyConfig.cryptoNetwork !== "" &&
+  economyConfig.payout.network !== "" &&
+  economyConfig.cryptoNetwork !== economyConfig.payout.network
+) {
+  throw new Error(
+    "[economyConfig] CRYPTO_NETWORK and PAYOUT_NETWORK must match when both are set; refusing mixed-network crypto operations.",
+  );
+}
 
 /** Both the payout-specific opt-in and the global worker switch must allow
  * payout workers to run. Keep this predicate shared by startup and the
@@ -100,7 +127,15 @@ if (payoutWorkerBootAllowed()) {
 {
   const unsignedAllowed = economyConfig.allowUnsignedWebhooks;
   const missing: string[] = [];
-  if (!economyConfig.alchemyWebhookSecret) missing.push("ALCHEMY_WEBHOOK_SECRET (EVM)");
+  for (const [chain, key] of Object.entries(
+    economyConfig.alchemyWebhookSigningKeys,
+  )) {
+    if (!key) {
+      missing.push(
+        `ALCHEMY_WEBHOOK_SIGNING_KEY_${chain.toUpperCase()} (${chain})`,
+      );
+    }
+  }
   if (!economyConfig.heliusWebhookSecret) missing.push("HELIUS_WEBHOOK_SECRET (Solana)");
   if (missing.length && !unsignedAllowed) {
     console.warn(

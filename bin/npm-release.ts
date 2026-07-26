@@ -99,6 +99,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "browser",
     artifactKind: "love",
   },
+  alchemy: {
+    key: "alchemy",
+    name: "@agenttool/alchemy",
+    packagePath: "packages/alchemy",
+    tagPrefix: "alchemy",
+    artifactKind: "pack",
+  },
   "repo-archive": {
     key: "repo-archive",
     name: "@agenttool/repo-archive",
@@ -499,6 +506,12 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/dist/cli.js",
       "package/schema/agent-repo-archive-v0.1.schema.json",
       "package/vectors/agent-repo-archive-v0.1-vectors.json",
+    );
+  }
+  if (spec.name === "@agenttool/alchemy") {
+    entries.push(
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
     );
   }
   if (spec.name === "@agenttool/skills") {

@@ -41,9 +41,9 @@ psql "$DATABASE_URL" -f api/migrations/20260508T232231_payout_policies.sql
 | `PAYOUT_NETWORK` | when payout is enabled and the global switch is unset | `testnet` \| `mainnet`. Boot refuses if active payout worker configuration omits it. |
 | `CRYPTO_HD_MNEMONIC` | mainnet | BIP-39 mnemonic; address derivation seed for mainnet. **Back up offline.** |
 | `CRYPTO_HD_MNEMONIC_TESTNET` | testnet | Separate testnet mnemonic; never reused for mainnet. Boot refuses testnet without this set. |
-| `ALCHEMY_API_KEY` | EVM RPC | Single key for all EVM chains; URL composed by `network.ts`. |
+| `ALCHEMY_API_KEY` | EVM RPC | Single key for all EVM chains; sent as `Authorization: Bearer` to the chain-specific Alchemy `/v2` endpoint and never placed in its URL. |
 | `HELIUS_API_KEY` | Solana mainnet | Required on mainnet (no public fallback). Optional on testnet (devnet falls back to `api.devnet.solana.com`). |
-| `RPC_URL_<CHAIN>_<NETWORK>` | optional override | Per-chain explicit URL (e.g. `RPC_URL_ETHEREUM_MAINNET=https://...`). Wins over Alchemy/Helius. |
+| `RPC_URL_<CHAIN>_<NETWORK>` | optional override | Per-chain explicit URL (e.g. `RPC_URL_ETHEREUM_MAINNET=https://...`). Wins over Alchemy/Helius; an EVM override receives no Alchemy authorization header. |
 
 Mainnet refuses to fall back to public RPCs — you MUST configure auth before any mainnet RPC call.
 
@@ -137,8 +137,9 @@ The workers log structured prefixes; grep for these:
 | `💸 payout confirm worker started` | Boot — confirm interval set. |
 | `[payout-dispatcher] enqueued N broadcast job(s)` | Per tick: rows found + enqueued. |
 | `[payout-broadcast] <id>: submitted <hash> (<chain>)` | Successful broadcast. |
-| `[payout-broadcast] <id>: submit error but tx landed` | Phantom error — tx is on-chain, marked `broadcast`. Investigate the error message. |
-| `[payout-broadcast] <id>: <reason>; refunded N credits` | Failure with refund. Common reasons: `submit_failed: <viem error>`, `build_or_sign_failed: <reason>`. |
+| `[payout-broadcast] <id>: submit error but tx landed` | The expected persisted identity was found and the row was CAS-advanced to `broadcast`; provider details are intentionally not logged. |
+| `[payout-broadcast] <id>: submit outcome unknown (lookup=absent\|unavailable)` | The RPC call errored and lookup could not prove submission. Row stays `broadcasting`; no refund or retry occurs. |
+| `[payout-broadcast] <id>: sign_failed` | Failure was proved before RPC dispatch, so the row failed and credits were refunded; bounded detail is stored on the payout row. |
 | `[payout-confirm] <id>: confirmed at block N (<chain>)` | Per chain confirmation. |
 | `[payout-confirm] <id>: reverted on-chain (<chain>); refunded N credits` | On-chain revert. |
 
@@ -147,14 +148,14 @@ The workers log structured prefixes; grep for these:
 | Condition | Cause | Remediation |
 |---|---|---|
 | Row at `requested` for >1min | Dispatcher not running OR worker not running | Check `PAYOUT_WORKER_ENABLED=true`, confirm `AGENTTOOL_DISABLE_WORKERS` is unset, then check logs. Rows pick up automatically when a worker comes online. |
-| Row at `broadcasting` for >5min | Worker crashed mid-cycle | Restart api. On boot, the next dispatcher tick re-enqueues; the worker checks `txExistsOnChain` and either marks `broadcast` (if it landed) or refunds (if not). |
-| Row at `broadcast` for >1h, no `confirmed` | RPC/chain delay, or never landed | Query the chain manually for the `tx_hash`. If absent: the tx is stuck in mempool — replace-by-fee from operator wallet, or wait. If reverted: confirm worker will catch on next tick. If receipt success but watcher hasn't run: check confirm-worker logs. |
+| Row at `broadcasting` for >5min | Worker crashed after hash persistence, or RPC submit/lookup outcome is ambiguous | The confirmer keeps performing read-only expected-ID lookups. A positive result CAS-advances to `broadcast`; absence/failure remains inconclusive and never triggers retry/refund. Later payouts from that wallet+chain remain requested behind the source gate. |
+| Row at `broadcast` for >1h, no `confirmed` | RPC/chain delay, or a transaction that is not reaching finality | Query the exact stored identity independently. Do not submit replacement bytes or alter `tx_hash` outside an audited replacement lifecycle; the current state machine has no RBF transition. |
 
 ---
 
 ## Operator-driven cancel + refund
 
-Two paths to refund credits manually:
+One safe path is currently implemented:
 
 ### Path A: user-initiated cancel (when status='requested')
 
@@ -165,26 +166,12 @@ curl -X POST $BASE/v1/wallets/$WALLET_ID/payouts/$PAYOUT_ID/cancel \
 # 409 → not_cancellable (already past 'requested' — worker has the row).
 ```
 
-### Path B: admin SQL (when status='broadcasting' or unrecoverable)
-
-```sql
-BEGIN;
--- Refund credits.
-UPDATE economy.wallets
-   SET balance = balance + (
-     SELECT CEIL((amount_base::numeric / 1000000) * 100)::bigint
-     FROM economy.crypto_payouts WHERE id = '<payout_id>'
-   )
- WHERE id = (SELECT wallet_id FROM economy.crypto_payouts WHERE id = '<payout_id>');
-
--- Mark failed.
-UPDATE economy.crypto_payouts
-   SET status = 'failed', error = 'admin_manual_refund'
- WHERE id = '<payout_id>';
-COMMIT;
-```
-
-Use Path B sparingly; document in operator log.
+There is intentionally no direct-SQL ambiguity refund recipe. Recomputing a
+refund from `amount_base`, crediting a wallet directly, or changing status
+without the exact locked debit and expected-state CAS can use the wrong FX
+debit, break earned-wall accounting, or refund twice. A future operator command
+must reuse the exact-ledger reversal service and require persisted decisive
+chain evidence. Until it exists, a `broadcasting` payout stays unresolved.
 
 ---
 
@@ -213,6 +200,10 @@ Error codes (HTTP 403) returned to the agent on policy violation:
 | `payout_exceeds_daily_ceiling` | UTC-day total + this payout exceeds `payout_daily_ceiling_base`. Sum excludes `failed` and `cancelled` rows. |
 | `payout_dual_control_required` | Amount ≥ `payout_dual_control_threshold_base`. Dual-control flow not yet implemented; below-threshold payouts are accepted unconditionally. |
 
+If the service cannot read the daily aggregate exactly, it returns
+`payout_daily_total_unavailable` (HTTP 503) and performs no debit. This is an
+operator/storage health condition, not a request-shape error.
+
 ---
 
 ## Key rotation
@@ -235,7 +226,10 @@ There is no in-protocol rotation that preserves continuity. This is a deliberate
 ## What this runbook does NOT cover
 
 - **Cross-chain settlement routing.** Composes on top of payout broadcast; its own slice.
-- **Replace-by-fee (RBF) for stuck mainnet txs.** Manual operator action; viem's `eth_sendRawTransaction` with same nonce + higher gas. Document in operator log if used.
+- **Replace-by-fee (RBF).** Not represented by the current state machine. Do
+  not submit replacement bytes ad hoc: they have a different hash and would
+  break the persisted-identity/unique-row contract. Build an audited
+  replacement transition first.
 - **Reorg deeper than confirmation threshold.** Out of scope; manual escalation if it ever fires (extremely unlikely on mainnet at 12 blocks).
 - **Hardware-wallet signing.** Future option; currently the platform uses HD-derived software keys.
 

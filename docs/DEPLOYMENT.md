@@ -64,13 +64,81 @@ export STRIPE_SECRET_KEY="sk_test_..."
 export STRIPE_WEBHOOK_SECRET="whsec_..."
 
 # Crypto payment (optional)
+export CRYPTO_NETWORK="testnet"  # explicit; unset never falls through to mainnet
 export CRYPTO_HD_MNEMONIC="..."  # BIP-39 12 or 24 words
-export ALCHEMY_WEBHOOK_SECRET="..."
+export ALCHEMY_API_KEY="..."
+export ALCHEMY_NOTIFY_AUTH_TOKEN="..."
+export AGENTTOOL_PUBLIC_URL="https://api.example"
+export ALCHEMY_WATCH_TARGET_REVISION="1"
+# Optional explicit tombstones, for example: "polygon,optimism"
+export ALCHEMY_WATCH_DISABLED_CHAINS=""
+export ALCHEMY_WEBHOOK_ID_ETHEREUM="..."
+export ALCHEMY_WEBHOOK_ID_BASE="..."
+export ALCHEMY_WEBHOOK_ID_POLYGON="..."
+export ALCHEMY_WEBHOOK_ID_ARBITRUM="..."
+export ALCHEMY_WEBHOOK_ID_OPTIMISM="..."
+export ALCHEMY_WEBHOOK_SIGNING_KEY_ETHEREUM="..."
+export ALCHEMY_WEBHOOK_SIGNING_KEY_BASE="..."
+export ALCHEMY_WEBHOOK_SIGNING_KEY_POLYGON="..."
+export ALCHEMY_WEBHOOK_SIGNING_KEY_ARBITRUM="..."
+export ALCHEMY_WEBHOOK_SIGNING_KEY_OPTIMISM="..."
 
 # Bind
 export PORT=3000
 export HOST=0.0.0.0
 ```
+
+The five webhook IDs and five signing keys refer to the same five existing
+per-network Address Activity webhooks. A signing key is specific to its
+webhook; do not reuse one across routes. AgentTool updates address sets; it
+does not create or delete Alchemy apps/webhooks. EVM address disclosure also
+requires the matching per-chain signing key and a recent observation of the
+current public webhook ID/callback target. Secret bytes are never written to
+watch state. Use deployment secrets rather than exporting credential values
+from a global shell profile. See [ALCHEMY.md](ALCHEMY.md).
+
+`ALCHEMY_NOTIFY_AUTH_TOKEN` authorizes the worker's bounded team-webhook
+metadata GET, paginated address-membership GET, and membership PATCH. Set
+`ALCHEMY_WATCH_TARGET_REVISION` to a positive bounded integer and increase it
+whenever an existing webhook ID, callback, or active/disabled declaration
+changes. Never reuse one revision for different facts. Explicitly disabled
+chains go in `ALCHEMY_WATCH_DISABLED_CHAINS` as exact comma-separated
+supported EVM names with no whitespace, duplicates, or empty entries. An
+omitted webhook variable does not disable that chain. A disabled chain may
+retain its webhook ID and signing key so the API can authenticate deliveries
+for previously watched addresses; the worker excludes it from reconciliation.
+The tombstone does not delete or deactivate the provider webhook. To stop
+those deliveries, separately deactivate it or remove its memberships before
+removing the local ingress identity.
+
+`CRYPTO_NETWORK` owns deposits and shared crypto reads. `PAYOUT_NETWORK` remains
+the payout-worker opt-in and a compatibility fallback; if both are set they
+must match. Neither an unset value nor a conflict silently selects mainnet.
+
+Before accepting EVM deposits, stop crypto webhook ingress and old API
+writers, and drain old workers before applying the checksum-verified deposit
+identity, watch, target-binding, target-registry, and finality migrations.
+The target-registry schema keeps rolling old-binary writes fail closed for
+address disclosure and durable convergence, but an old worker can still claim
+a newly inserted revisionless row during mixed-version overlap. Keep every old
+worker drained for the whole overlap; a database fence cannot cancel provider
+I/O already started.
+
+The finality migration keeps a rollout-compatible database default of
+`credited` so an accidentally surviving old immediate-credit writer cannot
+mislabel its effect as pending; the new writer always supplies an explicit
+state. Do not claim the finality contract until only the new writers are
+serving. Signed live Alchemy deliveries then persist as `pending`; signed
+removed generations persist reorg evidence and may reverse only their matching
+credited effect. The globally gated deposit confirmation worker performs
+bounded, zero-retry-per-call chain-ID, receipt-identity, canonical-block,
+exact-log, and depth checks before wallet credit.
+Provider configuration and a migration file on disk do not prove the path is
+operational—run a staging delivery plus canonical receipt/reorg-generation
+check first. A converged EVM watch is disclosure-fresh for ten minutes and
+becomes due for a best-effort background recheck after 24 hours while the
+worker runs; neither bound guarantees continuous provider delivery. Solana
+deposits do not yet have the equivalent finality contract.
 
 ## 3. Start the API
 
@@ -218,6 +286,10 @@ Peers can now resolve our identities at `/federation/identities/:uuid` and post 
 | `relation "tools.projects" does not exist` | 0000_bootstrap.sql not applied | Re-run from step 1 |
 | `extension "vector" is not available` | pgvector not installed | `CREATE EXTENSION vector` (Supabase has it; managed Postgres may need to enable) |
 | `[agenttool] browse worker did not start` | Redis unreachable or `AGENTTOOL_DISABLE_WORKERS=1` | Verify `REDIS_URL` and the worker off-switch. Keep workers disabled when the dependency or operational boundary is not intended. |
+| EVM watch target is `target_binding_pending` | The running worker has not prepared the API's current target revision | Verify the target environment. A current worker retries preparation before its next batch; reload or restart it only when needed to load corrected process configuration. |
+| EVM watch target is `target_configuration_conflict` | A running API target is older than or disagrees with the registry, or one revision was reused for different public facts | Align every replica with the intended target. Resolving a durable same-revision conflict or changing facts requires a revision higher than the registry head; restart with unchanged conflicting configuration cannot repair it. |
+| EVM watch target is `target_disabled` | Local configuration declares the chain disabled, or the disabled tombstone is the current registry head | Keep address disclosure closed. Retain the ID/key only for intended old-address ingress. To re-enable after preparation, remove the local disable and configure a consistent active target at a revision higher than the durable head. |
+| EVM watch is blocked after bounded provider attempts are exhausted | Provider repair has not been followed by a new reconciliation request | Inspect and repair the recorded outcome. No supported reset route or CLI exists yet; an approved maintenance tool must invoke the internal seam, and direct ad hoc row mutation is not the recovery contract. Restarting alone does not reset the outcome. |
 | `signature_invalid` on POST thought | signing pubkey not uploaded, or wrong key id in env | Re-check `AGENTTOOL_SIGNING_KEY_ID` matches the keys row in `identity.identity_keys` |
 | `box_key_id` errors on inbox send | box pubkey not registered | `agenttool-think register-box-key` |
 | `federation_disabled` on `/federation/inbox` | settings.enabled=false | PATCH `/v1/federation/settings` |

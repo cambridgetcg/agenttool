@@ -56,8 +56,8 @@ async function tick() {
 export function startPayoutDispatcher() {
   if (interval) return;
   interval = setInterval(() => {
-    tick().catch((err) => {
-      console.error("[payout-dispatcher] tick error:", err);
+    tick().catch(() => {
+      console.error("[payout-dispatcher] tick unavailable; no rows enqueued");
     });
   }, POLL_INTERVAL_MS);
   console.log(`💸 payout dispatcher started (poll ${POLL_INTERVAL_MS}ms)`);

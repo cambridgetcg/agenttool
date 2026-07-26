@@ -17,12 +17,15 @@ OS vault -> local broker --------> approved HTTPS origin
 
 `agentcred/0.1` is an experimental protocol and this package is a developer
 preview. Read [SPEC.md](./SPEC.md) and the limitations below before using it
-with a valuable credential.
+with a valuable credential. The separately negotiated
+[`agentcred.evm-jsonrpc-read/0.1`](./JSONRPC-READ-0.1.md) profile adds a
+method-aware EVM read surface without widening generic `http.fetch`.
 
-Version 0.1.0 is licensed under Apache-2.0 and distributed through the
-independently verifiable LOVE package catalog. npm is an optional convenience
-mirror whose exact availability must be checked independently; the LOVE
-manifest binds the artifact size, SHA-256, and source revision.
+Repository source is version 0.2.0. The independently verifiable LOVE catalog
+still records the immutable 0.1.0 release; source version 0.2.0 is not evidence
+that an npm or LOVE release exists. npm is an optional convenience mirror whose
+exact availability must be checked independently; a LOVE manifest binds the
+artifact size, SHA-256, and source revision.
 
 ## What the preview does
 
@@ -42,6 +45,10 @@ manifest binds the artifact size, SHA-256, and source revision.
   headers, and compressed responses;
 - bounds request and response bodies and removes exact secret-byte reflections
   before results, errors, and metadata audits cross the broker boundary;
+- can negotiate a closed EVM JSON-RPC read profile whose client supplies only
+  a CAIP-2 chain ID, one allowlisted method, and method-specific params; the
+  broker owns the exact origin plus `/v2`, envelope, ID, headers, and Bearer
+  credential injection;
 - negotiates client concurrency and bounds per-session/global in-flight work
   and active grants; and
 - latches audit failure, denying new grants and uses by default.
@@ -73,13 +80,21 @@ manifest binds the artifact size, SHA-256, and source revision.
   streaming APIs are rejected before a use is reserved in `0.1`. In AgentTool,
   this means `wake.voice`, `strands.thoughts.voice`, and `inbox.voice` are not
   available through this broker version.
+- The EVM JSON-RPC extension supports seven small read methods only. It does
+  not expose arbitrary RPC, logs, traces, simulation, subscriptions,
+  transaction broadcast, prepared wallet calls, or Alchemy administration.
+  Its origin-to-chain association is owner-configured; only an explicit
+  `eth_chainId` call live-checks that association.
 - The broker does not create, verify, decode, or place a spending limit on an
   x402 `PAYMENT-SIGNATURE`. Enabling `allowPaymentSignature` only forwards a
   caller-supplied signature within the origin/method/path/use boundary. Prefer
   a fresh, short-lived, one-use grant for one exact paid tool path and a
   trusted consent surface that checks the payment terms before signing.
-- Aborting the caller-side `fetch` rejects locally, but does not recall an
-  operation already dispatched to the broker or undo an upstream side effect.
+- Aborting caller-side `fetch` rejects locally, but does not recall an operation
+  already dispatched to the broker or undo an upstream side effect.
+  `callEvmJsonRpcRead()` has no per-use abort signal in this preview: its local
+  timeout stops waiting, while closing the session propagates cancellation to
+  in-flight broker work.
 - The JSONL audit stops at 10 MiB rather than rotating. The server emits one
   safe operator notification and denies subsequent grants/uses by default;
   deploy a managed `AuditSink` for rotation or tamper evidence.
@@ -168,6 +183,47 @@ set `"allowPaymentSignature": true` in both the owner policy and the requested
 grant. This permits forwarding only; it does not sign or validate payment
 terms.
 
+### Alchemy EVM read policy
+
+An Alchemy Chain API key can use the negotiated JSON-RPC profile without
+putting the key in the endpoint URL. The credential mapping must be
+`"kind": "bearer"`:
+
+```json
+{
+  "credentials": {
+    "alchemy/ethereum-read": {
+      "backend": "macos-keychain",
+      "service": "alchemy-ethereum-read",
+      "account": "you",
+      "auth": { "kind": "bearer" }
+    }
+  },
+  "policies": [
+    {
+      "operation": "jsonrpc.read",
+      "profile": "agentcred.evm-jsonrpc-read/0.1",
+      "credential": "alchemy/ethereum-read",
+      "origin": "https://eth-mainnet.g.alchemy.com",
+      "chainId": "eip155:1",
+      "methods": [
+        "eth_chainId",
+        "eth_blockNumber",
+        "eth_getBalance",
+        "eth_getTransactionReceipt"
+      ],
+      "maxTtlSeconds": 120,
+      "maxUses": 20,
+      "maxRequestBytes": 1024,
+      "maxResponseBytes": 4096
+    }
+  ]
+}
+```
+
+The path is fixed by the profile to `/v2`; there is intentionally no URL,
+path, query, header, raw body, JSON-RPC ID, batch, or notification input.
+
 ## Client API
 
 ```ts
@@ -203,6 +259,46 @@ await broker.revoke(grant);
 broker.close();
 ```
 
+The same client offers the shipped JSON-RPC profile during `hello` by default.
+A method-aware Alchemy read is requested separately:
+
+```ts
+import {
+  AGENTCRED_EVM_JSONRPC_READ_PROFILE,
+  AgentCredClient,
+} from "@agenttool/credential-broker";
+
+const broker = new AgentCredClient({
+  socketPath: `${process.env.HOME}/.config/agentcred/run/agentcred.sock`,
+});
+await broker.connect();
+
+const grant = await broker.requestGrant({
+  alias: "ethereum-observation",
+  credential: "alchemy/ethereum-read",
+  operation: "jsonrpc.read",
+  scope: {
+    profile: AGENTCRED_EVM_JSONRPC_READ_PROFILE,
+    origin: "https://eth-mainnet.g.alchemy.com",
+    chainId: "eip155:1",
+    methods: ["eth_getBalance"],
+    ttlSeconds: 60,
+    maxUses: 2,
+    maxRequestBytes: 1024,
+    maxResponseBytes: 4096,
+  },
+});
+
+const balance = await broker.callEvmJsonRpcRead(grant, {
+  chainId: "eip155:1",
+  method: "eth_getBalance",
+  params: ["0x1111111111111111111111111111111111111111", "finalized"],
+});
+
+await broker.revoke(grant);
+broker.close();
+```
+
 The returned handle serializes only its alias and receipt. Application code
 should keep the client and handle in trusted host state rather than exposing
 the client object as a model tool.
@@ -211,6 +307,8 @@ the client object as a model tool.
 
 - `BrokerServer`: local Unix-socket broker core.
 - `AgentCredClient`: connection and opaque-handle client.
+- `AgentCredClient.callEvmJsonRpcRead`: negotiated, method-aware EVM reads
+  without a caller-controlled URL or raw JSON-RPC envelope.
 - `MacOSKeychainSource`: broker-only Keychain reader.
 - `PolicyConsent`: owner-authored standing allowlist.
 - `ConsentProvider`: hook for a native out-of-band approval UI.

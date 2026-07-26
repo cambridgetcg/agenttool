@@ -39,7 +39,14 @@ export const payoutBroadcastQueue: Queue<PayoutBroadcastJobData> | null =
           // emitted a tx hash MUST NOT retry — first might still land →
           // double-spend. The worker handles its own classification.
           attempts: 1,
-          removeOnComplete: { age: 3600 },
-          removeOnFail: { age: 86400 * 7 }, // keep failures 7d for forensics
+          // Completed processing must release the payout-id dedupe key. Every
+          // normal pre-submit failure is terminalized by the worker before it
+          // completes, so a still-requested row cannot hide behind a retained
+          // completed job.
+          removeOnComplete: true,
+          // A failed job means even terminal-failure containment was
+          // unavailable. Retain it for explicit operator review;
+          // attempts:1 prevents an unsafe replay.
+          removeOnFail: { age: 86400 * 7 },
         },
       });

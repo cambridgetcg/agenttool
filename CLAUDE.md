@@ -30,6 +30,7 @@ packages/
   correspondence-yutabase-projector/ — private loopback-only verified local PostgreSQL sidecar
   telescope/    — @agenttool/telescope · read-only discovery evidence mapper
   wallet/       — @agenttool/wallet · LOVE/npm bounded wallet record/lifecycle primitives
+  alchemy/      — @agenttool/alchemy · bounded reads through an injected credential-owning transport
   scriptwriter/ — decentralised RRR + co-brainstorm node
 infra/          — Fly.io deploy configs
 bin/            — operator scripts · agenttool-bridge.ts · agenttool-think.ts · locked Whitehack advisory + offer-only Castle intake + local wallet-understanding CLI
@@ -50,6 +51,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/correspondence-yutabase/CLAUDE.md` ·
 `packages/correspondence-yutabase-projector/CLAUDE.md` ·
 `packages/wallet/CLAUDE.md` ·
+`packages/alchemy/CLAUDE.md` ·
 `infra/CLAUDE.md`.
 
 ## The five load-bearing flows

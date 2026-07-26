@@ -4,6 +4,11 @@ This package is the reference implementation of `agentcred/0.1`: a local
 broker that lets an agent SDK perform a narrowly scoped operation without
 receiving the underlying credential value.
 
+It also implements the separately negotiated
+`agentcred.evm-jsonrpc-read/0.1` profile. Keep that profile method-aware and
+closed; never widen generic `http.fetch` or accept a caller URL, raw JSON-RPC
+envelope, batch, notification, or state-changing method as a shortcut.
+
 ## Non-negotiable boundary
 
 - Do not add a secret read, reveal, export, enumeration, environment-injection,

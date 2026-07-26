@@ -8011,12 +8011,23 @@ function spec() {
             in: "query",
             schema: { type: "string", enum: ["ethereum", "base", "polygon", "arbitrum", "optimism", "solana"] },
           },
-          { name: "token", in: "query", schema: { type: "string", default: "USDC" } },
+          {
+            name: "token",
+            in: "query",
+            schema: { type: "string", enum: ["USDC"], default: "USDC" },
+          },
         ],
         get: {
           tags: ["crypto"],
-          summary: "Get deterministic crypto deposit address for wallet (BIP44 EVM live; Solana stubbed)",
-          responses: { "200": { description: "Address" } },
+          summary:
+            "Get or list deterministic USDC deposit addresses; EVM addresses return only after fresh independent verification of the current watch target and membership",
+          responses: {
+            "200": { description: "Address" },
+            "503": {
+              description:
+                "Stored derivation validation failed, or the EVM watch target, ingress key, or fresh independently verified membership is not ready",
+            },
+          },
         },
       },
       "/v1/wallets/{walletId}/payout": {
@@ -8025,7 +8036,8 @@ function spec() {
         ],
         post: {
           tags: ["crypto"],
-          summary: "Request a crypto payout (debits wallet; broadcast in Phase 3c)",
+          summary:
+            "Request a crypto payout (debits wallet; opt-in worker broadcasts)",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           requestBody: {
             required: true,
@@ -8035,8 +8047,18 @@ function spec() {
                   type: "object",
                   properties: {
                     chain: { type: "string" },
-                    token: { type: "string", default: "USDC" },
-                    amount_base: { type: "string", description: "Token base units (USDC: 1 USDC = '1000000')" },
+                    token: {
+                      type: "string",
+                      enum: ["USDC"],
+                      default: "USDC",
+                    },
+                    amount_base: {
+                      type: "string",
+                      pattern: "^[1-9][0-9]{0,15}$",
+                      maxLength: 16,
+                      description:
+                        "Canonical positive USDC base units, at most 9007199254740991 (1 USDC = '1000000')",
+                    },
                     destination_address: { type: "string" },
                   },
                   required: ["chain", "amount_base", "destination_address"],

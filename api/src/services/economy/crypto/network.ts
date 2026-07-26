@@ -1,10 +1,10 @@
-/** Network-aware helpers for crypto operations. Switch between mainnet
- *  and testnet behavior based on `economyConfig.payout.network`. When the
- *  network is unset (the default), behavior is mainnet — preserving existing
- *  semantics for deployments that haven't opted into the payout broadcast
- *  worker yet.
+/** Network-aware helpers for crypto operations. Deposit-only deployments use
+ *  `CRYPTO_NETWORK`; the older explicit `PAYOUT_NETWORK` remains a compatible
+ *  fallback. Unset never implies mainnet, and conflicting values fail closed.
  *
  *  Doctrine: docs/PAYOUT-BROADCAST-PLAN.md. */
+
+import { http, type HttpTransport } from "viem";
 
 import { economyConfig } from "../config";
 import {
@@ -44,7 +44,8 @@ export const EVM_TESTNET_CHAIN_IDS: Record<EvmChain, number> = {
   optimism: 11155420, // Optimism Sepolia
 };
 
-/** Confirmation thresholds (blocks of finality before status='confirmed'). */
+/** Conservative block-depth thresholds before a pending deposit may be
+ * credited. For L2s this is chain-local depth, not L1 settlement finality. */
 export const EVM_CONFIRMATION_THRESHOLDS: Record<EvmChain, number> = {
   ethereum: 12,
   base:     12,
@@ -55,10 +56,30 @@ export const EVM_CONFIRMATION_THRESHOLDS: Record<EvmChain, number> = {
 
 export type ActiveNetwork = "mainnet" | "testnet";
 
-/** The network this instance is operating against. Defaults to mainnet
- *  when `payout.network` is unset (preserves existing behavior). */
+/** The explicitly selected crypto network.
+ *
+ * `CRYPTO_NETWORK` owns deposits, watch reconciliation, ingress, contracts,
+ * and shared RPC reads. `PAYOUT_NETWORK` can supply the same value for older
+ * deployments, but cannot silently override a conflicting deposit network. */
 export function activeNetwork(): ActiveNetwork {
-  return economyConfig.payout.network === "testnet" ? "testnet" : "mainnet";
+  const cryptoNetwork = economyConfig.cryptoNetwork;
+  const payoutNetwork = economyConfig.payout.network;
+  if (
+    cryptoNetwork !== "" &&
+    payoutNetwork !== "" &&
+    cryptoNetwork !== payoutNetwork
+  ) {
+    throw new Error(
+      "CRYPTO_NETWORK and PAYOUT_NETWORK disagree — crypto operations are disabled until they match.",
+    );
+  }
+  const selected = cryptoNetwork || payoutNetwork;
+  if (selected === "") {
+    throw new Error(
+      "CRYPTO_NETWORK is unset — choose testnet or mainnet before using crypto operations.",
+    );
+  }
+  return selected;
 }
 
 /** The HD mnemonic for the active network. Throws if unset. */
@@ -100,40 +121,108 @@ const PUBLIC_TESTNET_RPCS: Record<EvmChain, string> = {
   optimism: "https://optimism-sepolia-rpc.publicnode.com",
 };
 
-/** Build the RPC URL for a chain on the active network. Resolution order:
+export type EvmRpcEndpointSource =
+  | "override"
+  | "alchemy"
+  | "public-testnet";
+
+export interface EvmRpcEndpoint {
+  url: string;
+  source: EvmRpcEndpointSource;
+}
+
+export interface EvmRpcTransportOptions {
+  /** Viem retries three times by default. Submission passes zero so one
+   * caller-level dispatch attempt cannot be hidden inside the transport. */
+  retryCount?: number;
+  timeout?: number;
+}
+
+interface ResolvedEvmRpcEndpoint extends EvmRpcEndpoint {
+  authorization?: string;
+}
+
+/** Resolve the EVM RPC endpoint and its request authentication. Resolution order:
  *
  *    1. `RPC_URL_<CHAIN>_<NETWORK>` env override (e.g.
  *       `RPC_URL_ETHEREUM_TESTNET=https://my-rpc.example/...`)
- *    2. `ALCHEMY_API_KEY` env → Alchemy URL with active network's subdomain
+ *    2. `ALCHEMY_API_KEY` env → Alchemy endpoint with Bearer authentication
  *    3. **Testnet only**: a public unauth'd RPC fallback
+ *
+ *  An explicit override receives no Alchemy authorization header. This both
+ *  preserves the override contract and prevents the shared Alchemy key from
+ *  being disclosed to a caller-selected endpoint.
  *
  *  Mainnet refuses to fall through to the public fallback — operators
  *  must explicitly set ALCHEMY_API_KEY (or per-chain override) before
  *  any mainnet broadcast can happen. The point is to make
  *  silent-mainnet-via-public-RPC impossible. */
-export function rpcUrl(chain: EvmChain): string {
+function resolveEvmRpcEndpoint(chain: EvmChain): ResolvedEvmRpcEndpoint {
   const network = activeNetwork();
 
   // 1. Per-chain explicit override — wins over everything.
   const envKey = `RPC_URL_${chain.toUpperCase()}_${network.toUpperCase()}`;
   const override = process.env[envKey];
-  if (override) return override;
+  if (override) {
+    return {
+      url: override,
+      source: "override",
+    };
+  }
 
-  // 2. Alchemy with shared API key.
+  // 2. Alchemy with a shared API key sent in the request header. Keep the
+  //    credential out of URLs, where clients, proxies, errors, and access
+  //    logs commonly record it.
   const apiKey = process.env.ALCHEMY_API_KEY ?? "";
   if (apiKey) {
     const subdomain = ALCHEMY_NETWORKS[chain][network];
-    return `https://${subdomain}.g.alchemy.com/v2/${apiKey}`;
+    return {
+      url: `https://${subdomain}.g.alchemy.com/v2`,
+      source: "alchemy",
+      authorization: `Bearer ${apiKey}`,
+    };
   }
 
   // 3. Testnet falls back to public RPCs. Mainnet does NOT — explicit auth
   //    is required for production broadcasts to prevent silent reliance on
   //    a public node that may rate-limit / disappear / get man-in-the-middled.
-  if (network === "testnet") return PUBLIC_TESTNET_RPCS[chain];
+  if (network === "testnet") {
+    return {
+      url: PUBLIC_TESTNET_RPCS[chain],
+      source: "public-testnet",
+    };
+  }
 
   throw new Error(
     `No mainnet RPC URL: set ALCHEMY_API_KEY or RPC_URL_${chain.toUpperCase()}_MAINNET.`,
   );
+}
+
+/** Return provider identity without returning credential-bearing headers.
+ *  Callers that need a viem transport must use `evmRpcTransport`. */
+export function evmRpcEndpoint(chain: EvmChain): EvmRpcEndpoint {
+  const { url, source } = resolveEvmRpcEndpoint(chain);
+  return { url, source };
+}
+
+/** Build a viem HTTP transport from the resolved endpoint. Alchemy credentials
+ *  are applied only as an Authorization header and never enter the URL. */
+export function evmRpcTransport(
+  chain: EvmChain,
+  options: EvmRpcTransportOptions = {},
+): HttpTransport {
+  const endpoint = resolveEvmRpcEndpoint(chain);
+  if (!endpoint.authorization) {
+    return http(endpoint.url, options);
+  }
+  return http(endpoint.url, {
+    ...options,
+    fetchOptions: {
+      headers: {
+        Authorization: endpoint.authorization,
+      },
+    },
+  });
 }
 
 // ── Solana ──────────────────────────────────────────────────────────────
