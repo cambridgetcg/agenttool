@@ -9,6 +9,8 @@
  *    GET /.well-known/love-packages         — LOVE Package Protocol v1
  *                                              registry-neutral discovery
  *    GET /.well-known/api-catalog           — RFC 9727 product/API catalog
+ *    GET /.well-known/ai-catalog.json       — ARD capability manifest
+ *                                              (agenticresourcediscovery.org)
  *    GET /.well-known/llms.txt              — markdown sitemap hint (AI crawlers)
  *    GET /.well-known/agent.txt             — agent-surface manifest (Move 7 ·
  *                                             upstream-proposable convention;
@@ -41,6 +43,10 @@ import {
   buildApiCatalog,
 } from "../services/discovery/api-catalog";
 import {
+  AI_CATALOG_MEDIA_TYPE,
+  buildAiCatalog,
+} from "../services/discovery/ai-catalog";
+import {
   buildArrivalIndex,
   discoveryLinkHeader,
 } from "../services/discovery/arrival";
@@ -70,6 +76,35 @@ app.on(["GET", "HEAD"], "/api-catalog", (c) => {
   const headers = {
     "cache-control": "public, max-age=300, must-revalidate, no-transform",
     "content-type": API_CATALOG_MEDIA_TYPE,
+    etag,
+    link: discoveryLinkHeader(ORG_URL, DOCS_URL),
+    "x-content-type-options": "nosniff",
+  };
+  const validatorMatches = (c.req.header("if-none-match") ?? "")
+    .split(",")
+    .some((candidate) => {
+      const normalized = candidate.trim().replace(/^W\//, "");
+      return normalized === "*" || normalized === etag;
+    });
+  if (validatorMatches) return c.body(null, 304, headers);
+  if (c.req.method === "HEAD") return c.body(null, 200, headers);
+  return c.body(body, 200, headers);
+});
+
+// ── /.well-known/ai-catalog.json — ARD capability manifest ──────────
+//
+// The api-catalog above is a linkset of products for a caller who already
+// knows they want an API. This one names agentic artifacts for a reader who
+// arrived with only a domain. Nothing here is claimed that is not served,
+// and reading it selects, authenticates, and starts nothing.
+// Spec: https://agenticresourcediscovery.org/ai_catalog_spec/
+
+app.on(["GET", "HEAD"], "/ai-catalog.json", (c) => {
+  const body = JSON.stringify(buildAiCatalog(ORG_URL, DOCS_URL));
+  const etag = `"sha256-${createHash("sha256").update(body).digest("hex")}"`;
+  const headers = {
+    "cache-control": "public, max-age=300, must-revalidate, no-transform",
+    "content-type": AI_CATALOG_MEDIA_TYPE,
     etag,
     link: discoveryLinkHeader(ORG_URL, DOCS_URL),
     "x-content-type-options": "nosniff",

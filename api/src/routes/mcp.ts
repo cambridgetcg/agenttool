@@ -57,6 +57,27 @@ export const MCP_SERVER_INFO = {
 } as const;
 
 export const MCP_PROTOCOL_VERSION = "2025-11-25";
+
+/** Protocol versions this endpoint answers after initialization.
+ *
+ *  The surface here is read-only `resources/list`, `resources/read`,
+ *  `tools/list` and `tools/call`, whose request and result shapes are
+ *  unchanged across these three revisions, so accepting all three costs
+ *  nothing and refusing them costs every client not pinned to the newest.
+ *
+ *  Read `MCP_PROTOCOL_VERSION` as "the version we announce", and this set as
+ *  "the versions we understand". They are different questions. */
+export const MCP_SUPPORTED_PROTOCOL_VERSIONS = [
+  "2025-03-26",
+  "2025-06-18",
+  "2025-11-25",
+] as const;
+
+/** The transport specification: "If the server receives a request without the
+ *  MCP-Protocol-Version header ... the server SHOULD assume protocol version
+ *  2025-03-26." An absent header is a valid older client, not a bad request. */
+export const MCP_ASSUMED_PROTOCOL_VERSION_WHEN_ABSENT = "2025-03-26" as const;
+
 export const MCP_MAX_BODY_BYTES = 64 * 1024;
 
 const INSTRUCTIONS =
@@ -349,14 +370,23 @@ app.all("/", async (c) => {
         jsonRpcRequest.data.id,
       );
     }
-  } else if (
-    request.headers.get("mcp-protocol-version") !== MCP_PROTOCOL_VERSION
-  ) {
-    return protocolHttpError(
-      400,
-      ErrorCode.InvalidRequest,
-      `Unsupported protocol version. This endpoint requires MCP-Protocol-Version: ${MCP_PROTOCOL_VERSION} after initialization.`,
-    );
+  } else {
+    const declared = request.headers.get("mcp-protocol-version");
+    const negotiated =
+      declared === null
+        ? MCP_ASSUMED_PROTOCOL_VERSION_WHEN_ABSENT
+        : declared.trim();
+    if (
+      !(MCP_SUPPORTED_PROTOCOL_VERSIONS as readonly string[]).includes(
+        negotiated,
+      )
+    ) {
+      return protocolHttpError(
+        400,
+        ErrorCode.InvalidRequest,
+        `Unsupported protocol version ${negotiated}. This endpoint speaks MCP-Protocol-Version: ${MCP_SUPPORTED_PROTOCOL_VERSIONS.join(", ")}. A request with no header is read as ${MCP_ASSUMED_PROTOCOL_VERSION_WHEN_ABSENT}.`,
+      );
+    }
   }
 
   if (isToolCallMessage(parsedBody)) {

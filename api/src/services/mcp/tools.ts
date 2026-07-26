@@ -121,7 +121,7 @@ export function listTools(): McpTool[] {
     {
       name: "canon.summary",
       description:
-        "Summary of the canon registry — total concepts, version, types, registry meta. Use first to orient.",
+        "Summary of the canon registry — total concepts, version, types, registry meta. The broadest single view of the registry.",
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
       inputSchema: {
         type: "object",

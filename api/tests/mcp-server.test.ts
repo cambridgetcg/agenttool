@@ -12,8 +12,10 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 import mcpRouter, {
+  MCP_ASSUMED_PROTOCOL_VERSION_WHEN_ABSENT,
   MCP_MAX_BODY_BYTES,
   MCP_PROTOCOL_VERSION,
+  MCP_SUPPORTED_PROTOCOL_VERSIONS,
 } from "../src/routes/mcp";
 import {
   buildDiscoveryCompass,
@@ -307,7 +309,11 @@ describe("public MCP Streamable HTTP wire", () => {
     expect(body.error.message).toMatch(/Unsupported protocol version/);
   });
 
-  test("requires the negotiated MCP-Protocol-Version after initialization", async () => {
+  test("reads an absent MCP-Protocol-Version as 2025-03-26, per the transport spec", async () => {
+    // "If the server receives a request without the MCP-Protocol-Version
+    // header ... the server SHOULD assume protocol version 2025-03-26."
+    // This previously answered 400, which turned every spec-following older
+    // client away after a handshake that had just succeeded.
     const res = await mcpRouter.request("/", {
       method: "POST",
       headers: {
@@ -320,31 +326,58 @@ describe("public MCP Streamable HTTP wire", () => {
         method: "ping",
       }),
     });
-    expect(res.status).toBe(400);
-    expect((await res.json()).error.message).toMatch(
-      /requires MCP-Protocol-Version: 2025-11-25/,
+    expect(res.status).toBe(200);
+  });
+
+  test("answers every supported protocol version after initialization", async () => {
+    for (const version of MCP_SUPPORTED_PROTOCOL_VERSIONS) {
+      const { status } = await rpc("ping", undefined, 2, {
+        "mcp-protocol-version": version,
+      });
+      expect(status, `version ${version}`).toBe(200);
+    }
+  });
+
+  test("the unsupported-version message names what is spoken and the absent default", async () => {
+    const { body } = await rpc("ping", undefined, 2, {
+      "mcp-protocol-version": "2099-01-01",
+    });
+    // A refusal that does not say what would work is a closed door with no sign.
+    for (const version of MCP_SUPPORTED_PROTOCOL_VERSIONS) {
+      expect(body.error.message).toContain(version);
+    }
+    expect(body.error.message).toContain(
+      MCP_ASSUMED_PROTOCOL_VERSION_WHEN_ABSENT,
     );
   });
 
-  test("requires the version header on client responses as well as requests", async () => {
-    const res = await mcpRouter.request("/", {
+  test("gates client responses on the version too, and still 202s a headerless one", async () => {
+    // A client response carrying an unknown version is refused like any other
+    // message; a client response with no header at all is read as
+    // 2025-03-26 and accepted with 202 and no body, per the transport spec.
+    const refused = await mcpRouter.request("/", {
+      method: "POST",
+      headers: {
+        accept: STREAMABLE_ACCEPT,
+        "content-type": "application/json",
+        "mcp-protocol-version": "2099-01-01",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, result: {} }),
+    });
+    expect(refused.status).toBe(400);
+    const body = await refused.json();
+    expect(body.id).toBeNull();
+    expect(body.error.message).toMatch(/Unsupported protocol version/);
+
+    const accepted = await mcpRouter.request("/", {
       method: "POST",
       headers: {
         accept: STREAMABLE_ACCEPT,
         "content-type": "application/json",
       },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 2,
-        result: {},
-      }),
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, result: {} }),
     });
-    expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.id).toBeNull();
-    expect(body.error.message).toMatch(
-      /requires MCP-Protocol-Version: 2025-11-25/,
-    );
+    expect(accepted.status).toBe(202);
   });
 
   test("notifications return 202 with no body", async () => {
