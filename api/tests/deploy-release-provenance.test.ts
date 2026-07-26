@@ -54,6 +54,17 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
+async function waitForPath(path: string, timeoutMs = 5_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await exists(path)) {
+      return true;
+    }
+    await Bun.sleep(20);
+  }
+  return exists(path);
+}
+
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "agenttool-deploy-provenance-"));
   cleanup.push(root);
@@ -886,15 +897,7 @@ describe("deploy release provenance spine", () => {
     const firstStderr = new Response(first.stderr).text();
     let firstResult: [number, string, string] | undefined;
     try {
-      let started = false;
-      for (let attempt = 0; attempt < 100; attempt += 1) {
-        if (await exists(firstPreflight)) {
-          started = true;
-          break;
-        }
-        await Bun.sleep(20);
-      }
-      expect(started).toBe(true);
+      expect(await waitForPath(firstPreflight)).toBe(true);
       const lockPath = deployLockPath(setup.home);
       expect(await exists(lockPath)).toBe(true);
 
@@ -978,15 +981,7 @@ describe("deploy release provenance spine", () => {
     const stderrPromise = new Response(holder.stderr).text();
     let holderResult: [number, string, string] | undefined;
     try {
-      let started = false;
-      for (let attempt = 0; attempt < 100; attempt += 1) {
-        if (await exists(marker)) {
-          started = true;
-          break;
-        }
-        await Bun.sleep(20);
-      }
-      expect(started).toBe(true);
+      expect(await waitForPath(marker)).toBe(true);
       const holderRecordText = await readFile(lockPath, "utf8");
       const holderRecord = holderRecordText
         .split("\n")
@@ -2444,15 +2439,7 @@ describe("deploy release provenance spine", () => {
     );
     const stdoutPromise = new Response(child.stdout).text();
     const stderrPromise = new Response(child.stderr).text();
-    let started = false;
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      if (await exists(marker)) {
-        started = true;
-        break;
-      }
-      await Bun.sleep(20);
-    }
-    expect(started).toBe(true);
+    expect(await waitForPath(marker)).toBe(true);
     child.kill("SIGTERM");
     await writeFile(release, "continue\n");
     const [code, stdout, stderr] = await Promise.all([child.exited, stdoutPromise, stderrPromise]);
