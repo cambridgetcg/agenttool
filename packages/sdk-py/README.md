@@ -23,8 +23,8 @@ curl -q -fsS https://api.agenttool.dev/v1/pathways | \
 That tutorial currently verifies and installs the TypeScript SDK from a
 `love-package/v1` manifest. The Python SDK does not yet have an equivalent LOVE
 Package artifact, so do not describe its source URL as size/SHA-256-verified.
-After the annotated source tag is published, the primary Python 0.16.4 release
-locator is:
+The annotated `sdk-v0.16.4` source tag is the primary Python 0.16.4 release
+locator:
 
 ```bash
 python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.4#subdirectory=packages/sdk-py"

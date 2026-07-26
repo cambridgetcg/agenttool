@@ -177,6 +177,18 @@ test("documents non-activating installation and literal inspector path arguments
   );
 
   expect(readme).toContain(
+    "https://github.com/cambridgetcg/agenttool/releases/download/skills-v0.2.1/agenttool-skills-0.2.1.tgz",
+  );
+  expect(readme).toContain(
+    "6fc378a4edaa10760095fe8c4655c42798741fa2f5f985a16627368726ceb391",
+  );
+  expect(readme).toMatch(
+    /npm 0\.2\.1 is unavailable.*npm `latest` remains 0\.1\.0/s,
+  );
+  expect(readme).toMatch(
+    /npm install --ignore-scripts --no-audit --no-fund\s+\\\s+\.\/agenttool-skills-0\.2\.1\.tgz/s,
+  );
+  expect(readme).not.toContain(
     "npm install --ignore-scripts --no-audit --no-fund --save-exact @agenttool/skills@0.2.1",
   );
   expect(readme).toContain("installing the package\nalone does not register these skills");

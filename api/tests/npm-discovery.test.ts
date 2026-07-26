@@ -18,7 +18,7 @@ const CURRENT_NPM_SPECIFIERS = [
   "@agenttool/data@0.3.1",
   "@agenttool/data-sync@0.1.1",
   "@agenttool/sdk@0.16.4",
-  "@agenttool/telescope@0.2.0",
+  "@agenttool/telescope@0.2.3",
 ] as const;
 
 describe("optional npm package discovery", () => {
@@ -43,7 +43,7 @@ describe("optional npm package discovery", () => {
     expect(canonical).toContain(
       "npm install --save-exact @agenttool/sdk@0.16.4",
     );
-    expect(canonical).toMatch(/skips Step 1.*independent LOVE/is);
+    expect(canonical).toMatch(/skips Step 1.*in-command LOVE/is);
     expect(canonical).toMatch(/never substitute npm `latest`/i);
   });
 

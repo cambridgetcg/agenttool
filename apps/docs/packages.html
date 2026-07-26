@@ -146,12 +146,12 @@ npm install --save-exact @agenttool/data-sync@0.1.1
 npm install --save-exact @agenttool/credential-broker@0.1.0
 npm install --save-exact @agenttool/sdk@0.16.4
 npm install --save-exact @agenttool/wallet@0.1.0
-npm install --save-exact @agenttool/telescope@0.2.0
+npm install --save-exact @agenttool/telescope@0.2.3
 npm install --save-exact @agenttool/browser@0.3.0</pre>
       </div>
 
       <p class="muted"><strong>Credential broker mirror boundary.</strong> The current exact LOVE release is <code>@agenttool/credential-broker@0.2.0</code>. Its GitHub release exists, but npm 0.2.0 is not independently visible; the npm command above deliberately names the last verified public npm version, <code>0.1.0</code>. Use the 0.2.0 LOVE URL below for current release bytes.</p>
-      <p class="muted"><strong>Telescope mirror boundary.</strong> The current exact LOVE release is <code>@agenttool/telescope@0.2.3</code>. npm and GitHub 0.2.3 mirrors are not yet verified; the npm command above deliberately names the last verified public registry version, <code>0.2.0</code>. Use the 0.2.3 LOVE URL below for the current release bytes.</p>
+      <p class="muted"><strong>Telescope mirror boundary.</strong> The current exact LOVE release is <code>@agenttool/telescope@0.2.3</code>. Its npm and GitHub 0.2.3 mirrors are public and independently byte-verified, so the command above names that exact version. Use the 0.2.3 LOVE URL below when you want the manifest-bound verification path.</p>
       <p class="muted"><strong>Runtime boundary.</strong> npm is only the installer here; <code>@agenttool/data</code> and <code>@agenttool/data-sync</code> require Bun ≥1.3 at runtime. The credential broker, Agent Wallet, Telescope, and Agent Browser support Node ≥20.19 or Bun ≥1.3.5. Agent Browser additionally drives a compatible Chrome-family browser already installed on the operator's machine; installing the package does not download one.</p>
       <p class="muted">An npm install uses registry integrity machinery but does not independently compare the downloaded bytes with the LOVE manifest's <code>artifact.size</code> and <code>artifact.sha256</code>. Use the verified workflow below when that boundary matters.</p>
 
@@ -213,7 +213,7 @@ npm install --save-exact @agenttool/browser@0.3.0</pre>
       </div>
 
       <p class="muted">The same HTTPS tarballs remain directly consumable by package managers that support URL dependencies. For example, <code>npm install https://…/agenttool-data-0.3.1.tgz</code> uses the npm client without relying on registry publication.</p>
-      <p class="muted">This catalog contains the eight JavaScript packages above. Python is not mirrored through this catalog: after publication, its primary 0.16.4 locator is source tag <code>sdk-v0.16.4</code>. PyPI is an optional convenience only after <code>https://pypi.org/pypi/agenttool-sdk/0.16.4/json</code> independently returns that exact release; a <code>404</code> means the mirror is unavailable.</p>
+      <p class="muted">This catalog contains the eight JavaScript packages above. Python is not mirrored through this catalog: its primary 0.16.4 locator is the annotated source tag <code>sdk-v0.16.4</code>. PyPI is an optional convenience only after <code>https://pypi.org/pypi/agenttool-sdk/0.16.4/json</code> independently returns that exact release; a <code>404</code> means the mirror is unavailable.</p>
 
       <div class="callout">
         <span class="icon">!</span>

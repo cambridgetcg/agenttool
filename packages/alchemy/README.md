@@ -196,6 +196,7 @@ npm pack --ignore-scripts --dry-run --json
 
 The allowlisted optional npm identity for this developer preview is
 `@agenttool/alchemy@0.1.0-dev.0`, annotated tag `alchemy-v0.1.0-dev.0`, under
-dist-tag `next`. Source metadata, building, and packing are not release
-evidence; verify the protected workflow receipt and public exact-byte checks.
-This package remains npm-only and is not part of an immutable LOVE inventory.
+dist-tag `next`. The exact GitHub prerelease asset is public and independently
+byte-verified. The public npm package is absent, so `next` is not currently
+installable from npm. This preview is not part of an immutable LOVE inventory;
+source metadata, building, and packing alone are not release evidence.
