@@ -102,6 +102,10 @@ fi
 # ── Locate repo root (this script lives in bin/) ───────────────────
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 1
+if [[ ! -x "$REPO_ROOT/bin/stage-frontend-release.sh" ]]; then
+  echo "✗ Missing shared frontend release stager: bin/stage-frontend-release.sh"
+  exit 1
+fi
 
 PINNED_RELEASE_REVISION="${AGENTTOOL_FRONTEND_RELEASE_REVISION:-}"
 if [[ -n "$PINNED_RELEASE_REVISION" ]]; then
@@ -137,7 +141,7 @@ else
 fi
 COMMIT_DIRTY=false
 
-# Build the upload from Git-tracked HEAD bytes, never the ambient app
+# Build the upload from the selected release commit, never the ambient app
 # directory. Wrangler's fixed ignore list does not exclude `.env*` or
 # `.dev.vars*`; uploading the working tree can therefore publish an ignored
 # local credential file.
@@ -150,10 +154,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 echo "→ Staging committed frontend bytes…"
-git archive --format=tar "$COMMIT_HASH" -- \
-  apps/_shared apps/docs apps/dashboard apps/web docs infra/pages packages/data/schema \
-  packages/repo-archive/schema packages/repo-archive/vectors packages/wallet/schema |
-  tar -xf - -C "$STAGE_ROOT"
+bin/stage-frontend-release.sh "$COMMIT_HASH" "$STAGE_ROOT"
 
 # Repository-control files are tracked inputs, not public site assets.
 find "$STAGE_ROOT/apps" \( -type f -o -type l \) -name '.gitignore' -delete
@@ -215,27 +216,6 @@ for app in docs dashboard web; do
   cp "$PAGES_FENCE_DIR/sensitive-path-worker.js" "$STAGE_ROOT/apps/$app/_worker.js"
   cp "$PAGES_FENCE_DIR/sensitive-path-routes.json" "$STAGE_ROOT/apps/$app/_routes.json"
 done
-
-if ! python3 - "$STAGE_ROOT" <<'PY'
-import sys
-from pathlib import Path
-
-root = Path(sys.argv[1]).resolve(strict=True)
-for app in ("docs", "dashboard", "web"):
-    for path in (root / "apps" / app).rglob("*"):
-        if not path.is_symlink():
-            continue
-        try:
-            target = path.resolve(strict=True)
-            target.relative_to(root)
-        except (FileNotFoundError, RuntimeError, ValueError):
-            print(f"  ✗ staged symlink escapes or is broken: {path.relative_to(root)}", file=sys.stderr)
-            raise SystemExit(1)
-PY
-then
-  echo "✗ Frontend staging contains an unsafe symlink; refusing upload."
-  exit 1
-fi
 
 # ── Targets (key|dir|project-name; bash 3 compatible) ──────────────
 ALL_TARGETS=(

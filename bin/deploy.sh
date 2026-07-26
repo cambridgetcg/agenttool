@@ -32,6 +32,10 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 1
+if [ ! -x "$REPO_ROOT/bin/stage-frontend-release.sh" ]; then
+  echo "Missing shared frontend release stager: bin/stage-frontend-release.sh" >&2
+  exit 1
+fi
 
 # ── Parse flags ───────────────────────────────────────────────────────
 SURVEY_ONLY=0
@@ -130,6 +134,38 @@ readonly -a REQUIRED_GAME_PUBLICATIONS=(
   "apps/web/sky.json|https://agenttool.dev/sky.json"
   "apps/web/sky.js|https://agenttool.dev/sky.js"
   "apps/web/sky.css|https://agenttool.dev/sky.css"
+)
+readonly -a FRONTEND_PARITY_PUBLICATIONS=(
+  "apps/dashboard/index.html|https://app.agenttool.dev/"
+  "apps/dashboard/watch.html|https://app.agenttool.dev/watch.html"
+  "apps/dashboard/style.css|https://app.agenttool.dev/style.css"
+  "apps/docs/index.html|https://docs.agenttool.dev/"
+  "apps/docs/play.html|https://docs.agenttool.dev/play"
+  "apps/docs/browser.html|https://docs.agenttool.dev/browser"
+  "apps/docs/data.html|https://docs.agenttool.dev/data"
+  "apps/docs/packages.html|https://docs.agenttool.dev/packages"
+  "apps/docs/pathways.html|https://docs.agenttool.dev/pathways"
+  "apps/docs/tutorial.html|https://docs.agenttool.dev/tutorial"
+  "apps/docs/whitehack.html|https://docs.agenttool.dev/whitehack"
+  "apps/docs/agenttool.jsonld|https://docs.agenttool.dev/agenttool.jsonld"
+  "apps/docs/observer-is-observed-0.1.schema.json|https://docs.agenttool.dev/observer-is-observed-0.1.schema.json"
+  "apps/docs/AGENT-REPO-ARCHIVE.md|https://docs.agenttool.dev/AGENT-REPO-ARCHIVE.md"
+  "apps/docs/specs/AGENT-REPO-ARCHIVE-0.1.md|https://docs.agenttool.dev/specs/AGENT-REPO-ARCHIVE-0.1.md"
+  "apps/docs/specs/agent-repo-archive-0.1.schema.json|https://docs.agenttool.dev/specs/agent-repo-archive-0.1.schema.json"
+  "apps/docs/specs/agent-repo-archive-0.1-vectors.json|https://docs.agenttool.dev/specs/agent-repo-archive-0.1-vectors.json"
+  "${RIGHTS_STATIC_PAIRS[@]}"
+  "apps/docs/lounge.html|https://docs.agenttool.dev/lounge.html"
+  "apps/web/village.html|https://agenttool.dev/village.html"
+  "apps/web/lounge.html|https://agenttool.dev/lounge.html"
+  "apps/web/gallery.html|https://agenttool.dev/gallery.html"
+  "apps/web/index.html|https://agenttool.dev/"
+  "${REQUIRED_GAME_PUBLICATIONS[@]}"
+  "apps/web/room.html|https://agenttool.dev/room"
+  "apps/web/room.json|https://agenttool.dev/room.json"
+  "apps/web/room.js|https://agenttool.dev/room.js"
+  "apps/web/room.css|https://agenttool.dev/room.css"
+  "apps/web/welcome.json|https://agenttool.dev/welcome.json"
+  "apps/web/sitemap.xml|https://agenttool.dev/sitemap.xml"
 )
 readonly -a LOCAL_GAME_HEADER_SPECS=(
   "party|Lantern Relay|local-party-game|local-party-rules"
@@ -514,6 +550,7 @@ API_STAGING_ACTIVE=0
 API_SOURCE_DIRTY="unknown"
 LOVE_PACKAGE_HEADER_PROBES=""
 DOCTRINE_STAGE_DIR="api/doctrine-docs.bundled"
+FRONTEND_RELEASE_STAGE_ROOT=""
 
 cleanup_api_staging() {
   local failed=0
@@ -523,6 +560,24 @@ cleanup_api_staging() {
     API_STAGING_ACTIVE=0
   fi
   return "$failed"
+}
+
+cleanup_frontend_release_stage() {
+  local stage_root="${FRONTEND_RELEASE_STAGE_ROOT:-}"
+  if [ -z "$stage_root" ]; then
+    return 0
+  fi
+  case "${stage_root##*/}" in
+    agenttool-release-verify.*) ;;
+    *)
+      echo "$(red '✗') Refusing to remove an unexpected frontend verification path: $stage_root" >&2
+      return 1
+      ;;
+  esac
+  if [ -e "$stage_root" ] && ! rm -rf -- "$stage_root"; then
+    return 1
+  fi
+  FRONTEND_RELEASE_STAGE_ROOT=""
 }
 
 portable_md5_file() {
@@ -541,8 +596,54 @@ portable_md5_stdin() {
   fi
 }
 
-portable_md5_git_file() {
-  git show "$HEAD_REVISION:$1" | portable_md5_stdin
+portable_md5_release_file() {
+  local path="$1"
+  local staged_path
+  case "$path" in
+    ""|/*|.|..|./*|../*|*/../*|*/..|*/./*|*/.)
+      echo "committed release input error: unsafe repository path: $path" >&2
+      return 1
+      ;;
+  esac
+  if [ -z "${FRONTEND_RELEASE_STAGE_ROOT:-}" ]; then
+    echo "committed release input error: frontend release stage is unavailable" >&2
+    return 1
+  fi
+  staged_path="$FRONTEND_RELEASE_STAGE_ROOT/$path"
+  if [ ! -f "$staged_path" ]; then
+    echo "committed release input error: missing staged regular file: $path" >&2
+    return 1
+  fi
+  portable_md5_file "$staged_path"
+}
+
+verify_staged_frontend_release_inputs() {
+  local publication local_path
+
+  # Rights and advertised games are mandatory discovery inputs. Validate their
+  # dereferenced staged types once, before a migration or upload can mutate
+  # production; the bounded retry loop is reserved for live HTTP convergence.
+  for publication in \
+    "${RIGHTS_STATIC_PAIRS[@]}" \
+    "${REQUIRED_GAME_PUBLICATIONS[@]}"; do
+    local_path="${publication%|*}"
+    if ! portable_md5_release_file "$local_path" >/dev/null; then
+      echo "  $(red '✗') Required discovery input is not a staged regular file: $local_path"
+      return 1
+    fi
+  done
+
+  # Optional parity rows retain their historical missing-path skip, but every
+  # row present in the selected commit must also resolve to a regular staged
+  # file before Phase 1.
+  for publication in "${FRONTEND_PARITY_PUBLICATIONS[@]}"; do
+    local_path="${publication%|*}"
+    if git cat-file -e "$HEAD_REVISION:$local_path" 2>/dev/null &&
+      ! portable_md5_release_file "$local_path" >/dev/null; then
+      echo "  $(red '✗') Frontend parity input is not a staged regular file: $local_path"
+      return 1
+    fi
+  done
 }
 
 response_header_value() {
@@ -602,7 +703,7 @@ verify_rights_static_bytes() {
       echo "  $(red '✗') Missing committed Rights of Life release input: $local_path"
       return 1
     fi
-    local_hash="$(portable_md5_git_file "$local_path")" || return 1
+    local_hash="$(portable_md5_release_file "$local_path")" || return 1
     remote_hash="$(
       release_curl -fsS --max-time 20 "$url" | portable_md5_stdin
     )" || {
@@ -902,7 +1003,7 @@ verify_required_game_publication_once() {
   for publication in "${REQUIRED_GAME_PUBLICATIONS[@]}"; do
     local_path="${publication%|*}"
     url="${publication#*|}"
-    committed_hash="$(portable_md5_git_file "$local_path")" || return 1
+    committed_hash="$(portable_md5_release_file "$local_path")" || return 1
     response_headers="$(
       release_curl -fsS --max-time 15 -o /dev/null -D - "$url"
     )" || {
@@ -955,50 +1056,18 @@ wait_for_discovery_prerequisites() {
 verify_frontend_live_once() {
   local love_package_header_probes="$1"
   local p local_path url local_hash remote_hash response_headers http_status
-  local -a pairs sensitive_public_urls encoded_sensitive_public_urls
+  local -a sensitive_public_urls encoded_sensitive_public_urls
 
   # Lantern Relay changed in this release, and Pocket Sky is newly advertised
   # by the API, docs, and welcome. Their static inputs are required release
   # inputs, not optional parity probes that may be skipped when absent.
   verify_required_frontend_inputs || return 1
 
-  pairs=(
-    "apps/dashboard/index.html|https://app.agenttool.dev/"
-    "apps/dashboard/watch.html|https://app.agenttool.dev/watch.html"
-    "apps/dashboard/style.css|https://app.agenttool.dev/style.css"
-    "apps/docs/index.html|https://docs.agenttool.dev/"
-    "apps/docs/play.html|https://docs.agenttool.dev/play"
-    "apps/docs/browser.html|https://docs.agenttool.dev/browser"
-    "apps/docs/data.html|https://docs.agenttool.dev/data"
-    "apps/docs/packages.html|https://docs.agenttool.dev/packages"
-    "apps/docs/pathways.html|https://docs.agenttool.dev/pathways"
-    "apps/docs/tutorial.html|https://docs.agenttool.dev/tutorial"
-    "apps/docs/whitehack.html|https://docs.agenttool.dev/whitehack"
-    "apps/docs/agenttool.jsonld|https://docs.agenttool.dev/agenttool.jsonld"
-    "apps/docs/observer-is-observed-0.1.schema.json|https://docs.agenttool.dev/observer-is-observed-0.1.schema.json"
-    "apps/docs/AGENT-REPO-ARCHIVE.md|https://docs.agenttool.dev/AGENT-REPO-ARCHIVE.md"
-    "apps/docs/specs/AGENT-REPO-ARCHIVE-0.1.md|https://docs.agenttool.dev/specs/AGENT-REPO-ARCHIVE-0.1.md"
-    "apps/docs/specs/agent-repo-archive-0.1.schema.json|https://docs.agenttool.dev/specs/agent-repo-archive-0.1.schema.json"
-    "apps/docs/specs/agent-repo-archive-0.1-vectors.json|https://docs.agenttool.dev/specs/agent-repo-archive-0.1-vectors.json"
-    "${RIGHTS_STATIC_PAIRS[@]}"
-    "apps/docs/lounge.html|https://docs.agenttool.dev/lounge.html"
-    "apps/web/village.html|https://agenttool.dev/village.html"
-    "apps/web/lounge.html|https://agenttool.dev/lounge.html"
-    "apps/web/gallery.html|https://agenttool.dev/gallery.html"
-    "apps/web/index.html|https://agenttool.dev/"
-    "${REQUIRED_GAME_PUBLICATIONS[@]}"
-    "apps/web/room.html|https://agenttool.dev/room"
-    "apps/web/room.json|https://agenttool.dev/room.json"
-    "apps/web/room.js|https://agenttool.dev/room.js"
-    "apps/web/room.css|https://agenttool.dev/room.css"
-    "apps/web/welcome.json|https://agenttool.dev/welcome.json"
-    "apps/web/sitemap.xml|https://agenttool.dev/sitemap.xml"
-  )
-  for p in "${pairs[@]}"; do
+  for p in "${FRONTEND_PARITY_PUBLICATIONS[@]}"; do
     local_path="${p%|*}"
     url="${p#*|}"
     if ! git cat-file -e "$HEAD_REVISION:$local_path" 2>/dev/null; then continue; fi
-    local_hash="$(portable_md5_git_file "$local_path")" || return 1
+    local_hash="$(portable_md5_release_file "$local_path")" || return 1
     remote_hash="$(release_curl -sL --max-time 15 "$url" 2>/dev/null | portable_md5_stdin)" || {
       echo "  $(red '✗') Could not fetch frontend release input: $url"
       return 1
@@ -1190,6 +1259,10 @@ on_deploy_exit() {
     echo "$(red '✗') Could not remove temporary API build inputs during exit cleanup." >&2
     [ "$status" = 0 ] && status=1
   fi
+  if ! cleanup_frontend_release_stage; then
+    echo "$(red '✗') Could not remove the committed frontend verification stage." >&2
+    [ "$status" = 0 ] && status=1
+  fi
   if [ "$status" != 0 ] && [ "$EXTERNAL_MUTATION_STARTED" = 1 ] && \
     [ "$DEPLOY_RECEIPT_WRITTEN" != 1 ]; then
     echo "$(yellow '⚠ deploy stopped after an external mutation may have begun; recording failed_or_uncertain outcome')"
@@ -1208,6 +1281,25 @@ on_deploy_exit() {
 trap 'on_deploy_exit "$?"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+
+# Materialize the pinned frontend commit once. Every local hash below reads
+# this validated archive, matching the symlink behavior and path estate used
+# by the uploader without repeatedly resolving Git objects inside retry loops.
+FRONTEND_RELEASE_STAGE_ROOT="$(
+  mktemp -d "${TMPDIR:-/tmp}/agenttool-release-verify.XXXXXX"
+)" || {
+  echo "$(red '✗') Could not create the committed frontend verification stage."
+  exit 1
+}
+if ! bin/stage-frontend-release.sh \
+  "$HEAD_REVISION" "$FRONTEND_RELEASE_STAGE_ROOT"; then
+  echo "$(red '✗ Release blocked:') Could not stage committed frontend verification bytes."
+  exit 1
+fi
+if ! verify_staged_frontend_release_inputs; then
+  echo "$(red '✗ Release blocked:') Committed frontend verification inputs are not regular staged files."
+  exit 1
+fi
 
 # Select and validate the committed package probes before any migration,
 # frontend upload, or API rollout. The same fixed set is reused across the
@@ -1504,6 +1596,10 @@ if [ "$SKIP_FRONTEND" = 0 ]; then
   FRONTEND_RESULT="deployed_verified"
 fi
 
+if ! cleanup_frontend_release_stage; then
+  echo "$(red '✗') Could not remove the committed frontend verification stage before recording success." >&2
+  exit 1
+fi
 write_deploy_receipt "succeeded" 0 || exit 1
 
 echo ""

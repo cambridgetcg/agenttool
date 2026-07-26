@@ -205,12 +205,17 @@ nested retry loop inside the 25-attempt release loop.
 `--no-frontend` skips the Pages upload; it does not bypass this prerequisite.
 An API-only release proceeds only when the committed Rights and game bytes
 plus their direct-response headers are already live. Every byte comparison
-reads from the release commit, not the ambient worktree, because
-`bin/frontend-deploy.sh` also archives the commit. The same bounded retry
-covers normal custom-domain convergence for both docs and games. Failure after
-an earlier migration or Pages upload does not mean production was unchanged;
-the receipt remains conservative about any mutation that may already have
-begun.
+reads from one validated archive of the release commit, not the ambient
+worktree. The uploader and verifier share the archive-root manifest committed
+in that revision, and both follow safe in-archive symlinks to the target bytes
+Pages actually receives. A reachable absolute, escaping, broken, or cyclic
+symlink blocks before migrations or publication. Every required Rights/game
+path, and every parity path present in the release commit, must also resolve to
+a regular file in that archive before Phase 1. This keeps structural failures
+out of the HTTP convergence loop. The same bounded retry covers normal
+custom-domain convergence for both docs and games. Failure after an earlier
+migration or Pages upload does not mean production was unchanged; the receipt
+remains conservative about any mutation that may already have begun.
 
 `--no-cache-api` is a one-shot recovery option for evidence of a malformed
 Fly image or poisoned remote build cache. It keeps the normal source,

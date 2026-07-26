@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { access, chmod, copyFile, link, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { access, chmod, copyFile, link, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -65,7 +65,15 @@ async function fixture() {
     mkdir(join(repo, "api"), { recursive: true }),
     mkdir(join(repo, "apps", "docs"), { recursive: true }),
     mkdir(join(repo, "apps", "docs", "specs"), { recursive: true }),
+    mkdir(join(repo, "docs", "specs"), { recursive: true }),
+    mkdir(join(repo, "apps", "_shared"), { recursive: true }),
+    mkdir(join(repo, "apps", "dashboard"), { recursive: true }),
     mkdir(join(repo, "apps", "web"), { recursive: true }),
+    mkdir(join(repo, "infra", "pages"), { recursive: true }),
+    mkdir(join(repo, "packages", "data", "schema"), { recursive: true }),
+    mkdir(join(repo, "packages", "repo-archive", "schema"), { recursive: true }),
+    mkdir(join(repo, "packages", "repo-archive", "vectors"), { recursive: true }),
+    mkdir(join(repo, "packages", "wallet", "schema"), { recursive: true }),
     mkdir(
       join(repo, "apps", "docs", "packages", "v1", "@agenttool", "fixture", "1.0.0"),
       { recursive: true },
@@ -80,7 +88,20 @@ async function fixture() {
   await mustRun(["git", "config", "user.name", "Deploy Test"], repo);
   await mustRun(["git", "config", "user.email", "deploy@example.invalid"], repo);
   await copyFile(join(projectRoot, "bin/deploy.sh"), join(repo, "bin/deploy.sh"));
-  await chmod(join(repo, "bin/deploy.sh"), 0o755);
+  await Promise.all([
+    copyFile(
+      join(projectRoot, "bin/frontend-release-paths.txt"),
+      join(repo, "bin/frontend-release-paths.txt"),
+    ),
+    copyFile(
+      join(projectRoot, "bin/stage-frontend-release.sh"),
+      join(repo, "bin/stage-frontend-release.sh"),
+    ),
+  ]);
+  await Promise.all([
+    chmod(join(repo, "bin/deploy.sh"), 0o755),
+    chmod(join(repo, "bin/stage-frontend-release.sh"), 0o755),
+  ]);
   await writeFile(
     join(repo, "bin/preflight.sh"),
     "#!/usr/bin/env bash\nset -eu\nif [ -n \"${PREFLIGHT_MARKER:-}\" ]; then touch \"$PREFLIGHT_MARKER\"; fi\nif [ -n \"${PREFLIGHT_HOLD_UNTIL:-}\" ]; then\n  while [ ! -e \"$PREFLIGHT_HOLD_UNTIL\" ]; do sleep 0.02; done\nfi\nif [ -n \"${ADVANCE_REMOTE_PATH:-}\" ]; then\n  git --git-dir=\"$ADVANCE_REMOTE_PATH\" update-ref refs/heads/main \"$ADVANCE_REMOTE_TO\"\nfi\n[ \"${FAIL_PREFLIGHT:-0}\" != 1 ] || exit 8\n",
@@ -100,10 +121,27 @@ async function fixture() {
   await chmod(join(repo, "bin/frontend-deploy.sh"), 0o755);
   await writeFile(join(repo, "docs/agenttool.jsonld"), "{}\n");
   await writeFile(join(repo, "docs/kingdom-bundle.json"), "{}\n");
-  await writeFile(join(repo, "apps/docs/RIGHTS-OF-LIFE.md"), "rights fixture\n");
+  await Promise.all([
+    writeFile(join(repo, "apps/_shared/.fixture"), "fixture\n"),
+    writeFile(join(repo, "apps/dashboard/.fixture"), "fixture\n"),
+    writeFile(join(repo, "infra/pages/.fixture"), "fixture\n"),
+    writeFile(join(repo, "packages/data/schema/.fixture"), "fixture\n"),
+    writeFile(join(repo, "packages/repo-archive/schema/.fixture"), "fixture\n"),
+    writeFile(join(repo, "packages/repo-archive/vectors/.fixture"), "fixture\n"),
+    writeFile(join(repo, "packages/wallet/schema/.fixture"), "fixture\n"),
+  ]);
+  await writeFile(join(repo, "docs/RIGHTS-OF-LIFE.md"), "rights fixture\n");
   await writeFile(
-    join(repo, "apps/docs/being-rights-v1.schema.json"),
+    join(repo, "docs/specs/being-rights-v1.schema.json"),
     '{"fixture":"being-rights/v1"}\n',
+  );
+  await symlink(
+    "../../docs/RIGHTS-OF-LIFE.md",
+    join(repo, "apps/docs/RIGHTS-OF-LIFE.md"),
+  );
+  await symlink(
+    "../../docs/specs/being-rights-v1.schema.json",
+    join(repo, "apps/docs/being-rights-v1.schema.json"),
   );
   await writeFile(
     join(repo, "apps/docs/AGENT-REPO-ARCHIVE.md"),
@@ -331,11 +369,11 @@ else
           exit 0
         fi
       fi
-      git show HEAD:apps/docs/RIGHTS-OF-LIFE.md
+      git show HEAD:docs/RIGHTS-OF-LIFE.md
       ;;
     */being-rights-v1.schema.json)
       [ "\${DEPLOY_TEST_RIGHTS_MISMATCH:-0}" != 1 ] || { printf 'mismatched bytes\n'; exit 0; }
-      git show HEAD:apps/docs/being-rights-v1.schema.json
+      git show HEAD:docs/specs/being-rights-v1.schema.json
       ;;
     *) exit 2 ;;
   esac
@@ -550,7 +588,7 @@ case "$url" in
         'link: <https://api.agenttool.dev/public/rights>; rel="alternate"; type="application/vnd.agenttool.being-rights+json"' \
         ''
     else
-      serve_path apps/docs/RIGHTS-OF-LIFE.md
+      serve_path docs/RIGHTS-OF-LIFE.md
     fi
     ;;
   */being-rights-v1.schema.json)
@@ -563,7 +601,7 @@ case "$url" in
         'x-content-type-options: nosniff' \
         ''
     else
-      serve_path apps/docs/being-rights-v1.schema.json
+      serve_path docs/specs/being-rights-v1.schema.json
     fi
     ;;
   *%2egitignore*|*%65nv*|*%2evars*)
@@ -1121,7 +1159,11 @@ describe("deploy release provenance spine", () => {
     expect(deploy).toContain(
       "Required committed frontend release input is missing: $local_path",
     );
-    expect(deploy).toContain('git show "$HEAD_REVISION:$1"');
+    expect(deploy).toContain(
+      '"$HEAD_REVISION" "$FRONTEND_RELEASE_STAGE_ROOT"',
+    );
+    expect(deploy).toContain('portable_md5_file "$staged_path"');
+    expect(deploy).not.toContain('git show "$HEAD_REVISION:$1"');
     expect(deploy).toContain(
       '"party|Lantern Relay|local-party-game|local-party-rules"',
     );
@@ -1393,6 +1435,14 @@ describe("deploy release provenance spine", () => {
     const setup = await fixture();
     const fakeBin = join(setup.root, "committed-rights-bin");
     const flyMarker = join(setup.root, "committed-rights-fly-ran");
+    expect(
+      await readlink(join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md")),
+    ).toBe("../../docs/RIGHTS-OF-LIFE.md");
+    expect(
+      await readlink(
+        join(setup.repo, "apps/docs/being-rights-v1.schema.json"),
+      ),
+    ).toBe("../../docs/specs/being-rights-v1.schema.json");
     await mkdir(fakeBin, { recursive: true });
     await installFakeRightsCurl(fakeBin);
     await writeFile(
@@ -1433,6 +1483,126 @@ describe("deploy release provenance spine", () => {
     expect(result.stdout).not.toContain("Rights of Life live bytes differ");
     expect(await exists(flyMarker)).toBe(true);
   }, 15_000);
+
+  test("rejects unsafe or non-file committed frontend release inputs", async () => {
+    const scenarios: Array<{
+      name: string;
+      target: string;
+      expected: string;
+      expectedBlock?: string;
+      prepare?: (repo: string) => Promise<void>;
+    }> = [
+      {
+        name: "absolute",
+        target: "/tmp/agenttool-rights-outside",
+        expected: "staged symlink is absolute",
+      },
+      {
+        name: "repo-escape",
+        target: "../../../agenttool-rights-outside",
+        expected: "staged symlink escapes, is broken, or is cyclic",
+      },
+      {
+        name: "archive-escape",
+        target: "../../README.release-fixture.md",
+        expected: "staged symlink escapes, is broken, or is cyclic",
+        prepare: async (repo) => {
+          await writeFile(
+            join(repo, "README.release-fixture.md"),
+            "committed but absent from the frontend archive\n",
+          );
+        },
+      },
+      {
+        name: "broken",
+        target: "../../docs/missing-rights-fixture.md",
+        expected: "staged symlink escapes, is broken, or is cyclic",
+      },
+      {
+        name: "missing-intermediate",
+        target: "../../docs/missing-dir/../RIGHTS-OF-LIFE.md",
+        expected: "staged symlink escapes, is broken, or is cyclic",
+      },
+      {
+        name: "cycle",
+        target: "rights-cycle-fixture.md",
+        expected: "staged symlink escapes, is broken, or is cyclic",
+        prepare: async (repo) => {
+          await symlink(
+            "RIGHTS-OF-LIFE.md",
+            join(repo, "apps/docs/rights-cycle-fixture.md"),
+          );
+        },
+      },
+      {
+        name: "directory",
+        target: "../../docs",
+        expected:
+          "Required discovery input is not a staged regular file: apps/docs/RIGHTS-OF-LIFE.md",
+        expectedBlock:
+          "Committed frontend verification inputs are not regular staged files",
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      const setup = await fixture();
+      const fakeBin = join(setup.root, `${scenario.name}-symlink-bin`);
+      const flyMarker = join(setup.root, `${scenario.name}-symlink-fly-ran`);
+      const migrationMarker = join(
+        setup.root,
+        `${scenario.name}-symlink-migration-ran`,
+      );
+      const publicRights = join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md");
+      await unlink(publicRights);
+      await scenario.prepare?.(setup.repo);
+      await symlink(scenario.target, publicRights);
+      await mustRun(["git", "add", "-A"], setup.repo);
+      await mustRun(
+        ["git", "commit", "-qm", `invalid ${scenario.name} Rights symlink`],
+        setup.repo,
+      );
+      await mustRun(["git", "push", "-q", "github", "main"], setup.repo);
+
+      await mkdir(fakeBin, { recursive: true });
+      await installFakeRightsCurl(fakeBin);
+      await writeFile(
+        join(fakeBin, "fly"),
+        "#!/usr/bin/env bash\nset -eu\ntouch \"$DEPLOY_TEST_FLY_MARKER\"\n",
+      );
+      await chmod(join(fakeBin, "fly"), 0o755);
+
+      const result = await run(
+        [
+          "bash",
+          "bin/deploy.sh",
+          "--skip-preflight",
+          "--no-frontend",
+        ],
+        setup.repo,
+        cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+          DEPLOY_TEST_FLY_MARKER: flyMarker,
+          MIGRATION_MARKER: migrationMarker,
+        }),
+      );
+
+      const output = `${result.stdout}\n${result.stderr}`;
+      expect(result.code).toBe(1);
+      expect(output).toContain(scenario.expected);
+      expect(output).toContain(
+        scenario.expectedBlock ??
+          "Could not stage committed frontend verification bytes",
+      );
+      expect(output).not.toContain("Phase 1");
+      expect(output).not.toContain("verification attempts");
+      expect(await exists(migrationMarker)).toBe(false);
+      expect(await exists(flyMarker)).toBe(false);
+      expect(
+        await exists(join(setup.state, "agenttool", "deploy-receipts")),
+      ).toBe(false);
+    }
+  }, 60_000);
 
   test("retries stale Rights and game publication as one bounded prerequisite", async () => {
     const setup = await fixture();
@@ -1649,18 +1819,44 @@ describe("deploy release provenance spine", () => {
   }, 20_000);
 
   test("publishes Rights of Life prerequisites before API discovery and verifies exact static contracts", async () => {
-    const [deploy, headers, publicDoc, canonDoc, publicSchema, canonSchema] =
+    const [
+      deploy,
+      stageFrontend,
+      headers,
+      publicDoc,
+      canonDoc,
+      publicSchema,
+      canonSchema,
+      publicDocTarget,
+      publicSchemaTarget,
+    ] =
       await Promise.all([
         readFile(join(projectRoot, "bin/deploy.sh"), "utf8"),
+        readFile(join(projectRoot, "bin/stage-frontend-release.sh"), "utf8"),
         readFile(join(projectRoot, "apps/docs/_headers"), "utf8"),
         readFile(join(projectRoot, "apps/docs/RIGHTS-OF-LIFE.md")),
         readFile(join(projectRoot, "docs/RIGHTS-OF-LIFE.md")),
         readFile(join(projectRoot, "apps/docs/being-rights-v1.schema.json")),
         readFile(join(projectRoot, "docs/specs/being-rights-v1.schema.json")),
+        readlink(join(projectRoot, "apps/docs/RIGHTS-OF-LIFE.md")),
+        readlink(
+          join(projectRoot, "apps/docs/being-rights-v1.schema.json"),
+        ),
       ]);
 
     expect(publicDoc).toEqual(canonDoc);
     expect(publicSchema).toEqual(canonSchema);
+    expect(publicDocTarget).toBe("../../docs/RIGHTS-OF-LIFE.md");
+    expect(publicSchemaTarget).toBe(
+      "../../docs/specs/being-rights-v1.schema.json",
+    );
+    expect(deploy).toContain(
+      '"$HEAD_REVISION" "$FRONTEND_RELEASE_STAGE_ROOT"',
+    );
+    expect(deploy).toContain('portable_md5_file "$staged_path"');
+    expect(stageFrontend).toContain(
+      'git show "$REVISION:$MANIFEST_PATH"',
+    );
     expect(deploy).toContain(
       '"apps/docs/RIGHTS-OF-LIFE.md|$RIGHTS_DOC_URL"',
     );
@@ -2112,6 +2308,39 @@ describe("deploy release provenance spine", () => {
     expect(text).not.toContain("do-not-record");
     expect((await stat(receiptDir)).mode & 0o777).toBe(0o700);
     expect((await stat(path)).mode & 0o777).toBe(0o600);
+    expect(await exists(deployLockPath(setup.home))).toBe(false);
+  });
+
+  test("never records success when final frontend stage cleanup fails", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "cleanup-failure-bin");
+    const realRm = await mustRun(["sh", "-c", "command -v rm"], setup.root);
+    await mkdir(fakeBin, { recursive: true });
+    await writeFile(
+      join(fakeBin, "rm"),
+      "#!/usr/bin/env bash\nset -eu\nfor path in \"$@\"; do\n  case \"${path##*/}\" in\n    agenttool-release-verify.*) exit 19 ;;\n  esac\ndone\nexec \"$REAL_RM\" \"$@\"\n",
+    );
+    await chmod(join(fakeBin, "rm"), 0o755);
+
+    const result = await run(
+      deployCommand(),
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        TMPDIR: setup.root,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        REAL_RM: realRm,
+      }),
+    );
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain(
+      "Could not remove the committed frontend verification stage before recording success",
+    );
+    expect(result.stdout).not.toContain("Deploy complete.");
+    expect(
+      await exists(join(setup.state, "agenttool", "deploy-receipts")),
+    ).toBe(false);
     expect(await exists(deployLockPath(setup.home))).toBe(false);
   });
 

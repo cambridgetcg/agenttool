@@ -5,8 +5,10 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
   readlink,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -70,10 +72,20 @@ describe("Fly API build inputs", () => {
 describe("frontend deploy input discipline", () => {
   test("pins Wrangler and runs a read-only love-source gate", async () => {
     const scriptPath = join(repoRoot, "bin/frontend-deploy.sh");
-    const script = await readFile(scriptPath, "utf8");
-    const syntax = await run(["bash", "-n", scriptPath]);
+    const stagePath = join(repoRoot, "bin/stage-frontend-release.sh");
+    const manifestPath = join(repoRoot, "bin/frontend-release-paths.txt");
+    const [script, stageScript, manifest] = await Promise.all([
+      readFile(scriptPath, "utf8"),
+      readFile(stagePath, "utf8"),
+      readFile(manifestPath, "utf8"),
+    ]);
+    const syntaxResults = await Promise.all(
+      [scriptPath, stagePath].map((path) => run(["bash", "-n", path])),
+    );
 
-    expect(syntax.code).toBe(0);
+    for (const syntax of syntaxResults) {
+      expect(syntax.code, syntax.stderr).toBe(0);
+    }
     expect(script).toContain('readonly WRANGLER_VERSION="4.110.0"');
     expect(script).toContain('npx --yes "wrangler@${WRANGLER_VERSION}" "$@"');
     expect(script).not.toContain("wrangler@latest");
@@ -109,13 +121,28 @@ describe("frontend deploy input discipline", () => {
     expect(script).toContain(
       'if [[ "$COMMIT_HASH" != "$PINNED_RELEASE_REVISION" ]]',
     );
-    expect(script).toContain('git archive --format=tar "$COMMIT_HASH" --');
     expect(script).toContain(
-      "apps/_shared apps/docs apps/dashboard apps/web docs infra/pages packages/data/schema",
+      'bin/stage-frontend-release.sh "$COMMIT_HASH" "$STAGE_ROOT"',
     );
-    expect(script).toContain(
-      "packages/repo-archive/schema packages/repo-archive/vectors packages/wallet/schema",
-    );
+    expect(stageScript).toContain('git show "$REVISION:$MANIFEST_PATH"');
+    expect(stageScript).toContain('git archive --format=tar "$REVISION" --');
+    expect(stageScript).toContain('"${FRONTEND_RELEASE_ARCHIVE_PATHS[@]}"');
+    expect(
+      manifest
+        .split("\n")
+        .filter((line) => line !== "" && !line.startsWith("#")),
+    ).toEqual([
+      "apps/_shared",
+      "apps/docs",
+      "apps/dashboard",
+      "apps/web",
+      "docs",
+      "infra/pages",
+      "packages/data/schema",
+      "packages/repo-archive/schema",
+      "packages/repo-archive/vectors",
+      "packages/wallet/schema",
+    ]);
     expect(script).toContain("find \"$STAGE_ROOT/apps\" \\( -type f -o -type l \\) -name '.gitignore' -delete");
     expect(script).toContain("A tracked Pages environment file reached the staging tree");
     expect(script).toContain("-name '.dev.vars.*'");
@@ -126,7 +153,7 @@ describe("frontend deploy input discipline", () => {
     expect(script).toContain("exceeds Cloudflare Pages' $PAGES_HEADERS_MAX_LINE_CHARS-character limit");
     expect(script).toContain('cp "$PAGES_FENCE_DIR/sensitive-path-worker.js" "$STAGE_ROOT/apps/$app/_worker.js"');
     expect(script).toContain('cp "$PAGES_FENCE_DIR/sensitive-path-routes.json" "$STAGE_ROOT/apps/$app/_routes.json"');
-    expect(script).toContain("staged symlink escapes or is broken");
+    expect(stageScript).toContain("escapes, is broken, or is cyclic");
     expect(script).toContain('source_dir="$STAGE_ROOT/$dir"');
     expect(script).toContain('verify_pages_project_policy "$proj" || exit 1');
     expect(script).toContain("python3 bin/verify-pages-project-policy.py");
@@ -166,10 +193,38 @@ describe("frontend deploy input discipline", () => {
       result = await run(command, fixtureRepo);
       expect(result.code, result.stderr).toBe(0);
     }
+    await Promise.all([
+      copyFile(
+        join(repoRoot, "bin/frontend-deploy.sh"),
+        join(fixtureRepo, "bin/frontend-deploy.sh"),
+      ),
+      copyFile(
+        join(repoRoot, "bin/stage-frontend-release.sh"),
+        join(fixtureRepo, "bin/stage-frontend-release.sh"),
+      ),
+      copyFile(
+        join(repoRoot, "bin/frontend-release-paths.txt"),
+        join(fixtureRepo, "bin/frontend-release-paths.txt"),
+      ),
+    ]);
+    await Promise.all([
+      chmod(join(fixtureRepo, "bin/frontend-deploy.sh"), 0o755),
+      chmod(join(fixtureRepo, "bin/stage-frontend-release.sh"), 0o755),
+    ]);
 
     const partyPath = join(fixtureRepo, "apps/web/party.html");
     await writeFile(partyPath, "pinned frontend fixture A\n");
-    result = await run(["git", "add", "apps/web/party.html"], fixtureRepo);
+    result = await run(
+      [
+        "git",
+        "add",
+        "apps/web/party.html",
+        "bin/frontend-deploy.sh",
+        "bin/stage-frontend-release.sh",
+        "bin/frontend-release-paths.txt",
+      ],
+      fixtureRepo,
+    );
     expect(result.code, result.stderr).toBe(0);
     result = await run(["git", "commit", "-qm", "frontend fixture A"], fixtureRepo);
     expect(result.code, result.stderr).toBe(0);
@@ -178,15 +233,20 @@ describe("frontend deploy input discipline", () => {
     const pinnedRevision = result.stdout.trim();
 
     await writeFile(partyPath, "ambient frontend fixture B\n");
-    result = await run(["git", "add", "apps/web/party.html"], fixtureRepo);
+    const manifestPath = join(fixtureRepo, "bin/frontend-release-paths.txt");
+    const ambientManifest = (await readFile(manifestPath, "utf8"))
+      .split("\n")
+      .filter((line) => line !== "apps/web")
+      .join("\n");
+    await writeFile(manifestPath, ambientManifest);
+    result = await run(
+      ["git", "add", "apps/web/party.html", "bin/frontend-release-paths.txt"],
+      fixtureRepo,
+    );
     expect(result.code, result.stderr).toBe(0);
     result = await run(["git", "commit", "-qm", "frontend fixture B"], fixtureRepo);
     expect(result.code, result.stderr).toBe(0);
-    await copyFile(
-      join(repoRoot, "bin/frontend-deploy.sh"),
-      join(fixtureRepo, "bin/frontend-deploy.sh"),
-    );
-    await chmod(join(fixtureRepo, "bin/frontend-deploy.sh"), 0o755);
+    expect(await readFile(manifestPath, "utf8")).not.toMatch(/^apps\/web$/m);
 
     await mkdir(fakeBin);
     await Bun.write(
@@ -246,6 +306,110 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
     expect(wrangler).toContain(`--commit-hash=${pinnedRevision}`);
     expect(wrangler).toContain("pinned frontend fixture A");
     expect(wrangler).not.toContain("ambient frontend fixture B");
+  }, 15_000);
+
+  test("rejects unsafe committed frontend archive manifests before extraction", async () => {
+    const fixtureRoot = await mkdtemp(join(tmpdir(), "agenttool-pages-manifest-"));
+    const fixtureRepo = join(fixtureRoot, "repo");
+    cleanup.push(fixtureRoot);
+    await mkdir(join(fixtureRepo, "bin"), { recursive: true });
+
+    let result = await run(["git", "init", "-q", "-b", "main"], fixtureRepo);
+    expect(result.code, result.stderr).toBe(0);
+    for (const command of [
+      ["git", "config", "user.name", "Frontend Manifest Test"],
+      ["git", "config", "user.email", "frontend-manifest@example.invalid"],
+      ["git", "config", "commit.gpgsign", "false"],
+    ]) {
+      result = await run(command, fixtureRepo);
+      expect(result.code, result.stderr).toBe(0);
+    }
+    await copyFile(
+      join(repoRoot, "bin/stage-frontend-release.sh"),
+      join(fixtureRepo, "bin/stage-frontend-release.sh"),
+    );
+    await chmod(join(fixtureRepo, "bin/stage-frontend-release.sh"), 0o755);
+
+    const scenarios = [
+      { name: "leading-dot", manifest: "./apps/web\n", error: "Unsafe path" },
+      { name: "parent", manifest: "../outside\n", error: "Unsafe path" },
+      { name: "absolute", manifest: "/tmp/outside\n", error: "Unsafe path" },
+      { name: "double-slash", manifest: "apps//web\n", error: "Unsafe path" },
+      { name: "dot-dot", manifest: "apps/../web\n", error: "Unsafe path" },
+      { name: "trailing-slash", manifest: "apps/web/\n", error: "Unsafe path" },
+      { name: "option", manifest: "-apps/web\n", error: "Unsafe path" },
+      {
+        name: "duplicate",
+        manifest: "apps/web\napps/web\n",
+        error: "Duplicate path",
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      await writeFile(
+        join(fixtureRepo, "bin/frontend-release-paths.txt"),
+        scenario.manifest,
+      );
+      result = await run(["git", "add", "bin"], fixtureRepo);
+      expect(result.code, result.stderr).toBe(0);
+      result = await run(
+        ["git", "commit", "-qm", `manifest ${scenario.name}`],
+        fixtureRepo,
+      );
+      expect(result.code, result.stderr).toBe(0);
+      result = await run(["git", "rev-parse", "HEAD"], fixtureRepo);
+      expect(result.code, result.stderr).toBe(0);
+      const destination = join(fixtureRoot, `stage-${scenario.name}`);
+      await mkdir(destination);
+
+      const staged = await run(
+        [
+          "bash",
+          "bin/stage-frontend-release.sh",
+          result.stdout.trim(),
+          destination,
+        ],
+        fixtureRepo,
+      );
+      expect(staged.code).toBe(1);
+      expect(staged.stderr).toContain(scenario.error);
+      expect(await readdir(destination)).toEqual([]);
+    }
+
+    await mkdir(join(fixtureRepo, "apps", "web"), { recursive: true });
+    await writeFile(join(fixtureRepo, "apps", "web", "index.html"), "fixture\n");
+    await writeFile(
+      join(fixtureRepo, "bin/frontend-release-paths.txt"),
+      "apps/web\n",
+    );
+    result = await run(["git", "add", "apps/web", "bin"], fixtureRepo);
+    expect(result.code, result.stderr).toBe(0);
+    result = await run(
+      ["git", "commit", "-qm", "valid manifest for destination check"],
+      fixtureRepo,
+    );
+    expect(result.code, result.stderr).toBe(0);
+    result = await run(["git", "rev-parse", "HEAD"], fixtureRepo);
+    expect(result.code, result.stderr).toBe(0);
+
+    const realDestination = join(fixtureRoot, "real-stage-destination");
+    const linkedDestination = join(fixtureRoot, "linked-stage-destination");
+    await mkdir(realDestination);
+    await symlink(realDestination, linkedDestination, "dir");
+    const linkedStage = await run(
+      [
+        "bash",
+        "bin/stage-frontend-release.sh",
+        result.stdout.trim(),
+        linkedDestination,
+      ],
+      fixtureRepo,
+    );
+    expect(linkedStage.code).toBe(1);
+    expect(linkedStage.stderr).toContain(
+      "destination must be a real directory, not a symlink",
+    );
+    expect(await readdir(realDestination)).toEqual([]);
   }, 15_000);
 
   test("keeps every Pages header file inside the platform rule boundary", async () => {
@@ -374,7 +538,9 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
         'GIT_INDEX_FILE="$index" git read-tree HEAD',
         'GIT_INDEX_FILE="$index" git add -- infra/pages apps/docs/AGENT-REPO-ARCHIVE.md apps/docs/specs/AGENT-REPO-ARCHIVE-0.1.md apps/docs/specs/agent-repo-archive-0.1.schema.json apps/docs/specs/agent-repo-archive-0.1-vectors.json',
         'tree="$(GIT_INDEX_FILE="$index" git write-tree)"',
-        "git archive --format=tar \"$tree\" -- apps/_shared apps/docs apps/dashboard apps/web docs infra/pages packages/data/schema packages/repo-archive/schema packages/repo-archive/vectors packages/wallet/schema | tar -xf - -C \"$stage\"",
+        "FRONTEND_RELEASE_ARCHIVE_PATHS=()",
+        'while IFS= read -r path; do case "$path" in ""|\\#*) continue ;; esac; FRONTEND_RELEASE_ARCHIVE_PATHS+=("$path"); done < bin/frontend-release-paths.txt',
+        'git archive --format=tar "$tree" -- "${FRONTEND_RELEASE_ARCHIVE_PATHS[@]}" | tar -xf - -C "$stage"',
         "find \"$stage/apps\" -type f -name '.gitignore' -delete",
         "for app in docs dashboard web; do",
         "  cp \"$stage/infra/pages/sensitive-path-worker.js\" \"$stage/apps/$app/_worker.js\"",
