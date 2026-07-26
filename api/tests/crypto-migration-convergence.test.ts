@@ -76,6 +76,19 @@ describe("crypto migration history convergence", () => {
     expect(source).toContain("ALTER COLUMN status SET DEFAULT 'credited'");
     expect(source).toContain("observation_generation");
     expect(source).toContain("credited_generation");
+    expect(source).toContain("NEW.status = 'pending'");
+    expect(source).toContain("OLD.status = 'removed'");
+    expect(source).toContain(
+      "NEW.observation_generation := OLD.observation_generation + 1",
+    );
+    expect(source).toContain(
+      "OLD.observation_generation + 1",
+    );
+    expect(source).toContain("NEW.credited_generation IS NOT NULL");
+    expect(source).toContain("OLD.status IS DISTINCT FROM 'pending'");
+    expect(source).toContain(
+      "observation_generation may change only for a distinct pending incarnation",
+    );
     expect(source).not.toMatch(/^\s*(?:UPDATE|DELETE|TRUNCATE)\b/im);
   });
 
