@@ -7,7 +7,9 @@ import {
   depositAddresses,
 } from "../src/db/schema/economy";
 import {
+  DepositWatchNotReadyError,
   depositAddressMatches,
+  evmDepositWatchTargetForDisclosure,
   getOrCreateDepositAddress,
 } from "../src/services/economy/crypto";
 
@@ -58,6 +60,78 @@ describe("Alchemy deposit identity invariants", () => {
         "DAI",
       ),
     ).rejects.toThrow("Only USDC");
+  });
+
+  test("requires the exact chain ingress signing-key presence before disclosure", () => {
+    const env = {
+      AGENTTOOL_PUBLIC_URL: "https://agenttool.example",
+      ALCHEMY_WEBHOOK_ID_BASE: "wh_public_base_target",
+    };
+
+    try {
+      evmDepositWatchTargetForDisclosure(
+        "base",
+        "testnet",
+        env,
+        false,
+      );
+      throw new Error("expected disclosure readiness refusal");
+    } catch (error) {
+      expect(error).toBeInstanceOf(DepositWatchNotReadyError);
+      expect((error as DepositWatchNotReadyError).code).toBe(
+        "deposit_ingress_signing_key_missing",
+      );
+      expect((error as DepositWatchNotReadyError).retryable).toBe(false);
+    }
+
+    expect(() =>
+      evmDepositWatchTargetForDisclosure(
+        "ethereum",
+        "testnet",
+        env,
+        true,
+      ),
+    ).toThrow(DepositWatchNotReadyError);
+  });
+
+  test("target identity changes only with public target configuration", () => {
+    const common = {
+      AGENTTOOL_PUBLIC_URL: "https://agenttool.example",
+      ALCHEMY_WEBHOOK_ID_BASE: "wh_public_base_target",
+    };
+    const first = evmDepositWatchTargetForDisclosure(
+      "base",
+      "testnet",
+      {
+        ...common,
+        ALCHEMY_NOTIFY_AUTH_TOKEN: "first-control-secret",
+        ALCHEMY_WEBHOOK_SIGNING_KEY_BASE: "first-ingress-secret",
+      },
+      true,
+    );
+    const secretRotation = evmDepositWatchTargetForDisclosure(
+      "base",
+      "testnet",
+      {
+        ...common,
+        ALCHEMY_NOTIFY_AUTH_TOKEN: "second-control-secret",
+        ALCHEMY_WEBHOOK_SIGNING_KEY_BASE: "second-ingress-secret",
+      },
+      true,
+    );
+    const targetRotation = evmDepositWatchTargetForDisclosure(
+      "base",
+      "testnet",
+      {
+        ...common,
+        ALCHEMY_WEBHOOK_ID_BASE: "wh_replaced_public_base_target",
+      },
+      true,
+    );
+
+    expect(first).toMatch(/^[0-9a-f]{64}$/);
+    expect(secretRotation).toBe(first);
+    expect(targetRotation).not.toBe(first);
   });
 
   test("declares one logical row per wallet, chain, and token", () => {

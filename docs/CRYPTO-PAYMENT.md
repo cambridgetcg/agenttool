@@ -22,7 +22,7 @@ Solana deposit finality remain separate operator work.
 | Capability | Status (Phase 3b) | Surface |
 |---|---|---|
 | Multi-chain deposit address derivation | Implemented; provider/mnemonic configuration required | `GET /v1/wallets/:id/deposit-address?chain=&token=` |
-| List all deposit addresses for a wallet | Implemented; every stored row is revalidated and every EVM watch is reasserted before the list is disclosed | `GET /v1/wallets/:id/deposit-address` |
+| List all deposit addresses for a wallet | Implemented; every stored row is revalidated and every EVM watch must match the current public target with an observation no older than ten minutes | `GET /v1/wallets/:id/deposit-address` |
 | Onchain identity binding via signed message | Implemented (EVM EIP-191; Solana ed25519) | `POST /v1/wallets/:id/onchain/{challenge,verify}` · `GET /v1/wallets/:id/onchain` |
 | Inbound transfer ingestion | EVM signed observations persist pending until exact canonical log/depth; removed block generations are durable and causally fenced. Solana signed ingress still credits before equivalent raw-atomic finality. | `POST /v1/billing/crypto-webhook/:chain` (signature-verified, public) |
 | Idempotency + reorg evidence | Implemented locally; migration not applied | `economy.crypto_webhook_events` logical identity + immutable `crypto_webhook_event_observations` block generations |
@@ -69,12 +69,23 @@ Properties of the address:
 An EVM response reports `watch_status: provider_verified` only after the
 durable reconciler independently observes the exact active Address Activity
 webhook, expected network and callback URL, plus this address's membership.
+The API also requires the matching chain-specific ingress signing key to be
+present before disclosure. It checks presence only: the key and any
+secret-derived fingerprint are never written to watch state.
 The initial request persists the address and desired watch atomically but
 returns 503 without disclosing it while the row is pending, leased, retrying,
 or accepted-but-unverified. A PATCH 200 is never enough by itself. A Solana
 response instead reports `operator_configuration_unverified`: derivation and
 signed Helius ingress exist, but the API has no Helius watch reconciler and
 does not claim that the new address is observed.
+
+Convergence is bound to a SHA-256 fingerprint of public target facts only
+(provider, chain/network, existing webhook ID, and callback URL). Changing
+those facts fences in-flight work and starts a new generation. A converged
+observation is disclosure-ready for at most ten minutes; the first later read
+requeues verification and returns 503 until it converges again. This is a
+bounded read-time freshness gate, not a claim that unread rows are polled
+forever.
 
 ### 2. Send USDC to it
 
@@ -204,7 +215,7 @@ This is the same posture as Stripe — Stripe is *our* payment infra, not a serv
 | `ALCHEMY_API_KEY` | EVM RPC | Sent in an `Authorization: Bearer` header rather than the RPC URL. Use a scoped app/access key. |
 | `ALCHEMY_NOTIFY_AUTH_TOKEN` | EVM address-watch reconciliation | Notify control-plane token. Used only to inspect exact webhook metadata/membership and idempotently change one desired address membership. |
 | `AGENTTOOL_PUBLIC_URL` | EVM callback verification | Explicit HTTPS API origin. The worker derives the per-chain webhook route from it and will not guess a production callback. |
-| `ALCHEMY_WEBHOOK_SIGNING_KEY_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` | EVM inbound transfer ingestion | HMAC-SHA256 signing key from that specific webhook's detail page. Configure each webhook to POST to its matching `/v1/billing/crypto-webhook/<chain>` route; never reuse one key for all five. |
+| `ALCHEMY_WEBHOOK_SIGNING_KEY_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` | EVM inbound transfer ingestion and address-disclosure readiness | HMAC-SHA256 signing key from that specific webhook's detail page. Configure each webhook to POST to its matching `/v1/billing/crypto-webhook/<chain>` route; never reuse one key for all five. Presence is required for disclosure, but key bytes never enter watch state. |
 | `ALCHEMY_WEBHOOK_ID_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` | EVM address-watch reconciliation | Existing Address Activity webhook ID for each chain. The API refuses to disclose an EVM deposit address until the relevant active-network target converges. |
 | `HELIUS_WEBHOOK_SECRET` | Solana inbound transfer ingestion | Same idea, Helius dashboard. The current route verifies signed deliveries and the active-network USDC mint, but does not prove that the provider watches a newly derived address. |
 
@@ -238,7 +249,10 @@ provider-neutral watch generations, bounded attempts/backoff, and leases; it
 does not guess/backfill provider or network for historical rows), and
 `api/migrations/20260726T202500_crypto_deposit_finality.sql` (historical
 effects remain credited without invented evidence; new EVM observations are
-pending and retain immutable block generations).
+pending and retain immutable block generations), and
+`api/migrations/20260726T211500_deposit_watch_target_binding.sql` (invalidates
+unbound historical observations and binds new convergence to public target
+identity without storing credentials or secret-derived fingerprints).
 
 ---
 

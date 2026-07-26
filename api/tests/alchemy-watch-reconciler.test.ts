@@ -5,6 +5,9 @@ import {
   createAlchemyDepositWatchReconciler,
   type AlchemyWatchReconcilerConfig,
 } from "../src/services/economy/crypto/alchemy-watch-reconciler";
+import {
+  alchemyDepositWatchTargetFingerprint,
+} from "../src/services/economy/crypto/alchemy-notify";
 import type { DepositWatchReconcileRequest } from "../src/services/economy/crypto/deposit-watch";
 
 const AUTH_TOKEN = "obvious-test-auth-token-not-a-credential";
@@ -17,6 +20,13 @@ const THIRD_ADDRESS =
 const CALLBACK_BASE_URL = "https://agenttool.example";
 const CALLBACK_URL =
   `${CALLBACK_BASE_URL}/v1/billing/crypto-webhook/base`;
+const TARGET_FINGERPRINT =
+  alchemyDepositWatchTargetFingerprint({
+    chain: "base",
+    network: "testnet",
+    webhookId: WEBHOOK_ID,
+    callbackBaseUrl: CALLBACK_BASE_URL,
+  })!;
 
 function config(
   overrides: Partial<AlchemyWatchReconcilerConfig> = {},
@@ -43,6 +53,7 @@ function request(
     provider: "alchemy",
     chain: "base",
     network: "testnet",
+    targetFingerprint: TARGET_FINGERPRINT,
     address: ADDRESS,
     desiredState: "watching",
     observedState: "unknown",
@@ -149,6 +160,27 @@ describe("Alchemy deposit-watch reconciler", () => {
       expect(call.init?.redirect).toBe("error");
       expect(call.init?.signal).toBeInstanceOf(AbortSignal);
     }
+  });
+
+  test("does not contact or mutate an older configured target generation", async () => {
+    let calls = 0;
+    const reconciler = createAlchemyDepositWatchReconciler({
+      config: config(),
+      fetchImpl: (async () => {
+        calls += 1;
+        throw new Error("must not contact the provider");
+      }) as typeof fetch,
+    });
+
+    expect(
+      await reconciler(
+        request({ targetFingerprint: "f".repeat(64) }),
+      ),
+    ).toEqual({
+      kind: "retryable",
+      code: "provider_target_mismatch",
+    });
+    expect(calls).toBe(0);
   });
 
   test("boundedly accepts both official team-webhook envelope variants", async () => {

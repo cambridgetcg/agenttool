@@ -286,6 +286,7 @@ export const DEPOSIT_WATCH_OUTCOME_CODES = [
   "provider_rate_limited",
   "provider_timeout",
   "provider_configuration_missing",
+  "provider_target_mismatch",
   "provider_rejected",
   "provider_unsupported",
   "reconciler_failed",
@@ -299,8 +300,9 @@ export type DepositWatchOutcomeCode =
  * `accepted_unverified` means only that a provider mutation endpoint accepted
  * a request. `converged` is stronger: an injected adapter independently
  * observed the desired membership on the intended active/type/destination
- * subscription for the current generation. Neither state proves future
- * delivery, chain finality, or callback processing. */
+ * subscription for the current generation and public target fingerprint.
+ * Neither state proves future delivery, chain finality, or callback
+ * processing; disclosure separately applies a bounded observation age. */
 export const depositAddressWatches = economySchema.table(
   "deposit_address_watches",
   {
@@ -309,6 +311,12 @@ export const depositAddressWatches = economySchema.table(
     provider: text("provider").notNull(),
     chain: text("chain").notNull(),
     network: text("network").notNull(),
+    /**
+     * SHA-256 of public target facts only (provider, chain/network, provider
+     * target id, callback URL). Nullable only for migration-invalidated legacy
+     * rows; credentials and secret-derived fingerprints never belong here.
+     */
+    targetFingerprint: text("target_fingerprint"),
     desiredState: text("desired_state")
       .$type<DepositWatchDesiredState>()
       .notNull()
@@ -323,6 +331,7 @@ export const depositAddressWatches = economySchema.table(
       .default("pending"),
     generation: integer("generation").notNull().default(1),
     observedGeneration: integer("observed_generation"),
+    observedTargetFingerprint: text("observed_target_fingerprint"),
     attemptCount: integer("attempt_count").notNull().default(0),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
       .defaultNow(),
@@ -384,6 +393,13 @@ export const depositAddressWatches = economySchema.table(
       sql`${t.status} IN ('pending', 'leased', 'retry_wait', 'accepted_unverified', 'converged', 'blocked')`,
     ),
     check(
+      "deposit_watch_target_fingerprint",
+      sql`(
+        (${t.targetFingerprint} IS NULL AND ${t.status} = 'blocked')
+        OR ${t.targetFingerprint} ~ '^[0-9a-f]{64}$'
+      )`,
+    ),
+    check(
       "deposit_watch_generation",
       sql`${t.generation} >= 1 AND (${t.observedGeneration} IS NULL OR ${t.observedGeneration} >= 1)`,
     ),
@@ -405,12 +421,14 @@ export const depositAddressWatches = economySchema.table(
         (
           ${t.observedState} = 'unknown'
           AND ${t.observedGeneration} IS NULL
+          AND ${t.observedTargetFingerprint} IS NULL
           AND ${t.observedAt} IS NULL
         )
         OR
         (
           ${t.observedState} <> 'unknown'
           AND ${t.observedGeneration} IS NOT NULL
+          AND ${t.observedTargetFingerprint} ~ '^[0-9a-f]{64}$'
           AND ${t.observedAt} IS NOT NULL
         )
       )`,
@@ -458,6 +476,7 @@ export const depositAddressWatches = economySchema.table(
         OR (
           ${t.observedState} = ${t.desiredState}
           AND ${t.observedGeneration} = ${t.generation}
+          AND ${t.observedTargetFingerprint} = ${t.targetFingerprint}
         )
       )`,
     ),
@@ -481,6 +500,7 @@ export const depositAddressWatches = economySchema.table(
         'provider_rate_limited',
         'provider_timeout',
         'provider_configuration_missing',
+        'provider_target_mismatch',
         'provider_rejected',
         'provider_unsupported',
         'reconciler_failed',

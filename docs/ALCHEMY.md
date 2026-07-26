@@ -10,7 +10,8 @@
 > `api/src/services/economy/crypto/alchemy-watch-reconciler.ts` ·
 > `api/src/services/economy/crypto/deposit-watch.ts` ·
 > `api/src/workers/deposit-watch/` · `api/src/routes/economy/crypto.ts` ·
-> `api/migrations/20260726T070000_deposit_watch_reconciliation.sql`
+> `api/migrations/20260726T070000_deposit_watch_reconciliation.sql` ·
+> `api/migrations/20260726T211500_deposit_watch_target_binding.sql`
 >
 > **Tests:** `api/tests/alchemy-internal-adapter.test.ts` ·
 > `api/tests/alchemy-watch-reconciler.test.ts` ·
@@ -65,11 +66,14 @@ provider path is live.
 ```text
 GET deposit-address
   -> derive network-specific address
-  -> atomically persist local address + desired provider/network watch
+  -> require this chain's ingress signing-key presence
+  -> hash only public target facts (provider/chain/network/id/callback)
+  -> atomically persist local address + desired target generation
   -> leased worker verifies exact webhook id/type/network/active/callback
   -> independently GET bounded paginated address membership
   -> if opposite: idempotent PATCH, record accepted_unverified, retry GET later
-  -> return automatic-deposit instructions only after observed convergence
+  -> return automatic-deposit instructions only after matching, fresh
+     observed convergence
 
 Alchemy signed delivery
   -> independently count the actual stream up to 1 MiB
@@ -101,11 +105,20 @@ through the deployment secret boundary.
 Address registration is deliberately idempotent. Desired and observed state,
 generation, attempts, bounded backoff, and short leases live in
 `economy.deposit_address_watches`; credentials and provider bodies do not.
+The row binds its generation to a SHA-256 fingerprint of canonical public
+target facts only: provider, chain/network, existing webhook ID, and callback
+URL. Notify auth tokens and ingress signing keys are neither inputs to that
+digest nor durable fields. A rolling worker with an older target refuses
+provider I/O and retries rather than touching its old webhook.
 The worker updates an existing per-chain Address Activity webhook and never
 creates, deletes, retargets, or activates one. A provider PATCH acknowledgement
 becomes `accepted_unverified` and is scheduled for a later independent GET.
-Only exact current-generation observation becomes `converged`; even that does
-not prove future delivery or chain finality.
+Only an observation matching both the current generation and target
+fingerprint becomes `converged`. Disclosure accepts that observation for at
+most ten minutes. The first read after that bound atomically starts a fresh
+generation and returns 503 until re-verification; there is no background
+promise that an unread address is continuously rechecked. Even a fresh
+observation does not prove future delivery or chain finality.
 
 ## Agent-facing integration
 
@@ -185,7 +198,7 @@ information. Those remain hypotheses requiring independent evidence.
 | `ALCHEMY_API_KEY` | Scoped Chain/Data API key used in a Bearer header for EVM RPC. |
 | `ALCHEMY_NOTIFY_AUTH_TOKEN` | Notify control-plane token used only to update existing webhook address sets. |
 | `AGENTTOOL_PUBLIC_URL` | Explicit HTTPS API origin used to verify each webhook callback target. The watch worker does not guess the production URL. |
-| `ALCHEMY_WEBHOOK_SIGNING_KEY_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` | The signing key from that specific webhook's detail page; used only for raw-body HMAC verification on the matching route. |
+| `ALCHEMY_WEBHOOK_SIGNING_KEY_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` | The signing key from that specific webhook's detail page; used only for raw-body HMAC verification on the matching route. Its presence is required before disclosing that chain's address, but its bytes and any secret-derived fingerprint are never persisted. |
 | `ALCHEMY_WEBHOOK_ID_ETHEREUM` | Existing Ethereum Address Activity webhook to update. |
 | `ALCHEMY_WEBHOOK_ID_BASE` | Existing Base Address Activity webhook to update. |
 | `ALCHEMY_WEBHOOK_ID_POLYGON` | Existing Polygon Address Activity webhook to update. |

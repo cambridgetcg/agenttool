@@ -5,7 +5,9 @@
  * access lives inside an injected reconciler. A mutation endpoint returning
  * success becomes `accepted_unverified`; only an independent observation of
  * the intended active/type/destination subscription and its address membership
- * may become `converged`.
+ * for the current public target fingerprint may become `converged`. Address
+ * disclosure additionally bounds the age of that observation and starts a new
+ * generation when it expires.
  *
  * Provider operations must be idempotent and honor the supplied AbortSignal.
  * A timeout is an ambiguous external outcome: the durable row retries with the
@@ -32,6 +34,7 @@ export const DEPOSIT_WATCH_MAX_BATCH_SIZE = 10;
 export const DEPOSIT_WATCH_MAX_LEASE_MS = 5 * 60_000;
 export const DEPOSIT_WATCH_DEFAULT_LEASE_MS = 30_000;
 export const DEPOSIT_WATCH_DEFAULT_PROVIDER_TIMEOUT_MS = 10_000;
+export const DEPOSIT_WATCH_DISCLOSURE_MAX_AGE_MS = 10 * 60_000;
 
 const DEPOSIT_WATCH_BACKOFF_MS = [
   30_000,
@@ -46,6 +49,7 @@ const DEPOSIT_WATCH_BACKOFF_MS = [
 
 const PROVIDER_NAME_RE = /^[a-z][a-z0-9_-]{0,31}$/;
 const LEASE_OWNER_RE = /^[A-Za-z0-9._:-]{1,128}$/;
+const TARGET_FINGERPRINT_RE = /^[0-9a-f]{64}$/;
 
 export class DepositWatchInvariantError extends Error {
   readonly code = "deposit_watch_invariant_failed";
@@ -66,6 +70,11 @@ export interface PersistDepositAddressWatchInput {
   derivationPath: string;
   provider: string;
   network: DepositWatchNetwork;
+  /**
+   * Digest of public target identity only. Callers must never derive this
+   * value from a credential or signing key.
+   */
+  targetFingerprint: string;
   desiredState?: DepositWatchDesiredState;
 }
 
@@ -76,10 +85,12 @@ export interface PersistedDepositAddressWatch {
   chain: Chain;
   network: DepositWatchNetwork;
   provider: string;
+  targetFingerprint: string;
   desiredState: DepositWatchDesiredState;
   observedState: DepositWatchObservedState;
   status: DepositWatchStatus;
   generation: number;
+  observedAt: Date | null;
 }
 
 type DepositWatchTransaction =
@@ -91,6 +102,7 @@ function validatePersistInput(input: PersistDepositAddressWatchInput): void {
     input.token !== "USDC" ||
     !PROVIDER_NAME_RE.test(input.provider) ||
     (input.network !== "mainnet" && input.network !== "testnet") ||
+    !TARGET_FINGERPRINT_RE.test(input.targetFingerprint) ||
     (input.desiredState !== undefined &&
       input.desiredState !== "watching" &&
       input.desiredState !== "not_watching") ||
@@ -115,6 +127,9 @@ function watchProjection(
   deposit: { id: string; address: string },
   watch: typeof depositAddressWatches.$inferSelect,
 ): PersistedDepositAddressWatch {
+  if (watch.targetFingerprint === null) {
+    throw new DepositWatchInvariantError();
+  }
   return {
     depositAddressId: deposit.id,
     watchId: watch.id,
@@ -122,11 +137,32 @@ function watchProjection(
     chain: watch.chain as Chain,
     network: watch.network as DepositWatchNetwork,
     provider: watch.provider,
+    targetFingerprint: watch.targetFingerprint,
     desiredState: watch.desiredState,
     observedState: watch.observedState,
     status: watch.status,
     generation: watch.generation,
+    observedAt: watch.observedAt,
   };
+}
+
+function convergedObservationIsStale(
+  watch: typeof depositAddressWatches.$inferSelect,
+  targetFingerprint: string,
+  now = new Date(),
+): boolean {
+  if (watch.status !== "converged") return false;
+  if (
+    watch.observedAt === null ||
+    watch.observedTargetFingerprint !== targetFingerprint
+  ) {
+    return true;
+  }
+  const observedAt = watch.observedAt.getTime();
+  return (
+    !Number.isFinite(observedAt) ||
+    observedAt <= now.getTime() - DEPOSIT_WATCH_DISCLOSURE_MAX_AGE_MS
+  );
 }
 
 /**
@@ -187,6 +223,7 @@ export async function persistDepositAddressAndDesiredWatchInTransaction(
       provider: input.provider,
       chain: input.chain,
       network: input.network,
+      targetFingerprint: input.targetFingerprint,
       desiredState,
     })
     .onConflictDoNothing();
@@ -205,17 +242,26 @@ export async function persistDepositAddressAndDesiredWatchInTransaction(
     .limit(1);
 
   if (!watch) throw new DepositWatchInvariantError();
-  if (watch.desiredState === desiredState) {
+  const targetChanged =
+    watch.targetFingerprint !== input.targetFingerprint;
+  const desiredStateChanged = watch.desiredState !== desiredState;
+  const staleConvergence = convergedObservationIsStale(
+    watch,
+    input.targetFingerprint,
+  );
+  if (!targetChanged && !desiredStateChanged && !staleConvergence) {
     return watchProjection(deposit, watch);
   }
 
-  // A new desired generation fences any in-flight provider result. Preserve
-  // the last real observation as historical evidence, but it cannot satisfy
-  // convergence for this new generation.
+  // A changed public target, desired state, or stale disclosure snapshot starts
+  // a new generation and fences every in-flight provider result. Preserve the
+  // last real observation as historical evidence; generation + target binding
+  // prevent it from satisfying current convergence.
   const [updated] = await tx
     .update(depositAddressWatches)
     .set({
       desiredState,
+      targetFingerprint: input.targetFingerprint,
       generation: sql`${depositAddressWatches.generation} + 1`,
       status: "pending",
       attemptCount: 0,
@@ -270,6 +316,7 @@ export async function requestDepositWatchReconciliationInTransaction(
       and(
         eq(depositAddressWatches.id, watchId),
         inArray(depositAddressWatches.status, ["blocked", "converged"]),
+        sql`${depositAddressWatches.targetFingerprint} IS NOT NULL`,
       ),
     )
     .returning({ id: depositAddressWatches.id });
@@ -290,6 +337,7 @@ export interface DepositWatchClaim {
   provider: string;
   chain: Chain;
   network: DepositWatchNetwork;
+  targetFingerprint: string;
   address: string;
   desiredState: DepositWatchDesiredState;
   observedState: DepositWatchObservedState;
@@ -318,7 +366,8 @@ export type DepositWatchProviderOutcome =
       code:
         | "provider_unavailable"
         | "provider_rate_limited"
-        | "provider_timeout";
+        | "provider_timeout"
+        | "provider_target_mismatch";
     }
   | {
       kind: "terminal";
@@ -352,6 +401,7 @@ export interface CompleteDepositWatchInput extends DepositWatchTransition {
   id: string;
   leaseId: string;
   generation: number;
+  targetFingerprint: string;
   completedAt: Date;
 }
 
@@ -371,6 +421,7 @@ interface RawClaimRow extends Record<string, unknown> {
   provider: string;
   chain: string;
   network: string;
+  target_fingerprint: string;
   address: string;
   desired_state: DepositWatchDesiredState;
   observed_state: DepositWatchObservedState;
@@ -406,7 +457,8 @@ export const drizzleDepositWatchStore: DepositWatchStore = {
       candidates AS (
         SELECT watch.id
         FROM economy.deposit_address_watches AS watch
-        WHERE watch.attempt_count < ${DEPOSIT_WATCH_MAX_ATTEMPTS}
+        WHERE watch.target_fingerprint IS NOT NULL
+          AND watch.attempt_count < ${DEPOSIT_WATCH_MAX_ATTEMPTS}
           AND (
             (
               watch.status IN ('pending', 'retry_wait', 'accepted_unverified')
@@ -446,6 +498,7 @@ export const drizzleDepositWatchStore: DepositWatchStore = {
         claimed.provider,
         claimed.chain,
         claimed.network,
+        claimed.target_fingerprint,
         deposit.address,
         claimed.desired_state,
         claimed.observed_state,
@@ -467,6 +520,7 @@ export const drizzleDepositWatchStore: DepositWatchStore = {
       provider: row.provider,
       chain: row.chain as Chain,
       network: row.network as DepositWatchNetwork,
+      targetFingerprint: row.target_fingerprint,
       address: row.address,
       desiredState: row.desired_state,
       observedState: row.observed_state,
@@ -509,6 +563,7 @@ export const drizzleDepositWatchStore: DepositWatchStore = {
           ? {
               observedState: observation.state,
               observedGeneration: observation.generation,
+              observedTargetFingerprint: input.targetFingerprint,
               observedAt: sql`clock_timestamp()`,
             }
           : {}),
@@ -520,6 +575,10 @@ export const drizzleDepositWatchStore: DepositWatchStore = {
           eq(depositAddressWatches.status, "leased"),
           eq(depositAddressWatches.leaseId, input.leaseId),
           eq(depositAddressWatches.generation, input.generation),
+          eq(
+            depositAddressWatches.targetFingerprint,
+            input.targetFingerprint,
+          ),
           sql`${depositAddressWatches.leaseExpiresAt} > clock_timestamp()`,
         ),
       )
@@ -668,7 +727,8 @@ function sanitizeProviderOutcome(
     candidate.kind === "retryable" &&
     (candidate.code === "provider_unavailable" ||
       candidate.code === "provider_rate_limited" ||
-      candidate.code === "provider_timeout")
+      candidate.code === "provider_timeout" ||
+      candidate.code === "provider_target_mismatch")
   ) {
     return { kind: "retryable", code: candidate.code };
   }
@@ -700,6 +760,7 @@ async function reconcileWithTimeout(
         provider: claim.provider,
         chain: claim.chain,
         network: claim.network,
+        targetFingerprint: claim.targetFingerprint,
         address: claim.address,
         desiredState: claim.desiredState,
         observedState: claim.observedState,
@@ -799,6 +860,7 @@ export async function runDepositWatchReconciliationBatch(options: {
         id: claim.id,
         leaseId: claim.leaseId,
         generation: claim.generation,
+        targetFingerprint: claim.targetFingerprint,
         completedAt,
         ...transition,
       });

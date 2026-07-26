@@ -68,6 +68,7 @@ export CRYPTO_NETWORK="testnet"  # explicit; unset never falls through to mainne
 export CRYPTO_HD_MNEMONIC="..."  # BIP-39 12 or 24 words
 export ALCHEMY_API_KEY="..."
 export ALCHEMY_NOTIFY_AUTH_TOKEN="..."
+export AGENTTOOL_PUBLIC_URL="https://api.example"
 export ALCHEMY_WEBHOOK_ID_ETHEREUM="..."
 export ALCHEMY_WEBHOOK_ID_BASE="..."
 export ALCHEMY_WEBHOOK_ID_POLYGON="..."
@@ -87,9 +88,11 @@ export HOST=0.0.0.0
 The five webhook IDs and five signing keys refer to the same five existing
 per-network Address Activity webhooks. A signing key is specific to its
 webhook; do not reuse one across routes. AgentTool updates address sets; it
-does not create or delete Alchemy apps/webhooks. Use deployment secrets rather
-than exporting credential values from a global shell profile. See
-[ALCHEMY.md](ALCHEMY.md).
+does not create or delete Alchemy apps/webhooks. EVM address disclosure also
+requires the matching per-chain signing key and a recent observation of the
+current public webhook ID/callback target. Secret bytes are never written to
+watch state. Use deployment secrets rather than exporting credential values
+from a global shell profile. See [ALCHEMY.md](ALCHEMY.md).
 
 `CRYPTO_NETWORK` owns deposits and shared crypto reads. `PAYOUT_NETWORK` remains
 the payout-worker opt-in and a compatibility fallback; if both are set they

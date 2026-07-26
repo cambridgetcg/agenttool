@@ -180,6 +180,20 @@ interface ReadyDepositAddress {
   created_at: string;
 }
 
+function depositWatchReadinessHint(
+  error: DepositWatchNotReadyError,
+): string {
+  if (error.code === "deposit_watch_target_unconfigured") {
+    return "Configure the explicit public callback origin and this chain's existing Alchemy webhook ID, restart the worker, then retry.";
+  }
+  if (error.code === "deposit_ingress_signing_key_missing") {
+    return "Configure this chain's Alchemy webhook signing key, restart the API, then retry; provider membership alone is not safe ingress.";
+  }
+  return error.retryable
+    ? "Retry this exact request after the durable reconciler independently verifies the current target generation."
+    : "An operator must repair the blocked provider-watch configuration, then enqueue a new desired generation.";
+}
+
 export async function resolveReadyDepositAddressRows(
   walletId: string,
   rows: ListedDepositAddress[],
@@ -269,10 +283,7 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
             retryable: error.retryable,
             watch_status: error.watchStatus,
             message: error.message,
-            hint:
-              error.retryable
-                ? "Retry this exact list after the durable reconciler independently verifies every EVM watch."
-                : "An operator must repair the blocked provider-watch configuration, then enqueue a new desired generation.",
+            hint: depositWatchReadinessHint(error),
             consequence:
               "No deposit address was disclosed because at least one stored EVM address is not yet confirmed as watched.",
           }),
@@ -334,12 +345,9 @@ router.get("/wallets/:walletId/deposit-address", async (c) => {
           retryable: error.retryable,
           watch_status: error.watchStatus,
           message: error.message,
-          hint:
-            error.retryable
-              ? "Retry this exact request after the durable reconciler independently verifies the Alchemy watch."
-              : "An operator must repair the blocked provider-watch configuration, then enqueue a new desired generation.",
+          hint: depositWatchReadinessHint(error),
           consequence:
-            "The deposit address exists locally, but AgentTool will not disclose it or claim automatic detection until the watch converges.",
+            "AgentTool will not disclose the deposit address or claim automatic detection until authenticated ingress and the current watch target are ready.",
         }),
         503,
       );

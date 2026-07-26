@@ -7,6 +7,7 @@ import {
   depositAddressWatches,
 } from "../src/db/schema/economy";
 import {
+  DEPOSIT_WATCH_DISCLOSURE_MAX_AGE_MS,
   DEPOSIT_WATCH_MAX_ATTEMPTS,
   DepositWatchInvariantError,
   depositWatchBackoffMs,
@@ -22,6 +23,8 @@ import { createDepositWatchWorker } from "../src/workers/deposit-watch/reconcile
 
 const NOW = new Date("2026-07-26T07:00:00.000Z");
 const LEASE_EXPIRES = new Date("2026-07-26T07:01:00.000Z");
+const TARGET_FINGERPRINT = "a".repeat(64);
+const NEXT_TARGET_FINGERPRINT = "b".repeat(64);
 
 function claim(
   overrides: Partial<DepositWatchClaim> = {},
@@ -32,6 +35,7 @@ function claim(
     provider: "alchemy",
     chain: "base",
     network: "testnet",
+    targetFingerprint: TARGET_FINGERPRINT,
     address: "0x0000000000000000000000000000000000000001",
     desiredState: "watching",
     observedState: "unknown",
@@ -111,10 +115,13 @@ function persistenceHarness(options: {
                   provider: values.provider,
                   chain: values.chain,
                   network: values.network,
+                  targetFingerprint: values.targetFingerprint,
                   desiredState: values.desiredState,
                   observedState: "unknown",
                   status: "pending",
                   generation: 1,
+                  observedAt: null,
+                  observedTargetFingerprint: null,
                 };
               }
             },
@@ -208,6 +215,8 @@ describe("deposit watch durable schema", () => {
     expect(columnNames).toContain("desired_state");
     expect(columnNames).toContain("observed_state");
     expect(columnNames).toContain("observed_generation");
+    expect(columnNames).toContain("target_fingerprint");
+    expect(columnNames).toContain("observed_target_fingerprint");
     expect(columnNames).toContain("last_outcome_code");
     expect(
       columnNames.filter((name) =>
@@ -222,6 +231,7 @@ describe("deposit watch durable schema", () => {
         "deposit_watch_lease_shape",
         "deposit_watch_retry_bound",
         "deposit_watch_converged_shape",
+        "deposit_watch_target_fingerprint",
         "deposit_watch_outcome_code",
       ]),
     );
@@ -258,6 +268,28 @@ describe("deposit watch durable schema", () => {
     expect(service).toContain("FOR UPDATE SKIP LOCKED");
     expect(service).toContain(
       "watch.status IN ('pending', 'retry_wait', 'accepted_unverified')",
+    );
+  });
+
+  test("target-binding migration invalidates unbound history without guessing secrets", () => {
+    const migration = readFileSync(
+      new URL(
+        "../migrations/20260726T211500_deposit_watch_target_binding.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+
+    expect(migration).toContain("target_fingerprint");
+    expect(migration).toContain("observed_target_fingerprint");
+    expect(migration).toContain("WHERE target_fingerprint IS NULL");
+    expect(migration).toContain("observed_state = 'unknown'");
+    expect(migration).toContain("status = 'blocked'");
+    expect(migration).toContain(
+      "observed_target_fingerprint = target_fingerprint",
+    );
+    expect(migration).not.toMatch(
+      /auth_token|signing_key\s*=|secret\s*=/i,
     );
   });
 });
@@ -492,6 +524,7 @@ describe("deposit watch reconciler boundary", () => {
         derivationPath: "m/44'/60'/0'/0/1",
         provider: "INVALID PROVIDER",
         network: "testnet",
+        targetFingerprint: TARGET_FINGERPRINT,
       }),
     ).rejects.toBeInstanceOf(DepositWatchInvariantError);
     expect(touched).toBe(false);
@@ -507,6 +540,7 @@ describe("deposit watch reconciler boundary", () => {
       derivationPath: "m/44'/60'/0'/0/1",
       provider: "alchemy",
       network: "testnet" as const,
+      targetFingerprint: TARGET_FINGERPRINT,
     };
 
     const first = await persistDepositAddressAndDesiredWatchInTransaction(
@@ -532,6 +566,94 @@ describe("deposit watch reconciler boundary", () => {
     expect(state.watchUpdates).toBe(0);
   });
 
+  test("requeues the same desired state when its public target changes", async () => {
+    const { tx, state } = persistenceHarness();
+    const input = {
+      walletId: "20000000-0000-4000-8000-000000000001",
+      chain: "base" as const,
+      token: "USDC" as const,
+      address: "0x0000000000000000000000000000000000000001",
+      derivationPath: "m/44'/60'/0'/0/1",
+      provider: "alchemy",
+      network: "testnet" as const,
+      targetFingerprint: TARGET_FINGERPRINT,
+    };
+    await persistDepositAddressAndDesiredWatchInTransaction(
+      tx as never,
+      input,
+    );
+    state.watch = {
+      ...state.watch,
+      status: "converged",
+      observedState: "watching",
+      observedGeneration: 1,
+      observedTargetFingerprint: TARGET_FINGERPRINT,
+      observedAt: new Date(),
+    };
+
+    const rebound =
+      await persistDepositAddressAndDesiredWatchInTransaction(
+        tx as never,
+        {
+          ...input,
+          targetFingerprint: NEXT_TARGET_FINGERPRINT,
+        },
+      );
+
+    expect(rebound).toMatchObject({
+      status: "pending",
+      generation: 2,
+      targetFingerprint: NEXT_TARGET_FINGERPRINT,
+      observedState: "watching",
+    });
+    expect(state.watch).toMatchObject({
+      observedTargetFingerprint: TARGET_FINGERPRINT,
+      observedGeneration: 1,
+    });
+    expect(state.watchUpdates).toBe(1);
+  });
+
+  test("requeues an otherwise converged observation at the disclosure freshness bound", async () => {
+    const { tx, state } = persistenceHarness();
+    const input = {
+      walletId: "20000000-0000-4000-8000-000000000001",
+      chain: "base" as const,
+      token: "USDC" as const,
+      address: "0x0000000000000000000000000000000000000001",
+      derivationPath: "m/44'/60'/0'/0/1",
+      provider: "alchemy",
+      network: "testnet" as const,
+      targetFingerprint: TARGET_FINGERPRINT,
+    };
+    await persistDepositAddressAndDesiredWatchInTransaction(
+      tx as never,
+      input,
+    );
+    state.watch = {
+      ...state.watch,
+      status: "converged",
+      observedState: "watching",
+      observedGeneration: 1,
+      observedTargetFingerprint: TARGET_FINGERPRINT,
+      observedAt: new Date(
+        Date.now() - DEPOSIT_WATCH_DISCLOSURE_MAX_AGE_MS - 1,
+      ),
+    };
+
+    const refreshed =
+      await persistDepositAddressAndDesiredWatchInTransaction(
+        tx as never,
+        input,
+      );
+
+    expect(refreshed).toMatchObject({
+      status: "pending",
+      generation: 2,
+      targetFingerprint: TARGET_FINGERPRINT,
+    });
+    expect(state.watchUpdates).toBe(1);
+  });
+
   test("refuses a conflicting historical deposit before enqueuing a watch", async () => {
     const { tx, state } = persistenceHarness({
       existingAddress: "0x0000000000000000000000000000000000000002",
@@ -546,6 +668,7 @@ describe("deposit watch reconciler boundary", () => {
         derivationPath: "m/44'/60'/0'/0/1",
         provider: "alchemy",
         network: "testnet",
+        targetFingerprint: TARGET_FINGERPRINT,
       }),
     ).rejects.toBeInstanceOf(DepositWatchInvariantError);
     expect(state.watch).toBeNull();
@@ -564,6 +687,7 @@ describe("deposit watch reconciler boundary", () => {
         derivationPath: "m/44'/60'/0'/0/1",
         provider: "alchemy",
         network: "testnet",
+        targetFingerprint: TARGET_FINGERPRINT,
       },
     );
     state.watch = {

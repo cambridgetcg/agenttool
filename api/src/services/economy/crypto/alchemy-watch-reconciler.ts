@@ -26,7 +26,10 @@ import {
   type DepositWatchProviderReconciler,
   type DepositWatchReconcileRequest,
 } from "./deposit-watch";
-import { alchemyAddressActivityNetwork } from "./alchemy-notify";
+import {
+  alchemyAddressActivityNetwork,
+  alchemyDepositWatchTargetFingerprint,
+} from "./alchemy-notify";
 
 const ALCHEMY_NOTIFY_ORIGIN = "https://dashboard.alchemy.com";
 const TEAM_WEBHOOKS_PATH = "/api/team-webhooks";
@@ -727,6 +730,28 @@ async function reconcileAlchemyWatch(
     return {
       kind: "terminal",
       code: "provider_configuration_missing",
+    };
+  }
+  const configuredTargetFingerprint =
+    alchemyDepositWatchTargetFingerprint({
+      chain: request.chain,
+      network: request.network,
+      webhookId,
+      callbackBaseUrl: config.callbackOrigin,
+    });
+  if (configuredTargetFingerprint === null) {
+    return {
+      kind: "terminal",
+      code: "provider_configuration_missing",
+    };
+  }
+  if (request.targetFingerprint !== configuredTargetFingerprint) {
+    // During a rolling config change, an older worker may briefly see a row
+    // fenced for the new public target. It must neither mutate its old target
+    // nor terminally block the new generation.
+    return {
+      kind: "retryable",
+      code: "provider_target_mismatch",
     };
   }
 

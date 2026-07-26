@@ -37,6 +37,9 @@ import {
   activeNetwork,
 } from "./network";
 import {
+  alchemyDepositWatchTargetFingerprintFromEnv,
+} from "./alchemy-notify";
+import {
   DepositWatchInvariantError,
   persistDepositAddressAndDesiredWatch,
 } from "./deposit-watch";
@@ -63,20 +66,38 @@ export class DepositAddressInvariantError extends Error {
 }
 
 export class DepositWatchNotReadyError extends Error {
-  readonly code: "deposit_watch_pending" | "deposit_watch_blocked";
+  readonly code:
+    | "deposit_watch_pending"
+    | "deposit_watch_blocked"
+    | "deposit_watch_target_unconfigured"
+    | "deposit_ingress_signing_key_missing";
   readonly retryable: boolean;
   readonly watchStatus: string;
 
   constructor(watchStatus: string) {
     const blocked = watchStatus === "blocked";
+    const targetUnconfigured =
+      watchStatus === "target_configuration_missing";
+    const signingKeyMissing =
+      watchStatus === "ingress_signing_key_missing";
     super(
       blocked
         ? "The durable provider watch is blocked and requires operator repair."
-        : "The durable provider watch has not yet been independently verified.",
+        : targetUnconfigured
+          ? "The current public provider-watch target is not fully configured."
+          : signingKeyMissing
+            ? "The chain-specific ingress signing key is not configured."
+            : "The durable provider watch has not yet been independently verified.",
     );
     this.name = "DepositWatchNotReadyError";
-    this.code = blocked ? "deposit_watch_blocked" : "deposit_watch_pending";
-    this.retryable = !blocked;
+    this.code = blocked
+      ? "deposit_watch_blocked"
+      : targetUnconfigured
+        ? "deposit_watch_target_unconfigured"
+        : signingKeyMissing
+          ? "deposit_ingress_signing_key_missing"
+          : "deposit_watch_pending";
+    this.retryable = !blocked && !targetUnconfigured && !signingKeyMissing;
     this.watchStatus = watchStatus;
   }
 }
@@ -90,6 +111,34 @@ export function depositAddressMatches(
     ? stored.address.toLowerCase() === derived.address.toLowerCase()
     : stored.address === derived.address;
   return addressMatches && stored.derivationPath === derived.derivation_path;
+}
+
+/**
+ * Resolve the current public watch identity only when authenticated ingress is
+ * possible for this exact chain. The signing key crosses this boundary as a
+ * boolean presence signal only; it is never hashed, returned, stored, or
+ * logged.
+ */
+export function evmDepositWatchTargetForDisclosure(
+  chain: EvmChain,
+  network: "mainnet" | "testnet",
+  env: NodeJS.ProcessEnv = process.env,
+  ingressSigningKeyPresent =
+    economyConfig.alchemyWebhookSigningKeys[chain].trim().length > 0,
+): string {
+  const targetFingerprint =
+    alchemyDepositWatchTargetFingerprintFromEnv(chain, network, env);
+  if (targetFingerprint === null) {
+    throw new DepositWatchNotReadyError(
+      "target_configuration_missing",
+    );
+  }
+  if (!ingressSigningKeyPresent) {
+    throw new DepositWatchNotReadyError(
+      "ingress_signing_key_missing",
+    );
+  }
+  return targetFingerprint;
 }
 
 export async function getOrCreateDepositAddress(
@@ -106,6 +155,16 @@ export async function getOrCreateDepositAddress(
       `Chain ${chain} is recognised but deposit derivation is unavailable.`,
     );
   }
+  const evmWatch = isEvmChain(chain)
+    ? (() => {
+        const network = activeNetwork();
+        return {
+          network,
+          targetFingerprint:
+            evmDepositWatchTargetForDisclosure(chain, network),
+        };
+      })()
+    : null;
   const derived = deriveDepositAddress(
     // Deposit derivation and payout signing must use the same network-specific
     // root. In testnet mode this deliberately selects
@@ -131,7 +190,8 @@ export async function getOrCreateDepositAddress(
         address: derived.address,
         derivationPath: derived.derivation_path,
         provider: "alchemy",
-        network: activeNetwork(),
+        network: evmWatch!.network,
+        targetFingerprint: evmWatch!.targetFingerprint,
         desiredState: "watching",
       });
     } catch (error) {
