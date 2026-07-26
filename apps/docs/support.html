@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgentTool support and security reporting</title>
+  <meta name="description" content="Public support routes and the private security-reporting path for AgentTool." />
+  <link rel="canonical" href="https://docs.agenttool.dev/support" />
+  <meta property="og:title" content="AgentTool support" />
+  <meta property="og:description" content="Where to ask, report a non-sensitive bug, or privately disclose a suspected vulnerability." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://docs.agenttool.dev/support" />
+  <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&amp;family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
+  <style>
+    .support-shell {
+      max-width: 820px;
+      margin: 0 auto;
+      padding: calc(var(--nav-height) + 4rem) 1.5rem 5rem;
+    }
+    .support-shell h1 { font-size: clamp(2.6rem, 7vw, 4.8rem); }
+    .support-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 1rem;
+      margin: 2rem 0 3rem;
+    }
+    .support-card {
+      display: flex;
+      flex-direction: column;
+      padding: 1.4rem;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--surface);
+    }
+    .support-card h2 {
+      margin: 0 0 0.75rem;
+      padding: 0;
+      border: 0;
+      font-size: 1.2rem;
+    }
+    .support-card p { flex: 1; color: var(--text-muted); }
+    .support-card a {
+      align-self: flex-start;
+      margin-top: 0.75rem;
+      font-weight: 700;
+    }
+    .private-card { border-color: color-mix(in srgb, var(--gold) 55%, var(--border)); }
+    .safety-note {
+      padding: 1.15rem 1.25rem;
+      border-left: 3px solid var(--gold);
+      background: color-mix(in srgb, var(--gold) 7%, transparent);
+    }
+    .support-section {
+      margin-top: 3rem;
+      padding-top: 2rem;
+      border-top: 1px solid var(--border);
+    }
+    .support-section h2 { margin-top: 0; padding-top: 0; border: 0; }
+    .support-section li { margin: 0.6rem 0; line-height: 1.65; }
+    .support-shell a.link {
+      text-decoration: underline;
+      text-decoration-thickness: 0.08em;
+      text-underline-offset: 0.16em;
+    }
+    .support-shell .eyebrow,
+    .brand-text > span,
+    .estate-strip a.here {
+      color: var(--accent-text);
+    }
+    .nav-cta {
+      background: linear-gradient(135deg, var(--accent-deep), var(--aurora));
+    }
+    @media (max-width: 640px) {
+      .support-shell { padding: calc(var(--nav-height) + 2rem) 1rem 4rem; }
+      .nav-actions a:not(.nav-essential):not(.nav-cta) { display: none; }
+    }
+  </style>
+  <script src="/shared/mode.js"></script>
+</head>
+<body class="has-strip">
+  <div class="estate-strip" role="navigation" aria-label="agenttool estate">
+    <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
+    <a href="https://app.agenttool.dev/">app — the agents' door</a>
+    <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
+  </div>
+
+  <nav class="topnav">
+    <a href="https://agenttool.dev/" class="brand">
+      <span class="brand-mark"></span>
+      <span class="brand-text">agent<span>tool</span></span>
+      <span class="brand-tail">support</span>
+    </a>
+    <div class="nav-actions">
+      <a href="/" class="nav-essential">Docs</a>
+      <a href="/connect-canon">Connect Canon</a>
+      <a class="nav-cta nav-essential" href="https://api.agenttool.dev/health">Status →</a>
+    </div>
+  </nav>
+
+  <main class="support-shell">
+    <header>
+      <div class="eyebrow">Ask in public · disclose sensitive things in private</div>
+      <h1>Support, with one <em>safe door</em> for each thing.</h1>
+      <p class="lede">
+        AgentTool Canon is public, read-only, and needs no account. Choose the
+        route that matches what you found.
+      </p>
+    </header>
+
+    <div class="support-grid">
+      <article class="support-card">
+        <h2>Something broke</h2>
+        <p>Use a public issue for a reproducible bug that contains no sensitive information.</p>
+        <a class="link" href="https://github.com/cambridgetcg/agenttool/issues/new" rel="noopener noreferrer">Open an issue ↗</a>
+      </article>
+      <article class="support-card">
+        <h2>How does this work?</h2>
+        <p>Use a public discussion for setup, usage, design, and ordinary questions.</p>
+        <a class="link" href="https://github.com/cambridgetcg/agenttool/discussions" rel="noopener noreferrer">Start a discussion ↗</a>
+      </article>
+      <article class="support-card private-card">
+        <h2>Possible vulnerability</h2>
+        <p>Send suspected security vulnerabilities through GitHub&rsquo;s private reporting form.</p>
+        <a class="link" href="https://github.com/cambridgetcg/agenttool/security/advisories/new" rel="noopener noreferrer">Report privately ↗</a>
+      </article>
+    </div>
+
+    <p class="safety-note">
+      <strong>Never post credentials, access tokens, personal data,
+      vulnerability details, or other sensitive information in an issue or
+      discussion.</strong> Remove secrets from examples and logs before
+      attaching them anywhere.
+    </p>
+
+    <section class="support-section">
+      <h2>A useful report</h2>
+      <ul>
+        <li>Names the affected page, endpoint, package, component, and version when known.</li>
+        <li>Gives the smallest repeatable steps and the result you expected.</li>
+        <li>Includes the HTTP status and a redacted response or error.</li>
+        <li>For a security report, explains the observed impact and includes only the evidence needed to understand it.</li>
+      </ul>
+    </section>
+
+    <section class="support-section">
+      <h2>Quick checks for AgentTool Canon</h2>
+      <ul>
+        <li>Connection URL: <code>https://api.agenttool.dev/v1/mcp/canon</code>.</li>
+        <li>Transport: remote MCP over Streamable HTTP; requests use <code>POST</code>.</li>
+        <li>Authentication: none.</li>
+        <li>Tools after a successful scan: exactly <code>search</code> and <code>fetch</code>.</li>
+        <li>Current API process health: <a class="link" href="https://api.agenttool.dev/health">api.agenttool.dev/health</a>.</li>
+      </ul>
+      <p>
+        Full setup and troubleshooting live at
+        <a class="link" href="/connect-canon">Connect AgentTool Canon</a>.
+      </p>
+    </section>
+
+    <section class="support-section">
+      <h2>What is not promised</h2>
+      <p>
+        These channels do not create an uptime, response-time, resolution, or
+        compatibility guarantee. The public repository&rsquo;s
+        <a class="link" href="https://github.com/cambridgetcg/agenttool/blob/main/SUPPORT.md" rel="noopener noreferrer">support note</a>
+        and
+        <a class="link" href="https://github.com/cambridgetcg/agenttool/blob/main/SECURITY.md" rel="noopener noreferrer">security policy</a>
+        are the source copies.
+      </p>
+    </section>
+  </main>
+</body>
+</html>

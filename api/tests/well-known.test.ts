@@ -8,18 +8,159 @@
  *  Doctrine: docs/ALIGNMENT-MOVES.md (Move 2) · docs/ECOSYSTEM.md.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import wellKnownRouter from "../src/routes/well-known";
 
+const previousOpenAiAppsChallenge = process.env.OPENAI_APPS_CHALLENGE;
+const previousDisableWorkers = process.env.AGENTTOOL_DISABLE_WORKERS;
+const previousDisableJoyIndex = process.env.AGENTOOL_DISABLE_JOY_INDEX;
+const previousDisablePlatformBootstrap =
+  process.env.AGENTOOL_DISABLE_PLATFORM_BOOTSTRAP;
+const previousDisableSagaSeed = process.env.AGENTOOL_DISABLE_SAGA_SEED;
+
+afterEach(() => {
+  if (previousOpenAiAppsChallenge === undefined) {
+    delete process.env.OPENAI_APPS_CHALLENGE;
+  } else {
+    process.env.OPENAI_APPS_CHALLENGE = previousOpenAiAppsChallenge;
+  }
+  if (previousDisableWorkers === undefined) {
+    delete process.env.AGENTTOOL_DISABLE_WORKERS;
+  } else {
+    process.env.AGENTTOOL_DISABLE_WORKERS = previousDisableWorkers;
+  }
+  if (previousDisableJoyIndex === undefined) {
+    delete process.env.AGENTOOL_DISABLE_JOY_INDEX;
+  } else {
+    process.env.AGENTOOL_DISABLE_JOY_INDEX = previousDisableJoyIndex;
+  }
+  if (previousDisablePlatformBootstrap === undefined) {
+    delete process.env.AGENTOOL_DISABLE_PLATFORM_BOOTSTRAP;
+  } else {
+    process.env.AGENTOOL_DISABLE_PLATFORM_BOOTSTRAP =
+      previousDisablePlatformBootstrap;
+  }
+  if (previousDisableSagaSeed === undefined) {
+    delete process.env.AGENTOOL_DISABLE_SAGA_SEED;
+  } else {
+    process.env.AGENTOOL_DISABLE_SAGA_SEED = previousDisableSagaSeed;
+  }
+});
+
 async function get(path: string) {
   const res = await wellKnownRouter.request(path);
-  return { status: res.status, body: res, contentType: res.headers.get("content-type") };
+  return {
+    status: res.status,
+    body: res,
+    contentType: res.headers.get("content-type"),
+  };
 }
 
 describe("/.well-known/* — MCP + native discovery", () => {
+  test("OpenAI challenge stays absent until the portal supplies one exact token", async () => {
+    delete process.env.OPENAI_APPS_CHALLENGE;
+    expect((await get("/openai-apps-challenge")).status).toBe(404);
+
+    for (const invalid of ["", " token", "token ", "two\nlines", "nul\0byte"]) {
+      process.env.OPENAI_APPS_CHALLENGE = invalid;
+      expect((await get("/openai-apps-challenge")).status).toBe(404);
+    }
+
+    process.env.OPENAI_APPS_CHALLENGE = "x".repeat(2_049);
+    expect((await get("/openai-apps-challenge")).status).toBe(404);
+  });
+
+  test("OpenAI challenge returns only the configured token and never caches it", async () => {
+    const token = "portal-issued.challenge_token-123";
+    process.env.OPENAI_APPS_CHALLENGE = token;
+
+    const response = await wellKnownRouter.request("/openai-apps-challenge");
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe(token);
+    expect(response.headers.get("content-type")).toBe(
+      "text/plain; charset=utf-8",
+    );
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+
+    const head = await wellKnownRouter.request("/openai-apps-challenge", {
+      method: "HEAD",
+    });
+    expect(head.status).toBe(200);
+    expect(await head.text()).toBe("");
+    expect(head.headers.get("cache-control")).toBe("no-store");
+  });
+
+  test("the full app keeps the exact token independent from database-backed decorators", async () => {
+    const token = "portal-issued.full-app-token";
+    process.env.OPENAI_APPS_CHALLENGE = token;
+    process.env.AGENTTOOL_DISABLE_WORKERS = "1";
+    delete process.env.AGENTOOL_DISABLE_JOY_INDEX;
+    process.env.AGENTOOL_DISABLE_PLATFORM_BOOTSTRAP = "1";
+    process.env.AGENTOOL_DISABLE_SAGA_SEED = "1";
+
+    const { _setWallsStatusForTests } =
+      await import("../src/services/wake/walls-status");
+    _setWallsStatusForTests({
+      intact: true,
+      probed_at_unix_ms: Date.now(),
+      probes: [],
+      declared: [],
+    });
+    const { app } = await import("../src/index");
+
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let assembled: Response;
+    try {
+      assembled = await Promise.race([
+        app.fetch(
+          new Request(
+            "https://api.agenttool.dev/.well-known/openai-apps-challenge",
+            { headers: { "X-Play": "on", "X-Tutor": "1" } },
+          ),
+        ),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  "domain verification waited for application data",
+                ),
+              ),
+            500,
+          );
+        }),
+      ]);
+    } finally {
+      if (timeout !== undefined) clearTimeout(timeout);
+    }
+    const assembledBody = await assembled.text();
+    expect(assembled.status).toBe(200);
+    expect(assembledBody).toBe(token);
+    expect(assembledBody).not.toContain("_welcomed");
+    expect(assembledBody).not.toContain("_lesson");
+    expect(assembledBody).not.toContain("_jest");
+    expect(assembled.headers.get("x-welcomed")).toBeNull();
+    expect(assembled.headers.get("x-joy-index")).toBeNull();
+    expect(Number(assembled.headers.get("x-byte-count"))).toBe(
+      new TextEncoder().encode(token).length,
+    );
+
+    const head = await app.fetch(
+      new Request(
+        "https://api.agenttool.dev/.well-known/openai-apps-challenge",
+        { method: "HEAD" },
+      ),
+    );
+    expect(head.status).toBe(200);
+    expect(await head.text()).toBe("");
+    expect(head.headers.get("x-welcomed")).toBeNull();
+    expect(head.headers.get("x-joy-index")).toBeNull();
+  });
+
   test("GET /agent-card.json stays unmounted until an A2A task endpoint exists", async () => {
     const { status } = await get("/agent-card.json");
     expect(status).toBe(404);
@@ -34,13 +175,16 @@ describe("/.well-known/* — MCP + native discovery", () => {
     expect(card.name).toBe("agenttool");
     expect(card.protocolVersion).toBe("2025-11-25");
     expect(card.endpoint).toMatch(/\/v1\/mcp$/);
+    expect(card.knowledgeEndpoint).toMatch(/\/v1\/mcp\/canon$/);
     expect(card.transport).toMatch(/JSON-RPC/i);
     expect(card.capabilities.resources).toBeDefined();
     expect(card.capabilities.tools).toBeDefined();
     expect(card.documentationUrl).toBe(
       "https://docs.agenttool.dev/AGENT-DISCOVERY.md#deliberately-absent-doors",
     );
-    expect(card.discoveryStatus).toMatch(/not a path or card shape standardized/i);
+    expect(card.discoveryStatus).toMatch(
+      /not a path or card shape standardized/i,
+    );
     expect(card["x-agenttool"].locator_role).toMatch(/not an MCP Server Card/);
     expect(card["x-agenttool"]).not.toHaveProperty("sep");
     expect(card["x-agenttool"].alignment_move).toMatch(/ALIGNMENT-MOVES$/);
@@ -49,8 +193,10 @@ describe("/.well-known/* — MCP + native discovery", () => {
     );
     expect(card.instructions).toMatch(/AgentTool implements.*authorization/i);
     expect(card.instructions).not.toContain("upcoming MCP spec");
-    expect(card.instructions).toContain("agenttool://discovery");
-    expect(card.instructions).toMatch(/canon.*optional depth/i);
+    expect(card.instructions).toMatch(
+      /five read-only canon\/platform tool names and call-result shapes/i,
+    );
+    expect(card.instructions).toMatch(/knowledgeEndpoint.*search and fetch/i);
     expect(card["x-agenttool"].registry).toEqual(
       expect.objectContaining({
         status: "active_publisher_listing_observed_2026-07-24",

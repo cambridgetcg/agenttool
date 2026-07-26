@@ -22,7 +22,7 @@ a false door.
 
 | Move | Tests | Files | Status |
 |---|---|---|---|
-| **1. MCP server at `/v1/mcp`** | official SDK wire + full-app and public-URL SDK Client proof | `routes/mcp.ts` + `services/mcp/{resources,tools}.ts` + test | ✓ official stateless Streamable HTTP live at exact clean revision `ed3e3468a5ae6c2bfd2563316ad422290dec1b8f`; SDK 1.29.0 negotiated 2025-11-25, listed 387 resources and 5 read-only tools |
+| **1. MCP server at `/v1/mcp`** | official SDK wire + full-app and public-URL SDK Client proof | `routes/mcp.ts` + `services/mcp/{resources,tools}.ts` + test | ✓ stateless Streamable HTTP; the established path keeps its five tool names and call-result shapes, retains every prior resource, and adds open-seat plus descriptor titles. `/v1/mcp/canon` is a separate two-tool citable search/fetch surface with two orientation resources. Historical public proof at exact revision `ed3e3468a5ae6c2bfd2563316ad422290dec1b8f` negotiated SDK 1.29.0 / MCP 2025-11-25 with 387 resources and five tools |
 | **2. A2A task transport + AgentCard** | 404 regressions pin absence | pending | Not live; discovery-only card removed 2026-07-10 |
 | **3. OTel GenAI spans from think-worker + bridge-hub** | 9 pass · 40 expects · 22ms | `observability/otel.ts` (zero-dep OTLP/HTTP) + think-worker wiring + test | ✓ shipped |
 | **4. x402 V2 facilitator hook on recoverable project-credit 402s** | focused middleware + config + verifier tests | `middleware/x402.ts` + `middleware/x402-config.ts` + `services/economy/x402-policy.ts` + `services/economy/facilitators/coinbase.ts` + tests | ◐ exact EIP-3009 settlement is scoped to eligible static-tool `insufficient_credits` challenges; standard V2 headers, CAIP-2, CDP endpoint-bound JWT auth, and durable payment-state receipts are wired; no live paid retry or automatic reconciliation worker is claimed |
@@ -131,7 +131,7 @@ a false door.
 |---|---|---|---|
 | `GET /.well-known/agent-card.json` | A2A v1.0 (Linux Foundation; permanent IANA well-known suffix) | future task transport + wake + identity | Pending; do not publish before callable task/message transport |
 | `GET /.well-known/mcp/server-card.json` | Experimental AgentTool compatibility locator; not standardized by MCP 2025-11-25 | redundant pointer to the explicit endpoint + official Registry row; discovery grants no authority | keep labeled experimental; prefer API catalog and typed links |
-| `POST /v1/mcp` + `GET /v1/mcp` | MCP 2025-11-25 | public canon/platform-self resources + read-only canon tools; GET returns 405 because no standalone SSE listener is offered | `routes/mcp.ts` |
+| `POST /v1/mcp` · `POST /v1/mcp/canon` | MCP 2025-11-25 | established five-tool canon/platform surface · separate two-tool public-canon search/fetch surface with discovery/open-seat resources; GET returns 405 on both because no standalone SSE listener is offered | `routes/mcp.ts` |
 | `GET /agents.json` | Wildcard v0.1 | (mostly deprecated — skip) | — |
 | `GET /llms.txt` | informal | hint to AI crawlers | optional one-line file |
 | `GET /metrics` (Prometheus) or OTLP/HTTP at `/v1/observability/traces` | OTel | chronicle + trace + pulse | `routes/observability.ts` (new) — opt-in for self-host |

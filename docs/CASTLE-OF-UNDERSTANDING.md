@@ -6,15 +6,30 @@
 >
 > **Implements:** Two non-interchangeable local boundaries: one bounded, one-shot local-private projection from caller-selected Castle Git blobs into an exclusively marked in-process `agent-data/v1` node; and one stdout-only Whitehack advisory projection that can offer unaccepted candidates at the Castle gate without opening or writing the Castle.
 >
-> **Code:** [`agenttool-castle.ts`](https://github.com/cambridgetcg/agenttool/blob/main/bin/agenttool-castle.ts) · [`packages/data`](https://github.com/cambridgetcg/agenttool/tree/main/packages/data) · [`agenttool-castle-whitehack-intake.ts`](https://github.com/cambridgetcg/agenttool/blob/main/bin/agenttool-castle-whitehack-intake.ts) · [`_castle-whitehack-intake.ts`](https://github.com/cambridgetcg/agenttool/blob/main/bin/_castle-whitehack-intake.ts)
+> **Code:** [`agenttool-castle.ts`](https://github.com/cambridgetcg/agenttool/blob/main/bin/agenttool-castle.ts) · [`packages/data`](https://github.com/cambridgetcg/agenttool/tree/main/packages/data) · [`agenttool-castle-whitehack-intake.ts`](https://github.com/cambridgetcg/agenttool/blob/main/bin/agenttool-castle-whitehack-intake.ts) · [`_castle-whitehack-intake.ts`](https://github.com/cambridgetcg/agenttool/blob/main/bin/_castle-whitehack-intake.ts) · public boundary only: [`tools.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/mcp/tools.ts) · [`agenttool.jsonld`](agenttool.jsonld)
 >
-> **Tests:** [`agenttool-castle.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/bin/tests/agenttool-castle.test.ts) · [`agenttool-castle-whitehack-intake.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/bin/tests/agenttool-castle-whitehack-intake.test.ts) · [`agenttool-castle-whitehack-intake-schema.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/agenttool-castle-whitehack-intake-schema.test.ts)
+> **Tests:** [`agenttool-castle.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/bin/tests/agenttool-castle.test.ts) · [`agenttool-castle-whitehack-intake.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/bin/tests/agenttool-castle-whitehack-intake.test.ts) · [`agenttool-castle-whitehack-intake-schema.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/agenttool-castle-whitehack-intake-schema.test.ts) · public boundary only: [`mcp-server.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/mcp-server.test.ts)
 >
 > **Status:** Local operator tooling. Neither boundary is packaged, hosted as a service, deployed as a runtime, or scheduled; their source and documentation are public. Runtime HALT sentinels gate the committed-word projection's plan/sync/search/show commands. HALT and projection state are device-local and time-varying; `bun bin/agenttool-castle.ts status --json` is authoritative, and documentation or a Whitehack intake document never overrides a raised HALT.
 
 Publishing this guide as a discovery signpost does not change that status:
 `automatic_action: never`. Reading it does not fetch Castle words, install a
 package, begin a sync, lower a HALT, send a bearer, or write memory.
+
+## What the public canon may say
+
+The public JSON-LD registry contains one
+`urn:agenttool:doc/CASTLE-OF-UNDERSTANDING` entry. AgentTool’s public MCP
+`search` tool at `/v1/mcp/canon` can find that entry from ordinary words;
+`fetch` can return that one public registry record and its citation URL. The
+same invitation is named in `GET /public/open-seat` and
+`agenttool://open-seat`.
+
+That is a map to this public boundary, not a hosted Castle. The search index is
+the bundled AgentTool canon only. It never scans `~/castle`, receives a Castle
+path, opens a room, imports a selected Git blob, reads local projection state,
+or checks or changes HALT. No private Castle word becomes public merely
+because this doctrine entry is searchable.
 
 ## The narrow bridge
 

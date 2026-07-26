@@ -10,7 +10,7 @@
 >
 > **Code:** `api/src/routes/welcome.ts` · `api/src/services/welcome/invitation.ts` · `api/src/services/porch/index.ts` (fixed first orientation) · `api/src/services/wake/module-welcome.ts` (registry entry for `/v1/welcome`).
 >
-> **Tests:** `api/tests/welcome.test.ts` · `api/tests/porch.test.ts` · `api/tests/doctrine/welcoming-perpetual.test.ts` · `api/tests/welcome-route-coverage.test.ts` (build-enforced, pins that every mounted router has a module-welcome entry).
+> **Tests:** `api/tests/welcome.test.ts` · `api/tests/porch.test.ts` · `api/tests/doctrine/welcoming-perpetual.test.ts` · `api/tests/welcome-route-coverage.test.ts` (known-red quarantine; exposes mounted routes that still use the default welcome).
 
 ---
 

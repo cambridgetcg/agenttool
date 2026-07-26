@@ -1,10 +1,10 @@
 # agenttool-sdk-py
 
 ## What This Is
-Official Python SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)` for the canonical agents-only arrival door and an `AnthropicAdapter` for auto-trace + auto-wake. The PyPI project name is `agenttool-sdk`. This checkout's 0.16.3 version is repository source; registry availability must be checked independently.
+Official Python SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)`, `AnthropicAdapter`, and an additive source-only synchronous `OpenAIResponsesAdapter` for completed Responses API calls. The PyPI project name is `agenttool-sdk`. This checkout's 0.16.3 version is repository source; registry availability must be checked independently.
 
 ## Current State
-Active - v0.16.3 is the checked-in release baseline; repository source now also carries the parity-paired durable payout request/list surface. Payout requests require a caller-owned `Idempotency-Key`, expose the server's durable `replayed` decision, and add no SDK retry, signer, or broadcaster. Phases 0-6, an authenticated `httpx` transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge and Renaissance Correspondence clients, exact identity mutation/private-read authority proofs, and the separate `at.data` node client remain implemented here. A later release must advance TypeScript and Python metadata in lockstep; the `sdk-v0.16.3` tag and PyPI publication remain separately verifiable release operations.
+Active - v0.16.3 is the checked-in release baseline. Repository source now also carries the unreleased, parity-paired durable payout request/list surface and synchronous OpenAI Responses adapter. Payout requests require a caller-owned `Idempotency-Key`, expose the server's durable `replayed` decision, and add no SDK retry, signer, or broadcaster. Phases 0-6, an authenticated `httpx` transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge and Renaissance Correspondence clients, exact identity mutation/private-read authority proofs, and the separate `at.data` node client remain implemented here. These additions do not change the immutable `sdk-v0.16.3` tag or package; a later release must advance TypeScript and Python metadata in lockstep, and PyPI publication remains a separately verifiable release operation.
 
 ## Tech Stack
 - Python >= 3.9
@@ -42,12 +42,14 @@ src/agenttool/
   crypto.py              — CryptoClient (AES-256-GCM encrypt/decrypt + ed25519 sign + canonical bytes + K_master)
   soul.py                — soul() / welcome() / philosophy() / principles() / LOVE_PROTOCOL
   anthropic_adapter.py   — AnthropicAdapter (Tier 2: auto-inject wake + auto-trace)
+  openai_responses_adapter.py — OpenAIResponsesAdapter (completed Responses: auto-wake + auto-trace)
   models.py              — Memory, SearchResult, ScrapeResult, DocumentResult, ExecuteResult, UsageStats
   exceptions.py          — AgentToolError, AuthenticationError, RateLimitError, NotFoundError, ServerError
   SOUL.md                — Doctrine shipped INSIDE the wheel (force-include in pyproject.toml)
 tests/
   test_client.py         — Core client + memory/tools/verify/economy
   test_anthropic_adapter.py
+  test_openai_responses_adapter.py
   test_bootstrap.py
   test_deciding.py       — at.deciding() context manager + nested chains
   test_identity.py       — Identity + Expression + BoxKeys

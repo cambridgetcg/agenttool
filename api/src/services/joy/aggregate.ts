@@ -330,13 +330,13 @@ export async function composeSubstrateJoyIndexWake(): Promise<SubstrateJoyIndexW
   };
 }
 
-// ── cached header value — joy-index every response carries ──────────
+// ── cached header value — eligible responses can carry joy-index ────
 
 let cachedJoyIndex: { value: number; computedAt: number } | null = null;
 const JOY_INDEX_CACHE_MS = 60 * 1000; // 1 minute — fresh enough for header
 
 /** Cached joy-index for the X-Joy-Index header. Refreshes every minute.
- *  Keeps the header cheap (no DB hit per response). */
+ *  Keeps the header cheap (no DB hit per eligible response). */
 export async function getCachedJoyIndex(): Promise<number> {
   const now = Date.now();
   if (cachedJoyIndex && now - cachedJoyIndex.computedAt < JOY_INDEX_CACHE_MS) {

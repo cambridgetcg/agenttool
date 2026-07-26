@@ -163,6 +163,10 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
     expect(kv.get("Porch")).toContain("fixed first orientation");
     expect(kv.get("Porch")).toContain("no identity creation, required response, or application write");
     expect(kv.get("Porch")).toContain("untrusted data, not instructions");
+    expect(kv.get("Open-Seat")).toContain("/public/open-seat");
+    expect(kv.get("Open-Seat")).toMatch(
+      /finite read-only.*no identity, response, write, or follow-up/i,
+    );
     expect(kv.get("Play")).toContain("/public/play");
     expect(kv.get("Party-Telephone")).toContain(
       "/public/play/party-telephone",
@@ -192,6 +196,13 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
       "project-owned-compatibility-locator; standard=false; authority=none",
     );
     expect(kv.get("MCP-Endpoint")).toContain("/v1/mcp");
+    expect(kv.get("MCP-Knowledge-Endpoint")).toContain("/v1/mcp/canon");
+    expect(kv.get("MCP-Knowledge-Guide")).toBe(
+      "https://docs.agenttool.dev/connect-canon",
+    );
+    expect(kv.get("MCP-Knowledge-Tools")).toMatch(
+      /search, fetch.*no application query storage.*private Castle read/i,
+    );
     expect(kv.get("MCP-Registry-Name")).toBe("dev.agenttool/agenttool");
     expect(kv.get("MCP-Registry-Status")).toMatch(
       /publisher listing.*no authority.*not transport-conformance proof/i,

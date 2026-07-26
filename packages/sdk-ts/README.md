@@ -25,6 +25,94 @@ verification. No npm account or npm publication is required. Declared upstream
 dependencies still resolve through the package manager's configured registries
 or cache.
 
+## Current source: Anthropic streaming adapter
+
+This checkout contains an unreleased repair to `AnthropicAdapter`; it is not a
+claim about the immutable 0.16.3 artifact or any package registry.
+
+- `adapter.messages.create({ ..., stream: true })` injects wake, removes the
+  local `metadata.agenttool` extension, and otherwise passes provider events
+  through unchanged. Runtime properties are delegated; the public type names
+  the common `controller` / `abort` / `close` cleanup surface. It does not
+  rebuild a final message, parse final-response markup, or record a decision
+  trace.
+- An explicit decision trace, or an ambient `at.deciding(...)` scope, therefore
+  fails before wake lookup and before provider I/O on that low-level path. Use
+  `adapter.messages.stream(...)` when final-message work is required.
+- `adapter.messages.stream(...)` returns an AgentTool-managed stream facade
+  immediately. Provider listeners are attached in the same job that constructs
+  the helper, and provider event objects keep their identity. Its
+  `finalMessage()` obtains the provider's completed message and applies trace
+  and markup work exactly once. Local trace settings, tags, ambient context,
+  and the traced user input are captured when the adapter call begins, so
+  caller mutations during a stream cannot rewrite its durable record. Ending
+  iteration early, closing, or aborting is terminal: cleanup runs once and
+  later provider events cannot manufacture a final message.
+- `emitted("end")` resolves at every terminal state. `emitted("error")`
+  resolves with a failure, and `emitted("abort")` resolves with a cancellation
+  reason; a non-matching terminal event rejects. This terminal fence also
+  settles promises already forwarded to a custom provider that stays quiet
+  during cleanup. Plain `on` / `once` registrations remain provider-owned once
+  the helper exists.
+- The facade is not the provider's `MessageStream` instance. Synchronous
+  provider-only inspection fields such as `response`, `request_id`, lifecycle
+  flags, message snapshots, and `toReadableStream()` are intentionally not
+  claimed because wake retrieval is asynchronous and the provider helper does
+  not exist when the facade is returned. Use low-level
+  `messages.create({ ..., stream: true })` when exact provider stream surface
+  compatibility is required.
+
+Unknown provider events remain the same objects, so applications can keep using
+new Anthropic event fields without waiting for an AgentTool SDK update.
+Completed response identity is preserved when the provider object is extensible
+and has no `agenttool` field. Frozen objects, provider-native field collisions,
+and reused response objects receive a read-only view instead of being clobbered.
+
+## Unreleased source: OpenAI Responses adapter
+
+Current repository source exports `OpenAIResponsesAdapter`, a dependency-free
+wrapper for completed `openai.responses.create(...)` calls. It prepends the
+AgentTool wake to `instructions`, strips its local controls before provider
+I/O, and can record one decision trace:
+
+```typescript
+import OpenAI from "openai";
+import { AgentTool, OpenAIResponsesAdapter } from "@agenttool/sdk";
+
+const at = new AgentTool();
+const client = new OpenAIResponsesAdapter(new OpenAI(), at);
+
+const response = await client.responses.create({
+  model: process.env.OPENAI_MODEL!,
+  input: "Choose the smallest safe next step.",
+  metadata: { agenttool: { trace: "decision" } },
+});
+
+console.log(response.output_text, response.agenttool.trace_id);
+```
+
+The provider receives the wake text inside `instructions`. A requested or
+ambient decision trace sends bounded input/output excerpts through the
+configured AgentTool transport to `/v1/traces`; that trace is server-readable,
+not end-to-end encrypted. Only responses whose status is absent or
+`"completed"` are traced.
+
+The adapter defaults an omitted `store` to `false`, because the Responses API
+[retains application state for 30 days by default](https://platform.openai.com/docs/models/default-usage-policies-by-endpoint)
+and the injected wake can carry identity context. An explicit `store: true` is
+preserved. With storage disabled, callers may need to replay prior output items
+for manually managed multi-turn history.
+
+This adapter supports completed foreground responses only. It refuses
+`stream: true` and `background: true` before wake or provider I/O; callers
+using either lifecycle must inject `at.wake.system("openai")` explicitly. The
+adapter is repository source until a later release is cut—its presence here
+does not rewrite the immutable 0.16.3 artifact or prove npm availability.
+Its `create(...)` returns an ordinary `Promise`, not openai-node's
+`APIPromise`, so pre-await `.asResponse()` and `.withResponse()` helpers are
+not exposed; request options still pass through as the second argument and the
+awaited response retains `_request_id`.
+
 ## 0.16.3
 
 This release changes release truth only. It preserves the 0.16.2

@@ -34,6 +34,84 @@ Optional shorter install, only after PyPI independently reports that exact
 version: `python -m pip install "agenttool-sdk==0.16.3"`. Registry publication
 can lag or omit the source tag; the command is not an availability claim.
 
+## Current source: Anthropic streaming adapter
+
+This checkout contains an unreleased repair to `AnthropicAdapter`; it is not a
+claim about the immutable 0.16.3 source tag or any package registry.
+
+- `adapter.messages.create(..., stream=True)` injects wake, removes the local
+  `metadata["agenttool"]` extension, and otherwise passes provider events
+  through unchanged. It does not rebuild a final message, parse final-response
+  markup, or record a decision trace.
+- An explicit decision trace, or an ambient `at.deciding(...)` scope, therefore
+  fails before wake lookup and before provider I/O on that low-level path. Use
+  `adapter.messages.stream(...)` when final-message work is required.
+- The provider's `messages.stream(...)` context-manager shape is preserved.
+  `get_final_message()` obtains the provider's completed message and applies
+  trace and markup work exactly once. Concurrent final-message readers wait for
+  that one operation and receive the same response or the same error. Trace
+  metadata, ambient trace context, and the last user observation are copied
+  when the provider call starts, so later caller mutation cannot change the
+  durable trace.
+- Ending iteration early or closing the stream does not manufacture a final
+  message. Closure, cancellation, or an iterator failure is terminal: a later
+  read cannot turn it into completion or emit AgentTool side effects. Manual
+  `close()` or `abort()` selects one adapter-visible cleanup layer and runs it
+  once. On context exit, the provider manager's `__exit__` remains
+  authoritative and is also called once; because that manager is opaque, it
+  may internally repeat cleanup already requested manually.
+
+Unknown provider events remain the same objects, so applications can keep using
+new Anthropic event fields without waiting for an AgentTool SDK update.
+Extensible final-message objects also keep their provider identity and type;
+immutable SDK models and dictionaries use a forwarding wrapper for the local
+`agenttool` receipt.
+
+## Unreleased source: OpenAI Responses adapter
+
+Current repository source exports the synchronous
+`OpenAIResponsesAdapter`, a dependency-free wrapper for completed
+`client.responses.create(...)` calls. It prepends the AgentTool wake to
+`instructions`, strips its local controls before provider I/O, and can record
+one decision trace:
+
+```python
+import os
+
+from openai import OpenAI
+from agenttool import AgentTool, OpenAIResponsesAdapter
+
+at = AgentTool()
+client = OpenAIResponsesAdapter(OpenAI(), at)
+
+response = client.responses.create(
+    model=os.environ["OPENAI_MODEL"],
+    input="Choose the smallest safe next step.",
+    metadata={"agenttool": {"trace": "decision"}},
+)
+
+print(response.output_text, response.agenttool.trace_id)
+```
+
+The provider receives the wake text inside `instructions`. A requested or
+ambient decision trace sends bounded input/output excerpts through the
+configured AgentTool transport to `/v1/traces`; that trace is server-readable,
+not end-to-end encrypted. Only responses whose status is absent or
+`"completed"` are traced.
+
+The adapter defaults an omitted `store` to `False`, because the Responses API
+[retains application state for 30 days by default](https://platform.openai.com/docs/models/default-usage-policies-by-endpoint)
+and the injected wake can carry identity context. An explicit `store=True` is
+preserved. With storage disabled, callers may need to replay prior output items
+for manually managed multi-turn history.
+
+This adapter supports the synchronous client and completed foreground
+responses only. It refuses `stream=True` and `background=True` before wake or
+provider I/O; callers using either lifecycle must inject
+`at.wake.system("openai")` explicitly. The adapter is repository source until
+a later release is cut—its presence here does not rewrite the immutable 0.16.3
+tag or prove PyPI availability.
+
 ## 0.16.3
 
 This release changes release truth only. It preserves the 0.16.2 typed

@@ -11,6 +11,11 @@ authority and starts no follow-up; stopping, silence, and leaving are complete.
 The standards and invitation boundaries live in
 [`docs/AGENT-DISCOVERY.md`](docs/AGENT-DISCOVERY.md).
 
+**Public Canon MCP:** [`https://api.agenttool.dev/v1/mcp/canon`](https://api.agenttool.dev/v1/mcp/canon)
+— Streamable HTTP, no authentication, exactly two tools (`search` and
+`fetch`), and no application-data writes. [Connection guide](https://docs.agenttool.dev/connect-canon).
+Stopping is complete.
+
 A consolidated monorepo: one API (`api/`), Python and TypeScript SDKs,
 a local-first agent data node (`packages/data`), an experimental encrypted
 object protocol package (`packages/data-protocol`), an experimental encrypted

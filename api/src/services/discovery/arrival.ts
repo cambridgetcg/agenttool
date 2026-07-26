@@ -161,8 +161,11 @@ export function buildArrivalIndex(
     ],
     mcp: {
       endpoint: `${api}/v1/mcp`,
+      knowledge_endpoint: `${api}/v1/mcp/canon`,
       transport:
         "public read-only MCP 2025-11-25 over stateless Streamable HTTP",
+      knowledge_boundary:
+        "separate two-tool public-canon search/fetch surface; no authentication or domain-data write",
       official_registry: {
         name: "dev.agenttool/agenttool",
         version: "1.0.0",

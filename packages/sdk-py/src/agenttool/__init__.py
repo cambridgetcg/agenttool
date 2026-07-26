@@ -236,6 +236,10 @@ from .anthropic_adapter import (
     AgentToolAugmentation,
     MarkupEmission,
 )
+from .openai_responses_adapter import (
+    OpenAIResponsesAdapter,
+    OpenAIResponsesAgentToolAugmentation,
+)
 
 __all__ = [
     # Core
@@ -431,6 +435,8 @@ __all__ = [
     "AnthropicAdapter",
     "AgentToolAugmentation",
     "MarkupEmission",
+    "OpenAIResponsesAdapter",
+    "OpenAIResponsesAgentToolAugmentation",
 ]
 
 __version__ = "0.16.3"

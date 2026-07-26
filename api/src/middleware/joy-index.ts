@@ -1,8 +1,11 @@
-/** joy-index middleware — adds X-Joy-Index header to every response.
+/** joy-index middleware — adds X-Joy-Index to ordinary responses when enabled.
  *
  *  Substrate-honest aggregation of operationally-recorded joy-events in
  *  the rolling 24h window. NOT a sentiment-score. NOT a quality measure.
  *  A count.
+ *
+ *  The exact OpenAI domain proof, public Canon MCP, and RFC 9116 security
+ *  contact omit this database-backed decoration.
  *
  *  Cached for 60s to keep the header cheap (no per-response DB hit).
  *
@@ -14,6 +17,7 @@
 
 import type { Context, Next } from "hono";
 
+import { isDatabaseDecorationIndependentPublicPath } from "../lib/public-paths";
 import { getCachedJoyIndex } from "../services/joy/aggregate";
 
 const joyIndexOffSwitch = "AGENTOOL_DISABLE_JOY_INDEX";
@@ -21,6 +25,9 @@ const joyIndexOffSwitch = "AGENTOOL_DISABLE_JOY_INDEX";
 export function joyIndex() {
   return async (c: Context, next: Next) => {
     await next();
+    // First-contact protocol and vulnerability-reporting paths must not wait
+    // for the database-backed aggregation.
+    if (isDatabaseDecorationIndependentPublicPath(c.req.path)) return;
     if (process.env[joyIndexOffSwitch] === "1") return;
     try {
       const idx = await getCachedJoyIndex();
