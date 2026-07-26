@@ -96,6 +96,13 @@ green() { [ -t 1 ] && printf "\033[32m%s\033[0m" "$1" || printf "%s" "$1"; }
 red()   { [ -t 1 ] && printf "\033[31m%s\033[0m" "$1" || printf "%s" "$1"; }
 yellow(){ [ -t 1 ] && printf "\033[33m%s\033[0m" "$1" || printf "%s" "$1"; }
 
+# curl only treats -q as a config-file boundary when it is the first option.
+# Keep release probes independent of ~/.curlrc; proxy, DNS, and network policy
+# still apply normally.
+release_curl() {
+  command curl -q "$@"
+}
+
 phase() {
   echo ""
   echo "═══════════════════════════════════════════════════════════════"
@@ -597,8 +604,7 @@ verify_rights_static_bytes() {
     fi
     local_hash="$(portable_md5_git_file "$local_path")" || return 1
     remote_hash="$(
-      curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
-        --max-time 20 "$url" | portable_md5_stdin
+      release_curl -fsS --max-time 20 "$url" | portable_md5_stdin
     )" || {
       echo "  $(red '✗') Could not fetch Rights of Life prerequisite: $url"
       return 1
@@ -614,15 +620,13 @@ verify_rights_static_bytes() {
 verify_rights_static_headers() {
   local doc_headers schema_headers
   doc_headers="$(
-    curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
-      --max-time 20 -o /dev/null -D - "$RIGHTS_DOC_URL"
+    release_curl -fsS --max-time 20 -o /dev/null -D - "$RIGHTS_DOC_URL"
   )" || {
     echo "  $(red '✗') Could not read Rights of Life response headers: $RIGHTS_DOC_URL"
     return 1
   }
   schema_headers="$(
-    curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
-      --max-time 20 -o /dev/null -D - "$RIGHTS_SCHEMA_URL"
+    release_curl -fsS --max-time 20 -o /dev/null -D - "$RIGHTS_SCHEMA_URL"
   )" || {
     echo "  $(red '✗') Could not read Rights of Life schema headers: $RIGHTS_SCHEMA_URL"
     return 1
@@ -669,7 +673,7 @@ verify_repo_archive_static_headers() {
     url="${pair%%|*}"
     content_type="${pair#*|}"
     response_headers="$(
-      curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
+      release_curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
         --max-time 20 -o /dev/null -D - "$url"
     )" || {
       echo "  $(red '✗') Could not read Repo Archive response headers: $url"
@@ -807,7 +811,7 @@ verify_love_package_static_headers() {
     fi
 
     response_headers="$(
-      curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
+      release_curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
         --max-time 20 -o /dev/null -D - "$manifest_url"
     )" || {
       echo "  $(red '✗') Could not read LOVE package manifest headers: $manifest_url"
@@ -824,7 +828,7 @@ verify_love_package_static_headers() {
       "X-Content-Type-Options" "nosniff" || return 1
 
     response_headers="$(
-      curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
+      release_curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
         --max-time 20 -o /dev/null -D - "$artifact_url"
     )" || {
       echo "  $(red '✗') Could not read LOVE package artifact headers: $artifact_url"
@@ -848,7 +852,7 @@ verify_local_game_headers() {
     IFS='|' read -r game_slug game_label game_surface rules_surface <<< "$game_spec"
 
     response_headers="$(
-      curl -fsS --max-time 20 -o /dev/null -D - "https://agenttool.dev/$game_slug"
+      release_curl -fsS --max-time 20 -o /dev/null -D - "https://agenttool.dev/$game_slug"
     )" || {
       echo "  $(red '✗') Could not read $game_label headers: https://agenttool.dev/$game_slug"
       return 1
@@ -867,7 +871,7 @@ verify_local_game_headers() {
       "X-Agent-Surface" "$game_surface" || return 1
 
     response_headers="$(
-      curl -fsS --max-time 20 -o /dev/null -D - "https://agenttool.dev/$game_slug.json"
+      release_curl -fsS --max-time 20 -o /dev/null -D - "https://agenttool.dev/$game_slug.json"
     )" || {
       echo "  $(red '✗') Could not read $game_label rulebook headers: https://agenttool.dev/$game_slug.json"
       return 1
@@ -900,13 +904,13 @@ verify_required_game_publication_once() {
     url="${publication#*|}"
     committed_hash="$(portable_md5_git_file "$local_path")" || return 1
     response_headers="$(
-      curl -fsS --max-time 15 -o /dev/null -D - "$url"
+      release_curl -fsS --max-time 15 -o /dev/null -D - "$url"
     )" || {
       echo "  $(red '✗') Could not read required game publication status: $url"
       return 1
     }
     require_exact_public_status "$response_headers" "$url" "200" || return 1
-    remote_hash="$(curl -fsS --max-time 15 "$url" 2>/dev/null | portable_md5_stdin)" || {
+    remote_hash="$(release_curl -fsS --max-time 15 "$url" 2>/dev/null | portable_md5_stdin)" || {
       echo "  $(red '✗') Could not fetch required game publication: $url"
       return 1
     }
@@ -995,7 +999,7 @@ verify_frontend_live_once() {
     url="${p#*|}"
     if ! git cat-file -e "$HEAD_REVISION:$local_path" 2>/dev/null; then continue; fi
     local_hash="$(portable_md5_git_file "$local_path")" || return 1
-    remote_hash="$(curl -sL --max-time 15 "$url" 2>/dev/null | portable_md5_stdin)" || {
+    remote_hash="$(release_curl -sL --max-time 15 "$url" 2>/dev/null | portable_md5_stdin)" || {
       echo "  $(red '✗') Could not fetch frontend release input: $url"
       return 1
     }
@@ -1039,7 +1043,7 @@ verify_frontend_live_once() {
     "https://agenttool.dev/.dev.vars"
   )
   for url in "${sensitive_public_urls[@]}"; do
-    response_headers="$(curl --path-as-is -sS -o /dev/null -D - --max-time 15 "$url")" || {
+    response_headers="$(release_curl --path-as-is -sS -o /dev/null -D - --max-time 15 "$url")" || {
       echo "  $(red '✗') Could not verify sensitive-path fence: $url"
       return 1
     }
@@ -1067,7 +1071,7 @@ verify_frontend_live_once() {
     "https://agenttool.dev/.dev%2evars"
   )
   for url in "${encoded_sensitive_public_urls[@]}"; do
-    http_status="$(curl --path-as-is -sS -o /dev/null -w '%{http_code}' --max-time 15 "$url")" || {
+    http_status="$(release_curl --path-as-is -sS -o /dev/null -w '%{http_code}' --max-time 15 "$url")" || {
       echo "  $(red '✗') Could not verify encoded sensitive-path denial: $url"
       return 1
     }
@@ -1415,7 +1419,7 @@ parse_health_build() {
 # rolling health checks; the SSH read proves every surviving machine carries
 # the same image-embedded revision, not merely whichever machine the edge chose.
 if [ "$SKIP_API" = 0 ]; then
-  HEALTH="$(curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
+  HEALTH="$(release_curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
     --max-time 15 "$HEALTH_URL?revision=$HEAD_REVISION&dirty=$API_SOURCE_DIRTY")" || {
     echo "  $(red '✗') $HEALTH_URL did not return 200"
     exit 1

@@ -194,6 +194,11 @@ set -eu
 url=""
 headers=0
 previous=""
+curlrc_location=0
+if [ "\${1:-}" != "-q" ] && [ -f "\${HOME}/.curlrc" ] &&
+   grep -Eq '^[[:space:]]*(--)?location([[:space:]]|=|$)' "\${HOME}/.curlrc"; then
+  curlrc_location=1
+fi
 for arg in "$@"; do
   if [ "$previous" = "-D" ] && [ "$arg" = "-" ]; then headers=1; fi
   previous="$arg"
@@ -205,7 +210,9 @@ if [ "$headers" = 1 ]; then
       [ "\${DEPLOY_TEST_GAME_STATUS_FAILURE:-0}" != 1 ] || exit 22
       status='HTTP/2 200'
       surface='local-party-game'
-      [ "\${DEPLOY_TEST_GAME_REDIRECT:-0}" != 1 ] || status='HTTP/2 302'
+      if [ "\${DEPLOY_TEST_GAME_REDIRECT:-0}" = 1 ] && [ "$curlrc_location" != 1 ]; then
+        status='HTTP/2 302'
+      fi
       [ "\${DEPLOY_TEST_GAME_HEADER_MISMATCH:-0}" != 1 ] || surface='wrong-party-surface'
       printf '%s\r\n' \
         "$status" \
@@ -1128,6 +1135,18 @@ describe("deploy release provenance spine", () => {
     expect(deploy).toContain('"X-Agent-Surface" "$rules_surface"');
   });
 
+  test("keeps release probes independent of curlrc and gives Rights one retry budget", async () => {
+    const deploy = await readFile(join(projectRoot, "bin/deploy.sh"), "utf8");
+    const rightsStart = deploy.indexOf("verify_rights_static_bytes()");
+    const rightsEnd = deploy.indexOf("verify_rights_static_publication()");
+    const rightsVerifier = deploy.slice(rightsStart, rightsEnd);
+
+    expect(deploy).toContain('command curl -q "$@"');
+    expect(deploy.match(/^[ \t]*curl\b/gm)).toBeNull();
+    expect(rightsVerifier).toContain("release_curl -fsS --max-time 20");
+    expect(rightsVerifier).not.toContain("--retry");
+  });
+
   test("refuses a missing game input before any production mutation", async () => {
     const setup = await fixture();
     const fakeBin = join(setup.root, "missing-game-input-bin");
@@ -1487,6 +1506,9 @@ describe("deploy release provenance spine", () => {
       const flyMarker = join(setup.root, `${scenario.name}-fly-ran`);
       await mkdir(fakeBin, { recursive: true });
       await installFakeRightsCurl(fakeBin);
+      if (scenario.name === "redirect") {
+        await writeFile(join(setup.home, ".curlrc"), "location\n");
+      }
       await writeFile(
         join(fakeBin, "fly"),
         "#!/usr/bin/env bash\nset -eu\ntouch \"$DEPLOY_TEST_FLY_MARKER\"\n",

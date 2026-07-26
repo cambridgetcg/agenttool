@@ -196,6 +196,12 @@ The dashboard uploads after Fly. This ordering means a failed web step cannot
 be followed by docs or Fly, while a failed dashboard phase cannot leave API
 discovery pointing at a missing or stale game.
 
+Release probes start curl with `-q`, so a user `~/.curlrc` cannot silently add
+redirect following or alter the request. This does not disable configured
+proxies, DNS behavior, or network intermediaries. Each Rights byte or header
+probe makes one transfer per outer convergence attempt; curl does not add a
+nested retry loop inside the 25-attempt release loop.
+
 `--no-frontend` skips the Pages upload; it does not bypass this prerequisite.
 An API-only release proceeds only when the committed Rights and game bytes
 plus their direct-response headers are already live. Every byte comparison
@@ -229,7 +235,7 @@ What "rolling" means: Fly brings up one new machine at a time. If the new machin
 ```
 1. bin/migrate-pending.sh                     # schema first
 2. git push github main                       # release head aligned with prod
-3. bin/deploy.sh --no-migrate                 # docs/web → verify → api → dashboard
+3. bin/deploy.sh --no-migrate                 # web/docs → verify → Fly → dashboard
 4. Verify: curl https://api.agenttool.dev/health | jq .build.revision
 ```
 
