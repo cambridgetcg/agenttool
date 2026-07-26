@@ -669,6 +669,7 @@ describe("Castle local projection", () => {
     expect(JSON.parse(
       await readFile(join(fixture.data, "castle-format.json"), "utf8"),
     ).schema).toBe(CASTLE_FORMAT_SCHEMA);
+    Bun.gc(true); // Quiesce Bun's deferred sqlite3_close_v2 checkpoint before byte snapshot.
     const before = await snapshotTree(fixture.data);
 
     const downgraded = spawnSync(process.execPath, [
