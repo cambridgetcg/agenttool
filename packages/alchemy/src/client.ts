@@ -650,6 +650,49 @@ function parseTransfer(
   };
 }
 
+function transferMatchesQuery(
+  transfer: AlchemyAssetTransfer,
+  query: NormalizedAssetTransfersQuery,
+): boolean {
+  const blockNumber = BigInt(transfer.blockNumberHex);
+  if (blockNumber < BigInt(query.fromBlock)) return false;
+  if (
+    query.toBlock.startsWith("0x") &&
+    blockNumber > BigInt(query.toBlock)
+  ) {
+    return false;
+  }
+  if (query.fromAddress !== null && transfer.from !== query.fromAddress) {
+    return false;
+  }
+  if (query.toAddress !== null && transfer.to !== query.toAddress) {
+    return false;
+  }
+  if (
+    query.contractAddresses.length > 0 &&
+    CONTRACT_FILTER_CATEGORIES.has(transfer.category) &&
+    (transfer.contractAddress === null ||
+      !query.contractAddresses.includes(transfer.contractAddress))
+  ) {
+    return false;
+  }
+  if (
+    query.excludeZeroValue &&
+    (((transfer.category === "external" ||
+      transfer.category === "internal" ||
+      transfer.category === "erc20") &&
+      (transfer.rawValueHex === null ||
+        BigInt(transfer.rawValueHex) === 0n)) ||
+      (transfer.category === "erc1155" &&
+        transfer.erc1155Values.some(
+          (entry) => BigInt(entry.valueHex) === 0n,
+        )))
+  ) {
+    return false;
+  }
+  return true;
+}
+
 class ReadClient implements AlchemyReadClient {
   readonly #network: AlchemyNetwork;
   readonly #configuredChainId: number;
@@ -919,9 +962,17 @@ class ReadClient implements AlchemyReadClient {
       blockFreshness(block),
       options,
     );
+    const parsedBlock = parseBlock(invocation.result);
+    if (
+      parsedBlock !== null &&
+      block.startsWith("0x") &&
+      parsedBlock.numberHex !== block
+    ) {
+      return invalidResponse();
+    }
     return {
       blockReference: block,
-      block: parseBlock(invocation.result),
+      block: parsedBlock,
       provenance: invocation.provenance,
     };
   }
@@ -971,6 +1022,9 @@ class ReadClient implements AlchemyReadClient {
       options,
     );
     const transaction = parseTransaction(invocation.result);
+    if (transaction !== null && transaction.hash !== transactionHash) {
+      return invalidResponse();
+    }
     return {
       transactionHash,
       transaction,
@@ -1005,6 +1059,9 @@ class ReadClient implements AlchemyReadClient {
       options,
     );
     const receipt = parseReceipt(invocation.result);
+    if (receipt !== null && receipt.transactionHash !== transactionHash) {
+      return invalidResponse();
+    }
     return {
       transactionHash,
       receipt,
@@ -1073,9 +1130,13 @@ class ReadClient implements AlchemyReadClient {
     ) {
       return invalidResponse();
     }
-    const transfers = result.transfers.map((transfer) =>
-      parseTransfer(transfer, normalized.categories),
-    );
+    const transfers = result.transfers.map((transfer) => {
+      const parsed = parseTransfer(transfer, normalized.categories);
+      if (!transferMatchesQuery(parsed, normalized.query)) {
+        return invalidResponse();
+      }
+      return parsed;
+    });
     const nextPageKey =
       result.pageKey === undefined ||
       result.pageKey === null ||

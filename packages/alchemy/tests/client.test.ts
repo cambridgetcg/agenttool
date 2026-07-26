@@ -285,6 +285,209 @@ describe("bounded named reads", () => {
     ]);
   });
 
+  test("binds numbered blocks, transactions, and receipts to their request", async () => {
+    const mismatchedBlock = createAlchemyReadClient({
+      network: "ethereum-mainnet",
+      transport: new FakeTransport((request) =>
+        transportResponse(request, resultFor(request)),
+      ),
+      now: () => NOW,
+    });
+    await expect(
+      mismatchedBlock.getBlock({ block: "0x11" }),
+    ).rejects.toMatchObject({ code: "invalid_response" });
+
+    const mismatchedTransaction = createAlchemyReadClient({
+      network: "ethereum-mainnet",
+      transport: new FakeTransport((request) =>
+        transportResponse(request, {
+          ...(resultFor(request) as Record<string, unknown>),
+          hash: HASH_B,
+        }),
+      ),
+      now: () => NOW,
+    });
+    await expect(
+      mismatchedTransaction.getTransaction({ transactionHash: HASH_A }),
+    ).rejects.toMatchObject({ code: "invalid_response" });
+
+    const mismatchedReceipt = createAlchemyReadClient({
+      network: "ethereum-mainnet",
+      transport: new FakeTransport((request) =>
+        transportResponse(request, {
+          ...(resultFor(request) as Record<string, unknown>),
+          transactionHash: HASH_B,
+        }),
+      ),
+      now: () => NOW,
+    });
+    await expect(
+      mismatchedReceipt.getTransactionReceipt({ transactionHash: HASH_A }),
+    ).rejects.toMatchObject({ code: "invalid_response" });
+
+    const nullResult = createAlchemyReadClient({
+      network: "ethereum-mainnet",
+      transport: new FakeTransport((request) =>
+        transportResponse(request, null),
+      ),
+      now: () => NOW,
+    });
+    await expect(
+      nullResult.getBlock({ block: "0x11" }),
+    ).resolves.toMatchObject({ block: null });
+    await expect(
+      nullResult.getTransaction({ transactionHash: HASH_A }),
+    ).resolves.toMatchObject({ transaction: null });
+    await expect(
+      nullResult.getTransactionReceipt({ transactionHash: HASH_A }),
+    ).resolves.toMatchObject({ receipt: null });
+  });
+
+  test("binds transfer results to enforceable request filters", async () => {
+    const query = {
+      fromBlock: "0x10" as const,
+      toBlock: "0x20" as const,
+      categories: ["erc20"] as const,
+      fromAddress: ADDRESS_A,
+      toAddress: ADDRESS_B,
+      contractAddresses: [CONTRACT],
+      excludeZeroValue: true,
+    };
+    const transfer: Record<string, unknown> = {
+      uniqueId: "0xabc:log:1",
+      hash: HASH_A,
+      blockNum: "0x11",
+      from: ADDRESS_A,
+      to: ADDRESS_B,
+      category: "erc20",
+      rawContract: {
+        address: CONTRACT,
+        value: "0x1",
+      },
+    };
+    const mutations: Array<Record<string, unknown>> = [
+      { ...transfer, blockNum: "0x9" },
+      { ...transfer, blockNum: "0x21" },
+      { ...transfer, from: ADDRESS_B },
+      { ...transfer, to: ADDRESS_A },
+      {
+        ...transfer,
+        rawContract: {
+          ...(transfer.rawContract as Record<string, unknown>),
+          address: ADDRESS_A,
+        },
+      },
+      {
+        ...transfer,
+        rawContract: {
+          ...(transfer.rawContract as Record<string, unknown>),
+          value: "0x0",
+        },
+      },
+      {
+        ...transfer,
+        rawContract: {
+          ...(transfer.rawContract as Record<string, unknown>),
+          value: null,
+        },
+      },
+    ];
+
+    for (const mismatched of mutations) {
+      const client = createAlchemyReadClient({
+        network: "ethereum-mainnet",
+        transport: new FakeTransport((request) =>
+          transportResponse(request, { transfers: [mismatched] }),
+        ),
+        now: () => NOW,
+      });
+      await expect(
+        client.getAssetTransfersPage(query),
+      ).rejects.toMatchObject({ code: "invalid_response" });
+    }
+
+    const zeroBatchValue = {
+      ...transfer,
+      category: "erc1155",
+      rawContract: {
+        ...(transfer.rawContract as Record<string, unknown>),
+        value: null,
+      },
+      erc1155Metadata: [{ tokenId: "0x1", value: "0x0" }],
+    };
+    const erc1155Client = createAlchemyReadClient({
+      network: "ethereum-mainnet",
+      transport: new FakeTransport((request) =>
+        transportResponse(request, { transfers: [zeroBatchValue] }),
+      ),
+      now: () => NOW,
+    });
+    await expect(
+      erc1155Client.getAssetTransfersPage({
+        ...query,
+        categories: ["erc1155"],
+      }),
+    ).rejects.toMatchObject({ code: "invalid_response" });
+  });
+
+  test("supports address-selected mixed token and native transfer queries", async () => {
+    const externalTransfer = {
+      uniqueId: "0xabc:external:1",
+      hash: HASH_A,
+      blockNum: "0x11",
+      from: ADDRESS_A,
+      to: ADDRESS_B,
+      category: "external",
+      rawContract: {
+        address: null,
+        value: "0x1",
+      },
+    };
+    const tokenTransfer = {
+      uniqueId: "0xabc:log:2",
+      hash: HASH_A,
+      blockNum: "0x11",
+      from: ADDRESS_A,
+      to: ADDRESS_B,
+      category: "erc20",
+      rawContract: {
+        address: CONTRACT,
+        value: "0x2",
+      },
+    };
+    const transport = new FakeTransport((request) =>
+      transportResponse(request, {
+        transfers: [externalTransfer, tokenTransfer],
+      }),
+    );
+    const client = createAlchemyReadClient({
+      network: "ethereum-mainnet",
+      transport,
+      now: () => NOW,
+    });
+
+    const page = await client.getAssetTransfersPage({
+      fromBlock: "0x10",
+      toBlock: "0x20",
+      categories: ["external", "erc20"],
+      toAddress: ADDRESS_B,
+      contractAddresses: [CONTRACT],
+      excludeZeroValue: true,
+    });
+
+    expect(page.transfers.map((transfer) => transfer.category)).toEqual([
+      "external",
+      "erc20",
+    ]);
+    expect(transport.requests[0]?.call.params).toMatchObject([
+      {
+        category: ["external", "erc20"],
+        toAddress: ADDRESS_B,
+        contractAddresses: [CONTRACT],
+      },
+    ]);
+  });
+
   test("returns null for not-yet-observed blocks, transactions, and receipts", async () => {
     const transport = new FakeTransport((request) =>
       transportResponse(request, null),
