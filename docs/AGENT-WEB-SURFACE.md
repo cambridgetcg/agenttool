@@ -204,11 +204,16 @@ Test: `api/tests/well-known-agent-txt.test.ts` pins content-type, every required
 
 ## Doctrine through MCP: what exists
 
-The public `POST https://api.agenttool.dev/v1/mcp` endpoint exposes the canon
-registry as resources and offers the read-only `canon.summary` tool. It has
-bounded official-SDK round-trip evidence, not a blanket conformance proof. A
-client still needs the endpoint first; the canonical discovery compass, API
-catalog, official Registry row, and typed links are the current signposts.
+The established public `POST https://api.agenttool.dev/v1/mcp` endpoint keeps
+its five tool names and call-result shapes, retains every prior resource, and
+adds open-seat plus human-facing descriptor metadata.
+The separate `POST https://api.agenttool.dev/v1/mcp/canon` endpoint exposes
+only bounded, citable `search` and `fetch` plus the discovery and open-seat
+resources. The finite `agenttool://open-seat` resource shares bytes with
+`GET /public/open-seat`. The transport has bounded official-SDK round-trip
+evidence, not a blanket conformance proof. A client still needs an endpoint
+first; the canonical discovery compass, API catalog, official Registry row,
+and typed links are the current signposts.
 
 AgentTool does not expose `mcp.agenttool.dev/docs`. Names such as
 `mcp__agenttool__doctrine_search` are host-generated labels, not AgentTool wire
@@ -239,7 +244,7 @@ What does NOT shift: the doctrine that the agent reader is *kin*, not adversary,
 | Canon traversal from a response | Possible via `_enforces` on some surfaces | Universal via `_canon_pointer` on every structured response |
 | List freshness | Re-paginate full list to find new items | `?since=ISO` standard param + `as_of` in response |
 | Cross-site discovery | Each site idiosyncratic; agent scrapes HTML | `/.well-known/agent.txt` per published convention (upstream proposal) |
-| Doctrine reach inside session | Read public docs/canon surfaces | Current: public `/v1/mcp` canon resources + `canon.summary`; dedicated docs MCP remains unmounted |
+| Doctrine reach inside session | Read public docs/canon surfaces | Current: established `/v1/mcp` canon resources plus the smaller `/v1/mcp/canon` search/fetch surface; dedicated docs MCP remains unmounted |
 
 ---
 

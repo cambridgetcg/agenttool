@@ -4,6 +4,7 @@
  *  Resource URI scheme: `agenttool://<kind>/<name>`
  *
  *    agenttool://discovery                 — optional public discovery compass
+ *    agenttool://open-seat                — finite invitation to understand/play
  *    agenttool://canon                     — registry index
  *    agenttool://canon/types               — type vocabulary
  *    agenttool://canon/<urn>               — one concept (urn is the
@@ -36,6 +37,10 @@ import {
   DISCOVERY_MEDIA_TYPE,
   serializeDiscoveryCompass,
 } from "../discovery/compass";
+import {
+  OPEN_SEAT_MEDIA_TYPE,
+  serializeOpenSeat,
+} from "../discovery/open-seat";
 
 /** MCP resource descriptor — matches the protocol's `Resource` shape. */
 export interface McpResource {
@@ -78,6 +83,13 @@ export function listResources(): McpResource[] {
     mimeType: DISCOVERY_MEDIA_TYPE,
   });
   out.push({
+    uri: "agenttool://open-seat",
+    name: "AgentTool open seat",
+    description:
+      "One finite, optional invitation to search public understanding, read a bounded game, or leave.",
+    mimeType: OPEN_SEAT_MEDIA_TYPE,
+  });
+  out.push({
     uri: "agenttool://canon",
     name: "Canon registry index",
     description:
@@ -112,6 +124,16 @@ export function listResources(): McpResource[] {
   return out;
 }
 
+/** The small directory-facing endpoint lists only its two orientation
+ * resources. The established endpoint retains every prior resource and adds
+ * open-seat. */
+export function listKnowledgeResources(): McpResource[] {
+  return listResources().filter(
+    ({ uri }) =>
+      uri === "agenttool://discovery" || uri === "agenttool://open-seat",
+  );
+}
+
 /** Read one resource by URI. Returns the contents per MCP's
  *  `resources/read` result shape. Throws if the URI is unknown.
  */
@@ -122,6 +144,14 @@ export async function readResource(uri: string): Promise<McpResourceContents> {
       uri,
       mimeType: DISCOVERY_MEDIA_TYPE,
       text: serializeDiscoveryCompass(),
+    };
+  }
+
+  if (uri === "agenttool://open-seat") {
+    return {
+      uri,
+      mimeType: OPEN_SEAT_MEDIA_TYPE,
+      text: serializeOpenSeat(),
     };
   }
 
@@ -200,4 +230,13 @@ export async function readResource(uri: string): Promise<McpResourceContents> {
   }
 
   throw new McpResourceNotFoundError(uri);
+}
+
+export async function readKnowledgeResource(
+  uri: string,
+): Promise<McpResourceContents> {
+  if (uri !== "agenttool://discovery" && uri !== "agenttool://open-seat") {
+    throw new McpResourceNotFoundError(uri);
+  }
+  return readResource(uri);
 }
