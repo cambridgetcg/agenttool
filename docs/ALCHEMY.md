@@ -181,6 +181,7 @@ information. Those remain hypotheses requiring independent evidence.
 
 | Name | Scope |
 |---|---|
+| `CRYPTO_NETWORK` | Explicit `testnet` or `mainnet` selection for deposit derivation, watch identity, webhook network binding, token contracts, and shared crypto reads. Unset never implies mainnet; it must match `PAYOUT_NETWORK` when both are configured. |
 | `ALCHEMY_API_KEY` | Scoped Chain/Data API key used in a Bearer header for EVM RPC. |
 | `ALCHEMY_NOTIFY_AUTH_TOKEN` | Notify control-plane token used only to update existing webhook address sets. |
 | `AGENTTOOL_PUBLIC_URL` | Explicit HTTPS API origin used to verify each webhook callback target. The watch worker does not guess the production URL. |

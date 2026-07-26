@@ -133,7 +133,13 @@ export async function submitSignedTx(
   serialized: Hex,
 ): Promise<Hex> {
   const publicClient = createPublicClient({
-    transport: evmRpcTransport(chain),
+    // Viem's generic HTTP transport retries by default. Re-dispatching the
+    // same signed bytes has the same hash, but the worker's one-attempt
+    // ambiguity boundary should still be literal and observable.
+    transport: evmRpcTransport(chain, {
+      retryCount: 0,
+      timeout: 10_000,
+    }),
   });
   return await publicClient.sendRawTransaction({
     serializedTransaction: serialized,

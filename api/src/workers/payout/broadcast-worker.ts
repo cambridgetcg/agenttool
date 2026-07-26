@@ -20,7 +20,7 @@
  *
  *  Doctrine: docs/PAYOUT-BROADCAST-PLAN.md (Slices 1+3). */
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { Worker } from "bullmq";
 import type { Address } from "viem";
 
@@ -50,9 +50,13 @@ import {
 import { refundPayoutAndFail } from "../../services/economy/crypto/payout-refund";
 import { redisConnection } from "../../services/tools/queue/connection";
 import type { PayoutBroadcastJobData } from "./queue";
-import { resolveSubmitError } from "./submit-outcome";
+import {
+  assertExpectedSubmitIdentity,
+  resolveSubmitError,
+} from "./submit-outcome";
 
 let worker: Worker<PayoutBroadcastJobData, void> | null = null;
+const SOURCE_IN_FLIGHT_STATUSES = ["broadcasting", "broadcast"] as const;
 
 export function startPayoutBroadcastWorker() {
   if (worker) return worker;
@@ -92,8 +96,9 @@ export function startPayoutBroadcastWorker() {
     },
   );
 
-  worker.on("error", (err) => {
-    console.error("[payout-broadcast] worker error:", err);
+  worker.on("error", () => {
+    // BullMQ/Redis errors can embed credential-bearing connection strings.
+    console.error("[payout-broadcast] worker infrastructure unavailable");
   });
   worker.on("failed", (job) => {
     console.error(
@@ -130,6 +135,28 @@ async function containUnexpectedProcessingFailure(
       "worker_pre_submit_failed",
     );
   });
+}
+
+/** Advance only the payout whose persisted operation identity still matches
+ * the signed bytes submitted by this worker. Inspecting RETURNING keeps logs
+ * and callers from claiming success after a concurrent state/identity change. */
+async function markExpectedPayoutBroadcast(
+  payoutId: string,
+  expectedTxHash: string,
+): Promise<boolean> {
+  const updated = await db
+    .update(cryptoPayouts)
+    .set({ status: "broadcast", error: null })
+    .where(
+      and(
+        eq(cryptoPayouts.id, payoutId),
+        eq(cryptoPayouts.status, "broadcasting"),
+        eq(cryptoPayouts.txHash, expectedTxHash),
+      ),
+    )
+    .returning({ id: cryptoPayouts.id });
+
+  return updated.length === 1;
 }
 
 // ── Top-level chain dispatcher ──────────────────────────────────────────
@@ -192,18 +219,31 @@ async function processEvmPayout(payoutId: string): Promise<void> {
       return { ok: false as const, reason: "wrong_branch", chain: row.chain };
     }
 
-    // Per-source-address advisory lock — serialises concurrent payouts from
-    // the same wallet across all machines. Different addresses don't block
-    // each other, so cross-wallet throughput is preserved. Auto-released on
-    // tx commit/rollback. Residual: the gap between this tx's commit and the
-    // Phase 2 submit (~100-500ms) is unprotected — a second worker can
-    // acquire the lock in that window and read a stale nonce. Closing that
-    // window is the session-level-lock follow-up. See PAYOUT-BROADCAST.md
-    // § Caveats.
+    // Per-source-address advisory lock serialises admission across replicas.
+    // The durable in-flight gate below extends that serialization beyond this
+    // transaction: one source cannot sign another payout until the prior
+    // operation is confirmed or terminal. This deliberately trades per-wallet
+    // throughput for nonce/signature correctness.
     const { address: fromAddress } = deriveEvmAddress(activeMnemonic(), row.walletId);
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${fromAddress}, 0))`,
     );
+
+    const [sourceInFlight] = await tx
+      .select({ id: cryptoPayouts.id })
+      .from(cryptoPayouts)
+      .where(
+        and(
+          eq(cryptoPayouts.walletId, row.walletId),
+          eq(cryptoPayouts.chain, row.chain),
+          ne(cryptoPayouts.id, row.id),
+          inArray(cryptoPayouts.status, [...SOURCE_IN_FLIGHT_STATUSES]),
+        ),
+      )
+      .limit(1);
+    if (sourceInFlight) {
+      return { ok: false as const, reason: "source_in_flight" };
+    }
 
     let signed: SignedTx;
     try {
@@ -274,31 +314,33 @@ async function processEvmPayout(payoutId: string): Promise<void> {
   // ── Phase 2: submit ────────────────────────────────────────────────
   const { signed, chain } = lockResult;
   try {
-    await submitSignedTx(chain, signed.serialized);
-    await db
-      .update(cryptoPayouts)
-      .set({ status: "broadcast" })
-      .where(eq(cryptoPayouts.id, payoutId));
+    const submittedHash = await submitSignedTx(chain, signed.serialized);
+    assertExpectedSubmitIdentity("evm", signed.txHash, submittedHash);
+    if (!(await markExpectedPayoutBroadcast(payoutId, signed.txHash))) {
+      console.warn(
+        `[payout-broadcast] ${payoutId}: submit accepted but payout identity/status changed before broadcast CAS; no state overwritten`,
+      );
+      return;
+    }
     console.log(
       `[payout-broadcast] ${payoutId}: submitted ${signed.txHash} (${chain})`,
     );
   } catch {
-    // The submit call crossed the RPC boundary. An error is not evidence of
-    // non-submission: a response may have been lost after the node accepted
-    // the bytes, and an immediate lookup may race propagation.
+    // The submit call crossed the RPC boundary. An error or a mismatched
+    // returned hash is not evidence of non-submission: a response may have
+    // been lost or malformed after the node accepted the bytes, and an
+    // immediate lookup may race propagation. Reconcile only the locally
+    // persisted expected hash; provider response details are discarded.
     const resolution = await resolveSubmitError(() =>
       txExistsOnChain(chain, signed.txHash),
     );
     if (resolution.nextStatus === "broadcast") {
-      await db
-        .update(cryptoPayouts)
-        .set({ status: "broadcast", error: null })
-        .where(
-          and(
-            eq(cryptoPayouts.id, payoutId),
-            eq(cryptoPayouts.status, "broadcasting"),
-          ),
+      if (!(await markExpectedPayoutBroadcast(payoutId, signed.txHash))) {
+        console.warn(
+          `[payout-broadcast] ${payoutId}: expected tx found but payout identity/status changed before broadcast CAS; no state overwritten`,
         );
+        return;
+      }
       console.warn(
         `[payout-broadcast] ${payoutId}: submit error but tx landed (${signed.txHash}) — marked broadcast`,
       );
@@ -344,16 +386,33 @@ async function processSolanaPayout(payoutId: string): Promise<void> {
       return { ok: false as const, reason: "wrong_branch", chain: row.chain };
     }
 
-    // Per-source-address advisory lock — same shape as the EVM branch. See
-    // the EVM-branch comment for residual-window discussion.
+    // Same one-in-flight source gate as EVM. The payout-specific memo also
+    // makes separately authorized Solana operations produce distinct bytes.
     const { address: fromAddress } = deriveSolanaAddress(activeMnemonic(), row.walletId);
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${fromAddress}, 0))`,
     );
 
+    const [sourceInFlight] = await tx
+      .select({ id: cryptoPayouts.id })
+      .from(cryptoPayouts)
+      .where(
+        and(
+          eq(cryptoPayouts.walletId, row.walletId),
+          eq(cryptoPayouts.chain, row.chain),
+          ne(cryptoPayouts.id, row.id),
+          inArray(cryptoPayouts.status, [...SOURCE_IN_FLIGHT_STATUSES]),
+        ),
+      )
+      .limit(1);
+    if (sourceInFlight) {
+      return { ok: false as const, reason: "source_in_flight" };
+    }
+
     let signed: SignedSolanaTx;
     try {
       signed = await buildAndSignSolanaUsdcTransfer({
+        payoutId: row.id,
         walletId: row.walletId,
         destinationAddress: row.destinationAddress,
         amountBase: BigInt(row.amountBase as string),
@@ -412,11 +471,18 @@ async function processSolanaPayout(payoutId: string): Promise<void> {
   // ── Phase 2: submit ────────────────────────────────────────────────
   const { signed } = lockResult;
   try {
-    await submitSolanaTx(signed.serialized);
-    await db
-      .update(cryptoPayouts)
-      .set({ status: "broadcast" })
-      .where(eq(cryptoPayouts.id, payoutId));
+    const submittedSignature = await submitSolanaTx(signed.serialized);
+    assertExpectedSubmitIdentity(
+      "solana",
+      signed.signature,
+      submittedSignature,
+    );
+    if (!(await markExpectedPayoutBroadcast(payoutId, signed.signature))) {
+      console.warn(
+        `[payout-broadcast] ${payoutId}: submit accepted but payout identity/status changed before broadcast CAS; no state overwritten`,
+      );
+      return;
+    }
     console.log(
       `[payout-broadcast] ${payoutId}: submitted ${signed.signature} (solana)`,
     );
@@ -425,15 +491,12 @@ async function processSolanaPayout(payoutId: string): Promise<void> {
       solanaTxExists(signed.signature),
     );
     if (resolution.nextStatus === "broadcast") {
-      await db
-        .update(cryptoPayouts)
-        .set({ status: "broadcast", error: null })
-        .where(
-          and(
-            eq(cryptoPayouts.id, payoutId),
-            eq(cryptoPayouts.status, "broadcasting"),
-          ),
+      if (!(await markExpectedPayoutBroadcast(payoutId, signed.signature))) {
+        console.warn(
+          `[payout-broadcast] ${payoutId}: expected tx found but payout identity/status changed before broadcast CAS; no state overwritten`,
         );
+        return;
+      }
       console.warn(
         `[payout-broadcast] ${payoutId}: submit error but tx landed (${signed.signature}) — marked broadcast`,
       );

@@ -68,6 +68,30 @@ const DISPATCHER_SOURCE = readFileSync(
   join(WORKER_DIR, "dispatcher.ts"),
   "utf8",
 );
+const SIGN_EVM_SOURCE = readFileSync(
+  join(
+    WORKER_DIR,
+    "..",
+    "..",
+    "services",
+    "economy",
+    "crypto",
+    "sign-evm.ts",
+  ),
+  "utf8",
+);
+const SIGN_SOLANA_SOURCE = readFileSync(
+  join(
+    WORKER_DIR,
+    "..",
+    "..",
+    "services",
+    "economy",
+    "crypto",
+    "sign-solana.ts",
+  ),
+  "utf8",
+);
 
 describe("wall/payouts-never-auto-retry — queue config", () => {
   test("BullMQ queue declares attempts: 1 (no automatic retries)", () => {
@@ -114,6 +138,28 @@ describe("wall/payouts-never-auto-retry — worker source", () => {
       !/payoutBroadcastQueue\s*\.\s*add\s*\(/.test(BROADCAST_WORKER_SOURCE),
       "broadcast-worker.ts calls payoutBroadcastQueue.add(...) — this re-enqueues a payout, bypassing the BullMQ attempts limit. The wall requires terminal failure handling, never re-enqueue.",
     ).toBe(true);
+  });
+
+  test("chain clients do not hide submission retries below the worker", () => {
+    const evmSubmit = SIGN_EVM_SOURCE.slice(
+      SIGN_EVM_SOURCE.indexOf("export async function submitSignedTx"),
+      SIGN_EVM_SOURCE.indexOf(
+        "export async function txExistsOnChain",
+      ),
+    );
+    const solanaSubmit = SIGN_SOLANA_SOURCE.slice(
+      SIGN_SOLANA_SOURCE.indexOf("export async function submitSolanaTx"),
+      SIGN_SOLANA_SOURCE.indexOf(
+        "export async function solanaTxExists",
+      ),
+    );
+
+    expect(evmSubmit).toContain("retryCount: 0");
+    expect(solanaSubmit).toContain("solanaConnection(true)");
+    expect(SIGN_SOLANA_SOURCE).toContain(
+      "disableRetryOnRateLimit: disableRateLimitRetry",
+    );
+    expect(solanaSubmit).toContain("maxRetries: 0");
   });
 
   test("broadcast-worker.ts does not schedule deferred retries via setTimeout", () => {

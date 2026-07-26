@@ -174,6 +174,7 @@ This is the same posture as Stripe — Stripe is *our* payment infra, not a serv
 
 | Env var | Required for | Notes |
 |---|---|---|
+| `CRYPTO_NETWORK` | Deposits, provider-watch identity, webhook network binding, token contracts, and shared crypto reads | Must be exactly `testnet` or `mainnet`. Unset never means mainnet. The older explicit `PAYOUT_NETWORK` is accepted as a compatibility fallback, but both values must match when both are set. |
 | `CRYPTO_HD_MNEMONIC` | Mainnet deposit address derivation and payout signing | 12 or 24 word BIP-39 mnemonic. **Back this up offline.** Losing it means losing all derived addresses (and the funds at them). |
 | `CRYPTO_HD_MNEMONIC_TESTNET` | Testnet deposit address derivation and payout signing | Kept separate from the mainnet root. Address creation and signing select the same active root. |
 | `ALCHEMY_API_KEY` | EVM RPC | Sent in an `Authorization: Bearer` header rather than the RPC URL. Use a scoped app/access key. |

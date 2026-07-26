@@ -5,7 +5,7 @@
  *  JSON parse or DB touch, so they need no database.
  *
  *  Pins: fix/crypto-webhook-fail-closed (Helius/Alchemy fail-open mint-hole). */
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { economyConfig } from "../src/services/economy/config";
 import {
@@ -31,13 +31,15 @@ const cfg = economyConfig as unknown as {
   alchemyWebhookSigningKeys: Record<EvmChain, string>;
   heliusWebhookSecret: string;
   allowUnsignedWebhooks: boolean;
+  cryptoNetwork: "" | "testnet" | "mainnet";
   payout: { network: string };
 };
 const original = {
   alchemy: { ...cfg.alchemyWebhookSigningKeys },
   helius: cfg.heliusWebhookSecret,
   allowUnsigned: cfg.allowUnsignedWebhooks,
-  network: cfg.payout.network,
+  cryptoNetwork: cfg.cryptoNetwork,
+  payoutNetwork: cfg.payout.network,
   webhookIds: Object.fromEntries(
     Object.values(ALCHEMY_WEBHOOK_ID_ENV).map((name) => [
       name,
@@ -45,11 +47,18 @@ const original = {
     ]),
   ) as Record<string, string | undefined>,
 };
+beforeEach(() => {
+  // Every crypto path must choose a network explicitly. Most fixtures model
+  // mainnet; the network-specific case below opts into testnet itself.
+  cfg.cryptoNetwork = "mainnet";
+  cfg.payout.network = "";
+});
 afterEach(() => {
   Object.assign(cfg.alchemyWebhookSigningKeys, original.alchemy);
   cfg.heliusWebhookSecret = original.helius;
   cfg.allowUnsignedWebhooks = original.allowUnsigned;
-  cfg.payout.network = original.network;
+  cfg.cryptoNetwork = original.cryptoNetwork;
+  cfg.payout.network = original.payoutNetwork;
   for (const [name, value] of Object.entries(original.webhookIds)) {
     if (value === undefined) delete process.env[name];
     else process.env[name] = value;
@@ -235,7 +244,7 @@ describe("Helius (Solana) webhook signature gate", () => {
   test("uses the active-network Solana USDC mint and ignores mainnet USDC on testnet", async () => {
     cfg.heliusWebhookSecret = "s3cret";
     cfg.allowUnsignedWebhooks = false;
-    cfg.payout.network = "testnet";
+    cfg.cryptoNetwork = "testnet";
     const observedContracts: string[] = [];
     const testnetRouter = createCryptoWebhookRouter(async (transfer) => {
       observedContracts.push(transfer.contractAddress);

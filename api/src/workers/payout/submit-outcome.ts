@@ -8,6 +8,7 @@
  * Doctrine: docs/PAYOUT-BROADCAST.md. */
 
 export type SubmitLookupOutcome = "found" | "absent" | "unavailable";
+export type SubmitIdentityKind = "evm" | "solana";
 
 export type SubmitErrorResolution =
   | {
@@ -28,6 +29,28 @@ function safeUnknownError(
     `submit_outcome_unknown: lookup_${lookup}; ` +
     "signed transaction may still land; operator reconciliation required"
   );
+}
+
+/** Require the RPC's returned operation id to identify the bytes we signed.
+ *
+ * EVM transaction hashes are hexadecimal and case-insensitive. Solana
+ * signatures are base58 and case-sensitive. A mismatch throws one bounded
+ * local error that intentionally omits both identities; callers must treat it
+ * as ambiguous and reconcile the locally persisted expected identity. */
+export function assertExpectedSubmitIdentity(
+  kind: SubmitIdentityKind,
+  expected: string,
+  actual: unknown,
+): void {
+  const matches =
+    typeof actual === "string" &&
+    (kind === "evm"
+      ? actual.toLowerCase() === expected.toLowerCase()
+      : actual === expected);
+
+  if (!matches) {
+    throw new Error("submit_identity_mismatch");
+  }
 }
 
 /** Reconcile one submit error without retaining or exposing the provider

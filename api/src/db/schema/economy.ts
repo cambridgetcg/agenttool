@@ -526,6 +526,12 @@ export const cryptoPayouts = economySchema.table(
   (t) => [
     index("idx_payouts_wallet").on(t.walletId),
     index("idx_payouts_status").on(t.status),
+    uniqueIndex("uq_crypto_payout_chain_tx_hash")
+      .on(
+        t.chain,
+        sql`CASE WHEN ${t.chain} = 'solana' THEN ${t.txHash} ELSE lower(${t.txHash}) END`,
+      )
+      .where(sql`${t.txHash} IS NOT NULL`),
   ],
 );
 

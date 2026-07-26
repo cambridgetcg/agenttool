@@ -64,6 +64,7 @@ export STRIPE_SECRET_KEY="sk_test_..."
 export STRIPE_WEBHOOK_SECRET="whsec_..."
 
 # Crypto payment (optional)
+export CRYPTO_NETWORK="testnet"  # explicit; unset never falls through to mainnet
 export CRYPTO_HD_MNEMONIC="..."  # BIP-39 12 or 24 words
 export ALCHEMY_API_KEY="..."
 export ALCHEMY_NOTIFY_AUTH_TOKEN="..."
@@ -89,6 +90,10 @@ webhook; do not reuse one across routes. AgentTool updates address sets; it
 does not create or delete Alchemy apps/webhooks. Use deployment secrets rather
 than exporting credential values from a global shell profile. See
 [ALCHEMY.md](ALCHEMY.md).
+
+`CRYPTO_NETWORK` owns deposits and shared crypto reads. `PAYOUT_NETWORK` remains
+the payout-worker opt-in and a compatibility fallback; if both are set they
+must match. Neither an unset value nor a conflict silently selects mainnet.
 
 ## 3. Start the API
 

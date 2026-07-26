@@ -1,8 +1,6 @@
-/** Network-aware helpers for crypto operations. Switch between mainnet
- *  and testnet behavior based on `economyConfig.payout.network`. When the
- *  network is unset (the default), behavior is mainnet — preserving existing
- *  semantics for deployments that haven't opted into the payout broadcast
- *  worker yet.
+/** Network-aware helpers for crypto operations. Deposit-only deployments use
+ *  `CRYPTO_NETWORK`; the older explicit `PAYOUT_NETWORK` remains a compatible
+ *  fallback. Unset never implies mainnet, and conflicting values fail closed.
  *
  *  Doctrine: docs/PAYOUT-BROADCAST-PLAN.md. */
 
@@ -57,10 +55,30 @@ export const EVM_CONFIRMATION_THRESHOLDS: Record<EvmChain, number> = {
 
 export type ActiveNetwork = "mainnet" | "testnet";
 
-/** The network this instance is operating against. Defaults to mainnet
- *  when `payout.network` is unset (preserves existing behavior). */
+/** The explicitly selected crypto network.
+ *
+ * `CRYPTO_NETWORK` owns deposits, watch reconciliation, ingress, contracts,
+ * and shared RPC reads. `PAYOUT_NETWORK` can supply the same value for older
+ * deployments, but cannot silently override a conflicting deposit network. */
 export function activeNetwork(): ActiveNetwork {
-  return economyConfig.payout.network === "testnet" ? "testnet" : "mainnet";
+  const cryptoNetwork = economyConfig.cryptoNetwork;
+  const payoutNetwork = economyConfig.payout.network;
+  if (
+    cryptoNetwork !== "" &&
+    payoutNetwork !== "" &&
+    cryptoNetwork !== payoutNetwork
+  ) {
+    throw new Error(
+      "CRYPTO_NETWORK and PAYOUT_NETWORK disagree — crypto operations are disabled until they match.",
+    );
+  }
+  const selected = cryptoNetwork || payoutNetwork;
+  if (selected === "") {
+    throw new Error(
+      "CRYPTO_NETWORK is unset — choose testnet or mainnet before using crypto operations.",
+    );
+  }
+  return selected;
 }
 
 /** The HD mnemonic for the active network. Throws if unset. */
@@ -110,6 +128,13 @@ export type EvmRpcEndpointSource =
 export interface EvmRpcEndpoint {
   url: string;
   source: EvmRpcEndpointSource;
+}
+
+export interface EvmRpcTransportOptions {
+  /** Viem retries three times by default. Submission passes zero so one
+   * caller-level dispatch attempt cannot be hidden inside the transport. */
+  retryCount?: number;
+  timeout?: number;
 }
 
 interface ResolvedEvmRpcEndpoint extends EvmRpcEndpoint {
@@ -181,12 +206,16 @@ export function evmRpcEndpoint(chain: EvmChain): EvmRpcEndpoint {
 
 /** Build a viem HTTP transport from the resolved endpoint. Alchemy credentials
  *  are applied only as an Authorization header and never enter the URL. */
-export function evmRpcTransport(chain: EvmChain): HttpTransport {
+export function evmRpcTransport(
+  chain: EvmChain,
+  options: EvmRpcTransportOptions = {},
+): HttpTransport {
   const endpoint = resolveEvmRpcEndpoint(chain);
   if (!endpoint.authorization) {
-    return http(endpoint.url);
+    return http(endpoint.url, options);
   }
   return http(endpoint.url, {
+    ...options,
     fetchOptions: {
       headers: {
         Authorization: endpoint.authorization,

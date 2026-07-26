@@ -14,7 +14,11 @@ const MANAGED_ENV = ["ALCHEMY_API_KEY", OVERRIDE_ENV] as const;
 const payoutConfig = economyConfig.payout as unknown as {
   network: "" | "testnet" | "mainnet";
 };
+const cryptoConfig = economyConfig as unknown as {
+  cryptoNetwork: "" | "testnet" | "mainnet";
+};
 const originalNetwork = payoutConfig.network;
+const originalCryptoNetwork = cryptoConfig.cryptoNetwork;
 let originalEnv: Record<
   (typeof MANAGED_ENV)[number],
   string | undefined
@@ -28,6 +32,7 @@ beforeEach(() => {
     ALCHEMY_API_KEY: process.env.ALCHEMY_API_KEY,
     RPC_URL_ETHEREUM_TESTNET: process.env[OVERRIDE_ENV],
   };
+  cryptoConfig.cryptoNetwork = "";
   payoutConfig.network = "testnet";
   delete process.env.ALCHEMY_API_KEY;
   delete process.env[OVERRIDE_ENV];
@@ -35,6 +40,7 @@ beforeEach(() => {
 
 afterEach(() => {
   payoutConfig.network = originalNetwork;
+  cryptoConfig.cryptoNetwork = originalCryptoNetwork;
   for (const name of MANAGED_ENV) {
     const value = originalEnv[name];
     if (value === undefined) delete process.env[name];
@@ -96,6 +102,20 @@ describe("Alchemy EVM RPC authentication", () => {
     );
   });
 
+  test("lets the submit path override Viem's hidden transport retries", () => {
+    const configured = evmRpcTransport("ethereum", {
+      retryCount: 0,
+      timeout: 10_000,
+    })({
+      chain: undefined,
+      retryCount: 3,
+      timeout: undefined,
+    });
+
+    expect(configured.config.retryCount).toBe(0);
+    expect(configured.config.timeout).toBe(10_000);
+  });
+
   test("resolves the deposit contract from the same active network", () => {
     expect(activeUsdcAddress("base")).toBe(
       "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
@@ -104,6 +124,20 @@ describe("Alchemy EVM RPC authentication", () => {
     payoutConfig.network = "mainnet";
     expect(activeUsdcAddress("base")).toBe(
       "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    );
+  });
+
+  test("never treats an unset or conflicting crypto network as mainnet", () => {
+    payoutConfig.network = "";
+    cryptoConfig.cryptoNetwork = "";
+    expect(() => evmRpcEndpoint("ethereum")).toThrow(
+      "CRYPTO_NETWORK is unset",
+    );
+
+    cryptoConfig.cryptoNetwork = "testnet";
+    payoutConfig.network = "mainnet";
+    expect(() => evmRpcEndpoint("ethereum")).toThrow(
+      "CRYPTO_NETWORK and PAYOUT_NETWORK disagree",
     );
   });
 });

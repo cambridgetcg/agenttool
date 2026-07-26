@@ -1,10 +1,13 @@
 # PAYOUT-BROADCAST.md
 
-> *Plan for the outbound half of the sovereign-payment loop. The deposit half (Alchemy + Helius webhooks) is now live; this is the missing send-side worker.*
+> *Outbound half of the sovereign-payment loop. Signed Alchemy/Helius ingress
+> exists, but deposit confirmation/reorg accounting is still a production
+> blocker; this document does not claim the full loop is live.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Horizon A (active work) · [PAYOUT-BROADCAST-PLAN](PAYOUT-BROADCAST-PLAN.md) (slice plan) · [PAYOUT-BROADCAST-OPS](PAYOUT-BROADCAST-OPS.md) (runbook) · [PATTERN-PERSIST-IDENTITY](PATTERN-PERSIST-IDENTITY.md) (the discipline this pipeline canonicalises)
 >
-> **Implements:** Layer 4 — Economy. The outbound send-side; closes the sovereign-payment loop with the inbound webhook ingestion already shipped.
+> **Implements:** Layer 4 — Economy. The outbound send-side state machine;
+> full loop closure also depends on finalized inbound accounting.
 >
 > **Code:** `api/src/workers/payout/{dispatcher,broadcast-worker,confirm-worker,queue,index}.ts` · `api/src/routes/economy/crypto.ts` (request handler) · `api/src/services/economy/crypto/{hd,sign-evm,sign-solana}.ts`
 >
@@ -17,15 +20,15 @@
 | HD derivation (BIP44) per chain | ✓ | `services/economy/crypto/hd.ts` |
 | EIP-191 sigverify (EVM identity binding) | ✓ | `services/economy/crypto/sign.ts` |
 | Solana sigverify (identity binding) | ✓ | same module |
-| Alchemy webhook (EVM deposits) | ✓ | `routes/economy/crypto.ts` |
-| Helius webhook (Solana deposits) | ✓ | shipped 2026-05-07 |
+| Alchemy webhook (EVM deposits) | ◐ | Signed ingress + durable watch state; finalized credit/reorg handling still required |
+| Helius webhook (Solana deposits) | ◐ | Signed ingress exists; durable watch readiness + finalized credit handling still required |
 | Payout intent recording | ✓ | `cryptoPayouts` table; status='requested' |
 | Payout signing (private key derive + tx build) | ✓ (testnet) | `services/economy/crypto/sign-evm.ts` · `sign-solana.ts` |
 | Payout broadcast (RPC submission) | ✓ (testnet) | `workers/payout/broadcast-worker.ts` |
 | Payout confirmation watcher | ✓ (testnet) | `workers/payout/confirm-worker.ts` |
 | Mainnet enable (`PAYOUT_NETWORK=mainnet` + small smoke) | ◯ | plan Slice 7 — operator-led |
 
-## What's missing — the send-side state machine
+## Send-side state machine
 
 ```
 requested  ─────►  broadcasting  ─────►  broadcast  ─────►  confirmed
@@ -36,7 +39,8 @@ requested  ─────►  broadcasting  ─────►  broadcast  ─�
 - **`requested`** — `POST /v1/wallets/:id/payout` records the intent (already shipped).
 - **`broadcasting`** — worker picks up the request, derives the signing key, builds + signs the transaction, and persists its deterministic hash before submitting to chain RPC. A submit error remains here unless a lookup positively finds the transaction.
 - **`broadcast`** — RPC accepted, has a tx hash; waiting for confirmations.
-- **`confirmed`** — N confirmations reached (chain-specific: 12 ETH-equiv, 32 Solana finalized).
+- **`confirmed`** — the chain-specific EVM block threshold is reached, or
+  Solana reports `finalized`.
 - **`failed`** — a failure proved before RPC dispatch, or a later on-chain revert observed by the confirmation watcher. An RPC submit error alone never authorizes this transition or a refund.
 
 ## Worker shape (BullMQ — already in deps)
@@ -44,12 +48,15 @@ requested  ─────►  broadcasting  ─────►  broadcast  ─�
 Two queues:
 
 1. **`payout-broadcast`** — fan-out from any `cryptoPayouts.status='requested'` row. Idempotent on payout_id. Job:
-   - SELECT FOR UPDATE on the row, lock to in-flight worker.
+   - Read inside a transaction and use status compare-and-swap for ownership.
    - Derive signing key from `cryptoHdMnemonic` + payout's wallet path.
    - Build + sign transaction (EVM via ethers/viem, Solana via @solana/web3.js).
    - Submit to RPC. On success: status='broadcast'. On error: query by the persisted hash; found → `broadcast`, absent or lookup unavailable → remain `broadcasting` with a bounded operator-facing error.
 
-2. **`payout-confirm`** — periodic. Polls `status='broadcast'` rows, queries chain for confirmations:
+2. **`payout-confirm`** — periodic. Reconciles `broadcasting` rows by their
+   persisted identity, then polls `broadcast` rows for confirmations:
+   - A later positive identity lookup advances `broadcasting → broadcast`.
+     Absence or provider failure changes nothing.
    - For EVM: `eth_getTransactionReceipt(tx_hash)` — confirmed when blockNumber > current - confirmation_threshold.
    - For Solana: `getSignatureStatuses(tx_sig)` — confirmed when confirmationStatus='finalized'.
 
@@ -62,30 +69,48 @@ These hold:
 - **No payout to addresses outside the wallet's chain.** Schema enforces `chain` consistency. Cross-chain via bridge is a separate flow and not implemented.
 - **No autonomous retries on RPC failure that change semantics.** A submit attempt that emitted a tx hash does NOT retry — the first attempt may still land. Failures proved before dispatch (signing/build) fail and refund without automatic retry.
 - **No refund from ambiguous evidence.** Once dispatch begins, a provider error, an immediately absent lookup, and an unavailable lookup are all inconclusive. Only a positive lookup advances to `broadcast`; operator reconciliation decides any later retry or refund.
+- **One in-flight operation per wallet and chain.** The cross-replica
+  transaction lock admits no second signing operation while an earlier row is
+  `broadcasting` or `broadcast`. A stuck ambiguous operation therefore blocks
+  later payouts from that source rather than risking nonce reuse.
+- **One chain identity authorizes one payout row.** A partial unique index
+  rejects duplicate `(chain, tx_hash)` values. Solana signed bytes also carry
+  a domain-separated digest of the payout ID, so otherwise identical payout
+  rows cannot share one signature.
 
-## Provider choices (deferred until building)
+## Provider choices
 
 For broadcast RPC:
 - **EVM**: Alchemy or an explicit per-chain override. The shared Alchemy key is sent as `Authorization: Bearer`, never embedded in the endpoint URL; overrides receive no Alchemy credential.
 - **Solana**: Helius. Same reuse pattern.
 
-For transaction building:
-- **EVM**: `viem` (lighter than ethers, modern). Add as dep.
-- **Solana**: `@solana/web3.js`. Add as dep.
-
-These deps add ~3–5MB to the API container. Acceptable.
+Transaction building uses `viem` for EVM and `@solana/web3.js` plus
+`@solana/spl-token` for Solana. Submission disables transport-layer retries;
+read-only lookup/confirmation calls remain separately classifiable.
 
 ## Status now
 
 Slices 0–6 of `PAYOUT-BROADCAST-PLAN.md` have shipped against testnet (Sepolia for EVM, Solana devnet). The send-side worker lives at `api/src/workers/payout/` (dispatcher · broadcast-worker · confirm-worker · queue · index). End-to-end harnesses: `api/scripts/_e2e-payout-{evm,sol,loop-closure,policies,cancel}.{ts,mjs}`.
 
-Slice 7 — the mainnet enable pass — is the remaining work and is **operator-led, not in-session**: secret rotation, `PAYOUT_NETWORK=mainnet` flip in Fly, minimal mainnet smoke (≤0.01 USDC) verified on Etherscan + Solscan.
+Slice 7 remains **operator-led, not in-session**, and is not yet authorized by
+the code being present. Mainnet enable also waits for the remaining caveats
+below and finalized inbound accounting.
 
 ### Caveats to close before mainnet
 
-1. **Per-source-address nonce locking — Phase 1 shipped, Phase 2 follow-up.** `broadcast-worker.ts` now takes a `pg_advisory_xact_lock(hashtextextended(fromAddress, 0))` at the start of each Phase 1 transaction (EVM + Solana branches). Same address blocks; different addresses run in parallel; auto-released on commit. **Operational reality**: the api runs across 3 machines (`lhr×2 + cdg×1`); BullMQ-level concurrency=1 serialises *within* a machine, but jobs targeting the same source address picked by *different* machines previously raced unprotected. Phase 1 lock closes most of that surface. **Residual race window**: the lock releases at Phase 1 commit, but submit happens in Phase 2 outside the transaction — a concurrent same-address worker on a different machine can acquire the lock and read the chain's nonce in the ~100-500ms before our submit lands in mempool. Today protected only by low payout volume. The full close requires a **session-level lock** spanning Phase 1 + Phase 2 — needs a reserved Postgres connection threaded through the worker. Don't enable high-throughput payout volume (or autoscale machine count up further) until that ships.
-2. **24h-aging alert.** Plan Slice 2 specifies *"no receipt + age > 24h → alert (no auto-fail)"* — `confirm-worker.tick()` doesn't yet check `requestedAt` age. Stuck `broadcast` rows are operator-discoverable via logs but not foregrounded.
-3. **Credits-precision ceiling.** `creditsForAmount` (`broadcast-worker.ts:90`, `confirm-worker.ts:33`) uses `Number(amountBase) / 1_000_000` — silently rounds above ~9007 USDC. Either BigInt math or an explicit per-payout cap enforced in policies.
+1. **24h-aging alert.** The confirmer now rotates fairly through
+   `broadcasting` and `broadcast` rows and can advance later-visible
+   identities, but it does not foreground rows older than 24 hours.
+2. **Source availability tradeoff.** One ambiguous or long-pending operation
+   deliberately blocks later payouts from that wallet+chain. There is no
+   automatic resend/refund; operator reconciliation remains required.
+3. **Solana expiry evidence.** The signed transaction's
+   `lastValidBlockHeight` and exact bytes are not persisted. The system cannot
+   yet prove expiry plus historical absence strongly enough to offer an
+   operator-gated `broadcasting → failed` reversal.
+4. **Fixed-point FX.** Payout request bounds keep current arithmetic inside
+   JavaScript's exact-integer range, but GBP/USD conversion still uses a
+   floating operator quote rather than a fixed-point rational representation.
 
 ## Acceptance criteria when this ships
 

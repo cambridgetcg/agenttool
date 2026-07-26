@@ -27,7 +27,7 @@ Decide once, stamp on the design.
 | 3 | Solana libs | **`@solana/web3.js` + `@solana/spl-token`** | Standard; only real choice. |
 | 4 | Network split | **`PAYOUT_NETWORK=testnet\|mainnet`** global flag; **refuse-to-boot** if unset; separate `CRYPTO_HD_MNEMONIC_TESTNET`; per-chain `CHAIN_RPC_URL_<chain>[_TESTNET]`. | Single global gate. No accidental mainnet calls. Forces explicit operator intent. |
 | 5 | Dispatch model | **Cron poll every 10s**: `SELECT id FROM crypto_payouts WHERE status='requested' LIMIT N` → enqueue. | Simpler than `pg_notify` listener; payout latency budget is minutes, not sub-second. |
-| 6 | Crash idempotency | **DB lock + deterministic tx_hash + write-before-submit**: lock row, build+sign, **compute `tx_hash`**, write `tx_hash` + `status='broadcasting'`, commit, then submit to RPC. | After a crash, the hash provides a stable reconciliation key: positive chain evidence proves submission without a second broadcast, while absent/unavailable evidence remains explicit. Without the persisted hash, even positive reconciliation would be unavailable. |
+| 6 | Crash/idempotency | **Cross-replica source lock + one in-flight wallet/chain operation + deterministic tx_hash + write-before-submit + unique chain identity.** Solana also carries an opaque payout-specific memo. | The durable source gate closes the commit→submit nonce window by refusing a second signer until the prior row terminalizes. A positive chain lookup can recover ambiguity; one chain operation cannot confirm two payout rows. |
 | 7 | Confirmation thresholds | ETH/Base/Arbitrum/Optimism: **12 blocks** · Polygon: **64 blocks** · Solana: **`finalized` commitment**. | Standard exchange-grade. Configurable per-chain via env. |
 | 8 | Retry rules | **No automatic retries.** Failures proved before transaction dispatch (sign/build/RPC preparation reads) fail + refund. Once `sendRawTransaction` begins, any error is ambiguous: found lookup → `broadcast`; absent/unavailable lookup → remain `broadcasting` for operator reconciliation. | Doctrine wall — the first submit might still land, and immediate lookup absence is not authoritative → retry or refund could double-spend value. |
 | 9 | Refund path | `requested → failed` (pre-broadcast): atomic credit-back, `transactions.type='payout_refund'` row. `broadcast → failed` (revert): same, post-confirmation. | Schema already supports it; worker has to wire it. |
@@ -59,10 +59,13 @@ Each individually shippable + verifiable. Slices land in order; later slices may
 - `api/src/workers/payout-dispatcher.ts` — cron, polls `requested` every 10s, enqueues BullMQ jobs.
 - `api/src/workers/payout-broadcast.ts` — consumes queue:
   1. `SELECT FOR UPDATE` lock the row.
-  2. Status flip → `broadcasting`.
+  2. Take the cross-replica source lock and defer if another payout for the
+     wallet+chain is `broadcasting` or `broadcast`.
   3. HD-derive signing key (testnet mnemonic + payout's wallet path).
   4. Build USDC `transfer(to, amount)` tx via viem; gas estimate; nonce from RPC.
-  5. Sign locally → **compute `tx_hash` deterministically** → write `tx_hash` to row + commit.
+  5. Sign locally → **compute `tx_hash` deterministically** → atomically write
+     `tx_hash` + `status='broadcasting'` and commit. The database rejects a
+     duplicate `(chain, tx_hash)`.
   6. `eth_sendRawTransaction` to Alchemy Sepolia RPC.
   7. On RPC accept: `status='broadcast'`.
   8. On a failure proved before transaction dispatch: `status='failed'` + atomic refund. After dispatch begins, a submit error never fails/refunds automatically; only positive lookup evidence advances to `broadcast`.
@@ -71,7 +74,9 @@ Each individually shippable + verifiable. Slices land in order; later slices may
 ### Slice 2 — EVM confirmation watcher · ~0.5 day · ✓ shipped (24h-aging alert pending — see PAYOUT-BROADCAST.md caveats)
 
 - `api/src/workers/payout-confirm.ts` — BullMQ repeatable job, every 30s.
-- Polls `crypto_payouts.status='broadcast'` rows.
+- Fairly rotates through `broadcasting` and `broadcast` rows. A positive
+  expected-ID lookup advances ambiguity; absence/unavailability changes
+  nothing.
 - For each: `eth_getTransactionReceipt(tx_hash)`.
   - Receipt + `currentBlock - receipt.blockNumber >= threshold` + `status === 1` → `status='confirmed'`, `confirmed_at` set, `transactions.payout_confirmed` row.
   - Receipt + `status === 0` (revert) → `status='failed'` + refund.
@@ -82,6 +87,9 @@ Each individually shippable + verifiable. Slices land in order; later slices may
 
 - Same shape as Slices 1+2, Solana stack:
   - Signing: SLIP-0010 ed25519 (already shipped) → `Transaction.partialSign(keypair)`.
+  - Operation identity: a Memo Program instruction carries a
+    domain-separated digest of the payout UUID so otherwise identical rows
+    produce different signed bytes without publishing the raw internal ID.
   - USDC: `createTransferCheckedInstruction` from `@solana/spl-token`.
   - RPC: Helius devnet `sendTransaction` with `skipPreflight: false`.
   - Confirm: `getSignatureStatuses([sig], { searchTransactionHistory: true })` until `confirmationStatus='finalized'`.

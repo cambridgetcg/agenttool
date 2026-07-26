@@ -97,6 +97,9 @@ Environment vars (set in shell or `.env` per workspace — there is no `.env.exa
 - `POSTGRES_URL` — Supabase Postgres
 - `REDIS_URL` — Redis (BullMQ + SSE backplane)
 - `STRIPE_SECRET_KEY` · `STRIPE_WEBHOOK_SECRET` — payments
+- `CRYPTO_NETWORK=testnet|mainnet` — explicit network for deposit derivation,
+  watch reconciliation, webhook binding, token contracts, and shared crypto
+  reads; unset does not imply mainnet
 - `ALCHEMY_API_KEY` — scoped EVM RPC key, sent in a Bearer header
 - `ALCHEMY_NOTIFY_AUTH_TOKEN` · `ALCHEMY_WEBHOOK_ID_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` · explicit `AGENTTOOL_PUBLIC_URL` — durable PATCH-then-GET reconciliation of derived EVM deposit addresses on exact existing Address Activity webhooks
 - `ALCHEMY_WEBHOOK_SIGNING_KEY_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` — webhook-specific raw-body HMAC verification for inbound EVM deposit events

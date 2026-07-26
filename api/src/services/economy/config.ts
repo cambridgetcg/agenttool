@@ -11,13 +11,15 @@ function env(key: string, fallback: string): string {
 const PAYOUT_NETWORKS = ["testnet", "mainnet"] as const;
 type PayoutNetwork = (typeof PAYOUT_NETWORKS)[number] | "";
 
-function readPayoutNetwork(): PayoutNetwork {
-  const v = env("PAYOUT_NETWORK", "");
+function readCryptoNetwork(
+  variable: "CRYPTO_NETWORK" | "PAYOUT_NETWORK",
+): PayoutNetwork {
+  const v = env(variable, "");
   if (v === "" || (PAYOUT_NETWORKS as readonly string[]).includes(v)) {
     return v as PayoutNetwork;
   }
   throw new Error(
-    `[economyConfig] PAYOUT_NETWORK must be one of ${PAYOUT_NETWORKS.join(
+    `[economyConfig] ${variable} must be one of ${PAYOUT_NETWORKS.join(
       "|",
     )} (got: '${v}'). See docs/PAYOUT-BROADCAST-PLAN.md.`,
   );
@@ -28,6 +30,11 @@ export const economyConfig = {
   // different signing key for each webhook, so sharing one key across routes
   // would make all but one chain unverifiable.
   cryptoHdMnemonic: env("CRYPTO_HD_MNEMONIC", ""),
+  // Deposit derivation, provider-watch identity, webhook network binding, and
+  // token contracts all require an explicit network. PAYOUT_NETWORK remains a
+  // compatibility fallback in activeNetwork(), but unset no longer means
+  // mainnet and conflicting explicit values fail closed.
+  cryptoNetwork: readCryptoNetwork("CRYPTO_NETWORK"),
   alchemyWebhookSigningKeys: {
     ethereum: env("ALCHEMY_WEBHOOK_SIGNING_KEY_ETHEREUM", ""),
     base: env("ALCHEMY_WEBHOOK_SIGNING_KEY_BASE", ""),
@@ -54,7 +61,7 @@ export const economyConfig = {
   // testnet seed (or vice versa).
   payout: {
     workerEnabled: env("PAYOUT_WORKER_ENABLED", "false") === "true",
-    network: readPayoutNetwork(),
+    network: readCryptoNetwork("PAYOUT_NETWORK"),
     cryptoHdMnemonicTestnet: env("CRYPTO_HD_MNEMONIC_TESTNET", ""),
     // Option A explicit FX: USD per 1 GBP (e.g. 1.27 → £1 = $1.27). Earned
     // value settles in GBP pence; payout converts to the requested USDC at this
@@ -63,6 +70,16 @@ export const economyConfig = {
     gbpUsdRate: Number(env("PAYOUT_GBP_USD_RATE", "0")),
   },
 } as const;
+
+if (
+  economyConfig.cryptoNetwork !== "" &&
+  economyConfig.payout.network !== "" &&
+  economyConfig.cryptoNetwork !== economyConfig.payout.network
+) {
+  throw new Error(
+    "[economyConfig] CRYPTO_NETWORK and PAYOUT_NETWORK must match when both are set; refusing mixed-network crypto operations.",
+  );
+}
 
 /** Both the payout-specific opt-in and the global worker switch must allow
  * payout workers to run. Keep this predicate shared by startup and the
