@@ -178,7 +178,7 @@ BEGIN
     SET
         status = 'failed',
         tx_hash = NULL,
-        error = 'synthetic_policy_fixture_no_chain_operation',
+        error = 'synthetic_policy_e2e_fixture_reconciled',
         metadata = jsonb_build_object(
             'fixture_repair',
             jsonb_build_object(
