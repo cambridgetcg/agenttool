@@ -43,7 +43,7 @@ describe("AgentTool Canon directory readiness", () => {
       "https://claude.ai/customize/connectors?modal=add-custom-connector",
     );
     expect(page).toContain(
-      "https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt",
+      "https://developers.openai.com/plugins/deploy/connect-chatgpt",
     );
     expect(page).toContain(
       "https://claude.com/docs/connectors/custom/remote-mcp",
