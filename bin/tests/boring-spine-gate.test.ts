@@ -420,6 +420,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).toContain("          - skills");
     expect(workflow).toContain("          - browser");
+    expect(workflow).toContain("          - alchemy");
     expect(workflow).toContain("          - repo-archive");
     expect(workflow).not.toContain("pull_request:");
     expect(workflow).not.toMatch(/\n\s+push:/);

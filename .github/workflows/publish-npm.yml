@@ -16,6 +16,7 @@ on:
           - wallet
           - telescope
           - browser
+          - alchemy
           - repo-archive
           - collab
           - correspondence-yutabase

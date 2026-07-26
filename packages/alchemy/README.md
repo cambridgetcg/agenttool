@@ -194,6 +194,8 @@ bun run ci
 npm pack --ignore-scripts --dry-run --json
 ```
 
-Version `0.1.0-dev.0` is source metadata only until an operator explicitly
-publishes immutable reviewed bytes. Building or packing locally is not a
-release.
+The allowlisted optional npm identity for this developer preview is
+`@agenttool/alchemy@0.1.0-dev.0`, annotated tag `alchemy-v0.1.0-dev.0`, under
+dist-tag `next`. Source metadata, building, and packing are not release
+evidence; verify the protected workflow receipt and public exact-byte checks.
+This package remains npm-only and is not part of an immutable LOVE inventory.

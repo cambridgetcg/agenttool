@@ -85,9 +85,10 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
-  test("allowlists twelve reviewed release identities", () => {
+  test("allowlists thirteen reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
+      "alchemy",
       "browser",
       "collab",
       "correspondence-yutabase",
@@ -120,6 +121,11 @@ describe("standard npm release policy", () => {
       packagePath: "packages/browser",
       artifactKind: "love",
     });
+    expect(releaseSpec("alchemy")).toMatchObject({
+      name: "@agenttool/alchemy",
+      packagePath: "packages/alchemy",
+      artifactKind: "pack",
+    });
     expect(releaseSpec("repo-archive")).toMatchObject({
       name: "@agenttool/repo-archive",
       packagePath: "packages/repo-archive",
@@ -136,7 +142,7 @@ describe("standard npm release policy", () => {
   });
 
   test("derives exact annotated tags and npm filenames", () => {
-    expect(expectedTag(releaseSpec("credential-broker"), "0.1.0")).toBe("credential-broker-v0.1.0");
+    expect(expectedTag(releaseSpec("credential-broker"), "0.2.0")).toBe("credential-broker-v0.2.0");
     expect(expectedTag(releaseSpec("sdk"), "0.16.1")).toBe("sdk-v0.16.1");
     expect(packedFilename("@agenttool/collab", "0.1.0")).toBe("agenttool-collab-0.1.0.tgz");
     expect(packedFilename("@agenttool/correspondence-yutabase", "0.1.0-dev.0")).toBe(
@@ -151,6 +157,12 @@ describe("standard npm release policy", () => {
     );
     expect(packedFilename("@agenttool/repo-archive", "0.1.0-dev.0")).toBe(
       "agenttool-repo-archive-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("alchemy"), "0.1.0-dev.0")).toBe(
+      "alchemy-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/alchemy", "0.1.0-dev.0")).toBe(
+      "agenttool-alchemy-0.1.0-dev.0.tgz",
     );
     expect(() => expectedTag(releaseSpec("sdk"), "latest")).toThrow("invalid package version");
   });
@@ -185,6 +197,10 @@ describe("standard npm release policy", () => {
       "package/dist/cli.js",
       "package/schema/agent-repo-archive-v0.1.schema.json",
       "package/vectors/agent-repo-archive-v0.1-vectors.json",
+    ]));
+    expect(requiredArchiveEntries(releaseSpec("alchemy"))).toEqual(expect.arrayContaining([
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
     ]));
   });
 

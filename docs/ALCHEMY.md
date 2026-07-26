@@ -82,9 +82,11 @@ rather than creating a new dependency on a retiring surface. See
 
 ## Reusable read package
 
-`packages/alchemy` is source version `0.1.0-dev.0`. It has not been published
-or added to an immutable LOVE release inventory. Local source and a successful
-pack are not registry availability.
+`packages/alchemy` is source version `0.1.0-dev.0`. Its allowlisted optional
+npm-only prerelease identity is annotated tag `alchemy-v0.1.0-dev.0` with npm
+dist-tag `next`; it is not part of an immutable LOVE release inventory. Source
+metadata and a successful local pack do not prove registry availability—use
+the protected workflow's public receipt and exact-byte checks.
 
 The client permits eight underlying provider methods:
 
@@ -134,10 +136,11 @@ broadcaster, wallet, simulation API, or Alchemy admin client.
 
 ## Credential-broker bridge
 
-Repository source for `@agenttool/credential-broker` is now `0.2.0`; the
-immutable LOVE release remains `0.1.0`. No 0.2.0 publication is implied. The
-package SemVer changed because the new source bytes must never be rebuilt under
-the old release identity; the negotiated wire names remain
+Repository source and the exact immutable LOVE artifact for
+`@agenttool/credential-broker` are now `0.2.0`. npm availability remains
+independent: neither source metadata nor a LOVE artifact proves registry
+publication. The package SemVer changed because the new source bytes must
+never be rebuilt under the old release identity; the negotiated wire names remain
 `agentcred/0.1` and `agentcred.evm-jsonrpc-read/0.1`.
 
 The negotiated profile permits exactly the seven standard `eth_*` methods

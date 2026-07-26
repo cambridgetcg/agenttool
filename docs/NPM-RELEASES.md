@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the established public JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser; Collab, Agent Skills, the developer-preview Correspondence-to-YUTABASE planner, and the developer-preview Repo Archive are intentionally npm-only.
+> **Implements:** one manual, allowlisted npm release state machine for the established public JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser; Collab, Agent Skills, the developer-preview Correspondence-to-YUTABASE planner, the developer-preview Repo Archive, and the developer-preview Alchemy observation client are intentionally npm-only.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -142,3 +142,29 @@ LOVE artifacts, deploy hosted services, configure npm trusted publishers, or
 revoke credentials. It creates or verifies one byte-identical GitHub Release
 asset for the already-existing annotated tag before attempting the optional npm
 mirror; it does not rewrite unrelated release assets.
+
+### Alchemy developer-preview bootstrap
+
+`@agenttool/alchemy@0.1.0-dev.0` uses the npm-only packed-artifact path. Its
+first publication must use the protected bootstrap environment and npm
+`next`; the release policy prevents bootstrap from creating a new version once
+the package exists (an exact already-published rerun is verification-only) and
+rejects a prerelease sent to `latest`.
+
+```bash
+bun bin/npm-release.ts resolve --package alchemy
+
+git tag -a alchemy-v0.1.0-dev.0 <github-main-commit> \
+  -m '@agenttool/alchemy@0.1.0-dev.0'
+git push github refs/tags/alchemy-v0.1.0-dev.0
+
+gh workflow run publish-npm.yml --ref alchemy-v0.1.0-dev.0 \
+  -f package=alchemy \
+  -f tag=alchemy-v0.1.0-dev.0 \
+  -f authentication=bootstrap \
+  -f npm_tag=next
+```
+
+This publishes only the bounded local observation library. It does not deploy
+the AgentTool API, configure Alchemy credentials or webhooks, apply database
+migrations, or make a provider call.
