@@ -1,11 +1,12 @@
 /**
  * Environment composition for the durable Alchemy deposit-watch worker.
  *
- * The worker starts only when both the Notify control token and an explicit
- * public callback origin are configured. It scopes the existing per-chain
- * webhook IDs to the single active payout/deposit network; it does not invent
- * a production URL, create webhooks, or run when the global worker switch is
- * off (the caller in `src/index.ts` owns that gate).
+ * Active targets require the Notify control token and an explicit public
+ * callback origin. Explicit disabled-chain tombstones do not: they cannot
+ * claim work or contact Alchemy. Every binding is scoped to the single active
+ * payout/deposit network and one monotonic revision. This module does not
+ * invent a production URL, create webhooks, or run when the global worker
+ * switch is off (the caller in `src/index.ts` owns that gate).
  */
 
 import { randomUUID } from "node:crypto";
@@ -17,7 +18,17 @@ import {
 } from "../../services/economy/crypto/alchemy-watch-reconciler";
 import {
   alchemyNotifyConfig,
+  alchemyDepositWatchTargetFingerprint,
+  parseExplicitHttpsOrigin,
+  parseAlchemyWatchDisabledChains,
+  parseAlchemyWatchTargetRevision,
 } from "../../services/economy/crypto/alchemy-notify";
+import {
+  bindDepositWatchTargets,
+  DEPOSIT_WATCH_UNBOUND_TARGET_FINGERPRINT,
+  type DepositWatchProviderReconciler,
+  type DepositWatchTargetBinding,
+} from "../../services/economy/crypto/deposit-watch";
 import {
   activeNetwork,
   type ActiveNetwork,
@@ -36,50 +47,116 @@ export type AlchemyDepositWatchBootResult =
 
 let worker: DepositWatchWorker | null = null;
 
-function explicitHttpsOrigin(value: string | undefined): string | null {
-  if (!value || value.trim() !== value) return null;
-  try {
-    const parsed = new URL(value);
-    if (
-      parsed.protocol !== "https:" ||
-      parsed.username !== "" ||
-      parsed.password !== "" ||
-      parsed.search !== "" ||
-      parsed.hash !== "" ||
-      parsed.pathname !== "/"
-    ) {
-      return null;
-    }
-    return parsed.origin;
-  } catch {
-    return null;
-  }
+export interface AlchemyDepositWatchWorkerConfig {
+  /** Null only for a disabled-only binding set, which cannot claim work. */
+  reconcilerConfig: AlchemyWatchReconcilerConfig | null;
+  /** Active heads plus explicit disabled tombstones prepared atomically. */
+  targetBindings: readonly DepositWatchTargetBinding[];
+  /** Exact active subset passed to the claim store. */
+  claimTargets: readonly DepositWatchTargetBinding[];
+  targetRevision: number;
 }
 
 /**
- * Pure config builder for tests and startup diagnostics. Secret values remain
- * in memory and are never returned through a route, log, or error message.
+ * Compatibility helper for the active provider adapter configuration.
+ * Disabled-only composition intentionally returns null here; the complete
+ * worker builder below can still prepare those credential-free tombstones.
  */
 export function alchemyDepositWatchConfigFromEnv(
   env: NodeJS.ProcessEnv,
   network: ActiveNetwork,
 ): AlchemyWatchReconcilerConfig | null {
+  return alchemyDepositWatchWorkerConfigFromEnv(env, network)
+    ?.reconcilerConfig ?? null;
+}
+
+/**
+ * Build the complete worker boundary. Missing webhook IDs are omissions, not
+ * disables. A chain is disabled only through the explicit tombstone list.
+ * That declaration takes precedence for reconciliation while its webhook ID
+ * may remain configured so signed deliveries for previously watched
+ * addresses can still be authenticated.
+ */
+export function alchemyDepositWatchWorkerConfigFromEnv(
+  env: NodeJS.ProcessEnv,
+  network: ActiveNetwork,
+): AlchemyDepositWatchWorkerConfig | null {
   const notify = alchemyNotifyConfig(env);
-  const callbackBaseUrl = explicitHttpsOrigin(
-    env.AGENTTOOL_PUBLIC_URL,
+  const targetRevision = parseAlchemyWatchTargetRevision(
+    env.ALCHEMY_WATCH_TARGET_REVISION,
   );
-  if (!notify.authToken || callbackBaseUrl === null) return null;
+  const disabledChains = parseAlchemyWatchDisabledChains(
+    env.ALCHEMY_WATCH_DISABLED_CHAINS,
+  );
+  if (targetRevision === null || disabledChains === null) return null;
+  const disabled = new Set(disabledChains);
 
   const webhookIds: AlchemyWatchReconcilerConfig["webhookIds"] = {};
+  const targetBindings: DepositWatchTargetBinding[] = [];
+  const callbackBaseUrl = parseExplicitHttpsOrigin(
+    env.AGENTTOOL_PUBLIC_URL,
+  );
+  const hasActiveTargets = ALCHEMY_WATCH_EVM_CHAINS.some(
+    (chain) =>
+      !disabled.has(chain) &&
+      notify.webhookIds[chain] !== undefined,
+  );
+  if (
+    hasActiveTargets &&
+    (!notify.authToken || callbackBaseUrl === null)
+  ) {
+    return null;
+  }
+  const reconcilerConfig: AlchemyWatchReconcilerConfig | null =
+    hasActiveTargets && callbackBaseUrl !== null
+      ? {
+          authToken: notify.authToken,
+          callbackBaseUrl,
+          webhookIds,
+          targetRevision,
+        }
+      : null;
+
   for (const chain of ALCHEMY_WATCH_EVM_CHAINS) {
     const webhookId = notify.webhookIds[chain];
-    if (webhookId) webhookIds[chain] = { [network]: webhookId };
+    if (disabled.has(chain)) {
+      targetBindings.push({
+        provider: "alchemy",
+        chain,
+        network,
+        state: "disabled",
+        targetFingerprint: DEPOSIT_WATCH_UNBOUND_TARGET_FINGERPRINT,
+        targetRevision,
+      });
+    } else if (webhookId) {
+      if (reconcilerConfig === null) return null;
+      const fingerprint = alchemyDepositWatchTargetFingerprint({
+        chain,
+        network,
+        webhookId,
+        callbackBaseUrl: reconcilerConfig.callbackBaseUrl,
+      });
+      if (fingerprint === null) return null;
+      webhookIds[chain] = { [network]: webhookId };
+      targetBindings.push({
+        provider: "alchemy",
+        chain,
+        network,
+        state: "active",
+        targetFingerprint: fingerprint,
+        targetRevision,
+      });
+    }
   }
+  if (targetBindings.length === 0) return null;
 
   return {
-    authToken: notify.authToken,
-    callbackBaseUrl,
-    webhookIds,
+    reconcilerConfig,
+    targetBindings,
+    claimTargets: targetBindings.filter(
+      (binding) => binding.state === "active",
+    ),
+    targetRevision,
   };
 }
 
@@ -103,19 +180,29 @@ export function startAlchemyDepositWatchWorker(options: {
   if (worker?.isRunning()) return "already_started";
 
   const env = options.env ?? process.env;
-  const config = alchemyDepositWatchConfigFromEnv(
+  const config = alchemyDepositWatchWorkerConfigFromEnv(
     env,
     options.network ?? activeNetwork(),
   );
   if (config === null) return "unconfigured";
 
-  const reconciler = createAlchemyDepositWatchReconciler({
-    config,
-    ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
-  });
+  const reconciler: DepositWatchProviderReconciler =
+    config.reconcilerConfig === null
+      ? async () => ({
+          kind: "terminal",
+          code: "provider_configuration_missing",
+        })
+      : createAlchemyDepositWatchReconciler({
+          config: config.reconcilerConfig,
+          ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+        });
   worker = createDepositWatchWorker({
     owner: workerOwner(env, options.owner),
     reconciler,
+    targets: config.claimTargets,
+    prepare: async () => {
+      await bindDepositWatchTargets(config.targetBindings);
+    },
   });
   worker.start();
   return "started";

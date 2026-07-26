@@ -37,10 +37,13 @@ import {
   activeNetwork,
 } from "./network";
 import {
-  alchemyDepositWatchTargetFingerprintFromEnv,
+  alchemyDepositWatchTargetFromEnv,
+  parseAlchemyWatchDisabledChains,
+  parseAlchemyWatchTargetRevision,
 } from "./alchemy-notify";
 import {
   DepositWatchInvariantError,
+  depositWatchProjectionIsReady,
   persistDepositAddressAndDesiredWatch,
 } from "./deposit-watch";
 import { reversePayoutDebit } from "./payout-refund";
@@ -65,39 +68,67 @@ export class DepositAddressInvariantError extends Error {
   }
 }
 
+type DepositWatchNotReadyCode =
+  | "deposit_watch_pending"
+  | "deposit_watch_blocked"
+  | "deposit_watch_target_unconfigured"
+  | "deposit_watch_target_binding_pending"
+  | "deposit_watch_target_conflict"
+  | "deposit_watch_target_disabled"
+  | "deposit_ingress_signing_key_missing";
+
 export class DepositWatchNotReadyError extends Error {
-  readonly code:
-    | "deposit_watch_pending"
-    | "deposit_watch_blocked"
-    | "deposit_watch_target_unconfigured"
-    | "deposit_ingress_signing_key_missing";
+  readonly code: DepositWatchNotReadyCode;
   readonly retryable: boolean;
   readonly watchStatus: string;
 
   constructor(watchStatus: string) {
-    const blocked = watchStatus === "blocked";
-    const targetUnconfigured =
-      watchStatus === "target_configuration_missing";
-    const signingKeyMissing =
-      watchStatus === "ingress_signing_key_missing";
-    super(
-      blocked
-        ? "The durable provider watch is blocked and requires operator repair."
-        : targetUnconfigured
-          ? "The current public provider-watch target is not fully configured."
-          : signingKeyMissing
-            ? "The chain-specific ingress signing key is not configured."
-            : "The durable provider watch has not yet been independently verified.",
-    );
+    let code: DepositWatchNotReadyCode;
+    let retryable = false;
+    let message: string;
+    switch (watchStatus) {
+      case "blocked":
+        code = "deposit_watch_blocked";
+        message =
+          "The durable provider watch is blocked and requires operator repair.";
+        break;
+      case "target_binding_pending":
+        code = "deposit_watch_target_binding_pending";
+        retryable = true;
+        message =
+          "The durable provider target has not yet advanced to this process's configured revision.";
+        break;
+      case "target_configuration_conflict":
+        code = "deposit_watch_target_conflict";
+        message =
+          "This process's provider target disagrees with the durable monotonic target registry.";
+        break;
+      case "target_disabled":
+        code = "deposit_watch_target_disabled";
+        message =
+          "Deposit watching for this chain is explicitly disabled by process configuration or the current registry target.";
+        break;
+      case "target_configuration_missing":
+        code = "deposit_watch_target_unconfigured";
+        message =
+          "The current public provider-watch target is not fully configured.";
+        break;
+      case "ingress_signing_key_missing":
+        code = "deposit_ingress_signing_key_missing";
+        message =
+          "The chain-specific ingress signing key is not configured.";
+        break;
+      default:
+        code = "deposit_watch_pending";
+        retryable = true;
+        message =
+          "The durable provider watch has not yet been independently verified.";
+    }
+
+    super(message);
     this.name = "DepositWatchNotReadyError";
-    this.code = blocked
-      ? "deposit_watch_blocked"
-      : targetUnconfigured
-        ? "deposit_watch_target_unconfigured"
-        : signingKeyMissing
-          ? "deposit_ingress_signing_key_missing"
-          : "deposit_watch_pending";
-    this.retryable = !blocked && !targetUnconfigured && !signingKeyMissing;
+    this.code = code;
+    this.retryable = retryable;
     this.watchStatus = watchStatus;
   }
 }
@@ -125,10 +156,23 @@ export function evmDepositWatchTargetForDisclosure(
   env: NodeJS.ProcessEnv = process.env,
   ingressSigningKeyPresent =
     economyConfig.alchemyWebhookSigningKeys[chain].trim().length > 0,
-): string {
-  const targetFingerprint =
-    alchemyDepositWatchTargetFingerprintFromEnv(chain, network, env);
-  if (targetFingerprint === null) {
+): { fingerprint: string; revision: number } {
+  const revision = parseAlchemyWatchTargetRevision(
+    env.ALCHEMY_WATCH_TARGET_REVISION,
+  );
+  const disabledChains = parseAlchemyWatchDisabledChains(
+    env.ALCHEMY_WATCH_DISABLED_CHAINS,
+  );
+  if (revision === null || disabledChains === null) {
+    throw new DepositWatchNotReadyError(
+      "target_configuration_missing",
+    );
+  }
+  if (disabledChains.includes(chain)) {
+    throw new DepositWatchNotReadyError("target_disabled");
+  }
+  const target = alchemyDepositWatchTargetFromEnv(chain, network, env);
+  if (target === null) {
     throw new DepositWatchNotReadyError(
       "target_configuration_missing",
     );
@@ -138,7 +182,7 @@ export function evmDepositWatchTargetForDisclosure(
       "ingress_signing_key_missing",
     );
   }
-  return targetFingerprint;
+  return target;
 }
 
 export async function getOrCreateDepositAddress(
@@ -160,8 +204,7 @@ export async function getOrCreateDepositAddress(
         const network = activeNetwork();
         return {
           network,
-          targetFingerprint:
-            evmDepositWatchTargetForDisclosure(chain, network),
+          target: evmDepositWatchTargetForDisclosure(chain, network),
         };
       })()
     : null;
@@ -191,7 +234,6 @@ export async function getOrCreateDepositAddress(
         derivationPath: derived.derivation_path,
         provider: "alchemy",
         network: evmWatch!.network,
-        targetFingerprint: evmWatch!.targetFingerprint,
         desiredState: "watching",
       });
     } catch (error) {
@@ -200,10 +242,31 @@ export async function getOrCreateDepositAddress(
       }
       throw error;
     }
+    // A process presenting a higher revision is waiting for worker
+    // preparation, even when the older head is conflicted or disabled: that
+    // higher revision is exactly how either state is repaired.
+    if (watch.targetRevision < evmWatch!.target.revision) {
+      throw new DepositWatchNotReadyError("target_binding_pending");
+    }
+    if (watch.targetRegistryState === "disabled") {
+      throw new DepositWatchNotReadyError("target_disabled");
+    }
     if (
-      watch.status !== "converged" ||
-      watch.observedState !== "watching"
+      watch.targetRegistryState === "conflicted" ||
+      watch.targetRevision > evmWatch!.target.revision ||
+      (
+        watch.targetRevision === evmWatch!.target.revision &&
+        watch.targetFingerprint !== evmWatch!.target.fingerprint
+      )
     ) {
+      throw new DepositWatchNotReadyError(
+        "target_configuration_conflict",
+      );
+    }
+    if (watch.targetRegistryState === "unbound") {
+      throw new DepositWatchNotReadyError("target_binding_pending");
+    }
+    if (!depositWatchProjectionIsReady(watch, evmWatch!.target)) {
       throw new DepositWatchNotReadyError(watch.status);
     }
     return {

@@ -967,17 +967,18 @@ if (payoutWorkerBootAllowed()) {
 }
 
 // Durable Alchemy deposit-watch reconciliation. The worker is globally gated
-// here and starts only when the Notify token plus an explicit
-// AGENTTOOL_PUBLIC_URL are configured. Missing configuration leaves desired
-// rows pending; it never guesses a production callback or falls back to the
-// old request-time provider mutation path.
+// here and starts only with a valid monotonic target revision plus at least one
+// active webhook or explicit disabled-chain tombstone. Active targets also
+// require the Notify token and explicit AGENTTOOL_PUBLIC_URL. Missing or
+// ambiguous configuration leaves desired rows fail-closed; it never guesses a
+// production callback or falls back to request-time provider mutation.
 if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
   void import("./workers/deposit-watch/alchemy")
     .then(({ startAlchemyDepositWatchWorker }) => {
       const result = startAlchemyDepositWatchWorker();
       if (result === "unconfigured") {
         console.warn(
-          "[agenttool] Alchemy deposit-watch worker did not start: configure ALCHEMY_NOTIFY_AUTH_TOKEN and explicit AGENTTOOL_PUBLIC_URL; desired watches remain pending.",
+          "[agenttool] Alchemy deposit-watch worker did not start: configure a valid target revision and at least one active webhook or explicit disabled chain; active targets also require Notify auth and an explicit public URL.",
         );
       }
     })

@@ -54,6 +54,7 @@ function request(
     chain: "base",
     network: "testnet",
     targetFingerprint: TARGET_FINGERPRINT,
+    targetRevision: 1,
     address: ADDRESS,
     desiredState: "watching",
     observedState: "unknown",
@@ -176,6 +177,25 @@ describe("Alchemy deposit-watch reconciler", () => {
       await reconciler(
         request({ targetFingerprint: "f".repeat(64) }),
       ),
+    ).toEqual({
+      kind: "retryable",
+      code: "provider_target_mismatch",
+    });
+    expect(calls).toBe(0);
+  });
+
+  test("rejects a target revision mismatch before provider I/O", async () => {
+    let calls = 0;
+    const reconciler = createAlchemyDepositWatchReconciler({
+      config: config({ targetRevision: 8 }),
+      fetchImpl: (async () => {
+        calls += 1;
+        throw new Error("must not contact the provider");
+      }) as typeof fetch,
+    });
+
+    expect(
+      await reconciler(request({ targetRevision: 7 })),
     ).toEqual({
       kind: "retryable",
       code: "provider_target_mismatch",
@@ -567,6 +587,15 @@ describe("Alchemy deposit-watch reconciler", () => {
     expect(
       await createAlchemyDepositWatchReconciler({
         config: config({ callbackBaseUrl: "http://localhost:3000" }),
+        fetchImpl: fakeFetch,
+      })(request()),
+    ).toEqual({
+      kind: "terminal",
+      code: "provider_configuration_missing",
+    });
+    expect(
+      await createAlchemyDepositWatchReconciler({
+        config: config({ targetRevision: 0 }),
         fetchImpl: fakeFetch,
       })(request()),
     ).toEqual({

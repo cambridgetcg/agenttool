@@ -7944,8 +7944,14 @@ function spec() {
         get: {
           tags: ["crypto"],
           summary:
-            "Get or list validated deterministic USDC deposit addresses; EVM addresses return only after watch registration is accepted",
-          responses: { "200": { description: "Address" } },
+            "Get or list deterministic USDC deposit addresses; EVM addresses return only after fresh independent verification of the current watch target and membership",
+          responses: {
+            "200": { description: "Address" },
+            "503": {
+              description:
+                "Stored derivation validation failed, or the EVM watch target, ingress key, or fresh independently verified membership is not ready",
+            },
+          },
         },
       },
       "/v1/wallets/{walletId}/payout": {

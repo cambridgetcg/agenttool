@@ -287,13 +287,106 @@ export const DEPOSIT_WATCH_OUTCOME_CODES = [
   "provider_timeout",
   "provider_configuration_missing",
   "provider_target_mismatch",
+  "provider_target_disabled",
   "provider_rejected",
   "provider_unsupported",
   "reconciler_failed",
   "lease_expired",
+  "target_binding_required",
 ] as const;
 export type DepositWatchOutcomeCode =
   (typeof DEPOSIT_WATCH_OUTCOME_CODES)[number];
+
+export const DEPOSIT_WATCH_TARGET_STATES = [
+  "unbound",
+  "active",
+  "conflicted",
+  "disabled",
+] as const;
+export type DepositWatchTargetState =
+  (typeof DEPOSIT_WATCH_TARGET_STATES)[number];
+
+/** One monotonic, non-secret control head per provider/chain/network.
+ *
+ * Request replicas may establish only the revision-zero unbound sentinel.
+ * Configured workers activate, conflict, or disable a head transactionally.
+ * Credentials and secret-derived fingerprints never belong here. */
+export const depositWatchTargets = economySchema.table(
+  "deposit_watch_targets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    provider: text("provider").notNull(),
+    chain: text("chain").notNull(),
+    network: text("network").notNull(),
+    state: text("state")
+      .$type<DepositWatchTargetState>()
+      .notNull()
+      .default("unbound"),
+    targetFingerprint: text("target_fingerprint").notNull(),
+    targetRevision: integer("target_revision").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uq_deposit_watch_target_identity").on(
+      t.provider,
+      t.chain,
+      t.network,
+    ),
+    uniqueIndex("uq_deposit_watch_target_head").on(
+      t.provider,
+      t.chain,
+      t.network,
+      t.targetRevision,
+      t.targetFingerprint,
+    ),
+    check(
+      "deposit_watch_target_provider_shape",
+      sql`${t.provider} ~ '^[a-z][a-z0-9_-]{0,31}$'`,
+    ),
+    check(
+      "deposit_watch_target_chain",
+      sql`${t.chain} IN ('ethereum', 'base', 'polygon', 'arbitrum', 'optimism', 'solana')`,
+    ),
+    check(
+      "deposit_watch_target_network",
+      sql`${t.network} IN ('mainnet', 'testnet')`,
+    ),
+    check(
+      "deposit_watch_target_state",
+      sql`${t.state} IN ('unbound', 'active', 'conflicted', 'disabled')`,
+    ),
+    check(
+      "deposit_watch_target_head_shape",
+      sql`${t.targetFingerprint} ~ '^[0-9a-f]{64}$'
+        AND (
+          (
+            ${t.state} = 'unbound'
+            AND ${t.targetRevision} = 0
+            AND ${t.targetFingerprint} = 'c477199a36317357929d98d7597436d83a63f3f2575abb0cf80868c9f60933bb'
+          )
+          OR (
+            ${t.state} = 'active'
+            AND ${t.targetRevision} BETWEEN 1 AND 2147483647
+            AND ${t.targetFingerprint} <> 'c477199a36317357929d98d7597436d83a63f3f2575abb0cf80868c9f60933bb'
+          )
+          OR (
+            ${t.state} = 'conflicted'
+            AND ${t.targetRevision} BETWEEN 1 AND 2147483647
+          )
+          OR (
+            ${t.state} = 'disabled'
+            AND ${t.targetRevision} BETWEEN 1 AND 2147483647
+            AND ${t.targetFingerprint} = 'c477199a36317357929d98d7597436d83a63f3f2575abb0cf80868c9f60933bb'
+          )
+        )`,
+    ),
+  ],
+);
 
 /** Durable desired/observed provider-watch control state.
  *
@@ -318,6 +411,10 @@ export const depositAddressWatches = economySchema.table(
      * credentials and secret-derived fingerprints never belong here.
      */
     targetFingerprint: text("target_fingerprint"),
+    /** NULL is the compatibility state written by target-aware replicas that
+     * predate the monotonic registry. It cannot converge or be claimed by the
+     * registry-aware worker. */
+    targetRevision: integer("target_revision"),
     desiredState: text("desired_state")
       .$type<DepositWatchDesiredState>()
       .notNull()
@@ -333,6 +430,7 @@ export const depositAddressWatches = economySchema.table(
     generation: integer("generation").notNull().default(1),
     observedGeneration: integer("observed_generation"),
     observedTargetFingerprint: text("observed_target_fingerprint"),
+    observedTargetRevision: integer("observed_target_revision"),
     attemptCount: integer("attempt_count").notNull().default(0),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
       .defaultNow(),
@@ -355,6 +453,34 @@ export const depositAddressWatches = economySchema.table(
       columns: [t.depositAddressId, t.chain],
       foreignColumns: [depositAddresses.id, depositAddresses.chain],
     }).onDelete("cascade"),
+    foreignKey({
+      name: "fk_deposit_watch_registry_identity",
+      columns: [t.provider, t.chain, t.network],
+      foreignColumns: [
+        depositWatchTargets.provider,
+        depositWatchTargets.chain,
+        depositWatchTargets.network,
+      ],
+    }),
+    // The migration installs this target-head FK as DEFERRABLE INITIALLY
+    // DEFERRED so a worker can rotate the head and every watch atomically.
+    foreignKey({
+      name: "fk_deposit_watch_registry_head",
+      columns: [
+        t.provider,
+        t.chain,
+        t.network,
+        t.targetRevision,
+        t.targetFingerprint,
+      ],
+      foreignColumns: [
+        depositWatchTargets.provider,
+        depositWatchTargets.chain,
+        depositWatchTargets.network,
+        depositWatchTargets.targetRevision,
+        depositWatchTargets.targetFingerprint,
+      ],
+    }),
     uniqueIndex("uq_deposit_watch_target").on(
       t.depositAddressId,
       t.provider,
@@ -364,8 +490,15 @@ export const depositAddressWatches = economySchema.table(
     index("idx_deposit_watch_due")
       .on(t.nextAttemptAt, t.createdAt)
       .where(
-        sql`${t.status} IN ('pending', 'retry_wait', 'accepted_unverified')`,
+        sql`${t.status} IN ('pending', 'retry_wait', 'accepted_unverified', 'converged')`,
       ),
+    index("idx_deposit_watch_registry_head").on(
+      t.provider,
+      t.chain,
+      t.network,
+      t.targetRevision,
+      t.targetFingerprint,
+    ),
     index("idx_deposit_watch_expired_lease")
       .on(t.leaseExpiresAt)
       .where(sql`${t.status} = 'leased'`),
@@ -396,8 +529,24 @@ export const depositAddressWatches = economySchema.table(
     check(
       "deposit_watch_target_fingerprint",
       sql`(
-        (${t.targetFingerprint} IS NULL AND ${t.status} <> 'converged')
-        OR ${t.targetFingerprint} ~ '^[0-9a-f]{64}$'
+        (
+          ${t.targetRevision} IS NULL
+          AND ${t.status} <> 'converged'
+          AND (
+            ${t.targetFingerprint} IS NULL
+            OR ${t.targetFingerprint} ~ '^[0-9a-f]{64}$'
+          )
+        )
+        OR (
+          ${t.targetRevision} IS NOT NULL
+          AND ${t.targetRevision} BETWEEN 0 AND 2147483647
+          AND ${t.targetFingerprint} IS NOT NULL
+          AND ${t.targetFingerprint} ~ '^[0-9a-f]{64}$'
+          AND (
+            ${t.targetRevision} <> 0
+            OR ${t.targetFingerprint} = 'c477199a36317357929d98d7597436d83a63f3f2575abb0cf80868c9f60933bb'
+          )
+        )
       )`,
     ),
     check(
@@ -423,13 +572,25 @@ export const depositAddressWatches = economySchema.table(
           ${t.observedState} = 'unknown'
           AND ${t.observedGeneration} IS NULL
           AND ${t.observedTargetFingerprint} IS NULL
+          AND ${t.observedTargetRevision} IS NULL
           AND ${t.observedAt} IS NULL
         )
         OR
         (
           ${t.observedState} <> 'unknown'
           AND ${t.observedGeneration} IS NOT NULL
+          AND ${t.observedTargetFingerprint} IS NOT NULL
           AND ${t.observedTargetFingerprint} ~ '^[0-9a-f]{64}$'
+          AND (
+            (
+              ${t.observedTargetRevision} IS NOT NULL
+              AND ${t.observedTargetRevision} BETWEEN 1 AND 2147483647
+            )
+            OR (
+              ${t.observedTargetRevision} IS NULL
+              AND ${t.status} <> 'converged'
+            )
+          )
           AND ${t.observedAt} IS NOT NULL
         )
       )`,
@@ -460,12 +621,12 @@ export const depositAddressWatches = economySchema.table(
       "deposit_watch_schedule_shape",
       sql`(
         (
-          ${t.status} IN ('pending', 'retry_wait', 'accepted_unverified')
+          ${t.status} IN ('pending', 'retry_wait', 'accepted_unverified', 'converged')
           AND ${t.nextAttemptAt} IS NOT NULL
         )
         OR
         (
-          ${t.status} NOT IN ('pending', 'retry_wait', 'accepted_unverified')
+          ${t.status} NOT IN ('pending', 'retry_wait', 'accepted_unverified', 'converged')
           AND ${t.nextAttemptAt} IS NULL
         )
       )`,
@@ -476,15 +637,23 @@ export const depositAddressWatches = economySchema.table(
         ${t.status} <> 'converged'
         OR (
           ${t.observedState} = ${t.desiredState}
+          AND ${t.observedGeneration} IS NOT NULL
           AND ${t.observedGeneration} = ${t.generation}
+          AND ${t.observedTargetFingerprint} IS NOT NULL
           AND ${t.observedTargetFingerprint} = ${t.targetFingerprint}
+          AND ${t.observedTargetRevision} IS NOT NULL
+          AND ${t.observedTargetRevision} = ${t.targetRevision}
+          AND ${t.targetRevision} IS NOT NULL
+          AND ${t.targetRevision} BETWEEN 1 AND 2147483647
+          AND ${t.targetFingerprint} IS NOT NULL
+          AND ${t.targetFingerprint} <> 'c477199a36317357929d98d7597436d83a63f3f2575abb0cf80868c9f60933bb'
         )
       )`,
     ),
     check(
       "deposit_watch_retry_bound",
       sql`(
-        ${t.status} NOT IN ('retry_wait', 'accepted_unverified')
+        ${t.status} NOT IN ('retry_wait', 'accepted_unverified', 'converged')
         OR (
           ${t.nextAttemptAt} > ${t.updatedAt}
           AND ${t.nextAttemptAt} <= ${t.updatedAt} + interval '24 hours'
@@ -502,10 +671,12 @@ export const depositAddressWatches = economySchema.table(
         'provider_timeout',
         'provider_configuration_missing',
         'provider_target_mismatch',
+        'provider_target_disabled',
         'provider_rejected',
         'provider_unsupported',
         'reconciler_failed',
-        'lease_expired'
+        'lease_expired',
+        'target_binding_required'
       )`,
     ),
   ],

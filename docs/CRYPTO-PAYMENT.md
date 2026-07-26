@@ -22,9 +22,9 @@ Solana deposit finality remain separate operator work.
 | Capability | Status (Phase 3b) | Surface |
 |---|---|---|
 | Multi-chain deposit address derivation | Implemented; provider/mnemonic configuration required | `GET /v1/wallets/:id/deposit-address?chain=&token=` |
-| List all deposit addresses for a wallet | Implemented; every stored row is revalidated and every EVM watch must match the current public target with an observation no older than ten minutes | `GET /v1/wallets/:id/deposit-address` |
+| List all deposit addresses for a wallet | Implemented; every stored row is revalidated and every EVM watch must match the active monotonic registry target with an observation no older than ten minutes | `GET /v1/wallets/:id/deposit-address` |
 | Onchain identity binding via signed message | Implemented (EVM EIP-191; Solana ed25519) | `POST /v1/wallets/:id/onchain/{challenge,verify}` · `GET /v1/wallets/:id/onchain` |
-| Inbound transfer ingestion | EVM signed observations persist pending until exact canonical log/depth; removed block generations are durable and causally fenced. Solana signed ingress still credits before equivalent raw-atomic finality. | `POST /v1/billing/crypto-webhook/:chain` (signature-verified, public) |
+| Inbound transfer ingestion | EVM signed live observations persist pending until exact canonical log/depth; removed block generations are durable and causally fenced. Solana signed ingress still credits before equivalent raw-atomic finality. | `POST /v1/billing/crypto-webhook/:chain` (signature-verified, public) |
 | Idempotency + reorg evidence | Implemented locally; migration not applied | `economy.crypto_webhook_events` logical identity + immutable `crypto_webhook_event_observations` block generations |
 | Payout request lifecycle | Implemented behind explicit worker/network/FX configuration; production payout secrets were unconfigured when checked 2026-07-25 | `POST /v1/wallets/:id/payout` · `GET /v1/wallets/:id/payouts` |
 | Schema for everything above | Baseline live; wallet/chain/token uniqueness migration is local and not deployed | `api/migrations/0002_crypto_payment.sql` · `api/migrations/20260725T054912_crypto_deposit_identity.sql` |
@@ -79,13 +79,21 @@ response instead reports `operator_configuration_unverified`: derivation and
 signed Helius ingress exist, but the API has no Helius watch reconciler and
 does not claim that the new address is observed.
 
-Convergence is bound to a SHA-256 fingerprint of public target facts only
-(provider, chain/network, existing webhook ID, and callback URL). Changing
-those facts fences in-flight work and starts a new generation. A converged
-observation is disclosure-ready for at most ten minutes; the first later read
-requeues verification and returns 503 until it converges again. This is a
-bounded read-time freshness gate, not a claim that unread rows are polled
-forever.
+Convergence is bound to the authoritative provider/chain/network registry
+head: a positive monotonic revision plus a SHA-256 fingerprint of public
+target facts only (including webhook type, existing webhook ID, active state,
+and callback URL). The worker binds that head before every claim batch; a
+preparation failure prevents claims and is retried on its next tick. A lower
+revision is rejected, different facts at the same revision create a durable
+conflict, and only a higher revision can resolve it. Disabling a chain needs
+an explicit higher-revision tombstone; omitting its webhook variable is not a
+disable operation.
+
+A converged observation is disclosure-ready for at most ten minutes; the
+first later read requeues verification and returns 503 until it converges
+again. A worker also treats convergence as due for a best-effort background
+recheck after 24 hours. The 24-hour schedule does not extend the ten-minute
+read gate and is not a continuous-delivery guarantee.
 
 ### 2. Send USDC to it
 
@@ -213,10 +221,12 @@ This is the same posture as Stripe — Stripe is *our* payment infra, not a serv
 | `CRYPTO_HD_MNEMONIC` | Mainnet deposit address derivation and payout signing | 12 or 24 word BIP-39 mnemonic. **Back this up offline.** Losing it means losing all derived addresses (and the funds at them). |
 | `CRYPTO_HD_MNEMONIC_TESTNET` | Testnet deposit address derivation and payout signing | Kept separate from the mainnet root. Address creation and signing select the same active root. |
 | `ALCHEMY_API_KEY` | EVM RPC | Sent in an `Authorization: Bearer` header rather than the RPC URL. Use a scoped app/access key. |
-| `ALCHEMY_NOTIFY_AUTH_TOKEN` | EVM address-watch reconciliation | Notify control-plane token. Used only to inspect exact webhook metadata/membership and idempotently change one desired address membership. |
+| `ALCHEMY_NOTIFY_AUTH_TOKEN` | EVM address-watch reconciliation | Notify control-plane token used for bounded team-webhook metadata GET, paginated address-membership GET, and PATCH of one desired membership on an existing webhook. |
 | `AGENTTOOL_PUBLIC_URL` | EVM callback verification | Explicit HTTPS API origin. The worker derives the per-chain webhook route from it and will not guess a production callback. |
+| `ALCHEMY_WATCH_TARGET_REVISION` | EVM target registry | Positive bounded integer, default `1`. Increase it for any webhook ID, callback, or active/disabled change; different target facts must never reuse a revision. |
+| `ALCHEMY_WATCH_DISABLED_CHAINS` | Explicit EVM disablement | Optional exact comma-separated supported EVM chain names with no whitespace, duplicates, or empty entries. Each entry tells worker preparation to bind a disabled tombstone at the current target revision; omission is not disablement. A webhook ID may remain configured only so signed deliveries for previously watched addresses can still be authenticated; the disabled chain is excluded from reconciliation. |
 | `ALCHEMY_WEBHOOK_SIGNING_KEY_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` | EVM inbound transfer ingestion and address-disclosure readiness | HMAC-SHA256 signing key from that specific webhook's detail page. Configure each webhook to POST to its matching `/v1/billing/crypto-webhook/<chain>` route; never reuse one key for all five. Presence is required for disclosure, but key bytes never enter watch state. |
-| `ALCHEMY_WEBHOOK_ID_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` | EVM address-watch reconciliation | Existing Address Activity webhook ID for each chain. The API refuses to disclose an EVM deposit address until the relevant active-network target converges. |
+| `ALCHEMY_WEBHOOK_ID_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` | EVM address-watch reconciliation and signed-ingress identity binding | Existing Address Activity webhook ID for each chain. The API refuses to disclose an EVM deposit address until the relevant active-network target converges. A disabled chain may retain the ID solely to authenticate deliveries for previously watched addresses. |
 | `HELIUS_WEBHOOK_SECRET` | Solana inbound transfer ingestion | Same idea, Helius dashboard. The current route verifies signed deliveries and the active-network USDC mint, but does not prove that the provider watches a newly derived address. |
 
 Per-wallet settings (set on the wallet, not env): minimum payout amount,
@@ -232,6 +242,7 @@ reorg/subscription reconciliation work live in [ALCHEMY.md](ALCHEMY.md).
 
 ```
 economy.deposit_addresses        — wallet ↔ deposit address per (chain, token)
+economy.deposit_watch_targets    — monotonic active/conflicted/disabled target head
 economy.deposit_address_watches  — desired/observed provider watch + lease state
 economy.onchain_identities       — verified bindings (wallet ↔ external addr)
 economy.crypto_payouts           — outgoing transfer requests (lifecycle)
@@ -252,7 +263,10 @@ effects remain credited without invented evidence; new EVM observations are
 pending and retain immutable block generations), and
 `api/migrations/20260726T211500_deposit_watch_target_binding.sql` (invalidates
 unbound historical observations and binds new convergence to public target
-identity without storing credentials or secret-derived fingerprints).
+identity without storing credentials or secret-derived fingerprints), and
+`api/migrations/20260726T214500_deposit_watch_target_registry.sql` (adds the
+authoritative monotonic target head, revision-bound convergence, durable
+same-revision conflict, and explicit higher-revision disabled tombstones).
 
 ---
 
@@ -262,9 +276,12 @@ Solana derivation/signature verification, Helius ingress, EVM/Solana payout
 broadcast, confirmation polling, and payout policy gates are implemented.
 Before production crypto enablement, the remaining load-bearing work is:
 
-1. stop crypto webhook ingress and all workers, apply and independently review
-   the local identity/watch/finality migrations, deploy only the new writers,
-   then run a credentialed staging proof against each configured webhook/RPC;
+1. stop crypto webhook ingress, drain all old workers, apply and independently
+   review the local identity/watch/target-registry/finality migrations, deploy
+   only the new writers, then run a credentialed staging proof against each
+   configured webhook/RPC. The rolling schema fails closed for disclosure and
+   durable convergence, but cannot cancel a provider call an old worker
+   already started;
 2. add disposable-Postgres concurrency tests for pending credit, duplicate
    confirmation, generation replacement, removal reversal, and quarantine;
 3. build a durable Helius watch plus raw-atomic Solana finality/reorg adapter;

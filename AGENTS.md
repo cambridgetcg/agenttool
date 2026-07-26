@@ -104,7 +104,9 @@ Environment vars (set in shell or `.env` per workspace — there is no `.env.exa
   watch reconciliation, webhook binding, token contracts, and shared crypto
   reads; unset does not imply mainnet
 - `ALCHEMY_API_KEY` — scoped EVM RPC key, sent in a Bearer header
-- `ALCHEMY_NOTIFY_AUTH_TOKEN` · `ALCHEMY_WEBHOOK_ID_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` · explicit `AGENTTOOL_PUBLIC_URL` — durable PATCH-then-GET reconciliation of derived EVM deposit addresses on exact existing Address Activity webhooks
+- `ALCHEMY_NOTIFY_AUTH_TOKEN` · `ALCHEMY_WEBHOOK_ID_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` · explicit `AGENTTOOL_PUBLIC_URL` — bounded metadata GET, paginated membership GET, and PATCH-then-GET reconciliation of derived EVM deposit addresses on exact existing Address Activity webhooks
+- `ALCHEMY_WATCH_TARGET_REVISION` — positive monotonic target version (default `1`); increase it whenever webhook ID, callback, or active/disabled target facts change
+- `ALCHEMY_WATCH_DISABLED_CHAINS` — optional exact comma-separated EVM chain tombstones at the current target revision; omission is not disablement, and the tombstone overrides watch reconciliation while a webhook ID may remain solely to authenticate deliveries for previously watched addresses
 - `ALCHEMY_WEBHOOK_SIGNING_KEY_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` — webhook-specific raw-body HMAC verification for inbound EVM deposit events; the matching key must be present before that chain's address is disclosed, but secret bytes never enter durable watch state
 - `VAULT_MASTER_KEY` — HKDF root for server-encrypted vault entries
 - `ANTHROPIC_API_KEY` · `OPENAI_API_KEY` · `OLLAMA_API_KEY` — for adapter + opt-in contract tests

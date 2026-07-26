@@ -11,10 +11,18 @@
 import { createHash } from "node:crypto";
 
 import type { ActiveNetwork } from "./network";
-import type { EvmChain } from "./chains";
+import {
+  EVM_CHAINS,
+  isEvmChain,
+  type EvmChain,
+} from "./chains";
 
 const ALCHEMY_WEBHOOK_ID_MAX_BYTES = 256;
 const ALCHEMY_CALLBACK_PATH_PREFIX = "/v1/billing/crypto-webhook/";
+export const ALCHEMY_WATCH_TARGET_REVISION_MAX = 2_147_483_647;
+const ALCHEMY_WATCH_DISABLED_CHAINS_MAX_BYTES = 128;
+export const ALCHEMY_ADDRESS_ACTIVITY_WEBHOOK_TYPE = "ADDRESS_ACTIVITY";
+export const ALCHEMY_ADDRESS_ACTIVITY_ACTIVE = true;
 
 export const ALCHEMY_WEBHOOK_ID_ENV: Record<EvmChain, string> = {
   ethereum: "ALCHEMY_WEBHOOK_ID_ETHEREUM",
@@ -64,7 +72,50 @@ export function alchemyAddressActivityNetwork(
   return ADDRESS_ACTIVITY_NETWORKS[chain][network];
 }
 
-function explicitHttpsOrigin(value: unknown): string | null {
+/**
+ * Parse one monotonic, non-secret target revision. An absent variable starts
+ * at revision 1; malformed, padded, fractional, or out-of-range values fail
+ * closed instead of guessing rollout order.
+ */
+export function parseAlchemyWatchTargetRevision(
+  value: string | undefined,
+): number | null {
+  if (value === undefined) return 1;
+  if (!/^[1-9][0-9]{0,9}$/.test(value)) return null;
+  const revision = Number(value);
+  return Number.isSafeInteger(revision) &&
+    revision <= ALCHEMY_WATCH_TARGET_REVISION_MAX
+    ? revision
+    : null;
+}
+
+/**
+ * Parse the exact, explicit tombstone set. Omission (or an empty variable)
+ * means no chain is disabled; it never infers disablement from a missing
+ * webhook ID.
+ */
+export function parseAlchemyWatchDisabledChains(
+  value: string | undefined,
+): readonly EvmChain[] | null {
+  if (value === undefined || value === "") return [];
+  if (
+    value.length > ALCHEMY_WATCH_DISABLED_CHAINS_MAX_BYTES ||
+    value.trim() !== value
+  ) {
+    return null;
+  }
+
+  const chains = value.split(",");
+  if (chains.length > EVM_CHAINS.length) return null;
+  const seen = new Set<EvmChain>();
+  for (const chain of chains) {
+    if (!isEvmChain(chain) || seen.has(chain)) return null;
+    seen.add(chain);
+  }
+  return EVM_CHAINS.filter((chain) => seen.has(chain));
+}
+
+export function parseExplicitHttpsOrigin(value: unknown): string | null {
   if (typeof value !== "string" || value.trim() !== value) return null;
   try {
     const parsed = new URL(value);
@@ -113,11 +164,11 @@ export function alchemyDepositWatchTargetFingerprint(input: {
   callbackBaseUrl: string;
 }): string | null {
   const webhookId = boundedWebhookId(input.webhookId);
-  const callbackOrigin = explicitHttpsOrigin(input.callbackBaseUrl);
+  const callbackOrigin = parseExplicitHttpsOrigin(input.callbackBaseUrl);
   if (webhookId === null || callbackOrigin === null) return null;
 
   const canonicalPublicTarget = JSON.stringify({
-    schema: "agenttool-deposit-watch-target/v1",
+    schema: "agenttool-deposit-watch-target/v2",
     provider: "alchemy",
     chain: input.chain,
     network: input.network,
@@ -126,6 +177,8 @@ export function alchemyDepositWatchTargetFingerprint(input: {
       input.network,
     ),
     provider_target_id: webhookId,
+    provider_target_type: ALCHEMY_ADDRESS_ACTIVITY_WEBHOOK_TYPE,
+    provider_target_active: ALCHEMY_ADDRESS_ACTIVITY_ACTIVE,
     callback_url:
       `${callbackOrigin}${ALCHEMY_CALLBACK_PATH_PREFIX}${input.chain}`,
   });
@@ -134,23 +187,42 @@ export function alchemyDepositWatchTargetFingerprint(input: {
     .digest("hex");
 }
 
+export interface AlchemyDepositWatchTarget {
+  fingerprint: string;
+  revision: number;
+}
+
 /**
- * Resolve only the non-secret target inputs needed by the request path.
- * Control-plane credentials and ingress signing keys are intentionally not
- * read here.
+ * Resolve the exact non-secret active target presented by this process.
+ * Explicitly disabled chains and malformed rollout configuration return null.
  */
-export function alchemyDepositWatchTargetFingerprintFromEnv(
+export function alchemyDepositWatchTargetFromEnv(
   chain: EvmChain,
   network: ActiveNetwork,
   env: NodeJS.ProcessEnv = process.env,
-): string | null {
-  const webhookId = alchemyNotifyConfig(env).webhookIds[chain];
+): AlchemyDepositWatchTarget | null {
+  const disabledChains = parseAlchemyWatchDisabledChains(
+    env.ALCHEMY_WATCH_DISABLED_CHAINS,
+  );
+  const revision = parseAlchemyWatchTargetRevision(
+    env.ALCHEMY_WATCH_TARGET_REVISION,
+  );
+  if (
+    disabledChains === null ||
+    disabledChains.includes(chain) ||
+    revision === null
+  ) {
+    return null;
+  }
+
+  const webhookId = env[ALCHEMY_WEBHOOK_ID_ENV[chain]]?.trim();
   const callbackBaseUrl = env.AGENTTOOL_PUBLIC_URL;
   if (!webhookId || !callbackBaseUrl) return null;
-  return alchemyDepositWatchTargetFingerprint({
+  const fingerprint = alchemyDepositWatchTargetFingerprint({
     chain,
     network,
     webhookId,
     callbackBaseUrl,
   });
+  return fingerprint === null ? null : { fingerprint, revision };
 }

@@ -2,7 +2,9 @@
  *
  *  Foundation for sovereign-agent crypto payment. The agent gets a
  *  deterministic deposit address per chain, sends USDC there from its
- *  own wallet, and the inbound webhook credits its agenttool balance.
+ *  own wallet, and signed live ingress records a pending EVM observation for
+ *  later canonical confirmation and credit. Signed removal ingress records
+ *  reorg evidence and may reverse only its matching credited generation.
  *  Onchain identity binding lets the agent prove it controls the address.
  *
  *  Doctrine: docs/CRYPTO-PAYMENT.md.
@@ -184,14 +186,23 @@ function depositWatchReadinessHint(
   error: DepositWatchNotReadyError,
 ): string {
   if (error.code === "deposit_watch_target_unconfigured") {
-    return "Configure the explicit public callback origin and this chain's existing Alchemy webhook ID, restart the worker, then retry.";
+    return "Configure the explicit public callback origin, this chain's existing Alchemy webhook ID, and the intended monotonic target revision. Reload that configuration in both the API and watch worker; worker preparation must bind it before claims.";
+  }
+  if (error.code === "deposit_watch_target_binding_pending") {
+    return "Retry after the watch worker prepares this exact target revision. A current worker retries before its next batch; reload or restart only to load corrected process configuration, and neither action resets exhausted provider outcomes.";
+  }
+  if (error.code === "deposit_watch_target_conflict") {
+    return "Align every API and worker replica on one intended target. Repair a durable conflict by choosing one consistent revision higher than the registry head; restarting unchanged conflicting configuration cannot resolve it.";
+  }
+  if (error.code === "deposit_watch_target_disabled") {
+    return "Deposit watching for this chain is closed by local configuration or the current registry tombstone. Keep the webhook ID and signing key only if authenticated deliveries for previously watched addresses should continue. To re-enable after worker preparation, remove the local disable and use an operator-approved active target at a higher revision.";
   }
   if (error.code === "deposit_ingress_signing_key_missing") {
-    return "Configure this chain's Alchemy webhook signing key, restart the API, then retry; provider membership alone is not safe ingress.";
+    return "Configure this chain's Alchemy webhook signing key and restart the API, then retry; provider membership alone is not safe ingress, and this configuration restart does not reset an exhausted watch.";
   }
   return error.retryable
     ? "Retry this exact request after the durable reconciler independently verifies the current target generation."
-    : "An operator must repair the blocked provider-watch configuration, then enqueue a new desired generation.";
+    : "Restarting a worker alone does not repair an exhausted or blocked provider outcome. Fix the recorded cause; there is no supported reset route or CLI yet, so an approved maintenance tool must invoke the internal reconciliation seam.";
 }
 
 export async function resolveReadyDepositAddressRows(

@@ -128,10 +128,61 @@ describe("Alchemy deposit identity invariants", () => {
       },
       true,
     );
+    const revisionRotation = evmDepositWatchTargetForDisclosure(
+      "base",
+      "testnet",
+      {
+        ...common,
+        ALCHEMY_WATCH_TARGET_REVISION: "2",
+      },
+      true,
+    );
 
-    expect(first).toMatch(/^[0-9a-f]{64}$/);
-    expect(secretRotation).toBe(first);
-    expect(targetRotation).not.toBe(first);
+    expect(first.fingerprint).toMatch(/^[0-9a-f]{64}$/);
+    expect(first.revision).toBe(1);
+    expect(secretRotation).toEqual(first);
+    expect(targetRotation.fingerprint).not.toBe(first.fingerprint);
+    expect(revisionRotation).toEqual({
+      fingerprint: first.fingerprint,
+      revision: 2,
+    });
+  });
+
+  test("an explicit disable takes precedence while the ingress ID can remain", () => {
+    const common = {
+      AGENTTOOL_PUBLIC_URL: "https://agenttool.example",
+      ALCHEMY_WATCH_DISABLED_CHAINS: "base",
+    };
+
+    expect(() =>
+      evmDepositWatchTargetForDisclosure(
+        "base",
+        "testnet",
+        common,
+        true,
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        code: "deposit_watch_target_disabled",
+        retryable: false,
+      }),
+    );
+    expect(() =>
+      evmDepositWatchTargetForDisclosure(
+        "base",
+        "testnet",
+        {
+          ...common,
+          ALCHEMY_WEBHOOK_ID_BASE: "wh_public_base_target",
+        },
+        true,
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        code: "deposit_watch_target_disabled",
+        retryable: false,
+      }),
+    );
   });
 
   test("declares one logical row per wallet, chain, and token", () => {
@@ -175,8 +226,11 @@ describe("Alchemy deposit identity invariants", () => {
 
     expect(issuance).toContain("persistDepositAddressAndDesiredWatch");
     expect(issuance).not.toContain("ensureAlchemyAddressWatched");
-    expect(issuance.indexOf('watch.status !== "converged"')).toBeGreaterThan(
+    expect(issuance.indexOf("depositWatchProjectionIsReady")).toBeGreaterThan(
       issuance.indexOf("persistDepositAddressAndDesiredWatch"),
+    );
+    expect(issuance).not.toContain(
+      "targetFingerprint: evmWatch",
     );
   });
 });

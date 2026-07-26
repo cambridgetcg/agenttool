@@ -27,6 +27,9 @@ import {
   type DepositWatchReconcileRequest,
 } from "./deposit-watch";
 import {
+  ALCHEMY_ADDRESS_ACTIVITY_ACTIVE,
+  ALCHEMY_ADDRESS_ACTIVITY_WEBHOOK_TYPE,
+  ALCHEMY_WATCH_TARGET_REVISION_MAX,
   alchemyAddressActivityNetwork,
   alchemyDepositWatchTargetFingerprint,
 } from "./alchemy-notify";
@@ -87,6 +90,8 @@ export interface AlchemyWatchReconcilerConfig {
   callbackBaseUrl: string;
   /** Exact existing webhook identity for every intentionally enabled target. */
   webhookIds: AlchemyWatchWebhookIds;
+  /** Monotonic non-secret revision for rolling target changes. */
+  targetRevision?: number;
   requestTimeoutMs?: number;
   maxResponseBytes?: number;
   pageSize?: number;
@@ -103,6 +108,7 @@ interface ValidatedConfig {
   authToken: string;
   callbackOrigin: string;
   webhookIds: AlchemyWatchWebhookIds;
+  targetRevision: number;
   requestTimeoutMs: number;
   maxResponseBytes: number;
   pageSize: number;
@@ -222,6 +228,7 @@ function validateConfig(
     options.config.maxPages ?? ALCHEMY_WATCH_DEFAULT_MAX_PAGES;
   const maxAddresses =
     options.config.maxAddresses ?? ALCHEMY_WATCH_DEFAULT_MAX_ADDRESSES;
+  const targetRevision = options.config.targetRevision ?? 1;
 
   if (
     callbackOrigin === null ||
@@ -240,7 +247,10 @@ function validateConfig(
     !Number.isSafeInteger(maxAddresses) ||
     maxAddresses < 1 ||
     maxAddresses > ALCHEMY_WATCH_MAX_ADDRESSES ||
-    maxAddresses > pageSize * maxPages
+    maxAddresses > pageSize * maxPages ||
+    !Number.isSafeInteger(targetRevision) ||
+    targetRevision < 1 ||
+    targetRevision > ALCHEMY_WATCH_TARGET_REVISION_MAX
   ) {
     return null;
   }
@@ -249,6 +259,7 @@ function validateConfig(
     authToken: options.config.authToken,
     callbackOrigin,
     webhookIds: options.config.webhookIds,
+    targetRevision,
     requestTimeoutMs,
     maxResponseBytes,
     pageSize,
@@ -556,9 +567,9 @@ function validateConfiguredWebhook(
 
   const webhook = matches[0]!;
   if (
-    webhook.webhook_type !== "ADDRESS_ACTIVITY" ||
+    webhook.webhook_type !== ALCHEMY_ADDRESS_ACTIVITY_WEBHOOK_TYPE ||
     webhook.network !== expected.network ||
-    webhook.is_active !== true ||
+    webhook.is_active !== ALCHEMY_ADDRESS_ACTIVITY_ACTIVE ||
     webhook.webhook_url !== expected.callbackUrl
   ) {
     throw new ProviderFault("rejected");
@@ -730,6 +741,15 @@ async function reconcileAlchemyWatch(
     return {
       kind: "terminal",
       code: "provider_configuration_missing",
+    };
+  }
+  if (request.targetRevision !== config.targetRevision) {
+    // A revision disagreement is sufficient to fence this process from the
+    // provider. The fingerprint check below remains a second, independent
+    // binding to the exact public target.
+    return {
+      kind: "retryable",
+      code: "provider_target_mismatch",
     };
   }
   const configuredTargetFingerprint =

@@ -11,6 +11,7 @@ import {
   type DepositWatchBatchResult,
   type DepositWatchProviderReconciler,
   type DepositWatchStore,
+  type DepositWatchTargetBinding,
 } from "../../services/economy/crypto/deposit-watch";
 
 export interface DepositWatchWorker {
@@ -28,6 +29,8 @@ export function createDepositWatchWorker(options: {
   limit?: number;
   leaseMs?: number;
   providerTimeoutMs?: number;
+  targets?: readonly DepositWatchTargetBinding[];
+  prepare?: () => Promise<void>;
   now?: () => Date;
 }): DepositWatchWorker {
   const intervalMs = options.intervalMs ?? 30_000;
@@ -46,17 +49,25 @@ export function createDepositWatchWorker(options: {
 
   const runOnce = (): Promise<DepositWatchBatchResult> => {
     if (inFlight) return inFlight;
-    inFlight = runDepositWatchReconciliationBatch({
-      owner: options.owner,
-      reconciler: options.reconciler,
-      ...(options.store ? { store: options.store } : {}),
-      ...(options.limit === undefined ? {} : { limit: options.limit }),
-      ...(options.leaseMs === undefined ? {} : { leaseMs: options.leaseMs }),
-      ...(options.providerTimeoutMs === undefined
-        ? {}
-        : { providerTimeoutMs: options.providerTimeoutMs }),
-      ...(options.now ? { now: options.now } : {}),
-    }).finally(() => {
+    inFlight = (async () => {
+      // Re-run the idempotent preparation gate before every batch. This also
+      // fences legacy rows written after a prior tick during rolling deploys.
+      if (options.prepare) await options.prepare();
+      return runDepositWatchReconciliationBatch({
+        owner: options.owner,
+        reconciler: options.reconciler,
+        ...(options.store ? { store: options.store } : {}),
+        ...(options.limit === undefined ? {} : { limit: options.limit }),
+        ...(options.leaseMs === undefined ? {} : { leaseMs: options.leaseMs }),
+        ...(options.providerTimeoutMs === undefined
+          ? {}
+          : { providerTimeoutMs: options.providerTimeoutMs }),
+        ...(options.targets === undefined
+          ? {}
+          : { targets: options.targets }),
+        ...(options.now ? { now: options.now } : {}),
+      });
+    })().finally(() => {
       inFlight = null;
     });
     return inFlight;

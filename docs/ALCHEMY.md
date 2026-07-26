@@ -19,11 +19,13 @@
 > **Migrations:** `20260725T054912_crypto_deposit_identity.sql` ·
 > `20260726T070000_deposit_watch_reconciliation.sql` ·
 > `20260726T202500_crypto_deposit_finality.sql` ·
-> `20260726T211500_deposit_watch_target_binding.sql`
+> `20260726T211500_deposit_watch_target_binding.sql` ·
+> `20260726T214500_deposit_watch_target_registry.sql`
 >
 > **Tests:** `packages/alchemy/tests/` ·
 > `packages/credential-broker/tests/jsonrpc-read.test.ts` ·
-> `api/tests/{alchemy-notify,alchemy-watch-reconciler,deposit-watch-reconciliation,deposit-finality,deposit-finality-migration,crypto-webhook-fail-closed}.test.ts`
+> `api/tests/{alchemy-notify,alchemy-watch-reconciler,deposit-watch-reconciliation,deposit-watch-worker-prepare,deposit-finality,deposit-finality-migration,crypto-webhook-fail-closed}.test.ts` ·
+> `api/tests/integration/deposit-watch-target-registry-postgres.test.ts`
 
 ## Decision
 
@@ -173,41 +175,88 @@ they are outside the AgentCred profile.
 GET deposit-address
   -> derive and validate the network-specific address
   -> require that chain's ingress signing-key presence
-  -> hash public target facts only
-     (provider, chain/network, existing webhook ID, callback URL)
-  -> atomically store address + desired watch generation
-  -> leased worker verifies exact webhook metadata and active callback
-  -> independently scan bounded paginated address membership
-  -> PATCH only an opposite membership, then record accepted_unverified
-  -> later GET must independently observe the desired state
-  -> disclose only a matching observation no older than ten minutes
+  -> resolve public target facts + operator-controlled monotonic revision
+  -> atomically persist local address + desired state against the registry head
+  -> worker prepares exact active/disabled targets before every claim batch
+  -> leased worker verifies exact webhook id/type/network/active/callback
+  -> independently GET bounded paginated address membership
+  -> if opposite: idempotent PATCH, record accepted_unverified, retry GET later
+  -> return automatic-deposit instructions only after matching, fresh
+     observed convergence
 ```
 
-Desired and observed state, bounded attempts/backoff, short leases,
-generation, and target fingerprint live in
-`economy.deposit_address_watches`. Credentials, provider bodies, ingress
-signing keys, and secret-derived hashes do not.
+Address registration is deliberately idempotent. Desired and observed state,
+generation, attempts, bounded backoff, and short leases live in
+`economy.deposit_address_watches`; credentials and provider bodies do not.
+`economy.deposit_watch_targets` owns one authoritative head for each
+provider/chain/network identity. An active head binds a positive monotonic
+revision to a SHA-256 fingerprint of canonical public target facts only:
+provider, chain/network, `ADDRESS_ACTIVITY` type, existing webhook ID, active
+state, and callback URL. Notify auth tokens and ingress signing keys are
+neither inputs to that digest nor durable fields.
 
-The worker updates one existing per-chain Address Activity webhook. It does not
-create, delete, retarget, or activate webhooks. A PATCH 200 is acceptance, not
-convergence. Only an independent GET matching the current generation and
-target becomes `converged`.
+Before every coalesced batch/tick, a worker transaction presents its
+configured target set to that registry. A preparation failure prevents all
+claims for that batch and the next tick retries it. Repeating the same
+revision and fingerprint is idempotent. A lower revision is rejected; a
+different target at the same revision durably marks the identity `conflicted`
+and blocks claims; only a higher revision can resolve that conflict. Disabling
+a chain is also an explicit higher-revision tombstone, not an inference from
+an omitted webhook variable. A disabled target stops AgentTool disclosure and
+reconciliation; it does not delete or deactivate the provider webhook. A
+disabled-only preparation needs no Notify credential or callback because it
+claims no work and performs no provider I/O. Its existing webhook ID and
+signing key may remain in the API solely to authenticate deliveries for
+previously watched addresses; the worker excludes that chain from its active
+target and provider configuration. If those deliveries should stop, the
+operator must separately deactivate the remote webhook or remove its
+memberships before removing the local ingress identity. AgentTool does not
+perform that provider-side cleanup.
 
-Changing a public target fact fences older workers. A target-less row from a
-rolling migration cannot converge; the next address request binds the current
-target and starts a fresh generation. A converged observation is accepted for
-at most ten minutes. The first later read requeues verification and returns
-503 until it converges again. This is read-time freshness, not a promise that
-unread rows are polled forever or that future webhook delivery will work.
+Rows created during a migration/old-replica overlap may remain revisionless,
+but cannot become `converged`, and a registry-aware worker does not claim
+them. Requests also compare the running API's target revision and fingerprint
+with the registry head before disclosure. This makes the database rollout
+fail closed for address disclosure and durable convergence. It does not stop
+a pre-registry worker from claiming a newly inserted revisionless row during
+mixed-version overlap. Drain every old worker before the migration and keep
+them drained for the whole overlap; a database fence cannot cancel provider
+I/O that an old worker has already started.
+
+A running worker automatically retries failed target preparation on its next
+tick. Reload or restart is needed only to load corrected process
+configuration; neither action clears a provider outcome whose bounded attempts
+are exhausted. After repairing that cause, an approved maintenance tool must
+invoke the internal reconciliation seam. There is no supported reset route or
+CLI yet; direct ad hoc row mutation is not the recovery contract. An
+intentional disabled tombstone remains closed until a higher-revision active
+target replaces it.
+
+The worker updates an existing per-chain Address Activity webhook and never
+creates, deletes, retargets, or activates one. A provider PATCH acknowledgement
+becomes `accepted_unverified` and is scheduled for a later independent GET.
+Only an observation matching the current generation, target fingerprint, and
+target revision becomes `converged`. Disclosure accepts that observation for
+at most ten minutes. The first read after that bound atomically starts a fresh
+generation and returns 503 until re-verification. Independently, a converged
+row becomes due for a best-effort background recheck after 24 hours while the
+worker is running. That longer schedule does not extend the ten-minute
+disclosure window or promise continuous provider delivery. Even a fresh
+observation does not prove future delivery or chain finality.
 
 ## Signed ingress and separate EVM RPC confirmation
 
 ```text
-signed Alchemy delivery
+signed live Alchemy delivery
   -> bound and verify raw body, webhook ID/type, network, route chain
   -> parse exact USDC contract/log/atomic-unit identity
   -> durably store logical event + immutable block-generation observation
   -> status remains pending; no wallet effect
+
+signed removed Alchemy delivery
+  -> durably store the removed block generation
+  -> reverse only its exact matching credited generation, if any
+  -> stale or ambiguous removal cannot reverse a newer generation
 
 confirmation worker
   -> separately read active chain ID, receipt, block at exact height, head
@@ -260,12 +309,14 @@ finality/reorg reconciliation or durable watch convergence.
 
 | Name | Scope |
 |---|---|
-| `CRYPTO_NETWORK` | Explicit `testnet` or `mainnet` selection for derivation, watch identity, webhook binding, token contracts, and shared reads. Unset never implies mainnet. |
-| `ALCHEMY_API_KEY` | Scoped Chain/Data API credential for API-owned EVM RPC. Use as a Bearer credential, never in a logged URL. |
-| `ALCHEMY_NOTIFY_AUTH_TOKEN` | Notify control-plane token used only to inspect and update an existing webhook's address membership. |
-| `AGENTTOOL_PUBLIC_URL` | Explicit HTTPS API origin used to verify the expected per-chain callback. |
-| `ALCHEMY_WEBHOOK_SIGNING_KEY_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` | Per-webhook HMAC key. Presence gates address disclosure; bytes never enter watch state. |
-| `ALCHEMY_WEBHOOK_ID_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` | Existing per-chain Address Activity webhook ID reconciled by the worker. |
+| `CRYPTO_NETWORK` | Explicit `testnet` or `mainnet` selection for deposit derivation, watch identity, webhook network binding, token contracts, and shared crypto reads. Unset never implies mainnet; it must match `PAYOUT_NETWORK` when both are configured. |
+| `ALCHEMY_API_KEY` | Scoped Chain/Data API credential for API-owned EVM RPC. Use it as a Bearer credential, never in a logged URL. |
+| `ALCHEMY_NOTIFY_AUTH_TOKEN` | Notify control-plane token used for bounded team-webhook metadata GET, paginated address-membership GET, and PATCH of one existing webhook's desired address membership. |
+| `AGENTTOOL_PUBLIC_URL` | Explicit HTTPS API origin used to verify each webhook callback target. The watch worker does not guess the production URL. |
+| `ALCHEMY_WATCH_TARGET_REVISION` | Positive bounded integer, default `1`. It is the monotonic operator version for the worker's active and disabled target declarations. Increase it for any webhook ID, callback, or active/disabled change; never reuse a revision for different target facts. |
+| `ALCHEMY_WATCH_DISABLED_CHAINS` | Optional exact comma-separated EVM chain names. Each entry tells worker preparation to bind an explicit disabled tombstone at the current target revision. No whitespace, duplicates, empty entries, or unsupported chains are accepted. Omission does not disable a chain. A configured webhook ID may remain for signed ingress from previously watched addresses, but is excluded from active reconciliation. |
+| `ALCHEMY_WEBHOOK_SIGNING_KEY_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` | The signing key from that specific webhook's detail page; used only for raw-body HMAC verification on the matching route. Its presence is required before disclosing that chain's address, but its bytes and any secret-derived fingerprint are never persisted. |
+| `ALCHEMY_WEBHOOK_ID_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` | Existing per-chain Address Activity webhook IDs used for reconciliation and signed-delivery identity binding. |
 
 Use separate provider apps/keys for development and production. Provider IP,
 domain, method, network, and address allowlists narrow only the dimensions they
@@ -275,7 +326,7 @@ errors.
 
 ## Rollout and remaining proof
 
-All four identity/watch/finality migrations are local source only and have not
+All five identity/watch/finality migrations are local source only and have not
 been applied by this work. The finality migration deliberately keeps the
 database default at `credited` so an old immediate-credit replica cannot write
 a wallet effect mislabeled as `pending`; new code always writes an explicit
@@ -284,8 +335,8 @@ state.
 Cutover therefore requires an operator to:
 
 1. stop old API writers, webhook ingress, and all related workers;
-2. apply and review the identity, watch, finality, and target-binding
-   migrations;
+2. apply and review the identity, watch, finality, target-binding, and
+   target-registry migrations;
 3. deploy only the new writers/workers; and
 4. run a credentialed testnet proof of webhook metadata, pagination,
    PATCH-then-GET convergence, signed callback delivery, RPC evidence, reorg
@@ -298,9 +349,14 @@ duplicate confirmation, generation replacement, reversal, and quarantine.
 
 Before stronger production claims:
 
+- add a scoped operator surface for reconciliation after a blocked watch is
+  repaired; the internal seam exists, but there is no supported route or CLI;
 - add those database behavior/concurrency tests;
-- add durable operator alerts and a confirmation lease if duplicate RPC load
-  becomes material;
+- add durable alerts for old pending observations, quarantine, rejection,
+  negative balances, and exhausted watch attempts, plus a confirmation lease
+  if duplicate RPC load becomes material;
+- add bounded `Retry-After`, jitter, and telemetry for read-only provider
+  calls without automatically retrying ambiguous broadcasts;
 - build equivalent Helius watch and Solana raw-atomic finality/reorg handling;
 - model L2 settlement separately if a product claim requires L1 finality;
 - replace payout FX floating arithmetic, add the 24-hour stuck-operation alert,
