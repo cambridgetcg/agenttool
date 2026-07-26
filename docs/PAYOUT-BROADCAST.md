@@ -11,7 +11,7 @@
 >
 > **Code:** `api/src/workers/payout/{dispatcher,broadcast-worker,confirm-worker,queue,index}.ts` · `api/src/routes/economy/crypto.ts` (request handler) · `api/src/services/economy/crypto/{hd,sign-evm,sign-solana}.ts`
 >
-> **Tests:** `api/tests/{alchemy-rpc-auth,payout-submit-outcome}.test.ts` (transport and ambiguity unit tests) · `api/scripts/_e2e-payout-{evm,sol,loop-closure,policies,cancel}.{ts,mjs}` (E2E harnesses)
+> **Tests:** `api/tests/{alchemy-rpc-auth,payout-submit-outcome}.test.ts` (transport and ambiguity unit tests). Four former payout E2E entrypoints are now inert resting stubs; the separate loop-closure script is retained only as a legacy credentialed smoke.
 
 ## What's already shipped
 
@@ -121,10 +121,12 @@ authenticated cancellation remain supported. Any `broadcasting` or
 chain evidence before manual action.
 
 The retained source implementation is covered by hermetic worker, policy,
-transport, and ambiguity tests. Credentialed scripts under
-`api/scripts/_e2e-payout-*` are future operator harnesses; their presence is
-not evidence that the current revision or provider configuration was
-successfully exercised.
+transport, and ambiguity tests. The former EVM, Solana, policy, and
+cancellation E2E entrypoints are inert stubs that exit without loading
+dependencies or touching credentials, databases, RPC, or HTTP. Their former
+credentialed implementations remain in Git history. The separate
+`_e2e-payout-loop-closure.ts` is a legacy smoke, not an activation check or
+evidence that the current revision or provider configuration was exercised.
 
 ### Requirements before any reopening
 

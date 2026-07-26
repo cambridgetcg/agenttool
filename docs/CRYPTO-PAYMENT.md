@@ -134,8 +134,9 @@ configured as `ALCHEMY_WEBHOOK_SIGNING_KEY_<CHAIN>`. The handler:
    matching block generation. A delayed `removed(A)` is stored but cannot
    reverse newer B. Conflicting or historical evidence that cannot safely
    authorize a balance effect becomes durable `quarantined` state.
-7. Solana currently retains immediate exact-integer credit after signed Helius
-   ingestion. This is not equivalent to the EVM finality contract.
+7. Solana signed ingress has no durable watch/finality reconciler and refuses
+   balance credit by default. Its immediate adapter is an explicit
+   development-only opt-in and is not equivalent to the EVM finality contract.
 
 Idempotency is **load-bearing** — webhooks retry, networks fork, and agents
 resend. Logical identity prevents duplicate credit; immutable block-generation

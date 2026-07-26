@@ -120,6 +120,39 @@ describe("public crypto source truth", () => {
     }
   });
 
+  test("retired payout harness entrypoints are unconditional inert stubs", () => {
+    const harnesses = [
+      "api/scripts/_e2e-payout-evm.ts",
+      "api/scripts/_e2e-payout-sol.ts",
+      "api/scripts/_e2e-payout-policies.ts",
+      "api/scripts/_e2e-payout-cancel.mjs",
+    ];
+    const expectedExecutable = [
+      "const RESTING_NOTICE = [",
+      '  "Historical payout harness retired: payouts are resting unconditionally.",',
+      '  "Former implementation remains in Git history.",',
+      '  "Current operations: docs/PAYOUT-BROADCAST-OPS.md",',
+      '  "Historical plan: docs/PAYOUT-BROADCAST-PLAN.md",',
+      '].join("\\n");',
+      "",
+      "console.error(RESTING_NOTICE);",
+      "process.exitCode = 1;",
+    ].join("\n");
+
+    for (const path of harnesses) {
+      const source = read(path);
+      const executable = source.replace(/^\/\*\*[\s\S]*?\*\/\s*/, "").trim();
+
+      expect(source).toContain(
+        "fresh payout admission and\n * every payout worker remain resting unconditionally",
+      );
+      expect(source).toContain(
+        "former credentialed\n * implementation remains available in Git history",
+      );
+      expect(executable).toBe(expectedExecutable);
+    }
+  });
+
   test("fresh-request boundary distinguishes replay reads from economic work", () => {
     const boundarySources = [
       read("packages/sdk-ts/README.md"),

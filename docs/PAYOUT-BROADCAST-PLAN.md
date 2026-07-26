@@ -189,17 +189,21 @@ the conserved-backing redesign and does not imply mainnet readiness.
 
 ## Historical credentialed harnesses — not an enablement path
 
-The retained harnesses describe the former campaign:
+Four former harness entrypoints are now unconditional resting stubs:
 
 ```
-api/scripts/_e2e-payout-evm.ts             — Sepolia outbound
-api/scripts/_e2e-payout-sol.ts             — Solana devnet outbound
-api/scripts/_e2e-payout-loop-closure.ts    — legacy EVM recipient smoke
-api/scripts/_e2e-payout-policies.ts        — database-backed policy smoke
-api/scripts/_e2e-payout-cancel.mjs         — database-backed cancel smoke
+api/scripts/_e2e-payout-evm.ts             — retired Sepolia stub
+api/scripts/_e2e-payout-sol.ts             — retired Solana devnet stub
+api/scripts/_e2e-payout-policies.ts        — retired policy stub
+api/scripts/_e2e-payout-cancel.mjs         — retired cancellation stub
 ```
 
-Their historical sequence was:
+They exit non-zero without loading dependencies or touching credentials,
+databases, RPC, or HTTP. Their former credentialed implementations remain in
+Git history. `api/scripts/_e2e-payout-loop-closure.ts` remains only as a legacy
+credentialed EVM recipient smoke; it is not an admission or activation check.
+
+The former campaign sequence, retained here as history, was:
 
 1. Boot a fresh test project + wallet via `/v1/projects` + `/v1/wallets`.
 2. Fund credits via direct DB insert (no Stripe round-trip; testnet only).
@@ -208,14 +212,13 @@ Their historical sequence was:
 5. Poll `/v1/wallets/:id/payouts` until `status='confirmed'` or 5min timeout.
 6. Inspect the durable payout state and the recipient chain balance.
 
-These scripts are not part of ordinary PR CI. A fresh payout call now returns
-`503 payout_admission_resting`, so they cannot reach their historical broadcast
-targets. Do not run them as an activation check. They require explicit local or
-testnet credentials and can create chain/database side effects; a successful
-historical run is not proof that the current revision or provider configuration
-works.
+The retired stubs are not part of ordinary PR CI and cannot reach their former
+broadcast targets. A fresh payout call returns `503
+payout_admission_resting`. Do not use any historical script as an activation
+check. A successful old run is not proof that the current revision or provider
+configuration works.
 
-The historical harness expected testnet-only credentials:
+The former implementations expected testnet-only credentials:
 
 - Sepolia faucet-funded mnemonic.
 - Solana devnet airdrop-fundable keypair.

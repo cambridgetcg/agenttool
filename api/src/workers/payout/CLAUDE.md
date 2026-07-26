@@ -94,17 +94,19 @@ Focused unit tests:
 - [`api/tests/payout-source-serialization.test.ts`](../../../tests/payout-source-serialization.test.ts) · [`api/tests/solana-payout-identity.test.ts`](../../../tests/solana-payout-identity.test.ts) — source lock ordering, durable EVM nonce evidence, and distinct signed Solana operation bytes.
 - [`api/tests/alchemy-rpc-auth.test.ts`](../../../tests/alchemy-rpc-auth.test.ts) — Alchemy Bearer transport and override isolation.
 
-E2E harnesses live in [`api/scripts/`](../../../scripts/):
-- `_e2e-payout-evm.ts` — Sepolia round-trip.
-- `_e2e-payout-sol.ts` — Solana devnet round-trip.
+Historical E2E entrypoints live in [`api/scripts/`](../../../scripts/):
+- `_e2e-payout-evm.ts` — inert former Sepolia stub.
+- `_e2e-payout-sol.ts` — inert former Solana devnet stub.
 - `_e2e-payout-loop-closure.ts` — legacy credentialed EVM recipient smoke;
   its presence is not current-run evidence and it says nothing about Solana
   credit.
-- `_e2e-payout-policies.ts` — payout policy enforcement.
-- `_e2e-payout-cancel.mjs` — cancel before broadcast.
+- `_e2e-payout-policies.ts` — inert former policy stub.
+- `_e2e-payout-cancel.mjs` — inert former cancellation stub.
 
-These are future credentialed harnesses. Their presence and a passing
-hermetic test do not authorize worker boot or prove current provider evidence.
+The four stubs exit without loading dependencies or touching credentials,
+databases, RPC, or HTTP; their former implementations remain in Git history.
+The legacy loop-closure smoke and passing hermetic tests do not authorize
+worker boot or prove current provider evidence.
 
 ## See also
 
