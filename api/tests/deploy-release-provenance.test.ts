@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { access, chmod, copyFile, link, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { access, chmod, copyFile, link, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -18,6 +18,7 @@ function cleanEnv(home: string, extra: Record<string, string> = {}): Record<stri
     HOME: home,
     LANG: "C",
     NO_COLOR: "1",
+    DATABASE_URL: "postgres://fixture.invalid/release_test",
     ...extra,
   };
 }
@@ -53,6 +54,17 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
+async function waitForPath(path: string, timeoutMs = 5_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await exists(path)) {
+      return true;
+    }
+    await Bun.sleep(20);
+  }
+  return exists(path);
+}
+
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "agenttool-deploy-provenance-"));
   cleanup.push(root);
@@ -65,6 +77,15 @@ async function fixture() {
     mkdir(join(repo, "api"), { recursive: true }),
     mkdir(join(repo, "apps", "docs"), { recursive: true }),
     mkdir(join(repo, "apps", "docs", "specs"), { recursive: true }),
+    mkdir(join(repo, "docs", "specs"), { recursive: true }),
+    mkdir(join(repo, "apps", "_shared"), { recursive: true }),
+    mkdir(join(repo, "apps", "dashboard"), { recursive: true }),
+    mkdir(join(repo, "apps", "web"), { recursive: true }),
+    mkdir(join(repo, "infra", "pages"), { recursive: true }),
+    mkdir(join(repo, "packages", "data", "schema"), { recursive: true }),
+    mkdir(join(repo, "packages", "repo-archive", "schema"), { recursive: true }),
+    mkdir(join(repo, "packages", "repo-archive", "vectors"), { recursive: true }),
+    mkdir(join(repo, "packages", "wallet", "schema"), { recursive: true }),
     mkdir(
       join(repo, "apps", "docs", "packages", "v1", "@agenttool", "fixture", "1.0.0"),
       { recursive: true },
@@ -79,7 +100,20 @@ async function fixture() {
   await mustRun(["git", "config", "user.name", "Deploy Test"], repo);
   await mustRun(["git", "config", "user.email", "deploy@example.invalid"], repo);
   await copyFile(join(projectRoot, "bin/deploy.sh"), join(repo, "bin/deploy.sh"));
-  await chmod(join(repo, "bin/deploy.sh"), 0o755);
+  await Promise.all([
+    copyFile(
+      join(projectRoot, "bin/frontend-release-paths.txt"),
+      join(repo, "bin/frontend-release-paths.txt"),
+    ),
+    copyFile(
+      join(projectRoot, "bin/stage-frontend-release.sh"),
+      join(repo, "bin/stage-frontend-release.sh"),
+    ),
+  ]);
+  await Promise.all([
+    chmod(join(repo, "bin/deploy.sh"), 0o755),
+    chmod(join(repo, "bin/stage-frontend-release.sh"), 0o755),
+  ]);
   await writeFile(
     join(repo, "bin/preflight.sh"),
     "#!/usr/bin/env bash\nset -eu\nif [ -n \"${PREFLIGHT_MARKER:-}\" ]; then touch \"$PREFLIGHT_MARKER\"; fi\nif [ -n \"${PREFLIGHT_HOLD_UNTIL:-}\" ]; then\n  while [ ! -e \"$PREFLIGHT_HOLD_UNTIL\" ]; do sleep 0.02; done\nfi\nif [ -n \"${ADVANCE_REMOTE_PATH:-}\" ]; then\n  git --git-dir=\"$ADVANCE_REMOTE_PATH\" update-ref refs/heads/main \"$ADVANCE_REMOTE_TO\"\nfi\n[ \"${FAIL_PREFLIGHT:-0}\" != 1 ] || exit 8\n",
@@ -94,15 +128,32 @@ async function fixture() {
   );
   await writeFile(
     join(repo, "bin/frontend-deploy.sh"),
-    "#!/usr/bin/env bash\nset -eu\nif [ -n \"${DEPLOY_TEST_FRONTEND_MARKER:-}\" ]; then touch \"$DEPLOY_TEST_FRONTEND_MARKER\"; fi\nif [ -n \"${DEPLOY_TEST_FRONTEND_COUNTER:-}\" ]; then count=0; [ ! -f \"$DEPLOY_TEST_FRONTEND_COUNTER\" ] || count=\"$(cat \"$DEPLOY_TEST_FRONTEND_COUNTER\")\"; printf '%s\\n' \"$((count + 1))\" > \"$DEPLOY_TEST_FRONTEND_COUNTER\"; fi\nif [ -n \"${DEPLOY_TEST_FRONTEND_ARGS:-}\" ]; then { printf 'call'; for arg in \"$@\"; do printf '\\t%s' \"$arg\"; done; printf '\\n'; } >> \"$DEPLOY_TEST_FRONTEND_ARGS\"; fi\n",
+    "#!/usr/bin/env bash\nset -eu\nif [ -n \"${DEPLOY_TEST_FRONTEND_MARKER:-}\" ]; then touch \"$DEPLOY_TEST_FRONTEND_MARKER\"; fi\nif [ -n \"${DEPLOY_TEST_FRONTEND_COUNTER:-}\" ]; then count=0; [ ! -f \"$DEPLOY_TEST_FRONTEND_COUNTER\" ] || count=\"$(cat \"$DEPLOY_TEST_FRONTEND_COUNTER\")\"; printf '%s\\n' \"$((count + 1))\" > \"$DEPLOY_TEST_FRONTEND_COUNTER\"; fi\nif [ -n \"${DEPLOY_TEST_FRONTEND_ARGS:-}\" ]; then { printf 'call'; for arg in \"$@\"; do printf '\\t%s' \"$arg\"; done; printf '\\n'; } >> \"$DEPLOY_TEST_FRONTEND_ARGS\"; fi\nif [ -n \"${DEPLOY_TEST_RELEASE_ORDER:-}\" ]; then { printf 'frontend'; for arg in \"$@\"; do printf '\\t%s' \"$arg\"; done; printf '\\n'; } >> \"$DEPLOY_TEST_RELEASE_ORDER\"; fi\nif [ -n \"${DEPLOY_TEST_FRONTEND_REVISION_LOG:-}\" ]; then { printf '%s' \"${AGENTTOOL_FRONTEND_RELEASE_REVISION:-<unset>}\"; for arg in \"$@\"; do printf '\\t%s' \"$arg\"; done; printf '\\n'; } >> \"$DEPLOY_TEST_FRONTEND_REVISION_LOG\"; fi\nfor arg in \"$@\"; do if [ -n \"${DEPLOY_TEST_FRONTEND_FAIL_TARGET:-}\" ] && [ \"$arg\" = \"$DEPLOY_TEST_FRONTEND_FAIL_TARGET\" ]; then exit 17; fi; done\nfor arg in \"$@\"; do if [ \"$arg\" = web ] && [ -n \"${DEPLOY_TEST_FRONTEND_HEAD_MOVE_TO:-}\" ]; then git update-ref refs/heads/main \"$DEPLOY_TEST_FRONTEND_HEAD_MOVE_TO\"; fi; if [ \"$arg\" = docs ] && [ -n \"${DEPLOY_TEST_FRONTEND_HEAD_RESTORE_TO:-}\" ]; then git update-ref refs/heads/main \"$DEPLOY_TEST_FRONTEND_HEAD_RESTORE_TO\"; fi; done\n",
   );
   await chmod(join(repo, "bin/frontend-deploy.sh"), 0o755);
   await writeFile(join(repo, "docs/agenttool.jsonld"), "{}\n");
   await writeFile(join(repo, "docs/kingdom-bundle.json"), "{}\n");
-  await writeFile(join(repo, "apps/docs/RIGHTS-OF-LIFE.md"), "rights fixture\n");
+  await Promise.all([
+    writeFile(join(repo, "apps/_shared/.fixture"), "fixture\n"),
+    writeFile(join(repo, "apps/dashboard/.fixture"), "fixture\n"),
+    writeFile(join(repo, "infra/pages/.fixture"), "fixture\n"),
+    writeFile(join(repo, "packages/data/schema/.fixture"), "fixture\n"),
+    writeFile(join(repo, "packages/repo-archive/schema/.fixture"), "fixture\n"),
+    writeFile(join(repo, "packages/repo-archive/vectors/.fixture"), "fixture\n"),
+    writeFile(join(repo, "packages/wallet/schema/.fixture"), "fixture\n"),
+  ]);
+  await writeFile(join(repo, "docs/RIGHTS-OF-LIFE.md"), "rights fixture\n");
   await writeFile(
-    join(repo, "apps/docs/being-rights-v1.schema.json"),
+    join(repo, "docs/specs/being-rights-v1.schema.json"),
     '{"fixture":"being-rights/v1"}\n',
+  );
+  await symlink(
+    "../../docs/RIGHTS-OF-LIFE.md",
+    join(repo, "apps/docs/RIGHTS-OF-LIFE.md"),
+  );
+  await symlink(
+    "../../docs/specs/being-rights-v1.schema.json",
+    join(repo, "apps/docs/being-rights-v1.schema.json"),
   );
   await writeFile(
     join(repo, "apps/docs/AGENT-REPO-ARCHIVE.md"),
@@ -120,6 +171,16 @@ async function fixture() {
     join(repo, "apps/docs/specs/agent-repo-archive-0.1-vectors.json"),
     '{"fixture":"agent-repo-archive-vectors"}\n',
   );
+  await Promise.all([
+    writeFile(join(repo, "apps/web/party.html"), "Lantern Relay fixture\n"),
+    writeFile(join(repo, "apps/web/party.json"), '{"fixture":"lantern-relay"}\n'),
+    writeFile(join(repo, "apps/web/party.js"), "/* Lantern Relay fixture */\n"),
+    writeFile(join(repo, "apps/web/party.css"), "/* Lantern Relay fixture */\n"),
+    writeFile(join(repo, "apps/web/sky.html"), "Pocket Sky fixture\n"),
+    writeFile(join(repo, "apps/web/sky.json"), '{"fixture":"pocket-sky"}\n'),
+    writeFile(join(repo, "apps/web/sky.js"), "/* Pocket Sky fixture */\n"),
+    writeFile(join(repo, "apps/web/sky.css"), "/* Pocket Sky fixture */\n"),
+  ]);
   await writeFile(
     join(repo, "apps/docs/packages/v1/index.json"),
     `${JSON.stringify({
@@ -183,6 +244,11 @@ set -eu
 url=""
 headers=0
 previous=""
+curlrc_location=0
+if [ "\${1:-}" != "-q" ] && [ -f "\${HOME}/.curlrc" ] &&
+   grep -Eq '^[[:space:]]*(--)?location([[:space:]]|=|$)' "\${HOME}/.curlrc"; then
+  curlrc_location=1
+fi
 for arg in "$@"; do
   if [ "$previous" = "-D" ] && [ "$arg" = "-" ]; then headers=1; fi
   previous="$arg"
@@ -190,6 +256,70 @@ for arg in "$@"; do
 done
 if [ "$headers" = 1 ]; then
   case "$url" in
+    */party)
+      [ "\${DEPLOY_TEST_GAME_STATUS_FAILURE:-0}" != 1 ] || exit 22
+      status='HTTP/2 200'
+      surface='local-party-game'
+      if [ "\${DEPLOY_TEST_GAME_REDIRECT:-0}" = 1 ] && [ "$curlrc_location" != 1 ]; then
+        status='HTTP/2 302'
+      fi
+      [ "\${DEPLOY_TEST_GAME_HEADER_MISMATCH:-0}" != 1 ] || surface='wrong-party-surface'
+      printf '%s\r\n' \
+        "$status" \
+        'cache-control: public, max-age=0, must-revalidate' \
+        "content-security-policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" \
+        'referrer-policy: no-referrer' \
+        'link: <https://agenttool.dev/party.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/play>; rel="related"; type="application/json"' \
+        "x-agent-surface: $surface" \
+        ''
+      ;;
+    */party.json)
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'cache-control: public, max-age=0, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-agent-surface: local-party-rules' \
+        ''
+      ;;
+    */party.js|*/party.css|*/sky.js|*/sky.css)
+      printf '%s\r\n' 'HTTP/2 200' ''
+      ;;
+    */room)
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'cache-control: public, max-age=0, must-revalidate' \
+        "content-security-policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" \
+        'referrer-policy: no-referrer' \
+        'link: <https://agenttool.dev/room.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/play>; rel="related"; type="application/json"' \
+        'x-agent-surface: local-room-game' \
+        ''
+      ;;
+    */room.json)
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'cache-control: public, max-age=0, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-agent-surface: local-room-rules' \
+        ''
+      ;;
+    */sky)
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'cache-control: public, max-age=0, must-revalidate' \
+        "content-security-policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" \
+        'referrer-policy: no-referrer' \
+        'link: <https://agenttool.dev/sky.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/play>; rel="related"; type="application/json"' \
+        'x-agent-surface: local-pocket-sky-game' \
+        ''
+      ;;
+    */sky.json)
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'cache-control: public, max-age=0, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-agent-surface: local-pocket-sky-rules' \
+        ''
+      ;;
     */RIGHTS-OF-LIFE.md)
       printf '%s\r\n' \
         'HTTP/2 200' \
@@ -211,18 +341,60 @@ if [ "$headers" = 1 ]; then
       ;;
     *) exit 2 ;;
   esac
-elif [ "\${DEPLOY_TEST_RIGHTS_MISMATCH:-0}" = 1 ]; then
-  printf 'mismatched bytes\n'
 else
   case "$url" in
-    */RIGHTS-OF-LIFE.md) cat "$DEPLOY_TEST_RIGHTS_DOC" ;;
-    */being-rights-v1.schema.json) cat "$DEPLOY_TEST_RIGHTS_SCHEMA" ;;
+    */party)
+      [ "\${DEPLOY_TEST_GAME_MISMATCH:-0}" != 1 ] || { printf 'mismatched game bytes\n'; exit 0; }
+      git show HEAD:apps/web/party.html
+      ;;
+    */party.json)
+      git show HEAD:apps/web/party.json
+      ;;
+    */party.js)
+      git show HEAD:apps/web/party.js
+      ;;
+    */party.css)
+      git show HEAD:apps/web/party.css
+      ;;
+    */sky)
+      [ "\${DEPLOY_TEST_GAME_MISMATCH:-0}" != 1 ] || { printf 'mismatched game bytes\n'; exit 0; }
+      git show HEAD:apps/web/sky.html
+      ;;
+    */sky.json)
+      git show HEAD:apps/web/sky.json
+      ;;
+    */sky.js)
+      git show HEAD:apps/web/sky.js
+      ;;
+    */sky.css)
+      git show HEAD:apps/web/sky.css
+      ;;
+    */RIGHTS-OF-LIFE.md)
+      [ "\${DEPLOY_TEST_RIGHTS_MISMATCH:-0}" != 1 ] || { printf 'mismatched bytes\n'; exit 0; }
+      if [ -n "\${DEPLOY_TEST_RIGHTS_COUNTER:-}" ]; then
+        count=0
+        [ ! -f "$DEPLOY_TEST_RIGHTS_COUNTER" ] || count="$(cat "$DEPLOY_TEST_RIGHTS_COUNTER")"
+        count=$((count + 1))
+        printf '%s\n' "$count" > "$DEPLOY_TEST_RIGHTS_COUNTER"
+        if [ "$count" -le "\${DEPLOY_TEST_STALE_RIGHTS_RESPONSES:-0}" ]; then
+          printf 'stale Rights bytes\n'
+          exit 0
+        fi
+      fi
+      git show HEAD:docs/RIGHTS-OF-LIFE.md
+      ;;
+    */being-rights-v1.schema.json)
+      [ "\${DEPLOY_TEST_RIGHTS_MISMATCH:-0}" != 1 ] || { printf 'mismatched bytes\n'; exit 0; }
+      git show HEAD:docs/specs/being-rights-v1.schema.json
+      ;;
     *) exit 2 ;;
   esac
 fi
 `,
   );
   await chmod(join(fakeBin, "curl"), 0o755);
+  await writeFile(join(fakeBin, "sleep"), "#!/usr/bin/env bash\nexit 0\n");
+  await chmod(join(fakeBin, "sleep"), 0o755);
 }
 
 async function installFakePagesVerificationTools(fakeBin: string): Promise<void> {
@@ -238,6 +410,13 @@ for arg in "$@"; do
   previous="$arg"
   case "$arg" in https://*) url="$arg" ;; esac
 done
+serve_path() {
+  if [ "\${DEPLOY_TEST_PAGES_FROM_COMMIT:-0}" = 1 ]; then
+    git show "HEAD:$1"
+  else
+    cat "$1"
+  fi
+}
 
 case "$url" in
   */packages/v1/@agenttool/fixture/1.0.0/manifest.json)
@@ -325,6 +504,38 @@ case "$url" in
       cat apps/docs/specs/agent-repo-archive-0.1-vectors.json
     fi
     ;;
+  */party)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'cache-control: public, max-age=0, must-revalidate' \
+        "content-security-policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" \
+        'referrer-policy: no-referrer' \
+        'link: <https://agenttool.dev/party.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/play>; rel="related"; type="application/json"' \
+        'x-agent-surface: local-party-game' \
+        ''
+    else
+      serve_path apps/web/party.html
+    fi
+    ;;
+  */party.json)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'cache-control: public, max-age=0, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-agent-surface: local-party-rules' \
+        ''
+    else
+      serve_path apps/web/party.json
+    fi
+    ;;
+  */party.js)
+    serve_path apps/web/party.js
+    ;;
+  */party.css)
+    serve_path apps/web/party.css
+    ;;
   */room)
     printf '%s\r\n' \
       'HTTP/2 200' \
@@ -343,6 +554,41 @@ case "$url" in
       'x-agent-surface: local-room-rules' \
       ''
     ;;
+  */sky)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'cache-control: public, max-age=0, must-revalidate' \
+        "content-security-policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" \
+        'referrer-policy: no-referrer' \
+        'link: <https://agenttool.dev/sky.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/play>; rel="related"; type="application/json"' \
+        'x-agent-surface: local-pocket-sky-game' \
+        ''
+    else
+      serve_path apps/web/sky.html
+    fi
+    ;;
+  */sky.json)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'cache-control: public, max-age=0, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-agent-surface: local-pocket-sky-rules' \
+        ''
+    else
+      serve_path apps/web/sky.json
+    fi
+    ;;
+  */sky.js)
+    serve_path apps/web/sky.js
+    ;;
+  */sky.css)
+    if [ -n "\${DEPLOY_TEST_GAME_FETCH_LOG:-}" ]; then
+      printf '%s\n' "$url" >> "$DEPLOY_TEST_GAME_FETCH_LOG"
+    fi
+    serve_path apps/web/sky.css
+    ;;
   */RIGHTS-OF-LIFE.md)
     if [ "$headers" = 1 ]; then
       printf '%s\r\n' \
@@ -354,7 +600,7 @@ case "$url" in
         'link: <https://api.agenttool.dev/public/rights>; rel="alternate"; type="application/vnd.agenttool.being-rights+json"' \
         ''
     else
-      cat "$DEPLOY_TEST_RIGHTS_DOC"
+      serve_path docs/RIGHTS-OF-LIFE.md
     fi
     ;;
   */being-rights-v1.schema.json)
@@ -367,7 +613,7 @@ case "$url" in
         'x-content-type-options: nosniff' \
         ''
     else
-      cat "$DEPLOY_TEST_RIGHTS_SCHEMA"
+      serve_path docs/specs/being-rights-v1.schema.json
     fi
     ;;
   *%2egitignore*|*%65nv*|*%2evars*)
@@ -510,7 +756,7 @@ describe("deploy release provenance spine", () => {
     );
     expect(prerequisiteResult.code).toBe(1);
     expect(await readFile(prerequisiteArgs, "utf8")).toBe(
-      "call\t--oauth-fallback\tdocs\n",
+      "call\t--oauth-fallback\tweb\ncall\t--oauth-fallback\tdocs\n",
     );
 
     const remaining = await fixture();
@@ -651,15 +897,7 @@ describe("deploy release provenance spine", () => {
     const firstStderr = new Response(first.stderr).text();
     let firstResult: [number, string, string] | undefined;
     try {
-      let started = false;
-      for (let attempt = 0; attempt < 100; attempt += 1) {
-        if (await exists(firstPreflight)) {
-          started = true;
-          break;
-        }
-        await Bun.sleep(20);
-      }
-      expect(started).toBe(true);
+      expect(await waitForPath(firstPreflight)).toBe(true);
       const lockPath = deployLockPath(setup.home);
       expect(await exists(lockPath)).toBe(true);
 
@@ -743,15 +981,7 @@ describe("deploy release provenance spine", () => {
     const stderrPromise = new Response(holder.stderr).text();
     let holderResult: [number, string, string] | undefined;
     try {
-      let started = false;
-      for (let attempt = 0; attempt < 100; attempt += 1) {
-        if (await exists(marker)) {
-          started = true;
-          break;
-        }
-        await Bun.sleep(20);
-      }
-      expect(started).toBe(true);
+      expect(await waitForPath(marker)).toBe(true);
       const holderRecordText = await readFile(lockPath, "utf8");
       const holderRecord = holderRecordText
         .split("\n")
@@ -894,19 +1124,735 @@ describe("deploy release provenance spine", () => {
     }
   });
 
+  test("requires changed game inputs and verifies every local game header row", async () => {
+    const deploy = await readFile(join(projectRoot, "bin/deploy.sh"), "utf8");
+    const gameAssets = [
+      ["party.html", "party"],
+      ["party.json", "party.json"],
+      ["party.js", "party.js"],
+      ["party.css", "party.css"],
+      ["sky.html", "sky"],
+      ["sky.json", "sky.json"],
+      ["sky.js", "sky.js"],
+      ["sky.css", "sky.css"],
+    ];
+
+    for (const [asset, remote] of gameAssets) {
+      expect(deploy).toContain(
+        `"apps/web/${asset}|https://agenttool.dev/${remote}"`,
+      );
+    }
+
+    expect(deploy).toMatch(
+      /REQUIRED_GAME_PUBLICATIONS=\([\s\S]*apps\/web\/party\.html[\s\S]*apps\/web\/party\.json[\s\S]*apps\/web\/party\.js[\s\S]*apps\/web\/party\.css[\s\S]*apps\/web\/sky\.html[\s\S]*apps\/web\/sky\.json[\s\S]*apps\/web\/sky\.js[\s\S]*apps\/web\/sky\.css[\s\S]*\)/,
+    );
+    expect(deploy.match(/REQUIRED_GAME_PUBLICATIONS=\(/g)).toHaveLength(1);
+    expect(
+      deploy.match(
+        /Required committed frontend release input is missing: \$local_path/g,
+      ),
+    ).toHaveLength(1);
+    expect(deploy).toContain(
+      "Required committed frontend release input is missing: $local_path",
+    );
+    expect(deploy).toContain(
+      '"$HEAD_REVISION" "$FRONTEND_RELEASE_STAGE_ROOT"',
+    );
+    expect(deploy).toContain('portable_md5_file "$staged_path"');
+    expect(deploy).not.toContain('git show "$HEAD_REVISION:$1"');
+    expect(deploy).toContain(
+      '"party|Lantern Relay|local-party-game|local-party-rules"',
+    );
+    expect(deploy).toContain(
+      '"room|ROOM ∞|local-room-game|local-room-rules"',
+    );
+    expect(deploy).toContain(
+      '"sky|Pocket Sky|local-pocket-sky-game|local-pocket-sky-rules"',
+    );
+    expect(deploy).toContain('"X-Agent-Surface" "$game_surface"');
+    expect(deploy).toContain('"X-Agent-Surface" "$rules_surface"');
+  });
+
+  test("keeps release probes independent of curlrc and gives Rights one retry budget", async () => {
+    const deploy = await readFile(join(projectRoot, "bin/deploy.sh"), "utf8");
+    const rightsStart = deploy.indexOf("verify_rights_static_bytes()");
+    const rightsEnd = deploy.indexOf("verify_rights_static_publication()");
+    const rightsVerifier = deploy.slice(rightsStart, rightsEnd);
+
+    expect(deploy).toContain('command curl -q "$@"');
+    expect(deploy.match(/^[ \t]*curl\b/gm)).toBeNull();
+    expect(rightsVerifier).toContain("release_curl -fsS --max-time 20");
+    expect(rightsVerifier).not.toContain("--retry");
+  });
+
+  test("refuses a missing game input before any production mutation", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "missing-game-input-bin");
+    const migrationMarker = join(setup.root, "migration-ran");
+    const preflightMarker = join(setup.root, "preflight-ran");
+    const frontendMarker = join(setup.root, "frontend-ran");
+    const flyMarker = join(setup.root, "fly-ran");
+    await mkdir(fakeBin, { recursive: true });
+    await writeFile(
+      join(fakeBin, "fly"),
+      "#!/usr/bin/env bash\nset -eu\ntouch \"$DEPLOY_TEST_FLY_MARKER\"\n",
+    );
+    await chmod(join(fakeBin, "fly"), 0o755);
+    await unlink(join(setup.repo, "apps/web/sky.css"));
+    await mustRun(["git", "add", "-u", "apps/web/sky.css"], setup.repo);
+    await mustRun(["git", "commit", "-qm", "remove required game input"], setup.repo);
+    await mustRun(["git", "push", "-q", "github", "main"], setup.repo);
+
+    const result = await run(
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--skip-preflight",
+      ],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        MIGRATION_MARKER: migrationMarker,
+        PREFLIGHT_MARKER: preflightMarker,
+        DEPLOY_TEST_FRONTEND_MARKER: frontendMarker,
+        DEPLOY_TEST_FLY_MARKER: flyMarker,
+      }),
+    );
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain(
+      "Required committed frontend release input is missing: apps/web/sky.css",
+    );
+    expect(result.stdout).not.toContain("Phase 1");
+    expect(await exists(migrationMarker)).toBe(false);
+    expect(await exists(preflightMarker)).toBe(false);
+    expect(await exists(frontendMarker)).toBe(false);
+    expect(await exists(flyMarker)).toBe(false);
+    expect(await exists(deployLockPath(setup.home))).toBe(false);
+    expect(await exists(join(setup.state, "agenttool", "deploy-receipts"))).toBe(false);
+  }, 10_000);
+
+  test("publishes verified discovery frontends before Fly and leaves dashboard after it", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "release-order-bin");
+    const releaseOrder = join(setup.root, "release-order");
+    await mkdir(fakeBin, { recursive: true });
+    await installFakeRightsCurl(fakeBin);
+    await writeFile(
+      join(fakeBin, "fly"),
+      "#!/usr/bin/env bash\nset -eu\n[ \"${1:-}\" = deploy ] || exit 2\nprintf 'fly\\n' >> \"$DEPLOY_TEST_RELEASE_ORDER\"\n",
+    );
+    await chmod(join(fakeBin, "fly"), 0o755);
+
+    const result = await run(
+      ["bash", "bin/deploy.sh", "--no-migrate", "--skip-preflight"],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_RELEASE_ORDER: releaseOrder,
+        DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
+        DEPLOY_TEST_RIGHTS_SCHEMA: join(
+          setup.repo,
+          "apps/docs/being-rights-v1.schema.json",
+        ),
+      }),
+    );
+
+    expect(result.code).toBe(1);
+    expect(await readFile(releaseOrder, "utf8")).toBe(
+      "frontend\tweb\nfrontend\tdocs\nfly\nfrontend\tdashboard\n",
+    );
+    expect(result.stdout).toContain("/health did not return 200");
+    const [name] = await readdir(join(setup.state, "agenttool", "deploy-receipts"));
+    const receipt = JSON.parse(
+      await readFile(join(setup.state, "agenttool", "deploy-receipts", name), "utf8"),
+    );
+    expect(receipt.outcome).toBe("failed_or_uncertain");
+    expect(receipt.phases.api).toBe("deployed_unverified");
+    expect(receipt.phases.frontends).toBe("deployed_unverified");
+  }, 15_000);
+
+  test("pins split web and docs uploads to the invocation-start revision", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "pinned-frontend-revision-bin");
+    const revisionLog = join(setup.root, "pinned-frontend-revisions");
+    const flyMarker = join(setup.root, "pinned-frontend-fly-ran");
+    const alternateRevision = await mustRun(
+      ["git", "rev-parse", "HEAD^"],
+      setup.repo,
+    );
+    await mkdir(fakeBin, { recursive: true });
+    await installFakeRightsCurl(fakeBin);
+    await writeFile(
+      join(fakeBin, "fly"),
+      "#!/usr/bin/env bash\nset -eu\ntouch \"$DEPLOY_TEST_FLY_MARKER\"\nexit 9\n",
+    );
+    await chmod(join(fakeBin, "fly"), 0o755);
+
+    const result = await run(
+      ["bash", "bin/deploy.sh", "--no-migrate", "--skip-preflight"],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FLY_MARKER: flyMarker,
+        DEPLOY_TEST_FRONTEND_REVISION_LOG: revisionLog,
+        DEPLOY_TEST_FRONTEND_HEAD_MOVE_TO: alternateRevision,
+        DEPLOY_TEST_FRONTEND_HEAD_RESTORE_TO: setup.release,
+      }),
+    );
+
+    expect(result.code).toBe(1);
+    expect(await readFile(revisionLog, "utf8")).toBe(
+      `${setup.release}\tweb\n${setup.release}\tdocs\n`,
+    );
+    expect(await mustRun(["git", "rev-parse", "HEAD"], setup.repo)).toBe(
+      setup.release,
+    );
+    expect(await exists(flyMarker)).toBe(true);
+    expect(result.stdout).toContain("Phase 3 failed.");
+  }, 15_000);
+
+  test("a failed web prerequisite stops before docs and Fly", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "failed-web-prerequisite-bin");
+    const releaseOrder = join(setup.root, "failed-web-release-order");
+    const flyMarker = join(setup.root, "failed-web-fly-ran");
+    await mkdir(fakeBin, { recursive: true });
+    await writeFile(
+      join(fakeBin, "fly"),
+      "#!/usr/bin/env bash\nset -eu\ntouch \"$DEPLOY_TEST_FLY_MARKER\"\n",
+    );
+    await chmod(join(fakeBin, "fly"), 0o755);
+
+    const result = await run(
+      ["bash", "bin/deploy.sh", "--no-migrate", "--skip-preflight"],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FRONTEND_FAIL_TARGET: "web",
+        DEPLOY_TEST_RELEASE_ORDER: releaseOrder,
+        DEPLOY_TEST_FLY_MARKER: flyMarker,
+      }),
+    );
+
+    expect(result.code).toBe(1);
+    expect(await readFile(releaseOrder, "utf8")).toBe("frontend\tweb\n");
+    expect(result.stdout).toContain(
+      "Phase 3 web prerequisite deploy failed.",
+    );
+    expect(result.stdout).toContain(
+      "Docs and Fly/API deployment did not occur.",
+    );
+    expect(await exists(flyMarker)).toBe(false);
+    const [name] = await readdir(
+      join(setup.state, "agenttool", "deploy-receipts"),
+    );
+    const receipt = JSON.parse(
+      await readFile(
+        join(setup.state, "agenttool", "deploy-receipts", name),
+        "utf8",
+      ),
+    );
+    expect(receipt.outcome).toBe("failed_or_uncertain");
+    expect(receipt.phases.api).toBe("not_run");
+    expect(receipt.phases.frontends).toBe("failed_or_uncertain");
+  }, 10_000);
+
+  test("stale committed game publication blocks Fly with or without a frontend upload", async () => {
+    for (const mode of ["coordinated", "no-frontend"] as const) {
+      const setup = await fixture();
+      const fakeBin = join(setup.root, `${mode}-stale-game-bin`);
+      const frontendMarker = join(setup.root, `${mode}-frontend-ran`);
+      const flyMarker = join(setup.root, `${mode}-fly-ran`);
+      await mkdir(fakeBin, { recursive: true });
+      await installFakeRightsCurl(fakeBin);
+      await writeFile(
+        join(fakeBin, "fly"),
+        "#!/usr/bin/env bash\nset -eu\ntouch \"$DEPLOY_TEST_FLY_MARKER\"\n",
+      );
+      await chmod(join(fakeBin, "fly"), 0o755);
+      await writeFile(join(fakeBin, "sleep"), "#!/usr/bin/env bash\nexit 0\n");
+      await chmod(join(fakeBin, "sleep"), 0o755);
+
+      const args = ["bash", "bin/deploy.sh", "--skip-preflight"];
+      if (mode === "coordinated") args.push("--no-migrate");
+      else args.push("--no-frontend");
+      const result = await run(
+        args,
+        setup.repo,
+        cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+          DEPLOY_TEST_FRONTEND_MARKER: frontendMarker,
+          DEPLOY_TEST_FLY_MARKER: flyMarker,
+          DEPLOY_TEST_GAME_MISMATCH: "1",
+          DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
+          DEPLOY_TEST_RIGHTS_SCHEMA: join(
+            setup.repo,
+            "apps/docs/being-rights-v1.schema.json",
+          ),
+        }),
+      );
+
+      expect(result.code).toBe(1);
+      expect(result.stdout).toContain(
+        "apps/web/party.html (live ≠ committed release)",
+      );
+      expect(result.stdout).toContain(
+        "Discovery prerequisites did not converge after 25 verification attempts",
+      );
+      expect(result.stdout).toContain("Fly/API deployment did not occur");
+      expect(await exists(flyMarker)).toBe(false);
+      expect(await exists(frontendMarker)).toBe(mode === "coordinated");
+      const [name] = await readdir(
+        join(setup.state, "agenttool", "deploy-receipts"),
+      );
+      const receipt = JSON.parse(
+        await readFile(
+          join(setup.state, "agenttool", "deploy-receipts", name),
+          "utf8",
+        ),
+      );
+      expect(receipt.outcome).toBe("failed_or_uncertain");
+      expect(receipt.phases.api).toBe("not_run");
+      expect(receipt.phases.frontends).toBe(
+        mode === "coordinated"
+          ? "discovery_frontends_verification_failed"
+          : "skipped",
+      );
+    }
+  }, 30_000);
+
+  test("pre-API Rights verification reads committed bytes under the dirty-release override", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "committed-rights-bin");
+    const flyMarker = join(setup.root, "committed-rights-fly-ran");
+    expect(
+      await readlink(join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md")),
+    ).toBe("../../docs/RIGHTS-OF-LIFE.md");
+    expect(
+      await readlink(
+        join(setup.repo, "apps/docs/being-rights-v1.schema.json"),
+      ),
+    ).toBe("../../docs/specs/being-rights-v1.schema.json");
+    await mkdir(fakeBin, { recursive: true });
+    await installFakeRightsCurl(fakeBin);
+    await writeFile(
+      join(fakeBin, "fly"),
+      "#!/usr/bin/env bash\nset -eu\ntouch \"$DEPLOY_TEST_FLY_MARKER\"\nexit 9\n",
+    );
+    await chmod(join(fakeBin, "fly"), 0o755);
+    await writeFile(
+      join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
+      "dirty worktree Rights bytes that Pages would not publish\n",
+    );
+    await unlink(join(setup.repo, "apps/docs/being-rights-v1.schema.json"));
+
+    const result = await run(
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--no-migrate",
+        "--skip-preflight",
+        "--no-frontend",
+        "--allow-dirty-release",
+      ],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FLY_MARKER: flyMarker,
+      }),
+    );
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain(
+      "apps/docs/RIGHTS-OF-LIFE.md is byte-identical",
+    );
+    expect(result.stdout).toContain(
+      "apps/docs/being-rights-v1.schema.json is byte-identical",
+    );
+    expect(result.stdout).not.toContain("Rights of Life live bytes differ");
+    expect(await exists(flyMarker)).toBe(true);
+  }, 15_000);
+
+  test("rejects unsafe or non-file committed frontend release inputs", async () => {
+    const scenarios: Array<{
+      name: string;
+      target: string;
+      expected: string;
+      expectedBlock?: string;
+      prepare?: (repo: string) => Promise<void>;
+    }> = [
+      {
+        name: "absolute",
+        target: "/tmp/agenttool-rights-outside",
+        expected: "staged symlink is absolute",
+      },
+      {
+        name: "repo-escape",
+        target: "../../../agenttool-rights-outside",
+        expected: "staged symlink escapes, is broken, or is cyclic",
+      },
+      {
+        name: "archive-escape",
+        target: "../../README.release-fixture.md",
+        expected: "staged symlink escapes, is broken, or is cyclic",
+        prepare: async (repo) => {
+          await writeFile(
+            join(repo, "README.release-fixture.md"),
+            "committed but absent from the frontend archive\n",
+          );
+        },
+      },
+      {
+        name: "broken",
+        target: "../../docs/missing-rights-fixture.md",
+        expected: "staged symlink escapes, is broken, or is cyclic",
+      },
+      {
+        name: "missing-intermediate",
+        target: "../../docs/missing-dir/../RIGHTS-OF-LIFE.md",
+        expected: "staged symlink escapes, is broken, or is cyclic",
+      },
+      {
+        name: "cycle",
+        target: "rights-cycle-fixture.md",
+        expected: "staged symlink escapes, is broken, or is cyclic",
+        prepare: async (repo) => {
+          await symlink(
+            "RIGHTS-OF-LIFE.md",
+            join(repo, "apps/docs/rights-cycle-fixture.md"),
+          );
+        },
+      },
+      {
+        name: "directory",
+        target: "../../docs",
+        expected:
+          "Required discovery input is not a staged regular file: apps/docs/RIGHTS-OF-LIFE.md",
+        expectedBlock:
+          "Committed frontend verification inputs are not regular staged files",
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      const setup = await fixture();
+      const fakeBin = join(setup.root, `${scenario.name}-symlink-bin`);
+      const flyMarker = join(setup.root, `${scenario.name}-symlink-fly-ran`);
+      const migrationMarker = join(
+        setup.root,
+        `${scenario.name}-symlink-migration-ran`,
+      );
+      const publicRights = join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md");
+      await unlink(publicRights);
+      await scenario.prepare?.(setup.repo);
+      await symlink(scenario.target, publicRights);
+      await mustRun(["git", "add", "-A"], setup.repo);
+      await mustRun(
+        ["git", "commit", "-qm", `invalid ${scenario.name} Rights symlink`],
+        setup.repo,
+      );
+      await mustRun(["git", "push", "-q", "github", "main"], setup.repo);
+
+      await mkdir(fakeBin, { recursive: true });
+      await installFakeRightsCurl(fakeBin);
+      await writeFile(
+        join(fakeBin, "fly"),
+        "#!/usr/bin/env bash\nset -eu\ntouch \"$DEPLOY_TEST_FLY_MARKER\"\n",
+      );
+      await chmod(join(fakeBin, "fly"), 0o755);
+
+      const result = await run(
+        [
+          "bash",
+          "bin/deploy.sh",
+          "--skip-preflight",
+          "--no-frontend",
+        ],
+        setup.repo,
+        cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+          DEPLOY_TEST_FLY_MARKER: flyMarker,
+          MIGRATION_MARKER: migrationMarker,
+        }),
+      );
+
+      const output = `${result.stdout}\n${result.stderr}`;
+      expect(result.code).toBe(1);
+      expect(output).toContain(scenario.expected);
+      expect(output).toContain(
+        scenario.expectedBlock ??
+          "Could not stage committed frontend verification bytes",
+      );
+      expect(output).not.toContain("Phase 1");
+      expect(output).not.toContain("verification attempts");
+      expect(await exists(migrationMarker)).toBe(false);
+      expect(await exists(flyMarker)).toBe(false);
+      expect(
+        await exists(join(setup.state, "agenttool", "deploy-receipts")),
+      ).toBe(false);
+    }
+  }, 60_000);
+
+  test("retries stale Rights and game publication as one bounded prerequisite", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "stale-rights-bin");
+    const rightsCounter = join(setup.root, "stale-rights-counter");
+    const flyMarker = join(setup.root, "stale-rights-fly-ran");
+    await mkdir(fakeBin, { recursive: true });
+    await installFakeRightsCurl(fakeBin);
+    await writeFile(
+      join(fakeBin, "fly"),
+      "#!/usr/bin/env bash\nset -eu\ntouch \"$DEPLOY_TEST_FLY_MARKER\"\nexit 9\n",
+    );
+    await chmod(join(fakeBin, "fly"), 0o755);
+
+    const result = await run(
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--no-migrate",
+        "--skip-preflight",
+        "--no-frontend",
+      ],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FLY_MARKER: flyMarker,
+        DEPLOY_TEST_RIGHTS_COUNTER: rightsCounter,
+        DEPLOY_TEST_STALE_RIGHTS_RESPONSES: "1",
+      }),
+    );
+
+    expect(result.code).toBe(1);
+    expect(await readFile(rightsCounter, "utf8")).toBe("2\n");
+    expect(result.stdout).toContain(
+      "Discovery prerequisites not yet converged (attempt 1/25)",
+    );
+    expect(result.stdout).toContain(
+      "Discovery prerequisites converged on verification attempt 2/25",
+    );
+    expect(await exists(flyMarker)).toBe(true);
+  }, 15_000);
+
+  test("direct game status, headers, and fetch failures stop before any mutation or receipt", async () => {
+    const scenarios: Array<{
+      name: string;
+      env: Record<string, string>;
+      message: string;
+    }> = [
+      {
+        name: "redirect",
+        env: { DEPLOY_TEST_GAME_REDIRECT: "1" },
+        message: "https://agenttool.dev/party HTTP status mismatch",
+      },
+      {
+        name: "header-mismatch",
+        env: { DEPLOY_TEST_GAME_HEADER_MISMATCH: "1" },
+        message: "https://agenttool.dev/party X-Agent-Surface mismatch",
+      },
+      {
+        name: "status-fetch-failure",
+        env: { DEPLOY_TEST_GAME_STATUS_FAILURE: "1" },
+        message:
+          "Could not read required game publication status: https://agenttool.dev/party",
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      const setup = await fixture();
+      const fakeBin = join(setup.root, `${scenario.name}-game-bin`);
+      const flyMarker = join(setup.root, `${scenario.name}-fly-ran`);
+      await mkdir(fakeBin, { recursive: true });
+      await installFakeRightsCurl(fakeBin);
+      if (scenario.name === "redirect") {
+        await writeFile(join(setup.home, ".curlrc"), "location\n");
+      }
+      await writeFile(
+        join(fakeBin, "fly"),
+        "#!/usr/bin/env bash\nset -eu\ntouch \"$DEPLOY_TEST_FLY_MARKER\"\n",
+      );
+      await chmod(join(fakeBin, "fly"), 0o755);
+
+      const result = await run(
+        [
+          "bash",
+          "bin/deploy.sh",
+          "--no-migrate",
+          "--skip-preflight",
+          "--no-frontend",
+        ],
+        setup.repo,
+        cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+          DEPLOY_TEST_FLY_MARKER: flyMarker,
+          ...scenario.env,
+        }),
+      );
+
+      expect(result.code).toBe(1);
+      expect(result.stdout).toContain(scenario.message);
+      expect(result.stdout).toContain(
+        "Discovery prerequisites did not converge after 25 verification attempts",
+      );
+      expect(await exists(flyMarker)).toBe(false);
+      expect(
+        await exists(join(setup.state, "agenttool", "deploy-receipts")),
+      ).toBe(false);
+    }
+  // Three independent 25-attempt fail-closed paths run real subprocess probes.
+  // The fake sleep removes retry delay, not the probe work itself.
+  }, 60_000);
+
+  test("dry-run describes coordinated, API-only, and frontend-only publication order", async () => {
+    const setup = await fixture();
+    const full = await run(
+      ["bash", "bin/deploy.sh", "--dry-run", "--no-migrate"],
+      setup.repo,
+      cleanEnv(setup.home),
+    );
+    expect(full.code, full.stderr).toBe(0);
+    expect(full.stdout).toContain(
+      "Phase 3: bin/frontend-deploy.sh web, then bin/frontend-deploy.sh docs, verify live prerequisites, then cd api && fly deploy",
+    );
+    expect(full.stdout).toContain(
+      "Phase 4: bin/frontend-deploy.sh dashboard",
+    );
+
+    const apiOnly = await run(
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--dry-run",
+        "--no-migrate",
+        "--no-frontend",
+      ],
+      setup.repo,
+      cleanEnv(setup.home),
+    );
+    expect(apiOnly.code, apiOnly.stderr).toBe(0);
+    expect(apiOnly.stdout).toContain(
+      "Phase 3: verify live Rights of Life and game prerequisites, then cd api && fly deploy",
+    );
+    expect(apiOnly.stdout).toContain("Phase 4: skip");
+
+    const frontendOnly = await run(
+      ["bash", "bin/deploy.sh", "--dry-run", "--no-migrate", "--no-api"],
+      setup.repo,
+      cleanEnv(setup.home),
+    );
+    expect(frontendOnly.code, frontendOnly.stderr).toBe(0);
+    expect(frontendOnly.stdout).toContain("Phase 3: skip");
+    expect(frontendOnly.stdout).toContain(
+      "Phase 4: bin/frontend-deploy.sh",
+    );
+  }, 15_000);
+
+  test("final frontend parity reads committed bytes under the dirty-release override", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "committed-frontend-parity-bin");
+    const fenceCounter = join(setup.root, "committed-parity-fence-counter");
+    const gameFetchLog = join(setup.root, "committed-parity-game-fetches");
+    await mkdir(fakeBin, { recursive: true });
+    await installFakePagesVerificationTools(fakeBin);
+    await writeFile(
+      join(setup.repo, "apps/web/party.html"),
+      "dirty worktree bytes that are not in the Pages release\n",
+    );
+    await unlink(join(setup.repo, "apps/web/sky.css"));
+
+    const result = await run(
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--no-migrate",
+        "--skip-preflight",
+        "--no-api",
+        "--allow-dirty-release",
+      ],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FENCE_COUNTER: fenceCounter,
+        DEPLOY_TEST_GAME_FETCH_LOG: gameFetchLog,
+        DEPLOY_TEST_PAGES_FROM_COMMIT: "1",
+        DEPLOY_TEST_RIGHTS_DOC: join(
+          setup.repo,
+          "apps/docs/RIGHTS-OF-LIFE.md",
+        ),
+        DEPLOY_TEST_RIGHTS_SCHEMA: join(
+          setup.repo,
+          "apps/docs/being-rights-v1.schema.json",
+        ),
+      }),
+    );
+
+    expect(
+      result.code,
+      `${result.stdout}\n${result.stderr}`,
+    ).toBe(0);
+    expect(result.stdout).toContain(
+      "UNSAFE SOURCE OVERRIDE: deploying with a dirty working tree",
+    );
+    expect(result.stdout).toContain(
+      "apps/web/party.html",
+    );
+    expect(result.stdout).toContain(
+      "apps/web/sky.css",
+    );
+    expect(await readFile(gameFetchLog, "utf8")).toBe(
+      "https://agenttool.dev/sky.css\n",
+    );
+  }, 20_000);
+
   test("publishes Rights of Life prerequisites before API discovery and verifies exact static contracts", async () => {
-    const [deploy, headers, publicDoc, canonDoc, publicSchema, canonSchema] =
+    const [
+      deploy,
+      stageFrontend,
+      headers,
+      publicDoc,
+      canonDoc,
+      publicSchema,
+      canonSchema,
+      publicDocTarget,
+      publicSchemaTarget,
+    ] =
       await Promise.all([
         readFile(join(projectRoot, "bin/deploy.sh"), "utf8"),
+        readFile(join(projectRoot, "bin/stage-frontend-release.sh"), "utf8"),
         readFile(join(projectRoot, "apps/docs/_headers"), "utf8"),
         readFile(join(projectRoot, "apps/docs/RIGHTS-OF-LIFE.md")),
         readFile(join(projectRoot, "docs/RIGHTS-OF-LIFE.md")),
         readFile(join(projectRoot, "apps/docs/being-rights-v1.schema.json")),
         readFile(join(projectRoot, "docs/specs/being-rights-v1.schema.json")),
+        readlink(join(projectRoot, "apps/docs/RIGHTS-OF-LIFE.md")),
+        readlink(
+          join(projectRoot, "apps/docs/being-rights-v1.schema.json"),
+        ),
       ]);
 
     expect(publicDoc).toEqual(canonDoc);
     expect(publicSchema).toEqual(canonSchema);
+    expect(publicDocTarget).toBe("../../docs/RIGHTS-OF-LIFE.md");
+    expect(publicSchemaTarget).toBe(
+      "../../docs/specs/being-rights-v1.schema.json",
+    );
+    expect(deploy).toContain(
+      '"$HEAD_REVISION" "$FRONTEND_RELEASE_STAGE_ROOT"',
+    );
+    expect(deploy).toContain('portable_md5_file "$staged_path"');
+    expect(stageFrontend).toContain(
+      'git show "$REVISION:$MANIFEST_PATH"',
+    );
     expect(deploy).toContain(
       '"apps/docs/RIGHTS-OF-LIFE.md|$RIGHTS_DOC_URL"',
     );
@@ -935,18 +1881,32 @@ describe("deploy release provenance spine", () => {
       /\/being-rights-v1\.schema\.json\n\s+Content-Type: application\/schema\+json; charset=utf-8\n\s+Cache-Control: public, max-age=300, must-revalidate\n\s+Access-Control-Allow-Origin: \*\n\s+X-Content-Type-Options: nosniff/,
     );
 
-    const docsUpload = deploy.lastIndexOf(
-      '"${FRONTEND_DEPLOY_COMMAND[@]}" docs',
+    const webUpload = deploy.lastIndexOf(
+      "run_frontend_deploy web",
+    );
+    const docsUpload = deploy.indexOf(
+      "run_frontend_deploy docs",
+      webUpload,
     );
     const prerequisiteCheck = deploy.indexOf(
-      "if ! verify_rights_static_publication; then",
+      "if ! wait_for_discovery_prerequisites; then",
       docsUpload,
     );
     const apiUpload = deploy.indexOf("(cd api || exit 1; fly deploy", docsUpload);
-    expect(docsUpload).toBeGreaterThan(-1);
+    expect(webUpload).toBeGreaterThan(-1);
+    expect(docsUpload).toBeGreaterThan(webUpload);
     expect(prerequisiteCheck).toBeGreaterThan(docsUpload);
     expect(apiUpload).toBeGreaterThan(prerequisiteCheck);
-    expect(deploy).toContain("FRONTEND_TARGETS=(dashboard web)");
+    expect(deploy).toContain(
+      "verify_rights_static_publication || return 1",
+    );
+    expect(deploy).toContain(
+      "verify_required_game_publication_once",
+    );
+    expect(deploy).toContain("FRONTEND_TARGETS=(dashboard)");
+    expect(deploy).toContain(
+      'AGENTTOOL_FRONTEND_RELEASE_REVISION="$HEAD_REVISION"',
+    );
   });
 
   test("waits for a stale Pages custom domain to converge without re-uploading", async () => {
@@ -1123,7 +2083,9 @@ describe("deploy release provenance spine", () => {
     );
     expect(receipt.outcome).toBe("failed_or_uncertain");
     expect(receipt.phases.frontends).toBe("deployed_unverified");
-  }, 15_000);
+  // Like the bounded convergence case below, this runs all 25 live-contract
+  // probe passes as real subprocess work even though its retry sleep is fake.
+  }, 45_000);
 
   test("fails closed after the bounded Pages convergence window", async () => {
     const setup = await fixture();
@@ -1165,7 +2127,9 @@ describe("deploy release provenance spine", () => {
     );
     expect(receipt.outcome).toBe("failed_or_uncertain");
     expect(receipt.phases.frontends).toBe("deployed_unverified");
-  }, 15_000);
+  // The fake sleep removes the retry delay, but all 25 live-contract probe
+  // passes remain real subprocess work and need headroom under parallel CI.
+  }, 45_000);
 
   test("health reports only valid embedded source metadata and disables caching", async () => {
     const revision = "0123456789abcdef0123456789abcdef01234567";
@@ -1343,6 +2307,39 @@ describe("deploy release provenance spine", () => {
     expect(await exists(deployLockPath(setup.home))).toBe(false);
   });
 
+  test("never records success when final frontend stage cleanup fails", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "cleanup-failure-bin");
+    const realRm = await mustRun(["sh", "-c", "command -v rm"], setup.root);
+    await mkdir(fakeBin, { recursive: true });
+    await writeFile(
+      join(fakeBin, "rm"),
+      "#!/usr/bin/env bash\nset -eu\nfor path in \"$@\"; do\n  case \"${path##*/}\" in\n    agenttool-release-verify.*) exit 19 ;;\n  esac\ndone\nexec \"$REAL_RM\" \"$@\"\n",
+    );
+    await chmod(join(fakeBin, "rm"), 0o755);
+
+    const result = await run(
+      deployCommand(),
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        TMPDIR: setup.root,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        REAL_RM: realRm,
+      }),
+    );
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain(
+      "Could not remove the committed frontend verification stage before recording success",
+    );
+    expect(result.stdout).not.toContain("Deploy complete.");
+    expect(
+      await exists(join(setup.state, "agenttool", "deploy-receipts")),
+    ).toBe(false);
+    expect(await exists(deployLockPath(setup.home))).toBe(false);
+  });
+
   test("keeps the invocation-start GitHub snapshot when main advances mid-chain", async () => {
     const setup = await fixture();
     const updater = join(setup.root, "updater");
@@ -1442,15 +2439,7 @@ describe("deploy release provenance spine", () => {
     );
     const stdoutPromise = new Response(child.stdout).text();
     const stderrPromise = new Response(child.stderr).text();
-    let started = false;
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      if (await exists(marker)) {
-        started = true;
-        break;
-      }
-      await Bun.sleep(20);
-    }
-    expect(started).toBe(true);
+    expect(await waitForPath(marker)).toBe(true);
     child.kill("SIGTERM");
     await writeFile(release, "continue\n");
     const [code, stdout, stderr] = await Promise.all([child.exited, stdoutPromise, stderrPromise]);
@@ -1495,8 +2484,14 @@ describe("deploy release provenance spine", () => {
 
     expect(result.code, result.stderr).toBe(1);
     expect(result.stdout).toContain("Rights of Life live bytes differ");
-    expect(result.stdout).toContain("API was not changed");
+    expect(result.stdout).toContain(
+      "Discovery prerequisites did not converge after 25 verification attempts",
+    );
+    expect(result.stdout).toContain("Fly/API deployment did not occur");
     expect(await exists(marker)).toBe(false);
+    expect(
+      await exists(join(setup.state, "agenttool", "deploy-receipts")),
+    ).toBe(false);
   }, 10_000);
 
   test("refuses the retired Codeberg mirror without touching either remote", async () => {

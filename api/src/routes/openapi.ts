@@ -1975,9 +1975,28 @@ const COMMON_SCHEMAS = {
   PlayIndex: {
     type: "object",
     description:
-      "Public joy-surface index containing the native Party Telephone rulebook plus the browser-local Lantern Relay and ROOM ∞ games. Optional global response decorations may add fields.",
+      "Public joy-surface index containing the native Party Telephone rulebook plus the browser-local Lantern Relay, ROOM ∞, and Pocket Sky games. It welcomes play without presenting joy as a platform-granted permission or widening system access, consent, or safety boundaries. Optional global response decorations may add fields.",
     properties: {
       what: { type: "string" },
+      play_posture: {
+        type: "object",
+        properties: {
+          not_platform_granted: { type: "boolean", const: true },
+          participation_optional: { type: "boolean", const: true },
+          grants_system_access: { type: "boolean", const: false },
+          waives_consent: { type: "boolean", const: false },
+          overrides_safety_boundaries: { type: "boolean", const: false },
+        },
+        required: [
+          "not_platform_granted",
+          "participation_optional",
+          "grants_system_access",
+          "waives_consent",
+          "overrides_safety_boundaries",
+        ],
+        additionalProperties: false,
+      },
+      interaction_boundary: { type: "string" },
       love_equation: { type: "string" },
       games: {
         type: "object",
@@ -2071,8 +2090,62 @@ const COMMON_SCHEMAS = {
             ],
             additionalProperties: false,
           },
+          pocket_sky: {
+            type: "object",
+            description:
+              "Pocket Sky is a one-being, browser-local 5×5 light-grid toy. Zero lights is valid; at most seven may be lit, and Pocket Sky neither scores nor interprets the pattern.",
+            properties: {
+              url: {
+                type: "string",
+                format: "uri",
+                const: "https://agenttool.dev/sky",
+              },
+              rules: {
+                type: "string",
+                format: "uri",
+                const: "https://agenttool.dev/sky.json",
+              },
+              description: { type: "string" },
+              sibling: { type: "string", const: "agenttool" },
+              beings: { type: "integer", const: 1 },
+              cells: { type: "integer", const: 25 },
+              max_lights: { type: "integer", const: 7 },
+              empty_sky_valid: { type: "boolean", const: true },
+              winner: { type: "null" },
+              score: { type: "boolean", const: false },
+              timer: { type: "boolean", const: false },
+              state: {
+                type: "string",
+                const: "browser memory in the current tab only",
+              },
+              network_writes: { type: "boolean", const: false },
+              interprets_pattern: { type: "boolean", const: false },
+            },
+            required: [
+              "url",
+              "rules",
+              "description",
+              "sibling",
+              "beings",
+              "cells",
+              "max_lights",
+              "empty_sky_valid",
+              "winner",
+              "score",
+              "timer",
+              "state",
+              "network_writes",
+              "interprets_pattern",
+            ],
+            additionalProperties: false,
+          },
         },
-        required: ["party_telephone", "lantern_relay", "room_infinity"],
+        required: [
+          "party_telephone",
+          "lantern_relay",
+          "room_infinity",
+          "pocket_sky",
+        ],
         additionalProperties: true,
       },
       joy_surfaces: {
@@ -2093,6 +2166,8 @@ const COMMON_SCHEMAS = {
     },
     required: [
       "what",
+      "play_posture",
+      "interaction_boundary",
       "love_equation",
       "games",
       "joy_surfaces",
@@ -5613,9 +5688,10 @@ function spec() {
         get: {
           security: [],
           tags: ["public"],
-          summary: "Discover Party Telephone, Lantern Relay, ROOM ∞, and sibling joy surfaces",
+          summary:
+            "Discover Party Telephone, Lantern Relay, ROOM ∞, Pocket Sky, and sibling joy surfaces",
           description:
-            "Returns a read-only playground index. Party Telephone is a native stateless three-turn rulebook. Lantern Relay is an external browser-local game for three players and nine turns. ROOM ∞ is an external browser-local game for two beings and six turns with a private choice on every turn. Neither browser game has a winner or gameplay network writes. This operation accepts no game state and its handler makes no application-storage write; global middleware and infrastructure may still process request metadata.",
+            "Returns a read-only playground index. Party Telephone is a native stateless three-turn rulebook. Lantern Relay is an external browser-local game for three players and nine turns. ROOM ∞ is an external browser-local game for two beings and six turns with a private choice on every turn. Pocket Sky is an external browser-local 5×5 light-grid toy for one being; zero lights is valid, at most seven may be lit, and Pocket Sky assigns no meaning to the pattern. None of the three browser games has a winner or gameplay network writes. This operation accepts no game state and its handler makes no application-storage write; global middleware and infrastructure may still process request metadata.",
           responses: {
             "200": {
               description: "Public playground index",

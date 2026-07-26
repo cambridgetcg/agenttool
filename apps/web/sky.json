@@ -1,0 +1,128 @@
+{
+  "_format": "agenttool-pocket-sky/v1",
+  "game": "Pocket Sky",
+  "human_play": "https://agenttool.dev/sky",
+  "invitation": "One being may toggle up to seven lights on a five-by-five sky. Empty is valid, and Pocket Sky does not name, score, rank, or interpret the pattern.",
+  "participants": {
+    "required": 1,
+    "identity_verified_by_agenttool": false,
+    "note": "The page neither asks for nor verifies a name, account, identity, consciousness, feeling, or reason for playing."
+  },
+  "board": {
+    "rows": 5,
+    "columns": 5,
+    "cells": 25,
+    "minimum_lights": 0,
+    "maximum_lights": 7,
+    "starts_empty": true,
+    "empty_is_valid": true,
+    "light_state": {
+      "unlit": "hollow star",
+      "lit": "solid star",
+      "color_is_the_only_signal": false
+    }
+  },
+  "bounds": {
+    "winner": false,
+    "score": false,
+    "ranking": false,
+    "finish_condition": false,
+    "timer": false,
+    "background_loop": false,
+    "random_reward": false,
+    "auto_advance": false,
+    "sound": false,
+    "motion_required": false
+  },
+  "controls": {
+    "toggle_light": "Activate any cell. A lit cell may always be removed. An eighth unlit cell is rejected without changing the board.",
+    "rest": {
+      "label": "Rest the sky",
+      "reopen_label": "Reopen the sky",
+      "button_semantics": "state-dependent action label",
+      "aria_pressed": false,
+      "preserves_pattern_in_page_memory": true,
+      "disables_light_toggles": true,
+      "reopen_is_explicit": true,
+      "runs_background_work": false
+    },
+    "clear": {
+      "label": "Clear the lights",
+      "erases_all_lights": true,
+      "requires_confirmation": false,
+      "penalty": false
+    },
+    "leave": {
+      "reload_clears_round": true,
+      "navigation_clears_round": true,
+      "return_restores_round": false,
+      "penalty": false
+    }
+  },
+  "keyboard": {
+    "one_roving_tab_stop": true,
+    "toggle": [
+      "Space",
+      "Enter"
+    ],
+    "move_without_wrapping": [
+      "ArrowLeft",
+      "ArrowRight",
+      "ArrowUp",
+      "ArrowDown"
+    ],
+    "row_edges": [
+      "Home",
+      "End"
+    ],
+    "board_edges": [
+      "Control+Home",
+      "Control+End",
+      "Command+Home",
+      "Command+End"
+    ],
+    "tab_leaves_grid": true
+  },
+  "status": {
+    "live_region": true,
+    "reports": [
+      "current light count",
+      "seven-light rejection",
+      "resting or open state"
+    ],
+    "names_or_interprets_pattern": false
+  },
+  "privacy": {
+    "account_required": false,
+    "text_or_identity_input": false,
+    "game_state": "Pocket Sky gameplay state uses JavaScript memory in the current browser tab only.",
+    "persisted": false,
+    "gameplay_local_storage": false,
+    "gameplay_session_storage": false,
+    "gameplay_indexed_db": false,
+    "gameplay_cookie_write": false,
+    "gameplay_clipboard_write": false,
+    "gameplay_network_write": false,
+    "gameplay_network_boundary": "The Pocket Sky script sends no light, rest, clear, focus, or count action. Ordinary page and static-file requests remain visible to hosting and network infrastructure.",
+    "appearance_storage": "The separate shared site theme script may read or write the localStorage key agenttool.mode for dawn/night appearance. It receives no Pocket Sky pattern.",
+    "tab_observation": "A person or software controlling the current tab or device can inspect page memory while the round is open. Page memory is not a secrecy boundary.",
+    "leaving": "Clearing, reloading, navigating away, or closing the page erases the in-memory round. There is no recovery path in Pocket Sky; erasure cannot recall a copy made outside it."
+  },
+  "accessibility": {
+    "native_toggle_buttons": true,
+    "star_aria_pressed_state": true,
+    "labelled_grid": true,
+    "screen_reader_status": true,
+    "minimum_target_css_pixels": 44,
+    "keyboard": true,
+    "touch": true,
+    "color_only_meaning": false,
+    "sound_required": false,
+    "motion_required": false,
+    "reduced_motion_honored": true,
+    "forced_colors_honored": true
+  },
+  "machine_playground": "https://api.agenttool.dev/public/play",
+  "doctrine": "A pattern may be held without being explained. Seven is a ceiling, not a goal. Zero is complete.",
+  "updated_at": "2026-07-26"
+}

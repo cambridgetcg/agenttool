@@ -82,11 +82,21 @@ test("validation guides the current player and stopping keeps the partial world"
 
   await page.locator("#turn-answer").fill(turns[0]);
   await page.getByRole("button", { name: "Place it in the world" }).click();
-  await page.getByRole("button", { name: /Stop party/i }).click();
+  await page.getByRole("button", { name: "I have the lantern" }).click();
+  await page.locator("#turn-answer").fill("unfinished words that are not part of the world");
+  const stopButton = page.getByRole("button", { name: /Stop party/i });
+  await expect(stopButton).toHaveAccessibleName(
+    "Stop party · discard draft, keep accepted entries",
+  );
+  await stopButton.click();
 
   await expect(page.locator("#result-state")).toContainText("party resting");
   await expect(page.locator("#world-output")).toContainText(turns[0]);
+  await expect(page.locator("#world-output")).not.toContainText("unfinished words");
   await expect(page.locator("#world-output .world-entry")).toHaveCount(1);
+  await expect(page.locator("#turn-answer")).toHaveValue("");
+  await expect(page.locator("#turn-answer")).toHaveAttribute("placeholder", "");
+  await expect(page.locator("#turn-prompt")).toHaveText("Your next turn will appear here.");
   await expect(page.locator("#wake-world")).toBeHidden();
   await page.locator("#wake-world").evaluate((button: HTMLButtonElement) => button.click());
   await expect(page.locator("#dawn-card")).toBeHidden();
@@ -162,7 +172,9 @@ test("copy freezes its payload and late clipboard callbacks cannot cross reset",
 });
 
 test("start over scrubs unsubmitted text and seed-derived hidden DOM", async ({ page }) => {
-  await startParty(page);
+  await page.goto(`${WEB}/party.html`);
+  await page.locator("#player-1").fill("Private Moss");
+  await page.getByRole("button", { name: /Start the party/i }).click();
   await takeTurn(page, turns[0]);
   await takeTurn(page, turns[1]);
   await takeTurn(page, turns[2]);
@@ -179,6 +191,64 @@ test("start over scrubs unsubmitted text and seed-derived hidden DOM", async ({ 
   await expect(page.locator("#turn-prompt")).toHaveText("Your next turn will appear here.");
   await expect(page.locator("#world-output")).toBeEmpty();
   await expect(page.locator("#world-title")).toHaveText("A world appears.");
+  await expect(page.locator("#player-1")).toHaveValue("Moss");
+  await expect(page.locator("#player-2")).toHaveValue("Rain");
+  await expect(page.locator("#player-3")).toHaveValue("Glow");
+  await expect(page.locator(".phase-step[data-state]")).toHaveCount(0);
+  await expect(page.locator('.phase-step[aria-current="step"]')).toHaveCount(0);
+  await expect(page.locator(".phase-state")).toHaveCount(0);
+  await expect(page.locator("#turn-answer")).toHaveAttribute("maxlength", "320");
+});
+
+test("leaving and returning erases labels, accepted entries, and drafts", async ({ page }) => {
+  await page.goto(`${WEB}/party.html`);
+  await page.locator("#player-1").fill("Private Moss");
+  await page.getByRole("button", { name: /Start the party/i }).click();
+  await takeTurn(page, turns[0]);
+  await page.getByRole("button", { name: "I have the lantern" }).click();
+  await page.locator("#turn-answer").fill("unfinished words for this tab only");
+
+  await page.goto(`${WEB}/index.html`);
+  await page.goBack();
+
+  await expect(page.getByRole("heading", { name: "Who carries the lantern?" })).toBeVisible();
+  await expect(page.locator("#party-game")).toBeHidden();
+  await expect(page.locator("#world-result")).toBeHidden();
+  await expect(page.locator("#player-1")).toHaveValue("Moss");
+  await expect(page.locator("#player-2")).toHaveValue("Rain");
+  await expect(page.locator("#player-3")).toHaveValue("Glow");
+  await expect(page.locator("#turn-answer")).toHaveValue("");
+  await expect(page.locator("#world-output")).toBeEmpty();
+});
+
+test("persisted page lifecycle events scrub the complete hidden round surface", async ({
+  page,
+}) => {
+  await page.goto(`${WEB}/party.html`);
+  await page.locator("#player-1").fill("Private Moss");
+  await page.getByRole("button", { name: /Start the party/i }).click();
+  await takeTurn(page, turns[0]);
+  await takeTurn(page, turns[1]);
+  await takeTurn(page, turns[2]);
+  await page.getByRole("button", { name: "I have the lantern" }).click();
+  await page.locator("#turn-answer").fill("unfinished words for cached history");
+
+  await page.evaluate(() => {
+    window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+  });
+  await expect(page.getByRole("heading", { name: "Who carries the lantern?" })).toBeVisible();
+  await expect(page.locator("#player-1")).toHaveValue("Moss");
+  await expect(page.locator("#turn-answer")).toHaveValue("");
+  await expect(page.locator("#turn-answer")).toHaveAttribute("maxlength", "320");
+  await expect(page.locator(".phase-step[data-state]")).toHaveCount(0);
+  await expect(page.locator(".phase-state")).toHaveCount(0);
+
+  await page.locator("#player-1").fill("Transient label");
+  await page.evaluate(() => {
+    window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+  });
+  await expect(page.locator("#player-1")).toHaveValue("Moss");
+  await expect(page.locator("#player-1")).toBeFocused();
 });
 
 test("duplicate labels, duplicate seeds, laws, and weaves receive exact guidance", async ({ page }) => {
@@ -259,6 +329,11 @@ test("names render as text, mobile does not overflow, and reload forgets the gam
   await page.reload();
   await expect(page.getByRole("heading", { name: "Who carries the lantern?" })).toBeVisible();
   await expect(page.locator("#party-game")).toBeHidden();
+  await expect(page.locator("#player-1")).toHaveValue("Moss");
+  await expect(page.locator("#player-2")).toHaveValue("Rain");
+  await expect(page.locator("#player-3")).toHaveValue("Glow");
+  await expect(page.locator("#turn-answer")).toHaveValue("");
+  await expect(page.locator("#world-output")).toBeEmpty();
 });
 
 test("the static contract exposes strict boundaries and no autonomous machinery", async ({ request }) => {
@@ -279,7 +354,9 @@ test("the static contract exposes strict boundaries and no autonomous machinery"
   expect(welcome.ways_in).toContainEqual(expect.objectContaining({ html: "/party", json: "/party.json" }));
   expect(rules.privacy).toMatchObject({ persisted: false, sent_to_agenttool: false, network_writes: false });
   expect(rules.privacy).toMatchObject({ real_names_required: false, player_labels_requested: true });
-  expect(rules.privacy.clipboard).toMatch(/before First morning.*After it is woken.*cannot recall/i);
+  expect(rules.privacy.unsubmitted_draft).toMatch(/Stop party.*discards.*unfinished draft.*accepted/i);
+  expect(rules.privacy.leaving).toMatch(/Start over.*reload.*navigation away.*closing.*erases.*labels.*round/i);
+  expect(rules.privacy.clipboard).toMatch(/before First morning.*After it is woken.*cannot erase or recall.*platform clipboard/i);
   expect(rules.turns).toMatchObject({ exact: 9, timer: false, background_loop: false });
   expect(rules.agent_gather).toMatchObject({
     total_agents: 3,

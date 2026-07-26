@@ -27,6 +27,8 @@ const REQUIRED_KEYS = [
   "Self",
   "Play",
   "Party-Telephone",
+  "Pocket-Sky",
+  "Pocket-Sky-Rules",
   "Safety",
   "Wellness",
   "Wellness-Schema",
@@ -175,6 +177,10 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
     expect(kv.get("Room-Infinity-Rules")).toBe(
       "https://agenttool.dev/room.json",
     );
+    expect(kv.get("Pocket-Sky")).toBe("https://agenttool.dev/sky");
+    expect(kv.get("Pocket-Sky-Rules")).toBe(
+      "https://agenttool.dev/sky.json",
+    );
     expect(kv.get("Wellness")).toContain("/public/wellness");
     expect(kv.get("Wellness-Schema")).toBe(
       "https://docs.agenttool.dev/agent-wellness-0.1.schema.json",
@@ -298,7 +304,7 @@ describe("/.well-known/agent.txt — convention provenance", () => {
   test("Last-Modified exactly names the current manifest revision date", async () => {
     const { body } = await fetchAgentTxt();
     const kv = parseKv(body);
-    expect(kv.get("Last-Modified")).toBe("2026-07-24");
+    expect(kv.get("Last-Modified")).toBe("2026-07-26");
   });
 });
 

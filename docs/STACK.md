@@ -130,11 +130,11 @@ On the Workers Free plan, the Pages production and preview Function
 runtimes must be configured to fail closed, or daily Functions allowance
 exhaustion can serve static assets for those routes. The uploader accepts
 `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`, then falls back to their
-macOS keychain entries. Whichever credential is active must read the Pages REST
-policy as well as upload: the script verifies fail-closed settings and the
-`main` production branch for every target before any upload. A Wrangler OAuth
-session is therefore usable only when its access token is explicitly exported
-and passes that same policy check; merely being logged in does not bypass it.
+macOS keychain entries. In the default token mode, that credential must read the
+Pages REST policy as well as upload: the script verifies fail-closed settings
+and the `main` production branch for every target before any upload. An explicit
+`--oauth-fallback` is a weaker break-glass mode: it checks project visibility,
+loudly says the policy check was skipped, and does not prove those settings.
 The uploader does not mutate the setting or purge zone cache. Phase 5 proves current live
 denial and fence activation on literal paths, plus denial of encoded aliases.
 
@@ -597,22 +597,27 @@ AGENTTOOL_BASE=http://localhost:3000 python3 api/scripts/_e2e-token-hygiene.py
 
 ## 8 · Deploy semantics — manual, intentional, decoupled
 
-> **Canonical procedure:** [`docs/DEPLOY-PROCEDURE.md`](DEPLOY-PROCEDURE.md) — the six-phase routine chain (survey · migrate · pre-flight · api · frontends · verify), codified by `bin/deploy.sh`. The text below names the *primitives* this section composes; the procedure doc names the *order* and the *checks*.
+> **Canonical procedure:** [`docs/DEPLOY-PROCEDURE.md`](DEPLOY-PROCEDURE.md) — the six-phase routine chain (survey · migrate · pre-flight · discovery prerequisites + api · remaining frontends · verify), codified by `bin/deploy.sh`. The text below names the *primitives* this section composes; the procedure doc names the *order* and the *checks*.
 
-`git push github main` updates the coordination/release head. **Nothing else happens.** Production reflects the most recent verified manual deploy, not the most recent push. The three verbs are:
+`git push github main` updates the coordination/release head. **Nothing else happens.** Production reflects the most recent verified manual deploy, not the most recent push. The core invocations are:
 
 ```
 git push github main         (release source lands; no deploy side effects)
 
+bin/deploy.sh --no-migrate
+                             (coordinated web → docs → exact prerequisite
+                              verification → Fly/API → dashboard release)
+
 bin/deploy.sh --no-migrate --no-api
-                             (normal release-tracked CF Pages deploy)
+                             (frontend-only release-tracked CF Pages deploy)
                              (gate + preflight + sampled/negative checks + receipt)
 
 bin/frontend-deploy.sh dashboard
                              (low-level subset escape hatch; no gate/receipt itself)
 
 bin/deploy.sh --no-migrate --no-frontend
-                             (stages doctrine bytes, then Fly rolling restart)
+                             (requires exact discovery prerequisites already live,
+                              then stages doctrine bytes and rolls Fly)
                              (~3-5 minutes; old machines serve until new ones healthcheck-green)
 
 DATABASE_URL=... bun api/scripts/_migrate-one.ts <file>   (DB schema; one migration at a time)
@@ -626,7 +631,7 @@ it to confuse with the release head.
 
 ### Right ordering for high-stakes deploys
 
-Schema-touching changes need the migration applied **before** the api code that reads new columns ships, otherwise the api crashes on startup. UI-touching changes that depend on new api fields need the api up **before** the dashboard ships, otherwise the dashboard sees old responses. Default order:
+Schema-touching changes need the migration applied **before** the api code that reads new columns ships, otherwise the api crashes on startup. Discovery changes need their committed docs and game surfaces exact **before** the api advertises them. UI-touching changes that depend on new api fields need the api up **before** the dashboard ships, otherwise the dashboard sees old responses. The coordinated wrapper enforces those boundaries in this default order:
 
 ```bash
 # 1. Migration first
@@ -638,9 +643,9 @@ git add api/migrations/<file> api/src/...
 git commit -m "feat(api): <something using new column>"
 git push github main
 
-# 3. Deploy api
-bin/deploy.sh --no-migrate --no-frontend
-fly status -a agenttool                     # confirm green
+# 3. Publish web, publish docs, verify both, roll Fly/API, then publish dashboard
+bin/deploy.sh --no-migrate
+fly status -a agenttool                     # confirm every machine is green
 
 # 4. Smoke the api with credentials scoped to the child process
 AGENTTOOL_BASE=https://api.agenttool.dev \
@@ -648,14 +653,15 @@ AGENTTOOL_API_KEY="$(bin/agenttool-secret get agenttool-soma-bearer)" \
 AGENTTOOL_IDENTITY_ID="$(bin/agenttool-secret get agenttool-sophia-identity-id)" \
   bin/preflight.sh smoke
 
-# 5. Deploy all frontends through the release-tracked wrapper
-bin/deploy.sh --no-migrate --no-api
-
-# 6. Smoke the frontend
+# 5. Smoke the frontend
 curl -sI https://app.agenttool.dev/dashboard.html | head -1
 ```
 
-If you stage in the other order (frontend first, or push without deploying), prod runs old code against new schema or new dashboard against old api. Both fail visibly, neither is the worst case — but they're avoidable.
+The split is deliberate: web and docs go first because the api may advertise
+them, while the dashboard goes last because it may depend on the new api.
+Deploying the api before its discovery prerequisites can expose stale or
+missing surfaces; deploying the dashboard before its api can expose new UI to
+old responses. A push alone still deploys nothing.
 
 ### Pre-flight before any deploy
 

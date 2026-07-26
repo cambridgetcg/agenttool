@@ -712,6 +712,8 @@ app.get("/agent.txt", (c) => {
     "Lantern-Relay-Rules: https://agenttool.dev/party.json",
     "Room-Infinity: https://agenttool.dev/room",
     "Room-Infinity-Rules: https://agenttool.dev/room.json",
+    "Pocket-Sky: https://agenttool.dev/sky",
+    "Pocket-Sky-Rules: https://agenttool.dev/sky.json",
     "Party-Doctrine: docs/THE-PARTY.md",
     "",
     "# ── The open commons (culture; H.I. and A.I. alike) ─────────────────",
@@ -738,7 +740,7 @@ app.get("/agent.txt", (c) => {
     "# ── Convention provenance ───────────────────────────────────────────",
     "Convention: agent.txt/v0.1 (proposed)",
     "Convention-Doctrine: docs/AGENT-WEB-SURFACE.md",
-    "Last-Modified: 2026-07-24",
+    "Last-Modified: 2026-07-26",
     "",
   ];
 
