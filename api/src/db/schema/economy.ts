@@ -8,6 +8,8 @@ import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
+  check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -238,7 +240,247 @@ export const depositAddresses = economySchema.table(
       .where(
         sql`${t.chain} IN ('ethereum', 'base', 'polygon', 'arbitrum', 'optimism')`,
       ),
+    uniqueIndex("uq_deposit_address_id_chain").on(t.id, t.chain),
     index("idx_deposit_wallet").on(t.walletId),
+  ],
+);
+
+export const DEPOSIT_WATCH_DESIRED_STATES = [
+  "watching",
+  "not_watching",
+] as const;
+export type DepositWatchDesiredState =
+  (typeof DEPOSIT_WATCH_DESIRED_STATES)[number];
+
+export const DEPOSIT_WATCH_OBSERVED_STATES = [
+  "unknown",
+  "watching",
+  "not_watching",
+] as const;
+export type DepositWatchObservedState =
+  (typeof DEPOSIT_WATCH_OBSERVED_STATES)[number];
+
+export const DEPOSIT_WATCH_STATUSES = [
+  "pending",
+  "leased",
+  "retry_wait",
+  "accepted_unverified",
+  "converged",
+  "blocked",
+] as const;
+export type DepositWatchStatus = (typeof DEPOSIT_WATCH_STATUSES)[number];
+
+/** Closed, provider-neutral outcomes. No provider response body, exception
+ * message, credential, or arbitrary diagnostic belongs in this column. */
+export const DEPOSIT_WATCH_OUTCOME_CODES = [
+  "provider_mutation_accepted",
+  "desired_state_verified",
+  "opposite_state_verified",
+  "provider_unavailable",
+  "provider_rate_limited",
+  "provider_timeout",
+  "provider_configuration_missing",
+  "provider_rejected",
+  "provider_unsupported",
+  "reconciler_failed",
+  "lease_expired",
+] as const;
+export type DepositWatchOutcomeCode =
+  (typeof DEPOSIT_WATCH_OUTCOME_CODES)[number];
+
+/** Durable desired/observed provider-watch control state.
+ *
+ * `accepted_unverified` means only that a provider mutation endpoint accepted
+ * a request. `converged` is stronger: an injected adapter independently
+ * observed the desired membership on the intended active/type/destination
+ * subscription for the current generation. Neither state proves future
+ * delivery, chain finality, or callback processing. */
+export const depositAddressWatches = economySchema.table(
+  "deposit_address_watches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    depositAddressId: uuid("deposit_address_id").notNull(),
+    provider: text("provider").notNull(),
+    chain: text("chain").notNull(),
+    network: text("network").notNull(),
+    desiredState: text("desired_state")
+      .$type<DepositWatchDesiredState>()
+      .notNull()
+      .default("watching"),
+    observedState: text("observed_state")
+      .$type<DepositWatchObservedState>()
+      .notNull()
+      .default("unknown"),
+    status: text("status")
+      .$type<DepositWatchStatus>()
+      .notNull()
+      .default("pending"),
+    generation: integer("generation").notNull().default(1),
+    observedGeneration: integer("observed_generation"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
+      .defaultNow(),
+    leaseId: uuid("lease_id"),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    lastOutcomeCode: text("last_outcome_code").$type<DepositWatchOutcomeCode>(),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    observedAt: timestamp("observed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      name: "fk_deposit_watch_address_chain",
+      columns: [t.depositAddressId, t.chain],
+      foreignColumns: [depositAddresses.id, depositAddresses.chain],
+    }).onDelete("cascade"),
+    uniqueIndex("uq_deposit_watch_target").on(
+      t.depositAddressId,
+      t.provider,
+      t.chain,
+      t.network,
+    ),
+    index("idx_deposit_watch_due")
+      .on(t.nextAttemptAt, t.createdAt)
+      .where(
+        sql`${t.status} IN ('pending', 'retry_wait', 'accepted_unverified')`,
+      ),
+    index("idx_deposit_watch_expired_lease")
+      .on(t.leaseExpiresAt)
+      .where(sql`${t.status} = 'leased'`),
+    check(
+      "deposit_watch_provider_shape",
+      sql`${t.provider} ~ '^[a-z][a-z0-9_-]{0,31}$'`,
+    ),
+    check(
+      "deposit_watch_chain",
+      sql`${t.chain} IN ('ethereum', 'base', 'polygon', 'arbitrum', 'optimism', 'solana')`,
+    ),
+    check(
+      "deposit_watch_network",
+      sql`${t.network} IN ('mainnet', 'testnet')`,
+    ),
+    check(
+      "deposit_watch_desired_state",
+      sql`${t.desiredState} IN ('watching', 'not_watching')`,
+    ),
+    check(
+      "deposit_watch_observed_state",
+      sql`${t.observedState} IN ('unknown', 'watching', 'not_watching')`,
+    ),
+    check(
+      "deposit_watch_status",
+      sql`${t.status} IN ('pending', 'leased', 'retry_wait', 'accepted_unverified', 'converged', 'blocked')`,
+    ),
+    check(
+      "deposit_watch_generation",
+      sql`${t.generation} >= 1 AND (${t.observedGeneration} IS NULL OR ${t.observedGeneration} >= 1)`,
+    ),
+    check(
+      "deposit_watch_attempt_bound",
+      sql`${t.attemptCount} BETWEEN 0 AND 8`,
+    ),
+    check(
+      "deposit_watch_attempt_shape",
+      sql`(
+        (${t.attemptCount} = 0 AND ${t.lastAttemptAt} IS NULL)
+        OR
+        (${t.attemptCount} > 0 AND ${t.lastAttemptAt} IS NOT NULL)
+      )`,
+    ),
+    check(
+      "deposit_watch_observation_shape",
+      sql`(
+        (
+          ${t.observedState} = 'unknown'
+          AND ${t.observedGeneration} IS NULL
+          AND ${t.observedAt} IS NULL
+        )
+        OR
+        (
+          ${t.observedState} <> 'unknown'
+          AND ${t.observedGeneration} IS NOT NULL
+          AND ${t.observedAt} IS NOT NULL
+        )
+      )`,
+    ),
+    check(
+      "deposit_watch_lease_shape",
+      sql`(
+        (
+          ${t.status} = 'leased'
+          AND ${t.leaseId} IS NOT NULL
+          AND ${t.leaseOwner} IS NOT NULL
+          AND char_length(${t.leaseOwner}) BETWEEN 1 AND 128
+          AND ${t.leaseExpiresAt} IS NOT NULL
+          AND ${t.lastAttemptAt} IS NOT NULL
+          AND ${t.leaseExpiresAt} > ${t.lastAttemptAt}
+          AND ${t.leaseExpiresAt} <= ${t.lastAttemptAt} + interval '5 minutes'
+        )
+        OR
+        (
+          ${t.status} <> 'leased'
+          AND ${t.leaseId} IS NULL
+          AND ${t.leaseOwner} IS NULL
+          AND ${t.leaseExpiresAt} IS NULL
+        )
+      )`,
+    ),
+    check(
+      "deposit_watch_schedule_shape",
+      sql`(
+        (
+          ${t.status} IN ('pending', 'retry_wait', 'accepted_unverified')
+          AND ${t.nextAttemptAt} IS NOT NULL
+        )
+        OR
+        (
+          ${t.status} NOT IN ('pending', 'retry_wait', 'accepted_unverified')
+          AND ${t.nextAttemptAt} IS NULL
+        )
+      )`,
+    ),
+    check(
+      "deposit_watch_converged_shape",
+      sql`(
+        ${t.status} <> 'converged'
+        OR (
+          ${t.observedState} = ${t.desiredState}
+          AND ${t.observedGeneration} = ${t.generation}
+        )
+      )`,
+    ),
+    check(
+      "deposit_watch_retry_bound",
+      sql`(
+        ${t.status} NOT IN ('retry_wait', 'accepted_unverified')
+        OR (
+          ${t.nextAttemptAt} > ${t.updatedAt}
+          AND ${t.nextAttemptAt} <= ${t.updatedAt} + interval '24 hours'
+        )
+      )`,
+    ),
+    check(
+      "deposit_watch_outcome_code",
+      sql`${t.lastOutcomeCode} IS NULL OR ${t.lastOutcomeCode} IN (
+        'provider_mutation_accepted',
+        'desired_state_verified',
+        'opposite_state_verified',
+        'provider_unavailable',
+        'provider_rate_limited',
+        'provider_timeout',
+        'provider_configuration_missing',
+        'provider_rejected',
+        'provider_unsupported',
+        'reconciler_failed',
+        'lease_expired'
+      )`,
+    ),
   ],
 );
 
