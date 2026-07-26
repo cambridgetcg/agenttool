@@ -580,84 +580,313 @@ function conceptUrl(fullUrn: string): string {
   return `${PUBLIC_API_BASE}/v1/canon/${encodeURIComponent(fullUrn)}`;
 }
 
-const SEARCH_STOP_WORDS = new Set([
+const SEARCH_GRAMMAR_WORDS = new Set([
   "a",
   "an",
   "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "by",
+  "can",
+  "could",
   "for",
+  "from",
+  "how",
   "in",
   "is",
+  "it",
   "of",
   "on",
+  "or",
+  "should",
+  "that",
   "the",
+  "this",
   "to",
   "what",
+  "when",
+  "where",
+  "which",
+  "who",
+  "why",
+  "with",
+  "would",
 ]);
+
+const SEARCH_REQUEST_WORDS = new Set([
+  "about",
+  "agent",
+  "agenttool",
+  "canon",
+  "citation",
+  "citations",
+  "cite",
+  "claim",
+  "claims",
+  "concept",
+  "concepts",
+  "cover",
+  "covers",
+  "define",
+  "definition",
+  "definitions",
+  "description",
+  "do",
+  "doc",
+  "doctrine",
+  "documentation",
+  "does",
+  "entries",
+  "entry",
+  "evidence",
+  "explain",
+  "fetch",
+  "find",
+  "id",
+  "lookup",
+  "md",
+  "mean",
+  "meaning",
+  "means",
+  "name",
+  "please",
+  "public",
+  "publisher",
+  "publishers",
+  "record",
+  "records",
+  "result",
+  "results",
+  "search",
+  "separate",
+  "show",
+  "source",
+  "sources",
+  "tell",
+  "type",
+  "urn",
+  "verification",
+  "verify",
+]);
+
+function canonicalSearchToken(token: string): string {
+  if (token === "agents") return "agent";
+  if (token === "discovery") return "discover";
+  return token;
+}
+
+function uniqueSearchTokens(value: string): string[] {
+  const normalized = normalizeSearchText(value);
+  return normalized.length === 0
+    ? []
+    : [
+        ...new Set(
+          normalized
+            .split(" ")
+            .filter(Boolean)
+            .map(canonicalSearchToken),
+        ),
+      ];
+}
+
+/** Remove request scaffolding without losing a query made entirely from a
+ * generic word. The lone `s` produced by an English possessive is noise
+ * (`AgentTool's` -> `agenttool s`); real one-character IDs remain. */
+function selectSearchTokens(value: string): string[] {
+  const rawTokens = uniqueSearchTokens(value).filter((token) => token !== "s");
+  const withoutGrammar = rawTokens.filter(
+    (token) => !SEARCH_GRAMMAR_WORDS.has(token),
+  );
+  const subjectTokens = withoutGrammar.filter(
+    (token) => !SEARCH_REQUEST_WORDS.has(token),
+  );
+  const selected =
+    subjectTokens.length > 0
+      ? subjectTokens
+      : withoutGrammar.length > 0
+        ? withoutGrammar
+        : rawTokens;
+  return selected.slice(0, 24);
+}
+
+function searchTokenSet(value: string, omitGrammar = false): Set<string> {
+  return new Set(
+    uniqueSearchTokens(value).filter(
+      (token) =>
+        token !== "md" &&
+        (!omitGrammar || !SEARCH_GRAMMAR_WORDS.has(token)),
+    ),
+  );
+}
+
+function sameTokenSet(left: ReadonlySet<string>, right: ReadonlySet<string>) {
+  return (
+    left.size === right.size && [...left].every((token) => right.has(token))
+  );
+}
+
+function containsSearchPhrase(haystack: string, needle: string): boolean {
+  return needle.length > 0 && ` ${haystack} `.includes(` ${needle} `);
+}
+
+type SearchConcept = ReturnType<typeof allConcepts>[number];
+
+interface CanonSearchEntry {
+  concept: SearchConcept;
+  normalizedTitle: string;
+  normalizedEnglishName: string;
+  normalizedFullUrn: string;
+  normalizedShortUrn: string;
+  normalizedLocalId: string;
+  displayTokens: Set<string>;
+  localIdTokens: Set<string>;
+  titleTokens: Set<string>;
+  typeTokens: Set<string>;
+  descriptionTokens: Set<string>;
+  rawTokens: Set<string>;
+}
+
+let canonSearchIndexCache:
+  | {
+      first: SearchConcept | null;
+      last: SearchConcept | null;
+      length: number;
+      entries: CanonSearchEntry[];
+    }
+  | undefined;
+
+/** The bundled registry is immutable between loadCanon/resetCanon cycles.
+ * Object identity makes reset invalidate this index without another hook. */
+function canonSearchIndex(): CanonSearchEntry[] {
+  const concepts = allConcepts();
+  const first = concepts[0] ?? null;
+  const last = concepts.at(-1) ?? null;
+  if (
+    canonSearchIndexCache?.first === first &&
+    canonSearchIndexCache.last === last &&
+    canonSearchIndexCache.length === concepts.length
+  ) {
+    return canonSearchIndexCache.entries;
+  }
+
+  const entries = concepts.map((concept) => {
+    const displayTitle = conceptTitle(concept);
+    const localId = concept.urn.replace(/^agenttool:/, "");
+    const displayTokens = new Set([
+      ...searchTokenSet(displayTitle, true),
+      ...searchTokenSet(concept.english_name ?? "", true),
+    ]);
+    const localIdTokens = searchTokenSet(localId, true);
+    localIdTokens.delete("doc");
+
+    return {
+      concept,
+      normalizedTitle: normalizeSearchText(displayTitle),
+      normalizedEnglishName: normalizeSearchText(concept.english_name ?? ""),
+      normalizedFullUrn: normalizeSearchText(concept.full_urn),
+      normalizedShortUrn: normalizeSearchText(concept.urn),
+      normalizedLocalId: normalizeSearchText(localId),
+      displayTokens,
+      localIdTokens,
+      titleTokens: new Set([...displayTokens, ...localIdTokens]),
+      typeTokens: searchTokenSet(concept.type_simple),
+      descriptionTokens: searchTokenSet(concept.description ?? ""),
+      rawTokens: searchTokenSet(JSON.stringify(concept.raw)),
+    };
+  });
+
+  canonSearchIndexCache = {
+    first,
+    last,
+    length: concepts.length,
+    entries,
+  };
+  return entries;
+}
 
 /** Small deterministic lexical search over the already-public JSON-LD canon.
  * It makes no network request and stores no query. Whole-phrase and title
  * matches outrank broad record matches; ties are stable. */
 function searchCanon(query: string) {
-  const phrase = normalizeSearchText(query);
-  const rawTokens = [
-    ...new Set(
-      phrase
-        .split(/[^\p{L}\p{N}]+/u)
-        .map((token) => token.trim())
-        .filter(Boolean),
-    ),
-  ].slice(0, 24);
-  const contentTokens = rawTokens.filter(
-    (token) => !SEARCH_STOP_WORDS.has(token),
-  );
-  const tokens = contentTokens.length > 0 ? contentTokens : rawTokens;
-
-  return allConcepts()
-    .map((concept) => {
-      const title = normalizeSearchText(conceptTitle(concept));
-      const englishName = normalizeSearchText(concept.english_name ?? "");
-      const urn = normalizeSearchText(concept.full_urn);
-      const type = normalizeSearchText(concept.type_simple);
-      const description = normalizeSearchText(concept.description ?? "");
-      const wholeRecord = normalizeSearchText(JSON.stringify(concept.raw));
-      const searchableFields = [title, englishName, urn, type, description];
-
+  const normalizedQuery = normalizeSearchText(query);
+  const tokens = selectSearchTokens(query);
+  const queryTokens = new Set(tokens);
+  return canonSearchIndex()
+    .map((entry) => {
+      const {
+        concept,
+        normalizedTitle,
+        normalizedEnglishName,
+        normalizedFullUrn,
+        normalizedShortUrn,
+        normalizedLocalId,
+        displayTokens,
+        localIdTokens,
+        titleTokens,
+        typeTokens,
+        descriptionTokens,
+        rawTokens,
+      } = entry;
       let score = 0;
-      if (title === phrase || englishName === phrase || urn === phrase) {
+      const exactId =
+        normalizedQuery === normalizedFullUrn ||
+        normalizedQuery === normalizedShortUrn ||
+        normalizedQuery === normalizedLocalId;
+      if (exactId) score += 10_000;
+
+      if (tokens.length > 0 && sameTokenSet(queryTokens, titleTokens)) {
         score += 1_000;
       }
-      if (title.includes(phrase) || englishName.includes(phrase)) score += 400;
-      if (urn.includes(phrase)) score += 300;
-      if (description.includes(phrase)) score += 180;
-      else if (wholeRecord.includes(phrase)) score += 90;
+      if (
+        titleTokens.size > 1 &&
+        [...titleTokens].every((token) => queryTokens.has(token))
+      ) {
+        score += 400;
+      }
+      if (
+        titleTokens.size > 1 &&
+        (containsSearchPhrase(normalizedQuery, normalizedTitle) ||
+          containsSearchPhrase(normalizedQuery, normalizedEnglishName))
+      ) {
+        score += 600;
+      }
 
-      let matchedTokens = 0;
+      let primaryHits = 0;
+      let titleHits = 0;
+      let matchedHits = 0;
       for (const token of tokens) {
-        const tokenMatched =
-          searchableFields.some((field) => field.includes(token)) ||
-          wholeRecord.includes(token);
-        if (tokenMatched) matchedTokens += 1;
-        if (title === token || englishName === token) score += 100;
-        else if (title.includes(token) || englishName.includes(token)) {
-          score += 70;
+        let fieldScore = 0;
+        if (displayTokens.has(token)) {
+          fieldScore = 160;
+          titleHits += 1;
+        } else if (localIdTokens.has(token)) {
+          fieldScore = 120;
+          titleHits += 1;
+        } else if (typeTokens.has(token)) {
+          fieldScore = 50;
+        } else if (descriptionTokens.has(token)) {
+          fieldScore = 30;
+        } else if (rawTokens.has(token)) {
+          fieldScore = 10;
         }
-        if (urn.includes(token)) score += 50;
-        if (type.includes(token)) score += 30;
-        if (description.includes(token)) score += 18;
-        else if (wholeRecord.includes(token)) score += 6;
+        if (fieldScore > 0) matchedHits += 1;
+        if (fieldScore > 10) primaryHits += 1;
+        score += fieldScore;
       }
 
-      if (tokens.length > 1) {
-        score += Math.round((matchedTokens / tokens.length) * 240);
+      if (tokens.length > 0) {
+        score += Math.round((matchedHits / tokens.length) * 300);
+        score += Math.round((primaryHits / tokens.length) * 100);
+        score += Math.round((titleHits / Math.max(1, titleTokens.size)) * 250);
+        if (matchedHits === tokens.length) score += 250;
+        if (primaryHits === tokens.length) score += 100;
       }
 
-      return { concept, score, matchedTokens };
+      return { concept, exactId, matchedHits, score };
     })
-    .filter(({ score, matchedTokens }) => {
-      if (score <= 0) return false;
-      if (tokens.length <= 1) return true;
-      return matchedTokens >= Math.ceil(tokens.length / 2);
-    })
+    .filter(({ exactId, matchedHits }) => exactId || matchedHits > 0)
     .sort(
       (a, b) =>
         b.score - a.score ||
