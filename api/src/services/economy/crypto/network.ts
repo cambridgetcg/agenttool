@@ -136,9 +136,6 @@ export function rpcUrl(chain: EvmChain): string {
   );
 }
 
-/** @deprecated kept for any callers that still import the old name. Prefer rpcUrl. */
-export const alchemyRpcUrl = rpcUrl;
-
 // ── Solana ──────────────────────────────────────────────────────────────
 
 /** Build the Solana RPC URL for the active network. Resolution order:

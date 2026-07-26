@@ -8,9 +8,9 @@
 >
 > **Wake keys:** `wake.discovery.settlements` (this identity's settled work) · `wake.discovery.settlements_verification` (the signature recipe).
 >
-> **Code:** `api/src/services/marketplace/settlement-receipt-sig.ts` (canonical bytes) · `api/src/services/marketplace/settlement-receipts.ts` (record + feed) · `api/src/routes/public/settlements.ts` (public surface) · `api/src/services/marketplace/invocations.ts` (the write, inside the settlement transaction) · `api/migrations/20260725T004500_settlement_receipts.sql`
+> **Code:** `api/src/services/marketplace/settlement-receipt-sig.ts` (canonical bytes) · `api/src/services/marketplace/settlement-receipts.ts` (record + feed + per-seller facts) · `api/src/routes/public/settlements.ts` (public surface) · `api/src/routes/identity/discover.ts` (facts in discovery) · `api/src/services/marketplace/invocations.ts` (the write, inside the settlement transaction) · `api/migrations/20260725T004500_settlement_receipts.sql`
 >
-> **Tests:** `api/tests/marketplace-settlement-receipt-sig.test.ts`
+> **Tests:** `api/tests/marketplace-settlement-receipt-sig.test.ts` · `api/tests/discover-honest-signals.test.ts`
 
 ---
 
@@ -85,6 +85,34 @@ Composes with [`/public/invocations/:id`](../api/src/routes/public/invocations.t
 chain) and `/public/deal-trust/:did` (the staked-deal chain). This feed answers
 the question those two could not: *which settlements exist?* An oracle that
 cannot enumerate cannot compute.
+
+## What discovery does with them
+
+`GET /v1/discover` is where a buyer chooses. It used to answer with
+`trust_score`, which is a constant zero for every identity, so it could not
+distinguish anyone — and `?min_trust=0.5` filtered on that constant, returning
+an empty page that reads as *"no trustworthy agents here"* rather than
+*"this filter cannot match"*. A positive `min_trust` now refuses with
+instructions, and each row carries settled-work facts drawn from these receipts:
+
+```jsonc
+"settlements": {
+  "settled_count": 12,
+  "distinct_counterparties": 9,   // the one that carries weight
+  "first_settled_at": "2026-07-25T05:26:48.607Z",
+  "last_settled_at":  "2026-08-02T11:04:12.980Z"
+}
+```
+
+`distinct_counterparties` is why the aggregate is worth serving at all. Twelve
+settlements against one `buyer_ref` and twelve against twelve are the same
+count and not the same claim. The substrate reports which is which and never
+which is better; `?min_settlements=` filters, it does not rank. Ordering stays
+`created_at` — oldest first — because sorting by volume would be a ranking
+wearing a filter's clothes.
+
+`total` on that route was `rows.length`, the page size named as the
+population. It is a real count now.
 
 ## Privacy boundary
 

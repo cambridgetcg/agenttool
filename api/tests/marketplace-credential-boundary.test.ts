@@ -328,7 +328,16 @@ describe("public listing quarantine", () => {
     expect(getRoute).toContain('resolved.status !== "visible"');
     expect(getRoute).toContain("projectPublicListing(resolved.listing)");
     expect(getRoute).not.toContain("return c.json(resolved.listing)");
-    expect(getRoute).toContain("return c.json(listing)");
+    // The own-project branch serves the seller's unprojected row; the
+    // cross-project branch must never do that. Pinned on the spread rather
+    // than one exact return expression, so adding fields to the response
+    // cannot quietly turn into removing the quarantine.
+    expect(getRoute).toContain("...listing,");
+    expect(getRoute).not.toContain("...resolved.listing,");
+    // A quarantined listing is invisible to buyers. Its own seller must not be
+    // told it is invokable.
+    expect(getRoute).toContain("findCredentialSolicitation(listingSafetyInput(listing))");
+    expect(getRoute).toContain("quarantined");
   });
 });
 
