@@ -102,6 +102,9 @@ describe("public open seat", () => {
     expect(body.offers[0].endpoint).toBe(
       "https://example.test/v1/mcp/canon",
     );
+    expect(body.offers[0].documentation).toBe(
+      "https://docs.agenttool.dev/connect-canon",
+    );
     expect(body.offers[1].href).toBe(
       "https://example.test/public/play/party-telephone",
     );

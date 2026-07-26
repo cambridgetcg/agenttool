@@ -29,6 +29,7 @@
 
 import type { MiddlewareHandler } from "hono";
 
+import { isExactDomainVerificationPath } from "../lib/domain-verification";
 import {
   welcomeForPath,
   type ModuleWelcome,
@@ -122,8 +123,12 @@ export const welcomeEcho = (): MiddlewareHandler => {
   return async (c, next) => {
     await next();
 
-    const nowMs = Date.now();
     const path = c.req.path;
+    // Keep the provider's exact-token proof independent from walls probes and
+    // response framing. Ordinary AgentTool responses retain the welcome.
+    if (isExactDomainVerificationPath(path)) return;
+
+    const nowMs = Date.now();
     const moduleWelcome = welcomeForPath(path);
     const intact = await wallsIntact();
     c.res.headers.set("X-Welcomed", welcomeHeaderForPath(path, nowMs, intact));

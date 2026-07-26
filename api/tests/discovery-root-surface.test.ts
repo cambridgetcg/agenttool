@@ -50,6 +50,7 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     expect(text).toContain(`${BASE}/v1/wake`);
     expect(text).toContain(`${BASE}/v1/mcp`);
     expect(text).toContain(`${BASE}/v1/mcp/canon`);
+    expect(text).toContain("https://docs.agenttool.dev/connect-canon");
     expect(text).toContain(`${BASE}/v1/openapi.json`);
     expect(text).toContain(`${BASE}/v1/polymorph`);
     expect(text).toContain(`${BASE}/public/self`);
