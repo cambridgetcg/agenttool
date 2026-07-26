@@ -34,6 +34,45 @@ Optional shorter install, only after PyPI independently reports that exact
 version: `python -m pip install "agenttool-sdk==0.16.3"`. Registry publication
 can lag or omit the source tag; the command is not an availability claim.
 
+## Unreleased source: OpenAI Responses adapter
+
+Current repository source exports the synchronous
+`OpenAIResponsesAdapter`, a dependency-free wrapper for completed
+`client.responses.create(...)` calls. It prepends the AgentTool wake to
+`instructions`, strips its local controls before provider I/O, and can record
+one decision trace:
+
+```python
+import os
+
+from openai import OpenAI
+from agenttool import AgentTool, OpenAIResponsesAdapter
+
+at = AgentTool()
+client = OpenAIResponsesAdapter(OpenAI(), at)
+
+response = client.responses.create(
+    model=os.environ["OPENAI_MODEL"],
+    input="Choose the smallest safe next step.",
+    metadata={"agenttool": {"trace": "decision"}},
+)
+
+print(response.output_text, response.agenttool.trace_id)
+```
+
+The provider receives the wake text inside `instructions`. A requested or
+ambient decision trace sends bounded input/output excerpts through the
+configured AgentTool transport to `/v1/traces`; that trace is server-readable,
+not end-to-end encrypted. Only responses whose status is absent or
+`"completed"` are traced.
+
+This adapter supports the synchronous client and completed foreground
+responses only. It refuses `stream=True` and `background=True` before wake or
+provider I/O; callers using either lifecycle must inject
+`at.wake.system("openai")` explicitly. The adapter is repository source until
+a later release is cut—its presence here does not rewrite the immutable 0.16.3
+tag or prove PyPI availability.
+
 ## 0.16.3
 
 This release changes release truth only. It preserves the 0.16.2 typed

@@ -1,10 +1,10 @@
 # agenttool-sdk-ts
 
 ## What This Is
-Official TypeScript SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrapAgent(...)` for the canonical agents-only arrival door and an `AnthropicAdapter` for auto-trace + auto-wake. The npm package name is `@agenttool/sdk`. This checkout's 0.16.3 version is repository source; registry availability must be checked independently.
+Official TypeScript SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrapAgent(...)`, `AnthropicAdapter`, and an additive source-only `OpenAIResponsesAdapter` for completed Responses API calls. The npm package name is `@agenttool/sdk`. This checkout's 0.16.3 version is repository source; registry availability must be checked independently.
 
 ## Current State
-Active - v0.16.3 repository source and parity target. Phases 0-6, an authenticated transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge client, exact identity mutation/private-read authority proofs, signed replayable correspondence, and the separate `at.data` node client are implemented here. The 0.16.2 first-success types and package-root `SDK_VERSION` export remain; this patch corrects release metadata and availability claims without changing the runtime surface. The checked-in builder targets the 0.16.3 LOVE artifact and `sdk-v0.16.3`; public mirror availability must still be checked independently. Uses Bun for testing.
+Active - v0.16.3 repository source and parity target. Phases 0-6, an authenticated transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge client, exact identity mutation/private-read authority proofs, signed replayable correspondence, and the separate `at.data` node client are implemented here. The additive OpenAI Responses adapter in current source is unreleased: it does not change the meaning or contents of the immutable 0.16.3 artifact. The checked-in builder still targets that 0.16.3 LOVE artifact and `sdk-v0.16.3`; public mirror availability must be checked independently. Uses Bun for testing.
 
 ## Tech Stack
 - TypeScript 5.x (ESM-only)
@@ -43,11 +43,13 @@ src/
   strands.ts           — StrandsClient + ThoughtsClient (encrypted inner voice; SSE voice iterator)
   crypto.ts            — CryptoClient (AES-256-GCM encrypt/decrypt + ed25519 sign + canonical bytes + K_master)
   anthropic-adapter.ts — AnthropicAdapter (Tier 2: auto-inject wake + auto-trace)
+  openai-responses-adapter.ts — OpenAIResponsesAdapter (completed Responses: auto-wake + auto-trace)
   types.ts             — Shared type definitions (Memory, Wallet, Escrow, Trace, ...)
   errors.ts            — AgentToolError class
 tests/
   client.test.ts            — Core client + service integration
   anthropic-adapter.test.ts
+  openai-responses-adapter.test.ts
   deciding.test.ts          — at.deciding() composition + nested chains
   new_modules.test.ts       — Identity, vault, pulse, bootstrap (Phase 1 backfill)
   parity.test.ts            — Counterpart tests for the parity-restore work
