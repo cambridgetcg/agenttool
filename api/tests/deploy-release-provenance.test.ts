@@ -18,6 +18,7 @@ function cleanEnv(home: string, extra: Record<string, string> = {}): Record<stri
     HOME: home,
     LANG: "C",
     NO_COLOR: "1",
+    DATABASE_URL: "postgres://fixture.invalid/release_test",
     ...extra,
   };
 }

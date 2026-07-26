@@ -376,6 +376,37 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
       expect(await readdir(destination)).toEqual([]);
     }
 
+    await writeFile(
+      join(fixtureRepo, "bin/frontend-release-paths.txt"),
+      "missing-root\n",
+    );
+    result = await run(
+      ["git", "add", "bin/frontend-release-paths.txt"],
+      fixtureRepo,
+    );
+    expect(result.code, result.stderr).toBe(0);
+    result = await run(
+      ["git", "commit", "-qm", "manifest missing archive root"],
+      fixtureRepo,
+    );
+    expect(result.code, result.stderr).toBe(0);
+    result = await run(["git", "rev-parse", "HEAD"], fixtureRepo);
+    expect(result.code, result.stderr).toBe(0);
+    const missingRootDestination = join(fixtureRoot, "stage-missing-root");
+    await mkdir(missingRootDestination);
+    const missingRootStage = await run(
+      [
+        "bash",
+        "bin/stage-frontend-release.sh",
+        result.stdout.trim(),
+        missingRootDestination,
+      ],
+      fixtureRepo,
+    );
+    expect(missingRootStage.code).not.toBe(0);
+    expect(missingRootStage.stderr).toContain("pathspec");
+    expect(await readdir(missingRootDestination)).toEqual([]);
+
     await mkdir(join(fixtureRepo, "apps", "web"), { recursive: true });
     await writeFile(join(fixtureRepo, "apps", "web", "index.html"), "fixture\n");
     await writeFile(
