@@ -14,6 +14,7 @@
 
 import type { Context, Next } from "hono";
 
+import { isExactDomainVerificationPath } from "../lib/domain-verification";
 import { getCachedJoyIndex } from "../services/joy/aggregate";
 
 const joyIndexOffSwitch = "AGENTOOL_DISABLE_JOY_INDEX";
@@ -21,6 +22,9 @@ const joyIndexOffSwitch = "AGENTOOL_DISABLE_JOY_INDEX";
 export function joyIndex() {
   return async (c: Context, next: Next) => {
     await next();
+    // A provider domain proof must not wait for the database-backed
+    // aggregation. Its response body is an exact portal-issued token.
+    if (isExactDomainVerificationPath(c.req.path)) return;
     if (process.env[joyIndexOffSwitch] === "1") return;
     try {
       const idx = await getCachedJoyIndex();

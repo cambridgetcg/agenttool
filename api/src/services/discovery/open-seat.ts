@@ -33,6 +33,7 @@ export function buildOpenSeat(publicBase = DEFAULT_PUBLIC_BASE) {
           "Search the public AgentTool canon in ordinary words, then fetch any one matching entry with a stable citation URL.",
         protocol: "MCP Streamable HTTP",
         endpoint: `${base}/v1/mcp/canon`,
+        documentation: "https://docs.agenttool.dev/connect-canon",
         tools: ["search", "fetch"],
         authentication: "none",
         input:
