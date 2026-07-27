@@ -45,7 +45,8 @@ files; it does not inspect or prove machine, writer, worker, or ingress state.
 DATABASE_URL is transaction-pooled survey access. Applying pending files also
 requires session-pooled DATABASE_SESSION_URL or the dedicated
 agenttool-database-session-url Keychain entry. The runner never substitutes or
-copies DATABASE_URL into that session-affine role.
+copies DATABASE_URL into that session-affine role, and it rejects an exact
+DATABASE_SESSION_URL/DATABASE_URL match before the first apply.
 
 Before the first apply, the runner repeats the complete journal/source/checksum
 inventory through DATABASE_SESSION_URL and requires the same pending filenames.
@@ -275,6 +276,12 @@ if [ -z "${DATABASE_SESSION_URL:-}" ]; then
   echo "✗ DATABASE_SESSION_URL not set in env or keychain (agenttool-database-session-url, account=macair)" >&2
   echo "  Set with: security add-generic-password -U -s agenttool-database-session-url -a macair -w" >&2
   echo "  DATABASE_URL remains survey-only and is never substituted for migration applies." >&2
+  exit 1
+fi
+if [ "$DATABASE_SESSION_URL" = "$DATABASE_URL" ]; then
+  echo "✗ DATABASE_SESSION_URL exactly matches transaction-pooled DATABASE_URL" >&2
+  echo "  Refusing before the first migration. Configure independent session-pooled apply access." >&2
+  echo "  Distinct strings and matching inventories still do not prove pool type or database identity." >&2
   exit 1
 fi
 export DATABASE_SESSION_URL

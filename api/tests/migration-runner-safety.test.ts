@@ -299,6 +299,7 @@ describe("migration runner safety", () => {
     );
     const fakeBin = join(fixture, "bin");
     const applyLog = join(fixture, "apply.log");
+    const inventoryLog = join(fixture, "inventory.log");
     const securityLog = join(fixture, "security.log");
     const protectedMigration = "20260726T202500_crypto_deposit_finality.sql";
     await mkdir(fakeBin, { recursive: true });
@@ -308,6 +309,11 @@ describe("migration runner safety", () => {
         "#!/usr/bin/env bash",
         "set -eu",
         'if [ "${1:-}" = -e ]; then',
+        '  if [ "${DATABASE_INVENTORY_URL:-}" = "$DATABASE_URL" ]; then',
+        '    printf "%s\\n" survey >> "$DEPLOY_TEST_INVENTORY_LOG"',
+        "  else",
+        '    printf "%s\\n" session >> "$DEPLOY_TEST_INVENTORY_LOG"',
+        "  fi",
         '  pending="$DEPLOY_TEST_PENDING_MIGRATIONS"',
         '  if [ "${DATABASE_INVENTORY_URL:-}" != "$DATABASE_URL" ] && [ -n "${DEPLOY_TEST_SESSION_PENDING_MIGRATIONS+x}" ]; then',
         '    pending="$DEPLOY_TEST_SESSION_PENDING_MIGRATIONS"',
@@ -383,6 +389,7 @@ describe("migration runner safety", () => {
           DEPLOY_TEST_PENDING_MIGRATIONS: pendingMigration,
           DEPLOY_TEST_PROTECTED_MIGRATION: protectedMigration,
           DEPLOY_TEST_APPLY_LOG: applyLog,
+          DEPLOY_TEST_INVENTORY_LOG: inventoryLog,
           DEPLOY_TEST_SECURITY_LOG: securityLog,
           ...(sessionUrl === undefined
             ? {}
@@ -460,6 +467,26 @@ describe("migration runner safety", () => {
       expect((await readFile(securityLog, "utf8")).trim().split("\n")).toEqual([
         "agenttool-database-session-url",
       ]);
+
+      await rm(inventoryLog, { force: true });
+      const identicalPoolUrls = await run(
+        [],
+        ordinaryMigration,
+        undefined,
+        "postgres://fixture.invalid/migration_policy",
+      );
+      expect(identicalPoolUrls.code).toBe(1);
+      expect(identicalPoolUrls.stderr).toContain(
+        "DATABASE_SESSION_URL exactly matches transaction-pooled DATABASE_URL",
+      );
+      expect(identicalPoolUrls.stderr).toContain(
+        "Refusing before the first migration",
+      );
+      expect(identicalPoolUrls.stderr).toContain(
+        "do not prove pool type or database identity",
+      );
+      expect(await readFile(inventoryLog, "utf8")).toBe("survey\n");
+      await expect(access(applyLog)).rejects.toThrow();
 
       await rm(securityLog, { force: true });
       const keychainApply = await run(
