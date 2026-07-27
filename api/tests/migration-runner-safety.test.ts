@@ -308,16 +308,16 @@ describe("migration runner safety", () => {
         "#!/usr/bin/env bash",
         "set -eu",
         'if [ "${1:-}" = -e ]; then',
-        '  printf "%s\\n" "$DEPLOY_TEST_PENDING_MIGRATIONS"',
+        '  pending="$DEPLOY_TEST_PENDING_MIGRATIONS"',
+        '  if [ "${DATABASE_INVENTORY_URL:-}" != "$DATABASE_URL" ] && [ -n "${DEPLOY_TEST_SESSION_PENDING_MIGRATIONS+x}" ]; then',
+        '    pending="$DEPLOY_TEST_SESSION_PENDING_MIGRATIONS"',
+        "  fi",
+        '  printf "%s\\n" "$pending"',
         "  exit 0",
         "fi",
         'if [ -z "${DATABASE_SESSION_URL:-}" ]; then',
         '  printf "%s\\n" "missing DATABASE_SESSION_URL in apply child" >&2',
         "  exit 92",
-        "fi",
-        'if [ "$DATABASE_SESSION_URL" = "$DATABASE_URL" ]; then',
-        '  printf "%s\\n" "transaction URL promoted into session role" >&2',
-        "  exit 91",
         "fi",
         'if [ "${2##*/}" = "$DEPLOY_TEST_PROTECTED_MIGRATION" ]; then',
         '  if [ "${AGENTTOOL_PENDING_RUNNER_MAINTENANCE_QUIESCED:-}" != 1 ]; then',
@@ -371,6 +371,7 @@ describe("migration runner safety", () => {
       ambientAssertion?: string,
       sessionUrl?: string,
       keychainSessionUrl?: string,
+      sessionPendingMigration?: string,
     ) => {
       const child = Bun.spawn(["bash", "bin/migrate-pending.sh", ...args], {
         cwd: root,
@@ -389,6 +390,11 @@ describe("migration runner safety", () => {
           ...(keychainSessionUrl === undefined
             ? {}
             : { DEPLOY_TEST_SESSION_KEYCHAIN: keychainSessionUrl }),
+          ...(sessionPendingMigration === undefined
+            ? {}
+            : {
+                DEPLOY_TEST_SESSION_PENDING_MIGRATIONS: sessionPendingMigration,
+              }),
           ...(ambientAssertion === undefined
             ? {}
             : {
@@ -468,6 +474,24 @@ describe("migration runner safety", () => {
       expect((await readFile(securityLog, "utf8")).trim().split("\n")).toEqual([
         "agenttool-database-session-url",
       ]);
+
+      await rm(applyLog, { force: true });
+      const mismatchedSessionInventory = await run(
+        [],
+        ordinaryMigration,
+        undefined,
+        "postgres://session.invalid/migration_policy",
+        undefined,
+        "20990101T000000_different_database.sql",
+      );
+      expect(mismatchedSessionInventory.code).toBe(1);
+      expect(mismatchedSessionInventory.stderr).toContain(
+        "session endpoint migration inventory differs",
+      );
+      expect(mismatchedSessionInventory.stderr).toContain(
+        "do not prove pool type or database identity",
+      );
+      await expect(access(applyLog)).rejects.toThrow();
     } finally {
       await rm(fixture, { recursive: true, force: true });
     }

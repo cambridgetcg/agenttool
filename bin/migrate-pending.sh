@@ -46,6 +46,12 @@ DATABASE_URL is transaction-pooled survey access. Applying pending files also
 requires session-pooled DATABASE_SESSION_URL or the dedicated
 agenttool-database-session-url Keychain entry. The runner never substitutes or
 copies DATABASE_URL into that session-affine role.
+
+Before the first apply, the runner repeats the complete journal/source/checksum
+inventory through DATABASE_SESSION_URL and requires the same pending filenames.
+That comparison detects many endpoint mistakes; it cannot prove pool type or
+that two configured URLs identify the same database. The operator remains
+responsible for that binding.
 EOF
 }
 
@@ -132,18 +138,25 @@ export DATABASE_URL
 
 # ── Compute pending: files − meta._migrations rows ─────────────────────
 PENDING_FILE="$(mktemp -t agenttool-pending.XXXXXX)"
+SESSION_PENDING_FILE="$(mktemp -t agenttool-session-pending.XXXXXX)"
 QUIESCENCE_PENDING_FILE="$(mktemp -t agenttool-quiescence-pending.XXXXXX)"
-trap 'rm -f "$PENDING_FILE" "$QUIESCENCE_PENDING_FILE"' EXIT
+trap 'rm -f "$PENDING_FILE" "$SESSION_PENDING_FILE" "$QUIESCENCE_PENDING_FILE"' EXIT
 
-cd "$REPO_ROOT/api"
-# shellcheck disable=SC2016 # Single-quoted JavaScript must not expand in Bash.
-bun -e '
+compute_pending() {
+  local database_inventory_url="$1"
+  local output_file="$2"
+  (
+    cd "$REPO_ROOT/api"
+    # shellcheck disable=SC2016 # Single-quoted JavaScript must not expand in Bash.
+    DATABASE_INVENTORY_URL="$database_inventory_url" bun -e '
 import { createHash } from "node:crypto";
 import postgres from "postgres";
 import { readdirSync } from "node:fs";
 
-const sql = postgres(process.env.DATABASE_URL!, {
-  ssl: process.env.DATABASE_URL!.includes("supabase") ? "require" : false,
+const databaseUrl = process.env.DATABASE_INVENTORY_URL;
+if (!databaseUrl) throw new Error("DATABASE_INVENTORY_URL is absent");
+const sql = postgres(databaseUrl, {
+  ssl: databaseUrl.includes("supabase") ? "require" : false,
   prepare: false, max: 1, idle_timeout: 5, connect_timeout: 10,
 });
 
@@ -197,8 +210,11 @@ try {
 } finally {
   await sql.end();
 }
-' > "$PENDING_FILE"
-cd "$REPO_ROOT"
+' > "$output_file"
+  )
+}
+
+compute_pending "$DATABASE_URL" "$PENDING_FILE"
 
 PENDING_COUNT=$(wc -l < "$PENDING_FILE" | tr -d ' ')
 if grep -Fxf "$QUIESCENCE_REQUIRED_FILE" "$PENDING_FILE" \
@@ -262,6 +278,17 @@ if [ -z "${DATABASE_SESSION_URL:-}" ]; then
   exit 1
 fi
 export DATABASE_SESSION_URL
+
+# Repeat the complete source/checksum inventory through the session endpoint.
+# Exact pending-list equality catches many misbindings without claiming that
+# connection-string syntax proves pool type or database identity.
+compute_pending "$DATABASE_SESSION_URL" "$SESSION_PENDING_FILE"
+if ! cmp -s "$PENDING_FILE" "$SESSION_PENDING_FILE"; then
+  echo "✗ session endpoint migration inventory differs from the transaction-pooled survey" >&2
+  echo "  Refusing before the first migration. Verify both scoped URLs target the intended database." >&2
+  echo "  Matching inventories narrow endpoint drift; they do not prove pool type or database identity." >&2
+  exit 1
+fi
 
 # ── Apply each pending file via _migrate-one.ts ────────────────────────
 APPLIED=0

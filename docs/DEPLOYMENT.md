@@ -38,6 +38,12 @@ bin/migrate-pending.sh --maintenance-quiesced
 bin/migrate-pending.sh --dry-run
 ```
 
+Before the first mutation, the runner repeats the complete
+journal/source/checksum inventory through `DATABASE_SESSION_URL` and requires
+the same pending filenames as the `DATABASE_URL` survey. That detects many
+endpoint mistakes, but it does not prove pool type or database identity;
+provision both scoped URLs for this exact target.
+
 `--maintenance-quiesced` is an operator assertion, not a process check. Use it
 for a fresh install only while nothing can write to that database and no
 provider callback targets it. Established environments must use the fenced

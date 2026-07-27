@@ -22,7 +22,10 @@ agenttool-database-session-url Keychain entry.
 
 A positional postgres:// URL remains accepted only as backward-compatible
 DATABASE_URL survey input. It is never printed and never satisfies the separate
-session-pooled apply requirement.
+session-pooled apply requirement. Before applying, the pending runner requires
+the session endpoint to report the same complete migration inventory. Matching
+inventories do not prove pool type or database identity; configure both scoped
+URLs for the same intended database.
 EOF
 }
 

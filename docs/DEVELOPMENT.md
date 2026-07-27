@@ -86,6 +86,11 @@ order across the convention boundary. No tooling changes needed.
   `api/migrations/quiescence-required.txt`, the one-file helper refuses it;
   use the full pending runner only inside the reviewed exclusive cutover in
   `DEPLOY-PROCEDURE.md`.
+- **Treat endpoint identity as operator-provided.** The pending runner repeats
+  the complete journal/source/checksum inventory through the session endpoint
+  and requires the same pending filenames before applying. This catches many
+  configuration mistakes, but matching inventories do not prove pool type or
+  that two URLs identify the same database.
 
 ---
 
