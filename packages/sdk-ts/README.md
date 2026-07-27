@@ -4,7 +4,7 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![Release](https://img.shields.io/badge/release-v0.16.5-blue)](https://github.com/cambridgetcg/agenttool/tree/sdk-v0.16.5)
+[![Release](https://img.shields.io/badge/release-v0.16.5-blue)](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.16.5)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
 ## Installation
@@ -25,6 +25,12 @@ verification. No npm account or npm publication is required. Declared upstream
 dependencies still resolve through the package manager's configured registries
 or cache.
 
+The exact npm 0.16.5 tarball and GitHub Release asset are public and
+independently byte-identical to the 162,164-byte LOVE artifact
+(`sha256:d995999917b89a38846b751ab4a92f9600698460e64a91c73bc12d96b50c6805`).
+npm remains an optional mirror: installing from it does not compare the
+download with the LOVE manifest's size and SHA-256.
+
 ## 0.16.5
 
 This corrective patch aligns the SDK with the platform's fail-closed payout
@@ -37,9 +43,10 @@ implemented `get_wallet(...)` and `list_payouts(...)` method names.
 
 ## 0.16.4 Anthropic streaming adapter
 
-Version 0.16.4 contains a bounded repair to `AnthropicAdapter`. The source tag
-and LOVE artifact are authoritative; npm availability must still be observed
-independently.
+Version 0.16.4 contains a bounded repair to `AnthropicAdapter`. Its source tag,
+LOVE artifact, npm tarball, and GitHub Release remain public historical bytes;
+the three tarballs were independently byte-identical at
+`sha256:ab11a7a69c1bb73e0a2aa936131bec4aa2e28db222091311970e012cdb21ea4d`.
 
 - `adapter.messages.create({ ..., stream: true })` injects wake, removes the
   local `metadata.agenttool` extension, and otherwise passes provider events

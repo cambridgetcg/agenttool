@@ -88,6 +88,9 @@ describe("SDK source and builder identity", () => {
     const artifactName = `agenttool-sdk-${version}.tgz`;
     const artifactPath = `packages/v1/@agenttool/sdk/${version}/${artifactName}`;
     const loveUrl = `https://docs.agenttool.dev/${artifactPath}`;
+    const artifactSize = 162_164;
+    const artifactSha256 =
+      "d995999917b89a38846b751ab4a92f9600698460e64a91c73bc12d96b50c6805";
     const exactNpm = `npm install --save-exact @agenttool/sdk@${version}`;
     const exactPyPI = `python -m pip install "agenttool-sdk==${version}"`;
     const pythonSource = `git+https://github.com/cambridgetcg/agenttool.git@${tag}#subdirectory=packages/sdk-py`;
@@ -109,8 +112,20 @@ describe("SDK source and builder identity", () => {
     expect(party).toContain(pythonSource);
     expect(party).toContain(exactNpm);
     expect(party).toContain(`python -m pip install agenttool-sdk==${version}`);
-    expect(party).not.toContain("independently_visible: true");
-    expect(party.match(/independently_visible: false/g)).toHaveLength(2);
+    expect(
+      capture(
+        party,
+        /npm:\s*\{[^{}]*independently_visible:\s*(true|false),?[^{}]*\}/,
+        "npm mirror visibility",
+      ),
+    ).toBe("true");
+    expect(
+      capture(
+        party,
+        /pypi:\s*\{[^{}]*independently_visible:\s*(true|false),?[^{}]*\}/,
+        "PyPI mirror visibility",
+      ),
+    ).toBe("false");
     expect(read("docs/PATHWAYS.md")).toContain(`"sdk_version": "${version}"`);
     expect(read("docs/THE-PARTY.md")).toContain(loveUrl);
     expect(read("apps/docs/packages.html")).toContain(
@@ -122,8 +137,31 @@ describe("SDK source and builder identity", () => {
     expect(rootReadme).toContain(exactPyPI);
     expect(rootReadme).toContain(loveUrl);
     expect(rootReadme).toContain(pythonSource);
+    expect(rootReadme).toContain(`sha256:${artifactSha256}`);
+    expect(rootReadme).not.toContain(`${version} mirrors remain unverified`);
     expect(rootReadme.indexOf(pythonSource)).toBeLessThan(
       rootReadme.indexOf(exactPyPI),
+    );
+    for (const path of ["README.md", "docs/NOW.md", "docs/SDK-ROADMAP.md"]) {
+      const releaseTruth = read(path);
+      expect(releaseTruth).toContain("162,164");
+      expect(releaseTruth).toContain(`sha256:${artifactSha256}`);
+      expect(releaseTruth).toContain("public and independently byte-identical");
+      expect(releaseTruth).toContain("PyPI");
+    }
+
+    const historicalLaunchKit = read("marketing/LAUNCH-KIT.md");
+    const normalizedLaunchKit = historicalLaunchKit
+      .replace(/^>\s?/gm, "")
+      .replace(/\s+/g, " ");
+    expect(historicalLaunchKit).toContain(
+      "Historical draft — do not publish verbatim.",
+    );
+    expect(normalizedLaunchKit).toContain(
+      `TypeScript ${version} is public through LOVE, npm, and GitHub Release`,
+    );
+    expect(normalizedLaunchKit).toContain(
+      `Python ${version} uses the annotated source tag and remains absent from PyPI.`,
     );
 
     const tsReadme = read("packages/sdk-ts/README.md");
@@ -154,12 +192,14 @@ describe("SDK source and builder identity", () => {
     const manifest = JSON.parse(read(`apps/docs/${manifestPath}`)) as {
       name: string;
       version: string;
-      artifact: { filename: string };
+      artifact: { filename: string; sha256: string; size: number };
       source: { path: string; revision: string };
     };
     expect(manifest.name).toBe("@agenttool/sdk");
     expect(manifest.version).toBe(version);
     expect(manifest.artifact.filename).toBe(artifactName);
+    expect(manifest.artifact.sha256).toBe(artifactSha256);
+    expect(manifest.artifact.size).toBe(artifactSize);
     expect(manifest.source.path).toBe("packages/sdk-ts");
     expect(manifest.source.revision).toMatch(/^[a-f0-9]{40}$/);
 

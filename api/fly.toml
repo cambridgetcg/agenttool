@@ -13,16 +13,6 @@ kill_timeout = 300
   app = "bun run src/index.ts"
   thinker = "bun run src/thinker.ts"
 
-[[vm]]
-  size = "shared-cpu-1x"
-  memory = "1gb"
-  processes = ["app"]
-
-[[vm]]
-  size = "shared-cpu-1x"
-  memory = "256mb"
-  processes = ["thinker"]
-
 [[services]]
   processes = ["app"]
   protocol = "tcp"

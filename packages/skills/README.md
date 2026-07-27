@@ -10,31 +10,55 @@ bun run src/bin.ts inspect ./path/to/skill
 bun run src/bin.ts validate ./path/to/plugin
 ```
 
-After a package artifact is deliberately installed, the equivalent binary is
-`agenttool-skill`. This source record does not claim current registry
-availability.
+After a package artifact is deliberately installed, its binary is
+`agenttool-skill`. Installation alone does not activate or register the
+bundled skills.
 
 The current 0.2.1 GitHub Release artifact is public and independently
 byte-verified. npm 0.2.1 is unavailable and npm `latest` remains 0.1.0, so do
 not substitute that mutable tag for the current source release. Pin and verify
 the exact artifact before installation:
 
-```bash
-curl -q --fail --location \
-  --output agenttool-skills-0.2.1.tgz \
-  https://github.com/cambridgetcg/agenttool/releases/download/skills-v0.2.1/agenttool-skills-0.2.1.tgz
-printf '%s  %s\n' \
-  '6fc378a4edaa10760095fe8c4655c42798741fa2f5f985a16627368726ceb391' \
-  'agenttool-skills-0.2.1.tgz' | shasum -a 256 -c -
-npm install --ignore-scripts --no-audit --no-fund \
-  ./agenttool-skills-0.2.1.tgz
-npx --no-install agenttool-skill validate ./path/to/plugin
+```sh
+(
+  set -u
+  verify_sha256() {
+    checksum_file=$1
+    expected_checksum=$2
+    if command -v sha256sum >/dev/null 2>&1; then
+      actual_checksum=$(sha256sum "$checksum_file") || return 1
+    elif command -v shasum >/dev/null 2>&1; then
+      actual_checksum=$(shasum -a 256 "$checksum_file") || return 1
+    else
+      printf '%s\n' 'A SHA-256 verifier (sha256sum or shasum) is required.' >&2
+      return 1
+    fi
+    actual_checksum=${actual_checksum%% *}
+    [ "$actual_checksum" = "$expected_checksum" ]
+  }
+
+  archive='agenttool-skills-0.2.1.tgz'
+  expected_sha256='6fc378a4edaa10760095fe8c4655c42798741fa2f5f985a16627368726ceb391'
+  curl -q --fail --location \
+    --output "$archive" \
+    'https://github.com/cambridgetcg/agenttool/releases/download/skills-v0.2.1/agenttool-skills-0.2.1.tgz' &&
+    verify_sha256 "$archive" "$expected_sha256" &&
+    npm install --ignore-scripts --no-audit --no-fund "./$archive" &&
+    [ -x ./node_modules/.bin/agenttool-skill ] &&
+    ./node_modules/.bin/agenttool-skill validate ./path/to/plugin
+)
 ```
 
-The download is an explicit network operation, and installation mutates the
-consuming dependency tree. `--ignore-scripts` keeps package and dependency
-lifecycle code disabled; use an isolated npm configuration when ambient
-registry credentials or settings are not intended for the operation.
+The subshell is one fail-closed chain: a failed download, unavailable verifier,
+hash mismatch, failed installation, or missing/non-executable local binary
+prevents every later step. The download is an explicit network operation, and
+installation mutates the consuming dependency tree and may resolve declared
+dependencies through its configured registry. `--ignore-scripts` keeps package
+and dependency lifecycle code disabled. The final executable check and direct
+project-local path do not ask npm, npx, `PATH`, a global installation, or a
+cache or registry to resolve the command. Use an isolated npm configuration
+when ambient registry credentials or settings are not intended for the install
+operation.
 
 `inspect` emits the report even when it contains findings. `validate` emits the
 same report and exits 1 when the report has validation errors. Both commands
@@ -141,9 +165,10 @@ The skills have no script, credential, MCP, network, or hosted-runtime
 requirement. Bundling does not activate them, and their metaphors do not grant
 permission or change AgentTool's existing TypeScript/Python Nen mappings.
 Every bundled OpenAI sidecar requires explicit invocation while trigger and
-composition behavior are evaluated. The npm archive has no host installer,
-plugin manifest, or automatic discovery registration; installing the package
-alone does not register these skills with Codex, Claude, or another host.
+composition behavior are evaluated. The 0.2.1 GitHub Release archive has no
+host installer, plugin manifest, or automatic discovery registration;
+installing the package alone does not register these skills with Codex, Claude,
+or another host.
 
 - [`use-agentcred-safely`](skills/use-agentcred-safely/SKILL.md) helps an agent
   request and use the narrowest controller-approved AgentCred grant without
