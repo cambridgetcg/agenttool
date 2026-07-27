@@ -15,9 +15,14 @@ usage:
   bin/migrate.sh new <descriptive_slug>
   bin/migrate.sh [--dry-run]
 
-DATABASE_URL is read from the environment or the configured Keychain entry by
-the pending runner. A positional postgres:// URL remains accepted only for
-backward compatibility and is never printed.
+DATABASE_URL is transaction-pooled survey access, read from the environment or
+the configured Keychain entry by the pending runner. Applying pending files
+also requires session-pooled DATABASE_SESSION_URL or the dedicated
+agenttool-database-session-url Keychain entry.
+
+A positional postgres:// URL remains accepted only as backward-compatible
+DATABASE_URL survey input. It is never printed and never satisfies the separate
+session-pooled apply requirement.
 EOF
 }
 
@@ -82,7 +87,8 @@ case "${1:-}" in
     ;;
   postgres://*|postgresql://*)
     # Legacy callers passed the connection URI as argv. Keep the compatibility
-    # path, but scope it to the child process and never echo it.
+    # survey path, but scope it to the child process and never echo or promote
+    # it to DATABASE_SESSION_URL.
     database_url="$1"
     shift
     exec env DATABASE_URL="$database_url" "$ROOT/bin/migrate-pending.sh" "$@"

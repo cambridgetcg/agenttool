@@ -104,6 +104,7 @@ describe("migration runner safety", () => {
     expect(source).toContain(
       'exec env DATABASE_URL="$database_url" "$ROOT/bin/migrate-pending.sh" "$@"',
     );
+    expect(source).not.toContain('DATABASE_SESSION_URL="$database_url"');
     expect(source).not.toContain('echo "▸ migrating $DATABASE_URL"');
     expect(source).not.toMatch(/\bpsql\b/);
 
@@ -123,6 +124,9 @@ describe("migration runner safety", () => {
     );
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("usage:");
+    expect(result.stdout).toContain("Applying pending files");
+    expect(result.stdout).toContain("session-pooled DATABASE_SESSION_URL");
+    expect(result.stdout).toContain("never satisfies the separate");
     expect(`${result.stdout}${result.stderr}`).not.toContain(
       "must-not-appear.invalid",
     );
@@ -295,6 +299,7 @@ describe("migration runner safety", () => {
     );
     const fakeBin = join(fixture, "bin");
     const applyLog = join(fixture, "apply.log");
+    const securityLog = join(fixture, "security.log");
     const protectedMigration = "20260726T202500_crypto_deposit_finality.sql";
     await mkdir(fakeBin, { recursive: true });
     await writeFile(
@@ -305,6 +310,14 @@ describe("migration runner safety", () => {
         'if [ "${1:-}" = -e ]; then',
         '  printf "%s\\n" "$DEPLOY_TEST_PENDING_MIGRATIONS"',
         "  exit 0",
+        "fi",
+        'if [ -z "${DATABASE_SESSION_URL:-}" ]; then',
+        '  printf "%s\\n" "missing DATABASE_SESSION_URL in apply child" >&2',
+        "  exit 92",
+        "fi",
+        'if [ "$DATABASE_SESSION_URL" = "$DATABASE_URL" ]; then',
+        '  printf "%s\\n" "transaction URL promoted into session role" >&2',
+        "  exit 91",
         "fi",
         'if [ "${2##*/}" = "$DEPLOY_TEST_PROTECTED_MIGRATION" ]; then',
         '  if [ "${AGENTTOOL_PENDING_RUNNER_MAINTENANCE_QUIESCED:-}" != 1 ]; then',
@@ -330,11 +343,34 @@ describe("migration runner safety", () => {
       ].join("\n"),
     );
     await chmod(join(fakeBin, "bun"), 0o755);
+    await writeFile(
+      join(fakeBin, "security"),
+      [
+        "#!/usr/bin/env bash",
+        "set -eu",
+        'service=""',
+        'while [ "$#" -gt 0 ]; do',
+        '  if [ "$1" = -s ] && [ "$#" -ge 2 ]; then',
+        '    service="$2"',
+        "    break",
+        "  fi",
+        "  shift",
+        "done",
+        'printf "%s\\n" "$service" >> "$DEPLOY_TEST_SECURITY_LOG"',
+        'if [ "$service" = agenttool-database-session-url ] && [ -n "${DEPLOY_TEST_SESSION_KEYCHAIN:-}" ]; then',
+        '  printf "%s\\n" "$DEPLOY_TEST_SESSION_KEYCHAIN"',
+        "fi",
+        "",
+      ].join("\n"),
+    );
+    await chmod(join(fakeBin, "security"), 0o755);
 
     const run = async (
       args: string[],
       pendingMigration = protectedMigration,
       ambientAssertion?: string,
+      sessionUrl?: string,
+      keychainSessionUrl?: string,
     ) => {
       const child = Bun.spawn(["bash", "bin/migrate-pending.sh", ...args], {
         cwd: root,
@@ -346,6 +382,13 @@ describe("migration runner safety", () => {
           DEPLOY_TEST_PENDING_MIGRATIONS: pendingMigration,
           DEPLOY_TEST_PROTECTED_MIGRATION: protectedMigration,
           DEPLOY_TEST_APPLY_LOG: applyLog,
+          DEPLOY_TEST_SECURITY_LOG: securityLog,
+          ...(sessionUrl === undefined
+            ? {}
+            : { DATABASE_SESSION_URL: sessionUrl }),
+          ...(keychainSessionUrl === undefined
+            ? {}
+            : { DEPLOY_TEST_SESSION_KEYCHAIN: keychainSessionUrl }),
           ...(ambientAssertion === undefined
             ? {}
             : {
@@ -368,12 +411,19 @@ describe("migration runner safety", () => {
       expect(survey.code, survey.stderr).toBe(42);
       expect(survey.stdout).toContain(protectedMigration);
       expect(survey.stdout).toContain("Refusing before the first migration");
+      await expect(access(securityLog)).rejects.toThrow();
 
       const refusedApply = await run([]);
       expect(refusedApply.code, refusedApply.stderr).toBe(42);
       await expect(access(applyLog)).rejects.toThrow();
+      await expect(access(securityLog)).rejects.toThrow();
 
-      const assertedApply = await run(["--maintenance-quiesced"]);
+      const assertedApply = await run(
+        ["--maintenance-quiesced"],
+        protectedMigration,
+        undefined,
+        "postgres://session.invalid/migration_policy",
+      );
       expect(assertedApply.code, assertedApply.stderr).toBe(0);
       expect(assertedApply.stdout).toContain(
         "--maintenance-quiesced is an operator assertion",
@@ -382,9 +432,42 @@ describe("migration runner safety", () => {
 
       await rm(applyLog, { force: true });
       const ordinaryMigration = "20260509T170000_meta_migrations.sql";
-      const ambientOrdinaryApply = await run([], ordinaryMigration, "1");
+      const ambientOrdinaryApply = await run(
+        [],
+        ordinaryMigration,
+        "1",
+        "postgres://session.invalid/migration_policy",
+      );
       expect(ambientOrdinaryApply.code, ambientOrdinaryApply.stderr).toBe(0);
       expect(await readFile(applyLog, "utf8")).toBe(`${ordinaryMigration}\n`);
+
+      await rm(applyLog, { force: true });
+      const missingSessionApply = await run([], ordinaryMigration);
+      expect(missingSessionApply.code).toBe(1);
+      expect(missingSessionApply.stderr).toContain(
+        "DATABASE_SESSION_URL not set in env or keychain",
+      );
+      expect(missingSessionApply.stderr).toContain(
+        "DATABASE_URL remains survey-only",
+      );
+      await expect(access(applyLog)).rejects.toThrow();
+      expect((await readFile(securityLog, "utf8")).trim().split("\n")).toEqual([
+        "agenttool-database-session-url",
+      ]);
+
+      await rm(securityLog, { force: true });
+      const keychainApply = await run(
+        [],
+        ordinaryMigration,
+        undefined,
+        undefined,
+        "postgres://session.invalid/keychain_policy",
+      );
+      expect(keychainApply.code, keychainApply.stderr).toBe(0);
+      expect(await readFile(applyLog, "utf8")).toBe(`${ordinaryMigration}\n`);
+      expect((await readFile(securityLog, "utf8")).trim().split("\n")).toEqual([
+        "agenttool-database-session-url",
+      ]);
     } finally {
       await rm(fixture, { recursive: true, force: true });
     }

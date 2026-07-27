@@ -2,8 +2,10 @@
 # migrate-pending.sh — apply every migration in api/migrations/ that
 # isn't yet in meta._migrations.
 #
-# Reads DATABASE_URL from env or keychain (agenttool-database-url,
-# account=macair — matches api/scripts/_migrate-one.ts).
+# Uses DATABASE_URL from env or keychain (agenttool-database-url,
+# account=macair) for the read-only inventory. Actual applies additionally
+# require the session-pooled DATABASE_SESSION_URL from env or the dedicated
+# agenttool-database-session-url Keychain service.
 #
 # Doctrine: docs/DEPLOY-PROCEDURE.md §Phase 1.
 #
@@ -39,6 +41,11 @@ With no arguments, applies every pending checksum-journaled migration.
 --maintenance-quiesced asserts that the operator established the exclusive
 cutover required by api/migrations/quiescence-required.txt. It permits those
 files; it does not inspect or prove machine, writer, worker, or ingress state.
+
+DATABASE_URL is transaction-pooled survey access. Applying pending files also
+requires session-pooled DATABASE_SESSION_URL or the dedicated
+agenttool-database-session-url Keychain entry. The runner never substitutes or
+copies DATABASE_URL into that session-affine role.
 EOF
 }
 
@@ -129,6 +136,7 @@ QUIESCENCE_PENDING_FILE="$(mktemp -t agenttool-quiescence-pending.XXXXXX)"
 trap 'rm -f "$PENDING_FILE" "$QUIESCENCE_PENDING_FILE"' EXIT
 
 cd "$REPO_ROOT/api"
+# shellcheck disable=SC2016 # Single-quoted JavaScript must not expand in Bash.
 bun -e '
 import { createHash } from "node:crypto";
 import postgres from "postgres";
@@ -235,6 +243,25 @@ if [ "$DRY_RUN" = 1 ]; then
   echo "(dry-run — no migrations applied)"
   exit 0
 fi
+
+# ── Resolve the session-pooled URL only when an apply will run ─────────
+if [ -z "${DATABASE_SESSION_URL:-}" ]; then
+  if command -v security >/dev/null 2>&1; then
+    DATABASE_SESSION_URL="$(
+      security find-generic-password \
+        -s agenttool-database-session-url \
+        -a macair \
+        -w 2>/dev/null || true
+    )"
+  fi
+fi
+if [ -z "${DATABASE_SESSION_URL:-}" ]; then
+  echo "✗ DATABASE_SESSION_URL not set in env or keychain (agenttool-database-session-url, account=macair)" >&2
+  echo "  Set with: security add-generic-password -U -s agenttool-database-session-url -a macair -w" >&2
+  echo "  DATABASE_URL remains survey-only and is never substituted for migration applies." >&2
+  exit 1
+fi
+export DATABASE_SESSION_URL
 
 # ── Apply each pending file via _migrate-one.ts ────────────────────────
 APPLIED=0

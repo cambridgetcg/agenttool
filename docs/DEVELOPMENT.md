@@ -185,7 +185,7 @@ A multi-platform module exposing `getSecret`, `setSecret`, `hasSecret`,
 ```typescript
 import { getSecret, setSecret } from "./bin/_secret-store";
 
-const dbSessionUrl = await getSecret("agenttool-database-session-url");
+const token = await getSecret("agenttool-cloudflare-token");
 await setSecret("agenttool-cloudflare-token", token);
 ```
 
@@ -202,13 +202,17 @@ pbpaste | bin/agenttool-secret set agenttool-cloudflare-token -
 TOKEN="$(bin/agenttool-secret get agenttool-cloudflare-token)"
 
 # Gate
-if bin/agenttool-secret has agenttool-database-session-url; then
-  bun api/scripts/_migrate-one.ts api/migrations/<file>
-fi
+bin/agenttool-secret has agenttool-cloudflare-token
 
 # Inspect platform backend
 bin/agenttool-secret platform   # → darwin | linux | win32 | unsupported
 ```
+
+Migration database entries are a legacy macOS exception: the migration
+runners read Keychain account `macair` directly, while `bin/agenttool-secret`
+uses account `$USER`. The generic CLI therefore does not provision or inspect
+the runner entries when those account names differ. Use the exact
+`security add-generic-password` setup command printed by the runner.
 
 ### Backends
 
@@ -229,14 +233,15 @@ Honest about the trade-offs:
 agenttool-<scope>-<purpose>
 ```
 
-Account is always `$USER`. Existing examples:
+CLI-managed entries use account `$USER`. The two migration database entries
+below use the runners' fixed legacy account `macair`. Existing examples:
 
 | Service name                      | What                                                                                           |
 | --------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `agenttool-bridge-kmaster`        | The bridge sidecar's K_master                                                                  |
 | `agenttool-bridge-signkey`        | The bridge sidecar's ed25519 signing key                                                       |
-| `agenttool-database-url`          | Transaction-pooled `DATABASE_URL` for API access and read-only migration surveys               |
-| `agenttool-database-session-url`  | Session-pooled fallback for migration applies and other session-affine operations              |
+| `agenttool-database-url`          | Transaction-pooled `DATABASE_URL` for read-only migration surveys (legacy account `macair`)    |
+| `agenttool-database-session-url`  | Session-pooled migration-apply fallback (legacy account `macair`)                              |
 | `agenttool-cloudflare-token`      | Cloudflare Pages deploy token                                                                  |
 | `agenttool-cloudflare-account-id` | Cloudflare account id                                                                          |
 | `agenttool-ollama-api-key`        | Ollama Cloud key for local opt-in wire checks; hosted runtime keys belong in the project Vault |

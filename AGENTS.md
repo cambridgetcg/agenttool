@@ -99,7 +99,9 @@ cd packages/sdk-py && pip install -e .         # Python SDK
 Environment vars (set in shell or `.env` per workspace — there is no `.env.example`; the canonical list lives in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) + [`docs/STACK.md`](docs/STACK.md)):
 
 - `DATABASE_URL` — transaction-pooled Supabase Postgres used by the API,
-  migrations, and database test tier
+  read-only migration inventory, and database test tier
+- `DATABASE_SESSION_URL` — session-pooled Supabase Postgres required for
+  migration applies and used by session-affine operations such as LISTEN
 - `REDIS_URL` — Redis (BullMQ + SSE backplane)
 - `STRIPE_SECRET_KEY` · `STRIPE_WEBHOOK_SECRET` — payments
 - `CRYPTO_NETWORK=testnet|mainnet` — explicit network for deposit derivation,

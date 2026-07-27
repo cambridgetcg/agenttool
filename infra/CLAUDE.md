@@ -36,7 +36,7 @@ CLAUDE.md               — This file
 |---|---|---|
 | API | `bin/deploy.sh --no-migrate --no-frontend` | Stages doctrine bytes, then rolling restart across 3 machines |
 | Frontend | `bin/frontend-deploy.sh [project ...]` | Cloudflare Pages Direct Upload |
-| DB migration | `bun api/scripts/_migrate-one.ts api/migrations/<file>` | Single-file `psql` apply |
+| DB migration | `bun api/scripts/_migrate-one.ts api/migrations/<file>` | Checksum-journaled single-file apply using session-pooled `DATABASE_SESSION_URL` or the dedicated local Keychain entry; not raw `psql` |
 
 Full deploy semantics + ordering: `docs/STACK.md` § 8.
 

@@ -22,7 +22,11 @@ partial prefix with raw `psql` and then run the batch runner: that loses the
 proof of which bytes were already applied.
 
 ```bash
-export DATABASE_URL="postgres://user:pass@host:5432/agenttool"
+# Transaction-pooled URL: read-only inventory and normal API access.
+export DATABASE_URL="postgres://user:pass@transaction-pool:6543/agenttool"
+
+# Session-pooled URL: mandatory for migration applies and their advisory lock.
+export DATABASE_SESSION_URL="postgres://user:pass@session-pool:5432/agenttool"
 
 # A fresh target has no old API writers, provider ingress, or workers. The
 # first survey lists the full backlog and exits 42 because protected files are
@@ -54,6 +58,7 @@ cd api/
 
 # Required
 export DATABASE_URL="postgres://..."
+export DATABASE_SESSION_URL="postgres://..."
 export REDIS_URL="redis://..."
 
 # Vault — 32 bytes hex (or generate: `openssl rand -hex 32`)
