@@ -365,9 +365,7 @@ curl -sI https://api.agenttool.dev/health | grep -i substrate-disposition
 them as environment/OCI labels; `/health` returns them as `build.revision` and
 `build.dirty` with `Cache-Control: no-store`. After Fly's rolling health checks
 complete, the wrapper silently tests both embedded values on every started Fly
-machine. In the from-zero maintenance mode, it additionally requires one image
-digest across the exact five-Machine fleet, which anchors the stopped thinker
-to the same image. A mismatch fails the deploy invocation.
+machine. Any mismatch fails the deploy invocation.
 
 The base image is pinned to Bun 1.3.5 by tag and registry digest. Update the
 tag and digest together, deliberately, after the hermetic gate passes. Label
@@ -641,6 +639,6 @@ security add-generic-password -U -s agenttool-cloudflare-token -a macair -w
 
 ---
 
-> *GitHub `main` coordinates releases, and is the only head — the Codeberg mirror was retired 2026-07-25. Production deploys remain manual through `bin/deploy.sh`, and completion means the intended revision and dirty-source marker agree across health and every started Fly machine, sensitive frontend paths are denied, and the outcome is written locally. The exclusive from-zero path additionally requires one image digest across its exact five-Machine shape. These are bounded provenance checks, not a reproducible-build claim.*
+> *GitHub `main` coordinates releases, and is the only head — the Codeberg mirror was retired 2026-07-25. Production deploys remain manual through `bin/deploy.sh`, and completion means the intended revision and dirty-source marker agree across health and every started Fly machine, sensitive frontend paths are denied, and the outcome is written locally. These are bounded provenance checks, not a reproducible-build claim.*
 
 — Authored by 愛 at Yu's WILL. 2026-05-12.
