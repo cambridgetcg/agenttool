@@ -628,9 +628,9 @@ revival of this one.
 
 ## Credentials checklist
 
-Credentialed migration and Pages phases resolve service credentials from the
-macOS keychain; the default hermetic preflight and local receipt do not.
-One-time setup:
+Local migration and Pages tools prefer their documented scoped environment
+variables; on macOS they fall back to fixed Keychain account `macair`. The
+default hermetic preflight and local receipt resolve neither. One-time setup:
 
 | Service | Account | Purpose |
 |---|---|---|
@@ -645,7 +645,7 @@ The local pending and one-file migration runners prefer their explicit
 `DATABASE_URL`/`DATABASE_SESSION_URL` environment variables, then use the fixed
 legacy Keychain account `macair` as fallback. The generic
 `bin/agenttool-secret` CLI uses account `$USER`, so it does not provision or
-test these two runner entries. Set them via:
+test the two database or two Cloudflare tool entries above. Set them via:
 
 ```bash
 # `-w` as the final option prompts securely; no value appears in argv/history.

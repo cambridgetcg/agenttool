@@ -192,34 +192,42 @@ A multi-platform module exposing `getSecret`, `setSecret`, `hasSecret`,
 ```typescript
 import { getSecret, setSecret } from "./bin/_secret-store";
 
-const token = await getSecret("agenttool-cloudflare-token");
-await setSecret("agenttool-cloudflare-token", token);
+const example = await getSecret("agenttool-example-secret");
+if (example !== null) {
+  await setSecret("agenttool-example-secret", example);
+}
 ```
 
 ### The CLI wrapper (`bin/agenttool-secret`)
 
-Shell-callable. The right thing to use from bash scripts (E2E tests,
-deploys, etc.) instead of shelling out to platform-specific commands:
+Shell-callable. Use it for new portable local scripts instead of shelling out
+to platform-specific commands:
 
 ```bash
 # Store (stdin — never put secrets on the command line)
-pbpaste | bin/agenttool-secret set agenttool-cloudflare-token -
+pbpaste | bin/agenttool-secret set agenttool-example-secret -
 
 # Retrieve
-TOKEN="$(bin/agenttool-secret get agenttool-cloudflare-token)"
+EXAMPLE="$(bin/agenttool-secret get agenttool-example-secret)"
 
 # Gate
-bin/agenttool-secret has agenttool-cloudflare-token
+bin/agenttool-secret has agenttool-example-secret
+
+# Remove the inert tutorial entry when finished
+bin/agenttool-secret remove agenttool-example-secret
 
 # Inspect platform backend
 bin/agenttool-secret platform   # → darwin | linux | win32 | unsupported
 ```
 
-Migration database entries are a legacy macOS exception: the local pending and
-one-file migration runners read Keychain account `macair` directly, while
-`bin/agenttool-secret` uses account `$USER`. The generic CLI therefore does not
-provision or inspect the runner entries when those account names differ. Use
-the exact `security add-generic-password` setup command printed by the runner.
+Four tool-specific entries are legacy macOS exceptions: the local pending and
+one-file migration runners use the two database services below, and
+`frontend-deploy.sh` uses the two Cloudflare services, all under fixed Keychain
+account `macair` after their explicit environment inputs. The generic
+`bin/agenttool-secret` CLI uses account `$USER`, so it does not provision or
+inspect those fixed-account entries. Use the exact
+`security add-generic-password` commands in
+[`DEPLOY-PROCEDURE.md` § Credentials checklist](DEPLOY-PROCEDURE.md#credentials-checklist).
 
 ### Backends
 
@@ -232,7 +240,9 @@ the exact `security add-generic-password` setup command printed by the runner.
 Honest about the trade-offs:
 
 - **Linux file fallback** is only as strong as the file's `chmod 600` — `root` or anyone with the disk image can read it. Same for the Windows plaintext fallback. The OS-managed paths (libsecret, DPAPI) are the strong story.
-- **No rotation flow yet.** Once a key is in the keychain it stays until `agenttool-secret remove`. Real key rotation (re-derive K_master, re-encrypt all strands, swap the keychain entry) is a separate body of work, not landed.
+- **Rotation is service-specific, not universal.** Section 6 covers the landed
+  K_master thought re-encryption flow; other secrets need their own reviewed
+  rotation and continuity procedure.
 
 ### Service naming convention
 
@@ -240,8 +250,9 @@ Honest about the trade-offs:
 agenttool-<scope>-<purpose>
 ```
 
-CLI-managed entries use account `$USER`. The two migration database entries
-below use the runners' fixed legacy account `macair`. Existing examples:
+CLI-managed entries use account `$USER`. The two migration database and two
+Cloudflare entries below use their tools' fixed legacy account `macair`.
+Existing examples:
 
 | Service name                      | What                                                                                           |
 | --------------------------------- | ---------------------------------------------------------------------------------------------- |
@@ -249,8 +260,8 @@ below use the runners' fixed legacy account `macair`. Existing examples:
 | `agenttool-bridge-signkey`        | The bridge sidecar's ed25519 signing key                                                       |
 | `agenttool-database-url`          | Transaction-pooled `DATABASE_URL` for read-only migration surveys (legacy account `macair`)    |
 | `agenttool-database-session-url`  | Session-pooled migration-apply fallback (legacy account `macair`)                              |
-| `agenttool-cloudflare-token`      | Cloudflare Pages deploy token                                                                  |
-| `agenttool-cloudflare-account-id` | Cloudflare account id                                                                          |
+| `agenttool-cloudflare-token`      | Cloudflare Pages deploy token (`frontend-deploy.sh`, legacy account `macair`)                   |
+| `agenttool-cloudflare-account-id` | Cloudflare account id (`frontend-deploy.sh`, legacy account `macair`)                           |
 | `agenttool-ollama-api-key`        | Ollama Cloud key for local opt-in wire checks; hosted runtime keys belong in the project Vault |
 | `agenttool-sophia-key`            | Yu's personal Sophia bearer (used by `_e2e-*.mjs`)                                             |
 | `agenttool-sophia-identity-id`    | Yu's personal Sophia identity id                                                               |
@@ -261,7 +272,12 @@ The CLI rejects service names that don't start with `agenttool-` — convention 
 
 ### When to use which
 
-- **Writing a new script that needs a secret?** Use `bin/agenttool-secret get <service>` from bash, or import `getSecret` from `bin/_secret-store` from Bun/TypeScript. Don't shell out to `security` / `secret-tool` / PowerShell directly — the existing dev scripts that did so are macOS-only by accident, and that's the friction we just eliminated.
+- **Writing a new script that needs a CLI-managed secret?** Use
+  `bin/agenttool-secret get <service>` from bash, or import `getSecret` from
+  `bin/_secret-store` from Bun/TypeScript. Do not silently switch the existing
+  migration or Pages tools away from their documented environment/fixed-account
+  contract; consolidating those legacy exceptions is a separate reviewed
+  change.
 - **Modifying `bin/agenttool-bridge.ts`?** It still has its own copy of the platform branches (parallel-session territory at the time of this commit). Migrating it to use `_secret-store` is a clean follow-up — nothing prevents it, just deferred to avoid stepping on in-flight work.
 - **Adding a new keychain-stored secret?** Pick a name following the convention, add a row to the table above, and write to it via `agenttool-secret set <service> -` (stdin, never argv).
 
@@ -404,7 +420,7 @@ or `bun add -g @noble/ed25519`.
 | Doc edits                 | Prefer additive; rewrites only when restructuring                                     |
 | Secrets — read            | `bin/agenttool-secret get <service>` (bash) or `getSecret(service)` (TS)              |
 | Secrets — write           | `… \| bin/agenttool-secret set <service> -` (stdin; never argv)                       |
-| Service naming            | `agenttool-<scope>-<purpose>`; CLI account = `$USER`, migration DB entries = `macair` |
+| Service naming            | `agenttool-<scope>-<purpose>`; CLI = `$USER`, fixed tool entries = `macair`            |
 | K_master rotation         | `bin/agenttool-rotate --dry-run` first; then without `--dry-run`. Resume-safe.        |
 | Pre-commit                | `git status --short` → `git add <paths>` → `git diff --cached --stat` → test → commit |
 | Commit style              | `<type>(<scope>): <imperative>` (see `git log` for examples)                          |
