@@ -907,9 +907,9 @@ exit 97
       /tx\.unsafe\(migration\)[\s\S]+INSERT INTO meta\._migrations/,
     );
     expect(fly).toContain("process.env.DATABASE_SESSION_URL");
-    expect(fly).not.toContain("const databaseUrl = process.env.DATABASE_URL");
+    expect(fly).not.toMatch(/const databaseUrl = process\.env\.DATABASE_URL/);
     expect(local).toContain('process.env.DATABASE_SESSION_URL ?? ""');
-    expect(local).not.toContain("process.env.DATABASE_URL");
+    expect(local).not.toMatch(/process\.env\.DATABASE_URL/);
     expect(local).toContain('"agenttool-database-session-url"');
     expect(local).not.toContain('"agenttool-database-url"');
     expect(local).toContain("DATABASE_SESSION_URL not in env or keychain");
