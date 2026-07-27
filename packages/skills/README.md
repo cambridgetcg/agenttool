@@ -44,7 +44,7 @@ the exact artifact before installation:
     'https://github.com/cambridgetcg/agenttool/releases/download/skills-v0.2.1/agenttool-skills-0.2.1.tgz' &&
     verify_sha256 "$archive" "$expected_sha256" &&
     npm install --ignore-scripts --no-audit --no-fund "./$archive" &&
-    npx --no-install agenttool-skill validate ./path/to/plugin
+    npx --offline --no-install agenttool-skill validate ./path/to/plugin
 )
 ```
 
@@ -52,9 +52,9 @@ The subshell is one fail-closed chain: a failed download, unavailable verifier,
 hash mismatch, or failed installation prevents every later step. The download
 is an explicit network operation, and installation mutates the consuming
 dependency tree. `--ignore-scripts` keeps package and dependency lifecycle code
-disabled; `npx --no-install` refuses a registry fallback. Use an isolated npm
-configuration when ambient registry credentials or settings are not intended
-for the operation.
+disabled; `npx --offline --no-install` refuses registry access and installation
+when the local binary is missing. Use an isolated npm configuration when
+ambient registry credentials or settings are not intended for the operation.
 
 `inspect` emits the report even when it contains findings. `validate` emits the
 same report and exits 1 when the report has validation errors. Both commands

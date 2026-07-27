@@ -299,7 +299,7 @@ test("documents non-activating installation and literal inspector path arguments
     /npm 0\.2\.1 is unavailable.*npm `latest` remains 0\.1\.0/s,
   );
   expect(readme).toMatch(
-    /curl[\s\S]*&&\s+verify_sha256 "\$archive" "\$expected_sha256" &&\s+npm install --ignore-scripts --no-audit --no-fund "\.\/\$archive" &&\s+npx --no-install agenttool-skill validate/s,
+    /curl[\s\S]*&&\s+verify_sha256 "\$archive" "\$expected_sha256" &&\s+npm install --ignore-scripts --no-audit --no-fund "\.\/\$archive" &&\s+npx --offline --no-install agenttool-skill validate/s,
   );
   expect(readme).toContain("command -v sha256sum");
   expect(readme).toContain("command -v shasum");
@@ -389,7 +389,7 @@ test("documented archive install succeeds with either portable SHA-256 verifier"
       "npm install --ignore-scripts --no-audit --no-fund ./agenttool-skills-0.2.1.tgz",
     );
     expect(result.trace).toContain(
-      "npx --no-install agenttool-skill validate ./path/to/plugin",
+      "npx --offline --no-install agenttool-skill validate ./path/to/plugin",
     );
   }
 });
