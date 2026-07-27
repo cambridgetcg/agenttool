@@ -139,15 +139,18 @@ The pending script:
    the invocation is a dry run, or protected files are pending without the
    required operator assertion.
 4. Before a real apply, resolves the separately scoped session-pooled
-   `DATABASE_SESSION_URL`, repeats the complete source/journal/checksum
-   inventory through that endpoint, and requires the exact same ordered
-   pending filenames. A mismatch refuses before the first mutation. Matching
+   `DATABASE_SESSION_URL` and rejects an exact string match with `DATABASE_URL`.
+   It then repeats the complete source/journal/checksum inventory through the
+   session endpoint and requires the exact same ordered pending filenames. A
+   mismatch refuses before the first mutation. Distinct strings and matching
    inventories catch many endpoint mistakes; they do not prove pool type or
    that both URLs identify the same database. The operator remains responsible
    for that binding.
 5. Applies pending files in alphabetical order (which is timestamp order for
-   the `YYYYMMDDTHHMMSS_*` naming convention). Each apply goes through
-   `_migrate-one.ts`, which:
+   the `YYYYMMDDTHHMMSS_*` naming convention), except that a target without the
+   migration journal promotes
+   `20260509T170000_meta_migrations.sql` to the front so later files can be
+   journaled. Each apply goes through `_migrate-one.ts`, which:
    - Computes file sha256 and refuses to apply if a row exists with a different checksum (corruption signal).
    - Holds one PostgreSQL advisory lock for the migration session. It waits at
      most 30 seconds for that lock, at most 10 seconds for each database lock,
@@ -631,22 +634,25 @@ One-time setup:
 
 | Service | Account | Purpose |
 |---|---|---|
-| `agenttool-database-url` | `macair` | Transaction-pooled `DATABASE_URL` for migration inventory and general database access |
+| `agenttool-database-url` | `macair` | Transaction-pooled `DATABASE_URL` for migration inventory |
 | `agenttool-database-session-url` | `macair` | Session-pooled `DATABASE_SESSION_URL` required for migration applies |
 | `agenttool-cloudflare-token` | `macair` | CF API token (Pages:Edit) for `frontend-deploy.sh` |
 | `agenttool-cloudflare-account-id` | `macair` | 32-char CF account ID |
 | `agenttool-soma-bearer` | `$USER` | Bearer for the canonical agent (for smoke tests + wake reads) |
 | `agenttool-sophia-identity-id` | `$USER` | The canonical agent's identity UUID (for smoke + preflight) |
 
-The migration runners use the fixed legacy Keychain account `macair`
-directly. The generic `bin/agenttool-secret` CLI uses account `$USER`, so it
-does not provision or test these two runner entries. Set them via:
+The local pending and one-file migration runners prefer their explicit
+`DATABASE_URL`/`DATABASE_SESSION_URL` environment variables, then use the fixed
+legacy Keychain account `macair` as fallback. The generic
+`bin/agenttool-secret` CLI uses account `$USER`, so it does not provision or
+test these two runner entries. Set them via:
 
 ```bash
 # `-w` as the final option prompts securely; no value appears in argv/history.
 security add-generic-password -U -s agenttool-database-url -a macair -w
 security add-generic-password -U -s agenttool-database-session-url -a macair -w
 security add-generic-password -U -s agenttool-cloudflare-token -a macair -w
+security add-generic-password -U -s agenttool-cloudflare-account-id -a macair -w
 ```
 
 ## Common failure modes + recipes

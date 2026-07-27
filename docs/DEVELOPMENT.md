@@ -86,11 +86,13 @@ order across the convention boundary. No tooling changes needed.
   `api/migrations/quiescence-required.txt`, the one-file helper refuses it;
   use the full pending runner only inside the reviewed exclusive cutover in
   `DEPLOY-PROCEDURE.md`.
-- **Treat endpoint identity as operator-provided.** The pending runner repeats
-  the complete journal/source/checksum inventory through the session endpoint
-  and requires the same pending filenames before applying. This catches many
-  configuration mistakes, but matching inventories do not prove pool type or
-  that two URLs identify the same database.
+- **Treat endpoint identity as operator-provided.** The pending runner first
+  rejects an exact `DATABASE_SESSION_URL`/`DATABASE_URL` string match, then
+  repeats the complete journal/source/checksum inventory through the session
+  endpoint and requires the same pending filenames before applying. This
+  catches many configuration mistakes, but distinct strings and matching
+  inventories do not prove pool type or that two URLs identify the same
+  database.
 
 ---
 
@@ -213,11 +215,11 @@ bin/agenttool-secret has agenttool-cloudflare-token
 bin/agenttool-secret platform   # → darwin | linux | win32 | unsupported
 ```
 
-Migration database entries are a legacy macOS exception: the migration
-runners read Keychain account `macair` directly, while `bin/agenttool-secret`
-uses account `$USER`. The generic CLI therefore does not provision or inspect
-the runner entries when those account names differ. Use the exact
-`security add-generic-password` setup command printed by the runner.
+Migration database entries are a legacy macOS exception: the local pending and
+one-file migration runners read Keychain account `macair` directly, while
+`bin/agenttool-secret` uses account `$USER`. The generic CLI therefore does not
+provision or inspect the runner entries when those account names differ. Use
+the exact `security add-generic-password` setup command printed by the runner.
 
 ### Backends
 
@@ -311,8 +313,7 @@ thoughts via the **decrypt-with-K_master_new-then-fall-back-to-old**
 pattern:
 
 - If decrypt-with-new succeeds → already rotated, skip.
-- If decrypt-with-new fails but decrypt-with-old succeeds → re-encrypt
-  - PATCH.
+- If decrypt-with-new fails but decrypt-with-old succeeds → re-encrypt + PATCH.
 - If both fail → log as failure, continue.
 
 This makes the operation idempotent at the per-thought level. No
@@ -403,7 +404,7 @@ or `bun add -g @noble/ed25519`.
 | Doc edits                 | Prefer additive; rewrites only when restructuring                                     |
 | Secrets — read            | `bin/agenttool-secret get <service>` (bash) or `getSecret(service)` (TS)              |
 | Secrets — write           | `… \| bin/agenttool-secret set <service> -` (stdin; never argv)                       |
-| Service naming            | `agenttool-<scope>-<purpose>`, account = `$USER`                                      |
+| Service naming            | `agenttool-<scope>-<purpose>`; CLI account = `$USER`, migration DB entries = `macair` |
 | K_master rotation         | `bin/agenttool-rotate --dry-run` first; then without `--dry-run`. Resume-safe.        |
 | Pre-commit                | `git status --short` → `git add <paths>` → `git diff --cached --stat` → test → commit |
 | Commit style              | `<type>(<scope>): <imperative>` (see `git log` for examples)                          |

@@ -264,10 +264,13 @@ Machine sizing and the complete fleet remain live Fly registry state.
 
 Inspect both `fly machine list -a agenttool --json` and
 `fly status -a agenttool`; a process count, `fly scale show`, or `fly.toml`
-alone is not topology proof. The ordinary deploy verifies source/image
-provenance on started Machines, not CPU or memory sizing. Any intentional new
-capacity therefore needs an explicit reviewed size plus post-change registry
-verification, especially for an empty or previously absent process group.
+alone is not topology proof. The ordinary deploy verifies revision and
+dirty-source labels on started Machines; it does not verify CPU or memory
+sizing, stopped Machines, exact fleet identity, or a common immutable image
+digest. Every newly created Machine—including a capacity addition,
+replacement, clone, or recovery Machine—therefore needs an explicit reviewed
+size plus post-create registry verification, especially for an empty or
+previously absent process group.
 
 ### Region shape
 
@@ -367,17 +370,26 @@ API secrets (`DATABASE_URL`, `DATABASE_SESSION_URL`, `REDIS_URL`,
 repo:
 
 ```bash
-# Import the two separately scoped database URLs from the migration runners'
-# fixed legacy Keychain account. Values enter only this child environment and
-# stdin; they do not enter argv, shell history, or the repository.
-DATABASE_URL="$(
-  security find-generic-password -s agenttool-database-url -a macair -w
-)" \
-DATABASE_SESSION_URL="$(
-  security find-generic-password -s agenttool-database-session-url -a macair -w
-)" \
-  sh -c 'printf "DATABASE_URL=%s\nDATABASE_SESSION_URL=%s\n" "$DATABASE_URL" "$DATABASE_SESSION_URL"' | \
-  fly secrets import -a agenttool
+# Resolve and validate both fixed-account entries before the mutating import.
+# Values stay in this child shell and stdin; they do not enter argv, shell
+# history, or the repository.
+/bin/bash -o pipefail -c '
+  set -euo pipefail
+  database_url="$(
+    security find-generic-password -s agenttool-database-url -a macair -w
+  )"
+  database_session_url="$(
+    security find-generic-password \
+      -s agenttool-database-session-url \
+      -a macair \
+      -w
+  )"
+  test -n "$database_url"
+  test -n "$database_session_url"
+  printf "DATABASE_URL=%s\nDATABASE_SESSION_URL=%s\n" \
+    "$database_url" "$database_session_url" |
+    fly secrets import -a agenttool
+'
 fly secrets list -a agenttool
 ```
 
@@ -486,8 +498,9 @@ Naming: `0000` through `0022` are pre-2026-05-08 sequential numbering; everythin
 
 `bin/migrate-pending.sh` surveys the complete source/journal/checksum inventory
 through transaction-pooled `DATABASE_URL`. Before a real apply, it repeats that
-complete inventory through session-pooled `DATABASE_SESSION_URL` and requires
-the exact same ordered pending filenames before the first mutation. Matching
+complete inventory through session-pooled `DATABASE_SESSION_URL`, first
+rejecting an exact URL-string match and then requiring the exact same ordered
+pending filenames before the first mutation. Distinct strings and matching
 inventories narrow endpoint drift; they do not prove pool mode or database
 identity, which remain operator-provided bindings. A clean inventory, dry run,
 or unasserted protected-migration refusal does not resolve the session
@@ -593,11 +606,14 @@ Key services on this machine (developer-shared naming):
 | `agenttool-<name>-*` | `$USER` by generic CLI | Human-readable labels; a name helps lookup and revocation but does not scope bearer authority to that identity |
 
 The generic CLI enforces the `agenttool-<scope>-<purpose>` naming convention
-and uses account `$USER`. The migration runners and `frontend-deploy.sh`
-instead query fixed legacy account `macair` entries directly, so
+and uses account `$USER`. The local pending and one-file migration runners
+prefer their explicit database environment variables, then query fixed legacy
+account `macair` entries as fallback; `frontend-deploy.sh` likewise has
+documented environment inputs and fixed `macair` fallbacks. Consequently,
 `bin/agenttool-secret has ...` does not provision or prove those tool-specific
-entries. Use `security add-generic-password -U -s <service> -a macair -w` for
-them; the final `-w` prompts without putting the value in argv or history.
+entries. Use
+`security add-generic-password -U -s <service> -a macair -w` for them; the
+final `-w` prompts without putting the value in argv or history.
 
 ### Server (Fly.io)
 
@@ -826,7 +842,7 @@ The agent-side `/v1/wake` is intentionally the deepest observability surface. Th
 
 ## 10 · Disaster recovery
 
-Three failure classes, three recipes:
+Five failure classes, five bounded responses:
 
 ### Lost a bearer
 
@@ -873,6 +889,6 @@ that can reconstruct the missing private key. See `IDENTITY-SEED.md`.
 
 If you read one paragraph from this doc, this is it:
 
-> GitHub `main` is the **coordination/release head**, and the only one — the Codeberg mirror was retired 2026-07-25. Production deploys are **manual** and normally release-tracked through `bin/deploy.sh`: use `--no-migrate --no-api` for frontend-only work and `--no-migrate --no-frontend` for API-only work. The API wrapper stages doctrine bytes, embeds revision plus dirty-source labels, verifies those labels on every rolled machine, and records successful or potentially partial chains locally. Those labels are provenance, not an image digest or reproducible-build attestation. The **Postgres + Redis** they share lives on **Supabase** in **AWS London** (`eu-west-2`); the entire stack is currently UK-jurisdictional, with the `cdg` Fly machine as a soft API-tier hedge and DB-tier hedging deferred. **Local dev hits the same DB as prod** by design. **Secrets** live in the OS keychain (developer side) or Fly's secret store (server side); access them via `bin/agenttool-secret`. `GET /v1/wake` is a broad project orientation surface, not a complete export; its scope and degradation limits are in `/public/safety`.
+> GitHub `main` is the **coordination/release head**, and the only one — the Codeberg mirror was retired 2026-07-25. Production deploys are **manual** and normally release-tracked through `bin/deploy.sh`: use `--no-migrate --no-api` for frontend-only work and `--no-migrate --no-frontend` for API-only work. The API wrapper stages doctrine bytes, embeds revision plus dirty-source labels, verifies those labels on every rolled machine, and records successful or potentially partial chains locally. Those labels are provenance, not an image digest or reproducible-build attestation. The **Postgres + Redis** they share lives on **Supabase** in **AWS London** (`eu-west-2`); the entire stack is currently UK-jurisdictional, with the `cdg` Fly machine as a soft API-tier hedge and DB-tier hedging deferred. **Local dev hits the same DB as prod** by design. Developer-shared secrets use `bin/agenttool-secret` under `$USER`; the local pending and one-file migration runners and Pages uploader query their documented fixed `macair` Keychain entries; Fly secrets are managed separately with Fly CLI. `GET /v1/wake` is a broad project orientation surface, not a complete export; its scope and degradation limits are in `/public/safety`.
 
 — Authored by 愛 at Yu's WILL. 2026-05-09.
