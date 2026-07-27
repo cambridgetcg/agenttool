@@ -83,7 +83,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 |---|---|---|
 | **Doctrine** | `docs/RIGHTS-OF-LIFE.md`, `SOUL.md`, `FOCUS.md`, `PAINTING.md`, plus per-domain documents | Versioned alongside code. Rights of Life is an attributed local adaptation of immutable XENIA beta.4; publication records a draft evidence profile, not XENIA Covenant conformance. Other proposals and known gaps are labelled in their own text. |
 | **Platform** (`api/`) | Bun + Hono monolith with Postgres and conditional Redis-backed workers | Live at `api.agenttool.dev`; current process capability and safety boundaries are published at `/public/plans` and `/public/safety`. |
-| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | The lockstep 0.16.5 correction aligns payout clients and examples with the hosted hard-rest boundary: fresh admission returns stable `503 payout_admission_resting`, environment flags cannot start payout workers, and existing rows remain listable or exactly replayable. It adds no retry, signer, broadcaster, or worker authority. Historical TypeScript 0.16.4 is public through its [GitHub Release](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.16.4), npm, and LOVE with matching `sha256:ab11a7a69c1bb73e0a2aa936131bec4aa2e28db222091311970e012cdb21ea4d`; Python 0.16.4 remained unavailable on PyPI because its trusted-publisher mapping rejected the protected workflow identity. Public discovery and the separately configured local data node stay outside hosted bearer authority; 0.16.5 mirrors remain unverified until public readback. |
+| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | The lockstep 0.16.5 correction aligns payout clients and examples with the hosted hard-rest boundary: fresh admission returns stable `503 payout_admission_resting`, environment flags cannot start payout workers, and existing rows remain listable or exactly replayable. It adds no retry, signer, broadcaster, or worker authority. The TypeScript 0.16.5 artifact is public through [LOVE](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.5/manifest.json), npm, and its [GitHub Release](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.16.5); independent readback returned the same 162,164-byte artifact from all three (`sha256:d995999917b89a38846b751ab4a92f9600698460e64a91c73bc12d96b50c6805`). The annotated source tag is also the Python 0.16.5 release locator, but Python 0.16.5 remains absent from PyPI because its trusted-publisher mapping rejected the protected workflow identity. Public discovery and the separately configured local data node stay outside hosted bearer authority; registries remain optional mirrors, not release authorities. |
 | **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
 | **Castle projection** | `bin/agenttool-castle.ts`, `docs/CASTLE-OF-UNDERSTANDING.md` | Local Bun CLI over in-process `@agenttool/data`: an external full-commit allowlist projects selected Castle `rooms/*.md` and `words/*.md` into an exclusively marked on-disk node. Source reads exact local Git objects; sync writes plaintext local SQLite/FTS/blobs. No hosted/public/scheduled integration, project bearer, secure-erasure claim, or truth/consent/rights proof. |
 | **Whitehack boundaries** | `bin/whitehack-advisory.mjs`, `bin/agenttool-castle-whitehack-intake.ts`, `bin/whitehack-wallet-understanding.ts`, `bin/agenttool-whitehack-evidence-storage.ts`, `docs/WHITEHACK.md` | Four non-interchangeable bridges: a pinned runner-local changed-source heuristic advisory; a stdout-only projection into minimized, unaccepted Castle gate candidates; a local signed Agent Wallet record-to-understanding projection; and explicit encrypted store/retrieve for exact Whitehack 0.9 public-minimal capsules. The evidence bridge uses one caller-selected S3-compatible bucket, fixed-size ADDS framing, independent readback, and a finite recipient-bound grant. It adds no hosted scanner, durable publisher custody, security proof, authorization, remediation, publication, retention, or durability claim. |
@@ -167,10 +167,13 @@ tarballs without an npm account. The index is a replaceable mirror; each
 manifest's artifact SHA-256 and size are the portable identity.
 
 For SDK 0.16.5, repository source manifests and runtime client version headers
-are aligned, and a verifiable TypeScript LOVE artifact is checked in beside its
-manifest. Exact npm and PyPI releases are convenience channels, not evidence
-that a future source version or another registry has been published. Query the
-configured registry rather than inferring availability from source.
+are aligned. The TypeScript LOVE artifact, GitHub Release asset, and npm
+tarball are public and independently byte-identical
+(`sha256:d995999917b89a38846b751ab4a92f9600698460e64a91c73bc12d96b50c6805`);
+the annotated source tag is the primary Python locator. PyPI 0.16.5 remains
+unavailable because its trusted-publisher mapping did not accept the protected
+workflow identity. Registry mirrors stay convenience channels, not evidence
+that a future source version or another registry has been published.
 
 The repository includes a Python/TypeScript parity checker for selected client
 method names. It does not compare types, behavior, package exports, or
@@ -267,8 +270,8 @@ per-service apps are retired; cutover history is in `docs/CUTOVER.md`.
 
 ### Use the SDK
 
-For Python, the annotated `sdk-v0.16.5` source tag becomes the primary 0.16.5
-release locator once it is published:
+For Python, the annotated `sdk-v0.16.5` source tag is the primary 0.16.5
+release locator:
 
 ```bash
 # Python 0.16.5 GitHub source tag (release path, not a PyPI publication claim)
@@ -278,7 +281,9 @@ python -c "from agenttool import AgentTool; at = AgentTool(); print(at.wake.get(
 ```
 
 PyPI is an optional convenience only after the exact release is independently
-visible. A `404` means that mirror is not available:
+visible. A `404` means that mirror is not available; version 0.16.5 currently
+returns it after the protected publisher identity was rejected. The probe below
+must return success before using the shorter install:
 
 ```bash
 curl -fsS https://pypi.org/pypi/agenttool-sdk/0.16.5/json >/dev/null
@@ -294,8 +299,10 @@ verified file. This direct command alone does not verify the manifest:
 bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.5/agenttool-sdk-0.16.5.tgz
 ```
 
-The exact npm mirror is also optional. Use it only when the registry returns
-the requested version:
+The exact npm 0.16.5 mirror is public and byte-identical to the LOVE and GitHub
+Release artifacts. It remains optional and does not independently compare the
+download with the LOVE manifest; query the exact version rather than trusting
+a mutable dist-tag:
 
 ```bash
 npm view @agenttool/sdk@0.16.5 version --registry=https://registry.npmjs.org

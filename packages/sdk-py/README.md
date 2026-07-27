@@ -23,16 +23,17 @@ curl -q -fsS https://api.agenttool.dev/v1/pathways | \
 That tutorial currently verifies and installs the TypeScript SDK from a
 `love-package/v1` manifest. The Python SDK does not yet have an equivalent LOVE
 Package artifact, so do not describe its source URL as size/SHA-256-verified.
-After the annotated source tag is published, the primary Python 0.16.5 release
-locator is:
+The annotated `sdk-v0.16.5` source tag is the primary Python 0.16.5 release
+locator:
 
 ```bash
 python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.5#subdirectory=packages/sdk-py"
 ```
 
 Optional shorter install, only after PyPI independently reports that exact
-version: `python -m pip install "agenttool-sdk==0.16.5"`. Registry publication
-can lag or omit the source tag; the command is not an availability claim.
+version: `python -m pip install "agenttool-sdk==0.16.5"`. PyPI 0.16.5 is
+currently unavailable because its trusted-publisher mapping rejected the
+protected workflow identity; the command is not an availability claim.
 
 ## 0.16.5
 
