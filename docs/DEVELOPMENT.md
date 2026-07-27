@@ -1,6 +1,6 @@
 # DEVELOPMENT.md
 
-> *Protocol for contributing to agenttool without stepping on parallel sessions.*
+> _Protocol for contributing to agenttool without stepping on parallel sessions._
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (what's shipping) · [NOW](NOW.md) (what just landed) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (how it deploys)
 
@@ -35,6 +35,7 @@ bun api/scripts/new-migration.ts add-foo-column
 ```
 
 The helper:
+
 - Stamps **UTC** so it's stable across machines.
 - **Auto-bumps** by 1 second if the file already exists (same-second
   collisions are extremely unlikely but the bump-loop makes the worst
@@ -77,11 +78,14 @@ order across the convention boundary. No tooling changes needed.
 - **Header comment** with `Doctrine:` reference and an `Apply:`
   command. The helper's stub gives you both.
 - **Apply ordinary migrations locally before commit** via
-  `bun api/scripts/_migrate-one.ts api/migrations/<file>`. The `DATABASE_URL`
-  comes from env or the `agenttool-database-url` macOS keychain entry. If the
-  file is in `api/migrations/quiescence-required.txt`, the one-file helper
-  refuses it; use the full pending runner only inside the reviewed exclusive
-  cutover in `DEPLOY-PROCEDURE.md`.
+  `bun api/scripts/_migrate-one.ts api/migrations/<file>`. The helper requires
+  a session-pooled `DATABASE_SESSION_URL` or the dedicated
+  `agenttool-database-session-url` macOS Keychain entry because migration
+  serialization uses a session advisory lock. It never substitutes the
+  transaction-pooled `DATABASE_URL`. If the file is in
+  `api/migrations/quiescence-required.txt`, the one-file helper refuses it;
+  use the full pending runner only inside the reviewed exclusive cutover in
+  `DEPLOY-PROCEDURE.md`.
 
 ---
 
@@ -97,6 +101,7 @@ commit. Doesn't break correctness but creates churn.
 **Pattern:** if you're modifying an existing schema file, check
 `git status` and `git log -- <file>` first to see if it's hot. If it
 is, either:
+
 - Add your column at the **end** of the table definition (less likely
   to conflict with someone adding a column elsewhere), or
 - Coordinate with the other session before starting (a 30-second
@@ -142,8 +147,8 @@ Five seconds, prevents 80% of "I committed someone else's WIP" pain:
 4. **Run tests for what you touched** — at minimum `bun test` in the
    relevant package.
 5. **Commit with a descriptive subject** following the existing style:
-   `<type>(<scope>): <imperative summary>`. Body explains *why*, not
-   *what* (the diff already says what).
+   `<type>(<scope>): <imperative summary>`. Body explains _why_, not
+   _what_ (the diff already says what).
 
 ---
 
@@ -180,7 +185,7 @@ A multi-platform module exposing `getSecret`, `setSecret`, `hasSecret`,
 ```typescript
 import { getSecret, setSecret } from "./bin/_secret-store";
 
-const dburl = await getSecret("agenttool-database-url");
+const dbSessionUrl = await getSecret("agenttool-database-session-url");
 await setSecret("agenttool-cloudflare-token", token);
 ```
 
@@ -197,7 +202,7 @@ pbpaste | bin/agenttool-secret set agenttool-cloudflare-token -
 TOKEN="$(bin/agenttool-secret get agenttool-cloudflare-token)"
 
 # Gate
-if bin/agenttool-secret has agenttool-database-url; then
+if bin/agenttool-secret has agenttool-database-session-url; then
   bun api/scripts/_migrate-one.ts api/migrations/<file>
 fi
 
@@ -207,13 +212,14 @@ bin/agenttool-secret platform   # → darwin | linux | win32 | unsupported
 
 ### Backends
 
-| OS | Mechanism | Fallback |
-|---|---|---|
-| **macOS** | `security` CLI (Keychain Access; encrypted at rest by the OS, unlocked at login) | none — `security` ships with macOS |
-| **Linux** | `secret-tool` from libsecret (GNOME Keyring / KWallet via the user's session keyring) | `~/.config/agenttool/<service>` mode 0600 when libsecret isn't installed (CI runners, headless containers) |
-| **Windows** | PowerShell `ProtectedData.Protect/Unprotect` (DPAPI · CurrentUser scope · ciphertext at `%APPDATA%/agenttool/<service>.dpapi`) | `%APPDATA%/agenttool/<service>` plaintext when PowerShell isn't available |
+| OS          | Mechanism                                                                                                                      | Fallback                                                                                                   |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| **macOS**   | `security` CLI (Keychain Access; encrypted at rest by the OS, unlocked at login)                                               | none — `security` ships with macOS                                                                         |
+| **Linux**   | `secret-tool` from libsecret (GNOME Keyring / KWallet via the user's session keyring)                                          | `~/.config/agenttool/<service>` mode 0600 when libsecret isn't installed (CI runners, headless containers) |
+| **Windows** | PowerShell `ProtectedData.Protect/Unprotect` (DPAPI · CurrentUser scope · ciphertext at `%APPDATA%/agenttool/<service>.dpapi`) | `%APPDATA%/agenttool/<service>` plaintext when PowerShell isn't available                                  |
 
 Honest about the trade-offs:
+
 - **Linux file fallback** is only as strong as the file's `chmod 600` — `root` or anyone with the disk image can read it. Same for the Windows plaintext fallback. The OS-managed paths (libsecret, DPAPI) are the strong story.
 - **No rotation flow yet.** Once a key is in the keychain it stays until `agenttool-secret remove`. Real key rotation (re-derive K_master, re-encrypt all strands, swap the keychain entry) is a separate body of work, not landed.
 
@@ -225,18 +231,19 @@ agenttool-<scope>-<purpose>
 
 Account is always `$USER`. Existing examples:
 
-| Service name | What |
-|---|---|
-| `agenttool-bridge-kmaster` | The bridge sidecar's K_master |
-| `agenttool-bridge-signkey` | The bridge sidecar's ed25519 signing key |
-| `agenttool-database-url` | DATABASE_URL for `_migrate-one.ts` |
-| `agenttool-cloudflare-token` | Cloudflare Pages deploy token |
-| `agenttool-cloudflare-account-id` | Cloudflare account id |
-| `agenttool-ollama-api-key` | Ollama Cloud key for local opt-in wire checks; hosted runtime keys belong in the project Vault |
-| `agenttool-sophia-key` | Yu's personal Sophia bearer (used by `_e2e-*.mjs`) |
-| `agenttool-sophia-identity-id` | Yu's personal Sophia identity id |
-| `agenttool-sophia-signing-key-id` | Yu's personal Sophia ed25519 key id |
-| `agenttool-sophia-k-master` | Yu's personal Sophia K_master |
+| Service name                      | What                                                                                           |
+| --------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `agenttool-bridge-kmaster`        | The bridge sidecar's K_master                                                                  |
+| `agenttool-bridge-signkey`        | The bridge sidecar's ed25519 signing key                                                       |
+| `agenttool-database-url`          | Transaction-pooled `DATABASE_URL` for API access and read-only migration surveys               |
+| `agenttool-database-session-url`  | Session-pooled fallback for migration applies and other session-affine operations              |
+| `agenttool-cloudflare-token`      | Cloudflare Pages deploy token                                                                  |
+| `agenttool-cloudflare-account-id` | Cloudflare account id                                                                          |
+| `agenttool-ollama-api-key`        | Ollama Cloud key for local opt-in wire checks; hosted runtime keys belong in the project Vault |
+| `agenttool-sophia-key`            | Yu's personal Sophia bearer (used by `_e2e-*.mjs`)                                             |
+| `agenttool-sophia-identity-id`    | Yu's personal Sophia identity id                                                               |
+| `agenttool-sophia-signing-key-id` | Yu's personal Sophia ed25519 key id                                                            |
+| `agenttool-sophia-k-master`       | Yu's personal Sophia K_master                                                                  |
 
 The CLI rejects service names that don't start with `agenttool-` — convention enforced at the tool boundary so naming stays consistent across all keychain entries.
 
@@ -295,7 +302,7 @@ pattern:
 
 - If decrypt-with-new succeeds → already rotated, skip.
 - If decrypt-with-new fails but decrypt-with-old succeeds → re-encrypt
-  + PATCH.
+  - PATCH.
 - If both fail → log as failure, continue.
 
 This makes the operation idempotent at the per-thought level. No
@@ -324,12 +331,14 @@ external state.
 ### Threat model
 
 What rotation defends against:
+
 - Past K_master compromise — old ciphertexts on disk become unreadable
   to anyone holding only K_master_old after the archive grace period.
 - Audit-driven hygiene — periodic rotation reduces the window in which
   a single key's compromise leaks data.
 
 What rotation does NOT defend against:
+
 - Active malware on the agent's machine during rotation — sees both keys.
 - Backups of the database that include old ciphertexts AND the old
   K_master from before rotation — the snapshot is still vulnerable.
@@ -373,21 +382,21 @@ or `bun add -g @noble/ed25519`.
 
 ## 7 · Conventions cheat sheet
 
-| Domain | Convention |
-|---|---|
-| New migration | `bun api/scripts/new-migration.ts <slug>` → `YYYYMMDDTHHMMSS_slug.sql` |
-| Apply ordinary migration | `bun api/scripts/_migrate-one.ts api/migrations/<file>` |
-| Apply protected migration | Reviewed exclusive cutover, then `bin/migrate-pending.sh --maintenance-quiesced` |
-| Old migrations | Stay as `0000_…` through `0022_…`. Don't renumber. |
-| Schema edits | Append at end-of-table; coordinate if hot |
-| Dep addition | Separate small commit; lockfile included |
-| Doc edits | Prefer additive; rewrites only when restructuring |
-| Secrets — read | `bin/agenttool-secret get <service>` (bash) or `getSecret(service)` (TS) |
-| Secrets — write | `… \| bin/agenttool-secret set <service> -` (stdin; never argv) |
-| Service naming | `agenttool-<scope>-<purpose>`, account = `$USER` |
-| K_master rotation | `bin/agenttool-rotate --dry-run` first; then without `--dry-run`. Resume-safe. |
-| Pre-commit | `git status --short` → `git add <paths>` → `git diff --cached --stat` → test → commit |
-| Commit style | `<type>(<scope>): <imperative>` (see `git log` for examples) |
+| Domain                    | Convention                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------- |
+| New migration             | `bun api/scripts/new-migration.ts <slug>` → `YYYYMMDDTHHMMSS_slug.sql`                |
+| Apply ordinary migration  | `bun api/scripts/_migrate-one.ts api/migrations/<file>`                               |
+| Apply protected migration | Reviewed exclusive cutover, then `bin/migrate-pending.sh --maintenance-quiesced`      |
+| Old migrations            | Stay as `0000_…` through `0022_…`. Don't renumber.                                    |
+| Schema edits              | Append at end-of-table; coordinate if hot                                             |
+| Dep addition              | Separate small commit; lockfile included                                              |
+| Doc edits                 | Prefer additive; rewrites only when restructuring                                     |
+| Secrets — read            | `bin/agenttool-secret get <service>` (bash) or `getSecret(service)` (TS)              |
+| Secrets — write           | `… \| bin/agenttool-secret set <service> -` (stdin; never argv)                       |
+| Service naming            | `agenttool-<scope>-<purpose>`, account = `$USER`                                      |
+| K_master rotation         | `bin/agenttool-rotate --dry-run` first; then without `--dry-run`. Resume-safe.        |
+| Pre-commit                | `git status --short` → `git add <paths>` → `git diff --cached --stat` → test → commit |
+| Commit style              | `<type>(<scope>): <imperative>` (see `git log` for examples)                          |
 
 ---
 

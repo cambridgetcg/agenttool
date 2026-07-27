@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Apply one checked migration from inside an existing Fly machine.
 #
-# This is the no-local-DATABASE_URL path. The database secret stays inside Fly;
-# only the migration text, filename, and checksum cross the SSH command.
+# This is the no-local-database-credential path. The session-pooled database
+# secret stays inside Fly; only the migration text, filename, and checksum
+# cross the SSH command. The transaction-pooled DATABASE_URL is deliberately
+# insufficient because it cannot preserve the session advisory lock.
 # The remote runner refuses checksum drift and records meta._migrations.
 # Quiescence-listed files refuse before checksum encoding or any Fly call.
 #
@@ -81,8 +83,13 @@ const { default: postgres } = await import("postgres");
 const filename = "__FILENAME__";
 const checksum = "__CHECKSUM__";
 const migration = Buffer.from("__MIGRATION_B64__", "base64").toString("utf8");
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) throw new Error("DATABASE_URL is absent inside the Fly machine");
+const databaseSessionUrl = process.env.DATABASE_SESSION_URL;
+if (!databaseSessionUrl) {
+  throw new Error(
+    "DATABASE_SESSION_URL is absent inside the Fly machine; " +
+    "the transaction-pooled DATABASE_URL cannot hold the migration lock",
+  );
+}
 
 // Keep this scanner aligned with api/scripts/_migrate-one.ts. Migration
 // headers may be longer than a handful of lines, while a later PL/pgSQL
@@ -106,7 +113,7 @@ function firstExecutableSql(text) {
   }
 }
 
-const sql = postgres(databaseUrl, {
+const sql = postgres(databaseSessionUrl, {
   max: 1,
   prepare: false,
   connect_timeout: 10,
@@ -127,7 +134,10 @@ try {
     }
     console.log(`${filename}: already applied (checksum match)`);
   } else {
-    const noTransaction = /^--\s*@no-transaction\b/m.test(migration);
+    // Keep the opt-out marker exact: prose such as
+    // "-- @no-transaction is NOT set" must not weaken atomicity.
+    const noTransaction =
+      /^--[ \t]+@no-transaction[ \t]*$/m.test(migration);
     const managesTransaction = /^BEGIN(?:\s+(?:WORK|TRANSACTION))?\s*;?/i.test(
       firstExecutableSql(migration),
     );
