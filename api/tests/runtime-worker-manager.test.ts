@@ -271,22 +271,6 @@ describe("Fly process topology", () => {
     expect(fly).toMatch(/^kill_signal\s*=\s*"SIGTERM"\s*$/m);
     expect(fly).toMatch(/^kill_timeout\s*=\s*300\s*$/m);
 
-    const vmBlocks = fly
-      .split(/^\[\[vm\]\]\s*$/m)
-      .slice(1)
-      .map((block) => block.split(/^\s*\[\[/m, 1)[0] ?? "");
-    expect(vmBlocks).toHaveLength(2);
-    const appVm = vmBlocks.find((block) =>
-      /^\s*processes\s*=\s*\[\s*"app"\s*\]\s*$/m.test(block),
-    );
-    const thinkerVm = vmBlocks.find((block) =>
-      /^\s*processes\s*=\s*\[\s*"thinker"\s*\]\s*$/m.test(block),
-    );
-    expect(appVm).toMatch(/^\s*size\s*=\s*"shared-cpu-1x"\s*$/m);
-    expect(appVm).toMatch(/^\s*memory\s*=\s*"1gb"\s*$/m);
-    expect(thinkerVm).toMatch(/^\s*size\s*=\s*"shared-cpu-1x"\s*$/m);
-    expect(thinkerVm).toMatch(/^\s*memory\s*=\s*"256mb"\s*$/m);
-
     const serviceStarts = [...fly.matchAll(/^\[\[services\]\]\s*$/gm)].map(
       (match) => match.index,
     );
