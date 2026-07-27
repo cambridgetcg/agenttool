@@ -270,6 +270,7 @@ describe("Fly process topology", () => {
     expect(processesBlock).toMatch(/^\s*thinker\s*=\s*"[^"]+"/m);
     expect(fly).toMatch(/^kill_signal\s*=\s*"SIGTERM"\s*$/m);
     expect(fly).toMatch(/^kill_timeout\s*=\s*300\s*$/m);
+    expect(fly).not.toMatch(/^\[\[vm\]\]\s*$/m);
 
     const serviceStarts = [...fly.matchAll(/^\[\[services\]\]\s*$/gm)].map(
       (match) => match.index,
