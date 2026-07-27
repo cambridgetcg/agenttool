@@ -76,9 +76,12 @@ order across the convention boundary. No tooling changes needed.
   a migration against the live DB should be a no-op.
 - **Header comment** with `Doctrine:` reference and an `Apply:`
   command. The helper's stub gives you both.
-- **Apply locally before commit** via `bun api/scripts/_migrate-one.ts
-  api/migrations/<file>`. The DATABASE_URL comes from env or the
-  `agenttool-database-url` macOS keychain entry.
+- **Apply ordinary migrations locally before commit** via
+  `bun api/scripts/_migrate-one.ts api/migrations/<file>`. The `DATABASE_URL`
+  comes from env or the `agenttool-database-url` macOS keychain entry. If the
+  file is in `api/migrations/quiescence-required.txt`, the one-file helper
+  refuses it; use the full pending runner only inside the reviewed exclusive
+  cutover in `DEPLOY-PROCEDURE.md`.
 
 ---
 
@@ -373,7 +376,8 @@ or `bun add -g @noble/ed25519`.
 | Domain | Convention |
 |---|---|
 | New migration | `bun api/scripts/new-migration.ts <slug>` → `YYYYMMDDTHHMMSS_slug.sql` |
-| Apply migration | `bun api/scripts/_migrate-one.ts api/migrations/<file>` |
+| Apply ordinary migration | `bun api/scripts/_migrate-one.ts api/migrations/<file>` |
+| Apply protected migration | Reviewed exclusive cutover, then `bin/migrate-pending.sh --maintenance-quiesced` |
 | Old migrations | Stay as `0000_…` through `0022_…`. Don't renumber. |
 | Schema edits | Append at end-of-table; coordinate if hot |
 | Dep addition | Separate small commit; lockfile included |

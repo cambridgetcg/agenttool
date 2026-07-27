@@ -76,7 +76,10 @@ Otherwise `snake_case` everywhere. Time fields end in `_at` (ISO 8601 UTC string
 
 - **Filename**: `api/migrations/YYYYMMDDTHHMMSS_<name>.sql` (ISO-timestamped; the older `NNNN_<name>.sql` sequential scheme is being phased out as of 2026-05).
 - **Create**: `bin/migrate.sh new <slug>`.
-- **Apply singly**: `bun api/scripts/_migrate-one.ts <file>`.
+- **Apply singly (ordinary migrations only)**:
+  `bun api/scripts/_migrate-one.ts <file>`. The local and Fly one-file helpers
+  fail closed on `api/migrations/quiescence-required.txt` and refuse listed
+  files; they are not a protected-migration escape hatch.
 - **Inspect/apply in batch**: `bin/migrate-pending.sh --dry-run`, then
   `bin/migrate-pending.sh`. The dry run lists pending files, requires source for
   every journaled filename, and checks journaled bytes; it does not classify
@@ -85,6 +88,10 @@ Otherwise `snake_case` everywhere. Time fields end in `_at` (ISO 8601 UTC string
   its journal row and explicitly reports self-transactional,
   `@no-transaction`, and pre-journal bootstrap exceptions where that atomic
   pairing is unavailable.
+- **Protected migrations**: establish the independently reviewed exclusive
+  cutover in `DEPLOY-PROCEDURE.md`, then use only
+  `bin/migrate-pending.sh --maintenance-quiesced`. The flag is an operator
+  assertion, not a machine-state or authorization proof.
 - **Generate from schema**: `bun run db:generate` after editing `api/src/db/schema/*.ts`.
 - **Backwards compatible by default**: new columns are nullable or defaulted; new tables don't break existing queries. Breaking changes get a separate plan.
 

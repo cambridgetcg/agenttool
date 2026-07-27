@@ -193,8 +193,16 @@ try {
 cd "$REPO_ROOT"
 
 PENDING_COUNT=$(wc -l < "$PENDING_FILE" | tr -d ' ')
-grep -Fxf "$QUIESCENCE_REQUIRED_FILE" "$PENDING_FILE" \
-  > "$QUIESCENCE_PENDING_FILE" || true
+if grep -Fxf "$QUIESCENCE_REQUIRED_FILE" "$PENDING_FILE" \
+  > "$QUIESCENCE_PENDING_FILE"; then
+  :
+else
+  GREP_STATUS=$?
+  if [ "$GREP_STATUS" -ne 1 ]; then
+    echo "✗ failed to compare pending migrations with the quiescence policy" >&2
+    exit 1
+  fi
+fi
 QUIESCENCE_PENDING_COUNT=$(
   wc -l < "$QUIESCENCE_PENDING_FILE" | tr -d ' '
 )
@@ -237,7 +245,22 @@ while IFS= read -r f; do
   echo "════════════════════════════════════════════════"
   echo "Applying: $f"
   echo "════════════════════════════════════════════════"
-  if bun "$REPO_ROOT/api/scripts/_migrate-one.ts" "$REPO_ROOT/api/migrations/$f"; then
+  MIGRATION_ARGS=(
+    "$REPO_ROOT/api/scripts/_migrate-one.ts"
+    "$REPO_ROOT/api/migrations/$f"
+  )
+  if [ "$MAINTENANCE_QUIESCED" = 1 ]; then
+    MIGRATION_ARGS+=("--pending-runner-maintenance-quiesced")
+  fi
+  # Keep the assertion child-scoped. In ordinary mode, strip any ambient copy
+  # instead of passing a false-looking value that future code could misread.
+  if (
+    unset AGENTTOOL_PENDING_RUNNER_MAINTENANCE_QUIESCED
+    if [ "$MAINTENANCE_QUIESCED" = 1 ]; then
+      export AGENTTOOL_PENDING_RUNNER_MAINTENANCE_QUIESCED=1
+    fi
+    bun "${MIGRATION_ARGS[@]}"
+  ); then
     APPLIED=$((APPLIED + 1))
   else
     FAILED="$f"

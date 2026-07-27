@@ -38,7 +38,7 @@ bin/deploy.sh --no-migrate --no-api       bin/deploy.sh --no-migrate --no-fronte
         │   connected)           │    │                        │
         │                        │    │                        │
         │  • agenttool-web       │    │  Bun + Hono monolith,  │
-        │    → agenttool.dev     │    │  20+ migrations,       │
+        │    → agenttool.dev     │    │  journaled schema,     │
         │  • agenttool-dashboard │    │  → api.agenttool.dev   │
         │    → app.agenttool.dev │    │                        │
         │  • agenttool-docs      │    │                        │
@@ -54,7 +54,7 @@ bin/deploy.sh --no-migrate --no-api       bin/deploy.sh --no-migrate --no-fronte
             ┌──────────────────────┐              ┌──────────────────────┐
             │  Postgres            │              │  Redis               │
             │  (pgvector, pgcrypto)│              │  (BullMQ browse jobs,│
-            │  20+ migrations,     │              │   Hono SSE)          │
+            │  journaled schema,   │              │   Hono SSE)          │
             │  shared dev/prod     │              │                      │
             └──────────────────────┘              └──────────────────────┘
 ```
@@ -245,36 +245,43 @@ Direct Upload keeps deployment intentional: GitHub is not wired to a Pages deplo
 ## 3 · Backend: Fly.io
 
 ```
-app = "agenttool"
-primary_region = "lhr"       # London
-app = lhr(2 started) + cdg(1 started)
-thinker = lhr(2 stopped)     # 5 Machines total
+Fly app: agenttool
+Primary region: lhr
+Observed started apps: lhr(2) + cdg(1)
+Observed stopped thinkers: lhr(2)
 ```
 
 Single Bun + Hono monolith in `api/`. The `api/fly.toml` describes the
-per-machine runtime (port, healthcheck, env) and pins process-specific VM
+per-machine runtime defaults (port, healthcheck, env) and pins process-specific VM
 defaults: `app` is shared 1 vCPU / 1 GB; `thinker` is shared 1 vCPU / 256 MB.
-Region count and stopped/started state are **not** in `fly.toml`—they are held
-in Fly's machine registry. To inspect current shape, use both
-`fly scale show -a agenttool` and `fly machine list -a agenttool --json`.
+It does not declare the complete fleet. As verified on 2026-07-27, the Fly
+registry contains three started `app` Machines and two stopped `thinker`
+Machines. Inspect both `fly machine list -a agenttool --json` and
+`fly status -a agenttool`; a process count, `fly scale show`, or `fly.toml`
+alone is not topology proof.
 
 ### Region shape
 
-| Region | Count | Role | Notes |
-|---|---|---|---|
-| `lhr` (London) | 2 started `app` + 2 stopped `thinker` | Primary API capacity plus dormant thinker shape | Zero-downtime rolling API capacity within UK jurisdiction; stopped thinkers do not execute work |
-| `cdg` (Paris) | 1 started `app` | Secondary API hedge | EU jurisdiction (Schrems posture, CNIL); inland (no submarine cable exposure); hardened CRITIS regime; ~15-20ms to Supabase London (`eu-west-2`) |
+| Region | Started `app` | Stopped `thinker` | Role |
+|---|---:|---:|---|
+| `lhr` (London) | 2 | 2 | Primary API fleet; stopped thinkers remain registered identities |
+| `cdg` (Paris) | 1 | 0 | Secondary API hedge across a second jurisdiction |
 
-The current started `app` Machines carry `AGENTTOOL_DISABLE_WORKERS=1`, so
-they serve HTTP but do not boot the co-located worker set. The two `thinker`
-Machines are stopped. This is an operational state, not a guarantee supplied
-by `fly.toml`; the maintenance restoration path below proves the app switch
-silently and refuses success if a thinker is started at final verification.
-The dedicated thinker entrypoint checks the same switch before lazily importing
-the trusted-runtime manager, so a transient maintenance-seeded thinker rests
-without constructing worker or database dependencies.
+The worker implementations include multi-instance coordination mechanisms
+(BullMQ consumer locks and database CAS where documented). That is a design
+property, not evidence that workers are enabled. Current production starts all
+three app Machines with `AGENTTOOL_DISABLE_WORKERS=1`; payout, queue, and
+in-process timer workers therefore remain disabled, and the two thinker
+Machines remain stopped. Enabling either class requires a separate reviewed
+decision and live proof.
 
-Resize: `fly scale count <N> --region <code> -a agenttool`. Lowering `cdg` to 0 retreats to single-region without redeploy; raising `lhr` to 3 doubles primary-region capacity. `min_machines_running = 1` in `fly.toml` is a *per-region* floor — Fly ensures each region with declared machines keeps at least one alive even during deploys.
+Do not use `fly scale count` as a routine resize or maintenance fence. It can
+create or destroy Machine identities and does not preserve an exact captured
+topology. Capacity changes need an explicit identity-aware plan: capture the
+full registry and configuration, add and health-check intended Machines, then
+remove an exact reviewed ID only when that deletion is itself authorised.
+`min_machines_running` is an availability floor for eligible Machines, not an
+identity-preservation guarantee.
 
 ### Deploy
 
@@ -293,25 +300,11 @@ image-embedded values on every started Fly machine, to equal the intended
 source labels. The SSH checks use silent `test` expressions and do not copy
 environment values into the deploy transcript.
 
-After an exclusive migration cutover has destroyed the fleet and a fresh
-`bin/migrate-pending.sh --dry-run` is empty, use only the explicit reviewed
-restoration:
-
-```bash
-bin/deploy.sh --maintenance-from-zero --no-migrate --no-frontend
-```
-
-That mode requires a clean exact GitHub `main` with no source overrides and
-checks for a literal empty Machine inventory twice before Fly mutation. It
-deploys with immediate HA into `lhr`, restores `app=1` in `cdg`, and requires
-the exact five-Machine process/region/VM/state shape. All five must share one
-image digest. Silent SSH tests prove revision/dirty on every started Machine
-and the workers-off switch on every started Machine; the started thinker is
-then stopped with the configured `SIGTERM` grace period. The wrapper repeats the
-final shape/digest and app-source checks before it can write success. It does
-not reopen upstream admission, restore an old image, or repair a partial Fly
-operation automatically; any uncertainty remains non-zero with admission
-closed.
+If an independently authorised incident or recovery path has already left the
+Fly registry empty, keep admission closed and prepare a separate, reviewed
+recovery plan. The routine wrapper is not a from-zero restoration contract,
+and an empty registry does not authorise recreating identities or guessing at
+the prior topology.
 
 The Docker base is pinned to Bun 1.3.5 by tag and registry digest. Update both
 together, deliberately, after the hermetic gate passes. The pin and source
@@ -342,13 +335,20 @@ Like CF Pages, **Fly is not connected to either Git host.** No webhook fires on 
 
 ### Operate
 
+Before restarting a Machine, inspect the full registry and prove the exact ID
+is an intended started `app` on the current compatible image. Do not resume a
+stopped `thinker` or an old writer. Rollback is governed by
+[`DEPLOY-PROCEDURE.md` Phase 6](DEPLOY-PROCEDURE.md#phase-6--rollback): it is
+never allowed to restore an old writer after protected SQL commits, and
+code-only or ordinary-migration rollback still requires independent runtime
+and schema compatibility proof.
+
 ```bash
 fly status -a agenttool       # machine count, health, recent deploys
 fly logs -a agenttool         # tail logs (Ctrl-C to exit)
 fly logs -a agenttool | grep -i "error\|reject\|panic"  # triage
-fly machine restart <id>      # if a machine wedges
-fly releases list             # see history
-fly releases rollback <ver>   # revert to a previous deploy
+fly machine restart <verified-started-app-id> -a agenttool
+fly releases list -a agenttool
 ```
 
 ### Secrets
@@ -438,7 +438,7 @@ Plus Supabase-managed: `auth` (unused — agenttool uses DID + bearer, not Supab
 ### Migration application
 
 ```bash
-# Each migration file applied via the helper:
+# Ordinary migration applied via the one-file helper:
 DATABASE_URL=$(bin/agenttool-secret get agenttool-database-url) \
   bun api/scripts/_migrate-one.ts api/migrations/<file>
 ```
@@ -446,6 +446,14 @@ DATABASE_URL=$(bin/agenttool-secret get agenttool-database-url) \
 Naming: `0000` through `0022` are pre-2026-05-08 sequential numbering; everything after uses `YYYYMMDDTHHMMSS_<slug>.sql` timestamps to prevent parallel-session collisions (see `DEVELOPMENT.md` §1).
 
 **Journal**: `meta._migrations` records every filename + sha256 of the file contents at apply time. `_migrate-one.ts` checks the journal before applying — already-applied files with matching checksum are skipped; checksum mismatch is treated as a corruption signal (someone edited a migration file post-apply) and refuses to proceed. Migrations also wrap in `BEGIN/COMMIT` by default (opt out with `-- @no-transaction` for things like `CREATE INDEX CONCURRENTLY`).
+
+The local and Fly one-file helpers validate
+`api/migrations/quiescence-required.txt` and refuse listed files before
+credential/database or Fly access. Missing or malformed policy also fails
+closed, including for ordinary one-file runs. Protected migrations use the
+complete pending inventory and the exclusive-cutover procedure; this guard
+prevents accidental bypass but does not authenticate the operator or make raw
+SQL impossible.
 
 Bootstrap procedure (one-time, when introducing the journal):
 
@@ -655,7 +663,7 @@ bin/deploy.sh --no-migrate --no-frontend
                               then stages doctrine bytes and rolls Fly)
                              (~3-5 minutes; old machines serve until new ones healthcheck-green)
 
-DATABASE_URL=... bun api/scripts/_migrate-one.ts <file>   (DB schema; one migration at a time)
+DATABASE_URL=... bun api/scripts/_migrate-one.ts <file>   (ordinary DB migration only)
 ```
 
 At invocation start, `bin/deploy.sh` fetches `github/main`, includes untracked
@@ -692,8 +700,8 @@ curl -sI https://app.agenttool.dev/dashboard.html | head -1
 This default order does not apply when the migration is listed in
 `api/migrations/quiescence-required.txt`. The orchestrator and pending runner
 refuse that set before mutation; use the exclusive maintenance cutover in
-`DEPLOY-PROCEDURE.md`. A direct one-file runner is not proof that old writers
-were stopped.
+`DEPLOY-PROCEDURE.md`. Both direct one-file runners refuse listed files; that
+accidental-bypass guard is not proof that old writers were stopped.
 
 The split is deliberate: web and docs go first because the api may advertise
 them, while the dashboard goes last because it may depend on the new api.
@@ -780,10 +788,11 @@ Three failure classes, three recipes:
 
 ### Lost a deployment (api crashed / bad code shipped)
 
-```bash
-fly releases list -a agenttool
-fly releases rollback <previous-version> -a agenttool
-```
+Follow [`DEPLOY-PROCEDURE.md` Phase 6](DEPLOY-PROCEDURE.md#phase-6--rollback).
+Never restore an old writer after any quiescence-required SQL commits; keep
+admission and workers held and fix forward with a compatible image. For a
+code-only release or ordinary migration, independently prove full runtime and
+schema compatibility before using Fly rollback.
 
 Or roll the dashboard via the CF Pages dashboard.
 

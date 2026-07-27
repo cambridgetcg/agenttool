@@ -59,16 +59,36 @@ Before and after any protected production cutover:
 2. Prove `PAYOUT_WORKER_ENABLED` is absent or false on every old replica.
 3. Count historical rows by `requested`, `broadcasting`, `broadcast`,
    `confirmed`, `failed`, and `cancelled`.
-4. Keep payout admission and every payout worker closed.
-5. Apply protected migrations only while the Fly Machine inventory is a
-   literal empty array, following [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md).
-6. Restore only the exact protected-main image. Verify the global worker-off
-   switch on every transient or final started Machine.
+4. Keep payout admission and every payout worker closed. Capture every exact
+   Fly Machine ID and its material configuration before maintenance. Do not
+   destroy, recreate, or scale the fleet to zero as a fencing shortcut.
+5. Use a separately reviewed and rehearsed identity-preserving mechanism to
+   fence restart, autostart, schedules, and external admission; drain durable
+   jobs, leases, and in-flight work; then stop those same Machine IDs in place.
+   Before SQL, prove every captured ID still exists and no old writer can
+   resume.
+6. Exercise only the canonical pending runner, in order:
 
-A protected cutover is permitted only when the old fleet is already
-worker-off and the maintenance procedure destroys that fleet before migrations
-run. If either fact cannot be proved, stop; a database write and transition
-guard is required before rollout.
+   ```bash
+   bin/migrate-pending.sh --dry-run
+   bin/migrate-pending.sh --dry-run --maintenance-quiesced
+   bin/migrate-pending.sh --maintenance-quiesced
+   bin/migrate-pending.sh --dry-run
+   ```
+
+   Require the two pre-apply inventories to name the same reviewed files and
+   the final inventory to be empty.
+7. Once any protected SQL commits, proceed forward only. Update those same
+   Machine IDs in place to the exact protected-main image, keep workers off,
+   and prove the final identity, topology, image, source revision, health, and
+   worker flags before reopening any admission.
+
+The repository currently has no checked identity-preserving maintenance
+implementation. If the reviewed mechanism or any writer-exclusion proof is
+absent, stop before SQL; neither this runbook nor an empty registry authorizes
+destroying an extant fleet or guessing at lost identities. A registry that is
+already empty through an independently authorized incident or recovery action
+requires a separate reviewed recovery plan.
 
 ## Historical rows
 
