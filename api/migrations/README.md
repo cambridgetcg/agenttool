@@ -7,9 +7,9 @@ recorded by filename and SHA-256 checksum.
 
 - **Up one level:** [`api/CLAUDE.md`](../CLAUDE.md).
 - **Migration protocol:** [`docs/DEVELOPMENT.md`](../../docs/DEVELOPMENT.md) §1 (the load-bearing migration discipline — *timestamp prefix is load-bearing*).
-- **Apply one locally:** `api/scripts/_migrate-one.ts`.
+- **Apply one ordinary migration locally:** `api/scripts/_migrate-one.ts`.
 - **Apply pending locally:** `bin/migrate-pending.sh`.
-- **Apply one through Fly:** `bin/fly-migrate-one.sh`.
+- **Apply one ordinary migration through Fly:** `bin/fly-migrate-one.sh`.
 
 ## File-naming convention
 
@@ -82,13 +82,20 @@ manifest for migrations that cannot share a rollout window with old API
 writers, webhook ingress, or workers. It is not a migration and is not recorded
 in `meta._migrations`.
 
-When one of its files is pending, `bin/migrate-pending.sh` reports the pending
-set and exits `42` before the first apply. After an operator has established the
-exclusive cutover in `docs/DEPLOY-PROCEDURE.md`, the
-`--maintenance-quiesced` assertion permits the checked runner to proceed. The
-flag does not inspect Fly, disable provider delivery, drain work, or prove that
-another writer is absent. The one-file local and Fly runners also do not prove
-quiescence; do not use them to bypass this policy.
+When one of its files is pending, `bin/migrate-pending.sh` reports the complete
+pending set and exits `42` before the first apply. After an operator has
+established the exclusive cutover in `docs/DEPLOY-PROCEDURE.md`, the
+`--maintenance-quiesced` assertion permits the checked pending runner to
+proceed.
+
+Both one-file entry points fail closed when the manifest is missing or invalid.
+The local one-file runner refuses a listed filename before reading credentials
+or connecting; the Fly one-file runner refuses before checksum encoding or any
+`fly` call. Use those helpers only for ordinary migrations. This is an
+accidental-bypass guard, not authentication or proof of quiescence: the
+maintenance flag does not inspect Fly, disable provider delivery, drain work,
+or prove that another writer is absent, and deliberately forged process state
+or raw SQL remain outside the guard.
 
 ## Invariants to defend
 
