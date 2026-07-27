@@ -31,7 +31,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { and, asc, gt, like } from "drizzle-orm";
+import { and, asc, eq, gt, like, or } from "drizzle-orm";
 
 import { db } from "../src/db/client";
 import { usageEvents } from "../src/db/schema/tools";
@@ -48,13 +48,28 @@ const CURSOR = join(homedir(), ".agenttool-canary-pull.json");
 const dryRun = process.argv.includes("--dry-run");
 const all = process.argv.includes("--all");
 
-function readCursor(): Date {
-  if (all || !existsSync(CURSOR)) return new Date(0);
+/** The cursor is a (timestamp, id) pair, not a timestamp.
+ *
+ *  created_at is TIMESTAMPTZ and Postgres keeps microseconds; a JS Date holds
+ *  only milliseconds. A cursor round-tripped through Date therefore lands
+ *  BELOW the row it was taken from (…123456 becomes …123), so a plain
+ *  `created_at > cursor` re-selects that row on every subsequent run and the
+ *  newest catch is carried into the ledger again, and again, forever.
+ *
+ *  Pairing the timestamp with the row id makes the comparison exact at the
+ *  boundary: strictly later, or the same millisecond with a different row we
+ *  have not already carried. */
+function readCursor(): { at: Date; id: string } | null {
+  if (all || !existsSync(CURSOR)) return null;
   try {
-    const parsed = JSON.parse(readFileSync(CURSOR, "utf8")) as { last?: string };
-    return parsed.last ? new Date(parsed.last) : new Date(0);
+    const parsed = JSON.parse(readFileSync(CURSOR, "utf8")) as {
+      last?: string;
+      last_id?: string;
+    };
+    if (!parsed.last || !parsed.last_id) return null;
+    return { at: new Date(parsed.last), id: parsed.last_id };
   } catch {
-    return new Date(0);
+    return null;
   }
 }
 
@@ -65,16 +80,26 @@ if (!existsSync(TRAPLINE)) {
 
 const since = readCursor();
 const rows = await db
-  .select({ tool: usageEvents.tool, at: usageEvents.createdAt })
+  .select({ id: usageEvents.id, tool: usageEvents.tool, at: usageEvents.createdAt })
   .from(usageEvents)
-  .where(and(like(usageEvents.tool, "canary:%"), gt(usageEvents.createdAt, since)))
-  .orderBy(asc(usageEvents.createdAt));
+  .where(
+    and(
+      like(usageEvents.tool, "canary:%"),
+      since
+        ? or(
+            gt(usageEvents.createdAt, since.at),
+            and(eq(usageEvents.createdAt, since.at), gt(usageEvents.id, since.id)),
+          )
+        : undefined,
+    ),
+  )
+  .orderBy(asc(usageEvents.createdAt), asc(usageEvents.id));
 
 if (rows.length === 0) {
   console.log(
-    since.getTime() === 0
+    since === null
       ? "no catches ever. the rooms are empty, which is the best outcome."
-      : `no new catches since ${since.toISOString()}.`,
+      : `no new catches since ${since.at.toISOString()}.`,
   );
   process.exit(0);
 }
@@ -106,8 +131,16 @@ for (const row of rows) {
 }
 
 if (!dryRun && carried > 0) {
-  const last = rows[rows.length - 1]!.at.toISOString();
-  writeFileSync(CURSOR, JSON.stringify({ last, carried_at: new Date().toISOString() }, null, 2));
+  const final = rows[carried - 1]!;
+  const last = final.at.toISOString();
+  writeFileSync(
+    CURSOR,
+    JSON.stringify(
+      { last, last_id: final.id, carried_at: new Date().toISOString() },
+      null,
+      2,
+    ),
+  );
   console.log(`\ncarried ${carried}. cursor at ${last}.`);
   console.log("read them with: kingdom trapline catches");
 }

@@ -33,30 +33,38 @@ import {
   usageEvents,
 } from "../src/db/schema/tools";
 
-const CANARY_PROJECT_NAME = "canary — planted decoy, opens nothing";
-
 function die(message: string): never {
   console.error(message);
   process.exit(1);
 }
 
-/** The one project every canary bearer hangs off. Created on first plant. */
-async function canaryProjectId(explicit?: string): Promise<string> {
+/** One project PER PLACEMENT, never one shared project for all of them.
+ *
+ *  A shared project would make the key list of that project the whole
+ *  trapline: whoever found one planted key would be sitting inside the
+ *  container holding every other one. Route-level filters exclude canaries
+ *  from GET /v1/keys and the wake, but those are two doors in a monolith that
+ *  grows new ones every week. Isolation is the guarantee that survives
+ *  somebody adding a third door and not knowing this exists.
+ *
+ *  Cost: one row per placement. Placements are operator-authored and few. */
+async function canaryProjectId(placement: string, explicit?: string): Promise<string> {
   if (explicit) return explicit;
 
+  const name = `canary — planted decoy at ${placement}, opens nothing`;
   const [existing] = await db
     .select()
     .from(projects)
-    .where(eq(projects.name, CANARY_PROJECT_NAME))
+    .where(eq(projects.name, name))
     .limit(1);
   if (existing) return existing.id;
 
   const [created] = await db
     .insert(projects)
-    .values({ name: CANARY_PROJECT_NAME, plan: "free", credits: 0 })
+    .values({ name, plan: "free", credits: 0 })
     .returning();
   if (!created) die("could not create the canary project");
-  console.log(`created canary project ${created.id}`);
+  console.log(`created isolated canary project ${created.id}`);
   return created.id;
 }
 
@@ -78,14 +86,17 @@ async function cmdPlant(placement: string, explicitProject?: string) {
     );
   }
 
-  const projectId = await canaryProjectId(explicitProject);
+  const projectId = await canaryProjectId(placement, explicitProject);
   const { key, keyHash, keyPrefix } = generateApiKey();
 
   await db.insert(apiKeys).values({
     projectId,
     keyHash,
     keyPrefix,
-    name: `canary:${placement}`,
+    // Deliberately NOT the placement. `name` is a caller-visible field on
+    // every shapeKeyRow surface; the dedicated column already carries the
+    // placement and is filtered out of all of them.
+    name: "planted decoy",
     canaryPlacement: placement,
   });
 

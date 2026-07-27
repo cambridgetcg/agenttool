@@ -1332,10 +1332,19 @@ app.get("/", async (c) => {
   // for the project, with age/idle/expiry advisories so the agent knows
   // its own posture without paging out to a separate endpoint.
   const currentBearerId = c.var.apiKeyId;
+  // Planted decoys are excluded here for the same reason as GET /v1/keys: the
+  // placement list is a map of where the bait sits. No-op for every honest
+  // project. Doctrine: safety-boundaries.canary_credentials.
   const bearerRows = await db
     .select()
     .from(apiKeys)
-    .where(and(eq(apiKeys.projectId, project.id), isNull(apiKeys.revokedAt)));
+    .where(
+      and(
+        eq(apiKeys.projectId, project.id),
+        isNull(apiKeys.revokedAt),
+        isNull(apiKeys.canaryPlacement),
+      ),
+    );
   const bearersSummary = summarizeBearers(
     bearerRows
       .map((r) => shapeKeyRow(r, r.id === currentBearerId))

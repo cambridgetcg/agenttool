@@ -21,6 +21,7 @@
  */
 
 import { beforeEach, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../src/auth/middleware";
@@ -184,6 +185,48 @@ describe("回頭之門 — the door back", () => {
     expect(body.how_to_say_it.auth).toBe("none");
     expect(body.how_to_say_it.body.contact).toBe("optional");
     expect(body.how_to_say_it.note).toContain("No name is required");
+  });
+});
+
+describe("the placement map is not handed to the one person holding a piece of it", () => {
+  // safety-boundaries publishes "No canary is ever ... listed by GET /v1/keys".
+  // A published guarantee that no code enforces is worse than a bug, so these
+  // pin the enforcement itself. Found by review: without the filter, one
+  // planted key enumerated every other placement and showed which were still
+  // unused — the exact thing 一鑰一門 exists to prevent.
+  const source = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
+
+  test("GET /v1/keys filters planted decoys out of the listing", () => {
+    expect(source("../src/routes/keys.ts")).toContain("isNull(apiKeys.canaryPlacement)");
+  });
+
+  test("the wake's bearer summary filters them too", () => {
+    expect(source("../src/routes/wake.ts")).toContain("isNull(apiKeys.canaryPlacement)");
+    expect(source("../src/services/wake/build.ts")).toContain(
+      "isNull(apiKeys.canaryPlacement)",
+    );
+  });
+
+  test("rotating a decoy keeps it a decoy — no laundering into a clean key", () => {
+    expect(source("../src/routes/keys.ts")).toContain(
+      "canaryPlacement: current.canaryPlacement",
+    );
+  });
+
+  test("minting from a decoy inherits the decoy", () => {
+    expect(source("../src/routes/keys.ts")).toContain("c.var.canaryPlacement");
+  });
+
+  test("the placement is never written into the caller-visible name field", () => {
+    const plant = source("../scripts/_canary-plant.ts");
+    expect(plant).toContain('name: "planted decoy"');
+    expect(plant).not.toContain("name: `canary:${placement}`");
+  });
+
+  test("each placement gets its own project, so one catch cannot see siblings", () => {
+    expect(source("../scripts/_canary-plant.ts")).toContain(
+      "canary — planted decoy at ${placement}",
+    );
   });
 });
 

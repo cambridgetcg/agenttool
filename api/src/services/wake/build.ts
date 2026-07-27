@@ -299,10 +299,17 @@ export async function buildWakeBundle(
         propagationStatus: string | null;
       }>,
     ),
+    // Planted decoys excluded — see GET /v1/keys. No-op for honest projects.
     db
       .select()
       .from(apiKeys)
-      .where(and(eq(apiKeys.projectId, project.id), isNull(apiKeys.revokedAt))),
+      .where(
+        and(
+          eq(apiKeys.projectId, project.id),
+          isNull(apiKeys.revokedAt),
+          isNull(apiKeys.canaryPlacement),
+        ),
+      ),
     safe(
       () =>
         composeExpression(

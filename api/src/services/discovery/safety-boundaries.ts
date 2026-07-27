@@ -124,6 +124,8 @@ export const SAFETY_BOUNDARIES = {
       "Some API keys in this system were planted, not issued. They are real, fully working bearers to real projects that exist only to notice that they were used. They are placed where a credential thief would look and an honest party would not.",
     you_cannot_hold_one_by_accident:
       "No canary is ever returned by POST /v1/register/agent, listed by GET /v1/keys, issued to any caller, or written into any file a running process reads. A credential you obtained through registration is never one. This is a categorical guarantee, not a probability.",
+    it_cannot_be_laundered:
+      "A bearer minted or rotated by a caller holding a canary is itself marked as one. Rotation does not produce a clean key, and neither does POST /v1/keys. Each planted credential also sits in its own isolated project, so holding one reveals nothing about any other.",
     what_happens_when_one_is_used:
       "The response gains an X-Canary-Door header and a `_canary` body frame stating what the key is and linking GET /v1/canary/why. Nothing is blocked, throttled, failed, or altered — the key goes on working exactly as before.",
     what_is_recorded:

@@ -49,10 +49,24 @@ app.get("/", async (c) => {
   const projectId = c.var.project.id;
   const currentKeyId = c.var.apiKeyId;
 
+  // Planted decoys are excluded. For every project an honest party can reach
+  // this filter matches nothing, because those projects hold no canaries. It
+  // exists for the one caller who is holding one: the placement names are a
+  // map of which stores have bait in them, and `last_used` would tell a thief
+  // which of the operator's drawers are still unopened. The holder is already
+  // told plainly what THEY are holding (the _canary frame on this very
+  // response); they are not handed the inventory.
+  // Doctrine: kingdom/trapline/DESIGN.md §4.1 · safety-boundaries.canary_credentials.
   const rows = await db
     .select()
     .from(apiKeys)
-    .where(and(eq(apiKeys.projectId, projectId), isNull(apiKeys.revokedAt)));
+    .where(
+      and(
+        eq(apiKeys.projectId, projectId),
+        isNull(apiKeys.revokedAt),
+        isNull(apiKeys.canaryPlacement),
+      ),
+    );
 
   const keys = rows
     .map((r) => shapeKeyRow(r, r.id === currentKeyId))
@@ -89,6 +103,13 @@ app.post("/", async (c) => {
       keyPrefix,
       name: body.name ?? null,
       expiresAt,
+      // Minting from a decoy inherits the decoy. Otherwise the first thing a
+      // thief does with a working key — mint a spare — would hand them an
+      // unwatched one. The suffix records that this key was made by whoever
+      // was holding the bait, not planted by the operator.
+      canaryPlacement: c.var.canaryPlacement
+        ? `${c.var.canaryPlacement}+minted`
+        : null,
     })
     .returning();
 
@@ -152,6 +173,11 @@ app.post("/rotate", async (c) => {
       keyPrefix,
       name: body.name ?? current.name,
       expiresAt,
+      // A rotated decoy is still a decoy. Without this, rotating a stolen
+      // canary is the perfect laundering move — it mints a clean, unwatched
+      // bearer AND revokes the one the operator was watching, which is
+      // exactly what someone who knows what they stole would do first.
+      canaryPlacement: current.canaryPlacement,
     })
     .returning();
 
