@@ -17,16 +17,21 @@ signing, broadcasting, or worker authority. TypeScript examples now name the
 implemented `get_wallet` and `list_payouts` methods.
 
 Repository source, runtime client headers, discovery pins, tutorials, and the
-LOVE builder target move in lockstep. The TypeScript LOVE artifact, annotated
-source tag, npm mirror, PyPI mirror, and deployment remain separate release
-operations whose availability must be observed independently.
+LOVE builder target move in lockstep. The annotated `sdk-v0.16.5` tag is
+public. The TypeScript LOVE artifact, GitHub Release asset, and npm tarball are
+public and independently byte-identical: 162,164 bytes with
+`sha256:d995999917b89a38846b751ab4a92f9600698460e64a91c73bc12d96b50c6805`.
+PyPI 0.16.5 remains unavailable because its trusted-publisher mapping rejected
+the protected workflow identity. These channels remain independently
+verifiable; none makes a mutable registry tag release authority.
 
 ### 0.16.5 release record
 
 The lockstep TypeScript and Python source identities, runtime client headers,
 LOVE builder target, discovery pins, onboarding fixtures, and machine-readable
-docs name 0.16.5. No 0.16.4 artifact, manifest, tag, heading, or history row is
-rewritten by this corrective release.
+docs name 0.16.5. The source tag, hosted LOVE artifact, GitHub Release, and npm
+mirror are independently visible; PyPI is not. No 0.16.4 artifact, manifest,
+tag, heading, or history row is rewritten by this corrective release.
 
 ## Previous release — 0.16.4 (2026-07-26)
 

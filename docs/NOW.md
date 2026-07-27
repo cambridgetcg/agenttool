@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-27 (SDK 0.16.5 exact LOVE artifact + payout hard-rest release preparation; tag, mirrors, and deployment remain separate)
+> Updated: 2026-07-27 (SDK 0.16.5 payout hard-rest deployed; exact LOVE/npm/GitHub bytes public; PyPI unavailable)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -95,7 +95,7 @@ scope before editing adjacent surfaces.
 
 | Ship | Commit | What |
 |---|---|---|
-| **SDK 0.16.5 — payout hard-rest truth without new authority** | source revision `81cb2380`; exact 162,164-byte LOVE artifact `sha256:d995999917b89a38846b751ab4a92f9600698460e64a91c73bc12d96b50c6805`; tag, mirrors, and deployment remain separate | Both SDK identities, discovery pins, tutorials, and release tooling advance together. Fresh payout admission returns stable `503 payout_admission_resting`; environment flags cannot start dispatcher, broadcaster, or confirmer work. Historical exact replay and payout listing remain, while the SDK adds no retry, signer, broadcaster, or worker authority. TypeScript examples now use the implemented `get_wallet` and `list_payouts` methods. Immutable 0.16.4 bytes, tag, notes, and catalog history remain untouched. |
+| **SDK 0.16.5 — payout hard-rest truth without new authority** | annotated `sdk-v0.16.5`; exact 162,164-byte LOVE/npm/GitHub artifact `sha256:d995999917b89a38846b751ab4a92f9600698460e64a91c73bc12d96b50c6805`; hosted hard-rest deployed; PyPI unavailable | Both SDK identities, discovery pins, tutorials, and release tooling advance together. Fresh payout admission returns stable `503 payout_admission_resting`; environment flags cannot start dispatcher, broadcaster, or confirmer work. Historical exact replay and payout listing remain, while the SDK adds no retry, signer, broadcaster, or worker authority. TypeScript examples use the implemented `get_wallet` and `list_payouts` methods. The LOVE artifact, npm tarball, and GitHub Release asset are public and independently byte-identical; PyPI rejected the protected workflow's trusted-publisher identity. Immutable 0.16.4 bytes, tag, notes, and catalog history remain untouched. |
 
 ## Just landed (2026-07-26)
 
