@@ -141,7 +141,16 @@ The pending script:
    - Wraps in `BEGIN/COMMIT` by default; opt out per-file with `-- @no-transaction`.
    - Records into `meta._migrations` on success.
 
-**On a fresh install** (no journal): run `bin/migrate-pending.sh` once. It applies `20260509T170000_meta_migrations.sql` first, then applies and journals every other file. Use `bun api/scripts/_migrate-bootstrap-journal.ts` only when adopting the journal on a database whose older migrations were already applied through another path.
+**On a fresh install** (no journal): first run
+`bin/migrate-pending.sh --dry-run` and inspect the full backlog. The current
+backlog contains protected files, so a genuinely fresh target with no writers,
+workers, or provider callbacks must then use
+`bin/migrate-pending.sh --maintenance-quiesced`; established environments use
+the fenced cutover below. The runner applies
+`20260509T170000_meta_migrations.sql` first, then applies and journals every
+other file. Use `bun api/scripts/_migrate-bootstrap-journal.ts` only when
+adopting the journal on a database whose older migrations were already applied
+through another path.
 
 **Pre-flight for risky migrations.** Some migrations add constraints or rewrite accounting rows. Before applying one, the operator must run its documented read-only precondition queries against the target database. `migrate-pending.sh` verifies journal checksums and applies pending files in order; it does **not** understand migration-specific data risks or run those precondition queries automatically.
 
@@ -209,13 +218,12 @@ Use one bounded maintenance cutover:
 
 The current `bin/deploy.sh` is a routine rolling rollout. It does not establish
 the exclusive captured-fleet fence, preserve stopped process groups as a
-maintenance rollout contract, or prove the per-machine sequence above. Its
-`--maintenance-from-zero` path starts only after identities are already gone
-and creates a replacement fleet; it is not an identity-preserving fence or a
-rollback for an extant fleet. No checked identity-preserving maintenance
-implementation currently exists in this repository. Prepare and independently
-review that narrow mechanism before the window; if it is absent or unrehearsed,
-stop instead of improvising.
+maintenance rollout contract, or prove the per-machine sequence above. A
+from-zero fleet recreation starts only after identities are already gone and
+is not an identity-preserving fence or a rollback for an extant fleet. No
+checked identity-preserving maintenance implementation currently exists in
+this repository. Prepare and independently review that narrow mechanism before
+the window; if it is absent or unrehearsed, stop instead of improvising.
 
 The maintenance mechanism proves only the process boundary it controls. It
 does not cancel provider I/O already started before quiescence, prove an
@@ -517,8 +525,6 @@ bin/deploy.sh --no-migrate             # skip Phase 1 (schema unchanged)
 bin/deploy.sh --no-api                 # skip Phase 3 (only docs/frontends changed)
 bin/deploy.sh --no-frontend            # skip Pages upload; still require live discovery prerequisites
 bin/deploy.sh --no-cache-api           # one-shot recovery: rebuild Fly image without cache
-bin/deploy.sh --maintenance-from-zero --no-migrate --no-frontend
-                                         # reviewed empty-fleet Fly restoration
 bin/deploy.sh --skip-preflight         # operator override (NOT recommended)
 bin/deploy.sh --allow-dirty-release    # loud override for a dirty source tree
 bin/deploy.sh --allow-non-release-head # loud override for HEAD != github/main

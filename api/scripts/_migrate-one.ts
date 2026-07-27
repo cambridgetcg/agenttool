@@ -227,6 +227,10 @@ async function main() {
     console.error("usage: bun run scripts/_migrate-one.ts <path-to-sql>");
     process.exit(2);
   }
+  if (!isRegularFile(file)) {
+    console.error(`migration must be a regular file: ${file}`);
+    process.exit(2);
+  }
 
   const filename = basename(file);
   enforceOneFileQuiescencePolicy(filename, pendingRunnerSentinel);

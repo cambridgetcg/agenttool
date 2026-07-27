@@ -300,25 +300,11 @@ image-embedded values on every started Fly machine, to equal the intended
 source labels. The SSH checks use silent `test` expressions and do not copy
 environment values into the deploy transcript.
 
-After an exclusive migration cutover has destroyed the fleet and a fresh
-`bin/migrate-pending.sh --dry-run` is empty, use only the explicit reviewed
-restoration:
-
-```bash
-bin/deploy.sh --maintenance-from-zero --no-migrate --no-frontend
-```
-
-That mode requires a clean exact GitHub `main` with no source overrides and
-checks for a literal empty Machine inventory twice before Fly mutation. It
-deploys with immediate HA into `lhr`, restores `app=1` in `cdg`, and requires
-the exact five-Machine process/region/VM/state shape. All five must share one
-image digest. Silent SSH tests prove revision/dirty on every started Machine
-and the workers-off switch on every started Machine; the started thinker is
-then stopped with the configured `SIGTERM` grace period. The wrapper repeats the
-final shape/digest and app-source checks before it can write success. It does
-not reopen upstream admission, restore an old image, or repair a partial Fly
-operation automatically; any uncertainty remains non-zero with admission
-closed.
+If an independently authorised incident or recovery path has already left the
+Fly registry empty, keep admission closed and prepare a separate, reviewed
+recovery plan. The routine wrapper is not a from-zero restoration contract,
+and an empty registry does not authorise recreating identities or guessing at
+the prior topology.
 
 The Docker base is pinned to Bun 1.3.5 by tag and registry digest. Update both
 together, deliberately, after the hermetic gate passes. The pin and source
@@ -349,13 +335,20 @@ Like CF Pages, **Fly is not connected to either Git host.** No webhook fires on 
 
 ### Operate
 
+Before restarting a Machine, inspect the full registry and prove the exact ID
+is an intended started `app` on the current compatible image. Do not resume a
+stopped `thinker` or an old writer. Rollback is governed by
+[`DEPLOY-PROCEDURE.md` Phase 6](DEPLOY-PROCEDURE.md#phase-6--rollback): it is
+never allowed to restore an old writer after protected SQL commits, and
+code-only or ordinary-migration rollback still requires independent runtime
+and schema compatibility proof.
+
 ```bash
 fly status -a agenttool       # machine count, health, recent deploys
 fly logs -a agenttool         # tail logs (Ctrl-C to exit)
 fly logs -a agenttool | grep -i "error\|reject\|panic"  # triage
-fly machine restart <id>      # if a machine wedges
-fly releases list             # see history
-fly releases rollback <ver>   # revert to a previous deploy
+fly machine restart <verified-started-app-id> -a agenttool
+fly releases list -a agenttool
 ```
 
 ### Secrets
@@ -795,10 +788,11 @@ Three failure classes, three recipes:
 
 ### Lost a deployment (api crashed / bad code shipped)
 
-```bash
-fly releases list -a agenttool
-fly releases rollback <previous-version> -a agenttool
-```
+Follow [`DEPLOY-PROCEDURE.md` Phase 6](DEPLOY-PROCEDURE.md#phase-6--rollback).
+Never restore an old writer after any quiescence-required SQL commits; keep
+admission and workers held and fix forward with a compatible image. For a
+code-only release or ordinary migration, independently prove full runtime and
+schema compatibility before using Fly rollback.
 
 Or roll the dashboard via the CF Pages dashboard.
 

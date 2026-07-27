@@ -446,14 +446,9 @@ exit 97
         "must-not-be-used.invalid",
       );
 
-      const ambientOnlyTarget = join(
-        fixture,
-        "20260726T203000_payout_network_binding.sql",
-      );
-      mkdirSync(ambientOnlyTarget);
       const ambientOnly = spawnSync(
         process.execPath,
-        [join(root, "api/scripts/_migrate-one.ts"), ambientOnlyTarget],
+        [join(root, "api/scripts/_migrate-one.ts"), protectedMigration],
         {
           cwd: root,
           encoding: "utf8",
@@ -470,7 +465,97 @@ exit 97
       expect(ambientOnly.stderr).toContain(
         "protected migration refuses direct one-file application",
       );
-      expect(ambientOnly.stderr).not.toContain("EISDIR");
+      expect(existsSync(securityMarker)).toBe(false);
+
+      const sentinelOnly = spawnSync(
+        process.execPath,
+        [
+          join(root, "api/scripts/_migrate-one.ts"),
+          protectedMigration,
+          "--pending-runner-maintenance-quiesced",
+        ],
+        {
+          cwd: root,
+          encoding: "utf8",
+          env: {
+            PATH: `${fakeBin}:/usr/bin:/bin`,
+            HOME: fixture,
+            LANG: "C",
+            SECURITY_MARKER: securityMarker,
+          },
+        },
+      );
+      expect(sentinelOnly.status).toBe(42);
+      expect(sentinelOnly.stderr).toContain(
+        "protected migration refuses direct one-file application",
+      );
+      expect(existsSync(securityMarker)).toBe(false);
+
+      const ordinaryDirectory = join(
+        fixture,
+        "20990101T000000_ordinary_directory.sql",
+      );
+      mkdirSync(ordinaryDirectory);
+      const ordinaryDirectoryResult = spawnSync(
+        process.execPath,
+        [join(root, "api/scripts/_migrate-one.ts"), ordinaryDirectory],
+        {
+          cwd: root,
+          encoding: "utf8",
+          env: {
+            PATH: `${fakeBin}:/usr/bin:/bin`,
+            HOME: fixture,
+            LANG: "C",
+            SECURITY_MARKER: securityMarker,
+            DATABASE_URL:
+              "postgres://must-not-be-used.invalid/requested_file",
+          },
+        },
+      );
+      expect(ordinaryDirectoryResult.status).toBe(2);
+      expect(ordinaryDirectoryResult.stderr).toContain(
+        "migration must be a regular file",
+      );
+      expect(ordinaryDirectoryResult.stderr).not.toContain("EISDIR");
+      expect(
+        `${ordinaryDirectoryResult.stdout}${ordinaryDirectoryResult.stderr}`,
+      ).not.toContain("must-not-be-used.invalid");
+      expect(existsSync(securityMarker)).toBe(false);
+
+      const protectedDirectory = join(
+        fixture,
+        "20260726T203000_payout_network_binding.sql",
+      );
+      mkdirSync(protectedDirectory);
+      const assertedProtectedDirectory = spawnSync(
+        process.execPath,
+        [
+          join(root, "api/scripts/_migrate-one.ts"),
+          protectedDirectory,
+          "--pending-runner-maintenance-quiesced",
+        ],
+        {
+          cwd: root,
+          encoding: "utf8",
+          env: {
+            PATH: `${fakeBin}:/usr/bin:/bin`,
+            HOME: fixture,
+            LANG: "C",
+            SECURITY_MARKER: securityMarker,
+            DATABASE_URL:
+              "postgres://must-not-be-used.invalid/requested_file",
+            AGENTTOOL_PENDING_RUNNER_MAINTENANCE_QUIESCED: "1",
+          },
+        },
+      );
+      expect(assertedProtectedDirectory.status).toBe(2);
+      expect(assertedProtectedDirectory.stderr).toContain(
+        "migration must be a regular file",
+      );
+      expect(assertedProtectedDirectory.stderr).not.toContain("EISDIR");
+      expect(
+        `${assertedProtectedDirectory.stdout}${assertedProtectedDirectory.stderr}`,
+      ).not.toContain("must-not-be-used.invalid");
       expect(existsSync(securityMarker)).toBe(false);
 
       const fly = spawnSync(
