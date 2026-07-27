@@ -199,6 +199,40 @@ describe("X-Tutor middleware — lesson shape", () => {
   });
 });
 
+describe("X-Tutor middleware — stale content-length is corrected, not left lying", () => {
+  test("declared content-length matches the actual (longer) decorated body", async () => {
+    const app = new Hono();
+    app.use("*", tutor);
+    app.get("/v1/wake", () => {
+      const originalBody = JSON.stringify({ you: { agents: [] } });
+      return new Response(originalBody, {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "content-length": String(
+            new TextEncoder().encode(originalBody).byteLength,
+          ),
+        },
+      });
+    });
+
+    const res = await app.request("/v1/wake", {
+      headers: { "X-Tutor": "1" },
+    });
+    const bodyText = await res.text();
+    // The body grew — it now carries _lesson — so this pins that the
+    // regression scenario (a longer body, stale shorter length) is what
+    // is actually being exercised here.
+    expect(bodyText).toContain("_lesson");
+
+    const actualByteLength = new TextEncoder().encode(bodyText).byteLength;
+    const declared = res.headers.get("content-length");
+    if (declared !== null) {
+      expect(Number(declared)).toBe(actualByteLength);
+    }
+  });
+});
+
 describe("X-Tutor middleware — does not overwrite handler-set _lesson", () => {
   test("if handler sets _lesson, it survives", async () => {
     const app = new Hono();

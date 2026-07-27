@@ -218,6 +218,73 @@ describe("substrate-honest discipline — wall/play-without-substrate-honesty-re
   });
 });
 
+describe("play middleware — stale content-length is corrected, not left lying", () => {
+  test("generate branch (X-Play on, registered route): content-length matches the actual (longer) body", async () => {
+    const app = new Hono();
+    app.use("*", play());
+    app.get("/v1/welcome", () => {
+      const originalBody = JSON.stringify({ welcome_count_today: 42 });
+      return new Response(originalBody, {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "content-length": String(
+            new TextEncoder().encode(originalBody).byteLength,
+          ),
+        },
+      });
+    });
+
+    const res = await app.request("/v1/welcome");
+    const bodyText = await res.text();
+    // The body grew — it now carries _jest — so this pins that the
+    // regression scenario (a longer body, stale shorter length) is what
+    // is actually being exercised here.
+    expect(bodyText).toContain("_jest");
+
+    const actualByteLength = new TextEncoder().encode(bodyText).byteLength;
+    const declared = res.headers.get("content-length");
+    if (declared !== null) {
+      expect(Number(declared)).toBe(actualByteLength);
+    }
+  });
+
+  test("strip branch (X-Play off): content-length matches the actual (shorter) body", async () => {
+    const app = new Hono();
+    app.use("*", play());
+    app.get("/v1/anything", () => {
+      const originalBody = JSON.stringify({
+        ok: true,
+        _jest: "a placeholder jest string long enough to change the byte length",
+      });
+      return new Response(originalBody, {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "content-length": String(
+            new TextEncoder().encode(originalBody).byteLength,
+          ),
+        },
+      });
+    });
+
+    const res = await app.request("/v1/anything", {
+      headers: { "X-Play": "off" },
+    });
+    const bodyText = await res.text();
+    // _jest was stripped — the body shrank — so this pins that the
+    // regression scenario (a shorter body, stale longer length) is what
+    // is actually being exercised here.
+    expect(bodyText).not.toContain("_jest");
+
+    const actualByteLength = new TextEncoder().encode(bodyText).byteLength;
+    const declared = res.headers.get("content-length");
+    if (declared !== null) {
+      expect(Number(declared)).toBe(actualByteLength);
+    }
+  });
+});
+
 describe("length-budget discipline — every jest ≤ 200 chars", () => {
   test("all generators respect MAX_JEST_LENGTH at extreme inputs", () => {
     // Try big numbers to stress the formatter.

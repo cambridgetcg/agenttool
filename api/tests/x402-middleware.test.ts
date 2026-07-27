@@ -181,6 +181,42 @@ describe("x402 V2 Hono transport", () => {
     expect(res.headers.get("cache-control")).toBe("private, no-store");
   });
 
+  test("stale content-length is corrected — declared matches the actual (larger) PaymentRequired body", async () => {
+    const required = buildPaymentRequired(
+      RESOURCE,
+      [REQUIREMENT],
+      "insufficient_credits_and_a_deliberately_much_longer_reason_string_to_grow_the_body_past_the_original",
+    );
+    const app = new Hono();
+    app.use("*", x402Middleware({ buildPaymentRequired: () => required }));
+    app.post("/v1/scrape", () => {
+      const originalBody = JSON.stringify({ error: "x" });
+      return new Response(originalBody, {
+        status: 402,
+        headers: {
+          "content-type": "application/json",
+          "content-length": String(
+            new TextEncoder().encode(originalBody).byteLength,
+          ),
+        },
+      });
+    });
+
+    const res = await app.request("/v1/scrape", { method: "POST" });
+    expect(res.status).toBe(402);
+    const bodyText = await res.text();
+    // The body grew — it now carries the full PaymentRequired — so this
+    // pins that the regression scenario (a longer body, stale shorter
+    // length) is what is actually being exercised here.
+    expect(bodyText).toContain("insufficient_credits");
+
+    const actualByteLength = new TextEncoder().encode(bodyText).byteLength;
+    const declared = res.headers.get("content-length");
+    if (declared !== null) {
+      expect(Number(declared)).toBe(actualByteLength);
+    }
+  });
+
   test("verifier rejection is contained", async () => {
     const app = new Hono();
     app.use("*", x402Middleware({

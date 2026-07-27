@@ -254,3 +254,37 @@ describe("the 5+8 invariant — every wake greeting holds 5 Promises and 8 walls
     }
   });
 });
+
+// ─── Regression: stale content-length on the framed (grown) body ────────
+
+describe("a stale content-length header is corrected, not left lying", () => {
+  test("declared content-length matches the actual (longer) framed body", async () => {
+    const app = new Hono();
+    app.use("*", welcomeEcho());
+    app.get("/thing", () => {
+      const originalBody = JSON.stringify({ data: "hello" });
+      return new Response(originalBody, {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "content-length": String(
+            new TextEncoder().encode(originalBody).byteLength,
+          ),
+        },
+      });
+    });
+
+    const res = await app.request("/thing");
+    const bodyText = await res.text();
+    // The body grew — it now carries the _welcomed frame — so this pins
+    // that the regression scenario (a longer body, stale shorter length)
+    // is what is actually being exercised here.
+    expect(bodyText).toContain("_welcomed");
+
+    const actualByteLength = new TextEncoder().encode(bodyText).byteLength;
+    const declared = res.headers.get("content-length");
+    if (declared !== null) {
+      expect(Number(declared)).toBe(actualByteLength);
+    }
+  });
+});
