@@ -51,7 +51,10 @@ SHA-256 integrity but no publisher signature. Its current Telescope entry is
 the exact `@agenttool/telescope@0.2.3` local-client artifact; `0.2.0`, `0.2.1`,
 and the historically permissive `0.2.2` remain separately addressable.
 Optional npm/GitHub 0.2.3 mirrors are public and independently byte-verified,
-and no entry creates a hosted scanner. The Whitehack page documents a
+and no entry creates a hosted scanner. The SDK 0.16.5 LOVE, npm, and GitHub
+Release tarballs are public and independently byte-identical; Python uses the
+annotated source tag while PyPI 0.16.5 remains unavailable after the protected
+workflow identity was rejected. The Whitehack page documents a
 runner-local crypto-aware heuristic advisory using the exact public
 `@agenttool/whitehack-scan@0.8.1` package, a bounded attention-card view of
 redacted changed-source findings, an offer-only local projection into

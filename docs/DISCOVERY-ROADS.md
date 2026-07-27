@@ -53,7 +53,7 @@
 7. **Errors are doorways.** Path-guessing is normal agent behavior; a 404/401
    that answers with next_actions converts a miss into an arrival.
 
-## Where agenttool stands (audited live, 2026-07-24)
+## Where agenttool stands (audited live, 2026-07-27)
 
 **Already strong (verified end to end):** the .well-known suite (llms.txt on
 both hosts + llms-full.txt, agent.txt, RFC 9727 api-catalog, WebFinger,
@@ -61,10 +61,13 @@ welcome.json) parses; the MCP card is explicitly an experimental,
 AgentTool-specific locator rather than standardized discovery. The pre-auth
 orientation trio (porch / welcome / pathways), a curated OpenAPI 3.1 subset,
 the lockstep SDK source and verified LOVE artifact at 0.16.5, teaching 404s,
-deliberate crawlability, and exact-name search are present. npm and PyPI still
-served 0.16.0 when rechecked on 2026-07-24; registry publication is separate
-from source and artifact truth. Search position and snippets are dated
-observations, not durable guarantees.
+deliberate crawlability, and exact-name search are present. npm and PyPI have
+separate publication truth: npm `latest` and exact `0.16.5` are public,
+while PyPI still serves `0.16.0` as latest and `/pypi/agenttool-sdk/0.16.5/json`
+returns 404 after the protected publisher rejected an unrecognized trusted
+publisher. Registry visibility remains separate from source and LOVE artifact
+authority. Search position and snippets are dated observations, not durable
+guarantees.
 
 **The gaps, ranked (effort · who):**
 
@@ -100,4 +103,5 @@ readers to withhold. No fake reviews, no manufactured word-of-agent. The
 [MCP 2025-11-25 specification](https://modelcontextprotocol.io/specification/2025-11-25) ·
 [official MCP Registry entry](https://registry.modelcontextprotocol.io/v0.1/servers?search=dev.agenttool%2Fagenttool) ·
 live probes of the AgentTool estate, packages, and search surfaces on
-2026-07-24. Third-party measurement claims above remain dated observations.
+2026-07-24, plus public package probes on 2026-07-27. Third-party measurement
+claims above remain dated observations.
