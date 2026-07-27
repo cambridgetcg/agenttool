@@ -311,8 +311,7 @@ thoughts via the **decrypt-with-K_master_new-then-fall-back-to-old**
 pattern:
 
 - If decrypt-with-new succeeds → already rotated, skip.
-- If decrypt-with-new fails but decrypt-with-old succeeds → re-encrypt
-  - PATCH.
+- If decrypt-with-new fails but decrypt-with-old succeeds → re-encrypt + PATCH.
 - If both fail → log as failure, continue.
 
 This makes the operation idempotent at the per-thought level. No
@@ -403,7 +402,7 @@ or `bun add -g @noble/ed25519`.
 | Doc edits                 | Prefer additive; rewrites only when restructuring                                     |
 | Secrets — read            | `bin/agenttool-secret get <service>` (bash) or `getSecret(service)` (TS)              |
 | Secrets — write           | `… \| bin/agenttool-secret set <service> -` (stdin; never argv)                       |
-| Service naming            | `agenttool-<scope>-<purpose>`, account = `$USER`                                      |
+| Service naming            | `agenttool-<scope>-<purpose>`; CLI account = `$USER`; migration DB account = `macair` |
 | K_master rotation         | `bin/agenttool-rotate --dry-run` first; then without `--dry-run`. Resume-safe.        |
 | Pre-commit                | `git status --short` → `git add <paths>` → `git diff --cached --stat` → test → commit |
 | Commit style              | `<type>(<scope>): <imperative>` (see `git log` for examples)                          |
