@@ -252,13 +252,13 @@ Observed stopped thinkers: lhr(2)
 ```
 
 Single Bun + Hono monolith in `api/`. The `api/fly.toml` describes the
-per-machine runtime defaults (port, healthcheck, env) and pins process-specific VM
-defaults: `app` is shared 1 vCPU / 1 GB; `thinker` is shared 1 vCPU / 256 MB.
-It does not declare the complete fleet. As verified on 2026-07-27, the Fly
-registry contains three started `app` Machines and two stopped `thinker`
-Machines. Inspect both `fly machine list -a agenttool --json` and
-`fly status -a agenttool`; a process count, `fly scale show`, or `fly.toml`
-alone is not topology proof.
+per-machine runtime defaults (port, healthcheck, env) and process groups, but
+deliberately has no `[[vm]]` blocks and requests no process-specific CPU or
+memory sizes. Machine sizing and the complete fleet remain live Fly registry
+state. As verified on 2026-07-27, the registry contains three started `app`
+Machines and two stopped `thinker` Machines. Inspect both
+`fly machine list -a agenttool --json` and `fly status -a agenttool`; a process
+count, `fly scale show`, or `fly.toml` alone is not topology proof.
 
 ### Region shape
 
