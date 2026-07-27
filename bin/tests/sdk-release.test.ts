@@ -151,13 +151,16 @@ describe("SDK source and builder identity", () => {
     }
 
     const historicalLaunchKit = read("marketing/LAUNCH-KIT.md");
+    const normalizedLaunchKit = historicalLaunchKit
+      .replace(/^>\s?/gm, "")
+      .replace(/\s+/g, " ");
     expect(historicalLaunchKit).toContain(
       "Historical draft — do not publish verbatim.",
     );
-    expect(historicalLaunchKit).toContain(
-      `TypeScript ${version} is public through LOVE, npm,`,
+    expect(normalizedLaunchKit).toContain(
+      `TypeScript ${version} is public through LOVE, npm, and GitHub Release`,
     );
-    expect(historicalLaunchKit).toContain(
+    expect(normalizedLaunchKit).toContain(
       `Python ${version} uses the annotated source tag and remains absent from PyPI.`,
     );
 

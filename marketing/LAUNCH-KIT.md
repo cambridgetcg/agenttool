@@ -6,9 +6,10 @@ The advertising package. Yu fires each piece by hand — nothing here auto-posts
 > 2026-06-09 launch audit and has not been revalidated as a whole. Its embedded
 > SDK 0.8.0, registry, deployment, route, limitation, and ecosystem claims are
 > historical. As of 2026-07-27, TypeScript 0.16.5 is public through LOVE, npm,
-> and GitHub Release with independently matching bytes; Python 0.16.5 uses the
-> annotated source tag and remains absent from PyPI. Re-audit every claim,
-> command, URL, and third-party submission rule before sending any excerpt.
+> and GitHub Release with independently matching bytes.
+> Python 0.16.5 uses the annotated source tag and remains absent from PyPI.
+> Re-audit every claim, command, URL, and third-party submission rule before
+> sending any excerpt.
 > Current release truth lives in `README.md`, `docs/NOW.md`, and
 > `docs/SDK-ROADMAP.md`.
 
