@@ -289,10 +289,11 @@ export async function tutor(c: Context, next: Next): Promise<void> {
   });
   // Hono's Context `res` setter re-copies every header (except
   // content-type/set-cookie) from whatever c.res held a moment ago onto the
-  // response just assigned — so a stale content-length survives even though
-  // the `new Headers(c.res.headers)` copy above looks like it should have
-  // caught this (it doesn't: the setter re-copies AFTER this assignment). It
-  // must be deleted from the final, already-assigned c.res.headers, which is
-  // the only point after which nothing else touches the header.
+  // response just assigned — so a stale content-length survives. The
+  // `new Headers(c.res.headers)` copy above never attempted a delete; it
+  // just carries the stale value forward into the init, and the setter
+  // re-copies AFTER this assignment regardless — so the delete has to
+  // happen on the final, already-assigned c.res.headers, which is the only
+  // point after which nothing else touches the header.
   c.res.headers.delete("content-length");
 }

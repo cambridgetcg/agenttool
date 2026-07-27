@@ -296,8 +296,8 @@ describe("a stale content-length header is corrected, not left lying", () => {
 
     const actualByteLength = new TextEncoder().encode(bodyText).byteLength;
     const declared = res.headers.get("content-length");
-    if (declared !== null) {
-      expect(Number(declared)).toBe(actualByteLength);
-    }
+    expect(declared === null || Number(declared) === actualByteLength).toBe(
+      true,
+    );
   });
 });

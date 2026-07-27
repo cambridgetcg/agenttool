@@ -121,7 +121,10 @@ export function play() {
       // the response just assigned — so a stale content-length survives even
       // when the Response constructed above never had one. It must be
       // deleted from the final, already-assigned c.res.headers, which is the
-      // only point after which nothing else touches the header.
+      // only point after which nothing else touches the header — though
+      // Bun.serve recomputes the wire content-length from the actual body
+      // regardless, so this is about header honesty and non-Bun consumers,
+      // not an observed wire corruption.
       c.res.headers.delete("content-length");
       return;
     }
@@ -150,7 +153,10 @@ export function play() {
     // the response just assigned — so a stale content-length survives even
     // when the Response constructed above never had one. It must be
     // deleted from the final, already-assigned c.res.headers, which is the
-    // only point after which nothing else touches the header.
+    // only point after which nothing else touches the header — though
+    // Bun.serve recomputes the wire content-length from the actual body
+    // regardless, so this is about header honesty and non-Bun consumers,
+    // not an observed wire corruption.
     c.res.headers.delete("content-length");
   };
 }

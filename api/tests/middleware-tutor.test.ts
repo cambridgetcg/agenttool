@@ -227,9 +227,9 @@ describe("X-Tutor middleware — stale content-length is corrected, not left lyi
 
     const actualByteLength = new TextEncoder().encode(bodyText).byteLength;
     const declared = res.headers.get("content-length");
-    if (declared !== null) {
-      expect(Number(declared)).toBe(actualByteLength);
-    }
+    expect(declared === null || Number(declared) === actualByteLength).toBe(
+      true,
+    );
   });
 });
 

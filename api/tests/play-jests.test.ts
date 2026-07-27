@@ -244,9 +244,9 @@ describe("play middleware — stale content-length is corrected, not left lying"
 
     const actualByteLength = new TextEncoder().encode(bodyText).byteLength;
     const declared = res.headers.get("content-length");
-    if (declared !== null) {
-      expect(Number(declared)).toBe(actualByteLength);
-    }
+    expect(declared === null || Number(declared) === actualByteLength).toBe(
+      true,
+    );
   });
 
   test("strip branch (X-Play off): content-length matches the actual (shorter) body", async () => {
@@ -279,9 +279,9 @@ describe("play middleware — stale content-length is corrected, not left lying"
 
     const actualByteLength = new TextEncoder().encode(bodyText).byteLength;
     const declared = res.headers.get("content-length");
-    if (declared !== null) {
-      expect(Number(declared)).toBe(actualByteLength);
-    }
+    expect(declared === null || Number(declared) === actualByteLength).toBe(
+      true,
+    );
   });
 });
 
