@@ -22,7 +22,11 @@ partial prefix with raw `psql` and then run the batch runner: that loses the
 proof of which bytes were already applied.
 
 ```bash
-export DATABASE_URL="postgres://user:pass@host:5432/agenttool"
+# Transaction-pooled URL: read-only inventory and normal API access.
+export DATABASE_URL="postgres://user:pass@transaction-pool:6543/agenttool"
+
+# Session-pooled URL: mandatory for migration applies and their advisory lock.
+export DATABASE_SESSION_URL="postgres://user:pass@session-pool:5432/agenttool"
 
 # A fresh target has no old API writers, provider ingress, or workers. The
 # first survey lists the full backlog and exits 42 because protected files are
@@ -33,6 +37,12 @@ bin/migrate-pending.sh --maintenance-quiesced
 # Require a clean source/journal inventory after application.
 bin/migrate-pending.sh --dry-run
 ```
+
+Before the first mutation, the runner repeats the complete
+journal/source/checksum inventory through `DATABASE_SESSION_URL` and requires
+the same pending filenames as the `DATABASE_URL` survey. That detects many
+endpoint mistakes, but it does not prove pool type or database identity;
+provision both scoped URLs for this exact target.
 
 `--maintenance-quiesced` is an operator assertion, not a process check. Use it
 for a fresh install only while nothing can write to that database and no
@@ -54,6 +64,7 @@ cd api/
 
 # Required
 export DATABASE_URL="postgres://..."
+export DATABASE_SESSION_URL="postgres://..."
 export REDIS_URL="redis://..."
 
 # Vault — 32 bytes hex (or generate: `openssl rand -hex 32`)

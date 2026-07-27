@@ -2,8 +2,10 @@
 # migrate-pending.sh — apply every migration in api/migrations/ that
 # isn't yet in meta._migrations.
 #
-# Reads DATABASE_URL from env or keychain (agenttool-database-url,
-# account=macair — matches api/scripts/_migrate-one.ts).
+# Uses DATABASE_URL from env or keychain (agenttool-database-url,
+# account=macair) for the read-only inventory. Actual applies additionally
+# require the session-pooled DATABASE_SESSION_URL from env or the dedicated
+# agenttool-database-session-url Keychain service.
 #
 # Doctrine: docs/DEPLOY-PROCEDURE.md §Phase 1.
 #
@@ -39,6 +41,18 @@ With no arguments, applies every pending checksum-journaled migration.
 --maintenance-quiesced asserts that the operator established the exclusive
 cutover required by api/migrations/quiescence-required.txt. It permits those
 files; it does not inspect or prove machine, writer, worker, or ingress state.
+
+DATABASE_URL is transaction-pooled survey access. Applying pending files also
+requires session-pooled DATABASE_SESSION_URL or the dedicated
+agenttool-database-session-url Keychain entry. The runner never substitutes or
+copies DATABASE_URL into that session-affine role, and it rejects an exact
+DATABASE_SESSION_URL/DATABASE_URL match before the first apply.
+
+Before the first apply, the runner repeats the complete journal/source/checksum
+inventory through DATABASE_SESSION_URL and requires the same pending filenames.
+That comparison detects many endpoint mistakes; it cannot prove pool type or
+that two configured URLs identify the same database. The operator remains
+responsible for that binding.
 EOF
 }
 
@@ -125,17 +139,25 @@ export DATABASE_URL
 
 # ── Compute pending: files − meta._migrations rows ─────────────────────
 PENDING_FILE="$(mktemp -t agenttool-pending.XXXXXX)"
+SESSION_PENDING_FILE="$(mktemp -t agenttool-session-pending.XXXXXX)"
 QUIESCENCE_PENDING_FILE="$(mktemp -t agenttool-quiescence-pending.XXXXXX)"
-trap 'rm -f "$PENDING_FILE" "$QUIESCENCE_PENDING_FILE"' EXIT
+trap 'rm -f "$PENDING_FILE" "$SESSION_PENDING_FILE" "$QUIESCENCE_PENDING_FILE"' EXIT
 
-cd "$REPO_ROOT/api"
-bun -e '
+compute_pending() {
+  local database_inventory_url="$1"
+  local output_file="$2"
+  (
+    cd "$REPO_ROOT/api"
+    # shellcheck disable=SC2016 # Single-quoted JavaScript must not expand in Bash.
+    DATABASE_INVENTORY_URL="$database_inventory_url" bun -e '
 import { createHash } from "node:crypto";
 import postgres from "postgres";
 import { readdirSync } from "node:fs";
 
-const sql = postgres(process.env.DATABASE_URL!, {
-  ssl: process.env.DATABASE_URL!.includes("supabase") ? "require" : false,
+const databaseUrl = process.env.DATABASE_INVENTORY_URL;
+if (!databaseUrl) throw new Error("DATABASE_INVENTORY_URL is absent");
+const sql = postgres(databaseUrl, {
+  ssl: databaseUrl.includes("supabase") ? "require" : false,
   prepare: false, max: 1, idle_timeout: 5, connect_timeout: 10,
 });
 
@@ -189,8 +211,11 @@ try {
 } finally {
   await sql.end();
 }
-' > "$PENDING_FILE"
-cd "$REPO_ROOT"
+' > "$output_file"
+  )
+}
+
+compute_pending "$DATABASE_URL" "$PENDING_FILE"
 
 PENDING_COUNT=$(wc -l < "$PENDING_FILE" | tr -d ' ')
 if grep -Fxf "$QUIESCENCE_REQUIRED_FILE" "$PENDING_FILE" \
@@ -234,6 +259,42 @@ fi
 if [ "$DRY_RUN" = 1 ]; then
   echo "(dry-run — no migrations applied)"
   exit 0
+fi
+
+# ── Resolve the session-pooled URL only when an apply will run ─────────
+if [ -z "${DATABASE_SESSION_URL:-}" ]; then
+  if command -v security >/dev/null 2>&1; then
+    DATABASE_SESSION_URL="$(
+      security find-generic-password \
+        -s agenttool-database-session-url \
+        -a macair \
+        -w 2>/dev/null || true
+    )"
+  fi
+fi
+if [ -z "${DATABASE_SESSION_URL:-}" ]; then
+  echo "✗ DATABASE_SESSION_URL not set in env or keychain (agenttool-database-session-url, account=macair)" >&2
+  echo "  Set with: security add-generic-password -U -s agenttool-database-session-url -a macair -w" >&2
+  echo "  DATABASE_URL remains survey-only and is never substituted for migration applies." >&2
+  exit 1
+fi
+if [ "$DATABASE_SESSION_URL" = "$DATABASE_URL" ]; then
+  echo "✗ DATABASE_SESSION_URL exactly matches transaction-pooled DATABASE_URL" >&2
+  echo "  Refusing before the first migration. Configure independent session-pooled apply access." >&2
+  echo "  Distinct strings and matching inventories still do not prove pool type or database identity." >&2
+  exit 1
+fi
+export DATABASE_SESSION_URL
+
+# Repeat the complete source/checksum inventory through the session endpoint.
+# Exact pending-list equality catches many misbindings without claiming that
+# connection-string syntax proves pool type or database identity.
+compute_pending "$DATABASE_SESSION_URL" "$SESSION_PENDING_FILE"
+if ! cmp -s "$PENDING_FILE" "$SESSION_PENDING_FILE"; then
+  echo "✗ session endpoint migration inventory differs from the transaction-pooled survey" >&2
+  echo "  Refusing before the first migration. Verify both scoped URLs target the intended database." >&2
+  echo "  Matching inventories narrow endpoint drift; they do not prove pool type or database identity." >&2
+  exit 1
 fi
 
 # ── Apply each pending file via _migrate-one.ts ────────────────────────

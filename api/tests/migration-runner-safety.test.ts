@@ -22,6 +22,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  isMissingMigrationJournalError,
   quiescenceRequiredFilenames,
   shouldWrapInTransaction,
 } from "../scripts/_migrate-one";
@@ -35,6 +36,26 @@ function read(path: string): string {
 function writeExecutable(path: string, contents: string): void {
   writeFileSync(path, contents);
   chmodSync(path, 0o755);
+}
+
+function embeddedFlyRunner(
+  migration: string,
+  filename = "20260509T170000_meta_migrations.sql",
+): string {
+  const match = read("bin/fly-migrate-one.sh").match(
+    /REMOTE_JS <<'JS' \|\| true\n([\s\S]*?)\nJS\n/,
+  );
+  if (!match?.[1]) throw new Error("embedded Fly migration runner not found");
+  return match[1]
+    .replace("__FILENAME__", filename)
+    .replace(
+      "__CHECKSUM__",
+      createHash("sha256").update(migration).digest("hex"),
+    )
+    .replace(
+      "__MIGRATION_B64__",
+      Buffer.from(migration, "utf8").toString("base64"),
+    );
 }
 
 function runnerFixture(): {
@@ -83,6 +104,7 @@ describe("migration runner safety", () => {
     expect(source).toContain(
       'exec env DATABASE_URL="$database_url" "$ROOT/bin/migrate-pending.sh" "$@"',
     );
+    expect(source).not.toContain('DATABASE_SESSION_URL="$database_url"');
     expect(source).not.toContain('echo "▸ migrating $DATABASE_URL"');
     expect(source).not.toMatch(/\bpsql\b/);
 
@@ -102,6 +124,9 @@ describe("migration runner safety", () => {
     );
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("usage:");
+    expect(result.stdout).toContain("Applying pending files");
+    expect(result.stdout).toContain("session-pooled DATABASE_SESSION_URL");
+    expect(result.stdout).toContain("never satisfies the separate");
     expect(`${result.stdout}${result.stderr}`).not.toContain(
       "must-not-appear.invalid",
     );
@@ -135,9 +160,7 @@ describe("migration runner safety", () => {
         );
 
         expect(result.status).toBe(code);
-        expect(`${result.stdout}${result.stderr}`).toContain(
-          "usage:",
-        );
+        expect(`${result.stdout}${result.stderr}`).toContain("usage:");
         expect(existsSync(fixture.securityMarker)).toBe(false);
         expect(existsSync(fixture.bunLog)).toBe(false);
         expect(existsSync(fixture.applyMarker)).toBe(false);
@@ -182,20 +205,16 @@ describe("migration runner safety", () => {
   });
 
   test("legacy TypeScript runner refuses without importing a database client", () => {
-    const result = spawnSync(
-      process.execPath,
-      [join(root, "bin/migrate.ts")],
-      {
-        cwd: root,
-        encoding: "utf8",
-        env: {
-          PATH: process.env.PATH ?? "/usr/bin:/bin",
-          HOME: tmpdir(),
-          LANG: "C",
-          DATABASE_URL: "postgres://should-not-be-used.invalid/audit",
-        },
+    const result = spawnSync(process.execPath, [join(root, "bin/migrate.ts")], {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        PATH: process.env.PATH ?? "/usr/bin:/bin",
+        HOME: tmpdir(),
+        LANG: "C",
+        DATABASE_URL: "postgres://should-not-be-used.invalid/audit",
       },
-    );
+    });
 
     expect(result.status).toBe(2);
     expect(result.stderr).toContain("bin/migrate.ts is retired");
@@ -214,9 +233,7 @@ describe("migration runner safety", () => {
   });
 
   test("the recovered production-journaled collab relay source stays byte exact", () => {
-    const migration = read(
-      "api/migrations/20260723T210000_collab_relay.sql",
-    );
+    const migration = read("api/migrations/20260723T210000_collab_relay.sql");
     expect(createHash("sha256").update(migration).digest("hex")).toBe(
       "01e9cf0cb09b2f33ad2e87d72d08cd5dab8f4391c322c703af61ee4eb2d0bb99",
     );
@@ -229,9 +246,7 @@ describe("migration runner safety", () => {
     expect(source).toContain(
       "migration source missing for journaled file: ${filename}",
     );
-    expect(source).not.toContain(
-      "if (!filesOnDisk.has(filename)) continue;",
-    );
+    expect(source).not.toContain("if (!filesOnDisk.has(filename)) continue;");
     expect(source).toContain("migration checksum drift");
   });
 
@@ -279,11 +294,14 @@ describe("migration runner safety", () => {
   });
 
   test("pending runner refuses protected files until the maintenance assertion", async () => {
-    const fixture = await mkdtemp(join(tmpdir(), "agenttool-migration-policy-"));
+    const fixture = await mkdtemp(
+      join(tmpdir(), "agenttool-migration-policy-"),
+    );
     const fakeBin = join(fixture, "bin");
     const applyLog = join(fixture, "apply.log");
-    const protectedMigration =
-      "20260726T202500_crypto_deposit_finality.sql";
+    const inventoryLog = join(fixture, "inventory.log");
+    const securityLog = join(fixture, "security.log");
+    const protectedMigration = "20260726T202500_crypto_deposit_finality.sql";
     await mkdir(fakeBin, { recursive: true });
     await writeFile(
       join(fakeBin, "bun"),
@@ -291,8 +309,21 @@ describe("migration runner safety", () => {
         "#!/usr/bin/env bash",
         "set -eu",
         'if [ "${1:-}" = -e ]; then',
-        '  printf "%s\\n" "$DEPLOY_TEST_PENDING_MIGRATIONS"',
+        '  if [ "${DATABASE_INVENTORY_URL:-}" = "$DATABASE_URL" ]; then',
+        '    printf "%s\\n" survey >> "$DEPLOY_TEST_INVENTORY_LOG"',
+        "  else",
+        '    printf "%s\\n" session >> "$DEPLOY_TEST_INVENTORY_LOG"',
+        "  fi",
+        '  pending="$DEPLOY_TEST_PENDING_MIGRATIONS"',
+        '  if [ "${DATABASE_INVENTORY_URL:-}" != "$DATABASE_URL" ] && [ -n "${DEPLOY_TEST_SESSION_PENDING_MIGRATIONS+x}" ]; then',
+        '    pending="$DEPLOY_TEST_SESSION_PENDING_MIGRATIONS"',
+        "  fi",
+        '  printf "%s\\n" "$pending"',
         "  exit 0",
+        "fi",
+        'if [ -z "${DATABASE_SESSION_URL:-}" ]; then',
+        '  printf "%s\\n" "missing DATABASE_SESSION_URL in apply child" >&2',
+        "  exit 92",
         "fi",
         'if [ "${2##*/}" = "$DEPLOY_TEST_PROTECTED_MIGRATION" ]; then',
         '  if [ "${AGENTTOOL_PENDING_RUNNER_MAINTENANCE_QUIESCED:-}" != 1 ]; then',
@@ -318,35 +349,68 @@ describe("migration runner safety", () => {
       ].join("\n"),
     );
     await chmod(join(fakeBin, "bun"), 0o755);
+    await writeFile(
+      join(fakeBin, "security"),
+      [
+        "#!/usr/bin/env bash",
+        "set -eu",
+        'service=""',
+        'while [ "$#" -gt 0 ]; do',
+        '  if [ "$1" = -s ] && [ "$#" -ge 2 ]; then',
+        '    service="$2"',
+        "    break",
+        "  fi",
+        "  shift",
+        "done",
+        'printf "%s\\n" "$service" >> "$DEPLOY_TEST_SECURITY_LOG"',
+        'if [ "$service" = agenttool-database-session-url ] && [ -n "${DEPLOY_TEST_SESSION_KEYCHAIN:-}" ]; then',
+        '  printf "%s\\n" "$DEPLOY_TEST_SESSION_KEYCHAIN"',
+        "fi",
+        "",
+      ].join("\n"),
+    );
+    await chmod(join(fakeBin, "security"), 0o755);
 
     const run = async (
       args: string[],
       pendingMigration = protectedMigration,
       ambientAssertion?: string,
+      sessionUrl?: string,
+      keychainSessionUrl?: string,
+      sessionPendingMigration?: string,
     ) => {
-      const child = Bun.spawn(
-        ["bash", "bin/migrate-pending.sh", ...args],
-        {
-          cwd: root,
-          env: {
-            PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
-            HOME: fixture,
-            LANG: "C",
-            DATABASE_URL: "postgres://fixture.invalid/migration_policy",
-            DEPLOY_TEST_PENDING_MIGRATIONS: pendingMigration,
-            DEPLOY_TEST_PROTECTED_MIGRATION: protectedMigration,
-            DEPLOY_TEST_APPLY_LOG: applyLog,
-            ...(ambientAssertion === undefined
-              ? {}
-              : {
-                  AGENTTOOL_PENDING_RUNNER_MAINTENANCE_QUIESCED:
-                    ambientAssertion,
-                }),
-          },
-          stdout: "pipe",
-          stderr: "pipe",
+      const child = Bun.spawn(["bash", "bin/migrate-pending.sh", ...args], {
+        cwd: root,
+        env: {
+          PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+          HOME: fixture,
+          LANG: "C",
+          DATABASE_URL: "postgres://fixture.invalid/migration_policy",
+          DEPLOY_TEST_PENDING_MIGRATIONS: pendingMigration,
+          DEPLOY_TEST_PROTECTED_MIGRATION: protectedMigration,
+          DEPLOY_TEST_APPLY_LOG: applyLog,
+          DEPLOY_TEST_INVENTORY_LOG: inventoryLog,
+          DEPLOY_TEST_SECURITY_LOG: securityLog,
+          ...(sessionUrl === undefined
+            ? {}
+            : { DATABASE_SESSION_URL: sessionUrl }),
+          ...(keychainSessionUrl === undefined
+            ? {}
+            : { DEPLOY_TEST_SESSION_KEYCHAIN: keychainSessionUrl }),
+          ...(sessionPendingMigration === undefined
+            ? {}
+            : {
+                DEPLOY_TEST_SESSION_PENDING_MIGRATIONS: sessionPendingMigration,
+              }),
+          ...(ambientAssertion === undefined
+            ? {}
+            : {
+                AGENTTOOL_PENDING_RUNNER_MAINTENANCE_QUIESCED: ambientAssertion,
+              }),
         },
-      );
+        stdout: "pipe",
+        stderr: "pipe",
+      });
       const [stdout, stderr, code] = await Promise.all([
         new Response(child.stdout).text(),
         new Response(child.stderr).text(),
@@ -360,12 +424,19 @@ describe("migration runner safety", () => {
       expect(survey.code, survey.stderr).toBe(42);
       expect(survey.stdout).toContain(protectedMigration);
       expect(survey.stdout).toContain("Refusing before the first migration");
+      await expect(access(securityLog)).rejects.toThrow();
 
       const refusedApply = await run([]);
       expect(refusedApply.code, refusedApply.stderr).toBe(42);
       await expect(access(applyLog)).rejects.toThrow();
+      await expect(access(securityLog)).rejects.toThrow();
 
-      const assertedApply = await run(["--maintenance-quiesced"]);
+      const assertedApply = await run(
+        ["--maintenance-quiesced"],
+        protectedMigration,
+        undefined,
+        "postgres://session.invalid/migration_policy",
+      );
       expect(assertedApply.code, assertedApply.stderr).toBe(0);
       expect(assertedApply.stdout).toContain(
         "--maintenance-quiesced is an operator assertion",
@@ -378,23 +449,83 @@ describe("migration runner safety", () => {
         [],
         ordinaryMigration,
         "1",
+        "postgres://session.invalid/migration_policy",
       );
-      expect(
-        ambientOrdinaryApply.code,
-        ambientOrdinaryApply.stderr,
-      ).toBe(0);
-      expect(await readFile(applyLog, "utf8")).toBe(
-        `${ordinaryMigration}\n`,
+      expect(ambientOrdinaryApply.code, ambientOrdinaryApply.stderr).toBe(0);
+      expect(await readFile(applyLog, "utf8")).toBe(`${ordinaryMigration}\n`);
+
+      await rm(applyLog, { force: true });
+      const missingSessionApply = await run([], ordinaryMigration);
+      expect(missingSessionApply.code).toBe(1);
+      expect(missingSessionApply.stderr).toContain(
+        "DATABASE_SESSION_URL not set in env or keychain",
       );
+      expect(missingSessionApply.stderr).toContain(
+        "DATABASE_URL remains survey-only",
+      );
+      await expect(access(applyLog)).rejects.toThrow();
+      expect((await readFile(securityLog, "utf8")).trim().split("\n")).toEqual([
+        "agenttool-database-session-url",
+      ]);
+
+      await rm(inventoryLog, { force: true });
+      const identicalPoolUrls = await run(
+        [],
+        ordinaryMigration,
+        undefined,
+        "postgres://fixture.invalid/migration_policy",
+      );
+      expect(identicalPoolUrls.code).toBe(1);
+      expect(identicalPoolUrls.stderr).toContain(
+        "DATABASE_SESSION_URL exactly matches transaction-pooled DATABASE_URL",
+      );
+      expect(identicalPoolUrls.stderr).toContain(
+        "Refusing before the first migration",
+      );
+      expect(identicalPoolUrls.stderr).toContain(
+        "do not prove pool type or database identity",
+      );
+      expect(await readFile(inventoryLog, "utf8")).toBe("survey\n");
+      await expect(access(applyLog)).rejects.toThrow();
+
+      await rm(securityLog, { force: true });
+      const keychainApply = await run(
+        [],
+        ordinaryMigration,
+        undefined,
+        undefined,
+        "postgres://session.invalid/keychain_policy",
+      );
+      expect(keychainApply.code, keychainApply.stderr).toBe(0);
+      expect(await readFile(applyLog, "utf8")).toBe(`${ordinaryMigration}\n`);
+      expect((await readFile(securityLog, "utf8")).trim().split("\n")).toEqual([
+        "agenttool-database-session-url",
+      ]);
+
+      await rm(applyLog, { force: true });
+      const mismatchedSessionInventory = await run(
+        [],
+        ordinaryMigration,
+        undefined,
+        "postgres://session.invalid/migration_policy",
+        undefined,
+        "20990101T000000_different_database.sql",
+      );
+      expect(mismatchedSessionInventory.code).toBe(1);
+      expect(mismatchedSessionInventory.stderr).toContain(
+        "session endpoint migration inventory differs",
+      );
+      expect(mismatchedSessionInventory.stderr).toContain(
+        "do not prove pool type or database identity",
+      );
+      await expect(access(applyLog)).rejects.toThrow();
     } finally {
       await rm(fixture, { recursive: true, force: true });
     }
   });
 
   test("direct one-file runners refuse protected migrations before credentials or Fly", () => {
-    const fixture = mkdtempSync(
-      join(tmpdir(), "agenttool-one-file-policy-"),
-    );
+    const fixture = mkdtempSync(join(tmpdir(), "agenttool-one-file-policy-"));
     const fakeBin = join(fixture, "bin");
     const securityMarker = join(fixture, "security-called");
     const flyMarker = join(fixture, "fly-called");
@@ -507,8 +638,7 @@ exit 97
             HOME: fixture,
             LANG: "C",
             SECURITY_MARKER: securityMarker,
-            DATABASE_URL:
-              "postgres://must-not-be-used.invalid/requested_file",
+            DATABASE_URL: "postgres://must-not-be-used.invalid/requested_file",
           },
         },
       );
@@ -542,8 +672,7 @@ exit 97
             HOME: fixture,
             LANG: "C",
             SECURITY_MARKER: securityMarker,
-            DATABASE_URL:
-              "postgres://must-not-be-used.invalid/requested_file",
+            DATABASE_URL: "postgres://must-not-be-used.invalid/requested_file",
             AGENTTOOL_PENDING_RUNNER_MAINTENANCE_QUIESCED: "1",
           },
         },
@@ -560,10 +689,7 @@ exit 97
 
       const fly = spawnSync(
         "/bin/bash",
-        [
-          join(root, "bin/fly-migrate-one.sh"),
-          protectedMigration,
-        ],
+        [join(root, "bin/fly-migrate-one.sh"), protectedMigration],
         {
           cwd: root,
           encoding: "utf8",
@@ -588,10 +714,7 @@ exit 97
         "/bin/bash",
         [
           join(root, "bin/fly-migrate-one.sh"),
-          join(
-            root,
-            "api/migrations/20260509T170000_meta_migrations.sql",
-          ),
+          join(root, "api/migrations/20260509T170000_meta_migrations.sql"),
         ],
         {
           cwd: root,
@@ -615,9 +738,7 @@ exit 97
   });
 
   test("policy targets must be regular files", () => {
-    const fixture = mkdtempSync(
-      join(tmpdir(), "agenttool-policy-files-"),
-    );
+    const fixture = mkdtempSync(join(tmpdir(), "agenttool-policy-files-"));
     const migrations = join(fixture, "migrations");
     const policy = join(fixture, "quiescence-required.txt");
     const filename = "20990101T000000_fixture.sql";
@@ -626,9 +747,9 @@ exit 97
     writeFileSync(policy, `${filename}\n`);
 
     try {
-      expect(() =>
-        quiescenceRequiredFilenames(policy, migrations),
-      ).toThrow("quiescence policy manifest is invalid");
+      expect(() => quiescenceRequiredFilenames(policy, migrations)).toThrow(
+        "quiescence policy manifest is invalid",
+      );
     } finally {
       rmSync(fixture, { recursive: true, force: true });
     }
@@ -656,10 +777,7 @@ exit 97
         "/bin/bash",
         [
           join(root, "bin/fly-migrate-one.sh"),
-          join(
-            root,
-            "api/migrations/20260509T170000_meta_migrations.sql",
-          ),
+          join(root, "api/migrations/20260509T170000_meta_migrations.sql"),
         ],
         {
           cwd: root,
@@ -712,8 +830,12 @@ exit 97
       "bin/fly-migrate-one.sh",
     ]) {
       const source = read(path);
-      expect(source).toContain("pg_advisory_lock(hashtext('agenttool:migrations'))");
-      expect(source).toContain("pg_advisory_unlock(hashtext('agenttool:migrations'))");
+      expect(source).toContain(
+        "pg_advisory_lock(hashtext('agenttool:migrations'))",
+      );
+      expect(source).toContain(
+        "pg_advisory_unlock(hashtext('agenttool:migrations'))",
+      );
     }
   });
 
@@ -741,7 +863,31 @@ exit 97
     expect(local).toContain("applied without journal (bootstrap phase");
   });
 
-  test("Fly runner mirrors the local transaction markers", () => {
+  test("journal bootstrap fallback accepts only an undefined table", () => {
+    expect(isMissingMigrationJournalError({ code: "42P01" })).toBe(true);
+    expect(
+      isMissingMigrationJournalError({
+        code: "42703",
+        message: 'column "checksum" does not exist',
+      }),
+    ).toBe(false);
+    expect(
+      isMissingMigrationJournalError({
+        message: 'relation "meta._migrations" does not exist',
+      }),
+    ).toBe(false);
+    expect(isMissingMigrationJournalError(new Error("does not exist"))).toBe(
+      false,
+    );
+    const local = read("api/scripts/_migrate-one.ts");
+    const recordApplied = local.slice(
+      local.indexOf("async function recordApplied"),
+      local.indexOf("/** Return the SQL beginning"),
+    );
+    expect(recordApplied).not.toContain("ON CONFLICT");
+  });
+
+  test("Fly runner requires a session URL and preserves exact transaction markers", () => {
     const local = read("api/scripts/_migrate-one.ts");
     const fly = read("bin/fly-migrate-one.sh");
     for (const marker of ["@no-transaction", "firstExecutableSql"]) {
@@ -750,7 +896,9 @@ exit 97
     }
     for (const source of [local, fly]) {
       expect(source).toContain("await sql.begin(async (tx) => {");
-      expect(source).toContain("atomic migration+journal transaction unavailable");
+      expect(source).toContain(
+        "atomic migration+journal transaction unavailable",
+      );
     }
     expect(local).toMatch(
       /tx\.unsafe\(text\)[\s\S]+recordApplied\(tx, filename, checksum\)/,
@@ -758,6 +906,106 @@ exit 97
     expect(fly).toMatch(
       /tx\.unsafe\(migration\)[\s\S]+INSERT INTO meta\._migrations/,
     );
+    expect(fly).toContain("process.env.DATABASE_SESSION_URL");
+    expect(fly).not.toMatch(/const databaseUrl = process\.env\.DATABASE_URL/);
+    expect(local).toContain('process.env.DATABASE_SESSION_URL ?? ""');
+    expect(local).not.toMatch(/process\.env\.DATABASE_URL/);
+    expect(local).toContain('"agenttool-database-session-url"');
+    expect(local).not.toContain('"agenttool-database-url"');
+    expect(local).toContain("DATABASE_SESSION_URL not in env or keychain");
+    expect(fly).toContain(
+      String.raw`/^--[ \t]+@no-transaction[ \t]*$/m.test(migration)`,
+    );
+    expect(fly).not.toContain(
+      String.raw`/^--\s*@no-transaction\b/m.test(migration)`,
+    );
+    const journalMigration = read(
+      "api/migrations/20260509T170000_meta_migrations.sql",
+    );
+    expect(shouldWrapInTransaction(journalMigration)).toBe(true);
+    expect(journalMigration).toContain("-- @no-transaction is NOT set");
+
+    const fixture = mkdtempSync(join(tmpdir(), "agenttool-fly-runner-"));
+    const postgresModule = join(fixture, "node_modules", "postgres");
+    const callLog = join(fixture, "postgres-calls");
+    mkdirSync(postgresModule, { recursive: true });
+    writeFileSync(
+      join(postgresModule, "package.json"),
+      JSON.stringify({
+        name: "postgres",
+        type: "module",
+        exports: "./index.js",
+      }),
+    );
+    writeFileSync(
+      join(postgresModule, "index.js"),
+      `
+import { appendFileSync } from "node:fs";
+const note = (value) =>
+  appendFileSync(process.env.MIGRATION_FAKE_LOG, value + "\\n");
+const client = (label) => {
+  const sql = async (parts) => {
+    const text = Array.isArray(parts) ? parts.join("?") : String(parts);
+    note(label + ":tag:" + text.replace(/\\s+/g, " ").trim());
+    return [];
+  };
+  sql.unsafe = async (text) => {
+    note(label + ":unsafe:" + String(text).split("\\n", 1)[0]);
+    return [];
+  };
+  return sql;
+};
+export default function postgres(url) {
+  note("url:" + (url.includes("session.invalid") ? "session" : "other"));
+  const sql = client("sql");
+  sql.begin = async (callback) => {
+    note("begin");
+    return callback(client("tx"));
+  };
+  sql.end = async () => note("end");
+  return sql;
+}
+`,
+    );
+
+    try {
+      const remote = embeddedFlyRunner(journalMigration);
+      const result = spawnSync(process.execPath, ["-e", remote], {
+        cwd: fixture,
+        encoding: "utf8",
+        env: {
+          PATH: process.env.PATH ?? "/usr/bin:/bin",
+          HOME: fixture,
+          LANG: "C",
+          DATABASE_URL: "postgres://transaction.invalid/test",
+          DATABASE_SESSION_URL: "postgres://session.invalid/test",
+          MIGRATION_FAKE_LOG: callLog,
+        },
+      });
+      expect(result.status, result.stderr).toBe(0);
+      const calls = readFileSync(callLog, "utf8");
+      expect(calls).toContain("url:session");
+      expect(calls).toContain("begin");
+      expect(calls).toContain("tx:unsafe:-- Migration journal");
+
+      rmSync(callLog);
+      const missingSession = spawnSync(process.execPath, ["-e", remote], {
+        cwd: fixture,
+        encoding: "utf8",
+        env: {
+          PATH: process.env.PATH ?? "/usr/bin:/bin",
+          HOME: fixture,
+          LANG: "C",
+          DATABASE_URL: "postgres://transaction.invalid/test",
+          MIGRATION_FAKE_LOG: callLog,
+        },
+      });
+      expect(missingSession.status).not.toBe(0);
+      expect(missingSession.stderr).toContain("DATABASE_SESSION_URL is absent");
+      expect(existsSync(callLog)).toBe(false);
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
   });
 
   test("reviewed rollout migrations use the runner's atomic migration+journal transaction", () => {
