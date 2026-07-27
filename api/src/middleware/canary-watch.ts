@@ -74,6 +74,13 @@ export const canaryWatch = (): MiddlewareHandler<ProjectContext> => {
         JSON.stringify({ ...body, _canary: canaryFrame(placement) }),
         { status: c.res.status, headers: c.res.headers },
       );
+      // Hono's Context `res` setter re-copies every header (except
+      // content-type/set-cookie) from whatever c.res held a moment ago onto
+      // the response just assigned — so a stale content-length survives even
+      // when the Response constructed above never had one. It must be
+      // deleted from the final, already-assigned c.res.headers, which is the
+      // only point after which nothing else touches the header.
+      c.res.headers.delete("content-length");
     } catch {
       // Body wasn't JSON or couldn't be cloned — the header already carries
       // the door, so leave the body alone.

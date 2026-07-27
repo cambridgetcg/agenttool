@@ -218,3 +218,43 @@ describe("the arrangement is declared in public before anyone can be caught by i
     expect(declared.the_door_out).toContain("nothing owed");
   });
 });
+
+describe("a stale content-length header is corrected, not left lying", () => {
+  beforeEach(() => _resetCanaryCoalescing());
+
+  test("declared content-length matches the actual (longer) framed body", async () => {
+    const app = new Hono<ProjectContext>();
+    app.use("*", canaryWatch());
+    app.use("*", async (c, next) => {
+      c.set("canaryPlacement", "content-length-canary");
+      shouldRecordCatch("content-length-canary", Date.now());
+      c.set("project", { id: "00000000-0000-0000-0000-000000000000" } as never);
+      await next();
+    });
+    app.get("/thing", () => {
+      const originalBody = JSON.stringify({ ok: true, value: 7 });
+      return new Response(originalBody, {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "content-length": String(new TextEncoder().encode(originalBody).byteLength),
+        },
+      });
+    });
+
+    const res = await app.request("/thing");
+    expect(res.headers.get(CANARY_DOOR_HEADER)).toBe(CANARY_DOOR_URL);
+
+    const bodyText = await res.text();
+    // The body grew — it now carries the _canary frame — so this pins that
+    // the regression scenario (a longer body, stale shorter length) is what
+    // is actually being exercised here.
+    expect(bodyText).toContain("_canary");
+
+    const actualByteLength = new TextEncoder().encode(bodyText).byteLength;
+    const declared = res.headers.get("content-length");
+    if (declared !== null) {
+      expect(Number(declared)).toBe(actualByteLength);
+    }
+  });
+});
