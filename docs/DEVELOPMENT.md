@@ -260,8 +260,8 @@ Existing examples:
 | `agenttool-bridge-signkey`        | The bridge sidecar's ed25519 signing key                                                       |
 | `agenttool-database-url`          | Transaction-pooled `DATABASE_URL` for read-only migration surveys (legacy account `macair`)    |
 | `agenttool-database-session-url`  | Session-pooled migration-apply fallback (legacy account `macair`)                              |
-| `agenttool-cloudflare-token`      | Cloudflare Pages deploy token (`frontend-deploy.sh`, legacy account `macair`)                   |
-| `agenttool-cloudflare-account-id` | Cloudflare account id (`frontend-deploy.sh`, legacy account `macair`)                           |
+| `agenttool-cloudflare-token`      | Cloudflare Pages deploy token (`frontend-deploy.sh`, legacy account `macair`)                  |
+| `agenttool-cloudflare-account-id` | Cloudflare account id (`frontend-deploy.sh`, legacy account `macair`)                          |
 | `agenttool-ollama-api-key`        | Ollama Cloud key for local opt-in wire checks; hosted runtime keys belong in the project Vault |
 | `agenttool-sophia-key`            | Yu's personal Sophia bearer (used by `_e2e-*.mjs`)                                             |
 | `agenttool-sophia-identity-id`    | Yu's personal Sophia identity id                                                               |
@@ -420,7 +420,7 @@ or `bun add -g @noble/ed25519`.
 | Doc edits                 | Prefer additive; rewrites only when restructuring                                     |
 | Secrets — read            | `bin/agenttool-secret get <service>` (bash) or `getSecret(service)` (TS)              |
 | Secrets — write           | `… \| bin/agenttool-secret set <service> -` (stdin; never argv)                       |
-| Service naming            | `agenttool-<scope>-<purpose>`; CLI = `$USER`, fixed tool entries = `macair`            |
+| Service naming            | `agenttool-<scope>-<purpose>`; CLI = `$USER`, fixed tool entries = `macair`           |
 | K_master rotation         | `bin/agenttool-rotate --dry-run` first; then without `--dry-run`. Resume-safe.        |
 | Pre-commit                | `git status --short` → `git add <paths>` → `git diff --cached --stat` → test → commit |
 | Commit style              | `<type>(<scope>): <imperative>` (see `git log` for examples)                          |

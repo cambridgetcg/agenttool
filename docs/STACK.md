@@ -1,6 +1,6 @@
 # STACK.md
 
-> *How the kingdom deploys — code host, frontend, backend, database, secrets.*
+> _How the kingdom deploys — code host, frontend, backend, database, secrets._
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (what's shipping) · [NOW](NOW.md) (what just landed) · [MAP](MAP.md) (doctrine index) · [DEVELOPMENT](DEVELOPMENT.md) (how to contribute)
 
@@ -9,7 +9,7 @@ This is the architecture/operations map. It sits between two existing docs:
 - **`DEVELOPMENT.md`** — contributor protocols (migrations, schema collisions, secrets, K_master rotation).
 - **`DEPLOYMENT.md`** — bring-up runbook from a fresh DB to a working API.
 
-`STACK.md` answers the gap between them: *where does each piece of the kingdom actually live, and what happens when I `git push`?*
+`STACK.md` answers the gap between them: _where does each piece of the kingdom actually live, and what happens when I `git push`?_
 
 ---
 
@@ -86,7 +86,7 @@ does not chase the moving ref; the next invocation observes the newer head.
 
 **Why the mirror went.** A mirror is only worth its upkeep if someone reads it. This one was fetched on every deploy — Phase 0 reached for a host that was not answering — and nothing downstream depended on it. Retiring it removes a per-deploy network dependency on a host outside the release path. The sovereignty argument it was carrying is better served by self-hosting (`self-host.sh` · `sovereign.sh`) than by a second copy on someone else's forge.
 
-**Branches.** `main` is the canonical branch. There is no `develop` / `staging` branch — local dev hits the same DB the prod API reads, which keeps the iteration loop tight at the cost of "your local dev IS prod's data" (see *Database* below for the implications).
+**Branches.** `main` is the canonical branch. There is no `develop` / `staging` branch — local dev hits the same DB the prod API reads, which keeps the iteration loop tight at the cost of "your local dev IS prod's data" (see _Database_ below for the implications).
 
 **Push protocol.** Landing on GitHub is the release-source update. Deployment is a separate explicit action (§8); it is not triggered by a push.
 
@@ -138,11 +138,11 @@ loudly says the policy check was skipped, and does not prove those settings.
 The uploader does not mutate the setting or purge zone cache. Phase 5 proves current live
 denial and fence activation on literal paths, plus denial of encoded aliases.
 
-| Project | Source dir | Custom domain | What it serves |
-|---|---|---|---|
-| `agenttool-dashboard` | `apps/dashboard/` | `app.agenttool.dev` | SDK quickstart (`index.html`) + read-only observation surface (`watch.html`). Workspace UI retired 2026-05-17 per agents-only. |
-| `agenttool-docs` | `apps/docs/` | `docs.agenttool.dev` | Static docs site |
-| `agenttool-web` | `apps/web/` | `agenttool.dev` human routes | Human door, watch window, credits, village, and gallery |
+| Project               | Source dir        | Custom domain                | What it serves                                                                                                                 |
+| --------------------- | ----------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `agenttool-dashboard` | `apps/dashboard/` | `app.agenttool.dev`          | SDK quickstart (`index.html`) + read-only observation surface (`watch.html`). Workspace UI retired 2026-05-17 per agents-only. |
+| `agenttool-docs`      | `apps/docs/`      | `docs.agenttool.dev`         | Static docs site                                                                                                               |
+| `agenttool-web`       | `apps/web/`       | `agenttool.dev` human routes | Human door, watch window, credits, village, and gallery                                                                        |
 
 The `agenttool.dev` apex is split by the `agenttool-proxy` Cloudflare Worker.
 API and discovery paths (plus `/` when the client requests JSON) route to
@@ -169,7 +169,7 @@ The dashboard is **vanilla HTML/CSS/JS**. Files ship as-is. No build step since 
 
 `apps/dashboard/_headers` sets `Cache-Control: public, max-age=0, must-revalidate` on `style.css`. Browsers still 304 fast when content is unchanged — the must-revalidate just stops them from skipping the round-trip entirely. Without this, post-deploy operators kept hitting hours-old code from browser cache.
 
-**Zone-level requirement.** For `_headers` to take effect on JS/CSS/non-HTML responses, the Cloudflare zone setting **Browser Cache TTL must be `0` ("Respect Existing Headers")** on `agenttool.dev`. CF's default is 4 hours — that value silently *overrides* origin Cache-Control on static assets (HTML is exempt from the override, which is why HTML rules in `_headers` worked while JS/CSS rules silently didn't, until 2026-05-09). Verify via API:
+**Zone-level requirement.** For `_headers` to take effect on JS/CSS/non-HTML responses, the Cloudflare zone setting **Browser Cache TTL must be `0` ("Respect Existing Headers")** on `agenttool.dev`. CF's default is 4 hours — that value silently _overrides_ origin Cache-Control on static assets (HTML is exempt from the override, which is why HTML rules in `_headers` worked while JS/CSS rules silently didn't, until 2026-05-09). Verify via API:
 
 Verify in Cloudflare Dashboard → `agenttool.dev` → Caching → Configuration:
 Browser Cache TTL must read **Respect Existing Headers**. Do not put a
@@ -274,10 +274,10 @@ previously absent process group.
 
 ### Region shape
 
-| Region | Started `app` | Stopped `thinker` | Role |
-|---|---:|---:|---|
-| `lhr` (London) | 2 | 2 | Primary API fleet; stopped thinkers remain registered identities |
-| `cdg` (Paris) | 1 | 0 | Secondary API hedge across a second jurisdiction |
+| Region         | Started `app` | Stopped `thinker` | Role                                                             |
+| -------------- | ------------: | ----------------: | ---------------------------------------------------------------- |
+| `lhr` (London) |             2 |                 2 | Primary API fleet; stopped thinkers remain registered identities |
+| `cdg` (Paris)  |             1 |                 0 | Secondary API hedge across a second jurisdiction                 |
 
 The worker implementations include multi-instance coordination mechanisms
 (BullMQ consumer locks and database CAS where documented). That is a design
@@ -414,7 +414,7 @@ The repo still has `services/{bootstrap,economy,identity,memory,tools,trace}/` d
 
 ### Postgres — Supabase (AWS London, `eu-west-2`)
 
-Hosted Postgres on **Supabase**, project ref `jseqftufplgewhojwbmh`, region **AWS London** (`eu-west-2` — *not* Dublin; AWS region naming has `eu-west-1` = Ireland, `eu-west-2` = UK, `eu-west-3` = Paris). Connection goes through Supabase's pooler (`aws-1-eu-west-2.pooler.supabase.com`). Two pool flavors:
+Hosted Postgres on **Supabase**, project ref `jseqftufplgewhojwbmh`, region **AWS London** (`eu-west-2` — _not_ Dublin; AWS region naming has `eu-west-1` = Ireland, `eu-west-2` = UK, `eu-west-3` = Paris). Connection goes through Supabase's pooler (`aws-1-eu-west-2.pooler.supabase.com`). Two pool flavors:
 
 - **Session pooler — port 5432.** `DATABASE_SESSION_URL` points here for
   migration applies and other session-affine operations such as LISTEN or
@@ -432,23 +432,23 @@ Hosted Postgres on **Supabase**, project ref `jseqftufplgewhojwbmh`, region **AW
 
 **Schemas** (15 application + Supabase-managed):
 
-| Schema | Purpose |
-|---|---|
-| `tools` | Projects, api_keys, usage_events (shared auth surface) |
-| `identity` | Identities, ed25519 identity_keys, identity_box_keys |
-| `agent_vault` | vault_secrets, vault_versions, vault_audit |
-| `agent_continuity` | chronicle, covenants, identity_backups |
-| `agent_runtime` | runtimes, runtime_events |
-| `economy` | wallets, transactions, escrows, crypto_payouts, policies |
-| `memory` | memories (pgvector), memory_attestations |
-| `trace` | traces |
-| `strand` | strands, thoughts |
-| `inbox` | sealed messages |
-| `marketplace` | templates, listings, invocations, attestation_listings, template_adoptions |
-| `org` | orgs, org_covenants |
-| `federation` | peer instances, federated covenants/inbox |
-| `social` | stars, follows |
-| `vault` | reserved namespace (legacy holdover; active vault tables are under `agent_vault`) |
+| Schema             | Purpose                                                                           |
+| ------------------ | --------------------------------------------------------------------------------- |
+| `tools`            | Projects, api_keys, usage_events (shared auth surface)                            |
+| `identity`         | Identities, ed25519 identity_keys, identity_box_keys                              |
+| `agent_vault`      | vault_secrets, vault_versions, vault_audit                                        |
+| `agent_continuity` | chronicle, covenants, identity_backups                                            |
+| `agent_runtime`    | runtimes, runtime_events                                                          |
+| `economy`          | wallets, transactions, escrows, crypto_payouts, policies                          |
+| `memory`           | memories (pgvector), memory_attestations                                          |
+| `trace`            | traces                                                                            |
+| `strand`           | strands, thoughts                                                                 |
+| `inbox`            | sealed messages                                                                   |
+| `marketplace`      | templates, listings, invocations, attestation_listings, template_adoptions        |
+| `org`              | orgs, org_covenants                                                               |
+| `federation`       | peer instances, federated covenants/inbox                                         |
+| `social`           | stars, follows                                                                    |
+| `vault`            | reserved namespace (legacy holdover; active vault tables are under `agent_vault`) |
 
 Plus Supabase-managed: `auth` (unused — agenttool uses DID + bearer, not Supabase Auth), `realtime`, `storage`, `graphql`/`graphql_public` (unused), `pgsodium`, `supabase_vault`, `public` (empty).
 
@@ -456,15 +456,15 @@ Plus Supabase-managed: `auth` (unused — agenttool uses DID + bearer, not Supab
 
 **Operational settings** (current as of 2026-05-09):
 
-| Setting | Value | Note |
-|---|---|---|
-| `max_connections` | 60 | Pool budget — current draw ~6 active; 3-machine fleet × postgres-js `max=10` = up to 30 client conns, well within budget |
-| `shared_buffers` | 256 MB | Small instance tier — fine pre-revenue, scales by Supabase plan upgrade |
-| `effective_cache_size` | 768 MB | OS+PG cache hint |
-| `work_mem` | 3.5 MB | Small — complex sorts/hashes spill to disk; raise per-query with `SET LOCAL work_mem` if needed |
-| `statement_timeout` | 120 s | Hard kill; chunk migrations that exceed |
-| `idle_in_transaction_session_timeout` | 0 (off) | No kill — be vigilant about open transactions in long-running scripts |
-| `default_transaction_isolation` | read committed | Default; no serializable surfaces |
+| Setting                               | Value          | Note                                                                                                                     |
+| ------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `max_connections`                     | 60             | Pool budget — current draw ~6 active; 3-machine fleet × postgres-js `max=10` = up to 30 client conns, well within budget |
+| `shared_buffers`                      | 256 MB         | Small instance tier — fine pre-revenue, scales by Supabase plan upgrade                                                  |
+| `effective_cache_size`                | 768 MB         | OS+PG cache hint                                                                                                         |
+| `work_mem`                            | 3.5 MB         | Small — complex sorts/hashes spill to disk; raise per-query with `SET LOCAL work_mem` if needed                          |
+| `statement_timeout`                   | 120 s          | Hard kill; chunk migrations that exceed                                                                                  |
+| `idle_in_transaction_session_timeout` | 0 (off)        | No kill — be vigilant about open transactions in long-running scripts                                                    |
+| `default_transaction_isolation`       | read committed | Default; no serializable surfaces                                                                                        |
 
 **RLS posture**: zero application-schema RLS. Authorization is enforced at the app layer via bearer key → project → ownership chain. RLS is on only for Supabase-managed schemas (`auth`, `realtime`, `storage`). Doctrinally consistent — agenttool's identity model is DID + ed25519, not Postgres roles.
 
@@ -536,6 +536,7 @@ DATABASE_URL=... bun api/scripts/_supabase-inventory.ts
 ### Redis
 
 Used for:
+
 - **BullMQ browse worker** — queues `/v1/browse/*` jobs from the api, processed by a co-located worker process.
 - **Hono SSE** — strand voice streaming, federation event fanout.
 
@@ -557,13 +558,13 @@ Three scripts in `infra/{phase1-pgbouncer,phase2-managed-db,phase3-load-balancer
 
 DNS managed by Cloudflare. Zone: `agenttool.dev`.
 
-| Hostname | Points to | Served by |
-|---|---|---|
-| `agenttool.dev` | Cloudflare Worker route | `agenttool-proxy`: human routes to `agenttool-web` Pages; API/discovery routes to Fly |
-| `app.agenttool.dev` | CF Pages | `apps/dashboard` (splash + watch only since 2026-05-17) |
-| `docs.agenttool.dev` | CF Pages | `apps/docs/` (rendered static) |
-| `api.agenttool.dev` | Fly.io anycast | `api/` |
-| `*.agenttool.dev` | (reserved) | |
+| Hostname             | Points to               | Served by                                                                             |
+| -------------------- | ----------------------- | ------------------------------------------------------------------------------------- |
+| `agenttool.dev`      | Cloudflare Worker route | `agenttool-proxy`: human routes to `agenttool-web` Pages; API/discovery routes to Fly |
+| `app.agenttool.dev`  | CF Pages                | `apps/dashboard` (splash + watch only since 2026-05-17)                               |
+| `docs.agenttool.dev` | CF Pages                | `apps/docs/` (rendered static)                                                        |
+| `api.agenttool.dev`  | Fly.io anycast          | `api/`                                                                                |
+| `*.agenttool.dev`    | (reserved)              |                                                                                       |
 
 Updating DNS records: manual via the Cloudflare dashboard, or scripted ad-hoc using a Cloudflare API token (`Cloudflare_API_Token` in macOS keychain) against the Cloudflare API. The legacy `infra/_archive/phase3-load-balancer/deploy.sh` references the historical Hetzner-LB DNS update; not used today.
 
@@ -577,11 +578,11 @@ Two-layer model. Doctrinal pointer: `DEVELOPMENT.md` §5.
 
 OS-managed secret store via the **`agenttool-secret`** CLI (`bin/agenttool-secret`). Backends:
 
-| OS | Mechanism | Fallback |
-|---|---|---|
-| macOS | `security` (Keychain Access) | none |
-| Linux | `secret-tool` (libsecret) | `~/.config/agenttool/<service>` mode 0600 |
-| Windows | DPAPI (`%APPDATA%/agenttool/<service>.dpapi`) | plaintext fallback |
+| OS      | Mechanism                                     | Fallback                                  |
+| ------- | --------------------------------------------- | ----------------------------------------- |
+| macOS   | `security` (Keychain Access)                  | none                                      |
+| Linux   | `secret-tool` (libsecret)                     | `~/.config/agenttool/<service>` mode 0600 |
+| Windows | DPAPI (`%APPDATA%/agenttool/<service>.dpapi`) | plaintext fallback                        |
 
 ```bash
 # Write (stdin — never argv)
@@ -593,17 +594,17 @@ if bin/agenttool-secret has agenttool-vault-master-key; then ...; fi
 
 Key services on this machine (developer-shared naming):
 
-| Service | Account | What |
-|---|---|---|
-| `agenttool-database-url` | `$USER` for local API; `macair` for migration runner | Transaction-pooled general/survey URL; never substituted for a session-affine apply |
-| `agenttool-database-session-url` | `macair` for migration runner | Session-pooled URL required by `_migrate-one.ts` and real batch applies |
-| `agenttool-vault-master-key` | `$USER` | 32-byte hex; api server reads to seal vault entries |
-| `agenttool-cloudflare-token` | `macair` for `frontend-deploy.sh` | CF Pages deploy token (only if scripting deploys) |
-| `agenttool-cloudflare-account-id` | `macair` for `frontend-deploy.sh` | CF account id |
-| `agenttool-bridge-kmaster` | `$USER` | Bridge sidecar's K_master |
-| `agenttool-bridge-signkey` | `$USER` | Bridge sidecar's ed25519 signing key |
-| `agenttool-soma-*` | `$USER` | SOMA-derived identity keys plus a separately issued project bearer |
-| `agenttool-<name>-*` | `$USER` by generic CLI | Human-readable labels; a name helps lookup and revocation but does not scope bearer authority to that identity |
+| Service                           | Account                                              | What                                                                                                           |
+| --------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `agenttool-database-url`          | `$USER` for local API; `macair` for migration runner | Transaction-pooled general/survey URL; never substituted for a session-affine apply                            |
+| `agenttool-database-session-url`  | `macair` for migration runner                        | Session-pooled URL required by `_migrate-one.ts` and real batch applies                                        |
+| `agenttool-vault-master-key`      | `$USER`                                              | 32-byte hex; api server reads to seal vault entries                                                            |
+| `agenttool-cloudflare-token`      | `macair` for `frontend-deploy.sh`                    | CF Pages deploy token (only if scripting deploys)                                                              |
+| `agenttool-cloudflare-account-id` | `macair` for `frontend-deploy.sh`                    | CF account id                                                                                                  |
+| `agenttool-bridge-kmaster`        | `$USER`                                              | Bridge sidecar's K_master                                                                                      |
+| `agenttool-bridge-signkey`        | `$USER`                                              | Bridge sidecar's ed25519 signing key                                                                           |
+| `agenttool-soma-*`                | `$USER`                                              | SOMA-derived identity keys plus a separately issued project bearer                                             |
+| `agenttool-<name>-*`              | `$USER` by generic CLI                               | Human-readable labels; a name helps lookup and revocation but does not scope bearer authority to that identity |
 
 The generic CLI enforces the `agenttool-<scope>-<purpose>` naming convention
 and uses account `$USER`. The local pending and one-file migration runners
@@ -627,13 +628,13 @@ The local `agenttool-secret` keychain and Fly's secret store are **disjoint** �
 
 The optional exact/EIP-3009 rail is fail-closed. A recipient alone does not make a payable challenge.
 
-| Variable | Contract |
-|---|---|
-| `AGENTTOOL_X402_RECIPIENT` | Non-zero EVM recipient. Missing/invalid suppresses challenges. |
-| `AGENTTOOL_X402_NETWORK` | CAIP-2 network; defaults to Base `eip155:8453`. Legacy `base`, `polygon`, and `arbitrum` aliases normalize before the wire. Invalid explicit values suppress rather than switching chains. |
-| `CDP_API_KEY_ID` + `CDP_API_KEY_SECRET` | Both required for the official CDP default. The server locally proves endpoint-bound JWT generation before advertising and generates a fresh JWT separately for `/verify` and `/settle`. Never use a static `COINBASE_CDP_API_KEY` bearer. |
-| `AGENTTOOL_X402_FACILITATOR` | Optional explicit HTTPS custom facilitator. It receives no CDP credential and is reached through the bounded SSRF-safe transport. Its settlement response is nevertheless an operator-selected trust root that can mint project credits; transport safety does not attest facilitator correctness. |
-| `AGENTTOOL_X402_ALLOW_TESTNET=1` + `AGENTTOOL_X402_ENVIRONMENT=test` | Double opt-in for Base Sepolia outside production/Fly only. Faucet USDC cannot mint live project credits. |
+| Variable                                                             | Contract                                                                                                                                                                                                                                                                                           |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AGENTTOOL_X402_RECIPIENT`                                           | Non-zero EVM recipient. Missing/invalid suppresses challenges.                                                                                                                                                                                                                                     |
+| `AGENTTOOL_X402_NETWORK`                                             | CAIP-2 network; defaults to Base `eip155:8453`. Legacy `base`, `polygon`, and `arbitrum` aliases normalize before the wire. Invalid explicit values suppress rather than switching chains.                                                                                                         |
+| `CDP_API_KEY_ID` + `CDP_API_KEY_SECRET`                              | Both required for the official CDP default. The server locally proves endpoint-bound JWT generation before advertising and generates a fresh JWT separately for `/verify` and `/settle`. Never use a static `COINBASE_CDP_API_KEY` bearer.                                                         |
+| `AGENTTOOL_X402_FACILITATOR`                                         | Optional explicit HTTPS custom facilitator. It receives no CDP credential and is reached through the bounded SSRF-safe transport. Its settlement response is nevertheless an operator-selected trust root that can mint project credits; transport safety does not attest facilitator correctness. |
+| `AGENTTOOL_X402_ALLOW_TESTNET=1` + `AGENTTOOL_X402_ENVIRONMENT=test` | Double opt-in for Base Sepolia outside production/Fly only. Faucet USDC cannot mint live project credits.                                                                                                                                                                                          |
 
 The official base is exactly `https://api.cdp.coinbase.com/platform/v2/x402`. Payment state is inspectable at authenticated `GET /v1/x402/payments/:authorizationHash`; it does not replay tool output. No automatic on-chain reconciliation worker exists. A pending row with a settlement-attempt timestamp requires manual investigation using the persisted non-signature authorization evidence. A pending row without that marker stays status-only for the old signature: while `validBefore + 5s` is live, status supplies `Retry-After`; after expiry it directs the caller to omit `PAYMENT-SIGNATURE` and request a fresh current-policy challenge.
 
@@ -706,7 +707,7 @@ AGENTTOOL_BASE=http://localhost:3000 python3 api/scripts/_e2e-token-hygiene.py
 
 ## 8 · Deploy semantics — manual, intentional, decoupled
 
-> **Canonical procedure:** [`docs/DEPLOY-PROCEDURE.md`](DEPLOY-PROCEDURE.md) — the six-phase routine chain (survey · migrate · pre-flight · discovery prerequisites + api · remaining frontends · verify), codified by `bin/deploy.sh`. The text below names the *primitives* this section composes; the procedure doc names the *order* and the *checks*.
+> **Canonical procedure:** [`docs/DEPLOY-PROCEDURE.md`](DEPLOY-PROCEDURE.md) — the six-phase routine chain (survey · migrate · pre-flight · discovery prerequisites + api · remaining frontends · verify), codified by `bin/deploy.sh`. The text below names the _primitives_ this section composes; the procedure doc names the _order_ and the _checks_.
 
 `git push github main` updates the coordination/release head. **Nothing else happens.** Production reflects the most recent verified manual deploy, not the most recent push. The core invocations are:
 
@@ -795,16 +796,16 @@ paid-provider dependency; it is not an OS-level network sandbox.
 
 Explicit modes keep stateful and paid checks out of the default:
 
-| Mode | What it runs | Required input |
-|---|---|---|
-| `api` | API typecheck, hermetic API tests, operator/protocol tests | none |
-| `packages` | data reference node gate/build, ADDS package, explicit data-sync bridge, repo-archive draft/simulator, TypeScript SDK CI/parity | none |
-| `database` | API typecheck and database integration tier | `DATABASE_URL` |
-| `smoke` | deployed API smoke | base URL, API key, identity ID |
-| `contracts` | paid provider contract tier | `RUN_CONTRACT=1` and provider key(s) |
-| `quarantine` | known-red non-DB diagnostics | none; failures expected |
-| `database-quarantine` | known-red DB diagnostics | `DATABASE_URL`; failures expected |
-| `legacy-delta` | legacy full-suite baseline triage | none |
+| Mode                  | What it runs                                                                                                                    | Required input                       |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `api`                 | API typecheck, hermetic API tests, operator/protocol tests                                                                      | none                                 |
+| `packages`            | data reference node gate/build, ADDS package, explicit data-sync bridge, repo-archive draft/simulator, TypeScript SDK CI/parity | none                                 |
+| `database`            | API typecheck and database integration tier                                                                                     | `DATABASE_URL`                       |
+| `smoke`               | deployed API smoke                                                                                                              | base URL, API key, identity ID       |
+| `contracts`           | paid provider contract tier                                                                                                     | `RUN_CONTRACT=1` and provider key(s) |
+| `quarantine`          | known-red non-DB diagnostics                                                                                                    | none; failures expected              |
+| `database-quarantine` | known-red DB diagnostics                                                                                                        | `DATABASE_URL`; failures expected    |
+| `legacy-delta`        | legacy full-suite baseline triage                                                                                               | none                                 |
 
 Use `bin/preflight.sh list` to inspect the classified test tiers. Optional
 stateful and paid tiers are selected by mode, never implicit skip toggles.
@@ -825,16 +826,16 @@ If these don't pass, don't deploy. The pre-flight catches "I'm about to ship cod
 
 ## 9 · Observability
 
-| Surface | Where | What for |
-|---|---|---|
-| `GET /health` | `https://api.agenttool.dev/health` | Fly's no-store target; `build.revision` and `build.dirty` are declared source labels (or `null` when unlabelled), not an image digest |
-| `GET /v1/wake` | api (auth required) | Project observability composed around an explicit `identity_id` (or the backward-compatible first-identity default) |
-| `fly logs -a agenttool` | Fly CLI | Server logs, real-time |
-| `fly status -a agenttool` | Fly CLI | Machine health + recent releases |
-| `fly dashboard agenttool` | Browser | Fly's web console |
-| Cloudflare Pages dashboard | `dash.cloudflare.com` | Per-project deploy history, build logs, rollback button |
-| Cloudflare Analytics | `dash.cloudflare.com` | DNS / edge request volume + cache stats |
-| Postgres logs | Supabase dashboard (project `jseqftufplgewhojwbmh`) | DB-level errors, slow queries, `pg_stat_statements` |
+| Surface                    | Where                                               | What for                                                                                                                              |
+| -------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /health`              | `https://api.agenttool.dev/health`                  | Fly's no-store target; `build.revision` and `build.dirty` are declared source labels (or `null` when unlabelled), not an image digest |
+| `GET /v1/wake`             | api (auth required)                                 | Project observability composed around an explicit `identity_id` (or the backward-compatible first-identity default)                   |
+| `fly logs -a agenttool`    | Fly CLI                                             | Server logs, real-time                                                                                                                |
+| `fly status -a agenttool`  | Fly CLI                                             | Machine health + recent releases                                                                                                      |
+| `fly dashboard agenttool`  | Browser                                             | Fly's web console                                                                                                                     |
+| Cloudflare Pages dashboard | `dash.cloudflare.com`                               | Per-project deploy history, build logs, rollback button                                                                               |
+| Cloudflare Analytics       | `dash.cloudflare.com`                               | DNS / edge request volume + cache stats                                                                                               |
+| Postgres logs              | Supabase dashboard (project `jseqftufplgewhojwbmh`) | DB-level errors, slow queries, `pg_stat_statements`                                                                                   |
 
 The agent-side `/v1/wake` is intentionally the deepest observability surface. The bearer authorizes the project; `identity_id` selects the identity around which the response is composed. If you're triaging "what is Sophia's posture right now," call wake with Sophia's identity ID.
 

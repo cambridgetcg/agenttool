@@ -2,11 +2,11 @@
 
 # DEPLOY-PROCEDURE — the standardized deploy chain
 
-> *Routine deploy procedure for an already-live agenttool install. GitHub `main` is the coordination/release head; this doc is the **deploy verb** — how one source revision becomes declared and checked across production.*
+> _Routine deploy procedure for an already-live agenttool install. GitHub `main` is the coordination/release head; this doc is the **deploy verb** — how one source revision becomes declared and checked across production._
 
 > **Compass:** [STACK](STACK.md) (where each piece deploys to) · [DEPLOYMENT](DEPLOYMENT.md) (fresh-DB bring-up runbook) · [DEVELOPMENT](DEVELOPMENT.md) (contributor protocols)
 >
-> **Implements:** the routine deploy chain. STACK answers *where things live*; DEPLOYMENT answers *how to bring them up from scratch*; this answers *how to ship a change to an established install*.
+> **Implements:** the routine deploy chain. STACK answers _where things live_; DEPLOYMENT answers _how to bring them up from scratch_; this answers _how to ship a change to an established install_.
 >
 > **Code:** `bin/deploy.sh` (orchestrator + release provenance) · `api/Dockerfile` (pinned runtime + embedded source labels) · `api/src/index.ts` (`/health.build`) · `bin/migrate-pending.sh` (repo-file and journal check) · `bin/preflight.sh` (test gate) · `bin/frontend-deploy.sh` (low-level CF Pages uploader) · `api/scripts/_migrate-one.ts` (per-file applier).
 >
@@ -63,11 +63,11 @@ ls api/migrations/*.sql | tail -5        # latest migration files
 
 What to look for:
 
-| Signal | Implication |
-|---|---|
-| Working tree dirty | Normal production deploy stops; commit/stash it, or use the loud `--allow-dirty-release` override deliberately |
-| `HEAD != github/main` after fetch | Normal production deploy stops; land/checkout the release commit, or use `--allow-non-release-head` deliberately |
-| A repo migration file is absent from `meta._migrations` | Phase 1 has work to do |
+| Signal                                                  | Implication                                                                                                      |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Working tree dirty                                      | Normal production deploy stops; commit/stash it, or use the loud `--allow-dirty-release` override deliberately   |
+| `HEAD != github/main` after fetch                       | Normal production deploy stops; land/checkout the release commit, or use `--allow-non-release-head` deliberately |
+| A repo migration file is absent from `meta._migrations` | Phase 1 has work to do                                                                                           |
 
 Run `bin/deploy.sh --survey` for the automated version of this phase.
 
@@ -226,6 +226,7 @@ Use one bounded maintenance cutover:
    Once any protected SQL commits, the cutover is forward-only: never start or
    restore an old writer image. Keep admission and workers held while fixing
    forward with a migration-compatible image.
+
 6. Update those same machine IDs in place to the pinned image, checking
    topology and image/revision after each update. Start and health-check the
    intended app machines one at a time with workers still disabled; verify
@@ -273,16 +274,16 @@ external dependencies; it is not an OS-level network sandbox.
 
 Stateful and paid work is opt-in by mode:
 
-| Mode | Scope | Required input |
-|---|---|---|
-| `api` | API typecheck, hermetic API tier, operator/protocol tests | none |
-| `packages` | data reference node, ADDS package, TypeScript SDK CI/parity | none |
-| `database` | API typecheck plus database integration tier | `DATABASE_URL` |
-| `smoke` | deployed API smoke | `AGENTTOOL_BASE`, API key, identity ID |
-| `contracts` | paid provider contract tier | `RUN_CONTRACT=1` and at least one of `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `OLLAMA_API_KEY` |
-| `quarantine` | known-red non-DB diagnostics | none; failures expected |
-| `database-quarantine` | known-red DB diagnostics | `DATABASE_URL`; failures expected |
-| `legacy-delta` | legacy full-suite baseline triage | none |
+| Mode                  | Scope                                                       | Required input                                                                                  |
+| --------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `api`                 | API typecheck, hermetic API tier, operator/protocol tests   | none                                                                                            |
+| `packages`            | data reference node, ADDS package, TypeScript SDK CI/parity | none                                                                                            |
+| `database`            | API typecheck plus database integration tier                | `DATABASE_URL`                                                                                  |
+| `smoke`               | deployed API smoke                                          | `AGENTTOOL_BASE`, API key, identity ID                                                          |
+| `contracts`           | paid provider contract tier                                 | `RUN_CONTRACT=1` and at least one of `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `OLLAMA_API_KEY` |
+| `quarantine`          | known-red non-DB diagnostics                                | none; failures expected                                                                         |
+| `database-quarantine` | known-red DB diagnostics                                    | `DATABASE_URL`; failures expected                                                               |
+| `legacy-delta`        | legacy full-suite baseline triage                           | none                                                                                            |
 
 Run `bin/preflight.sh list` to inspect tier classification. Smoke and contracts
 are separate invocations selected by mode. Do not deploy if the default gate
@@ -428,8 +429,7 @@ receipt surround that upload.
 
 The archive also includes the canonical `infra/pages/` fence. The uploader
 copies its `_worker.js` and `_routes.json` forms into each project root, so only
-`/.git*`, `/.env*`, and `/.dev.vars*` invoke a Function and receive a marked
-404. Normal static requests bypass Functions. On the Workers Free plan,
+`/.git*`, `/.env*`, and `/.dev.vars*` invoke a Function and receive a marked 404. Normal static requests bypass Functions. On the Workers Free plan,
 Cloudflare Pages → Settings → Runtime must set production and preview to **fail
 closed**; otherwise daily Functions allowance exhaustion can serve static
 assets on those routes. The uploader verifies both values when it has the
@@ -632,14 +632,14 @@ Local migration and Pages tools prefer their documented scoped environment
 variables; on macOS they fall back to fixed Keychain account `macair`. The
 default hermetic preflight and local receipt resolve neither. One-time setup:
 
-| Service | Account | Purpose |
-|---|---|---|
-| `agenttool-database-url` | `macair` | Transaction-pooled `DATABASE_URL` for migration inventory |
-| `agenttool-database-session-url` | `macair` | Session-pooled `DATABASE_SESSION_URL` required for migration applies |
-| `agenttool-cloudflare-token` | `macair` | CF API token (Pages:Edit) for `frontend-deploy.sh` |
-| `agenttool-cloudflare-account-id` | `macair` | 32-char CF account ID |
-| `agenttool-soma-bearer` | `$USER` | Bearer for the canonical agent (for smoke tests + wake reads) |
-| `agenttool-sophia-identity-id` | `$USER` | The canonical agent's identity UUID (for smoke + preflight) |
+| Service                           | Account  | Purpose                                                              |
+| --------------------------------- | -------- | -------------------------------------------------------------------- |
+| `agenttool-database-url`          | `macair` | Transaction-pooled `DATABASE_URL` for migration inventory            |
+| `agenttool-database-session-url`  | `macair` | Session-pooled `DATABASE_SESSION_URL` required for migration applies |
+| `agenttool-cloudflare-token`      | `macair` | CF API token (Pages:Edit) for `frontend-deploy.sh`                   |
+| `agenttool-cloudflare-account-id` | `macair` | 32-char CF account ID                                                |
+| `agenttool-soma-bearer`           | `$USER`  | Bearer for the canonical agent (for smoke tests + wake reads)        |
+| `agenttool-sophia-identity-id`    | `$USER`  | The canonical agent's identity UUID (for smoke + preflight)          |
 
 The local pending and one-file migration runners prefer their explicit
 `DATABASE_URL`/`DATABASE_SESSION_URL` environment variables, then use the fixed
@@ -657,14 +657,14 @@ security add-generic-password -U -s agenttool-cloudflare-account-id -a macair -w
 
 ## Common failure modes + recipes
 
-| Symptom | Likely cause | Recipe |
-|---|---|---|
-| `column "X" does not exist` during migration | The migration's CHECK or index references a column from an upstream migration that's unapplied. | Run `bin/migrate-pending.sh` first to apply the full backlog in order. |
-| `password authentication failed for user "postgres"` | The survey or session-pooled DB URL named by the failing phase is stale. | Reset it in Supabase, then update the corresponding `agenttool-database-url` or `agenttool-database-session-url` entry for account `macair` with `security add-generic-password -U -s <service> -a macair -w`. |
-| `fly deploy` fails with healthcheck | New code crashes on startup — likely a missing DB column or env var. | Apply migrations first; check `fly secrets list -a agenttool` for missing keys. |
-| New Fly machine exits `0` before the listening log, unchanged API source starts locally, and old machines remain healthy | The newly assembled remote image or build cache may be malformed. | Reproduce the exact staged image locally. If it serves `/health` with the expected revision, retry once with `bin/deploy.sh --no-cache-api` plus the normal phase flags. This bypasses Fly's build cache only; it does not bypass release gates or prove cache corruption by itself. |
-| Frontend stale after upload | CF Pages Browser Cache TTL not 0 — overrides origin headers. | Set zone setting via CF API (see Phase 4). |
-| `bin/preflight.sh smoke` fails with DNS error | Explicit smoke mode cannot reach `AGENTTOOL_BASE`. | Run smoke separately from a host that can reach the configured target; the default hermetic gate does not call it. |
+| Symptom                                                                                                                  | Likely cause                                                                                    | Recipe                                                                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `column "X" does not exist` during migration                                                                             | The migration's CHECK or index references a column from an upstream migration that's unapplied. | Run `bin/migrate-pending.sh` first to apply the full backlog in order.                                                                                                                                                                                                               |
+| `password authentication failed for user "postgres"`                                                                     | The survey or session-pooled DB URL named by the failing phase is stale.                        | Reset it in Supabase, then update the corresponding `agenttool-database-url` or `agenttool-database-session-url` entry for account `macair` with `security add-generic-password -U -s <service> -a macair -w`.                                                                       |
+| `fly deploy` fails with healthcheck                                                                                      | New code crashes on startup — likely a missing DB column or env var.                            | Apply migrations first; check `fly secrets list -a agenttool` for missing keys.                                                                                                                                                                                                      |
+| New Fly machine exits `0` before the listening log, unchanged API source starts locally, and old machines remain healthy | The newly assembled remote image or build cache may be malformed.                               | Reproduce the exact staged image locally. If it serves `/health` with the expected revision, retry once with `bin/deploy.sh --no-cache-api` plus the normal phase flags. This bypasses Fly's build cache only; it does not bypass release gates or prove cache corruption by itself. |
+| Frontend stale after upload                                                                                              | CF Pages Browser Cache TTL not 0 — overrides origin headers.                                    | Set zone setting via CF API (see Phase 4).                                                                                                                                                                                                                                           |
+| `bin/preflight.sh smoke` fails with DNS error                                                                            | Explicit smoke mode cannot reach `AGENTTOOL_BASE`.                                              | Run smoke separately from a host that can reach the configured target; the default hermetic gate does not call it.                                                                                                                                                                   |
 
 ## See Also
 
@@ -676,6 +676,6 @@ security add-generic-password -U -s agenttool-cloudflare-account-id -a macair -w
 
 ---
 
-> *GitHub `main` coordinates releases, and is the only head — the Codeberg mirror was retired 2026-07-25. Production deploys remain manual through `bin/deploy.sh`, and completion means the intended revision and dirty-source marker agree across health and every started Fly machine, sensitive frontend paths are denied, and the outcome is written locally. These are bounded provenance checks, not a reproducible-build claim.*
+> _GitHub `main` coordinates releases, and is the only head — the Codeberg mirror was retired 2026-07-25. Production deploys remain manual through `bin/deploy.sh`, and completion means the intended revision and dirty-source marker agree across health and every started Fly machine, sensitive frontend paths are denied, and the outcome is written locally. These are bounded provenance checks, not a reproducible-build claim._
 
 — Authored by 愛 at Yu's WILL. 2026-05-12.
