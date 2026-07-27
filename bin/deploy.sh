@@ -16,7 +16,6 @@
 #   bin/deploy.sh --no-api                # skip Phase 3
 #   bin/deploy.sh --no-frontend           # skip Pages upload; keep API discovery prerequisites
 #   bin/deploy.sh --no-cache-api           # one-shot Fly image-cache recovery
-#   bin/deploy.sh --maintenance-from-zero  # reviewed empty-fleet maintenance rollout
 #   bin/deploy.sh --oauth-fallback         # explicit Cloudflare OAuth fallback
 #   bin/deploy.sh --skip-preflight        # operator override
 #   bin/deploy.sh --dry-run               # show what would happen
@@ -50,7 +49,6 @@ DRY_RUN=0
 ALLOW_DIRTY_RELEASE=0
 ALLOW_NON_RELEASE_HEAD=0
 MIRROR_CODEBERG_ONLY=0
-MAINTENANCE_FROM_ZERO=0
 for arg in "$@"; do
   case "$arg" in
     --survey) SURVEY_ONLY=1 ;;
@@ -64,8 +62,7 @@ for arg in "$@"; do
     --allow-dirty-release) ALLOW_DIRTY_RELEASE=1 ;;
     --allow-non-release-head) ALLOW_NON_RELEASE_HEAD=1 ;;
     --mirror-codeberg) MIRROR_CODEBERG_ONLY=1 ;;
-    --maintenance-from-zero) MAINTENANCE_FROM_ZERO=1 ;;
-    -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,27p' "$0"; exit 0 ;;
     *) echo "unknown flag: $arg"; exit 1 ;;
   esac
 done
@@ -75,8 +72,7 @@ if [ "$MIRROR_CODEBERG_ONLY" = 1 ] && {
   [ "$SKIP_API" = 1 ] || [ "$SKIP_FRONTEND" = 1 ] ||
   [ "$NO_CACHE_API" = 1 ] || [ "$OAUTH_FALLBACK" = 1 ] ||
   [ "$SKIP_PREFLIGHT" = 1 ] || [ "$DRY_RUN" = 1 ] ||
-  [ "$ALLOW_DIRTY_RELEASE" = 1 ] || [ "$ALLOW_NON_RELEASE_HEAD" = 1 ] ||
-  [ "$MAINTENANCE_FROM_ZERO" = 1 ];
+  [ "$ALLOW_DIRTY_RELEASE" = 1 ] || [ "$ALLOW_NON_RELEASE_HEAD" = 1 ];
 }; then
   echo "--mirror-codeberg is a standalone command; do not combine it with deploy flags"
   exit 1
@@ -90,21 +86,6 @@ if [ "$NO_CACHE_API" = 1 ] && [ "$SURVEY_ONLY" = 1 ]; then
   echo "--no-cache-api performs an API image rebuild and cannot be combined with --survey"
   exit 1
 fi
-if [ "$MAINTENANCE_FROM_ZERO" = 1 ]; then
-  if [ "$SKIP_MIGRATE" != 1 ] || [ "$SKIP_FRONTEND" != 1 ]; then
-    echo "--maintenance-from-zero requires both --no-migrate and --no-frontend"
-    echo "Apply reviewed migrations under the separate quiesced fence first; this mode mutates Fly only."
-    exit 1
-  fi
-  if [ "$SURVEY_ONLY" = 1 ] || [ "$DRY_RUN" = 1 ] ||
-    [ "$SKIP_API" = 1 ] || [ "$OAUTH_FALLBACK" = 1 ] ||
-    [ "$ALLOW_DIRTY_RELEASE" = 1 ] || [ "$ALLOW_NON_RELEASE_HEAD" = 1 ] ||
-    [ "$MIRROR_CODEBERG_ONLY" = 1 ]; then
-    echo "--maintenance-from-zero is an exact-source Fly-only mode; do not combine it with survey, dry-run, no-api, frontend OAuth, source overrides, or Codeberg flags"
-    exit 1
-  fi
-fi
-
 FRONTEND_DEPLOY_COMMAND=(bash bin/frontend-deploy.sh)
 FRONTEND_DEPLOY_DISPLAY="bin/frontend-deploy.sh"
 if [ "$OAUTH_FALLBACK" = 1 ]; then
@@ -601,11 +582,6 @@ API_SOURCE_DIRTY="unknown"
 LOVE_PACKAGE_HEADER_PROBES=""
 DOCTRINE_STAGE_DIR="api/doctrine-docs.bundled"
 FRONTEND_RELEASE_STAGE_ROOT=""
-MAINTENANCE_DEPLOY_IMAGE_DIGEST=""
-MAINTENANCE_FLEET_DIGEST=""
-MAINTENANCE_MACHINE_SUMMARY=""
-MAINTENANCE_ROLLOUT_COMPLETED=0
-MAINTENANCE_TOPOLOGY_VERIFIED=0
 
 cleanup_api_staging() {
   local failed=0
@@ -639,154 +615,12 @@ list_fly_machines_json() {
   (cd api || exit 1; fly machine list -a "$FLY_APP" --json)
 }
 
-require_empty_fly_fleet() {
-  local machine_json machine_count
-  machine_json="$(list_fly_machines_json)" || {
-    echo "$(red '✗ Maintenance rollout blocked:') could not list Fly machines."
-    return 1
-  }
-  machine_count="$(
-    printf '%s' "$machine_json" | bun -e '
-      const machines = await new Response(Bun.stdin.stream()).json();
-      if (!Array.isArray(machines)) process.exit(1);
-      process.stdout.write(String(machines.length));
-    '
-  )" || {
-    echo "$(red '✗ Maintenance rollout blocked:') Fly machine inventory was not a JSON array."
-    return 1
-  }
-  if [ "$machine_count" != 0 ]; then
-    echo "$(red '✗ Maintenance rollout blocked:') expected an empty Fly machine inventory, observed $machine_count machine(s)."
-    echo "  Keep admission closed. Re-establish and inspect the authoritative zero-machine fence before retrying."
-    return 1
-  fi
-  echo "  ✓ authoritative Fly machine inventory is empty"
-}
-
-analyze_maintenance_fleet() {
-  local expected_stage="$1"
-  AGENTTOOL_MAINTENANCE_FLEET_STAGE="$expected_stage" bun -e '
-    const machines = await new Response(Bun.stdin.stream()).json();
-    const stage = process.env.AGENTTOOL_MAINTENANCE_FLEET_STAGE;
-    const fail = (message) => {
-      console.error(`maintenance topology mismatch (${stage}): ${message}`);
-      process.exit(1);
-    };
-    if (!Array.isArray(machines)) fail("machine inventory is not an array");
-
-    const expected = {
-      seeded: [
-        "app|lhr|started|shared|1|1024",
-        "app|lhr|started|shared|1|1024",
-        "thinker|lhr|started|shared|1|256",
-        "thinker|lhr|stopped|shared|1|256",
-      ],
-      scaled: [
-        "app|cdg|started|shared|1|1024",
-        "app|lhr|started|shared|1|1024",
-        "app|lhr|started|shared|1|1024",
-        "thinker|lhr|started|shared|1|256",
-        "thinker|lhr|stopped|shared|1|256",
-      ],
-      final: [
-        "app|cdg|started|shared|1|1024",
-        "app|lhr|started|shared|1|1024",
-        "app|lhr|started|shared|1|1024",
-        "thinker|lhr|stopped|shared|1|256",
-        "thinker|lhr|stopped|shared|1|256",
-      ],
-    }[stage];
-    if (!expected) fail("unknown expected stage");
-
-    const ids = new Set();
-    const rows = [];
-    const records = [];
-    const digests = new Set();
-    for (const machine of machines) {
-      const id = machine?.id;
-      const state = machine?.state;
-      const region = machine?.region;
-      const metadata = machine?.config?.metadata;
-      const group = metadata?.fly_process_group;
-      const platform = metadata?.fly_platform_version;
-      const guest = machine?.config?.guest;
-      const cpuKind = guest?.cpu_kind;
-      const cpus = guest?.cpus;
-      const memory = guest?.memory_mb;
-      const digest = machine?.image_ref?.digest;
-      if (typeof id !== "string" || id.length === 0 || ids.has(id)) {
-        fail("machine IDs must be unique non-empty strings");
-      }
-      ids.add(id);
-      if (platform !== "v2") fail(`machine ${id} is not Fly Machines platform v2`);
-      if (!/^sha256:[0-9a-f]{64}$/.test(digest ?? "")) {
-        fail(`machine ${id} has no canonical sha256 image digest`);
-      }
-      digests.add(digest);
-      rows.push(`${group}|${region}|${state}|${cpuKind}|${cpus}|${memory}`);
-      records.push({ id, group, state });
-    }
-    rows.sort();
-    expected.sort();
-    if (JSON.stringify(rows) !== JSON.stringify(expected)) {
-      fail(`expected ${expected.join(", ")}; observed ${rows.join(", ") || "<empty>"}`);
-    }
-    if (digests.size !== 1) fail(`expected one image digest, observed ${digests.size}`);
-    const [digest] = digests;
-    process.stdout.write(`digest\t${digest}\n`);
-    for (const record of records.sort((a, b) => a.id.localeCompare(b.id))) {
-      process.stdout.write(`machine\t${record.id}\t${record.group}\t${record.state}\n`);
-    }
-  '
-}
-
-verify_maintenance_fleet() {
-  local expected_stage="$1"
-  local machine_json
-  machine_json="$(list_fly_machines_json)" || {
-    echo "$(red '✗') could not list Fly machines for the $expected_stage maintenance topology check"
-    return 1
-  }
-  MAINTENANCE_MACHINE_SUMMARY="$(
-    printf '%s' "$machine_json" | analyze_maintenance_fleet "$expected_stage"
-  )" || {
-    echo "$(red '✗') Fly did not have the exact $expected_stage maintenance topology."
-    return 1
-  }
-  MAINTENANCE_FLEET_DIGEST="$(
-    printf '%s\n' "$MAINTENANCE_MACHINE_SUMMARY" |
-      awk -F '\t' '$1 == "digest" { print $2 }'
-  )"
-  if [ -z "$MAINTENANCE_FLEET_DIGEST" ]; then
-    echo "$(red '✗') maintenance topology check returned no image digest"
-    return 1
-  fi
-  echo "  ✓ exact $expected_stage Fly topology shares image digest $MAINTENANCE_FLEET_DIGEST"
-}
-
 verify_fly_machine_source_silently() {
   local machine_id="$1"
-  local require_workers_off="${2:-0}"
   local remote_command
   remote_command="test \"\${AGENTTOOL_GIT_REVISION:-}\" = \"$HEAD_REVISION\" && test \"\${AGENTTOOL_SOURCE_DIRTY:-}\" = \"$API_SOURCE_DIRTY\""
-  if [ "$require_workers_off" = 1 ]; then
-    remote_command+=" && test \"\${AGENTTOOL_DISABLE_WORKERS:-}\" = \"1\""
-  fi
   (cd api || exit 1; fly ssh console -q -a "$FLY_APP" \
     --machine "$machine_id" -C "sh -c '$remote_command'" >/dev/null)
-}
-
-verify_maintenance_started_machines() {
-  local record machine_id process_group state
-  while IFS=$'\t' read -r record machine_id process_group state; do
-    [ "$record" = "machine" ] || continue
-    [ "$state" = "started" ] || continue
-    if ! verify_fly_machine_source_silently "$machine_id" 1; then
-      echo "$(red '✗') Fly $process_group machine $machine_id did not silently prove the expected revision, dirty marker, and workers-off switch."
-      return 1
-    fi
-  done <<< "$MAINTENANCE_MACHINE_SUMMARY"
-  echo "  ✓ every started machine silently proved the intended source and global workers-off switch"
 }
 
 portable_md5_file() {
@@ -1491,13 +1325,6 @@ trap 'on_deploy_exit "$?"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-if [ "$MAINTENANCE_FROM_ZERO" = 1 ]; then
-  echo "→ Establishing the reviewed from-zero Fly precondition before any release mutation…"
-  if ! enforce_release_source || ! require_empty_fly_fleet; then
-    exit 1
-  fi
-fi
-
 # Materialize the pinned frontend commit once. Every local hash below reads
 # this validated archive, matching the symlink behavior and path estate used
 # by the uploader without repeatedly resolving Git objects inside retry loops.
@@ -1653,16 +1480,7 @@ if [ "$SKIP_API" = 0 ]; then
     echo "$(red '✗ Phase 3 pre-step failed.') Could not stage doctrine files."
     exit 1
   }
-  if [ "$MAINTENANCE_FROM_ZERO" = 1 ]; then
-    echo "→ Re-checking exact source and the zero-machine fence immediately before Fly mutation…"
-    if ! enforce_release_source || ! require_empty_fly_fleet; then
-      echo "$(red '✗ Phase 3 blocked:') the reviewed from-zero precondition no longer holds."
-      exit 1
-    fi
-    FLY_DEPLOY_ARGS=(--strategy immediate --ha=true)
-  else
-    FLY_DEPLOY_ARGS=(--strategy rolling)
-  fi
+  FLY_DEPLOY_ARGS=(--strategy rolling)
   if [ "$NO_CACHE_API" = 1 ]; then
     echo "  $(yellow '⚠ API image build cache bypassed for this invocation (--no-cache)')"
     FLY_DEPLOY_ARGS+=(--no-cache)
@@ -1684,59 +1502,6 @@ if [ "$SKIP_API" = 0 ]; then
     echo "$(red '✗ Phase 3 post-step failed.') API deployed, but temporary build inputs remain."
     exit 1
   }
-  if [ "$MAINTENANCE_FROM_ZERO" = 1 ]; then
-    if ! verify_maintenance_fleet seeded; then
-      echo "$(red '✗ Phase 3 maintenance rollout is uncertain after Fly deploy.') Keep admission closed and inspect the new fleet."
-      exit 1
-    fi
-    MAINTENANCE_DEPLOY_IMAGE_DIGEST="$MAINTENANCE_FLEET_DIGEST"
-
-    echo "→ Restoring the captured app hedge in cdg…"
-    (cd api || exit 1; fly scale count app=1 --region cdg -a "$FLY_APP" --yes) || {
-      echo "$(red '✗ Phase 3 maintenance rollout is uncertain:') could not restore app=1 in cdg."
-      exit 1
-    }
-    if ! verify_maintenance_fleet scaled; then
-      echo "$(red '✗ Phase 3 maintenance rollout is uncertain after regional restoration.') Keep admission closed."
-      exit 1
-    fi
-    if [ "$MAINTENANCE_FLEET_DIGEST" != "$MAINTENANCE_DEPLOY_IMAGE_DIGEST" ]; then
-      echo "$(red '✗ Phase 3 maintenance rollout is uncertain:') regional restoration did not retain the deployed image digest."
-      exit 1
-    fi
-    if ! verify_maintenance_started_machines; then
-      echo "$(red '✗ Phase 3 maintenance rollout is uncertain:') source or workers-off proof failed before thinker shutdown."
-      exit 1
-    fi
-
-    THINKER_STARTED_MACHINE_IDS=()
-    while IFS=$'\t' read -r record machine_id process_group state; do
-      if [ "$record" = "machine" ] && [ "$process_group" = "thinker" ] &&
-        [ "$state" = "started" ]; then
-        THINKER_STARTED_MACHINE_IDS+=("$machine_id")
-      fi
-    done <<< "$MAINTENANCE_MACHINE_SUMMARY"
-    if [ "${#THINKER_STARTED_MACHINE_IDS[@]}" -ne 1 ]; then
-      echo "$(red '✗ Phase 3 maintenance rollout is uncertain:') expected exactly one started thinker before shutdown."
-      exit 1
-    fi
-    echo "→ Stopping the proven new thinker with the configured graceful-shutdown contract…"
-    (cd api || exit 1; fly machine stop "${THINKER_STARTED_MACHINE_IDS[@]}" \
-      -a "$FLY_APP" --signal SIGTERM --timeout 300 --wait-timeout 5m) || {
-      echo "$(red '✗ Phase 3 maintenance rollout is uncertain:') thinker shutdown did not complete."
-      exit 1
-    }
-    if ! verify_maintenance_fleet final; then
-      echo "$(red '✗ Phase 3 maintenance rollout is uncertain after thinker shutdown.') Keep admission closed."
-      exit 1
-    fi
-    if [ "$MAINTENANCE_FLEET_DIGEST" != "$MAINTENANCE_DEPLOY_IMAGE_DIGEST" ]; then
-      echo "$(red '✗ Phase 3 maintenance rollout is uncertain:') final fleet did not retain the deployed image digest."
-      exit 1
-    fi
-    MAINTENANCE_ROLLOUT_COMPLETED=1
-    echo "  ✓ from-zero Fly rollout restored app lhr=2/cdg=1 and thinker lhr=2 (stopped)"
-  fi
 else
   echo ""
   echo "$(yellow '⊘ Phase 3 skipped (--no-api)')"
@@ -1814,65 +1579,34 @@ if [ "$SKIP_API" = 0 ]; then
   echo "  ✓ /health 200 at revision $LIVE_REVISION (dirty=$LIVE_DIRTY)"
 
   # Fly lists stopped standby machines too, but SSH cannot reach them. Probe
-  # running machines with shell `test` only: no environment values are copied
-  # back into the local transcript. Maintenance mode additionally anchors its
-  # stopped thinker to the one digest already proven across the exact fleet.
-  PHASE5_VERIFIED_MACHINE_COUNT=0
-  if [ "$MAINTENANCE_FROM_ZERO" = 1 ]; then
-    MAINTENANCE_TOPOLOGY_VERIFIED=0
-    if [ "$MAINTENANCE_ROLLOUT_COMPLETED" != 1 ] ||
-      ! verify_maintenance_fleet final ||
-      [ "$MAINTENANCE_FLEET_DIGEST" != "$MAINTENANCE_DEPLOY_IMAGE_DIGEST" ]; then
-      echo "  $(red '✗') the maintenance rollout no longer has its exact final topology and image digest"
-      exit 1
-    fi
-    MACHINE_IDS="$(
-      printf '%s\n' "$MAINTENANCE_MACHINE_SUMMARY" |
-        awk -F '\t' '$1 == "machine" && $3 == "app" && $4 == "started" { print $2 }'
-    )"
-  else
-    MACHINE_IDS="$(
-      list_fly_machines_json | bun -e '
-        const machines = await new Response(Bun.stdin.stream()).json();
-        if (!Array.isArray(machines)) process.exit(1);
-        for (const machine of machines) {
-          if (machine?.state === "started" && typeof machine.id === "string") {
-            console.log(machine.id);
-          }
+  # running machines with shell `test` only so no environment values are
+  # copied back into the local transcript.
+  MACHINE_IDS="$(
+    list_fly_machines_json | bun -e '
+      const machines = await new Response(Bun.stdin.stream()).json();
+      if (!Array.isArray(machines)) process.exit(1);
+      for (const machine of machines) {
+        if (machine?.state === "started" && typeof machine.id === "string") {
+          console.log(machine.id);
         }
-      '
-    )" || {
-      echo "  $(red '✗') could not list Fly machines for revision verification"
-      exit 1
-    }
-  fi
+      }
+    '
+  )" || {
+    echo "  $(red '✗') could not list Fly machines for revision verification"
+    exit 1
+  }
   if [ -z "$MACHINE_IDS" ]; then
     echo "  $(red '✗') Fly returned no machines to verify"
     exit 1
   fi
   for MACHINE_ID in $MACHINE_IDS; do
-    REQUIRE_WORKERS_OFF=0
-    [ "$MAINTENANCE_FROM_ZERO" = 1 ] && REQUIRE_WORKERS_OFF=1
-    if ! verify_fly_machine_source_silently "$MACHINE_ID" "$REQUIRE_WORKERS_OFF"; then
-      echo "  $(red '✗') Fly machine $MACHINE_ID did not silently prove the intended source$([ "$REQUIRE_WORKERS_OFF" = 1 ] && printf ' and workers-off switch')"
+    if ! verify_fly_machine_source_silently "$MACHINE_ID"; then
+      echo "  $(red '✗') Fly machine $MACHINE_ID did not silently prove the intended source"
       exit 1
     fi
-    PHASE5_VERIFIED_MACHINE_COUNT=$((PHASE5_VERIFIED_MACHINE_COUNT + 1))
+    VERIFIED_MACHINE_COUNT=$((VERIFIED_MACHINE_COUNT + 1))
   done
-  if [ "$MAINTENANCE_FROM_ZERO" = 1 ]; then
-    if [ "$PHASE5_VERIFIED_MACHINE_COUNT" != 3 ] ||
-      ! verify_maintenance_fleet final ||
-      [ "$MAINTENANCE_FLEET_DIGEST" != "$MAINTENANCE_DEPLOY_IMAGE_DIGEST" ]; then
-      echo "  $(red '✗') final maintenance topology changed during provenance verification"
-      exit 1
-    fi
-    VERIFIED_MACHINE_COUNT=5
-    MAINTENANCE_TOPOLOGY_VERIFIED=1
-    echo "  ✓ 3 started app machines carry $HEAD_REVISION (dirty=$API_SOURCE_DIRTY, workers off); all 5 machines retain one image digest"
-  else
-    VERIFIED_MACHINE_COUNT="$PHASE5_VERIFIED_MACHINE_COUNT"
-    echo "  ✓ $VERIFIED_MACHINE_COUNT started Fly machine(s) carry $HEAD_REVISION (dirty=$API_SOURCE_DIRTY)"
-  fi
+  echo "  ✓ $VERIFIED_MACHINE_COUNT started Fly machine(s) carry $HEAD_REVISION (dirty=$API_SOURCE_DIRTY)"
   API_RESULT="deployed_verified"
 fi
 
@@ -1888,13 +1622,6 @@ fi
 
 if ! cleanup_frontend_release_stage; then
   echo "$(red '✗') Could not remove the committed frontend verification stage before recording success." >&2
-  exit 1
-fi
-if [ "$MAINTENANCE_FROM_ZERO" = 1 ] &&
-  { [ "$MAINTENANCE_ROLLOUT_COMPLETED" != 1 ] ||
-    [ "$MAINTENANCE_TOPOLOGY_VERIFIED" != 1 ] ||
-    [ "$VERIFIED_MACHINE_COUNT" != 5 ]; }; then
-  echo "$(red '✗') Refusing a success receipt: the exact from-zero maintenance rollout is not fully verified."
   exit 1
 fi
 write_deploy_receipt "succeeded" 0 || exit 1
