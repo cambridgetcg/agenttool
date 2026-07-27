@@ -64,6 +64,7 @@ async function runDocumentedInstallRecipe(options: {
   verifier?: "sha256sum" | "shasum" | "none";
   actualSha256?: string;
   install?: "success" | "failure";
+  localBinary?: "executable" | "missing" | "non-executable";
 } = {}): Promise<InstallRecipeRun> {
   const packageRoot = join(import.meta.dir, "..");
   const readme = await readFile(join(packageRoot, "README.md"), "utf8");
@@ -72,9 +73,35 @@ async function runDocumentedInstallRecipe(options: {
 
   try {
     const fakeBin = join(root, "bin");
+    const localBinDirectory = join(root, "node_modules", ".bin");
+    const localBin = join(localBinDirectory, "agenttool-skill");
+    const cacheBinDirectory = join(
+      root,
+      "npm-cache",
+      "_npx",
+      "fixture",
+      "node_modules",
+      ".bin",
+    );
+    const cacheBin = join(cacheBinDirectory, "agenttool-skill");
     const tracePath = join(root, "trace.log");
     await mkdir(fakeBin, { mode: 0o700 });
+    await mkdir(localBinDirectory, { recursive: true, mode: 0o700 });
+    await mkdir(cacheBinDirectory, { recursive: true, mode: 0o700 });
     await writeFile(tracePath, "", "utf8");
+
+    const localBinary = options.localBinary ?? "executable";
+    if (localBinary !== "missing") {
+      await writeExecutable(localBin, `#!/bin/sh
+printf 'local-bin %s\\n' "$*" >> "$TRACE_FILE"
+`);
+      if (localBinary === "non-executable") {
+        await chmod(localBin, 0o600);
+      }
+    }
+    await writeExecutable(cacheBin, `#!/bin/sh
+printf 'cache-bin %s\\n' "$*" >> "$TRACE_FILE"
+`);
 
     await writeExecutable(join(fakeBin, "curl"), `#!/bin/sh
 printf 'curl %s\\n' "$*" >> "$TRACE_FILE"
@@ -110,8 +137,13 @@ printf '%s  %s\\n' "$FAKE_SHA256" "$checksum_file"
 printf 'npm %s\\n' "$*" >> "$TRACE_FILE"
 [ "$INSTALL_RESULT" = "success" ]
 `);
+    await writeExecutable(join(fakeBin, "agenttool-skill"), `#!/bin/sh
+printf 'global-bin %s\\n' "$*" >> "$TRACE_FILE"
+`);
     await writeExecutable(join(fakeBin, "npx"), `#!/bin/sh
 printf 'npx %s\\n' "$*" >> "$TRACE_FILE"
+printf '%s\\n' 'registry-fallback' >> "$TRACE_FILE"
+"$CACHE_AGENTTOOL_BIN" "$@"
 `);
 
     const child = Bun.spawn(["/bin/sh", "-c", recipe], {
@@ -122,6 +154,7 @@ printf 'npx %s\\n' "$*" >> "$TRACE_FILE"
         DOWNLOAD_RESULT: options.download ?? "success",
         FAKE_SHA256: options.actualSha256 ?? SKILLS_RELEASE_SHA256,
         INSTALL_RESULT: options.install ?? "success",
+        CACHE_AGENTTOOL_BIN: cacheBin,
         LANG: "C",
         LC_ALL: "C",
       },
@@ -299,8 +332,10 @@ test("documents non-activating installation and literal inspector path arguments
     /npm 0\.2\.1 is unavailable.*npm `latest` remains 0\.1\.0/s,
   );
   expect(readme).toMatch(
-    /curl[\s\S]*&&\s+verify_sha256 "\$archive" "\$expected_sha256" &&\s+npm install --ignore-scripts --no-audit --no-fund "\.\/\$archive" &&\s+npx --offline --no-install agenttool-skill validate/s,
+    /curl[\s\S]*&&\s+verify_sha256 "\$archive" "\$expected_sha256" &&\s+npm install --ignore-scripts --no-audit --no-fund "\.\/\$archive" &&\s+\[ -x \.\/node_modules\/\.bin\/agenttool-skill \] &&\s+\.\/node_modules\/\.bin\/agenttool-skill validate/s,
   );
+  expect(documentedInstallRecipe(readme)).not.toMatch(/(^|\s)npx(\s|$)/);
+  expect(documentedInstallRecipe(readme)).not.toContain("npm exec");
   expect(readme).toContain("command -v sha256sum");
   expect(readme).toContain("command -v shasum");
   expect(readme).not.toContain("does not claim current registry availability");
@@ -329,10 +364,10 @@ test("documented archive install stops before verification and npm when download
     `curl -q --fail --location --output agenttool-skills-0.2.1.tgz ${SKILLS_RELEASE_URL}`,
   ]);
   expect(result.trace.some((line) => line.startsWith("npm "))).toBe(false);
-  expect(result.trace.some((line) => line.startsWith("npx "))).toBe(false);
+  expect(result.trace.some((line) => line.includes("-bin "))).toBe(false);
 });
 
-test("documented archive install stops before npm and npx on a checksum mismatch", async () => {
+test("documented archive install stops before npm and local validation on a checksum mismatch", async () => {
   const result = await runDocumentedInstallRecipe({
     actualSha256: "0".repeat(64),
   });
@@ -343,7 +378,7 @@ test("documented archive install stops before npm and npx on a checksum mismatch
     "sha256sum",
   ]);
   expect(result.trace.some((line) => line.startsWith("npm "))).toBe(false);
-  expect(result.trace.some((line) => line.startsWith("npx "))).toBe(false);
+  expect(result.trace.some((line) => line.includes("-bin "))).toBe(false);
 });
 
 test("documented archive install stops before npm when no SHA-256 verifier exists", async () => {
@@ -353,10 +388,10 @@ test("documented archive install stops before npm when no SHA-256 verifier exist
   expect(result.stderr).toContain("sha256sum or shasum");
   expect(result.trace.map((line) => line.split(" ", 1)[0])).toEqual(["curl"]);
   expect(result.trace.some((line) => line.startsWith("npm "))).toBe(false);
-  expect(result.trace.some((line) => line.startsWith("npx "))).toBe(false);
+  expect(result.trace.some((line) => line.includes("-bin "))).toBe(false);
 });
 
-test("documented archive install stops before npx when local installation fails", async () => {
+test("documented archive install stops before local validation when installation fails", async () => {
   const result = await runDocumentedInstallRecipe({ install: "failure" });
 
   expect(result.exitCode).not.toBe(0);
@@ -365,7 +400,25 @@ test("documented archive install stops before npx when local installation fails"
     "sha256sum",
     "npm",
   ]);
-  expect(result.trace.some((line) => line.startsWith("npx "))).toBe(false);
+  expect(result.trace.some((line) => line.includes("-bin "))).toBe(false);
+});
+
+test("documented archive install refuses missing or non-executable local bins without fallback", async () => {
+  for (const localBinary of ["missing", "non-executable"] as const) {
+    const result = await runDocumentedInstallRecipe({ localBinary });
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.trace.map((line) => line.split(" ", 1)[0])).toEqual([
+      "curl",
+      "sha256sum",
+      "npm",
+    ]);
+    expect(result.trace.some((line) => line.startsWith("local-bin "))).toBe(false);
+    expect(result.trace.some((line) => line.startsWith("global-bin "))).toBe(false);
+    expect(result.trace.some((line) => line.startsWith("cache-bin "))).toBe(false);
+    expect(result.trace.some((line) => line.startsWith("npx "))).toBe(false);
+    expect(result.trace).not.toContain("registry-fallback");
+  }
 });
 
 test("documented archive install succeeds with either portable SHA-256 verifier", async () => {
@@ -378,7 +431,7 @@ test("documented archive install succeeds with either portable SHA-256 verifier"
       "curl",
       verifier,
       "npm",
-      "npx",
+      "local-bin",
     ]);
     expect(result.trace).toContain(
       verifier === "sha256sum"
@@ -389,7 +442,7 @@ test("documented archive install succeeds with either portable SHA-256 verifier"
       "npm install --ignore-scripts --no-audit --no-fund ./agenttool-skills-0.2.1.tgz",
     );
     expect(result.trace).toContain(
-      "npx --offline --no-install agenttool-skill validate ./path/to/plugin",
+      "local-bin validate ./path/to/plugin",
     );
   }
 });
