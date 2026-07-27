@@ -99,11 +99,13 @@ tables, columns, constraints, indexes, policies, or out-of-band DDL.
 
 ```bash
 # Auto-detect + apply pending migrations in timestamp order.
-# Reads DATABASE_URL from env or keychain (agenttool-database-url, account=macair).
+# Surveys through DATABASE_URL. A real apply additionally requires the
+# separately scoped session-pooled DATABASE_SESSION_URL.
 bin/migrate-pending.sh
 
 # Or apply one ordinary file at a time:
-DATABASE_URL=... bun api/scripts/_migrate-one.ts api/migrations/<file>.sql
+DATABASE_SESSION_URL=... \
+  bun api/scripts/_migrate-one.ts api/migrations/<file>.sql
 ```
 
 On a machine that deliberately has no local database credential, apply one
@@ -114,10 +116,12 @@ bin/fly-migrate-one.sh api/migrations/<file>.sql
 ```
 
 This bounded path sends the migration text and checksum over Fly SSH, executes
-with the app's existing `DATABASE_URL`, and records `meta._migrations`. The
-database URL never returns to the local machine. It is one-file-at-a-time by
-design; inspect the file and the pending set before each call, then deploy with
-`--no-migrate`.
+with the app's existing session-pooled `DATABASE_SESSION_URL`, and records
+`meta._migrations`. It refuses rather than falling back to the
+transaction-pooled `DATABASE_URL`, because that connection cannot preserve the
+session advisory lock. The database URL never returns to the local machine. It
+is one-file-at-a-time by design; inspect the file and the pending set before
+each call, then deploy with `--no-migrate`.
 
 Both one-file helpers refuse every filename in
 `api/migrations/quiescence-required.txt`. The local helper refuses before
@@ -127,11 +131,23 @@ closed. They are ordinary-migration tools, not an exclusive-cutover path.
 
 The pending script:
 
-1. Lists `api/migrations/*.sql`.
-2. Queries `meta._migrations` for applied filenames.
-3. Computes the diff (files − applied rows).
-4. Applies pending files in alphabetical order (which is timestamp order for the `YYYYMMDDTHHMMSS_*` naming convention).
-5. Each apply goes through `_migrate-one.ts`, which:
+1. Lists `api/migrations/*.sql` and queries `meta._migrations` through the
+   transaction-pooled `DATABASE_URL`.
+2. Refuses a journaled filename whose source is absent or whose checksum no
+   longer matches, then computes the pending set (files − applied rows).
+3. Exits without resolving an apply credential when the inventory is clean,
+   the invocation is a dry run, or protected files are pending without the
+   required operator assertion.
+4. Before a real apply, resolves the separately scoped session-pooled
+   `DATABASE_SESSION_URL`, repeats the complete source/journal/checksum
+   inventory through that endpoint, and requires the exact same ordered
+   pending filenames. A mismatch refuses before the first mutation. Matching
+   inventories catch many endpoint mistakes; they do not prove pool type or
+   that both URLs identify the same database. The operator remains responsible
+   for that binding.
+5. Applies pending files in alphabetical order (which is timestamp order for
+   the `YYYYMMDDTHHMMSS_*` naming convention). Each apply goes through
+   `_migrate-one.ts`, which:
    - Computes file sha256 and refuses to apply if a row exists with a different checksum (corruption signal).
    - Holds one PostgreSQL advisory lock for the migration session. It waits at
      most 30 seconds for that lock, at most 10 seconds for each database lock,
@@ -218,12 +234,15 @@ Use one bounded maintenance cutover:
 
 The current `bin/deploy.sh` is a routine rolling rollout. It does not establish
 the exclusive captured-fleet fence, preserve stopped process groups as a
-maintenance rollout contract, or prove the per-machine sequence above. A
-from-zero fleet recreation starts only after identities are already gone and
-is not an identity-preserving fence or a rollback for an extant fleet. No
-checked identity-preserving maintenance implementation currently exists in
-this repository. Prepare and independently review that narrow mechanism before
-the window; if it is absent or unrehearsed, stop instead of improvising.
+maintenance rollout contract, or prove the per-machine sequence above. No
+generic empty-registry restoration mode or checked identity-preserving
+maintenance implementation currently exists in this repository. If an
+independently authorized incident or recovery action has already lost Machine
+identities, keep admission closed and prepare a separate reviewed recovery
+plan; an empty registry is never a fencing shortcut or rollback. Prepare and
+independently review the narrow identity-preserving mechanism before a
+maintenance window; if it is absent or unrehearsed, stop instead of
+improvising.
 
 The maintenance mechanism proves only the process boundary it controls. It
 does not cancel provider I/O already started before quiescence, prove an
@@ -365,9 +384,9 @@ curl -sI https://api.agenttool.dev/health | grep -i substrate-disposition
 them as environment/OCI labels; `/health` returns them as `build.revision` and
 `build.dirty` with `Cache-Control: no-store`. After Fly's rolling health checks
 complete, the wrapper silently tests both embedded values on every started Fly
-machine. In the from-zero maintenance mode, it additionally requires one image
-digest across the exact five-Machine fleet, which anchors the stopped thinker
-to the same image. A mismatch fails the deploy invocation.
+machine. A mismatch fails the deploy invocation. An exclusive maintenance
+mechanism needs separate exact-ID and image proof for the complete captured
+fleet, including any Machine intentionally left stopped.
 
 The base image is pinned to Bun 1.3.5 by tag and registry digest. Update the
 tag and digest together, deliberately, after the hermetic gate passes. Label
@@ -480,8 +499,7 @@ response prevents a success receipt.
 ### Repo migration files and journal
 
 ```bash
-DATABASE_URL=$(bin/agenttool-secret get agenttool-database-url) \
-  bin/migrate-pending.sh --dry-run
+bin/migrate-pending.sh --dry-run
 ```
 
 When nothing is pending, this reports that no repo migration files are
@@ -514,7 +532,13 @@ Cloudflare Pages dashboard → project → previous deployment → "Rollback to 
 
 ### Database
 
-There is no automatic rollback. Migrations are forward-only. If a migration corrupted data, restore from a Supabase backup (Pro plan) or `pg_dump` snapshot — see [`STACK.md`](STACK.md) §10.
+There is no migration rollback. If protected SQL corrupts data, keep all
+admission, writers, and workers held and use a separately reviewed forward
+corrective migration or data repair. Restoring a Supabase backup or `pg_dump`
+snapshot is database-loss disaster recovery, not migration rollback; after a
+restore, keep every writer held until the restored journal and schema have
+been advanced to a revision compatible with the exact next image. See
+[`STACK.md`](STACK.md) §10.
 
 ## The one-command orchestrator
 
@@ -607,16 +631,21 @@ One-time setup:
 
 | Service | Account | Purpose |
 |---|---|---|
-| `agenttool-database-url` | `macair` | Full DATABASE_URL for `_migrate-one.ts` fallback |
+| `agenttool-database-url` | `macair` | Transaction-pooled `DATABASE_URL` for migration inventory and general database access |
+| `agenttool-database-session-url` | `macair` | Session-pooled `DATABASE_SESSION_URL` required for migration applies |
 | `agenttool-cloudflare-token` | `macair` | CF API token (Pages:Edit) for `frontend-deploy.sh` |
 | `agenttool-cloudflare-account-id` | `macair` | 32-char CF account ID |
 | `agenttool-soma-bearer` | `$USER` | Bearer for the canonical agent (for smoke tests + wake reads) |
 | `agenttool-sophia-identity-id` | `$USER` | The canonical agent's identity UUID (for smoke + preflight) |
 
-Set via:
+The migration runners use the fixed legacy Keychain account `macair`
+directly. The generic `bin/agenttool-secret` CLI uses account `$USER`, so it
+does not provision or test these two runner entries. Set them via:
 
 ```bash
 # `-w` as the final option prompts securely; no value appears in argv/history.
+security add-generic-password -U -s agenttool-database-url -a macair -w
+security add-generic-password -U -s agenttool-database-session-url -a macair -w
 security add-generic-password -U -s agenttool-cloudflare-token -a macair -w
 ```
 
@@ -625,7 +654,7 @@ security add-generic-password -U -s agenttool-cloudflare-token -a macair -w
 | Symptom | Likely cause | Recipe |
 |---|---|---|
 | `column "X" does not exist` during migration | The migration's CHECK or index references a column from an upstream migration that's unapplied. | Run `bin/migrate-pending.sh` first to apply the full backlog in order. |
-| `password authentication failed for user "postgres"` | Stale DB password in keychain. | Reset it in Supabase, then run `security add-generic-password -U -s agenttool-database-url -a macair -w` and enter the URL at the prompt. |
+| `password authentication failed for user "postgres"` | The survey or session-pooled DB URL named by the failing phase is stale. | Reset it in Supabase, then update the corresponding `agenttool-database-url` or `agenttool-database-session-url` entry for account `macair` with `security add-generic-password -U -s <service> -a macair -w`. |
 | `fly deploy` fails with healthcheck | New code crashes on startup — likely a missing DB column or env var. | Apply migrations first; check `fly secrets list -a agenttool` for missing keys. |
 | New Fly machine exits `0` before the listening log, unchanged API source starts locally, and old machines remain healthy | The newly assembled remote image or build cache may be malformed. | Reproduce the exact staged image locally. If it serves `/health` with the expected revision, retry once with `bin/deploy.sh --no-cache-api` plus the normal phase flags. This bypasses Fly's build cache only; it does not bypass release gates or prove cache corruption by itself. |
 | Frontend stale after upload | CF Pages Browser Cache TTL not 0 — overrides origin headers. | Set zone setting via CF API (see Phase 4). |
@@ -641,6 +670,6 @@ security add-generic-password -U -s agenttool-cloudflare-token -a macair -w
 
 ---
 
-> *GitHub `main` coordinates releases, and is the only head — the Codeberg mirror was retired 2026-07-25. Production deploys remain manual through `bin/deploy.sh`, and completion means the intended revision and dirty-source marker agree across health and every started Fly machine, sensitive frontend paths are denied, and the outcome is written locally. The exclusive from-zero path additionally requires one image digest across its exact five-Machine shape. These are bounded provenance checks, not a reproducible-build claim.*
+> *GitHub `main` coordinates releases, and is the only head — the Codeberg mirror was retired 2026-07-25. Production deploys remain manual through `bin/deploy.sh`, and completion means the intended revision and dirty-source marker agree across health and every started Fly machine, sensitive frontend paths are denied, and the outcome is written locally. These are bounded provenance checks, not a reproducible-build claim.*
 
 — Authored by 愛 at Yu's WILL. 2026-05-12.

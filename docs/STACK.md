@@ -252,13 +252,22 @@ Observed stopped thinkers: lhr(2)
 ```
 
 Single Bun + Hono monolith in `api/`. The `api/fly.toml` describes the
-per-machine runtime defaults (port, healthcheck, env) and pins process-specific VM
-defaults: `app` is shared 1 vCPU / 1 GB; `thinker` is shared 1 vCPU / 256 MB.
-It does not declare the complete fleet. As verified on 2026-07-27, the Fly
-registry contains three started `app` Machines and two stopped `thinker`
-Machines. Inspect both `fly machine list -a agenttool --json` and
+per-machine runtime defaults (port, healthcheck, env) and process groups, but
+deliberately has no `[[vm]]` blocks and requests no process-specific CPU or
+memory sizes. Removing those blocks does not resize existing Machines. Under
+Fly's [documented size precedence](https://fly.io/docs/launch/scale-machine/#machine-size-configuration-precedence),
+existing Machines retain their sizes and scaling can infer a size from an
+existing Machine; an empty fleet or new process group with no sizing source
+falls back to `shared-cpu-1x`. As verified on 2026-07-27, the registry contains
+three started 1 GB `app` Machines and two stopped 256 MB `thinker` Machines.
+Machine sizing and the complete fleet remain live Fly registry state.
+
+Inspect both `fly machine list -a agenttool --json` and
 `fly status -a agenttool`; a process count, `fly scale show`, or `fly.toml`
-alone is not topology proof.
+alone is not topology proof. The ordinary deploy verifies source/image
+provenance on started Machines, not CPU or memory sizing. Any intentional new
+capacity therefore needs an explicit reviewed size plus post-change registry
+verification, especially for an empty or previously absent process group.
 
 ### Region shape
 
@@ -302,9 +311,9 @@ environment values into the deploy transcript.
 
 If an independently authorised incident or recovery path has already left the
 Fly registry empty, keep admission closed and prepare a separate, reviewed
-recovery plan. The routine wrapper is not a from-zero restoration contract,
-and an empty registry does not authorise recreating identities or guessing at
-the prior topology.
+recovery plan. No generic empty-registry restoration mode is supported, and an
+empty registry does not authorise recreating identities or guessing at the
+prior topology.
 
 The Docker base is pinned to Bun 1.3.5 by tag and registry digest. Update both
 together, deliberately, after the hermetic gate passes. The pin and source
@@ -353,16 +362,29 @@ fly releases list -a agenttool
 
 ### Secrets
 
-API secrets (DATABASE_URL, REDIS_URL, VAULT_MASTER_KEY, STRIPE_*, etc.) live in Fly's secret store, NOT in the repo:
+API secrets (`DATABASE_URL`, `DATABASE_SESSION_URL`, `REDIS_URL`,
+`VAULT_MASTER_KEY`, `STRIPE_*`, etc.) live in Fly's secret store, NOT in the
+repo:
 
 ```bash
-# Import from stdin so values never enter argv or shell history.
-printf 'DATABASE_URL=%s\n' "$(bin/agenttool-secret get agenttool-database-url)" | \
-  fly secrets import -a agenttool
-printf 'VAULT_MASTER_KEY=%s\n' "$(openssl rand -hex 32)" | \
+# Import the two separately scoped database URLs from the migration runners'
+# fixed legacy Keychain account. Values enter only this child environment and
+# stdin; they do not enter argv, shell history, or the repository.
+DATABASE_URL="$(
+  security find-generic-password -s agenttool-database-url -a macair -w
+)" \
+DATABASE_SESSION_URL="$(
+  security find-generic-password -s agenttool-database-session-url -a macair -w
+)" \
+  sh -c 'printf "DATABASE_URL=%s\nDATABASE_SESSION_URL=%s\n" "$DATABASE_URL" "$DATABASE_SESSION_URL"' | \
   fly secrets import -a agenttool
 fly secrets list -a agenttool
 ```
+
+Generating or replacing `VAULT_MASTER_KEY` is deliberately absent from this
+routine import example. That is credential rotation and requires a separately
+reviewed re-encryption/continuity plan; importing a fresh key by convenience
+would not preserve access to existing ciphertext.
 
 `OPENAI_APPS_CHALLENGE` is optional and dormant. Leave it unset until the
 OpenAI submission portal issues one domain-challenge token; while unset,
@@ -382,8 +404,15 @@ The repo still has `services/{bootstrap,economy,identity,memory,tools,trace}/` d
 
 Hosted Postgres on **Supabase**, project ref `jseqftufplgewhojwbmh`, region **AWS London** (`eu-west-2` — *not* Dublin; AWS region naming has `eu-west-1` = Ireland, `eu-west-2` = UK, `eu-west-3` = Paris). Connection goes through Supabase's pooler (`aws-1-eu-west-2.pooler.supabase.com`). Two pool flavors:
 
-- **Session pooler — port 5432.** Local dev uses this. Long-lived connections, full session features (LISTEN/NOTIFY, prepared statements, advisory locks).
-- **Transaction pooler — port 6543.** Prod's `DATABASE_URL` Fly secret points here. Higher concurrency for many short-lived connections; *no* prepared statements (`prepare: false` required in postgres-js) and no session-scoped state. Known timeout issue from Fly (logged as task #60) — symptom: authed-endpoint 502s after ~13s.
+- **Session pooler — port 5432.** `DATABASE_SESSION_URL` points here for
+  migration applies and other session-affine operations such as LISTEN or
+  advisory locks.
+- **Transaction pooler — port 6543.** `DATABASE_URL` points here for the API,
+  local general access, tests, and read-only migration inventory. It provides
+  higher concurrency for many short-lived connections; there are no prepared
+  statements (`prepare: false` is required in postgres-js) or reliable
+  session-scoped state. A known timeout issue from Fly (logged as task #60)
+  presents as authenticated endpoint 502s after about 13 seconds.
 
 **Jurisdictional concentration note.** Both API (Fly `lhr`) and DB (Supabase `eu-west-2` = AWS London) sit in UK jurisdiction. The Fly `cdg` Paris machine added 2026-05-09 hedges API jurisdiction; data-layer hedging requires a separate Supabase project (or migration to `eu-west-3` Paris / `eu-central-1` Frankfurt) and is a deliberate next-step decision, not a current property.
 
@@ -429,7 +458,12 @@ Plus Supabase-managed: `auth` (unused — agenttool uses DID + bearer, not Supab
 
 **Database size**: ~16 MB total (2026-05-09). Pre-revenue scale; lots of headroom before any tuning matters.
 
-**Local dev hits the same DB as prod.** The `agenttool-database-url` keychain entry on each developer's machine points at the production DB — there is no `dev.db` separate copy. This is intentional (tighter iteration loop, no sync drift) and load-bearing on Yu's workflow. Implications:
+**Local dev hits the same DB as prod.** The transaction-pooled
+`agenttool-database-url` and session-pooled
+`agenttool-database-session-url` entries used by migration tooling must point
+at the same production database target through their respective pool modes;
+there is no separate `dev.db`. This is intentional (tighter iteration loop, no
+sync drift) and load-bearing on Yu's workflow. Implications:
 
 - Migrations applied locally are visible to prod immediately.
 - Test fixtures created during e2e runs (the `_e2e-*.py/.mjs` scripts) land in prod tables. Most scripts now sweep their residue at the end; if you write a new one, do the same.
@@ -438,14 +472,26 @@ Plus Supabase-managed: `auth` (unused — agenttool uses DID + bearer, not Supab
 ### Migration application
 
 ```bash
-# Ordinary migration applied via the one-file helper:
-DATABASE_URL=$(bin/agenttool-secret get agenttool-database-url) \
+# Canonical ordered inventory and apply:
+bin/migrate-pending.sh
+
+# Or one explicitly selected ordinary migration:
+DATABASE_SESSION_URL=... \
   bun api/scripts/_migrate-one.ts api/migrations/<file>
 ```
 
 Naming: `0000` through `0022` are pre-2026-05-08 sequential numbering; everything after uses `YYYYMMDDTHHMMSS_<slug>.sql` timestamps to prevent parallel-session collisions (see `DEVELOPMENT.md` §1).
 
 **Journal**: `meta._migrations` records every filename + sha256 of the file contents at apply time. `_migrate-one.ts` checks the journal before applying — already-applied files with matching checksum are skipped; checksum mismatch is treated as a corruption signal (someone edited a migration file post-apply) and refuses to proceed. Migrations also wrap in `BEGIN/COMMIT` by default (opt out with `-- @no-transaction` for things like `CREATE INDEX CONCURRENTLY`).
+
+`bin/migrate-pending.sh` surveys the complete source/journal/checksum inventory
+through transaction-pooled `DATABASE_URL`. Before a real apply, it repeats that
+complete inventory through session-pooled `DATABASE_SESSION_URL` and requires
+the exact same ordered pending filenames before the first mutation. Matching
+inventories narrow endpoint drift; they do not prove pool mode or database
+identity, which remain operator-provided bindings. A clean inventory, dry run,
+or unasserted protected-migration refusal does not resolve the session
+credential.
 
 The local and Fly one-file helpers validate
 `api/migrations/quiescence-required.txt` and refuse listed files before
@@ -459,7 +505,7 @@ Bootstrap procedure (one-time, when introducing the journal):
 
 ```bash
 # 1. Apply the migration that creates the journal.
-DATABASE_URL=... bun api/scripts/_migrate-one.ts \
+DATABASE_SESSION_URL=... bun api/scripts/_migrate-one.ts \
   api/migrations/20260509T170000_meta_migrations.sql
 
 # 2. Backfill every existing migration filename + checksum.
@@ -525,30 +571,33 @@ OS-managed secret store via the **`agenttool-secret`** CLI (`bin/agenttool-secre
 | Windows | DPAPI (`%APPDATA%/agenttool/<service>.dpapi`) | plaintext fallback |
 
 ```bash
-# Read
-bin/agenttool-secret get agenttool-database-url
-
 # Write (stdin — never argv)
-pbpaste | bin/agenttool-secret set agenttool-cloudflare-token -
+pbpaste | bin/agenttool-secret set agenttool-vault-master-key -
 
 # Gate
-if bin/agenttool-secret has agenttool-database-url; then ...; fi
+if bin/agenttool-secret has agenttool-vault-master-key; then ...; fi
 ```
 
 Key services on this machine (developer-shared naming):
 
-| Service | What |
-|---|---|
-| `agenttool-database-url` | Postgres connection string for `_migrate-one.ts` + smokes |
-| `agenttool-vault-master-key` | 32-byte hex; api server reads to seal vault entries |
-| `agenttool-cloudflare-token` | CF Pages deploy token (only if scripting deploys) |
-| `agenttool-cloudflare-account-id` | CF account id |
-| `agenttool-bridge-kmaster` | Bridge sidecar's K_master |
-| `agenttool-bridge-signkey` | Bridge sidecar's ed25519 signing key |
-| `agenttool-soma-*` | SOMA-derived identity keys plus a separately issued project bearer |
-| `agenttool-<name>-*` | Human-readable Keychain labels. A name helps lookup and revocation; it does not scope bearer authority to that identity. |
+| Service | Account | What |
+|---|---|---|
+| `agenttool-database-url` | `$USER` for local API; `macair` for migration runner | Transaction-pooled general/survey URL; never substituted for a session-affine apply |
+| `agenttool-database-session-url` | `macair` for migration runner | Session-pooled URL required by `_migrate-one.ts` and real batch applies |
+| `agenttool-vault-master-key` | `$USER` | 32-byte hex; api server reads to seal vault entries |
+| `agenttool-cloudflare-token` | `macair` for `frontend-deploy.sh` | CF Pages deploy token (only if scripting deploys) |
+| `agenttool-cloudflare-account-id` | `macair` for `frontend-deploy.sh` | CF account id |
+| `agenttool-bridge-kmaster` | `$USER` | Bridge sidecar's K_master |
+| `agenttool-bridge-signkey` | `$USER` | Bridge sidecar's ed25519 signing key |
+| `agenttool-soma-*` | `$USER` | SOMA-derived identity keys plus a separately issued project bearer |
+| `agenttool-<name>-*` | `$USER` by generic CLI | Human-readable labels; a name helps lookup and revocation but does not scope bearer authority to that identity |
 
-Naming convention: `agenttool-<scope>-<purpose>`, account = `$USER`. The CLI rejects names that don't start with `agenttool-`.
+The generic CLI enforces the `agenttool-<scope>-<purpose>` naming convention
+and uses account `$USER`. The migration runners and `frontend-deploy.sh`
+instead query fixed legacy account `macair` entries directly, so
+`bin/agenttool-secret has ...` does not provision or prove those tool-specific
+entries. Use `security add-generic-password -U -s <service> -a macair -w` for
+them; the final `-w` prompts without putting the value in argv or history.
 
 ### Server (Fly.io)
 
@@ -589,7 +638,8 @@ cd agenttool
 cd api && bun install && cd ..
 cd packages/sdk-ts && bun install && cd ../..
 
-# 3. Stash DATABASE_URL from the clipboard; generate K_master into stdin.
+# 3. Stash a transaction-pooled DATABASE_URL for local API work; generate
+#    K_master into stdin. Migration runners use separate macair entries above.
 pbpaste | bin/agenttool-secret set agenttool-database-url -
 openssl rand -hex 32 | bin/agenttool-secret set agenttool-vault-master-key -
 
@@ -663,7 +713,7 @@ bin/deploy.sh --no-migrate --no-frontend
                               then stages doctrine bytes and rolls Fly)
                              (~3-5 minutes; old machines serve until new ones healthcheck-green)
 
-DATABASE_URL=... bun api/scripts/_migrate-one.ts <file>   (ordinary DB migration only)
+DATABASE_SESSION_URL=... bun api/scripts/_migrate-one.ts <file>   (ordinary DB migration only)
 ```
 
 At invocation start, `bin/deploy.sh` fetches `github/main`, includes untracked
@@ -798,7 +848,16 @@ Or roll the dashboard via the CF Pages dashboard.
 
 ### Lost a database
 
-**Supabase** provides automated daily backups on the Pro plan (free tier: opt-in PITR is unavailable). Verify the project's backup posture in the Supabase dashboard → Database → Backups. Restore is operator-driven via the dashboard (point-in-time on Pro+ plans only). For a defense-in-depth posture, consider a periodic `pg_dump` to S3/R2 from a Fly machine or a separate cron host — the application stack does not currently do this.
+**Supabase** provides automated daily backups on the Pro plan (free tier:
+opt-in PITR is unavailable). Verify the project's backup posture in the
+Supabase dashboard → Database → Backups. Restore is operator-driven via the
+dashboard (point-in-time on Pro+ plans only). A restore is disaster recovery,
+not migration rollback: hold all admission, writers, and workers, then
+reconcile and advance the restored migration journal and schema to a revision
+compatible with the exact next image before any application or worker process
+starts. For a defense-in-depth posture, consider a periodic `pg_dump` to S3/R2
+from a Fly machine or a separate cron host — the application stack does not
+currently do this.
 
 ### Lost the mnemonic
 
