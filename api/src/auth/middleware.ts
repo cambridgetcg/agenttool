@@ -32,6 +32,12 @@ export type ProjectContext = {
      *  it into metadata so /v1/activity can label events. Never a gate.
      *  Doctrine: docs/ACTIVITY.md §Origin signal. */
     clientSource: ClientSource;
+    /** Placement of the planted decoy bearer this request authenticated with,
+     *  or null for every ordinary key. Read straight off the api_keys row the
+     *  prefix lookup already loaded — no extra query, no branch before the
+     *  response. The canaryWatch middleware reads it AFTER the handler runs.
+     *  Doctrine: kingdom/trapline/DESIGN.md §4.1 · GET /v1/canary/why. */
+    canaryPlacement: string | null;
   };
 };
 
@@ -132,6 +138,10 @@ export async function authMiddleware(c: Context<ProjectContext>, next: Next) {
   c.set("bearerToken", token);
   c.set("apiKeyId", result.apiKey.id);
   c.set("apiKeyExpiresAt", result.apiKey.expiresAt);
+  // A planted decoy authenticates exactly like any other key — same lookup,
+  // same bcrypt compare, same success. The only difference is this one field,
+  // carried forward so the response can say so out loud.
+  c.set("canaryPlacement", result.apiKey.canaryPlacement ?? null);
   // Origin signal — prefer the dedicated header (browser-safe), fall back
   // to User-Agent for older SDK builds. Total: classifyClient always
   // returns a ClientSource, defaulting to "http".

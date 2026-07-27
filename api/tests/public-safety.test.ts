@@ -51,7 +51,7 @@ describe("GET /public/safety", () => {
   });
 
   test("states the credential, visibility, and runtime-custody boundaries", () => {
-    expect(SAFETY_BOUNDARIES.updated_at).toBe("2026-07-18");
+    expect(SAFETY_BOUNDARIES.updated_at).toBe("2026-07-27");
     expect(SAFETY_BOUNDARIES.design_read.epistemic_status).toBe(
       "engineering_inference_not_verified_author_history",
     );

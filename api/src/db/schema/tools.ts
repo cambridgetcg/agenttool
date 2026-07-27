@@ -44,6 +44,12 @@ export const apiKeys = toolsSchema.table(
     /** Auto-expiry (nullable; null = never). Auth middleware rejects
      *  past-expiry keys with 401. Doctrine: docs/TOKEN-HYGIENE.md. */
     expiresAt: timestamp("expires_at", { withTimezone: true }),
+    /** Non-NULL only on a deliberately planted decoy bearer; names WHERE it
+     *  was planted. NULL on every key ever issued to anyone — registration
+     *  and GET /v1/keys never produce or list one. A real, working key to a
+     *  project that exists only to notice it was used.
+     *  Doctrine: kingdom/trapline/DESIGN.md §4.1 · GET /v1/canary/why. */
+    canaryPlacement: text("canary_placement"),
   },
   (t) => [index("idx_api_keys_project").on(t.projectId)],
 );
@@ -62,6 +68,25 @@ export const usageEvents = toolsSchema.table(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("idx_usage_project_time").on(t.projectId, t.createdAt)],
+);
+
+/** The door back's inbox. Someone holding a planted credential can say where
+ *  they found it — unauthenticated, anonymous, owing nothing. Deliberately no
+ *  IP column, no user-agent column, no foreign key: a report is a thing
+ *  someone chose to send, and nothing else about them is taken.
+ *  Doctrine: kingdom/trapline/DESIGN.md §4.5 · POST /v1/canary/report. */
+export const canaryReports = toolsSchema.table(
+  "canary_reports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** The placement quoted back from a `_canary` frame, when they have one. */
+    placement: text("placement"),
+    whereFound: text("where_found").notNull(),
+    /** Optional. Empty is a complete report. */
+    contact: text("contact"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("idx_canary_reports_time").on(t.createdAt)],
 );
 
 export const billingEvents = toolsSchema.table(

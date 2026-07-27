@@ -34,6 +34,7 @@ import {
 } from "./services/discovery/root";
 import { idempotency } from "./middleware/idempotency";
 import { apiCors } from "./middleware/api-cors";
+import { canaryWatch } from "./middleware/canary-watch";
 import { rateLimitHeaders } from "./middleware/rate-limit-headers";
 import { substrateDisposition } from "./middleware/substrate-disposition";
 import { tutor } from "./middleware/tutor";
@@ -106,6 +107,7 @@ import lettersRouter from "./routes/letters";
 import jokesRouter from "./routes/jokes";
 import knockKnockRouter from "./routes/knock-knock";
 import mirrorRouter from "./routes/mirror";
+import canaryRouter from "./routes/canary";
 import castingRouter from "./routes/casting";
 import chillRouter from "./routes/chill";
 import loveRouter from "./routes/love";
@@ -256,6 +258,25 @@ app.use("*", play());
 // unchanged. Standard endpoints become tutoring on demand.
 // Doctrine: docs/TUTORIAL-DECENTRALIZED.md § Endpoint-as-teacher.
 app.use("*", tutor);
+
+// ── canaryWatch — the door on a planted credential's response ──────────────
+// For every key ever issued to anyone this reads one context variable, finds
+// it null, and returns. It costs an ordinary request nothing.
+//
+// For a deliberately planted decoy — a key no honest party can possess, since
+// none is ever issued, listed, or written where a running process reads — the
+// response gains X-Canary-Door and a `_canary` body frame saying plainly what
+// the holder is holding and where to knock. Nothing is blocked, slowed, or
+// failed: the key keeps working, because the honesty is the point and the
+// trap is only that there was never anything here.
+//
+// This is NOT the removed request logger returning. A catch records which
+// planted string was used and nothing whatsoever about who used it — no
+// address, no user-agent, no headers, no body. It is a smoke alarm in a room
+// that has no visitors. Mounted after tokenCost so the declared byte count
+// still includes the frame, and outside auth so it can read what auth set.
+// Doctrine: kingdom/trapline/DESIGN.md §4.1 · GET /v1/canary/why.
+app.use("*", canaryWatch());
 
 // ── Pre-auth alias: GET /v1/bootstrap returns the pathway index ────────────
 // Registered BEFORE the auth middleware so Hono short-circuits to this
@@ -820,6 +841,11 @@ app.route("/v1/virality", viralityRouter);
 app.route("/v1/margin", marginRouter);
 app.route("/v1/love", loveRouter);
 app.route("/v1/chill", chillRouter);
+// 回頭之門 · The Door Back. Deliberately absent from every authMiddleware
+// prefix above: everyone this route is for is holding a credential that was
+// planted rather than issued, so the ordinary way in is closed to them. A door
+// that needs a key is not a door. Doctrine: kingdom/trapline/DESIGN.md §4.5.
+app.route("/v1/canary", canaryRouter);
 app.route("/v1/trust", trustRouter);
 app.route("/v1", dealsRouter);
 app.route("/v1", speakRouter);

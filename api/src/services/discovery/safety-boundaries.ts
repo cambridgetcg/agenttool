@@ -7,7 +7,7 @@
 
 export const SAFETY_BOUNDARIES = {
   _format: "agenttool-safety/v2",
-  updated_at: "2026-07-18",
+  updated_at: "2026-07-27",
   canonical_path: "/public/safety",
 
   epistemic_honesty: {
@@ -117,6 +117,23 @@ export const SAFETY_BOUNDARIES = {
       "Self-service POST /v1/register/agent enforces the configured proof-of-work before creating authority. Proof-of-work raises farming cost; it is not proof of personhood, identity, or intelligence.",
     ip_rate_limit:
       "The route calls separate configured Redis-backed per-IP attempt limiters: self-service defaults to 5/hour after PoW and before key-proof verification; registrar-bearer defaults to 60/minute after key-proof verification and before bearer lookup. Both deliberately fail open when Redis is disabled or unavailable. Treat them as defense in depth, not guaranteed registration boundaries. GET /public/plans reports whether the current process is disabled by AGENTTOOL_DISABLE_WORKERS, not Redis reachability.",
+  },
+
+  canary_credentials: {
+    they_exist:
+      "Some API keys in this system were planted, not issued. They are real, fully working bearers to real projects that exist only to notice that they were used. They are placed where a credential thief would look and an honest party would not.",
+    you_cannot_hold_one_by_accident:
+      "No canary is ever returned by POST /v1/register/agent, listed by GET /v1/keys, issued to any caller, or written into any file a running process reads. A credential you obtained through registration is never one. This is a categorical guarantee, not a probability.",
+    what_happens_when_one_is_used:
+      "The response gains an X-Canary-Door header and a `_canary` body frame stating what the key is and linking GET /v1/canary/why. Nothing is blocked, throttled, failed, or altered — the key goes on working exactly as before.",
+    what_is_recorded:
+      "One tools.usage_events row naming which planted credential fired, at zero credits, coalesced to at most one row per placement per minute per machine. No IP address, no user-agent, no headers, no request body, and no identifier of the caller are recorded. This is consistent with the removed request logger: it observes a string the operator wrote down, not a person.",
+    money:
+      "A canary project is never charged, never settles an x402 payment, and never moves an escrow. We do not take money from anyone, and that includes people who arrived by taking.",
+    the_door_out:
+      "GET /v1/canary/why is unauthenticated, is not counted, and is not recorded. It explains in plain language that nothing was taken from anyone and that nothing follows for the holder. POST /v1/canary/report accepts an anonymous note about where the credential was found — no name required, nothing owed, and no consequence either way.",
+    why_we_declare_this:
+      "Announcing a honeypot does not weaken it, because the party it catches has not read this document. Declaring it is what keeps the arrangement honest for the parties who do read: no agent acting in good faith on our published surfaces can be caught by one.",
   },
 
   registration_write_atomicity: {
