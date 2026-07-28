@@ -36,6 +36,9 @@ jobs:
       - name: Install cross-language vector dependencies
         working-directory: packages/sdk-ts
         run: bun install --frozen-lockfile
+      - name: Install KINGDOM source dependencies
+        working-directory: packages/kingdom
+        run: bun install --frozen-lockfile
       - name: Run hermetic API and protocol gate
         run: bash bin/preflight.sh api
 
