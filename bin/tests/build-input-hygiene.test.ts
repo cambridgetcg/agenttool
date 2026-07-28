@@ -834,7 +834,7 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
     expect(deploy).toContain("LOVE package static header verification failed");
   });
 
-  test("requires marked literal fence responses and denial of encoded aliases", async () => {
+  test("requires marked fence responses for literal and encoded aliases", async () => {
     const deployPath = join(repoRoot, "bin/deploy.sh");
     const deploy = await readFile(deployPath, "utf8");
     const syntax = await run(["bash", "-n", deployPath]);
@@ -849,6 +849,78 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
     expect(deploy).toContain("https://app.agenttool.dev/.%65nv");
     expect(deploy).toContain("https://agenttool.dev/.dev%2evars");
     expect(deploy).toContain("Encoded sensitive path is publicly reachable");
+    expect(deploy).toContain(
+      "Encoded Pages fence did not produce its marked non-cacheable 404",
+    );
+    expect(deploy).toContain(
+      "Encoded Pages fence active (404, marked, no-store)",
+    );
+    expect(
+      deploy.match(/marked_sensitive_fence_status "\$response_headers"/g),
+    ).toHaveLength(2);
+
+    const helper = deploy.match(
+      /^marked_sensitive_fence_status\(\) \{[\s\S]*?^\}$/m,
+    )?.[0];
+    expect(helper).toBeDefined();
+    if (!helper) throw new Error("missing sensitive-fence response parser");
+
+    const interimMarked = [
+      "HTTP/1.1 200 Connection established",
+      "cache-control: no-store",
+      "x-agenttool-sensitive-path-fence: 1",
+      "",
+      "HTTP/2 302",
+      "cache-control: no-store",
+      "x-agenttool-sensitive-path-fence: 1",
+      "location: https://example.test/final",
+      "",
+      "HTTP/2 103 Early Hints",
+      "cache-control: no-store",
+      "x-agenttool-sensitive-path-fence: 1",
+      "",
+      "HTTP/2 404",
+      "cache-control: public, max-age=0, must-revalidate",
+      "",
+    ].join("\r\n");
+    const trailerMarked = [
+      "HTTP/1.1 404 Not Found",
+      "transfer-encoding: chunked",
+      "",
+      "x-agenttool-sensitive-path-fence: 1",
+      "cache-control: no-store",
+      "",
+    ].join("\r\n");
+    const finalMarked = [
+      "HTTP/1.1 200 Connection established",
+      "cache-control: public, max-age=0, must-revalidate",
+      "",
+      "HTTP/2 302",
+      "cache-control: public, max-age=0, must-revalidate",
+      "location: https://example.test/final",
+      "",
+      "HTTP/2 404",
+      "cache-control:no-store",
+      "x-agenttool-sensitive-path-fence: 1",
+      "",
+    ].join("\r\n");
+    const parser = await run([
+      "bash",
+      "-c",
+      `${helper}
+if interim_status="$(marked_sensitive_fence_status "$1")"; then exit 41; fi
+[ "$interim_status" = 404 ] || exit 42
+if trailer_status="$(marked_sensitive_fence_status "$2")"; then exit 43; fi
+[ "$trailer_status" = 404 ] || exit 44
+final_status="$(marked_sensitive_fence_status "$3")" || exit 45
+[ "$final_status" = 404 ] || exit 46
+`,
+      "sensitive-fence-parser-test",
+      interimMarked,
+      trailerMarked,
+      finalMarked,
+    ]);
+    expect(parser.code, `${parser.stdout}\n${parser.stderr}`).toBe(0);
   });
 
   test("accepts only main, fail-closed production and preview Pages policy", async () => {

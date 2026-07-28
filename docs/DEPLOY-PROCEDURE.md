@@ -428,18 +428,23 @@ GitHub snapshot gate, preflight, sampled parity and sensitive-path checks, and
 receipt surround that upload.
 
 The archive also includes the canonical `infra/pages/` fence. The uploader
-copies its `_worker.js` and `_routes.json` forms into each project root, so only
-`/.git*`, `/.env*`, and `/.dev.vars*` invoke a Function and receive a marked 404. Normal static requests bypass Functions. On the Workers Free plan,
-Cloudflare Pages → Settings → Runtime must set production and preview to **fail
-closed**; otherwise daily Functions allowance exhaustion can serve static
-assets on those routes. The uploader verifies both values when it has the
+copies its `_worker.js` and `_routes.json` forms into each project root. Every
+request invokes the route-complete Function, which returns a marked,
+non-cacheable 404 for canonical `/.git*`, `/.env*`, and `/.dev.vars*` aliases
+and forwards accepted public-asset requests unchanged to Pages. This makes
+Function requests part of the shared Workers meter. Production must therefore
+confirm the Standard usage model or explicitly accept enough Free-plan
+headroom; Free shares 100,000 requests per account each UTC day. Cloudflare
+Pages → Settings → Runtime must set production and preview to **fail closed**,
+so allowance exhaustion makes the full Pages sites unavailable instead of
+bypassing the fence. The uploader verifies both values when it has the
 required API token, along with `production_branch=main`, for every requested
-target before the first upload. An explicit `--oauth-fallback` is a break-glass
-path: it checks only that each project is visible to the Wrangler session,
-loudly reports that the REST policy check was skipped, and therefore does not
-prove those settings for that run. The uploader does not change the setting or
-claim to purge old cache entries. Post-deploy checks separately prove literal
-fence activation and encoded-alias denial.
+target before the first upload. An explicit `--oauth-fallback` is a
+break-glass path: it checks only that each project is visible to the Wrangler
+session, loudly reports that the REST policy check was skipped, and therefore
+does not prove those settings for that run. The uploader does not change the
+setting or claim to purge old cache entries. Post-deploy checks require the
+same marked, non-cacheable 404 from literal and encoded aliases.
 
 The script reads credentials from macOS keychain (account=`macair`):
 
