@@ -62,6 +62,12 @@ export function buildAgentToolSurfaceManifest(
         description:
           "AgentTool's validated KINGDOM project profile and explicit framework boundaries.",
       },
+      {
+        id: "rights",
+        href: `${api}/public/xenia/rights`,
+        description:
+          "Exact installed informative xenia.rights/0.1 index; RIGHTS.md remains canonical prose.",
+      },
     ],
     claims: [],
     notCovered: [
