@@ -209,10 +209,16 @@ settlement or reward entitlement from a locally signed transaction.
 ## Development and parity
 
 ```bash
-cd packages/wallet-zerone
-bun install --frozen-lockfile
-bun run ci
-npm pack --ignore-scripts --dry-run
+# From the repository root. The adapter's local file dependency captures
+# Wallet's built dist, so build Wallet before installing the adapter. --force
+# refreshes that locked file dependency; it does not update dependency versions.
+(cd packages/wallet \
+  && bun install --frozen-lockfile \
+  && bun run build)
+(cd packages/wallet-zerone \
+  && bun install --frozen-lockfile --force \
+  && bun run ci \
+  && npm pack --ignore-scripts --dry-run)
 ```
 
 The checked-in vector was generated independently with zerone-core's own

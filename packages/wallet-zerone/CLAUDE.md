@@ -56,7 +56,16 @@ Go/Cosmos vectors.
 ## Commands
 
 ```bash
-bun install --frozen-lockfile
+# Run these two setup steps from the repository root. The forced adapter install
+# refreshes the locked local file dependency after Wallet produces dist; it does
+# not update dependency versions.
+(cd packages/wallet \
+  && bun install --frozen-lockfile \
+  && bun run build)
+(cd packages/wallet-zerone \
+  && bun install --frozen-lockfile --force)
+
+cd packages/wallet-zerone
 bun run typecheck
 bun test
 bun run build
