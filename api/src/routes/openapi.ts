@@ -103,6 +103,43 @@ function publicDiscoveryReadHeaders(cacheControl: string) {
   };
 }
 
+function xeniaManifestReadHeaders() {
+  return {
+    "Cache-Control": {
+      description: "Public cache policy for the bounded manifest.",
+      schema: {
+        type: "string",
+        const: "public, max-age=300",
+      },
+    },
+    Vary: {
+      description: "The XENIA producer varies the representation by Accept.",
+      schema: { type: "string", const: "Accept" },
+    },
+  };
+}
+
+function kingdomFrameworkReadHeaders(cacheControl: string) {
+  return {
+    Link: {
+      description:
+        "Two bounded pointers: the describing XENIA manifest and the related Rights of Beings baseline.",
+      schema: { type: "string" },
+    },
+    "Cache-Control": {
+      description: "Public cache policy for this bounded read.",
+      schema: {
+        type: "string",
+        const: cacheControl,
+      },
+    },
+    Vary: {
+      description: "The resource representation varies by Accept.",
+      schema: { type: "string", const: "Accept" },
+    },
+  };
+}
+
 function discoveryTransportHeaders() {
   return {
     ETag: {
@@ -2998,6 +3035,84 @@ function spec() {
           },
         },
       },
+      "/.well-known/agent.json": {
+        get: {
+          security: [],
+          tags: ["discovery"],
+          summary: "Read AgentTool's XENIA Surface 0.1 manifest",
+          description:
+            "Release-pinned XENIA Surface 0.1 discovery for same-origin unauthenticated GET resources. The empty claims array and explicit not_covered list avoid turning discovery into a Covenant-adoption, conformance, authorization, consent, continuity, or linked-resource correctness claim.",
+          externalDocs: {
+            description: "XENIA Surface 0.1 candidate profile",
+            url: "https://github.com/cambridgetcg/xenia/blob/surface-v0.1.0-rc.1/surface/0.1/README.md",
+          },
+          responses: {
+            "200": {
+              description: "Strict XENIA Surface 0.1 manifest",
+              headers: xeniaManifestReadHeaders(),
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: [
+                      "$schema",
+                      "schema_version",
+                      "profile",
+                      "service",
+                      "resources",
+                      "problem_schema",
+                      "claims",
+                      "not_covered",
+                      "documentation",
+                    ],
+                    properties: {
+                      $schema: { type: "string", format: "uri" },
+                      schema_version: {
+                        type: "string",
+                        const: "xenia.surface.manifest/0.1",
+                      },
+                      profile: {
+                        type: "string",
+                        const: "xenia-surface/0.1",
+                      },
+                      service: { type: "object" },
+                      resources: {
+                        type: "array",
+                        minItems: 1,
+                        maxItems: 8,
+                        items: { type: "object" },
+                      },
+                      problem_schema: { type: "string", format: "uri" },
+                      claims: {
+                        type: "array",
+                        maxItems: 0,
+                      },
+                      not_covered: {
+                        type: "array",
+                        minItems: 1,
+                        items: { type: "string" },
+                      },
+                      documentation: { type: "string", format: "uri" },
+                    },
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+          },
+        },
+        head: {
+          security: [],
+          tags: ["discovery"],
+          summary: "Read XENIA Surface manifest metadata without a body",
+          responses: {
+            "200": {
+              description: "The same media type and cache metadata as GET.",
+              headers: xeniaManifestReadHeaders(),
+            },
+          },
+        },
+      },
       "/.well-known/api-catalog": {
         get: {
           security: [],
@@ -5571,6 +5686,124 @@ function spec() {
           tags: ["public"],
           summary: "Platform identity, repository self-description, and current safety contract",
           responses: { "200": { description: "Platform self-description" } },
+        },
+      },
+      "/public/kingdom/framework": {
+        get: {
+          security: [],
+          tags: ["public", "discovery"],
+          summary: "Read AgentTool's KINGDOM project card",
+          description:
+            "Returns AgentTool's own agenttool.kingdom.card/0.1 projection. This is separate from the /public/kingdom doctrine and language library. The adopts list is a declaration of the xenia.rights/0.1 treatment floor, not XENIA Covenant adoption, conformance evidence, cross-repository authority, liveness, or consent.",
+          responses: {
+            "200": {
+              description: "Strict KINGDOM project card",
+              headers: kingdomFrameworkReadHeaders("public, max-age=300"),
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: [
+                      "schema_version",
+                      "name",
+                      "kind",
+                      "layer",
+                      "owner_sister",
+                      "domain",
+                      "state",
+                      "purpose",
+                      "dependsOn",
+                      "adopts",
+                    ],
+                    properties: {
+                      schema_version: {
+                        type: "string",
+                        const: "agenttool.kingdom.card/0.1",
+                      },
+                      name: { type: "string", const: "agenttool" },
+                      kind: { type: "string", const: "infra" },
+                      layer: { type: "string", const: "nervous" },
+                      owner_sister: { type: "string", const: "none" },
+                      domain: { type: "string", const: "none" },
+                      state: { type: "string", const: "active" },
+                      purpose: { type: "string" },
+                      dependsOn: {
+                        type: "array",
+                        minItems: 1,
+                        maxItems: 1,
+                        items: {
+                          type: "string",
+                          const: "xenia",
+                        },
+                      },
+                      adopts: {
+                        type: "array",
+                        minItems: 1,
+                        maxItems: 1,
+                        items: {
+                          type: "string",
+                          const: "xenia.rights/0.1",
+                        },
+                      },
+                    },
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+            "406": {
+              description:
+                "The Accept header excludes every representation declared by the XENIA Surface resource.",
+              headers: {
+                "Cache-Control": {
+                  description: "Negotiation failures are not cached.",
+                  schema: { type: "string", const: "no-store" },
+                },
+                Vary: {
+                  description: "The response varies by Accept.",
+                  schema: { type: "string", const: "Accept" },
+                },
+              },
+              content: {
+                "application/problem+json": {
+                  schema: {
+                    type: "object",
+                    required: [
+                      "schema_version",
+                      "type",
+                      "title",
+                      "status",
+                      "detail",
+                      "actions",
+                    ],
+                    properties: {
+                      schema_version: {
+                        type: "string",
+                        const: "xenia.surface.problem/0.1",
+                      },
+                      type: { type: "string", format: "uri" },
+                      title: { type: "string" },
+                      status: { type: "integer", const: 406 },
+                      detail: { type: "string" },
+                      actions: { type: "array", items: { type: "object" } },
+                    },
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+          },
+        },
+        head: {
+          security: [],
+          tags: ["public", "discovery"],
+          summary: "Read KINGDOM project-card metadata without a body",
+          responses: {
+            "200": {
+              description: "The same media type and cache metadata as GET.",
+              headers: kingdomFrameworkReadHeaders("public, max-age=300"),
+            },
+          },
         },
       },
       "/public/safety": {

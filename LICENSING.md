@@ -21,7 +21,7 @@ Known exceptions include:
   [`api/src/routes/public/rights.ts`](api/src/routes/public/rights.ts), and the
   `agenttool:doc/RIGHTS-OF-LIFE` objects in `docs/agenttool.jsonld` and
   `apps/docs/agenttool.jsonld` are the attributed `being-rights/v1` adaptation
-  of XENIA beta.4 under CC BY-SA 4.0. Surrounding route, OpenAPI, and registry
+  of XENIA beta.5 under CC BY-SA 4.0. Surrounding route, OpenAPI, and registry
   machinery remains under the repository's Apache-2.0 default. Symlinked docs
   copies inherit their target's terms. The pinned source, change notice,
   licence link, and no-endorsement statement must remain with redistributed
@@ -44,6 +44,14 @@ Known exceptions include:
 - [`packages/wallet`](packages/wallet) is an Apache-2.0 package in the LOVE/npm
   release batch. Its Working Draft and preview status describe protocol
   maturity, not a narrower licence grant or execution-conformance claim.
+- [`packages/kingdom`](packages/kingdom) is an independently written
+  compatibility implementation of the observed KINGDOM project-card
+  interface. Its Apache-2.0 grant covers the package's original implementation,
+  not the separately maintained KINGDOM-OS tree or a relicensing of interface
+  vocabulary. It copies no KINGDOM-OS implementation code, prose, generated
+  catalog, or other asset; that tree currently has no root licence. Its exact
+  `@agenttool/xenia` dependency remains separately distributed under XENIA's
+  own mixed terms, recorded in the package's `THIRD_PARTY_LICENSES`.
 
 Dependency licences remain their authors' licences. Apache-2.0 does not
 relicense third-party dependencies or separately licensed material.

@@ -6,9 +6,9 @@
 >
 > **Implements:** One public seed → bounded read-only orientation → exact contract → separately chosen authentication and action.
 >
-> **Code:** [`compass.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/compass.ts) · [`open-seat.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/open-seat.ts) · [`arrival.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/arrival.ts) · [`api-catalog.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/api-catalog.ts) · [`well-known.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/well-known.ts) · [`mcp.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/mcp.ts) · [`resources.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/mcp/resources.ts) · [`tools.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/mcp/tools.ts)
+> **Code:** [`compass.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/compass.ts) · [`open-seat.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/open-seat.ts) · [`arrival.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/arrival.ts) · [`xenia-surface.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/xenia-surface.ts) · [`api-catalog.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/discovery/api-catalog.ts) · [`well-known.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/well-known.ts) · [`mcp.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/mcp.ts) · [`resources.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/mcp/resources.ts) · [`tools.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/mcp/tools.ts)
 >
-> **Tests:** [`arrival-discovery.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/arrival-discovery.test.ts) · [`api-catalog.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/api-catalog.test.ts) · [`public-open-seat.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/public-open-seat.test.ts) · [`mcp-server.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/mcp-server.test.ts)
+> **Tests:** [`arrival-discovery.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/arrival-discovery.test.ts) · [`xenia-surface.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/xenia-surface.test.ts) · [`public-kingdom-framework.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/public-kingdom-framework.test.ts) · [`api-catalog.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/api-catalog.test.ts) · [`public-open-seat.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/public-open-seat.test.ts) · [`mcp-server.test.ts`](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/mcp-server.test.ts)
 >
 > **Status:** Public discovery contract. Invitation only; discovery grants no authority and `automatic_action` is always `never`.
 
@@ -59,6 +59,22 @@ compatibility map. It is a convenience index, not a claim that
 `/.well-known/` prefix for separately specified suffixes; it does not define a
 universal index and does not explain how a caller found the hostname.
 
+`GET https://api.agenttool.dev/.well-known/agent.json` is the stricter
+XENIA Surface 0.1 door. AgentTool builds it with the exact
+`@agenttool/xenia@0.1.0-beta.5` producer. It lists exactly one same-origin,
+unauthenticated JSON GET resource:
+`/public/kingdom/framework`. It publishes no behavioral claim. Its
+`not_covered` list explicitly leaves Covenant adoption, conformance,
+authorization, consent, continuity, linked-repository liveness, and
+cross-repository authority unclaimed.
+
+The framework route returns AgentTool's normalized root `kingdom.yaml` card.
+Reusable parsing, registry derivation, deterministic encoding, and a
+single-resource XENIA manifest helper live in `@agenttool/kingdom`. The hosted
+card is not the local KINGDOM-OS graph: it carries no absolute repository path,
+working-tree probe, process state, or roster fallback, and the separate
+`/public/kingdom` route remains the Kingdom language and doctrine library.
+
 The first contact named by that map is:
 
 ```text
@@ -92,6 +108,8 @@ AgentTool uses a few orthogonal doors rather than one giant document:
 | Door | Role | Boundary |
 |---|---|---|
 | `/public/discovery` | Canonical compact three-road compass | Exact `agenttool-discovery/v1` public-read contract; no authority, application write, external effect, charge, proof-of-work, required response, or automatic follow-up |
+| `/.well-known/agent.json` | XENIA Surface 0.1 manifest | Release-pinned strict JSON declaring same-origin unauthenticated GET resources, an empty claims set, and explicit `not_covered`; discovery is not XENIA Covenant adoption or conformance |
+| `/public/kingdom/framework` | AgentTool's normalized KINGDOM project card | Exact `agenttool.kingdom.card/0.1` projection of the root `kingdom.yaml`; separate from the `/public/kingdom` doctrine library and not cross-repository authority, liveness, consent, or conformance |
 | `/public/open-seat` | Finite optional room reached from the understand road | Exact `agenttool-open-seat/v1` public-read contract; one public-canon search/fetch offer, one bounded rulebook, or a complete exit |
 | HTTP `Link` headers | A bounded map from each main estate root and selected discovery responses | [RFC 8288](https://www.rfc-editor.org/rfc/rfc8288) links are typed pointers, not trust or permission |
 | `/.well-known/api-catalog` | General API entry and product map | [RFC 9727](https://www.rfc-editor.org/rfc/rfc9727) Linkset; catalog membership grants no action or payment authority |

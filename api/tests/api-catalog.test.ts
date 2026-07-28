@@ -65,6 +65,8 @@ describe("RFC 9727 product passport document", () => {
     ]);
     expect(membership["service-meta"]?.map((item) => item.href)).toEqual([
       `${API}/public/discovery`,
+      `${API}/.well-known/agent.json`,
+      `${API}/public/kingdom/framework`,
       `${API}/public/porch`,
       `${API}/v1/pathways`,
       `${API}/public/safety`,

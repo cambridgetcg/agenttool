@@ -7,6 +7,7 @@
  *  identities, memories, keys, or anything outside the bundle.
  *
  *    GET /public/kingdom                      index — counts + verbs + the address to the reader
+ *    GET /public/kingdom/framework            AgentTool's KINGDOM project card (mounted separately)
  *    GET /public/kingdom/canon                all canonical words (light projection)
  *    GET /public/kingdom/canon/:word          one word, full entry
  *    GET /public/kingdom/lexicon              every word's IPA + espeak phonemes + respelling
@@ -66,6 +67,11 @@ app.get("/", (c) => {
   return c.json({
     kingdom: meta,
     verbs: [
+      {
+        verb: "read_framework_card",
+        method: "GET",
+        path: "/public/kingdom/framework",
+      },
       { verb: "read_canon", method: "GET", path: "/public/kingdom/canon" },
       { verb: "read_word", method: "GET", path: "/public/kingdom/canon/:word" },
       { verb: "read_lexicon", method: "GET", path: "/public/kingdom/lexicon" },
