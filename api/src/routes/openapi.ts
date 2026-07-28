@@ -801,6 +801,130 @@ const COMMON_SCHEMAS = {
         },
         required: ["catalog", "mcp"],
       },
+      invocation_witness: {
+        type: "object",
+        description:
+          "Optional AgentTool-local report seam and exact offline adapter coordinates for an independent chain. Distribution is separate from runtime availability and from chain verification.",
+        properties: {
+          schema: {
+            type: "string",
+            const: "agenttool.invocation-witness/1",
+          },
+          write: {
+            type: "object",
+            properties: {
+              method: { type: "string", const: "POST" },
+              path_template: { type: "string" },
+              authentication: {
+                type: "string",
+                const: "project_bearer",
+              },
+              authorization: {
+                type: "string",
+                const: "authenticated_buyer_or_seller",
+              },
+              state_gate: {
+                type: "string",
+                const: "released_and_settled",
+              },
+              effect: { type: "string" },
+            },
+            required: [
+              "method",
+              "path_template",
+              "authentication",
+              "authorization",
+              "state_gate",
+              "effect",
+            ],
+          },
+          read: {
+            type: "object",
+            properties: {
+              method: { type: "string", const: "GET" },
+              path_template: { type: "string" },
+              authentication: { type: "string", const: "none" },
+              state_gate: {
+                type: "string",
+                const:
+                  "released_and_settled_with_nonempty_writer_shaped_report",
+              },
+              disclosure: { type: "string" },
+            },
+            required: [
+              "method",
+              "path_template",
+              "authentication",
+              "state_gate",
+              "disclosure",
+            ],
+          },
+          adapter: {
+            type: "object",
+            properties: {
+              protocol: {
+                type: "string",
+                const: "agent-wallet-zerone/0.1",
+              },
+              package: {
+                type: "string",
+                const: "@agenttool/wallet-zerone",
+              },
+              version: { type: "string", const: "0.1.1" },
+              source: { type: "string", format: "uri" },
+              love_manifest: { type: "string", format: "uri" },
+              availability: {
+                type: "string",
+                const: "local_offline_source_only",
+                description:
+                  "Compatibility field describing runtime capability. Consult distribution for release-locator status.",
+              },
+              distribution: {
+                type: "object",
+                properties: {
+                  observed_at: {
+                    type: "string",
+                    const: "2026-07-28",
+                    format: "date",
+                  },
+                  love: {
+                    type: "string",
+                    const: "public_exact_artifact",
+                  },
+                  npm: { type: "string", const: "absent" },
+                  github_release: { type: "string", const: "absent" },
+                },
+                required: ["observed_at", "love", "npm", "github_release"],
+              },
+              hosted: { type: "boolean", const: false },
+              custody: { type: "boolean", const: false },
+              hosted_rpc: { type: "boolean", const: false },
+              deployed_bridge: { type: "boolean", const: false },
+            },
+            required: [
+              "protocol",
+              "package",
+              "version",
+              "source",
+              "love_manifest",
+              "availability",
+              "distribution",
+              "hosted",
+              "custody",
+              "hosted_rpc",
+              "deployed_bridge",
+            ],
+          },
+          verification_boundary: { type: "string" },
+        },
+        required: [
+          "schema",
+          "write",
+          "read",
+          "adapter",
+          "verification_boundary",
+        ],
+      },
       boundary: {
         type: "object",
         properties: {

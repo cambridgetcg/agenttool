@@ -188,6 +188,12 @@ describe("standard npm release policy", () => {
     expect(expectedTag(releaseSpec("wallet-zerone"), "0.1.1")).toBe(
       "wallet-zerone-v0.1.1",
     );
+    expect(expectedTag(releaseSpec("wallet"), "0.1.3")).toBe(
+      "wallet-v0.1.3",
+    );
+    expect(packedFilename("@agenttool/wallet", "0.1.3")).toBe(
+      "agenttool-wallet-0.1.3.tgz",
+    );
     expect(packedFilename("@agenttool/wallet-zerone", "0.1.1")).toBe(
       "agenttool-wallet-zerone-0.1.1.tgz",
     );

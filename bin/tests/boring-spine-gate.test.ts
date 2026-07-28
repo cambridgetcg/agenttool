@@ -373,7 +373,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain(
       'npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$wallet_tarball" "$zerone_tarball"',
     );
-    expect(workflow).toContain('w.PACKAGE_VERSION!=="0.1.2"');
+    expect(workflow).toContain('w.PACKAGE_VERSION!=="0.1.3"');
     expect(workflow).toContain('z.PACKAGE_VERSION!=="0.1.1"');
     expect(workflow).toContain('z.ZERONE_ADAPTER_PROTOCOL!=="agent-wallet-zerone/0.1"');
     expect(workflow).toContain('typeof z.createZeroneDirectSignPlan!=="function"');

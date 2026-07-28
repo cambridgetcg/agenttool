@@ -119,6 +119,13 @@ export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
     buildCommands: [["bun", "run", "ci"]],
   },
   {
+    name: "@agenttool/wallet",
+    version: "0.1.3",
+    packagePath: "packages/wallet",
+    releaseTag: "wallet-v0.1.3",
+    buildCommands: [["bun", "run", "ci"]],
+  },
+  {
     name: "@agenttool/wallet-zerone",
     version: "0.1.0",
     packagePath: "packages/wallet-zerone",

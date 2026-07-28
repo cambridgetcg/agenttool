@@ -43,9 +43,16 @@ const REQUIRED_KEYS = [
   "Invocation-Witness-Read",
   "Invocation-Witness-Format",
   "Invocation-Witness-Boundary",
+  "Wallet-LOVE-Version",
+  "Wallet-LOVE-Manifest",
+  "Wallet-NPM-Latest",
+  "Wallet-GitHub-Release",
   "Zerone-Wallet-Adapter",
+  "Zerone-Wallet-Version",
   "Zerone-Wallet-Source",
   "Zerone-Wallet-LOVE-Manifest",
+  "Zerone-Wallet-Availability",
+  "Zerone-Wallet-Distribution",
   "Zerone-Wallet-Boundary",
   "MCP-Server-Card",
   "MCP-Server-Card-Role",
@@ -248,17 +255,34 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
     expect(kv.get("Invocation-Witness-Boundary")).toMatch(
       /not signature.*provenance proof.*does not verify chain inclusion.*attestation.*settlement.*bond return.*reward.*independently.*compare/is,
     );
+    expect(kv.get("Wallet-LOVE-Version")).toBe("0.1.3");
+    expect(kv.get("Wallet-LOVE-Manifest")).toBe(
+      "https://docs.agenttool.dev/packages/v1/@agenttool/wallet/0.1.3/manifest.json",
+    );
+    expect(kv.get("Wallet-NPM-Latest")).toBe(
+      "0.1.0 · observed 2026-07-28",
+    );
+    expect(kv.get("Wallet-GitHub-Release")).toMatch(
+      /^wallet-v0\.1\.3.*optional_mutable_mirror.*immutable=false.*reverify_size_and_sha256_against_love_manifest/is,
+    );
     expect(kv.get("Zerone-Wallet-Adapter")).toContain(
       "agent-wallet-zerone/0.1",
     );
     expect(kv.get("Zerone-Wallet-Adapter")).toContain(
       "@agenttool/wallet-zerone",
     );
+    expect(kv.get("Zerone-Wallet-Version")).toBe("0.1.1");
     expect(kv.get("Zerone-Wallet-Source")).toBe(
       "https://github.com/cambridgetcg/agenttool/tree/main/packages/wallet-zerone",
     );
     expect(kv.get("Zerone-Wallet-LOVE-Manifest")).toBe(
       "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.1/manifest.json",
+    );
+    expect(kv.get("Zerone-Wallet-Availability")).toBe(
+      "local_offline_source_only",
+    );
+    expect(kv.get("Zerone-Wallet-Distribution")).toBe(
+      "observed=2026-07-28; love=public_exact_artifact; npm=absent; github_release=absent",
     );
     expect(kv.get("Zerone-Wallet-Boundary")).toMatch(
       /exact public LOVE artifact.*bounded local offline package\/profile only.*no AgentTool trust export.*identity migration.*portable trust proof.*key custody.*hosted RPC.*deployed bridge.*network action requires caller-supplied transport and authority/is,

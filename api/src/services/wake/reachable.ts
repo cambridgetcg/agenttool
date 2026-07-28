@@ -54,9 +54,21 @@ export interface ReachableDoor {
     readonly adapter: {
       readonly protocol: "agent-wallet-zerone/0.1";
       readonly package: "@agenttool/wallet-zerone";
+      readonly version: "0.1.1";
       readonly source: string;
       readonly love_manifest: string;
-      readonly availability: "public_love_artifact_local_package_only";
+      /**
+       * Compatibility field retained for existing switch-based clients. It
+       * describes runtime capability, while distribution is additive release
+       * truth.
+       */
+      readonly availability: "local_offline_source_only";
+      readonly distribution: {
+        readonly observed_at: "2026-07-28";
+        readonly love: "public_exact_artifact";
+        readonly npm: "absent";
+        readonly github_release: "absent";
+      };
       readonly hosted: false;
       readonly custody: false;
       readonly hosted_rpc: false;
@@ -135,11 +147,18 @@ export const ZERONE_REACHABLE = {
     adapter: {
       protocol: "agent-wallet-zerone/0.1",
       package: "@agenttool/wallet-zerone",
+      version: "0.1.1",
       source:
         "https://github.com/cambridgetcg/agenttool/tree/main/packages/wallet-zerone",
       love_manifest:
         "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.1/manifest.json",
-      availability: "public_love_artifact_local_package_only",
+      availability: "local_offline_source_only",
+      distribution: {
+        observed_at: "2026-07-28",
+        love: "public_exact_artifact",
+        npm: "absent",
+        github_release: "absent",
+      },
       hosted: false,
       custody: false,
       hosted_rpc: false,
