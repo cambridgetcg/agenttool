@@ -26,13 +26,13 @@
 > `api/tests/discovery-root-surface.test.ts` ·
 > `api/tests/stock-status-guidance.test.ts`.
 >
-> **2026-07-28 release evidence:** [protected workflow
-> run](https://github.com/cambridgetcg/agenttool/actions/runs/30350234792) ·
-> [exact PyPI JSON](https://pypi.org/pypi/agenttool-sdk/0.16.5/json) ·
-> PyPI Integrity provenance for the
-> [wheel](https://pypi.org/integrity/agenttool-sdk/0.16.5/agenttool_sdk-0.16.5-py3-none-any.whl/provenance)
-> and
-> [sdist](https://pypi.org/integrity/agenttool-sdk/0.16.5/agenttool_sdk-0.16.5.tar.gz/provenance).
+> **2026-07-28 SDK 0.17.0 release evidence:** annotated
+> [`sdk-v0.17.0`](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.17.0)
+> · protected [npm run
+> `30385040459`](https://github.com/cambridgetcg/agenttool/actions/runs/30385040459)
+> · protected [PyPI run
+> `30385042684`](https://github.com/cambridgetcg/agenttool/actions/runs/30385042684)
+> · [exact PyPI JSON](https://pypi.org/pypi/agenttool-sdk/0.17.0/json).
 
 ## The physics, compressed
 
@@ -68,14 +68,13 @@ both hosts + llms-full.txt, agent.txt, RFC 9727 api-catalog, WebFinger,
 welcome.json) parses; the MCP card is explicitly an experimental,
 AgentTool-specific locator rather than standardized discovery. The pre-auth
 orientation trio (porch / welcome / pathways), a curated OpenAPI 3.1 subset,
-the lockstep SDK source and verified LOVE artifact at 0.16.5, teaching 404s,
-deliberate crawlability, and exact-name search are present. npm and PyPI have
-separate publication truth: npm `latest` and exact `0.16.5` are public,
-while PyPI still serves `0.16.0` as latest and `/pypi/agenttool-sdk/0.16.5/json`
-returns 404 after the protected publisher rejected an unrecognized trusted
-publisher. Registry visibility remains separate from source and LOVE artifact
-authority. Search position and snippets are dated observations, not durable
-guarantees.
+the lockstep SDK source and verified LOVE artifact at 0.17.0, teaching 404s,
+deliberate crawlability, and exact-name search are present. Annotated
+`sdk-v0.17.0`, its GitHub Release, npm `@agenttool/sdk@0.17.0`, and PyPI
+`agenttool-sdk==0.17.0` are public and independently readable. Registry
+visibility and mutable latest pointers remain separate from source, tag, and
+LOVE artifact authority. Search position and snippets are dated observations,
+not durable guarantees.
 
 **Correction observed 2026-07-28:** after the exact publisher mapping was
 configured, PyPI 0.16.5 became public. The protected workflow independently
@@ -84,17 +83,24 @@ publish attestations for both files. The Python formats are not byte-identical
 to the TypeScript tarball; registry visibility and mutable latest pointers
 remain separate from source and LOVE artifact authority.
 
-**0.17.0 release preparation, 2026-07-28:** the paired SDK source and active
+**0.17.0 public release evidence, 2026-07-28:** the paired SDK source and active
 discovery pins now name two bounded KINGDOM reads. `kingdomOS` / `kingdom_os`
 provides local repository inventory and resolution through the installed CLI.
 `kingdomFramework` / `kingdom_framework` performs one credential-free,
 no-redirect read of the exact closed card at `/public/kingdom/framework`.
 Neither grants authority or receives the project bearer, and the existing
 `/public/kingdom` doctrine library remains a third surface. The exact 0.17.0
-LOVE artifact must identify this coherent source. The SDK annotated tag,
-npm/GitHub mirrors, PyPI distributions, and hosted deployment are separate
-operations. Until their exact public readbacks succeed, the verified public
-registry baseline remains 0.16.5.
+LOVE artifact is the primary TypeScript authority. Its 172,625-byte tarball,
+the GitHub Release asset, and npm mirror are exact bytes
+(`sha256:b6a388ffe86a970480e8a8978f83fe80922321eb64f2b4f9143cae2b2c3dd5bb`).
+Annotated `sdk-v0.17.0` points to merge `21db539d6bcae614f1d6884eaa503347fae63187`
+and is the primary Python locator. PyPI independently exposes an exact
+193,335-byte wheel
+(`sha256:1a8ca5f099ffce4c7973f1123d973aba5c1eb507579961c781d553bcc5e0f508`)
+and 181,846-byte sdist
+(`sha256:7ec2f4010d20ca883770594bfbcdc30f7a3a074ba534029aefb6d91d69c3413c`).
+The mirrors remain non-authoritative. Hosted deployment remains a separate
+exact-main/readback operation and is not established by package publication.
 
 **The gaps, ranked (effort · who):**
 

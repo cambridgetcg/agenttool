@@ -185,3 +185,27 @@ for `cambridgetcg/agenttool`, workflow `publish-npm.yml`, Environment
 `npm-bootstrap`, and allowed action `npm publish`. Every later version must use
 `authentication=trusted`; the workflow then exchanges the protected
 GitHub-hosted job's OIDC identity and does not expose the bootstrap token.
+
+## Verified SDK 0.17.0 publication
+
+The authorized SDK publication completed through
+[workflow run 30385040459](https://github.com/cambridgetcg/agenttool/actions/runs/30385040459).
+Its final `agenttool.npm-release/1` receipt reports `status: published`,
+`npm_tag: latest`, and public observation at
+`2026-07-28T17:56:24.734Z`.
+
+- Annotated tag `sdk-v0.17.0` peels to the two-parent GitHub `main` merge
+  `21db539d6bcae614f1d6884eaa503347fae63187`.
+- The release receipt binds the TypeScript source revision
+  `d480eb630915dc61f12d223c0b28cadccd1ff335`.
+- LOVE, the one-asset
+  [GitHub Release](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.17.0),
+  the workflow artifact, and npm's public `@agenttool/sdk@0.17.0` tarball are
+  byte-identical: `172625` bytes, SHA-256
+  `b6a388ffe86a970480e8a8978f83fe80922321eb64f2b4f9143cae2b2c3dd5bb`.
+- npm reported SHA-1 `5e7caf1f6eb7811f00b6da2e29d61f928723628a`,
+  `latest: 0.17.0`, and public provenance for the exact release.
+
+This receipt proves the observed 0.17.0 mirror result. It does not make npm
+package authority, replace LOVE, or imply that any hosted AgentTool revision
+was deployed.

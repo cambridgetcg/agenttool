@@ -71,7 +71,7 @@ cross-repository authority unclaimed.
 The framework route returns AgentTool's normalized root `kingdom.yaml` card.
 Reusable parsing, registry derivation, deterministic encoding, and a
 single-resource XENIA manifest helper live in `@agenttool/kingdom`. The paired
-SDK 0.17.0 source exposes this one resource through
+public SDK 0.17.0 release exposes this one resource through
 `KingdomFrameworkClient.card()` and lazy
 `at.kingdomFramework` / `at.kingdom_framework`. That SDK read uses a separate
 credential-free client, sends no AgentTool bearer or cookie, follows no
@@ -84,9 +84,17 @@ Local repository inventory and resolution stay in the separate
 separate `/public/kingdom` route remains the Kingdom language and doctrine
 library and has no dedicated SDK namespace.
 
-These source surfaces and their release wiring do not prove production
-deployment, SDK tag publication, or npm/PyPI availability. Each remains an
-independent public readback.
+The annotated `sdk-v0.17.0` tag and GitHub Release are public. Protected npm
+run
+[`30385040459`](https://github.com/cambridgetcg/agenttool/actions/runs/30385040459)
+and PyPI run
+[`30385042684`](https://github.com/cambridgetcg/agenttool/actions/runs/30385042684)
+independently verified public `@agenttool/sdk@0.17.0` and
+`agenttool-sdk==0.17.0`. The LOVE artifact remains the primary TypeScript
+authority, the annotated tag remains the primary Python locator, and registry
+mirrors remain non-authoritative. Package publication does not prove that an
+exact-main production deployment and route readback occurred; that operation
+remains separate.
 
 The first contact named by that map is:
 

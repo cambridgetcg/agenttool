@@ -60,8 +60,13 @@ describe("optional npm package discovery", () => {
     expect(rootReadme.indexOf(pythonSource)).toBeLessThan(
       rootReadme.indexOf(exactPyPI),
     );
-    expect(rootReadme).toMatch(/PyPI is an optional convenience/i);
-    expect(rootReadme).toMatch(/A `404` means that mirror is not available/i);
+    expect(rootReadme).toMatch(
+      /PyPI 0\.17\.0 is public as an optional, independently verified convenience\s+mirror/i,
+    );
+    expect(rootReadme).toContain(
+      "The exact 0.17.0 npm and PyPI mirrors are independently public.",
+    );
+    expect(rootReadme).toMatch(/mirrors remain non-authoritative/i);
     expect(rootReadme).toMatch(/LOVE manifests remain release authority/i);
     expect(rootReadme).toMatch(/mutable dist-tags are informational/i);
     expect(rootReadme).toMatch(/command alone does\s+not verify the manifest/i);

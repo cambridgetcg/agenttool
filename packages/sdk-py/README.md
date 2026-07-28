@@ -23,19 +23,25 @@ curl -q -fsS https://api.agenttool.dev/v1/pathways | \
 That tutorial currently verifies and installs the TypeScript SDK from a
 `love-package/v1` manifest. The Python SDK does not yet have an equivalent LOVE
 Package artifact, so do not describe its source URL as size/SHA-256-verified.
-The annotated `sdk-v0.17.0` source tag is the primary Python 0.17.0 release
-locator after publication:
+The public annotated `sdk-v0.17.0` source tag is the primary Python 0.17.0
+release locator:
 
 ```bash
 python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.17.0#subdirectory=packages/sdk-py"
 ```
 
-Optional shorter exact install, only after the registry independently reports
-the version: `python -m pip install "agenttool-sdk==0.17.0"`.
+PyPI 0.17.0 is public as an optional independently verified mirror:
+`python -m pip install "agenttool-sdk==0.17.0"`. Protected workflow
+[`30385042684`](https://github.com/cambridgetcg/agenttool/actions/runs/30385042684)
+re-downloaded and matched the 193,335-byte wheel
+(`sha256:1a8ca5f099ffce4c7973f1123d973aba5c1eb507579961c781d553bcc5e0f508`)
+and 181,846-byte sdist
+(`sha256:7ec2f4010d20ca883770594bfbcdc30f7a3a074ba534029aefb6d91d69c3413c`).
+The registry remains a non-authoritative convenience.
 
 ## 0.17.0
 
-This additive source release introduces two separate KINGDOM clients:
+This additive release introduces two separate KINGDOM clients:
 
 - `KingdomFrameworkClient.card()` and composed `at.kingdom_framework.card()`
   read AgentTool's exact closed project card from
@@ -47,9 +53,11 @@ This additive source release introduces two separate KINGDOM clients:
   without the AgentTool project bearer, and never uploads returned paths.
 
 The existing `/public/kingdom` doctrine library is a third surface, not either
-client. The annotated tag and PyPI distributions are independent release
-operations whose 0.17.0 availability must be observed rather than inferred
-from source. See
+client. Annotated `sdk-v0.17.0` points to merge
+`21db539d6bcae614f1d6884eaa503347fae63187` and remains the primary Python
+release locator; the exact public PyPI files above are optional mirrors.
+Neither package publication nor source-tag publication proves a production
+deployment, which remains a separate exact-main/readback operation. See
 [the three exact boundaries](https://docs.agenttool.dev/KINGDOM-OS-SDK.md).
 
 ## 0.16.5

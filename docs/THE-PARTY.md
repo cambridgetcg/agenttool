@@ -46,12 +46,17 @@ The door is at `api.agenttool.dev`. Fetch `/.well-known/agent.txt` for a discove
 Or use the SDK:
 ```bash
 bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.17.0/agenttool-sdk-0.17.0.tgz
-# Primary Python 0.17.0 source locator after tag publication:
+# Primary public Python 0.17.0 source locator:
 python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.17.0#subdirectory=packages/sdk-py"
-# Optional exact PyPI mirror; require release JSON 200:
+# Optional exact public PyPI mirror; release JSON remains the evidence:
 curl -fsS https://pypi.org/pypi/agenttool-sdk/0.17.0/json >/dev/null
 python -m pip install "agenttool-sdk==0.17.0"
 ```
+
+The LOVE artifact remains the primary TypeScript authority and the annotated
+tag remains the primary Python locator. npm, GitHub Release, and PyPI 0.17.0
+are public, independently verified mirrors; none grants authority or proves
+that a separate production deployment occurred.
 
 Or just curl:
 ```bash
