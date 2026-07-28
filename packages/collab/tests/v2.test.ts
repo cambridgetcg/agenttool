@@ -1195,7 +1195,7 @@ describe("agenttool.collab/0.2 session coordination", () => {
     ).toBe("ended");
   });
 
-  test("keeps routed reports within the exact event page snapshot", () => {
+  test("bounds session event pages while preserving exact reports and acknowledgement", () => {
     const sender = session("sender");
     const observer = session("observer");
     for (let index = 0; index < 55; index += 1) {
@@ -1214,28 +1214,94 @@ describe("agenttool.collab/0.2 session coordination", () => {
       to_session_id: observer.session.id,
     });
 
-    const first = store.nextForSession(observer.credential);
-    expect(first.events.has_more).toBe(true);
-    expect(first.projection_scope).toBe("snapshot_head");
-    expect(first.reports_scope).toBe("event_page");
-    expect(
-      first.reports.every(
-        (item) => item.event_sequence <= first.events.next_anchor.sequence,
-      ),
-    ).toBe(true);
-    expect(first.reports.some((item) => item.id === report.id)).toBe(false);
-
-    const acknowledged = store.acknowledgeSessionCursor({
+    const fullPage = store.eventsSince(observer.workspace.id, 0, 500);
+    const defaultPage = store.nextForSession(observer.credential);
+    expect(defaultPage.events.events).toHaveLength(50);
+    expect(store.nextForActor(
+      observer.workspace.id,
+      "legacy-observer",
+    ).events.events).toHaveLength(50);
+    expect(store.nextForSession({
       ...observer.credential,
-      anchor: first.events.next_anchor,
-      expected_cursor_version: observer.session.cursor_version,
+      event_limit: 1,
+    }).events.events).toHaveLength(1);
+    expect(store.nextForSession({
+      ...observer.credential,
+      event_limit: 50,
+    }).events.events).toHaveLength(50);
+    for (const eventLimit of [0, 51, 1.5]) {
+      expect(errorCode(() => store.nextForSession({
+        ...observer.credential,
+        event_limit: eventLimit,
+      }))).toBe("invalid_event_limit");
+      expect(errorCode(() => store.nextForActor(
+        observer.workspace.id,
+        "legacy-observer",
+        0,
+        eventLimit,
+      ))).toBe("invalid_event_limit");
+    }
+
+    const seenSequences: number[] = [];
+    const reportPages: Array<[number, number]> = [];
+    let cursor = observer.session.cursor;
+    let cursorVersion = observer.session.cursor_version;
+    while (true) {
+      const page = store.nextForSession({
+        ...observer.credential,
+        known_cursor: cursor,
+        event_limit: 10,
+      });
+      expect(page.events.cursor).toEqual(cursor);
+      expect(page.events.events.length).toBeLessThanOrEqual(10);
+      expect(page.events.chain_valid).toBe(true);
+      expect(page.events.verification_scope).toBe("returned_page");
+      expect(page.projection_scope).toBe("snapshot_head");
+      expect(page.reports_scope).toBe("event_page");
+      expect(
+        page.reports.every(
+          (item) =>
+            item.event_sequence > page.events.cursor.sequence
+            && item.event_sequence <= page.events.next_anchor.sequence,
+        ),
+      ).toBe(true);
+      const pageContainsReportEvent = page.events.events.some(
+        (event) => event.sequence === report.event_sequence,
+      );
+      expect(page.reports.some((item) => item.id === report.id)).toBe(
+        pageContainsReportEvent,
+      );
+      if (pageContainsReportEvent) {
+        reportPages.push([
+          page.events.cursor.sequence,
+          page.events.next_anchor.sequence,
+        ]);
+      }
+      seenSequences.push(...page.events.events.map((event) => event.sequence));
+
+      const acknowledged = store.acknowledgeSessionCursor({
+        ...observer.credential,
+        anchor: page.events.next_anchor,
+        expected_cursor_version: cursorVersion,
+      });
+      expect(acknowledged.cursor).toEqual(page.events.next_anchor);
+      expect(acknowledged.cursor_version).toBe(cursorVersion + 1);
+      cursor = acknowledged.cursor;
+      cursorVersion = acknowledged.cursor_version;
+      if (!page.events.has_more) break;
+    }
+
+    expect(seenSequences).toEqual(fullPage.events.map((event) => event.sequence));
+    expect(reportPages).toHaveLength(1);
+    const afterAcknowledgement = store.nextForSession({
+      ...observer.credential,
+      known_cursor: cursor,
+      event_limit: 1,
     });
-    const second = store.nextForSession(observer.credential);
-    expect(second.events.cursor).toEqual(acknowledged.cursor);
-    expect(second.reports.some((item) => item.id === report.id)).toBe(true);
-    expect(
-      second.events.events.some((event) => event.sequence === report.event_sequence),
-    ).toBe(true);
+    expect(afterAcknowledgement.events.cursor).toEqual(cursor);
+    expect(afterAcknowledgement.events.events).toEqual([]);
+    expect(afterAcknowledgement.events.has_more).toBe(false);
+    expect(afterAcknowledgement.reports).toEqual([]);
   });
 
   test("expires incoming handoffs when their target session ends", () => {
