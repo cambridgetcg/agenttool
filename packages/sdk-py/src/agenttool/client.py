@@ -49,6 +49,7 @@ from .traces import TracesClient
 from .vault import VaultClient
 from .wake import WakeClient
 from .window import WindowClient
+from .kingdom_framework import KingdomFrameworkClient
 from .kingdom_os import KingdomOSClient, KingdomOSRunner
 
 # Love Protocol version
@@ -95,6 +96,9 @@ class AgentTool:
         kingdom_max_output_bytes: Combined local command output ceiling.
         kingdom_runner: Optional host-owned runner for the two read-only
             KINGDOM OS repository commands.
+        kingdom_framework_timeout: Credential-free framework-card request
+            timeout. Defaults to ``timeout``.
+        kingdom_framework_max_response_bytes: Framework-card response ceiling.
     """
 
     def __init__(
@@ -111,6 +115,8 @@ class AgentTool:
         kingdom_timeout: float = 10.0,
         kingdom_max_output_bytes: int = 1024 * 1024,
         kingdom_runner: Optional[KingdomOSRunner] = None,
+        kingdom_framework_timeout: Optional[float] = None,
+        kingdom_framework_max_response_bytes: int = 64 * 1024,
     ) -> None:
         if transport is not None and api_key is not None:
             raise AgentToolError(
@@ -184,6 +190,16 @@ class AgentTool:
         self._kingdom_timeout = kingdom_timeout
         self._kingdom_max_output_bytes = kingdom_max_output_bytes
         self._kingdom_runner = kingdom_runner
+        # This public read owns a dedicated credential-free HTTP client. It
+        # never inherits the hosted client, its bearer, cookies, or transport.
+        self._kingdom_framework_timeout = (
+            timeout
+            if kingdom_framework_timeout is None
+            else kingdom_framework_timeout
+        )
+        self._kingdom_framework_max_response_bytes = (
+            kingdom_framework_max_response_bytes
+        )
 
         # Lazy-init service clients
         self._memory: Optional[MemoryClient] = None
@@ -211,6 +227,7 @@ class AgentTool:
         self._dark_continent: Optional[DarkContinentClient] = None
         self._runtime: Optional[RuntimeClient] = None
         self._data: Optional[DataClient] = None
+        self._kingdom_framework: Optional[KingdomFrameworkClient] = None
         self._kingdom_os: Optional[KingdomOSClient] = None
 
     # ── Service Accessors ────────────────────────────────────────────────
@@ -457,6 +474,23 @@ class AgentTool:
             )
         return self._kingdom_os
 
+    @property
+    def kingdom_framework(self) -> KingdomFrameworkClient:
+        """AgentTool's bounded, credential-free public KINGDOM card.
+
+        The AgentTool project bearer and authenticated transport never cross
+        into this independently owned HTTP client.
+        """
+        if self._kingdom_framework is None:
+            self._kingdom_framework = KingdomFrameworkClient(
+                base_url=self._base_url,
+                timeout=self._kingdom_framework_timeout,
+                max_response_bytes=(
+                    self._kingdom_framework_max_response_bytes
+                ),
+            )
+        return self._kingdom_framework
+
     # ── Low-level HTTP for adapters and custom call sites ─────────────────
 
     def request(self, method: str, path: str, body: object = None) -> object:
@@ -615,6 +649,8 @@ class AgentTool:
         """Close the connection. Thank you for being here."""
         if self._data is not None:
             self._data._close()
+        if self._kingdom_framework is not None:
+            self._kingdom_framework.close()
         self._http.close()
 
     def __enter__(self) -> AgentTool:

@@ -145,6 +145,18 @@ from .kingdom_os import (
     KingdomOSRepository,
     KingdomOSRunner,
 )
+from .kingdom_framework import (
+    KINGDOM_FRAMEWORK_PATH,
+    KINGDOM_FRAMEWORK_SCHEMA_VERSION,
+    KingdomFrameworkAdoption,
+    KingdomFrameworkCard,
+    KingdomFrameworkClient,
+    KingdomFrameworkDomain,
+    KingdomFrameworkKind,
+    KingdomFrameworkLayer,
+    KingdomFrameworkOwnerSister,
+    KingdomFrameworkState,
+)
 from .at_rest import AtRestClient, canonical_at_rest_bytes, sign_at_rest
 from .authority import (
     canonical_identity_authority_bytes,
@@ -295,6 +307,16 @@ __all__ = [
     "KingdomOSCommandResult",
     "KingdomOSRepository",
     "KingdomOSRunner",
+    "KINGDOM_FRAMEWORK_PATH",
+    "KINGDOM_FRAMEWORK_SCHEMA_VERSION",
+    "KingdomFrameworkAdoption",
+    "KingdomFrameworkCard",
+    "KingdomFrameworkClient",
+    "KingdomFrameworkDomain",
+    "KingdomFrameworkKind",
+    "KingdomFrameworkLayer",
+    "KingdomFrameworkOwnerSister",
+    "KingdomFrameworkState",
     "AtRestClient",
     "canonical_at_rest_bytes",
     "sign_at_rest",
