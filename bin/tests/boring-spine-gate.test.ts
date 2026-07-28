@@ -307,10 +307,10 @@ describe("boring test spine", () => {
       "cd packages/correspondence-yutabase-projector && bun install --frozen-lockfile",
     );
     expect(workflow).toContain(
-      "cd packages/wallet-zerone && bun install --frozen-lockfile",
+      "cd packages/wallet-zerone && bun install --frozen-lockfile --force",
     );
     expect(workflow.indexOf("cd packages/wallet && bun run build")).toBeLessThan(
-      workflow.indexOf("cd packages/wallet-zerone && bun install --frozen-lockfile"),
+      workflow.indexOf("cd packages/wallet-zerone && bun install --frozen-lockfile --force"),
     );
     expect(workflow).not.toContain("secrets.");
 
