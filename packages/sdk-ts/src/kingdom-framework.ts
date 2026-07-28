@@ -249,6 +249,7 @@ async function cancelBody(response: Response): Promise<void> {
 async function readBoundedBytes(
   response: Response,
   maximumBytes: number,
+  timeoutSignal?: AbortSignal,
 ): Promise<Uint8Array> {
   const contentLength = response.headers.get("content-length");
   if (contentLength !== null) {
@@ -319,6 +320,13 @@ async function readBoundedBytes(
     }
   } catch (error) {
     if (error instanceof AgentToolError) throw error;
+    if (timeoutSignal?.aborted) {
+      throw frameworkError(
+        "KINGDOM framework endpoint is unreachable.",
+        "kingdom_framework_unreachable",
+        "Check the configured AgentTool API origin and timeout.",
+      );
+    }
     throw frameworkError(
       "KINGDOM framework response body could not be read.",
       "kingdom_framework_invalid_response",
@@ -613,6 +621,7 @@ export class KingdomFrameworkClient {
   /** Fetch and validate AgentTool's exact public KINGDOM project card. */
   async card(): Promise<KingdomFrameworkCard> {
     let response: Response;
+    const timeoutSignal = AbortSignal.timeout(this.timeoutMs);
     try {
       // This is intentionally not an HttpConfig request. The authenticated
       // AgentTool transport and its bearer cannot cross this public boundary.
@@ -625,7 +634,7 @@ export class KingdomFrameworkClient {
           credentials: "omit",
           redirect: "manual",
           referrerPolicy: "no-referrer",
-          signal: AbortSignal.timeout(this.timeoutMs),
+          signal: timeoutSignal,
         },
       );
     } catch {
@@ -653,6 +662,7 @@ export class KingdomFrameworkClient {
       const bodyBytes = await readBoundedBytes(
         response,
         this.maxResponseBytes,
+        timeoutSignal,
       );
       let body: unknown;
       if (
@@ -691,6 +701,7 @@ export class KingdomFrameworkClient {
     const bodyBytes = await readBoundedBytes(
       response,
       this.maxResponseBytes,
+      timeoutSignal,
     );
     return validateCard(decodeJson(bodyBytes));
   }

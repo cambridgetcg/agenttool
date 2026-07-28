@@ -435,6 +435,36 @@ describe("KingdomFrameworkClient transport validation", () => {
     expect(error.toString()).not.toContain("secret");
   });
 
+  test("applies the request deadline while reading a drip-fed body", async () => {
+    globalThis.fetch = (async (
+      _input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      const signal = init?.signal;
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("{"));
+            signal?.addEventListener(
+              "abort",
+              () => controller.error(signal.reason),
+              { once: true },
+            );
+          },
+        }),
+        { headers: { "content-type": "application/json" } },
+      );
+    }) as typeof fetch;
+
+    const started = performance.now();
+    const error = await caughtError(
+      new KingdomFrameworkClient({ timeout: 0.01 }).card(),
+    );
+
+    expect(error.code).toBe("kingdom_framework_unreachable");
+    expect(performance.now() - started).toBeLessThan(250);
+  });
+
   test("preserves guided HTTP error metadata after a bounded JSON read", async () => {
     useResponse(
       jsonResponse(
