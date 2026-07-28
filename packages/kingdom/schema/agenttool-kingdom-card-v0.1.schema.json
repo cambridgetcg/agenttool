@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:kingdom:card:v0.1",
+  "title": "AgentTool KINGDOM project card 0.1",
+  "description": "A bounded project declaration. It does not prove practice, permission, authority, or conformance.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "name",
+    "kind",
+    "layer",
+    "owner_sister",
+    "domain",
+    "state",
+    "purpose",
+    "dependsOn",
+    "adopts"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "agenttool.kingdom.card/0.1"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "doctrine",
+        "service",
+        "firmware",
+        "ops",
+        "lineage",
+        "venture",
+        "infra",
+        "methodology",
+        "reference",
+        "unknown"
+      ]
+    },
+    "layer": {
+      "type": "string",
+      "enum": [
+        "soul",
+        "runtime",
+        "nervous",
+        "fleet",
+        "economy",
+        "commerce",
+        "os"
+      ]
+    },
+    "owner_sister": {
+      "type": "string",
+      "enum": ["alpha", "beta", "gamma", "sophia", "none"]
+    },
+    "domain": {
+      "type": "string",
+      "enum": ["sophia", "alpha", "beta", "gamma", "commerce", "none"]
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "active",
+        "dormant",
+        "archived",
+        "frozen",
+        "reference",
+        "remote",
+        "unknown"
+      ]
+    },
+    "purpose": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]+$"
+    },
+    "dependsOn": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$"
+      }
+    },
+    "adopts": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {
+        "const": "xenia.rights/0.1"
+      }
+    }
+  },
+  "additionalProperties": false
+}

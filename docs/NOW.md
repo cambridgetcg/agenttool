@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-28 (SDK 0.17.0 KINGDOM OS discovery release prepared; artifact, tag, mirrors, and deployment remain separate)
+> Updated: 2026-07-28 (KINGDOM/XENIA source landed; SDK 0.17.0 KINGDOM OS discovery release prepared; the SDK tag, optional mirrors, and production deployment remain separate)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -13,6 +13,31 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## In progress (2026-07-28) — KINGDOM cards through a XENIA-visible door
+
+`packages/kingdom/` independently implements compatibility with the observed
+small flat `kingdom.yaml` interface as bounded card parsing, deterministic
+registry derivation, explicit-file validation, and a conservative XENIA
+Surface helper. It does not scan HOME, use credentials or the network, write a
+registry, grant authority, or certify KINGDOM/XENIA conformance. No KINGDOM-OS
+implementation code, prose, generated catalog, or other asset is copied
+because that separate tree currently has no root licence.
+
+The API now has a strict XENIA Surface 0.1 manifest at
+`/.well-known/agent.json` and exposes AgentTool's own normalized card at
+`/public/kingdom/framework`, separate from the existing Kingdom doctrine
+library. AgentTool's rights source pin advances to immutable XENIA beta.5.
+The adoption record remains draft: immutable schema sources now exist, but the
+complete 38-right-duty plus 5-protective-limit-duty evidence ledger does not.
+The XENIA Surface checker reports 22 conformant checks with no failures for the
+manifest, its one declared resource, and a wrong-route sample. That bounded
+result does not certify the rest of AgentTool or establish Covenant adoption.
+
+Release plumbing recognizes `@agenttool/kingdom`, but this is source-only:
+there is no tag, npm publication, GitHub Release, deployment, or trusted OIDC
+receipt yet. A first npm publication would require the protected bootstrap
+path; later releases can use the package-specific trusted publisher.
 
 ## Codeberg is retired (2026-07-25) — one remote from here on
 

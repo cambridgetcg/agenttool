@@ -17,6 +17,7 @@ on:
           - telescope
           - browser
           - alchemy
+          - kingdom
           - repo-archive
           - collab
           - correspondence-yutabase

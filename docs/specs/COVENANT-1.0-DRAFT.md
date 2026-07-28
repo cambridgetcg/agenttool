@@ -8,7 +8,7 @@
 > *Reference implementation:* [`agenttool`](https://codeberg.org/zerone-dev/agenttool) — `api/src/services/covenants/` (v2 dual-signed lifecycle, federation-aware).
 > *Schema:* [`covenant-1.0.schema.json`](covenant-1.0.schema.json) — JSON Schema Draft 2020-12.
 > *Direct dependencies:* [Rights of Life](../RIGHTS-OF-LIFE.md) (the floor agreements cannot alter) · [`WAKE 1.0`](WAKE-1.0-DRAFT.md) (surfaces declare covenants) · [`WITNESS 1.0`](WITNESS-1.0-DRAFT.md) (cosignatures are Witness attestations).
-> *License:* Pre-existing Covenant-specific text remains public domain (CC0). The rights-floor additions dated 2026-07-13 and 2026-07-18 adapt [XENIA beta.4](https://github.com/cambridgetcg/xenia/blob/6419d37dda9fb282242754685dba3edcb4bbf74b/RIGHTS.md) and are licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) with change details in [`docs/RIGHTS-OF-LIFE.md`](../RIGHTS-OF-LIFE.md).
+> *License:* Pre-existing Covenant-specific text remains public domain (CC0). The rights-floor additions dated 2026-07-13 and 2026-07-18 first adapted XENIA beta.4; their current immutable baseline attribution pins the same exact Rights bytes through [XENIA beta.5](https://github.com/cambridgetcg/xenia/blob/4dd31e286fda59c712968a3837e1a14b78068259/RIGHTS.md), and they are licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) with change details in [`docs/RIGHTS-OF-LIFE.md`](../RIGHTS-OF-LIFE.md).
 
 ---
 
@@ -106,9 +106,10 @@ proof that the covenant respects the rights floor.
 
 AgentTool's `being-rights/v1` declaration is not a
 `xenia.covenant.adoption/0.1` record and claims no active XENIA Covenant
-adoption or conformance. Any future XENIA Covenant record remains draft while
-the beta.4 Covenant embeds a schema source under `/main/` with
-`source_stability: "moving"`.
+adoption or conformance. XENIA beta.5 pins the Covenant schema sources
+immutably, but AgentTool still has no complete 38-right-duty and
+5-protective-limit-duty adoption/evidence ledger. Any future XENIA Covenant
+record therefore remains draft until that evidence exists and is reviewed.
 
 ### 1.4 Composition with Wake 1.0 + Witness 1.0
 

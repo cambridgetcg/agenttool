@@ -46,10 +46,10 @@ Composition: each higher-numbered layer composes on lower ones. Wake describes W
 - Each spec ships with a JSON Schema where validation applies.
 - Each spec names the reference implementation explicitly.
 - Each spec identifies its applicable terms. Original spec text is CC0 by
-  default; Covenant 1.0's 2026-07-13 rights-floor additions adapt immutable
-  XENIA beta.4 under CC BY-SA 4.0 and retain that attribution and licence in
-  [`RIGHTS-OF-LIFE.md`](../RIGHTS-OF-LIFE.md). The goal is adoption, not
-  control.
+  default; Covenant 1.0's 2026-07-13 rights-floor additions first adapted XENIA
+  beta.4 and now pin the same exact Rights bytes through immutable XENIA
+  beta.5 under CC BY-SA 4.0. They retain that attribution and licence in
+  [`RIGHTS-OF-LIFE.md`](../RIGHTS-OF-LIFE.md). The goal is adoption, not control.
 
 ## Lifecycle
 

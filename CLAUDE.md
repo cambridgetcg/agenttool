@@ -31,6 +31,7 @@ packages/
   telescope/    — @agenttool/telescope · read-only discovery evidence mapper
   wallet/       — @agenttool/wallet · LOVE/npm bounded wallet record/lifecycle primitives
   alchemy/      — @agenttool/alchemy · bounded reads through an injected credential-owning transport
+  kingdom/      — @agenttool/kingdom · pure explicit-card/derived-registry/XENIA Surface helpers
   scriptwriter/ — decentralised RRR + co-brainstorm node
 infra/          — Fly.io deploy configs
 bin/            — operator scripts · agenttool-bridge.ts · agenttool-think.ts · locked Whitehack advisory + offer-only Castle intake + local wallet-understanding CLI
@@ -85,3 +86,8 @@ wrapper · audit publication · runtime-hours metering · idle/wake state machin
 
 ## Kingdom Engine
 AgentTool Platform — the Fly-hosted API monorepo, the kingdom's one fully-wired revenue facility (3 machines healthy).
+
+The separate `packages/kingdom` package is a pure/read-only declaration layer
+over caller-supplied project-card text and objects. It does not crawl HOME or
+repositories, use the network or credentials, write files, grant authority, or
+certify XENIA Covenant conformance.
