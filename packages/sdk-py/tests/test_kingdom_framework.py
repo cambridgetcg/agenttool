@@ -6,7 +6,10 @@ import copy
 import json
 import math
 import os
-from typing import Any, Callable
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any, Callable, Optional
 from unittest.mock import patch
 
 import httpx
@@ -75,6 +78,11 @@ class _ChunkStream(httpx.SyncByteStream):
 
     def __iter__(self) -> Any:
         yield from self._chunks
+
+
+class _MustNotReadStream(httpx.SyncByteStream):
+    def __iter__(self) -> Any:
+        raise AssertionError("the remote error body must not be read")
 
 
 class TestKingdomFrameworkCredentialFreeRead:
@@ -196,7 +204,16 @@ class TestKingdomFrameworkTransportBoundaries:
 
     @pytest.mark.parametrize(
         "media_type",
-        ["text/json", "text/plain", "application/octet-stream", ""],
+        [
+            "text/json",
+            "text/plain",
+            "application/octet-stream",
+            "application/+json",
+            "application/ +json",
+            "application/foo +json",
+            "application/foo/bar+json",
+            "",
+        ],
     )
     def test_rejects_unsupported_or_missing_success_media_type(
         self,
@@ -298,18 +315,24 @@ class TestKingdomFrameworkTransportBoundaries:
         assert exc_info.value.error_code == "kingdom_framework_invalid_response"
         assert sentinel not in str(exc_info.value)
 
-    def test_maps_bounded_problem_json_without_losing_guidance(self) -> None:
+    def test_http_failure_uses_fixed_local_guidance_without_reading_body(
+        self,
+    ) -> None:
+        sentinel = "hostile-remote-guidance-must-not-surface"
+
         def handler(request: httpx.Request) -> httpx.Response:
-            return _json_response(
-                request,
-                {
-                    "error": "kingdom_framework_temporarily_unavailable",
-                    "message": "The framework card is resting.",
-                    "hint": "Retry after the maintenance window.",
-                    "details": {"retryable": True},
+            return httpx.Response(
+                402,
+                stream=_MustNotReadStream(),
+                headers={
+                    "Content-Type": "application/problem+json",
+                    "Payment-Required": sentinel,
+                    "Payment-Response": sentinel,
+                    "Link": f"<https://{sentinel}.invalid/status>; rel=status",
+                    "Retry-After": "999",
+                    "X-Credits-Balance": sentinel,
                 },
-                status=503,
-                media_type="application/problem+json",
+                request=request,
             )
 
         with (
@@ -319,11 +342,28 @@ class TestKingdomFrameworkTransportBoundaries:
             kingdom.card()
 
         error = exc_info.value
-        assert error.code == 503
-        assert error.error_code == "kingdom_framework_temporarily_unavailable"
-        assert error.message == "The framework card is resting."
-        assert error.hint == "Retry after the maintenance window."
-        assert error.details == {"retryable": True}
+        assert error.code == 402
+        assert error.error_code == "kingdom_framework_http_error"
+        assert error.message == (
+            "The KINGDOM framework endpoint returned HTTP 402."
+        )
+        assert error.hint == (
+            "Check the configured public endpoint and retry deliberately."
+        )
+        assert error.docs == "https://docs.agenttool.dev/AGENT-DISCOVERY.md"
+        assert error.safety == KINGDOM_FRAMEWORK_PATH
+        assert error.next_actions is None
+        assert error.details is None
+        assert error.x402_version is None
+        assert error.accepts is None
+        assert error.x402_resource is None
+        assert error.extensions is None
+        assert error.payment_required is None
+        assert error.payment_response is None
+        assert error.payment_status_link is None
+        assert error.retry_after is None
+        assert error.credits_balance is None
+        assert sentinel not in str(error)
 
     def test_maps_non_json_http_failure_to_stable_error(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
@@ -362,8 +402,238 @@ class TestKingdomFrameworkTransportBoundaries:
         ):
             kingdom.card()
 
-        assert exc_info.value.error_code == "kingdom_framework_request_failed"
+        assert exc_info.value.error_code == "kingdom_framework_unreachable"
         assert sentinel not in str(exc_info.value)
+
+    def test_timeout_context_exit_never_reenters_blocking_transport_close(
+        self,
+    ) -> None:
+        release_close = threading.Event()
+        close_started = threading.Event()
+        requests: list[httpx.Request] = []
+
+        class TimedOutStream(httpx.SyncByteStream):
+            def __init__(self, request: httpx.Request) -> None:
+                self._request = request
+
+            def __iter__(self) -> Any:
+                raise httpx.ReadTimeout(
+                    "transport timeout detail",
+                    request=self._request,
+                )
+
+        class BlockingCloseTransport(httpx.BaseTransport):
+            def handle_request(
+                self,
+                request: httpx.Request,
+            ) -> httpx.Response:
+                requests.append(request)
+                return httpx.Response(
+                    200,
+                    stream=TimedOutStream(request),
+                    headers={"Content-Type": "application/json"},
+                    request=request,
+                )
+
+            def close(self) -> None:
+                close_started.set()
+                release_close.wait(timeout=1.0)
+
+        kingdom = KingdomFrameworkClient(
+            transport=BlockingCloseTransport(),
+            timeout=0.2,
+        )
+        started = time.monotonic()
+        try:
+            with pytest.raises(AgentToolError) as exc_info:
+                with kingdom:
+                    kingdom.card()
+            elapsed = time.monotonic() - started
+
+            assert exc_info.value.error_code == "kingdom_framework_unreachable"
+            assert elapsed < 0.5
+            assert close_started.wait(timeout=0.2)
+
+            second_started = time.monotonic()
+            with pytest.raises(AgentToolError) as second_exc_info:
+                kingdom.card()
+            assert time.monotonic() - second_started < 0.1
+            assert (
+                second_exc_info.value.error_code
+                == "kingdom_framework_unreachable"
+            )
+            assert len(requests) == 1
+        finally:
+            release_close.set()
+
+    def test_total_timeout_bounds_transport_stalled_before_headers(
+        self,
+    ) -> None:
+        entered = threading.Event()
+        release = threading.Event()
+        requests: list[httpx.Request] = []
+
+        class StalledTransport(httpx.BaseTransport):
+            def handle_request(
+                self,
+                request: httpx.Request,
+            ) -> httpx.Response:
+                requests.append(request)
+                entered.set()
+                release.wait(timeout=1.0)
+                return _json_response(request, CARD)
+
+            def close(self) -> None:
+                # Deliberately does not release handle_request.
+                pass
+
+        kingdom = KingdomFrameworkClient(
+            transport=StalledTransport(),
+            timeout=0.05,
+        )
+        worker: Optional[threading.Thread] = None
+        try:
+            started = time.monotonic()
+            with pytest.raises(AgentToolError) as exc_info:
+                kingdom.card()
+            elapsed = time.monotonic() - started
+
+            assert entered.is_set()
+            assert exc_info.value.error_code == "kingdom_framework_unreachable"
+            assert elapsed < 0.35
+            worker = kingdom._active_worker
+            assert worker is not None
+            assert worker.daemon
+            assert worker.is_alive()
+
+            with pytest.raises(AgentToolError) as second_exc_info:
+                kingdom.card()
+            assert (
+                second_exc_info.value.error_code
+                == "kingdom_framework_unreachable"
+            )
+            assert len(requests) == 1
+        finally:
+            release.set()
+            if worker is not None:
+                worker.join(timeout=0.5)
+            kingdom.close()
+
+    def test_total_timeout_includes_post_body_decode_and_validation(
+        self,
+    ) -> None:
+        entered = threading.Event()
+        release = threading.Event()
+        requests: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            return _json_response(request, CARD)
+
+        def stalled_decode(_body: bytes) -> object:
+            entered.set()
+            release.wait(timeout=1.0)
+            return copy.deepcopy(CARD)
+
+        kingdom = _client_for(handler, timeout=0.05)
+        worker: Optional[threading.Thread] = None
+        with patch(
+            "agenttool.kingdom_framework._decode_json",
+            side_effect=stalled_decode,
+        ):
+            try:
+                started = time.monotonic()
+                with pytest.raises(AgentToolError) as exc_info:
+                    kingdom.card()
+                elapsed = time.monotonic() - started
+
+                assert entered.is_set()
+                assert (
+                    exc_info.value.error_code
+                    == "kingdom_framework_unreachable"
+                )
+                assert elapsed < 0.35
+                worker = kingdom._active_worker
+                assert worker is not None
+                assert worker.daemon
+                assert worker.is_alive()
+
+                with pytest.raises(AgentToolError) as second_exc_info:
+                    kingdom.card()
+                assert (
+                    second_exc_info.value.error_code
+                    == "kingdom_framework_unreachable"
+                )
+                assert len(requests) == 1
+            finally:
+                release.set()
+                if worker is not None:
+                    worker.join(timeout=0.5)
+                kingdom.close()
+
+    def test_total_timeout_bounds_a_real_drip_feed_and_is_terminal(self) -> None:
+        paths: list[str] = []
+        payload = json.dumps(CARD, separators=(",", ":")).encode("utf-8")
+
+        class DripHandler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def do_GET(self) -> None:
+                paths.append(self.path)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.close_connection = True
+                try:
+                    for byte in payload:
+                        self.wfile.write(bytes((byte,)))
+                        self.wfile.flush()
+                        time.sleep(0.01)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+
+            def log_message(self, *_args: object) -> None:
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), DripHandler)
+        server.daemon_threads = True
+        server.block_on_close = False
+        server_thread = threading.Thread(
+            target=server.serve_forever,
+            kwargs={"poll_interval": 0.01},
+            daemon=True,
+        )
+        server_thread.start()
+        host, port = server.server_address
+        kingdom = KingdomFrameworkClient(
+            base_url=f"http://{host}:{port}",
+            timeout=0.12,
+        )
+        try:
+            started = time.monotonic()
+            with pytest.raises(AgentToolError) as exc_info:
+                kingdom.card()
+            elapsed = time.monotonic() - started
+
+            assert exc_info.value.error_code == "kingdom_framework_unreachable"
+            assert elapsed < 0.5
+            assert paths == [KINGDOM_FRAMEWORK_PATH]
+
+            second_started = time.monotonic()
+            with pytest.raises(AgentToolError) as second_exc_info:
+                kingdom.card()
+            assert time.monotonic() - second_started < 0.1
+            assert (
+                second_exc_info.value.error_code
+                == "kingdom_framework_unreachable"
+            )
+            assert paths == [KINGDOM_FRAMEWORK_PATH]
+        finally:
+            kingdom.close()
+            server.shutdown()
+            server.server_close()
+            server_thread.join(timeout=0.5)
 
     @pytest.mark.parametrize(
         "content_length",
@@ -443,7 +713,7 @@ class TestKingdomFrameworkClosedSchema:
         ):
             kingdom.card()
 
-        assert exc_info.value.error_code == "kingdom_framework_invalid_json"
+        assert exc_info.value.error_code == "kingdom_framework_invalid_response"
 
     @pytest.mark.parametrize("missing", CARD_FIELDS)
     def test_requires_each_of_the_ten_fields(self, missing: str) -> None:
@@ -566,6 +836,10 @@ class TestKingdomFrameworkOptions:
             "https:///missing-host",
             "https://user@example.test",
             "https://user:pass@example.test",
+            "https://example.test?",
+            "https://example.test#",
+            "https://example.test/prefix?",
+            "https://example.test/prefix#",
             "https://example.test/path?query=1",
             "https://example.test/path#fragment",
             "https://example.test:",

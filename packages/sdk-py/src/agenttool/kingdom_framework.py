@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import json
 import math
+import queue
 import re
 import threading
+import time
 from typing import List, Literal, Mapping, Optional, TypedDict, cast
 from urllib.parse import urlsplit
 
@@ -112,6 +114,9 @@ _CARD_FIELDS = frozenset(
     }
 )
 _NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$")
+_JSON_SUFFIX_MEDIA_TYPE = re.compile(
+    r"^application/[a-z0-9!#$&^_.+-]+\+json$"
+)
 _UNSAFE_PURPOSE = re.compile(r"[\u0000-\u001f\u007f-\u009f\u2028\u2029]")
 _KINDS = frozenset(
     {
@@ -170,12 +175,33 @@ def _has_unicode_surrogate(value: str) -> bool:
     return any(0xD800 <= ord(character) <= 0xDFFF for character in value)
 
 
+def _unreachable_error() -> AgentToolError:
+    return _framework_error(
+        "The KINGDOM framework endpoint is unreachable.",
+        "kingdom_framework_unreachable",
+        "Check the configured AgentTool API origin and total timeout.",
+    )
+
+
+def _remaining_seconds(deadline: float) -> float:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise _unreachable_error()
+    return remaining
+
+
 def _normalize_base_url(value: str) -> str:
-    if not isinstance(value, str) or not value or _has_unicode_surrogate(value):
+    if (
+        not isinstance(value, str)
+        or not value
+        or _has_unicode_surrogate(value)
+        or "?" in value
+        or "#" in value
+    ):
         raise _framework_error(
             "The KINGDOM framework base URL is invalid.",
             "kingdom_framework_invalid_options",
-            "Pass an absolute HTTP or HTTPS base URL without embedded credentials.",
+            "Pass an absolute HTTP or HTTPS base URL without credentials, a query, or a fragment.",
         )
     try:
         parsed = urlsplit(value)
@@ -209,11 +235,14 @@ def _media_type(headers: Mapping[str, str]) -> str:
 
 def _is_json_media_type(media_type: str) -> bool:
     return media_type == "application/json" or (
-        media_type.startswith("application/") and media_type.endswith("+json")
+        _JSON_SUFFIX_MEDIA_TYPE.fullmatch(media_type) is not None
     )
 
 
-def _read_bounded(response: httpx.Response, maximum: int) -> bytes:
+def _read_bounded(
+    response: httpx.Response,
+    maximum: int,
+) -> bytes:
     content_length = response.headers.get("content-length")
     if content_length is not None:
         if re.fullmatch(r"(?:0|[1-9][0-9]*)", content_length) is None:
@@ -258,6 +287,8 @@ def _read_bounded(response: httpx.Response, maximum: int) -> bytes:
             body.extend(chunk)
     except AgentToolError:
         raise
+    except httpx.TimeoutException:
+        raise
     except Exception as error:
         raise _framework_error(
             "The KINGDOM framework response stream could not be read.",
@@ -272,7 +303,7 @@ def _reject_non_json_number(value: str) -> object:
     raise ValueError(f"invalid JSON number: {value}")
 
 
-def _decode_json(body: bytes, *, error_code: str) -> object:
+def _decode_json(body: bytes) -> object:
     try:
         text = body.decode("utf-8")
         return json.loads(
@@ -287,7 +318,7 @@ def _decode_json(body: bytes, *, error_code: str) -> object:
     ) as error:
         raise _framework_error(
             "The KINGDOM framework response was not valid JSON.",
-            error_code,
+            "kingdom_framework_invalid_response",
             "Use a compatible endpoint that returns one UTF-8 JSON project card.",
         ) from error
 
@@ -384,36 +415,12 @@ def _validate_card(candidate: object) -> KingdomFrameworkCard:
 
 def _http_status_error(
     response: httpx.Response,
-    body: bytes,
 ) -> AgentToolError:
-    parsed: object = None
-    if _is_json_media_type(_media_type(response.headers)):
-        try:
-            parsed = _decode_json(
-                body,
-                error_code="kingdom_framework_invalid_error_response",
-            )
-        except AgentToolError:
-            parsed = None
-    remote = AgentToolError.from_response_body(
-        parsed,
-        status=response.status_code,
-        fallback=(
-            "The KINGDOM framework endpoint returned "
-            f"HTTP {response.status_code}."
-        ),
-        headers=response.headers,
-    )
-    return AgentToolError(
-        remote.message,
-        hint=remote.hint or "Check the endpoint and retry the credential-free read.",
+    return _framework_error(
+        f"The KINGDOM framework endpoint returned HTTP {response.status_code}.",
+        "kingdom_framework_http_error",
+        "Check the configured public endpoint and retry deliberately.",
         code=response.status_code,
-        error_code=remote.error_code or "kingdom_framework_http_error",
-        next_actions=remote.next_actions,
-        docs=remote.docs or _DOCS,
-        safety=remote.safety or KINGDOM_FRAMEWORK_PATH,
-        details=remote.details,
-        retry_after=remote.retry_after,
     )
 
 
@@ -468,64 +475,198 @@ class KingdomFrameworkClient:
         if transport is not None:
             client_options["transport"] = transport
         self._base_url = _normalize_base_url(base_url)
+        self._timeout = float(timeout)
         self._max_response_bytes = max_response_bytes
         self._http = httpx.Client(**client_options)
-        self._request_lock = threading.Lock()
+        self._lifecycle_lock = threading.Lock()
+        self._state_lock = threading.Lock()
+        self._terminal = False
+        self._cancel_started = False
+        self._active_response: Optional[httpx.Response] = None
+        self._active_worker: Optional[threading.Thread] = None
+
+    def _set_active_response(self, response: httpx.Response) -> None:
+        with self._state_lock:
+            terminal = self._terminal
+            if not terminal:
+                self._active_response = response
+        if terminal:
+            try:
+                response.close()
+            finally:
+                raise _unreachable_error()
+
+    def _clear_active_response(self, response: httpx.Response) -> None:
+        with self._state_lock:
+            if self._active_response is response:
+                self._active_response = None
+
+    def _card_operation(self) -> KingdomFrameworkCard:
+        url = f"{self._base_url}{KINGDOM_FRAMEWORK_PATH}"
+        response: Optional[httpx.Response] = None
+        try:
+            with self._http.stream(
+                "GET",
+                url,
+                timeout=self._timeout,
+            ) as current_response:
+                response = current_response
+                self._set_active_response(response)
+                if 300 <= response.status_code < 400:
+                    raise _framework_error(
+                        "The KINGDOM framework read refused an HTTP redirect.",
+                        "kingdom_framework_redirect_refused",
+                        "Use the canonical API origin directly; redirects are never followed.",
+                        code=response.status_code,
+                    )
+                if response.status_code != 200:
+                    raise _http_status_error(response)
+
+                media_type = _media_type(response.headers)
+                if not _is_json_media_type(media_type):
+                    raise _framework_error(
+                        "The KINGDOM framework response used an unsupported media type.",
+                        "kingdom_framework_unsupported_media_type",
+                        "Expected application/json or an application/*+json representation.",
+                        code=response.status_code,
+                        details={"media_type": media_type or None},
+                    )
+                body = _read_bounded(
+                    response,
+                    self._max_response_bytes,
+                )
+        finally:
+            if response is not None:
+                self._clear_active_response(response)
+        return _validate_card(_decode_json(body))
+
+    def _run_card_worker(
+        self,
+        results: queue.Queue[tuple[str, object]],
+    ) -> None:
+        event: tuple[str, object] = ("error", _unreachable_error())
+        try:
+            self._http.cookies.clear()
+            event = ("ok", self._card_operation())
+        except httpx.TimeoutException:
+            event = ("timeout", _unreachable_error())
+        except AgentToolError as error:
+            event = ("error", error)
+        except Exception:
+            event = ("error", _unreachable_error())
+        finally:
+            try:
+                self._http.cookies.clear()
+            except Exception:
+                if event[0] == "ok":
+                    event = ("error", _unreachable_error())
+            worker = threading.current_thread()
+            with self._state_lock:
+                if self._active_worker is worker:
+                    self._active_worker = None
+            try:
+                results.put_nowait(event)
+            except queue.Full:
+                pass
+
+    def _mark_terminal_and_cancel(self) -> None:
+        with self._state_lock:
+            self._terminal = True
+            if self._cancel_started:
+                return
+            self._cancel_started = True
+            response = self._active_response
+
+        def cancel() -> None:
+            if response is not None:
+                try:
+                    response.close()
+                except Exception:
+                    pass
+            try:
+                self._http.close()
+            except Exception:
+                pass
+
+        try:
+            threading.Thread(
+                target=cancel,
+                name="agenttool-kingdom-framework-cancel",
+                daemon=True,
+            ).start()
+        except Exception:
+            pass
 
     def card(self) -> KingdomFrameworkCard:
         """Fetch and validate AgentTool's credential-free KINGDOM card."""
-        url = f"{self._base_url}{KINGDOM_FRAMEWORK_PATH}"
-        with self._request_lock:
-            # httpx persists Set-Cookie by default even when initialized with
-            # an empty jar. Clear before and after every read so public
-            # discovery never acquires or replays cookie authority.
-            self._http.cookies.clear()
-            try:
-                with self._http.stream("GET", url) as response:
-                    if 300 <= response.status_code < 400:
-                        raise _framework_error(
-                            "The KINGDOM framework read refused an HTTP redirect.",
-                            "kingdom_framework_redirect_refused",
-                            "Use the canonical API origin directly; redirects are never followed.",
-                            code=response.status_code,
-                        )
-                    if response.status_code != 200:
-                        body = _read_bounded(
-                            response, self._max_response_bytes
-                        )
-                        raise _http_status_error(response, body)
-
-                    media_type = _media_type(response.headers)
-                    if not _is_json_media_type(media_type):
-                        raise _framework_error(
-                            "The KINGDOM framework response used an unsupported media type.",
-                            "kingdom_framework_unsupported_media_type",
-                            "Expected application/json or an application/*+json representation.",
-                            code=response.status_code,
-                            details={"media_type": media_type or None},
-                        )
-                    body = _read_bounded(response, self._max_response_bytes)
-            except AgentToolError:
-                raise
-            except Exception as error:
-                raise _framework_error(
-                    "The KINGDOM framework request failed.",
-                    "kingdom_framework_request_failed",
-                    "Check the API origin and retry the same credential-free GET.",
-                ) from error
-            finally:
-                self._http.cookies.clear()
-
-        return _validate_card(
-            _decode_json(
-                body,
-                error_code="kingdom_framework_invalid_json",
+        deadline = time.monotonic() + self._timeout
+        try:
+            remaining = _remaining_seconds(deadline)
+        except AgentToolError:
+            self._mark_terminal_and_cancel()
+            raise
+        if not self._lifecycle_lock.acquire(timeout=remaining):
+            self._mark_terminal_and_cancel()
+            raise _unreachable_error()
+        try:
+            with self._state_lock:
+                if self._terminal:
+                    raise _unreachable_error()
+            results: queue.Queue[tuple[str, object]] = queue.Queue(maxsize=1)
+            worker = threading.Thread(
+                target=self._run_card_worker,
+                args=(results,),
+                name="agenttool-kingdom-framework-request",
+                daemon=True,
             )
-        )
+            with self._state_lock:
+                self._active_worker = worker
+            try:
+                worker.start()
+            except Exception as error:
+                with self._state_lock:
+                    if self._active_worker is worker:
+                        self._active_worker = None
+                raise _unreachable_error() from error
+
+            try:
+                event, value = results.get(
+                    timeout=_remaining_seconds(deadline)
+                )
+            except (queue.Empty, AgentToolError) as error:
+                self._mark_terminal_and_cancel()
+                raise _unreachable_error() from error
+            if time.monotonic() >= deadline:
+                self._mark_terminal_and_cancel()
+                raise _unreachable_error()
+            if event == "timeout":
+                self._mark_terminal_and_cancel()
+                raise _unreachable_error()
+            if event == "error":
+                if isinstance(value, AgentToolError):
+                    raise value
+                raise _unreachable_error()
+            if event != "ok":
+                raise _unreachable_error()
+            return cast(KingdomFrameworkCard, value)
+        finally:
+            self._lifecycle_lock.release()
 
     def close(self) -> None:
         """Close this client's dedicated credential-free HTTP session."""
-        self._http.close()
+        with self._lifecycle_lock:
+            with self._state_lock:
+                if self._terminal or self._cancel_started:
+                    return
+                active = (
+                    self._active_worker is not None
+                    and self._active_worker.is_alive()
+                )
+                self._terminal = True
+            if active:
+                self._mark_terminal_and_cancel()
+            else:
+                self._http.close()
 
     def __enter__(self) -> "KingdomFrameworkClient":
         return self
