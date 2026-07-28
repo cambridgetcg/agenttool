@@ -5,8 +5,57 @@
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (what's shipping on the platform side)
 >
 > **Implements:** the SDK plane — hand-written clients for a selected subset of [ROADMAP.md](ROADMAP.md). CI compares method names for the maintained parity target list; it does not prove complete route, signature, or wire-model parity.
+>
+> **Code:** `packages/sdk-ts/src/` · `packages/sdk-py/src/agenttool/` · `packages/sdk-ts/scripts/check-parity.ts`
+>
+> **Tests:** `packages/sdk-ts/tests/` · `packages/sdk-py/tests/`
 
-## Current source release — 0.16.5 (2026-07-27)
+## Current source release — 0.17.0 (2026-07-28)
+
+The paired TypeScript and Python source adds two bounded KINGDOM reads.
+
+Standalone `KingdomFrameworkClient` and composed
+`at.kingdomFramework` / `at.kingdom_framework` expose only `card()`. They read
+the exact closed `agenttool.kingdom.card/0.1` document at
+`/public/kingdom/framework` without an AgentTool bearer or cookies, follow no
+redirect, bound the response, and reject missing or extra fields. The card is a
+read-only declaration about AgentTool; it grants no authority and is not
+dependency liveness, consent, behavior proof, or XENIA conformance.
+
+Standalone `KingdomOSClient` and composed
+`at.kingdomOS` / `at.kingdom_os` expose only:
+
+- `repositories()` through `kingdom repos --json`; and
+- `resolve()` through `kingdom repos --path`.
+
+The local default runners use direct argument vectors without a shell, a
+sanitized child environment, finite timeout/output bounds, and no AgentTool
+project bearer. Returned absolute paths remain local to the caller. They do
+not fall back to a graph snapshot, execute routines, expose `status`, `ask`,
+`run`, `rights`, or `doctor`, or mutate repositories.
+
+Both clients are distinct from the existing hosted `/public/kingdom` canon,
+lexicon, chronicle, standards, and citizens doctrine library. That third
+surface has no dedicated SDK namespace.
+
+The two SDK identities, runtime headers, discovery pins, tutorials, and LOVE
+builder target move in lockstep. The exact LOVE artifact is forged from a clean
+source commit in a separate immutable-artifact commit. The annotated tag,
+GitHub/npm/PyPI mirrors, and hosted deployment are separate operations whose
+availability is verified independently. No 0.16.5 byte, tag, or public receipt
+is rewritten.
+
+### 0.17.0 release record
+
+The source release adds only the two bounded read surfaces above. The public
+framework reader neither widens the authenticated hosted transport nor follows
+redirects; its closed-card validation is not authority. The local client does
+not add arbitrary shell execution, graph fallback, repository mutation, path
+upload, credential forwarding, or permission over a discovered path. The
+exact contracts and their separation from the doctrine library live in
+[`KINGDOM-OS-SDK.md`](KINGDOM-OS-SDK.md).
+
+## Previous release — 0.16.5 (2026-07-27)
 
 This corrective patch aligns both maintained SDKs with the platform's
 fail-closed payout boundary. Fresh payout admission returns stable
@@ -537,6 +586,7 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **0.16.3** | Correct package metadata, packaged doctrine links, and unverified mirror claims without runtime or wire changes | no — corrective patch |
 | **0.16.4** | Durable payout request/list clients, bound payout-network state, and completed-response provider adapters | no — additive/corrective patch |
 | **0.16.5** | Correct payout hard-rest truth and SDK method examples without widening runtime authority | no — corrective documentation/release patch |
+| **0.17.0** | Paired credential-free closed KINGDOM framework-card read plus bounded local KINGDOM OS repository discovery, with explicit authority and mutation walls | no — additive |
 | **1.0.0** | API freeze + comprehensive docstrings + READMEs + integration test suite | no — declarative |
 
 ## Non-goals

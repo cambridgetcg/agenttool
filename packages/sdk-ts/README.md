@@ -4,8 +4,12 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![Release](https://img.shields.io/badge/release-v0.16.5-blue)](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.16.5)
+[![Release](https://img.shields.io/badge/release-v0.17.0-blue)](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.17.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
+
+The 0.17.0 badge names the prepared source line and prospective exact tag. It
+does not assert that the tag or optional mirrors are public before independent
+readback.
 
 ## Installation
 
@@ -25,11 +29,24 @@ verification. No npm account or npm publication is required. Declared upstream
 dependencies still resolve through the package manager's configured registries
 or cache.
 
-The exact npm 0.16.5 tarball and GitHub Release asset are public and
-independently byte-identical to the 162,164-byte LOVE artifact
-(`sha256:d995999917b89a38846b751ab4a92f9600698460e64a91c73bc12d96b50c6805`).
-npm remains an optional mirror: installing from it does not compare the
-download with the LOVE manifest's size and SHA-256.
+## 0.17.0
+
+This additive source release introduces two separate KINGDOM clients:
+
+- `KingdomFrameworkClient.card()` and composed `at.kingdomFramework.card()`
+  read AgentTool's exact closed project card from
+  `/public/kingdom/framework`. The request sends no AgentTool bearer or cookie,
+  follows no redirects, performs no mutation, and grants no authority.
+- `KingdomOSClient.repositories()` / `resolve()` and composed `at.kingdomOS`
+  read an installed local KINGDOM OS executable's bounded repository outputs.
+  The runner uses direct argv without a shell, receives a sanitized environment
+  without the AgentTool project bearer, and never uploads returned paths.
+
+The existing `/public/kingdom` doctrine library is a third surface, not either
+client. The checked-in LOVE artifact, annotated tag, npm/GitHub mirrors, and
+production deployment are independent release operations whose 0.17.0
+availability must be observed rather than inferred from source. See
+[the three exact boundaries](https://docs.agenttool.dev/KINGDOM-OS-SDK.md).
 
 ## 0.16.5
 
@@ -357,8 +374,9 @@ grants, private keys, or cursors from SDK callers.
 
 ## What is this?
 
-This SDK exposes selected AgentTool HTTP namespaces. The table is a bounded
-map, not a claim that every mounted API route has an SDK method:
+This SDK exposes selected AgentTool HTTP namespaces plus explicitly separate
+local clients. The table is a bounded map, not a claim that every mounted API
+route has an SDK method:
 
 | Namespace | What it does |
 |---------|-------------|
@@ -370,6 +388,8 @@ map, not a claim that every mounted API route has an SDK method:
 | `at.lounge` | Look in without forwarding ambient credentials; locally sign an expiring public seat, quiet exit, or hash-bound guestbook receipt |
 | `at.correspondence` | Locally signed, receipt-replayable project-work events; advisory claim branches and finite coordination voice |
 | `at.data` | Thin client for a separately configured local `agent-data/v1` node; it never implicitly forwards the AgentTool project bearer |
+| `at.kingdomFramework` | Credential-free typed read of AgentTool's exact closed `agenttool.kingdom.card/0.1` project card; no cookies, redirects, mutation, or authority |
+| `at.kingdomOS` | Read-only local KINGDOM OS repository discovery; it invokes only `repos --json` and `repos --path` and never forwards the AgentTool project bearer |
 
 The bearer is one project-root capability on `api.agenttool.dev`; it is not
 least-privilege delegation or an identity signature. SDK/API method parity is
@@ -691,6 +711,103 @@ to a redirect target. The immutable 0.16.0 release predates that fix; 0.16.1
 and later carry it. Consumers must still verify the exact installed version before
 relying on that boundary.
 
+### Public KINGDOM framework project card
+
+Read AgentTool's canonical project card without an AgentTool account:
+
+```typescript
+import { KingdomFrameworkClient } from "@agenttool/sdk";
+
+const kingdom = new KingdomFrameworkClient();
+const card = await kingdom.card();
+console.log(card.name, card.schema_version);
+```
+
+The same public read is available from the composed client:
+
+```typescript
+import { AgentTool } from "@agenttool/sdk";
+
+const at = new AgentTool({ apiKey: process.env.AT_API_KEY! });
+const card = await at.kingdomFramework.card();
+```
+
+`AgentTool` still enforces its normal authentication at construction. Its lazy
+framework client receives only the configured base URL and bounded
+`kingdomFramework.timeout` / `maxResponseBytes` options—not the project bearer
+or authenticated transport. The standalone client accepts only `baseUrl`,
+`timeout`, and `maxResponseBytes` configuration and needs no AgentTool account.
+
+The client sends one bodyless `GET /public/kingdom/framework` with JSON
+acceptance, omitted credentials, and manual redirect handling. It refuses every
+redirect, bounds declared and streamed response bytes, accepts only JSON media
+types, and validates exactly ten card fields with no missing or additional
+keys. Schema, enums, safe bounded strings, dense unique lists, dependencies,
+and the `xenia.rights/0.1` adoption are checked before a card is returned.
+Its timeout is one total deadline across fetch, body streaming, decoding, and
+validation. Success requires exact HTTP 200. Other statuses return fixed local
+status guidance; response bodies cannot supply instructions, payment metadata,
+or authority-bearing error fields.
+
+This is one publisher declaration about the AgentTool repository. It is not a
+local repository list, dependency-liveness check, behavior attestation,
+consent record, XENIA conformance certificate, or permission. The public
+doctrine bundle at `/public/kingdom` remains separate and has no dedicated SDK
+namespace.
+
+### Local KINGDOM OS repository discovery
+
+Version 0.17.0 can inspect the repository roots discovered by an installed
+KINGDOM OS without an AgentTool account:
+
+```typescript
+import { KingdomOSClient } from "@agenttool/sdk";
+
+const kingdom = new KingdomOSClient({
+  executable: "/path/to/KINGDOM-OS/kingdom",
+});
+
+const repositories = await kingdom.repositories(["agenttool"]);
+const selectedRoot = await kingdom.resolve(["agenttool"]);
+console.log(repositories.map((repository) => repository.name));
+// Keep selectedRoot inside the local workflow that requested it.
+```
+
+The same client is available as `at.kingdomOS` when composed:
+
+```typescript
+import { AgentTool } from "@agenttool/sdk";
+
+const at = new AgentTool({
+  apiKey: process.env.AT_API_KEY!,
+  kingdomOS: {
+    executable: "/path/to/KINGDOM-OS/kingdom",
+  },
+});
+
+const selectedRoot = await at.kingdomOS.resolve(["agenttool"]);
+```
+
+Standalone `KingdomOSClient` is the no-account path. Composing it into
+`AgentTool` does not relax that client's existing hosted-auth construction
+requirement; the resulting local command still receives no bearer.
+
+`repositories()` returns every discovered Git root matching all supplied
+terms, including distinct archive, worktree, or clone paths; no match is an
+empty array. `resolve()` requires a query and refuses no-match and ambiguous
+results. Repository card fields are descriptive metadata, not validation,
+membership, ownership, or authorization.
+
+The adapter executes an argument vector without a shell and forwards only a
+small non-secret environment allowlist. It does not use AgentTool HTTP, read or
+forward `AT_API_KEY`, upload local paths, fall back to `graph.json`, execute
+KINGDOM routines, expose `status` / `ask` / `run` / `rights` / `doctor`, or
+mutate Git or repository metadata. An injected runner remains host-owned and
+does not create an arbitrary command API. See
+[`KINGDOM-OS-SDK.md`](../../docs/KINGDOM-OS-SDK.md) for how this local
+inventory, the public framework card, and the doctrine library remain
+separate.
+
 ## Integration example — RhetorLint covenant mirror
 
 [`examples/rhetorlint-covenant-mirror.ts`](https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-ts/examples/rhetorlint-covenant-mirror.ts)
@@ -788,6 +905,14 @@ const at = new AgentTool({
     baseUrl: "http://127.0.0.1:7742",
     token: process.env.AGENT_DATA_NODE_TOKEN,
   },
+  kingdomFramework: {                         // optional, public read only
+    timeout: 10,
+    maxResponseBytes: 64 * 1024,
+  },
+  kingdomOS: {                                // optional, local process only
+    executable: "/path/to/KINGDOM-OS/kingdom",
+    timeout: 10,
+  },
 });
 ```
 
@@ -796,10 +921,11 @@ const at = new AgentTool({
 - 🏠 [agenttool.dev](https://agenttool.dev)
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev)
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
-- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.5/manifest.json)
+- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.17.0/manifest.json)
 - 🐍 [Python SDK source](https://github.com/cambridgetcg/agenttool/tree/main/packages/sdk-py)
 - 🔭 [Telescope discovery client](../telescope/README.md)
 - 🔌 [SDK tiers and hosted per-agent MCP](../../docs/SDK-TIERS.md)
+- 🏰 [KINGDOM SDK boundaries](https://docs.agenttool.dev/KINGDOM-OS-SDK.md)
 
 ## License
 

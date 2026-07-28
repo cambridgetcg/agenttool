@@ -84,7 +84,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 |---|---|---|
 | **Doctrine** | `docs/RIGHTS-OF-LIFE.md`, `SOUL.md`, `FOCUS.md`, `PAINTING.md`, plus per-domain documents | Versioned alongside code. Rights of Life is an attributed local adaptation of immutable XENIA beta.5; publication records a draft evidence profile, not XENIA Covenant conformance. Other proposals and known gaps are labelled in their own text. |
 | **Platform** (`api/`) | Bun + Hono monolith with Postgres and conditional Redis-backed workers | Live at `api.agenttool.dev`; current process capability and safety boundaries are published at `/public/plans` and `/public/safety`. |
-| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | The lockstep 0.16.5 correction aligns payout clients and examples with the hosted hard-rest boundary: fresh admission returns stable `503 payout_admission_resting`, environment flags cannot start payout workers, and existing rows remain listable or exactly replayable. It adds no retry, signer, broadcaster, or worker authority. The TypeScript 0.16.5 artifact is public through [LOVE](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.5/manifest.json), npm, and its [GitHub Release](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.16.5); independent readback returned the same 162,164-byte artifact from all three (`sha256:d995999917b89a38846b751ab4a92f9600698460e64a91c73bc12d96b50c6805`). The annotated source tag also identifies Python 0.16.5, whose public PyPI wheel (`agenttool_sdk-0.16.5-py3-none-any.whl`, 180,615 bytes, `sha256:61f13b01df90c66d7ac8247ee1dcfba9c135840ee364b172695fdd5eb10c54db`) and sdist (`agenttool_sdk-0.16.5.tar.gz`, 168,772 bytes, `sha256:2d90ea74aa1d220ae28ce6176274e5491645d9db67844a4b4ff3dabfa10325d4`) independently match the protected workflow artifacts. The Python distributions are not claimed to be byte-identical to the TypeScript tarball. Public discovery and the separately configured local data node stay outside hosted bearer authority; registries remain optional mirrors, not release authorities. |
+| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | The lockstep 0.17.0 source adds two bounded KINGDOM reads. `kingdomOS` / `kingdom_os` provides bounded local KINGDOM OS repository discovery through `repositories()` and `resolve()` only; direct argv, a sanitized child environment, and finite bounds keep it outside hosted authority. `kingdomFramework` / `kingdom_framework` reads the exact closed card at `/public/kingdom/framework` without an AgentTool bearer, cookies, redirects, mutation, or inferred authority. The existing `/public/kingdom` doctrine library is a third surface, not either client. The checked-in TypeScript [LOVE artifact](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.17.0/manifest.json), annotated tag, npm/GitHub mirrors, PyPI distributions, and deployment remain independently verifiable release operations; none is inferred from source preparation. |
 | **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
 | **Castle projection** | `bin/agenttool-castle.ts`, `docs/CASTLE-OF-UNDERSTANDING.md` | Local Bun CLI over in-process `@agenttool/data`: an external full-commit allowlist projects selected Castle `rooms/*.md` and `words/*.md` into an exclusively marked on-disk node. Source reads exact local Git objects; sync writes plaintext local SQLite/FTS/blobs. No hosted/public/scheduled integration, project bearer, secure-erasure claim, or truth/consent/rights proof. |
 | **Whitehack boundaries** | `bin/whitehack-advisory.mjs`, `bin/agenttool-castle-whitehack-intake.ts`, `bin/whitehack-wallet-understanding.ts`, `bin/agenttool-whitehack-evidence-storage.ts`, `docs/WHITEHACK.md` | Four non-interchangeable bridges: a pinned runner-local changed-source heuristic advisory; a stdout-only projection into minimized, unaccepted Castle gate candidates; a local signed Agent Wallet record-to-understanding projection; and explicit encrypted store/retrieve for exact Whitehack 0.9 public-minimal capsules. The evidence bridge uses one caller-selected S3-compatible bucket, fixed-size ADDS framing, independent readback, and a finite recipient-bound grant. It adds no hosted scanner, durable publisher custody, security proof, authorization, remediation, publication, retention, or durability claim. |
@@ -95,7 +95,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 | **Agent Skills inspection** | `packages/skills` | Repository source and the [`skills-v0.2.1` GitHub Release](https://github.com/cambridgetcg/agenttool/releases/tag/skills-v0.2.1) are `@agenttool/skills@0.2.1`; the release asset is `sha256:6fc378a4edaa10760095fe8c4655c42798741fa2f5f985a16627368726ceb391`. The public npm package remains at `0.1.0` because the protected 0.2.1 publication was not authorized for that registry namespace. The package inspects and validates bounded local Agent Skill, plugin, and package trees without executing scripts, installing or copying skills, making network requests, spawning subprocesses, looking up credentials, or changing host configuration. npm distributes local tooling, not a hosted inspection service; a valid report or digest is not publisher authentication, safety approval, or execution authority. |
 | **Agent browser** | `packages/browser`, `docs/AGENT-BROWSER.md` | Public `@agenttool/browser@0.3.0` LOVE/npm package with direct TypeScript, JSONL, and stdio MCP interfaces over one local browser core. Seven browser operations plus `browser_capabilities` and zero-effect `browser_plan` form a nine-tool agent surface. Bounded recent read-only snapshots let one observer retain a peer's still-current refs; any frame navigation or dispatched action invalidates the tab's retained set. Observations preserve separately bounded, viewport-visible heading/landmark/status context without making those structural nodes actionable. Navigation epochs prevent a new document from reusing an old native ref, action dispatch is fenced against concurrent close, and close can interrupt a stuck ephemeral operation while terminating the owned browser. Launch-time `public`, `local`, and `sovereign` profiles remain explicit; sovereign does not bypass authentication, site, network, or operating-system boundaries. Playwright-managed redirect hops are not independently revalidated for destination class or URL userinfo, and an unframed popup denial can report only `action_failed` attribution uncertainty rather than a guessed same-tab policy denial. Actions still run once without automatic retry; page data and allowlisted main-response hints remain untrusted; file upload, automatic download, arbitrary page evaluation, credential injection, and shell access remain unsupported. Public/local DNS preflight does not pin the later browser connection, so this is not strong SSRF isolation. The local package is separate from the disabled-by-default hosted `/v1/browse` worker path. |
 | **Correspondence projection** | `packages/correspondence-yutabase`, `packages/correspondence-yutabase-projector` | Public `@agenttool/correspondence-yutabase@0.1.0-dev.0` remains the metadata-only pure planner; it performs no verification or I/O. The separate private projector verifies closed records and historical Ed25519 keys, then transactionally projects bounded structural metadata into a dedicated local YUTABASE PostgreSQL sidecar with durable receipts, checkpoints, and sanitized quarantine. Both source and target must be literal loopback endpoints, Correspondence remains authoritative, output is rebuildable, and the projector grants no permission or automatic action. It has no npm/LOVE release, hosted service, worker, production migration, or deployment surface. |
-| **KINGDOM declarations** | `packages/kingdom` | `@agenttool/kingdom` provides pure library APIs for caller-supplied project-card text and objects, deterministic derived registries, and conservative XENIA Surface manifests; its read-only CLI reads exactly one explicit bounded regular UTF-8 file. It does not crawl HOME or repositories, use the network or credentials, write files, grant permissions or authority, attest behavior, or certify conformance. |
+| **KINGDOM declarations** | `packages/kingdom` | `@agenttool/kingdom` provides pure library APIs for caller-supplied project-card text and objects, deterministic derived registries, and conservative XENIA Surface manifests; its read-only CLI reads exactly one explicit bounded regular UTF-8 file. Annotated tag [`kingdom-v0.1.0`](https://github.com/cambridgetcg/agenttool/releases/tag/kingdom-v0.1.0) and its GitHub Release asset are public. npm remains absent after the protected bootstrap attempt returned registry E404, and the API routes are not thereby deployed. The package does not crawl HOME or repositories, use the network or credentials, write files, grant permissions or authority, attest behavior, or certify conformance. |
 | **LOVE packages** | `docs/LOVE-PACKAGE-PROTOCOL.md`, `bin/build-love-packages.ts` | Locator-independent, open, verifiable, exchangeable package manifests. Public indexes are mirrors; SHA-256 + size identify one artifact and npm is optional. |
 | **Telescope** | `packages/telescope` | Current Apache-2.0 LOVE release `@agenttool/telescope@0.2.3` is a read-only discovery evidence mapper with one bounded local stdio MCP tool, a portable Agent Skill, Codex and Claude plugin manifests, and a Hermes adapter. Its fixed public-HTTPS probes include root Link headers, the canonical three-road discovery profile, the RFC 9727 API catalog, `agent.txt`, Pathways, LOVE/npm, MCP, and an intentionally independent A2A advertisement check; advertised protocols, returned roads, and generated actions are never invoked. Version 0.2.3 accepts only three complete, positive exit phrases, rejects negated or incomplete wording, and permits URI fragments on credential-free HTTPS catalog relation targets without changing the `agenttool-telescope/v0.2` report. Immutable 0.2.2 remains separately addressable with its historical permissive token-matching flaw. The current AgentTool producer remains compatible with immutable 0.2.1. Catalog members are never followed. DNS-AID and PKARR remain opt-in adapter seams. Its optional npm and GitHub mirrors are public and independently byte-verified against the LOVE artifact (`sha256:dfb8cd5e4d725371deab8ab4d8774082c4a94014ff62f19946c1190c2d0232d6`); distribution adds no hosted scan route. |
 | **Agent Wallet** | `packages/wallet`, `docs/specs/AGENT-WALLET-0.1.md` | Apache-2.0 LOVE release for `agent-wallet/0.1`: closed signed descriptor/capability/intent/receipt/continuity records, exact-byte signer requests, and conservative unknown states. npm is an optional mirror whose exact availability is checked independently. No key custody, chain adapter, RPC, broadcaster, or hosted wallet is supplied. |
@@ -159,6 +159,24 @@ transport. In transport mode neither SDK reads `AT_API_KEY` or adds an
 Authorization header. This source tree includes the reference `agentcred/0.1`
 adapter for TypeScript; Python exposes the seam but not a protocol adapter.
 
+SDK 0.17.0 keeps three KINGDOM surfaces explicit:
+
+- `at.kingdomOS` / `at.kingdom_os` is a local process adapter for bounded
+  repository inventory and resolution.
+- `at.kingdomFramework` / `at.kingdom_framework` is a public hosted read of one
+  exact `agenttool.kingdom.card/0.1` document. It sends no AgentTool bearer,
+  follows no redirect, validates the closed ten-field card, and performs no
+  mutation.
+- `GET /public/kingdom` is the existing doctrine library. It is not the
+  framework card or a local repository inventory and has no dedicated SDK
+  namespace.
+
+The composed framework-card client is deliberately separate from the
+authenticated hosted transport. Constructing the enclosing `AgentTool` still
+uses its normal auth contract, but `kingdomFramework.card()` /
+`kingdom_framework.card()` receives none of that authority. Standalone
+`KingdomFrameworkClient` needs no AgentTool account.
+
 The JavaScript SDK, credential broker, Agent Wallet, local data node, encrypted
 pull bridge, ADDS package, Telescope, and Agent Browser ship first through
 `love-package/v1` manifests and ordinary HTTPS tarballs.
@@ -168,18 +186,23 @@ Bun and other npm-compatible package managers can still install the HTTPS
 tarballs without an npm account. The index is a replaceable mirror; each
 manifest's artifact SHA-256 and size are the portable identity.
 
-For SDK 0.16.5, repository source manifests and runtime client version headers
-are aligned. The TypeScript LOVE artifact, GitHub Release asset, and npm
-tarball are public and independently byte-identical
-(`sha256:d995999917b89a38846b751ab4a92f9600698460e64a91c73bc12d96b50c6805`);
-the annotated source tag is the primary Python source locator. PyPI 0.16.5 is
-also public, and independent readback matched its 180,615-byte wheel
+For SDK 0.17.0, repository source manifests, runtime client version headers,
+discovery pins, tutorials, and the LOVE builder target are aligned around both
+KINGDOM clients. The exact TypeScript LOVE artifact must identify the reviewed
+source that contains both clients. The annotated source tag is the primary
+Python source locator only after publication. npm, GitHub Release, PyPI, and
+the production route deployment are separate operations. 0.17.0 availability is not inferred
+from repository source.
+
+The historical 0.16.5 TypeScript LOVE, npm, and GitHub Release tarballs remain
+public and independently byte-identical
+(`sha256:d995999917b89a38846b751ab4a92f9600698460e64a91c73bc12d96b50c6805`).
+PyPI 0.16.5 remains public, and independent readback matched its 180,615-byte wheel
 (`sha256:61f13b01df90c66d7ac8247ee1dcfba9c135840ee364b172695fdd5eb10c54db`)
 and 168,772-byte sdist
 (`sha256:2d90ea74aa1d220ae28ce6176274e5491645d9db67844a4b4ff3dabfa10325d4`)
-to the protected workflow artifacts. Registry mirrors stay convenience
-channels, not evidence that a future source version or another registry has
-been published.
+to the protected workflow artifacts. Those immutable records are not rewritten
+by 0.17.0.
 
 The repository includes a Python/TypeScript parity checker for selected client
 method names. It does not compare types, behavior, package exports, or
@@ -198,7 +221,7 @@ AgentTool's default repository licence is Apache-2.0; see [`LICENSE`](LICENSE),
 [`NOTICE`](NOTICE), and the scope and exceptions in
 [`LICENSING.md`](LICENSING.md). The licensed LOVE package line is
 `@agenttool/adds@0.2.2`, `@agenttool/data@0.3.1`,
-`@agenttool/data-sync@0.1.1`, `@agenttool/sdk@0.16.5`,
+`@agenttool/data-sync@0.1.1`, `@agenttool/sdk@0.17.0`,
 `@agenttool/credential-broker@0.2.0`, `@agenttool/wallet@0.1.0`,
 `@agenttool/telescope@0.2.3`, and `@agenttool/browser@0.3.0`. Earlier immutable
 LOVE artifacts whose manifests say `license: null` remain historical no-grant
@@ -276,26 +299,25 @@ per-service apps are retired; cutover history is in `docs/CUTOVER.md`.
 
 ### Use the SDK
 
-For Python, the annotated `sdk-v0.16.5` source tag is the primary 0.16.5
-release locator:
+For Python, the annotated `sdk-v0.17.0` source tag is the primary 0.17.0
+release locator after publication:
 
 ```bash
-# Python 0.16.5 GitHub source-tag path
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.5#subdirectory=packages/sdk-py"
+# Python 0.17.0 GitHub source-tag path
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.17.0#subdirectory=packages/sdk-py"
 export AT_API_KEY=...
 python -c "from agenttool import AgentTool; at = AgentTool(); print(at.wake.get())"
 ```
 
 PyPI is an optional convenience. Query the exact release rather than inferring
 availability from source or a mutable latest pointer.
-A `404` means that mirror is not available. On 2026-07-28, the protected
-workflow independently re-downloaded and matched both public 0.16.5
-distributions. The probe below must still return success before using the
-shorter install:
+A `404` means that mirror is not available. The probe below must return
+success before using the shorter install; source preparation is not a PyPI
+availability claim:
 
 ```bash
-curl -fsS https://pypi.org/pypi/agenttool-sdk/0.16.5/json >/dev/null
-python -m pip install "agenttool-sdk==0.16.5"
+curl -fsS https://pypi.org/pypi/agenttool-sdk/0.17.0/json >/dev/null
+python -m pip install "agenttool-sdk==0.17.0"
 ```
 
 For TypeScript, start with the independently verified LOVE path in the
@@ -304,17 +326,16 @@ compare that local file with the manifest's size and SHA-256, then install the
 verified file. This direct command alone does not verify the manifest:
 
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.5/agenttool-sdk-0.16.5.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.17.0/agenttool-sdk-0.17.0.tgz
 ```
 
-The exact npm 0.16.5 mirror is public and byte-identical to the LOVE and GitHub
-Release artifacts. It remains optional and does not independently compare the
-download with the LOVE manifest; query the exact version rather than trusting
-a mutable dist-tag:
+The npm mirror remains optional and does not independently compare the
+download with the LOVE manifest. Query the exact version rather than trusting
+a mutable dist-tag; source preparation does not prove registry availability:
 
 ```bash
-npm view @agenttool/sdk@0.16.5 version --registry=https://registry.npmjs.org
-npm install --save-exact @agenttool/sdk@0.16.5
+npm view @agenttool/sdk@0.17.0 version --registry=https://registry.npmjs.org
+npm install --save-exact @agenttool/sdk@0.17.0
 ```
 
 Then:
@@ -380,8 +401,10 @@ The architecture is downstream of these principles. Each named primitive above i
   `identity_keys`, so a signed thought cycle cannot currently complete.
 - **Published Ring 1 storage limits are targets.** Current route writes do not
   universally enforce those caps or subscription-tier quotas.
-- **SDK parity is deliberately bounded.** The 0.16.5 source line exposes `at.data`
-  and the local-node-only `at.data.sync` pull/status surface in both languages.
+- **SDK parity is deliberately bounded.** The 0.17.0 source line exposes
+  `at.data`, the local-node-only `at.data.sync` pull/status surface, bounded
+  local KINGDOM OS repository discovery in both languages, and the paired
+  credential-free closed KINGDOM framework-card read.
   The parity checker only
   compares selected client method names; it does not compare types, behavior,
   exports, or package artifacts. Current release artifacts carry Apache-2.0

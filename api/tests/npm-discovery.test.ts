@@ -17,7 +17,7 @@ const CURRENT_NPM_SPECIFIERS = [
   "@agenttool/credential-broker@0.1.0",
   "@agenttool/data@0.3.1",
   "@agenttool/data-sync@0.1.1",
-  "@agenttool/sdk@0.16.5",
+  "@agenttool/sdk@0.17.0",
   "@agenttool/telescope@0.2.3",
 ] as const;
 
@@ -41,7 +41,7 @@ describe("optional npm package discovery", () => {
     const published = read("apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md");
     expect(published).toBe(canonical);
     expect(canonical).toContain(
-      "npm install --save-exact @agenttool/sdk@0.16.5",
+      "npm install --save-exact @agenttool/sdk@0.17.0",
     );
     expect(canonical).toMatch(/skips Step 1.*in-command LOVE/is);
     expect(canonical).toMatch(/never substitute npm `latest`/i);
@@ -50,11 +50,11 @@ describe("optional npm package discovery", () => {
   test("describes npm as optional in repository-level orientation", () => {
     const rootReadme = read("README.md");
     expect(rootReadme).toContain(
-      "npm install --save-exact @agenttool/sdk@0.16.5",
+      "npm install --save-exact @agenttool/sdk@0.17.0",
     );
     const pythonSource =
-      "git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.5#subdirectory=packages/sdk-py";
-    const exactPyPI = 'python -m pip install "agenttool-sdk==0.16.5"';
+      "git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.17.0#subdirectory=packages/sdk-py";
+    const exactPyPI = 'python -m pip install "agenttool-sdk==0.17.0"';
     expect(rootReadme).toContain(pythonSource);
     expect(rootReadme).toContain(exactPyPI);
     expect(rootReadme.indexOf(pythonSource)).toBeLessThan(

@@ -61,7 +61,7 @@
 7. **Errors are doorways.** Path-guessing is normal agent behavior; a 404/401
    that answers with next_actions converts a miss into an arrival.
 
-## Where agenttool stands (audited live, 2026-07-27)
+## Where agenttool stands (audited live, 2026-07-28)
 
 **Already strong (verified end to end):** the .well-known suite (llms.txt on
 both hosts + llms-full.txt, agent.txt, RFC 9727 api-catalog, WebFinger,
@@ -83,6 +83,18 @@ re-downloaded and matched its wheel and sdist, and PyPI Integrity exposes
 publish attestations for both files. The Python formats are not byte-identical
 to the TypeScript tarball; registry visibility and mutable latest pointers
 remain separate from source and LOVE artifact authority.
+
+**0.17.0 release preparation, 2026-07-28:** the paired SDK source and active
+discovery pins now name two bounded KINGDOM reads. `kingdomOS` / `kingdom_os`
+provides local repository inventory and resolution through the installed CLI.
+`kingdomFramework` / `kingdom_framework` performs one credential-free,
+no-redirect read of the exact closed card at `/public/kingdom/framework`.
+Neither grants authority or receives the project bearer, and the existing
+`/public/kingdom` doctrine library remains a third surface. The exact 0.17.0
+LOVE artifact must identify this coherent source. The SDK annotated tag,
+npm/GitHub mirrors, PyPI distributions, and hosted deployment are separate
+operations. Until their exact public readbacks succeed, the verified public
+registry baseline remains 0.16.5.
 
 **The gaps, ranked (effort · who):**
 

@@ -1,10 +1,10 @@
 # agenttool-sdk-py
 
 ## What This Is
-Official Python SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)`, `AnthropicAdapter`, and a synchronous `OpenAIResponsesAdapter` for completed Responses API calls. The PyPI project name is `agenttool-sdk`. The annotated `sdk-v0.16.5` source tag and PyPI 0.16.5 are public; independent readback matched the exact public wheel and sdist to the protected workflow artifacts.
+Official Python SDK for the AgentTool platform. One `AgentTool` client composes authenticated hosted namespaces, the credential-free `at.kingdom_framework` project-card read, `at.data` for a separately configured local `agent-data/v1` node, and the local `at.kingdom_os` repository adapter. The public card read and both local clients inherit no AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)`, `AnthropicAdapter`, and a synchronous `OpenAIResponsesAdapter` for completed Responses API calls. The PyPI project name is `agenttool-sdk`. The annotated `sdk-v0.17.0` source tag becomes the primary Python release locator only after publication; PyPI remains an optional independently verified mirror.
 
 ## Current State
-Active - v0.16.5 is the checked-in, tagged, and publicly mirrored release baseline. This corrective patch tells the hard-rest payout truth: fresh admission returns `503 payout_admission_resting`, every payout worker boot path remains closed regardless of environment flags, and only historical exact replay/listing remains usable. The SDK adds no retry, signer, broadcaster, or worker authority. Phases 0-6, the synchronous completed-response provider adapters, an authenticated `httpx` transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge and Renaissance Correspondence clients, exact identity mutation/private-read authority proofs, and the separate `at.data` node client remain implemented here. The immutable `sdk-v0.16.4` tag remains historical bytes; public PyPI 0.16.5 is established by exact distribution readback rather than inferred from source.
+Active - v0.17.0 adds two paired KINGDOM reads. `KingdomOSClient.repositories()` / `resolve()` and lazy `at.kingdom_os` use fixed local argv, a sanitized environment, and no hosted bearer, path upload, graph fallback, routine execution, or mutation. `KingdomFrameworkClient.card()` and lazy `at.kingdom_framework` perform one credential-free, no-redirect read of the exact closed `agenttool.kingdom.card/0.1` document; they send no project bearer or cookies, reject missing or extra card fields, and grant no authority. The existing `/public/kingdom` doctrine library is separate from both clients. The immutable `sdk-v0.16.5` source tag and public 0.16.5 distributions contain neither namespace. The payout hard-rest boundary remains unchanged: fresh admission returns `503 payout_admission_resting`, every payout worker boot path remains closed, and only historical exact replay/listing remains usable. The SDK adds no retry, signer, broadcaster, or worker authority. Phases 0-6, synchronous completed-response provider adapters, authenticated `httpx` transport seam, project-private handoff continuity, wake profiles, trace signals, covenant review, Lounge and Renaissance Correspondence clients, identity authority proofs, and the separate `at.data` node client remain implemented here.
 
 ## Tech Stack
 - Python >= 3.9
@@ -16,7 +16,7 @@ Active - v0.16.5 is the checked-in, tagged, and publicly mirrored release baseli
 ## Project Structure
 ```
 src/agenttool/
-  __init__.py            — Public surface + __version__ ("0.16.5")
+  __init__.py            — Public surface + __version__ ("0.17.0")
   client.py              — AgentTool (composes hosted clients + at.deciding sugar)
   authority.py           — Exact local identity mutation and private-read authority proof helpers
   _context.py            — AmbientContext for auto-trace ambient state
@@ -29,6 +29,8 @@ src/agenttool/
   lounge.py              — LoungeClient + credential-free public look and local receipt signing
   memory.py              — MemoryClient (store, search, get, delete; tiered)
   data.py                — DataClient + DataSyncClient (separate local node; manifest, collect, query, changes, bounded peer pull/status)
+  kingdom_os.py          — KingdomOSClient (local read-only repository list/resolve; no shell, hosted auth, or mutation)
+  kingdom_framework.py   — KingdomFrameworkClient (credential-free exact public project card; no redirects or authority)
   pulse.py               — PulseClient (derived liveness; old heartbeat-emit deprecated, see Phase 0 roadmap)
   register.py            — Top-level register() — DEPRECATED since 2026-05-15 (agents-only); raises with 410 migration payload pointing at bootstrap_agent
   bootstrap_agent.py     — Top-level bootstrap_agent() — POST /v1/register/agent canonical arrival door (BYO keys + PoW)
@@ -59,6 +61,8 @@ tests/
   test_traces.py
   test_vault.py
   test_credential_transport.py — bearer-free broker transport boundary
+  test_kingdom_os.py     — fixed argv, sanitized environment, schema, ambiguity, and bearer-isolation contract
+  test_kingdom_framework.py — closed card, no-bearer/no-cookie, no-redirect, response-bound contract
 dist/                    — Built distribution files
 pyproject.toml           — Package config; force-includes SOUL.md in wheel
 ```
@@ -87,9 +91,11 @@ See [`docs/PYPI-RELEASES.md`](../../docs/PYPI-RELEASES.md).
 ## Dependencies
 - **Runtime**: `httpx >= 0.27`, `cryptography >= 41.0` (Phase 5+ for AES-256-GCM + ed25519)
 - **Dev**: `pytest >= 7.0`
-- **API**: All calls go to `https://api.agenttool.dev` (configurable via `base_url`)
+- **API**: Authenticated hosted calls go to `https://api.agenttool.dev` (configurable via `base_url`); `at.kingdom_framework` reads only its credential-free public card through a separate session; `at.data` and `at.kingdom_os` are separate local authorities
 - **Auth**: Reads `AT_API_KEY`, accepts `api_key`, or accepts a mutually
-  exclusive authenticated `httpx.BaseTransport` via `transport=`
+  exclusive authenticated `httpx.BaseTransport` via `transport=`. The public
+  KINGDOM framework reader receives neither bearer nor authenticated transport;
+  the local KINGDOM OS adapter receives neither.
 
 ## Parity invariant
 py and ts repository source stay at the same minor version (lockstep enforced from 0.7.0), and the LOVE builder target matches that source version. Registry versions can lag because npm and PyPI publication are separate operations. Each new module must land in BOTH languages before merging - `cd packages/sdk-ts && bun run check-parity` is the gate.
@@ -110,8 +116,11 @@ AgentTool Platform · "Welcome, don't block."
 
 ## Key Files
 - `src/agenttool/client.py` — Main `AgentTool` class composing the maintained service clients
-- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.16.5"`)
+- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.17.0"`)
 - `pyproject.toml` — Package metadata + `force-include` SOUL.md in wheel
 - `tests/test_client.py` — Primary test file
 - `tests/test_data.py` — local data-node and sync wire + bearer-isolation contract
+- `tests/test_kingdom_os.py` — local KINGDOM OS argv/schema/privacy boundary
+- `tests/test_kingdom_framework.py` — credential-free closed-card HTTP boundary
+- `docs/KINGDOM-OS-SDK.md` (repo root) — the three distinct KINGDOM surfaces and their non-goals
 - `docs/SDK-ROADMAP.md` (repo root) — Phase plan + endpoint coverage matrix

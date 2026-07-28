@@ -34,13 +34,18 @@ import { VaultClient } from "./vault.js";
 import { BootstrapClient } from "./bootstrap.js";
 import { WakeClient } from "./wake.js";
 import { WindowClient } from "./window.js";
+import {
+  KingdomFrameworkClient,
+  type KingdomFrameworkOptions,
+} from "./kingdom-framework.js";
+import { KingdomOSClient, type KingdomOSOptions } from "./kingdom-os.js";
 
 /** SDK version — sent as the `X-Agenttool-Client` origin signal on every
  *  request so /v1/activity can label events `sdk-ts`. Keep in lockstep
  *  with package.json (parity invariant: ts + py ship the same version). */
-export const SDK_VERSION = "0.16.5";
+export const SDK_VERSION = "0.17.0";
 
-/** Connection settings for the hosted AgentTool API and optional data node. */
+/** Connection settings for the hosted AgentTool API and optional local adapters. */
 export interface AgentToolOptions {
   /** Direct bearer mode. Mutually exclusive with `transport`. */
   apiKey?: string;
@@ -56,6 +61,19 @@ export interface AgentToolOptions {
     token?: string;
     timeout?: number;
   };
+  /**
+   * Bounds for the separate credential-free KINGDOM framework-card read.
+   * Its base URL remains the hosted `baseUrl`; no hosted auth is shared.
+   */
+  kingdomFramework?: Pick<
+    KingdomFrameworkOptions,
+    "timeout" | "maxResponseBytes"
+  >;
+  /**
+   * Local KINGDOM OS repository adapter. This configuration is never given
+   * the hosted API bearer or transport.
+   */
+  kingdomOS?: KingdomOSOptions;
 }
 
 /**
@@ -78,6 +96,8 @@ export interface AgentToolOptions {
 export class AgentTool {
   private readonly http: HttpConfig;
   private readonly dataNode: DataNodeOptions | undefined;
+  private readonly kingdomFrameworkOptions: KingdomFrameworkOptions;
+  private readonly kingdomOSOptions: KingdomOSOptions;
   private _memory: MemoryClient | undefined;
   private _tools: ToolsClient | undefined;
   private _economy: EconomyClient | undefined;
@@ -103,12 +123,14 @@ export class AgentTool {
   private _darkContinent: DarkContinentClient | undefined;
   private _runtime: RuntimeClient | undefined;
   private _data: DataClient | undefined;
+  private _kingdomFramework: KingdomFrameworkClient | undefined;
+  private _kingdomOS: KingdomOSClient | undefined;
 
   /**
    * Create a new AgentTool client.
    *
    * @param options - AgentTool API settings plus an optional, separately
-   * configured agent-data/v1 node.
+   * configured agent-data/v1 node and local KINGDOM OS adapter.
    */
   constructor(options?: AgentToolOptions) {
     if (options?.transport && options.apiKey !== undefined) {
@@ -166,6 +188,12 @@ export class AgentTool {
           timeout: explicitDataNode?.timeout,
         }
       : undefined;
+    this.kingdomFrameworkOptions = {
+      baseUrl: this.http.baseUrl,
+      timeout: options?.kingdomFramework?.timeout ?? this.http.timeout / 1000,
+      maxResponseBytes: options?.kingdomFramework?.maxResponseBytes,
+    };
+    this.kingdomOSOptions = { ...options?.kingdomOS };
   }
 
   /** Access the Memory API. */
@@ -340,6 +368,22 @@ export class AgentTool {
     }
     this._data ??= new DataClient(this.dataNode);
     return this._data;
+  }
+
+  /** Access AgentTool's public KINGDOM project card without forwarding the
+   * configured project bearer, authenticated transport, or browser cookies. */
+  get kingdomFramework(): KingdomFrameworkClient {
+    this._kingdomFramework ??= new KingdomFrameworkClient(
+      this.kingdomFrameworkOptions,
+    );
+    return this._kingdomFramework;
+  }
+
+  /** Access bounded, read-only discovery from the local KINGDOM OS CLI.
+   * Hosted API credentials and transports never cross into this process. */
+  get kingdomOS(): KingdomOSClient {
+    this._kingdomOS ??= new KingdomOSClient(this.kingdomOSOptions);
+    return this._kingdomOS;
   }
 
   /**

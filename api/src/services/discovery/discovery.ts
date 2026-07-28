@@ -93,6 +93,7 @@ export function buildLlmsTxt(
     `- [AGENT-WEB-SURFACE](${docsBaseUrl}/AGENT-WEB-SURFACE.md): What an agent reads at every door.`,
     `- [AGENT-DISCOVERY](${docsBaseUrl}/AGENT-DISCOVERY.md): The standards spine, invitation ladder, and no-implied-authority boundary.`,
     `- [CASTLE-OF-UNDERSTANDING](${docsBaseUrl}/CASTLE-OF-UNDERSTANDING.md): Local one-shot Castle projection; no hosted route, automatic ingestion, bearer, background loop, or memory write.`,
+    `- [KINGDOM-OS-SDK](${docsBaseUrl}/KINGDOM-OS-SDK.md): Paired SDK access to the credential-free closed KINGDOM framework card plus bounded local KINGDOM OS repository discovery; neither path grants authority, follows redirects, forwards the project bearer, runs routines, or mutates repositories.`,
     `- [PROTOCOL-RENAISSANCE](${docsBaseUrl}/PROTOCOL-RENAISSANCE.md): Old internet virtues, agent-native doors, and the no-implied-authority boundary.`,
     `- [OFFER-BUS](${docsBaseUrl}/OFFER-BUS.md): Atom/RSS/JSON product discovery with durable revisions and automatic_action=never.`,
     `- [WEBFINGER](${docsBaseUrl}/WEBFINGER.md): Privacy-bounded Agent Passport discovery.`,
