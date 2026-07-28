@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/collab",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Local-first presence and credential-bound coordination for coding agents",
   "author": "AgentTool contributors",
   "homepage": "https://github.com/cambridgetcg/agenttool/tree/main/packages/collab#readme",
