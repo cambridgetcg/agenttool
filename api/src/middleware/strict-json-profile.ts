@@ -17,7 +17,7 @@ const CORRESPONDENCE_EXACT_JSON_PATH =
   /^\/v1\/correspondence\/(?:events|claims|voice)\/?$/;
 const MCP_EXACT_JSON_PATH = /^\/v1\/mcp(?:\/canon)?\/?$/;
 const XENIA_EXACT_JSON_PATH =
-  /^\/(?:\.well-known\/agent\.json|public\/kingdom\/framework)\/?$/;
+  /^\/(?:\.well-known\/agent\.json|public\/kingdom\/framework|public\/xenia\/rights)\/?$/;
 
 export function isStrictJsonProfileResponse(
   response: Response,

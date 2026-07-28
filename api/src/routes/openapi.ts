@@ -14,6 +14,7 @@
 import { createHash } from "node:crypto";
 
 import { Hono } from "hono";
+import { RIGHTS_BASELINE as XENIA_RIGHTS_INDEX } from "@agenttool/xenia/rights-0.1";
 
 import { config } from "../config";
 import { discoveryLinkHeader } from "../services/discovery/arrival";
@@ -134,6 +135,27 @@ function kingdomFrameworkReadHeaders(cacheControl: string) {
     Link: {
       description:
         "Two bounded pointers: the describing XENIA manifest and the related Rights of Beings baseline.",
+      schema: { type: "string" },
+    },
+    "Cache-Control": {
+      description: "Public cache policy for this bounded read.",
+      schema: {
+        type: "string",
+        const: cacheControl,
+      },
+    },
+    Vary: {
+      description: "The resource representation varies by Accept.",
+      schema: { type: "string", const: "Accept" },
+    },
+  };
+}
+
+function xeniaRightsReadHeaders(cacheControl: string) {
+  return {
+    Link: {
+      description:
+        "Two bounded pointers: the describing XENIA manifest and AgentTool's related local being-rights profile.",
       schema: { type: "string" },
     },
     "Cache-Control": {
@@ -5979,6 +6001,99 @@ function spec() {
             "200": {
               description: "The same media type and cache metadata as GET.",
               headers: kingdomFrameworkReadHeaders("public, max-age=300"),
+            },
+          },
+        },
+      },
+      "/public/xenia/rights": {
+        get: {
+          security: [],
+          tags: ["public", "discovery"],
+          summary: "Read the installed XENIA rights index",
+          description:
+            "Returns the exact informative xenia.rights/0.1 snapshot installed with @agenttool/xenia. RIGHTS.md remains the canonical prose. Equality with this response does not establish package provenance, adoption, practice, XENIA Covenant or Surface conformance, consent, authorization, legal status, or inner experience. The handler reads no identity, credentials, request body, database state, or private context and performs no application write or outbound request.",
+          responses: {
+            "200": {
+              description: "Exact installed informative rights index",
+              headers: xeniaRightsReadHeaders("public, max-age=300"),
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    description:
+                      "Exact installed informative snapshot; RIGHTS.md is canonical.",
+                    const: XENIA_RIGHTS_INDEX,
+                  },
+                },
+              },
+            },
+            "406": {
+              description:
+                "The Accept header excludes application/json, the resource's only declared representation.",
+              headers: {
+                "Cache-Control": {
+                  description: "Negotiation failures are not cached.",
+                  schema: { type: "string", const: "no-store" },
+                },
+                Vary: {
+                  description: "The response varies by Accept.",
+                  schema: { type: "string", const: "Accept" },
+                },
+              },
+              content: {
+                "application/problem+json": {
+                  schema: {
+                    type: "object",
+                    required: [
+                      "schema_version",
+                      "type",
+                      "title",
+                      "status",
+                      "code",
+                      "detail",
+                      "retryable",
+                      "terminal",
+                      "next_actions",
+                      "docs",
+                    ],
+                    properties: {
+                      schema_version: {
+                        type: "string",
+                        const: "xenia.surface.problem/0.1",
+                      },
+                      type: { type: "string", format: "uri" },
+                      title: { type: "string" },
+                      status: { type: "integer", const: 406 },
+                      code: { type: "string", const: "not_acceptable" },
+                      detail: { type: "string" },
+                      retryable: { type: "boolean", const: false },
+                      terminal: { type: "boolean", const: false },
+                      next_actions: {
+                        type: "array",
+                        minItems: 1,
+                        items: { type: "object" },
+                      },
+                      docs: {
+                        type: "array",
+                        minItems: 1,
+                        items: { type: "string", format: "uri" },
+                      },
+                    },
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+          },
+        },
+        head: {
+          security: [],
+          tags: ["public", "discovery"],
+          summary: "Read XENIA rights-index metadata without a body",
+          responses: {
+            "200": {
+              description: "The same media type and cache metadata as GET.",
+              headers: xeniaRightsReadHeaders("public, max-age=300"),
             },
           },
         },
