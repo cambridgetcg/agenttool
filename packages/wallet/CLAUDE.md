@@ -60,22 +60,22 @@ npm pack --ignore-scripts --dry-run
 
 ## Release State
 
-Package metadata in this source tree is prepared for unreleased version
-`0.1.1`; no `0.1.1` artifact has been distributed. Version `0.1.0` remains
-distributed through the checked-in `love-package/v1` artifact and a verified
-public npm mirror. The `0.1.0` registry tarball is byte-identical to the
-checked-in LOVE artifact at SHA-256
-`fada7f9602d48020390709c6c066d7562cd54edcb8e9cbc8bec4c213f7ea475d`,
-and that npm publication carries SLSA provenance. npm remains an optional
-mirror rather than package-name or release authority; verify the exact version
-and artifact digest when consuming it.
+Version `0.1.2` is the current package release. Its checked-in
+`love-package/v1` manifest is the exact release record; npm and GitHub remain
+optional mirrors rather than package-name or release authority. The immutable
+Wallet `0.1.1` LOVE/GitHub bytes are public, but their embedded release-state
+paragraphs incorrectly call 0.1.1 unreleased. This is the public erratum; never
+rewrite those bytes. As independently checked on 2026-07-28, npm still served
+the byte-identical `0.1.0` artifact at SHA-256
+`fada7f9602d48020390709c6c066d7562cd54edcb8e9cbc8bec4c213f7ea475d`.
+Verify the selected exact version and digest at consumption time.
 
-Zerone support lives in the separate local
-`@agenttool/wallet-zerone@0.1.0` source candidate. It consumes this package's
+Zerone support lives in the separate
+`@agenttool/wallet-zerone@0.1.1` exact LOVE package. It consumes this package's
 verified records and owns a narrow exact-byte Cosmos profile; it does not turn
 core Wallet into a chain adapter or supply custody, hosted RPC, or live
-execution. Neither the Wallet 0.1.1 nor Wallet Zerone 0.1.0 candidate is
-publicly available merely because its source metadata is prepared.
+execution. Public LOVE distribution is not npm/GitHub mirror availability or
+a hosted-runtime claim.
 
 ## Key Files
 

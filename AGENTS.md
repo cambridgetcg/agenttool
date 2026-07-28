@@ -45,14 +45,17 @@ structure and emits reports; it does not execute scripts, install or copy
 skills, use the network, spawn subprocesses, look up credentials, or change
 host configuration. Agent
 Wallet core 0.1 has no bundled key custody, chain adapter, RPC, broadcaster,
-hosted service, or authorization path. Its `@agenttool/wallet@0.1.0` npm
-mirror is public and byte-identical to the exact LOVE artifact; source is
-prepared for 0.1.1. The separate local
-`@agenttool/wallet-zerone@0.1.0` candidate owns a two-message Zerone profile,
-exact Cosmos direct-sign bytes, chain-native verification, and injected
-transports. It still supplies no keys, custody, endpoint, hosted RPC, generic
-REST, automatic rebroadcast, durable host transaction, settlement proof, or
-live-network test by default. Telescope 0.2.3 is the current exact LOVE
+hosted service, or authorization path. `@agenttool/wallet@0.1.2` is the
+current exact LOVE release; npm remains independently verified at 0.1.0 until
+an exact later registry version is observed. The separate local
+`@agenttool/wallet-zerone@0.1.1` exact LOVE release owns a two-message Zerone
+profile, exact Cosmos direct-sign bytes, chain-native verification, and
+injected transports. It still supplies no keys, custody, endpoint, hosted RPC,
+generic REST, automatic rebroadcast, durable host transaction, settlement
+proof, deployed bridge, or live-network test by default. Earlier Wallet 0.1.1
+and Zerone 0.1.0 artifacts remain immutable; their embedded pre-release status
+sentences are covered by the public erratum rather than rewritten. Telescope
+0.2.3 is the current exact LOVE
 release; its optional npm and GitHub mirrors are public and independently
 byte-verified, and the package remains a local client without a hosted scan
 route.
@@ -277,7 +280,7 @@ bun bin/npm-release.ts resolve --package collab # inspect allowlisted npm identi
 | `agenttool-castle.ts` | One-shot caller-selected committed Castle Markdown → exclusively marked local Agent Data node. Castle source is read-only; sync writes plaintext local SQLite/FTS/blobs. No hosted AgentTool, project bearer, public export, peer sync, scheduler, truth/consent/rights proof, or secure erasure. See `docs/CASTLE-OF-UNDERSTANDING.md`. |
 | `agenttool-castle-whitehack-intake.ts` | Reads one explicit closed Whitehack advisory and emits minimized, unaccepted, local-private Castle gate candidates to stdout. Locations are omitted by default. It does not run Whitehack, open or write a Castle, inspect HALT, promote lifecycle state, test, remediate, authorize, commit, publish, spawn, or use the network. See `docs/WHITEHACK.md`. |
 | `agenttool-whitehack-evidence-storage.ts` | Explicit local `store`/`retrieve` bridge for exact Whitehack 0.9.0 public-minimal capsules. It encrypts one constant-size ADDS frame to a caller-selected S3-compatible bucket, independently verifies and decrypts before issuing one finite recipient-bound grant, and emits a sensitive non-public receipt. Credentials/private key use fixed environment names only. It has finite provider deadlines, no retry/delete/Castle/scan path, and no durability, retention, publication, or authorization claim. See `docs/WHITEHACK.md`. |
-| `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, `@agenttool/telescope`, `@agenttool/wallet`, and `@agenttool/browser` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
+| `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, `@agenttool/telescope`, `@agenttool/wallet`, `@agenttool/wallet-zerone`, and `@agenttool/browser` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
 | `npm-release.ts` | Implements the one allowlisted npm release policy behind `.github/workflows/publish-npm.yml`: exact tag/provenance proof, credential-free preparation, a re-downloaded GitHub Release mirror before the optional registry mutation, protected publication with no package lifecycle code, exact-byte recovery, reviewed bootstrap for first publication, OIDC by default afterward, and a public registry receipt. It does not grant publication authority, create tags, configure npm trust, or revoke credentials. See `docs/NPM-RELEASES.md`. |
 | `pypi-release.ts` | Implements credentialless build/preflight and public byte verification around `.github/workflows/publish-pypi.yml` for the Python SDK. Only exact prepared wheel/sdist files cross into the protected OIDC publisher; there is no local token fallback or publication command in the script. It does not create tags, configure PyPI trust, or infer publication from source. See `docs/PYPI-RELEASES.md`. |
 | `whitehack-advisory.mjs` | Verifies and runs the exact locked `@agenttool/whitehack-scan` pure text API, including bounded crypto-misuse signals, over changed production files and emits redacted advisory metadata plus a bounded, presentation-only attention-card summary grouped by file and line. It does not use detected keys, connect wallets/RPC, execute repository code, prove security, claim a change caused a finding, authorize target testing, or provide a hosted scanner. See `docs/WHITEHACK.md`. |

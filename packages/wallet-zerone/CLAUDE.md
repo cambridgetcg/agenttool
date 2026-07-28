@@ -92,10 +92,14 @@ after ensuring dependencies are cached.
 
 ## Release state
 
-Version `0.1.0` is a locally prepared release candidate after independent
-wire/package review. Its `@agenttool/wallet ^0.1.1` peer must be released
-first. Do not claim npm publication, public artifact availability, deployment,
-or live-chain execution from source metadata alone.
+Version `0.1.1` is the current exact LOVE release after independent
+wire/package review and declares `@agenttool/wallet ^0.1.2` as its peer. The
+immutable `0.1.0` LOVE artifact remains public, but its embedded candidate
+wording is a historical release-state error and must not be rewritten. As of
+the 2026-07-28 source preparation, the adapter's optional npm and GitHub
+Release mirrors had not been completed; verify those mutable surfaces
+independently. Public LOVE bytes do not prove hosted deployment, custody, host
+execution conformance, or live-chain execution.
 
 ## Kingdom Engine
 

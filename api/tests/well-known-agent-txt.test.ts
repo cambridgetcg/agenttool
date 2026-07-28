@@ -45,6 +45,7 @@ const REQUIRED_KEYS = [
   "Invocation-Witness-Boundary",
   "Zerone-Wallet-Adapter",
   "Zerone-Wallet-Source",
+  "Zerone-Wallet-LOVE-Manifest",
   "Zerone-Wallet-Boundary",
   "MCP-Server-Card",
   "MCP-Server-Card-Role",
@@ -256,8 +257,11 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
     expect(kv.get("Zerone-Wallet-Source")).toBe(
       "https://github.com/cambridgetcg/agenttool/tree/main/packages/wallet-zerone",
     );
+    expect(kv.get("Zerone-Wallet-LOVE-Manifest")).toBe(
+      "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.1/manifest.json",
+    );
     expect(kv.get("Zerone-Wallet-Boundary")).toMatch(
-      /local bounded offline source only.*no AgentTool trust export.*identity migration.*portable trust proof.*key custody.*hosted RPC.*deployed bridge.*network action requires caller-supplied transport and authority/is,
+      /exact public LOVE artifact.*bounded local offline package\/profile only.*no AgentTool trust export.*identity migration.*portable trust proof.*key custody.*hosted RPC.*deployed bridge.*network action requires caller-supplied transport and authority/is,
     );
   });
 

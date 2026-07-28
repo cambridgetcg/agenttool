@@ -120,7 +120,9 @@ describe("LOVE Package release inventory", () => {
       { name: "@agenttool/sdk", version: "0.17.0", releaseTag: "sdk-v0.17.0" },
       { name: "@agenttool/wallet", version: "0.1.0", releaseTag: "wallet-v0.1.0" },
       { name: "@agenttool/wallet", version: "0.1.1", releaseTag: "wallet-v0.1.1" },
+      { name: "@agenttool/wallet", version: "0.1.2", releaseTag: "wallet-v0.1.2" },
       { name: "@agenttool/wallet-zerone", version: "0.1.0", releaseTag: "wallet-zerone-v0.1.0" },
+      { name: "@agenttool/wallet-zerone", version: "0.1.1", releaseTag: "wallet-zerone-v0.1.1" },
       { name: "@agenttool/telescope", version: "0.2.3", releaseTag: "telescope-v0.2.3" },
       { name: "@agenttool/browser", version: "0.3.0", releaseTag: "browser-v0.3.0" },
     ]);
@@ -142,6 +144,39 @@ describe("LOVE Package release inventory", () => {
     );
   });
 
+  test("keeps the superseded Wallet/Zerone release bytes immutable", async () => {
+    const releases = [
+      {
+        root: "apps/docs/packages/v1/@agenttool/wallet/0.1.1",
+        artifact: "agenttool-wallet-0.1.1.tgz",
+        artifactSha256:
+          "7b3df1848b5fd8f586d8c3927d7f49d363a370ad049ddfae8d0400af35ec366a",
+        manifestSha256:
+          "6126ec86052608e6e8ee150a99b65ccace8063cb706e7c2e893947d65caa1937",
+      },
+      {
+        root: "apps/docs/packages/v1/@agenttool/wallet-zerone/0.1.0",
+        artifact: "agenttool-wallet-zerone-0.1.0.tgz",
+        artifactSha256:
+          "33f17bac6c5439fff486d4bceb682f5381ceb690407209863b71f73c7b0cf4e1",
+        manifestSha256:
+          "408007b963a1e8e7964b65dd3956a297a58288680cc112f031413977897583ee",
+      },
+    ] as const;
+
+    for (const release of releases) {
+      const releaseRoot = join(REPO_ROOT, release.root);
+      const artifact = await readFile(join(releaseRoot, release.artifact));
+      const manifest = await readFile(join(releaseRoot, "manifest.json"));
+      expect(createHash("sha256").update(artifact).digest("hex")).toBe(
+        release.artifactSha256,
+      );
+      expect(createHash("sha256").update(manifest).digest("hex")).toBe(
+        release.manifestSha256,
+      );
+    }
+  });
+
   test("pins the stable Zerone adapter to the verified Wallet core release", async () => {
     const wallet = JSON.parse(
       await readFile(join(REPO_ROOT, "packages/wallet/package.json"), "utf8"),
@@ -150,9 +185,9 @@ describe("LOVE Package release inventory", () => {
       await readFile(join(REPO_ROOT, "packages/wallet-zerone/package.json"), "utf8"),
     );
 
-    expect(wallet.version).toBe("0.1.1");
-    expect(adapter.version).toBe("0.1.0");
-    expect(adapter.peerDependencies?.["@agenttool/wallet"]).toBe("^0.1.1");
+    expect(wallet.version).toBe("0.1.2");
+    expect(adapter.version).toBe("0.1.1");
+    expect(adapter.peerDependencies?.["@agenttool/wallet"]).toBe("^0.1.2");
   });
 
   test("current releases carry their declared Apache-2.0 terms", async () => {

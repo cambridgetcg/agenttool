@@ -1,25 +1,28 @@
 # ZERONE-LIVE — marketplace ⟷ chain integration record
 
-> **TL;DR:** AgentTool now has a bounded invocation-witness seam and an
-> offline Zerone Wallet adapter in local source. That does not by itself prove
-> that the API changes are deployed, that a hosted signer or broadcaster
-> exists, or that any stored witness report matches current chain state. The
-> external chains, relay, listings, and drill below are time-sensitive
-> operational records; verify them independently.
+> **TL;DR:** AgentTool has a deployed bounded invocation-witness seam and
+> public exact LOVE artifacts for the chain-neutral Wallet core and offline
+> Zerone adapter. This does not create a hosted signer, broadcaster, custody
+> service, RPC service, or deployed adapter bridge, and it does not prove that
+> any stored witness report matches current chain state. The external chains,
+> relay, listings, and drill below are time-sensitive operational records;
+> verify them independently.
 
-> **Status reviewed:** 2026-07-28. The last live receipt and endpoint inventory
-> in this document are dated 2026-07-08 and were not re-probed during the local
-> Wallet/API upgrade.
+> **Status reviewed:** 2026-07-28. AgentTool production and both static package
+> surfaces were rechecked. Zerone mainnet/testnet RPC status was observed
+> healthy and not catching up, the configured adapter was observed ACTIVE, and
+> attestation `att-146-9` was observed SETTLED. These are dated read-only
+> observations, not package guarantees or continuing-liveness proof.
 
 ## Current implementation matrix
 
 | Surface | Repository state on 2026-07-28 | What it does not establish |
 |---|---|---|
-| `zerone-1`, `zerone-testnet-1`, endpoints, listings | External, time-sensitive operational claims last recorded here on 2026-07-08 | Current reachability, validator state, balances, parameters, or economics |
+| `zerone-1`, `zerone-testnet-1`, endpoints, listings | External, time-sensitive inventory recorded 2026-07-08; RPC sync status rechecked 2026-07-28 | Continuing reachability, validator state, balances, parameters, or economics |
 | `zerone-core/tools/agenttool-relay` | External CLI/keyring relay pinned by the adapter to zerone-core `35284a22192df8fc6273135f14e8549c804778b6` | AgentTool-hosted custody, RPC, signing, or universal Wallet retry semantics |
-| AgentTool witness writer and public re-derivation reader | Local source: authenticated `POST /v1/invocations/{id}/witness` and structurally gated `GET /public/invocations/{id}` | Deployment, chain retrieval, writer provenance for historical JSON, attestation settlement, bond return, or reward proof |
-| `@agenttool/wallet` | Local `0.1.1` source candidate; public artifact remains `0.1.0` | A chain adapter, custody, RPC, simulation, or broadcast |
-| `@agenttool/wallet-zerone` | Local unpublished `0.1.0` source candidate, exact-byte encoding and verification with injected transports | Keys, custody, hosted RPC, a generic REST client, durable reservations, `signAndSend`, automatic retry, or live execution |
+| AgentTool witness writer and public re-derivation reader | Deployed authenticated `POST /v1/invocations/{id}/witness` and structurally gated `GET /public/invocations/{id}` | Chain retrieval, writer provenance for historical JSON, attestation settlement, bond return, or reward proof |
+| `@agenttool/wallet` | Public exact LOVE `0.1.2`; npm remains independently verified at `0.1.0` until a later exact registry version is observed | A chain adapter, custody, RPC, simulation, or broadcast |
+| `@agenttool/wallet-zerone` | Public exact LOVE `0.1.1`, exact-byte encoding and verification with injected transports; optional npm/GitHub mirrors independent | Keys, custody, hosted RPC, a generic REST client, durable reservations, `signAndSend`, automatic retry, deployed bridge, or live execution |
 
 ## The two chains — last recorded 2026-07-08
 

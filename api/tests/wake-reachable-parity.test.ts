@@ -42,7 +42,9 @@ describe("wake reachable doors", () => {
       adapter: {
         protocol: "agent-wallet-zerone/0.1",
         package: "@agenttool/wallet-zerone",
-        availability: "local_offline_source_only",
+        love_manifest:
+          "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.1/manifest.json",
+        availability: "public_love_artifact_local_package_only",
         hosted: false,
         custody: false,
         hosted_rpc: false,

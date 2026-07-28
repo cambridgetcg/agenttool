@@ -1,5 +1,5 @@
 export const PACKAGE_NAME = "@agenttool/wallet" as const;
-export const PACKAGE_VERSION = "0.1.1" as const;
+export const PACKAGE_VERSION = "0.1.2" as const;
 export const AGENT_WALLET_PROTOCOL = "agent-wallet/0.1" as const;
 
 export const RECORD_SCHEMAS = Object.freeze({
