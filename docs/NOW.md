@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-28 (`@agenttool/kingdom@0.1.0` is public on npm and GitHub with independently verified bytes and attestations, and its XENIA-visible production API door is live; SDK 0.17.0 has a public annotated tag, GitHub Release, npm and PyPI mirrors with independent readback, while production status is evidenced separately)
+> Updated: 2026-07-28 (`@agenttool/kingdom@0.1.0` is public on npm and GitHub with independently verified byte parity and npm attestations, and its XENIA-visible production API door is live; SDK 0.17.0 has a public annotated tag, GitHub Release, npm and PyPI mirrors with independent readback, while production status is evidenced separately)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -46,20 +46,21 @@ are byte-identical
 prepared, mirrored, published, and read back that exact artifact. A fresh
 install followed by `npm audit signatures` verified its registry signatures
 and attestations. The SLSA provenance binds the public repository, exact
-workflow, tag, commit, and run, with an inclusion proof at
+workflow, tag, commit, and run, with a Rekor transparency-log entry at
 [Rekor index 2275324579](https://search.sigstore.dev/?logIndex=2275324579).
 Those proofs authenticate release bytes and build identity; they do not certify
 KINGDOM/XENIA conformance or grant authority.
 
-A separate clean production deployment now serves
+A separate clean production deployment of revision `7f2d2041` now serves
 [`/.well-known/agent.json`](https://api.agenttool.dev/.well-known/agent.json)
 and
 [`/public/kingdom/framework`](https://api.agenttool.dev/public/kingdom/framework).
-Live readback returns the closed `agenttool.kingdom.card/0.1` card, and the
-XENIA Surface checker reports 22 passing checks with no failures or unknowns
-for the manifest, its declared resource, and a wrong-route sample. That
-bounded result establishes availability of this door only; it does not certify
-the rest of AgentTool or establish Covenant adoption.
+At the 2026-07-28 observation, live readback returns the closed
+`agenttool.kingdom.card/0.1` card, and the XENIA Surface checker reports 22
+passing checks with no failures or unknowns for the manifest, its declared
+resource, and a wrong-route sample. That bounded result establishes
+availability of this door only; it does not certify the rest of AgentTool or
+establish Covenant adoption.
 
 ## Codeberg is retired (2026-07-25) — one remote from here on
 
