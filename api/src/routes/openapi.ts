@@ -46,6 +46,16 @@ import {
   OFFER_BUS_INDEX_MEDIA_TYPE,
   OFFER_BUS_JSON_MEDIA_TYPE,
 } from "../services/offer-bus";
+import {
+  WITNESS_ADAPTER_ID_PATTERN,
+  WITNESS_ATTESTATION_ID_PATTERN,
+  WITNESS_CAP,
+  WITNESS_CHAIN_ID_PATTERN,
+  WITNESS_DID_MAX_LENGTH,
+  WITNESS_DID_PATTERN,
+  WITNESS_ENTRY_SCHEMA,
+  WITNESS_TX_HASH_PATTERN,
+} from "../services/marketplace/witness";
 import { SUBSTRATE_TASK_KINDS } from "../services/substrate-tasks/verifiers";
 import {
   DOCUMENT_MAX_JSON_REQUEST_BYTES,
@@ -2610,6 +2620,88 @@ const COMMON_SCHEMAS = {
     ],
   },
 };
+
+function invocationWitnessEntrySchema() {
+  return {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      schema: {
+        type: "string",
+        const: WITNESS_ENTRY_SCHEMA,
+        description:
+          "Versioned server-writer shape discriminator. This is not a signature or proof of historical provenance.",
+      },
+      chain_id: {
+        type: "string",
+        pattern: WITNESS_CHAIN_ID_PATTERN.source,
+        description:
+          "Bounded chain identifier reported by an authenticated invocation party; for Zerone the relay uses raw zerone-1 or zerone-testnet-1.",
+      },
+      tx_hash: {
+        type: "string",
+        pattern: WITNESS_TX_HASH_PATTERN.source,
+      },
+      attestation_id: {
+        type: "string",
+        pattern: WITNESS_ATTESTATION_ID_PATTERN.source,
+      },
+      adapter_id: {
+        type: "string",
+        pattern: WITNESS_ADAPTER_ID_PATTERN.source,
+      },
+      witness_did: {
+        type: ["string", "null"],
+        maxLength: WITNESS_DID_MAX_LENGTH,
+        pattern: WITNESS_DID_PATTERN.source,
+        description:
+          "Server-resolved DID or DID-URL of the authenticated reporting party; null only for an unresolved retained seller identity.",
+      },
+      witnessed_at: { type: "string", format: "date-time" },
+    },
+    required: [
+      "schema",
+      "chain_id",
+      "tx_hash",
+      "attestation_id",
+      "witness_did",
+      "witnessed_at",
+    ],
+  };
+}
+
+function invocationWitnessWriteResponse(description: string) {
+  return {
+    description,
+    content: {
+      "application/json": {
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            witness: invocationWitnessEntrySchema(),
+            witness_count: {
+              type: "integer",
+              minimum: 1,
+              maximum: WITNESS_CAP,
+            },
+            already_witnessed: { type: "boolean" },
+            public_path: {
+              type: "string",
+              pattern: "^/public/invocations/[0-9a-fA-F-]{36}$",
+            },
+          },
+          required: [
+            "witness",
+            "witness_count",
+            "already_witnessed",
+            "public_path",
+          ],
+        },
+      },
+    },
+  };
+}
 
 function spec() {
   return {
@@ -5611,6 +5703,91 @@ function spec() {
         parameters: [{ name: "did", in: "path", required: true, description: "Exact legacy did-field value, percent-encoded as one path segment; application lookup, not W3C DID Resolution", schema: { type: "string" } }],
         get: { security: [], tags: ["public"], summary: "Active/revoked public profile envelope or smaller memorial witness shape; expression appears only for active identities with expression_visibility=public", responses: { "200": { description: "Profile or memorial witness" }, "404": { $ref: "#/components/responses/NotFound" } } },
       },
+      "/public/invocations/{id}": {
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        get: {
+          security: [],
+          tags: ["public", "marketplace"],
+          summary:
+            "Re-derive a released invocation after a valid party-reported chain reference",
+          description:
+            "Unauthenticated, deliberately narrow comparison surface. It opens only while the invocation remains status=released with a settlement timestamp and a non-empty list of exact agenttool.invocation-witness/1 entries. New entries are accepted through the authenticated witness route, but shape and version checks do not prove historical writer or cryptographic provenance, and AgentTool does not query or verify the referenced chain. Retrieve the named transaction and attestation independently, then compare their content hash with the ten ordered fields returned here. Sealed input and output payloads are never exposed.",
+          responses: {
+            "200": {
+              description:
+                "Ten canonical invocation fields plus bounded party-reported witness references and an independent comparison recipe",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      amount: { type: "integer" },
+                      buyer_did: { type: "string" },
+                      completed_at: {
+                        type: ["string", "null"],
+                        format: "date-time",
+                      },
+                      completion_sig: { type: ["string", "null"] },
+                      created_at: { type: "string", format: "date-time" },
+                      currency: { type: "string" },
+                      id: { type: "string", format: "uuid" },
+                      listing_id: { type: "string", format: "uuid" },
+                      settled_at: {
+                        type: ["string", "null"],
+                        format: "date-time",
+                      },
+                      status: { type: "string", const: "released" },
+                      _witnesses: {
+                        type: "array",
+                        minItems: 1,
+                        maxItems: WITNESS_CAP,
+                        items: invocationWitnessEntrySchema(),
+                      },
+                      _witness_notice: {
+                        type: "string",
+                        description:
+                          "States that entries are authenticated-party reports, not chain verification.",
+                      },
+                      _rederive: {
+                        type: "string",
+                        description:
+                          "Compact-JSON content-hash comparison recipe for the ten ordered fields.",
+                      },
+                    },
+                    required: [
+                      "amount",
+                      "buyer_did",
+                      "completed_at",
+                      "completion_sig",
+                      "created_at",
+                      "currency",
+                      "id",
+                      "listing_id",
+                      "settled_at",
+                      "status",
+                      "_witnesses",
+                      "_witness_notice",
+                      "_rederive",
+                    ],
+                  },
+                },
+              },
+            },
+            "404": {
+              description:
+                "not_witnessed — unknown, non-released, unsettled, private, empty, legacy-shaped, malformed, extra-key, or over-cap witness metadata",
+            },
+          },
+        },
+      },
       "/public/identities/by-pubkey": {
         post: {
           security: [],
@@ -7857,6 +8034,73 @@ function spec() {
           responses: {
             "200": { description: "Signature verified and invocation released" },
             "503": disputeArbitrationRestResponse(),
+          },
+        },
+      },
+      "/v1/invocations/{id}/witness": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["marketplace"],
+          summary: "Report a public-chain reference for a released invocation",
+          description:
+            "An authenticated buyer or seller party may append a bounded, versioned chain reference after direct settlement (status=released). This zero-credit writer is idempotent per (chain_id, attestation_id), caps metadata at 32 entries, and opens GET /public/invocations/{id} for independent re-derivation. AgentTool records the party report but does not query the named chain, verify that the transaction or attestation exists, prove ownership/provenance, or establish Zerone attestation settlement.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    chain_id: {
+                      type: "string",
+                      pattern: WITNESS_CHAIN_ID_PATTERN.source,
+                      description:
+                        "Bounded chain identifier; Zerone relay values are raw zerone-1 or zerone-testnet-1.",
+                    },
+                    tx_hash: {
+                      type: "string",
+                      pattern: WITNESS_TX_HASH_PATTERN.source,
+                    },
+                    attestation_id: {
+                      type: "string",
+                      pattern: WITNESS_ATTESTATION_ID_PATTERN.source,
+                    },
+                    adapter_id: {
+                      type: "string",
+                      pattern: WITNESS_ADAPTER_ID_PATTERN.source,
+                    },
+                  },
+                  required: ["chain_id", "tx_hash", "attestation_id"],
+                },
+              },
+            },
+          },
+          responses: {
+            "201": invocationWitnessWriteResponse(
+              "A new authenticated-party chain reference was stored",
+            ),
+            "200": invocationWitnessWriteResponse(
+              "Idempotent replay; the previously stored entry is returned unchanged",
+            ),
+            "400": {
+              description:
+                "Strict request validation failed; unknown, unsafe, or out-of-bound fields are refused",
+            },
+            "403": {
+              description: "not_invocation_party",
+            },
+            "404": { $ref: "#/components/responses/NotFound" },
+            "409": {
+              description:
+                "invocation_not_settled | witnesses_full",
+            },
+            "500": {
+              description:
+                "witnesses_malformed — retained metadata is not a valid server-writer shape; retrying cannot repair it",
+            },
           },
         },
       },

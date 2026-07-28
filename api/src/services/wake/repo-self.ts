@@ -146,6 +146,26 @@ const MODULES: ModuleSelf[] = [
     claude_md: "packages/wallet/CLAUDE.md",
   },
   {
+    path: "packages/wallet-zerone/",
+    name: "@agenttool/wallet-zerone",
+    kind: "chain-profile-library",
+    modalities: [
+      "typescript",
+      "esm",
+      "cosmos-sign-mode-direct",
+      "go-cosmos-vectors",
+    ],
+    register:
+      "Local Zerone profile source for verified agent-wallet/0.1 intents: two message types, exact direct-sign bytes, chain-native verification, and injected transports.",
+    walls: [
+      "No key derivation, private-key or mnemonic input, custody, signer provider, or sign-and-send operation",
+      "No bundled endpoint, bearer credential, hosted RPC, generic REST client, automatic rebroadcast, or deployed bridge",
+      "Transaction inclusion is not attestation settlement, bond return, challenge survival, or reward proof",
+      "Source/package discovery does not prove npm, public LOVE, docs deployment, or durable-host execution availability",
+    ],
+    claude_md: "packages/wallet-zerone/CLAUDE.md",
+  },
+  {
     path: "infra/",
     name: "agenttool-infra",
     kind: "configuration",

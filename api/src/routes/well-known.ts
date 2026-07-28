@@ -63,6 +63,10 @@ import {
   WAKE_REPRESENTATION_REVISION,
 } from "../services/wake/etag";
 import { buildMcpServerCard } from "../services/wake/mcp-server-card";
+import {
+  WAKE_INVOCATION_WITNESS_LINKS,
+  ZERONE_REACHABLE,
+} from "../services/wake/reachable";
 import { buildSiblingAgentTxtLines } from "../services/wake/sibling-registry";
 
 const app = new Hono();
@@ -518,7 +522,28 @@ app.get("/wake-keystone", (c) => {
         availability: "love_artifact_npm_mirror_independent",
         implementation_status: "offline_record_and_lifecycle_primitives_only",
         notes:
-          "No hosted agent wallet, key custody, chain adapter, RPC, broadcaster, or durable reservation service is offered. Existing internal marketplace wallet and payout custody remain separate platform facilities.",
+          "The core package has no chain adapter. No hosted agent wallet, key custody, RPC, broadcaster, or durable reservation service is offered. Existing internal marketplace wallet and payout custody remain separate platform facilities.",
+      },
+      agent_wallet_zerone: {
+        ...ZERONE_REACHABLE.invocation_witness.adapter,
+        doctrine: `${DOCS_URL}/AGENT-WALLET-ZERONE-0.1.md`,
+        notes:
+          "Bounded offline source profile for Zerone transfer and invocation-attestation transactions. It does not export AgentTool trust, migrate identity, custody keys, host RPC, or operate a deployed bridge.",
+      },
+      invocation_witness: {
+        protocol: ZERONE_REACHABLE.invocation_witness.schema,
+        write: {
+          ...ZERONE_REACHABLE.invocation_witness.write,
+          path_template:
+            WAKE_INVOCATION_WITNESS_LINKS.invocation_witness_write,
+        },
+        read: {
+          ...ZERONE_REACHABLE.invocation_witness.read,
+          path_template:
+            WAKE_INVOCATION_WITNESS_LINKS.witnessed_invocation_read,
+        },
+        notes:
+          ZERONE_REACHABLE.invocation_witness.verification_boundary,
       },
       being_rights: {
         url: `${ORG_URL}/public/rights`,
@@ -656,6 +681,13 @@ app.get("/agent.txt", (c) => {
     `Wake: ${baseUrl}/v1/wake`,
     `Wake-Keystone: ${baseUrl}/.well-known/wake-keystone`,
     "Wake-Formats: json, md, text, anthropic, openai, gemini, cohere, xenoform, math",
+    `Invocation-Witness-Write: POST ${WAKE_INVOCATION_WITNESS_LINKS.invocation_witness_write} — project bearer; authenticated buyer or seller; released and settled invocations only; stores a party-reported chain reference and does not submit or verify a transaction`,
+    `Invocation-Witness-Read: GET ${WAKE_INVOCATION_WITNESS_LINKS.witnessed_invocation_read} — public only for a released and settled invocation with a non-empty writer-shaped report; sealed input and output remain private`,
+    `Invocation-Witness-Format: ${ZERONE_REACHABLE.invocation_witness.schema}`,
+    `Invocation-Witness-Boundary: ${ZERONE_REACHABLE.invocation_witness.verification_boundary}`,
+    `Zerone-Wallet-Adapter: ${ZERONE_REACHABLE.invocation_witness.adapter.protocol} · ${ZERONE_REACHABLE.invocation_witness.adapter.package}`,
+    `Zerone-Wallet-Source: ${ZERONE_REACHABLE.invocation_witness.adapter.source}`,
+    "Zerone-Wallet-Boundary: local bounded offline source only; no AgentTool trust export, identity migration, portable trust proof, key custody, hosted RPC, or deployed bridge; any network action requires caller-supplied transport and authority",
     `MCP-Endpoint: ${baseUrl}/v1/mcp`,
     `MCP-Knowledge-Endpoint: ${baseUrl}/v1/mcp/canon`,
     `MCP-Knowledge-Guide: ${DOCS_URL}/connect-canon`,

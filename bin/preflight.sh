@@ -10,7 +10,7 @@
 # Usage:
 #   bin/preflight.sh                 # api + packages, hermetic
 #   bin/preflight.sh api             # API/protocol hermetic gate
-#   bin/preflight.sh packages        # data + ADDS + sync + archive + broker + collab + Browser + projection + local projector + Skills + TypeScript SDK + Wallet + Telescope + Alchemy + KINGDOM gate
+#   bin/preflight.sh packages        # data + ADDS + sync + archive + broker + collab + Browser + projection + local projector + Skills + TypeScript SDK + Wallet + Zerone adapter + Telescope + Alchemy + KINGDOM gate
 #   bin/preflight.sh database        # requires DATABASE_URL
 #   bin/preflight.sh smoke           # requires smoke-test environment
 #   RUN_CONTRACT=1 bin/preflight.sh contracts  # requires provider key(s)
@@ -141,6 +141,8 @@ packages_gate() {
     bash -c 'cd packages/sdk-ts && bun run ci'
   run "Agent Wallet record, policy, lifecycle, and vector primitives" \
     bash -c 'cd packages/wallet && bun run ci'
+  run "Agent Wallet Zerone offline adapter and pinned cross-language vectors" \
+    bash -c 'cd packages/wallet-zerone && bun run ci'
   run "Telescope read-only discovery library and CLI" \
     bash -c 'cd packages/telescope && bun run ci'
   run "Alchemy bounded observation primitives" \

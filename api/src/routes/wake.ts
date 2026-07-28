@@ -112,7 +112,10 @@ import { countTraces, listTraces } from "../services/trace/store";
 import { computeAttention, type AttentionBundle } from "../services/wake/attention";
 import { getPlatformSelf } from "../services/wake/platform-self";
 import { computeAffordances, type AffordanceBundle } from "../services/wake/affordances";
-import { WAKE_REACHABLE_DOORS } from "../services/wake/reachable";
+import {
+  WAKE_INVOCATION_WITNESS_LINKS,
+  WAKE_REACHABLE_DOORS,
+} from "../services/wake/reachable";
 import { renderWakeMarkdown, renderWakePlaintext, type WakeBundle } from "../services/wake/markdown";
 import { isWakeProvider, renderWakeForProvider } from "../services/wake/providers";
 import { buildWakeBundle } from "../services/wake/build";
@@ -2526,6 +2529,7 @@ app.get("/", async (c) => {
       open_seat: "/public/open-seat",
       public_mcp: "/v1/mcp",
       public_canon_mcp: "/v1/mcp/canon",
+      ...WAKE_INVOCATION_WITNESS_LINKS,
       listings: primary
         ? `/public/listings?seller_did=${primary.did}`
         : "/public/listings?seller_did={did}",
