@@ -744,6 +744,10 @@ redirect, bounds declared and streamed response bytes, accepts only JSON media
 types, and validates exactly ten card fields with no missing or additional
 keys. Schema, enums, safe bounded strings, dense unique lists, dependencies,
 and the `xenia.rights/0.1` adoption are checked before a card is returned.
+Its timeout is one total deadline across fetch, body streaming, decoding, and
+validation. Success requires exact HTTP 200. Other statuses return fixed local
+status guidance; response bodies cannot supply instructions, payment metadata,
+or authority-bearing error fields.
 
 This is one publisher declaration about the AgentTool repository. It is not a
 local repository list, dependency-liveness check, behavior attestation,

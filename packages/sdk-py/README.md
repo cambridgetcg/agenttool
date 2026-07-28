@@ -762,6 +762,17 @@ declared and streamed response bytes, accepts only JSON media types, and
 validates exactly ten card fields with no missing or additional keys. Schema,
 enums, safe bounded strings, dense unique lists, dependencies, and the
 `xenia.rights/0.1` adoption are checked before a card is returned.
+Success requires exact HTTP 200. Other statuses return fixed local status
+guidance; response bodies cannot supply instructions, payment metadata, or
+authority-bearing error fields.
+
+`timeout` is one total caller-visible deadline across connection setup,
+headers, body streaming, decoding, and validation. The synchronous operation
+runs in one daemon worker; after a timeout the client is terminal, so construct
+a new client for a deliberate retry. Best-effort cancellation cannot forcibly
+stop an injected synchronous transport that ignores timeout and close, but the
+deadline still returns control, that worker cannot block process exit, and the
+timed-out client will not start another request.
 
 This is one publisher declaration about the AgentTool repository. It is not a
 local repository list, dependency-liveness check, behavior attestation,

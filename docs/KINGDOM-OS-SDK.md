@@ -145,14 +145,29 @@ new location. It applies a finite timeout and a 64 KiB response ceiling by
 default. The timeout is configurable from more than zero through 300 seconds;
 the response ceiling is configurable from 1 KiB through 1 MiB.
 
+The timeout is one total caller-visible deadline across connection setup,
+headers, the streamed success body, decoding, and validation—not a fresh
+allowance for every received chunk. TypeScript aborts the fetch at that
+deadline. Python performs the synchronous operation in one daemon worker and
+makes that client terminal after a timeout; construct a new client for a
+deliberate retry. This prevents repeated timed-out calls from accumulating
+workers while best-effort cancellation finishes.
+
 Python's standalone constructor also accepts a host-owned `httpx` transport
 seam. The SDK still supplies no credential and disables ambient environment
 trust, but it cannot guarantee what an injected transport implementation adds
-or does. That behavior remains the host's boundary.
+or does. In particular, Python cannot forcibly stop arbitrary synchronous host
+code that ignores both its timeout and close request. The total deadline still
+returns control to the caller, the worker is daemonized, and that client will
+not start another request, but the injected code may continue until it
+cooperates. That behavior remains the host's boundary.
 
 Both SDKs preflight a declared `Content-Length`, stream the decoded body under
-the same ceiling, and accept only JSON media types. A successful response must
-be UTF-8 JSON containing exactly these ten fields—none missing and none extra:
+the same ceiling, and accept only JSON media types. Success requires exact HTTP
+200; other statuses produce fixed local status guidance and their bodies are
+never imported as agent instructions, payment requests, or authority metadata.
+A successful response must be UTF-8 JSON containing exactly these ten
+fields—none missing and none extra:
 
 ```text
 schema_version · name · kind · layer · owner_sister · domain · state
