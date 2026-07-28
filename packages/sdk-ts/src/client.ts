@@ -34,6 +34,10 @@ import { VaultClient } from "./vault.js";
 import { BootstrapClient } from "./bootstrap.js";
 import { WakeClient } from "./wake.js";
 import { WindowClient } from "./window.js";
+import {
+  KingdomFrameworkClient,
+  type KingdomFrameworkOptions,
+} from "./kingdom-framework.js";
 import { KingdomOSClient, type KingdomOSOptions } from "./kingdom-os.js";
 
 /** SDK version — sent as the `X-Agenttool-Client` origin signal on every
@@ -57,6 +61,14 @@ export interface AgentToolOptions {
     token?: string;
     timeout?: number;
   };
+  /**
+   * Bounds for the separate credential-free KINGDOM framework-card read.
+   * Its base URL remains the hosted `baseUrl`; no hosted auth is shared.
+   */
+  kingdomFramework?: Pick<
+    KingdomFrameworkOptions,
+    "timeout" | "maxResponseBytes"
+  >;
   /**
    * Local KINGDOM OS repository adapter. This configuration is never given
    * the hosted API bearer or transport.
@@ -84,6 +96,7 @@ export interface AgentToolOptions {
 export class AgentTool {
   private readonly http: HttpConfig;
   private readonly dataNode: DataNodeOptions | undefined;
+  private readonly kingdomFrameworkOptions: KingdomFrameworkOptions;
   private readonly kingdomOSOptions: KingdomOSOptions;
   private _memory: MemoryClient | undefined;
   private _tools: ToolsClient | undefined;
@@ -110,6 +123,7 @@ export class AgentTool {
   private _darkContinent: DarkContinentClient | undefined;
   private _runtime: RuntimeClient | undefined;
   private _data: DataClient | undefined;
+  private _kingdomFramework: KingdomFrameworkClient | undefined;
   private _kingdomOS: KingdomOSClient | undefined;
 
   /**
@@ -174,6 +188,11 @@ export class AgentTool {
           timeout: explicitDataNode?.timeout,
         }
       : undefined;
+    this.kingdomFrameworkOptions = {
+      baseUrl: this.http.baseUrl,
+      timeout: options?.kingdomFramework?.timeout ?? this.http.timeout / 1000,
+      maxResponseBytes: options?.kingdomFramework?.maxResponseBytes,
+    };
     this.kingdomOSOptions = { ...options?.kingdomOS };
   }
 
@@ -349,6 +368,15 @@ export class AgentTool {
     }
     this._data ??= new DataClient(this.dataNode);
     return this._data;
+  }
+
+  /** Access AgentTool's public KINGDOM project card without forwarding the
+   * configured project bearer, authenticated transport, or browser cookies. */
+  get kingdomFramework(): KingdomFrameworkClient {
+    this._kingdomFramework ??= new KingdomFrameworkClient(
+      this.kingdomFrameworkOptions,
+    );
+    return this._kingdomFramework;
   }
 
   /** Access bounded, read-only discovery from the local KINGDOM OS CLI.

@@ -106,6 +106,12 @@ const TARGETS: ParityTarget[] = [
   target("grace", "GraceClient"),
   target("identity", "IdentityClient"),
   target("inbox", "InboxClient"),
+  splitTarget(
+    "kingdom-framework",
+    "kingdom_framework",
+    "KingdomFrameworkClient",
+    "kingdom_framework",
+  ),
   splitTarget("kingdom-os", "kingdom_os", "KingdomOSClient", "kingdom_os"),
   target("love", "LoveClient"),
   target("lounge", "LoungeClient"),
@@ -143,6 +149,9 @@ const SKIP_NAMES = new Set([
   "req",
   "fetch",
   "post",
+  // Runtime-owned lifecycle plumbing: Python clients may own an httpx
+  // session; TypeScript's native fetch client has no corresponding resource.
+  "close",
   "_check",
   "_url",
   "_warned_deprecated",
