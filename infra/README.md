@@ -21,7 +21,7 @@ infra/
   fly/                  — Fly.io config snapshots (active deploy: api/fly.toml)
     agenttool.toml      — Mirror of api/fly.toml (snapshot only)
     migrate.sh          — Pre-Fly cutover script (legacy)
-  pages/                — Shared Pages Worker + route-complete invocation policy
+  pages/                — Shared Pages Worker + targeted ambiguous-root routes
   _archive/             — Archaeology, NOT the active path
     phase1-pgbouncer/   — Pre-Fly Forge VPS pooler script
     phase2-managed-db/  — Pre-Fly managed-DB cutover scripts

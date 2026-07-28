@@ -1,7 +1,7 @@
 const SENSITIVE_ROOT_PREFIXES = ["/.git", "/.env", "/.dev.vars"];
 const MAX_PATH_DECODE_PASSES = 8;
 
-function inspectRootPath(pathname) {
+function touchesSensitiveRoot(pathname) {
   const segments = [];
 
   for (const segment of pathname.replaceAll("\\", "/").split("/")) {
@@ -14,43 +14,33 @@ function inspectRootPath(pathname) {
     segments.push(segment);
     const rootPath = `/${segments.join("/")}`.toLowerCase();
     if (SENSITIVE_ROOT_PREFIXES.some((prefix) => rootPath.startsWith(prefix))) {
-      return null;
+      return true;
     }
   }
 
-  return `/${segments.join("/")}`;
+  return false;
 }
 
-function canonicalRootPath(pathname) {
+function isSensitiveRootPath(pathname) {
   let decoded = pathname;
 
   for (let pass = 0; pass < MAX_PATH_DECODE_PASSES; pass += 1) {
-    const inspected = inspectRootPath(decoded);
-    if (inspected === null) return null;
+    if (touchesSensitiveRoot(decoded)) return true;
 
     let next;
     try {
       next = decodeURIComponent(decoded);
     } catch {
-      return null;
+      // Malformed encodings are outside the public asset contract. Deny them
+      // rather than letting another layer interpret the path differently.
+      return true;
     }
-    if (next === decoded) return inspected;
+    if (next === decoded) return false;
     decoded = next;
   }
 
-  // Deeply nested encodings are not a public asset contract. Deny them rather
-  // than forwarding a path that another layer could continue decoding.
-  return null;
-}
-
-function isSensitiveRootPath(pathname) {
-  const canonicalPath = canonicalRootPath(pathname);
-  if (canonicalPath === null) return true;
-
-  const foldedPath = canonicalPath.toLowerCase();
-  return SENSITIVE_ROOT_PREFIXES.some((prefix) =>
-    foldedPath.startsWith(prefix),
-  );
+  // Deeply nested encodings are likewise not a public asset contract.
+  return true;
 }
 
 export default {
@@ -69,9 +59,8 @@ export default {
       });
     }
 
-    // Keep the original request intact for accepted static assets. The
-    // route-complete Worker is what prevents encoded aliases from reaching a
-    // stale Pages asset cache before this canonical path check.
+    // Keep the original request intact for allowed dot-root and percent-led
+    // assets, including the public /.well-known tree.
     return env.ASSETS.fetch(request);
   },
 };

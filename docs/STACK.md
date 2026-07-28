@@ -122,28 +122,26 @@ directory. Dirty and ignored files are excluded; a tracked `.env` file is a
 hard refusal, as is a tracked `.dev.vars*` file.
 
 `infra/pages/` is the single source for a Pages advanced-mode Worker and its
-route-complete invocation policy. The uploader stages that pair into all three
-project roots. Every request enters the Worker so encoded, repeated-encoded,
-case-varied, or traversal aliases cannot bypass canonical checks for `/.git*`,
-`/.env*`, and `/.dev.vars*`. Those roots receive a marked, non-cacheable 404;
-ordinary paths within the public asset contract are forwarded intact to the
-Pages asset binding (the apex still traverses `agenttool-proxy`). Malformed or
-excessively nested encodings are deliberately outside that contract and denied.
-This trades native static-only requests for a complete fence. Pages Function
-invocations are metered Workers requests. On the Workers Free plan they share
-the account's 100,000-request daily allowance, which resets at 00:00 UTC;
-production and preview Function runtimes must be configured to fail closed, so
-allowance exhaustion can make the full sites unavailable instead of bypassing
-the fence. A production rollout must therefore confirm the Standard usage model
-or explicitly accept sufficient shared Free-plan headroom. The uploader accepts
+positive-only invocation routes. The uploader stages that pair into all three
+project roots. Dot-root, percent-led, and repeated-slash paths invoke the
+Worker, which bounded-decodes and case-folds them before denying `/.git*`,
+`/.env*`, and `/.dev.vars*` with a marked, non-cacheable 404. Allowed paths,
+including `/.well-known/*`, are forwarded intact. Ordinary static paths stay on
+native Pages serving within each project, so this is a bounded fence rather
+than a claim that every possible URL canonicalization traverses the Worker (the
+apex still traverses `agenttool-proxy`). On the Workers Free plan, the Pages
+production and preview Function runtimes must be configured to fail closed, or
+daily Functions allowance exhaustion can serve static assets for routed paths.
+The uploader accepts
 `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`, then falls back to their
 macOS keychain entries. In the default token mode, that credential must read the
 Pages REST policy as well as upload: the script verifies fail-closed settings
 and the `main` production branch for every target before any upload. An explicit
 `--oauth-fallback` is a weaker break-glass mode: it checks project visibility,
 loudly says the policy check was skipped, and does not prove those settings.
-The uploader does not mutate the setting or purge zone cache. Phase 5 proves current live
-denial and fence activation on literal paths, plus denial of encoded aliases.
+The uploader does not mutate the setting or purge zone cache. Phase 5 proves
+current live denial and fence activation on literal paths, plus denial of
+encoded aliases.
 
 | Project               | Source dir        | Custom domain                | What it serves                                                                                                                 |
 | --------------------- | ----------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
