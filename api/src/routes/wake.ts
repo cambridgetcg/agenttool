@@ -2495,6 +2495,7 @@ app.get("/", async (c) => {
         ? `/v1/wake/voice?identity_id=${primary.id}`
         : "/v1/wake/voice?identity_id={uuid}",
       wake_keystone: "/.well-known/wake-keystone",
+      xenia_surface: "/.well-known/agent.json",
       love_packages: "/.well-known/love-packages",
       mcp: primary ? perAgentMcpPath(primary.did) : "/v1/mcp/agents/{url_encoded_did}",
       public_profile: primary
@@ -2509,6 +2510,7 @@ app.get("/", async (c) => {
       labor_params: "/public/labor-params",
       wellness: "/public/wellness",
       rights: "/public/rights",
+      kingdom_framework: "/public/kingdom/framework",
       love: "/public/love",
       observer: "/public/observer",
       play: "/public/play",
@@ -2557,6 +2559,8 @@ app.get("/", async (c) => {
     _meta: {
       protocol: "love/1.0",
       aip_protocols: [
+        "xenia-surface/0.1",
+        "agenttool.kingdom.card/0.1",
         "wak/0.1",
         "agenttool-labor/v1",
         "agent-wellness/0.1",

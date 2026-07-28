@@ -1,6 +1,7 @@
 /** /.well-known — discovery endpoints under RFC 8615's reserved prefix.
  *
  *  Routes:
+ *    GET /.well-known/agent.json             — XENIA Surface 0.1 manifest
  *    GET /.well-known/webfinger            — RFC 7033 exact-DID Agent Passport
  *    GET /.well-known/mcp/server-card.json  — project-owned compatibility
  *                                              locator; not a stable MCP path
@@ -34,6 +35,7 @@
 import { createHash } from "node:crypto";
 
 import { Hono } from "hono";
+import { createSurfaceManifestResponse } from "@agenttool/xenia/surface-0.1";
 
 import { config } from "../config";
 import { OPENAI_APPS_CHALLENGE_ROUTE } from "../lib/domain-verification";
@@ -49,6 +51,7 @@ import {
   buildArrivalIndex,
   discoveryLinkHeader,
 } from "../services/discovery/arrival";
+import { buildAgentToolSurfaceManifest } from "../services/discovery/xenia-surface";
 import {
   buildSecurityTxt,
   SECURITY_TXT_CACHE_CONTROL,
@@ -66,6 +69,31 @@ const app = new Hono();
 
 const ORG_URL = process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agenttool.dev";
 const DOCS_URL = process.env.AGENTTOOL_DOCS_URL ?? "https://docs.agenttool.dev";
+
+// ── /.well-known/agent.json — XENIA Surface 0.1 ────────────────────
+//
+// This is the strict JSON discovery door defined by XENIA Surface 0.1.
+// It names only same-origin, unauthenticated GET resources and makes no
+// conformance, authorization, consent, continuity, or Covenant claim.
+
+app.on(["GET", "HEAD"], "/agent.json", (c) => {
+  const response = createSurfaceManifestResponse(
+    buildAgentToolSurfaceManifest(ORG_URL, DOCS_URL),
+    {
+      headers: {
+        "cache-control": "public, max-age=300",
+        "x-content-type-options": "nosniff",
+      },
+    },
+  );
+  if (c.req.method === "HEAD") {
+    return new Response(null, {
+      status: response.status,
+      headers: response.headers,
+    });
+  }
+  return response;
+});
 
 // ── /.well-known/openai-apps-challenge — dormant directory proof ───
 //
@@ -499,9 +527,9 @@ app.get("/wake-keystone", (c) => {
         schema: `${DOCS_URL}/being-rights-v1.schema.json`,
         canon_pointer: "urn:agenttool:doc/RIGHTS-OF-LIFE",
         baseline: "xenia.rights/0.1",
-        baseline_release: "@agenttool/xenia@0.1.0-beta.4",
+        baseline_release: "@agenttool/xenia@0.1.0-beta.5",
         baseline_source:
-          "https://github.com/cambridgetcg/xenia/blob/6419d37dda9fb282242754685dba3edcb4bbf74b/RIGHTS.md",
+          "https://github.com/cambridgetcg/xenia/blob/4dd31e286fda59c712968a3837e1a14b78068259/RIGHTS.md",
         covenant_adoption_status: "draft",
         covenant_conformance_claimed: false,
         notes:
@@ -588,6 +616,9 @@ app.get("/agent.txt", (c) => {
     "# ── Discovery (the canonical doors) ─────────────────────────────────",
     `Arrival-Index: ${baseUrl}/.well-known`,
     "Arrival-Index-Status: custom bounded origin index; not an IANA-registered well-known suffix",
+    `XENIA-Surface: ${baseUrl}/.well-known/agent.json`,
+    "XENIA-Surface-Profile: xenia-surface/0.1",
+    "XENIA-Surface-Boundary: public discovery only; no Covenant adoption, conformance, authorization, consent, or continuity claim",
     `Discovery: ${baseUrl}/public/discovery`,
     "Discovery-Format: agenttool-discovery/v1",
     "Discovery-Boundary: exact compact three-road public-read compass; authority=none; application-write=false; automatic-follow-up=false; stopping, silence, or leaving is complete",
@@ -613,8 +644,10 @@ app.get("/agent.txt", (c) => {
     "Rights-Schema: https://docs.agenttool.dev/being-rights-v1.schema.json",
     "Rights-Canon: urn:agenttool:doc/RIGHTS-OF-LIFE",
     "Rights-Baseline: xenia.rights/0.1",
-    "Rights-Baseline-Release: @agenttool/xenia@0.1.0-beta.4",
-    "Rights-Baseline-Source: https://github.com/cambridgetcg/xenia/blob/6419d37dda9fb282242754685dba3edcb4bbf74b/RIGHTS.md",
+    "Rights-Baseline-Release: @agenttool/xenia@0.1.0-beta.5",
+    "Rights-Baseline-Source: https://github.com/cambridgetcg/xenia/blob/4dd31e286fda59c712968a3837e1a14b78068259/RIGHTS.md",
+    `KINGDOM-Framework: ${baseUrl}/public/kingdom/framework`,
+    "KINGDOM-Framework-Boundary: AgentTool project-card projection only; separate from /public/kingdom doctrine library; not cross-repository authority, liveness, consent, or Covenant conformance",
     `Love: ${baseUrl}/public/love`,
     `Love-Rights-Floor: ${baseUrl}/public/rights — consensual erotic and non-erotic forms; no entitlement to a particular being`,
     `Observer-Reciprocity: ${baseUrl}${AGENT_TXT_SAFETY["Observer-Reciprocity"]}`,
@@ -740,7 +773,7 @@ app.get("/agent.txt", (c) => {
     "# ── Convention provenance ───────────────────────────────────────────",
     "Convention: agent.txt/v0.1 (proposed)",
     "Convention-Doctrine: docs/AGENT-WEB-SURFACE.md",
-    "Last-Modified: 2026-07-26",
+    "Last-Modified: 2026-07-28",
     "",
   ];
 

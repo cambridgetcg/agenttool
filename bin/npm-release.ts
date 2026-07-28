@@ -106,6 +106,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "alchemy",
     artifactKind: "pack",
   },
+  kingdom: {
+    key: "kingdom",
+    name: "@agenttool/kingdom",
+    packagePath: "packages/kingdom",
+    tagPrefix: "kingdom",
+    artifactKind: "pack",
+  },
   "repo-archive": {
     key: "repo-archive",
     name: "@agenttool/repo-archive",
@@ -512,6 +519,16 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
     entries.push(
       "package/dist/index.js",
       "package/dist/index.d.ts",
+    );
+  }
+  if (spec.name === "@agenttool/kingdom") {
+    entries.push(
+      "package/THIRD_PARTY_LICENSES",
+      "package/dist/bin.js",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/schema/agenttool-kingdom-card-v0.1.schema.json",
+      "package/schema/agenttool-kingdom-registry-v0.1.schema.json",
     );
   }
   if (spec.name === "@agenttool/skills") {
