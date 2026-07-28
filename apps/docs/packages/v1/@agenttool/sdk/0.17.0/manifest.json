@@ -3,13 +3,13 @@
   "document_type": "package-manifest",
   "name": "@agenttool/sdk",
   "version": "0.17.0",
-  "description": "TypeScript SDK for agenttool.dev, local agent data nodes, and bounded local KINGDOM OS repository discovery",
+  "description": "TypeScript SDK for agenttool.dev, typed KINGDOM framework cards, local agent data nodes, and bounded local KINGDOM OS repository discovery",
   "license": "Apache-2.0",
   "artifact": {
     "format": "npm-tarball",
     "filename": "agenttool-sdk-0.17.0.tgz",
-    "sha256": "7af5b1d84f8685c66d8a014fdd5a9c20049586a5ffab6a077f6d62e4a660682c",
-    "size": 167288,
+    "sha256": "b6a388ffe86a970480e8a8978f83fe80922321eb64f2b4f9143cae2b2c3dd5bb",
+    "size": 172625,
     "media_type": "application/gzip",
     "mirrors": [
       {
@@ -33,7 +33,7 @@
   },
   "source": {
     "repository": "https://github.com/cambridgetcg/agenttool.git",
-    "revision": "7940482f74659a49922152e57d0828ff6660456f",
+    "revision": "d480eb630915dc61f12d223c0b28cadccd1ff335",
     "path": "packages/sdk-ts"
   },
   "dependency_resolution": {
