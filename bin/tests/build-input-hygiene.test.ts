@@ -683,7 +683,7 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
     }
   });
 
-  test("routes ambiguous root paths through a canonical fail-closed Pages fence", async () => {
+  test("routes every path through a canonical fail-closed Pages fence", async () => {
     const workerPath = join(repoRoot, "infra/pages/sensitive-path-worker.js");
     const routesPath = join(repoRoot, "infra/pages/sensitive-path-routes.json");
     const syntax = await run(["node", "--check", workerPath]);
@@ -692,7 +692,7 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
     expect(syntax.code, syntax.stderr).toBe(0);
     expect(routes).toEqual({
       version: 1,
-      include: ["/.*", "/%*", "//*"],
+      include: ["/*"],
       exclude: [],
     });
     const matchesInvocationRoute = (path: string) => routes.include.some((rule: string) => (
@@ -702,15 +702,23 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
       "/packages/v1/@agenttool/data/0.1.0/manifest.json",
       "/packages/v1/@agenttool/data/0.1.0/agenttool-data-0.1.0.tgz",
     ]) {
-      expect(matchesInvocationRoute(packagePath), packagePath).toBe(false);
+      expect(matchesInvocationRoute(packagePath), packagePath).toBe(true);
     }
 
     const worker = (await import(pathToFileURL(workerPath).href)).default;
-    let assetFetches = 0;
+    const assetRequests: Array<{ method: string; url: string }> = [];
     const env = {
       ASSETS: {
-        fetch: async () => {
-          assetFetches += 1;
+        fetch: async (request: Request) => {
+          assetRequests.push({ method: request.method, url: request.url });
+          if (new URL(request.url).pathname === "/.well-known/agent.txt") {
+            return new Response(null, {
+              status: 301,
+              headers: {
+                Location: "https://example.test/api-catalog",
+              },
+            });
+          }
           return new Response("static asset", {
             status: 200,
             headers: {
@@ -747,6 +755,10 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
       "/%2egit%2f..%2findex.html",
       "/.git%5c..%5cindex.html",
       "/%252egit%252f..%252findex.html",
+      "/public/%2e%2e/%2egitignore",
+      "/public/%252e%252e/%252egitignore",
+      "/public%2f..%2f%2egitignore",
+      "/public%5c..%5c%2egitignore",
       "/%",
     ];
     for (const path of sensitiveRootPaths) {
@@ -776,7 +788,15 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
     expect(head.status).toBe(404);
     expect(await head.text()).toBe("");
 
-    for (const path of ["/style.css", "/.well-known/agent.txt", "/caf%C3%A9"]) {
+    const allowedPaths = [
+      "/style.css",
+      "/caf%C3%A9",
+      "/public%2f..%2fstyle.css",
+      "/packages/v1/@agenttool/data/0.1.0/manifest.json",
+      "/packages/v1/@agenttool/data/0.1.0/agenttool-data-0.1.0.tgz",
+    ];
+    for (const path of allowedPaths) {
+      expect(matchesInvocationRoute(path), path).toBe(true);
       const staticResponse = await worker.fetch(new Request(`https://example.test${path}`), env);
       expect(staticResponse.status).toBe(200);
       expect(await staticResponse.text()).toBe("static asset");
@@ -785,7 +805,27 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
       );
       expect(staticResponse.headers.get("content-type")).toBe("application/gzip");
     }
-    expect(assetFetches).toBe(3);
+
+    const wellKnownRequest = new Request(
+      "https://example.test/.well-known/agent.txt?from=fence",
+      { method: "HEAD" },
+    );
+    const redirectResponse = await worker.fetch(wellKnownRequest, env);
+    expect(redirectResponse.status).toBe(301);
+    expect(redirectResponse.headers.get("location")).toBe(
+      "https://example.test/api-catalog",
+    );
+
+    expect(assetRequests).toEqual([
+      ...allowedPaths.map((path) => ({
+        method: "GET",
+        url: `https://example.test${path}`,
+      })),
+      {
+        method: "HEAD",
+        url: "https://example.test/.well-known/agent.txt?from=fence",
+      },
+    ]);
   });
 
   test("verifies live headers for every latest LOVE package release", async () => {

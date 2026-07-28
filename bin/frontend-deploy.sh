@@ -203,10 +203,10 @@ for app in docs dashboard web; do
 done
 
 # One committed policy protects all three Pages projects. `_routes.json` sends
-# only dot-root, percent-led, and repeated-slash paths through the small Worker,
-# which canonicalizes encoded aliases before Pages asset serving. Ordinary
-# static traffic stays outside Functions. Project policy separately keeps
-# allowance exhaustion fail closed.
+# every path through the small Worker so encoded separators after ordinary
+# prefixes cannot bypass canonicalization before Pages asset serving. Allowed
+# requests are forwarded intact to the asset binding. Project policy separately
+# keeps allowance exhaustion fail closed.
 PAGES_FENCE_DIR="$STAGE_ROOT/infra/pages"
 for fence_file in sensitive-path-worker.js sensitive-path-routes.json; do
   if [[ ! -f "$PAGES_FENCE_DIR/$fence_file" || -L "$PAGES_FENCE_DIR/$fence_file" ]]; then
