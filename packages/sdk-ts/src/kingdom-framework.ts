@@ -325,7 +325,8 @@ async function readBoundedBytes(
       totalBytes += value.byteLength;
       if (totalBytes > maximumBytes) {
         try {
-          await reader.cancel();
+          const cancellation = reader.cancel();
+          void cancellation.catch(() => undefined);
         } catch {
           // The size error remains the useful deterministic outcome.
         }

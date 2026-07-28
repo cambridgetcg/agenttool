@@ -366,6 +366,33 @@ describe("KingdomFrameworkClient transport validation", () => {
     expect(error.code).toBe("kingdom_framework_response_too_large");
   });
 
+  test("does not let hostile stream cancellation bypass the deadline", async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(2048));
+      },
+      cancel() {
+        return new Promise<void>(() => undefined);
+      },
+    });
+    useResponse(
+      new Response(stream, {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const started = performance.now();
+    const error = await caughtError(
+      new KingdomFrameworkClient({
+        timeout: 0.01,
+        maxResponseBytes: 1024,
+      }).card(),
+    );
+
+    expect(error.code).toBe("kingdom_framework_response_too_large");
+    expect(performance.now() - started).toBeLessThan(250);
+  });
+
   test("does not reflect a hostile response-stream failure", async () => {
     const stream = new ReadableStream<Uint8Array>({
       pull(controller) {
