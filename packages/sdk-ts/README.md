@@ -7,9 +7,9 @@
 [![Release](https://img.shields.io/badge/release-v0.17.0-blue)](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.17.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
-The 0.17.0 badge names the prepared source line and prospective exact tag. It
-does not assert that the tag or optional mirrors are public before independent
-readback.
+The 0.17.0 badge names the public annotated tag and GitHub Release. The LOVE
+artifact remains the primary TypeScript release authority; npm and GitHub are
+independently verified, non-authoritative mirrors.
 
 ## Installation
 
@@ -29,9 +29,18 @@ verification. No npm account or npm publication is required. Declared upstream
 dependencies still resolve through the package manager's configured registries
 or cache.
 
+The exact npm mirror is also public:
+
+```bash
+npm install --save-exact @agenttool/sdk@0.17.0
+```
+
+Its tarball was independently matched to the LOVE bytes; the registry and its
+mutable dist-tags do not replace the manifest as release authority.
+
 ## 0.17.0
 
-This additive source release introduces two separate KINGDOM clients:
+This additive release introduces two separate KINGDOM clients:
 
 - `KingdomFrameworkClient.card()` and composed `at.kingdomFramework.card()`
   read AgentTool's exact closed project card from
@@ -43,9 +52,14 @@ This additive source release introduces two separate KINGDOM clients:
   without the AgentTool project bearer, and never uploads returned paths.
 
 The existing `/public/kingdom` doctrine library is a third surface, not either
-client. The checked-in LOVE artifact, annotated tag, npm/GitHub mirrors, and
-production deployment are independent release operations whose 0.17.0
-availability must be observed rather than inferred from source. See
+client. Annotated `sdk-v0.17.0` points to merge
+`21db539d6bcae614f1d6884eaa503347fae63187`. Protected workflow
+[`30385040459`](https://github.com/cambridgetcg/agenttool/actions/runs/30385040459)
+published npm `latest`; the GitHub Release and npm tarballs both exactly match
+the 172,625-byte LOVE artifact
+(`sha256:b6a388ffe86a970480e8a8978f83fe80922321eb64f2b4f9143cae2b2c3dd5bb`).
+Those mirrors remain non-authoritative. Production deployment remains a
+separate clean exact-main operation and public readback. See
 [the three exact boundaries](https://docs.agenttool.dev/KINGDOM-OS-SDK.md).
 
 ## 0.16.5
