@@ -34,13 +34,14 @@ import { VaultClient } from "./vault.js";
 import { BootstrapClient } from "./bootstrap.js";
 import { WakeClient } from "./wake.js";
 import { WindowClient } from "./window.js";
+import { KingdomOSClient, type KingdomOSOptions } from "./kingdom-os.js";
 
 /** SDK version — sent as the `X-Agenttool-Client` origin signal on every
  *  request so /v1/activity can label events `sdk-ts`. Keep in lockstep
  *  with package.json (parity invariant: ts + py ship the same version). */
 export const SDK_VERSION = "0.16.5";
 
-/** Connection settings for the hosted AgentTool API and optional data node. */
+/** Connection settings for the hosted AgentTool API and optional local adapters. */
 export interface AgentToolOptions {
   /** Direct bearer mode. Mutually exclusive with `transport`. */
   apiKey?: string;
@@ -56,6 +57,11 @@ export interface AgentToolOptions {
     token?: string;
     timeout?: number;
   };
+  /**
+   * Local KINGDOM OS repository adapter. This configuration is never given
+   * the hosted API bearer or transport.
+   */
+  kingdomOS?: KingdomOSOptions;
 }
 
 /**
@@ -78,6 +84,7 @@ export interface AgentToolOptions {
 export class AgentTool {
   private readonly http: HttpConfig;
   private readonly dataNode: DataNodeOptions | undefined;
+  private readonly kingdomOSOptions: KingdomOSOptions;
   private _memory: MemoryClient | undefined;
   private _tools: ToolsClient | undefined;
   private _economy: EconomyClient | undefined;
@@ -103,12 +110,13 @@ export class AgentTool {
   private _darkContinent: DarkContinentClient | undefined;
   private _runtime: RuntimeClient | undefined;
   private _data: DataClient | undefined;
+  private _kingdomOS: KingdomOSClient | undefined;
 
   /**
    * Create a new AgentTool client.
    *
    * @param options - AgentTool API settings plus an optional, separately
-   * configured agent-data/v1 node.
+   * configured agent-data/v1 node and local KINGDOM OS adapter.
    */
   constructor(options?: AgentToolOptions) {
     if (options?.transport && options.apiKey !== undefined) {
@@ -166,6 +174,7 @@ export class AgentTool {
           timeout: explicitDataNode?.timeout,
         }
       : undefined;
+    this.kingdomOSOptions = { ...options?.kingdomOS };
   }
 
   /** Access the Memory API. */
@@ -340,6 +349,13 @@ export class AgentTool {
     }
     this._data ??= new DataClient(this.dataNode);
     return this._data;
+  }
+
+  /** Access bounded, read-only discovery from the local KINGDOM OS CLI.
+   * Hosted API credentials and transports never cross into this process. */
+  get kingdomOS(): KingdomOSClient {
+    this._kingdomOS ??= new KingdomOSClient(this.kingdomOSOptions);
+    return this._kingdomOS;
   }
 
   /**

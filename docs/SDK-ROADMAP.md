@@ -5,8 +5,32 @@
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (what's shipping on the platform side)
 >
 > **Implements:** the SDK plane — hand-written clients for a selected subset of [ROADMAP.md](ROADMAP.md). CI compares method names for the maintained parity target list; it does not prove complete route, signature, or wire-model parity.
+>
+> **Code:** `packages/sdk-ts/src/` · `packages/sdk-py/src/agenttool/` · `packages/sdk-ts/scripts/check-parity.ts`
+>
+> **Tests:** `packages/sdk-ts/tests/` · `packages/sdk-py/tests/`
 
-## Current source release — 0.16.5 (2026-07-27)
+## Unreleased repository source — toward 0.17.0
+
+The paired TypeScript and Python source adds a bounded local KINGDOM OS
+repository-discovery adapter. Standalone `KingdomOSClient` and the composed
+`at.kingdomOS` / `at.kingdom_os` namespaces expose only:
+
+- `repositories()` through `kingdom repos --json`; and
+- `resolve()` through `kingdom repos --path`.
+
+The default runners use direct argument vectors without a shell, a sanitized
+child environment, finite timeout/output bounds, and no AgentTool project
+bearer. Returned absolute paths remain local to the caller. The clients do not
+fall back to a graph snapshot, execute routines, expose `status`, `ask`, `run`,
+`rights`, or `doctor`, mutate repositories, or call the hosted
+`/public/kingdom` library.
+
+This is unreleased source, not a rewrite of the immutable `0.16.5` artifacts.
+The exact contract and discovery limits live in
+[`KINGDOM-OS-SDK.md`](KINGDOM-OS-SDK.md).
+
+## Current released baseline — 0.16.5 (2026-07-27)
 
 This corrective patch aligns both maintained SDKs with the platform's
 fail-closed payout boundary. Fresh payout admission returns stable
@@ -537,6 +561,7 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **0.16.3** | Correct package metadata, packaged doctrine links, and unverified mirror claims without runtime or wire changes | no — corrective patch |
 | **0.16.4** | Durable payout request/list clients, bound payout-network state, and completed-response provider adapters | no — additive/corrective patch |
 | **0.16.5** | Correct payout hard-rest truth and SDK method examples without widening runtime authority | no — corrective documentation/release patch |
+| **0.17.0 (planned)** | Paired read-only local KINGDOM OS repository discovery with explicit hosted-auth and mutation walls | no — additive |
 | **1.0.0** | API freeze + comprehensive docstrings + READMEs + integration test suite | no — declarative |
 
 ## Non-goals

@@ -16,6 +16,14 @@
 
 export { AgentTool, SDK_VERSION } from "./client.js";
 export type { AgentToolOptions } from "./client.js";
+export { KingdomOSClient } from "./kingdom-os.js";
+export type {
+  KingdomOSCommand,
+  KingdomOSCommandResult,
+  KingdomOSOptions,
+  KingdomOSRepository,
+  KingdomOSRunner,
+} from "./kingdom-os.js";
 export type { AgentToolTransport } from "./_http.js";
 export { AgentToolError } from "./errors.js";
 export type {

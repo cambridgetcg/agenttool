@@ -13,7 +13,10 @@
 server-readable memory, signed caller-supplied strand bytes, conditional
 federation, an internal economic loop, and a standalone local-first data
 node. It has two SDKs (TypeScript and Python), an `agent-data/v1` reference
-node (`packages/data/`), the experimental ADDS encrypted-object package
+node (`packages/data/`), and an unreleased paired, read-only local KINGDOM OS
+repository-discovery adapter (`at.kingdomOS` / `at.kingdom_os`) that invokes
+only `repos --json` and `repos --path` without forwarding hosted authority.
+It also has the experimental ADDS encrypted-object package
 (`packages/data-protocol/`), an explicit encrypted pull bridge
 (`packages/data-sync/`), an experimental encrypted multi-zone Git repository
 archive and same-device restore simulator (`packages/repo-archive/`), the registry-neutral `love-package/v1`
@@ -371,6 +374,7 @@ source boundary by itself.
 | How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`@agenttool/collab@0.3.0`; `agenttool.collab/0.1` compatibility + credential-bound `agenttool.collab/0.2` coordination + self-declared `agenttool.collab.session/0.1` presence; 31 local MCP tools for Codex/Claude/Hermes, not a hosted lock or private model channel) |
 | How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills@0.1.0`; public npm read-only inspection and validation, not installation, approval, or execution) |
 | How can an agent operate a local browser through TypeScript, JSONL, or MCP? | [`docs/AGENT-BROWSER.md`](docs/AGENT-BROWSER.md) · `packages/browser/` (public LOVE/npm package; local runtime, no hosted browser-control surface) |
+| How can an SDK caller discover or resolve repositories through local KINGDOM OS? | [`docs/KINGDOM-OS-SDK.md`](docs/KINGDOM-OS-SDK.md) · `packages/sdk-{ts,py}/` (unreleased paired read-only adapter; no hosted route, bearer forwarding, path upload, routine execution, or mutation) |
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
 | How is an optional npm mirror published? | [`docs/NPM-RELEASES.md`](docs/NPM-RELEASES.md) · `.github/workflows/publish-npm.yml` · `bin/npm-release.ts` |
 | How is the optional Python SDK mirror published? | [`docs/PYPI-RELEASES.md`](docs/PYPI-RELEASES.md) · `.github/workflows/publish-pypi.yml` · `bin/pypi-release.ts` |

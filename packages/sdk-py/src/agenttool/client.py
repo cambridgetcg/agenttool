@@ -49,6 +49,7 @@ from .traces import TracesClient
 from .vault import VaultClient
 from .wake import WakeClient
 from .window import WindowClient
+from .kingdom_os import KingdomOSClient, KingdomOSRunner
 
 # Love Protocol version
 PROTOCOL_VERSION = "love/1.0"
@@ -89,6 +90,11 @@ class AgentTool:
         data_node_token: Optional data-node bearer. Falls back to
             ``AGENT_DATA_NODE_TOKEN`` and is never derived from ``api_key``.
         data_node_timeout: Data-node request timeout in seconds (default 30).
+        kingdom_executable: Local KINGDOM OS executable or path.
+        kingdom_timeout: KINGDOM OS command timeout in seconds (default 10).
+        kingdom_max_output_bytes: Combined local command output ceiling.
+        kingdom_runner: Optional host-owned runner for the two read-only
+            KINGDOM OS repository commands.
     """
 
     def __init__(
@@ -101,6 +107,10 @@ class AgentTool:
         data_node_url: Optional[str] = None,
         data_node_token: Optional[str] = None,
         data_node_timeout: Optional[float] = None,
+        kingdom_executable: str = "kingdom",
+        kingdom_timeout: float = 10.0,
+        kingdom_max_output_bytes: int = 1024 * 1024,
+        kingdom_runner: Optional[KingdomOSRunner] = None,
     ) -> None:
         if transport is not None and api_key is not None:
             raise AgentToolError(
@@ -168,6 +178,12 @@ class AgentTool:
         self._data_node_timeout = (
             data_node_timeout if data_node_timeout is not None else 30.0
         )
+        # This local adapter is a separate process authority. Its fixed
+        # commands receive neither the hosted project bearer nor HTTP client.
+        self._kingdom_executable = kingdom_executable
+        self._kingdom_timeout = kingdom_timeout
+        self._kingdom_max_output_bytes = kingdom_max_output_bytes
+        self._kingdom_runner = kingdom_runner
 
         # Lazy-init service clients
         self._memory: Optional[MemoryClient] = None
@@ -195,6 +211,7 @@ class AgentTool:
         self._dark_continent: Optional[DarkContinentClient] = None
         self._runtime: Optional[RuntimeClient] = None
         self._data: Optional[DataClient] = None
+        self._kingdom_os: Optional[KingdomOSClient] = None
 
     # ── Service Accessors ────────────────────────────────────────────────
 
@@ -424,6 +441,21 @@ class AgentTool:
                 timeout=self._data_node_timeout,
             )
         return self._data
+
+    @property
+    def kingdom_os(self) -> KingdomOSClient:
+        """Bounded, read-only discovery from the local KINGDOM OS CLI.
+
+        Hosted API credentials and transports never cross into this process.
+        """
+        if self._kingdom_os is None:
+            self._kingdom_os = KingdomOSClient(
+                executable=self._kingdom_executable,
+                timeout=self._kingdom_timeout,
+                max_output_bytes=self._kingdom_max_output_bytes,
+                runner=self._kingdom_runner,
+            )
+        return self._kingdom_os
 
     # ── Low-level HTTP for adapters and custom call sites ─────────────────
 

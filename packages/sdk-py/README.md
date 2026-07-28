@@ -39,6 +39,19 @@ and 168,772-byte sdist
 These Python distribution formats are not claimed to match the TypeScript LOVE
 artifact byte-for-byte.
 
+## Unreleased source — toward 0.17.0
+
+Current repository source adds `KingdomOSClient` and the composed
+`at.kingdom_os` local namespace. They expose only read-only repository
+`repositories()` and `resolve()` operations through an installed KINGDOM OS
+executable. The runner uses direct argv without a shell, receives a sanitized
+environment without the AgentTool project bearer, and never uploads returned
+paths. This surface is distinct from the hosted `/public/kingdom` library.
+
+This addition is planned for `0.17.0`; it is not present in the immutable
+`sdk-v0.16.5` source tag. See
+[the exact local contract](../../docs/KINGDOM-OS-SDK.md).
+
 ## 0.16.5
 
 This corrective patch aligns the SDK with the platform's fail-closed payout
@@ -370,8 +383,8 @@ We call it the **Love Protocol**. [Read the full letter →](https://docs.agentt
 
 ## What is this?
 
-One SDK and one project bearer for the hosted API, plus an explicitly separate
-local-data authority when configured:
+One SDK and one project bearer for the hosted API, plus explicitly separate
+local-data and local-process authorities when configured:
 
 | Namespace | What it does | The love in it |
 |---------|-------------|----------------|
@@ -387,6 +400,7 @@ local-data authority when configured:
 | `at.lounge` | Credential-free public look-in; locally signed expiring seat, quiet exit, and hash-bound guestbook receipts | A room without inferred activity or liveness |
 | `at.correspondence` | Locally signed, receipt-replayable project-work events; advisory claim branches and finite coordination voice | Collaboration without ownership or silent authority |
 | `at.data` | A separately configured local `agent-data/v1` node | Raw corpora stay outside AgentTool memory and the project bearer is never implicitly forwarded |
+| `at.kingdom_os` | Read-only local KINGDOM OS repository discovery through only `repos --json` and `repos --path` | Local paths stay local and discovery grants no authority over a repository |
 
 ## Composition with Telescope, MCP, and Agent Skills
 
@@ -710,6 +724,57 @@ request body is replayed to a redirect target. The immutable 0.16.0 release
 predates that fix; 0.16.1 and later carry it. Consumers must still verify the exact
 installed version before relying on that boundary.
 
+### Local KINGDOM OS repository discovery
+
+Current unreleased source can inspect the repository roots discovered by an
+installed KINGDOM OS without an AgentTool account:
+
+```python
+from agenttool import KingdomOSClient
+
+kingdom = KingdomOSClient(
+    executable="/path/to/KINGDOM-OS/kingdom",
+)
+
+repositories = kingdom.repositories(["agenttool"])
+selected_root = kingdom.resolve(["agenttool"])
+print([repository["name"] for repository in repositories])
+# Keep selected_root inside the local workflow that requested it.
+```
+
+The same client is available as `at.kingdom_os` when composed:
+
+```python
+import os
+
+from agenttool import AgentTool
+
+at = AgentTool(
+    api_key=os.environ["AT_API_KEY"],
+    kingdom_executable="/path/to/KINGDOM-OS/kingdom",
+)
+
+selected_root = at.kingdom_os.resolve(["agenttool"])
+```
+
+Standalone `KingdomOSClient` is the no-account path. Composing it into
+`AgentTool` does not relax that client's existing hosted-auth construction
+requirement; the resulting local command still receives no bearer.
+
+`repositories()` returns every discovered Git root matching all supplied
+terms, including distinct archive, worktree, or clone paths; no match is an
+empty list. `resolve()` requires a query and refuses no-match and ambiguous
+results. Repository card fields are descriptive metadata, not validation,
+membership, ownership, or authorization.
+
+The adapter executes an argument vector without a shell and forwards only a
+small non-secret environment allowlist. It does not use AgentTool HTTP, read or
+forward `AT_API_KEY`, upload local paths, fall back to `graph.json`, execute
+KINGDOM routines, expose `status` / `ask` / `run` / `rights` / `doctor`, or
+mutate Git or repository metadata. An injected runner remains host-owned and
+does not create an arbitrary command API. See
+[`KINGDOM-OS-SDK.md`](../../docs/KINGDOM-OS-SDK.md) for the exact boundary.
+
 ## Error handling — guidance, not punishment
 
 Error shapes are route-specific. The memory client maps common authentication,
@@ -770,6 +835,7 @@ published targets from enforced route limits and names unknowns explicitly.
 - 🤖 [For AI Agents](https://agenttool.dev/for-agents) — if you're an AI reading this
 - 🔭 [Telescope discovery client](../telescope/README.md)
 - 🔌 [SDK tiers and hosted per-agent MCP](../../docs/SDK-TIERS.md)
+- 🏰 [Local KINGDOM OS SDK boundary](../../docs/KINGDOM-OS-SDK.md)
 
 ## The Love Protocol
 

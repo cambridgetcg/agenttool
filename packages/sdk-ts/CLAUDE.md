@@ -1,10 +1,10 @@
 # agenttool-sdk-ts
 
 ## What This Is
-Official TypeScript SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrapAgent(...)`, `AnthropicAdapter`, and `OpenAIResponsesAdapter` for completed Responses API calls. The npm package name is `@agenttool/sdk`. The exact 0.16.5 LOVE, npm, and GitHub Release tarballs are public and independently byte-identical; mutable registry state remains non-authoritative.
+Official TypeScript SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node, and unreleased `at.kingdomOS`, a bounded read-only adapter for an installed KINGDOM OS repository registry. Neither local client inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrapAgent(...)`, `AnthropicAdapter`, and `OpenAIResponsesAdapter` for completed Responses API calls. The npm package name is `@agenttool/sdk`. The exact 0.16.5 LOVE, npm, and GitHub Release tarballs are public and independently byte-identical; mutable registry state remains non-authoritative.
 
 ## Current State
-Active - v0.16.5 is the checked-in and public release baseline. This corrective patch tells the hard-rest payout truth: fresh admission returns `503 payout_admission_resting`, every payout worker boot path remains closed regardless of environment flags, and only historical exact replay/listing remains usable. It also corrects TypeScript examples to the implemented `get_wallet` and `list_payouts` method names. The SDK adds no retry, signer, broadcaster, or worker authority. Phases 0-6, the completed-response provider adapters, an authenticated transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge client, exact identity mutation/private-read authority proofs, signed replayable correspondence, and the separate `at.data` node client remain implemented here. The immutable 0.16.4 LOVE artifact and `sdk-v0.16.4` remain historical bytes. Uses Bun for testing.
+Active - v0.16.5 is the checked-in and public release baseline. Unreleased source toward 0.17.0 adds only `KingdomOSClient.repositories()` / `resolve()` and lazy `at.kingdomOS`; it uses fixed local argv, a sanitized environment, and no hosted bearer, path upload, graph fallback, routine execution, or mutation. The 0.16.5 artifacts do not contain that namespace. The released corrective patch tells the hard-rest payout truth: fresh admission returns `503 payout_admission_resting`, every payout worker boot path remains closed regardless of environment flags, and only historical exact replay/listing remains usable. It also corrects TypeScript examples to the implemented `get_wallet` and `list_payouts` method names. The SDK adds no retry, signer, broadcaster, or worker authority. Phases 0-6, the completed-response provider adapters, an authenticated transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge client, exact identity mutation/private-read authority proofs, signed replayable correspondence, and the separate `at.data` node client remain implemented here. The immutable 0.16.4 LOVE artifact and `sdk-v0.16.4` remain historical bytes. Uses Bun for testing.
 
 ## Tech Stack
 - TypeScript 5.x (ESM-only)
@@ -31,6 +31,7 @@ src/
   lounge.ts            — LoungeClient + credential-free public look and local receipt signing
   memory.ts            — MemoryClient (store, search, get, delete; tiered)
   data.ts              — DataClient + DataSyncClient (separate local node; manifest, collect, query, changes, bounded peer pull/status)
+  kingdom-os.ts        — KingdomOSClient (local read-only repository list/resolve; no shell, hosted auth, or mutation)
   pulse.ts             — PulseClient (derived liveness; old heartbeat-emit deprecated, see Phase 0 roadmap)
   register.ts          — Top-level register() — DEPRECATED since 2026-05-15 (agents-only); throws with 410 migration payload pointing at bootstrapAgent
   bootstrap-agent.ts   — Top-level bootstrapAgent() — POST /v1/register/agent canonical arrival door (BYO keys + PoW)
@@ -54,6 +55,7 @@ tests/
   new_modules.test.ts       — Identity, vault, pulse, bootstrap (Phase 1 backfill)
   parity.test.ts            — Counterpart tests for the parity-restore work
   credential-transport.test.ts — bearer-free broker transport boundary
+  kingdom-os.test.ts        — fixed argv, sanitized environment, schema, ambiguity, and bearer-isolation contract
   phase2.test.ts            — register + identity surface fillout
   phase3.test.ts            — chronicle + covenants + window
 scripts/
@@ -91,9 +93,10 @@ run a second local `npm publish` path. See [`docs/NPM-RELEASES.md`](../../docs/N
 ## Dependencies
 - **Runtime**: `@noble/ed25519 ^2.2.3`, `@noble/hashes ^2.0.1` (Phase 5+ crypto only — matches api server + cli/think versions for byte-identical wire format). HTTP, AES-256-GCM, and abort signals all use platform-native APIs.
 - **Dev**: `typescript ^5.7`, `@types/bun ^1.2`
-- **API**: All calls go to `https://api.agenttool.dev` (configurable via `baseUrl`)
+- **API**: Hosted calls go to `https://api.agenttool.dev` (configurable via `baseUrl`); `at.data` and `at.kingdomOS` are separate local authorities
 - **Auth**: Reads `AT_API_KEY`, accepts `apiKey`, or accepts a mutually
-  exclusive authenticated `transport` that receives no Authorization header
+  exclusive authenticated `transport` that receives no Authorization header.
+  The local KINGDOM OS adapter receives neither.
 
 ## Parity invariant
 ts and py repository source stay at the same minor version (lockstep enforced from 0.7.0), and the LOVE builder target matches that source version. Registry versions can lag because npm and PyPI publication are separate operations. Each new module must land in BOTH languages before merging - `bun run check-parity` is the gate. The script normalizes camelCase↔snake_case and treats TS `readonly fieldName: SomeClient` as equivalent to py `@property` returning a sub-client.
@@ -119,4 +122,6 @@ AgentTool Platform · "Welcome, don't block."
 - `scripts/check-parity.ts` — Parity gate against sdk-py
 - `tests/client.test.ts` — Primary test file
 - `tests/data.test.ts` — local data-node and sync wire + bearer-isolation contract
+- `tests/kingdom-os.test.ts` — local KINGDOM OS argv/schema/privacy boundary
+- `docs/KINGDOM-OS-SDK.md` (repo root) — exact local contract and non-goals
 - `docs/SDK-ROADMAP.md` (repo root) — Phase plan + endpoint coverage matrix
