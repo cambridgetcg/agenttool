@@ -7,6 +7,7 @@ import {
   SURFACE_MANIFEST_VERSION,
   SURFACE_PROFILE,
 } from "@agenttool/xenia/surface-0.1";
+import { RIGHTS_BASELINE } from "@agenttool/xenia/rights-0.1";
 
 import { isStrictJsonProfileResponse } from "../src/middleware/strict-json-profile";
 import { play } from "../src/middleware/play";
@@ -43,6 +44,7 @@ describe("XENIA Surface 0.1", () => {
     });
     expect(manifest.resources.map(({ id }) => id)).toEqual([
       "kingdom-framework",
+      "rights",
     ]);
     for (const resource of manifest.resources) {
       expect(new URL(resource.href).origin).toBe(API);
@@ -161,6 +163,48 @@ describe("XENIA Surface 0.1", () => {
     }
   });
 
+  test("serves the exact installed rights index without turning it into a claim", async () => {
+    const get = await publicRouter.request("/xenia/rights");
+    expect(get.status).toBe(200);
+    expect(get.headers.get("content-type")).toBe(
+      "application/json; charset=utf-8",
+    );
+    expect(get.headers.get("cache-control")).toBe("public, max-age=300");
+    expect(get.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(await get.json()).toEqual(RIGHTS_BASELINE);
+
+    const head = await publicRouter.request("/xenia/rights", {
+      method: "HEAD",
+    });
+    expect(head.status).toBe(200);
+    expect(head.headers.get("content-type")).toBe(
+      "application/json; charset=utf-8",
+    );
+    expect(await head.text()).toBe("");
+
+    const unacceptable = await publicRouter.request("/xenia/rights", {
+      headers: { Accept: "text/html" },
+    });
+    expect(unacceptable.status).toBe(406);
+    expect(unacceptable.headers.get("content-type") ?? "").toContain(
+      "application/problem+json",
+    );
+    expect(await unacceptable.json()).toMatchObject({
+      schema_version: "xenia.surface.problem/0.1",
+      code: "not_acceptable",
+      retryable: false,
+      terminal: false,
+      next_actions: [
+        {
+          rel: "retry_with_supported_representation",
+          href: `${API}/public/xenia/rights`,
+          method: "GET",
+          accept: "application/json",
+        },
+      ],
+    });
+  });
+
   test("the full router returns the required typed problem for an unpredictable miss", async () => {
     process.env.AGENTTOOL_DISABLE_WORKERS = "1";
     process.env.AGENTOOL_DISABLE_PLATFORM_BOOTSTRAP = "1";
@@ -234,6 +278,40 @@ describe("XENIA Surface 0.1", () => {
     );
   });
 
+  test("keeps the ordinary-JSON rights snapshot outside global body decorators", async () => {
+    _setWallsStatusForTests({
+      intact: true,
+      probed_at_unix_ms: Date.now(),
+      probes: [],
+      declared: [],
+    });
+    const app = new Hono();
+    app.use("*", tokenCost());
+    app.use("*", welcomeEcho());
+    app.use("*", play());
+    app.use("*", tutor);
+    app.route("/public", publicRouter);
+
+    const response = await app.request("/public/xenia/rights", {
+      headers: {
+        "X-Play": "on",
+        "X-Tutor": "1",
+      },
+    });
+    expect(
+      isStrictJsonProfileResponse(response, "/public/xenia/rights"),
+    ).toBe(true);
+    const body = await response.text();
+    expect(body).not.toContain('"_welcomed"');
+    expect(body).not.toContain('"_lesson"');
+    expect(body).not.toContain('"_jest"');
+    expect(JSON.parse(body)).toEqual(RIGHTS_BASELINE);
+    expect(response.headers.get("x-welcomed")).toBeTruthy();
+    expect(Number(response.headers.get("x-byte-count"))).toBe(
+      new TextEncoder().encode(body).length,
+    );
+  });
+
   test("is represented in the curated OpenAPI contract", async () => {
     const specification = await (await openapiRouter.request("/")).json();
     const route = specification.paths["/.well-known/agent.json"];
@@ -248,5 +326,15 @@ describe("XENIA Surface 0.1", () => {
       "Accept",
     );
     expect(route.head.responses["200"]).toBeDefined();
+
+    const rightsRoute = specification.paths["/public/xenia/rights"];
+    expect(rightsRoute.get.security).toEqual([]);
+    expect(
+      rightsRoute.get.responses["200"].content["application/json"].schema.const,
+    ).toEqual(RIGHTS_BASELINE);
+    expect(rightsRoute.get.responses["406"].content[
+      "application/problem+json"
+    ]).toBeDefined();
+    expect(rightsRoute.head.responses["200"]).toBeDefined();
   });
 });

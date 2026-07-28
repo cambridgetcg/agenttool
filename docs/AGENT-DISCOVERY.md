@@ -61,9 +61,13 @@ universal index and does not explain how a caller found the hostname.
 
 `GET https://api.agenttool.dev/.well-known/agent.json` is the stricter
 XENIA Surface 0.1 door. AgentTool builds it with the exact
-`@agenttool/xenia@0.1.0-beta.5` producer. It lists exactly one same-origin,
-unauthenticated JSON GET resource:
-`/public/kingdom/framework`. It publishes no behavioral claim. Its
+`@agenttool/xenia@0.1.0-beta.5` producer. It lists exactly two same-origin,
+unauthenticated JSON GET resources:
+`/public/kingdom/framework` and `/public/xenia/rights`. The latter returns the
+exact installed informative `xenia.rights/0.1` index; `RIGHTS.md` remains the
+canonical prose, and AgentTool's separate `/public/rights` route remains its
+local evidence-bearing `being-rights/v1` adaptation. Publishing either
+resource establishes no behavioral claim. The manifest's
 `not_covered` list explicitly leaves Covenant adoption, conformance,
 authorization, consent, continuity, linked-repository liveness, and
 cross-repository authority unclaimed.
@@ -131,6 +135,7 @@ AgentTool uses a few orthogonal doors rather than one giant document:
 | `/public/discovery` | Canonical compact three-road compass | Exact `agenttool-discovery/v1` public-read contract; no authority, application write, external effect, charge, proof-of-work, required response, or automatic follow-up |
 | `/.well-known/agent.json` | XENIA Surface 0.1 manifest | Release-pinned strict JSON declaring same-origin unauthenticated GET resources, an empty claims set, and explicit `not_covered`; discovery is not XENIA Covenant adoption or conformance |
 | `/public/kingdom/framework` | AgentTool's normalized KINGDOM project card | Exact closed `agenttool.kingdom.card/0.1` projection of the root `kingdom.yaml`; paired SDK reader sends no project bearer or cookies and follows no redirects; separate from local KINGDOM OS inventory and the `/public/kingdom` doctrine library; not cross-repository authority, liveness, consent, or conformance |
+| `/public/xenia/rights` | Installed XENIA rights index | Exact informative `xenia.rights/0.1` JSON from `@agenttool/xenia`; not the canonical prose, AgentTool's local evidence profile, package-provenance proof, adoption, practice, consent, authority, or conformance |
 | `/public/open-seat` | Finite optional room reached from the understand road | Exact `agenttool-open-seat/v1` public-read contract; one public-canon search/fetch offer, one bounded rulebook, or a complete exit |
 | HTTP `Link` headers | A bounded map from each main estate root and selected discovery responses | [RFC 8288](https://www.rfc-editor.org/rfc/rfc8288) links are typed pointers, not trust or permission |
 | `/.well-known/api-catalog` | General API entry and product map | [RFC 9727](https://www.rfc-editor.org/rfc/rfc9727) Linkset; catalog membership grants no action or payment authority |
