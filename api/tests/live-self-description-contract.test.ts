@@ -410,13 +410,23 @@ describe("live self-description — curated repo and platform bounds", () => {
       /launch\/, specs\/, superpowers\/, wakes\/, and zerone-migration\//i,
     );
     expect(testsModule?.register).toMatch(/five practical families/i);
-    expect(tsSdkModule?.register).toMatch(/local.*KINGDOM OS/i);
-    expect(pySdkModule?.register).toMatch(/local.*KINGDOM OS/i);
+    expect(tsSdkModule?.register).toMatch(
+      /credential-free typed KINGDOM framework-card read.*local.*KINGDOM OS/i,
+    );
+    expect(pySdkModule?.register).toMatch(
+      /credential-free typed KINGDOM framework-card read.*local.*KINGDOM OS/i,
+    );
     expect(tsSdkModule?.walls.join(" ")).toMatch(
-      /never inherit or forward the project bearer/i,
+      /framework-card read.*never inherit or forward the project bearer/i,
     );
     expect(pySdkModule?.walls.join(" ")).toMatch(
-      /never inherit or forward the project bearer/i,
+      /framework-card read.*never inherit or forward the project bearer/i,
+    );
+    expect(tsSdkModule?.walls.join(" ")).toMatch(
+      /\/public\/kingdom\/framework.*refuses redirects.*grants no authority/i,
+    );
+    expect(pySdkModule?.walls.join(" ")).toMatch(
+      /\/public\/kingdom\/framework.*refuses redirects.*grants no authority/i,
     );
     expect(sdkLayer?.docs).toContain("KINGDOM-OS-SDK.md");
     expect(new Set(why?.docs).size).toBe(why?.docs.length);

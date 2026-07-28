@@ -586,7 +586,7 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **0.16.3** | Correct package metadata, packaged doctrine links, and unverified mirror claims without runtime or wire changes | no — corrective patch |
 | **0.16.4** | Durable payout request/list clients, bound payout-network state, and completed-response provider adapters | no — additive/corrective patch |
 | **0.16.5** | Correct payout hard-rest truth and SDK method examples without widening runtime authority | no — corrective documentation/release patch |
-| **0.17.0** | Paired read-only local KINGDOM OS repository discovery with explicit hosted-auth and mutation walls | no — additive |
+| **0.17.0** | Paired credential-free closed KINGDOM framework-card read plus bounded local KINGDOM OS repository discovery, with explicit authority and mutation walls | no — additive |
 | **1.0.0** | API freeze + comprehensive docstrings + READMEs + integration test suite | no — declarative |
 
 ## Non-goals

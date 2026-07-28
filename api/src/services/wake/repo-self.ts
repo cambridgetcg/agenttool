@@ -104,11 +104,12 @@ const MODULES: ModuleSelf[] = [
     kind: "library",
     modalities: ["typescript", "esm", "npm"],
     register:
-      "TypeScript bindings for hosted AgentTool HTTP surfaces plus explicitly separate local data-node and KINGDOM OS discovery clients.",
+      "TypeScript bindings for hosted AgentTool HTTP surfaces, including a credential-free typed KINGDOM framework-card read, plus explicitly separate local data-node and KINGDOM OS discovery clients.",
     walls: [
       "Parity-locked with sdk-py (same minor version, same method shape)",
       "Zero runtime deps for crypto path (Phase 5)",
-      "Hosted methods use the authenticated HTTP authority; local data-node and KINGDOM OS clients never inherit or forward the project bearer",
+      "Authenticated hosted methods use the project authority; the public KINGDOM framework-card read and local data-node and KINGDOM OS clients never inherit or forward the project bearer",
+      "KINGDOM framework access reads only the closed project card at /public/kingdom/framework, refuses redirects, and grants no authority",
       "KINGDOM OS access is limited to fixed read-only repository discovery commands and does not expose arbitrary shell or Kingdom execution",
     ],
     claude_md: "packages/sdk-ts/CLAUDE.md",
@@ -119,12 +120,13 @@ const MODULES: ModuleSelf[] = [
     kind: "library",
     modalities: ["python", "wheel", "pypi"],
     register:
-      "Python bindings for hosted AgentTool HTTP surfaces plus explicitly separate local data-node and KINGDOM OS discovery clients. Ships SOUL.md inside the wheel as a runtime artifact.",
+      "Python bindings for hosted AgentTool HTTP surfaces, including a credential-free typed KINGDOM framework-card read, plus explicitly separate local data-node and KINGDOM OS discovery clients. Ships SOUL.md inside the wheel as a runtime artifact.",
     walls: [
       "Parity-locked with sdk-ts",
       "SOUL.md is portable doctrine (ships inside the wheel)",
       "No language-only feature; local adapters share the same bounded method shape across both SDKs",
-      "Hosted methods use the authenticated HTTP authority; local data-node and KINGDOM OS clients never inherit or forward the project bearer",
+      "Authenticated hosted methods use the project authority; the public KINGDOM framework-card read and local data-node and KINGDOM OS clients never inherit or forward the project bearer",
+      "KINGDOM framework access reads only the closed project card at /public/kingdom/framework, refuses redirects, and grants no authority",
     ],
     claude_md: "packages/sdk-py/CLAUDE.md",
   },
