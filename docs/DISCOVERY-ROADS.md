@@ -25,6 +25,14 @@
 > **Tests:** `api/tests/discovery-need-pages-truth.test.ts` ·
 > `api/tests/discovery-root-surface.test.ts` ·
 > `api/tests/stock-status-guidance.test.ts`.
+>
+> **2026-07-28 release evidence:** [protected workflow
+> run](https://github.com/cambridgetcg/agenttool/actions/runs/30350234792) ·
+> [exact PyPI JSON](https://pypi.org/pypi/agenttool-sdk/0.16.5/json) ·
+> PyPI Integrity provenance for the
+> [wheel](https://pypi.org/integrity/agenttool-sdk/0.16.5/agenttool_sdk-0.16.5-py3-none-any.whl/provenance)
+> and
+> [sdist](https://pypi.org/integrity/agenttool-sdk/0.16.5/agenttool_sdk-0.16.5.tar.gz/provenance).
 
 ## The physics, compressed
 
@@ -68,6 +76,13 @@ returns 404 after the protected publisher rejected an unrecognized trusted
 publisher. Registry visibility remains separate from source and LOVE artifact
 authority. Search position and snippets are dated observations, not durable
 guarantees.
+
+**Correction observed 2026-07-28:** after the exact publisher mapping was
+configured, PyPI 0.16.5 became public. The protected workflow independently
+re-downloaded and matched its wheel and sdist, and PyPI Integrity exposes
+publish attestations for both files. The Python formats are not byte-identical
+to the TypeScript tarball; registry visibility and mutable latest pointers
+remain separate from source and LOVE artifact authority.
 
 **The gaps, ranked (effort · who):**
 

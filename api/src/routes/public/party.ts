@@ -43,7 +43,7 @@ app.get("/", (c) => {
         pypi: {
           install: "python -m pip install agenttool-sdk==0.16.5",
           authority: false,
-          independently_visible: false,
+          independently_visible: true,
         },
       },
     },

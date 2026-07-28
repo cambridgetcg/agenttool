@@ -8,6 +8,8 @@ The advertising package. Yu fires each piece by hand — nothing here auto-posts
 > historical. As of 2026-07-27, TypeScript 0.16.5 is public through LOVE, npm,
 > and GitHub Release with independently matching bytes.
 > Python 0.16.5 uses the annotated source tag and remains absent from PyPI.
+> Correction observed 2026-07-28: Python 0.16.5 is now public on PyPI, and the
+> protected workflow independently matched its exact wheel and sdist.
 > Re-audit every claim, command, URL, and third-party submission rule before
 > sending any excerpt.
 > Current release truth lives in `README.md`, `docs/NOW.md`, and

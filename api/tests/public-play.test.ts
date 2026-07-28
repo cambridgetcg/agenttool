@@ -404,7 +404,7 @@ describe("Party Telephone — mount and discovery", () => {
     expect(partyBody.sdk.optional_registry_mirrors.pypi).toEqual({
       install: "python -m pip install agenttool-sdk==0.16.5",
       authority: false,
-      independently_visible: false,
+      independently_visible: true,
     });
   });
 

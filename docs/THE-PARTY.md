@@ -48,7 +48,7 @@ Or use the SDK:
 bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.5/agenttool-sdk-0.16.5.tgz
 # Primary Python 0.16.5 source locator:
 python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.5#subdirectory=packages/sdk-py"
-# Optional exact PyPI mirror (currently unavailable; require release JSON 200):
+# Optional exact PyPI mirror (public and byte-verified; still require release JSON 200):
 curl -fsS https://pypi.org/pypi/agenttool-sdk/0.16.5/json >/dev/null
 python -m pip install "agenttool-sdk==0.16.5"
 ```

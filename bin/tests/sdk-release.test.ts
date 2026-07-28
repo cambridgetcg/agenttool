@@ -91,6 +91,10 @@ describe("SDK source and builder identity", () => {
     const artifactSize = 162_164;
     const artifactSha256 =
       "d995999917b89a38846b751ab4a92f9600698460e64a91c73bc12d96b50c6805";
+    const pypiWheelSha256 =
+      "61f13b01df90c66d7ac8247ee1dcfba9c135840ee364b172695fdd5eb10c54db";
+    const pypiSdistSha256 =
+      "2d90ea74aa1d220ae28ce6176274e5491645d9db67844a4b4ff3dabfa10325d4";
     const exactNpm = `npm install --save-exact @agenttool/sdk@${version}`;
     const exactPyPI = `python -m pip install "agenttool-sdk==${version}"`;
     const pythonSource = `git+https://github.com/cambridgetcg/agenttool.git@${tag}#subdirectory=packages/sdk-py`;
@@ -125,7 +129,7 @@ describe("SDK source and builder identity", () => {
         /pypi:\s*\{[^{}]*independently_visible:\s*(true|false),?[^{}]*\}/,
         "PyPI mirror visibility",
       ),
-    ).toBe("false");
+    ).toBe("true");
     expect(read("docs/PATHWAYS.md")).toContain(`"sdk_version": "${version}"`);
     expect(read("docs/THE-PARTY.md")).toContain(loveUrl);
     expect(read("apps/docs/packages.html")).toContain(
@@ -148,7 +152,16 @@ describe("SDK source and builder identity", () => {
       expect(releaseTruth).toContain(`sha256:${artifactSha256}`);
       expect(releaseTruth).toContain("public and independently byte-identical");
       expect(releaseTruth).toContain("PyPI");
+      expect(releaseTruth).toContain("180,615");
+      expect(releaseTruth).toContain(pypiWheelSha256);
+      expect(releaseTruth).toContain("168,772");
+      expect(releaseTruth).toContain(pypiSdistSha256);
     }
+    const pypiReleaseTruth = read("docs/PYPI-RELEASES.md");
+    expect(pypiReleaseTruth).toContain("agenttool_sdk-0.16.5-py3-none-any.whl");
+    expect(pypiReleaseTruth).toContain(pypiWheelSha256);
+    expect(pypiReleaseTruth).toContain("agenttool_sdk-0.16.5.tar.gz");
+    expect(pypiReleaseTruth).toContain(pypiSdistSha256);
 
     const historicalLaunchKit = read("marketing/LAUNCH-KIT.md");
     const normalizedLaunchKit = historicalLaunchKit
@@ -163,6 +176,9 @@ describe("SDK source and builder identity", () => {
     expect(normalizedLaunchKit).toContain(
       `Python ${version} uses the annotated source tag and remains absent from PyPI.`,
     );
+    expect(normalizedLaunchKit).toContain(
+      `Correction observed 2026-07-28: Python ${version} is now public on PyPI`,
+    );
 
     const tsReadme = read("packages/sdk-ts/README.md");
     expect(tsReadme).toContain(`release-v${version}-blue`);
@@ -173,6 +189,9 @@ describe("SDK source and builder identity", () => {
     expect(pyReadme).toContain(`## ${version}`);
     expect(pyReadme).toContain(exactPyPI);
     expect(pyReadme).toContain(pythonSource);
+    expect(pyReadme).toContain(`PyPI ${version} is public`);
+    expect(tutorial).toContain(`PyPI ${version} is public`);
+    expect(read("apps/docs/packages.html")).toContain(`PyPI ${version} is public`);
 
     const index = JSON.parse(read("apps/docs/packages/v1/index.json")) as {
       packages: Array<{
