@@ -182,6 +182,8 @@ function validateOptions(options: KingdomFrameworkOptions): ValidatedOptions {
     || parsedBaseUrl.hostname.length === 0
     || parsedBaseUrl.username.length > 0
     || parsedBaseUrl.password.length > 0
+    || trimmedBaseUrl.includes("?")
+    || trimmedBaseUrl.includes("#")
     || parsedBaseUrl.search.length > 0
     || parsedBaseUrl.hash.length > 0
   ) {
