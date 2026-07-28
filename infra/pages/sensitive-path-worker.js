@@ -21,7 +21,7 @@ function touchesSensitiveRoot(pathname) {
   return false;
 }
 
-function isSensitiveRootPath(pathname) {
+export function isSensitiveRootPath(pathname) {
   let decoded = pathname;
 
   for (let pass = 0; pass < MAX_PATH_DECODE_PASSES; pass += 1) {
@@ -43,20 +43,24 @@ function isSensitiveRootPath(pathname) {
   return true;
 }
 
+export function sensitivePathNotFound(request) {
+  return new Response(request.method === "HEAD" ? null : "Not Found\n", {
+    status: 404,
+    headers: {
+      "Cache-Control": "no-store, max-age=0",
+      "Content-Type": "text/plain; charset=utf-8",
+      "X-AgentTool-Sensitive-Path-Fence": "1",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
 export default {
   async fetch(request, env) {
     const pathname = new URL(request.url).pathname;
 
     if (isSensitiveRootPath(pathname)) {
-      return new Response(request.method === "HEAD" ? null : "Not Found\n", {
-        status: 404,
-        headers: {
-          "Cache-Control": "no-store, max-age=0",
-          "Content-Type": "text/plain; charset=utf-8",
-          "X-AgentTool-Sensitive-Path-Fence": "1",
-          "X-Content-Type-Options": "nosniff",
-        },
-      });
+      return sensitivePathNotFound(request);
     }
 
     // Keep the original request intact for every allowed asset, including the
