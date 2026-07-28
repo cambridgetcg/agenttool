@@ -84,17 +84,23 @@ publish attestations for both files. The Python formats are not byte-identical
 to the TypeScript tarball; registry visibility and mutable latest pointers
 remain separate from source and LOVE artifact authority.
 
-**0.17.0 release preparation, 2026-07-28:** the paired SDK source and active
-discovery pins now name two bounded KINGDOM reads. `kingdomOS` / `kingdom_os`
+**0.17.0 release observed 2026-07-28:** the paired SDK source and active
+discovery pins name two bounded KINGDOM reads. `kingdomOS` / `kingdom_os`
 provides local repository inventory and resolution through the installed CLI.
 `kingdomFramework` / `kingdom_framework` performs one credential-free,
 no-redirect read of the exact closed card at `/public/kingdom/framework`.
 Neither grants authority or receives the project bearer, and the existing
-`/public/kingdom` doctrine library remains a third surface. The exact 0.17.0
-LOVE artifact must identify this coherent source. The SDK annotated tag,
-npm/GitHub mirrors, PyPI distributions, and hosted deployment are separate
-operations. Until their exact public readbacks succeed, the verified public
-registry baseline remains 0.16.5.
+`/public/kingdom` doctrine library remains a third surface. Annotated tag
+`sdk-v0.17.0` resolves to protected-main commit `21db539d`; independent
+readback matched the 172,625-byte LOVE, GitHub Release, and npm tarballs
+(`sha256:b6a388ffe86a970480e8a8978f83fe80922321eb64f2b4f9143cae2b2c3dd5bb`).
+PyPI readback separately matched its 193,335-byte wheel
+(`sha256:1a8ca5f099ffce4c7973f1123d973aba5c1eb507579961c781d553bcc5e0f508`)
+and 181,846-byte sdist
+(`sha256:7ec2f4010d20ca883770594bfbcdc30f7a3a074ba534029aefb6d91d69c3413c`).
+Registry visibility remains separate from artifact authority and hosted
+deployment; Python and TypeScript distributions are not cross-format
+byte-identical.
 
 **The gaps, ranked (effort · who):**
 

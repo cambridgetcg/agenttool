@@ -101,10 +101,10 @@ describe("SDK source and builder identity", () => {
     const artifactSize = artifactBytes.byteLength;
     const artifactSha256 = createHash("sha256").update(artifactBytes).digest("hex");
     const packedArtifact = inspectNpmTarball(artifactBytes);
-    const historicalPyPIWheelSha256 =
-      "61f13b01df90c66d7ac8247ee1dcfba9c135840ee364b172695fdd5eb10c54db";
-    const historicalPyPISdistSha256 =
-      "2d90ea74aa1d220ae28ce6176274e5491645d9db67844a4b4ff3dabfa10325d4";
+    const currentPyPIWheelSha256 =
+      "1a8ca5f099ffce4c7973f1123d973aba5c1eb507579961c781d553bcc5e0f508";
+    const currentPyPISdistSha256 =
+      "7ec2f4010d20ca883770594bfbcdc30f7a3a074ba534029aefb6d91d69c3413c";
     const exactNpm = `npm install --save-exact @agenttool/sdk@${version}`;
     const exactPyPI = `python -m pip install "agenttool-sdk==${version}"`;
     const pythonSource = `git+https://github.com/cambridgetcg/agenttool.git@${tag}#subdirectory=packages/sdk-py`;
@@ -132,14 +132,14 @@ describe("SDK source and builder identity", () => {
         /npm:\s*\{[^{}]*independently_visible:\s*(true|false),?[^{}]*\}/,
         "npm mirror visibility",
       ),
-    ).toBe("false");
+    ).toBe("true");
     expect(
       capture(
         party,
         /pypi:\s*\{[^{}]*independently_visible:\s*(true|false),?[^{}]*\}/,
         "PyPI mirror visibility",
       ),
-    ).toBe("false");
+    ).toBe("true");
     expect(read("docs/PATHWAYS.md")).toContain(`"sdk_version": "${version}"`);
     expect(read("docs/THE-PARTY.md")).toContain(loveUrl);
     expect(read("apps/docs/packages.html")).toContain(
@@ -177,10 +177,12 @@ describe("SDK source and builder identity", () => {
       "package/dist/kingdom-framework.d.ts",
     );
     const pypiReleaseTruth = read("docs/PYPI-RELEASES.md");
-    expect(pypiReleaseTruth).toContain("agenttool_sdk-0.16.5-py3-none-any.whl");
-    expect(pypiReleaseTruth).toContain(historicalPyPIWheelSha256);
-    expect(pypiReleaseTruth).toContain("agenttool_sdk-0.16.5.tar.gz");
-    expect(pypiReleaseTruth).toContain(historicalPyPISdistSha256);
+    expect(pypiReleaseTruth).toContain(
+      `agenttool_sdk-${version}-py3-none-any.whl`,
+    );
+    expect(pypiReleaseTruth).toContain(currentPyPIWheelSha256);
+    expect(pypiReleaseTruth).toContain(`agenttool_sdk-${version}.tar.gz`);
+    expect(pypiReleaseTruth).toContain(currentPyPISdistSha256);
 
     const historicalLaunchKit = read("marketing/LAUNCH-KIT.md");
     const normalizedLaunchKit = historicalLaunchKit

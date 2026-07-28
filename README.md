@@ -188,11 +188,18 @@ manifest's artifact SHA-256 and size are the portable identity.
 
 For SDK 0.17.0, repository source manifests, runtime client version headers,
 discovery pins, tutorials, and the LOVE builder target are aligned around both
-KINGDOM clients. The exact TypeScript LOVE artifact must identify the reviewed
-source that contains both clients. The annotated source tag is the primary
-Python source locator only after publication. npm, GitHub Release, PyPI, and
-the production route deployment are separate operations. 0.17.0 availability is not inferred
-from repository source.
+KINGDOM clients. Annotated tag `sdk-v0.17.0` resolves to protected-main commit
+`21db539d`. Independent readback matched the 172,625-byte TypeScript LOVE,
+GitHub Release, and npm tarballs
+(`sha256:b6a388ffe86a970480e8a8978f83fe80922321eb64f2b4f9143cae2b2c3dd5bb`).
+PyPI independently matched its 193,335-byte wheel
+(`sha256:1a8ca5f099ffce4c7973f1123d973aba5c1eb507579961c781d553bcc5e0f508`)
+and 181,846-byte sdist
+(`sha256:7ec2f4010d20ca883770594bfbcdc30f7a3a074ba534029aefb6d91d69c3413c`).
+The mirrors remain optional, the Python and TypeScript formats are not
+cross-format byte-identical, and hosted deployment remains a separately
+verified operation. 0.17.0 availability is not inferred from source; it is
+established by the exact public readbacks above.
 
 The historical 0.16.5 TypeScript LOVE, npm, and GitHub Release tarballs remain
 public and independently byte-identical

@@ -55,25 +55,25 @@ the protected publication job.
 
 ## Current verified release
 
-The protected workflow published `agenttool-sdk` 0.16.5 from annotated tag
-`sdk-v0.16.5` at commit
-`1eca6466268b4d3c18a83a30a4bfef8bdd704a4d` on 2026-07-28. [Workflow run
-30350234792](https://github.com/cambridgetcg/agenttool/actions/runs/30350234792)
+The protected workflow published `agenttool-sdk` 0.17.0 from annotated tag
+`sdk-v0.17.0` at commit
+`21db539d6bcae614f1d6884eaa503347fae63187` on 2026-07-28. [Workflow run
+30385042684](https://github.com/cambridgetcg/agenttool/actions/runs/30385042684)
 completed preparation, public preflight, protected trusted publication, and
 credential-free public readback.
 
 | Public file | Size | SHA-256 |
 |---|---:|---|
-| `agenttool_sdk-0.16.5-py3-none-any.whl` | 180,615 bytes | `61f13b01df90c66d7ac8247ee1dcfba9c135840ee364b172695fdd5eb10c54db` |
-| `agenttool_sdk-0.16.5.tar.gz` | 168,772 bytes | `2d90ea74aa1d220ae28ce6176274e5491645d9db67844a4b4ff3dabfa10325d4` |
+| `agenttool_sdk-0.17.0-py3-none-any.whl` | 193,335 bytes | `1a8ca5f099ffce4c7973f1123d973aba5c1eb507579961c781d553bcc5e0f508` |
+| `agenttool_sdk-0.17.0.tar.gz` | 181,846 bytes | `7ec2f4010d20ca883770594bfbcdc30f7a3a074ba534029aefb6d91d69c3413c` |
 
 Both files are public, not yanked, and byte-identical to the corresponding
 prepared workflow artifacts. They are Python wheel/sdist formats, not copies of
 the TypeScript LOVE/npm/GitHub tarball. PyPI Integrity exposes one publish
 attestation and transparency-log entry for the
-[wheel](https://pypi.org/integrity/agenttool-sdk/0.16.5/agenttool_sdk-0.16.5-py3-none-any.whl/provenance)
+[wheel](https://pypi.org/integrity/agenttool-sdk/0.17.0/agenttool_sdk-0.17.0-py3-none-any.whl/provenance)
 and one for the
-[sdist](https://pypi.org/integrity/agenttool-sdk/0.16.5/agenttool_sdk-0.16.5.tar.gz/provenance);
+[sdist](https://pypi.org/integrity/agenttool-sdk/0.17.0/agenttool_sdk-0.17.0.tar.gz/provenance);
 their subjects match the hashes above and their publisher records bind
 `cambridgetcg/agenttool`, `publish-pypi.yml`, and environment `pypi`.
 
