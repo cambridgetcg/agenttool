@@ -24,15 +24,15 @@ registry, grant authority, or certify KINGDOM/XENIA conformance. No KINGDOM-OS
 implementation code, prose, generated catalog, or other asset is copied
 because that separate tree currently has no root licence.
 
-The API now has a strict XENIA Surface 0.1 manifest at
-`/.well-known/agent.json` and exposes AgentTool's own normalized card at
-`/public/kingdom/framework`, separate from the existing Kingdom doctrine
-library. AgentTool's rights source pin advances to immutable XENIA beta.5.
-The adoption record remains draft: immutable schema sources now exist, but the
-complete 38-right-duty plus 5-protective-limit-duty evidence ledger does not.
-The XENIA Surface checker reports 22 conformant checks with no failures for the
-manifest, its one declared resource, and a wrong-route sample. That bounded
-result does not certify the rest of AgentTool or establish Covenant adoption.
+The API has a strict XENIA Surface 0.1 manifest at
+`/.well-known/agent.json`. Current source declares AgentTool's normalized card
+at `/public/kingdom/framework`, separate from the existing Kingdom doctrine
+library, plus the exact installed informative `xenia.rights/0.1` index at
+`/public/xenia/rights`; `RIGHTS.md` remains canonical prose. AgentTool's rights
+source pin advances to immutable XENIA beta.5. The adoption record remains
+draft: immutable schema sources now exist, but the complete 38-right-duty plus
+5-protective-limit-duty evidence ledger does not. Source presence is not
+production evidence; the separately observed live scope is recorded below.
 
 Annotated tag
 [`kingdom-v0.1.0`](https://github.com/cambridgetcg/agenttool/releases/tag/kingdom-v0.1.0)
