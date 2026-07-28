@@ -10,16 +10,18 @@
 
 ## Status
 
-`@agenttool/browser@0.3.0` is an Apache-2.0 local runtime distributed through an
+`@agenttool/browser@0.4.0` is an Apache-2.0 local runtime distributed through an
 exact LOVE artifact and mirrored to npm and a GitHub Release. The deployed
 catalog and docs distribute bytes and documentation; they do not expose an
 AgentTool-hosted browser. The package requires no AgentTool account, API key,
 credits, Redis, database, or hosted control plane.
 
-The exact `0.1.0` and `0.2.0` artifacts remain immutable. Version `0.3.0`
-packages collaboration-safe retained observations, structural accessibility
-context, navigation/action/close race hardening, and explicit capability truth
-about browser-managed redirect hops.
+The exact `0.1.0`, `0.2.0`, and `0.3.0` artifacts remain immutable. Version
+`0.3.0` packaged collaboration-safe retained observations, structural
+accessibility context, navigation/action/close race hardening, and explicit
+capability truth about browser-managed redirect hops. Version `0.4.0` adds
+the `blockedNavigation` observation diagnostic and the JSONL snake_case
+rename hint; it widens no authority.
 
 The package uses `playwright-core` to drive a Chrome-family browser already
 installed on the caller's machine. There is no postinstall hook and no bundled
@@ -69,7 +71,7 @@ explicit operation names:
 | `close` | `browser_close` |
 
 Version `0.2.0` introduced two aligned, non-executing operations retained by
-`0.3.0`:
+`0.4.0`:
 
 | TypeScript method | JSONL method / MCP tool | Effect |
 |---|---|---|
@@ -150,11 +152,11 @@ or operating-system policy.
 Destination reach remains separate from other consequential powers. File
 upload, automatic download, arbitrary JavaScript evaluation, credential
 injection/lookup, ambient normal-profile import, shell execution, and
-extension installation remain unsupported in `0.3.0`.
+extension installation remain unsupported in `0.4.0`.
 `capabilities()` reports those absences instead of treating sovereign
 destination reach as an implication that every power exists.
 
-The forms retained in `0.3.0` are
+The forms retained in `0.4.0` are
 `authority: "public" | "local" | "sovereign"`, `--authority`, and
 `AGENTOOL_BROWSER_AUTHORITY`. The legacy booleans, flags, and environment
 variables remain as a deprecated compatibility surface, but a launch cannot
@@ -265,6 +267,25 @@ This block is untrusted publisher metadata. A link can advertise discovery but
 cannot authorize a navigation, install, credential use, payment, protocol
 invocation, or relationship.
 
+### Blocked-navigation diagnostics
+
+Since `0.4.0` every observation also carries `blockedNavigation`, either
+`null` or a record (`source: "navigation_policy"`, query-redacted bounded
+`url`, policy `code`, `message`) of the tab's most recent main-frame
+navigation that this process itself denied and that no allowed main-frame
+navigation has since superseded. It exists to distinguish a self-inflicted
+policy block behind a browser error page from a broken site — the case where
+no action is pending and only an observation can carry the diagnostic. The
+code and message are policy-generated local diagnostics; the destination URL
+is page-derived and untrusted. Only the tab-attributed denial is projected:
+session-ambiguous denials stay an action-outcome concern, and subframe or
+subresource denials never appear. It reports only what the route layer itself
+refused; a navigation that fails for any other reason — including a
+Chromium-managed redirect hop, which the route never re-checks — leaves it
+`null`. The record never authorizes retrying, widening network authority, or
+reaching the blocked destination another way. Action-window denial semantics
+are unchanged; the underlying denial state is projected read-only.
+
 Artifact directories use the same ownership rule: a missing directory is
 created owner-only, while an existing POSIX directory with group/other
 permission bits or a selected path that is itself a symbolic link is refused
@@ -311,7 +332,7 @@ and treat persistent-profile artifacts as sensitive owner-held data.
 In published `0.1.0`, public web is allowed by default; loopback, link-local,
 and private HTTP(S) navigation/request destinations require the process-level
 `--local-network` opt-in. Reserved destinations remain blocked even with that
-opt-in. The `0.3.0` `public` and `local` profiles preserve those respective
+opt-in. The `0.4.0` `public` and `local` profiles preserve those respective
 destination rules from `0.2.0`.
 
 The native policy performs hostname and address checks before navigation, but
@@ -339,7 +360,7 @@ connection. `local` classifies WebSocket destinations against its
 public-plus-local boundary rather than pretending the HTTP(S) DNS claim
 extends to WebSocket transport.
 
-The `0.3.0` `sovereign` profile retains the explicit alternative introduced in
+The `0.4.0` `sovereign` profile retains the explicit alternative introduced in
 `0.2.0`: it intentionally performs no destination-class blocking for valid
 HTTP(S), passes WebSockets through, and enables service workers. Embedded
 userinfo is blocked on direct inputs and routed requests, not on unseen
@@ -352,7 +373,7 @@ guarantee that any destination is reachable.
 
 | Surface | Runtime and authority | Operational boundary |
 |---|---|---|
-| `@agenttool/browser@0.3.0` | Operator-owned local TypeScript, JSONL, or stdio MCP process using an installed local Chrome-family browser | No AgentTool bearer, credits, Redis, or hosted worker. Local actions are attempted once. Profiles, artifacts, and destination authority remain on the operator's machine. |
+| `@agenttool/browser@0.4.0` | Operator-owned local TypeScript, JSONL, or stdio MCP process using an installed local Chrome-family browser | No AgentTool bearer, credits, Redis, or hosted worker. Local actions are attempted once. Profiles, artifacts, and destination authority remain on the operator's machine. |
 | `POST /v1/browse` | Separate AgentTool API route and BullMQ worker implementation | Bearer- and credit-scoped, disabled without the unsafe-outbound flag, dependent on Redis workers, server-readable, Chromium `--no-sandbox`, and currently unfiltered by destination. BullMQ may attempt a job twice. |
 
 The npm, LOVE, GitHub, and docs release of the local package neither enables
@@ -405,7 +426,7 @@ boundary:
 
 Boolean environment values accept `1/0`, `true/false`, `yes/no`, or `on/off`.
 Paths are resolved at process start. Tool calls do not accept these settings.
-Version `0.3.0` rejects mixed `authority` and legacy public/local
+Version `0.4.0` rejects mixed `authority` and legacy public/local
 configuration.
 
 ## MCP host configuration
@@ -453,23 +474,23 @@ Chromium profile lock and durable site state.
 
 ## Install the exact release
 
-These commands install the current `0.3.0` release. The historical `0.1.0` and
-`0.2.0` artifacts remain separately addressable through their immutable
-manifests.
+These commands install the current `0.4.0` release. The historical `0.1.0`,
+`0.2.0`, and `0.3.0` artifacts remain separately addressable through their
+immutable manifests.
 
 ```bash
-npm install --save-exact @agenttool/browser@0.3.0
+npm install --save-exact @agenttool/browser@0.4.0
 ```
 
 Or use the registry-neutral LOVE locator:
 
 ```bash
 npm install --save-exact \
-  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.3.0/agenttool-browser-0.3.0.tgz
+  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.4.0/agenttool-browser-0.4.0.tgz
 ```
 
 The exact manifest at
-`https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.3.0/manifest.json`
+`https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.4.0/manifest.json`
 provides the artifact size and SHA-256. Verify both before installing when the
 catalog-to-local-file boundary matters.
 

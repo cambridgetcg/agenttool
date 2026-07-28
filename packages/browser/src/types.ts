@@ -244,6 +244,22 @@ export interface MainDocumentResponse {
   trust: "untrusted";
 }
 
+/**
+ * Local policy diagnostics for the most recent main-frame navigation this
+ * process itself denied on this tab and that no allowed navigation has since
+ * superseded. The code and message are policy-generated; the destination URL
+ * is page-derived, query-redacted, and untrusted. This lets an agent
+ * distinguish a self-inflicted policy block behind a browser error page from
+ * a broken site. It never authorizes retrying, widening network authority,
+ * or reaching the blocked destination another way.
+ */
+export interface BlockedNavigation {
+  source: "navigation_policy";
+  url: string | null;
+  code: string;
+  message: string;
+}
+
 export interface Observation {
   schema: typeof OBSERVATION_SCHEMA;
   sessionId: string;
@@ -257,6 +273,7 @@ export interface Observation {
   text: string | null;
   refs: SnapshotRef[];
   response: MainDocumentResponse | null;
+  blockedNavigation: BlockedNavigation | null;
   truncated: {
     snapshot: boolean;
     text: boolean;

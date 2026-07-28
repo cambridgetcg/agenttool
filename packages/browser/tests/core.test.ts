@@ -618,6 +618,203 @@ describe("AgentBrowser core", () => {
     });
   }
 
+  test("surfaces a standing main-frame policy denial in observations until an allowed navigation supersedes it", async () => {
+    const { browser, context, page } = await launched();
+
+    // A page-initiated navigation the policy denies: no action is pending,
+    // so only the observation can carry the diagnostic.
+    await context.routeHandler!({
+      request: () => ({
+        url: () => "http://10.0.0.9/internal?token=secret",
+        isNavigationRequest: () => true,
+        frame: () => page.mainFrameValue,
+      }),
+      abort: async () => {},
+      continue: async () => {},
+    });
+
+    const observation = await browser.observe();
+    expect(observation.blockedNavigation).toMatchObject({
+      source: "navigation_policy",
+      code: "network_blocked",
+    });
+    expect(observation.blockedNavigation?.url).toContain("10.0.0.9");
+    expect(observation.blockedNavigation?.url).not.toContain("secret");
+
+    // The diagnostic is read-only and repeatable.
+    expect((await browser.observe()).blockedNavigation).not.toBeNull();
+
+    // An allowed main-frame navigation supersedes the denial.
+    await context.routeHandler!({
+      request: () => ({
+        url: () => "https://example.com/next",
+        isNavigationRequest: () => true,
+        frame: () => page.mainFrameValue,
+      }),
+      abort: async () => {},
+      continue: async () => {},
+    });
+    expect((await browser.observe()).blockedNavigation).toBeNull();
+    await browser.close();
+  });
+
+  test("orders supersession by navigation initiation, not policy-check completion", async () => {
+    const page = new FakePage();
+    const context = new FakeContext([page]);
+    const runtime = new FakeRuntime(context);
+    let releaseSlowDns!: () => void;
+    const slowDns = new Promise<void>((resolveGate) => {
+      releaseSlowDns = resolveGate;
+    });
+    const browser = await AgentBrowser.launch({
+      runtime,
+      resolveHostname: async (hostname) => {
+        if (hostname === "slow-blocked.example.net") {
+          await slowDns;
+          return [{ address: "10.0.0.9", family: 4 }];
+        }
+        return [{ address: "93.184.216.34", family: 4 }];
+      },
+    });
+
+    // A blocked navigation is initiated FIRST but its rejection waits on DNS;
+    // a later allowed IP-literal navigation classifies synchronously, commits,
+    // and must supersede the denial even though the denial records later.
+    const slowBlocked = context.routeHandler!({
+      request: () => ({
+        url: () => "https://slow-blocked.example.net/",
+        isNavigationRequest: () => true,
+        frame: () => page.mainFrameValue,
+      }),
+      abort: async () => {},
+      continue: async () => {},
+    });
+    await context.routeHandler!({
+      request: () => ({
+        url: () => "https://93.184.216.34/",
+        isNavigationRequest: () => true,
+        frame: () => page.mainFrameValue,
+      }),
+      abort: async () => {},
+      continue: async () => {},
+    });
+    releaseSlowDns();
+    await slowBlocked;
+
+    expect((await browser.observe()).blockedNavigation).toBeNull();
+    await browser.close();
+  });
+
+  test("advances supersession past a tab whose runtime cannot expose frame identity", async () => {
+    const crashed = new FakePage();
+    const healthy = new FakePage();
+    const context = new FakeContext([crashed, healthy]);
+    const runtime = new FakeRuntime(context);
+    const browser = await AgentBrowser.launch({
+      runtime,
+      resolveHostname: async () => [{ address: "93.184.216.34", family: 4 }],
+    });
+    crashed.mainFrame = () => {
+      throw new Error("frame identity unavailable");
+    };
+
+    await context.routeHandler!({
+      request: () => ({
+        url: () => "http://10.0.0.9/internal",
+        isNavigationRequest: () => true,
+        frame: () => healthy.mainFrameValue,
+      }),
+      abort: async () => {},
+      continue: async () => {},
+    });
+    const observation = await browser.observe({ tabId: "tab_2" });
+    expect(observation.blockedNavigation).not.toBeNull();
+
+    await context.routeHandler!({
+      request: () => ({
+        url: () => "https://example.com/recovered",
+        isNavigationRequest: () => true,
+        frame: () => healthy.mainFrameValue,
+      }),
+      abort: async () => {},
+      continue: async () => {},
+    });
+    expect(
+      (await browser.observe({ tabId: "tab_2" })).blockedNavigation,
+    ).toBeNull();
+    await browser.close();
+  });
+
+  test("keeps subresource and unattributable denials out of the observation diagnostic", async () => {
+    const { browser, context, page } = await launched();
+
+    await context.routeHandler!({
+      request: () => ({
+        url: () => "http://127.0.0.1/pixel.png",
+        isNavigationRequest: () => false,
+        frame: () => page.mainFrameValue,
+      }),
+      abort: async () => {},
+      continue: async () => {},
+    });
+    await context.routeHandler!({
+      request: () => ({
+        url: () => "http://127.0.0.1/unknown-frame",
+        isNavigationRequest: () => true,
+        frame: () => new FakeFrame(),
+      }),
+      abort: async () => {},
+      continue: async () => {},
+    });
+
+    expect((await browser.observe()).blockedNavigation).toBeNull();
+    await browser.close();
+  });
+
+  test("keeps the observation diagnostic after a denied action has already thrown", async () => {
+    const page = new FakePage();
+    const context = new FakeContext([page]);
+    const runtime = new FakeRuntime(context);
+    let resolutions = 0;
+    const browser = await AgentBrowser.launch({
+      runtime,
+      resolveHostname: async () => {
+        resolutions += 1;
+        return [
+          {
+            address: resolutions === 1 ? "93.184.216.34" : "127.0.0.1",
+            family: 4,
+          },
+        ];
+      },
+    });
+    page.gotoHook = async () => {
+      await context.routeHandler!({
+        request: () => ({
+          url: () => "https://rebinding.example.net/page",
+          isNavigationRequest: () => true,
+          frame: () => page.mainFrameValue,
+        }),
+        abort: async () => {
+          page.urlValue = "chrome-error://chromewebdata/";
+        },
+        continue: async () => {},
+      });
+    };
+
+    await expect(
+      browser.act({ kind: "navigate", url: "https://rebinding.example.net/page" }),
+    ).rejects.toMatchObject({ code: "network_blocked" });
+
+    const observation = await browser.observe();
+    expect(observation.blockedNavigation).toMatchObject({
+      source: "navigation_policy",
+      code: "network_blocked",
+      url: "https://rebinding.example.net/page",
+    });
+    await browser.close();
+  });
+
   test("classifies and connects an allowed local-authority WebSocket", async () => {
     const context = new FakeContext([new FakePage()]);
     const runtime = new FakeRuntime(context);

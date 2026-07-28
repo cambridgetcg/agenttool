@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/browser",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Local-first browser control shaped for agents",
   "author": "AgentTool contributors",
   "license": "Apache-2.0",

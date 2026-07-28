@@ -8,6 +8,7 @@ import {
   DEFAULT_BROWSER_LIMITS,
 } from "./browser.js";
 import {
+  ACTION_WIRE_FIELDS,
   actOnceAndObserve,
   browserActionSchema,
   buildBrowserMcpServer,
@@ -194,6 +195,63 @@ function parseRequest(text: string): JsonlRequest {
   };
 }
 
+/**
+ * Every accepted wire field name per operation, including nested action
+ * fields. Only these may ever be suggested by the camelCase hint; suggesting
+ * a transformed name that the wire does not accept would steer a
+ * single-attempt caller into a second guaranteed rejection.
+ */
+const WIRE_FIELD_NAMES: Record<BrowserOperation, ReadonlySet<string>> = {
+  browser_capabilities: new Set(),
+  browser_plan: new Set(ACTION_WIRE_FIELDS),
+  browser_open: new Set(["url"]),
+  browser_observe: new Set(["tab_id", "include_text", "max_text_chars"]),
+  browser_act: new Set(ACTION_WIRE_FIELDS),
+  browser_extract: new Set(["tab_id", "ref", "snapshot_id", "format", "max_chars"]),
+  browser_screenshot: new Set(["tab_id"]),
+  browser_tabs: new Set(),
+  browser_close: new Set(),
+};
+
+interface WireIssue {
+  code?: string;
+  keys?: readonly unknown[];
+  errors?: readonly (readonly WireIssue[])[];
+  path: readonly PropertyKey[];
+  message: string;
+}
+
+/**
+ * Collect rejected keys from an unrecognized_keys issue, descending into
+ * union branches (the action schema is a union, so its member rejections
+ * nest under invalid_union).
+ */
+function unrecognizedKeys(issue: WireIssue): string[] {
+  if (issue.code === "unrecognized_keys") {
+    return (issue.keys ?? []).filter(
+      (key): key is string => typeof key === "string",
+    );
+  }
+  if (issue.code === "invalid_union") {
+    return (issue.errors ?? []).flat().flatMap(unrecognizedKeys);
+  }
+  return [];
+}
+
+function issueDetail(method: BrowserOperation, issue: WireIssue): string {
+  const base = `${issue.path.join(".") || "params"}: ${issue.message}`;
+  const accepted = WIRE_FIELD_NAMES[method];
+  const snakeHints = [...new Set(unrecognizedKeys(issue))]
+    .map((key) => [key, key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)] as const)
+    .filter(([key, snake]) => snake !== key && accepted.has(snake))
+    .map(([key, snake]) => `${key} -> ${snake}`);
+  if (snakeHints.length === 0) return base;
+  return (
+    `${base} (request fields are snake_case — ${snakeHints.join(", ")}; `
+    + "observation fields are camelCase)"
+  );
+}
+
 function parsedParams<M extends BrowserOperation>(
   method: M,
   params: Record<string, unknown>,
@@ -204,7 +262,7 @@ function parsedParams<M extends BrowserOperation>(
       "invalid_params",
       parsed.error.issues
         .slice(0, 4)
-        .map((issue) => `${issue.path.join(".") || "params"}: ${issue.message}`)
+        .map((issue) => issueDetail(method, issue))
         .join("; ")
         .slice(0, 2_000),
     );

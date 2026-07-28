@@ -35,6 +35,7 @@ import {
   type ActionResult,
   type ActAndObserveResult,
   type AgentBrowserOptions,
+  type BlockedNavigation,
   type BrowserAction,
   type BrowserContextLike,
   type BrowserFrameLike,
@@ -102,6 +103,14 @@ interface TabState {
   responseDocumentUrl: string | null;
   responseCapture: Promise<void>;
   responseSequence: number;
+  /**
+   * The route-handler arrival order of this tab's most recent allowed
+   * main-frame navigation. Observations surface a policy denial only while
+   * its own arrival order is newer than this; the denial map itself is never
+   * mutated here, so action-window denial checks keep their exact shipped
+   * semantics.
+   */
+  lastAllowedNavigationOrder: number;
 }
 
 interface RetainedSnapshot {
@@ -111,8 +120,12 @@ interface RetainedSnapshot {
 
 interface RequestPolicyDenial {
   sequence: number;
+  /** Route-handler arrival order of the denied request, for supersession. */
+  order: number;
   error: BrowserError;
   tabId: string | null;
+  /** Query-redacted, bounded destination of the denied request; page-derived. */
+  url: string | null;
 }
 
 interface ResolvedRef {
@@ -459,6 +472,7 @@ export class AgentBrowser {
         text,
         refs: compact.refs,
         response,
+        blockedNavigation: this.tabBlockedNavigation(state),
         truncated: {
           snapshot:
             compact.truncated.snapshot
@@ -847,6 +861,11 @@ export class AgentBrowser {
   private async installRequestPolicy(): Promise<void> {
     await this.context.route("**/*", async (route) => {
       const request = route.request();
+      // Supersession compares navigation-initiation order, taken here before
+      // the policy check awaits anything. Check-completion order would let a
+      // slow rejecting DNS preflight outrank a later-initiated allowed
+      // navigation and project a stale denial over its committed page.
+      const arrivalOrder = ++this.requestPolicyDenialSequence;
       try {
         await this.policy.assertAllowed(request.url());
       } catch (error) {
@@ -857,10 +876,12 @@ export class AgentBrowser {
             "network_blocked",
             "Browser request was denied by the launch-time network policy.",
           ),
+          arrivalOrder,
         );
         await route.abort("blockedbyclient");
         return;
       }
+      this.markAllowedMainFrameNavigation(request, arrivalOrder);
       try {
         await route.continue();
       } catch {
@@ -918,6 +939,7 @@ export class AgentBrowser {
       responseDocumentUrl: null,
       responseCapture: Promise.resolve(),
       responseSequence: 0,
+      lastAllowedNavigationOrder: 0,
     };
     this.watchPageEvents(state);
     this.pageStates.set(page, state);
@@ -1243,11 +1265,18 @@ export class AgentBrowser {
   private recordMainFrameRequestPolicyDenial(
     request: BrowserRequestLike,
     error: BrowserError,
+    arrivalOrder: number,
   ): void {
     try {
       if (!request.isNavigationRequest()) return;
     } catch {
       return;
+    }
+    let deniedUrl: string | null = null;
+    try {
+      deniedUrl = redactUrlForOutput(request.url()).slice(0, 2_048);
+    } catch {
+      // The denial still stands without a reportable destination.
     }
 
     // A popup's initial navigation can be routed before Playwright has created
@@ -1259,7 +1288,7 @@ export class AgentBrowser {
     try {
       frame = request.frame();
     } catch {
-      this.recordRequestPolicyDenial(error, null);
+      this.recordRequestPolicyDenial(error, null, deniedUrl, arrivalOrder);
       return;
     }
 
@@ -1271,7 +1300,7 @@ export class AgentBrowser {
     } catch {
       // A runtime that cannot classify a returned frame has crossed the same
       // attribution boundary as an unregistered popup.
-      this.recordRequestPolicyDenial(error, null);
+      this.recordRequestPolicyDenial(error, null, deniedUrl, arrivalOrder);
       return;
     }
 
@@ -1280,13 +1309,13 @@ export class AgentBrowser {
     } catch {
       // The policy decision must still be surfaced and the route aborted even
       // if a custom runtime cannot enumerate/register the new page in time.
-      this.recordRequestPolicyDenial(error, null);
+      this.recordRequestPolicyDenial(error, null, deniedUrl, arrivalOrder);
       return;
     }
     for (const state of this.states.values()) {
       try {
         if (state.page.mainFrame() === frame) {
-          this.recordRequestPolicyDenial(error, state.id);
+          this.recordRequestPolicyDenial(error, state.id, deniedUrl, arrivalOrder);
           return;
         }
       } catch {
@@ -1296,16 +1325,19 @@ export class AgentBrowser {
     // A navigation request can race page registration (notably for popups).
     // Preserve the policy denial at session scope and report an uncertain
     // action outcome rather than inventing an attribution.
-    this.recordRequestPolicyDenial(error, null);
+    this.recordRequestPolicyDenial(error, null, deniedUrl, arrivalOrder);
   }
 
   private recordRequestPolicyDenial(
     error: BrowserError,
     tabId: string | null,
+    url: string | null,
+    order: number,
   ): void {
     this.requestPolicyDenialSequence += 1;
     this.requestPolicyDenials.set(tabId, {
       sequence: this.requestPolicyDenialSequence,
+      order,
       error:
         tabId === null
           ? new BrowserError(
@@ -1315,7 +1347,63 @@ export class AgentBrowser {
             )
           : error,
       tabId,
+      url,
     });
+  }
+
+  /**
+   * When an allowed main-frame navigation passes the route layer, advance the
+   * tab's supersession marker so older denials stop appearing in
+   * observations. Attribution is best-effort and read-only; failing to
+   * attribute must never disturb the routing path.
+   */
+  private markAllowedMainFrameNavigation(
+    request: BrowserRequestLike,
+    arrivalOrder: number,
+  ): void {
+    let frame: BrowserFrameLike;
+    try {
+      if (!request.isNavigationRequest()) return;
+      frame = request.frame();
+      if (frame.parentFrame() !== null) return;
+    } catch {
+      // Supersession is an observation nicety; the navigation proceeds.
+      return;
+    }
+    for (const state of this.states.values()) {
+      try {
+        if (state.page.mainFrame() === frame) {
+          state.lastAllowedNavigationOrder = Math.max(
+            state.lastAllowedNavigationOrder,
+            arrivalOrder,
+          );
+          return;
+        }
+      } catch {
+        // A custom runtime may not expose a stable frame identity for every
+        // tab; keep matching the remaining tabs.
+      }
+    }
+  }
+
+  /**
+   * Project this tab's standing policy denial for read-only observations.
+   * Only the tab-attributed record is surfaced; a session-ambiguous denial is
+   * an action-outcome concern, not a per-tab diagnostic. A denial stops
+   * appearing once an allowed main-frame navigation for the tab supersedes
+   * it or the tab closes. The denial map is never mutated here.
+   */
+  private tabBlockedNavigation(state: TabState): BlockedNavigation | null {
+    const denial = this.requestPolicyDenials.get(state.id);
+    if (!denial || denial.order <= state.lastAllowedNavigationOrder) {
+      return null;
+    }
+    return {
+      source: "navigation_policy",
+      url: denial.url,
+      code: denial.error.code,
+      message: denial.error.message.slice(0, 2_000),
+    };
   }
 
   private requestPolicyDenialAfter(

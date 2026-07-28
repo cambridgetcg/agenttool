@@ -366,6 +366,27 @@ describe("JSONL protocol", () => {
     expect(calls.some((call) => call.method === "act")).toBe(false);
   });
 
+  test("points camelCase request fields at their snake_case wire names, but only real ones", async () => {
+    const { browser, calls } = fakeBrowser();
+    const responses = await jsonl(browser, [
+      request("camel", "browser_act", {
+        action: { kind: "click", ref: "tab_1@1:e6", snapshotId: "session:tab_1:1" },
+      }),
+      request("no-such-field", "browser_screenshot", { fullPage: true }),
+      request("wrong-op-field", "browser_observe", { maxChars: 100 }),
+    ]);
+
+    expect(responses[0].error.code).toBe("invalid_params");
+    expect(responses[0].error.message).toContain("snapshotId -> snapshot_id");
+    // full_page is not a wire field anywhere; max_chars is not an observe
+    // field. Neither may be suggested as a rename.
+    expect(responses[1].error.code).toBe("invalid_params");
+    expect(responses[1].error.message).not.toContain("full_page");
+    expect(responses[2].error.code).toBe("invalid_params");
+    expect(responses[2].error.message).not.toContain("max_chars");
+    expect(calls).toHaveLength(0);
+  });
+
   test("rejects arbitrary selector extraction before it reaches the core", async () => {
     const { browser, calls } = fakeBrowser();
     const responses = await jsonl(browser, [

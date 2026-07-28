@@ -2,28 +2,30 @@
 
 A small local browser surface for agents.
 
-`0.3.0` is distributed as an exact LOVE package and mirrored to npm. It remains
+`0.4.0` is distributed as an exact LOVE package and mirrored to npm. It remains
 a local runtime: the docs deployment publishes package bytes and documentation,
 not a hosted browser-control service.
 
-Version `0.3.0` adds collaboration-safe retained observations, structural
-accessibility context, stricter navigation/action/close race handling, and an
-explicit capability declaration for browser-managed redirect hops. The exact
-`0.1.0` and `0.2.0` artifacts remain immutable.
+Version `0.4.0` surfaces standing policy denials in observations as
+`blockedNavigation`, so a policy-blocked page-initiated navigation is
+distinguishable from a broken site, and teaches JSONL `invalid_params` errors
+to point a camelCase request field at its real snake_case wire name. No
+authority is widened. The exact `0.1.0`, `0.2.0`, and `0.3.0` artifacts
+remain immutable.
 
 ```bash
-npm install --save-exact @agenttool/browser@0.3.0
+npm install --save-exact @agenttool/browser@0.4.0
 ```
 
 Registry-neutral exact artifact:
 
 ```bash
 npm install --save-exact \
-  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.3.0/agenttool-browser-0.3.0.tgz
+  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.4.0/agenttool-browser-0.4.0.tgz
 ```
 
 The sibling
-[LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.3.0/manifest.json)
+[LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.4.0/manifest.json)
 names the artifact size and SHA-256. A URL install does not compare those
 values automatically; verify them first when that boundary matters.
 
@@ -239,6 +241,32 @@ fragment); navigation races fail closed to `null`.
 These are publisher-controlled hints, not identity, proof, recognition,
 permission, billing approval, or an instruction to follow a link.
 
+### Blocked-navigation diagnostics
+
+Every `Observation` also includes `blockedNavigation`, either `null` or a
+record of this tab's most recent main-frame navigation that this process
+itself denied and that no allowed main-frame navigation has since superseded:
+
+```json
+{
+  "source": "navigation_policy",
+  "url": "http://10.0.0.9/internal",
+  "code": "network_blocked",
+  "message": "Browser request was denied by the launch-time network policy."
+}
+```
+
+Without it, a page-initiated navigation into a denied destination is
+indistinguishable from an outage: the agent sees only a browser error page.
+The code and message are policy-generated local diagnostics; the destination
+URL is page-derived, query-redacted, bounded, and untrusted. Only the
+tab-attributed denial is surfaced, subframe and subresource denials never
+appear, and the record reports what the route layer itself refused — a
+navigation that fails for any other reason (including a redirect hop, which
+the route layer never re-checks) leaves it `null`. It never authorizes
+retrying, widening network authority, or reaching the destination another
+way.
+
 ## Best integration seam
 
 Use [`@agenttool/telescope`](../telescope/README.md) first when an origin may
@@ -258,7 +286,7 @@ and cannot alter the same underlying facts or widen authority.
 ## Authority profiles
 
 Version `0.2.0` introduced the three named launch-time profiles retained by
-`0.3.0`:
+`0.4.0`:
 
 | Profile | Policy-checked HTTP(S) requests | WebSockets | Service workers |
 |---|---|---|---|
@@ -279,7 +307,7 @@ destinations available to the host, including local services. In a persistent
 profile, service-worker and site state can outlive the process. Sovereign is
 therefore broad local process authority, not an isolation or SSRF claim.
 
-Destination authority does not imply every other browser power. In `0.3.0`,
+Destination authority does not imply every other browser power. In `0.4.0`,
 file upload, automatic download, arbitrary JavaScript evaluation, credential
 injection/lookup, ambient profile import, shell execution, and extension
 installation remain unsupported and are reported as such by `capabilities()`.
@@ -344,7 +372,7 @@ Do this only for a caller-controlled development network. Tool calls cannot
 widen either profile or network authority after launch. Reserved destinations
 remain blocked even with this opt-in.
 
-Version `0.3.0` retains `allowPublicWeb` / `allowLocalNetwork`,
+Version `0.4.0` retains `allowPublicWeb` / `allowLocalNetwork`,
 `--public-web` / `--local-network`, and their environment variables as a
 deprecated `0.1.0` compatibility surface. Do not combine the `authority` form
 with any legacy authority option in one launch; mixed configuration is
@@ -391,7 +419,7 @@ unrecognized carriers such as `srcset`, meta refresh, CSS `url()`, or malformed
 markup, browser storage, canvas/image content, or screenshot pixels. It cannot
 undo data already submitted to a site.
 
-The published `0.3.0` package intentionally has no:
+The published `0.4.0` package intentionally has no:
 
 - arbitrary JavaScript evaluation;
 - file-upload operation;
@@ -406,7 +434,7 @@ model-visible state, or advisory plans.
 
 ## Network limitation
 
-The `0.3.0` `public` and `local` profiles preserve the `0.2.0` and historical
+The `0.4.0` `public` and `local` profiles preserve the `0.2.0` and historical
 `0.1.0` destination checks before navigation, including DNS answers.
 Playwright then owns the browser connection. The package cannot pin the
 checked DNS answer to the later socket or verify the connected peer address,
