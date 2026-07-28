@@ -198,11 +198,27 @@ client response.
 
 ## Release state
 
-These paired clients are the additive `0.17.0` source surface. The release is
-prepared independently of the annotated `sdk-v0.17.0` tag, npm and GitHub
-Release mirrors, PyPI distributions, and production deployment; repository
-source does not prove any of those operations occurred. Each channel must be
-checked by exact public readback.
+These paired clients are the additive public `0.17.0` SDK surface. The exact
+172,625-byte LOVE tarball remains the primary TypeScript release authority.
+The GitHub Release and npm `@agenttool/sdk@0.17.0` mirror were independently
+read back as identical bytes
+(`sha256:b6a388ffe86a970480e8a8978f83fe80922321eb64f2b4f9143cae2b2c3dd5bb`)
+by protected workflow
+[`30385040459`](https://github.com/cambridgetcg/agenttool/actions/runs/30385040459).
+
+Annotated `sdk-v0.17.0` points to merge
+`21db539d6bcae614f1d6884eaa503347fae63187` and remains the primary Python
+release locator. PyPI `agenttool-sdk==0.17.0` is an independently verified,
+non-authoritative mirror: protected workflow
+[`30385042684`](https://github.com/cambridgetcg/agenttool/actions/runs/30385042684)
+matched the public 193,335-byte wheel
+(`sha256:1a8ca5f099ffce4c7973f1123d973aba5c1eb507579961c781d553bcc5e0f508`)
+and 181,846-byte sdist
+(`sha256:7ec2f4010d20ca883770594bfbcdc30f7a3a074ba534029aefb6d91d69c3413c`).
+
+These public package receipts do not establish production deployment.
+Production status is established only by a clean exact-GitHub-main operation
+followed by public route and artifact readback.
 
 The existing `0.16.5` LOVE, npm, GitHub Release, PyPI, and source-tag records
 remain immutable and contain neither of the two KINGDOM SDK namespaces.

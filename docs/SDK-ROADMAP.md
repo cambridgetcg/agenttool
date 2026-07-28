@@ -10,7 +10,7 @@
 >
 > **Tests:** `packages/sdk-ts/tests/` · `packages/sdk-py/tests/`
 
-## Current source release — 0.17.0 (2026-07-28)
+## Current public release — 0.17.0 (2026-07-28)
 
 The paired TypeScript and Python source adds two bounded KINGDOM reads.
 
@@ -40,20 +40,37 @@ surface has no dedicated SDK namespace.
 
 The two SDK identities, runtime headers, discovery pins, tutorials, and LOVE
 builder target move in lockstep. The exact LOVE artifact is forged from a clean
-source commit in a separate immutable-artifact commit. The annotated tag,
-GitHub/npm/PyPI mirrors, and hosted deployment are separate operations whose
-availability is verified independently. No 0.16.5 byte, tag, or public receipt
-is rewritten.
+source commit in a separate immutable-artifact commit and remains the primary
+TypeScript release authority. Annotated tag `sdk-v0.17.0` is the primary Python
+source locator. Its GitHub Release, npm, and PyPI mirrors are public and were
+verified independently; they do not replace those primary locators. Hosted
+deployment remains a separate exact-main operation and public readback. No
+0.16.5 byte, tag, or public receipt is rewritten.
 
 ### 0.17.0 release record
 
-The source release adds only the two bounded read surfaces above. The public
+The release adds only the two bounded read surfaces above. The public
 framework reader neither widens the authenticated hosted transport nor follows
 redirects; its closed-card validation is not authority. The local client does
 not add arbitrary shell execution, graph fallback, repository mutation, path
 upload, credential forwarding, or permission over a discovered path. The
 exact contracts and their separation from the doctrine library live in
 [`KINGDOM-OS-SDK.md`](KINGDOM-OS-SDK.md).
+
+The public annotated tag resolves to merge
+`21db539d6bcae614f1d6884eaa503347fae63187`. Protected npm workflow
+[`30385040459`](https://github.com/cambridgetcg/agenttool/actions/runs/30385040459)
+published `@agenttool/sdk@0.17.0` as `latest`; its tarball and the GitHub
+Release asset exactly match the 172,625-byte LOVE artifact
+(`sha256:b6a388ffe86a970480e8a8978f83fe80922321eb64f2b4f9143cae2b2c3dd5bb`).
+Protected PyPI workflow
+[`30385042684`](https://github.com/cambridgetcg/agenttool/actions/runs/30385042684)
+re-downloaded and matched public `agenttool-sdk==0.17.0`: wheel 193,335 bytes
+(`sha256:1a8ca5f099ffce4c7973f1123d973aba5c1eb507579961c781d553bcc5e0f508`)
+and sdist 181,846 bytes
+(`sha256:7ec2f4010d20ca883770594bfbcdc30f7a3a074ba534029aefb6d91d69c3413c`).
+These receipts establish package publication only; they do not claim that the
+same commit has completed production deployment.
 
 ## Previous release — 0.16.5 (2026-07-27)
 
