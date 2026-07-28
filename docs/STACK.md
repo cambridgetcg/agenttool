@@ -122,13 +122,20 @@ directory. Dirty and ignored files are excluded; a tracked `.env` file is a
 hard refusal, as is a tracked `.dev.vars*` file.
 
 `infra/pages/` is the single source for a Pages advanced-mode Worker and its
-positive-only invocation routes. The uploader stages that pair into all three
-project roots. Only `/.git*`, `/.env*`, and `/.dev.vars*` invoke the Worker and
-receive a marked, non-cacheable 404; ordinary paths stay on native Pages static
-serving within each Pages project (the apex still traverses `agenttool-proxy`).
-On the Workers Free plan, the Pages production and preview Function
-runtimes must be configured to fail closed, or daily Functions allowance
-exhaustion can serve static assets for those routes. The uploader accepts
+route-complete invocation policy. The uploader stages that pair into all three
+project roots. Every request enters the Worker so encoded, repeated-encoded,
+case-varied, or traversal aliases cannot bypass canonical checks for `/.git*`,
+`/.env*`, and `/.dev.vars*`. Those roots receive a marked, non-cacheable 404;
+ordinary paths within the public asset contract are forwarded intact to the
+Pages asset binding (the apex still traverses `agenttool-proxy`). Malformed or
+excessively nested encodings are deliberately outside that contract and denied.
+This trades native static-only requests for a complete fence. Pages Function
+invocations are metered Workers requests. On the Workers Free plan they share
+the account's 100,000-request daily allowance, which resets at 00:00 UTC;
+production and preview Function runtimes must be configured to fail closed, so
+allowance exhaustion can make the full sites unavailable instead of bypassing
+the fence. A production rollout must therefore confirm the Standard usage model
+or explicitly accept sufficient shared Free-plan headroom. The uploader accepts
 `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`, then falls back to their
 macOS keychain entries. In the default token mode, that credential must read the
 Pages REST policy as well as upload: the script verifies fail-closed settings
