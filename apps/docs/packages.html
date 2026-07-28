@@ -151,7 +151,7 @@ npm install --save-exact @agenttool/browser@0.3.0</pre>
       </div>
 
       <p class="muted"><strong>Credential broker mirror boundary.</strong> The current exact LOVE release is <code>@agenttool/credential-broker@0.2.0</code>. Its GitHub release exists, but npm 0.2.0 is not independently visible; the npm command above deliberately names the last verified public npm version, <code>0.1.0</code>. Use the 0.2.0 LOVE URL below for current release bytes.</p>
-      <p class="muted"><strong>SDK mirror boundary.</strong> The current exact LOVE release is <code>@agenttool/sdk@0.17.0</code>. It adds bounded local KINGDOM OS repository discovery without a hosted route, bearer forwarding, path upload, routine execution, or mutation. npm and GitHub Release are optional JavaScript mirrors, and PyPI is an optional Python mirror; query each exact version before use because source preparation does not prove public registry availability. The immutable 0.16.5 LOVE, npm, GitHub Release, source-tag, and PyPI records remain historical bytes.</p>
+      <p class="muted"><strong>SDK mirror boundary.</strong> The prepared <code>@agenttool/sdk@0.17.0</code> source keeps three KINGDOM surfaces distinct: <code>kingdomFramework</code> / <code>kingdom_framework</code> performs one credential-free, no-redirect read of the exact closed project card; <code>kingdomOS</code> / <code>kingdom_os</code> provides bounded local repository inventory and resolution without bearer forwarding, path upload, routine execution, or mutation; <code>/public/kingdom</code> remains the separate doctrine library. The exact LOVE artifact must identify that coherent source. The SDK tag, npm and GitHub Release mirrors, PyPI distributions, and production deployment remain separate operations; query each exact channel because preparation does not prove public availability. The immutable public 0.16.5 records remain historical bytes.</p>
       <p class="muted"><strong>Telescope mirror boundary.</strong> The current exact LOVE release is <code>@agenttool/telescope@0.2.3</code>. Its npm and GitHub 0.2.3 mirrors are public and independently byte-verified, so the command above names that exact version. Use the 0.2.3 LOVE URL below when you want the manifest-bound verification path.</p>
       <p class="muted"><strong>Runtime boundary.</strong> npm is only the installer here; <code>@agenttool/data</code> and <code>@agenttool/data-sync</code> require Bun ≥1.3 at runtime. The credential broker, Agent Wallet, Telescope, and Agent Browser support Node ≥20.19 or Bun ≥1.3.5. Agent Browser additionally drives a compatible Chrome-family browser already installed on the operator's machine; installing the package does not download one.</p>
       <p class="muted">An npm install uses registry integrity machinery but does not independently compare the downloaded bytes with the LOVE manifest's <code>artifact.size</code> and <code>artifact.sha256</code>. Use the verified workflow below when that boundary matters.</p>
@@ -164,10 +164,12 @@ npm install --save-exact @agenttool/browser@0.3.0</pre>
       </div>
 
       <div class="code-block">
-        <div class="code-label"><span>@agenttool/sdk · 0.17.0 · bounded local KINGDOM OS discovery</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <div class="code-label"><span>@agenttool/sdk · 0.17.0 · closed public card + bounded local discovery</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
 <pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.17.0/agenttool-sdk-0.17.0.tgz
 
-<span class="kw">import</span> { AgentTool } <span class="kw">from</span> <span class="str">"@agenttool/sdk"</span>;</pre>
+<span class="kw">import</span> { AgentTool, KingdomFrameworkClient } <span class="kw">from</span> <span class="str">"@agenttool/sdk"</span>;
+
+<span class="kw">const</span> card = <span class="kw">await</span> <span class="kw">new</span> KingdomFrameworkClient().card();</pre>
       </div>
 
       <div class="code-block">
@@ -461,6 +463,7 @@ test "$actual_size" = "$expected_size" &amp;&amp;
         <li><a href="/packages/v1/index.json"><code>/packages/v1/index.json</code></a> — current AgentTool mirror catalog.</li>
         <li><a href="data.html">Agent data</a> — operate <code>@agenttool/data</code> and use SDK <code>at.data</code>.</li>
         <li><a href="browser.html">Agent Browser</a> — operate the local TypeScript, JSONL, and stdio MCP browser doors.</li>
+        <li><a href="KINGDOM-OS-SDK.md">KINGDOM SDK boundaries</a> — distinguish the credential-free framework card, local KINGDOM OS inventory, and public doctrine library.</li>
         <li><a href="AGENT-DATA-PROTOCOL.md"><code>agent-data/v1</code></a> — collection and query protocol.</li>
         <li><a href="ADDS-0.1-DRAFT.md"><code>adds/v0.1</code></a> — experimental encrypted-object protocol.</li>
       </ul>

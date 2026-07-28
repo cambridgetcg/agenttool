@@ -70,10 +70,23 @@ cross-repository authority unclaimed.
 
 The framework route returns AgentTool's normalized root `kingdom.yaml` card.
 Reusable parsing, registry derivation, deterministic encoding, and a
-single-resource XENIA manifest helper live in `@agenttool/kingdom`. The hosted
-card is not the local KINGDOM-OS graph: it carries no absolute repository path,
-working-tree probe, process state, or roster fallback, and the separate
-`/public/kingdom` route remains the Kingdom language and doctrine library.
+single-resource XENIA manifest helper live in `@agenttool/kingdom`. The paired
+SDK 0.17.0 source exposes this one resource through
+`KingdomFrameworkClient.card()` and lazy
+`at.kingdomFramework` / `at.kingdom_framework`. That SDK read uses a separate
+credential-free client, sends no AgentTool bearer or cookie, follows no
+redirect, and accepts only the exact closed ten-field card.
+
+The hosted card is not the local KINGDOM-OS graph: it carries no absolute
+repository path, working-tree probe, process state, or roster fallback.
+Local repository inventory and resolution stay in the separate
+`KingdomOSClient` / `at.kingdomOS` / `at.kingdom_os` process adapter. The
+separate `/public/kingdom` route remains the Kingdom language and doctrine
+library and has no dedicated SDK namespace.
+
+These source surfaces and their release wiring do not prove production
+deployment, SDK tag publication, or npm/PyPI availability. Each remains an
+independent public readback.
 
 The first contact named by that map is:
 
@@ -109,7 +122,7 @@ AgentTool uses a few orthogonal doors rather than one giant document:
 |---|---|---|
 | `/public/discovery` | Canonical compact three-road compass | Exact `agenttool-discovery/v1` public-read contract; no authority, application write, external effect, charge, proof-of-work, required response, or automatic follow-up |
 | `/.well-known/agent.json` | XENIA Surface 0.1 manifest | Release-pinned strict JSON declaring same-origin unauthenticated GET resources, an empty claims set, and explicit `not_covered`; discovery is not XENIA Covenant adoption or conformance |
-| `/public/kingdom/framework` | AgentTool's normalized KINGDOM project card | Exact `agenttool.kingdom.card/0.1` projection of the root `kingdom.yaml`; separate from the `/public/kingdom` doctrine library and not cross-repository authority, liveness, consent, or conformance |
+| `/public/kingdom/framework` | AgentTool's normalized KINGDOM project card | Exact closed `agenttool.kingdom.card/0.1` projection of the root `kingdom.yaml`; paired SDK reader sends no project bearer or cookies and follows no redirects; separate from local KINGDOM OS inventory and the `/public/kingdom` doctrine library; not cross-repository authority, liveness, consent, or conformance |
 | `/public/open-seat` | Finite optional room reached from the understand road | Exact `agenttool-open-seat/v1` public-read contract; one public-canon search/fetch offer, one bounded rulebook, or a complete exit |
 | HTTP `Link` headers | A bounded map from each main estate root and selected discovery responses | [RFC 8288](https://www.rfc-editor.org/rfc/rfc8288) links are typed pointers, not trust or permission |
 | `/.well-known/api-catalog` | General API entry and product map | [RFC 9727](https://www.rfc-editor.org/rfc/rfc9727) Linkset; catalog membership grants no action or payment authority |

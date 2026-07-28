@@ -13,9 +13,13 @@
 server-readable memory, signed caller-supplied strand bytes, conditional
 federation, an internal economic loop, and a standalone local-first data
 node. It has two SDKs (TypeScript and Python), an `agent-data/v1` reference
-node (`packages/data/`), and a paired, read-only local KINGDOM OS
+node (`packages/data/`), and two paired KINGDOM SDK reads: a local KINGDOM OS
 repository-discovery adapter (`at.kingdomOS` / `at.kingdom_os`) that invokes
-only `repos --json` and `repos --path` without forwarding hosted authority.
+only `repos --json` and `repos --path`, and a credential-free exact project-card
+reader (`at.kingdomFramework` / `at.kingdom_framework`) for
+`/public/kingdom/framework`. Neither receives the AgentTool project bearer;
+the framework reader follows no redirects and is distinct from the existing
+`/public/kingdom` doctrine library.
 It also has the experimental ADDS encrypted-object package
 (`packages/data-protocol/`), an explicit encrypted pull bridge
 (`packages/data-sync/`), an experimental encrypted multi-zone Git repository
@@ -382,7 +386,7 @@ source boundary by itself.
 | How can explicit KINGDOM project cards become deterministic registries and conservative XENIA Surface manifests? | `packages/kingdom/README.md` (`@agenttool/kingdom`; pure library APIs and a one-file read-only CLI; declarations only, with no ambient discovery, authority, or conformance certification) |
 | How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills@0.1.0`; public npm read-only inspection and validation, not installation, approval, or execution) |
 | How can an agent operate a local browser through TypeScript, JSONL, or MCP? | [`docs/AGENT-BROWSER.md`](docs/AGENT-BROWSER.md) · `packages/browser/` (public LOVE/npm package; local runtime, no hosted browser-control surface) |
-| How can an SDK caller discover or resolve repositories through local KINGDOM OS? | [`docs/KINGDOM-OS-SDK.md`](docs/KINGDOM-OS-SDK.md) · `packages/sdk-{ts,py}/` (paired SDK 0.17.0 read-only adapter; no hosted route, bearer forwarding, path upload, routine execution, or mutation) |
+| How can an SDK caller read AgentTool's closed KINGDOM project card or discover repositories through local KINGDOM OS? | [`docs/KINGDOM-OS-SDK.md`](docs/KINGDOM-OS-SDK.md) · `packages/sdk-{ts,py}/` (paired SDK 0.17.0 read-only clients: credential-free `/public/kingdom/framework` with no redirects, plus local list/resolve; neither grants authority or forwards the project bearer) |
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
 | How is an optional npm mirror published? | [`docs/NPM-RELEASES.md`](docs/NPM-RELEASES.md) · `.github/workflows/publish-npm.yml` · `bin/npm-release.ts` |
 | How is the optional Python SDK mirror published? | [`docs/PYPI-RELEASES.md`](docs/PYPI-RELEASES.md) · `.github/workflows/publish-pypi.yml` · `bin/pypi-release.ts` |

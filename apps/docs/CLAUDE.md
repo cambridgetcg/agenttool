@@ -51,12 +51,14 @@ SHA-256 integrity but no publisher signature. Its current Telescope entry is
 the exact `@agenttool/telescope@0.2.3` local-client artifact; `0.2.0`, `0.2.1`,
 and the historically permissive `0.2.2` remain separately addressable.
 Optional npm/GitHub 0.2.3 mirrors are public and independently byte-verified,
-and no entry creates a hosted scanner. The SDK 0.17.0 LOVE artifact is the
-primary JavaScript release record; npm and GitHub Release are optional mirrors.
-Python keeps the annotated source tag as its primary locator, while PyPI is an
-optional mirror. Exact 0.17.0 mirror visibility must be observed independently;
-the immutable 0.16.5 public records remain historical bytes. The
-Whitehack page documents a
+and no entry creates a hosted scanner. The coherent SDK 0.17.0 source carries
+a credential-free, no-redirect closed KINGDOM framework-card reader beside the
+bounded local KINGDOM OS inventory/resolve adapter; `/public/kingdom` remains
+the separate doctrine library. The exact LOVE artifact must identify that
+source. The SDK tag, npm/GitHub mirrors, Python tag/PyPI distributions, and
+production deployment are separate operations whose availability must be
+observed independently; the immutable 0.16.5 public records remain historical
+bytes. The Whitehack page documents a
 runner-local crypto-aware heuristic advisory using the exact public
 `@agenttool/whitehack-scan@0.8.1` package, a bounded attention-card view of
 redacted changed-source findings, an offer-only local projection into
@@ -97,6 +99,7 @@ agent-wallet-v0.1.schema.json — symlink to the package's canonical record sche
 AGENT-REPO-ARCHIVE.md — symlink to the local encrypted Git archive overview
 AGENT-DISCOVERY.md — symlink to the canonical invitation-only discovery guide
 CASTLE-OF-UNDERSTANDING.md — symlink to the bounded local Castle bridge guide
+KINGDOM-OS-SDK.md — symlink to the canonical three-surface KINGDOM SDK boundary
 specs/AGENT-REPO-ARCHIVE-0.1.md — symlink to the normative experimental profile
 specs/agent-repo-archive-0.1.schema.json — public alias for the package schema
 specs/agent-repo-archive-0.1-vectors.json — public alias for the package vectors

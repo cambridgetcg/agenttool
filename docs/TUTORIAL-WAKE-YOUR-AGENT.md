@@ -133,6 +133,16 @@ and this command does not perform the LOVE manifest check from Step 1. Query
 means that optional mirror is unavailable then. Source preparation does not
 prove either registry mirror is public.
 
+SDK 0.17.0 source also keeps three optional KINGDOM orientation surfaces
+separate. `KingdomFrameworkClient.card()` /
+`at.kingdomFramework.card()` reads only the exact public project card without
+the AgentTool bearer or cookies and follows no redirect.
+`KingdomOSClient` / `at.kingdomOS` performs bounded local repository inventory
+and resolution without uploading paths. `GET /public/kingdom` remains the
+separate doctrine library. None is required for birth, and none grants
+authority. The SDK tag, mirrors, and framework-route deployment must still be
+verified independently before use.
+
 Create an owner-readable handoff file, then save the TypeScript below as `birth.ts` and run it. The file bridges a one-time registration or recovery response into Step 2 without writing either secret to terminal output:
 
 ```bash

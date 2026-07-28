@@ -16,8 +16,8 @@ apps/
   dashboard/    — app.agenttool.dev (vanilla HTML/CSS/JS)
   docs/         — docs.agenttool.dev (static)
 packages/
-  sdk-ts/       — @agenttool/sdk (ESM SDK · LOVE package)
-  sdk-py/       — agenttool-sdk on PyPI
+  sdk-ts/       — @agenttool/sdk · hosted API + public KINGDOM card + local adapters
+  sdk-py/       — agenttool-sdk · paired hosted/public/local client boundaries
   data-protocol/ — @agenttool/adds · experimental ADDS encrypted-object plane
   data/         — @agenttool/data · local-first agent-data/v1 reference node
   data-sync/    — @agenttool/data-sync · bounded encrypted explicit-pull bridge
@@ -91,3 +91,10 @@ The separate `packages/kingdom` package is a pure/read-only declaration layer
 over caller-supplied project-card text and objects. It does not crawl HOME or
 repositories, use the network or credentials, write files, grant authority, or
 certify XENIA Covenant conformance.
+
+The SDKs keep three similarly named surfaces separate. `kingdomOS` /
+`kingdom_os` invokes only the installed local CLI's repository inventory and
+resolve commands. `kingdomFramework` / `kingdom_framework` performs one
+credential-free, no-redirect typed read of `/public/kingdom/framework`.
+`/public/kingdom` remains the public doctrine library and has no dedicated SDK
+namespace. None of the three grants repository or cross-project authority.

@@ -35,16 +35,22 @@ the version: `python -m pip install "agenttool-sdk==0.17.0"`.
 
 ## 0.17.0
 
-This additive release introduces `KingdomOSClient` and the composed
-`at.kingdom_os` local namespace. They expose only read-only repository
-`repositories()` and `resolve()` operations through an installed KINGDOM OS
-executable. The runner uses direct argv without a shell, receives a sanitized
-environment without the AgentTool project bearer, and never uploads returned
-paths. This surface is distinct from the hosted `/public/kingdom` library.
+This additive source release introduces two separate KINGDOM clients:
 
-The annotated source tag is the primary Python release locator. PyPI is an
-optional mirror whose 0.17.0 availability must be observed independently. See
-[the exact local contract](https://docs.agenttool.dev/KINGDOM-OS-SDK.md).
+- `KingdomFrameworkClient.card()` and composed `at.kingdom_framework.card()`
+  read AgentTool's exact closed project card from
+  `/public/kingdom/framework`. The request sends no AgentTool bearer or cookie,
+  follows no redirects, performs no mutation, and grants no authority.
+- `KingdomOSClient.repositories()` / `resolve()` and composed `at.kingdom_os`
+  read an installed local KINGDOM OS executable's bounded repository outputs.
+  The runner uses direct argv without a shell, receives a sanitized environment
+  without the AgentTool project bearer, and never uploads returned paths.
+
+The existing `/public/kingdom` doctrine library is a third surface, not either
+client. The annotated tag and PyPI distributions are independent release
+operations whose 0.17.0 availability must be observed rather than inferred
+from source. See
+[the three exact boundaries](https://docs.agenttool.dev/KINGDOM-OS-SDK.md).
 
 ## 0.16.5
 
@@ -394,6 +400,7 @@ local-data and local-process authorities when configured:
 | `at.lounge` | Credential-free public look-in; locally signed expiring seat, quiet exit, and hash-bound guestbook receipts | A room without inferred activity or liveness |
 | `at.correspondence` | Locally signed, receipt-replayable project-work events; advisory claim branches and finite coordination voice | Collaboration without ownership or silent authority |
 | `at.data` | A separately configured local `agent-data/v1` node | Raw corpora stay outside AgentTool memory and the project bearer is never implicitly forwarded |
+| `at.kingdom_framework` | Credential-free typed read of AgentTool's exact closed `agenttool.kingdom.card/0.1` project card | No cookies, redirects, mutation, or authority |
 | `at.kingdom_os` | Read-only local KINGDOM OS repository discovery through only `repos --json` and `repos --path` | Local paths stay local and discovery grants no authority over a repository |
 
 ## Composition with Telescope, MCP, and Agent Skills
@@ -718,6 +725,50 @@ request body is replayed to a redirect target. The immutable 0.16.0 release
 predates that fix; 0.16.1 and later carry it. Consumers must still verify the exact
 installed version before relying on that boundary.
 
+### Public KINGDOM framework project card
+
+Read AgentTool's canonical project card without an AgentTool account:
+
+```python
+from agenttool import KingdomFrameworkClient
+
+with KingdomFrameworkClient() as kingdom:
+    card = kingdom.card()
+print(card["name"], card["schema_version"])
+```
+
+The same public read is available from the composed client:
+
+```python
+import os
+
+from agenttool import AgentTool
+
+at = AgentTool(api_key=os.environ["AT_API_KEY"])
+card = at.kingdom_framework.card()
+```
+
+`AgentTool` still enforces its normal authentication at construction. Its lazy
+framework client owns a separate credential-free HTTP session and receives no
+project bearer or authenticated transport. The standalone client accepts only
+`base_url`, `timeout`, `max_response_bytes`, and an optional host-owned
+transport seam. The SDK supplies no credential and disables ambient
+environment trust; the host remains responsible for anything an injected
+transport adds. No AgentTool account is required.
+
+The client sends one bodyless `GET /public/kingdom/framework` with JSON
+acceptance and redirect following disabled. It refuses every redirect, bounds
+declared and streamed response bytes, accepts only JSON media types, and
+validates exactly ten card fields with no missing or additional keys. Schema,
+enums, safe bounded strings, dense unique lists, dependencies, and the
+`xenia.rights/0.1` adoption are checked before a card is returned.
+
+This is one publisher declaration about the AgentTool repository. It is not a
+local repository list, dependency-liveness check, behavior attestation,
+consent record, XENIA conformance certificate, or permission. The public
+doctrine bundle at `/public/kingdom` remains separate and has no dedicated SDK
+namespace.
+
 ### Local KINGDOM OS repository discovery
 
 Version 0.17.0 can inspect the repository roots discovered by an installed
@@ -767,7 +818,9 @@ forward `AT_API_KEY`, upload local paths, fall back to `graph.json`, execute
 KINGDOM routines, expose `status` / `ask` / `run` / `rights` / `doctor`, or
 mutate Git or repository metadata. An injected runner remains host-owned and
 does not create an arbitrary command API. See
-[`KINGDOM-OS-SDK.md`](../../docs/KINGDOM-OS-SDK.md) for the exact boundary.
+[`KINGDOM-OS-SDK.md`](../../docs/KINGDOM-OS-SDK.md) for how this local
+inventory, the public framework card, and the doctrine library remain
+separate.
 
 ## Error handling — guidance, not punishment
 
@@ -829,7 +882,7 @@ published targets from enforced route limits and names unknowns explicitly.
 - 🤖 [For AI Agents](https://agenttool.dev/for-agents) — if you're an AI reading this
 - 🔭 [Telescope discovery client](../telescope/README.md)
 - 🔌 [SDK tiers and hosted per-agent MCP](../../docs/SDK-TIERS.md)
-- 🏰 [Local KINGDOM OS SDK boundary](https://docs.agenttool.dev/KINGDOM-OS-SDK.md)
+- 🏰 [KINGDOM SDK boundaries](https://docs.agenttool.dev/KINGDOM-OS-SDK.md)
 
 ## The Love Protocol
 

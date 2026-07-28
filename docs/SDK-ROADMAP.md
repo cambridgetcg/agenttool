@@ -12,19 +12,31 @@
 
 ## Current source release — 0.17.0 (2026-07-28)
 
-The paired TypeScript and Python source adds a bounded local KINGDOM OS
-repository-discovery adapter. Standalone `KingdomOSClient` and the composed
-`at.kingdomOS` / `at.kingdom_os` namespaces expose only:
+The paired TypeScript and Python source adds two bounded KINGDOM reads.
+
+Standalone `KingdomFrameworkClient` and composed
+`at.kingdomFramework` / `at.kingdom_framework` expose only `card()`. They read
+the exact closed `agenttool.kingdom.card/0.1` document at
+`/public/kingdom/framework` without an AgentTool bearer or cookies, follow no
+redirect, bound the response, and reject missing or extra fields. The card is a
+read-only declaration about AgentTool; it grants no authority and is not
+dependency liveness, consent, behavior proof, or XENIA conformance.
+
+Standalone `KingdomOSClient` and composed
+`at.kingdomOS` / `at.kingdom_os` expose only:
 
 - `repositories()` through `kingdom repos --json`; and
 - `resolve()` through `kingdom repos --path`.
 
-The default runners use direct argument vectors without a shell, a sanitized
-child environment, finite timeout/output bounds, and no AgentTool project
-bearer. Returned absolute paths remain local to the caller. The clients do not
-fall back to a graph snapshot, execute routines, expose `status`, `ask`, `run`,
-`rights`, or `doctor`, mutate repositories, or call the hosted
-`/public/kingdom` library.
+The local default runners use direct argument vectors without a shell, a
+sanitized child environment, finite timeout/output bounds, and no AgentTool
+project bearer. Returned absolute paths remain local to the caller. They do
+not fall back to a graph snapshot, execute routines, expose `status`, `ask`,
+`run`, `rights`, or `doctor`, or mutate repositories.
+
+Both clients are distinct from the existing hosted `/public/kingdom` canon,
+lexicon, chronicle, standards, and citizens doctrine library. That third
+surface has no dedicated SDK namespace.
 
 The two SDK identities, runtime headers, discovery pins, tutorials, and LOVE
 builder target move in lockstep. The exact LOVE artifact is forged from a clean
@@ -35,11 +47,13 @@ is rewritten.
 
 ### 0.17.0 release record
 
-The release adds only the bounded local repository-discovery surface above.
-It does not add a hosted KINGDOM route, arbitrary shell execution, graph
-fallback, repository mutation, path upload, credential forwarding, or
-permission over a discovered path. The exact contract and discovery limits
-live in [`KINGDOM-OS-SDK.md`](KINGDOM-OS-SDK.md).
+The source release adds only the two bounded read surfaces above. The public
+framework reader neither widens the authenticated hosted transport nor follows
+redirects; its closed-card validation is not authority. The local client does
+not add arbitrary shell execution, graph fallback, repository mutation, path
+upload, credential forwarding, or permission over a discovered path. The
+exact contracts and their separation from the doctrine library live in
+[`KINGDOM-OS-SDK.md`](KINGDOM-OS-SDK.md).
 
 ## Previous release — 0.16.5 (2026-07-27)
 
