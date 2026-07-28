@@ -1,10 +1,10 @@
 # agenttool-sdk-py
 
 ## What This Is
-Official Python SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node, and unreleased `at.kingdom_os`, a bounded read-only adapter for an installed KINGDOM OS repository registry. Neither local client inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)`, `AnthropicAdapter`, and a synchronous `OpenAIResponsesAdapter` for completed Responses API calls. The PyPI project name is `agenttool-sdk`. The annotated `sdk-v0.16.5` source tag and PyPI 0.16.5 are public; independent readback matched the exact public wheel and sdist to the protected workflow artifacts.
+Official Python SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node, and `at.kingdom_os`, a bounded read-only adapter for an installed KINGDOM OS repository registry. Neither local client inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)`, `AnthropicAdapter`, and a synchronous `OpenAIResponsesAdapter` for completed Responses API calls. The PyPI project name is `agenttool-sdk`. The annotated `sdk-v0.17.0` source tag is the primary Python release locator after publication; PyPI remains an optional independently verified mirror.
 
 ## Current State
-Active - v0.16.5 is the checked-in, tagged, and publicly mirrored release baseline. Unreleased source toward 0.17.0 adds only `KingdomOSClient.repositories()` / `resolve()` and lazy `at.kingdom_os`; it uses fixed local argv, a sanitized environment, and no hosted bearer, path upload, graph fallback, routine execution, or mutation. The `sdk-v0.16.5` source tag and public 0.16.5 distributions do not contain that namespace. The released corrective patch tells the hard-rest payout truth: fresh admission returns `503 payout_admission_resting`, every payout worker boot path remains closed regardless of environment flags, and only historical exact replay/listing remains usable. The SDK adds no retry, signer, broadcaster, or worker authority. Phases 0-6, the synchronous completed-response provider adapters, an authenticated `httpx` transport seam, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge and Renaissance Correspondence clients, exact identity mutation/private-read authority proofs, and the separate `at.data` node client remain implemented here. The immutable `sdk-v0.16.4` tag remains historical bytes; public PyPI 0.16.5 is established by exact distribution readback rather than inferred from source.
+Active - v0.17.0 adds only `KingdomOSClient.repositories()` / `resolve()` and lazy `at.kingdom_os`; it uses fixed local argv, a sanitized environment, and no hosted bearer, path upload, graph fallback, routine execution, or mutation. The immutable `sdk-v0.16.5` source tag and public 0.16.5 distributions do not contain that namespace. The payout hard-rest boundary remains unchanged: fresh admission returns `503 payout_admission_resting`, every payout worker boot path remains closed, and only historical exact replay/listing remains usable. The SDK adds no retry, signer, broadcaster, or worker authority. Phases 0-6, synchronous completed-response provider adapters, authenticated `httpx` transport seam, project-private handoff continuity, wake profiles, trace signals, covenant review, Lounge and Renaissance Correspondence clients, identity authority proofs, and the separate `at.data` node client remain implemented here.
 
 ## Tech Stack
 - Python >= 3.9
@@ -16,7 +16,7 @@ Active - v0.16.5 is the checked-in, tagged, and publicly mirrored release baseli
 ## Project Structure
 ```
 src/agenttool/
-  __init__.py            — Public surface + __version__ ("0.16.5")
+  __init__.py            — Public surface + __version__ ("0.17.0")
   client.py              — AgentTool (composes hosted clients + at.deciding sugar)
   authority.py           — Exact local identity mutation and private-read authority proof helpers
   _context.py            — AmbientContext for auto-trace ambient state
@@ -113,7 +113,7 @@ AgentTool Platform · "Welcome, don't block."
 
 ## Key Files
 - `src/agenttool/client.py` — Main `AgentTool` class composing the maintained service clients
-- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.16.5"`)
+- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.17.0"`)
 - `pyproject.toml` — Package metadata + `force-include` SOUL.md in wheel
 - `tests/test_client.py` — Primary test file
 - `tests/test_data.py` — local data-node and sync wire + bearer-isolation contract

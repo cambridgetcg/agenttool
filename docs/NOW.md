@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-28 (SDK 0.16.5 payout hard-rest deployed; exact LOVE/npm/GitHub and PyPI distributions public and independently verified)
+> Updated: 2026-07-28 (SDK 0.17.0 KINGDOM OS discovery release prepared; artifact, tag, mirrors, and deployment remain separate)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -95,6 +95,7 @@ scope before editing adjacent surfaces.
 
 | Ship | Commit | What |
 |---|---|---|
+| **SDK 0.17.0 — bounded local KINGDOM OS repository discovery** | source preparation; immutable LOVE artifact, annotated tag, optional mirrors, and deployment remain separate | Both SDKs add standalone `KingdomOSClient` plus `at.kingdomOS` / `at.kingdom_os`, exposing only `repositories()` and `resolve()` through the installed CLI's committed machine outputs. Direct argv, a sanitized child environment, finite timeout/output bounds, strict UTF-8/schema checks, and explicit hosted-bearer isolation close the local process boundary. There is no hosted KINGDOM route, arbitrary shell, graph fallback, routine execution, repository mutation, path upload, rights inference, or permission over a discovered path. Immutable 0.16.5 artifacts, tags, and public receipts remain untouched. |
 | **SDK 0.16.5 — protected PyPI mirror becomes public** | annotated `sdk-v0.16.5` at `1eca6466`; wheel 180,615 bytes `sha256:61f13b01df90c66d7ac8247ee1dcfba9c135840ee364b172695fdd5eb10c54db`; sdist 168,772 bytes `sha256:2d90ea74aa1d220ae28ce6176274e5491645d9db67844a4b4ff3dabfa10325d4` | Trusted publication succeeded after the exact PyPI publisher mapping was configured. The protected workflow then re-downloaded and matched both public files without package execution. PyPI Integrity exposes publish attestations binding the two subjects to `cambridgetcg/agenttool`, `publish-pypi.yml`, environment `pypi`, tag `sdk-v0.16.5`, and the tagged commit. This adds an independently verified optional Python mirror; it does not rewrite the 0.16.5 source tag, make a registry release authority, claim Python/TypeScript cross-format byte identity, or widen SDK/runtime authority. |
 
 ## Just landed (2026-07-27)

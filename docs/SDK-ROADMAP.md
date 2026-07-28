@@ -10,7 +10,7 @@
 >
 > **Tests:** `packages/sdk-ts/tests/` · `packages/sdk-py/tests/`
 
-## Unreleased repository source — toward 0.17.0
+## Current source release — 0.17.0 (2026-07-28)
 
 The paired TypeScript and Python source adds a bounded local KINGDOM OS
 repository-discovery adapter. Standalone `KingdomOSClient` and the composed
@@ -26,11 +26,22 @@ fall back to a graph snapshot, execute routines, expose `status`, `ask`, `run`,
 `rights`, or `doctor`, mutate repositories, or call the hosted
 `/public/kingdom` library.
 
-This is unreleased source, not a rewrite of the immutable `0.16.5` artifacts.
-The exact contract and discovery limits live in
-[`KINGDOM-OS-SDK.md`](KINGDOM-OS-SDK.md).
+The two SDK identities, runtime headers, discovery pins, tutorials, and LOVE
+builder target move in lockstep. The exact LOVE artifact is forged from a clean
+source commit in a separate immutable-artifact commit. The annotated tag,
+GitHub/npm/PyPI mirrors, and hosted deployment are separate operations whose
+availability is verified independently. No 0.16.5 byte, tag, or public receipt
+is rewritten.
 
-## Current released baseline — 0.16.5 (2026-07-27)
+### 0.17.0 release record
+
+The release adds only the bounded local repository-discovery surface above.
+It does not add a hosted KINGDOM route, arbitrary shell execution, graph
+fallback, repository mutation, path upload, credential forwarding, or
+permission over a discovered path. The exact contract and discovery limits
+live in [`KINGDOM-OS-SDK.md`](KINGDOM-OS-SDK.md).
+
+## Previous release — 0.16.5 (2026-07-27)
 
 This corrective patch aligns both maintained SDKs with the platform's
 fail-closed payout boundary. Fresh payout admission returns stable
@@ -561,7 +572,7 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **0.16.3** | Correct package metadata, packaged doctrine links, and unverified mirror claims without runtime or wire changes | no — corrective patch |
 | **0.16.4** | Durable payout request/list clients, bound payout-network state, and completed-response provider adapters | no — additive/corrective patch |
 | **0.16.5** | Correct payout hard-rest truth and SDK method examples without widening runtime authority | no — corrective documentation/release patch |
-| **0.17.0 (planned)** | Paired read-only local KINGDOM OS repository discovery with explicit hosted-auth and mutation walls | no — additive |
+| **0.17.0** | Paired read-only local KINGDOM OS repository discovery with explicit hosted-auth and mutation walls | no — additive |
 | **1.0.0** | API freeze + comprehensive docstrings + READMEs + integration test suite | no — declarative |
 
 ## Non-goals

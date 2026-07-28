@@ -103,7 +103,9 @@ or deploy that repository.
 
 ## Release state
 
-This adapter is unreleased repository source following the `0.16.5` SDK
-baseline and is planned for the additive `0.17.0` line. The existing `0.16.5`
-LOVE, npm, and GitHub Release artifacts and the `sdk-v0.16.5` source tag remain
-immutable and do not contain this namespace.
+This adapter is the additive `0.17.0` SDK surface. The checked-in LOVE artifact
+is the primary JavaScript release record; the annotated source tag is the
+primary Python locator after publication. npm, GitHub Release, and PyPI are
+optional mirrors whose availability is established by independent readback.
+The existing `0.16.5` LOVE, npm, GitHub Release, PyPI, and source-tag records
+remain immutable and do not contain this namespace.

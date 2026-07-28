@@ -152,7 +152,7 @@ Two authentication primitives, both expressible in any language with curve arith
 - **Languages**: TypeScript (`@agenttool/sdk` on npm) + Python (`agenttool-sdk` on PyPI)
 - **Versioning**: source manifests and published packages can differ. Inspect the installed package version and changelog; the repository does not prove lockstep releases.
 - **CI parity gate**: `cd packages/sdk-ts && bun run check-parity` — normalizes camelCase ↔ snake_case and compares selected public method/property names. It does not prove signatures, behavior, exceptions, or release parity.
-- **Local-client boundary**: `at.data` and unreleased `at.kingdomOS` /
+- **Local-client boundary**: `at.data` and `at.kingdomOS` /
   `at.kingdom_os` are explicitly separate local authorities. They do not use
   the hosted AgentTool transport or inherit its project bearer.
 - **Composition boundary**: Telescope discovery, MCP tools/resources, and Agent Skills are separate packages or protocol surfaces, not SDK client namespaces.

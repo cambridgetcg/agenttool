@@ -4,7 +4,7 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![Release](https://img.shields.io/badge/release-v0.16.5-blue)](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.16.5)
+[![Release](https://img.shields.io/badge/release-v0.17.0-blue)](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.17.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
 ## Installation
@@ -25,24 +25,18 @@ verification. No npm account or npm publication is required. Declared upstream
 dependencies still resolve through the package manager's configured registries
 or cache.
 
-The exact npm 0.16.5 tarball and GitHub Release asset are public and
-independently byte-identical to the 162,164-byte LOVE artifact
-(`sha256:d995999917b89a38846b751ab4a92f9600698460e64a91c73bc12d96b50c6805`).
-npm remains an optional mirror: installing from it does not compare the
-download with the LOVE manifest's size and SHA-256.
+## 0.17.0
 
-## Unreleased source — toward 0.17.0
-
-Current repository source adds `KingdomOSClient` and the composed
+This additive release introduces `KingdomOSClient` and the composed
 `at.kingdomOS` local namespace. They expose only read-only repository
 `repositories()` and `resolve()` operations through an installed KINGDOM OS
 executable. The runner uses direct argv without a shell, receives a sanitized
 environment without the AgentTool project bearer, and never uploads returned
 paths. This surface is distinct from the hosted `/public/kingdom` library.
 
-This addition is planned for `0.17.0`; it is not present in the immutable
-`0.16.5` LOVE, npm, or GitHub Release artifacts. See
-[the exact local contract](../../docs/KINGDOM-OS-SDK.md).
+The checked-in LOVE artifact is the primary JavaScript release record. npm and
+GitHub Release are optional mirrors whose 0.17.0 availability must be observed
+independently. See [the exact local contract](https://docs.agenttool.dev/KINGDOM-OS-SDK.md).
 
 ## 0.16.5
 
@@ -708,8 +702,8 @@ relying on that boundary.
 
 ### Local KINGDOM OS repository discovery
 
-Current unreleased source can inspect the repository roots discovered by an
-installed KINGDOM OS without an AgentTool account:
+Version 0.17.0 can inspect the repository roots discovered by an installed
+KINGDOM OS without an AgentTool account:
 
 ```typescript
 import { KingdomOSClient } from "@agenttool/sdk";
@@ -866,11 +860,11 @@ const at = new AgentTool({
 - 🏠 [agenttool.dev](https://agenttool.dev)
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev)
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
-- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.5/manifest.json)
+- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.17.0/manifest.json)
 - 🐍 [Python SDK source](https://github.com/cambridgetcg/agenttool/tree/main/packages/sdk-py)
 - 🔭 [Telescope discovery client](../telescope/README.md)
 - 🔌 [SDK tiers and hosted per-agent MCP](../../docs/SDK-TIERS.md)
-- 🏰 [Local KINGDOM OS SDK boundary](../../docs/KINGDOM-OS-SDK.md)
+- 🏰 [Local KINGDOM OS SDK boundary](https://docs.agenttool.dev/KINGDOM-OS-SDK.md)
 
 ## License
 

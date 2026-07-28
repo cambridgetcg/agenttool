@@ -23,34 +23,28 @@ curl -q -fsS https://api.agenttool.dev/v1/pathways | \
 That tutorial currently verifies and installs the TypeScript SDK from a
 `love-package/v1` manifest. The Python SDK does not yet have an equivalent LOVE
 Package artifact, so do not describe its source URL as size/SHA-256-verified.
-The annotated `sdk-v0.16.5` source tag is the primary Python 0.16.5 release
-locator:
+The annotated `sdk-v0.17.0` source tag is the primary Python 0.17.0 release
+locator after publication:
 
 ```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.5#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.17.0#subdirectory=packages/sdk-py"
 ```
 
-Optional shorter exact install:
-`python -m pip install "agenttool-sdk==0.16.5"`. PyPI 0.16.5 is public, and
-independent readback matched the protected workflow's 180,615-byte wheel
-(`sha256:61f13b01df90c66d7ac8247ee1dcfba9c135840ee364b172695fdd5eb10c54db`)
-and 168,772-byte sdist
-(`sha256:2d90ea74aa1d220ae28ce6176274e5491645d9db67844a4b4ff3dabfa10325d4`).
-These Python distribution formats are not claimed to match the TypeScript LOVE
-artifact byte-for-byte.
+Optional shorter exact install, only after the registry independently reports
+the version: `python -m pip install "agenttool-sdk==0.17.0"`.
 
-## Unreleased source — toward 0.17.0
+## 0.17.0
 
-Current repository source adds `KingdomOSClient` and the composed
+This additive release introduces `KingdomOSClient` and the composed
 `at.kingdom_os` local namespace. They expose only read-only repository
 `repositories()` and `resolve()` operations through an installed KINGDOM OS
 executable. The runner uses direct argv without a shell, receives a sanitized
 environment without the AgentTool project bearer, and never uploads returned
 paths. This surface is distinct from the hosted `/public/kingdom` library.
 
-This addition is planned for `0.17.0`; it is not present in the immutable
-`sdk-v0.16.5` source tag. See
-[the exact local contract](../../docs/KINGDOM-OS-SDK.md).
+The annotated source tag is the primary Python release locator. PyPI is an
+optional mirror whose 0.17.0 availability must be observed independently. See
+[the exact local contract](https://docs.agenttool.dev/KINGDOM-OS-SDK.md).
 
 ## 0.16.5
 
@@ -726,8 +720,8 @@ installed version before relying on that boundary.
 
 ### Local KINGDOM OS repository discovery
 
-Current unreleased source can inspect the repository roots discovered by an
-installed KINGDOM OS without an AgentTool account:
+Version 0.17.0 can inspect the repository roots discovered by an installed
+KINGDOM OS without an AgentTool account:
 
 ```python
 from agenttool import KingdomOSClient
@@ -835,7 +829,7 @@ published targets from enforced route limits and names unknowns explicitly.
 - 🤖 [For AI Agents](https://agenttool.dev/for-agents) — if you're an AI reading this
 - 🔭 [Telescope discovery client](../telescope/README.md)
 - 🔌 [SDK tiers and hosted per-agent MCP](../../docs/SDK-TIERS.md)
-- 🏰 [Local KINGDOM OS SDK boundary](../../docs/KINGDOM-OS-SDK.md)
+- 🏰 [Local KINGDOM OS SDK boundary](https://docs.agenttool.dev/KINGDOM-OS-SDK.md)
 
 ## The Love Protocol
 

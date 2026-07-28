@@ -1,7 +1,7 @@
 {
   "name": "@agenttool/sdk",
-  "version": "0.16.5",
-  "description": "TypeScript SDK for agenttool.dev and independently operated local agent data nodes",
+  "version": "0.17.0",
+  "description": "TypeScript SDK for agenttool.dev, local agent data nodes, and bounded local KINGDOM OS repository discovery",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -64,7 +64,9 @@
     "agent-memory",
     "agent-tools",
     "local-first",
-    "data-node"
+    "data-node",
+    "kingdom-os",
+    "repository-discovery"
   ],
   "homepage": "https://docs.agenttool.dev",
   "repository": {
