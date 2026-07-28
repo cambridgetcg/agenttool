@@ -167,6 +167,13 @@ function validateOptions(options: KingdomFrameworkOptions): ValidatedOptions {
   }
 
   const trimmedBaseUrl = rawBaseUrl.trim();
+  if (hasUnpairedSurrogate(trimmedBaseUrl)) {
+    throw frameworkError(
+      "KINGDOM framework base URL is invalid.",
+      "kingdom_framework_invalid_options",
+      "Pass an absolute HTTP(S) base URL without malformed Unicode.",
+    );
+  }
   let parsedBaseUrl: URL;
   try {
     parsedBaseUrl = new URL(trimmedBaseUrl);
@@ -579,32 +586,6 @@ function validateCard(value: unknown): KingdomFrameworkCard {
   });
 }
 
-function copyHttpError(error: AgentToolError, status: number): AgentToolError {
-  return new AgentToolError(
-    `KINGDOM framework request failed (${status}): ${error.message}`,
-    {
-      code: error.code ?? "kingdom_framework_http_error",
-      hint:
-        error.hint
-        ?? "Check the public framework endpoint and retry deliberately.",
-      next_actions: error.next_actions,
-      docs: error.docs ?? FRAMEWORK_DOCS,
-      safety: error.safety ?? "/public/kingdom/framework",
-      details: error.details,
-      status,
-      x402Version: error.x402Version,
-      accepts: error.accepts,
-      resource: error.resource,
-      extensions: error.extensions,
-      paymentRequired: error.paymentRequired,
-      paymentResponse: error.paymentResponse,
-      paymentStatusLink: error.paymentStatusLink,
-      retryAfter: error.retryAfter,
-      creditsBalance: error.creditsBalance,
-    },
-  );
-}
-
 /** Standalone client for `GET /public/kingdom/framework`. */
 export class KingdomFrameworkClient {
   private readonly baseUrl: string;
@@ -659,32 +640,16 @@ export class KingdomFrameworkClient {
     }
 
     if (!response.ok) {
-      const bodyBytes = await readBoundedBytes(
+      await readBoundedBytes(
         response,
         this.maxResponseBytes,
         timeoutSignal,
       );
-      let body: unknown;
-      if (
-        bodyBytes.byteLength > 0
-        && isJsonMediaType(response.headers.get("content-type"))
-      ) {
-        try {
-          body = decodeJson(bodyBytes);
-        } catch {
-          body = undefined;
-        }
-      }
-      throw copyHttpError(
-        AgentToolError.fromResponseBody(
-          body,
-          response.status,
-          response.statusText
-            ? `KINGDOM framework request failed: ${response.statusText}`
-            : "KINGDOM framework request failed.",
-          response.headers,
-        ),
-        response.status,
+      throw frameworkError(
+        `KINGDOM framework endpoint returned HTTP ${response.status}.`,
+        "kingdom_framework_http_error",
+        "Check the configured public framework endpoint and retry deliberately.",
+        { status: response.status },
       );
     }
 
