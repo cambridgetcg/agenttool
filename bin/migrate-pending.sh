@@ -17,7 +17,9 @@
 #                                            # assert an exclusive cutover
 #
 # Safe properties:
-#   - Order is alphabetical (= timestamp order for YYYYMMDDTHHMMSS files)
+#   - Order is alphabetical (= timestamp order for YYYYMMDDTHHMMSS files),
+#     except that a missing journal promotes
+#     20260509T170000_meta_migrations.sql first
 #   - Each apply goes through _migrate-one.ts (checksum verification +
 #     journal recording)
 #   - Quiescence-required files refuse before the first apply unless the
