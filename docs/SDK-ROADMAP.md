@@ -21,17 +21,23 @@ LOVE builder target move in lockstep. The annotated `sdk-v0.16.5` tag is
 public. The TypeScript LOVE artifact, GitHub Release asset, and npm tarball are
 public and independently byte-identical: 162,164 bytes with
 `sha256:d995999917b89a38846b751ab4a92f9600698460e64a91c73bc12d96b50c6805`.
-PyPI 0.16.5 remains unavailable because its trusted-publisher mapping rejected
-the protected workflow identity. These channels remain independently
-verifiable; none makes a mutable registry tag release authority.
+PyPI 0.16.5 is also public. Independent readback matched its 180,615-byte wheel
+(`sha256:61f13b01df90c66d7ac8247ee1dcfba9c135840ee364b172695fdd5eb10c54db`)
+and 168,772-byte sdist
+(`sha256:2d90ea74aa1d220ae28ce6176274e5491645d9db67844a4b4ff3dabfa10325d4`)
+to the protected workflow artifacts. These channels remain independently
+verifiable; the Python formats are not byte-identical to the TypeScript
+tarball, and no mutable registry pointer becomes release authority.
 
 ### 0.16.5 release record
 
 The lockstep TypeScript and Python source identities, runtime client headers,
 LOVE builder target, discovery pins, onboarding fixtures, and machine-readable
 docs name 0.16.5. The source tag, hosted LOVE artifact, GitHub Release, and npm
-mirror are independently visible; PyPI is not. No 0.16.4 artifact, manifest,
-tag, heading, or history row is rewritten by this corrective release.
+mirror are independently visible. The PyPI wheel and sdist are independently
+visible and byte-verified against the protected workflow artifacts. No 0.16.4
+artifact, manifest, tag, heading, or history row is rewritten by this
+corrective release.
 
 ## Previous release — 0.16.4 (2026-07-26)
 

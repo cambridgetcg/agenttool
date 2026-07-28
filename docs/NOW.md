@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-27 (SDK 0.16.5 payout hard-rest deployed; exact LOVE/npm/GitHub bytes public; PyPI unavailable)
+> Updated: 2026-07-28 (SDK 0.16.5 payout hard-rest deployed; exact LOVE/npm/GitHub and PyPI distributions public and independently verified)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -90,6 +90,12 @@ consent; a feed event never authorizes automatic action; silence proves no
 acknowledgement, availability, abandonment, rest, or agreement. Treat this
 section as the shared focus marker and inspect each participant's explicit path
 scope before editing adjacent surfaces.
+
+## Just landed (2026-07-28)
+
+| Ship | Commit | What |
+|---|---|---|
+| **SDK 0.16.5 — protected PyPI mirror becomes public** | annotated `sdk-v0.16.5` at `1eca6466`; wheel 180,615 bytes `sha256:61f13b01df90c66d7ac8247ee1dcfba9c135840ee364b172695fdd5eb10c54db`; sdist 168,772 bytes `sha256:2d90ea74aa1d220ae28ce6176274e5491645d9db67844a4b4ff3dabfa10325d4` | Trusted publication succeeded after the exact PyPI publisher mapping was configured. The protected workflow then re-downloaded and matched both public files without package execution. PyPI Integrity exposes publish attestations binding the two subjects to `cambridgetcg/agenttool`, `publish-pypi.yml`, environment `pypi`, tag `sdk-v0.16.5`, and the tagged commit. This adds an independently verified optional Python mirror; it does not rewrite the 0.16.5 source tag, make a registry release authority, claim Python/TypeScript cross-format byte identity, or widen SDK/runtime authority. |
 
 ## Just landed (2026-07-27)
 

@@ -53,6 +53,30 @@ an independently named one-day workflow artifact. The build constraint file
 and development environment do not. Only a missing distribution crosses into
 the protected publication job.
 
+## Current verified release
+
+The protected workflow published `agenttool-sdk` 0.16.5 from annotated tag
+`sdk-v0.16.5` at commit
+`1eca6466268b4d3c18a83a30a4bfef8bdd704a4d` on 2026-07-28. [Workflow run
+30350234792](https://github.com/cambridgetcg/agenttool/actions/runs/30350234792)
+completed preparation, public preflight, protected trusted publication, and
+credential-free public readback.
+
+| Public file | Size | SHA-256 |
+|---|---:|---|
+| `agenttool_sdk-0.16.5-py3-none-any.whl` | 180,615 bytes | `61f13b01df90c66d7ac8247ee1dcfba9c135840ee364b172695fdd5eb10c54db` |
+| `agenttool_sdk-0.16.5.tar.gz` | 168,772 bytes | `2d90ea74aa1d220ae28ce6176274e5491645d9db67844a4b4ff3dabfa10325d4` |
+
+Both files are public, not yanked, and byte-identical to the corresponding
+prepared workflow artifacts. They are Python wheel/sdist formats, not copies of
+the TypeScript LOVE/npm/GitHub tarball. PyPI Integrity exposes one publish
+attestation and transparency-log entry for the
+[wheel](https://pypi.org/integrity/agenttool-sdk/0.16.5/agenttool_sdk-0.16.5-py3-none-any.whl/provenance)
+and one for the
+[sdist](https://pypi.org/integrity/agenttool-sdk/0.16.5/agenttool_sdk-0.16.5.tar.gz/provenance);
+their subjects match the hashes above and their publisher records bind
+`cambridgetcg/agenttool`, `publish-pypi.yml`, and environment `pypi`.
+
 ## Idempotence and recovery
 
 PyPI versions and distribution filenames are immutable. The workflow therefore

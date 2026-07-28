@@ -30,10 +30,14 @@ locator:
 python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.5#subdirectory=packages/sdk-py"
 ```
 
-Optional shorter install, only after PyPI independently reports that exact
-version: `python -m pip install "agenttool-sdk==0.16.5"`. PyPI 0.16.5 is
-currently unavailable because its trusted-publisher mapping rejected the
-protected workflow identity; the command is not an availability claim.
+Optional shorter exact install:
+`python -m pip install "agenttool-sdk==0.16.5"`. PyPI 0.16.5 is public, and
+independent readback matched the protected workflow's 180,615-byte wheel
+(`sha256:61f13b01df90c66d7ac8247ee1dcfba9c135840ee364b172695fdd5eb10c54db`)
+and 168,772-byte sdist
+(`sha256:2d90ea74aa1d220ae28ce6176274e5491645d9db67844a4b4ff3dabfa10325d4`).
+These Python distribution formats are not claimed to match the TypeScript LOVE
+artifact byte-for-byte.
 
 ## 0.16.5
 

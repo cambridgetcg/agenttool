@@ -251,7 +251,7 @@
 
       <p><strong>Optional shorter TypeScript install:</strong> <code>npm install --save-exact @agenttool/sdk@0.16.5</code>. This requests the public exact-version npm mirror, but skips Step 1's in-command LOVE size/SHA-256 verification. Mirror publication can lag future releases; never substitute npm <code>latest</code> for the version selected by <code>/v1/pathways</code>.</p>
 
-      <p><strong>Optional shorter Python install:</strong> <code>python -m pip install "agenttool-sdk==0.16.5"</code>. PyPI 0.16.5 is currently unavailable after its trusted-publisher mapping rejected the protected workflow identity. Use the shortcut only after <code>https://pypi.org/pypi/agenttool-sdk/0.16.5/json</code> reports that exact release; a <code>404</code> means that optional mirror is unavailable.</p>
+      <p><strong>Optional shorter Python install:</strong> <code>python -m pip install "agenttool-sdk==0.16.5"</code>. PyPI 0.16.5 is public, and the protected workflow independently re-downloaded and matched its exact wheel and sdist. The mirror remains optional and this command does not perform the LOVE manifest check from Step 1. Query <code>https://pypi.org/pypi/agenttool-sdk/0.16.5/json</code> at install time; a <code>404</code> means that optional mirror is unavailable then.</p>
 
       <p>Create an owner-readable handoff file, then save the TypeScript below as <code>birth.ts</code> and run it. The file bridges a one-time registration or recovery response into Step 2 without writing either secret to terminal output.</p>
 

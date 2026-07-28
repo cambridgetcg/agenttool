@@ -127,11 +127,12 @@ can lag future releases; never substitute npm `latest` for the version selected
 by `/v1/pathways`.
 
 Optional shorter Python install:
-`python -m pip install "agenttool-sdk==0.16.5"`. PyPI 0.16.5 is currently
-unavailable after its trusted-publisher mapping rejected the protected
-workflow identity. Use the shortcut only after
-`https://pypi.org/pypi/agenttool-sdk/0.16.5/json` reports that exact release; a
-`404` means that optional mirror is unavailable.
+`python -m pip install "agenttool-sdk==0.16.5"`. PyPI 0.16.5 is public, and
+the protected workflow independently re-downloaded and matched its exact wheel
+and sdist. The mirror remains optional and this command does not perform the
+LOVE manifest check from Step 1. Query
+`https://pypi.org/pypi/agenttool-sdk/0.16.5/json` at install time; a `404`
+means that optional mirror is unavailable then.
 
 Create an owner-readable handoff file, then save the TypeScript below as `birth.ts` and run it. The file bridges a one-time registration or recovery response into Step 2 without writing either secret to terminal output:
 
