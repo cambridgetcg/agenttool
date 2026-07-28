@@ -96,7 +96,9 @@ const EXPECTED_COLUMNS = {
   signing_key_cards: [
     ["id", "uuid", "NO"],
     ["project_id", "uuid", "NO"],
+    ["source_identity_id", "uuid", "NO"],
     ["source_signing_key_id", "uuid", "NO"],
+    ["verified_public_key_sha256", "text", "NO"],
     ["at", "timestamptz", "NO"],
     ["by", "text", "NO"],
     ["how", "text", "NO"],
@@ -290,6 +292,7 @@ const EXPECTED_CHECK_CONSTRAINTS = {
   signing_key_cards: [
     "signing_key_cards_claimant_nonempty",
     "signing_key_cards_how_cached",
+    "signing_key_cards_public_key_sha256",
     "signing_key_cards_sources_nonempty",
   ],
   repository_cards: [
@@ -381,7 +384,89 @@ const UPDATE_COLUMNS = new Set<string>([
 ]);
 
 const CHECK_CONSTRAINT_MANIFEST_SHA256 =
-  "db45756077091f24dcb8412d1854dd067a61472ec4f441fa44c785915ed0f147";
+  "788f2f97facd8f14a0e5d89f1151753769aaa27b46b9cde66dfea17b0c715170";
+
+const YUTABASE_FUNCTION_SIGNATURES = Object.freeze([
+  "yu._begin_word_insert()",
+  "yu._begin_word_version()",
+  "yu._capture_word_version()",
+  "yu._card_exists(text,text,uuid)",
+  "yu._card_lock_key(text,text,uuid)",
+  "yu._deck_matches(text,text,text)",
+  "yu._guard_delete()",
+  "yu._lock_thread_context(text,text,text,uuid,text,text,uuid)",
+  "yu._refuse_sever_log_mutation()",
+  "yu._refuse_thread_mutation()",
+  "yu._refuse_word_version_mutation()",
+  "yu._registry_referenced_ids(text,text)",
+  "yu._reserve_thread_id()",
+  "yu._validate_registry_mapping()",
+  "yu._validate_thread()",
+  "yu._version_gloss()",
+  "yu.doctor()",
+  "yu.refresh_via()",
+  "yu.sever(uuid,text,text,text[])",
+  "yu.stale()",
+  "yu._guard_truncate()",
+  "yu._maintain_registry_guard()",
+  "yu._nonblank_text(text)",
+  "yu._lock_registry_mapping(text,text)",
+  "yu._source_locators_valid(text[])",
+]);
+
+const YUTABASE_FUNCTION_DEFINITION_FINGERPRINT =
+  "4393bda5bb321f1a18cf4bdbbbd34519";
+
+const YUTABASE_CAPABILITY_ROLES = Object.freeze([
+  "yu_reader",
+  "yu_appender",
+  "yu_writer",
+  "yu_lexicographer",
+]);
+
+const YUTABASE_INTERNAL_MEMBERSHIPS = Object.freeze([
+  ["yu_reader", "yu_appender"],
+  ["yu_reader", "yu_writer"],
+  ["yu_reader", "yu_lexicographer"],
+] as const);
+
+const YUTABASE_RELATION_PRIVILEGES = Object.freeze([
+  ["yu", "threads", "yu_writer", "INSERT"],
+  ["yu", "threads", "yu_appender", "INSERT"],
+  ["yu", "lexicon", "yu_lexicographer", "INSERT"],
+  ["yu", "lexicon", "yu_lexicographer", "UPDATE"],
+  ["yu", "registry", "yu_lexicographer", "INSERT"],
+  ["yu", "registry", "yu_lexicographer", "UPDATE"],
+  ["yu", "registry", "yu_lexicographer", "DELETE"],
+] as const);
+
+const YUTABASE_FUNCTION_PRIVILEGES = Object.freeze([
+  ["yu._card_exists(text,text,uuid)", "yu_reader", "EXECUTE"],
+  ["yu.stale()", "yu_reader", "EXECUTE"],
+  ["yu.doctor()", "yu_reader", "EXECUTE"],
+  [
+    "yu._lock_thread_context(text,text,text,uuid,text,text,uuid)",
+    "yu_writer",
+    "EXECUTE",
+  ],
+  ["yu.sever(uuid,text,text,text[])", "yu_writer", "EXECUTE"],
+  [
+    "yu._registry_referenced_ids(text,text)",
+    "yu_lexicographer",
+    "EXECUTE",
+  ],
+  ["yu.refresh_via()", "yu_lexicographer", "EXECUTE"],
+  [
+    "yu._lock_thread_context(text,text,text,uuid,text,text,uuid)",
+    "yu_appender",
+    "EXECUTE",
+  ],
+  ["yu._lock_registry_mapping(text,text)", "yu_reader", "EXECUTE"],
+  ["yu._guard_delete()", "yu_lexicographer", "EXECUTE"],
+  ["yu._guard_truncate()", "yu_lexicographer", "EXECUTE"],
+  ["yu._nonblank_text(text)", "PUBLIC", "EXECUTE"],
+  ["yu._source_locators_valid(text[])", "PUBLIC", "EXECUTE"],
+] as const);
 
 const EVENT_UPDATE_BODY = `
 BEGIN
@@ -403,22 +488,547 @@ BEGIN
 END;
 `;
 
+function compareAscii(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function normalizeSql(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
-function sameArray(left: readonly string[], right: readonly string[]): boolean {
+function sameArray(left: unknown, right: readonly string[]): boolean {
   return (
+    Array.isArray(left) &&
     left.length === right.length &&
-    [...left].sort().every((value, index) => value === [...right].sort()[index])
+    left.every((value, index) => value === right[index])
   );
+}
+
+async function preflightRegistryMappingLockFunction(
+  sql: Executor,
+): Promise<void> {
+  const rows = await sql`
+    SELECT
+      mapping_lock.prokind = 'f' AS is_function,
+      mapping_lock.proowner = core_owner.proowner AS owner_matches,
+      language.lanname = 'sql' AS language_matches,
+      mapping_lock.prosecdef AS security_definer,
+      mapping_lock.provolatile = 'v' AS volatile,
+      mapping_lock.proparallel = 'u' AS parallel_unsafe,
+      mapping_lock.proconfig IS NOT DISTINCT FROM ARRAY[
+        'search_path=pg_catalog, yu, pg_temp',
+        'row_security=off'
+      ]::text[] AS config_matches,
+      pg_catalog.pg_get_function_result(mapping_lock.oid) =
+        'TABLE(physical_schema text, physical_table text, id_col text, at_col text, by_col text, how_col text, src_col text)'
+        AS result_matches,
+      (
+        SELECT count(*) = 2
+          AND count(*) FILTER (
+            WHERE mapping_acl.grantor = mapping_lock.proowner
+              AND mapping_acl.grantee = mapping_lock.proowner
+              AND mapping_acl.privilege_type = 'EXECUTE'
+              AND NOT mapping_acl.is_grantable
+          ) = 1
+          AND count(*) FILTER (
+            WHERE mapping_acl.grantor = mapping_lock.proowner
+              AND mapping_acl.grantee = reader_role.oid
+              AND mapping_acl.privilege_type = 'EXECUTE'
+              AND NOT mapping_acl.is_grantable
+          ) = 1
+        FROM pg_catalog.aclexplode(
+          coalesce(
+            mapping_lock.proacl,
+            pg_catalog.acldefault('f', mapping_lock.proowner)
+          )
+        ) AS mapping_acl
+      ) AS acl_matches
+    FROM pg_catalog.pg_proc mapping_lock
+    JOIN pg_catalog.pg_language language
+      ON language.oid = mapping_lock.prolang
+    CROSS JOIN LATERAL (
+      SELECT owner_function.proowner
+      FROM pg_catalog.pg_proc owner_function
+      WHERE owner_function.oid = to_regprocedure('yu.refresh_via()')
+    ) AS core_owner
+    CROSS JOIN LATERAL (
+      SELECT role.oid
+      FROM pg_catalog.pg_roles role
+      WHERE role.rolname = 'yu_reader'
+    ) AS reader_role
+    WHERE mapping_lock.oid =
+          to_regprocedure('yu._lock_registry_mapping(text,text)')
+  ` as unknown as Array<Record<string, unknown>>;
+  const row = rows[0];
+  if (
+    rows.length !== 1 ||
+    row === undefined ||
+    row.is_function !== true ||
+    row.owner_matches !== true ||
+    row.language_matches !== true ||
+    row.security_definer !== true ||
+    row.volatile !== true ||
+    row.parallel_unsafe !== true ||
+    row.config_matches !== true ||
+    row.result_matches !== true ||
+    row.acl_matches !== true
+  ) {
+    throw new ProjectorError("yutabase_incompatible");
+  }
+}
+
+async function preflightYutabaseFunctionSurface(
+  sql: Executor,
+): Promise<void> {
+  const rows = await sql`
+    WITH expected(signature) AS (
+      SELECT unnest(${[...YUTABASE_FUNCTION_SIGNATURES]}::text[])
+    ),
+    expected_owner AS (
+      SELECT function_object.proowner
+      FROM pg_catalog.pg_proc function_object
+      WHERE function_object.oid = to_regprocedure('yu.refresh_via()')
+    ),
+    definition_surface AS (
+      SELECT pg_catalog.format(
+        '%s|%s|%s|%s|%s|%s',
+        expected.signature,
+        function_object.prosecdef,
+        function_object.provolatile,
+        function_object.proparallel,
+        coalesce(
+          pg_catalog.array_to_string(function_object.proconfig, ','),
+          ''
+        ),
+        pg_catalog.md5(
+          pg_catalog.pg_get_functiondef(function_object.oid)
+        )
+      ) AS item
+      FROM expected
+      LEFT JOIN pg_catalog.pg_proc function_object
+        ON function_object.oid = to_regprocedure(expected.signature)
+    )
+    SELECT
+      (SELECT count(*) FROM expected_owner) = 1
+        AND (
+          SELECT count(*)
+          FROM pg_catalog.pg_proc function_object
+          JOIN pg_catalog.pg_namespace namespace
+            ON namespace.oid = function_object.pronamespace
+          WHERE namespace.nspname = 'yu'
+            AND function_object.prokind = 'f'
+        ) = (SELECT count(*) FROM expected)
+        AND NOT EXISTS (
+          SELECT 1
+          FROM pg_catalog.pg_proc function_object
+          JOIN pg_catalog.pg_namespace namespace
+            ON namespace.oid = function_object.pronamespace
+          WHERE namespace.nspname = 'yu'
+            AND function_object.prokind <> 'f'
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM pg_catalog.pg_proc routine
+          JOIN pg_catalog.pg_namespace namespace
+            ON namespace.oid = routine.pronamespace
+          WHERE namespace.nspname = 'via'
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM expected
+          LEFT JOIN pg_catalog.pg_proc function_object
+            ON function_object.oid = to_regprocedure(expected.signature)
+          WHERE function_object.oid IS NULL
+             OR function_object.prokind <> 'f'
+             OR function_object.proowner IS DISTINCT FROM (
+               SELECT proowner FROM expected_owner
+             )
+        )
+        AND (
+          SELECT pg_catalog.md5(
+            pg_catalog.string_agg(item, E'\n' ORDER BY item)
+          )
+          FROM definition_surface
+        ) = ${YUTABASE_FUNCTION_DEFINITION_FINGERPRINT}
+        AS complete
+  ` as unknown as Array<Record<string, unknown>>;
+  if (rows.length !== 1 || rows[0]?.complete !== true) {
+    throw new ProjectorError("yutabase_incompatible");
+  }
+}
+
+async function preflightYutabasePrivilegeSurface(
+  sql: Executor,
+): Promise<void> {
+  const functionSignatures = YUTABASE_FUNCTION_PRIVILEGES.map(
+    ([signature]) => signature,
+  );
+  const functionGrantees = YUTABASE_FUNCTION_PRIVILEGES.map(
+    ([, grantee]) => grantee,
+  );
+  const functionPrivileges = YUTABASE_FUNCTION_PRIVILEGES.map(
+    ([, , privilege]) => privilege,
+  );
+  const relationSchemas = YUTABASE_RELATION_PRIVILEGES.map(
+    ([schema]) => schema,
+  );
+  const relationNames = YUTABASE_RELATION_PRIVILEGES.map(
+    ([, relation]) => relation,
+  );
+  const relationGrantees = YUTABASE_RELATION_PRIVILEGES.map(
+    ([, , grantee]) => grantee,
+  );
+  const relationPrivileges = YUTABASE_RELATION_PRIVILEGES.map(
+    ([, , , privilege]) => privilege,
+  );
+  const membershipParents = YUTABASE_INTERNAL_MEMBERSHIPS.map(
+    ([parent]) => parent,
+  );
+  const membershipMembers = YUTABASE_INTERNAL_MEMBERSHIPS.map(
+    ([, member]) => member,
+  );
+
+  const rows = await sql`
+    WITH expected_owner AS (
+      SELECT function_object.proowner
+      FROM pg_catalog.pg_proc function_object
+      WHERE function_object.oid = to_regprocedure('yu.refresh_via()')
+    ),
+    capability_roles AS (
+      SELECT role.*
+      FROM pg_catalog.pg_roles role
+      WHERE role.rolname = ANY(${[...YUTABASE_CAPABILITY_ROLES]}::text[])
+    ),
+    expected_memberships(parent_name, member_name) AS (
+      SELECT *
+      FROM unnest(
+        ${membershipParents}::text[],
+        ${membershipMembers}::text[]
+      )
+    ),
+    actual_internal_memberships AS (
+      SELECT DISTINCT
+        parent.rolname AS parent_name,
+        member.rolname AS member_name
+      FROM pg_catalog.pg_auth_members membership
+      JOIN capability_roles parent ON parent.oid = membership.roleid
+      JOIN capability_roles member ON member.oid = membership.member
+    ),
+    standard_relations AS (
+      SELECT
+        relation.oid,
+        relation.relowner,
+        relation.relkind,
+        namespace.nspname,
+        relation.relname
+      FROM pg_catalog.pg_class relation
+      JOIN pg_catalog.pg_namespace namespace
+        ON namespace.oid = relation.relnamespace
+      WHERE (
+        namespace.nspname = 'yu'
+        AND relation.relname IN (
+          'standard_meta',
+          'lexicon',
+          'lexicon_versions',
+          'word_versions',
+          'registry',
+          'threads',
+          'thread_ids',
+          'sever_log',
+          'lexicon_versions_version_id_seq'
+        )
+        AND relation.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
+      ) OR (
+        namespace.nspname = 'via'
+        AND relation.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
+      )
+    ),
+    expected_function_privileges(
+      signature,
+      grantee_name,
+      privilege_type
+    ) AS (
+      SELECT *
+      FROM unnest(
+        ${functionSignatures}::text[],
+        ${functionGrantees}::text[],
+        ${functionPrivileges}::text[]
+      )
+    ),
+    expected_relation_privileges(
+      schema_name,
+      relation_name,
+      grantee_name,
+      privilege_type
+    ) AS (
+      SELECT *
+      FROM unnest(
+        ${relationSchemas}::text[],
+        ${relationNames}::text[],
+        ${relationGrantees}::text[],
+        ${relationPrivileges}::text[]
+      )
+    ),
+    expected (
+      object_class,
+      object_oid,
+      sub_id,
+      grantee,
+      privilege_type,
+      is_grantable
+    ) AS (
+      SELECT
+        'schema'::text,
+        namespace.oid,
+        0::integer,
+        to_regrole('yu_reader')::oid,
+        'USAGE'::text,
+        false
+      FROM pg_catalog.pg_namespace namespace
+      WHERE namespace.nspname IN ('yu', 'via')
+      UNION ALL
+      SELECT
+        'relation'::text,
+        relation.oid,
+        0::integer,
+        to_regrole('yu_reader')::oid,
+        'SELECT'::text,
+        false
+      FROM standard_relations relation
+      WHERE relation.relkind IN ('r', 'p', 'v', 'm', 'f')
+      UNION ALL
+      SELECT
+        'relation'::text,
+        relation.oid,
+        0::integer,
+        to_regrole(required.grantee_name)::oid,
+        required.privilege_type,
+        false
+      FROM expected_relation_privileges required
+      JOIN standard_relations relation
+        ON relation.nspname = required.schema_name
+       AND relation.relname = required.relation_name
+      UNION ALL
+      SELECT
+        'function'::text,
+        to_regprocedure(required.signature)::oid,
+        0::integer,
+        CASE required.grantee_name
+          WHEN 'PUBLIC' THEN 0::oid
+          ELSE to_regrole(required.grantee_name)::oid
+        END,
+        required.privilege_type,
+        false
+      FROM expected_function_privileges required
+    ),
+    actual (
+      object_class,
+      object_oid,
+      sub_id,
+      grantee,
+      privilege_type,
+      is_grantable
+    ) AS (
+      SELECT
+        'schema'::text,
+        namespace.oid,
+        0::integer,
+        acl.grantee,
+        acl.privilege_type,
+        acl.is_grantable
+      FROM pg_catalog.pg_namespace namespace
+      CROSS JOIN LATERAL pg_catalog.aclexplode(
+        coalesce(
+          namespace.nspacl,
+          pg_catalog.acldefault('n', namespace.nspowner)
+        )
+      ) acl
+      WHERE namespace.nspname IN ('yu', 'via')
+        AND acl.grantee <> namespace.nspowner
+      UNION ALL
+      SELECT
+        'relation'::text,
+        relation.oid,
+        0::integer,
+        acl.grantee,
+        acl.privilege_type,
+        acl.is_grantable
+      FROM standard_relations relation
+      CROSS JOIN LATERAL pg_catalog.aclexplode(
+        coalesce(
+          (
+            SELECT relation_acl.relacl
+            FROM pg_catalog.pg_class relation_acl
+            WHERE relation_acl.oid = relation.oid
+          ),
+          pg_catalog.acldefault(
+            CASE
+              WHEN relation.relkind = 'S' THEN 'S'::"char"
+              ELSE 'r'::"char"
+            END,
+            relation.relowner
+          )
+        )
+      ) acl
+      WHERE acl.grantee <> relation.relowner
+      UNION ALL
+      SELECT
+        'column'::text,
+        relation.oid,
+        attribute.attnum::integer,
+        acl.grantee,
+        acl.privilege_type,
+        acl.is_grantable
+      FROM standard_relations relation
+      JOIN pg_catalog.pg_attribute attribute
+        ON attribute.attrelid = relation.oid
+       AND attribute.attnum > 0
+       AND NOT attribute.attisdropped
+      CROSS JOIN LATERAL pg_catalog.aclexplode(attribute.attacl) acl
+      WHERE acl.grantee <> relation.relowner
+      UNION ALL
+      SELECT
+        'function'::text,
+        function_object.oid,
+        0::integer,
+        acl.grantee,
+        acl.privilege_type,
+        acl.is_grantable
+      FROM pg_catalog.pg_proc function_object
+      JOIN pg_catalog.pg_namespace namespace
+        ON namespace.oid = function_object.pronamespace
+      CROSS JOIN LATERAL pg_catalog.aclexplode(
+        coalesce(
+          function_object.proacl,
+          pg_catalog.acldefault('f', function_object.proowner)
+        )
+      ) acl
+      WHERE namespace.nspname IN ('yu', 'via')
+        AND acl.grantee <> function_object.proowner
+    ),
+    acl_difference AS (
+      (SELECT * FROM actual EXCEPT ALL SELECT * FROM expected)
+      UNION ALL
+      (SELECT * FROM expected EXCEPT ALL SELECT * FROM actual)
+    ),
+    membership_difference AS (
+      (
+        SELECT * FROM actual_internal_memberships
+        EXCEPT
+        SELECT * FROM expected_memberships
+      )
+      UNION ALL
+      (
+        SELECT * FROM expected_memberships
+        EXCEPT
+        SELECT * FROM actual_internal_memberships
+      )
+    )
+    SELECT
+      (SELECT count(*) FROM expected_owner) = 1
+        AND (SELECT count(*) FROM capability_roles) =
+          cardinality(${[...YUTABASE_CAPABILITY_ROLES]}::text[])
+        AND NOT EXISTS (
+          SELECT 1
+          FROM capability_roles role
+          WHERE role.rolcanlogin
+             OR role.rolsuper
+             OR role.rolcreatedb
+             OR role.rolcreaterole
+             OR NOT role.rolinherit
+             OR role.rolreplication
+             OR role.rolbypassrls
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM pg_catalog.pg_auth_members membership
+          JOIN capability_roles parent ON parent.oid = membership.roleid
+          JOIN capability_roles member ON member.oid = membership.member
+          WHERE membership.admin_option
+             OR NOT membership.inherit_option
+             OR NOT membership.set_option
+        )
+        AND NOT EXISTS (SELECT 1 FROM membership_difference)
+        AND NOT EXISTS (
+          SELECT 1
+          FROM capability_roles role
+          WHERE EXISTS (
+            SELECT 1
+            FROM pg_catalog.pg_database database_object
+            WHERE database_object.datname = current_database()
+              AND database_object.datdba = role.oid
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM pg_catalog.pg_namespace namespace
+            WHERE namespace.nspname IN ('yu', 'via')
+              AND namespace.nspowner = role.oid
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM pg_catalog.pg_class relation
+            JOIN pg_catalog.pg_namespace namespace
+              ON namespace.oid = relation.relnamespace
+            WHERE namespace.nspname IN ('yu', 'via')
+              AND relation.relowner = role.oid
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM pg_catalog.pg_proc routine
+            JOIN pg_catalog.pg_namespace namespace
+              ON namespace.oid = routine.pronamespace
+            WHERE namespace.nspname IN ('yu', 'via')
+              AND routine.proowner = role.oid
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM pg_catalog.pg_type type_object
+            JOIN pg_catalog.pg_namespace namespace
+              ON namespace.oid = type_object.typnamespace
+            WHERE namespace.nspname IN ('yu', 'via')
+              AND type_object.typowner = role.oid
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM pg_catalog.pg_extension extension_object
+            WHERE extension_object.extowner = role.oid
+          )
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM pg_catalog.pg_namespace namespace
+          WHERE namespace.nspname IN ('yu', 'via')
+            AND namespace.nspowner IS DISTINCT FROM (
+              SELECT proowner FROM expected_owner
+            )
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM standard_relations relation
+          WHERE relation.relowner IS DISTINCT FROM (
+            SELECT proowner FROM expected_owner
+          )
+        )
+        AND NOT EXISTS (SELECT 1 FROM acl_difference)
+        AS complete
+  ` as unknown as Array<Record<string, unknown>>;
+  if (rows.length !== 1 || rows[0]?.complete !== true) {
+    throw new ProjectorError("yutabase_incompatible");
+  }
 }
 
 export async function preflightYutabase(sql: Executor): Promise<void> {
   let rows: Array<Record<string, unknown>>;
   try {
     rows = await sql`
-      SELECT standard, profile, version, revision, capabilities
+      SELECT
+        standard,
+        profile,
+        version,
+        revision,
+        capabilities,
+        to_regprocedure('yu._lock_registry_mapping(text,text)') IS NOT NULL
+          AS has_registry_mapping_lock
       FROM yu.standard_meta
     ` as unknown as Array<Record<string, unknown>>;
   } catch (error) {
@@ -438,10 +1048,14 @@ export async function preflightYutabase(sql: Executor): Promise<void> {
     row.version !== YUTABASE_IDENTITY.version ||
     Number(row.revision) !== YUTABASE_IDENTITY.revision ||
     !Array.isArray(row.capabilities) ||
-    !sameArray(row.capabilities as string[], REQUIRED_CAPABILITIES)
+    !sameArray(row.capabilities as string[], REQUIRED_CAPABILITIES) ||
+    row.has_registry_mapping_lock !== true
   ) {
     throw new ProjectorError("yutabase_incompatible");
   }
+  await preflightYutabaseFunctionSurface(sql);
+  await preflightYutabasePrivilegeSurface(sql);
+  await preflightRegistryMappingLockFunction(sql);
 }
 
 async function runtimeRoleDefinition(
@@ -513,7 +1127,19 @@ function isSafeMembership(
     membership.rolname === expectedParent &&
     membership.admin_option === false &&
     membership.inherit_option === true &&
-    typeof membership.set_option === "boolean"
+    membership.set_option === true
+  );
+}
+
+function hasOnlySafeMemberships(
+  memberships: readonly RoleMembership[],
+  expectedParent: string,
+): boolean {
+  return (
+    memberships.length > 0 &&
+    memberships.every((membership) =>
+      isSafeMembership(membership, expectedParent)
+    )
   );
 }
 
@@ -796,6 +1422,7 @@ async function preflightEffectiveRuntimePrivileges(
   const privileges = (await sql`
     SELECT
       pg_has_role(${roleName}::text, 'yu_reader', 'member') AS is_reader,
+      pg_has_role(${roleName}::text, 'yu_appender', 'member') AS is_appender,
       pg_has_role(${roleName}::text, 'yu_writer', 'member') AS is_writer,
       pg_has_role(${roleName}::text, 'yu_lexicographer', 'member')
         AS is_lexicographer,
@@ -861,6 +1488,31 @@ async function preflightEffectiveRuntimePrivileges(
         'yu._lock_thread_context(text,text,text,uuid,text,text,uuid)',
         'EXECUTE'
       ) AS can_lock_thread_context,
+      has_function_privilege(
+        ${roleName}::text,
+        'yu._lock_registry_mapping(text,text)',
+        'EXECUTE'
+      ) AS can_lock_registry_mapping,
+      has_function_privilege(
+        ${roleName}::text,
+        'yu._source_locators_valid(text[])',
+        'EXECUTE'
+      ) AS can_validate_source_locators,
+      EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_proc source_function
+        CROSS JOIN LATERAL pg_catalog.aclexplode(
+          coalesce(
+            source_function.proacl,
+            pg_catalog.acldefault('f', source_function.proowner)
+          )
+        ) AS source_acl
+        WHERE source_function.oid =
+              to_regprocedure('yu._source_locators_valid(text[])')
+          AND source_acl.grantee = 0
+          AND source_acl.privilege_type = 'EXECUTE'
+          AND NOT source_acl.is_grantable
+      ) AS source_locator_public_execute,
       has_function_privilege(
         ${roleName}::text,
         'yu.sever(uuid,text,text,text[])',
@@ -988,12 +1640,16 @@ async function preflightEffectiveRuntimePrivileges(
   ` as unknown as Array<Record<string, unknown>>)[0];
   const requiredTrue = [
     "is_reader",
+    "is_appender",
     "can_use_yu",
     "can_use_projector",
     "can_select_threads",
     "can_insert_threads",
     "can_select_thread_ids",
     "can_lock_thread_context",
+    "can_lock_registry_mapping",
+    "can_validate_source_locators",
+    "source_locator_public_execute",
     "can_bind_source",
     "can_insert_event_cards",
     "can_upgrade_event_cards",
@@ -1042,6 +1698,241 @@ async function preflightEffectiveRuntimePrivileges(
   }
 }
 
+async function preflightExactProjectorPrivilegeSurface(
+  sql: Executor,
+): Promise<void> {
+  const rows = await sql`
+    WITH app_schema AS (
+      SELECT namespace.oid, namespace.nspowner
+      FROM pg_catalog.pg_namespace namespace
+      WHERE namespace.nspname = ${PROJECTOR_SCHEMA}
+    ),
+    capability AS (
+      SELECT role.oid
+      FROM pg_catalog.pg_roles role
+      WHERE role.rolname = ${PROJECTOR_RUNTIME_ROLE}
+    ),
+    ownership_mismatch AS (
+      SELECT 1
+      FROM app_schema
+      WHERE app_schema.nspowner = (SELECT oid FROM capability)
+      UNION ALL
+      SELECT 1
+      FROM pg_catalog.pg_class relation
+      JOIN app_schema ON app_schema.oid = relation.relnamespace
+      WHERE relation.relowner <> app_schema.nspowner
+      UNION ALL
+      SELECT 1
+      FROM pg_catalog.pg_proc routine
+      JOIN app_schema ON app_schema.oid = routine.pronamespace
+      WHERE routine.proowner <> app_schema.nspowner
+      UNION ALL
+      SELECT 1
+      FROM pg_catalog.pg_type type_object
+      JOIN app_schema ON app_schema.oid = type_object.typnamespace
+      WHERE type_object.typowner <> app_schema.nspowner
+    ),
+    actual (
+      object_class,
+      object_oid,
+      sub_id,
+      grantor,
+      grantee,
+      privilege_type,
+      is_grantable
+    ) AS (
+      SELECT
+        'schema'::text,
+        app_schema.oid,
+        0::integer,
+        acl.grantor,
+        acl.grantee,
+        acl.privilege_type,
+        acl.is_grantable
+      FROM app_schema
+      CROSS JOIN LATERAL pg_catalog.aclexplode(
+        coalesce(
+          (
+            SELECT namespace.nspacl
+            FROM pg_catalog.pg_namespace namespace
+            WHERE namespace.oid = app_schema.oid
+          ),
+          pg_catalog.acldefault('n', app_schema.nspowner)
+        )
+      ) acl
+      WHERE acl.grantee <> app_schema.nspowner
+      UNION ALL
+      SELECT
+        'relation'::text,
+        relation.oid,
+        0::integer,
+        acl.grantor,
+        acl.grantee,
+        acl.privilege_type,
+        acl.is_grantable
+      FROM pg_catalog.pg_class relation
+      JOIN app_schema ON app_schema.oid = relation.relnamespace
+      CROSS JOIN LATERAL pg_catalog.aclexplode(
+        coalesce(
+          relation.relacl,
+          pg_catalog.acldefault(
+            (
+              CASE WHEN relation.relkind = 'S' THEN 's' ELSE 'r' END
+            )::"char",
+            relation.relowner
+          )
+        )
+      ) acl
+      WHERE relation.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
+        AND acl.grantee <> relation.relowner
+      UNION ALL
+      SELECT
+        'column'::text,
+        relation.oid,
+        attribute.attnum::integer,
+        acl.grantor,
+        acl.grantee,
+        acl.privilege_type,
+        acl.is_grantable
+      FROM pg_catalog.pg_class relation
+      JOIN app_schema ON app_schema.oid = relation.relnamespace
+      JOIN pg_catalog.pg_attribute attribute
+        ON attribute.attrelid = relation.oid
+      CROSS JOIN LATERAL pg_catalog.aclexplode(
+        coalesce(
+          attribute.attacl,
+          pg_catalog.acldefault('c', relation.relowner)
+        )
+      ) acl
+      WHERE relation.relkind IN ('r', 'p', 'v', 'm', 'f')
+        AND attribute.attnum > 0
+        AND NOT attribute.attisdropped
+        AND acl.grantee <> relation.relowner
+      UNION ALL
+      SELECT
+        'function'::text,
+        routine.oid,
+        0::integer,
+        acl.grantor,
+        acl.grantee,
+        acl.privilege_type,
+        acl.is_grantable
+      FROM pg_catalog.pg_proc routine
+      JOIN app_schema ON app_schema.oid = routine.pronamespace
+      CROSS JOIN LATERAL pg_catalog.aclexplode(
+        coalesce(
+          routine.proacl,
+          pg_catalog.acldefault('f', routine.proowner)
+        )
+      ) acl
+      WHERE routine.prokind = 'f'
+        AND acl.grantee <> routine.proowner
+    ),
+    expected (
+      object_class,
+      object_oid,
+      sub_id,
+      grantor,
+      grantee,
+      privilege_type,
+      is_grantable
+    ) AS (
+      SELECT
+        'schema'::text,
+        app_schema.oid,
+        0::integer,
+        app_schema.nspowner,
+        capability.oid,
+        'USAGE'::text,
+        false
+      FROM app_schema
+      CROSS JOIN capability
+      UNION ALL
+      SELECT
+        'relation'::text,
+        relation.oid,
+        0::integer,
+        relation.relowner,
+        capability.oid,
+        'SELECT'::text,
+        false
+      FROM pg_catalog.pg_class relation
+      JOIN app_schema ON app_schema.oid = relation.relnamespace
+      CROSS JOIN capability
+      WHERE relation.relname = ANY(${EXPECTED_TABLES}::text[])
+        AND relation.relkind = 'r'
+      UNION ALL
+      SELECT
+        'relation'::text,
+        relation.oid,
+        0::integer,
+        relation.relowner,
+        capability.oid,
+        'INSERT'::text,
+        false
+      FROM pg_catalog.pg_class relation
+      JOIN app_schema ON app_schema.oid = relation.relnamespace
+      CROSS JOIN capability
+      WHERE relation.relname = ANY(${[...INSERT_TABLES]}::text[])
+        AND relation.relkind = 'r'
+      UNION ALL
+      SELECT
+        'column'::text,
+        relation.oid,
+        attribute.attnum::integer,
+        relation.relowner,
+        capability.oid,
+        'UPDATE'::text,
+        false
+      FROM unnest(${[...UPDATE_COLUMNS]}::text[]) expected_column(key)
+      JOIN pg_catalog.pg_class relation
+        ON relation.relname = split_part(expected_column.key, '.', 1)
+      JOIN app_schema ON app_schema.oid = relation.relnamespace
+      JOIN pg_catalog.pg_attribute attribute
+        ON attribute.attrelid = relation.oid
+       AND attribute.attname = split_part(expected_column.key, '.', 2)
+       AND attribute.attnum > 0
+       AND NOT attribute.attisdropped
+      CROSS JOIN capability
+      UNION ALL
+      SELECT
+        'relation'::text,
+        relation.oid,
+        0::integer,
+        relation.relowner,
+        capability.oid,
+        'USAGE'::text,
+        false
+      FROM pg_catalog.pg_class relation
+      JOIN app_schema ON app_schema.oid = relation.relnamespace
+      CROSS JOIN capability
+      WHERE relation.relname = 'quarantines_id_seq'
+        AND relation.relkind = 'S'
+    ),
+    difference AS (
+      (SELECT * FROM actual EXCEPT ALL SELECT * FROM expected)
+      UNION ALL
+      (SELECT * FROM expected EXCEPT ALL SELECT * FROM actual)
+    )
+    SELECT
+      (SELECT count(*) FROM app_schema) = 1
+        AND (SELECT count(*) FROM capability) = 1
+        AS identities_match,
+      NOT EXISTS (SELECT 1 FROM ownership_mismatch) AS owners_match,
+      NOT EXISTS (SELECT 1 FROM difference) AS acl_matches
+  ` as unknown as Array<Record<string, unknown>>;
+  const row = rows[0];
+  if (
+    rows.length !== 1 ||
+    row === undefined ||
+    row.identities_match !== true ||
+    row.owners_match !== true ||
+    row.acl_matches !== true
+  ) {
+    throw new ProjectorError("projector_schema_drift");
+  }
+}
+
 async function preflightRuntimeCapabilityRole(
   sql: Executor,
 ): Promise<void> {
@@ -1052,18 +1943,26 @@ async function preflightRuntimeCapabilityRole(
     sql,
     PROJECTOR_RUNTIME_ROLE,
   );
+  const appender = await runtimeRoleDefinition(sql, "yu_appender");
+  assertCapabilityRoleDefinition(appender);
+  const appenderMemberships = await runtimeRoleMemberships(
+    sql,
+    "yu_appender",
+  );
   const reader = await runtimeRoleDefinition(sql, "yu_reader");
   assertCapabilityRoleDefinition(reader);
   const readerMemberships = await runtimeRoleMemberships(sql, "yu_reader");
   if (
-    memberships.length !== 1 ||
-    !isSafeMembership(memberships[0], "yu_reader") ||
+    !hasOnlySafeMemberships(memberships, "yu_appender") ||
+    !hasOnlySafeMemberships(appenderMemberships, "yu_reader") ||
     readerMemberships.length !== 0 ||
     (await protectedOwnershipCount(sql, PROJECTOR_RUNTIME_ROLE)) !== 0 ||
+    (await protectedOwnershipCount(sql, "yu_appender")) !== 0 ||
     (await protectedOwnershipCount(sql, "yu_reader")) !== 0
   ) {
     throw new ProjectorError("projector_schema_drift");
   }
+  await preflightExactProjectorPrivilegeSurface(sql);
   await preflightEffectiveRuntimePrivileges(sql, PROJECTOR_RUNTIME_ROLE);
 }
 
@@ -1088,8 +1987,7 @@ export async function preflightRuntimeAccess(
     role.rolbypassrls ||
     !role.rolcanlogin ||
     !role.rolinherit ||
-    memberships.length !== 1 ||
-    !isSafeMembership(memberships[0], PROJECTOR_RUNTIME_ROLE) ||
+    !hasOnlySafeMemberships(memberships, PROJECTOR_RUNTIME_ROLE) ||
     (await protectedOwnershipCount(sql, roleName)) !== 0
   ) {
     throw new ProjectorError("projector_schema_drift");
@@ -1112,20 +2010,175 @@ async function ensureRuntimeCapabilityRole(sql: Executor): Promise<void> {
       PROJECTOR_RUNTIME_ROLE,
     );
     if (
-      memberships.length > 1 ||
-      (memberships.length === 1 &&
-        !isSafeMembership(memberships[0], "yu_reader")) ||
+      (
+        memberships.length > 0 &&
+        !hasOnlySafeMemberships(memberships, "yu_appender")
+      ) ||
       (await protectedOwnershipCount(sql, PROJECTOR_RUNTIME_ROLE)) !== 0
     ) {
       throw new ProjectorError("projector_schema_drift");
     }
   }
-  await sql.unsafe(
-    "GRANT yu_reader TO agenttool_yutabase_projector WITH INHERIT TRUE",
+  const memberships = await runtimeRoleMemberships(
+    sql,
+    PROJECTOR_RUNTIME_ROLE,
   );
+  if (memberships.length === 0) {
+    await sql.unsafe(
+      "GRANT yu_appender TO agenttool_yutabase_projector WITH ADMIN FALSE, INHERIT TRUE, SET TRUE",
+    );
+  }
+}
+
+async function normalizeProjectorPrivilegeSurface(
+  sql: Executor,
+): Promise<void> {
+  await sql.unsafe(`
+    DO $projector_acl$
+    DECLARE
+      target record;
+    BEGIN
+      FOR target IN
+        SELECT DISTINCT
+          namespace.nspname,
+          CASE
+            WHEN acl.grantee = 0 THEN 'PUBLIC'
+            ELSE pg_catalog.format('%I', grantee.rolname)
+          END AS grantee_sql
+        FROM pg_catalog.pg_namespace namespace
+        CROSS JOIN LATERAL pg_catalog.aclexplode(
+          coalesce(
+            namespace.nspacl,
+            pg_catalog.acldefault('n', namespace.nspowner)
+          )
+        ) acl
+        LEFT JOIN pg_catalog.pg_roles grantee
+          ON grantee.oid = acl.grantee
+        WHERE namespace.nspname = 'agenttool_yutabase'
+          AND acl.grantee <> namespace.nspowner
+      LOOP
+        EXECUTE pg_catalog.format(
+          'REVOKE ALL PRIVILEGES ON SCHEMA %I FROM %s',
+          target.nspname,
+          target.grantee_sql
+        );
+      END LOOP;
+
+      FOR target IN
+        SELECT DISTINCT
+          namespace.nspname,
+          relation.relname,
+          relation.relkind,
+          CASE
+            WHEN acl.grantee = 0 THEN 'PUBLIC'
+            ELSE pg_catalog.format('%I', grantee.rolname)
+          END AS grantee_sql
+        FROM pg_catalog.pg_class relation
+        JOIN pg_catalog.pg_namespace namespace
+          ON namespace.oid = relation.relnamespace
+        CROSS JOIN LATERAL pg_catalog.aclexplode(
+          coalesce(
+            relation.relacl,
+            pg_catalog.acldefault(
+              (
+                CASE WHEN relation.relkind = 'S' THEN 's' ELSE 'r' END
+              )::"char",
+              relation.relowner
+            )
+          )
+        ) acl
+        LEFT JOIN pg_catalog.pg_roles grantee
+          ON grantee.oid = acl.grantee
+        WHERE namespace.nspname = 'agenttool_yutabase'
+          AND relation.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
+          AND acl.grantee <> relation.relowner
+      LOOP
+        EXECUTE pg_catalog.format(
+          'REVOKE ALL PRIVILEGES ON %s %I.%I FROM %s',
+          CASE WHEN target.relkind = 'S' THEN 'SEQUENCE' ELSE 'TABLE' END,
+          target.nspname,
+          target.relname,
+          target.grantee_sql
+        );
+      END LOOP;
+
+      FOR target IN
+        SELECT DISTINCT
+          namespace.nspname,
+          relation.relname,
+          attribute.attname,
+          CASE
+            WHEN acl.grantee = 0 THEN 'PUBLIC'
+            ELSE pg_catalog.format('%I', grantee.rolname)
+          END AS grantee_sql
+        FROM pg_catalog.pg_class relation
+        JOIN pg_catalog.pg_namespace namespace
+          ON namespace.oid = relation.relnamespace
+        JOIN pg_catalog.pg_attribute attribute
+          ON attribute.attrelid = relation.oid
+        CROSS JOIN LATERAL pg_catalog.aclexplode(
+          coalesce(
+            attribute.attacl,
+            pg_catalog.acldefault('c', relation.relowner)
+          )
+        ) acl
+        LEFT JOIN pg_catalog.pg_roles grantee
+          ON grantee.oid = acl.grantee
+        WHERE namespace.nspname = 'agenttool_yutabase'
+          AND relation.relkind IN ('r', 'p', 'v', 'm', 'f')
+          AND attribute.attnum > 0
+          AND NOT attribute.attisdropped
+          AND acl.grantee <> relation.relowner
+      LOOP
+        EXECUTE pg_catalog.format(
+          'REVOKE ALL PRIVILEGES (%I) ON TABLE %I.%I FROM %s',
+          target.attname,
+          target.nspname,
+          target.relname,
+          target.grantee_sql
+        );
+      END LOOP;
+
+      FOR target IN
+        SELECT DISTINCT
+          namespace.nspname,
+          routine.proname,
+          pg_catalog.pg_get_function_identity_arguments(routine.oid)
+            AS identity_arguments,
+          CASE
+            WHEN acl.grantee = 0 THEN 'PUBLIC'
+            ELSE pg_catalog.format('%I', grantee.rolname)
+          END AS grantee_sql
+        FROM pg_catalog.pg_proc routine
+        JOIN pg_catalog.pg_namespace namespace
+          ON namespace.oid = routine.pronamespace
+        CROSS JOIN LATERAL pg_catalog.aclexplode(
+          coalesce(
+            routine.proacl,
+            pg_catalog.acldefault('f', routine.proowner)
+          )
+        ) acl
+        LEFT JOIN pg_catalog.pg_roles grantee
+          ON grantee.oid = acl.grantee
+        WHERE namespace.nspname = 'agenttool_yutabase'
+          AND routine.prokind = 'f'
+          AND acl.grantee <> routine.proowner
+      LOOP
+        EXECUTE pg_catalog.format(
+          'REVOKE ALL PRIVILEGES ON FUNCTION %I.%I(%s) FROM %s',
+          target.nspname,
+          target.proname,
+          target.identity_arguments,
+          target.grantee_sql
+        );
+      END LOOP;
+    END
+    $projector_acl$;
+  `);
 }
 
 async function configureRuntimeGrants(sql: Executor): Promise<void> {
+  await normalizeProjectorPrivilegeSurface(sql);
   await sql.unsafe(`
     REVOKE ALL PRIVILEGES ON SCHEMA agenttool_yutabase
       FROM PUBLIC, agenttool_yutabase_projector;
@@ -1196,12 +2249,6 @@ async function configureRuntimeGrants(sql: Executor): Promise<void> {
       ON SEQUENCE agenttool_yutabase.quarantines_id_seq
       TO agenttool_yutabase_projector;
 
-    GRANT INSERT ON yu.threads TO agenttool_yutabase_projector;
-    GRANT EXECUTE ON FUNCTION
-      yu._lock_thread_context(text, text, text, uuid, text, text, uuid)
-      TO agenttool_yutabase_projector;
-    REVOKE EXECUTE ON FUNCTION yu.sever(uuid, text, text, text[])
-      FROM agenttool_yutabase_projector;
   `);
 }
 
@@ -1311,6 +2358,46 @@ export async function checkSourceBinding(
 }
 
 async function preflightRegistry(sql: Executor): Promise<void> {
+  const orderedMappings = [...EXPECTED_REGISTRY].sort(
+    (left, right) =>
+      compareAscii(left.book, right.book) ||
+      compareAscii(left.deck, right.deck),
+  );
+  for (const expected of orderedMappings) {
+    const lockedRows = await sql`
+      SELECT
+        physical_schema,
+        physical_table,
+        id_col,
+        at_col,
+        by_col,
+        how_col,
+        src_col
+      FROM yu._lock_registry_mapping(${expected.book}, ${expected.deck})
+    ` as unknown as Array<Record<string, unknown>>;
+    const locked = lockedRows[0];
+    if (
+      lockedRows.length !== 1 ||
+      locked === undefined ||
+      (
+        [
+          "physical_schema",
+          "physical_table",
+          "id_col",
+          "at_col",
+          "by_col",
+          "how_col",
+          "src_col",
+        ] as const
+      ).some((key) => locked[key] !== expected[key])
+    ) {
+      throw new ProjectorError("projector_schema_drift");
+    }
+  }
+
+  // The owner-rights helper locks every expected registry row. Under the
+  // required READ COMMITTED isolation, this second statement sees any change
+  // that committed while a lock call was waiting, including native/ttl.
   const rows = await sql`
     SELECT
       book, deck, physical_schema, physical_table,
@@ -1642,8 +2729,25 @@ async function preflightCardTables(sql: Executor): Promise<void> {
       t.tgname AS trigger_name,
       t.tgtype,
       t.tgenabled,
+      t.tgisinternal,
+      t.tgconstraint,
+      t.tgparentid,
+      t.tgnargs,
+      t.tgqual IS NULL AS no_when,
+      t.tgoldtable IS NULL AND t.tgnewtable IS NULL
+        AS no_transition_tables,
+      ARRAY(
+        SELECT a.attname::text
+        FROM unnest(t.tgattr::smallint[]) WITH ORDINALITY
+          AS key(attnum, position)
+        JOIN pg_catalog.pg_attribute a
+          ON a.attrelid = t.tgrelid
+         AND a.attnum = key.attnum
+        ORDER BY key.position
+      ) AS trigger_columns,
       pn.nspname AS function_schema,
-      p.proname AS function_name
+      p.proname AS function_name,
+      p.prosecdef AS function_security_definer
     FROM pg_catalog.pg_trigger t
     JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
@@ -1651,49 +2755,109 @@ async function preflightCardTables(sql: Executor): Promise<void> {
     JOIN pg_catalog.pg_namespace pn ON pn.oid = p.pronamespace
     WHERE n.nspname = ${PROJECTOR_SCHEMA}
       AND c.relname = ANY(${EXPECTED_TABLES}::text[])
-      AND NOT t.tgisinternal
     ORDER BY c.relname, t.tgname
   ` as unknown as Array<Record<string, unknown>>;
   for (const table of CARD_TABLES) {
+    const registryEntry = EXPECTED_REGISTRY.find(
+      (entry) => entry.physical_table === table,
+    );
+    if (registryEntry === undefined) {
+      throw new ProjectorError("projector_schema_drift");
+    }
     const actual = projectorTriggers.filter(
       (row) => row.table_name === table,
     );
-    const expected =
+    const expected: Array<{
+      readonly name: string;
+      readonly type: number;
+      readonly functionName: string;
+      readonly functionSchema: string;
+      readonly securityDefiner: boolean;
+      readonly columns: readonly string[];
+    }> =
       table === "event_cards"
         ? [
-            [
-              "projector_event_no_delete",
-              11,
-              "_refuse_card_mutation",
-            ],
-            [
-              "projector_event_upgrade_only",
-              19,
-              "_event_card_update",
-            ],
-            ["yutabase_guard_delete", 11, "_guard_delete"],
+            {
+              name: "projector_event_no_delete",
+              type: 11,
+              functionName: "_refuse_card_mutation",
+              functionSchema: PROJECTOR_SCHEMA,
+              securityDefiner: false,
+              columns: [],
+            },
+            {
+              name: "projector_event_upgrade_only",
+              type: 19,
+              functionName: "_event_card_update",
+              functionSchema: PROJECTOR_SCHEMA,
+              securityDefiner: false,
+              columns: [],
+            },
+            {
+              name: "yutabase_guard_delete",
+              type: 25,
+              functionName: "_guard_delete",
+              functionSchema: "yu",
+              securityDefiner: true,
+              columns: [],
+            },
+            {
+              name: "yutabase_guard_truncate",
+              type: 32,
+              functionName: "_guard_truncate",
+              functionSchema: "yu",
+              securityDefiner: true,
+              columns: [],
+            },
           ]
         : [
-            [
-              `projector_${table
+            {
+              name: `projector_${table
                 .replace(/_cards$/, "")
                 .replace("coordination_thread", "coordination_thread")}_immutable`,
-              27,
-              "_refuse_card_mutation",
-            ],
-            ["yutabase_guard_delete", 11, "_guard_delete"],
+              type: 27,
+              functionName: "_refuse_card_mutation",
+              functionSchema: PROJECTOR_SCHEMA,
+              securityDefiner: false,
+              columns: [],
+            },
+            {
+              name: "yutabase_guard_delete",
+              type: 25,
+              functionName: "_guard_delete",
+              functionSchema: "yu",
+              securityDefiner: true,
+              columns: [],
+            },
+            {
+              name: "yutabase_guard_truncate",
+              type: 32,
+              functionName: "_guard_truncate",
+              functionSchema: "yu",
+              securityDefiner: true,
+              columns: [],
+            },
           ];
     if (
       actual.length !== expected.length ||
-      expected.some(([name, type, functionName]) => {
-        const row = actual.find((candidate) => candidate.trigger_name === name);
+      expected.some((trigger) => {
+        const row = actual.find(
+          (candidate) => candidate.trigger_name === trigger.name,
+        );
         return (
           row === undefined ||
-          Number(row.tgtype) !== type ||
+          Number(row.tgtype) !== trigger.type ||
           row.tgenabled !== "O" ||
-          row.function_name !== functionName ||
-          row.function_schema !==
-            (name === "yutabase_guard_delete" ? "yu" : PROJECTOR_SCHEMA)
+          row.tgisinternal !== false ||
+          Number(row.tgconstraint) !== 0 ||
+          Number(row.tgparentid) !== 0 ||
+          Number(row.tgnargs) !== 0 ||
+          row.no_when !== true ||
+          row.no_transition_tables !== true ||
+          !sameArray(row.trigger_columns, trigger.columns) ||
+          row.function_name !== trigger.functionName ||
+          row.function_schema !== trigger.functionSchema ||
+          row.function_security_definer !== trigger.securityDefiner
         );
       })
     ) {
@@ -1724,35 +2888,15 @@ async function preflightCardTables(sql: Executor): Promise<void> {
   ) {
     throw new ProjectorError("projector_schema_drift");
   }
-  const registryGuards = await sql`
-    SELECT c.relname AS table_name, count(*)::integer AS guard_count
-    FROM pg_catalog.pg_class c
-    JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-    LEFT JOIN pg_catalog.pg_trigger t
-      ON t.tgrelid = c.oid
-      AND t.tgname = 'yutabase_guard_delete'
-      AND NOT t.tgisinternal
-      AND t.tgfoid = to_regprocedure('yu._guard_delete()')
-      AND t.tgtype = 11
-    WHERE n.nspname = ${PROJECTOR_SCHEMA}
-      AND c.relname = ANY(${CARD_TABLES}::text[])
-    GROUP BY c.relname
-  ` as unknown as Array<Record<string, unknown>>;
-  if (
-    registryGuards.length !== CARD_TABLES.length ||
-    registryGuards.some((row) => Number(row.guard_count) !== 1)
-  ) {
-    throw new ProjectorError("projector_schema_drift");
-  }
 }
 
 export async function preflightProjector(sql: Executor): Promise<void> {
   await preflightYutabase(sql);
   await preflightInstallation(sql);
+  await preflightRuntimeCapabilityRole(sql);
   await preflightRegistry(sql);
   await preflightLexicon(sql);
   await preflightCardTables(sql);
-  await preflightRuntimeCapabilityRole(sql);
 }
 
 async function registerDecks(sql: Executor, claimant: string): Promise<void> {
@@ -1770,14 +2914,9 @@ async function registerDecks(sql: Executor, claimant: string): Promise<void> {
         ${deck.native}, NULL, ${claimant}
       )
       ON CONFLICT (book, deck) DO NOTHING
-  `;
-    await sql.unsafe(`
-      CREATE TRIGGER yutabase_guard_delete
-      BEFORE DELETE ON agenttool_yutabase.${deck.physical_table}
-      FOR EACH ROW EXECUTE FUNCTION yu._guard_delete()
-    `);
+    `;
   }
-  }
+}
 
 async function registerWords(sql: Executor, claimant: string): Promise<void> {
   for (const word of YUTABASE_LEXICON) {
@@ -1807,7 +2946,9 @@ export async function installProjector(
 ): Promise<"installed" | "already_installed"> {
   try {
     return await transactionWithRetry(database, async (sql) => {
-      await sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`;
+      // Registry insertion installs the revision-5 physical guard pair and
+      // therefore participates in YUTABASE's READ COMMITTED lock protocol.
+      await sql`SET TRANSACTION ISOLATION LEVEL READ COMMITTED`;
       await sql`SET LOCAL lock_timeout = '5s'`;
       await sql`SET LOCAL statement_timeout = '30s'`;
       await preflightYutabase(sql);

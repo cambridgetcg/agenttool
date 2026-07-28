@@ -37,6 +37,11 @@ interface CheckpointRow extends Record<string, unknown> {
   state: string;
 }
 
+interface SigningKeyBinding {
+  readonly sourceIdentityId: string;
+  readonly verifiedPublicKeySha256: string;
+}
+
 export interface ApplyResult {
   readonly applied: boolean;
   readonly replayed: boolean;
@@ -300,29 +305,67 @@ async function applyIdentityCard(
 async function applySigningKeyCard(
   sql: Transaction,
   card: YutabaseCardMutation,
+  binding: SigningKeyBinding,
 ): Promise<void> {
   const fields = card.fields as {
     project_id: string;
     source_signing_key_id: string;
   };
-  const existing = rows<Record<string, unknown>>(
+  const expected = {
+    id: card.address.id,
+    project_id: fields.project_id,
+    source_identity_id: binding.sourceIdentityId,
+    source_signing_key_id: fields.source_signing_key_id,
+    verified_public_key_sha256: binding.verifiedPublicKeySha256,
+  };
+  await lockSemanticKeys(sql, [
+    `signing-key-binding:${fields.project_id}:${fields.source_signing_key_id}`,
+  ]);
+  const matches = rows<Record<string, unknown>>(
     await sql`
-      SELECT id, project_id, source_signing_key_id
+      SELECT
+        id,
+        project_id,
+        source_identity_id,
+        source_signing_key_id,
+        verified_public_key_sha256
       FROM agenttool_yutabase.signing_key_cards
       WHERE id = ${card.address.id}
+        OR (
+          project_id = ${fields.project_id}
+          AND source_signing_key_id = ${fields.source_signing_key_id}
+        )
     `,
-  )[0];
+  );
+  if (matches.length > 1) {
+    throw new ProjectorError("signing_key_binding_collision");
+  }
+  const existing = matches[0];
   if (existing !== undefined) {
-    if (sameFields(existing, fields)) return;
-    throw new ProjectorError("card_collision");
+    if (sameFields(existing, expected)) return;
+    throw new ProjectorError("signing_key_binding_collision");
   }
   await sql`
     INSERT INTO agenttool_yutabase.signing_key_cards (
-      id, project_id, source_signing_key_id, at, by, how, src
+      id,
+      project_id,
+      source_identity_id,
+      source_signing_key_id,
+      verified_public_key_sha256,
+      at,
+      by,
+      how,
+      src
     ) VALUES (
-      ${card.address.id}, ${fields.project_id},
-      ${fields.source_signing_key_id}, ${card.claim.at},
-      ${card.claim.by}, ${card.claim.how}, ${[...card.claim.src]}
+      ${card.address.id},
+      ${fields.project_id},
+      ${binding.sourceIdentityId},
+      ${fields.source_signing_key_id},
+      ${binding.verifiedPublicKeySha256},
+      ${card.claim.at},
+      ${card.claim.by},
+      ${card.claim.how},
+      ${[...card.claim.src]}
     )
   `;
 }
@@ -476,6 +519,7 @@ async function applyCard(
   sql: Transaction,
   card: YutabaseCardMutation,
   projectId: string,
+  signingKeyBinding: SigningKeyBinding,
 ): Promise<void> {
   await lockSemanticKeys(sql, [`card:${card.address.id}`]);
   switch (card.address.deck) {
@@ -486,7 +530,7 @@ async function applyCard(
       await applyIdentityCard(sql, card);
       return;
     case "signing_keys":
-      await applySigningKeyCard(sql, card);
+      await applySigningKeyCard(sql, card, signingKeyBinding);
       return;
     case "repositories":
       await applyRepositoryCard(sql, card);
@@ -707,7 +751,10 @@ export async function applyVerifiedPlan(
     stage.value = "preflight";
     try {
       return await database.begin(async (sql) => {
-      await sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`;
+      // YUTABASE revision 5's card/thread lock protocol requires a refreshed
+      // post-wait snapshot. The checkpoint row and semantic advisory locks
+      // below still serialize projector work at READ COMMITTED.
+      await sql`SET TRANSACTION ISOLATION LEVEL READ COMMITTED`;
       await sql`SET LOCAL lock_timeout = '5s'`;
       await sql`SET LOCAL statement_timeout = '30s'`;
       await preflightProjector(sql);
@@ -755,11 +802,15 @@ export async function applyVerifiedPlan(
         throw new ProjectorError("applied_event_collision");
       }
 
+      const signingKeyBinding: SigningKeyBinding = {
+        sourceIdentityId: verified.record.event.sender.identity_id,
+        verifiedPublicKeySha256: verified.verifiedPublicKeySha256,
+      };
       for (const card of [...plan.cards].sort((left, right) =>
         left.address.ref.localeCompare(right.address.ref),
       )) {
         stage.value = "card";
-        await applyCard(sql, card, scope.projectId);
+        await applyCard(sql, card, scope.projectId, signingKeyBinding);
       }
       for (const relation of [...plan.relations].sort((left, right) =>
         left.id.localeCompare(right.id),
@@ -862,7 +913,10 @@ export async function quarantineFailure(
   const error = asProjectorError(input.error);
   try {
     await transactionWithRetry(database, async (sql) => {
-      await sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`;
+      // YUTABASE revision 5 requires statement-fresh post-lock snapshots.
+      // The checkpoint row and quarantine upsert provide the local write
+      // serialization this operation needs at READ COMMITTED.
+      await sql`SET TRANSACTION ISOLATION LEVEL READ COMMITTED`;
       await sql`SET LOCAL lock_timeout = '5s'`;
       await sql`SET LOCAL statement_timeout = '15s'`;
       await preflightProjector(sql);
@@ -933,7 +987,9 @@ export async function markCaughtUp(
   validateScopeConfig(scope);
   try {
     await transactionWithRetry(database, async (sql) => {
-      await sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`;
+      // YUTABASE registry and semantic locks require READ COMMITTED.
+      // ensureCheckpoint() locks the one local state row before mutation.
+      await sql`SET TRANSACTION ISOLATION LEVEL READ COMMITTED`;
       await preflightProjector(sql);
       await preflightRuntimeAccess(sql);
       await ensureSourceBinding(sql, scope.sourceOrigin, { bind: true });
@@ -965,55 +1021,64 @@ export async function projectionStatus(
   validateScopeConfig(scope);
   try {
     return await transactionWithRetry(database, async (sql) => {
-      await sql`SET TRANSACTION ISOLATION LEVEL REPEATABLE READ`;
+      await sql`SET TRANSACTION ISOLATION LEVEL READ COMMITTED`;
       await preflightProjector(sql);
       await preflightRuntimeAccess(sql);
       await checkSourceBinding(sql, scope.sourceOrigin);
-      const checkpoints = rows<Record<string, unknown>>(
+      // Keep the externally visible status coherent at READ COMMITTED by
+      // reading the checkpoint and quarantine count in one statement.
+      const statusRows = rows<Record<string, unknown>>(
         await sql`
+          WITH checkpoint AS (
+            SELECT
+              last_received_seq,
+              last_event_id,
+              state,
+              last_poll_at,
+              caught_up_at,
+              last_success_at,
+              last_error_at,
+              last_error_code
+            FROM agenttool_yutabase.projection_checkpoints
+            WHERE source_origin = ${scope.sourceOrigin}
+              AND source_project_id = ${scope.projectId}
+              AND source_repository_id = ${scope.repositoryId}
+              AND plan_profile = ${PLAN_PROFILE}
+          )
           SELECT
-            last_received_seq,
-            last_event_id,
-            state,
-            last_poll_at,
-            caught_up_at,
-            last_success_at,
-            last_error_at,
-            last_error_code
-          FROM agenttool_yutabase.projection_checkpoints
-          WHERE source_origin = ${scope.sourceOrigin}
-            AND source_project_id = ${scope.projectId}
-            AND source_repository_id = ${scope.repositoryId}
-            AND plan_profile = ${PLAN_PROFILE}
+            checkpoint.*,
+            (
+              SELECT count(*)::integer
+              FROM agenttool_yutabase.quarantines
+              WHERE source_origin = ${scope.sourceOrigin}
+                AND source_project_id = ${scope.projectId}
+                AND source_repository_id = ${scope.repositoryId}
+                AND plan_profile = ${PLAN_PROFILE}
+            ) AS quarantine_count
+          FROM (VALUES (true)) singleton(seed)
+          LEFT JOIN checkpoint ON singleton.seed
         `,
       );
-      const quarantine = await sql`
-        SELECT count(*)::integer AS count
-        FROM agenttool_yutabase.quarantines
-        WHERE source_origin = ${scope.sourceOrigin}
-          AND source_project_id = ${scope.projectId}
-          AND source_repository_id = ${scope.repositoryId}
-          AND plan_profile = ${PLAN_PROFILE}
-      `;
-      const row = checkpoints[0];
+      const row = statusRows[0];
+      if (statusRows.length !== 1 || row === undefined) {
+        throw new ProjectorError("projector_schema_drift");
+      }
+      const started = row.state !== null;
       return {
         installed: true,
         state:
-          row === undefined
-            ? "not_started"
-            : (row.state as "healthy" | "unhealthy"),
-        lastReceivedSeq:
-          row === undefined ? "0" : String(row.last_received_seq),
-        lastEventId:
-          row === undefined ? null : (row.last_event_id as string | null),
-        lastPollAt: row === undefined ? null : iso(row.last_poll_at),
-        caughtUpAt: row === undefined ? null : iso(row.caught_up_at),
-        lastSuccessAt:
-          row === undefined ? null : iso(row.last_success_at),
-        lastErrorAt: row === undefined ? null : iso(row.last_error_at),
+          started
+            ? (row.state as "healthy" | "unhealthy")
+            : "not_started",
+        lastReceivedSeq: started ? String(row.last_received_seq) : "0",
+        lastEventId: started ? (row.last_event_id as string | null) : null,
+        lastPollAt: started ? iso(row.last_poll_at) : null,
+        caughtUpAt: started ? iso(row.caught_up_at) : null,
+        lastSuccessAt: started ? iso(row.last_success_at) : null,
+        lastErrorAt: started ? iso(row.last_error_at) : null,
         lastErrorCode:
-          row === undefined ? null : (row.last_error_code as string | null),
-        quarantineCount: Number(quarantine[0]?.count ?? 0),
+          started ? (row.last_error_code as string | null) : null,
+        quarantineCount: Number(row.quarantine_count),
       };
     });
   } catch (error) {

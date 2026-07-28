@@ -115,6 +115,70 @@ describe("mapping boundaries", () => {
     ).not.toThrow();
   });
 
+  test("bounds and deduplicates the parent relations it plans", () => {
+    const duplicate = structuredClone(makeRecord({
+      parents: [PARENT_EVENT_ID, PARENT_EVENT_ID],
+    }));
+    expect(() => planCorrespondenceRecord(duplicate, OPTIONS)).toThrow(
+      "event.parents[1]: event IDs must be unique",
+    );
+
+    const tooMany = structuredClone(makeRecord()) as unknown as {
+      event: { parents: string[] };
+    };
+    tooMany.event.parents = Array.from(
+      { length: 17 },
+      (_, index) => `sha256:${index.toString(16).padStart(64, "0")}`,
+    );
+    expect(() =>
+      planCorrespondenceRecord(tooMany as never, OPTIONS),
+    ).toThrow("event.parents: expected 0–16 event IDs");
+  });
+
+  test("counts only bounded, unique, normalized scope paths", () => {
+    const record = structuredClone(makeRecord()) as unknown as {
+      event: { scope: { paths: string[] } };
+    };
+
+    record.event.scope.paths = [];
+    expect(() =>
+      planCorrespondenceRecord(record as never, OPTIONS),
+    ).toThrow("event.scope.paths: expected 1–64 path prefixes");
+
+    record.event.scope.paths = ["packages/sdk", "packages/sdk"];
+    expect(() =>
+      planCorrespondenceRecord(record as never, OPTIONS),
+    ).toThrow("event.scope.paths[1]: path prefixes must be unique");
+
+    record.event.scope.paths = ["packages/../secrets"];
+    expect(() =>
+      planCorrespondenceRecord(record as never, OPTIONS),
+    ).toThrow("expected a normalized repo-relative path prefix");
+  });
+
+  test("rejects values that cannot cross the local PostgreSQL projection", () => {
+    const surrogate = structuredClone(makeRecord()) as unknown as {
+      event: { repository_id: string };
+    };
+    surrogate.event.repository_id = `repo-${String.fromCharCode(0xd800)}`;
+    expect(() =>
+      planCorrespondenceRecord(surrogate as never, OPTIONS),
+    ).toThrow("without whitespace or control characters");
+
+    const oversizedReceipt = structuredClone(makeRecord()) as unknown as {
+      receipt: { received_seq: string };
+    };
+    oversizedReceipt.receipt.received_seq = "9223372036854775808";
+    expect(() =>
+      planCorrespondenceRecord(oversizedReceipt as never, OPTIONS),
+    ).toThrow("positive canonical signed-64-bit decimal");
+
+    oversizedReceipt.receipt.received_seq = "9".repeat(100_000);
+    expect(() =>
+      planCorrespondenceRecord(oversizedReceipt as never, OPTIONS),
+    ).toThrow("positive canonical signed-64-bit decimal");
+  });
+
   test("requires the actual projector claimant", () => {
     expect(() =>
       planCorrespondenceRecord(makeRecord(), { claimant: "   " }),

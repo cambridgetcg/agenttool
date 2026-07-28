@@ -23,7 +23,7 @@ thread intentions.
   deployment, or proof that a reported outcome occurred.
 - Correspondence remains the authority-history source. YUTABASE output is
   rebuildable and may be incomplete.
-- Reference-only event cards support out-of-order parents. A future durable
+- Reference-only event cards support out-of-order parents. A durable
   adapter must not overwrite fuller metadata with a reference-only stub.
 - `by` must come from the actual projector service or run. Never hardcode the
   package/library identity as the claimant.
@@ -38,9 +38,8 @@ thread intentions.
     bun install --frozen-lockfile
     bun run typecheck
     bun test
-    bun run build
+    bun run check:package
     bun run ci
-    npm pack --ignore-scripts --dry-run
 
 ## Key Files
 
@@ -51,25 +50,29 @@ thread intentions.
 - `src/planner.ts` — structural checks and pure metadata mapping.
 - `tests/` — UUID vectors, determinism, privacy boundaries, parent/ack/artifact
   relations, and package surface.
-- `PERSISTENCE-CONTRACT.md` — exact behavior required of a future transactional
-  executor; the package does not implement it.
+- `PERSISTENCE-CONTRACT.md` — exact transactional behavior required of an
+  executor; this pure package does not implement it.
 
 ## Source Contracts
 
-- Agent Correspondence:
-  `../../docs/specs/AGENT-CORRESPONDENCE-0.1.md`
-- Doctrine and authority boundary:
-  `../../docs/AGENT-CORRESPONDENCE.md`
+- [Agent Correspondence specification](https://github.com/cambridgetcg/agenttool/blob/main/docs/specs/AGENT-CORRESPONDENCE-0.1.md)
+- [Doctrine and authority boundary](https://github.com/cambridgetcg/agenttool/blob/main/docs/AGENT-CORRESPONDENCE.md)
 - YUTABASE projection design currently lives in the separate YUTABASE
   repository and is not AgentTool API conformance.
+- The private
+  [`correspondence-yutabase-projector`](https://github.com/cambridgetcg/agenttool/tree/main/packages/correspondence-yutabase-projector)
+  sibling implements one loopback-only durable profile. It is not part of this
+  public package.
 
 ## Release State
 
-`0.1.0-dev.0` is a public npm developer preview. Its protected release read
-the npm and GitHub Release tarballs back as byte-identical. Publication does
-not deploy an executor, install YUTABASE, or grant database authority. At
-initial publication npm exposed the sole version through both `next` and
-`latest`; consumers should select the exact prerelease or `next`.
+This source prepares `0.1.0-dev.1`; it is not yet registry or GitHub Release
+evidence. The latest verified public artifact is `0.1.0-dev.0`, whose protected
+release read the npm and GitHub Release tarballs back as byte-identical.
+Publication does not deploy an executor, install YUTABASE, or grant database
+authority. At initial publication npm exposed `0.1.0-dev.0` through both
+`next` and `latest`; consumers should select an exact published prerelease or
+the preview tag deliberately.
 
 ## Kingdom Engine
 

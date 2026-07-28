@@ -107,7 +107,7 @@ cd packages/collab && bun install              # public 0.3: collab/0.1 compatib
 cd packages/skills && bun install              # read-only portable Agent Skills inspection
 cd packages/browser && bun install             # public local-first agent browser package
 cd packages/correspondence-yutabase && bun install # pure Correspondence projection planner
-cd packages/correspondence-yutabase-projector && bun install # private local durable projector
+cd packages/correspondence-yutabase-projector && bun run setup:local # builds local planner dependency first
 cd packages/sdk-ts && bun install              # TS SDK
 cd packages/telescope && bun install           # read-only discovery evidence mapper
 cd packages/wallet && bun install              # agent-wallet/0.1 offline primitives

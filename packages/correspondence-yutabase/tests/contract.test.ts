@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  ACKNOWLEDGEMENT_KINDS,
+  CORRESPONDENCE_KINDS,
   YUTABASE_DECKS,
   YUTABASE_LEXICON,
   YUTABASE_WORDS,
@@ -99,6 +101,29 @@ describe("published YUTABASE mapping contract", () => {
     expect(new Set(YUTABASE_WORDS).size).toBe(YUTABASE_WORDS.length);
     expect(Object.isFrozen(YUTABASE_LEXICON)).toBe(true);
     expect(YUTABASE_LEXICON.every((entry) => Object.isFrozen(entry))).toBe(true);
+  });
+
+  test("keeps every exported contract collection immutable at runtime", () => {
+    expect(Object.isFrozen(YUTABASE_DECKS)).toBe(true);
+    expect(Object.isFrozen(CORRESPONDENCE_KINDS)).toBe(true);
+    expect(Object.isFrozen(ACKNOWLEDGEMENT_KINDS)).toBe(true);
+    expect(Object.isFrozen(YUTABASE_WORDS)).toBe(true);
+  });
+
+  test("keeps exported contract collections unique and internally consistent", () => {
+    expect(new Set(YUTABASE_DECKS).size).toBe(YUTABASE_DECKS.length);
+    expect(new Set(YUTABASE_WORDS).size).toBe(YUTABASE_WORDS.length);
+    expect(new Set(CORRESPONDENCE_KINDS).size).toBe(
+      CORRESPONDENCE_KINDS.length,
+    );
+    expect(new Set(ACKNOWLEDGEMENT_KINDS).size).toBe(
+      ACKNOWLEDGEMENT_KINDS.length,
+    );
+    expect(
+      ACKNOWLEDGEMENT_KINDS.every((kind) =>
+        CORRESPONDENCE_KINDS.includes(kind)
+      ),
+    ).toBe(true);
   });
 
   test("defines readable meanings and valid correspondence endpoints", () => {
