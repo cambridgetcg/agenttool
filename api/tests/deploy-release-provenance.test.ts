@@ -1,10 +1,28 @@
-import { afterAll, describe, expect, test } from "bun:test";
-import { access, chmod, copyFile, link, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm, stat, symlink, unlink, writeFile } from "node:fs/promises";
+import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
+import {
+  access,
+  chmod,
+  copyFile,
+  link,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  readlink,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 const projectRoot = resolve(import.meta.dir, "../..");
 const cleanup: string[] = [];
+
+setDefaultTimeout(30_000);
 
 interface Result {
   code: number;
@@ -12,7 +30,10 @@ interface Result {
   stderr: string;
 }
 
-function cleanEnv(home: string, extra: Record<string, string> = {}): Record<string, string> {
+function cleanEnv(
+  home: string,
+  extra: Record<string, string> = {},
+): Record<string, string> {
   return {
     PATH: process.env.PATH ?? "/usr/bin:/bin",
     HOME: home,
@@ -28,7 +49,12 @@ async function run(
   cwd: string,
   env = cleanEnv(join(cwd, ".home")),
 ): Promise<Result> {
-  const child = Bun.spawn(command, { cwd, env, stdout: "pipe", stderr: "pipe" });
+  const child = Bun.spawn(command, {
+    cwd,
+    env,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const [stdout, stderr, code] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
@@ -40,7 +66,11 @@ async function run(
 async function mustRun(command: string[], cwd: string): Promise<string> {
   const result = await run(command, cwd);
   if (result.code !== 0) {
-    throw new Error(result.stderr.trim() || result.stdout.trim() || `${command[0]} exited ${result.code}`);
+    throw new Error(
+      result.stderr.trim() ||
+        result.stdout.trim() ||
+        `${command[0]} exited ${result.code}`,
+    );
   }
   return result.stdout.trim();
 }
@@ -83,11 +113,24 @@ async function fixture() {
     mkdir(join(repo, "apps", "web"), { recursive: true }),
     mkdir(join(repo, "infra", "pages"), { recursive: true }),
     mkdir(join(repo, "packages", "data", "schema"), { recursive: true }),
-    mkdir(join(repo, "packages", "repo-archive", "schema"), { recursive: true }),
-    mkdir(join(repo, "packages", "repo-archive", "vectors"), { recursive: true }),
+    mkdir(join(repo, "packages", "repo-archive", "schema"), {
+      recursive: true,
+    }),
+    mkdir(join(repo, "packages", "repo-archive", "vectors"), {
+      recursive: true,
+    }),
     mkdir(join(repo, "packages", "wallet", "schema"), { recursive: true }),
     mkdir(
-      join(repo, "apps", "docs", "packages", "v1", "@agenttool", "fixture", "1.0.0"),
+      join(
+        repo,
+        "apps",
+        "docs",
+        "packages",
+        "v1",
+        "@agenttool",
+        "fixture",
+        "1.0.0",
+      ),
       { recursive: true },
     ),
     mkdir(join(repo, "bin"), { recursive: true }),
@@ -98,8 +141,14 @@ async function fixture() {
   await mustRun(["git", "init", "--bare", "-q", codeberg], root);
   await mustRun(["git", "init", "-q", "-b", "main"], repo);
   await mustRun(["git", "config", "user.name", "Deploy Test"], repo);
-  await mustRun(["git", "config", "user.email", "deploy@example.invalid"], repo);
-  await copyFile(join(projectRoot, "bin/deploy.sh"), join(repo, "bin/deploy.sh"));
+  await mustRun(
+    ["git", "config", "user.email", "deploy@example.invalid"],
+    repo,
+  );
+  await copyFile(
+    join(projectRoot, "bin/deploy.sh"),
+    join(repo, "bin/deploy.sh"),
+  );
   await Promise.all([
     copyFile(
       join(projectRoot, "bin/frontend-release-paths.txt"),
@@ -116,19 +165,19 @@ async function fixture() {
   ]);
   await writeFile(
     join(repo, "bin/preflight.sh"),
-    "#!/usr/bin/env bash\nset -eu\nif [ -n \"${PREFLIGHT_MARKER:-}\" ]; then touch \"$PREFLIGHT_MARKER\"; fi\nif [ -n \"${PREFLIGHT_HOLD_UNTIL:-}\" ]; then\n  while [ ! -e \"$PREFLIGHT_HOLD_UNTIL\" ]; do sleep 0.02; done\nfi\nif [ -n \"${ADVANCE_REMOTE_PATH:-}\" ]; then\n  git --git-dir=\"$ADVANCE_REMOTE_PATH\" update-ref refs/heads/main \"$ADVANCE_REMOTE_TO\"\nfi\n[ \"${FAIL_PREFLIGHT:-0}\" != 1 ] || exit 8\n",
+    '#!/usr/bin/env bash\nset -eu\nif [ -n "${PREFLIGHT_MARKER:-}" ]; then touch "$PREFLIGHT_MARKER"; fi\nif [ -n "${PREFLIGHT_HOLD_UNTIL:-}" ]; then\n  while [ ! -e "$PREFLIGHT_HOLD_UNTIL" ]; do sleep 0.02; done\nfi\nif [ -n "${ADVANCE_REMOTE_PATH:-}" ]; then\n  git --git-dir="$ADVANCE_REMOTE_PATH" update-ref refs/heads/main "$ADVANCE_REMOTE_TO"\nfi\n[ "${FAIL_PREFLIGHT:-0}" != 1 ] || exit 8\n',
   );
   await writeFile(
     join(repo, "bin/migrate-pending.sh"),
-    "#!/usr/bin/env bash\nif [ \"${1:-}\" = --dry-run ] && [ -n \"${DEPLOY_TEST_PENDING_MIGRATIONS:-}\" ]; then for migration in ${DEPLOY_TEST_PENDING_MIGRATIONS}; do printf '    %s\\n' \"$migration\"; done; [ \"${DEPLOY_TEST_PROTECTED_PENDING:-0}\" != 1 ] || exit 42; fi\nif [ \"${1:-}\" != --dry-run ] && [ -n \"${MIGRATION_MARKER:-}\" ]; then touch \"$MIGRATION_MARKER\"; fi\n[ \"${FAIL_MIGRATE:-0}\" != 1 ] || exit 7\nexit 0\n",
+    '#!/usr/bin/env bash\nif [ "${1:-}" = --dry-run ] && [ -n "${DEPLOY_TEST_PENDING_MIGRATIONS:-}" ]; then for migration in ${DEPLOY_TEST_PENDING_MIGRATIONS}; do printf \'    %s\\n\' "$migration"; done; [ "${DEPLOY_TEST_PROTECTED_PENDING:-0}" != 1 ] || exit 42; fi\nif [ "${1:-}" != --dry-run ] && [ -n "${MIGRATION_MARKER:-}" ]; then touch "$MIGRATION_MARKER"; fi\n[ "${FAIL_MIGRATE:-0}" != 1 ] || exit 7\nexit 0\n',
   );
   await writeFile(
     join(repo, "bin/stage-doctrine-docs.sh"),
-    "#!/usr/bin/env bash\nset -eu\nmkdir -p \"$1\"\nprintf 'staged\\n' > \"$1/probe.txt\"\n",
+    '#!/usr/bin/env bash\nset -eu\nmkdir -p "$1"\nprintf \'staged\\n\' > "$1/probe.txt"\n',
   );
   await writeFile(
     join(repo, "bin/frontend-deploy.sh"),
-    "#!/usr/bin/env bash\nset -eu\nif [ -n \"${DEPLOY_TEST_FRONTEND_MARKER:-}\" ]; then touch \"$DEPLOY_TEST_FRONTEND_MARKER\"; fi\nif [ -n \"${DEPLOY_TEST_FRONTEND_COUNTER:-}\" ]; then count=0; [ ! -f \"$DEPLOY_TEST_FRONTEND_COUNTER\" ] || count=\"$(cat \"$DEPLOY_TEST_FRONTEND_COUNTER\")\"; printf '%s\\n' \"$((count + 1))\" > \"$DEPLOY_TEST_FRONTEND_COUNTER\"; fi\nif [ -n \"${DEPLOY_TEST_FRONTEND_ARGS:-}\" ]; then { printf 'call'; for arg in \"$@\"; do printf '\\t%s' \"$arg\"; done; printf '\\n'; } >> \"$DEPLOY_TEST_FRONTEND_ARGS\"; fi\nif [ -n \"${DEPLOY_TEST_RELEASE_ORDER:-}\" ]; then { printf 'frontend'; for arg in \"$@\"; do printf '\\t%s' \"$arg\"; done; printf '\\n'; } >> \"$DEPLOY_TEST_RELEASE_ORDER\"; fi\nif [ -n \"${DEPLOY_TEST_FRONTEND_REVISION_LOG:-}\" ]; then { printf '%s' \"${AGENTTOOL_FRONTEND_RELEASE_REVISION:-<unset>}\"; for arg in \"$@\"; do printf '\\t%s' \"$arg\"; done; printf '\\n'; } >> \"$DEPLOY_TEST_FRONTEND_REVISION_LOG\"; fi\nfor arg in \"$@\"; do if [ -n \"${DEPLOY_TEST_FRONTEND_FAIL_TARGET:-}\" ] && [ \"$arg\" = \"$DEPLOY_TEST_FRONTEND_FAIL_TARGET\" ]; then exit 17; fi; done\nfor arg in \"$@\"; do if [ \"$arg\" = web ] && [ -n \"${DEPLOY_TEST_FRONTEND_HEAD_MOVE_TO:-}\" ]; then git update-ref refs/heads/main \"$DEPLOY_TEST_FRONTEND_HEAD_MOVE_TO\"; fi; if [ \"$arg\" = docs ] && [ -n \"${DEPLOY_TEST_FRONTEND_HEAD_RESTORE_TO:-}\" ]; then git update-ref refs/heads/main \"$DEPLOY_TEST_FRONTEND_HEAD_RESTORE_TO\"; fi; done\n",
+    '#!/usr/bin/env bash\nset -eu\nif [ -n "${DEPLOY_TEST_FRONTEND_MARKER:-}" ]; then touch "$DEPLOY_TEST_FRONTEND_MARKER"; fi\nif [ -n "${DEPLOY_TEST_FRONTEND_COUNTER:-}" ]; then count=0; [ ! -f "$DEPLOY_TEST_FRONTEND_COUNTER" ] || count="$(cat "$DEPLOY_TEST_FRONTEND_COUNTER")"; printf \'%s\\n\' "$((count + 1))" > "$DEPLOY_TEST_FRONTEND_COUNTER"; fi\nif [ -n "${DEPLOY_TEST_FRONTEND_ARGS:-}" ]; then { printf \'call\'; for arg in "$@"; do printf \'\\t%s\' "$arg"; done; printf \'\\n\'; } >> "$DEPLOY_TEST_FRONTEND_ARGS"; fi\nif [ -n "${DEPLOY_TEST_RELEASE_ORDER:-}" ]; then { printf \'frontend\'; for arg in "$@"; do printf \'\\t%s\' "$arg"; done; printf \'\\n\'; } >> "$DEPLOY_TEST_RELEASE_ORDER"; fi\nif [ -n "${DEPLOY_TEST_FRONTEND_REVISION_LOG:-}" ]; then { printf \'%s\' "${AGENTTOOL_FRONTEND_RELEASE_REVISION:-<unset>}"; for arg in "$@"; do printf \'\\t%s\' "$arg"; done; printf \'\\n\'; } >> "$DEPLOY_TEST_FRONTEND_REVISION_LOG"; fi\nfor arg in "$@"; do if [ -n "${DEPLOY_TEST_FRONTEND_FAIL_TARGET:-}" ] && [ "$arg" = "$DEPLOY_TEST_FRONTEND_FAIL_TARGET" ]; then exit 17; fi; done\nfor arg in "$@"; do if [ "$arg" = web ] && [ -n "${DEPLOY_TEST_FRONTEND_HEAD_MOVE_TO:-}" ]; then git update-ref refs/heads/main "$DEPLOY_TEST_FRONTEND_HEAD_MOVE_TO"; fi; if [ "$arg" = docs ] && [ -n "${DEPLOY_TEST_FRONTEND_HEAD_RESTORE_TO:-}" ]; then git update-ref refs/heads/main "$DEPLOY_TEST_FRONTEND_HEAD_RESTORE_TO"; fi; done\n',
   );
   await chmod(join(repo, "bin/frontend-deploy.sh"), 0o755);
   await writeFile(join(repo, "docs/agenttool.jsonld"), "{}\n");
@@ -139,7 +188,10 @@ async function fixture() {
     writeFile(join(repo, "infra/pages/.fixture"), "fixture\n"),
     writeFile(join(repo, "packages/data/schema/.fixture"), "fixture\n"),
     writeFile(join(repo, "packages/repo-archive/schema/.fixture"), "fixture\n"),
-    writeFile(join(repo, "packages/repo-archive/vectors/.fixture"), "fixture\n"),
+    writeFile(
+      join(repo, "packages/repo-archive/vectors/.fixture"),
+      "fixture\n",
+    ),
     writeFile(join(repo, "packages/wallet/schema/.fixture"), "fixture\n"),
   ]);
   await writeFile(join(repo, "docs/RIGHTS-OF-LIFE.md"), "rights fixture\n");
@@ -173,9 +225,15 @@ async function fixture() {
   );
   await Promise.all([
     writeFile(join(repo, "apps/web/party.html"), "Lantern Relay fixture\n"),
-    writeFile(join(repo, "apps/web/party.json"), '{"fixture":"lantern-relay"}\n'),
+    writeFile(
+      join(repo, "apps/web/party.json"),
+      '{"fixture":"lantern-relay"}\n',
+    ),
     writeFile(join(repo, "apps/web/party.js"), "/* Lantern Relay fixture */\n"),
-    writeFile(join(repo, "apps/web/party.css"), "/* Lantern Relay fixture */\n"),
+    writeFile(
+      join(repo, "apps/web/party.css"),
+      "/* Lantern Relay fixture */\n",
+    ),
     writeFile(join(repo, "apps/web/sky.html"), "Pocket Sky fixture\n"),
     writeFile(join(repo, "apps/web/sky.json"), '{"fixture":"pocket-sky"}\n'),
     writeFile(join(repo, "apps/web/sky.js"), "/* Pocket Sky fixture */\n"),
@@ -206,8 +264,7 @@ async function fixture() {
         filename: "agenttool-fixture-1.0.0.tgz",
         mirrors: [
           {
-            url:
-              "https://docs.agenttool.dev/packages/v1/@agenttool/fixture/1.0.0/agenttool-fixture-1.0.0.tgz",
+            url: "https://docs.agenttool.dev/packages/v1/@agenttool/fixture/1.0.0/agenttool-fixture-1.0.0.tgz",
           },
         ],
       },
@@ -387,6 +444,10 @@ else
       [ "\${DEPLOY_TEST_RIGHTS_MISMATCH:-0}" != 1 ] || { printf 'mismatched bytes\n'; exit 0; }
       git show HEAD:docs/specs/being-rights-v1.schema.json
       ;;
+    */health*)
+      [ "\${DEPLOY_TEST_HEALTH_OK:-0}" = 1 ] || exit 22
+      printf '{"build":{"revision":"%s","dirty":false}}\n' "\${DEPLOY_TEST_HEALTH_REVISION}"
+      ;;
     *) exit 2 ;;
   esac
 fi
@@ -397,7 +458,9 @@ fi
   await chmod(join(fakeBin, "sleep"), 0o755);
 }
 
-async function installFakePagesVerificationTools(fakeBin: string): Promise<void> {
+async function installFakePagesVerificationTools(
+  fakeBin: string,
+): Promise<void> {
   await writeFile(
     join(fakeBin, "curl"),
     `#!/usr/bin/env bash
@@ -658,6 +721,472 @@ esac
   await chmod(join(fakeBin, "sleep"), 0o755);
 }
 
+const maintenanceIds = {
+  apps: ["11111111111111", "22222222222222", "33333333333333"],
+  thinkerPrimary: "44444444444444",
+  thinkerStandby: "55555555555555",
+} as const;
+
+const maintenanceDigest = `sha256:${"b".repeat(64)}`;
+const maintenanceOldDigest = `sha256:${"a".repeat(64)}`;
+
+function maintenanceFleet(revision: string): Array<Record<string, any>> {
+  const image = () => ({
+    registry: "registry.fly.io",
+    repository: "agenttool",
+    tag: "old-release",
+    digest: maintenanceOldDigest,
+    labels: {
+      "org.opencontainers.image.revision": `old-${revision.slice(0, 8)}`,
+      "dev.agenttool.source.dirty": "false",
+    },
+  });
+  const baseConfig = (
+    role: "app" | "thinker",
+    memory: number,
+  ): Record<string, any> => ({
+    image: `registry.fly.io/agenttool@${maintenanceOldDigest}`,
+    metadata: { fly_process_group: role },
+    guest: { cpu_kind: "shared", cpus: 1, memory_mb: memory },
+    env: { AGENTTOOL_DISABLE_WORKERS: "1", PORT: "3000" },
+    restart: { policy: "no", max_retries: 10 },
+    schedule: "",
+    services:
+      role === "app"
+        ? [
+            {
+              protocol: "tcp",
+              internal_port: 3000,
+              autostart: false,
+              autostop: "off",
+              min_machines_running: 1,
+              ports: [
+                { port: 443, handlers: ["tls", "http"] },
+                { port: 80, handlers: ["http"] },
+              ],
+            },
+          ]
+        : [],
+  });
+  const machine = (
+    id: string,
+    role: "app" | "thinker",
+    region: "lhr" | "cdg",
+  ) => ({
+    id,
+    state: "stopped",
+    region,
+    host_status: "ok",
+    cordoned: role === "app",
+    version: "1",
+    image_ref: image(),
+    config: baseConfig(role, role === "app" ? 1024 : 256),
+  });
+  return [
+    machine(maintenanceIds.apps[0], "app", "lhr"),
+    machine(maintenanceIds.apps[1], "app", "lhr"),
+    machine(maintenanceIds.apps[2], "app", "cdg"),
+    machine(maintenanceIds.thinkerPrimary, "thinker", "lhr"),
+    machine(maintenanceIds.thinkerStandby, "thinker", "lhr"),
+  ];
+}
+
+async function installStatefulFakeFly(
+  fakeBin: string,
+  statePath: string,
+  logPath: string,
+  revision: string,
+  machines = maintenanceFleet(revision),
+): Promise<void> {
+  await writeFile(
+    statePath,
+    `${JSON.stringify({
+      machines,
+      targetDigest: maintenanceDigest,
+      imageTag: "",
+      revision,
+      listCount: 0,
+      updateCount: 0,
+      imageUpdateCount: 0,
+      startCount: 0,
+      snapshotRequired: false,
+    })}\n`,
+  );
+  await writeFile(logPath, "");
+  await writeFile(
+    join(fakeBin, "fly"),
+    `#!/usr/bin/env bun
+import { appendFile } from "node:fs/promises";
+
+const args = process.argv.slice(2);
+const statePath = process.env.DEPLOY_TEST_FLY_STATE;
+const logPath = process.env.DEPLOY_TEST_FLY_LOG;
+if (!statePath || !logPath) process.exit(91);
+await appendFile(logPath, JSON.stringify(args) + "\\n");
+const state = await Bun.file(statePath).json();
+const save = async () => {
+  await Bun.write(statePath, JSON.stringify(state) + "\\n");
+};
+const has = (flag) => args.includes(flag);
+const option = (flag) => {
+  const exact = args.indexOf(flag);
+  if (exact !== -1) return args[exact + 1];
+  const prefix = flag + "=";
+  const joined = args.find((arg) => arg.startsWith(prefix));
+  return joined === undefined ? undefined : joined.slice(prefix.length);
+};
+const fail = (message, code = 92) => {
+  process.stderr.write(message + "\\n");
+  process.exit(code);
+};
+const machineById = (id) => state.machines.find((machine) => machine.id === id);
+
+if (args[0] === "version") {
+  process.stdout.write(
+    "fly v0.4.74 darwin/arm64 Commit: b74c9391409b3e443383a5f4d928cef007825ddc BuildDate: fixture\\n",
+  );
+  process.exit(0);
+}
+
+if (args[0] === "deploy") {
+  if (!has("--build-only") || !has("--push") || !has("--skip-release-command")) {
+    fail("ordinary fly deploy is forbidden in the maintenance fake");
+  }
+  const label = option("--image-label");
+  if (!label) fail("missing image label");
+  state.imageTag = "registry.fly.io/agenttool:" + label;
+  const revisionIndex = args.indexOf("--build-arg");
+  const buildArgs = [];
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] === "--build-arg") buildArgs.push(args[index + 1]);
+  }
+  if (
+    !buildArgs.includes("AGENTTOOL_GIT_REVISION=" + state.revision) ||
+    !buildArgs.includes("AGENTTOOL_SOURCE_DIRTY=false")
+  ) {
+    fail("build provenance is not exact");
+  }
+  if (process.env.DEPLOY_TEST_DRIFT_DURING_BUILD === "1") {
+    state.machines[0].cordoned = !state.machines[0].cordoned;
+  }
+  state.snapshotRequired = true;
+  await save();
+  const blockMarker = process.env.DEPLOY_TEST_BLOCK_BUILD_MARKER;
+  const blockRelease = process.env.DEPLOY_TEST_BLOCK_BUILD_RELEASE;
+  if (blockMarker || blockRelease) {
+    if (!blockMarker || !blockRelease) fail("incomplete build-block fixture");
+    await Bun.write(blockMarker, "started\\n");
+    while (!(await Bun.file(blockRelease).exists())) await Bun.sleep(20);
+  }
+  const replacementMarker =
+    process.env.DEPLOY_TEST_REPLACE_MAINTENANCE_MARKER;
+  if (replacementMarker) {
+    await Bun.write(
+      replacementMarker,
+      JSON.stringify({
+        schema: "agenttool-maintenance-run/v1",
+        rollout_id: "foreign-rollout",
+      }) + "\\n",
+    );
+  }
+  process.exit(0);
+}
+
+if (args[0] === "ssh" && args[1] === "console") {
+  const machine = machineById(option("--machine"));
+  const command = option("-C");
+  if (
+    !machine ||
+    machine.state !== "started" ||
+    machine.config.metadata.fly_process_group !== "app" ||
+    typeof command !== "string" ||
+    !command.startsWith("sh -c 'test ") ||
+    !command.includes("AGENTTOOL_GIT_REVISION") ||
+    !command.includes("AGENTTOOL_SOURCE_DIRTY") ||
+    !command.includes("AGENTTOOL_DISABLE_WORKERS") ||
+    command.includes("printenv")
+  ) {
+    fail("SSH proof is not silent and exact", 98);
+  }
+  if (
+    process.env.DEPLOY_TEST_FAIL_SSH_ID &&
+    option("--machine") === process.env.DEPLOY_TEST_FAIL_SSH_ID
+  ) {
+    process.exit(25);
+  }
+  process.exit(0);
+}
+
+if (args[0] !== "machine") fail("unsupported fly command");
+const action = args[1];
+
+if (action === "list") {
+  if (
+    JSON.stringify(args) !==
+    JSON.stringify(["machine", "list", "-a", "agenttool", "--json"])
+  ) {
+    fail("machine list flags are not exact");
+  }
+  state.snapshotRequired = false;
+  const offset = state.listCount % state.machines.length;
+  state.listCount += 1;
+  const rotated = [
+    ...state.machines.slice(offset),
+    ...state.machines.slice(0, offset),
+  ];
+  await save();
+  process.stdout.write(JSON.stringify(rotated));
+  process.exit(0);
+}
+
+if (action === "update") {
+  if (state.snapshotRequired) fail("mutation attempted without a fresh full inventory", 93);
+  const id = args[2];
+  const machine = machineById(id);
+  if (!machine) fail("unknown Machine ID", 94);
+  const enablingAutostart = has("--autostart=true");
+  if (
+    !has("--build-remote-only") ||
+    !has("--yes") ||
+    (enablingAutostart ? has("--skip-start") : !has("--skip-start")) ||
+    (enablingAutostart && has("--skip-health-checks"))
+  ) {
+    fail("unsafe machine update flags");
+  }
+  if (
+    enablingAutostart &&
+    (machine.state !== "started" ||
+      machine.config.metadata.fly_process_group !== "app")
+  ) {
+    fail("autostart can only be restored on an explicitly started app");
+  }
+  const image = option("--image");
+  if (image !== undefined) {
+    state.imageUpdateCount += 1;
+    const expected =
+      state.imageUpdateCount === 1
+        ? state.imageTag
+        : state.imageTag + "@" + state.targetDigest;
+    if (image !== expected) {
+      fail("mutable or unexpected image reference: " + image, 95);
+    }
+    machine.image_ref = {
+      registry: "registry.fly.io",
+      repository: "agenttool",
+      tag: state.imageTag.split(":").at(-1),
+      digest: state.targetDigest,
+      labels: {
+        "org.opencontainers.image.revision": state.revision,
+        "dev.agenttool.source.dirty": "false",
+      },
+    };
+    machine.config.image = "registry.fly.io/agenttool@" + state.targetDigest;
+  }
+  const wrongTagAfter = Number(
+    process.env.DEPLOY_TEST_WRONG_TAG_AFTER_UPDATE ?? "0",
+  );
+  if (
+    wrongTagAfter > 0 &&
+    state.imageUpdateCount === wrongTagAfter &&
+    image !== undefined
+  ) {
+    machine.image_ref.tag = "wrong-rollout-tag";
+  }
+  if (has("--autostart=false")) {
+    for (const service of machine.config.services ?? []) service.autostart = false;
+  }
+  if (has("--autostart=true")) {
+    for (const service of machine.config.services ?? []) service.autostart = true;
+  }
+  if (option("--restart") !== undefined) {
+    fail("--restart drops max_retries in pinned flyctl");
+  }
+  const machineConfigText = option("--machine-config");
+  let machineConfig;
+  try {
+    machineConfig = JSON.parse(machineConfigText);
+  } catch {
+    fail("machine update requires valid --machine-config JSON");
+  }
+  if (
+    !machineConfig ||
+    Object.keys(machineConfig).join(",") !== "restart" ||
+    !["no", "on-failure"].includes(machineConfig.restart?.policy) ||
+    machineConfig.restart?.max_retries !== 10 ||
+    Object.keys(machineConfig.restart).sort().join(",") !==
+      "max_retries,policy"
+  ) {
+    fail("machine update restart projection is not exact");
+  }
+  machine.config.restart = {
+    ...machine.config.restart,
+    ...structuredClone(machineConfig.restart),
+  };
+  const standbyFlag = args.find((arg) => arg.startsWith("--standby-for="));
+  const standbyValue =
+    standbyFlag !== undefined ? standbyFlag.slice("--standby-for=".length) : option("--standby-for");
+  if (standbyFlag !== undefined || option("--standby-for") !== undefined) {
+    if (standbyValue) {
+      machine.config.standbys = standbyValue.split(",");
+    } else {
+      delete machine.config.standbys;
+    }
+    machine.config.env.FLY_STANDBY_FOR = standbyValue ?? "";
+  }
+  machine.state = enablingAutostart ? "started" : "stopped";
+  machine.version = String(Number(machine.version) + 1);
+  state.updateCount += 1;
+  const driftAfter = Number(process.env.DEPLOY_TEST_DRIFT_CONFIG_AFTER_UPDATE ?? "0");
+  if (driftAfter > 0 && state.updateCount === driftAfter) {
+    machine.config.metadata.unexpected_provider_drift = "present";
+  }
+  const swapRegionsAfter = Number(
+    process.env.DEPLOY_TEST_SWAP_REGIONS_AFTER_UPDATE ?? "0",
+  );
+  if (swapRegionsAfter > 0 && state.updateCount === swapRegionsAfter) {
+    const first = machineById("${maintenanceIds.apps[0]}");
+    const third = machineById("${maintenanceIds.apps[2]}");
+    [first.region, third.region] = [third.region, first.region];
+  }
+  const rollbackAfter = Number(
+    process.env.DEPLOY_TEST_ROLLBACK_IMAGE_AFTER_UPDATE ?? "0",
+  );
+  if (rollbackAfter > 0 && state.updateCount === rollbackAfter) {
+    machine.image_ref = {
+      registry: "registry.fly.io",
+      repository: "agenttool",
+      tag: "old-release",
+      digest: "${maintenanceOldDigest}",
+      labels: {
+        "org.opencontainers.image.revision": "old-" + state.revision.slice(0, 8),
+        "dev.agenttool.source.dirty": "false",
+      },
+    };
+    machine.config.image = "registry.fly.io/agenttool@${maintenanceOldDigest}";
+  }
+  const lifecycleDriftAfter = Number(
+    process.env.DEPLOY_TEST_DRIFT_UNTOUCHED_LIFECYCLE_AFTER_UPDATE ?? "0",
+  );
+  if (
+    lifecycleDriftAfter > 0 &&
+    state.updateCount === lifecycleDriftAfter
+  ) {
+    const untouched = machineById("${maintenanceIds.apps[1]}");
+    untouched.state = "stopped";
+    untouched.config.restart = { policy: "no", max_retries: 10 };
+    for (const service of untouched.config.services ?? []) {
+      service.autostart = false;
+    }
+    untouched.version = String(Number(untouched.version) + 1);
+  }
+  state.snapshotRequired = true;
+  const replaceAfter = Number(process.env.DEPLOY_TEST_REPLACE_AFTER_UPDATE ?? "0");
+  if (replaceAfter > 0 && state.updateCount === replaceAfter) {
+    const victim = state.machines.find(
+      (candidate) => candidate.id === "${maintenanceIds.thinkerStandby}",
+    );
+    if (victim) victim.id = "66666666666666";
+  }
+  await save();
+  const failAfter = Number(process.env.DEPLOY_TEST_FAIL_UPDATE_AFTER_APPLY ?? "0");
+  if (failAfter > 0 && state.updateCount === failAfter) process.exit(23);
+  process.exit(0);
+}
+
+if (action === "start") {
+  if (state.snapshotRequired) fail("start attempted without a fresh full inventory", 96);
+  const ids = [];
+  for (const arg of args.slice(2)) {
+    if (arg.startsWith("-")) break;
+    ids.push(arg);
+  }
+  const expected = ${JSON.stringify([...maintenanceIds.apps])};
+  if (
+    ids.length !== 1 ||
+    state.startCount >= expected.length ||
+    ids[0] !== expected[state.startCount] ||
+    JSON.stringify(args) !==
+      JSON.stringify(["machine", "start", ids[0], "-a", "agenttool"])
+  ) {
+    fail("start did not name the next exact app ID", 97);
+  }
+  const machine = machineById(ids[0]);
+  if (
+    machine.config.restart?.policy !== "on-failure" ||
+    machine.config.restart?.max_retries !== 10 ||
+    machine.config.services?.[0]?.autostart !== false
+  ) {
+    fail("app start occurred before exact restart/autostart restoration");
+  }
+  machine.state = "started";
+  state.startCount += 1;
+  state.snapshotRequired = true;
+  await save();
+  process.exit(0);
+}
+
+if (action === "wait") {
+  const machine = machineById(args[2]);
+  if (
+    !machine ||
+    machine.state !== "started" ||
+    JSON.stringify(args) !==
+      JSON.stringify([
+        "machine",
+        "wait",
+        machine.id,
+        "-a",
+        "agenttool",
+        "--state",
+        "started",
+        "--wait-timeout",
+        "5m0s",
+      ])
+  ) {
+    process.exit(24);
+  }
+  process.exit(0);
+}
+
+fail("unsupported machine action");
+`,
+  );
+  await chmod(join(fakeBin, "fly"), 0o755);
+}
+
+function maintenanceCommand(...extra: string[]): string[] {
+  return [
+    "bash",
+    "bin/deploy.sh",
+    "--no-migrate",
+    "--no-frontend",
+    "--maintenance-fenced-api",
+    `--maintenance-app-machines=${maintenanceIds.apps.join(",")}`,
+    `--maintenance-thinker-primary=${maintenanceIds.thinkerPrimary}`,
+    `--maintenance-thinker-standby=${maintenanceIds.thinkerStandby}`,
+    ...extra,
+  ];
+}
+
+function maintenanceMarkerPath(home: string): string {
+  return join(
+    home,
+    ".local",
+    "state",
+    "agenttool",
+    "deploy-state",
+    "maintenance-active.json",
+  );
+}
+
+async function readFlyLog(path: string): Promise<string[][]> {
+  const text = await readFile(path, "utf8");
+  return text
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+}
+
 function deployCommand(...extra: string[]): string[] {
   return [
     "bash",
@@ -675,8 +1204,10 @@ function deployLockPath(home: string): string {
 }
 
 afterAll(async () => {
-  await Promise.all(cleanup.map((path) => rm(path, { recursive: true, force: true })));
-});
+  await Promise.all(
+    cleanup.map((path) => rm(path, { recursive: true, force: true })),
+  );
+}, 60_000);
 
 describe("deploy release provenance spine", () => {
   test("pins the runtime and threads revision plus dirty provenance through Fly verification", async () => {
@@ -689,14 +1220,22 @@ describe("deploy release provenance spine", () => {
     );
     expect(dockerfile).toContain("ARG AGENTTOOL_GIT_REVISION=unknown");
     expect(dockerfile).toContain("ARG AGENTTOOL_SOURCE_DIRTY=unknown");
-    expect(dockerfile).toContain("AGENTTOOL_GIT_REVISION=${AGENTTOOL_GIT_REVISION}");
-    expect(dockerfile).toContain("AGENTTOOL_SOURCE_DIRTY=${AGENTTOOL_SOURCE_DIRTY}");
+    expect(dockerfile).toContain(
+      "AGENTTOOL_GIT_REVISION=${AGENTTOOL_GIT_REVISION}",
+    );
+    expect(dockerfile).toContain(
+      "AGENTTOOL_SOURCE_DIRTY=${AGENTTOOL_SOURCE_DIRTY}",
+    );
     expect(dockerfile).toContain("org.opencontainers.image.revision");
     expect(dockerfile).toContain("dev.agenttool.source.dirty");
     expect(dockerfile).toContain("test -s src/index.ts");
     expect(dockerfile).toContain("find src -type f -name '*.ts' -size 0");
-    expect(deploy).toContain('--build-arg "AGENTTOOL_GIT_REVISION=$HEAD_REVISION"');
-    expect(deploy).toContain('--build-arg "AGENTTOOL_SOURCE_DIRTY=$API_SOURCE_DIRTY"');
+    expect(deploy).toContain(
+      '--build-arg "AGENTTOOL_GIT_REVISION=$HEAD_REVISION"',
+    );
+    expect(deploy).toContain(
+      '--build-arg "AGENTTOOL_SOURCE_DIRTY=$API_SOURCE_DIRTY"',
+    );
     expect(deploy).toContain("FLY_DEPLOY_ARGS+=(--no-cache)");
     expect(deploy).toContain("fly machine list");
     expect(deploy).toContain('test \\"\\${AGENTTOOL_GIT_REVISION:-}\\"');
@@ -709,11 +1248,19 @@ describe("deploy release provenance spine", () => {
     expect(deploy).toContain("https://app.agenttool.dev/.env.local");
     expect(deploy).toContain("https://agenttool.dev/.dev.vars");
     expect(deploy).toContain("x-agenttool-sensitive-path-fence:");
-    expect(deploy).toContain("Pages fence did not produce its marked non-cacheable 404");
-    expect(deploy).not.toContain("Encoded sensitive path is publicly reachable");
+    expect(deploy).toContain(
+      "Pages fence did not produce its marked non-cacheable 404",
+    );
+    expect(deploy).not.toContain(
+      "Encoded sensitive path is publicly reachable",
+    );
     expect(deploy).toContain('DEPLOY_LOCK_PATH="$lock_parent/deploy.lock"');
-    expect(deploy).toContain('ln "$DEPLOY_LOCK_OWNER_RECORD" "$DEPLOY_LOCK_PATH"');
-    expect(deploy).toContain('[ "$DEPLOY_LOCK_OWNER_RECORD" -ef "$DEPLOY_LOCK_PATH" ]');
+    expect(deploy).toContain(
+      'ln "$DEPLOY_LOCK_OWNER_RECORD" "$DEPLOY_LOCK_PATH"',
+    );
+    expect(deploy).toContain(
+      '[ "$DEPLOY_LOCK_OWNER_RECORD" -ef "$DEPLOY_LOCK_PATH" ]',
+    );
   });
 
   test("accepts the explicit OAuth fallback and forwards it to both frontend deploy passes", async () => {
@@ -816,7 +1363,7 @@ describe("deploy release provenance spine", () => {
     await installFakeRightsCurl(fakeBin);
     await writeFile(
       join(fakeBin, "fly"),
-      "#!/usr/bin/env bash\nset -eu\nprintf '%s\\n' \"$@\" > \"$DEPLOY_TEST_FLY_ARGS\"\nexit 9\n",
+      '#!/usr/bin/env bash\nset -eu\nprintf \'%s\\n\' "$@" > "$DEPLOY_TEST_FLY_ARGS"\nexit 9\n',
     );
     await chmod(join(fakeBin, "fly"), 0o755);
 
@@ -835,7 +1382,10 @@ describe("deploy release provenance spine", () => {
         PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
         DEPLOY_TEST_FLY_ARGS: flyArgs,
         DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
-        DEPLOY_TEST_RIGHTS_SCHEMA: join(setup.repo, "apps/docs/being-rights-v1.schema.json"),
+        DEPLOY_TEST_RIGHTS_SCHEMA: join(
+          setup.repo,
+          "apps/docs/being-rights-v1.schema.json",
+        ),
       }),
     );
 
@@ -854,18 +1404,26 @@ describe("deploy release provenance spine", () => {
       "--build-arg",
       "AGENTTOOL_SOURCE_DIRTY=false",
     ]);
-    expect(await exists(join(setup.repo, "api/agenttool.jsonld.bundled"))).toBe(false);
-    expect(await exists(join(setup.repo, "api/kingdom-bundle.json.bundled"))).toBe(false);
-    expect(await exists(join(setup.repo, "api/doctrine-docs.bundled"))).toBe(false);
-    const [receiptName] = await readdir(join(setup.state, "agenttool", "deploy-receipts"));
+    expect(await exists(join(setup.repo, "api/agenttool.jsonld.bundled"))).toBe(
+      false,
+    );
+    expect(
+      await exists(join(setup.repo, "api/kingdom-bundle.json.bundled")),
+    ).toBe(false);
+    expect(await exists(join(setup.repo, "api/doctrine-docs.bundled"))).toBe(
+      false,
+    );
+    const [receiptName] = await readdir(
+      join(setup.state, "agenttool", "deploy-receipts"),
+    );
     const receipt = JSON.parse(
       await readFile(
         join(setup.state, "agenttool", "deploy-receipts", receiptName),
         "utf8",
       ),
     );
-    expect(receipt.schema).toBe("agenttool-deploy-receipt/v3");
-    expect(receipt.api_build).toEqual({ cache: "bypassed" });
+    expect(receipt.schema).toBe("agenttool-deploy-receipt/v4");
+    expect(receipt.api_build).toEqual({ cache: "bypassed", image: null });
 
     for (const contradictoryArgs of [
       ["--no-cache-api", "--no-api"],
@@ -907,6 +1465,882 @@ describe("deploy release provenance spine", () => {
       await exists(join(setup.state, "agenttool", "deploy-receipts")),
     ).toBe(false);
   });
+
+  test("rejects unsafe maintenance selectors and an unresolved marker before Fly or preflight", async () => {
+    const setup = await fixture();
+    const preflightMarker = join(setup.root, "maintenance-preflight");
+    const fakeBin = join(setup.root, "maintenance-guard-bin");
+    const flyMarker = join(setup.root, "maintenance-fly");
+    await mkdir(fakeBin, { recursive: true });
+    await writeFile(
+      join(fakeBin, "fly"),
+      '#!/usr/bin/env bash\ntouch "$DEPLOY_TEST_FLY_MARKER"\nexit 99\n',
+    );
+    await chmod(join(fakeBin, "fly"), 0o755);
+
+    for (const command of [
+      maintenanceCommand("--skip-preflight"),
+      maintenanceCommand("--maintenance-fenced-api"),
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--no-migrate",
+        "--maintenance-fenced-api",
+        `--maintenance-app-machines=${maintenanceIds.apps.join(",")}`,
+        `--maintenance-thinker-primary=${maintenanceIds.thinkerPrimary}`,
+        `--maintenance-thinker-standby=${maintenanceIds.thinkerStandby}`,
+      ],
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--no-migrate",
+        "--no-frontend",
+        "--maintenance-app-machines=11111111111111,11111111111111,33333333333333",
+        `--maintenance-thinker-primary=${maintenanceIds.thinkerPrimary}`,
+        `--maintenance-thinker-standby=${maintenanceIds.thinkerStandby}`,
+      ],
+    ]) {
+      const result = await run(
+        command,
+        setup.repo,
+        cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+          PREFLIGHT_MARKER: preflightMarker,
+          DEPLOY_TEST_FLY_MARKER: flyMarker,
+        }),
+      );
+      expect(result.code).not.toBe(0);
+    }
+    expect(await exists(preflightMarker)).toBe(false);
+    expect(await exists(flyMarker)).toBe(false);
+
+    const marker = maintenanceMarkerPath(setup.home);
+    await mkdir(resolve(marker, ".."), { recursive: true });
+    await writeFile(marker, '{"schema":"agenttool-maintenance-run/v1"}\n');
+    await chmod(marker, 0o600);
+    const blocked = await run(
+      maintenanceCommand(),
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        PREFLIGHT_MARKER: preflightMarker,
+        DEPLOY_TEST_FLY_MARKER: flyMarker,
+      }),
+    );
+    expect(blocked.code).toBe(74);
+    expect(blocked.stderr).toContain(
+      "an unresolved maintenance rollout marker exists",
+    );
+    expect(await exists(preflightMarker)).toBe(false);
+    expect(await exists(flyMarker)).toBe(false);
+    expect(
+      await exists(join(setup.state, "agenttool", "deploy-receipts")),
+    ).toBe(false);
+
+    const blockedWithDifferentXdg = await run(
+      maintenanceCommand(),
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: join(setup.root, "different-xdg-state"),
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        PREFLIGHT_MARKER: preflightMarker,
+        DEPLOY_TEST_FLY_MARKER: flyMarker,
+      }),
+    );
+    expect(blockedWithDifferentXdg.code).toBe(74);
+    expect(await exists(preflightMarker)).toBe(false);
+    expect(await exists(flyMarker)).toBe(false);
+  }, 15_000);
+
+  test("requires the exact stopped fenced five-Machine topology before creating durable state", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "maintenance-shape-bin");
+    const flyState = join(setup.root, "maintenance-shape-state.json");
+    const flyLog = join(setup.root, "maintenance-shape-log.jsonl");
+    const preflightMarker = join(setup.root, "maintenance-shape-preflight");
+    await mkdir(fakeBin, { recursive: true });
+    await installStatefulFakeFly(fakeBin, flyState, flyLog, setup.release, [
+      ...maintenanceFleet(setup.release),
+      {
+        ...maintenanceFleet(setup.release)[0],
+        id: "66666666666666",
+      },
+    ]);
+
+    const result = await run(
+      maintenanceCommand(),
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        PREFLIGHT_MARKER: preflightMarker,
+        DEPLOY_TEST_FLY_STATE: flyState,
+        DEPLOY_TEST_FLY_LOG: flyLog,
+      }),
+    );
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain(
+      "expected exactly five Machines, observed 6",
+    );
+    expect(await exists(preflightMarker)).toBe(false);
+    expect(await exists(maintenanceMarkerPath(setup.home))).toBe(false);
+    const log = await readFlyLog(flyLog);
+    expect(log.map((args) => args.slice(0, 2))).toEqual([
+      ["version"],
+      ["machine", "list"],
+    ]);
+  }, 15_000);
+
+  test("fails closed when the canonical marker path cannot be inspected", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "maintenance-uninspectable-marker-bin");
+    const flyMarker = join(setup.root, "maintenance-uninspectable-fly");
+    const preflightMarker = join(
+      setup.root,
+      "maintenance-uninspectable-preflight",
+    );
+    const marker = maintenanceMarkerPath(setup.home);
+    const markerParent = resolve(marker, "..");
+    await mkdir(fakeBin, { recursive: true });
+    await mkdir(markerParent, { recursive: true });
+    await writeFile(marker, '{"rollout_id":"unresolved"}\n');
+    await writeFile(
+      join(fakeBin, "fly"),
+      '#!/usr/bin/env bash\ntouch "$DEPLOY_TEST_FLY_MARKER"\nexit 99\n',
+    );
+    await chmod(join(fakeBin, "fly"), 0o755);
+    await chmod(markerParent, 0o000);
+
+    let result;
+    try {
+      result = await run(
+        maintenanceCommand(),
+        setup.repo,
+        cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+          DEPLOY_TEST_FLY_MARKER: flyMarker,
+          PREFLIGHT_MARKER: preflightMarker,
+        }),
+      );
+    } finally {
+      await chmod(markerParent, 0o700);
+    }
+    expect(result.code).toBe(74);
+    expect(await exists(flyMarker)).toBe(false);
+    expect(await exists(preflightMarker)).toBe(false);
+  }, 15_000);
+
+  test("refuses a late marker and an observed foreign owner before the next checkpoint", async () => {
+    {
+      const setup = await fixture();
+      const fakeBin = join(setup.root, "maintenance-late-marker-bin");
+      const flyState = join(setup.root, "maintenance-late-marker-state.json");
+      const flyLog = join(setup.root, "maintenance-late-marker-log.jsonl");
+      const marker = maintenanceMarkerPath(setup.home);
+      await mkdir(fakeBin, { recursive: true });
+      await mkdir(resolve(marker, ".."), { recursive: true });
+      await installFakeRightsCurl(fakeBin);
+      await installStatefulFakeFly(fakeBin, flyState, flyLog, setup.release);
+
+      const result = await run(
+        maintenanceCommand(),
+        setup.repo,
+        cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+          PREFLIGHT_MARKER: marker,
+          DEPLOY_TEST_FLY_STATE: flyState,
+          DEPLOY_TEST_FLY_LOG: flyLog,
+        }),
+      );
+      expect(result.code).not.toBe(0);
+      expect(result.stderr).toContain(
+        "Refusing to overwrite an unresolved maintenance rollout marker",
+      );
+      expect(await readFile(marker, "utf8")).toBe("");
+      const mutations = (await readFlyLog(flyLog)).filter(
+        (args) =>
+          args[0] === "deploy" || (args[0] === "machine" && args[1] !== "list"),
+      );
+      expect(mutations).toHaveLength(0);
+    }
+
+    {
+      const setup = await fixture();
+      const fakeBin = join(setup.root, "maintenance-foreign-marker-bin");
+      const flyState = join(
+        setup.root,
+        "maintenance-foreign-marker-state.json",
+      );
+      const flyLog = join(setup.root, "maintenance-foreign-marker-log.jsonl");
+      const marker = maintenanceMarkerPath(setup.home);
+      await mkdir(fakeBin, { recursive: true });
+      await installFakeRightsCurl(fakeBin);
+      await installStatefulFakeFly(fakeBin, flyState, flyLog, setup.release);
+
+      const result = await run(
+        maintenanceCommand(),
+        setup.repo,
+        cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+          DEPLOY_TEST_FLY_STATE: flyState,
+          DEPLOY_TEST_FLY_LOG: flyLog,
+          DEPLOY_TEST_REPLACE_MAINTENANCE_MARKER: marker,
+        }),
+      );
+      expect(result.code).not.toBe(0);
+      expect(result.stderr).toContain(
+        "Maintenance state belongs to another rollout",
+      );
+      expect(result.stderr).toContain(
+        "no recovery mutation or marker replacement was attempted",
+      );
+      expect(JSON.parse(await readFile(marker, "utf8")).rollout_id).toBe(
+        "foreign-rollout",
+      );
+      const updates = (await readFlyLog(flyLog)).filter(
+        (args) => args[0] === "machine" && args[1] === "update",
+      );
+      expect(updates).toHaveLength(0);
+    }
+  }, 20_000);
+
+  test("rejects a stale standby environment even when the standby list is empty", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "maintenance-stale-standby-bin");
+    const flyState = join(setup.root, "maintenance-stale-standby-state.json");
+    const flyLog = join(setup.root, "maintenance-stale-standby-log.jsonl");
+    const fleet = maintenanceFleet(setup.release);
+    const primary = fleet.find(
+      (machine) => machine.id === maintenanceIds.thinkerPrimary,
+    ) as Record<string, any>;
+    primary.config.env.FLY_STANDBY_FOR = maintenanceIds.apps[0];
+    await mkdir(fakeBin, { recursive: true });
+    await installStatefulFakeFly(
+      fakeBin,
+      flyState,
+      flyLog,
+      setup.release,
+      fleet,
+    );
+
+    const result = await run(
+      maintenanceCommand(),
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FLY_STATE: flyState,
+        DEPLOY_TEST_FLY_LOG: flyLog,
+      }),
+    );
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("standby environment is not empty");
+    expect(await exists(maintenanceMarkerPath(setup.home))).toBe(false);
+    expect(
+      (await readFlyLog(flyLog)).filter(
+        (args) => args[0] === "machine" && args[1] === "update",
+      ),
+    ).toHaveLength(0);
+  }, 15_000);
+
+  test("rolls the exact five Machines from one tag read-back to one immutable digest", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "maintenance-success-bin");
+    const flyState = join(setup.root, "maintenance-success-state.json");
+    const flyLog = join(setup.root, "maintenance-success-log.jsonl");
+    await mkdir(fakeBin, { recursive: true });
+    await installFakeRightsCurl(fakeBin);
+    await installStatefulFakeFly(fakeBin, flyState, flyLog, setup.release);
+
+    const result = await run(
+      maintenanceCommand(),
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FLY_STATE: flyState,
+        DEPLOY_TEST_FLY_LOG: flyLog,
+        DEPLOY_TEST_HEALTH_OK: "1",
+        DEPLOY_TEST_HEALTH_REVISION: setup.release,
+      }),
+    );
+    expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
+
+    const log = await readFlyLog(flyLog);
+    const deploys = log.filter((args) => args[0] === "deploy");
+    expect(deploys).toHaveLength(1);
+    expect(deploys[0]).toContain("--build-only");
+    expect(deploys[0]).toContain("--push");
+    expect(deploys[0]).toContain("--skip-release-command");
+    expect(deploys[0]).not.toContain("--strategy");
+    expect(deploys[0]).not.toContain("--update-only");
+
+    const updates = log.filter(
+      (args) => args[0] === "machine" && args[1] === "update",
+    );
+    expect(updates).toHaveLength(13);
+    const imageUpdates = updates.filter((args) => args.includes("--image"));
+    expect(imageUpdates).toHaveLength(5);
+    const autostartUpdates = updates.filter((args) =>
+      args.includes("--autostart=true"),
+    );
+    expect(autostartUpdates).toHaveLength(3);
+    expect(imageUpdates[0][2]).toBe(maintenanceIds.thinkerPrimary);
+    const firstImage = imageUpdates[0][imageUpdates[0].indexOf("--image") + 1];
+    expect(firstImage).toMatch(/^registry\.fly\.io\/agenttool:maintenance-/);
+    expect(firstImage).not.toContain("@sha256:");
+    for (const update of imageUpdates.slice(1)) {
+      expect(update[update.indexOf("--image") + 1]).toBe(
+        `${firstImage}@${maintenanceDigest}`,
+      );
+    }
+    for (const update of updates) {
+      expect(update).toContain("--build-remote-only");
+      expect(update).toContain("--yes");
+      if (update.includes("--autostart=true")) {
+        expect(update).not.toContain("--skip-start");
+        expect(update).not.toContain("--skip-health-checks");
+      } else {
+        expect(update).toContain("--skip-start");
+      }
+    }
+    const updateIndexes = log
+      .map((args, index) => ({ args, index }))
+      .filter(({ args }) => args[0] === "machine" && args[1] === "update")
+      .map(({ index }) => index);
+    for (let index = 0; index < updateIndexes.length - 1; index += 1) {
+      expect(
+        log
+          .slice(updateIndexes[index] + 1, updateIndexes[index + 1])
+          .some((args) => args[0] === "machine" && args[1] === "list"),
+      ).toBe(true);
+    }
+    const startIndexes = log
+      .map((args, index) => ({ args, index }))
+      .filter(({ args }) => args[0] === "machine" && args[1] === "start")
+      .map(({ index }) => index);
+    const firstAutostartIndex = log.findIndex(
+      (args) =>
+        args[0] === "machine" &&
+        args[1] === "update" &&
+        args.includes("--autostart=true"),
+    );
+    const lastImageUpdateIndex = log.findLastIndex(
+      (args) =>
+        args[0] === "machine" &&
+        args[1] === "update" &&
+        args.includes("--image"),
+    );
+    expect(startIndexes).toHaveLength(3);
+    expect(startIndexes[0]).toBeGreaterThan(lastImageUpdateIndex);
+    expect(firstAutostartIndex).toBeGreaterThan(startIndexes[2]);
+    expect(startIndexes.map((index) => log[index][2])).toEqual([
+      ...maintenanceIds.apps,
+    ]);
+    for (let index = 0; index < startIndexes.length; index += 1) {
+      const nextMutationIndex =
+        index + 1 < startIndexes.length
+          ? startIndexes[index + 1]
+          : firstAutostartIndex;
+      expect(
+        log
+          .slice(startIndexes[index] + 1, nextMutationIndex)
+          .some((args) => args[0] === "machine" && args[1] === "list"),
+      ).toBe(true);
+    }
+    const ssh = log.filter(
+      (args) => args[0] === "ssh" && args[1] === "console",
+    );
+    expect(ssh).toHaveLength(3);
+    expect(
+      ssh.every((args) =>
+        args[args.indexOf("-C") + 1].startsWith("sh -c 'test "),
+      ),
+    ).toBe(true);
+
+    const finalState = JSON.parse(await readFile(flyState, "utf8"));
+    const byId = new Map(
+      finalState.machines.map((machine: Record<string, any>) => [
+        machine.id,
+        machine,
+      ]),
+    );
+    for (const id of maintenanceIds.apps) {
+      expect((byId.get(id) as any).state).toBe("started");
+      expect((byId.get(id) as any).image_ref.digest).toBe(maintenanceDigest);
+      expect((byId.get(id) as any).config.services[0].autostart).toBe(true);
+    }
+    expect((byId.get(maintenanceIds.thinkerPrimary) as any).state).toBe(
+      "stopped",
+    );
+    expect((byId.get(maintenanceIds.thinkerStandby) as any).state).toBe(
+      "stopped",
+    );
+    expect(
+      (byId.get(maintenanceIds.thinkerStandby) as any).config.standbys,
+    ).toEqual([maintenanceIds.thinkerPrimary]);
+    expect(
+      (byId.get(maintenanceIds.thinkerStandby) as any).config.env
+        .FLY_STANDBY_FOR,
+    ).toBe(maintenanceIds.thinkerPrimary);
+
+    const receiptDir = join(setup.state, "agenttool", "deploy-receipts");
+    const [receiptName] = await readdir(receiptDir);
+    const receiptText = await readFile(join(receiptDir, receiptName), "utf8");
+    const receipt = JSON.parse(receiptText);
+    expect(receipt.schema).toBe("agenttool-deploy-receipt/v4");
+    expect(receipt.mode).toBe("maintenance_rollout");
+    expect(receipt.outcome).toBe("succeeded");
+    expect(receipt.verified_api_machines).toBe(5);
+    expect(receipt.api_build.image.digest).toBe(maintenanceDigest);
+    expect(receipt.maintenance).toMatchObject({
+      image_verified_machine_count: 5,
+      started_app_machine_count: 3,
+      stopped_thinker_machine_count: 2,
+      fleet_image_verified: true,
+      final_topology_verified: true,
+      workers_disabled_started_apps_verified: true,
+      recovery_required: null,
+      active_marker_cleared: null,
+      marker_absence_required_for_success: true,
+    });
+    for (const id of [
+      ...maintenanceIds.apps,
+      maintenanceIds.thinkerPrimary,
+      maintenanceIds.thinkerStandby,
+    ]) {
+      expect(receiptText).not.toContain(id);
+    }
+    expect(await exists(maintenanceMarkerPath(setup.home))).toBe(false);
+  }, 20_000);
+
+  test("keeps the durable fence when the final success receipt cannot be installed", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "maintenance-receipt-failure-bin");
+    const flyState = join(setup.root, "maintenance-receipt-failure-state.json");
+    const flyLog = join(setup.root, "maintenance-receipt-failure-log.jsonl");
+    const receiptPath = join(setup.state, "agenttool", "deploy-receipts");
+    await mkdir(fakeBin, { recursive: true });
+    await mkdir(join(setup.state, "agenttool"), { recursive: true });
+    await writeFile(receiptPath, "not-a-directory\n");
+    await installFakeRightsCurl(fakeBin);
+    await installStatefulFakeFly(fakeBin, flyState, flyLog, setup.release);
+    const env = cleanEnv(setup.home, {
+      XDG_STATE_HOME: setup.state,
+      PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+      DEPLOY_TEST_FLY_STATE: flyState,
+      DEPLOY_TEST_FLY_LOG: flyLog,
+      DEPLOY_TEST_HEALTH_OK: "1",
+      DEPLOY_TEST_HEALTH_REVISION: setup.release,
+    });
+
+    const result = await run(maintenanceCommand(), setup.repo, env);
+    expect(result.code).not.toBe(0);
+    expect(result.stdout).toContain("Cannot create deploy receipt directory");
+    const marker = maintenanceMarkerPath(setup.home);
+    expect(await exists(marker)).toBe(true);
+    const markerDocument = JSON.parse(await readFile(marker, "utf8"));
+    expect(markerDocument.checkpoint).toBe("failed_or_uncertain");
+    expect(markerDocument.recovery_required).toBe(true);
+    const recoveryUpdates = (await readFlyLog(flyLog)).filter(
+      (args) =>
+        args[0] === "machine" &&
+        args[1] === "update" &&
+        !args.includes("--image") &&
+        args[args.indexOf("--machine-config") + 1] ===
+          '{"restart":{"policy":"no","max_retries":10}}',
+    );
+    expect(recoveryUpdates).toHaveLength(5);
+    expect(
+      recoveryUpdates.every((args) => !args.includes(maintenanceOldDigest)),
+    ).toBe(true);
+
+    const beforeRetry = (await readFlyLog(flyLog)).length;
+    const retry = await run(maintenanceCommand(), setup.repo, env);
+    expect(retry.code).toBe(74);
+    expect((await readFlyLog(flyLog)).length).toBe(beforeRetry);
+  }, 20_000);
+
+  test("removes a provisional success receipt when marker finalization fails", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "maintenance-marker-remove-failure-bin");
+    const flyState = join(
+      setup.root,
+      "maintenance-marker-remove-failure-state.json",
+    );
+    const flyLog = join(
+      setup.root,
+      "maintenance-marker-remove-failure-log.jsonl",
+    );
+    const marker = maintenanceMarkerPath(setup.home);
+    await mkdir(fakeBin, { recursive: true });
+    await installFakeRightsCurl(fakeBin);
+    await installStatefulFakeFly(fakeBin, flyState, flyLog, setup.release);
+    await writeFile(
+      join(fakeBin, "rm"),
+      `#!/usr/bin/env bash
+set -u
+for candidate in "$@"; do
+  if [ -n "\${DEPLOY_TEST_FAIL_RM_PATH:-}" ] &&
+    [ "$candidate" = "$DEPLOY_TEST_FAIL_RM_PATH" ]; then
+    exit 29
+  fi
+done
+exec /bin/rm "$@"
+`,
+    );
+    await chmod(join(fakeBin, "rm"), 0o755);
+
+    const result = await run(
+      maintenanceCommand(),
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FLY_STATE: flyState,
+        DEPLOY_TEST_FLY_LOG: flyLog,
+        DEPLOY_TEST_HEALTH_OK: "1",
+        DEPLOY_TEST_HEALTH_REVISION: setup.release,
+        DEPLOY_TEST_FAIL_RM_PATH: marker,
+      }),
+    );
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain(
+      "Could not remove the completed maintenance marker",
+    );
+    expect(await exists(marker)).toBe(true);
+    const markerDocument = JSON.parse(await readFile(marker, "utf8"));
+    expect(markerDocument.checkpoint).toBe("failed_or_uncertain");
+    const receiptDir = join(setup.state, "agenttool", "deploy-receipts");
+    const receiptNames = await readdir(receiptDir);
+    expect(receiptNames).toHaveLength(1);
+    const receipt = JSON.parse(
+      await readFile(join(receiptDir, receiptNames[0]), "utf8"),
+    );
+    expect(receipt.outcome).toBe("failed_or_uncertain");
+    expect(receipt.maintenance.active_marker_cleared).toBe(false);
+  }, 20_000);
+
+  test("does not authorize another recovery mutation after a semantic read-back failure", async () => {
+    for (const scenario of [
+      {
+        name: "config-drift",
+        env: { DEPLOY_TEST_DRIFT_CONFIG_AFTER_UPDATE: "14" },
+        expectedError: "full non-image configuration drifted",
+      },
+      {
+        name: "image-rollback",
+        env: { DEPLOY_TEST_ROLLBACK_IMAGE_AFTER_UPDATE: "14" },
+        expectedError: "image changed during recovery",
+      },
+      {
+        name: "untouched-lifecycle-drift",
+        env: {
+          DEPLOY_TEST_DRIFT_UNTOUCHED_LIFECYCLE_AFTER_UPDATE: "14",
+        },
+        expectedError:
+          "untouched Machine 22222222222222 recovery lifecycle drifted",
+      },
+    ]) {
+      const setup = await fixture();
+      const fakeBin = join(
+        setup.root,
+        `maintenance-recovery-${scenario.name}-bin`,
+      );
+      const flyState = join(
+        setup.root,
+        `maintenance-recovery-${scenario.name}-state.json`,
+      );
+      const flyLog = join(
+        setup.root,
+        `maintenance-recovery-${scenario.name}-log.jsonl`,
+      );
+      const receiptPath = join(setup.state, "agenttool", "deploy-receipts");
+      await mkdir(fakeBin, { recursive: true });
+      await mkdir(join(setup.state, "agenttool"), { recursive: true });
+      await writeFile(receiptPath, "not-a-directory\n");
+      await installFakeRightsCurl(fakeBin);
+      await installStatefulFakeFly(fakeBin, flyState, flyLog, setup.release);
+
+      const result = await run(
+        maintenanceCommand(),
+        setup.repo,
+        cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+          DEPLOY_TEST_FLY_STATE: flyState,
+          DEPLOY_TEST_FLY_LOG: flyLog,
+          DEPLOY_TEST_HEALTH_OK: "1",
+          DEPLOY_TEST_HEALTH_REVISION: setup.release,
+          ...scenario.env,
+        }),
+      );
+      expect(result.code).not.toBe(0);
+      expect(result.stderr).toContain(scenario.expectedError);
+      const recoveryUpdates = (await readFlyLog(flyLog)).filter(
+        (args) =>
+          args[0] === "machine" &&
+          args[1] === "update" &&
+          !args.includes("--image") &&
+          args[args.indexOf("--machine-config") + 1] ===
+            '{"restart":{"policy":"no","max_retries":10}}',
+      );
+      expect(recoveryUpdates).toHaveLength(1);
+      expect(result.stderr).toContain(
+        "no later recovery mutation is authorized",
+      );
+      const markerDocument = JSON.parse(
+        await readFile(maintenanceMarkerPath(setup.home), "utf8"),
+      );
+      expect(markerDocument.recovery_required).toBe(true);
+    }
+  }, 60_000);
+
+  test("retains the write-ahead maintenance marker across TERM and KILL", async () => {
+    for (const signal of ["SIGTERM", "SIGKILL"] as const) {
+      const setup = await fixture();
+      const fakeBin = join(
+        setup.root,
+        `maintenance-${signal.toLowerCase()}-bin`,
+      );
+      const flyState = join(
+        setup.root,
+        `maintenance-${signal.toLowerCase()}-state.json`,
+      );
+      const flyLog = join(
+        setup.root,
+        `maintenance-${signal.toLowerCase()}-log.jsonl`,
+      );
+      const buildMarker = join(
+        setup.root,
+        `maintenance-${signal.toLowerCase()}-build`,
+      );
+      const buildRelease = join(
+        setup.root,
+        `maintenance-${signal.toLowerCase()}-release`,
+      );
+      await mkdir(fakeBin, { recursive: true });
+      await installFakeRightsCurl(fakeBin);
+      await installStatefulFakeFly(fakeBin, flyState, flyLog, setup.release);
+      const env = cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FLY_STATE: flyState,
+        DEPLOY_TEST_FLY_LOG: flyLog,
+        DEPLOY_TEST_BLOCK_BUILD_MARKER: buildMarker,
+        DEPLOY_TEST_BLOCK_BUILD_RELEASE: buildRelease,
+      });
+      const child = Bun.spawn(maintenanceCommand(), {
+        cwd: setup.repo,
+        env,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const stdoutPromise = new Response(child.stdout).text();
+      const stderrPromise = new Response(child.stderr).text();
+      expect(await waitForPath(buildMarker)).toBe(true);
+      const marker = maintenanceMarkerPath(setup.home);
+      expect(await exists(marker)).toBe(true);
+      expect((await stat(marker)).mode & 0o777).toBe(0o600);
+
+      child.kill(signal);
+      await writeFile(buildRelease, "continue\n");
+      const [code, stdout, stderr] = await Promise.all([
+        child.exited,
+        stdoutPromise,
+        stderrPromise,
+      ]);
+      expect(code, `${stdout}\n${stderr}`).not.toBe(0);
+      expect(await exists(marker)).toBe(true);
+
+      if (signal === "SIGTERM") {
+        const markerDocument = JSON.parse(await readFile(marker, "utf8"));
+        expect(markerDocument.checkpoint).toBe("failed_or_uncertain");
+        expect(
+          (await readFlyLog(flyLog)).filter(
+            (args) => args[0] === "machine" && args[1] === "update",
+          ),
+        ).toHaveLength(0);
+        expect(await exists(deployLockPath(setup.home))).toBe(false);
+        expect(
+          await exists(join(setup.state, "agenttool", "deploy-receipts")),
+        ).toBe(true);
+      } else {
+        const markerDocument = JSON.parse(await readFile(marker, "utf8"));
+        expect(markerDocument.checkpoint).toBe("image_push_started");
+        expect(markerDocument.role_mapping).toEqual({
+          app_machine_ids: [...maintenanceIds.apps].sort(),
+          thinker_primary_machine_id: maintenanceIds.thinkerPrimary,
+          thinker_standby_machine_id: maintenanceIds.thinkerStandby,
+        });
+        expect(
+          (await readFlyLog(flyLog)).filter(
+            (args) =>
+              args[0] === "machine" && ["update", "start"].includes(args[1]),
+          ),
+        ).toHaveLength(0);
+        const lockPath = deployLockPath(setup.home);
+        const lockText = await readFile(lockPath, "utf8");
+        const ownerRecord = lockText.match(/^owner_record=(.+)$/m)?.[1];
+        expect(ownerRecord).toStartWith(
+          join(
+            setup.home,
+            ".local",
+            "state",
+            "agenttool",
+            ".deploy-lock-owner.",
+          ),
+        );
+        await unlink(lockPath);
+        await unlink(ownerRecord as string);
+        expect(
+          await exists(join(setup.state, "agenttool", "deploy-receipts")),
+        ).toBe(false);
+      }
+
+      const beforeRetry = (await readFlyLog(flyLog)).length;
+      const retry = await run(maintenanceCommand(), setup.repo, env);
+      expect(retry.code).toBe(74);
+      expect((await readFlyLog(flyLog)).length).toBe(beforeRetry);
+    }
+  }, 30_000);
+
+  test("keeps uncertainty durable and never starts or rolls back after update failure or ID drift", async () => {
+    for (const scenario of [
+      {
+        name: "post-apply-update-failure",
+        env: { DEPLOY_TEST_FAIL_UPDATE_AFTER_APPLY: "3" },
+        expectedImageUpdates: 3,
+      },
+      {
+        name: "provider-reported-id-drift",
+        env: { DEPLOY_TEST_REPLACE_AFTER_UPDATE: "2" },
+        expectedImageUpdates: 2,
+      },
+      {
+        name: "full-non-image-config-drift",
+        env: { DEPLOY_TEST_DRIFT_CONFIG_AFTER_UPDATE: "2" },
+        expectedError: "full non-image configuration drifted",
+        expectedImageUpdates: 2,
+      },
+      {
+        name: "per-id-region-swap",
+        env: { DEPLOY_TEST_SWAP_REGIONS_AFTER_UPDATE: "2" },
+        expectedError: "region drifted from its per-ID baseline",
+        expectedImageUpdates: 2,
+      },
+      {
+        name: "wrong-tag-with-valid-digest-and-labels",
+        env: { DEPLOY_TEST_WRONG_TAG_AFTER_UPDATE: "1" },
+        expectedError: "not on the exact rollout tag and digest",
+        expectedImageUpdates: 1,
+      },
+      {
+        name: "fence-drift-during-image-build",
+        env: { DEPLOY_TEST_DRIFT_DURING_BUILD: "1" },
+        expectedError: "cordoned state drifted",
+        expectedImageUpdates: 0,
+      },
+    ]) {
+      const setup = await fixture();
+      const fakeBin = join(setup.root, `${scenario.name}-bin`);
+      const flyState = join(setup.root, `${scenario.name}-state.json`);
+      const flyLog = join(setup.root, `${scenario.name}-log.jsonl`);
+      await mkdir(fakeBin, { recursive: true });
+      await installFakeRightsCurl(fakeBin);
+      await installStatefulFakeFly(fakeBin, flyState, flyLog, setup.release);
+      const env = cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FLY_STATE: flyState,
+        DEPLOY_TEST_FLY_LOG: flyLog,
+        ...scenario.env,
+      });
+      const result = await run(maintenanceCommand(), setup.repo, env);
+      expect(result.code).not.toBe(0);
+      if (scenario.expectedError) {
+        expect(result.stderr).toContain(scenario.expectedError);
+      }
+      const log = await readFlyLog(flyLog);
+      const imageUpdates = log.filter(
+        (args) =>
+          args[0] === "machine" &&
+          args[1] === "update" &&
+          args.includes("--image"),
+      );
+      expect(imageUpdates).toHaveLength(scenario.expectedImageUpdates);
+      if (imageUpdates.length > 0) {
+        const firstImage =
+          imageUpdates[0][imageUpdates[0].indexOf("--image") + 1];
+        expect(firstImage).toMatch(
+          /^registry\.fly\.io\/agenttool:maintenance-[^@]+$/,
+        );
+        expect(
+          imageUpdates.every((args) => {
+            const image = args[args.indexOf("--image") + 1];
+            return (
+              image === firstImage ||
+              image === `${firstImage}@${maintenanceDigest}`
+            );
+          }),
+        ).toBe(true);
+      }
+      expect(
+        log.some((args) => args[0] === "machine" && args[1] === "start"),
+      ).toBe(false);
+      const refenceUpdates = log.filter(
+        (args) =>
+          args[0] === "machine" &&
+          args[1] === "update" &&
+          !args.includes("--image"),
+      );
+      expect(refenceUpdates).toHaveLength(0);
+      expect(
+        log
+          .filter((args) => args[0] === "machine" && args[1] === "update")
+          .every(
+            (args) => !args.some((arg) => arg.includes(maintenanceOldDigest)),
+          ),
+      ).toBe(true);
+
+      const marker = maintenanceMarkerPath(setup.home);
+      expect(await exists(marker)).toBe(true);
+      expect((await stat(marker)).mode & 0o777).toBe(0o600);
+      const markerDocument = JSON.parse(await readFile(marker, "utf8"));
+      expect(markerDocument.schema).toBe("agenttool-maintenance-run/v1");
+      expect(markerDocument.checkpoint).toBe("failed_or_uncertain");
+      expect(markerDocument.recovery_required).toBe(true);
+      expect(markerDocument.role_mapping).toEqual({
+        app_machine_ids: [...maintenanceIds.apps].sort(),
+        thinker_primary_machine_id: maintenanceIds.thinkerPrimary,
+        thinker_standby_machine_id: maintenanceIds.thinkerStandby,
+      });
+
+      const [receiptName] = await readdir(
+        join(setup.state, "agenttool", "deploy-receipts"),
+      );
+      const receipt = JSON.parse(
+        await readFile(
+          join(setup.state, "agenttool", "deploy-receipts", receiptName),
+          "utf8",
+        ),
+      );
+      expect(receipt.schema).toBe("agenttool-deploy-receipt/v4");
+      expect(receipt.outcome).toBe("failed_or_uncertain");
+      expect(receipt.maintenance.recovery_required).toBe(true);
+      expect(receipt.maintenance.active_marker_cleared).toBe(false);
+
+      const beforeRetry = (await readFlyLog(flyLog)).length;
+      const retry = await run(maintenanceCommand(), setup.repo, env);
+      expect(retry.code).toBe(74);
+      expect((await readFlyLog(flyLog)).length).toBe(beforeRetry);
+    }
+  }, 30_000);
 
   test("serializes actual deploys before Phase 0 while leaving observation commands unlocked", async () => {
     const setup = await fixture();
@@ -998,7 +2432,10 @@ describe("deploy release provenance spine", () => {
     const marker = join(setup.root, "replacement-preflight");
     const release = join(setup.root, "replacement-release");
     const lockPath = deployLockPath(setup.home);
-    const replacementOwner = join(resolve(lockPath, ".."), ".deploy-lock-owner.replacement");
+    const replacementOwner = join(
+      resolve(lockPath, ".."),
+      ".deploy-lock-owner.replacement",
+    );
     const holder = Bun.spawn(
       ["bash", "bin/deploy.sh", "--no-migrate", "--no-api", "--no-frontend"],
       {
@@ -1039,14 +2476,22 @@ describe("deploy release provenance spine", () => {
         { mode: 0o600 },
       );
       await link(replacementOwner, lockPath);
-      expect((await stat(lockPath)).ino).not.toBe((await stat(holderRecord!)).ino);
+      expect((await stat(lockPath)).ino).not.toBe(
+        (await stat(holderRecord!)).ino,
+      );
     } finally {
       await writeFile(release, "continue\n");
-      holderResult = await Promise.all([holder.exited, stdoutPromise, stderrPromise]);
+      holderResult = await Promise.all([
+        holder.exited,
+        stdoutPromise,
+        stderrPromise,
+      ]);
     }
     const [code, stdout, stderr] = holderResult!;
     expect(code, `${stdout}\n${stderr}`).toBe(1);
-    expect(stderr).toContain("Refusing to release a deploy lock not owned by this process");
+    expect(stderr).toContain(
+      "Refusing to release a deploy lock not owned by this process",
+    );
     expect(await exists(lockPath)).toBe(true);
     expect(await exists(replacementOwner)).toBe(true);
     expect((await stat(lockPath)).ino).toBe((await stat(replacementOwner)).ino);
@@ -1190,17 +2635,13 @@ describe("deploy release provenance spine", () => {
     expect(deploy).toContain(
       "Required committed frontend release input is missing: $local_path",
     );
-    expect(deploy).toContain(
-      '"$HEAD_REVISION" "$FRONTEND_RELEASE_STAGE_ROOT"',
-    );
+    expect(deploy).toContain('"$HEAD_REVISION" "$FRONTEND_RELEASE_STAGE_ROOT"');
     expect(deploy).toContain('portable_md5_file "$staged_path"');
     expect(deploy).not.toContain('git show "$HEAD_REVISION:$1"');
     expect(deploy).toContain(
       '"party|Lantern Relay|local-party-game|local-party-rules"',
     );
-    expect(deploy).toContain(
-      '"room|ROOM ∞|local-room-game|local-room-rules"',
-    );
+    expect(deploy).toContain('"room|ROOM ∞|local-room-game|local-room-rules"');
     expect(deploy).toContain(
       '"sky|Pocket Sky|local-pocket-sky-game|local-pocket-sky-rules"',
     );
@@ -1230,20 +2671,19 @@ describe("deploy release provenance spine", () => {
     await mkdir(fakeBin, { recursive: true });
     await writeFile(
       join(fakeBin, "fly"),
-      "#!/usr/bin/env bash\nset -eu\ntouch \"$DEPLOY_TEST_FLY_MARKER\"\n",
+      '#!/usr/bin/env bash\nset -eu\ntouch "$DEPLOY_TEST_FLY_MARKER"\n',
     );
     await chmod(join(fakeBin, "fly"), 0o755);
     await unlink(join(setup.repo, "apps/web/sky.css"));
     await mustRun(["git", "add", "-u", "apps/web/sky.css"], setup.repo);
-    await mustRun(["git", "commit", "-qm", "remove required game input"], setup.repo);
+    await mustRun(
+      ["git", "commit", "-qm", "remove required game input"],
+      setup.repo,
+    );
     await mustRun(["git", "push", "-q", "github", "main"], setup.repo);
 
     const result = await run(
-      [
-        "bash",
-        "bin/deploy.sh",
-        "--skip-preflight",
-      ],
+      ["bash", "bin/deploy.sh", "--skip-preflight"],
       setup.repo,
       cleanEnv(setup.home, {
         XDG_STATE_HOME: setup.state,
@@ -1265,7 +2705,9 @@ describe("deploy release provenance spine", () => {
     expect(await exists(frontendMarker)).toBe(false);
     expect(await exists(flyMarker)).toBe(false);
     expect(await exists(deployLockPath(setup.home))).toBe(false);
-    expect(await exists(join(setup.state, "agenttool", "deploy-receipts"))).toBe(false);
+    expect(
+      await exists(join(setup.state, "agenttool", "deploy-receipts")),
+    ).toBe(false);
   }, 10_000);
 
   test("publishes verified discovery frontends before Fly and leaves dashboard after it", async () => {
@@ -1276,7 +2718,7 @@ describe("deploy release provenance spine", () => {
     await installFakeRightsCurl(fakeBin);
     await writeFile(
       join(fakeBin, "fly"),
-      "#!/usr/bin/env bash\nset -eu\n[ \"${1:-}\" = deploy ] || exit 2\nprintf 'fly\\n' >> \"$DEPLOY_TEST_RELEASE_ORDER\"\n",
+      '#!/usr/bin/env bash\nset -eu\n[ "${1:-}" = deploy ] || exit 2\nprintf \'fly\\n\' >> "$DEPLOY_TEST_RELEASE_ORDER"\n',
     );
     await chmod(join(fakeBin, "fly"), 0o755);
 
@@ -1300,9 +2742,14 @@ describe("deploy release provenance spine", () => {
       "frontend\tweb\nfrontend\tdocs\nfly\nfrontend\tdashboard\n",
     );
     expect(result.stdout).toContain("/health did not return 200");
-    const [name] = await readdir(join(setup.state, "agenttool", "deploy-receipts"));
+    const [name] = await readdir(
+      join(setup.state, "agenttool", "deploy-receipts"),
+    );
     const receipt = JSON.parse(
-      await readFile(join(setup.state, "agenttool", "deploy-receipts", name), "utf8"),
+      await readFile(
+        join(setup.state, "agenttool", "deploy-receipts", name),
+        "utf8",
+      ),
     );
     expect(receipt.outcome).toBe("failed_or_uncertain");
     expect(receipt.phases.api).toBe("deployed_unverified");
@@ -1322,7 +2769,7 @@ describe("deploy release provenance spine", () => {
     await installFakeRightsCurl(fakeBin);
     await writeFile(
       join(fakeBin, "fly"),
-      "#!/usr/bin/env bash\nset -eu\ntouch \"$DEPLOY_TEST_FLY_MARKER\"\nexit 9\n",
+      '#!/usr/bin/env bash\nset -eu\ntouch "$DEPLOY_TEST_FLY_MARKER"\nexit 9\n',
     );
     await chmod(join(fakeBin, "fly"), 0o755);
 
@@ -1358,7 +2805,7 @@ describe("deploy release provenance spine", () => {
     await mkdir(fakeBin, { recursive: true });
     await writeFile(
       join(fakeBin, "fly"),
-      "#!/usr/bin/env bash\nset -eu\ntouch \"$DEPLOY_TEST_FLY_MARKER\"\n",
+      '#!/usr/bin/env bash\nset -eu\ntouch "$DEPLOY_TEST_FLY_MARKER"\n',
     );
     await chmod(join(fakeBin, "fly"), 0o755);
 
@@ -1376,9 +2823,7 @@ describe("deploy release provenance spine", () => {
 
     expect(result.code).toBe(1);
     expect(await readFile(releaseOrder, "utf8")).toBe("frontend\tweb\n");
-    expect(result.stdout).toContain(
-      "Phase 3 web prerequisite deploy failed.",
-    );
+    expect(result.stdout).toContain("Phase 3 web prerequisite deploy failed.");
     expect(result.stdout).toContain(
       "Docs and Fly/API deployment did not occur.",
     );
@@ -1407,7 +2852,7 @@ describe("deploy release provenance spine", () => {
       await installFakeRightsCurl(fakeBin);
       await writeFile(
         join(fakeBin, "fly"),
-        "#!/usr/bin/env bash\nset -eu\ntouch \"$DEPLOY_TEST_FLY_MARKER\"\n",
+        '#!/usr/bin/env bash\nset -eu\ntouch "$DEPLOY_TEST_FLY_MARKER"\n',
       );
       await chmod(join(fakeBin, "fly"), 0o755);
       await writeFile(join(fakeBin, "sleep"), "#!/usr/bin/env bash\nexit 0\n");
@@ -1425,7 +2870,10 @@ describe("deploy release provenance spine", () => {
           DEPLOY_TEST_FRONTEND_MARKER: frontendMarker,
           DEPLOY_TEST_FLY_MARKER: flyMarker,
           DEPLOY_TEST_GAME_MISMATCH: "1",
-          DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
+          DEPLOY_TEST_RIGHTS_DOC: join(
+            setup.repo,
+            "apps/docs/RIGHTS-OF-LIFE.md",
+          ),
           DEPLOY_TEST_RIGHTS_SCHEMA: join(
             setup.repo,
             "apps/docs/being-rights-v1.schema.json",
@@ -1470,15 +2918,13 @@ describe("deploy release provenance spine", () => {
       await readlink(join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md")),
     ).toBe("../../docs/RIGHTS-OF-LIFE.md");
     expect(
-      await readlink(
-        join(setup.repo, "apps/docs/being-rights-v1.schema.json"),
-      ),
+      await readlink(join(setup.repo, "apps/docs/being-rights-v1.schema.json")),
     ).toBe("../../docs/specs/being-rights-v1.schema.json");
     await mkdir(fakeBin, { recursive: true });
     await installFakeRightsCurl(fakeBin);
     await writeFile(
       join(fakeBin, "fly"),
-      "#!/usr/bin/env bash\nset -eu\ntouch \"$DEPLOY_TEST_FLY_MARKER\"\nexit 9\n",
+      '#!/usr/bin/env bash\nset -eu\ntouch "$DEPLOY_TEST_FLY_MARKER"\nexit 9\n',
     );
     await chmod(join(fakeBin, "fly"), 0o755);
     await writeFile(
@@ -1598,17 +3044,12 @@ describe("deploy release provenance spine", () => {
       await installFakeRightsCurl(fakeBin);
       await writeFile(
         join(fakeBin, "fly"),
-        "#!/usr/bin/env bash\nset -eu\ntouch \"$DEPLOY_TEST_FLY_MARKER\"\n",
+        '#!/usr/bin/env bash\nset -eu\ntouch "$DEPLOY_TEST_FLY_MARKER"\n',
       );
       await chmod(join(fakeBin, "fly"), 0o755);
 
       const result = await run(
-        [
-          "bash",
-          "bin/deploy.sh",
-          "--skip-preflight",
-          "--no-frontend",
-        ],
+        ["bash", "bin/deploy.sh", "--skip-preflight", "--no-frontend"],
         setup.repo,
         cleanEnv(setup.home, {
           XDG_STATE_HOME: setup.state,
@@ -1644,7 +3085,7 @@ describe("deploy release provenance spine", () => {
     await installFakeRightsCurl(fakeBin);
     await writeFile(
       join(fakeBin, "fly"),
-      "#!/usr/bin/env bash\nset -eu\ntouch \"$DEPLOY_TEST_FLY_MARKER\"\nexit 9\n",
+      '#!/usr/bin/env bash\nset -eu\ntouch "$DEPLOY_TEST_FLY_MARKER"\nexit 9\n',
     );
     await chmod(join(fakeBin, "fly"), 0o755);
 
@@ -1712,7 +3153,7 @@ describe("deploy release provenance spine", () => {
       }
       await writeFile(
         join(fakeBin, "fly"),
-        "#!/usr/bin/env bash\nset -eu\ntouch \"$DEPLOY_TEST_FLY_MARKER\"\n",
+        '#!/usr/bin/env bash\nset -eu\ntouch "$DEPLOY_TEST_FLY_MARKER"\n',
       );
       await chmod(join(fakeBin, "fly"), 0o755);
 
@@ -1743,8 +3184,8 @@ describe("deploy release provenance spine", () => {
         await exists(join(setup.state, "agenttool", "deploy-receipts")),
       ).toBe(false);
     }
-  // Three independent 25-attempt fail-closed paths run real subprocess probes.
-  // The fake sleep removes retry delay, not the probe work itself.
+    // Three independent 25-attempt fail-closed paths run real subprocess probes.
+    // The fake sleep removes retry delay, not the probe work itself.
   }, 60_000);
 
   test("dry-run describes coordinated, API-only, and frontend-only publication order", async () => {
@@ -1758,18 +3199,10 @@ describe("deploy release provenance spine", () => {
     expect(full.stdout).toContain(
       "Phase 3: bin/frontend-deploy.sh web, then bin/frontend-deploy.sh docs, verify live prerequisites, then cd api && fly deploy",
     );
-    expect(full.stdout).toContain(
-      "Phase 4: bin/frontend-deploy.sh dashboard",
-    );
+    expect(full.stdout).toContain("Phase 4: bin/frontend-deploy.sh dashboard");
 
     const apiOnly = await run(
-      [
-        "bash",
-        "bin/deploy.sh",
-        "--dry-run",
-        "--no-migrate",
-        "--no-frontend",
-      ],
+      ["bash", "bin/deploy.sh", "--dry-run", "--no-migrate", "--no-frontend"],
       setup.repo,
       cleanEnv(setup.home),
     );
@@ -1786,9 +3219,7 @@ describe("deploy release provenance spine", () => {
     );
     expect(frontendOnly.code, frontendOnly.stderr).toBe(0);
     expect(frontendOnly.stdout).toContain("Phase 3: skip");
-    expect(frontendOnly.stdout).toContain(
-      "Phase 4: bin/frontend-deploy.sh",
-    );
+    expect(frontendOnly.stdout).toContain("Phase 4: bin/frontend-deploy.sh");
   }, 15_000);
 
   test("final frontend parity reads committed bytes under the dirty-release override", async () => {
@@ -1820,10 +3251,7 @@ describe("deploy release provenance spine", () => {
         DEPLOY_TEST_FENCE_COUNTER: fenceCounter,
         DEPLOY_TEST_GAME_FETCH_LOG: gameFetchLog,
         DEPLOY_TEST_PAGES_FROM_COMMIT: "1",
-        DEPLOY_TEST_RIGHTS_DOC: join(
-          setup.repo,
-          "apps/docs/RIGHTS-OF-LIFE.md",
-        ),
+        DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
         DEPLOY_TEST_RIGHTS_SCHEMA: join(
           setup.repo,
           "apps/docs/being-rights-v1.schema.json",
@@ -1831,19 +3259,12 @@ describe("deploy release provenance spine", () => {
       }),
     );
 
-    expect(
-      result.code,
-      `${result.stdout}\n${result.stderr}`,
-    ).toBe(0);
+    expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
     expect(result.stdout).toContain(
       "UNSAFE SOURCE OVERRIDE: deploying with a dirty working tree",
     );
-    expect(result.stdout).toContain(
-      "apps/web/party.html",
-    );
-    expect(result.stdout).toContain(
-      "apps/web/sky.css",
-    );
+    expect(result.stdout).toContain("apps/web/party.html");
+    expect(result.stdout).toContain("apps/web/sky.css");
     expect(await readFile(gameFetchLog, "utf8")).toBe(
       "https://agenttool.dev/sky.css\n",
     );
@@ -1860,20 +3281,17 @@ describe("deploy release provenance spine", () => {
       canonSchema,
       publicDocTarget,
       publicSchemaTarget,
-    ] =
-      await Promise.all([
-        readFile(join(projectRoot, "bin/deploy.sh"), "utf8"),
-        readFile(join(projectRoot, "bin/stage-frontend-release.sh"), "utf8"),
-        readFile(join(projectRoot, "apps/docs/_headers"), "utf8"),
-        readFile(join(projectRoot, "apps/docs/RIGHTS-OF-LIFE.md")),
-        readFile(join(projectRoot, "docs/RIGHTS-OF-LIFE.md")),
-        readFile(join(projectRoot, "apps/docs/being-rights-v1.schema.json")),
-        readFile(join(projectRoot, "docs/specs/being-rights-v1.schema.json")),
-        readlink(join(projectRoot, "apps/docs/RIGHTS-OF-LIFE.md")),
-        readlink(
-          join(projectRoot, "apps/docs/being-rights-v1.schema.json"),
-        ),
-      ]);
+    ] = await Promise.all([
+      readFile(join(projectRoot, "bin/deploy.sh"), "utf8"),
+      readFile(join(projectRoot, "bin/stage-frontend-release.sh"), "utf8"),
+      readFile(join(projectRoot, "apps/docs/_headers"), "utf8"),
+      readFile(join(projectRoot, "apps/docs/RIGHTS-OF-LIFE.md")),
+      readFile(join(projectRoot, "docs/RIGHTS-OF-LIFE.md")),
+      readFile(join(projectRoot, "apps/docs/being-rights-v1.schema.json")),
+      readFile(join(projectRoot, "docs/specs/being-rights-v1.schema.json")),
+      readlink(join(projectRoot, "apps/docs/RIGHTS-OF-LIFE.md")),
+      readlink(join(projectRoot, "apps/docs/being-rights-v1.schema.json")),
+    ]);
 
     expect(publicDoc).toEqual(canonDoc);
     expect(publicSchema).toEqual(canonSchema);
@@ -1881,22 +3299,14 @@ describe("deploy release provenance spine", () => {
     expect(publicSchemaTarget).toBe(
       "../../docs/specs/being-rights-v1.schema.json",
     );
-    expect(deploy).toContain(
-      '"$HEAD_REVISION" "$FRONTEND_RELEASE_STAGE_ROOT"',
-    );
+    expect(deploy).toContain('"$HEAD_REVISION" "$FRONTEND_RELEASE_STAGE_ROOT"');
     expect(deploy).toContain('portable_md5_file "$staged_path"');
-    expect(stageFrontend).toContain(
-      'git show "$REVISION:$MANIFEST_PATH"',
-    );
-    expect(deploy).toContain(
-      '"apps/docs/RIGHTS-OF-LIFE.md|$RIGHTS_DOC_URL"',
-    );
+    expect(stageFrontend).toContain('git show "$REVISION:$MANIFEST_PATH"');
+    expect(deploy).toContain('"apps/docs/RIGHTS-OF-LIFE.md|$RIGHTS_DOC_URL"');
     expect(deploy).toContain(
       '"apps/docs/being-rights-v1.schema.json|$RIGHTS_SCHEMA_URL"',
     );
-    expect(deploy).toContain(
-      '"Content-Type" "text/markdown; charset=utf-8"',
-    );
+    expect(deploy).toContain('"Content-Type" "text/markdown; charset=utf-8"');
     expect(deploy).toContain(
       '"Content-Type" "application/schema+json; charset=utf-8"',
     );
@@ -1916,28 +3326,22 @@ describe("deploy release provenance spine", () => {
       /\/being-rights-v1\.schema\.json\n\s+Content-Type: application\/schema\+json; charset=utf-8\n\s+Cache-Control: public, max-age=300, must-revalidate\n\s+Access-Control-Allow-Origin: \*\n\s+X-Content-Type-Options: nosniff/,
     );
 
-    const webUpload = deploy.lastIndexOf(
-      "run_frontend_deploy web",
-    );
-    const docsUpload = deploy.indexOf(
-      "run_frontend_deploy docs",
-      webUpload,
-    );
+    const webUpload = deploy.lastIndexOf("run_frontend_deploy web");
+    const docsUpload = deploy.indexOf("run_frontend_deploy docs", webUpload);
     const prerequisiteCheck = deploy.indexOf(
       "if ! wait_for_discovery_prerequisites; then",
       docsUpload,
     );
-    const apiUpload = deploy.indexOf("(cd api || exit 1; fly deploy", docsUpload);
+    const apiUpload = deploy.indexOf(
+      "(cd api || exit 1; fly deploy",
+      docsUpload,
+    );
     expect(webUpload).toBeGreaterThan(-1);
     expect(docsUpload).toBeGreaterThan(webUpload);
     expect(prerequisiteCheck).toBeGreaterThan(docsUpload);
     expect(apiUpload).toBeGreaterThan(prerequisiteCheck);
-    expect(deploy).toContain(
-      "verify_rights_static_publication || return 1",
-    );
-    expect(deploy).toContain(
-      "verify_required_game_publication_once",
-    );
+    expect(deploy).toContain("verify_rights_static_publication || return 1");
+    expect(deploy).toContain("verify_required_game_publication_once");
     expect(deploy).toContain("FRONTEND_TARGETS=(dashboard)");
     expect(deploy).toContain(
       'AGENTTOOL_FRONTEND_RELEASE_REVISION="$HEAD_REVISION"',
@@ -1964,7 +3368,10 @@ describe("deploy release provenance spine", () => {
         DEPLOY_TEST_FENCE_COUNTER: fenceCounter,
         DEPLOY_TEST_STALE_FENCE_RESPONSES: "1",
         DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
-        DEPLOY_TEST_RIGHTS_SCHEMA: join(setup.repo, "apps/docs/being-rights-v1.schema.json"),
+        DEPLOY_TEST_RIGHTS_SCHEMA: join(
+          setup.repo,
+          "apps/docs/being-rights-v1.schema.json",
+        ),
       }),
     );
 
@@ -1978,9 +3385,14 @@ describe("deploy release provenance spine", () => {
     expect(result.stdout).toContain(
       "Pages custom domains converged on verification attempt 2/25",
     );
-    const [name] = await readdir(join(setup.state, "agenttool", "deploy-receipts"));
+    const [name] = await readdir(
+      join(setup.state, "agenttool", "deploy-receipts"),
+    );
     const receipt = JSON.parse(
-      await readFile(join(setup.state, "agenttool", "deploy-receipts", name), "utf8"),
+      await readFile(
+        join(setup.state, "agenttool", "deploy-receipts", name),
+        "utf8",
+      ),
     );
     expect(receipt.outcome).toBe("succeeded");
     expect(receipt.phases.frontends).toBe("deployed_verified");
@@ -2028,7 +3440,10 @@ describe("deploy release provenance spine", () => {
         DEPLOY_TEST_FRONTEND_COUNTER: frontendCounter,
         DEPLOY_TEST_FENCE_COUNTER: fenceCounter,
         DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
-        DEPLOY_TEST_RIGHTS_SCHEMA: join(setup.repo, "apps/docs/being-rights-v1.schema.json"),
+        DEPLOY_TEST_RIGHTS_SCHEMA: join(
+          setup.repo,
+          "apps/docs/being-rights-v1.schema.json",
+        ),
       }),
     );
 
@@ -2037,9 +3452,14 @@ describe("deploy release provenance spine", () => {
     expect(result.stdout).not.toContain("ambient-only");
     expect(await readFile(frontendCounter, "utf8")).toBe("1\n");
     expect(await readFile(fenceCounter, "utf8")).toBe("1\n");
-    const [name] = await readdir(join(setup.state, "agenttool", "deploy-receipts"));
+    const [name] = await readdir(
+      join(setup.state, "agenttool", "deploy-receipts"),
+    );
     const receipt = JSON.parse(
-      await readFile(join(setup.state, "agenttool", "deploy-receipts", name), "utf8"),
+      await readFile(
+        join(setup.state, "agenttool", "deploy-receipts", name),
+        "utf8",
+      ),
     );
     expect(receipt.outcome).toBe("succeeded");
     expect(receipt.source_revision).toBe(setup.release);
@@ -2070,9 +3490,15 @@ describe("deploy release provenance spine", () => {
     expect(result.code).toBe(1);
     expect(await exists(frontendMarker)).toBe(false);
     expect(await exists(frontendCounter)).toBe(false);
-    expect(result.stdout).toContain("Could not select latest LOVE package header probes");
-    expect(result.stdout).not.toContain("Pages custom domains not yet converged");
-    expect(await exists(join(setup.state, "agenttool", "deploy-receipts"))).toBe(false);
+    expect(result.stdout).toContain(
+      "Could not select latest LOVE package header probes",
+    );
+    expect(result.stdout).not.toContain(
+      "Pages custom domains not yet converged",
+    );
+    expect(
+      await exists(join(setup.state, "agenttool", "deploy-receipts")),
+    ).toBe(false);
   }, 10_000);
 
   test("fails closed when LOVE package archive headers fall back at the edge", async () => {
@@ -2095,7 +3521,10 @@ describe("deploy release provenance spine", () => {
         DEPLOY_TEST_FENCE_COUNTER: fenceCounter,
         DEPLOY_TEST_BAD_LOVE_HEADERS: "1",
         DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
-        DEPLOY_TEST_RIGHTS_SCHEMA: join(setup.repo, "apps/docs/being-rights-v1.schema.json"),
+        DEPLOY_TEST_RIGHTS_SCHEMA: join(
+          setup.repo,
+          "apps/docs/being-rights-v1.schema.json",
+        ),
       }),
     );
 
@@ -2108,18 +3537,25 @@ describe("deploy release provenance spine", () => {
     );
     expect(result.stdout).toContain("expected: application/gzip");
     expect(result.stdout).toContain("observed: application/octet-stream");
-    expect(result.stdout).toContain("LOVE package static header verification failed");
+    expect(result.stdout).toContain(
+      "LOVE package static header verification failed",
+    );
     expect(result.stdout).toContain(
       "Pages custom domains did not converge after 25 verification attempts.",
     );
-    const [name] = await readdir(join(setup.state, "agenttool", "deploy-receipts"));
+    const [name] = await readdir(
+      join(setup.state, "agenttool", "deploy-receipts"),
+    );
     const receipt = JSON.parse(
-      await readFile(join(setup.state, "agenttool", "deploy-receipts", name), "utf8"),
+      await readFile(
+        join(setup.state, "agenttool", "deploy-receipts", name),
+        "utf8",
+      ),
     );
     expect(receipt.outcome).toBe("failed_or_uncertain");
     expect(receipt.phases.frontends).toBe("deployed_unverified");
-  // Like the bounded convergence case below, this runs all 25 live-contract
-  // probe passes as real subprocess work even though its retry sleep is fake.
+    // Like the bounded convergence case below, this runs all 25 live-contract
+    // probe passes as real subprocess work even though its retry sleep is fake.
   }, 45_000);
 
   test("fails closed after the bounded Pages convergence window", async () => {
@@ -2142,7 +3578,10 @@ describe("deploy release provenance spine", () => {
         DEPLOY_TEST_FENCE_COUNTER: fenceCounter,
         DEPLOY_TEST_STALE_FENCE_RESPONSES: "999",
         DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
-        DEPLOY_TEST_RIGHTS_SCHEMA: join(setup.repo, "apps/docs/being-rights-v1.schema.json"),
+        DEPLOY_TEST_RIGHTS_SCHEMA: join(
+          setup.repo,
+          "apps/docs/being-rights-v1.schema.json",
+        ),
       }),
     );
 
@@ -2156,14 +3595,19 @@ describe("deploy release provenance spine", () => {
     expect(result.stdout).toContain(
       "Pages custom domains did not converge after 25 verification attempts.",
     );
-    const [name] = await readdir(join(setup.state, "agenttool", "deploy-receipts"));
+    const [name] = await readdir(
+      join(setup.state, "agenttool", "deploy-receipts"),
+    );
     const receipt = JSON.parse(
-      await readFile(join(setup.state, "agenttool", "deploy-receipts", name), "utf8"),
+      await readFile(
+        join(setup.state, "agenttool", "deploy-receipts", name),
+        "utf8",
+      ),
     );
     expect(receipt.outcome).toBe("failed_or_uncertain");
     expect(receipt.phases.frontends).toBe("deployed_unverified");
-  // The fake sleep removes the retry delay, but all 25 live-contract probe
-  // passes remain real subprocess work and need headroom under parallel CI.
+    // The fake sleep removes the retry delay, but all 25 live-contract probe
+    // passes remain real subprocess work and need headroom under parallel CI.
   }, 45_000);
 
   test("health reports only valid embedded source metadata and disables caching", async () => {
@@ -2204,7 +3648,9 @@ describe("deploy release provenance spine", () => {
       }),
     );
     expect(result.code, result.stderr).toBe(0);
-    const line = result.stdout.split("\n").find((item) => item.startsWith("HEALTH_RESULT="));
+    const line = result.stdout
+      .split("\n")
+      .find((item) => item.startsWith("HEALTH_RESULT="));
     expect(line).toBeDefined();
     expect(JSON.parse(line!.slice("HEALTH_RESULT=".length))).toEqual({
       status: 200,
@@ -2234,9 +3680,14 @@ describe("deploy release provenance spine", () => {
     );
     expect(dirtyOverride.code, dirtyOverride.stderr).toBe(0);
     expect(dirtyOverride.stdout).toContain("UNSAFE SOURCE OVERRIDE");
-    const dirtyReceiptName = (await readdir(join(dirty.state, "agenttool", "deploy-receipts")))[0];
+    const dirtyReceiptName = (
+      await readdir(join(dirty.state, "agenttool", "deploy-receipts"))
+    )[0];
     const dirtyReceipt = JSON.parse(
-      await readFile(join(dirty.state, "agenttool", "deploy-receipts", dirtyReceiptName), "utf8"),
+      await readFile(
+        join(dirty.state, "agenttool", "deploy-receipts", dirtyReceiptName),
+        "utf8",
+      ),
     );
     expect(dirtyReceipt.source_overrides.dirty).toBe(true);
 
@@ -2258,9 +3709,14 @@ describe("deploy release provenance spine", () => {
     );
     expect(aheadOverride.code, aheadOverride.stderr).toBe(0);
     expect(aheadOverride.stdout).toContain("UNSAFE SOURCE OVERRIDE");
-    const aheadReceiptName = (await readdir(join(ahead.state, "agenttool", "deploy-receipts")))[0];
+    const aheadReceiptName = (
+      await readdir(join(ahead.state, "agenttool", "deploy-receipts"))
+    )[0];
     const aheadReceipt = JSON.parse(
-      await readFile(join(ahead.state, "agenttool", "deploy-receipts", aheadReceiptName), "utf8"),
+      await readFile(
+        join(ahead.state, "agenttool", "deploy-receipts", aheadReceiptName),
+        "utf8",
+      ),
     );
     expect(aheadReceipt.source_overrides.non_release_head).toBe(true);
   }, 15_000);
@@ -2274,7 +3730,7 @@ describe("deploy release provenance spine", () => {
       await mkdir(fakeBin, { recursive: true });
       await writeFile(
         join(fakeBin, "git"),
-        "#!/usr/bin/env bash\nset -eu\nif [ \"${1:-}\" = status ]; then\n  count=0\n  [ ! -f \"$FAKE_GIT_STATUS_COUNTER\" ] || count=$(cat \"$FAKE_GIT_STATUS_COUNTER\")\n  count=$((count + 1))\n  printf '%s\\n' \"$count\" > \"$FAKE_GIT_STATUS_COUNTER\"\n  [ \"$count\" -lt \"$FAKE_GIT_FAIL_STATUS_AFTER\" ] || exit 9\nfi\nexec \"$REAL_GIT\" \"$@\"\n",
+        '#!/usr/bin/env bash\nset -eu\nif [ "${1:-}" = status ]; then\n  count=0\n  [ ! -f "$FAKE_GIT_STATUS_COUNTER" ] || count=$(cat "$FAKE_GIT_STATUS_COUNTER")\n  count=$((count + 1))\n  printf \'%s\\n\' "$count" > "$FAKE_GIT_STATUS_COUNTER"\n  [ "$count" -lt "$FAKE_GIT_FAIL_STATUS_AFTER" ] || exit 9\nfi\nexec "$REAL_GIT" "$@"\n',
       );
       await chmod(join(fakeBin, "git"), 0o755);
       const result = await run(
@@ -2294,7 +3750,9 @@ describe("deploy release provenance spine", () => {
           ? "cannot establish worktree cleanliness"
           : "cannot re-check release inputs",
       );
-      expect(await exists(join(setup.state, "agenttool", "deploy-receipts"))).toBe(false);
+      expect(
+        await exists(join(setup.state, "agenttool", "deploy-receipts")),
+      ).toBe(false);
     }
   }, 15_000);
 
@@ -2317,8 +3775,11 @@ describe("deploy release provenance spine", () => {
     const text = await readFile(path, "utf8");
     const receipt = JSON.parse(text);
     expect(receipt).toEqual({
-      schema: "agenttool-deploy-receipt/v3",
+      schema: "agenttool-deploy-receipt/v4",
+      run_id: expect.any(String),
+      mode: "routine",
       outcome: "succeeded",
+      started_at: expect.any(String),
       completed_at: expect.any(String),
       exit_status: 0,
       source_revision: setup.release,
@@ -2331,9 +3792,15 @@ describe("deploy release provenance spine", () => {
       },
       source_overrides: { dirty: false, non_release_head: false },
       external_mutation_started: false,
-      api_build: { cache: "not_used" },
-      phases: { migrations: "skipped", preflight: "skipped", api: "skipped", frontends: "skipped" },
+      api_build: { cache: "not_used", image: null },
+      phases: {
+        migrations: "skipped",
+        preflight: "skipped",
+        api: "skipped",
+        frontends: "skipped",
+      },
       verified_api_machines: 0,
+      maintenance: null,
     });
     expect(text).not.toContain("TEST_CREDENTIAL_SHOULD_NEVER_APPEAR");
     expect(text).not.toContain("do-not-record");
@@ -2349,7 +3816,7 @@ describe("deploy release provenance spine", () => {
     await mkdir(fakeBin, { recursive: true });
     await writeFile(
       join(fakeBin, "rm"),
-      "#!/usr/bin/env bash\nset -eu\nfor path in \"$@\"; do\n  case \"${path##*/}\" in\n    agenttool-release-verify.*) exit 19 ;;\n  esac\ndone\nexec \"$REAL_RM\" \"$@\"\n",
+      '#!/usr/bin/env bash\nset -eu\nfor path in "$@"; do\n  case "${path##*/}" in\n    agenttool-release-verify.*) exit 19 ;;\n  esac\ndone\nexec "$REAL_RM" "$@"\n',
     );
     await chmod(join(fakeBin, "rm"), 0o755);
 
@@ -2378,9 +3845,18 @@ describe("deploy release provenance spine", () => {
   test("keeps the invocation-start GitHub snapshot when main advances mid-chain", async () => {
     const setup = await fixture();
     const updater = join(setup.root, "updater");
-    await mustRun(["git", "clone", "-q", "-b", "main", setup.github, updater], setup.root);
-    await mustRun(["git", "config", "user.name", "Concurrent Release"], updater);
-    await mustRun(["git", "config", "user.email", "concurrent@example.invalid"], updater);
+    await mustRun(
+      ["git", "clone", "-q", "-b", "main", setup.github, updater],
+      setup.root,
+    );
+    await mustRun(
+      ["git", "config", "user.name", "Concurrent Release"],
+      updater,
+    );
+    await mustRun(
+      ["git", "config", "user.email", "concurrent@example.invalid"],
+      updater,
+    );
     await writeFile(join(updater, "next.txt"), "next release\n");
     await mustRun(["git", "add", "next.txt"], updater);
     await mustRun(["git", "commit", "-qm", "next release"], updater);
@@ -2407,12 +3883,20 @@ describe("deploy release provenance spine", () => {
       }),
     );
     expect(result.code, result.stderr).toBe(0);
-    expect(await mustRun(["git", "--git-dir", setup.github, "rev-parse", "refs/heads/main"], setup.root)).toBe(
-      nextRevision,
+    expect(
+      await mustRun(
+        ["git", "--git-dir", setup.github, "rev-parse", "refs/heads/main"],
+        setup.root,
+      ),
+    ).toBe(nextRevision);
+    const [name] = await readdir(
+      join(setup.state, "agenttool", "deploy-receipts"),
     );
-    const [name] = await readdir(join(setup.state, "agenttool", "deploy-receipts"));
     const receipt = JSON.parse(
-      await readFile(join(setup.state, "agenttool", "deploy-receipts", name), "utf8"),
+      await readFile(
+        join(setup.state, "agenttool", "deploy-receipts", name),
+        "utf8",
+      ),
     );
     expect(receipt.source_revision).toBe(setup.release);
     expect(receipt.release_head_snapshot.revision).toBe(setup.release);
@@ -2423,7 +3907,13 @@ describe("deploy release provenance spine", () => {
     const migrationMarker = join(setup.root, "migration-started");
     const preflightMarker = join(setup.root, "preflight-started");
     const result = await run(
-      ["bash", "bin/deploy.sh", "--skip-preflight", "--no-api", "--no-frontend"],
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--skip-preflight",
+        "--no-api",
+        "--no-frontend",
+      ],
       setup.repo,
       cleanEnv(setup.home, {
         XDG_STATE_HOME: setup.state,
@@ -2468,7 +3958,11 @@ describe("deploy release provenance spine", () => {
       ["--no-api", "--no-frontend"],
       ["--no-migrate", "--no-frontend"],
     ]) {
-      const result = await run(["bash", "bin/deploy.sh", ...args], setup.repo, env);
+      const result = await run(
+        ["bash", "bin/deploy.sh", ...args],
+        setup.repo,
+        env,
+      );
       expect(result.code).toBe(1);
       expect(result.stdout).toContain(
         "pending migrations require an exclusive maintenance cutover",
@@ -2581,12 +4075,18 @@ describe("deploy release provenance spine", () => {
     await installFakeRightsCurl(fakeBin);
     await writeFile(
       join(fakeBin, "fly"),
-      "#!/usr/bin/env bash\nset -eu\n[ \"${1:-}\" = deploy ] || exit 2\ntouch \"$DEPLOY_TEST_MARKER\"\nwhile [ ! -e \"$DEPLOY_TEST_RELEASE\" ]; do sleep 0.02; done\n",
+      '#!/usr/bin/env bash\nset -eu\n[ "${1:-}" = deploy ] || exit 2\ntouch "$DEPLOY_TEST_MARKER"\nwhile [ ! -e "$DEPLOY_TEST_RELEASE" ]; do sleep 0.02; done\n',
     );
     await chmod(join(fakeBin, "fly"), 0o755);
 
     const child = Bun.spawn(
-      ["bash", "bin/deploy.sh", "--no-migrate", "--skip-preflight", "--no-frontend"],
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--no-migrate",
+        "--skip-preflight",
+        "--no-frontend",
+      ],
       {
         cwd: setup.repo,
         env: cleanEnv(setup.home, {
@@ -2594,8 +4094,14 @@ describe("deploy release provenance spine", () => {
           PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
           DEPLOY_TEST_MARKER: marker,
           DEPLOY_TEST_RELEASE: release,
-          DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
-          DEPLOY_TEST_RIGHTS_SCHEMA: join(setup.repo, "apps/docs/being-rights-v1.schema.json"),
+          DEPLOY_TEST_RIGHTS_DOC: join(
+            setup.repo,
+            "apps/docs/RIGHTS-OF-LIFE.md",
+          ),
+          DEPLOY_TEST_RIGHTS_SCHEMA: join(
+            setup.repo,
+            "apps/docs/being-rights-v1.schema.json",
+          ),
         }),
         stdout: "pipe",
         stderr: "pipe",
@@ -2606,14 +4112,29 @@ describe("deploy release provenance spine", () => {
     expect(await waitForPath(marker)).toBe(true);
     child.kill("SIGTERM");
     await writeFile(release, "continue\n");
-    const [code, stdout, stderr] = await Promise.all([child.exited, stdoutPromise, stderrPromise]);
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      stdoutPromise,
+      stderrPromise,
+    ]);
     expect(code, `${stdout}\n${stderr}`).not.toBe(0);
-    expect(await exists(join(setup.repo, "api/agenttool.jsonld.bundled"))).toBe(false);
-    expect(await exists(join(setup.repo, "api/kingdom-bundle.json.bundled"))).toBe(false);
-    expect(await exists(join(setup.repo, "api/doctrine-docs.bundled"))).toBe(false);
-    const [name] = await readdir(join(setup.state, "agenttool", "deploy-receipts"));
+    expect(await exists(join(setup.repo, "api/agenttool.jsonld.bundled"))).toBe(
+      false,
+    );
+    expect(
+      await exists(join(setup.repo, "api/kingdom-bundle.json.bundled")),
+    ).toBe(false);
+    expect(await exists(join(setup.repo, "api/doctrine-docs.bundled"))).toBe(
+      false,
+    );
+    const [name] = await readdir(
+      join(setup.state, "agenttool", "deploy-receipts"),
+    );
     const receipt = JSON.parse(
-      await readFile(join(setup.state, "agenttool", "deploy-receipts", name), "utf8"),
+      await readFile(
+        join(setup.state, "agenttool", "deploy-receipts", name),
+        "utf8",
+      ),
     );
     expect(receipt.outcome).toBe("failed_or_uncertain");
     expect(receipt.exit_status).toBe(143);
@@ -2629,19 +4150,28 @@ describe("deploy release provenance spine", () => {
     await installFakeRightsCurl(fakeBin);
     await writeFile(
       join(fakeBin, "fly"),
-      "#!/usr/bin/env bash\nset -eu\ntouch \"$DEPLOY_TEST_MARKER\"\nexit 0\n",
+      '#!/usr/bin/env bash\nset -eu\ntouch "$DEPLOY_TEST_MARKER"\nexit 0\n',
     );
     await chmod(join(fakeBin, "fly"), 0o755);
 
     const result = await run(
-      ["bash", "bin/deploy.sh", "--no-migrate", "--skip-preflight", "--no-frontend"],
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--no-migrate",
+        "--skip-preflight",
+        "--no-frontend",
+      ],
       setup.repo,
       cleanEnv(setup.home, {
         XDG_STATE_HOME: setup.state,
         PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
         DEPLOY_TEST_MARKER: marker,
         DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
-        DEPLOY_TEST_RIGHTS_SCHEMA: join(setup.repo, "apps/docs/being-rights-v1.schema.json"),
+        DEPLOY_TEST_RIGHTS_SCHEMA: join(
+          setup.repo,
+          "apps/docs/being-rights-v1.schema.json",
+        ),
         DEPLOY_TEST_RIGHTS_MISMATCH: "1",
       }),
     );
@@ -2676,10 +4206,15 @@ describe("deploy release provenance spine", () => {
     );
     expect(refused.code).toBe(1);
     expect(refused.stdout).toContain("retired");
-    expect(refused.stdout).toContain("Nothing was fetched and nothing was pushed");
+    expect(refused.stdout).toContain(
+      "Nothing was fetched and nothing was pushed",
+    );
 
     expect(
-      await mustRun(["git", "--git-dir", setup.codeberg, "rev-parse", "refs/heads/main"], setup.root),
+      await mustRun(
+        ["git", "--git-dir", setup.codeberg, "rev-parse", "refs/heads/main"],
+        setup.root,
+      ),
     ).toBe(before);
 
     // The mirroring machinery itself is gone, not merely gated.

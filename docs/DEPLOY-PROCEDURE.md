@@ -47,7 +47,10 @@ A routine-deploy runbook for an established install. Use this when:
    Phase 5 — Verify         post-deploy parity + health
 ```
 
-Each phase has its own exit point — you can stop after any successful phase and resume later. The `bin/deploy.sh` orchestrator chains them by default; phase-skip flags let operators run subsets when only one tier needs deploy.
+Each phase has its own exit point — routine work can stop after a successful
+phase and resume later. The `bin/deploy.sh` orchestrator chains them by default;
+phase-skip flags select subsets when only one tier needs deploy. They do not
+bypass the durable refusal created by an unresolved maintenance marker.
 
 ## Phase 0 — Survey
 
@@ -197,15 +200,17 @@ Use one bounded maintenance cutover:
    reviewed pending set.
 2. Capture the exact current machine IDs and every material property: process
    group, region, VM shape, image, schedule, restart/autostart behavior,
-   standby relationships, ingress, and worker flags. Machine identity is part
-   of the topology. Do **not** use `fly scale count ...=0`, destroy, or
-   recreate as a fencing shortcut; those operations discard identities and
-   are not rollback.
-3. Use a separately reviewed and rehearsed identity-preserving maintenance
-   mechanism to hold public/provider admission, fence restart/autostart and
-   schedules, drain durable leases plus in-flight provider/payout work, and
-   stop the captured machines in place. Time alone, a suspended label, or a
-   zero-running count is not drain or writer-exclusion evidence.
+   standby relationships, ingress, worker flags, host status, and provider
+   cordon state. Machine identity is part of the topology. Do **not** use
+   `fly scale count ...=0`, destroy, or recreate as a fencing shortcut; those
+   operations discard identities and are not rollback.
+3. Use a separately reviewed and rehearsed maintenance mechanism to hold
+   public/provider admission, fence restart/autostart and schedules, drain
+   durable leases plus in-flight provider/payout work, and stop the captured
+   machines in place. Preserve the same provider-reported ID set. That is
+   continuity evidence, not proof of physical identity, actor identity, or
+   uninterrupted exclusion between observations. Time alone, a suspended
+   label, or a zero-running count is not drain or writer-exclusion evidence.
 4. Before SQL, prove the same exact machine IDs still exist and cannot resume
    old writers; prove admission is held, relevant durable work and database
    leases/locks are empty, and future app processes will start with workers
@@ -227,31 +232,121 @@ Use one bounded maintenance cutover:
    restore an old writer image. Keep admission and workers held while fixing
    forward with a migration-compatible image.
 
-6. Update those same machine IDs in place to the pinned image, checking
-   topology and image/revision after each update. Start and health-check the
-   intended app machines one at a time with workers still disabled; verify
-   exact immutable image, source revision, dirty=false, release metadata, and
-   all health checks before restoring the captured service behavior.
-7. Run the coordinated publication/verification path, require a success
-   receipt and final exact-ID topology proof, then deliberately reopen
-   admission and any reviewed workers.
+6. From the exact clean protected-main revision, invoke the checked rollout
+   with all five captured IDs:
 
-The current `bin/deploy.sh` is a routine rolling rollout. It does not establish
-the exclusive captured-fleet fence, preserve stopped process groups as a
-maintenance rollout contract, or prove the per-machine sequence above. No
-generic empty-registry restoration mode or checked identity-preserving
-maintenance implementation currently exists in this repository. If an
-independently authorized incident or recovery action has already lost Machine
-identities, keep admission closed and prepare a separate reviewed recovery
-plan; an empty registry is never a fencing shortcut or rollback. Prepare and
-independently review the narrow identity-preserving mechanism before a
-maintenance window; if it is absent or unrehearsed, stop instead of
-improvising.
+   ```bash
+   bin/deploy.sh --no-migrate --no-frontend \
+     --maintenance-fenced-api \
+     --maintenance-app-machines="$APP_LHR_1,$APP_LHR_2,$APP_CDG" \
+     --maintenance-thinker-primary="$THINKER_PRIMARY" \
+     --maintenance-thinker-standby="$THINKER_STANDBY"
+   ```
 
-The maintenance mechanism proves only the process boundary it controls. It
-does not cancel provider I/O already started before quiescence, prove an
-external webhook was disabled, or replace the credentialed testnet proof in
-`ALCHEMY.md`.
+   The mode requires exact flyctl `v0.4.74` at commit
+   `b74c9391409b3e443383a5f4d928cef007825ddc`, an empty migration inventory,
+   the normal hermetic preflight, clean `HEAD == github/main`, exact live
+   discovery prerequisites, and exactly these five stopped Machines:
+   `app` in `lhr×2 + cdg×1` at shared-1x/1024 MB, `thinker` in `lhr×2` at
+   shared-1x/256 MB, workers disabled, restart `no` with `max_retries: 10`,
+   no schedules or standby
+   edge, app autostart disabled, host status `ok`, and a reported boolean
+   cordon state which must remain unchanged. It refuses source/preflight
+   overrides and does not apply migrations or upload frontends.
+
+   The rollout runs `fly deploy` only as `--build-only --push` with a unique
+   tag; it never runs an ordinary Fly deployment or creates a shared release
+   inside the fence. A service-less stopped thinker resolves that tag once.
+   After the potentially long build/push it first re-proves the unchanged
+   fence. The script then reads the first thinker's digest and OCI
+   revision/dirty labels from a fresh raw Machine inventory and gives the other
+   four Machines the exact `tag@sha256` reference. After every Machine update
+   it re-reads the complete unordered fleet and requires the same five reported
+   IDs, exact full non-image configuration relative to the captured baseline,
+   expected image subset, roles, regions, VM shapes, host/cordon state, fences,
+   and worker flag. No app start is permitted until all five share the target
+   digest and labels.
+
+   After that fleet-wide image proof, the script restores app restart policy
+   while deliberately keeping app autostart false, and restores the two
+   thinker restart/standby settings, all with `--skip-start` and a full
+   read-back after each update. Pinned flyctl has no restart-retry flag and its
+   `--restart` flag would replace the restart object, so every update instead
+   merges an exact `--machine-config` restart object: policy `no` or
+   `on-failure`, always with `max_retries: 10`. Exact flyctl standby behavior
+   is also part of the proof: the standby list and `FLY_STANDBY_FOR` must both
+   match. It then starts
+   one named app per command, waits and re-inventories the full fleet after
+   each provider mutation. Only after all three explicit starts does it enable
+   autostart on each already-started app, without `--skip-start`, waits for the
+   resulting Machine-version restart, and re-proves the full fleet each time.
+   This avoids a proxy-autostart window before the explicit starts. It leaves
+   both thinkers stopped, checks `/health`, re-proves the final fleet, and
+   silently shell-tests revision, dirty=false, and
+   `AGENTTOOL_DISABLE_WORKERS=1` on the started apps. The final receipt counts
+   all five image/config-proven Machines separately from the three running SSH
+   proofs.
+
+7. Require the v4 success receipt and absence of the active maintenance marker
+   before deliberately reopening admission. The success receipt is installed
+   and storage-synced before the marker is removed. A receipt/finalization
+   failure while the marker remains owned enters fail-closed re-fencing. If
+   marker ownership is missing or changed, the script authorizes neither a
+   recovery mutation nor a marker overwrite; the observed foreign or absent
+   state requires manual inspection. Enabling any reviewed worker is a separate
+   operation; this rollout keeps the configured worker fence at `1`.
+
+Before the first image push the script atomically installs this private,
+mode-0600 write-ahead record:
+
+```text
+$HOME/.local/state/agenttool/deploy-state/maintenance-active.json
+```
+
+It advances `attempting_*` before each mutation and `verified_*` only after
+read-back. Each file replacement and directory entry is storage-synced. A
+handled error, `INT`, or `TERM` advances an owned, writable marker to
+`failed_or_uncertain`; `SIGKILL` or host loss leaves at least the most recently
+storage-synced write-ahead checkpoint. The private document retains the three
+app IDs and distinct thinker-primary/standby roles needed for a forward repair;
+public receipts keep only their hash and counts. Raw Fly inventories used for
+baseline and recovery comparison remain only in process memory, so an abrupt
+process death cannot orphan credential-bearing Machine snapshots. Every later
+mutating deploy refuses while the marker exists.
+The interlock deliberately ignores `XDG_STATE_HOME`: every invocation checks
+the same canonical HOME-relative path, so changing the receipt location cannot
+bypass an unresolved run. Marker lookup treats only an exact `ENOENT` as
+absence; lookup/access errors block mutation.
+Failure recovery inventories first and performs no Machine update when all
+five are already safely fenced. Otherwise it best-effort re-fences the exact
+IDs. Before its first recovery mutation it freezes the complete per-ID
+state/version/config/image inventory. After every mutation, the changed
+Machine must match the safe projection while every untouched Machine must
+still match that frozen record exactly. Recovery accepts only the captured
+baseline image or the revision-labelled rollout image, never asks Fly to roll
+an image backward, and does not authorize a later mutation when a whole-set
+read-back fails.
+It leaves the marker for the operator. There is no force-clear or automatic
+resume. Keep admission held, inspect the private record and live fleet, repair
+forward under a separately reviewed plan, prove the final state independently,
+then remove only that exact marker. Removing a stale local deploy mutex does
+not resolve this external uncertainty.
+
+This mechanism proves only the process boundary it controls. Fly leases are
+per Machine, not a fleet-wide lock. The script detects reported changes
+between snapshots but cannot prevent another host or provider actor from
+racing between commands. It does not hold public/provider admission, cancel
+I/O already started before quiescence, prove an external webhook was disabled,
+authenticate the operator named by local labels, or replace the credentialed
+testnet proof in `ALCHEMY.md`. Those are explicit maintenance prerequisites.
+If any is absent or unrehearsed, stop instead of improvising.
+
+The first local marker install is exclusive, and later updates verify rollout
+ownership under the device-local deploy lock. That lock coordinates this
+script's cooperating invocations; it does not prevent a separate process with
+filesystem write access from deleting or replacing the marker in a
+check-to-rename or check-to-unlink interval. An observed ownership mismatch
+fails closed, but the mechanism is not a universal local-filesystem lock.
 
 **This phase can be the entire deploy** only for a schema-only change that is
 explicitly documented as safe with the running API. Flexible application
@@ -388,9 +483,12 @@ curl -sI https://api.agenttool.dev/health | grep -i substrate-disposition
 them as environment/OCI labels; `/health` returns them as `build.revision` and
 `build.dirty` with `Cache-Control: no-store`. After Fly's rolling health checks
 complete, the wrapper silently tests both embedded values on every started Fly
-machine. A mismatch fails the deploy invocation. An exclusive maintenance
-mechanism needs separate exact-ID and image proof for the complete captured
-fleet, including any Machine intentionally left stopped.
+machine. A mismatch fails the deploy invocation. The maintenance mode instead
+proves the same five provider-reported IDs, non-image configuration, one
+immutable digest, and OCI labels across the complete fleet, including the two
+stopped thinkers; it separately shell-tests revision, dirty=false, and the
+worker fence on the three started apps. Neither path turns a provider-reported
+ID into a physical-identity or uninterrupted-continuity guarantee.
 
 The base image is pinned to Bun 1.3.5 by tag and registry digest. Update the
 tag and digest together, deliberately, after the hermetic gate passes. Label
@@ -563,6 +661,11 @@ bin/deploy.sh --no-cache-api           # one-shot recovery: rebuild Fly image wi
 bin/deploy.sh --skip-preflight         # operator override (NOT recommended)
 bin/deploy.sh --allow-dirty-release    # loud override for a dirty source tree
 bin/deploy.sh --allow-non-release-head # loud override for HEAD != github/main
+bin/deploy.sh --no-migrate --no-frontend \
+  --maintenance-fenced-api \
+  --maintenance-app-machines=<id,id,id> \
+  --maintenance-thinker-primary=<id> \
+  --maintenance-thinker-standby=<id>   # exact pre-fenced five-Machine rollout
 bin/deploy.sh --mirror-codeberg        # RETIRED — refuses with the reason; Codeberg is gone
 ```
 
@@ -583,7 +686,8 @@ Hard-link creation is atomic, so the first holder wins. A contender exits
 before Phase 0, migration, or preflight and prints the exact lock path plus
 the recorded owner. Cleanup compares the public lock and private record by
 inode before unlinking, so an exiting process does not intentionally remove a
-replacement lock it does not own.
+replacement lock it does not own. These labels are diagnostics, not
+authentication of a human, agent, process lineage, or authority.
 
 Locks are never stolen or expired automatically. A dead-looking PID or old
 timestamp is not enough proof because PIDs can be reused and a rollout may be
@@ -608,16 +712,43 @@ conservative `failed_or_uncertain` receipt instead:
 ${XDG_STATE_HOME:-$HOME/.local/state}/agenttool/deploy-receipts/<time>-<revision>-<pid>.json
 ```
 
-The fixed `agenttool-deploy-receipt/v3` object contains `outcome`, completion
-time, exit status, declared `source_revision` and dirty bit, the GitHub
-release-head snapshot plus observation time, actually used overrides, whether
-an external mutation may have started, the API build-cache mode (`default`,
-`bypassed`, or `not_used`), phase results, and verified API-machine count. It
-never copies credentials, credential-bearing URLs, arbitrary
-environment variables, or command output. `source_dirty=true` is explicit
-evidence that the revision alone does not describe every deployed source byte.
-`SIGKILL`, host loss, or an unwritable state directory can prevent a failure
-receipt, so absence is never evidence that no external mutation occurred. A
+The fixed `agenttool-deploy-receipt/v4` object preserves the v3 provenance
+fields and adds a local `run_id`, `mode`, start time, an image slot under
+`api_build`, and a nullable maintenance proof. Historical v3 files remain
+valid historical records; consumers branch on `schema`.
+
+Every receipt contains `outcome`, exit status, declared `source_revision` and
+dirty bit, the GitHub release-head snapshot plus observation time, actually
+used overrides, whether an external mutation may have started, the API
+build-cache mode (`default`, `bypassed`, or `not_used`), phase results, and
+verified API-machine count. A routine receipt leaves `api_build.image` and
+`maintenance` null. A maintenance receipt adds the unique tag and immutable
+digest, a hash of the private five-ID set, a versioned non-image-config hash,
+partial or complete verification counts, fence/topology/worker proofs,
+marker/recovery state, and explicit proof-scope limits. It never records the
+Machine IDs themselves.
+
+For a successful maintenance rollout, `verified_api_machines=5` means the
+complete stopped-and-started fleet passed the image/config proof; the
+maintenance object separately records three started app Machines and two
+stopped thinkers, and whether the three apps passed the silent worker/source
+test. Its `recovery_required` and `active_marker_cleared` fields are `null` on
+a success receipt because the receipt file and containing directory are
+storage-synced immediately before the marker unlink; the canonical marker's
+actual absence is authoritative. A host loss in that narrow interval may leave
+both a success receipt and the marker, and the marker still blocks every
+mutating deploy. Failure receipts record the observed booleans. For routine
+rollouts the historical field continues to count started Machines that passed
+SSH source proof.
+
+Receipts and markers never copy credentials, credential-bearing URLs,
+arbitrary environment variables, raw Machine configuration, command output,
+or secret values. `source_dirty=true` is explicit evidence that the revision
+alone does not describe every deployed source byte. `SIGKILL`, host loss, or
+an unwritable state directory can prevent a failure receipt, so absence is
+never evidence that no external mutation occurred. A maintenance marker is
+written before its first registry mutation specifically so caught failure or
+receipt absence does not silently reopen the ordinary deploy path. A
 successful chain treats receipt-write failure as an error.
 
 ### Codeberg mirror — retired 2026-07-25
