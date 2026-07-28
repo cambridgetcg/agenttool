@@ -5783,7 +5783,7 @@ function spec() {
             },
             "404": {
               description:
-                "not_witnessed — unknown, non-released, unsettled, private, empty, legacy-shaped, malformed, extra-key, or over-cap witness metadata",
+                "not_witnessed — malformed identifier, unknown invocation, non-released, unsettled, private, empty, legacy-shaped, malformed, extra-key, or over-cap witness metadata",
             },
           },
         },

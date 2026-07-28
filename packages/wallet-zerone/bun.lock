@@ -16,7 +16,7 @@
         "typescript": "^5.7.0",
       },
       "peerDependencies": {
-        "@agenttool/wallet": "^0.1.1",
+        "@agenttool/wallet": "^0.1.2",
       },
     },
   },

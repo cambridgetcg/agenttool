@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import * as walletZerone from "../dist/index.js";
 
 assert.equal(walletZerone.PACKAGE_NAME, "@agenttool/wallet-zerone");
-assert.equal(walletZerone.PACKAGE_VERSION, "0.1.0");
+assert.equal(walletZerone.PACKAGE_VERSION, "0.1.1");
 assert.equal(
   walletZerone.ZERONE_CORE_COMMIT,
   "35284a22192df8fc6273135f14e8549c804778b6",

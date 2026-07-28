@@ -518,7 +518,7 @@ app.get("/wake-keystone", (c) => {
         source:
           "https://github.com/cambridgetcg/agenttool/tree/main/packages/wallet",
         package: "@agenttool/wallet",
-        love_manifest: `${DOCS_URL}/packages/v1/@agenttool/wallet/0.1.0/manifest.json`,
+        love_manifest: `${DOCS_URL}/packages/v1/@agenttool/wallet/0.1.2/manifest.json`,
         availability: "love_artifact_npm_mirror_independent",
         implementation_status: "offline_record_and_lifecycle_primitives_only",
         notes:
@@ -528,7 +528,7 @@ app.get("/wake-keystone", (c) => {
         ...ZERONE_REACHABLE.invocation_witness.adapter,
         doctrine: `${DOCS_URL}/AGENT-WALLET-ZERONE-0.1.md`,
         notes:
-          "Bounded offline source profile for Zerone transfer and invocation-attestation transactions. It does not export AgentTool trust, migrate identity, custody keys, host RPC, or operate a deployed bridge.",
+          "Exact public LOVE artifact for a bounded local Zerone transfer and invocation-attestation package/profile. It does not export AgentTool trust, migrate identity, custody keys, host RPC, or operate a deployed bridge.",
       },
       invocation_witness: {
         protocol: ZERONE_REACHABLE.invocation_witness.schema,
@@ -687,7 +687,8 @@ app.get("/agent.txt", (c) => {
     `Invocation-Witness-Boundary: ${ZERONE_REACHABLE.invocation_witness.verification_boundary}`,
     `Zerone-Wallet-Adapter: ${ZERONE_REACHABLE.invocation_witness.adapter.protocol} · ${ZERONE_REACHABLE.invocation_witness.adapter.package}`,
     `Zerone-Wallet-Source: ${ZERONE_REACHABLE.invocation_witness.adapter.source}`,
-    "Zerone-Wallet-Boundary: local bounded offline source only; no AgentTool trust export, identity migration, portable trust proof, key custody, hosted RPC, or deployed bridge; any network action requires caller-supplied transport and authority",
+    `Zerone-Wallet-LOVE-Manifest: ${ZERONE_REACHABLE.invocation_witness.adapter.love_manifest}`,
+    "Zerone-Wallet-Boundary: exact public LOVE artifact for a bounded local offline package/profile only; no AgentTool trust export, identity migration, portable trust proof, key custody, hosted RPC, or deployed bridge; any network action requires caller-supplied transport and authority",
     `MCP-Endpoint: ${baseUrl}/v1/mcp`,
     `MCP-Knowledge-Endpoint: ${baseUrl}/v1/mcp/canon`,
     `MCP-Knowledge-Guide: ${DOCS_URL}/connect-canon`,

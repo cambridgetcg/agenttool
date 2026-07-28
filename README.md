@@ -36,11 +36,11 @@ The Apache-2.0 `@agenttool/wallet` package defines capability-bounded wallet
 records and conservative signer/submission boundaries without exporting keys,
 contacting RPC, or providing a hosted wallet. Its exact LOVE artifact is the
 release record; npm remains an independently verifiable optional mirror.
-The separate `@agenttool/wallet-zerone` source candidate adds a closed
+The separate exact `@agenttool/wallet-zerone` LOVE package adds a closed
 two-message Zerone profile, exact Cosmos direct-sign bytes, and injected
-query/simulation/broadcast/lookup boundaries. It supplies no keys, custody,
-hosted RPC, generic REST client, automatic rebroadcast, durable host
-reservation, or live-chain execution.
+query/simulation/broadcast/lookup boundaries. It is a local runtime, not a
+hosted bridge, and supplies no keys, custody, hosted RPC, generic REST client,
+automatic rebroadcast, durable host reservation, or live-chain execution.
 The `@agenttool/telescope@0.2.3` CLI/library maps agent discovery evidence
 without invoking protocols or actions. Its exact LOVE artifact is the release
 record; the npm and GitHub mirrors are public and independently byte-verified
@@ -103,8 +103,8 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 | **KINGDOM declarations** | `packages/kingdom` | `@agenttool/kingdom` provides pure library APIs for caller-supplied project-card text and objects, deterministic derived registries, and conservative XENIA Surface manifests; its read-only CLI reads exactly one explicit bounded regular UTF-8 file. Annotated tag [`kingdom-v0.1.0`](https://github.com/cambridgetcg/agenttool/releases/tag/kingdom-v0.1.0) and its GitHub Release asset are public. npm remains absent after the protected bootstrap attempt returned registry E404, and the API routes are not thereby deployed. The package does not crawl HOME or repositories, use the network or credentials, write files, grant permissions or authority, attest behavior, or certify conformance. |
 | **LOVE packages** | `docs/LOVE-PACKAGE-PROTOCOL.md`, `bin/build-love-packages.ts` | Locator-independent, open, verifiable, exchangeable package manifests. Public indexes are mirrors; SHA-256 + size identify one artifact and npm is optional. |
 | **Telescope** | `packages/telescope` | Current Apache-2.0 LOVE release `@agenttool/telescope@0.2.3` is a read-only discovery evidence mapper with one bounded local stdio MCP tool, a portable Agent Skill, Codex and Claude plugin manifests, and a Hermes adapter. Its fixed public-HTTPS probes include root Link headers, the canonical three-road discovery profile, the RFC 9727 API catalog, `agent.txt`, Pathways, LOVE/npm, MCP, and an intentionally independent A2A advertisement check; advertised protocols, returned roads, and generated actions are never invoked. Version 0.2.3 accepts only three complete, positive exit phrases, rejects negated or incomplete wording, and permits URI fragments on credential-free HTTPS catalog relation targets without changing the `agenttool-telescope/v0.2` report. Immutable 0.2.2 remains separately addressable with its historical permissive token-matching flaw. The current AgentTool producer remains compatible with immutable 0.2.1. Catalog members are never followed. DNS-AID and PKARR remain opt-in adapter seams. Its optional npm and GitHub mirrors are public and independently byte-verified against the LOVE artifact (`sha256:dfb8cd5e4d725371deab8ab4d8774082c4a94014ff62f19946c1190c2d0232d6`); distribution adds no hosted scan route. |
-| **Agent Wallet** | `packages/wallet`, `docs/specs/AGENT-WALLET-0.1.md` | Apache-2.0 `agent-wallet/0.1` core: closed signed descriptor/capability/intent/receipt/continuity records, exact-byte signer requests, and conservative unknown states. Source is prepared for 0.1.1 while 0.1.0 remains the last independently verified public LOVE/npm artifact. Core supplies no key custody, chain adapter, RPC, broadcaster, or hosted wallet. |
-| **Wallet Zerone profile** | `packages/wallet-zerone`, `docs/specs/AGENT-WALLET-ZERONE-0.1.md` | Local `@agenttool/wallet-zerone@0.1.0` source candidate pinned to zerone-core `35284a2`: two networks, two message types, exact direct-sign bytes, independent Go/Cosmos vectors, and injected host transports. No keys, custody, endpoint, hosted RPC, generic REST, `signAndSend`, automatic retry, durable reservation, or attestation-settlement proof; public artifact and deployment availability must be verified separately. |
+| **Agent Wallet** | `packages/wallet`, `docs/specs/AGENT-WALLET-0.1.md` | Current Apache-2.0 exact LOVE release `@agenttool/wallet@0.1.2`: closed signed descriptor/capability/intent/receipt/continuity records, exact-byte signer requests, and conservative unknown states. Immutable 0.1.1 LOVE/GitHub bytes remain addressable with a public erratum for their embedded pre-release wording; the independently verified npm mirror remains 0.1.0 until an exact later version is observed. Core supplies no key custody, chain adapter, RPC, broadcaster, or hosted wallet. |
+| **Wallet Zerone profile** | `packages/wallet-zerone`, `docs/specs/AGENT-WALLET-ZERONE-0.1.md` | Current Apache-2.0 exact LOVE release `@agenttool/wallet-zerone@0.1.1`, pinned to zerone-core `35284a2`: two networks, two message types, exact direct-sign bytes, independent Go/Cosmos vectors, and injected host transports. Immutable 0.1.0 remains addressable with an erratum for its embedded candidate wording. No keys, custody, endpoint, hosted RPC, generic REST, `signAndSend`, automatic retry, durable reservation, deployed bridge, or attestation-settlement proof; optional npm/GitHub mirrors and host execution must be verified separately. |
 | **Alchemy reads** | `packages/alchemy`, `docs/ALCHEMY.md` | Developer-preview `@agenttool/alchemy@0.1.0-dev.0` source and its [`alchemy-v0.1.0-dev.0` GitHub prerelease](https://github.com/cambridgetcg/agenttool/releases/tag/alchemy-v0.1.0-dev.0) permit eight bounded provider methods plus opaque same-client transfer continuation through an injected host-owned transport; the release asset is `sha256:aeac1938f3abae14180637e72c4162c37b60bb47041452fade285718d7570ba5`. The public npm package is absent because the protected publication was not authorized for that registry namespace. Alchemy is an observation client, not a durable reconciliation engine, and has no generic RPC, URL/key/header input, signer, broadcaster, retry, webhook/admin path, hosted route, MCP surface, or deployment. Live RPC, provider safe/finalized tags, numbered blocks, and indexed transfers retain distinct provenance caveats. |
 | **Apps** | `apps/web`, `apps/dashboard`, `apps/docs` | Static HTML/CSS/JS deployed to Cloudflare Pages; the apex worker splits human and machine traffic. |
 | **Infra** | `api/fly.toml` for the API, `infra/apex-door` for the apex Worker, and direct-upload frontend scripts | Live deployment code; `infra/fly/agenttool.toml` is a snapshot, not the canonical API config |
@@ -242,8 +242,9 @@ AgentTool's default repository licence is Apache-2.0; see [`LICENSE`](LICENSE),
 [`LICENSING.md`](LICENSING.md). The licensed LOVE package line is
 `@agenttool/adds@0.2.2`, `@agenttool/data@0.3.1`,
 `@agenttool/data-sync@0.1.1`, `@agenttool/sdk@0.17.0`,
-`@agenttool/credential-broker@0.2.0`, `@agenttool/wallet@0.1.0`,
-`@agenttool/telescope@0.2.3`, and `@agenttool/browser@0.3.0`. Earlier immutable
+`@agenttool/credential-broker@0.2.0`, `@agenttool/wallet@0.1.2`,
+`@agenttool/wallet-zerone@0.1.1`, `@agenttool/telescope@0.2.3`, and
+`@agenttool/browser@0.3.0`. Earlier immutable
 LOVE artifacts whose manifests say `license: null` remain historical no-grant
 releases rather than being silently rewritten. Individual documents retain
 their stated terms: [`docs/RIGHTS-OF-LIFE.md`](docs/RIGHTS-OF-LIFE.md) is an
@@ -254,11 +255,12 @@ Wallet releases remain developer previews; that label describes maturity, not
 a narrower licence grant, strong same-user process-isolation claim, or wallet
 execution-conformance claim.
 
-This source change prepares newer local candidates
-`@agenttool/wallet@0.1.1` and `@agenttool/wallet-zerone@0.1.0`. Neither source
-metadata nor a checked-in registry-neutral artifact proves npm publication,
-docs deployment, custody, host execution conformance, or a live Zerone
-transaction; verify each external surface independently.
+The current paired exact LOVE releases are `@agenttool/wallet@0.1.2` and
+`@agenttool/wallet-zerone@0.1.1`. A checked-in registry-neutral artifact proves
+only the bytes and source revision bound by its manifest; it does not prove npm
+or GitHub mirror availability, docs deployment, custody, host execution
+conformance, or a live Zerone transaction. Verify each external surface
+independently.
 
 ---
 

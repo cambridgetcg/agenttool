@@ -46,10 +46,10 @@ Known exceptions include:
 - [`packages/wallet`](packages/wallet) is an Apache-2.0 package in the LOVE/npm
   release batch. Its Working Draft and preview status describe protocol
   maturity, not a narrower licence grant or execution-conformance claim.
-- [`packages/wallet-zerone`](packages/wallet-zerone) is an Apache-2.0 local
-  source/release candidate with its own `LICENSE` and `NOTICE`. Source
-  metadata or a checked-in candidate does not claim npm publication, public
-  deployment, or execution conformance.
+- [`packages/wallet-zerone`](packages/wallet-zerone) is an Apache-2.0 package
+  in the current LOVE release batch with its own `LICENSE` and `NOTICE`.
+  Public LOVE bytes do not claim npm or GitHub mirror availability, a hosted
+  bridge, custody, live-chain execution, or execution conformance.
 - [`packages/kingdom`](packages/kingdom) is an independently written
   compatibility implementation of the observed KINGDOM project-card
   interface. Its Apache-2.0 grant covers the package's original implementation,

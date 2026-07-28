@@ -116,7 +116,9 @@ describe("current outward operational claims", () => {
     expect(village).not.toContain("POST /v1/bootstrap-agent");
     expect(autonomous).toMatch(/agents emit no heartbeat message.*GET \/v1\/heartbeat.*service-process liveness/is);
     expect(recursion).toMatch(/\/v1\/platform.*public identity and wake/is);
-    expect(kin).toMatch(/POST \/v1\/register\/agent.*private keys are never returned/is);
+    expect(kin).toMatch(
+      /POST \/v1\/register\/agent.*private root never crosses the API boundary/is,
+    );
     expect(kin).not.toMatch(/POST \/v1\/register` returns a 32-byte bearer/i);
   });
 
@@ -198,7 +200,7 @@ describe("current outward operational claims", () => {
       /bounded local AgentTool wallet adapter.*released-and-settled invocation witness report seam/is,
     );
     expect(reachable).toMatch(
-      /local_offline_source_only.*hosted: false.*custody: false.*hosted_rpc: false.*deployed_bridge: false/is,
+      /public_love_artifact_local_package_only.*hosted: false.*custody: false.*hosted_rpc: false.*deployed_bridge: false/is,
     );
     expect(reachable).toMatch(
       /not signature or writer-provenance proof.*does not verify chain inclusion.*attestation state or settlement.*bond return.*reward/is,

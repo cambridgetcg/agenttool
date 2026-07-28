@@ -9,9 +9,13 @@ into exact Cosmos `SIGN_MODE_DIRECT` bytes, verifies the returned secp256k1
 signature and `TxRaw`, and supplies injected query, simulation, broadcast, and
 lookup boundaries.
 
-The source package is the locally prepared `0.1.0` release candidate. It has
-not been published to npm or deployed. Its wire contract is pinned to
-zerone-core commit
+Version `0.1.1` is the current exact `love-package/v1` release. It remains a
+local offline runtime and has not become a hosted bridge, signer, custody
+provider, or RPC service. npm and GitHub are optional mirrors whose exact
+availability must be checked independently. The immutable `0.1.0` LOVE
+artifact remains public, but its embedded docs call it a release candidate;
+this paragraph is the public erratum and those historical bytes are not
+rewritten. Its wire contract is pinned to zerone-core commit
 `35284a22192df8fc6273135f14e8549c804778b6` and Cosmos SDK `v0.50.15`.
 
 It does not derive, accept, store, or export private keys or mnemonics. It does

@@ -55,7 +55,8 @@ export interface ReachableDoor {
       readonly protocol: "agent-wallet-zerone/0.1";
       readonly package: "@agenttool/wallet-zerone";
       readonly source: string;
-      readonly availability: "local_offline_source_only";
+      readonly love_manifest: string;
+      readonly availability: "public_love_artifact_local_package_only";
       readonly hosted: false;
       readonly custody: false;
       readonly hosted_rpc: false;
@@ -111,7 +112,7 @@ export const ZERONE_REACHABLE = {
     "an independent chain with a bounded local AgentTool wallet adapter and a released-and-settled invocation witness report seam",
   url: "https://github.com/cambridgetcg/zerone-core",
   _note:
-    "AgentTool source includes an offline @agenttool/wallet-zerone adapter plus POST /v1/invocations/{id}/witness for an authenticated buyer or seller to report a released, settled invocation and GET /public/invocations/{id} to read an accepted report shape. This is not trust-record export, identity migration, portable trust, key custody, hosted RPC, or a deployed bridge.",
+    "AgentTool publishes an exact LOVE artifact for the offline @agenttool/wallet-zerone adapter plus POST /v1/invocations/{id}/witness for an authenticated buyer or seller to report a released, settled invocation and GET /public/invocations/{id} to read an accepted report shape. This is not trust-record export, identity migration, portable trust, key custody, hosted RPC, or a deployed bridge.",
   invocation_witness: {
     schema: "agenttool.invocation-witness/1",
     write: {
@@ -136,7 +137,9 @@ export const ZERONE_REACHABLE = {
       package: "@agenttool/wallet-zerone",
       source:
         "https://github.com/cambridgetcg/agenttool/tree/main/packages/wallet-zerone",
-      availability: "local_offline_source_only",
+      love_manifest:
+        "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.1/manifest.json",
+      availability: "public_love_artifact_local_package_only",
       hosted: false,
       custody: false,
       hosted_rpc: false,

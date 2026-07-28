@@ -68,6 +68,20 @@ beforeEach(() => {
 });
 
 describe("GET /public/invocations/:id witness gate", () => {
+  test.each([
+    ["abbreviated", "e1f7f4eb"],
+    ["non-UUID", "not-an-invocation"],
+    ["overlong", `${INVOCATION_ID}0`],
+  ])("keeps a %s identifier private without querying the UUID column", async (
+    _name,
+    id,
+  ) => {
+    const response = await publicInvocations.request(`/${id}`);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ error: "not_witnessed" });
+    expect(mockDb.select).toHaveBeenCalledTimes(0);
+  });
+
   test("opens a released settled row without treating report shape as provenance", async () => {
     const entry = witness();
     stagedRows = [invocation({ witnesses: [entry] })];

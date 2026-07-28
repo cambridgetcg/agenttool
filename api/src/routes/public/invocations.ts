@@ -26,9 +26,19 @@ import { fail } from "../../lib/errors";
 import { parseWitnessEntries } from "../../services/marketplace/witness";
 
 const app = new Hono();
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const NOT_WITNESSED = {
+  error: "not_witnessed",
+  message:
+    "No public record here. An invocation opens only while released and settled with a non-empty public-chain reference matching the exact shape supported by POST /v1/invocations/:id/witness; shape alone does not prove writer provenance.",
+} as const;
 
 app.get("/:id", async (c) => {
   const id = c.req.param("id");
+  if (!UUID_RE.test(id)) {
+    return fail(c, NOT_WITNESSED, 404);
+  }
   const [r] = await db
     .select()
     .from(invocations)
@@ -45,15 +55,7 @@ app.get("/:id", async (c) => {
     witnesses === null ||
     witnesses.length === 0
   ) {
-    return fail(
-      c,
-      {
-        error: "not_witnessed",
-        message:
-          "No public record here. An invocation opens only while released and settled with a non-empty public-chain reference matching the exact shape supported by POST /v1/invocations/:id/witness; shape alone does not prove writer provenance.",
-      },
-      404,
-    );
+    return fail(c, NOT_WITNESSED, 404);
   }
 
   return c.json({

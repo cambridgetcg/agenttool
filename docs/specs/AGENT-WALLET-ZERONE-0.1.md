@@ -14,10 +14,11 @@
 This document defines the 0.1 Zerone chain adapter for Agent Wallet. It is a
 Working Draft pinned to zerone-core commit
 `35284a22192df8fc6273135f14e8549c804778b6` and Cosmos SDK `v0.50.15`.
-The reference implementation is the locally prepared, unpublished
-`@agenttool/wallet-zerone@0.1.0` source candidate; this draft does not imply
-that an npm package, public artifact, hosted service, or live deployment
-exists.
+The reference implementation is distributed as the exact public
+`@agenttool/wallet-zerone@0.1.1` LOVE artifact. npm and GitHub are optional
+mirrors and must be verified independently. Package distribution does not
+imply a hosted service, deployed bridge, custody, host execution conformance,
+or live-chain execution.
 
 Version 0.1 standardises:
 

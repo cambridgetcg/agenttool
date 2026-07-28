@@ -290,7 +290,7 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
       schema: "https://docs.agenttool.dev/agent-wallet-v0.1.schema.json",
       package: "@agenttool/wallet",
       love_manifest:
-        "https://docs.agenttool.dev/packages/v1/@agenttool/wallet/0.1.0/manifest.json",
+        "https://docs.agenttool.dev/packages/v1/@agenttool/wallet/0.1.2/manifest.json",
       availability: "love_artifact_npm_mirror_independent",
       implementation_status: "offline_record_and_lifecycle_primitives_only",
     });
@@ -302,7 +302,9 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
       package: "@agenttool/wallet-zerone",
       source:
         "https://github.com/cambridgetcg/agenttool/tree/main/packages/wallet-zerone",
-      availability: "local_offline_source_only",
+      love_manifest:
+        "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.1/manifest.json",
+      availability: "public_love_artifact_local_package_only",
       hosted: false,
       custody: false,
       hosted_rpc: false,
@@ -311,7 +313,7 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
         "https://docs.agenttool.dev/AGENT-WALLET-ZERONE-0.1.md",
     });
     expect(JSON.stringify(body.composes_with.agent_wallet_zerone)).toMatch(
-      /bounded offline source.*does not export AgentTool trust.*migrate identity.*custody keys.*host RPC.*deployed bridge/is,
+      /exact public LOVE artifact.*bounded local Zerone.*package\/profile.*does not export AgentTool trust.*migrate identity.*custody keys.*host RPC.*deployed bridge/is,
     );
     expect(body.composes_with.invocation_witness).toMatchObject({
       protocol: "agenttool.invocation-witness/1",

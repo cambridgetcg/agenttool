@@ -156,12 +156,12 @@ const MODULES: ModuleSelf[] = [
       "go-cosmos-vectors",
     ],
     register:
-      "Local Zerone profile source for verified agent-wallet/0.1 intents: two message types, exact direct-sign bytes, chain-native verification, and injected transports.",
+      "Public LOVE package and local Zerone profile source for verified agent-wallet/0.1 intents: two message types, exact direct-sign bytes, chain-native verification, and injected transports.",
     walls: [
       "No key derivation, private-key or mnemonic input, custody, signer provider, or sign-and-send operation",
       "No bundled endpoint, bearer credential, hosted RPC, generic REST client, automatic rebroadcast, or deployed bridge",
       "Transaction inclusion is not attestation settlement, bond return, challenge survival, or reward proof",
-      "Source/package discovery does not prove npm, public LOVE, docs deployment, or durable-host execution availability",
+      "Public LOVE distribution does not imply npm or GitHub mirror availability, a hosted bridge, or durable-host execution conformance",
     ],
     claude_md: "packages/wallet-zerone/CLAUDE.md",
   },
