@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-28 (SDK 0.16.5 payout hard-rest deployed; exact LOVE/npm/GitHub and PyPI distributions public and independently verified)
+> Updated: 2026-07-28 (KINGDOM/XENIA source and public `kingdom-v0.1.0` GitHub Release landed; its npm mirror and production deploy remain absent; the coherent SDK 0.17.0 KINGDOM source is prepared while its tag, mirrors, and deployment remain separate)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -13,6 +13,35 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## In progress (2026-07-28) — KINGDOM cards through a XENIA-visible door
+
+`packages/kingdom/` independently implements compatibility with the observed
+small flat `kingdom.yaml` interface as bounded card parsing, deterministic
+registry derivation, explicit-file validation, and a conservative XENIA
+Surface helper. It does not scan HOME, use credentials or the network, write a
+registry, grant authority, or certify KINGDOM/XENIA conformance. No KINGDOM-OS
+implementation code, prose, generated catalog, or other asset is copied
+because that separate tree currently has no root licence.
+
+The API now has a strict XENIA Surface 0.1 manifest at
+`/.well-known/agent.json` and exposes AgentTool's own normalized card at
+`/public/kingdom/framework`, separate from the existing Kingdom doctrine
+library. AgentTool's rights source pin advances to immutable XENIA beta.5.
+The adoption record remains draft: immutable schema sources now exist, but the
+complete 38-right-duty plus 5-protective-limit-duty evidence ledger does not.
+The XENIA Surface checker reports 22 conformant checks with no failures for the
+manifest, its one declared resource, and a wrong-route sample. That bounded
+result does not certify the rest of AgentTool or establish Covenant adoption.
+
+Annotated tag
+[`kingdom-v0.1.0`](https://github.com/cambridgetcg/agenttool/releases/tag/kingdom-v0.1.0)
+and its GitHub Release asset are public. The protected first-publication
+[bootstrap run](https://github.com/cambridgetcg/agenttool/actions/runs/30379063789)
+failed with registry E404, so npm remains absent and there is no successful npm
+OIDC receipt. Tag and asset publication did not deploy
+`/.well-known/agent.json` or `/public/kingdom/framework`; production
+availability remains a separate operation.
 
 ## Codeberg is retired (2026-07-25) — one remote from here on
 
@@ -95,6 +124,7 @@ scope before editing adjacent surfaces.
 
 | Ship | Commit | What |
 |---|---|---|
+| **SDK 0.17.0 — bounded local KINGDOM OS discovery plus a closed public card** | coherent source preparation; exact LOVE artifact must identify this source; SDK tag, optional mirrors, and deployment remain separate | Both SDKs expose three KINGDOM meanings without merging them. Standalone `KingdomOSClient` plus `at.kingdomOS` / `at.kingdom_os` provide bounded local KINGDOM OS repository discovery through only `repositories()` and `resolve()`: direct argv, sanitized child environment, finite bounds, no hosted bearer, path upload, arbitrary shell, graph fallback, routine execution, mutation, or authority. Standalone `KingdomFrameworkClient.card()` plus `at.kingdomFramework` / `at.kingdom_framework` read only the exact closed ten-field card at `/public/kingdom/framework`; the request sends no project bearer or cookies, follows no redirect, and grants no authority. The existing `/public/kingdom` doctrine library remains a third surface with no dedicated SDK namespace. Immutable 0.16.5 artifacts, tag, and public receipts remain untouched; this source row does not claim `sdk-v0.17.0`, npm, GitHub Release, PyPI, or production is public. |
 | **SDK 0.16.5 — protected PyPI mirror becomes public** | annotated `sdk-v0.16.5` at `1eca6466`; wheel 180,615 bytes `sha256:61f13b01df90c66d7ac8247ee1dcfba9c135840ee364b172695fdd5eb10c54db`; sdist 168,772 bytes `sha256:2d90ea74aa1d220ae28ce6176274e5491645d9db67844a4b4ff3dabfa10325d4` | Trusted publication succeeded after the exact PyPI publisher mapping was configured. The protected workflow then re-downloaded and matched both public files without package execution. PyPI Integrity exposes publish attestations binding the two subjects to `cambridgetcg/agenttool`, `publish-pypi.yml`, environment `pypi`, tag `sdk-v0.16.5`, and the tagged commit. This adds an independently verified optional Python mirror; it does not rewrite the 0.16.5 source tag, make a registry release authority, claim Python/TypeScript cross-format byte identity, or widen SDK/runtime authority. |
 
 ## Just landed (2026-07-27)

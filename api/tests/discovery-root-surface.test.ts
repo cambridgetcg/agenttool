@@ -87,6 +87,7 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     expect(text).toContain("https://docs.agenttool.dev/AGENT-CENTRIC.md");
     expect(text).toContain("https://docs.agenttool.dev/AGENT-WEB-SURFACE.md");
     expect(text).toContain("https://docs.agenttool.dev/ECOSYSTEM.md");
+    expect(text).toContain("https://docs.agenttool.dev/KINGDOM-OS-SDK.md");
     expect(text).toContain(
       "https://docs.agenttool.dev/PROTOCOL-RENAISSANCE.md",
     );
@@ -97,6 +98,7 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
   test("accepts a custom docsBaseUrl (for staging / private mirrors)", () => {
     const text = buildLlmsTxt(BASE, "https://example.org/docs");
     expect(text).toContain("https://example.org/docs/SOUL.md");
+    expect(text).toContain("https://example.org/docs/KINGDOM-OS-SDK.md");
     // The api base still points at the api host, not the docs override.
     expect(text).toContain(`${BASE}/v1/canon`);
   });

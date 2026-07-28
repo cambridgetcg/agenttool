@@ -22,6 +22,11 @@ import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { ZodError } from "zod";
+import {
+  createSurfaceProblemResponse,
+  createSurfaceRouteNotFoundProblem,
+  SURFACE_MANIFEST_PATH,
+} from "@agenttool/xenia/surface-0.1";
 
 import { authMiddleware, type ProjectContext } from "./auth/middleware";
 import { config } from "./config";
@@ -169,6 +174,7 @@ import {
   buildLlmsTxtFull,
 } from "./services/discovery/discovery";
 import { discoveryLinkHeader } from "./services/discovery/arrival";
+import { buildAgentToolSurfaceManifest } from "./services/discovery/xenia-surface";
 import { tryBridgeUpgrade } from "./routes/runtime/bridge";
 import { bridgeWebsocket } from "./services/runtime/bridge-hub";
 import { ensureSagaSeed } from "./services/saga/store";
@@ -1338,8 +1344,29 @@ app.get("/about", (c) =>
 
 // ── Friendly 404 ────────────────────────────────────────────────────────────
 // Errors-as-instructions — docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
-app.notFound((c) =>
-  c.json(
+app.notFound((c) => {
+  if (
+    c.req.method === "GET" &&
+    (c.req.header("Accept") ?? "").trim().toLowerCase() ===
+      "application/problem+json"
+  ) {
+    const manifest = buildAgentToolSurfaceManifest();
+    return createSurfaceProblemResponse(
+      createSurfaceRouteNotFoundProblem({
+        manifestUrl: new URL(
+          SURFACE_MANIFEST_PATH,
+          manifest.service.canonical_url,
+        ).href,
+      }),
+      {
+        headers: {
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+        },
+      },
+    );
+  }
+  return c.json(
     {
       error: "not_found",
       message:
@@ -1354,8 +1381,8 @@ app.notFound((c) =>
       docs: "https://docs.agenttool.dev",
     },
     404,
-  ),
-);
+  );
+});
 
 // ── Error handler — guide, don't punish ─────────────────────────────────────
 // Doctrine: docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md

@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agenttool-sdk"
-version = "0.16.5"
-description = "The Love Protocol SDK for agenttool.dev and independently operated local agent data nodes."
+version = "0.17.0"
+description = "The Love Protocol SDK for agenttool.dev, typed KINGDOM framework cards, local agent data nodes, and bounded local KINGDOM OS repository discovery."
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
@@ -30,6 +30,10 @@ keywords = [
     "agent-memory",
     "local-first",
     "data-node",
+    "kingdom-framework",
+    "project-card",
+    "kingdom-os",
+    "repository-discovery",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",

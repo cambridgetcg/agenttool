@@ -85,7 +85,7 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
-  test("allowlists thirteen reviewed release identities", () => {
+  test("allowlists fourteen reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
@@ -95,6 +95,7 @@ describe("standard npm release policy", () => {
       "credential-broker",
       "data",
       "data-sync",
+      "kingdom",
       "repo-archive",
       "sdk",
       "skills",
@@ -124,6 +125,12 @@ describe("standard npm release policy", () => {
     expect(releaseSpec("alchemy")).toMatchObject({
       name: "@agenttool/alchemy",
       packagePath: "packages/alchemy",
+      artifactKind: "pack",
+    });
+    expect(releaseSpec("kingdom")).toMatchObject({
+      name: "@agenttool/kingdom",
+      packagePath: "packages/kingdom",
+      tagPrefix: "kingdom",
       artifactKind: "pack",
     });
     expect(releaseSpec("repo-archive")).toMatchObject({
@@ -164,6 +171,10 @@ describe("standard npm release policy", () => {
     expect(packedFilename("@agenttool/alchemy", "0.1.0-dev.0")).toBe(
       "agenttool-alchemy-0.1.0-dev.0.tgz",
     );
+    expect(expectedTag(releaseSpec("kingdom"), "0.1.0")).toBe("kingdom-v0.1.0");
+    expect(packedFilename("@agenttool/kingdom", "0.1.0")).toBe(
+      "agenttool-kingdom-0.1.0.tgz",
+    );
     expect(() => expectedTag(releaseSpec("sdk"), "latest")).toThrow("invalid package version");
   });
 
@@ -201,6 +212,14 @@ describe("standard npm release policy", () => {
     expect(requiredArchiveEntries(releaseSpec("alchemy"))).toEqual(expect.arrayContaining([
       "package/dist/index.js",
       "package/dist/index.d.ts",
+    ]));
+    expect(requiredArchiveEntries(releaseSpec("kingdom"))).toEqual(expect.arrayContaining([
+      "package/THIRD_PARTY_LICENSES",
+      "package/dist/bin.js",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/schema/agenttool-kingdom-card-v0.1.schema.json",
+      "package/schema/agenttool-kingdom-registry-v0.1.schema.json",
     ]));
   });
 

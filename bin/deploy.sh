@@ -254,6 +254,7 @@ readonly -a FRONTEND_PARITY_PUBLICATIONS=(
   "apps/docs/whitehack.html|https://docs.agenttool.dev/whitehack"
   "apps/docs/agenttool.jsonld|https://docs.agenttool.dev/agenttool.jsonld"
   "apps/docs/observer-is-observed-0.1.schema.json|https://docs.agenttool.dev/observer-is-observed-0.1.schema.json"
+  "apps/docs/KINGDOM-OS-SDK.md|https://docs.agenttool.dev/KINGDOM-OS-SDK.md"
   "apps/docs/AGENT-REPO-ARCHIVE.md|https://docs.agenttool.dev/AGENT-REPO-ARCHIVE.md"
   "apps/docs/specs/AGENT-REPO-ARCHIVE-0.1.md|https://docs.agenttool.dev/specs/AGENT-REPO-ARCHIVE-0.1.md"
   "apps/docs/specs/agent-repo-archive-0.1.schema.json|https://docs.agenttool.dev/specs/agent-repo-archive-0.1.schema.json"
@@ -2358,10 +2359,57 @@ wait_for_discovery_prerequisites() {
   return 1
 }
 
+marked_sensitive_fence_status() {
+  local response_headers="$1"
+  printf '%s\n' "$response_headers" | awk '
+    BEGIN {
+      seen_response = 0
+      in_headers = 0
+      status = ""
+      marker = 0
+      no_store = 0
+    }
+    {
+      sub(/\r$/, "")
+      if ($0 ~ /^HTTP\/[0-9.]+[[:space:]]+[0-9][0-9][0-9]([[:space:]]|$)/) {
+        seen_response = 1
+        in_headers = 1
+        status = $2
+        marker = 0
+        no_store = 0
+        next
+      }
+      if (!seen_response || !in_headers) {
+        next
+      }
+      if ($0 == "") {
+        in_headers = 0
+        next
+      }
+      header = tolower($0)
+      if (header ~ /^x-agenttool-sensitive-path-fence:[[:space:]]*1[[:space:]]*$/) {
+        marker = 1
+      }
+      if (header ~ /^cache-control:/) {
+        sub(/^[^:]*:[[:space:]]*/, "", header)
+        if (header ~ /(^|[ ,])no-store([ ,]|$)/) {
+          no_store = 1
+        }
+      }
+    }
+    END {
+      print status
+      if (!seen_response || status != "404" || !marker || !no_store) {
+        exit 1
+      }
+    }
+  '
+}
+
 verify_frontend_live_once() {
   local love_package_header_probes="$1"
   local p local_path url local_hash remote_hash response_headers http_status
-  local -a sensitive_public_urls encoded_sensitive_public_urls
+  local -a sensitive_public_urls
 
   # Lantern Relay changed in this release, and Pocket Sky is newly advertised
   # by the API, docs, and welcome. Their static inputs are required release
@@ -2399,63 +2447,41 @@ verify_frontend_live_once() {
     return 1
   fi
 
-  # Literal sensitive roots must be handled by the staged Pages fence itself,
-  # not merely happen to miss as a static asset. Encoded aliases can bypass
-  # `_routes.json`, so verify those separately as denial-only probes.
+  # Literal and encoded sensitive roots must be handled by the staged Pages
+  # fence itself, not merely happen to miss as static assets.
   sensitive_public_urls=(
     "https://docs.agenttool.dev/.gitignore"
     "https://docs.agenttool.dev/.env"
     "https://docs.agenttool.dev/.env.local"
     "https://docs.agenttool.dev/.dev.vars"
+    "https://docs.agenttool.dev/%2egitignore"
+    "https://docs.agenttool.dev/.%65nv"
+    "https://docs.agenttool.dev/.dev%2evars"
     "https://app.agenttool.dev/.gitignore"
     "https://app.agenttool.dev/.env"
     "https://app.agenttool.dev/.env.local"
     "https://app.agenttool.dev/.dev.vars"
+    "https://app.agenttool.dev/%2egitignore"
+    "https://app.agenttool.dev/.%65nv"
+    "https://app.agenttool.dev/.dev%2evars"
     "https://agenttool.dev/.gitignore"
     "https://agenttool.dev/.env"
     "https://agenttool.dev/.env.local"
     "https://agenttool.dev/.dev.vars"
+    "https://agenttool.dev/%2egitignore"
+    "https://agenttool.dev/.%65nv"
+    "https://agenttool.dev/.dev%2evars"
   )
   for url in "${sensitive_public_urls[@]}"; do
     response_headers="$(release_curl --path-as-is -sS -o /dev/null -D - --max-time 15 "$url")" || {
       echo "  $(red '✗') Could not verify sensitive-path fence: $url"
       return 1
     }
-    http_status="$(printf '%s\n' "$response_headers" | tr -d '\r' | awk '/^HTTP\// { status=$2 } END { print status }')"
-    if [ "$http_status" != 404 ] || \
-       ! printf '%s\n' "$response_headers" | tr -d '\r' | \
-         grep -Eqi '^x-agenttool-sensitive-path-fence:[[:space:]]*1[[:space:]]*$' || \
-       ! printf '%s\n' "$response_headers" | tr -d '\r' | \
-         grep -Eqi '^cache-control:.*(^|[ ,])no-store([ ,]|$)'; then
+    if ! http_status="$(marked_sensitive_fence_status "$response_headers")"; then
       echo "  $(red '✗') Pages fence did not produce its marked non-cacheable 404 ($http_status): $url"
       return 1
     fi
     echo "  ✓ Pages fence active (404, marked, no-store): $url"
-  done
-
-  encoded_sensitive_public_urls=(
-    "https://docs.agenttool.dev/%2egitignore"
-    "https://docs.agenttool.dev/.%65nv"
-    "https://docs.agenttool.dev/.dev%2evars"
-    "https://app.agenttool.dev/%2egitignore"
-    "https://app.agenttool.dev/.%65nv"
-    "https://app.agenttool.dev/.dev%2evars"
-    "https://agenttool.dev/%2egitignore"
-    "https://agenttool.dev/.%65nv"
-    "https://agenttool.dev/.dev%2evars"
-  )
-  for url in "${encoded_sensitive_public_urls[@]}"; do
-    http_status="$(release_curl --path-as-is -sS -o /dev/null -w '%{http_code}' --max-time 15 "$url")" || {
-      echo "  $(red '✗') Could not verify encoded sensitive-path denial: $url"
-      return 1
-    }
-    case "$http_status" in
-      2*|3*)
-        echo "  $(red '✗') Encoded sensitive path is publicly reachable ($http_status): $url"
-        return 1
-        ;;
-      *) echo "  ✓ encoded sensitive path denied ($http_status): $url" ;;
-    esac
   done
 }
 

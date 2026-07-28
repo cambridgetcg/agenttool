@@ -13,7 +13,14 @@
 server-readable memory, signed caller-supplied strand bytes, conditional
 federation, an internal economic loop, and a standalone local-first data
 node. It has two SDKs (TypeScript and Python), an `agent-data/v1` reference
-node (`packages/data/`), the experimental ADDS encrypted-object package
+node (`packages/data/`), and two paired KINGDOM SDK reads: a local KINGDOM OS
+repository-discovery adapter (`at.kingdomOS` / `at.kingdom_os`) that invokes
+only `repos --json` and `repos --path`, and a credential-free exact project-card
+reader (`at.kingdomFramework` / `at.kingdom_framework`) for
+`/public/kingdom/framework`. Neither receives the AgentTool project bearer;
+the framework reader follows no redirects and is distinct from the existing
+`/public/kingdom` doctrine library.
+It also has the experimental ADDS encrypted-object package
 (`packages/data-protocol/`), an explicit encrypted pull bridge
 (`packages/data-sync/`), an experimental encrypted multi-zone Git repository
 archive and same-device restore simulator (`packages/repo-archive/`), the registry-neutral `love-package/v1`
@@ -26,8 +33,9 @@ loopback-only durable projector into a rebuildable local YUTABASE sidecar
 (`packages/correspondence-yutabase-projector/`), source reference
 primitives for capability-bounded agent wallets (`packages/wallet/`), a
 developer-preview bounded Alchemy observation client
-(`packages/alchemy/`), a
-read-only portable Agent Skills inspector (`packages/skills/`), a local-first
+(`packages/alchemy/`), pure explicit-input KINGDOM project-card, registry, and
+XENIA Surface helpers (`packages/kingdom/`), a read-only portable Agent Skills
+inspector (`packages/skills/`), a local-first
 agent browser (`packages/browser/`), and three static apps
 (`apps/`). The browser exposes one bounded core through direct TypeScript,
 JSONL, and stdio MCP; it uses an installed system browser and has no hosted
@@ -93,6 +101,7 @@ cd packages/sdk-ts && bun install              # TS SDK
 cd packages/telescope && bun install           # read-only discovery evidence mapper
 cd packages/wallet && bun install              # agent-wallet/0.1 offline primitives
 cd packages/alchemy && bun install             # bounded Alchemy observation primitives
+cd packages/kingdom && bun install             # pure KINGDOM card/registry helpers
 cd packages/sdk-py && pip install -e .         # Python SDK
 ```
 
@@ -207,6 +216,11 @@ cd packages/alchemy
 bun run ci                                     # typecheck + fake-transport tests + build + Node smoke
 npm pack --ignore-scripts --dry-run --json      # package boundary; does not publish or call Alchemy
 
+# KINGDOM (explicit inputs; read-only declarations) ─────────────────
+cd packages/kingdom
+bun run ci                                     # typecheck + build + hermetic tests
+# No HOME/repository crawl, network, credentials, writes, authority, or conformance certification.
+
 # Whitehack (advisory + Castle + wallet + encrypted evidence) ───────
 (cd tools/whitehack-advisory \
   && npm ci --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org --userconfig=/dev/null \
@@ -230,7 +244,7 @@ bunx playwright test                           # browser + multi-instance scenar
 # Deliberate test + release gates ────────────────────────────────────
 bin/preflight.sh                               # no application/service credentials required
 bin/preflight.sh api                           # API/typecheck/operator tests only
-bin/preflight.sh packages                      # data + ADDS + sync + broker + collab + Browser + projection + Skills + SDK + Wallet + Telescope
+bin/preflight.sh packages                      # data + ADDS + sync + broker + collab + Browser + projection + Skills + SDK + Wallet + Telescope + Alchemy + KINGDOM
 bin/preflight.sh database                      # explicit DB tier; requires DATABASE_URL
 bin/preflight.sh smoke                         # explicit deployed-route smoke
 RUN_CONTRACT=1 bin/preflight.sh contracts      # paid LLM wire proofs
@@ -369,8 +383,10 @@ source boundary by itself.
 | How can committed repository history be encrypted and independently restored from multiple zones? | [`docs/AGENT-REPO-ARCHIVE.md`](docs/AGENT-REPO-ARCHIVE.md) · `packages/repo-archive/` (local simulator; no cloud adapter or durability guarantee) |
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
 | How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`@agenttool/collab@0.3.0`; `agenttool.collab/0.1` compatibility + credential-bound `agenttool.collab/0.2` coordination + self-declared `agenttool.collab.session/0.1` presence; 31 local MCP tools for Codex/Claude/Hermes, not a hosted lock or private model channel) |
+| How can explicit KINGDOM project cards become deterministic registries and conservative XENIA Surface manifests? | `packages/kingdom/README.md` (`@agenttool/kingdom`; pure library APIs and a one-file read-only CLI; declarations only, with no ambient discovery, authority, or conformance certification) |
 | How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills@0.1.0`; public npm read-only inspection and validation, not installation, approval, or execution) |
 | How can an agent operate a local browser through TypeScript, JSONL, or MCP? | [`docs/AGENT-BROWSER.md`](docs/AGENT-BROWSER.md) · `packages/browser/` (public LOVE/npm package; local runtime, no hosted browser-control surface) |
+| How can an SDK caller read AgentTool's closed KINGDOM project card or discover repositories through local KINGDOM OS? | [`docs/KINGDOM-OS-SDK.md`](docs/KINGDOM-OS-SDK.md) · `packages/sdk-{ts,py}/` (paired SDK 0.17.0 read-only clients: credential-free `/public/kingdom/framework` with no redirects, plus local list/resolve; neither grants authority or forwards the project bearer) |
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
 | How is an optional npm mirror published? | [`docs/NPM-RELEASES.md`](docs/NPM-RELEASES.md) · `.github/workflows/publish-npm.yml` · `bin/npm-release.ts` |
 | How is the optional Python SDK mirror published? | [`docs/PYPI-RELEASES.md`](docs/PYPI-RELEASES.md) · `.github/workflows/publish-pypi.yml` · `bin/pypi-release.ts` |

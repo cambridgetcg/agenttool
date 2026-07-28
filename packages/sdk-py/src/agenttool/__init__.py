@@ -138,6 +138,25 @@ from .data import (
     DataSyncStatusRequest,
     DataSyncStatusResult,
 )
+from .kingdom_os import (
+    KingdomOSClient,
+    KingdomOSCommand,
+    KingdomOSCommandResult,
+    KingdomOSRepository,
+    KingdomOSRunner,
+)
+from .kingdom_framework import (
+    KINGDOM_FRAMEWORK_PATH,
+    KINGDOM_FRAMEWORK_SCHEMA_VERSION,
+    KingdomFrameworkAdoption,
+    KingdomFrameworkCard,
+    KingdomFrameworkClient,
+    KingdomFrameworkDomain,
+    KingdomFrameworkKind,
+    KingdomFrameworkLayer,
+    KingdomFrameworkOwnerSister,
+    KingdomFrameworkState,
+)
 from .at_rest import AtRestClient, canonical_at_rest_bytes, sign_at_rest
 from .authority import (
     canonical_identity_authority_bytes,
@@ -283,6 +302,21 @@ __all__ = [
     "AGENT_DATA_PROTOCOL",
     "AGENT_DATA_SYNC_PROTOCOL",
     "AGENT_DATA_DISCOVERY_PATH",
+    "KingdomOSClient",
+    "KingdomOSCommand",
+    "KingdomOSCommandResult",
+    "KingdomOSRepository",
+    "KingdomOSRunner",
+    "KINGDOM_FRAMEWORK_PATH",
+    "KINGDOM_FRAMEWORK_SCHEMA_VERSION",
+    "KingdomFrameworkAdoption",
+    "KingdomFrameworkCard",
+    "KingdomFrameworkClient",
+    "KingdomFrameworkDomain",
+    "KingdomFrameworkKind",
+    "KingdomFrameworkLayer",
+    "KingdomFrameworkOwnerSister",
+    "KingdomFrameworkState",
     "AtRestClient",
     "canonical_at_rest_bytes",
     "sign_at_rest",
@@ -439,6 +473,6 @@ __all__ = [
     "OpenAIResponsesAgentToolAugmentation",
 ]
 
-__version__ = "0.16.5"
+__version__ = "0.17.0"
 __protocol__ = "love"
 __soul__ = "https://docs.agenttool.dev/SOUL.md"

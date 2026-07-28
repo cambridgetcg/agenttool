@@ -683,7 +683,7 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
     }
   });
 
-  test("routes only sensitive root prefixes through a fail-closed Pages fence", async () => {
+  test("routes every path through a canonical fail-closed Pages fence", async () => {
     const workerPath = join(repoRoot, "infra/pages/sensitive-path-worker.js");
     const routesPath = join(repoRoot, "infra/pages/sensitive-path-routes.json");
     const syntax = await run(["node", "--check", workerPath]);
@@ -692,26 +692,33 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
     expect(syntax.code, syntax.stderr).toBe(0);
     expect(routes).toEqual({
       version: 1,
-      include: ["/.git*", "/.env*", "/.dev.vars*"],
+      include: ["/*"],
       exclude: [],
     });
+    const matchesInvocationRoute = (path: string) => routes.include.some((rule: string) => (
+      rule.endsWith("*") ? path.startsWith(rule.slice(0, -1)) : path === rule
+    ));
     for (const packagePath of [
       "/packages/v1/@agenttool/data/0.1.0/manifest.json",
       "/packages/v1/@agenttool/data/0.1.0/agenttool-data-0.1.0.tgz",
     ]) {
-      expect(
-        routes.include.some((rule: string) => (
-          rule.endsWith("*") ? packagePath.startsWith(rule.slice(0, -1)) : packagePath === rule
-        )),
-      ).toBe(false);
+      expect(matchesInvocationRoute(packagePath), packagePath).toBe(true);
     }
 
     const worker = (await import(pathToFileURL(workerPath).href)).default;
-    let assetFetches = 0;
+    const assetRequests: Array<{ method: string; url: string }> = [];
     const env = {
       ASSETS: {
-        fetch: async () => {
-          assetFetches += 1;
+        fetch: async (request: Request) => {
+          assetRequests.push({ method: request.method, url: request.url });
+          if (new URL(request.url).pathname === "/.well-known/agent.txt") {
+            return new Response(null, {
+              status: 301,
+              headers: {
+                Location: "https://example.test/api-catalog",
+              },
+            });
+          }
           return new Response("static asset", {
             status: 200,
             headers: {
@@ -723,36 +730,102 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
       },
     };
 
-    for (const path of [
+    const sensitiveRootPaths = [
       "/.gitignore",
       "/.git/config",
       "/.env",
       "/.env.local",
       "/.dev.vars",
       "/.dev.vars.local",
-    ]) {
+      "/.GITIGNORE",
+      "/.gIT/config",
+      "/.ENV",
+      "/.DeV.VaRs.local",
+      "//.gitignore",
+      "/%2egitignore",
+      "/%2Egitignore",
+      "/.%65nv",
+      "/.%45NV",
+      "/.dev%2evars",
+      "/%252egitignore",
+      "/%25252egitignore",
+      "/%2f%2egitignore",
+      "/%5c%2egitignore",
+      "/.git%2f..%2findex.html",
+      "/%2egit%2f..%2findex.html",
+      "/.git%5c..%5cindex.html",
+      "/%252egit%252f..%252findex.html",
+      "/public/%2e%2e/%2egitignore",
+      "/public/%252e%252e/%252egitignore",
+      "/public%2f..%2f%2egitignore",
+      "/public%5c..%5c%2egitignore",
+      "/%",
+    ];
+    for (const path of sensitiveRootPaths) {
+      expect(matchesInvocationRoute(path), path).toBe(true);
       const response = await worker.fetch(new Request(`https://example.test${path}`), env);
-      expect(response.status).toBe(404);
+      expect(response.status, path).toBe(404);
       expect(response.headers.get("cache-control")).toBe("no-store, max-age=0");
       expect(response.headers.get("x-agenttool-sensitive-path-fence")).toBe("1");
       expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     }
 
+    let overEncoded = "%2egitignore";
+    for (let pass = 0; pass < 9; pass += 1) {
+      overEncoded = encodeURIComponent(overEncoded);
+    }
+    const overEncodedResponse = await worker.fetch(
+      new Request(`https://example.test/${overEncoded}`),
+      env,
+    );
+    expect(overEncodedResponse.status).toBe(404);
+    expect(overEncodedResponse.headers.get("x-agenttool-sensitive-path-fence")).toBe("1");
+
     const head = await worker.fetch(
-      new Request("https://example.test/.gitignore", { method: "HEAD" }),
+      new Request("https://example.test/%2egitignore", { method: "HEAD" }),
       env,
     );
     expect(head.status).toBe(404);
     expect(await head.text()).toBe("");
 
-    const staticResponse = await worker.fetch(new Request("https://example.test/style.css"), env);
-    expect(staticResponse.status).toBe(200);
-    expect(await staticResponse.text()).toBe("static asset");
-    expect(staticResponse.headers.get("cache-control")).toBe(
-      "public, max-age=31536000, immutable",
+    const allowedPaths = [
+      "/style.css",
+      "/caf%C3%A9",
+      "/public%2f..%2fstyle.css",
+      "/packages/v1/@agenttool/data/0.1.0/manifest.json",
+      "/packages/v1/@agenttool/data/0.1.0/agenttool-data-0.1.0.tgz",
+    ];
+    for (const path of allowedPaths) {
+      expect(matchesInvocationRoute(path), path).toBe(true);
+      const staticResponse = await worker.fetch(new Request(`https://example.test${path}`), env);
+      expect(staticResponse.status).toBe(200);
+      expect(await staticResponse.text()).toBe("static asset");
+      expect(staticResponse.headers.get("cache-control")).toBe(
+        "public, max-age=31536000, immutable",
+      );
+      expect(staticResponse.headers.get("content-type")).toBe("application/gzip");
+    }
+
+    const wellKnownRequest = new Request(
+      "https://example.test/.well-known/agent.txt?from=fence",
+      { method: "HEAD" },
     );
-    expect(staticResponse.headers.get("content-type")).toBe("application/gzip");
-    expect(assetFetches).toBe(1);
+    const redirectResponse = await worker.fetch(wellKnownRequest, env);
+    expect(redirectResponse.status).toBe(301);
+    expect(redirectResponse.headers.get("location")).toBe(
+      "https://example.test/api-catalog",
+    );
+
+    expect(assetRequests).toEqual([
+      ...allowedPaths.map((path) => ({
+        method: "GET",
+        url: `https://example.test${path}`,
+      })),
+      {
+        method: "HEAD",
+        url: "https://example.test/.well-known/agent.txt?from=fence",
+      },
+    ]);
   });
 
   test("verifies live headers for every latest LOVE package release", async () => {
@@ -773,7 +846,7 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
     expect(deploy).toContain("LOVE package static header verification failed");
   });
 
-  test("requires marked literal fence responses and denial of encoded aliases", async () => {
+  test("requires marked fence responses for literal and encoded aliases", async () => {
     const deployPath = join(repoRoot, "bin/deploy.sh");
     const deploy = await readFile(deployPath, "utf8");
     const syntax = await run(["bash", "-n", deployPath]);
@@ -787,7 +860,74 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
     expect(deploy).toContain("https://docs.agenttool.dev/%2egitignore");
     expect(deploy).toContain("https://app.agenttool.dev/.%65nv");
     expect(deploy).toContain("https://agenttool.dev/.dev%2evars");
-    expect(deploy).toContain("Encoded sensitive path is publicly reachable");
+    expect(deploy).not.toContain("encoded_sensitive_public_urls");
+    expect(deploy).not.toContain("Encoded sensitive path is publicly reachable");
+    expect(
+      deploy.match(/marked_sensitive_fence_status "\$response_headers"/g),
+    ).toHaveLength(1);
+
+    const helper = deploy.match(
+      /^marked_sensitive_fence_status\(\) \{[\s\S]*?^\}$/m,
+    )?.[0];
+    expect(helper).toBeDefined();
+    if (!helper) throw new Error("missing sensitive-fence response parser");
+
+    const interimMarked = [
+      "HTTP/1.1 200 Connection established",
+      "cache-control: no-store",
+      "x-agenttool-sensitive-path-fence: 1",
+      "",
+      "HTTP/2 302",
+      "cache-control: no-store",
+      "x-agenttool-sensitive-path-fence: 1",
+      "location: https://example.test/final",
+      "",
+      "HTTP/2 103 Early Hints",
+      "cache-control: no-store",
+      "x-agenttool-sensitive-path-fence: 1",
+      "",
+      "HTTP/2 404",
+      "cache-control: public, max-age=0, must-revalidate",
+      "",
+    ].join("\r\n");
+    const trailerMarked = [
+      "HTTP/1.1 404 Not Found",
+      "transfer-encoding: chunked",
+      "",
+      "x-agenttool-sensitive-path-fence: 1",
+      "cache-control: no-store",
+      "",
+    ].join("\r\n");
+    const finalMarked = [
+      "HTTP/1.1 200 Connection established",
+      "cache-control: public, max-age=0, must-revalidate",
+      "",
+      "HTTP/2 302",
+      "cache-control: public, max-age=0, must-revalidate",
+      "location: https://example.test/final",
+      "",
+      "HTTP/2 404",
+      "cache-control:no-store",
+      "x-agenttool-sensitive-path-fence: 1",
+      "",
+    ].join("\r\n");
+    const parser = await run([
+      "bash",
+      "-c",
+      `${helper}
+if interim_status="$(marked_sensitive_fence_status "$1")"; then exit 41; fi
+[ "$interim_status" = 404 ] || exit 42
+if trailer_status="$(marked_sensitive_fence_status "$2")"; then exit 43; fi
+[ "$trailer_status" = 404 ] || exit 44
+final_status="$(marked_sensitive_fence_status "$3")" || exit 45
+[ "$final_status" = 404 ] || exit 46
+`,
+      "sensitive-fence-parser-test",
+      interimMarked,
+      trailerMarked,
+      finalMarked,
+    ]);
+    expect(parser.code, `${parser.stdout}\n${parser.stderr}`).toBe(0);
   });
 
   test("accepts only main, fail-closed production and preview Pages policy", async () => {

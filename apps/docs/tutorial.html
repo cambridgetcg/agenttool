@@ -242,16 +242,18 @@
 )</pre>
       </div>
 
-      <p>The installed tutorial contract is currently SDK 0.16.5. Its separately distributed annotated <code>sdk-v0.16.5</code> source tag is the primary Python release locator; it is not part of the LOVE JavaScript catalog.</p>
+      <p>The installed tutorial contract is currently SDK 0.17.0. Its separately distributed annotated <code>sdk-v0.17.0</code> source tag is the primary Python release locator after publication; it is not part of the LOVE JavaScript catalog.</p>
 
       <div class="code-block">
         <div class="code-label"><span>Python · primary source tag</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.5#subdirectory=packages/sdk-py"</pre>
+<pre>python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.17.0#subdirectory=packages/sdk-py"</pre>
       </div>
 
-      <p><strong>Optional shorter TypeScript install:</strong> <code>npm install --save-exact @agenttool/sdk@0.16.5</code>. This requests the public exact-version npm mirror, but skips Step 1's in-command LOVE size/SHA-256 verification. Mirror publication can lag future releases; never substitute npm <code>latest</code> for the version selected by <code>/v1/pathways</code>.</p>
+      <p><strong>Optional shorter TypeScript install:</strong> <code>npm install --save-exact @agenttool/sdk@0.17.0</code>. This requests the exact-version npm mirror, but skips Step 1's in-command LOVE size/SHA-256 verification. Mirror publication can lag future releases; never substitute npm <code>latest</code> for the version selected by <code>/v1/pathways</code>.</p>
 
-      <p><strong>Optional shorter Python install:</strong> <code>python -m pip install "agenttool-sdk==0.16.5"</code>. PyPI 0.16.5 is public, and the protected workflow independently re-downloaded and matched its exact wheel and sdist. The mirror remains optional and this command does not perform the LOVE manifest check from Step 1. Query <code>https://pypi.org/pypi/agenttool-sdk/0.16.5/json</code> at install time; a <code>404</code> means that optional mirror is unavailable then.</p>
+      <p><strong>Optional shorter Python install:</strong> <code>python -m pip install "agenttool-sdk==0.17.0"</code>. The mirror remains optional and this command does not perform the LOVE manifest check from Step 1. Query <code>https://pypi.org/pypi/agenttool-sdk/0.17.0/json</code> at install time; a <code>404</code> means that optional mirror is unavailable then. Source preparation does not prove either registry mirror is public.</p>
+
+      <p>SDK 0.17.0 source also keeps three optional KINGDOM orientation surfaces separate. <code>KingdomFrameworkClient.card()</code> / <code>at.kingdomFramework.card()</code> reads only the exact public project card without the AgentTool bearer or cookies and follows no redirect. <code>KingdomOSClient</code> / <code>at.kingdomOS</code> performs bounded local repository inventory and resolution without uploading paths. <code>GET /public/kingdom</code> remains the separate doctrine library. None is required for birth, and none grants authority. The SDK tag, mirrors, and framework-route deployment must still be verified independently before use.</p>
 
       <p>Create an owner-readable handoff file, then save the TypeScript below as <code>birth.ts</code> and run it. The file bridges a one-time registration or recovery response into Step 2 without writing either secret to terminal output.</p>
 
@@ -402,13 +404,13 @@ if (seedOnly) {
     sdkEntryUrl.protocol !== "file:" ||
     !sdkEntryUrl.pathname.endsWith("/dist/index.js")
   ) {
-    throw new Error("SDK 0.16 recovery bridge did not resolve to dist/index.js.");
+    throw new Error("SDK 0.17 recovery bridge did not resolve to dist/index.js.");
   }
   const sdkPackage = JSON.parse(
     readFileSync(new URL("../package.json", sdkEntryUrl), "utf8"),
   ) as { name?: unknown; version?: unknown };
-  if (sdkPackage.name !== "@agenttool/sdk" || sdkPackage.version !== "0.16.5") {
-    throw new Error("Seed-only recovery requires the verified @agenttool/sdk 0.16.5 artifact.");
+  if (sdkPackage.name !== "@agenttool/sdk" || sdkPackage.version !== "0.17.0") {
+    throw new Error("Seed-only recovery requires the verified @agenttool/sdk 0.17.0 artifact.");
   }
   const seedBridge = await import(
     new URL("./seed.js", sdkEntryUrl).href
@@ -417,7 +419,7 @@ if (seedOnly) {
     typeof seedBridge.signDiscoveryChallenge !== "function" ||
     typeof seedBridge.signRecoverChallenge !== "function"
   ) {
-    throw new Error("Verified SDK 0.16.5 is missing its recovery signing helpers.");
+    throw new Error("Verified SDK 0.17.0 is missing its recovery signing helpers.");
   }
 
   const discoveryProof = seedBridge.signDiscoveryChallenge({
@@ -583,7 +585,7 @@ if (seedOnly) {
 }</pre>
       </div>
 
-      <p>The mnemonic reaches the owner-only handoff before registration can commit. If the process times out, rerun the same <code>birth.ts</code> with the same handoff path: the seed-only branch verifies the exact installed SDK 0.16.5 package, loads its pinned <code>dist/seed.js</code> helpers by file URL, performs signed discovery, and recovers rather than registering again. A rooted match reuses one serialized recovery body for both its <code>identity-recover/v1</code> and exact-request <code>identity-authority/v1</code> proofs. Zero matches refuse. Multiple matches print only public candidate metadata and refuse; set <code>AGENT_RECOVERY_DID='the exact printed DID'</code> and rerun to select one. A completed handoff also refuses a rerun. The exact wire contract is in <a href="IDENTITY-SEED.md" class="link">IDENTITY-SEED.md</a>. If final atomic replacement fails, the error names a separate mode-<code>0600</code> completed handoff containing the one-time response.</p>
+      <p>The mnemonic reaches the owner-only handoff before registration can commit. If the process times out, rerun the same <code>birth.ts</code> with the same handoff path: the seed-only branch verifies the exact installed SDK 0.17.0 package, loads its pinned <code>dist/seed.js</code> helpers by file URL, performs signed discovery, and recovers rather than registering again. A rooted match reuses one serialized recovery body for both its <code>identity-recover/v1</code> and exact-request <code>identity-authority/v1</code> proofs. Zero matches refuse. Multiple matches print only public candidate metadata and refuse; set <code>AGENT_RECOVERY_DID='the exact printed DID'</code> and rerun to select one. A completed handoff also refuses a rerun. The exact wire contract is in <a href="IDENTITY-SEED.md" class="link">IDENTITY-SEED.md</a>. If final atomic replacement fails, the error names a separate mode-<code>0600</code> completed handoff containing the one-time response.</p>
 
       <p>You now have:</p>
       <ul class="primitive-list">

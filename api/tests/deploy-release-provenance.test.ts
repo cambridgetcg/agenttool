@@ -678,7 +678,11 @@ case "$url" in
     fi
     ;;
   *%2egitignore*|*%65nv*|*%2evars*)
-    printf '404'
+    printf '%s\r\n' \
+      'HTTP/2 404' \
+      'cache-control: no-store, max-age=0' \
+      'x-agenttool-sensitive-path-fence: 1' \
+      ''
     ;;
   */.gitignore|*/.env|*/.env.local|*/.dev.vars)
     status=404
@@ -1245,7 +1249,9 @@ describe("deploy release provenance spine", () => {
     expect(deploy).toContain(
       "Pages fence did not produce its marked non-cacheable 404",
     );
-    expect(deploy).toContain("Encoded sensitive path is publicly reachable");
+    expect(deploy).not.toContain(
+      "Encoded sensitive path is publicly reachable",
+    );
     expect(deploy).toContain('DEPLOY_LOCK_PATH="$lock_parent/deploy.lock"');
     expect(deploy).toContain(
       'ln "$DEPLOY_LOCK_OWNER_RECORD" "$DEPLOY_LOCK_PATH"',

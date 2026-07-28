@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the established public JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser; Collab, Agent Skills, the developer-preview Correspondence-to-YUTABASE planner, the developer-preview Repo Archive, and the developer-preview Alchemy observation client are intentionally npm-only.
+> **Implements:** one manual, allowlisted npm release state machine for the established public JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE planner, the developer-preview Repo Archive, and the developer-preview Alchemy observation client are intentionally npm-only.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -98,13 +98,16 @@ configure:
 | Environment | `npm-bootstrap` |
 | Allowed action | `npm publish` |
 
-The filename and environment are case-sensitive. npm does not validate the
-relationship when it is saved; the first trusted release is the operational
-proof. Configuring trust requires account-level 2FA and rejects a bypass-2FA
-token as the authorizing proof; Touch ID or another WebAuthn passkey satisfies
-that requirement without a TOTP authenticator app. After a trusted release
-succeeds, set package publishing access to require 2FA and disallow traditional
-tokens.
+The Environment field is optional in npm. Leaving it blank does not itself
+break this workflow, but setting it to the exact, case-sensitive
+`npm-bootstrap` value narrows trust to the protected publication job. The
+workflow filename is always case-sensitive and must include `.yml`. npm does
+not validate the relationship when it is saved; the first trusted release is
+the operational proof. Configuring trust requires account-level 2FA and rejects
+a bypass-2FA token as the authorizing proof; Touch ID or another WebAuthn
+passkey satisfies that requirement without a TOTP authenticator app. After a
+trusted release succeeds, set package publishing access to require 2FA and
+disallow traditional tokens.
 
 `npm login --auth-type=web` is the browser sign-in flow for saving a local CLI
 credential. It does not turn `npm publish` into browser authorization, bypass a
@@ -168,3 +171,17 @@ gh workflow run publish-npm.yml --ref alchemy-v0.1.0-dev.0 \
 This publishes only the bounded local observation library. It does not deploy
 the AgentTool API, configure Alchemy credentials or webhooks, apply database
 migrations, or make a provider call.
+
+### KINGDOM package bootstrap
+
+`@agenttool/kingdom` uses the npm-only packed-artifact path. Its first
+publication must use `authentication=bootstrap` because npm cannot attach a
+trusted publisher before the package exists. Before that dispatch, the
+protected `npm-bootstrap` GitHub environment must allow annotated
+`kingdom-v*` tags.
+
+After the first version is public, configure that package's trusted publisher
+for `cambridgetcg/agenttool`, workflow `publish-npm.yml`, Environment
+`npm-bootstrap`, and allowed action `npm publish`. Every later version must use
+`authentication=trusted`; the workflow then exchanges the protected
+GitHub-hosted job's OIDC identity and does not expose the bootstrap token.

@@ -122,21 +122,29 @@ directory. Dirty and ignored files are excluded; a tracked `.env` file is a
 hard refusal, as is a tracked `.dev.vars*` file.
 
 `infra/pages/` is the single source for a Pages advanced-mode Worker and its
-positive-only invocation routes. The uploader stages that pair into all three
-project roots. Only `/.git*`, `/.env*`, and `/.dev.vars*` invoke the Worker and
-receive a marked, non-cacheable 404; ordinary paths stay on native Pages static
-serving within each Pages project (the apex still traverses `agenttool-proxy`).
-On the Workers Free plan, the Pages production and preview Function
-runtimes must be configured to fail closed, or daily Functions allowance
-exhaustion can serve static assets for those routes. The uploader accepts
+route-complete Pages invocation policy. The uploader stages that pair into all
+three project roots. Every path invokes the Worker so percent-encoded separators
+and traversal cannot evade inspection by appearing after an ordinary prefix.
+The Worker bounded-decodes and case-folds paths before denying `/.git*`,
+`/.env*`, and `/.dev.vars*` with a marked, non-cacheable 404. Allowed requests,
+including `/.well-known/*` and ordinary static assets, are forwarded intact to
+the Pages asset binding. Every request therefore counts as a Pages Function
+invocation. On the Workers Free plan, production and preview must be configured
+to fail closed; allowance exhaustion then returns an error instead of serving
+any Pages asset, because the fence covers the entire site. The route policy does
+not itself evict a response already cached ahead of Pages, so marked live probes
+remain the convergence proof and an explicitly authorized cache purge may still
+be required during recovery.
+The uploader accepts
 `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`, then falls back to their
 macOS keychain entries. In the default token mode, that credential must read the
 Pages REST policy as well as upload: the script verifies fail-closed settings
 and the `main` production branch for every target before any upload. An explicit
 `--oauth-fallback` is a weaker break-glass mode: it checks project visibility,
 loudly says the policy check was skipped, and does not prove those settings.
-The uploader does not mutate the setting or purge zone cache. Phase 5 proves current live
-denial and fence activation on literal paths, plus denial of encoded aliases.
+The uploader does not mutate the setting or purge zone cache. Phase 5 proves
+current live denial and fence activation on literal paths, plus denial of
+encoded aliases.
 
 | Project               | Source dir        | Custom domain                | What it serves                                                                                                                 |
 | --------------------- | ----------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
