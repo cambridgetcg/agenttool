@@ -59,8 +59,8 @@ export default {
       });
     }
 
-    // Keep the original request intact for allowed dot-root and percent-led
-    // assets, including the public /.well-known tree.
+    // Keep the original request intact for every allowed asset, including the
+    // public /.well-known tree.
     return env.ASSETS.fetch(request);
   },
 };
