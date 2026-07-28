@@ -21,13 +21,16 @@ spawning, steering, waking, reconnecting, waiting for, and stopping agents.
    retaining distinct worktree records.
 4. Poll with `collab_next` from the persisted session cursor at the start of
    each turn, after local work, before relying on shared state, and whenever the
-   host wakes the agent. Follow `has_more` until caught up. Routed reports are
-   bounded to the returned event page; task and handoff projections are current
-   for the labelled snapshot head.
-5. Process the page before calling `collab_cursor_ack` with its terminal
-   `{ epoch_id, sequence, hash }` cursor. Treat acknowledgement as “processed,”
-   never as agreement, acceptance, consent, or correctness. Use
-   `collab_cursor_reset` only for deliberate replay or recovery.
+   host wakes the agent. Omit `event_limit` for the 10-event MCP default or set
+   an integer from 1 through 50. The limit bounds the event page and its routed
+   reports, not the task, conflict, or handoff projections for the labelled
+   snapshot head.
+5. Process one page before calling `collab_cursor_ack` with its exact terminal
+   `next_anchor` (`{ epoch_id, sequence, hash }`), then poll again if `has_more`
+   is true. A supplied `known_cursor` validates an anchor but does not paginate
+   or acknowledge. Treat acknowledgement as “processed,” never as agreement,
+   acceptance, consent, or correctness. Use `collab_cursor_reset` only for
+   deliberate replay or recovery.
 
 Use the separate presence plane only when discovery or compatibility needs it.
 Call `collab_session_join` with a workspace ID and self-declared labels, inspect

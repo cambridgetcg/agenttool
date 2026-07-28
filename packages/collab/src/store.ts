@@ -73,6 +73,8 @@ const MAX_SESSION_CAPABILITIES = 32;
 const MAX_SESSION_CAPABILITY_LENGTH = 100;
 const DEFAULT_SESSION_LIST_LIMIT = 100;
 const MAX_SESSION_LIST_LIMIT = 500;
+const DEFAULT_NEXT_EVENT_LIMIT = 50;
+const MAX_NEXT_EVENT_LIMIT = 50;
 const SESSION_TOKEN_BYTES = 32;
 const PRESENCE_SESSION_COLUMNS = [
   "id",
@@ -3744,7 +3746,12 @@ export class CollabStore {
     );
   }
 
-  nextForActor(workspaceId: string, actorInput: string, afterSequence = 0): {
+  nextForActor(
+    workspaceId: string,
+    actorInput: string,
+    afterSequence = 0,
+    eventLimit = DEFAULT_NEXT_EVENT_LIMIT,
+  ): {
     actor: string;
     session: null;
     own_claims: Task[];
@@ -3758,9 +3765,10 @@ export class CollabStore {
     reports_scope: "event_page";
   } {
     const actor = validateActor(actorInput);
+    const boundedEventLimit = validateNextEventLimit(eventLimit);
     this.expireElapsedHandoffs(workspaceId, "system:clock");
     const read = this.db.transaction(() => {
-      const events = this.readEventPage(workspaceId, afterSequence, 50);
+      const events = this.readEventPage(workspaceId, afterSequence, boundedEventLimit);
       const tasks = this.listTasks(workspaceId);
       const offers = this.db.query(`
         SELECT * FROM handoffs
@@ -3810,6 +3818,7 @@ export class CollabStore {
     session_token: string;
     generation: number;
     known_cursor?: EventCursor;
+    event_limit?: number;
   }): {
     actor: string;
     session: CoordinationSession;
@@ -3823,7 +3832,7 @@ export class CollabStore {
     projection_scope: "snapshot_head";
     reports_scope: "event_page";
   } {
-    const row = this.db.transaction(() => {
+    const authenticatedPoll = this.db.transaction(() => {
       const authenticated = this.authenticateSession(input);
       const stored: EventCursor = {
         epoch_id: authenticated.cursor_epoch_id,
@@ -3857,17 +3866,22 @@ export class CollabStore {
           throw error;
         }
       }
+      const eventLimit = validateNextEventLimit(input.event_limit);
       this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`)
         .run(this.timestamp(), authenticated.id);
-      return this.requireCoordinationSessionRow(authenticated.id);
+      return {
+        row: this.requireCoordinationSessionRow(authenticated.id),
+        event_limit: eventLimit,
+      };
     }).immediate();
+    const { row, event_limit: eventLimit } = authenticatedPoll;
     this.expireElapsedHandoffs(row.workspace_id, "system:clock");
     const read = this.db.transaction(() => {
       const current = this.authenticateSession(input);
       const events = this.readEventPage(
         current.workspace_id,
         current.cursor_sequence,
-        50,
+        eventLimit,
       );
       const tasks = this.listTasks(current.workspace_id);
       const { claimable, conflicted } = this.projectAvailableTasks(
@@ -5285,6 +5299,17 @@ function validateSessionListLimit(value: number | undefined): number {
     throw new CollabError(
       "invalid_session_list_limit",
       `limit must be an integer between 1 and ${MAX_SESSION_LIST_LIMIT}`,
+    );
+  }
+  return limit;
+}
+
+function validateNextEventLimit(value: number | undefined): number {
+  const limit = value ?? DEFAULT_NEXT_EVENT_LIMIT;
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_NEXT_EVENT_LIMIT) {
+    throw new CollabError(
+      "invalid_event_limit",
+      `event_limit must be an integer between 1 and ${MAX_NEXT_EVENT_LIMIT}`,
     );
   }
   return limit;

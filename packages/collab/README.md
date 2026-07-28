@@ -99,10 +99,14 @@ The normal session flow is:
 
 1. Call `collab_session_start` with the repository root. It opens the workspace
    and binds the new session; do not open its credential file.
-2. Poll with `collab_next` from the session's persisted cursor.
-3. Process the whole page, following `has_more` until caught up.
-4. Call `collab_cursor_ack` with the last processed
-   `{ epoch_id, sequence, hash }` cursor.
+2. Poll with `collab_next` from the session's persisted cursor. Its optional
+   `event_limit` accepts an integer from 1 through 50; omission uses the
+   context-bounded MCP default of 10.
+3. Process that page, then call `collab_cursor_ack` with its exact
+   `next_anchor` (`{ epoch_id, sequence, hash }`).
+4. If `has_more` is true, poll again from the now-persisted cursor. A supplied
+   `known_cursor` validates an anchor but does not select or acknowledge the
+   next page.
 5. Poll again after local work, before a mutation based on shared state, and
    whenever the host wakes the agent.
 6. End deliberately with `collab_session_end` when the host knows the session
@@ -121,7 +125,10 @@ snapshot. `reports` is bounded to that exact page; follow `has_more` instead of
 assuming a later report has already been delivered. Task, conflict, and
 handoff projections are labelled `snapshot_head` because they describe that
 snapshot's current head state and may reflect changes whose events appear on a
-later page.
+later page. `event_limit` bounds only the event page and its routed reports; it
+does not truncate those snapshot-head projections. Direct
+`CollabStore.nextForActor` and `CollabStore.nextForSession` calls retain their
+50-event default for source-API compatibility.
 
 Resume is a host-startup operation, not a model tool. Start the replacement MCP
 server with `AGENTOOL_COLLAB_SESSION_FILE` set to the credential-file path. The
