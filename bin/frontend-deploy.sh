@@ -204,7 +204,7 @@ done
 
 # One committed policy protects all three Pages projects. Every request enters
 # the small advanced-mode Worker so encoded aliases cannot bypass canonical
-# sensitive-root checks; ordinary requests are forwarded intact to Pages
+# sensitive-root checks; accepted asset requests are forwarded intact to Pages
 # assets. Project policy separately keeps allowance exhaustion fail closed.
 PAGES_FENCE_DIR="$STAGE_ROOT/infra/pages"
 for fence_file in sensitive-path-worker.js sensitive-path-routes.json; do

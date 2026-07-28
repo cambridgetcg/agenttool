@@ -743,13 +743,17 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
       "/%2f%2egitignore",
       "/%5c%2egitignore",
       "/public/%2e%2e/%2egitignore",
+      "/.git%2f..%2findex.html",
+      "/%2egit%2f..%2findex.html",
+      "/.git%5c..%5cindex.html",
+      "/%252egit%252f..%252findex.html",
       "/%",
     ]) {
       const response = await worker.fetch(
         new Request(`https://example.test${path}`),
         env,
       );
-      expect(response.status).toBe(404);
+      expect(response.status, path).toBe(404);
       expect(response.headers.get("cache-control")).toBe("no-store, max-age=0");
       expect(response.headers.get("x-agenttool-sensitive-path-fence")).toBe(
         "1",
