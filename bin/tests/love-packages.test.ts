@@ -121,6 +121,7 @@ describe("LOVE Package release inventory", () => {
       { name: "@agenttool/wallet", version: "0.1.0", releaseTag: "wallet-v0.1.0" },
       { name: "@agenttool/wallet", version: "0.1.1", releaseTag: "wallet-v0.1.1" },
       { name: "@agenttool/wallet", version: "0.1.2", releaseTag: "wallet-v0.1.2" },
+      { name: "@agenttool/wallet", version: "0.1.3", releaseTag: "wallet-v0.1.3" },
       { name: "@agenttool/wallet-zerone", version: "0.1.0", releaseTag: "wallet-zerone-v0.1.0" },
       { name: "@agenttool/wallet-zerone", version: "0.1.1", releaseTag: "wallet-zerone-v0.1.1" },
       { name: "@agenttool/telescope", version: "0.2.3", releaseTag: "telescope-v0.2.3" },
@@ -162,6 +163,14 @@ describe("LOVE Package release inventory", () => {
         manifestSha256:
           "408007b963a1e8e7964b65dd3956a297a58288680cc112f031413977897583ee",
       },
+      {
+        root: "apps/docs/packages/v1/@agenttool/wallet/0.1.2",
+        artifact: "agenttool-wallet-0.1.2.tgz",
+        artifactSha256:
+          "76eea9d34becdb53356aacf3daeb77396fe9111a5c16b0e2c8ba57f486842851",
+        manifestSha256:
+          "8d50789ce6a62e103c1eba0c0e4ac0a4174538d7a4a1b5d1236e6f795857e00d",
+      },
     ] as const;
 
     for (const release of releases) {
@@ -185,7 +194,7 @@ describe("LOVE Package release inventory", () => {
       await readFile(join(REPO_ROOT, "packages/wallet-zerone/package.json"), "utf8"),
     );
 
-    expect(wallet.version).toBe("0.1.2");
+    expect(wallet.version).toBe("0.1.3");
     expect(adapter.version).toBe("0.1.1");
     expect(adapter.peerDependencies?.["@agenttool/wallet"]).toBe("^0.1.2");
   });

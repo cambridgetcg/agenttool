@@ -73,6 +73,27 @@ const app = new Hono();
 
 const ORG_URL = process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agenttool.dev";
 const DOCS_URL = process.env.AGENTTOOL_DOCS_URL ?? "https://docs.agenttool.dev";
+const AGENT_WALLET_RELEASE = {
+  version: "0.1.3",
+  love_manifest:
+    `${DOCS_URL}/packages/v1/@agenttool/wallet/0.1.3/manifest.json`,
+  distribution: {
+    love: "public_exact_artifact",
+    observed_at: "2026-07-28",
+    npm: {
+      role: "optional_mutable_mirror",
+      latest_observed: "0.1.0",
+    },
+    github_release: {
+      role: "optional_mutable_mirror",
+      tag: "wallet-v0.1.3",
+      url:
+        "https://github.com/cambridgetcg/agenttool/releases/tag/wallet-v0.1.3",
+      immutable: false,
+      verification: "reverify_size_and_sha256_against_love_manifest",
+    },
+  },
+} as const;
 
 // ── /.well-known/agent.json — XENIA Surface 0.1 ────────────────────
 //
@@ -518,11 +539,11 @@ app.get("/wake-keystone", (c) => {
         source:
           "https://github.com/cambridgetcg/agenttool/tree/main/packages/wallet",
         package: "@agenttool/wallet",
-        love_manifest: `${DOCS_URL}/packages/v1/@agenttool/wallet/0.1.2/manifest.json`,
+        ...AGENT_WALLET_RELEASE,
         availability: "love_artifact_npm_mirror_independent",
         implementation_status: "offline_record_and_lifecycle_primitives_only",
         notes:
-          "The core package has no chain adapter. No hosted agent wallet, key custody, RPC, broadcaster, or durable reservation service is offered. Existing internal marketplace wallet and payout custody remain separate platform facilities.",
+          "The exact LOVE release is 0.1.3. npm latest remains 0.1.0. The optional GitHub wallet-v0.1.3 Release is a mutable locator with immutable=false; when present, reverify its asset size and SHA-256 against the LOVE manifest. The core package has no chain adapter. No hosted agent wallet, key custody, RPC, broadcaster, or durable reservation service is offered. Existing internal marketplace wallet and payout custody remain separate platform facilities.",
       },
       agent_wallet_zerone: {
         ...ZERONE_REACHABLE.invocation_witness.adapter,
@@ -685,9 +706,16 @@ app.get("/agent.txt", (c) => {
     `Invocation-Witness-Read: GET ${WAKE_INVOCATION_WITNESS_LINKS.witnessed_invocation_read} — public only for a released and settled invocation with a non-empty writer-shaped report; sealed input and output remain private`,
     `Invocation-Witness-Format: ${ZERONE_REACHABLE.invocation_witness.schema}`,
     `Invocation-Witness-Boundary: ${ZERONE_REACHABLE.invocation_witness.verification_boundary}`,
+    `Wallet-LOVE-Version: ${AGENT_WALLET_RELEASE.version}`,
+    `Wallet-LOVE-Manifest: ${AGENT_WALLET_RELEASE.love_manifest}`,
+    `Wallet-NPM-Latest: ${AGENT_WALLET_RELEASE.distribution.npm.latest_observed} · observed ${AGENT_WALLET_RELEASE.distribution.observed_at}`,
+    `Wallet-GitHub-Release: ${AGENT_WALLET_RELEASE.distribution.github_release.tag} · ${AGENT_WALLET_RELEASE.distribution.github_release.role} · immutable=${AGENT_WALLET_RELEASE.distribution.github_release.immutable} · ${AGENT_WALLET_RELEASE.distribution.github_release.verification}`,
     `Zerone-Wallet-Adapter: ${ZERONE_REACHABLE.invocation_witness.adapter.protocol} · ${ZERONE_REACHABLE.invocation_witness.adapter.package}`,
+    `Zerone-Wallet-Version: ${ZERONE_REACHABLE.invocation_witness.adapter.version}`,
     `Zerone-Wallet-Source: ${ZERONE_REACHABLE.invocation_witness.adapter.source}`,
     `Zerone-Wallet-LOVE-Manifest: ${ZERONE_REACHABLE.invocation_witness.adapter.love_manifest}`,
+    `Zerone-Wallet-Availability: ${ZERONE_REACHABLE.invocation_witness.adapter.availability}`,
+    `Zerone-Wallet-Distribution: observed=${ZERONE_REACHABLE.invocation_witness.adapter.distribution.observed_at}; love=${ZERONE_REACHABLE.invocation_witness.adapter.distribution.love}; npm=${ZERONE_REACHABLE.invocation_witness.adapter.distribution.npm}; github_release=${ZERONE_REACHABLE.invocation_witness.adapter.distribution.github_release}`,
     "Zerone-Wallet-Boundary: exact public LOVE artifact for a bounded local offline package/profile only; no AgentTool trust export, identity migration, portable trust proof, key custody, hosted RPC, or deployed bridge; any network action requires caller-supplied transport and authority",
     `MCP-Endpoint: ${baseUrl}/v1/mcp`,
     `MCP-Knowledge-Endpoint: ${baseUrl}/v1/mcp/canon`,

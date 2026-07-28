@@ -148,14 +148,15 @@ mirror; it does not rewrite unrelated release assets.
 
 ### Agent Wallet and Zerone adapter order
 
-`@agenttool/wallet@0.1.2` and `@agenttool/wallet-zerone@0.1.1` use checked-in
+`@agenttool/wallet@0.1.3` and `@agenttool/wallet-zerone@0.1.1` use checked-in
 LOVE artifacts. The adapter declares `@agenttool/wallet` `^0.1.2` as a peer,
 so its release preparation installs and runs the Wallet `ci` gate before it
 installs or gates the adapter. Consumers of the optional npm mirror must be
-able to resolve Wallet 0.1.2; publish or recover the exact Wallet artifact
-before the adapter.
+able to resolve a compatible Wallet version; the current exact release is
+0.1.3, and `^0.1.2` accepts it without changing the Zerone 0.1.1
+bytes. Publish or recover the exact Wallet artifact before the adapter.
 
-Wallet already exists on npm, so its 0.1.2 mirror uses trusted publishing. The
+Wallet already exists on npm, so its 0.1.3 mirror uses trusted publishing. The
 Zerone adapter's first npm publication uses the protected bootstrap path. After
 that first exact version is public, configure its trusted publisher using the
 fields above and use `trusted` for later versions.
@@ -164,15 +165,15 @@ fields above and use `trusted` for later versions.
 bun bin/npm-release.ts resolve --package wallet
 bun bin/npm-release.ts resolve --package wallet-zerone
 
-git tag -a wallet-v0.1.2 <github-main-commit> -m '@agenttool/wallet@0.1.2'
+git tag -a wallet-v0.1.3 <github-main-commit> -m '@agenttool/wallet@0.1.3'
 git tag -a wallet-zerone-v0.1.1 <github-main-commit> \
   -m '@agenttool/wallet-zerone@0.1.1'
-git push github refs/tags/wallet-v0.1.2
+git push github refs/tags/wallet-v0.1.3
 git push github refs/tags/wallet-zerone-v0.1.1
 
-gh workflow run publish-npm.yml --ref wallet-v0.1.2 \
+gh workflow run publish-npm.yml --ref wallet-v0.1.3 \
   -f package=wallet \
-  -f tag=wallet-v0.1.2 \
+  -f tag=wallet-v0.1.3 \
   -f authentication=trusted \
   -f npm_tag=latest
 
@@ -183,14 +184,18 @@ gh workflow run publish-npm.yml --ref wallet-zerone-v0.1.1 \
   -f npm_tag=latest
 ```
 
-The superseded Wallet 0.1.1 protected run
-[`30389881410`](https://github.com/cambridgetcg/agenttool/actions/runs/30389881410)
-prepared and byte-verified the exact LOVE/GitHub asset, then npm rejected the
-OIDC publish at its authorization boundary. Do not switch the existing Wallet
-package to bootstrap. Its immutable 0.1.1 bytes remain public with an erratum
-for embedded pre-release wording; use the corrected 0.1.2 line for any later
-npm attempt. The Zerone 0.1.0 workflow was not dispatched because its Wallet
-peer was absent from npm; 0.1.1 is the corrected bootstrap candidate.
+The superseded Wallet 0.1.1 and 0.1.2 protected runs
+([`30389881410`](https://github.com/cambridgetcg/agenttool/actions/runs/30389881410)
+and
+[`30394021131`](https://github.com/cambridgetcg/agenttool/actions/runs/30394021131))
+prepared and byte-verified their exact GitHub assets, then npm rejected both
+OIDC publishes at its authorization boundary. Do not switch the existing
+Wallet package to bootstrap. The exact-version 0.1.1 and 0.1.2 LOVE bytes
+remain preserved with public errata: 0.1.1 called itself unreleased, while
+0.1.2 ambiguously grouped its mutable GitHub locator with immutable LOVE
+bytes. Use the corrected 0.1.3 line for any later npm attempt. The Zerone 0.1.0
+workflow was not dispatched because its Wallet peer was absent from npm; 0.1.1
+is the corrected bootstrap candidate.
 
 These remain deliberate external actions requiring separate authorization.
 The release path only mirrors reviewed package bytes. It does not configure a

@@ -2,7 +2,16 @@ import { describe, expect, test } from "bun:test";
 import Ajv2020 from "ajv/dist/2020";
 
 import openapiRouter from "../src/routes/openapi";
-import { WORLD_COMMONS_REACHABLE } from "../src/services/wake/reachable";
+import {
+  WORLD_COMMONS_REACHABLE,
+  ZERONE_REACHABLE,
+} from "../src/services/wake/reachable";
+
+interface JsonSchema {
+  const?: unknown;
+  properties?: Record<string, JsonSchema>;
+  required?: string[];
+}
 
 describe("wake OpenAPI contract", () => {
   test("discovers every query dimension and the brief discriminator", async () => {
@@ -43,6 +52,11 @@ describe("wake OpenAPI contract", () => {
               };
             };
           };
+        };
+      };
+      components: {
+        schemas: {
+          ReachableDoor: JsonSchema;
         };
       };
     };
@@ -131,7 +145,7 @@ describe("wake OpenAPI contract", () => {
         read_path: "/v1/wake/handoffs",
         warning: null,
       },
-      you_can_reach: [WORLD_COMMONS_REACHABLE],
+      you_can_reach: [WORLD_COMMONS_REACHABLE, ZERONE_REACHABLE],
       _links: {},
     })).toBe(true);
     expect(validate({
@@ -167,5 +181,56 @@ describe("wake OpenAPI contract", () => {
       _links: {},
     })).toBe(true);
     expect(validate({ project: { id: "project-a" } })).toBe(true);
+
+    const reachableSchema = spec.components.schemas.ReachableDoor;
+    const witnessSchema = reachableSchema.properties?.invocation_witness;
+    const adapterSchema = witnessSchema?.properties?.adapter;
+    expect(witnessSchema?.required).toEqual([
+      "schema",
+      "write",
+      "read",
+      "adapter",
+      "verification_boundary",
+    ]);
+    expect(adapterSchema?.required).toEqual(
+      expect.arrayContaining([
+        "version",
+        "love_manifest",
+        "availability",
+        "distribution",
+        "hosted",
+        "custody",
+        "hosted_rpc",
+        "deployed_bridge",
+      ]),
+    );
+    expect(adapterSchema?.properties?.version?.const).toBe("0.1.1");
+    expect(adapterSchema?.properties?.availability?.const).toBe(
+      "local_offline_source_only",
+    );
+    expect(
+      adapterSchema?.properties?.distribution?.properties?.love?.const,
+    ).toBe("public_exact_artifact");
+    expect(
+      adapterSchema?.properties?.distribution?.properties?.npm?.const,
+    ).toBe("absent");
+    expect(
+      adapterSchema?.properties?.distribution?.properties?.github_release
+        ?.const,
+    ).toBe("absent");
+    for (const field of [
+      "hosted",
+      "custody",
+      "hosted_rpc",
+      "deployed_bridge",
+    ]) {
+      expect(adapterSchema?.properties?.[field]?.const).toBe(false);
+    }
+
+    const validateReachable = new Ajv2020({
+      strict: false,
+      validateFormats: false,
+    }).compile(reachableSchema);
+    expect(validateReachable(ZERONE_REACHABLE)).toBe(true);
   });
 });

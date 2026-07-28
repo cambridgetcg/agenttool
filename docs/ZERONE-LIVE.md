@@ -21,7 +21,7 @@
 | `zerone-1`, `zerone-testnet-1`, endpoints, listings | External, time-sensitive inventory recorded 2026-07-08; RPC sync status rechecked 2026-07-28 | Continuing reachability, validator state, balances, parameters, or economics |
 | `zerone-core/tools/agenttool-relay` | External CLI/keyring relay pinned by the adapter to zerone-core `35284a22192df8fc6273135f14e8549c804778b6` | AgentTool-hosted custody, RPC, signing, or universal Wallet retry semantics |
 | AgentTool witness writer and public re-derivation reader | Deployed authenticated `POST /v1/invocations/{id}/witness` and structurally gated `GET /public/invocations/{id}` | Chain retrieval, writer provenance for historical JSON, attestation settlement, bond return, or reward proof |
-| `@agenttool/wallet` | Public exact LOVE `0.1.2`; npm remains independently verified at `0.1.0` until a later exact registry version is observed | A chain adapter, custody, RPC, simulation, or broadcast |
+| `@agenttool/wallet` | Public exact LOVE `0.1.3`; npm remains independently verified at `0.1.0`, and optional mutable GitHub Releases require fresh digest verification | A chain adapter, custody, RPC, simulation, or broadcast |
 | `@agenttool/wallet-zerone` | Public exact LOVE `0.1.1`, exact-byte encoding and verification with injected transports; optional npm/GitHub mirrors independent | Keys, custody, hosted RPC, a generic REST client, durable reservations, `signAndSend`, automatic retry, deployed bridge, or live execution |
 
 ## The two chains — last recorded 2026-07-08

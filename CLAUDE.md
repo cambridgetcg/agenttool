@@ -62,11 +62,12 @@ The separate Wallet Zerone package supports only its reviewed two-network,
 two-message exact-byte profile through caller-injected transports. It adds no
 key custody, endpoint, hosted RPC, generic REST client, automatic retry,
 durable sign-time reservation, settlement proof, or default live-network
-test. The current exact LOVE releases are Wallet 0.1.2 and Wallet Zerone
+test. The current exact LOVE releases are Wallet 0.1.3 and Wallet Zerone
 0.1.1.
-Earlier 0.1.1/0.1.0 artifacts remain immutable with an erratum for their
-embedded candidate wording. npm, GitHub mirrors, docs deployment, and any host
-execution remain independently verifiable surfaces.
+Earlier Wallet 0.1.1/0.1.2 and Zerone 0.1.0 LOVE artifacts remain preserved
+with errata for their embedded release-state wording. Optional GitHub Releases
+are mutable locators, while npm, docs deployment, and any host execution remain
+independently verifiable surfaces.
 
 ## The five load-bearing flows
 

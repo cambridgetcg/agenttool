@@ -15,6 +15,7 @@ describe("release metadata", () => {
       scripts?: Record<string, string>;
     };
     expect(pkg.name).toBe(PACKAGE_NAME);
+    expect(PACKAGE_VERSION).toBe("0.1.3");
     expect(pkg.version).toBe(PACKAGE_VERSION);
     expect(pkg.private).toBeUndefined();
     expect(pkg.publishConfig).toEqual({ access: "public" });

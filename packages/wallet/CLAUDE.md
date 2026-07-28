@@ -60,13 +60,17 @@ npm pack --ignore-scripts --dry-run
 
 ## Release State
 
-Version `0.1.2` is the current package release. Its checked-in
+Version `0.1.3` is the current package release. Its checked-in
 `love-package/v1` manifest is the exact release record; npm and GitHub remain
-optional mirrors rather than package-name or release authority. The immutable
-Wallet `0.1.1` LOVE/GitHub bytes are public, but their embedded release-state
-paragraphs incorrectly call 0.1.1 unreleased. This is the public erratum; never
-rewrite those bytes. As independently checked on 2026-07-28, npm still served
-the byte-identical `0.1.0` artifact at SHA-256
+optional mirrors rather than package-name or release authority. The
+exact-version Wallet `0.1.1` and `0.1.2` LOVE artifacts remain byte-addressable
+and are not rewritten. Their currently public GitHub assets were independently
+byte-verified, but GitHub reports the release records as mutable, so those
+optional locators are not immutability guarantees. Version `0.1.1`
+incorrectly called itself unreleased; `0.1.2` ambiguously described the LOVE
+and GitHub bytes together as immutable. This is the public erratum; never
+rewrite either historical artifact. As independently checked on 2026-07-28,
+npm still served the byte-identical `0.1.0` artifact at SHA-256
 `fada7f9602d48020390709c6c066d7562cd54edcb8e9cbc8bec4c213f7ea475d`.
 Verify the selected exact version and digest at consumption time.
 
