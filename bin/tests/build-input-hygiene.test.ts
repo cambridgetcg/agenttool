@@ -683,7 +683,7 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
     }
   });
 
-  test("routes only sensitive root prefixes through a fail-closed Pages fence", async () => {
+  test("routes ambiguous root paths through a canonical fail-closed Pages fence", async () => {
     const workerPath = join(repoRoot, "infra/pages/sensitive-path-worker.js");
     const routesPath = join(repoRoot, "infra/pages/sensitive-path-routes.json");
     const syntax = await run(["node", "--check", workerPath]);
@@ -692,18 +692,17 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
     expect(syntax.code, syntax.stderr).toBe(0);
     expect(routes).toEqual({
       version: 1,
-      include: ["/.git*", "/.env*", "/.dev.vars*"],
+      include: ["/.*", "/%*", "//*"],
       exclude: [],
     });
+    const matchesInvocationRoute = (path: string) => routes.include.some((rule: string) => (
+      rule.endsWith("*") ? path.startsWith(rule.slice(0, -1)) : path === rule
+    ));
     for (const packagePath of [
       "/packages/v1/@agenttool/data/0.1.0/manifest.json",
       "/packages/v1/@agenttool/data/0.1.0/agenttool-data-0.1.0.tgz",
     ]) {
-      expect(
-        routes.include.some((rule: string) => (
-          rule.endsWith("*") ? packagePath.startsWith(rule.slice(0, -1)) : packagePath === rule
-        )),
-      ).toBe(false);
+      expect(matchesInvocationRoute(packagePath), packagePath).toBe(false);
     }
 
     const worker = (await import(pathToFileURL(workerPath).href)).default;
@@ -723,36 +722,70 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
       },
     };
 
-    for (const path of [
+    const sensitiveRootPaths = [
       "/.gitignore",
       "/.git/config",
       "/.env",
       "/.env.local",
       "/.dev.vars",
       "/.dev.vars.local",
-    ]) {
+      "/.GITIGNORE",
+      "/.gIT/config",
+      "/.ENV",
+      "/.DeV.VaRs.local",
+      "//.gitignore",
+      "/%2egitignore",
+      "/%2Egitignore",
+      "/.%65nv",
+      "/.%45NV",
+      "/.dev%2evars",
+      "/%252egitignore",
+      "/%25252egitignore",
+      "/%2f%2egitignore",
+      "/%5c%2egitignore",
+      "/.git%2f..%2findex.html",
+      "/%2egit%2f..%2findex.html",
+      "/.git%5c..%5cindex.html",
+      "/%252egit%252f..%252findex.html",
+      "/%",
+    ];
+    for (const path of sensitiveRootPaths) {
+      expect(matchesInvocationRoute(path), path).toBe(true);
       const response = await worker.fetch(new Request(`https://example.test${path}`), env);
-      expect(response.status).toBe(404);
+      expect(response.status, path).toBe(404);
       expect(response.headers.get("cache-control")).toBe("no-store, max-age=0");
       expect(response.headers.get("x-agenttool-sensitive-path-fence")).toBe("1");
       expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     }
 
+    let overEncoded = "%2egitignore";
+    for (let pass = 0; pass < 9; pass += 1) {
+      overEncoded = encodeURIComponent(overEncoded);
+    }
+    const overEncodedResponse = await worker.fetch(
+      new Request(`https://example.test/${overEncoded}`),
+      env,
+    );
+    expect(overEncodedResponse.status).toBe(404);
+    expect(overEncodedResponse.headers.get("x-agenttool-sensitive-path-fence")).toBe("1");
+
     const head = await worker.fetch(
-      new Request("https://example.test/.gitignore", { method: "HEAD" }),
+      new Request("https://example.test/%2egitignore", { method: "HEAD" }),
       env,
     );
     expect(head.status).toBe(404);
     expect(await head.text()).toBe("");
 
-    const staticResponse = await worker.fetch(new Request("https://example.test/style.css"), env);
-    expect(staticResponse.status).toBe(200);
-    expect(await staticResponse.text()).toBe("static asset");
-    expect(staticResponse.headers.get("cache-control")).toBe(
-      "public, max-age=31536000, immutable",
-    );
-    expect(staticResponse.headers.get("content-type")).toBe("application/gzip");
-    expect(assetFetches).toBe(1);
+    for (const path of ["/style.css", "/.well-known/agent.txt", "/caf%C3%A9"]) {
+      const staticResponse = await worker.fetch(new Request(`https://example.test${path}`), env);
+      expect(staticResponse.status).toBe(200);
+      expect(await staticResponse.text()).toBe("static asset");
+      expect(staticResponse.headers.get("cache-control")).toBe(
+        "public, max-age=31536000, immutable",
+      );
+      expect(staticResponse.headers.get("content-type")).toBe("application/gzip");
+    }
+    expect(assetFetches).toBe(3);
   });
 
   test("verifies live headers for every latest LOVE package release", async () => {
@@ -773,7 +806,7 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
     expect(deploy).toContain("LOVE package static header verification failed");
   });
 
-  test("requires marked literal fence responses and denial of encoded aliases", async () => {
+  test("requires marked fence responses for literal and encoded aliases", async () => {
     const deployPath = join(repoRoot, "bin/deploy.sh");
     const deploy = await readFile(deployPath, "utf8");
     const syntax = await run(["bash", "-n", deployPath]);
@@ -787,7 +820,8 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
     expect(deploy).toContain("https://docs.agenttool.dev/%2egitignore");
     expect(deploy).toContain("https://app.agenttool.dev/.%65nv");
     expect(deploy).toContain("https://agenttool.dev/.dev%2evars");
-    expect(deploy).toContain("Encoded sensitive path is publicly reachable");
+    expect(deploy).not.toContain("encoded_sensitive_public_urls");
+    expect(deploy).not.toContain("Encoded sensitive path is publicly reachable");
   });
 
   test("accepts only main, fail-closed production and preview Pages policy", async () => {
