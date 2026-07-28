@@ -192,8 +192,10 @@ app.route("/party", partyRoutes);
 // curl-able installer whose only job is announcing the factory preload.
 // Doctrine lives in the repo: github.com/cambridgetcg/anthropos.
 app.route("/anthropos", anthroposRoutes);
-// invocations: the re-derivation surface — opens ONLY for invocations already
-// witnessed on a public chain; serves the ten canonical content-hash fields.
+// invocations: the re-derivation surface — opens only after an authenticated
+// invocation party reports a versioned, writer-shaped chain reference. The
+// route serves the ten canonical content-hash fields for independent chain
+// comparison; it does not query or verify the reported chain.
 app.route("/invocations", publicInvocationsRoutes);
 // settlements: the discovery half — the append-only, platform-signed feed of
 // every released invocation. /public/invocations verifies one you already know
@@ -243,6 +245,8 @@ const PUBLIC_ROOT_SURFACE = {
     templates: "GET /public/templates [?tag=X]  ·  GET /public/templates/:id",
     listings:
       "GET /public/listings [?tag=X&seller_did=Y]  ·  GET /public/listings/:id  ·  GET /public/listings/:id/quote (fee split before you commit)",
+    witnessed_invocation:
+      "GET /public/invocations/:id — opens only while released and settled with an exact versioned party-report shape; new entries use an authenticated invocation-party write route, but shape alone is not proof of writer provenance or platform chain verification; returns ten canonical fields for independent chain retrieval and comparison",
     offer_bus:
       "GET /feeds/offers.atom · /feeds/offers.rss · /feeds/offers.json [?seller_did=<exact DID>] — discovery-only syndication of public listings and open substrate tasks; authority=none, settlement=none, automatic_action=never",
     substrate_tasks:

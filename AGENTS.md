@@ -32,6 +32,7 @@ projection planner (`packages/correspondence-yutabase/`), a private
 loopback-only durable projector into a rebuildable local YUTABASE sidecar
 (`packages/correspondence-yutabase-projector/`), source reference
 primitives for capability-bounded agent wallets (`packages/wallet/`), a
+separate exact-byte offline Zerone profile (`packages/wallet-zerone/`), a
 developer-preview bounded Alchemy observation client
 (`packages/alchemy/`), pure explicit-input KINGDOM project-card, registry, and
 XENIA Surface helpers (`packages/kingdom/`), a read-only portable Agent Skills
@@ -43,12 +44,18 @@ surface. Its exact LOVE/npm release distributes local tooling only. The Skills i
 structure and emits reports; it does not execute scripts, install or copy
 skills, use the network, spawn subprocesses, look up credentials, or change
 host configuration. Agent
-Wallet 0.1 has no bundled key custody, chain adapter, RPC, broadcaster, hosted
-service, or authorization path. Its `@agenttool/wallet@0.1.0` npm mirror is
-public and byte-identical to the exact LOVE artifact. Telescope 0.2.3 is the
-current exact LOVE release; its optional npm and GitHub mirrors are public and
-independently byte-verified, and the package remains a local client without a
-hosted scan route.
+Wallet core 0.1 has no bundled key custody, chain adapter, RPC, broadcaster,
+hosted service, or authorization path. Its `@agenttool/wallet@0.1.0` npm
+mirror is public and byte-identical to the exact LOVE artifact; source is
+prepared for 0.1.1. The separate local
+`@agenttool/wallet-zerone@0.1.0` candidate owns a two-message Zerone profile,
+exact Cosmos direct-sign bytes, chain-native verification, and injected
+transports. It still supplies no keys, custody, endpoint, hosted RPC, generic
+REST, automatic rebroadcast, durable host transaction, settlement proof, or
+live-network test by default. Telescope 0.2.3 is the current exact LOVE
+release; its optional npm and GitHub mirrors are public and independently
+byte-verified, and the package remains a local client without a hosted scan
+route.
 Immutable 0.2.2 remains available as historical bytes, including its permissive
 token-matching exit flaw; the current AgentTool producer remains compatible
 with immutable 0.2.1.
@@ -100,6 +107,7 @@ cd packages/correspondence-yutabase-projector && bun install # private local dur
 cd packages/sdk-ts && bun install              # TS SDK
 cd packages/telescope && bun install           # read-only discovery evidence mapper
 cd packages/wallet && bun install              # agent-wallet/0.1 offline primitives
+cd packages/wallet-zerone && bun install       # exact offline Zerone profile; no live network
 cd packages/alchemy && bun install             # bounded Alchemy observation primitives
 cd packages/kingdom && bun install             # pure KINGDOM card/registry helpers
 cd packages/sdk-py && pip install -e .         # Python SDK
@@ -210,6 +218,11 @@ node dist/cli.js scan api.agenttool.dev         # explicit live read-only dogfoo
 # Agent Wallet (source record/lifecycle primitives; no custody or RPC) ──
 cd packages/wallet
 bun run ci                                     # typecheck + security/schema/vector tests + build
+
+# Wallet Zerone (separate exact-byte adapter; injected fake transports) ───
+cd packages/wallet-zerone
+bun run ci                                     # typecheck + adversarial/vector tests + build + Node smoke
+npm pack --ignore-scripts --dry-run --json      # package boundary; no publish, signer, RPC, or live tx
 
 # Alchemy (bounded reads only; injected host transport) ─────────────
 cd packages/alchemy

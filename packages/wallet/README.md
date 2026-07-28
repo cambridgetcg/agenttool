@@ -16,13 +16,23 @@ It also provides a deliberately narrow signer interface, exact-byte request
 binding, a forward-only submission lifecycle, and a pure continuity
 compare-and-swap rule.
 
-Version `0.1.0` is distributed as an exact Apache-2.0 `love-package/v1`
-artifact whose manifest binds its size, SHA-256, and source revision. npm is an
-optional convenience mirror whose exact availability must be checked
-independently. The package does not create a wallet, derive or store a seed,
-export a private key, decode chain-specific calldata, choose transactions,
-contact an RPC endpoint, broadcast automatically, or persist counters. Those
-responsibilities belong to explicit adapters and a durable host implementation.
+Package metadata in this source tree is prepared for unreleased version
+`0.1.1`; no `0.1.1` artifact has been distributed. Version `0.1.0` remains
+distributed as an exact Apache-2.0 `love-package/v1` artifact whose manifest
+binds its size, SHA-256, and source revision. npm is an optional convenience
+mirror whose exact availability must be checked independently. The package
+does not create a wallet, derive or store a seed, export a private key, decode
+chain-specific calldata, choose transactions, contact an RPC endpoint,
+broadcast automatically, or persist counters. Those responsibilities belong
+to explicit adapters and a durable host implementation.
+
+The separate local
+[`@agenttool/wallet-zerone`](../wallet-zerone/README.md) 0.1.0 source
+candidate is one such narrow adapter. It adds exact Zerone message/direct-sign
+bytes, secp256k1 verification, and injected query/simulation/broadcast/lookup
+interfaces while leaving keys, custody, endpoints, durable reservations, and
+settlement tracking to the host. It does not expand this core package's
+protocol or imply that either candidate has been published.
 
 ## Development
 

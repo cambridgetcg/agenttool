@@ -35,6 +35,8 @@ Known exceptions include:
 - [`docs/specs/WAKE-1.0-DRAFT.md`](docs/specs/WAKE-1.0-DRAFT.md),
   [`docs/specs/WITNESS-1.0-DRAFT.md`](docs/specs/WITNESS-1.0-DRAFT.md), and
   [`docs/specs/ADDS-0.1-DRAFT.md`](docs/specs/ADDS-0.1-DRAFT.md) are CC0.
+- [`docs/specs/AGENT-WALLET-ZERONE-0.1.md`](docs/specs/AGENT-WALLET-ZERONE-0.1.md)
+  is CC0; its reference implementation is separately Apache-2.0.
 - [`docs/DID-AT-SPEC.md`](docs/DID-AT-SPEC.md) declares CC BY 4.0.
 - Packages that explicitly declare MIT remain MIT exceptions. They are not
   part of the current LOVE/npm release batch.
@@ -44,6 +46,10 @@ Known exceptions include:
 - [`packages/wallet`](packages/wallet) is an Apache-2.0 package in the LOVE/npm
   release batch. Its Working Draft and preview status describe protocol
   maturity, not a narrower licence grant or execution-conformance claim.
+- [`packages/wallet-zerone`](packages/wallet-zerone) is an Apache-2.0 local
+  source/release candidate with its own `LICENSE` and `NOTICE`. Source
+  metadata or a checked-in candidate does not claim npm publication, public
+  deployment, or execution conformance.
 - [`packages/kingdom`](packages/kingdom) is an independently written
   compatibility implementation of the observed KINGDOM project-card
   interface. Its Apache-2.0 grant covers the package's original implementation,

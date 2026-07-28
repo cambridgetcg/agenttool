@@ -85,6 +85,16 @@ export const RELEASE_SPECS = {
     tagPrefix: "wallet",
     artifactKind: "love",
   },
+  "wallet-zerone": {
+    key: "wallet-zerone",
+    name: "@agenttool/wallet-zerone",
+    packagePath: "packages/wallet-zerone",
+    tagPrefix: "wallet-zerone",
+    artifactKind: "love",
+    prerequisites: [
+      { packagePath: "packages/wallet", scripts: ["ci"] },
+    ],
+  },
   telescope: {
     key: "telescope",
     name: "@agenttool/telescope",
@@ -519,6 +529,13 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
     entries.push(
       "package/dist/index.js",
       "package/dist/index.d.ts",
+    );
+  }
+  if (spec.name === "@agenttool/wallet-zerone") {
+    entries.push(
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/vectors/agent-wallet-zerone-v0.1-vectors.json",
     );
   }
   if (spec.name === "@agenttool/kingdom") {

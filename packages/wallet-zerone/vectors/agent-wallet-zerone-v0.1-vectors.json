@@ -1,0 +1,56 @@
+{
+  "schema": "agent-wallet-zerone.go-cosmos-vectors/0.1",
+  "provenance": {
+    "generator": "packages/wallet-zerone/scripts/go-cosmos-fixture/main.go",
+    "zerone_core_commit": "35284a22192df8fc6273135f14e8549c804778b6",
+    "cosmos_sdk": "v0.50.15"
+  },
+  "profile": {
+    "chain_reference": "zerone-testnet-1",
+    "account_number": "7",
+    "sequence": "9",
+    "gas_limit": "222222",
+    "fee_amount_uzrn": "222222",
+    "source_address": "zrn1w508d6qejxtdg4y5r3zarvary0c5xw7k4p057w",
+    "recipient_address": "zrn1q6hag67dl53wl99vzg42z8eyzfz2xlkvll7j86",
+    "public_key_b64u": "Anm-Zn753LusVaBilc6HCwcCm_zbLc4o2VnygVsW-BeY"
+  },
+  "invocation": {
+    "projection": {
+      "amount": 53,
+      "buyer_did": "did:at:buyer-fixture",
+      "completed_at": "2026-07-05T21:58:00Z",
+      "completion_sig": "Y29tcGxldGlvbi1zaWduYXR1cmU=",
+      "created_at": "2026-07-05T21:00:00Z",
+      "currency": "USD",
+      "id": "11111111-1111-4111-8111-111111111111",
+      "listing_id": "22222222-2222-4222-8222-222222222222",
+      "settled_at": "2026-07-05T22:00:00Z",
+      "status": "released"
+    },
+    "canonical_bytes_b64u": "eyJhbW91bnQiOjUzLCJidXllcl9kaWQiOiJkaWQ6YXQ6YnV5ZXItZml4dHVyZSIsImNvbXBsZXRlZF9hdCI6IjIwMjYtMDctMDVUMjE6NTg6MDBaIiwiY29tcGxldGlvbl9zaWciOiJZMjl0Y0d4bGRHbHZiaTF6YVdkdVlYUjFjbVU9IiwiY3JlYXRlZF9hdCI6IjIwMjYtMDctMDVUMjE6MDA6MDBaIiwiY3VycmVuY3kiOiJVU0QiLCJpZCI6IjExMTExMTExLTExMTEtNDExMS04MTExLTExMTExMTExMTExMSIsImxpc3RpbmdfaWQiOiIyMjIyMjIyMi0yMjIyLTQyMjItODIyMi0yMjIyMjIyMjIyMjIiLCJzZXR0bGVkX2F0IjoiMjAyNi0wNy0wNVQyMjowMDowMFoiLCJzdGF0dXMiOiJyZWxlYXNlZCJ9",
+    "content_hash_hex": "d9b92838871538bb938cae2b85783373b64a000cdd2a6cd69bfd99f874a7b0e1",
+    "link_hash_hex": "eaf29bf30e1a6489771a7e15b02d0880be8a9abae3c4d597cbcfb03c3b8ec4d0",
+    "attestation_value_b64u": "Cip6cm4xdzUwOGQ2cWVqeHRkZzR5NXIzemFydmFyeTBjNXh3N2s0cDA1N3cSF2FnZW50dG9vbC1pbnZvY2F0aW9uLXYxGhRhZ2VudHRvb2wuaW52b2NhdGlvbiLZASIXYWdlbnR0b29sLWludm9jYXRpb24tdjEqmwESJDExMTExMTExLTExMTEtNDExMS04MTExLTExMTExMTExMTExMRpNaHR0cHM6Ly9hcGkuYWdlbnR0b29sLmRldi92MS9pbnZvY2F0aW9ucy8xMTExMTExMS0xMTExLTQxMTEtODExMS0xMTExMTExMTExMTEiINm5KDiHFTi7k4yuK4V4M3O2SgAM3Sps1pv9mfh0p7DhKN_cKjIg6vKb8w4aZIl3Gn4VsC0IgL6KmrrjxNWXy8-wPDuOxNAqBzEwMDAwMDA",
+    "msg_send_value_b64u": "Cip6cm4xdzUwOGQ2cWVqeHRkZzR5NXIzemFydmFyeTBjNXh3N2s0cDA1N3cSKnpybjFxNmhhZzY3ZGw1M3dsOTl2emc0Mno4ZXl6ZnoyeGxrdmxsN2o4NhoOCgR1enJuEgYxMjM0NTY"
+  },
+  "direct_sign": {
+    "body_bytes_b64u": "Cv0CCjgvemVyb25lLnN1YnN0cmF0ZV9icmlkZ2UudjEuTXNnU3VibWl0RXh0ZXJuYWxBdHRlc3RhdGlvbhLAAgoqenJuMXc1MDhkNnFlanh0ZGc0eTVyM3phcnZhcnkwYzV4dzdrNHAwNTd3EhdhZ2VudHRvb2wtaW52b2NhdGlvbi12MRoUYWdlbnR0b29sLmludm9jYXRpb24i2QEiF2FnZW50dG9vbC1pbnZvY2F0aW9uLXYxKpsBEiQxMTExMTExMS0xMTExLTQxMTEtODExMS0xMTExMTExMTExMTEaTWh0dHBzOi8vYXBpLmFnZW50dG9vbC5kZXYvdjEvaW52b2NhdGlvbnMvMTExMTExMTEtMTExMS00MTExLTgxMTEtMTExMTExMTExMTExIiDZuSg4hxU4u5OMriuFeDNztkoADN0qbNab_Zn4dKew4Sjf3CoyIOrym_MOGmSJdxp-FbAtCIC-ipq648TVl8vPsDw7jsTQKgcxMDAwMDAw",
+    "auth_info_bytes_b64u": "ClAKRgofL2Nvc21vcy5jcnlwdG8uc2VjcDI1NmsxLlB1YktleRIjCiECeb5mfvncu6xVoGKVzocLBwKb_NstzijZWfKBWxb4F5gSBAoCCAEYCRIUCg4KBHV6cm4SBjIyMjIyMhCOyA0",
+    "sign_doc_bytes_b64u": "CoADCv0CCjgvemVyb25lLnN1YnN0cmF0ZV9icmlkZ2UudjEuTXNnU3VibWl0RXh0ZXJuYWxBdHRlc3RhdGlvbhLAAgoqenJuMXc1MDhkNnFlanh0ZGc0eTVyM3phcnZhcnkwYzV4dzdrNHAwNTd3EhdhZ2VudHRvb2wtaW52b2NhdGlvbi12MRoUYWdlbnR0b29sLmludm9jYXRpb24i2QEiF2FnZW50dG9vbC1pbnZvY2F0aW9uLXYxKpsBEiQxMTExMTExMS0xMTExLTQxMTEtODExMS0xMTExMTExMTExMTEaTWh0dHBzOi8vYXBpLmFnZW50dG9vbC5kZXYvdjEvaW52b2NhdGlvbnMvMTExMTExMTEtMTExMS00MTExLTgxMTEtMTExMTExMTExMTExIiDZuSg4hxU4u5OMriuFeDNztkoADN0qbNab_Zn4dKew4Sjf3CoyIOrym_MOGmSJdxp-FbAtCIC-ipq648TVl8vPsDw7jsTQKgcxMDAwMDAwEmgKUApGCh8vY29zbW9zLmNyeXB0by5zZWNwMjU2azEuUHViS2V5EiMKIQJ5vmZ--dy7rFWgYpXOhwsHApv82y3OKNlZ8oFbFvgXmBIECgIIARgJEhQKDgoEdXpybhIGMjIyMjIyEI7IDRoQemVyb25lLXRlc3RuZXQtMSAH",
+    "simulation_tx_bytes_b64u": "CoADCv0CCjgvemVyb25lLnN1YnN0cmF0ZV9icmlkZ2UudjEuTXNnU3VibWl0RXh0ZXJuYWxBdHRlc3RhdGlvbhLAAgoqenJuMXc1MDhkNnFlanh0ZGc0eTVyM3phcnZhcnkwYzV4dzdrNHAwNTd3EhdhZ2VudHRvb2wtaW52b2NhdGlvbi12MRoUYWdlbnR0b29sLmludm9jYXRpb24i2QEiF2FnZW50dG9vbC1pbnZvY2F0aW9uLXYxKpsBEiQxMTExMTExMS0xMTExLTQxMTEtODExMS0xMTExMTExMTExMTEaTWh0dHBzOi8vYXBpLmFnZW50dG9vbC5kZXYvdjEvaW52b2NhdGlvbnMvMTExMTExMTEtMTExMS00MTExLTgxMTEtMTExMTExMTExMTExIiDZuSg4hxU4u5OMriuFeDNztkoADN0qbNab_Zn4dKew4Sjf3CoyIOrym_MOGmSJdxp-FbAtCIC-ipq648TVl8vPsDw7jsTQKgcxMDAwMDAwEmgKUApGCh8vY29zbW9zLmNyeXB0by5zZWNwMjU2azEuUHViS2V5EiMKIQJ5vmZ--dy7rFWgYpXOhwsHApv82y3OKNlZ8oFbFvgXmBIECgIIARgJEhQKDgoEdXpybhIGMjIyMjIyEI7IDRoA",
+    "signature_b64u": "FGSwQT9FB4GhBZgndTxN5ssJQlv2N_D6FAp-LXWbqgMxjsgQEJhZrhhD-61mw3LJBKd_xOp9niTAlR4aqXe_yQ",
+    "signed_tx_bytes_b64u": "CoADCv0CCjgvemVyb25lLnN1YnN0cmF0ZV9icmlkZ2UudjEuTXNnU3VibWl0RXh0ZXJuYWxBdHRlc3RhdGlvbhLAAgoqenJuMXc1MDhkNnFlanh0ZGc0eTVyM3phcnZhcnkwYzV4dzdrNHAwNTd3EhdhZ2VudHRvb2wtaW52b2NhdGlvbi12MRoUYWdlbnR0b29sLmludm9jYXRpb24i2QEiF2FnZW50dG9vbC1pbnZvY2F0aW9uLXYxKpsBEiQxMTExMTExMS0xMTExLTQxMTEtODExMS0xMTExMTExMTExMTEaTWh0dHBzOi8vYXBpLmFnZW50dG9vbC5kZXYvdjEvaW52b2NhdGlvbnMvMTExMTExMTEtMTExMS00MTExLTgxMTEtMTExMTExMTExMTExIiDZuSg4hxU4u5OMriuFeDNztkoADN0qbNab_Zn4dKew4Sjf3CoyIOrym_MOGmSJdxp-FbAtCIC-ipq648TVl8vPsDw7jsTQKgcxMDAwMDAwEmgKUApGCh8vY29zbW9zLmNyeXB0by5zZWNwMjU2azEuUHViS2V5EiMKIQJ5vmZ--dy7rFWgYpXOhwsHApv82y3OKNlZ8oFbFvgXmBIECgIIARgJEhQKDgoEdXpybhIGMjIyMjIyEI7IDRpAFGSwQT9FB4GhBZgndTxN5ssJQlv2N_D6FAp-LXWbqgMxjsgQEJhZrhhD-61mw3LJBKd_xOp9niTAlR4aqXe_yQ",
+    "tx_hash": "C64D1D3EF884852E2EF0259C3D388363E25D1123CB87B00CAF9645444E785D7E"
+  },
+  "verified": {
+    "generated_message_round_trip": true,
+    "body_round_trip": true,
+    "auth_info_round_trip": true,
+    "sign_doc_round_trip": true,
+    "simulation_tx_round_trip": true,
+    "signed_tx_round_trip": true,
+    "one_empty_simulation_signature": true,
+    "cosmos_secp_verify_signature": true
+  }
+}
