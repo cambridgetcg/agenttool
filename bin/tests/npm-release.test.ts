@@ -85,7 +85,7 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
-  test("allowlists fourteen reviewed release identities", () => {
+  test("allowlists fifteen reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
@@ -101,6 +101,7 @@ describe("standard npm release policy", () => {
       "skills",
       "telescope",
       "wallet",
+      "wallet-zerone",
     ]);
     expect(releaseSpec("collab")).toMatchObject({
       name: "@agenttool/collab",
@@ -138,6 +139,15 @@ describe("standard npm release policy", () => {
       packagePath: "packages/repo-archive",
       artifactKind: "pack",
     });
+    expect(releaseSpec("wallet-zerone")).toMatchObject({
+      name: "@agenttool/wallet-zerone",
+      packagePath: "packages/wallet-zerone",
+      tagPrefix: "wallet-zerone",
+      artifactKind: "love",
+      prerequisites: [
+        { packagePath: "packages/wallet", scripts: ["ci"] },
+      ],
+    });
     expect(releaseSpec("data-sync")).toMatchObject({
       gateScripts: ["ci", "build"],
       prerequisites: [
@@ -174,6 +184,12 @@ describe("standard npm release policy", () => {
     expect(expectedTag(releaseSpec("kingdom"), "0.1.0")).toBe("kingdom-v0.1.0");
     expect(packedFilename("@agenttool/kingdom", "0.1.0")).toBe(
       "agenttool-kingdom-0.1.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("wallet-zerone"), "0.1.0")).toBe(
+      "wallet-zerone-v0.1.0",
+    );
+    expect(packedFilename("@agenttool/wallet-zerone", "0.1.0")).toBe(
+      "agenttool-wallet-zerone-0.1.0.tgz",
     );
     expect(() => expectedTag(releaseSpec("sdk"), "latest")).toThrow("invalid package version");
   });
@@ -221,6 +237,13 @@ describe("standard npm release policy", () => {
       "package/schema/agenttool-kingdom-card-v0.1.schema.json",
       "package/schema/agenttool-kingdom-registry-v0.1.schema.json",
     ]));
+    expect(requiredArchiveEntries(releaseSpec("wallet-zerone"))).toEqual(
+      expect.arrayContaining([
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+        "package/vectors/agent-wallet-zerone-v0.1-vectors.json",
+      ]),
+    );
   });
 
   test("requires the Agent Skills runtime and bundled skills in its release archive", () => {

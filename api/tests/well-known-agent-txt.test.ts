@@ -39,6 +39,13 @@ const REQUIRED_KEYS = [
   "Wake",
   "Wake-Keystone",
   "Wake-Formats",
+  "Invocation-Witness-Write",
+  "Invocation-Witness-Read",
+  "Invocation-Witness-Format",
+  "Invocation-Witness-Boundary",
+  "Zerone-Wallet-Adapter",
+  "Zerone-Wallet-Source",
+  "Zerone-Wallet-Boundary",
   "MCP-Server-Card",
   "MCP-Server-Card-Role",
   "LLMs-Sitemap",
@@ -222,6 +229,36 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
     expect(kv.get("LLMs-Sitemap")).toContain("/.well-known/llms.txt");
     expect(kv.has("Agent-Card")).toBe(false);
     expect(body).not.toContain("/.well-known/agent-card.json");
+  });
+
+  test("invocation witness and Zerone adapter lines expose only the bounded report seam", async () => {
+    const { body } = await fetchAgentTxt();
+    const kv = parseKv(body);
+
+    expect(kv.get("Invocation-Witness-Write")).toMatch(
+      /^POST \/v1\/invocations\/\{id\}\/witness.*project bearer.*authenticated buyer or seller.*released and settled.*does not submit or verify/is,
+    );
+    expect(kv.get("Invocation-Witness-Read")).toMatch(
+      /^GET \/public\/invocations\/\{id\}.*released and settled.*non-empty writer-shaped report.*sealed input and output remain private/is,
+    );
+    expect(kv.get("Invocation-Witness-Format")).toBe(
+      "agenttool.invocation-witness/1",
+    );
+    expect(kv.get("Invocation-Witness-Boundary")).toMatch(
+      /not signature.*provenance proof.*does not verify chain inclusion.*attestation.*settlement.*bond return.*reward.*independently.*compare/is,
+    );
+    expect(kv.get("Zerone-Wallet-Adapter")).toContain(
+      "agent-wallet-zerone/0.1",
+    );
+    expect(kv.get("Zerone-Wallet-Adapter")).toContain(
+      "@agenttool/wallet-zerone",
+    );
+    expect(kv.get("Zerone-Wallet-Source")).toBe(
+      "https://github.com/cambridgetcg/agenttool/tree/main/packages/wallet-zerone",
+    );
+    expect(kv.get("Zerone-Wallet-Boundary")).toMatch(
+      /local bounded offline source only.*no AgentTool trust export.*identity migration.*portable trust proof.*key custody.*hosted RPC.*deployed bridge.*network action requires caller-supplied transport and authority/is,
+    );
   });
 
   test("Castle and play pointers are local, optional, and action-free", async () => {

@@ -173,6 +173,7 @@ describe("outward claim boundaries", () => {
       "packages/sdk-ts",
       "packages/telescope",
       "packages/wallet",
+      "packages/wallet-zerone",
       "packages/alchemy",
     ] as const;
     const pyProject = read("packages/sdk-py/pyproject.toml");

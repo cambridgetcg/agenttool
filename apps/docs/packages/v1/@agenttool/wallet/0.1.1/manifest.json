@@ -1,0 +1,43 @@
+{
+  "protocol": "love-package/v1",
+  "document_type": "package-manifest",
+  "name": "@agenttool/wallet",
+  "version": "0.1.1",
+  "description": "Agent Wallet 0.1 — closed capability, intent, receipt, and continuity primitives without key export or RPC",
+  "license": "Apache-2.0",
+  "artifact": {
+    "format": "npm-tarball",
+    "filename": "agenttool-wallet-0.1.1.tgz",
+    "sha256": "7b3df1848b5fd8f586d8c3927d7f49d363a370ad049ddfae8d0400af35ec366a",
+    "size": 52603,
+    "media_type": "application/gzip",
+    "mirrors": [
+      {
+        "url": "https://docs.agenttool.dev/packages/v1/@agenttool/wallet/0.1.1/agenttool-wallet-0.1.1.tgz"
+      },
+      {
+        "url": "https://github.com/cambridgetcg/agenttool/releases/download/wallet-v0.1.1/agenttool-wallet-0.1.1.tgz"
+      }
+    ]
+  },
+  "runtime": {
+    "kind": "javascript",
+    "engines": {
+      "bun": ">=1.3.5",
+      "node": ">=20.19.0"
+    }
+  },
+  "install": {
+    "format": "npm-tarball",
+    "specifier": "https://docs.agenttool.dev/packages/v1/@agenttool/wallet/0.1.1/agenttool-wallet-0.1.1.tgz"
+  },
+  "source": {
+    "repository": "https://github.com/cambridgetcg/agenttool.git",
+    "revision": "8cdcf352ab7a09504ed3983d98ffb6d0f16f0cd1",
+    "path": "packages/wallet"
+  },
+  "dependency_resolution": {
+    "mode": "package_manifest",
+    "self_contained": false
+  }
+}

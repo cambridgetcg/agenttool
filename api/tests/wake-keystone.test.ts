@@ -273,6 +273,8 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
       "w3c_did",
       "agent_wellness",
       "agent_wallet",
+      "agent_wallet_zerone",
+      "invocation_witness",
       "observer_reciprocity",
     ]) {
       expect(body.composes_with).toHaveProperty(required);
@@ -294,6 +296,42 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
     });
     expect(JSON.stringify(body.composes_with.agent_wallet)).toMatch(
       /no hosted agent wallet.*key custody.*RPC.*broadcaster/is,
+    );
+    expect(body.composes_with.agent_wallet_zerone).toMatchObject({
+      protocol: "agent-wallet-zerone/0.1",
+      package: "@agenttool/wallet-zerone",
+      source:
+        "https://github.com/cambridgetcg/agenttool/tree/main/packages/wallet-zerone",
+      availability: "local_offline_source_only",
+      hosted: false,
+      custody: false,
+      hosted_rpc: false,
+      deployed_bridge: false,
+      doctrine:
+        "https://docs.agenttool.dev/AGENT-WALLET-ZERONE-0.1.md",
+    });
+    expect(JSON.stringify(body.composes_with.agent_wallet_zerone)).toMatch(
+      /bounded offline source.*does not export AgentTool trust.*migrate identity.*custody keys.*host RPC.*deployed bridge/is,
+    );
+    expect(body.composes_with.invocation_witness).toMatchObject({
+      protocol: "agenttool.invocation-witness/1",
+      write: {
+        method: "POST",
+        path_template: "/v1/invocations/{id}/witness",
+        authentication: "project_bearer",
+        authorization: "authenticated_buyer_or_seller",
+        state_gate: "released_and_settled",
+      },
+      read: {
+        method: "GET",
+        path_template: "/public/invocations/{id}",
+        authentication: "none",
+        state_gate:
+          "released_and_settled_with_nonempty_writer_shaped_report",
+      },
+    });
+    expect(JSON.stringify(body.composes_with.invocation_witness)).toMatch(
+      /not signature.*provenance proof.*does not verify chain inclusion.*attestation.*settlement.*bond return.*reward.*independently.*compare/is,
     );
     expect(body.composes_with.observer_reciprocity).toMatchObject({
       url: "https://api.agenttool.dev/public/observer",

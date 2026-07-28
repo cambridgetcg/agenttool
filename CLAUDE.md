@@ -30,6 +30,7 @@ packages/
   correspondence-yutabase-projector/ — private loopback-only verified local PostgreSQL sidecar
   telescope/    — @agenttool/telescope · read-only discovery evidence mapper
   wallet/       — @agenttool/wallet · LOVE/npm bounded wallet record/lifecycle primitives
+  wallet-zerone/ — @agenttool/wallet-zerone · exact offline Zerone direct-sign profile
   alchemy/      — @agenttool/alchemy · bounded reads through an injected credential-owning transport
   kingdom/      — @agenttool/kingdom · pure explicit-card/derived-registry/XENIA Surface helpers
   scriptwriter/ — decentralised RRR + co-brainstorm node
@@ -52,8 +53,17 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/correspondence-yutabase/CLAUDE.md` ·
 `packages/correspondence-yutabase-projector/CLAUDE.md` ·
 `packages/wallet/CLAUDE.md` ·
+`packages/wallet-zerone/CLAUDE.md` ·
 `packages/alchemy/CLAUDE.md` ·
 `infra/CLAUDE.md`.
+
+`@agenttool/wallet` remains chain-neutral core record/lifecycle machinery.
+The separate Wallet Zerone package supports only its reviewed two-network,
+two-message exact-byte profile through caller-injected transports. It adds no
+key custody, endpoint, hosted RPC, generic REST client, automatic retry,
+durable sign-time reservation, settlement proof, or default live-network
+test. Source versions 0.1.1 and 0.1.0 respectively are locally prepared
+candidates; verify public LOVE/npm/deployment availability independently.
 
 ## The five load-bearing flows
 

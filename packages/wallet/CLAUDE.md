@@ -60,13 +60,22 @@ npm pack --ignore-scripts --dry-run
 
 ## Release State
 
-Version `0.1.0` is distributed through the checked-in `love-package/v1`
-artifact and a verified public npm mirror. The registry tarball is
-byte-identical to the checked-in LOVE artifact at SHA-256
+Package metadata in this source tree is prepared for unreleased version
+`0.1.1`; no `0.1.1` artifact has been distributed. Version `0.1.0` remains
+distributed through the checked-in `love-package/v1` artifact and a verified
+public npm mirror. The `0.1.0` registry tarball is byte-identical to the
+checked-in LOVE artifact at SHA-256
 `fada7f9602d48020390709c6c066d7562cd54edcb8e9cbc8bec4c213f7ea475d`,
-and the npm publication carries SLSA provenance. npm remains an optional mirror
-rather than package-name or release authority; verify the exact version and
-artifact digest when consuming it.
+and that npm publication carries SLSA provenance. npm remains an optional
+mirror rather than package-name or release authority; verify the exact version
+and artifact digest when consuming it.
+
+Zerone support lives in the separate local
+`@agenttool/wallet-zerone@0.1.0` source candidate. It consumes this package's
+verified records and owns a narrow exact-byte Cosmos profile; it does not turn
+core Wallet into a chain adapter or supply custody, hosted RPC, or live
+execution. Neither the Wallet 0.1.1 nor Wallet Zerone 0.1.0 candidate is
+publicly available merely because its source metadata is prepared.
 
 ## Key Files
 
@@ -88,6 +97,8 @@ Canonical protocol draft:
 [`docs/specs/AGENT-WALLET-0.1.md`](../../docs/specs/AGENT-WALLET-0.1.md).
 Canonical byte recipes:
 [`docs/CANONICAL-BYTES.md`](../../docs/CANONICAL-BYTES.md).
+Separate Zerone profile:
+[`docs/specs/AGENT-WALLET-ZERONE-0.1.md`](../../docs/specs/AGENT-WALLET-ZERONE-0.1.md).
 
 ## Kingdom Engine
 
