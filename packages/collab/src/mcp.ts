@@ -79,7 +79,7 @@ export function buildCollabMcpServer(
 ): McpServer {
   let binding: BoundSession | null = options.resumed_session ?? null;
   const server = new McpServer(
-    { name: "agenttool-collab", version: "0.3.0" },
+    { name: "agenttool-collab", version: "0.3.1" },
     {
       capabilities: { tools: {} },
       instructions:

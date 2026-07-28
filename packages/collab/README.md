@@ -392,13 +392,19 @@ workflow and `bin/npm-release.ts`, not a local `npm publish`. See
 [`docs/NPM-RELEASES.md`](../../docs/NPM-RELEASES.md).
 
 Version 0.1.0 is the initial public npm release, and version 0.2.0 remains a
-historical public release. Version 0.3.0 is the current public npm `latest`.
-Protected trusted workflow run `30010457955` published it with SLSA provenance;
-independently downloaded npm and
+historical public release. Version 0.3.0 is the last independently verified
+public npm release before this 0.3.1 source release. Protected trusted workflow
+run `30010457955` published 0.3.0 with SLSA provenance; independently
+downloaded npm and
 [GitHub Release](https://github.com/cambridgetcg/agenttool/releases/tag/collab-v0.3.0)
 tarballs were byte-identical
 (`sha256:9c605ebe4cdc87eda1b0eede6bba0a6591a3dd62badd364463b01521401def7f`).
-It remains local plaintext software, not a hosted service, remote relay, VPN,
-private model channel, or LOVE release. npm distributes the local skills,
-plugin manifests, source, and bundled MCP runtime; this release adds no Fly or
-Cloudflare surface.
+
+Version 0.3.1 adds bounded `collab_next` event pages while preserving routed
+reports, cursor authority, acknowledgements, and hash verification. Its
+annotated source tag, GitHub Release, npm publication, and `latest` dist-tag
+remain separately verifiable release acts; this source statement does not
+claim that any of them succeeded. Collab remains local plaintext software, not
+a hosted service, remote relay, VPN, private model channel, or LOVE release.
+npm distributes the local skills, plugin manifests, source, and bundled MCP
+runtime; this release adds no Fly or Cloudflare surface.
