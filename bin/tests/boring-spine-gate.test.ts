@@ -294,16 +294,23 @@ describe("boring test spine", () => {
     expect(workflow).toContain(
       "uv sync --locked --extra dev --no-install-project --no-sources --no-python-downloads --dry-run --no-cache",
     );
-    expect(workflow).toContain("name: Build local data-sync and projector peers");
+    expect(workflow).toContain("name: Build local-dependent package peers");
     expect(workflow).toContain("cd packages/data && bun run build");
     expect(workflow).toContain("cd packages/data-protocol && bun run build");
     expect(workflow).toContain("cd packages/correspondence-yutabase && bun run build");
+    expect(workflow).toContain("cd packages/wallet && bun run build");
     expect(workflow).toContain(
       "name: Install local-dependent package dependencies from lockfiles",
     );
     expect(workflow).toContain("cd packages/data-sync && bun install --frozen-lockfile");
     expect(workflow).toContain(
       "cd packages/correspondence-yutabase-projector && bun install --frozen-lockfile",
+    );
+    expect(workflow).toContain(
+      "cd packages/wallet-zerone && bun install --frozen-lockfile",
+    );
+    expect(workflow.indexOf("cd packages/wallet && bun run build")).toBeLessThan(
+      workflow.indexOf("cd packages/wallet-zerone && bun install --frozen-lockfile"),
     );
     expect(workflow).not.toContain("secrets.");
 
@@ -319,6 +326,7 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/correspondence-yutabase && bun run ci");
     expect(preflight).toContain("cd packages/correspondence-yutabase-projector && bun run ci");
     expect(preflight).toContain("cd packages/wallet && bun run ci");
+    expect(preflight).toContain("cd packages/wallet-zerone && bun run ci");
     expect(preflight).toContain("cd packages/telescope && bun run ci");
     expect(preflight).toContain("cd packages/alchemy && bun run ci");
     expect(preflight).toContain("cd packages/kingdom && bun run ci");
@@ -359,7 +367,20 @@ describe("boring test spine", () => {
     expect(workflow).toContain(
       "apps/docs/packages/v1/@agenttool/telescope/0.2.3/agenttool-telescope-0.2.3.tgz",
     );
-    expect(workflow).toContain("name: Smoke packed Agent Wallet under Node and Bun");
+    expect(workflow).toContain(
+      "name: Smoke packed Agent Wallet and Zerone adapter together under Node and Bun",
+    );
+    expect(workflow).toContain(
+      'npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$wallet_tarball" "$zerone_tarball"',
+    );
+    expect(workflow).toContain('w.PACKAGE_VERSION!=="0.1.1"');
+    expect(workflow).toContain('z.PACKAGE_VERSION!=="0.1.0"');
+    expect(workflow).toContain('z.ZERONE_ADAPTER_PROTOCOL!=="agent-wallet-zerone/0.1"');
+    expect(workflow).toContain('typeof z.createZeroneDirectSignPlan!=="function"');
+    expect(workflow).toContain(
+      'v.schema!=="agent-wallet-zerone.go-cosmos-vectors/0.1"',
+    );
+    expect(workflow).toContain("signAndSend|custody");
     expect(workflow).toContain(
       "name: Smoke canonical Agent Browser LOVE artifact under Node and Bun",
     );
@@ -424,6 +445,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("          - alchemy");
     expect(workflow).toContain("          - kingdom");
     expect(workflow).toContain("          - repo-archive");
+    expect(workflow).toContain("          - wallet-zerone");
     expect(workflow).not.toContain("pull_request:");
     expect(workflow).not.toMatch(/\n\s+push:/);
     expect(workflow).toContain("persist-credentials: false");

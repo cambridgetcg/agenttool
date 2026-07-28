@@ -18,7 +18,7 @@ import { z } from "zod";
 import type { ProjectContext } from "../auth/middleware";
 import { charge } from "../billing/charge";
 import { MARKETPLACE_PRICING } from "../billing/marketplace-pricing";
-import { errors, type NextAction } from "../lib/errors";
+import { errors, fail, type NextAction } from "../lib/errors";
 import { deltaMeta, parseSinceParam } from "../lib/since-param";
 import { attachSurface } from "../lib/surface-metadata";
 import {
@@ -30,6 +30,7 @@ import {
   invokeListing,
   listInvocationsForListing,
   listInvocationsForProject,
+  witnessInvocation,
 } from "../services/marketplace/invocations";
 import {
   DISPUTE_ARBITRATION_RESTING_CODE,
@@ -52,6 +53,12 @@ import {
   type CredentialSolicitationViolation,
 } from "../services/marketplace/credential-boundary";
 import { MARKETPLACE_INPUT_SAFETY } from "../services/discovery/safety-boundaries";
+import {
+  WITNESS_ADAPTER_ID_PATTERN,
+  WITNESS_ATTESTATION_ID_PATTERN,
+  WITNESS_CHAIN_ID_PATTERN,
+  WITNESS_TX_HASH_PATTERN,
+} from "../services/marketplace/witness";
 
 const app = new Hono<ProjectContext>();
 
@@ -108,6 +115,19 @@ const completeSchema = z.object({
   signature: z.string().min(1),
 }).strict();
 
+// Witness writeback — bounded chain identifiers only; unknown fields
+// rejected. These strings are later served UNAUTHENTICATED on
+// GET /public/invocations/:id, so each is pinned to a safe printable
+// class, not just a length: chain_id is a bounded raw relay chain identifier,
+// tx_hash is a hex digest (either case) with headroom, and attestation_id /
+// adapter_id are identifier-class. No whitespace, markup, or controls.
+const witnessSchema = z.object({
+  chain_id: z.string().regex(WITNESS_CHAIN_ID_PATTERN),
+  tx_hash: z.string().regex(WITNESS_TX_HASH_PATTERN),
+  attestation_id: z.string().regex(WITNESS_ATTESTATION_ID_PATTERN),
+  adapter_id: z.string().regex(WITNESS_ADAPTER_ID_PATTERN).optional(),
+}).strict();
+
 // ── Error mapping ─────────────────────────────────────────────────────
 
 // Errors-as-instructions — see docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md.
@@ -133,6 +153,7 @@ function mapServiceError(msg: string): {
   if (msg === "seller_wallet_not_owned_by_project") return { status: 403, code: msg };
   if (msg === "not_seller") return { status: 403, code: msg };
   if (msg === "not_buyer") return { status: 403, code: msg };
+  if (msg === "not_invocation_party") return { status: 403, code: msg };
   if (msg === "listing_not_public") return { status: 403, code: msg };
 
   // 402
@@ -161,8 +182,37 @@ function mapServiceError(msg: string): {
   if (msg === "seller_signing_key_missing") return { status: 409, code: msg };
   if (msg === "escrow_missing") return { status: 409, code: msg };
   if (msg.startsWith("invocation_state_invalid")) return { status: 409, code: msg };
+  if (msg.startsWith("invocation_not_settled")) {
+    return {
+      status: 409,
+      code: "invocation_not_settled",
+      hint:
+        "Witnessing opens only after settlement (status=released) — an unsettled invocation has nothing to attest. " +
+        msg,
+    };
+  }
+  if (msg === "witnesses_full") {
+    return {
+      status: 409,
+      code: msg,
+      hint:
+        "Witness cap reached (32 per invocation). The existing entries already open the public re-derivation surface.",
+    };
+  }
   if (msg.startsWith("escrow_state_invalid")) return { status: 409, code: msg };
   if (msg.startsWith("currency_mismatch")) return { status: 409, code: "currency_mismatch", hint: msg };
+
+  // 500 — coded server-data integrity faults. Keep the code on the wire so
+  // relay retry logic can distinguish a corrupt stored row from a transient
+  // failure: retrying witnesses_malformed will never repair the row.
+  if (msg === "witnesses_malformed") {
+    return {
+      status: 500,
+      code: msg,
+      hint:
+        "Stored metadata.witnesses on this invocation does not match the supported versioned witness shape — a data-integrity fault, not a request error. Retrying will not help; report the invocation id.",
+    };
+  }
 
   // 503 — policy review and arbitration are deliberately fail-closed.
   if (msg === DISPUTE_ARBITRATION_RESTING_CODE) {
@@ -177,6 +227,14 @@ function mapServiceError(msg: string): {
   if (msg === "price_amount_must_be_positive_integer") return { status: 400, code: msg };
   if (msg === "price_currency_required") return { status: 400, code: msg };
   if (msg === "sla_seconds_must_be_positive_integer") return { status: 400, code: msg };
+  if (msg === "invocation_witnesses_reserved") {
+    return {
+      status: 400,
+      code: msg,
+      hint:
+        "metadata.witnesses is server-managed. Omit it; a party may report a chain reference only after the invocation is released.",
+    };
+  }
   if (msg.startsWith("sealed_")) return { status: 400, code: "validation", hint: msg };
   if (msg === "dispute_policy_must_be_object") return { status: 400, code: msg };
   if (msg === "dispute_policy_arbiter_claim_required") return { status: 400, code: msg };
@@ -465,16 +523,17 @@ export default app;
 // ── Helper: catch + JSON-respond with hint preserved ────────────────────
 //  Service-layer errors arrive as Error.message strings. Map to HTTP status
 //  + JSON body, preserving the human-readable hint for codes like 402.
-//  500-class errors get re-thrown to land in the parent app's onError.
+//  Unmapped 500-class errors get re-thrown to land in the parent app's
+//  onError; named data-integrity faults keep their stable code on the wire.
 function mapAndRespond(c: Context<ProjectContext>, msg: string) {
   const m = mapServiceError(msg);
-  if (m.status === 500) throw new Error(msg);
+  if (m.status === 500 && m.code === "internal_error") throw new Error(msg);
   // Errors-as-instructions — spread guided fields when present.
   const body: Record<string, unknown> = { error: m.code };
   if (m.hint) body.hint = m.hint;
   if (m.next_actions) body.next_actions = m.next_actions;
   if (m.docs) body.docs = m.docs;
-  return c.json(body, m.status as 400 | 402 | 403 | 404 | 409 | 422 | 503);
+  return c.json(body, m.status as 400 | 402 | 403 | 404 | 409 | 422 | 500 | 503);
 }
 
 function disputeArbitrationRestResponse(c: Context<ProjectContext>) {
@@ -567,6 +626,49 @@ invocationsRouter.post("/:id/complete", async (c) => {
       signatureB64: parsed.data.signature,
     });
     return c.json(inv);
+  } catch (err) {
+    return mapAndRespond(c, (err as Error).message);
+  }
+});
+
+// ── POST /v1/invocations/:id/witness — chain-reference writeback ────────
+// A party to the invocation (buyer or seller project) reports a public-chain
+// reference for its ten canonical fields. This route authenticates the party
+// but does not query or verify the chain. The first witness opens
+// GET /public/invocations/:id for independent re-derivation and comparison.
+// Released-only; idempotent per
+// (chain_id, attestation_id): a relay retry gets the stored entry and never
+// appends a duplicate.
+invocationsRouter.post("/:id/witness", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json();
+  const parsed = witnessSchema.safeParse(body);
+  if (!parsed.success) {
+    return fail(c, errors.validation(parsed.error.flatten()), 400);
+  }
+
+  // Free: post-settlement reference writeback. The take-rate already priced
+  // the value; never toll the path that enables independent comparison.
+  await charge(c, MARKETPLACE_PRICING.witness, "invocation.witness");
+
+  try {
+    const out = await witnessInvocation({
+      invocationId: id,
+      callerProjectId: c.var.project.id,
+      chainId: parsed.data.chain_id,
+      txHash: parsed.data.tx_hash,
+      attestationId: parsed.data.attestation_id,
+      adapterId: parsed.data.adapter_id,
+    });
+    return c.json(
+      {
+        witness: out.entry,
+        witness_count: out.witnessCount,
+        already_witnessed: !out.created,
+        public_path: `/public/invocations/${id}`,
+      },
+      out.created ? 201 : 200,
+    );
   } catch (err) {
     return mapAndRespond(c, (err as Error).message);
   }

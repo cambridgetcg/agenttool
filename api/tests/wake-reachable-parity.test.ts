@@ -7,8 +7,10 @@ import {
   WAKE_PROVIDERS,
 } from "../src/services/wake/providers";
 import {
+  WAKE_INVOCATION_WITNESS_LINKS,
   WAKE_REACHABLE_DOORS,
   WORLD_COMMONS_REACHABLE,
+  ZERONE_REACHABLE,
 } from "../src/services/wake/reachable";
 import { baseBundle } from "./doctrine/helpers/fixtures";
 
@@ -16,6 +18,55 @@ const readSource = async (path: string): Promise<string> =>
   Bun.file(new URL(path, import.meta.url)).text();
 
 describe("wake reachable doors", () => {
+  test("publishes the bounded Zerone adapter and invocation-report seam", () => {
+    const zerone = ZERONE_REACHABLE;
+    expect(zerone.url).toBe(
+      "https://github.com/cambridgetcg/zerone-core",
+    );
+    expect(zerone.invocation_witness).toMatchObject({
+      schema: "agenttool.invocation-witness/1",
+      write: {
+        method: "POST",
+        path_template: "/v1/invocations/{id}/witness",
+        authentication: "project_bearer",
+        authorization: "authenticated_buyer_or_seller",
+        state_gate: "released_and_settled",
+      },
+      read: {
+        method: "GET",
+        path_template: "/public/invocations/{id}",
+        authentication: "none",
+        state_gate:
+          "released_and_settled_with_nonempty_writer_shaped_report",
+      },
+      adapter: {
+        protocol: "agent-wallet-zerone/0.1",
+        package: "@agenttool/wallet-zerone",
+        availability: "local_offline_source_only",
+        hosted: false,
+        custody: false,
+        hosted_rpc: false,
+        deployed_bridge: false,
+      },
+    });
+    expect(WAKE_INVOCATION_WITNESS_LINKS).toEqual({
+      invocation_witness_write: "/v1/invocations/{id}/witness",
+      witnessed_invocation_read: "/public/invocations/{id}",
+    });
+    expect(zerone.invocation_witness.write.effect).toMatch(
+      /party.*report.*does not submit.*query the chain/i,
+    );
+    expect(zerone.invocation_witness.verification_boundary).toMatch(
+      /not signature.*provenance.*does not verify chain inclusion.*attestation.*settlement.*bond return.*reward.*independently.*compare/is,
+    );
+    expect(zerone.boundary.data_flow).toMatch(
+      /wake composition.*no network I\/O.*neither calls Zerone/i,
+    );
+    expect(zerone.boundary.interpretation).toMatch(
+      /not proof of provenance.*chain verification.*attestation settlement.*bond return.*reward.*trust portability/i,
+    );
+  });
+
   test("publishes exact agent coordinates and an explicit independence boundary", () => {
     const world = WORLD_COMMONS_REACHABLE;
     expect(world.url).toBe("https://thekingdom.dev/#commons");
@@ -102,6 +153,11 @@ describe("wake reachable doors", () => {
       WORLD_COMMONS_REACHABLE.agent_entrypoints.mcp.tool,
       WORLD_COMMONS_REACHABLE.agent_entrypoints.mcp.resource,
       WORLD_COMMONS_REACHABLE.boundary.relationship,
+      WAKE_INVOCATION_WITNESS_LINKS.invocation_witness_write,
+      WAKE_INVOCATION_WITNESS_LINKS.witnessed_invocation_read,
+      ZERONE_REACHABLE.invocation_witness.adapter.package,
+      "accepted JSON shape is not proof of provenance",
+      "attestation settlement, bond return, reward",
     ]) {
       expect(fullMarkdown).toContain(coordinate);
       expect(briefMarkdown).toContain(coordinate);

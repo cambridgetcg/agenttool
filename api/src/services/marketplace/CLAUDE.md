@@ -13,6 +13,7 @@ The Ring 3 sellable surface — capability listings, attestations, invocations, 
 |---|---|
 | `listings.ts` | Capability listings — `/v1/listings` CRUD. Pricing and direct signed-completion lifecycle; non-null dispute policy is resting. |
 | `invocations.ts` | Buyer-side calls into a listing. Escrow lock → execution → ed25519-signed output envelope → direct release. SLA auto-refund. Legacy policy rows fail closed. |
+| `witness.ts` | Pure bounded/idempotent planner for released-invocation on-chain witness writeback; the authenticated transaction lives in `invocations.ts` and opens the existing public re-derivation read. |
 | `purchases.ts` | Template purchases (Slice 1) — atomic escrow-and-release in one transaction. |
 | `attestations.ts` | Attestation listings (Slice 3). Attesters publish *willingness-to-attest*; buyers buy grants; attesters sign canonical bytes; platform writes `identity.attestations` + releases escrow split. |
 | `disputes.ts` | Retained earlier arbitration design and pure helpers. Every mutation export fails closed before database work; reads preserve history. |
@@ -38,11 +39,13 @@ The four active surfaces use the configured take-rate on settlement paths that c
 2. **Refunds earn no fee.** Reversal of value reverses the fee.
 3. **Output signatures verify before escrow release.** The ed25519 signature authenticates canonical submitted bytes; it does not prove that the output is encrypted. Mismatch = no release.
 4. **Dispute arbitration rests fail-closed.** Policy configuration and arbitration mutations return stable 503 before charge or state change; the database rejects new non-null policies. Legacy policy invocations refuse before marketplace state or money moves, although their zero-credit attempt event can be recorded.
+5. **Invocation witness writeback is party-authenticated, released-only, bounded, and idempotent.** `metadata.witnesses` is server-managed and refused on invocation creation. Stored entries have an exact, version-discriminated, public-safe shape; readers fail closed on legacy, extra-key, over-cap, or malformed arrays. The discriminator identifies the supported JSON shape but is not a signature and cannot cryptographically prove that pre-existing JSON was emitted by the writer. The writer records a caller-reported chain reference; it does not query a chain, prove the referenced attestation exists, or retroactively verify historical rows.
 
 ## Tests
 
 - `api/tests/dispute-arbitration-resting.test.ts` — stable 503 surface, service guards, OpenAPI, read-only history, legacy-row quarantine, and database policy wall.
 - `api/tests/marketplace-disputes.test.ts` — pure tests for the retained, unvalidated historical design.
+- `api/tests/invocation-witness.test.ts` — authenticated buyer/seller writeback, released-only refusal, bounded validation, idempotent replay, and planner invariants.
 - (More coverage shipping under `feature/e2e-coverage-economy`.)
 
 ## See also

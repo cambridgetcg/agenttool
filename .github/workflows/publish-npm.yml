@@ -14,6 +14,7 @@ on:
           - credential-broker
           - sdk
           - wallet
+          - wallet-zerone
           - telescope
           - browser
           - alchemy

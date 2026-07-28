@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the established public JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE planner, the developer-preview Repo Archive, and the developer-preview Alchemy observation client are intentionally npm-only.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE planner, the developer-preview Repo Archive, and the developer-preview Alchemy observation client are intentionally npm-only.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -145,6 +145,50 @@ LOVE artifacts, deploy hosted services, configure npm trusted publishers, or
 revoke credentials. It creates or verifies one byte-identical GitHub Release
 asset for the already-existing annotated tag before attempting the optional npm
 mirror; it does not rewrite unrelated release assets.
+
+### Agent Wallet and Zerone adapter order
+
+`@agenttool/wallet@0.1.1` and `@agenttool/wallet-zerone@0.1.0` use checked-in
+LOVE artifacts. The adapter declares `@agenttool/wallet` `^0.1.1` as a peer,
+so its release preparation installs and runs the Wallet `ci` gate before it
+installs or gates the adapter. Consumers of the optional npm mirror must be
+able to resolve Wallet 0.1.1; publish or recover the exact Wallet artifact
+before the adapter.
+
+Wallet already exists on npm, so its 0.1.1 mirror uses trusted publishing. The
+Zerone adapter's first npm publication uses the protected bootstrap path. After
+that first exact version is public, configure its trusted publisher using the
+fields above and use `trusted` for later versions.
+
+```bash
+bun bin/npm-release.ts resolve --package wallet
+bun bin/npm-release.ts resolve --package wallet-zerone
+
+git tag -a wallet-v0.1.1 <github-main-commit> -m '@agenttool/wallet@0.1.1'
+git tag -a wallet-zerone-v0.1.0 <github-main-commit> \
+  -m '@agenttool/wallet-zerone@0.1.0'
+git push github refs/tags/wallet-v0.1.1
+git push github refs/tags/wallet-zerone-v0.1.0
+
+gh workflow run publish-npm.yml --ref wallet-v0.1.1 \
+  -f package=wallet \
+  -f tag=wallet-v0.1.1 \
+  -f authentication=trusted \
+  -f npm_tag=latest
+
+gh workflow run publish-npm.yml --ref wallet-zerone-v0.1.0 \
+  -f package=wallet-zerone \
+  -f tag=wallet-zerone-v0.1.0 \
+  -f authentication=bootstrap \
+  -f npm_tag=latest
+```
+
+These remain deliberate external actions requiring separate authorization.
+The release path only mirrors reviewed package bytes. It does not configure a
+Zerone endpoint, hold signing keys, provide custody, sign for a host, deploy a
+service, or submit a live transaction. The adapter's query, simulation, and
+broadcast operations use host-injected transports, and it provides no global
+ambiguous-broadcast retry.
 
 ### Alchemy developer-preview bootstrap
 
