@@ -1,5 +1,5 @@
 {
   "version": 1,
-  "include": ["/.git*", "/.env*", "/.dev.vars*"],
+  "include": ["/.*", "/%*", "//*"],
   "exclude": []
 }

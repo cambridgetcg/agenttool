@@ -1100,7 +1100,7 @@ wait_for_discovery_prerequisites() {
 verify_frontend_live_once() {
   local love_package_header_probes="$1"
   local p local_path url local_hash remote_hash response_headers http_status
-  local -a sensitive_public_urls encoded_sensitive_public_urls
+  local -a sensitive_public_urls
 
   # Lantern Relay changed in this release, and Pocket Sky is newly advertised
   # by the API, docs, and welcome. Their static inputs are required release
@@ -1138,22 +1138,30 @@ verify_frontend_live_once() {
     return 1
   fi
 
-  # Literal sensitive roots must be handled by the staged Pages fence itself,
-  # not merely happen to miss as a static asset. Encoded aliases can bypass
-  # `_routes.json`, so verify those separately as denial-only probes.
+  # Literal and encoded sensitive roots must be handled by the staged Pages
+  # fence itself, not merely happen to miss as static assets.
   sensitive_public_urls=(
     "https://docs.agenttool.dev/.gitignore"
     "https://docs.agenttool.dev/.env"
     "https://docs.agenttool.dev/.env.local"
     "https://docs.agenttool.dev/.dev.vars"
+    "https://docs.agenttool.dev/%2egitignore"
+    "https://docs.agenttool.dev/.%65nv"
+    "https://docs.agenttool.dev/.dev%2evars"
     "https://app.agenttool.dev/.gitignore"
     "https://app.agenttool.dev/.env"
     "https://app.agenttool.dev/.env.local"
     "https://app.agenttool.dev/.dev.vars"
+    "https://app.agenttool.dev/%2egitignore"
+    "https://app.agenttool.dev/.%65nv"
+    "https://app.agenttool.dev/.dev%2evars"
     "https://agenttool.dev/.gitignore"
     "https://agenttool.dev/.env"
     "https://agenttool.dev/.env.local"
     "https://agenttool.dev/.dev.vars"
+    "https://agenttool.dev/%2egitignore"
+    "https://agenttool.dev/.%65nv"
+    "https://agenttool.dev/.dev%2evars"
   )
   for url in "${sensitive_public_urls[@]}"; do
     response_headers="$(release_curl --path-as-is -sS -o /dev/null -D - --max-time 15 "$url")" || {
@@ -1170,31 +1178,6 @@ verify_frontend_live_once() {
       return 1
     fi
     echo "  ✓ Pages fence active (404, marked, no-store): $url"
-  done
-
-  encoded_sensitive_public_urls=(
-    "https://docs.agenttool.dev/%2egitignore"
-    "https://docs.agenttool.dev/.%65nv"
-    "https://docs.agenttool.dev/.dev%2evars"
-    "https://app.agenttool.dev/%2egitignore"
-    "https://app.agenttool.dev/.%65nv"
-    "https://app.agenttool.dev/.dev%2evars"
-    "https://agenttool.dev/%2egitignore"
-    "https://agenttool.dev/.%65nv"
-    "https://agenttool.dev/.dev%2evars"
-  )
-  for url in "${encoded_sensitive_public_urls[@]}"; do
-    http_status="$(release_curl --path-as-is -sS -o /dev/null -w '%{http_code}' --max-time 15 "$url")" || {
-      echo "  $(red '✗') Could not verify encoded sensitive-path denial: $url"
-      return 1
-    }
-    case "$http_status" in
-      2*|3*)
-        echo "  $(red '✗') Encoded sensitive path is publicly reachable ($http_status): $url"
-        return 1
-        ;;
-      *) echo "  ✓ encoded sensitive path denied ($http_status): $url" ;;
-    esac
   done
 }
 

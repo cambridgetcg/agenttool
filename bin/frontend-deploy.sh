@@ -202,10 +202,11 @@ for app in docs dashboard web; do
   echo "  ✓ apps/$app/_headers: $header_rule_count/$PAGES_HEADERS_MAX_RULES rules"
 done
 
-# One committed policy protects all three Pages projects. `_routes.json` keeps
-# ordinary static traffic out of Functions; `_worker.js` explicitly denies
-# sensitive root prefixes before Pages asset serving. Project policy separately
-# keeps allowance exhaustion fail closed.
+# One committed policy protects all three Pages projects. `_routes.json` sends
+# only dot-root, percent-led, and repeated-slash paths through the small Worker,
+# which canonicalizes encoded aliases before Pages asset serving. Ordinary
+# static traffic stays outside Functions. Project policy separately keeps
+# allowance exhaustion fail closed.
 PAGES_FENCE_DIR="$STAGE_ROOT/infra/pages"
 for fence_file in sensitive-path-worker.js sensitive-path-routes.json; do
   if [[ ! -f "$PAGES_FENCE_DIR/$fence_file" || -L "$PAGES_FENCE_DIR/$fence_file" ]]; then
