@@ -166,17 +166,25 @@ bun bin/npm-release.ts resolve --package wallet
 bun bin/npm-release.ts resolve --package wallet-zerone
 
 git tag -a wallet-v0.1.3 <github-main-commit> -m '@agenttool/wallet@0.1.3'
-git tag -a wallet-zerone-v0.1.1 <github-main-commit> \
-  -m '@agenttool/wallet-zerone@0.1.1'
 git push github refs/tags/wallet-v0.1.3
-git push github refs/tags/wallet-zerone-v0.1.1
 
 gh workflow run publish-npm.yml --ref wallet-v0.1.3 \
   -f package=wallet \
   -f tag=wallet-v0.1.3 \
   -f authentication=trusted \
   -f npm_tag=latest
+```
 
+The annotated `wallet-zerone-v0.1.1` tag already exists at protected main
+`7be74633`. Never recreate, move, or repush it. Its bootstrap workflow remains
+deferred while npm lacks any Wallet version satisfying the adapter's
+`^0.1.2` peer range; npm exposed only Wallet 0.1.0 when this patch was
+prepared. The protected `npm-bootstrap` environment must also explicitly
+authorize the existing `wallet-zerone-v*` tag family before a first
+publication. Only after both boundaries are independently verified may an
+operator dispatch the existing exact tag:
+
+```bash
 gh workflow run publish-npm.yml --ref wallet-zerone-v0.1.1 \
   -f package=wallet-zerone \
   -f tag=wallet-zerone-v0.1.1 \
