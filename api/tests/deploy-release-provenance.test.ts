@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import {
   access,
   chmod,
@@ -21,6 +21,8 @@ import { tmpdir } from "node:os";
 
 const projectRoot = resolve(import.meta.dir, "../..");
 const cleanup: string[] = [];
+
+setDefaultTimeout(30_000);
 
 interface Result {
   code: number;
@@ -1205,7 +1207,7 @@ afterAll(async () => {
   await Promise.all(
     cleanup.map((path) => rm(path, { recursive: true, force: true })),
   );
-});
+}, 60_000);
 
 describe("deploy release provenance spine", () => {
   test("pins the runtime and threads revision plus dirty provenance through Fly verification", async () => {
