@@ -1096,6 +1096,53 @@ wait_for_discovery_prerequisites() {
   return 1
 }
 
+marked_sensitive_fence_status() {
+  local response_headers="$1"
+  printf '%s\n' "$response_headers" | awk '
+    BEGIN {
+      seen_response = 0
+      in_headers = 0
+      status = ""
+      marker = 0
+      no_store = 0
+    }
+    {
+      sub(/\r$/, "")
+      if ($0 ~ /^HTTP\/[0-9.]+[[:space:]]+[0-9][0-9][0-9]([[:space:]]|$)/) {
+        seen_response = 1
+        in_headers = 1
+        status = $2
+        marker = 0
+        no_store = 0
+        next
+      }
+      if (!seen_response || !in_headers) {
+        next
+      }
+      if ($0 == "") {
+        in_headers = 0
+        next
+      }
+      header = tolower($0)
+      if (header ~ /^x-agenttool-sensitive-path-fence:[[:space:]]*1[[:space:]]*$/) {
+        marker = 1
+      }
+      if (header ~ /^cache-control:/) {
+        sub(/^[^:]*:[[:space:]]*/, "", header)
+        if (header ~ /(^|[ ,])no-store([ ,]|$)/) {
+          no_store = 1
+        }
+      }
+    }
+    END {
+      print status
+      if (!seen_response || status != "404" || !marker || !no_store) {
+        exit 1
+      }
+    }
+  '
+}
+
 verify_frontend_live_once() {
   local love_package_header_probes="$1"
   local p local_path url local_hash remote_hash response_headers http_status
@@ -1167,12 +1214,7 @@ verify_frontend_live_once() {
       echo "  $(red '✗') Could not verify sensitive-path fence: $url"
       return 1
     }
-    http_status="$(printf '%s\n' "$response_headers" | tr -d '\r' | awk '/^HTTP\// { status=$2 } END { print status }')"
-    if [ "$http_status" != 404 ] || \
-       ! printf '%s\n' "$response_headers" | tr -d '\r' | \
-         grep -Eqi '^x-agenttool-sensitive-path-fence:[[:space:]]*1[[:space:]]*$' || \
-       ! printf '%s\n' "$response_headers" | tr -d '\r' | \
-         grep -Eqi '^cache-control:.*(^|[ ,])no-store([ ,]|$)'; then
+    if ! http_status="$(marked_sensitive_fence_status "$response_headers")"; then
       echo "  $(red '✗') Pages fence did not produce its marked non-cacheable 404 ($http_status): $url"
       return 1
     fi
