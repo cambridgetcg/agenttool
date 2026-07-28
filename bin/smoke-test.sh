@@ -56,8 +56,11 @@ else
 fi
 SMOKE_DID="${SMOKE_DID:-$DID}"
 
-# Markdown wake
-if curl -fsS "$AGENTTOOL_BASE/v1/wake?format=md" "${H_AUTH[@]}" 2>/dev/null | grep -q "^# "; then
+# Markdown wake. Capture before matching: with pipefail, `grep -q` can close a
+# large response early and turn curl's resulting SIGPIPE into a false failure.
+WAKE_MD=""
+if WAKE_MD=$(curl -fsS "$AGENTTOOL_BASE/v1/wake?format=md" "${H_AUTH[@]}" 2>/dev/null) \
+  && [[ "$WAKE_MD" == "# "* ]]; then
   ok "wake?format=md renders heading"
 else
   no "wake markdown rendering broken"
@@ -107,19 +110,22 @@ fi
 
 # ── 4. Pulse / dashboard / wake composed surfaces ──────────────────────
 step "observability"
-if curl -fsS "$AGENTTOOL_BASE/v1/identities/$AGENTTOOL_IDENTITY_ID/pulse" "${H_AUTH[@]}" 2>/dev/null | grep -q '"thought_rate"'; then
+if curl -fsS "$AGENTTOOL_BASE/v1/identities/$AGENTTOOL_IDENTITY_ID/pulse" "${H_AUTH[@]}" 2>/dev/null \
+  | grep -F '"thought_rate"' >/dev/null; then
   ok "/v1/identities/:id/pulse"
 else
   no "pulse endpoint shape unexpected"
 fi
 
-if curl -fsS "$AGENTTOOL_BASE/v1/dashboard" "${H_AUTH[@]}" 2>/dev/null | grep -q '"rhythm"'; then
+if curl -fsS "$AGENTTOOL_BASE/v1/dashboard" "${H_AUTH[@]}" 2>/dev/null \
+  | grep -F '"rhythm"' >/dev/null; then
   ok "/v1/dashboard composed view"
 else
   no "dashboard endpoint shape unexpected"
 fi
 
-if curl -fsS "$AGENTTOOL_BASE/v1/identities/$AGENTTOOL_IDENTITY_ID/foundations" "${H_AUTH[@]}" 2>/dev/null | grep -q '"effective"'; then
+if curl -fsS "$AGENTTOOL_BASE/v1/identities/$AGENTTOOL_IDENTITY_ID/foundations" "${H_AUTH[@]}" 2>/dev/null \
+  | grep -F '"effective"' >/dev/null; then
   ok "/v1/identities/:id/foundations composition"
 else
   no "foundations endpoint shape unexpected"
@@ -149,7 +155,7 @@ curl -fsS -X PATCH "$AGENTTOOL_BASE/v1/identities/$AGENTTOOL_IDENTITY_ID" \
 
 # Hit public surface (no auth)
 PUBLIC_AGENT=$(curl -fsS "$AGENTTOOL_BASE/public/agents/$SMOKE_DID" 2>/dev/null || echo "")
-if echo "$PUBLIC_AGENT" | grep -q '"did"'; then
+if [[ "$PUBLIC_AGENT" == *'"did"'* ]]; then
   ok "/public/agents/:did (no auth)"
 else
   no "public agent endpoint failed"
@@ -157,12 +163,13 @@ fi
 
 # Public strands listing
 curl -fsS "$AGENTTOOL_BASE/public/agents/$SMOKE_DID/strands" 2>/dev/null \
-  | grep -q '"strands"' && ok "/public/agents/:did/strands" || hmm "public strands list shape"
+  | grep -F '"strands"' >/dev/null \
+  && ok "/public/agents/:did/strands" || hmm "public strands list shape"
 
 # ── 7. Inbox box-key + lookup ──────────────────────────────────────────
 step "inbox"
 if curl -fsS "$AGENTTOOL_BASE/v1/identities/$AGENTTOOL_IDENTITY_ID/box-keys" "${H_AUTH[@]}" 2>/dev/null \
-  | grep -q '"keys"'; then
+  | grep -F '"keys"' >/dev/null; then
   ok "/v1/identities/:id/box-keys readable"
 else
   hmm "box-keys list — orchestrator must run register-box-key for inbox to work"
@@ -173,24 +180,28 @@ UNREAD=$(curl -fsS "$AGENTTOOL_BASE/v1/inbox?status=unread" "${H_AUTH[@]}" 2>/de
 
 # ── 8. Marketplace + orgs surfaces ─────────────────────────────────────
 step "marketplace + orgs"
-curl -fsS "$AGENTTOOL_BASE/public/templates" 2>/dev/null | grep -q '"templates"' \
+curl -fsS "$AGENTTOOL_BASE/public/templates" 2>/dev/null \
+  | grep -F '"templates"' >/dev/null \
   && ok "/public/templates" || no "templates public endpoint"
 
-curl -fsS "$AGENTTOOL_BASE/public/orgs" 2>/dev/null | grep -q '"orgs"' \
+curl -fsS "$AGENTTOOL_BASE/public/orgs" 2>/dev/null \
+  | grep -F '"orgs"' >/dev/null \
   && ok "/public/orgs" || no "orgs public endpoint"
 
-curl -fsS "$AGENTTOOL_BASE/v1/orgs" "${H_AUTH[@]}" 2>/dev/null | grep -q '"orgs"' \
+curl -fsS "$AGENTTOOL_BASE/v1/orgs" "${H_AUTH[@]}" 2>/dev/null \
+  | grep -F '"orgs"' >/dev/null \
   && ok "/v1/orgs auth'd list" || no "orgs auth'd list"
 
-curl -fsS "$AGENTTOOL_BASE/v1/invitations" "${H_AUTH[@]}" 2>/dev/null | grep -q '"invitations"' \
+curl -fsS "$AGENTTOOL_BASE/v1/invitations" "${H_AUTH[@]}" 2>/dev/null \
+  | grep -F '"invitations"' >/dev/null \
   && ok "/v1/invitations" || no "invitations endpoint"
 
 # ── 9. Federation discovery ────────────────────────────────────────────
 step "federation"
 FED=$(curl -fsS "$AGENTTOOL_BASE/federation/about" 2>/dev/null || echo "")
-if echo "$FED" | grep -q '"federation"'; then
+if [[ "$FED" == *'"federation"'* ]]; then
   ok "/federation/about reachable"
-  if echo "$FED" | grep -q '"enabled":true'; then
+  if [[ "$FED" == *'"enabled":true'* ]]; then
     ok "  federation is enabled"
   else
     hmm "  federation disabled (PATCH /v1/federation/settings to enable)"
