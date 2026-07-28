@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-28 (KINGDOM/XENIA source and public `kingdom-v0.1.0` GitHub Release landed; its npm mirror and production deploy remain absent; SDK 0.17.0 now has a public annotated tag, GitHub Release, npm and PyPI mirrors with independent readback, while production status is evidenced separately)
+> Updated: 2026-07-28 (`@agenttool/kingdom@0.1.0` is public on npm and GitHub with independently verified bytes and attestations, and its XENIA-visible production API door is live; SDK 0.17.0 has a public annotated tag, GitHub Release, npm and PyPI mirrors with independent readback, while production status is evidenced separately)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -14,7 +14,7 @@
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
 
-## In progress (2026-07-28) — KINGDOM cards through a XENIA-visible door
+## Landed (2026-07-28) — KINGDOM cards through a XENIA-visible door
 
 `packages/kingdom/` independently implements compatibility with the observed
 small flat `kingdom.yaml` interface as bounded card parsing, deterministic
@@ -36,12 +36,30 @@ result does not certify the rest of AgentTool or establish Covenant adoption.
 
 Annotated tag
 [`kingdom-v0.1.0`](https://github.com/cambridgetcg/agenttool/releases/tag/kingdom-v0.1.0)
-and its GitHub Release asset are public. The protected first-publication
-[bootstrap run](https://github.com/cambridgetcg/agenttool/actions/runs/30379063789)
-failed with registry E404, so npm remains absent and there is no successful npm
-OIDC receipt. Tag and asset publication did not deploy
-`/.well-known/agent.json` or `/public/kingdom/framework`; production
-availability remains a separate operation.
+targets integration commit `7f6d17bf`. Its 26,474-byte GitHub Release asset
+and public npm
+[`@agenttool/kingdom@0.1.0`](https://www.npmjs.com/package/@agenttool/kingdom/v/0.1.0)
+are byte-identical
+(`sha256:67678dd8aa21ef63aa2b43107385fa5e8598591d9ef4020926e0272cfb4637e1`);
+`latest` resolves to `0.1.0`. The protected
+[bootstrap run](https://github.com/cambridgetcg/agenttool/actions/runs/30388388587)
+prepared, mirrored, published, and read back that exact artifact. A fresh
+install followed by `npm audit signatures` verified its registry signatures
+and attestations. The SLSA provenance binds the public repository, exact
+workflow, tag, commit, and run, with an inclusion proof at
+[Rekor index 2275324579](https://search.sigstore.dev/?logIndex=2275324579).
+Those proofs authenticate release bytes and build identity; they do not certify
+KINGDOM/XENIA conformance or grant authority.
+
+A separate clean production deployment now serves
+[`/.well-known/agent.json`](https://api.agenttool.dev/.well-known/agent.json)
+and
+[`/public/kingdom/framework`](https://api.agenttool.dev/public/kingdom/framework).
+Live readback returns the closed `agenttool.kingdom.card/0.1` card, and the
+XENIA Surface checker reports 22 passing checks with no failures or unknowns
+for the manifest, its declared resource, and a wrong-route sample. That
+bounded result establishes availability of this door only; it does not certify
+the rest of AgentTool or establish Covenant adoption.
 
 ## Codeberg is retired (2026-07-25) — one remote from here on
 
