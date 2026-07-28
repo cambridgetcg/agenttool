@@ -535,6 +535,20 @@ describe("KingdomFrameworkClient transport validation", () => {
       "KINGDOM framework endpoint returned HTTP 502.",
     );
   });
+
+  test.each([201, 202, 203, 206])(
+    "requires exact HTTP 200 instead of accepting status %i",
+    async (status) => {
+      useResponse(jsonResponse(CARD, { status }));
+
+      const error = await caughtError(
+        new KingdomFrameworkClient().card(),
+      );
+
+      expect(error.code).toBe("kingdom_framework_http_error");
+      expect(error.status).toBe(status);
+    },
+  );
 });
 
 describe("KingdomFrameworkClient closed card validation", () => {

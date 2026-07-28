@@ -142,6 +142,18 @@ function frameworkError(
   });
 }
 
+function unreachableError(): AgentToolError {
+  return frameworkError(
+    "KINGDOM framework endpoint is unreachable.",
+    "kingdom_framework_unreachable",
+    "Check the configured AgentTool API origin and timeout.",
+  );
+}
+
+function requireTimeRemaining(deadline: number): void {
+  if (performance.now() >= deadline) throw unreachableError();
+}
+
 function hasUnpairedSurrogate(value: string): boolean {
   for (let index = 0; index < value.length; index += 1) {
     const unit = value.charCodeAt(index);
@@ -247,7 +259,8 @@ function isJsonMediaType(contentType: string | null): boolean {
 
 async function cancelBody(response: Response): Promise<void> {
   try {
-    await response.body?.cancel();
+    const cancellation = response.body?.cancel();
+    void cancellation?.catch(() => undefined);
   } catch {
     // Cleanup failure must not replace the deterministic protocol error.
   }
@@ -328,11 +341,7 @@ async function readBoundedBytes(
   } catch (error) {
     if (error instanceof AgentToolError) throw error;
     if (timeoutSignal?.aborted) {
-      throw frameworkError(
-        "KINGDOM framework endpoint is unreachable.",
-        "kingdom_framework_unreachable",
-        "Check the configured AgentTool API origin and timeout.",
-      );
+      throw unreachableError();
     }
     throw frameworkError(
       "KINGDOM framework response body could not be read.",
@@ -602,6 +611,7 @@ export class KingdomFrameworkClient {
   /** Fetch and validate AgentTool's exact public KINGDOM project card. */
   async card(): Promise<KingdomFrameworkCard> {
     let response: Response;
+    const deadline = performance.now() + this.timeoutMs;
     const timeoutSignal = AbortSignal.timeout(this.timeoutMs);
     try {
       // This is intentionally not an HttpConfig request. The authenticated
@@ -619,12 +629,9 @@ export class KingdomFrameworkClient {
         },
       );
     } catch {
-      throw frameworkError(
-        "KINGDOM framework endpoint is unreachable.",
-        "kingdom_framework_unreachable",
-        "Check the configured AgentTool API origin and timeout.",
-      );
+      throw unreachableError();
     }
+    requireTimeRemaining(deadline);
 
     if (
       (response.status >= 300 && response.status < 400)
@@ -639,12 +646,9 @@ export class KingdomFrameworkClient {
       );
     }
 
-    if (!response.ok) {
-      await readBoundedBytes(
-        response,
-        this.maxResponseBytes,
-        timeoutSignal,
-      );
+    if (response.status !== 200) {
+      await cancelBody(response);
+      requireTimeRemaining(deadline);
       throw frameworkError(
         `KINGDOM framework endpoint returned HTTP ${response.status}.`,
         "kingdom_framework_http_error",
@@ -668,6 +672,11 @@ export class KingdomFrameworkClient {
       this.maxResponseBytes,
       timeoutSignal,
     );
-    return validateCard(decodeJson(bodyBytes));
+    requireTimeRemaining(deadline);
+    const decoded = decodeJson(bodyBytes);
+    requireTimeRemaining(deadline);
+    const card = validateCard(decoded);
+    requireTimeRemaining(deadline);
+    return card;
   }
 }
