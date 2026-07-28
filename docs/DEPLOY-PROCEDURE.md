@@ -428,18 +428,26 @@ GitHub snapshot gate, preflight, sampled parity and sensitive-path checks, and
 receipt surround that upload.
 
 The archive also includes the canonical `infra/pages/` fence. The uploader
-copies its `_worker.js` and `_routes.json` forms into each project root, so only
-`/.git*`, `/.env*`, and `/.dev.vars*` invoke a Function and receive a marked 404. Normal static requests bypass Functions. On the Workers Free plan,
-Cloudflare Pages → Settings → Runtime must set production and preview to **fail
-closed**; otherwise daily Functions allowance exhaustion can serve static
-assets on those routes. The uploader verifies both values when it has the
-required API token, along with `production_branch=main`, for every requested
-target before the first upload. An explicit `--oauth-fallback` is a break-glass
-path: it checks only that each project is visible to the Wrangler session,
-loudly reports that the REST policy check was skipped, and therefore does not
-prove those settings for that run. The uploader does not change the setting or
-claim to purge old cache entries. Post-deploy checks separately prove literal
-fence activation and encoded-alias denial.
+copies its `_worker.js` and `_routes.json` forms into each project root.
+Dot-root, percent-led, and repeated-slash paths invoke the Function, which
+bounded-decodes and case-folds them before returning a marked, non-cacheable
+404 for `/.git*`, `/.env*`, and `/.dev.vars*` aliases. Allowed routed paths,
+including `/.well-known/*`, are forwarded unchanged; ordinary static paths
+bypass Functions. These routed Function requests are part of the shared
+Workers meter. On Free they share the 100,000-request account allowance each
+UTC day. Workers Standard removes that daily request limit; fail-closed remains
+required by the release policy, but this specific Free-plan
+allowance-exhaustion path does not apply. Cloudflare Pages → Settings → Runtime
+must set production and preview to **fail closed**, so allowance exhaustion
+makes routed paths unavailable instead of serving them outside the fence. The
+uploader verifies both values when it has the required API token, along with
+`production_branch=main`, for every requested target before the first upload.
+An explicit `--oauth-fallback` is a break-glass path: it checks only that each
+project is visible to the Wrangler session, loudly reports that the REST
+policy check was skipped, and therefore does not prove those settings for that
+run. The uploader does not change the setting or claim to purge old cache
+entries. Post-deploy checks require the same marked, non-cacheable 404 from
+literal and encoded aliases.
 
 The script reads credentials from macOS keychain (account=`macair`):
 
