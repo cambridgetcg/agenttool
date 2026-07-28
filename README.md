@@ -189,8 +189,8 @@ manifest's artifact SHA-256 and size are the portable identity.
 For SDK 0.17.0, repository source manifests, runtime client version headers,
 discovery pins, tutorials, and the LOVE builder target are aligned around both
 KINGDOM clients. Annotated tag `sdk-v0.17.0` resolves to protected-main commit
-`21db539d`. Independent readback matched the 172,625-byte TypeScript LOVE,
-GitHub Release, and npm tarballs
+`21db539d`. Independent GitHub Release and npm readback matched the checked-in
+172,625-byte TypeScript LOVE tarball
 (`sha256:b6a388ffe86a970480e8a8978f83fe80922321eb64f2b4f9143cae2b2c3dd5bb`).
 PyPI independently matched its 193,335-byte wheel
 (`sha256:1a8ca5f099ffce4c7973f1123d973aba5c1eb507579961c781d553bcc5e0f508`)

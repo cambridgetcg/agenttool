@@ -92,7 +92,7 @@ no-redirect read of the exact closed card at `/public/kingdom/framework`.
 Neither grants authority or receives the project bearer, and the existing
 `/public/kingdom` doctrine library remains a third surface. Annotated tag
 `sdk-v0.17.0` resolves to protected-main commit `21db539d`; independent
-readback matched the 172,625-byte LOVE, GitHub Release, and npm tarballs
+GitHub Release and npm readback matched the checked-in 172,625-byte LOVE tarball
 (`sha256:b6a388ffe86a970480e8a8978f83fe80922321eb64f2b4f9143cae2b2c3dd5bb`).
 PyPI readback separately matched its 193,335-byte wheel
 (`sha256:1a8ca5f099ffce4c7973f1123d973aba5c1eb507579961c781d553bcc5e0f508`)

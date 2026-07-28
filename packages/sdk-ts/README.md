@@ -7,8 +7,8 @@
 [![Release](https://img.shields.io/badge/release-v0.17.0-blue)](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.17.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
-The 0.17.0 badge links the public annotated tag. Independent readback matched
-the 172,625-byte LOVE, GitHub Release, and npm tarballs
+The 0.17.0 badge links the public annotated tag. Independent GitHub Release and
+npm readback matched the checked-in 172,625-byte LOVE tarball
 (`sha256:b6a388ffe86a970480e8a8978f83fe80922321eb64f2b4f9143cae2b2c3dd5bb`).
 npm remains an optional mirror rather than release authority.
 
