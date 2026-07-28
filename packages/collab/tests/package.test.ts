@@ -14,7 +14,7 @@ describe("cross-host package", () => {
     const codex = await json(".codex-plugin/plugin.json");
     const claude = await json(".claude-plugin/plugin.json");
 
-    expect(packageManifest.version).toBe("0.3.0");
+    expect(packageManifest.version).toBe("0.3.1");
     expect(codex.version).toBe(packageManifest.version);
     expect(claude.version).toBe(packageManifest.version);
     expect(codex.skills).toBe("./skills/");
