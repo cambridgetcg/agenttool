@@ -21,7 +21,7 @@ with a valuable credential. The separately negotiated
 [`agentcred.evm-jsonrpc-read/0.1`](./JSONRPC-READ-0.1.md) profile adds a
 method-aware EVM read surface without widening generic `http.fetch`.
 
-This source tree describes the `0.3.0` release line. Check an immutable LOVE
+This source tree describes the `0.3.1` release line. Check an immutable LOVE
 manifest or exact npm version before treating any distribution mirror as
 available. Source, a branch, or a mutable registry tag is not release
 evidence.
