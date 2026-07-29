@@ -2,18 +2,22 @@
 
 A small local browser surface for agents.
 
-This README describes prepared `0.5.0` source. It is not yet distributed.
-`0.3.0` remains the immutable public latest through exact LOVE, npm, and GitHub
-Release artifacts. The docs deployment distributes bytes and documentation,
-not a hosted browser-control service.
+This README describes prepared `0.5.0` source. Release-state evidence recorded
+on 2026-07-29 showed that it had not yet been distributed and that `0.3.0` was
+the immutable public latest through exact LOVE, npm, and GitHub Release
+artifacts. Distribution state can change independently of these packaged
+bytes; verify the registry or exact LOVE catalog when current availability
+matters. The docs deployment distributes bytes and documentation, not a hosted
+browser-control service.
 
 The unreleased `0.4.0` boundary added standing-policy diagnostics and clearer
 JSONL field-rename errors. Prepared `0.5.0` carries that work forward and adds
 redacted `browser_act` receipts, non-ref observation-basis preconditions,
 session-local receipt context in observations, a backend-neutral capability
 inventory, and current MCP negotiation with an explicit compatibility path.
-Neither `0.4.0` nor `0.5.0` is available from the public install commands
-below.
+At that recorded preparation point, neither `0.4.0` nor `0.5.0` was available
+from the public install commands below. Those commands intentionally reproduce
+the verified `0.3.0` artifact rather than following a mutable latest tag.
 
 ```bash
 npm install --save-exact @agenttool/browser@0.3.0
@@ -120,6 +124,12 @@ same bounded operations usable by hosts from both eras; it does not turn MCP
 into a browser driver, durable browser session, or security boundary. Browser
 handles and authority remain local to this process.
 
+Direct embedders may call `serveBrowserMcpStdio(browser)`. The returned handle
+owns the MCP instances and transport, exposes `closed` for fatal transport
+closure, and deliberately does **not** own the shared `AgentBrowser`. The CLI
+waits for that signal and closes both layers; another embedder must apply the
+same lifecycle discipline.
+
 ### Capabilities and planning
 
 The direct API aligns `capabilities()` with `browser_capabilities`, and
@@ -128,6 +138,19 @@ launch-time authority and implemented operations; it does not visit or probe a
 destination. `browser_plan` accepts `{ "action": ... }` only. It produces an
 advisory, redacted classification for one existing `BrowserAction` without
 executing, approving, authorizing, or simulating it.
+
+The capability manifest separates `interfaces` from
+`modelFacingOperations`; the TypeScript entry also names its two deliberate
+direct-only affordances instead of implying perfect transport parity. Stable
+model-facing names and protocol identifiers are available without importing
+the runtime:
+
+```ts
+import {
+  BROWSER_OPERATIONS,
+  JSONL_PROTOCOL_VERSION,
+} from "@agenttool/browser/protocol";
+```
 
 Planning a typed action never echoes its `text` or selected values. URL query
 values are redacted. A URL-opening intention can be represented by a
@@ -199,7 +222,7 @@ action/basis summary, and one of three status shapes:
 
 | Runtime invocation | Local outcome | Meaning and retry advice |
 |---|---|---|
-| `not_started` | `rejected` | The browser method was not invoked. Correct the request or re-observe before making a new decision. |
+| `not_started` | `rejected` | The requested consequence-bearing browser action was not dispatched. Ref and policy preflight may already have queried the runtime. Correct the request or re-observe before making a new decision. |
 | `started` | `browser_completed` | The browser method returned locally. Do not repeat it automatically. |
 | `started` | `unknown` | Invocation began, but the local result is uncertain. Effects may have happened; do not repeat it automatically. |
 

@@ -118,6 +118,38 @@ function openStdio(browser: AgentBrowser) {
 }
 
 describe("browser MCP stdio negotiation", () => {
+  test("rejects an invalid process-start screenshot bound before serving", () => {
+    const fake = fakeBrowser();
+    expect(() =>
+      serveBrowserMcpStdio(fake.browser, {
+        maxInlineScreenshotBytes: -1,
+      })
+    ).toThrow(/non-negative safe integer/);
+    expect(fake.capabilityReads).toBe(0);
+  });
+
+  test("reports transport closure without taking browser ownership", async () => {
+    const fake = fakeBrowser();
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const errors: Error[] = [];
+    const handle = serveBrowserMcpStdio(fake.browser, {
+      transport: new StdioServerTransport(input, output),
+      onerror(error) {
+        errors.push(error);
+      },
+    });
+
+    output.emit("error", new Error("synthetic broken pipe"));
+    await handle.closed;
+
+    expect(errors).toHaveLength(1);
+    expect(fake.closeCalls).toBe(0);
+    await handle.close();
+    input.destroy();
+    output.destroy();
+  });
+
   test("serves modern discovery and tools with exact per-request claims", async () => {
     const fake = fakeBrowser();
     const stdio = openStdio(fake.browser);

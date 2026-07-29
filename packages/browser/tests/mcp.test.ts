@@ -9,6 +9,7 @@ import {
 import type { AgentBrowser } from "../src/browser.js";
 import { resolveBrowserCapabilities } from "../src/capabilities.js";
 import { planBrowserAction } from "../src/planning.js";
+import { BROWSER_OPERATIONS } from "../src/protocol.js";
 import type { BrowserAction } from "../src/types.js";
 
 function observation(overrides: Record<string, unknown> = {}) {
@@ -199,17 +200,9 @@ describe("browser MCP surface", () => {
   test("registers only the nine small browser tools", () => {
     const { browser } = fakeBrowser();
     const server = buildBrowserMcpServer(browser);
-    expect(Object.keys((server as any)._registeredTools).sort()).toEqual([
-      "browser_act",
-      "browser_capabilities",
-      "browser_close",
-      "browser_extract",
-      "browser_observe",
-      "browser_open",
-      "browser_plan",
-      "browser_screenshot",
-      "browser_tabs",
-    ]);
+    expect(Object.keys((server as any)._registeredTools).sort()).toEqual(
+      [...BROWSER_OPERATIONS].sort(),
+    );
   });
 
   test("labels page output untrusted and annotates side effects honestly", () => {

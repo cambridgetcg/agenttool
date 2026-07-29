@@ -716,6 +716,59 @@ describe("AgentBrowser core", () => {
     await browser.close();
   });
 
+  test("keeps the newest initiated denial when older policy work finishes last", async () => {
+    const page = new FakePage();
+    const context = new FakeContext([page]);
+    const runtime = new FakeRuntime(context);
+    let releaseOlder!: () => void;
+    let releaseNewer!: () => void;
+    const olderGate = new Promise<void>((resolveGate) => {
+      releaseOlder = resolveGate;
+    });
+    const newerGate = new Promise<void>((resolveGate) => {
+      releaseNewer = resolveGate;
+    });
+    const browser = await AgentBrowser.launch({
+      runtime,
+      resolveHostname: async (hostname) => {
+        if (hostname === "older-blocked.example.net") await olderGate;
+        if (hostname === "newer-blocked.example.net") await newerGate;
+        return [{ address: "10.0.0.9", family: 4 }];
+      },
+    });
+
+    const older = context.routeHandler!({
+      request: () => ({
+        url: () => "https://older-blocked.example.net/",
+        isNavigationRequest: () => true,
+        frame: () => page.mainFrameValue,
+      }),
+      abort: async () => {},
+      continue: async () => {},
+    });
+    const newer = context.routeHandler!({
+      request: () => ({
+        url: () => "https://newer-blocked.example.net/",
+        isNavigationRequest: () => true,
+        frame: () => page.mainFrameValue,
+      }),
+      abort: async () => {},
+      continue: async () => {},
+    });
+
+    // Complete the newer rejection first, then the older one. Observation
+    // order follows navigation initiation, not asynchronous DNS completion.
+    releaseNewer();
+    await newer;
+    releaseOlder();
+    await older;
+
+    const blocked = (await browser.observe()).blockedNavigation;
+    expect(blocked?.url).toContain("newer-blocked.example.net");
+    expect(blocked?.url).not.toContain("older-blocked.example.net");
+    await browser.close();
+  });
+
   test("advances supersession past a tab whose runtime cannot expose frame identity", async () => {
     const crashed = new FakePage();
     const healthy = new FakePage();
@@ -919,7 +972,7 @@ describe("AgentBrowser core", () => {
         typescript: {
           transport: "in_process",
           contract: "direct_api",
-          additionalOperations: [
+          directOnlyAffordances: [
             "selector_extract",
             "full_page_screenshot",
           ],
@@ -2195,6 +2248,30 @@ describe("AgentBrowser core", () => {
     expect(error.receipt).toBeUndefined();
     expect(page.button.pressCalls).toEqual([]);
     expect(page.keyboardCalls).toEqual([]);
+    expect(await browser.observe()).toMatchObject({
+      attemptSequence: 0,
+      lastActionReceipt: null,
+    });
+    await browser.close();
+  });
+
+  test("rejects viewport deltas on a ref-targeted scroll", async () => {
+    const { browser, page } = await launched();
+    const observation = await browser.observe();
+    const button = observation.refs.find((item) => item.role === "button")!;
+    const error = await rejectionOf(
+      browser.act({
+        kind: "scroll",
+        ref: button.ref,
+        snapshotId: observation.snapshotId,
+        deltaY: 400,
+      } as any),
+    );
+
+    expect(error).toMatchObject({ code: "invalid_action" });
+    expect(error.receipt).toBeUndefined();
+    expect(page.button.scrollCalls).toBe(0);
+    expect(page.wheelCalls).toEqual([]);
     expect(await browser.observe()).toMatchObject({
       attemptSequence: 0,
       lastActionReceipt: null,

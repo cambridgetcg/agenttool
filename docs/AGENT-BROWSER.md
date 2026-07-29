@@ -11,11 +11,13 @@
 ## Status
 
 The repository currently contains prepared `@agenttool/browser@0.5.0` source.
-It is unreleased. `0.3.0` remains the immutable public latest through exact
-LOVE, npm, and GitHub Release artifacts. The deployed catalog and docs
-distribute bytes and documentation; they do not expose an AgentTool-hosted
-browser. The package requires no AgentTool account, API key, credits, Redis,
-database, or hosted control plane.
+Release-state evidence recorded on 2026-07-29 showed that it was unreleased and
+that `0.3.0` was the immutable public latest through exact LOVE, npm, and GitHub
+Release artifacts. Distribution state can change independently of this source;
+verify the registry or exact LOVE catalog when current availability matters.
+The deployed catalog and docs distribute bytes and documentation; they do not
+expose an AgentTool-hosted browser. The package requires no AgentTool account,
+API key, credits, Redis, database, or hosted control plane.
 
 The exact `0.1.0`, `0.2.0`, and `0.3.0` artifacts remain immutable. Version
 `0.3.0` packaged collaboration-safe retained observations, structural
@@ -101,6 +103,19 @@ an explicit 2025-era stdio compatibility path. Both routes expose the same
 bounded browser core. MCP revision negotiation is transport compatibility,
 not a browser driver, durable session protocol, or security boundary; browser
 authority and AgentTool-owned handles remain local to this process.
+
+`serveBrowserMcpStdio(browser)` returns a handle that owns MCP instances and
+the transport, and whose `closed` promise reports fatal transport closure. It
+does not own the shared `AgentBrowser`. The CLI waits for transport closure and
+then closes both layers; direct embedders must arrange equivalent idempotent
+browser cleanup.
+
+The capability manifest separates `interfaces` from
+`modelFacingOperations`, so it does not imply that direct TypeScript's
+selector extraction and full-page screenshots exist on the narrower
+model-facing transports. Stable operation names and protocol identifiers are
+also exported from `@agenttool/browser/protocol` without loading the browser
+runtime.
 
 MCP and JSONL extraction accept the whole page or one `ref` plus its issuing
 `snapshot_id`; they do not accept a free-form selector. Trusted local
@@ -246,7 +261,7 @@ summary, possible-effects classification, and exactly one status:
 
 | `runtimeInvocation` | `localOutcome` | Interpretation | `retryAdvice` |
 |---|---|---|---|
-| `not_started` | `rejected` | No browser method was invoked. | `correct_or_reobserve` |
+| `not_started` | `rejected` | The requested consequence-bearing browser action was not dispatched; ref and policy preflight may already have queried the runtime. | `correct_or_reobserve` |
 | `started` | `browser_completed` | The browser method returned locally. This is not remote-effect proof. | `do_not_automatically_retry` |
 | `started` | `unknown` | Invocation began, but the local result is uncertain; effects may have happened. | `do_not_automatically_retry` |
 
@@ -459,7 +474,7 @@ planning and consent.
 
 | Surface | Runtime and authority | Operational boundary |
 |---|---|---|
-| Prepared local `0.5.0` source (unreleased; public latest is `0.3.0`) | Operator-owned local TypeScript, JSONL, or stdio MCP process using an installed local Chrome-family browser | No AgentTool bearer, credits, Redis, or hosted worker. Local actions are attempted once. Profiles, artifacts, and destination authority remain on the operator's machine. |
+| Prepared local `0.5.0` source (release evidence: unreleased, with `0.3.0` latest, on 2026-07-29) | Operator-owned local TypeScript, JSONL, or stdio MCP process using an installed local Chrome-family browser | No AgentTool bearer, credits, Redis, or hosted worker. Local actions are attempted once. Profiles, artifacts, and destination authority remain on the operator's machine. |
 | `POST /v1/browse` | Separate AgentTool API route and BullMQ worker implementation | Bearer- and credit-scoped, disabled without the unsafe-outbound flag, dependent on Redis workers, server-readable, Chromium `--no-sandbox`, and currently unfiltered by destination. BullMQ may attempt a job twice. |
 
 The npm, LOVE, GitHub, and docs release of the local package neither enables
@@ -560,10 +575,13 @@ Chromium profile lock and durable site state.
 
 ## Install the exact public release
 
-These commands install immutable public latest `0.3.0`. Prepared `0.4.0` and
-`0.5.0` source have not been distributed; use a reviewed source checkout to
-exercise those contracts before release. Historical `0.1.0` and `0.2.0`
-artifacts remain separately addressable through their immutable manifests.
+These commands reproduce immutable public release `0.3.0`, which was the
+verified latest in release-state evidence recorded on 2026-07-29. At that
+point prepared `0.4.0` and `0.5.0` source had not been distributed; use a
+reviewed source checkout to exercise those contracts before release. Verify
+the registry or exact LOVE catalog for current availability. Historical
+`0.1.0` and `0.2.0` artifacts remain separately addressable through their
+immutable manifests.
 
 ```bash
 npm install --save-exact @agenttool/browser@0.3.0

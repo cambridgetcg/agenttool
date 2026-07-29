@@ -1,6 +1,7 @@
 import type { BrowserAuthorityPreset } from "./capabilities.js";
+import type { BrowserActionReceipt } from "./attempts.js";
 
-export const OBSERVATION_SCHEMA = "agent-browser-observation/0.1" as const;
+export const OBSERVATION_SCHEMA = "agent-browser-observation/0.2" as const;
 
 export interface BrowserViewport {
   width: number;
@@ -263,6 +264,16 @@ export interface BlockedNavigation {
 export interface Observation {
   schema: typeof OBSERVATION_SCHEMA;
   sessionId: string;
+  /**
+   * Session-local order of admitted browser_act calls, including rejections.
+   * It resets at launch and is not a cross-process or cross-device clock.
+   */
+  attemptSequence: number;
+  /**
+   * The newest local action receipt in this session, which may concern
+   * another tab. Null means no browser_act call has passed input validation.
+   */
+  lastActionReceipt: Readonly<BrowserActionReceipt> | null;
   snapshotId: string;
   tabId: string;
   pageId: string;
@@ -287,28 +298,38 @@ interface TabAction {
   tabId?: string;
 }
 
+interface ObservationBasis {
+  basisSnapshotId?: string;
+}
+
 interface RefTarget {
   ref: string;
   snapshotId: string;
 }
 
-export type NavigateAction = TabAction & {
+export type NavigateAction = TabAction & ObservationBasis & {
   kind: "navigate";
   url: string;
 };
 
 export type ClickAction = TabAction & RefTarget & {
   kind: "click";
+  basisSnapshotId?: never;
 };
 
 export type TypeAction = TabAction & RefTarget & {
   kind: "type";
   text: string;
+  basisSnapshotId?: never;
 };
 
 export type PressAction =
-  | (TabAction & RefTarget & { kind: "press"; key: string })
-  | (TabAction & {
+  | (TabAction & RefTarget & {
+      kind: "press";
+      key: string;
+      basisSnapshotId?: never;
+    })
+  | (TabAction & ObservationBasis & {
       kind: "press";
       key: string;
       ref?: never;
@@ -318,6 +339,7 @@ export type PressAction =
 export type SelectAction = TabAction & RefTarget & {
   kind: "select";
   values: string | readonly string[];
+  basisSnapshotId?: never;
 };
 
 export type ScrollAction =
@@ -325,8 +347,9 @@ export type ScrollAction =
       kind: "scroll";
       deltaX?: never;
       deltaY?: never;
+      basisSnapshotId?: never;
     })
-  | (TabAction & {
+  | (TabAction & ObservationBasis & {
       kind: "scroll";
       deltaX?: number;
       deltaY: number;
@@ -334,7 +357,7 @@ export type ScrollAction =
       snapshotId?: never;
     });
 
-export type WaitAction = TabAction & {
+export type WaitAction = TabAction & ObservationBasis & {
   kind: "wait";
   ms: number;
 };
@@ -347,11 +370,11 @@ export type BrowserAction =
   | SelectAction
   | ScrollAction
   | WaitAction
-  | (TabAction & { kind: "back" })
-  | (TabAction & { kind: "forward" })
-  | (TabAction & { kind: "reload" })
-  | { kind: "new_tab"; url?: string }
-  | (TabAction & { kind: "close_tab" });
+  | (TabAction & ObservationBasis & { kind: "back" })
+  | (TabAction & ObservationBasis & { kind: "forward" })
+  | (TabAction & ObservationBasis & { kind: "reload" })
+  | { kind: "new_tab"; url?: string; basisSnapshotId?: never }
+  | (TabAction & ObservationBasis & { kind: "close_tab" });
 
 export interface ActionResult {
   ok: true;
@@ -361,6 +384,7 @@ export interface ActionResult {
   pageId: string | null;
   revision: number | null;
   url: string | null;
+  receipt: Readonly<BrowserActionReceipt>;
 }
 
 export interface ActAndObserveResult {
