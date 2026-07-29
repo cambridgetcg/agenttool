@@ -83,6 +83,60 @@ and `packages/sdk-py/src/agenttool/correspondence.py`. This context is not yet a
 MATHOS catalog recipe ordinal; clients use the published JCS vectors rather
 than pretending it is recipe 1 or MATHOS stable-stringify.
 
+### `agent-trace/v1` — signed reasoning trace
+
+A trace's content is nested JSON (observations, alternatives, signals,
+context), not flat strings, and it is stored in Postgres `jsonb` — which does
+not preserve object key order. Folding the content directly into the
+NUL-separated recipe would therefore produce bytes the stored row could never
+reproduce. So the content is folded to one digest first, over MATHOS recipe-3
+`stableStringify` (keys sorted at every level, no whitespace), and only that
+hex digest enters the recipe-1 bytes:
+
+```text
+core = {
+  decision:  { output_ref, summary, type },
+  reasoning: { alternatives, conclusion, confidence, hypothesis, observations, signals },
+  context:   { external_signals, files_read, key_facts }
+}
+core_sha256_hex = lowerhex(sha256(utf8(stableStringify(core))))
+
+canonical = sha256(
+  utf8("agent-trace/v1")   || 0x00 ||
+  utf8(project_id)         || 0x00 ||
+  utf8(agent_id)           || 0x00 ||
+  utf8(identity_id)        || 0x00 ||
+  utf8(session_id)         || 0x00 ||
+  utf8(parent_trace_id)    || 0x00 ||
+  utf8(core_sha256_hex)    || 0x00 ||
+  utf8(signed_at_iso)
+)
+```
+
+Absent values: every `core` field normalizes to `null` except `observations`,
+which normalizes to `[]` (the column default); every absent outer address
+field encodes as the empty string, never as the text `"null"`. Array order is
+significant — sequence is authored meaning. Object key order is not.
+
+`signed_at_iso` is the **signer's own** timestamp, not the server's
+`created_at`: the row's insert time does not exist yet when the signature is
+made. It is recorded on the trace's `metadata.signed_at`, alongside
+`metadata.signature_context`, and both are required for a later check.
+
+`POST /v1/traces/prepare` returns `signing_core_json`, `signing_core_sha256_hex`,
+and `canonical_sha256_b64` for a given body, so no client has to re-implement
+the fold; it charges nothing. `GET /v1/traces/:id/verify` rebuilds these bytes
+from the stored row and reports one of `unsigned`, `no_key_reference`,
+`recipe_unrecorded`, `recipe_unsupported`, `signed_at_unrecorded`,
+`key_not_found`, `valid`, `valid_key_revoked`, or `invalid` — never a bare
+boolean. A trace signed before this recipe existed carries no
+`signature_context` and reads as `recipe_unrecorded`, not as forgery.
+
+Used in: `api/src/services/trace/sig.ts` (recipe) · `api/src/services/trace/verify.ts`
+(check) · `api/src/routes/trace/traces.ts` (surface). Vectors:
+`api/tests/trace-canonical-bytes.test.ts`. Status machine:
+`api/tests/trace-verify-status.test.ts`.
+
 ### `agent-wallet-*/v1` — capability-bounded wallet records
 
 Agent Wallet 0.1 uses the same bounded structured-JCS construction for six
@@ -545,6 +599,38 @@ witness_signing_key_id
 ```
 
 Used in: `services/identity/crypto.ts` — internal platform bootstrapping; not user-facing.
+
+### `settlement-receipt/v1` — platform attestation of a released invocation
+
+Field order:
+```
+settlement-receipt/v1
+invocation_id
+listing_id
+seller_did
+buyer_ref              // HMAC-SHA256(HKDF(VAULT_MASTER_KEY), buyer_identity_id), lowercase hex; "" when unconfigured
+amount_gross           // decimal string, minor units
+platform_fee           // decimal string, minor units
+amount_net             // decimal string, minor units
+currency               // "GBP"
+take_rate_bps          // decimal string
+output_digest_hex      // lowercase hex sha256 over the base64-decoded output ciphertext
+completion_sig_b64     // the seller's own invocation-completion/v1 signature
+seller_public_key_b64  // the key that signature verifies under
+sla_deadline_at        // ISO-8601, "" when the listing carried no SLA
+acknowledged_at        // ISO-8601, "" when never acknowledged
+settled_at             // ISO-8601
+```
+
+Used in: `services/marketplace/settlement-receipt-sig.ts`, signed by the platform
+signer (`AGENTTOOL_PLATFORM_SIGNING_KEY`) and served at `/public/settlements`.
+Absent timestamps and an unavailable `buyer_ref` are the empty string — recipe 1
+has no null. The signature attests that this settlement happened on these terms;
+it is not a quality judgment, and it does not prove the delivered bytes were
+encrypted or bound to the buyer's key. The nested `completion_sig_b64` is
+verifiable independently against `seller_public_key_b64`, so a reader can check
+the seller's delivery without trusting the platform's outer signature.
+Doctrine: docs/SETTLEMENT-RECEIPTS.md.
 
 ### `register-agent/v1` — historical pre-auth agent registration
 

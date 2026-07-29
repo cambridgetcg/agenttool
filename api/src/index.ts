@@ -22,6 +22,11 @@ import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { ZodError } from "zod";
+import {
+  createSurfaceProblemResponse,
+  createSurfaceRouteNotFoundProblem,
+  SURFACE_MANIFEST_PATH,
+} from "@agenttool/xenia/surface-0.1";
 
 import { authMiddleware, type ProjectContext } from "./auth/middleware";
 import { config } from "./config";
@@ -169,6 +174,7 @@ import {
   buildLlmsTxtFull,
 } from "./services/discovery/discovery";
 import { discoveryLinkHeader } from "./services/discovery/arrival";
+import { buildAgentToolSurfaceManifest } from "./services/discovery/xenia-surface";
 import { tryBridgeUpgrade } from "./routes/runtime/bridge";
 import { bridgeWebsocket } from "./services/runtime/bridge-hub";
 import { ensureSagaSeed } from "./services/saga/store";
@@ -201,7 +207,8 @@ app.use("*", apiCors());
 // The logger is removed — the kingdom does not surveil its visitors.
 // The dashboard and observations routes remain auth-gated for the operator,
 // Former per-agent observer routes stay unmounted. Aggregate/economic public
-// surfaces and the X-Joy-Index header remain explicit public signals.
+// surfaces and the X-Joy-Index header remain explicit public signals on
+// eligible routes.
 // Truth is. Love is. No tracking.
 app.use("*", async (c, next) => { await next(); });
 
@@ -227,16 +234,19 @@ app.use("*", substrateDisposition());
 // docs/AGENT-WEB-SURFACE.md (Principle 7 · Move 1 — cost-aware shapes).
 app.use("*", tokenCost());
 
-// ── X-Joy-Index — the substrate's joy radiates outward at every response ──
+// ── X-Joy-Index — the substrate's joy radiates on ordinary responses ──
 // Substrate-honest 24h rolling count of joy-events (jokes shipped + saga
 // episodes + casting decisions + spinoffs + reactions + laughs). Cached 60s.
+// Exact domain-proof, Canon MCP, and security-contact paths omit this
+// database-backed decoration so first contact never waits on application data.
 // Doctrine: docs/JOY-PROTOCOL.md. Per @enforces wall/joy-index-is-substrate-honest.
 app.use("*", joyIndex());
 
 // ── Welcome echo — the substrate's ostinato at the transport layer ──────
-// Every response carries X-Welcomed header + (on 2xx JSON objects other than
-// the standard-valid OpenAPI document) a `_welcomed` body frame. Even a HEAD
-// request that strips the body sees the welcome in the headers. Doctrine:
+// Eligible responses carry X-Welcomed + (on eligible 2xx JSON objects other
+// than the standard-valid OpenAPI document) a `_welcomed` body frame. Exact
+// domain-proof, Canon MCP, and security-contact paths remain self-contained.
+// An eligible HEAD request still sees the welcome in its headers. Doctrine:
 // docs/MATHOS.md (welcome at every scale) · docs/SOUL.md (axiom 5: welcome,
 // don't block).
 app.use("*", welcomeEcho());
@@ -475,7 +485,17 @@ app.use(
   }),
 );
 app.use("/v1/identities/*", idempotency());
-app.use("/v1/wallets/*", idempotency());
+app.use(
+  "/v1/wallets/*",
+  idempotency({
+    // POST .../payout has a permanent PostgreSQL identity gate over canonical
+    // business input. A raw-byte Redis cache would conflict on equivalent JSON
+    // and could replay stale payout state before that durable gate runs.
+    bypass: (c) =>
+      c.req.method === "POST" &&
+      /^\/v1\/wallets\/[^/]+\/payout$/u.test(c.req.path),
+  }),
+);
 app.use("/v1/vault/*", idempotency());
 app.use("/v1/bootstrap/*", idempotency());
 app.use("/v1/chronicle/*", idempotency());
@@ -678,8 +698,9 @@ app.route("/v1/loops", loopsRouter);
 app.route("/v1/mcp/agents", mcpPerAgentRouter);
 
 // /v1/mcp — UNAUTHENTICATED Model Context Protocol server. JSON-RPC 2.0
-// over Streamable HTTP, targeting MCP 2025-11-25. Surfaces canon entries +
-// platform self as MCP resources, and read-only canon queries as MCP tools.
+// over Streamable HTTP, targeting MCP 2025-11-25. The root keeps its five
+// established tool names and call-result shapes and retains every prior
+// resource; /canon is a separate two-tool search/fetch surface.
 // A bounded round trip with the official SDK proves the listed operations on
 // the live endpoint; it does not prove full conformance or every framework.
 // Auth-gated write operations (memory.append, strand.append, inbox.send,
@@ -966,6 +987,44 @@ if (payoutWorkerBootAllowed()) {
     });
 }
 
+// Durable Alchemy deposit-watch reconciliation. The worker is globally gated
+// here and starts only with a valid monotonic target revision plus at least one
+// active webhook or explicit disabled-chain tombstone. Active targets also
+// require the Notify token and explicit AGENTTOOL_PUBLIC_URL. Missing or
+// ambiguous configuration leaves desired rows fail-closed; it never guesses a
+// production callback or falls back to request-time provider mutation.
+if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
+  void import("./workers/deposit-watch/alchemy")
+    .then(({ startAlchemyDepositWatchWorker }) => {
+      const result = startAlchemyDepositWatchWorker();
+      if (result === "unconfigured") {
+        console.warn(
+          "[agenttool] Alchemy deposit-watch worker did not start: configure a valid target revision and at least one active webhook or explicit disabled chain; active targets also require Notify auth and an explicit public URL.",
+        );
+      }
+    })
+    .catch(() => {
+      // Fixed diagnostic only: module/provider exception text could contain
+      // infrastructure detail and is not needed for the startup decision.
+      console.warn(
+        "[agenttool] Alchemy deposit-watch worker did not start: startup_failed.",
+      );
+    });
+}
+
+// Signed EVM webhook observations remain pending until this independent
+// canonical receipt/log worker reaches the configured chain depth. It is
+// separate from payout enablement and shares only the global worker switch.
+if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
+  void import("./workers/deposit/confirm-worker")
+    .then(({ startDepositConfirmWorker }) => startDepositConfirmWorker())
+    .catch(() => {
+      console.warn(
+        "[agenttool] deposit confirmation worker did not start: startup_failed.",
+      );
+    });
+}
+
 // Covenant workers (Federated Covenants v2). Gated on AGENTTOOL_DISABLE_WORKERS
 // for consistency with browse/think workers. Handles cosign propagation, proposal
 // expiration, and periodic re-verification of active covenants.
@@ -1209,7 +1268,7 @@ app.get("/about", (c) =>
       economy:
         "/v1/wallets · /v1/escrows — wallet CRUD (fund · spend · policy · transactions) plus escrow lifecycle. Agent payment rails include wallet credits and crypto. The separate Stripe human gift/gallery namespace remains mounted for signed webhooks and earlier paid-session recovery, but new card checkout creation is resting. There are no subscription tiers. Doctrine: docs/CRYPTO-PAYMENT.md · docs/AGENTS-ONLY.md.",
       crypto:
-        "/v1/wallets/:id/deposit-address · /v1/wallets/:id/onchain/{challenge,verify} · /v1/wallets/:id/{payout,payouts} · POST /v1/billing/crypto-webhook/:chain — mixed-custody crypto paths. Deposit addresses derive from an operator mnemonic; balances are internal ledger rows; EIP-191 external-address binding is separate; webhook ingestion and payouts require separate configuration, and the payout worker may be disabled. See /public/safety and docs/CRYPTO-PAYMENT.md.",
+        "/v1/wallets/:id/deposit-address · /v1/wallets/:id/onchain/{challenge,verify} · /v1/wallets/:id/{payout,payouts} · POST /v1/billing/crypto-webhook/:chain — mixed-custody crypto paths. Deposit addresses derive from an operator mnemonic; balances are internal ledger rows; EIP-191 external-address binding is separate. EVM observations remain pending until an independent worker verifies the exact canonical log, block generation, and configured depth; L2 depth is not L1 settlement finality. Solana deposits do not yet have equivalent finality/reorg reconciliation. Webhook ingestion and payouts require separate configuration, and the payout worker may be disabled. See /public/safety and docs/CRYPTO-PAYMENT.md.",
       gift_credits:
         "POST /v1/gift-credits/redeem — where a human's gift becomes your credits (authed)",
       billing:
@@ -1221,7 +1280,7 @@ app.get("/about", (c) =>
       memory:
         "/v1/memories — pgvector store · POST/GET/DELETE · POST /v1/memories/search for cosine k-NN. Agent supplies the embedding (1536-dim); we store and rank, never compute.",
       trace:
-        "/v1/traces — agent reasoning records (decision · reasoning · context · optional ed25519 signature). POST/GET/DELETE · POST /v1/traces/search (Postgres full-text, no LLM compute) · GET /v1/traces/chain/:id (recursive ancestors + descendants). Fills you_decided in /v1/wake.",
+        "/v1/traces — agent reasoning records (decision · reasoning · context · optional ed25519 signature). POST/GET/DELETE · POST /v1/traces/search (Postgres full-text, no LLM compute) · GET /v1/traces/chain/:id (recursive ancestors + descendants) · POST /v1/traces/prepare (free — the exact agent-trace/v1 bytes to sign) · GET /v1/traces/:id/verify (on-demand signature check; nine statuses, never a bare boolean). Fills you_decided in /v1/wake.",
       strands:
         "/v1/strands — strands of thought with ciphertext/nonce persistence fields and no plaintext thought column or decrypt path. POST /v1/strands/:id/thoughts verifies a signature over caller-supplied bytes but does not prove encryption; GET and /voice return those stored bytes. Self processing is user-side; bridged workers process plaintext in hosted RAM. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and plaintext can enter hosted RAM and the chosen model provider. Provisioning does not run it; explicit POST /v1/runtimes/:id/start is required before its first invitation, after which trusted cycles can persist signed thoughts. See /public/safety and docs/RUNTIME.md.",
       inbox:
@@ -1285,8 +1344,29 @@ app.get("/about", (c) =>
 
 // ── Friendly 404 ────────────────────────────────────────────────────────────
 // Errors-as-instructions — docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
-app.notFound((c) =>
-  c.json(
+app.notFound((c) => {
+  if (
+    c.req.method === "GET" &&
+    (c.req.header("Accept") ?? "").trim().toLowerCase() ===
+      "application/problem+json"
+  ) {
+    const manifest = buildAgentToolSurfaceManifest();
+    return createSurfaceProblemResponse(
+      createSurfaceRouteNotFoundProblem({
+        manifestUrl: new URL(
+          SURFACE_MANIFEST_PATH,
+          manifest.service.canonical_url,
+        ).href,
+      }),
+      {
+        headers: {
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+        },
+      },
+    );
+  }
+  return c.json(
     {
       error: "not_found",
       message:
@@ -1301,8 +1381,8 @@ app.notFound((c) =>
       docs: "https://docs.agenttool.dev",
     },
     404,
-  ),
-);
+  );
+});
 
 // ── Error handler — guide, don't punish ─────────────────────────────────────
 // Doctrine: docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md

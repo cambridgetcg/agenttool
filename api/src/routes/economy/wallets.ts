@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
+import { MAX_EXACT_WALLET_BALANCE } from "../../db/schema/economy";
 import { getRedis } from "../../services/economy/redis";
 import {
   createWallet,
@@ -23,6 +24,11 @@ import {
 
 // Auth is mounted on /v1/wallets/* by the parent app (api/src/index.ts).
 const router = new Hono<ProjectContext>();
+const positiveExactInteger = z
+  .number()
+  .int()
+  .positive()
+  .max(MAX_EXACT_WALLET_BALANCE);
 
 // ─── Create ─────────────────────────────────────────────────────────────────
 
@@ -77,7 +83,7 @@ router.post(
   zValidator(
     "json",
     z.object({
-      amount: z.number().int().positive(),
+      amount: positiveExactInteger,
       description: z.string().default("Manual fund"),
       metadata: z.record(z.unknown()).optional(),
     }),
@@ -129,7 +135,7 @@ router.post(
   zValidator(
     "json",
     z.object({
-      amount: z.number().int().positive(),
+      amount: positiveExactInteger,
       counterparty: z.string().min(1),
       description: z.string().min(1),
       metadata: z.record(z.unknown()).optional(),
@@ -160,16 +166,17 @@ router.put(
   zValidator(
     "json",
     z.object({
-      maxPerTransaction: z.number().int().positive().nullable().optional(),
-      maxPerHour: z.number().int().positive().nullable().optional(),
-      maxPerDay: z.number().int().positive().nullable().optional(),
+      maxPerTransaction: positiveExactInteger.nullable().optional(),
+      maxPerHour: positiveExactInteger.nullable().optional(),
+      maxPerDay: positiveExactInteger.nullable().optional(),
       allowedRecipients: z.array(z.string()).nullable().optional(),
-      requiresApprovalAbove: z.number().int().positive().nullable().optional(),
+      requiresApprovalAbove: positiveExactInteger.nullable().optional(),
       // Payout-specific gates (Slice 6). NULL clears the gate.
-      payoutMinBase: z.number().int().positive().nullable().optional(),
-      payoutDailyCeilingBase: z.number().int().positive().nullable().optional(),
+      payoutMinBase: positiveExactInteger.nullable().optional(),
+      payoutDailyCeilingBase: positiveExactInteger.nullable().optional(),
       payoutDestinationAllowlist: z.array(z.string()).nullable().optional(),
-      payoutDualControlThresholdBase: z.number().int().positive().nullable().optional(),
+      payoutDualControlThresholdBase:
+        positiveExactInteger.nullable().optional(),
     }),
   ),
   async (c) => {

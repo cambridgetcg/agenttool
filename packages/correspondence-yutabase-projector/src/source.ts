@@ -1,4 +1,7 @@
-import { CORRESPONDENCE_PROTOCOL } from "@agenttool/correspondence-yutabase";
+import {
+  CORRESPONDENCE_PROTOCOL,
+  isCanonicalNonnegativeInt64Decimal,
+} from "@agenttool/correspondence-yutabase";
 
 import {
   validateLoopbackSourceOrigin,
@@ -9,7 +12,6 @@ import { ProjectorError } from "./errors.js";
 import { decodeIdentityPublicKey } from "./identity-key.js";
 import { parseStrictJson } from "./strict-json.js";
 
-const CURSOR = /^(?:0|[1-9][0-9]*)$/;
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
@@ -67,9 +69,7 @@ function exact(
 function cursor(value: unknown, nullable: boolean): string | null {
   if (nullable && value === null) return null;
   if (
-    typeof value !== "string" ||
-    !CURSOR.test(value) ||
-    BigInt(value) > 9_223_372_036_854_775_807n
+    !isCanonicalNonnegativeInt64Decimal(value)
   ) {
     invalid("source_protocol_invalid");
   }

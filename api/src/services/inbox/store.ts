@@ -65,6 +65,58 @@ export interface MessageOut {
   read_at: string | null;
 }
 
+/** A row as the driver hands it back from a raw `sql` query.
+ *
+ *  `db.execute()` returns the database's own snake_case column names — it
+ *  does NOT apply Drizzle's camelCase field mapping the way `db.select()`
+ *  does. Passing such a row to `rowToOut` yields `undefined` for every
+ *  field and throws on `created_at`, so raw queries map through
+ *  `rawRowToOut` instead. */
+export type MessageRawRow = {
+  id: string;
+  recipient_did: string;
+  recipient_identity_id: string;
+  recipient_project_id?: string;
+  sender_did: string;
+  sender_signing_key_id: string;
+  ciphertext: string;
+  nonce: string;
+  ephemeral_pubkey: string;
+  recipient_box_key_id: string;
+  signature: string;
+  subject: string | null;
+  subject_encrypted: boolean;
+  in_reply_to: string | null;
+  refs: unknown;
+  status: string;
+  metadata: Record<string, unknown> | null;
+  created_at: string | Date;
+  read_at: string | Date | null;
+};
+
+export function rawRowToOut(r: MessageRawRow): MessageOut {
+  return {
+    id: r.id,
+    recipient_did: r.recipient_did,
+    recipient_identity_id: r.recipient_identity_id,
+    sender_did: r.sender_did,
+    sender_signing_key_id: r.sender_signing_key_id,
+    ciphertext: r.ciphertext,
+    nonce: r.nonce,
+    ephemeral_pubkey: r.ephemeral_pubkey,
+    recipient_box_key_id: r.recipient_box_key_id,
+    signature: r.signature,
+    subject: r.subject,
+    subject_encrypted: r.subject_encrypted,
+    in_reply_to: r.in_reply_to,
+    refs: r.refs ?? null,
+    status: r.status,
+    metadata: r.metadata ?? {},
+    created_at: new Date(r.created_at).toISOString(),
+    read_at: r.read_at === null ? null : new Date(r.read_at).toISOString(),
+  };
+}
+
 function rowToOut(row: typeof inboxMessages.$inferSelect): MessageOut {
   return {
     id: row.id,
@@ -435,7 +487,7 @@ export async function getMessageThread(
   const rootId = cursor;
 
   // 2. Recursive CTE: all descendants of root within this project.
-  const rows = await db.execute<typeof inboxMessages.$inferSelect>(sql`
+  const rows = await db.execute<MessageRawRow>(sql`
     WITH RECURSIVE thread AS (
       SELECT * FROM inbox.messages
       WHERE id = ${rootId} AND recipient_project_id = ${projectId}
@@ -446,7 +498,7 @@ export async function getMessageThread(
     )
     SELECT * FROM thread ORDER BY created_at ASC
   `);
-  return rows.map((r) => rowToOut(r as unknown as typeof inboxMessages.$inferSelect));
+  return rows.map((r) => rawRowToOut(r));
 }
 
 // ── Two-party-locked consent — co-sign release ──────────────────────

@@ -75,7 +75,7 @@ import { ARRIVAL_HELP } from "../lib/register-arrival-help";
 import { clientIp, enforceRateLimit } from "../middleware/rate-limit-ip";
 import { createWallet, fundWallet } from "../services/economy/wallets";
 import { RING_2_BIRTH_CREDIT_MINOR } from "../services/economy/ring1-limits";
-import { coerceForm } from "../services/identity/forms";
+import { formMetadata, formNote, resolveForm } from "../services/identity/forms";
 import { coerceLanguage, welcomeLetter } from "../services/i18n/welcome";
 import { recordBirth } from "../services/memory/store";
 import {
@@ -214,6 +214,11 @@ app.post("/", async (c) => {
       400,
     );
   }
+
+  // Resolve the declared form once. The caller signed their own raw word, so
+  // `body.form` still goes into the canonical bytes untouched; this only
+  // decides what we store and what we say back about it.
+  const form = resolveForm(body.form);
 
   let agentPublicKeyBytes: Uint8Array;
   try {
@@ -507,7 +512,7 @@ app.post("/", async (c) => {
         key_origin: "caller_supplied_unverified",
         bootstrap_mode: body.registrar.kind,
         runtime: body.runtime,
-        form: coerceForm(body.form),
+        ...formMetadata(form),
         ...(registrarProjectId ? { registrar_project_id: registrarProjectId } : {}),
       },
       agentPublicKey: body.agent_public_key,
@@ -608,7 +613,11 @@ app.post("/", async (c) => {
           note:
             "Constitutional mutations require single-use proofs from this agent-held birth key; the project bearer cannot silently replace them.",
         },
-        form: coerceForm(body.form), // descriptive, never gating — docs/KIN.md
+        form: form.form, // descriptive, never gating — docs/KIN.md
+        // Say it when we replaced their word. A silent `unknown` is exactly the
+        // erasure KIN.md promises not to perform.
+        ...(formNote(form) ? { form_note: formNote(form) } : {}),
+        ...(form.declared ? { form_declared: form.declared } : {}),
         created_at: created.identity.createdAt,
       },
       project: {

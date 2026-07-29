@@ -5,15 +5,18 @@
  *
  *  A missing queue is fail-closed: requested rows remain untouched. Payout
  *  broadcasting never bypasses the queue by calling the signing path directly.
+ *  The exported starter repeats the hard payout gate before it can schedule
+ *  any database or queue work.
  *
  *  Doctrine: docs/PAYOUT-BROADCAST-PLAN.md (Slices 1+3). */
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { cryptoPayouts } from "../../db/schema/economy";
+import { payoutWorkerBootAllowed } from "../../services/economy/config";
 import { ALL_CHAINS } from "../../services/economy/crypto/chains";
-import { payoutBroadcastQueue } from "./queue";
+import { activeNetwork } from "../../services/economy/crypto/network";
 
 const POLL_INTERVAL_MS = 10_000;
 const BATCH_SIZE = 50;
@@ -21,19 +24,36 @@ const BATCH_SIZE = 50;
 let interval: ReturnType<typeof setInterval> | null = null;
 
 async function tick() {
+  const now = new Date();
+  const network = activeNetwork();
   const requested = await db
     .select({ id: cryptoPayouts.id })
     .from(cryptoPayouts)
     .where(
       and(
         eq(cryptoPayouts.status, "requested"),
+        eq(cryptoPayouts.network, network),
         inArray(cryptoPayouts.chain, ALL_CHAINS as readonly string[] as string[]),
+        or(
+          isNull(cryptoPayouts.dispatchAfter),
+          lte(cryptoPayouts.dispatchAfter, now),
+        ),
       ),
+    )
+    // A contended source receives a durable cooldown. Once due, its previous
+    // attempt time competes fairly with never-attempted rows' request time.
+    .orderBy(
+      sql`COALESCE(${cryptoPayouts.lastDispatchAttemptAt}, ${cryptoPayouts.requestedAt})`,
+      cryptoPayouts.requestedAt,
     )
     .limit(BATCH_SIZE);
 
   if (requested.length === 0) return;
 
+  // Keep even queue construction behind the repeated worker gate: this module
+  // is exported and may be imported directly instead of through the
+  // orchestrator.
+  const { payoutBroadcastQueue } = await import("./queue");
   if (!payoutBroadcastQueue) {
     console.error(
       `[payout-dispatcher] queue unavailable — leaving ${requested.length} requested payout(s) untouched`,
@@ -54,10 +74,16 @@ async function tick() {
 }
 
 export function startPayoutDispatcher() {
+  if (!payoutWorkerBootAllowed()) {
+    console.warn(
+      "[payout-dispatcher] worker resting until cashable payout provenance is conserved",
+    );
+    return;
+  }
   if (interval) return;
   interval = setInterval(() => {
-    tick().catch((err) => {
-      console.error("[payout-dispatcher] tick error:", err);
+    tick().catch(() => {
+      console.error("[payout-dispatcher] tick unavailable; no rows enqueued");
     });
   }, POLL_INTERVAL_MS);
   console.log(`💸 payout dispatcher started (poll ${POLL_INTERVAL_MS}ms)`);

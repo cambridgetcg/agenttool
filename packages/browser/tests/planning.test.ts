@@ -33,6 +33,24 @@ describe("browser consequence planning", () => {
     ]);
   });
 
+  test("defers sovereign navigation policy checks to execution", () => {
+    const sovereign = resolveBrowserCapabilities({ authority: "sovereign" });
+
+    for (const action of [
+      { kind: "navigate" as const, url: "ftp://example.com/file" },
+      {
+        kind: "new_tab" as const,
+        url: "https://user:password@example.com/",
+      },
+      { kind: "reload" as const },
+    ]) {
+      expect(planBrowserAction(action, sovereign).authority).toEqual({
+        profile: "sovereign",
+        decision: "checked_at_execution",
+      });
+    }
+  });
+
   test("separates data disclosure, session changes, and durable state", () => {
     const persistent = resolveBrowserCapabilities({
       authority: "sovereign",
@@ -64,5 +82,32 @@ describe("browser consequence planning", () => {
       "durable_state",
     ]);
     expect(closed.repeatSafety).toBe("session_only");
+  });
+
+  test("carries an observation precondition in the redacted forecast only", () => {
+    const capabilities = resolveBrowserCapabilities({ authority: "public" });
+    const plan = planBrowserAction(
+      {
+        kind: "press",
+        key: "Secret+Chord",
+        tabId: "tab-1",
+        basisSnapshotId: "snapshot-1",
+      },
+      capabilities,
+    );
+
+    expect(plan).toMatchObject({
+      schema: "agent-browser-consequence-plan/0.2",
+      execution: false,
+      action: {
+        kind: "press",
+        tabId: "tab-1",
+        basisSnapshotId: "snapshot-1",
+      },
+    });
+    expect(plan.action).not.toHaveProperty("key");
+    expect(JSON.stringify(plan)).not.toContain("Secret+Chord");
+    expect(Object.isFrozen(plan)).toBe(true);
+    expect(Object.isFrozen(plan.action)).toBe(true);
   });
 });

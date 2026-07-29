@@ -1,7 +1,14 @@
 import { BrowserError } from "./errors.js";
+import {
+  BROWSER_OPERATIONS,
+  JSONL_PROTOCOL_VERSION,
+  MCP_LEGACY_COMPATIBILITY,
+  MCP_MODERN_PROTOCOL_REVISION,
+  type BrowserOperation,
+} from "./protocol.js";
 
 export const BROWSER_CAPABILITIES_SCHEMA =
-  "agent-browser-capabilities/0.2" as const;
+  "agent-browser-capabilities/0.4" as const;
 
 export type BrowserAuthorityPreset = "public" | "local" | "sovereign";
 export type EffectiveBrowserAuthority =
@@ -10,6 +17,28 @@ export type EffectiveBrowserAuthority =
 
 export interface BrowserCapabilitySet {
   schema: typeof BROWSER_CAPABILITIES_SCHEMA;
+  interfaces: {
+    typescript: {
+      transport: "in_process";
+      contract: "direct_api";
+      directOnlyAffordances: readonly [
+        "selector_extract",
+        "full_page_screenshot",
+      ];
+    };
+    jsonl: {
+      transport: "stdio";
+      contract: "model_facing_operations";
+      version: typeof JSONL_PROTOCOL_VERSION;
+    };
+    mcp: {
+      transport: "stdio";
+      contract: "model_facing_operations";
+      modernRevision: typeof MCP_MODERN_PROTOCOL_REVISION;
+      legacyCompatibility: typeof MCP_LEGACY_COMPATIBILITY;
+    };
+  };
+  modelFacingOperations: readonly BrowserOperation[];
   authority: {
     profile: EffectiveBrowserAuthority;
     fixedAt: "process_start";
@@ -19,7 +48,11 @@ export interface BrowserCapabilitySet {
     local: boolean;
     reserved: boolean;
     schemes: readonly ["http", "https"];
-    urlCredentials: "blocked";
+    urlCredentials: {
+      policyCheckedRequests: "blocked";
+      redirectHops: "browser";
+    };
+    redirectRevalidation: false;
     dnsPreflight: "classify" | "browser";
     connectionAddressPinning: false;
     webSockets: "blocked" | "classified" | "browser";
@@ -32,6 +65,8 @@ export interface BrowserCapabilitySet {
   };
   features: {
     interaction: "enabled";
+    browserActReceipts: "enabled";
+    nonRefObservationBasis: "enabled";
     screenshots: "enabled";
     persistentProfile: "enabled" | "requires_configuration";
     uploads: "unsupported";
@@ -148,6 +183,28 @@ export function resolveBrowserCapabilities(
 
   return deepFreeze({
     schema: BROWSER_CAPABILITIES_SCHEMA,
+    interfaces: {
+      typescript: {
+        transport: "in_process",
+        contract: "direct_api",
+        directOnlyAffordances: [
+          "selector_extract",
+          "full_page_screenshot",
+        ],
+      },
+      jsonl: {
+        transport: "stdio",
+        contract: "model_facing_operations",
+        version: JSONL_PROTOCOL_VERSION,
+      },
+      mcp: {
+        transport: "stdio",
+        contract: "model_facing_operations",
+        modernRevision: MCP_MODERN_PROTOCOL_REVISION,
+        legacyCompatibility: MCP_LEGACY_COMPATIBILITY,
+      },
+    },
+    modelFacingOperations: [...BROWSER_OPERATIONS],
     authority: {
       profile,
       fixedAt: "process_start",
@@ -157,7 +214,11 @@ export function resolveBrowserCapabilities(
       local: preset.local,
       reserved: preset.reserved,
       schemes: ["http", "https"] as const,
-      urlCredentials: "blocked",
+      urlCredentials: {
+        policyCheckedRequests: "blocked",
+        redirectHops: "browser",
+      },
+      redirectRevalidation: false,
       dnsPreflight: preset.dnsPreflight,
       connectionAddressPinning: false,
       webSockets: preset.webSockets,
@@ -173,6 +234,8 @@ export function resolveBrowserCapabilities(
     },
     features: {
       interaction: "enabled",
+      browserActReceipts: "enabled",
+      nonRefObservationBasis: "enabled",
       screenshots: "enabled",
       persistentProfile:
         profileMode === "persistent"
@@ -186,8 +249,8 @@ export function resolveBrowserCapabilities(
     },
     statement:
       profile === "sovereign"
-        ? "AgentTool passes implemented HTTP(S) and WebSocket destinations to the browser without DNS classification; browser, network, account, and site boundaries still apply."
-        : "AgentTool classifies implemented browser destinations before connection; DNS preflight does not pin the address Chromium later uses.",
+        ? "AgentTool passes policy-checked HTTP(S) and WebSocket destinations to the browser without DNS classification; Chromium-managed redirect hops are not revalidated for destination class or URL credentials."
+        : "AgentTool classifies policy-checked HTTP(S) requests before connection, but Chromium-managed redirect hops are not revalidated for destination class or URL credentials and DNS preflight does not pin Chromium's later address.",
   });
 }
 

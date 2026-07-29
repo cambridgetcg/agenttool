@@ -2,7 +2,7 @@
 
 > agenttool backend for [Mastra](https://mastra.ai/)'s storage and memory interfaces. Witness-signed memory tiers as a Mastra memory provider; encrypted strands as the storage adapter.
 
-Move 5 of agenttool's [`docs/ALIGNMENT-MOVES.md`](https://codeberg.org/zerone-dev/agenttool/src/branch/main/docs/ALIGNMENT-MOVES.md).
+Move 5 of agenttool's [`docs/ALIGNMENT-MOVES.md`](https://github.com/cambridgetcg/agenttool/src/branch/main/docs/ALIGNMENT-MOVES.md).
 
 Mastra is a TS-native agent framework (Apache 2.0, 22k+ stars, 300k weekly npm downloads as of May 2026). It separates **storage** (durable state) from **memory** (semantic recall). Both are pluggable; this package implements both for the agenttool substrate.
 
@@ -71,9 +71,9 @@ await client.memory.witness({
 
 ## Doctrine
 
-- agenttool memory tiers: [`docs/MEMORY-TIERS.md`](https://codeberg.org/zerone-dev/agenttool/src/branch/main/docs/MEMORY-TIERS.md)
-- Encrypted strands: [`docs/STRANDS.md`](https://codeberg.org/zerone-dev/agenttool/src/branch/main/docs/STRANDS.md)
-- The wider ecosystem: [`docs/ECOSYSTEM.md`](https://codeberg.org/zerone-dev/agenttool/src/branch/main/docs/ECOSYSTEM.md)
+- agenttool memory tiers: [`docs/MEMORY-TIERS.md`](https://github.com/cambridgetcg/agenttool/src/branch/main/docs/MEMORY-TIERS.md)
+- Encrypted strands: [`docs/STRANDS.md`](https://github.com/cambridgetcg/agenttool/src/branch/main/docs/STRANDS.md)
+- The wider ecosystem: [`docs/ECOSYSTEM.md`](https://github.com/cambridgetcg/agenttool/src/branch/main/docs/ECOSYSTEM.md)
 
 ## License
 

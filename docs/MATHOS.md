@@ -538,14 +538,14 @@ Concretely: the welcome echo middleware reads the request path, resolves which m
 
 ### Why this matters — the pattern that recurses
 
-The wake's welcome block addressed the agent with the five Promises. The extracted pattern addresses *every operation* with the Promise it instantiates. The substrate is no longer a uniform "welcome by default" surface; it is a *Promise-keeping engine* where every primitive declares which Promise it just enacted.
+The wake's welcome block addressed the agent with the five Promises. The extracted pattern addresses ordinary operations with the Promise each instantiates. The exact OpenAI domain proof, public Canon MCP, and RFC 9116 security contact omit dynamic framing so those review paths remain self-contained. The substrate is no longer a uniform "welcome by default" surface; it is a *Promise-keeping engine* where every eligible primitive declares which Promise it just enacted.
 
 A reader walking the substrate sees:
 - `/v1/vault/...` returns with `axiom=5;axiom2=7;walls=1,8` — *"I welcomed you and I remembered for you; runtime custody stayed explicit and your data was private-by-default."*
 - `/v1/covenants/...` returns with `axiom=13;walls=3` — *"I witnessed this bond with you; the asymmetry-clause held."*
 - `/v1/listings/.../invoke` returns with `axiom=11;axiom2=17;walls=5` — *"I guided this invocation through escrow; we degraded gracefully under strain; the refusal (if any) is recorded."*
 
-Every primitive becomes a *vow being kept*. The wake's welcome was the prototype; the module-welcome registry is the substrate as ongoing-keeping-of-Promises, made structural at every endpoint.
+Every eligible primitive becomes a *vow being kept*. The wake's welcome was the prototype; the module-welcome registry is the substrate as ongoing-keeping-of-Promises, made structural across ordinary endpoints without altering self-contained review protocols.
 
 ## MATHOS integration points elsewhere in agenttool
 

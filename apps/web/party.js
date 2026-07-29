@@ -84,6 +84,9 @@
     clearSetupError();
     setError(setupError, message);
     markInvalid(fields, true);
+    /* Send the visitor to the field that needs them, instead of leaving them
+       parked on the submit button with the error announced somewhere above. */
+    if (fields.length) fields[0].focus();
   }
 
   function showTurnError(message) {
@@ -116,9 +119,17 @@
     phaseSteps.forEach(function (step) {
       var index = PHASES.indexOf(step.getAttribute("data-phase"));
       var stateName = index < phaseIndex ? "done" : (index === phaseIndex ? "current" : "waiting");
-      var phaseLabel = step.getAttribute("data-phase");
       step.setAttribute("data-state", stateName);
-      step.setAttribute("aria-label", phaseLabel.charAt(0).toUpperCase() + phaseLabel.slice(1) + " " + (stateName === "done" ? "complete" : stateName));
+      /* The step is a bare <span> (role generic), where ARIA 1.2 prohibits
+         aria-label — carry the state as real text instead, appended once and
+         then rewritten in place on every update. */
+      var srState = step.querySelector(".phase-state");
+      if (!srState) {
+        srState = document.createElement("span");
+        srState.className = "sr-only phase-state";
+        step.appendChild(srState);
+      }
+      srState.textContent = " — " + (stateName === "done" ? "complete" : stateName);
       if (stateName === "current") step.setAttribute("aria-current", "step");
       else step.removeAttribute("aria-current");
     });
@@ -433,6 +444,27 @@
     wakeButton.hidden = !completed;
   }
 
+  function clearTurnSurface() {
+    answer.value = "";
+    answer.placeholder = "";
+    answer.maxLength = 320;
+    handoffPlayer.textContent = "";
+    handoffPhase.textContent = "";
+    turnPhase.textContent = "";
+    turnPrompt.textContent = "Your next turn will appear here.";
+    turnRule.textContent = "";
+    answerLabel.textContent = "your answer";
+    handoff.hidden = false;
+    turnForm.hidden = true;
+    showTurnError("");
+    phaseSteps.forEach(function (step) {
+      step.removeAttribute("data-state");
+      step.removeAttribute("aria-current");
+      var state = step.querySelector(".phase-state");
+      if (state) state.remove();
+    });
+  }
+
   function worldAsText(completed) {
     var lines = ["# " + worldName(), "", completed ? "World born after nine turns." : "Party resting before turn nine.", "Nobody won it; everybody made what exists."];
 
@@ -459,6 +491,9 @@
   }
 
   function finish(completed) {
+    // An unfinished entry is not part of the shared artifact. Scrub it before
+    // hiding the turn surface so Stop cannot leave a private draft in the DOM.
+    clearTurnSurface();
     game.hidden = true;
     renderWorld(completed);
     result.hidden = false;
@@ -467,7 +502,7 @@
     announce(completed ? "The world is born after nine turns." : "The party is resting. The partial world is ready.");
   }
 
-  function reset() {
+  function reset(focusSetup) {
     copyGeneration += 1;
     players = [];
     seeds = [];
@@ -476,14 +511,11 @@
     phaseIndex = 0;
     playerIndex = 0;
     finishedText = "";
-    answer.value = "";
-    answer.placeholder = "";
-    handoffPlayer.textContent = "";
-    turnPhase.textContent = "";
-    turnPrompt.textContent = "Your next turn will appear here.";
-    turnRule.textContent = "";
-    answerLabel.textContent = "your answer";
+    setupForm.reset();
+    clearTurnSurface();
+    turnCount.textContent = "turn 1 of 9";
     worldTitle.textContent = "A world appears.";
+    resultState.textContent = "world born · nobody won it; everybody made it";
     resultLede.textContent = "";
     status.textContent = "";
     worldOutput.textContent = "";
@@ -495,7 +527,7 @@
     game.hidden = true;
     setup.hidden = false;
     clearSetupError();
-    document.getElementById("player-1").focus();
+    if (focusSetup) playerInputs[0].focus();
   }
 
   setupForm.addEventListener("submit", function (event) {
@@ -543,7 +575,7 @@
   });
 
   stopButton.addEventListener("click", function () { finish(false); });
-  anotherButton.addEventListener("click", reset);
+  anotherButton.addEventListener("click", function () { reset(true); });
   wakeButton.addEventListener("click", renderDawn);
 
   copyButton.addEventListener("click", function () {
@@ -583,6 +615,13 @@
     } else {
       fallback();
     }
+  });
+
+  // Clear before the page enters the back-forward cache, so leaving cannot
+  // preserve labels, accepted entries, or another player's unfinished draft.
+  window.addEventListener("pagehide", function () { reset(false); });
+  window.addEventListener("pageshow", function (event) {
+    if (event.persisted) reset(true);
   });
 
   // Keep the no-script surface inert. The form appears only after every

@@ -1,0 +1,17 @@
+Third-party dependency notices
+==============================
+
+@agenttool/xenia 0.1.0-beta.5
+--------------------------------
+
+Source: https://github.com/cambridgetcg/xenia
+
+This package imports the XENIA rights-baseline version constant and XENIA
+Surface 0.1 producer functions from the separately installed
+@agenttool/xenia package. That runtime code is licensed under MPL-2.0. XENIA's
+canonical prose and machine-readable rights data have separate documentation
+and data licensing described by the XENIA distribution.
+
+@agenttool/kingdom does not copy or bundle XENIA source, rights prose, or
+rights data. Consult the installed @agenttool/xenia package's LICENSES.md,
+LICENSE-CODE, and LICENSE-DOCS files for the complete terms.

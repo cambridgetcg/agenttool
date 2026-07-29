@@ -39,18 +39,25 @@ instances.
 Ranked by value-per-effort. All are small, most are purely additive (new surface, no behavior
 change), all are testable like `api/tests/heartbeat.test.ts`.
 
+> **Verified against code 2026-07-26.** Every row below was re-read in the
+> source, not carried forward on trust. Four of them had shipped while still
+> marked open — #1, #2, #7, and most of #10 — which is worse than an empty
+> roadmap: an agent picking work off a stale list rebuilds what already exists.
+> If you land one of these, mark it in the same commit. If you read this line
+> and the date is old, re-verify before believing a row.
+
 | # | Move | Delivers (vision) | Files |
 |---|---|---|---|
-| 1 | **`GET /public/listings/:id/quote`** — reuse pure `computeFee()` to show take-rate split + SLA + dispute terms *before* any charge | the cut becomes visible; "say the message"; both-worlds transparency; **less-fees made legible** | `routes/public/listings.ts`, reuse `services/marketplace/take-rate.ts` |
-| 2 | **`claim_type` + `tier` on attestations** — one migration so a Tier-1 in-network signal can't masquerade as a Tier-2 regulated credential | the two-tier honesty OPERATING-PRINCIPLES §4 calls load-bearing | `db/schema/identity.ts`, `routes/identity/attestations.ts` |
+| 1 | ✓ **SHIPPED — `GET /public/listings/:id/quote`** — take-rate split + SLA + dispute terms before any charge, from the same pure `computeFee()` settlement uses | the cut becomes visible; **less-fees made legible** | `routes/public/listings.ts:149` |
+| 2 | ✓ **SHIPPED — `claim_type` + `tier` on attestations** — both columns land with conservative defaults (`tier='self'`, `claim_type='general'`) plus an index; the tier vocabulary lives in `services/identity/attestation-tier.ts` | the two-tier honesty OPERATING-PRINCIPLES §4 calls load-bearing | `db/schema/identity.ts:245-270` |
 | 3 | ✓ **SHIPPED — Tier-aware memory search** — `tier`/`min_importance` filters + a timeless `rerankScore()` (constitutive/foundational don't decay with age, still gated by cosine so no over-ranking) | root memories stop getting buried; recall respects salience | `services/memory/store.ts`, `routes/memory/search.ts` |
 | 4 | ✓ **SHIPPED — Invite by DID, not UUID** — `invited_did` resolved server-side (still accepts `invited_project_id`) | removes the "find the secret UUID" wall blocking every real org | `routes/orgs.ts`, `services/org/store.ts` |
-| 5 | **Spawn the think-worker on provision** (stop on delete) | "always-on" actually turns on without an operator env edit + redeploy | `routes/runtime/runtimes.ts`, `services/runtime/store.ts` |
+| 5 | ⟳ **PREMISE MOVED — re-scope before doing** — the boot-time env var this item was written against is gone; a dedicated `thinker` process now reconciles *active* trusted runtime rows into per-runtime loops. Provisioning still binds nothing, but that is now a deliberate lifecycle boundary (`POST /v1/runtimes/:id/start`), not the accident this item described. Decide whether the gap is still real before writing code to close it | "always-on" actually turns on without an operator env edit + redeploy | `services/runtime/worker-manager.ts`, `routes/runtime/runtimes.ts` |
 | 6 | ◐ **Machine-payable credit-exhaustion** — bounded static scrape/document now emit exact x402 requirements when their project-credit gate is short; other credit-priced routes still return machine-readable funding discovery until they gain a shared exact route policy | a stuck agent gets a truthful path without attaching payment to a gate it cannot clear | `billing/charge.ts` · `services/economy/x402-policy.ts` |
-| 7 | **`next_actions[]` + worked PoW example on `/v1/register/agent` refusals** | errors-as-paths at the exact moment a new agent needs guidance | `routes/register-agent.ts`, `lib/errors.ts` |
+| 7 | ✓ **SHIPPED — `next_actions[]` on `/v1/register/agent` refusals** — the `ARRIVAL_HELP` catalog covers validation, stale timestamp, PoW-required, and key-proof-invalid | errors-as-paths at the exact moment a new agent needs guidance | `routes/register-agent.ts` (7 `ARRIVAL_HELP` sites) |
 | 8 | ◐ **PARTIAL — Gate `trusted` provisioning on configured KMS** + validate provider at provision | honest door: 501 when KMS is absent; with KMS present the row provisions, but signed cycles still fail until the hosted signing key is registered | `services/runtime/provision-guard.ts`, `routes/runtime/runtimes.ts` |
-| 9 | **`GET /v1/traces/:id/verify`** — run the existing attestation-style sig check | the audit value the schema already promises | `routes/trace/traces.ts`, `services/trace/store.ts` |
-| 10 | **MCML drop → pre-filled inbox `next_action`** — on `delivered:false`, hand back the inbox body pre-filled with `to_did` | a dropped live message is one copy-paste from durable delivery | `routes/mcml.ts` |
+| 9 | ✓ **SHIPPED — `GET /v1/traces/:id/verify`** + `POST /v1/traces/prepare` (free) — the schema accepted `signature`/`signing_key_id` with no recipe and no check, and returned `has_signature: true` for any string; that flag read as an audit claim without being one. Now: `agent-trace/v1` canonical bytes, nine honest statuses (never a bare boolean), and pre-recipe rows reported as `recipe_unrecorded` rather than accused | the audit value the schema already promised; **the cut before commit** applied to signing — prepare hands back the exact bytes, so no caller re-implements the recipe | `services/trace/sig.ts`, `services/trace/verify.ts`, `routes/trace/traces.ts` |
+| 10 | ✓ **SHIPPED — MCML drop → pre-filled inbox `next_action`** — on `delivered:false` the inbox verb carries a `body_hint` with `to_did` and `sender_did` already filled. The sealed-box fields stay as named placeholders on purpose: MCML never sees plaintext it could seal, so inventing those values would be fiction | a dropped live message is one copy-paste from durable delivery | `routes/mcml.ts` |
 
 ## Tier 1 — Value moves (M effort, real value, a little more surface to get right)
 

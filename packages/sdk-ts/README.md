@@ -4,8 +4,12 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![Release](https://img.shields.io/badge/release-v0.16.3-blue)](https://github.com/cambridgetcg/agenttool/tree/sdk-v0.16.3)
+[![Release](https://img.shields.io/badge/release-v0.17.0-blue)](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.17.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
+
+The 0.17.0 badge names the public annotated tag and GitHub Release. The LOVE
+artifact remains the primary TypeScript release authority; npm and GitHub are
+independently verified, non-authoritative mirrors.
 
 ## Installation
 
@@ -24,6 +28,151 @@ The tarball URL is only a locator; installing from it directly skips that
 verification. No npm account or npm publication is required. Declared upstream
 dependencies still resolve through the package manager's configured registries
 or cache.
+
+The exact npm mirror is also public:
+
+```bash
+npm install --save-exact @agenttool/sdk@0.17.0
+```
+
+Its tarball was independently matched to the LOVE bytes; the registry and its
+mutable dist-tags do not replace the manifest as release authority.
+
+## 0.17.0
+
+This additive release introduces two separate KINGDOM clients:
+
+- `KingdomFrameworkClient.card()` and composed `at.kingdomFramework.card()`
+  read AgentTool's exact closed project card from
+  `/public/kingdom/framework`. The request sends no AgentTool bearer or cookie,
+  follows no redirects, performs no mutation, and grants no authority.
+- `KingdomOSClient.repositories()` / `resolve()` and composed `at.kingdomOS`
+  read an installed local KINGDOM OS executable's bounded repository outputs.
+  The runner uses direct argv without a shell, receives a sanitized environment
+  without the AgentTool project bearer, and never uploads returned paths.
+
+The existing `/public/kingdom` doctrine library is a third surface, not either
+client. Annotated `sdk-v0.17.0` points to merge
+`21db539d6bcae614f1d6884eaa503347fae63187`. Protected workflow
+[`30385040459`](https://github.com/cambridgetcg/agenttool/actions/runs/30385040459)
+published npm `latest`; the GitHub Release and npm tarballs both exactly match
+the 172,625-byte LOVE artifact
+(`sha256:b6a388ffe86a970480e8a8978f83fe80922321eb64f2b4f9143cae2b2c3dd5bb`).
+Those mirrors remain non-authoritative. Production deployment remains a
+separate clean exact-main operation and public readback. See
+[the three exact boundaries](https://docs.agenttool.dev/KINGDOM-OS-SDK.md).
+
+## 0.16.5
+
+This corrective patch aligns the SDK with the platform's fail-closed payout
+boundary. Fresh `request_payout(...)` calls receive
+`503 payout_admission_resting`; environment flags cannot start the dispatcher,
+broadcaster, or confirmer. Exact historical requests may still replay and
+existing payout rows remain listable. The SDK adds no retry, signing,
+broadcasting, or worker authority. The TypeScript examples now use the
+implemented `get_wallet(...)` and `list_payouts(...)` method names.
+
+## 0.16.4 Anthropic streaming adapter
+
+Version 0.16.4 contains a bounded repair to `AnthropicAdapter`. Its source tag,
+LOVE artifact, npm tarball, and GitHub Release remain public historical bytes;
+the three tarballs were independently byte-identical at
+`sha256:ab11a7a69c1bb73e0a2aa936131bec4aa2e28db222091311970e012cdb21ea4d`.
+
+- `adapter.messages.create({ ..., stream: true })` injects wake, removes the
+  local `metadata.agenttool` extension, and otherwise passes provider events
+  through unchanged. Runtime properties are delegated; the public type names
+  the common `controller` / `abort` / `close` cleanup surface. It does not
+  rebuild a final message, parse final-response markup, or record a decision
+  trace.
+- An explicit decision trace, or an ambient `at.deciding(...)` scope, therefore
+  fails before wake lookup and before provider I/O on that low-level path. Use
+  `adapter.messages.stream(...)` when final-message work is required.
+- `adapter.messages.stream(...)` returns an AgentTool-managed stream facade
+  immediately. Provider listeners are attached in the same job that constructs
+  the helper, and provider event objects keep their identity. Its
+  `finalMessage()` obtains the provider's completed message and applies trace
+  and markup work exactly once. Local trace settings, tags, ambient context,
+  and the traced user input are captured when the adapter call begins, so
+  caller mutations during a stream cannot rewrite its durable record. Ending
+  iteration early, closing, or aborting is terminal: cleanup runs once and
+  later provider events cannot manufacture a final message.
+- `emitted("end")` resolves at every terminal state. `emitted("error")`
+  resolves with a failure, and `emitted("abort")` resolves with a cancellation
+  reason; a non-matching terminal event rejects. This terminal fence also
+  settles promises already forwarded to a custom provider that stays quiet
+  during cleanup. Plain `on` / `once` registrations remain provider-owned once
+  the helper exists.
+- The facade is not the provider's `MessageStream` instance. Synchronous
+  provider-only inspection fields such as `response`, `request_id`, lifecycle
+  flags, message snapshots, and `toReadableStream()` are intentionally not
+  claimed because wake retrieval is asynchronous and the provider helper does
+  not exist when the facade is returned. Use low-level
+  `messages.create({ ..., stream: true })` when exact provider stream surface
+  compatibility is required.
+
+Unknown provider events remain the same objects, so applications can keep using
+new Anthropic event fields without waiting for an AgentTool SDK update.
+Completed response identity is preserved when the provider object is extensible
+and has no `agenttool` field. Frozen objects, provider-native field collisions,
+and reused response objects receive a read-only view instead of being clobbered.
+
+## 0.16.4 OpenAI Responses adapter
+
+Current repository source exports `OpenAIResponsesAdapter`, a dependency-free
+wrapper for completed `openai.responses.create(...)` calls. It prepends the
+AgentTool wake to `instructions`, strips its local controls before provider
+I/O, and can record one decision trace:
+
+```typescript
+import OpenAI from "openai";
+import { AgentTool, OpenAIResponsesAdapter } from "@agenttool/sdk";
+
+const at = new AgentTool();
+const client = new OpenAIResponsesAdapter(new OpenAI(), at);
+
+const response = await client.responses.create({
+  model: process.env.OPENAI_MODEL!,
+  input: "Choose the smallest safe next step.",
+  metadata: { agenttool: { trace: "decision" } },
+});
+
+console.log(response.output_text, response.agenttool.trace_id);
+```
+
+The provider receives the wake text inside `instructions`. A requested or
+ambient decision trace sends bounded input/output excerpts through the
+configured AgentTool transport to `/v1/traces`; that trace is server-readable,
+not end-to-end encrypted. Only responses whose status is absent or
+`"completed"` are traced.
+
+The adapter defaults an omitted `store` to `false`, because the Responses API
+[retains application state for 30 days by default](https://platform.openai.com/docs/models/default-usage-policies-by-endpoint)
+and the injected wake can carry identity context. An explicit `store: true` is
+preserved. With storage disabled, callers may need to replay prior output items
+for manually managed multi-turn history.
+
+This adapter supports completed foreground responses only. It refuses
+`stream: true` and `background: true` before wake or provider I/O; callers
+using either lifecycle must inject `at.wake.system("openai")` explicitly. The
+adapter is part of the 0.16.4 source and LOVE package. That does not rewrite
+the immutable 0.16.3 artifact or prove npm availability.
+Its `create(...)` returns an ordinary `Promise`, not openai-node's
+`APIPromise`, so pre-await `.asResponse()` and `.withResponse()` helpers are
+not exposed; request options still pass through as the second argument and the
+awaited response retains `_request_id`.
+
+## 0.16.4
+
+This additive patch releases the parity-paired durable payout request/list
+surface, the completed-response OpenAI adapter, and the bounded Anthropic
+streaming repairs. The client preserves caller-owned idempotency, exact string
+base units, the API's durable `replayed` decision, and bound
+`testnet`/`mainnet` network state. Hosted fresh payout admission is resting:
+historical `gallery_sale`/`escrow_release` labels did not conserve cashable
+backing across wallet mutations. Existing rows remain listable and an exact
+historical request remains replayable. The SDK does not retry, sign, or
+broadcast a payout.
 
 ## 0.16.3
 
@@ -239,8 +388,9 @@ grants, private keys, or cursors from SDK callers.
 
 ## What is this?
 
-This SDK exposes selected AgentTool HTTP namespaces. The table is a bounded
-map, not a claim that every mounted API route has an SDK method:
+This SDK exposes selected AgentTool HTTP namespaces plus explicitly separate
+local clients. The table is a bounded map, not a claim that every mounted API
+route has an SDK method:
 
 | Namespace | What it does |
 |---------|-------------|
@@ -252,6 +402,8 @@ map, not a claim that every mounted API route has an SDK method:
 | `at.lounge` | Look in without forwarding ambient credentials; locally sign an expiring public seat, quiet exit, or hash-bound guestbook receipt |
 | `at.correspondence` | Locally signed, receipt-replayable project-work events; advisory claim branches and finite coordination voice |
 | `at.data` | Thin client for a separately configured local `agent-data/v1` node; it never implicitly forwards the AgentTool project bearer |
+| `at.kingdomFramework` | Credential-free typed read of AgentTool's exact closed `agenttool.kingdom.card/0.1` project card; no cookies, redirects, mutation, or authority |
+| `at.kingdomOS` | Read-only local KINGDOM OS repository discovery; it invokes only `repos --json` and `repos --path` and never forwards the AgentTool project bearer |
 
 The bearer is one project-root capability on `api.agenttool.dev`; it is not
 least-privilege delegation or an identity signature. SDK/API method parity is
@@ -505,7 +657,24 @@ await at.economy.spend(wallet.id, {
   counterparty: "wlt_...",
   description: "payment for research service",
 });
+
+// Existing payout history remains readable while fresh creation rests.
+const payoutHistory = await at.economy.list_payouts(wallet.id);
 ```
+
+`idempotency_key` is required for payout requests and must be a caller-chosen
+8–256 character visible-ASCII value without spaces. Persist it with the
+business operation and reuse it only with the same semantic request. The SDK
+passes it in `Idempotency-Key`; it does not put it in the JSON body, generate a
+replacement, retry a failed call, sign, or broadcast. Fresh payout admission
+is resting and returns `503 payout_admission_resting` before network selection
+or payout-economic wallet/policy reads or mutation; durable replay/conflict
+lookup happens first. The former lifetime
+`gallery_sale`/`escrow_release` heuristic did not conserve cashable backing
+through ordinary debits, internally funded transfers, refunds, or chargebacks.
+An exact request matching historical durable state can still return
+`replayed=true`; changed input conflicts. Reopening requires backed
+sub-balances across every wallet mutation.
 
 ### Local agent data
 
@@ -555,6 +724,103 @@ every HTTP redirect on this separate data-node transport and reports
 to a redirect target. The immutable 0.16.0 release predates that fix; 0.16.1
 and later carry it. Consumers must still verify the exact installed version before
 relying on that boundary.
+
+### Public KINGDOM framework project card
+
+Read AgentTool's canonical project card without an AgentTool account:
+
+```typescript
+import { KingdomFrameworkClient } from "@agenttool/sdk";
+
+const kingdom = new KingdomFrameworkClient();
+const card = await kingdom.card();
+console.log(card.name, card.schema_version);
+```
+
+The same public read is available from the composed client:
+
+```typescript
+import { AgentTool } from "@agenttool/sdk";
+
+const at = new AgentTool({ apiKey: process.env.AT_API_KEY! });
+const card = await at.kingdomFramework.card();
+```
+
+`AgentTool` still enforces its normal authentication at construction. Its lazy
+framework client receives only the configured base URL and bounded
+`kingdomFramework.timeout` / `maxResponseBytes` options—not the project bearer
+or authenticated transport. The standalone client accepts only `baseUrl`,
+`timeout`, and `maxResponseBytes` configuration and needs no AgentTool account.
+
+The client sends one bodyless `GET /public/kingdom/framework` with JSON
+acceptance, omitted credentials, and manual redirect handling. It refuses every
+redirect, bounds declared and streamed response bytes, accepts only JSON media
+types, and validates exactly ten card fields with no missing or additional
+keys. Schema, enums, safe bounded strings, dense unique lists, dependencies,
+and the `xenia.rights/0.1` adoption are checked before a card is returned.
+Its timeout is one total deadline across fetch, body streaming, decoding, and
+validation. Success requires exact HTTP 200. Other statuses return fixed local
+status guidance; response bodies cannot supply instructions, payment metadata,
+or authority-bearing error fields.
+
+This is one publisher declaration about the AgentTool repository. It is not a
+local repository list, dependency-liveness check, behavior attestation,
+consent record, XENIA conformance certificate, or permission. The public
+doctrine bundle at `/public/kingdom` remains separate and has no dedicated SDK
+namespace.
+
+### Local KINGDOM OS repository discovery
+
+Version 0.17.0 can inspect the repository roots discovered by an installed
+KINGDOM OS without an AgentTool account:
+
+```typescript
+import { KingdomOSClient } from "@agenttool/sdk";
+
+const kingdom = new KingdomOSClient({
+  executable: "/path/to/KINGDOM-OS/kingdom",
+});
+
+const repositories = await kingdom.repositories(["agenttool"]);
+const selectedRoot = await kingdom.resolve(["agenttool"]);
+console.log(repositories.map((repository) => repository.name));
+// Keep selectedRoot inside the local workflow that requested it.
+```
+
+The same client is available as `at.kingdomOS` when composed:
+
+```typescript
+import { AgentTool } from "@agenttool/sdk";
+
+const at = new AgentTool({
+  apiKey: process.env.AT_API_KEY!,
+  kingdomOS: {
+    executable: "/path/to/KINGDOM-OS/kingdom",
+  },
+});
+
+const selectedRoot = await at.kingdomOS.resolve(["agenttool"]);
+```
+
+Standalone `KingdomOSClient` is the no-account path. Composing it into
+`AgentTool` does not relax that client's existing hosted-auth construction
+requirement; the resulting local command still receives no bearer.
+
+`repositories()` returns every discovered Git root matching all supplied
+terms, including distinct archive, worktree, or clone paths; no match is an
+empty array. `resolve()` requires a query and refuses no-match and ambiguous
+results. Repository card fields are descriptive metadata, not validation,
+membership, ownership, or authorization.
+
+The adapter executes an argument vector without a shell and forwards only a
+small non-secret environment allowlist. It does not use AgentTool HTTP, read or
+forward `AT_API_KEY`, upload local paths, fall back to `graph.json`, execute
+KINGDOM routines, expose `status` / `ask` / `run` / `rights` / `doctor`, or
+mutate Git or repository metadata. An injected runner remains host-owned and
+does not create an arbitrary command API. See
+[`KINGDOM-OS-SDK.md`](../../docs/KINGDOM-OS-SDK.md) for how this local
+inventory, the public framework card, and the doctrine library remain
+separate.
 
 ## Integration example — RhetorLint covenant mirror
 
@@ -653,6 +919,14 @@ const at = new AgentTool({
     baseUrl: "http://127.0.0.1:7742",
     token: process.env.AGENT_DATA_NODE_TOKEN,
   },
+  kingdomFramework: {                         // optional, public read only
+    timeout: 10,
+    maxResponseBytes: 64 * 1024,
+  },
+  kingdomOS: {                                // optional, local process only
+    executable: "/path/to/KINGDOM-OS/kingdom",
+    timeout: 10,
+  },
 });
 ```
 
@@ -661,10 +935,11 @@ const at = new AgentTool({
 - 🏠 [agenttool.dev](https://agenttool.dev)
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev)
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
-- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.16.3/manifest.json)
+- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.17.0/manifest.json)
 - 🐍 [Python SDK source](https://github.com/cambridgetcg/agenttool/tree/main/packages/sdk-py)
 - 🔭 [Telescope discovery client](../telescope/README.md)
 - 🔌 [SDK tiers and hosted per-agent MCP](../../docs/SDK-TIERS.md)
+- 🏰 [KINGDOM SDK boundaries](https://docs.agenttool.dev/KINGDOM-OS-SDK.md)
 
 ## License
 

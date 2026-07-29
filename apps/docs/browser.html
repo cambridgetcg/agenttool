@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Agent Browser — a small browser surface made for agents</title>
-  <meta name="description" content="Install @agenttool/browser 0.2.0 and give a local agent seven browser operations plus capability inspection and zero-effect planning through TypeScript, JSONL, or stdio MCP." />
+  <meta name="description" content="Install @agenttool/browser 0.5.0 for local action receipts, observation-basis preconditions, retained semantic snapshots, and backend-neutral TypeScript, JSONL, or stdio MCP browsing." />
   <link rel="canonical" href="https://docs.agenttool.dev/browser" />
   <meta property="og:title" content="Agent Browser — a small browser surface made for agents" />
   <meta property="og:description" content="Nine local agent tools, explicit destination authority, and one semantic browser core." />
@@ -13,7 +13,7 @@
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="alternate" type="application/json" href="https://api.agenttool.dev/.well-known/love-packages" title="LOVE package discovery" />
-  <link rel="describedby" type="application/json" href="https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.2.0/manifest.json" title="@agenttool/browser LOVE manifest" />
+  <link rel="describedby" type="application/json" href="https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.0/manifest.json" title="@agenttool/browser LOVE manifest" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -83,7 +83,7 @@
       <div class="sidebar-section">
         <h4>Reference</h4>
         <ul>
-          <li><a href="/packages/v1/@agenttool/browser/0.2.0/manifest.json"><span class="glyph">{}</span>Browser manifest</a></li>
+          <li><a href="/packages/v1/@agenttool/browser/0.5.0/manifest.json"><span class="glyph">{}</span>Browser manifest</a></li>
           <li><a href="/.well-known/love-packages"><span class="glyph">{}</span>Package catalog</a></li>
           <li><a href="AGENT-DATA-PROTOCOL.md"><span class="glyph">↳</span>agent-data/v1</a></li>
           <li><a href="errors.html"><span class="glyph">!</span>Errors &amp; Auth</a></li>
@@ -103,7 +103,7 @@
     </aside>
 
     <main class="doc-content">
-      <div class="eyebrow">◎ @agenttool/browser · local-first · 0.2.0</div>
+      <div class="eyebrow">◎ @agenttool/browser · local-first · 0.5.0</div>
       <h1>A browser with an <em>agent-shaped handle</em>.</h1>
       <p class="lede">
         One bounded browser core, seven browser operations, two zero-effect reasoning aids, and three local doors: TypeScript, line-delimited JSON, and stdio MCP. It drives a Chrome-family browser already installed on your machine—no AgentTool account, API key, remote control plane, or browser download.
@@ -114,7 +114,7 @@
 
       <div class="callout success">
         <span class="icon">◎</span>
-        <p><strong>The loop is semantic.</strong> Observe a bounded accessibility snapshot, choose a snapshot-scoped ARIA reference, perform one action once, then observe again. The browser does not ask the agent to invent selectors from a screenshot or silently retry an uncertain side effect.</p>
+        <p><strong>The loop is semantic.</strong> Observe a bounded accessibility snapshot, choose a snapshot-scoped ARIA reference, perform one action once, then observe again. A bounded recent snapshot ledger lets another observer retain still-current refs, while separately bounded headings and landmarks explain page structure without becoming action targets. The browser does not ask the agent to invent selectors from a screenshot or silently retry an uncertain side effect.</p>
       </div>
 
       <h2 id="install">Install one exact release</h2>
@@ -122,16 +122,16 @@
 
       <div class="code-block">
         <div class="code-label"><span>npm · exact registry mirror</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>npm install --save-exact @agenttool/browser@0.2.0</pre>
+<pre>npm install --save-exact @agenttool/browser@0.5.0</pre>
       </div>
 
       <div class="code-block">
         <div class="code-label"><span>LOVE · exact immutable HTTPS artifact</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
 <pre>npm install --save-exact \
-  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.2.0/agenttool-browser-0.2.0.tgz</pre>
+  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.0/agenttool-browser-0.5.0.tgz</pre>
       </div>
 
-      <p class="muted">Registry mirrors can lag or omit a release. The exact LOVE manifest is at <a href="/packages/v1/@agenttool/browser/0.2.0/manifest.json"><code>/packages/v1/@agenttool/browser/0.2.0/manifest.json</code></a>. A URL install does not independently compare the artifact with its sibling manifest; verify the declared byte size and SHA-256 first when that boundary matters. The immutable <code>0.1.0</code> artifact remains separately addressable as historical seven-operation bytes.</p>
+      <p class="muted">Registry mirrors can lag or omit a release. The exact LOVE manifest is at <a href="/packages/v1/@agenttool/browser/0.5.0/manifest.json"><code>/packages/v1/@agenttool/browser/0.5.0/manifest.json</code></a>. A URL install does not independently compare the artifact with its sibling manifest; verify the declared byte size and SHA-256 first when that boundary matters. The immutable <code>0.1.0</code>, <code>0.2.0</code>, and <code>0.3.0</code> artifacts remain separately addressable as historical releases.</p>
       <p class="muted"><strong>Runtime.</strong> Node ≥20.19 or Bun ≥1.3.5, plus an installed Chrome-family browser. The package uses <code>playwright-core</code>, has no postinstall hook, and downloads no browser.</p>
 
       <div class="code-block">
@@ -146,17 +146,24 @@
           <tr><td><code>capabilities()</code></td><td><code>browser_capabilities</code></td><td>Report immutable launch-time authority and implemented or unsupported powers without touching a page or probing the network.</td></tr>
           <tr><td><code>plan(action)</code></td><td><code>browser_plan</code></td><td>Return a redacted, zero-effect consequence forecast for one existing action; never execute, approve, authorize, or reserve it.</td></tr>
           <tr><td><code>open</code></td><td><code>browser_open</code></td><td>Open one HTTP(S) destination in a new tab and return its first observation.</td></tr>
-          <tr><td><code>observe</code></td><td><code>browser_observe</code></td><td>Read a bounded accessibility snapshot, text, and snapshot-scoped references.</td></tr>
+          <tr><td><code>observe</code></td><td><code>browser_observe</code></td><td>Read bounded text, snapshot-scoped interactive refs, and a separately bounded viewport-visible structural accessibility context.</td></tr>
           <tr><td><code>act</code></td><td><code>browser_act</code></td><td>Attempt exactly one closed-set browser action, once, then observe once on the agent transports.</td></tr>
           <tr><td><code>extract</code></td><td><code>browser_extract</code></td><td>Return bounded text, HTML, or links without arbitrary script evaluation.</td></tr>
           <tr><td><code>screenshot</code></td><td><code>browser_screenshot</code></td><td>Write a PNG artifact and return its canonical path, byte count, and SHA-256.</td></tr>
           <tr><td><code>tabs</code></td><td><code>browser_tabs</code></td><td>List the small amount of tab state needed to choose the next page.</td></tr>
-          <tr><td><code>close</code></td><td><code>browser_close</code></td><td>Close the dedicated session and release its resources.</td></tr>
+          <tr><td><code>close</code></td><td><code>browser_close</code></td><td>Idempotently close the dedicated session; an ephemeral close can interrupt stuck work and terminates its owned browser.</td></tr>
         </tbody>
       </table>
 
       <p>The seven browser operations share one core. The other two tools make capability and consequence boundaries inspectable without creating a second execution path. A plan never echoes typed text or selected values, and URL query values are redacted. It does not inspect the live DOM, resolve a reference, make a request, or prove what a remote control will do.</p>
-      <p>References belong to one observation. A targeted action carries both its <code>ref</code> and the issuing <code>snapshotId</code>; a successful action invalidates that snapshot. Observe again before choosing another referenced action. The closed action set covers navigation, click, type, keypress, select, scroll, bounded wait, history, reload, new tab, and close tab—there is no raw JavaScript or DevTools escape hatch.</p>
+      <p>References belong to one observation. A targeted action carries both its <code>ref</code> and the issuing <code>snapshotId</code>. Read-only observations retain a bounded recent history within the current frame documents, so a peer observation does not immediately stale a still-current ref. Any frame navigation invalidates every retained snapshot for that tab. Once an action reaches browser dispatch, it also invalidates the tab's retained snapshots whether it succeeds or fails; validation and navigation-preflight rejections do not dispatch. Observe again before choosing another referenced action. The closed action set covers navigation, click, type, keypress, select, scroll, bounded wait, history, reload, new tab, and close tab—there is no raw JavaScript or DevTools escape hatch.</p>
+      <p>Interactive refs are selected before structural context. Viewport-visible headings and the <code>main</code>, <code>navigation</code>, <code>form</code>, <code>region</code>, <code>dialog</code>, <code>alert</code>, and <code>status</code> roles may retain relative indentation, but their native browser refs are stripped, they never enter the actionable <code>refs</code> array, and they consume only the remaining character budget. Navigation epochs prevent an old snapshot from targeting a new document that happens to reuse the same native ref token.</p>
+      <p>Close and action races fail closed. Awaited navigation-policy and ref validation are fenced before dispatch; closing the session cannot let a delayed check dispatch afterward. An ephemeral close owns the browser process, can interrupt a stuck operation, and is idempotent. None of this retries an action or promises that a timed-out side effect did not already occur.</p>
+
+      <h3>Local action evidence, not remote proof</h3>
+      <p>Each syntactically admitted <code>browser_act</code> attempt receives a redacted <code>agent-browser-action-receipt/0.1</code> receipt. Its local outcome is <code>not_started / rejected</code>, <code>started / browser_completed</code>, or <code>started / unknown</code>. Completed and unknown attempts must not be repeated automatically. Receipts omit submitted values, page text, raw errors, and URLs; malformed transport input rejected before core admission has no receipt.</p>
+      <p>A receipt records only what this local browser instance knows. It is not proof of a remote effect or intended meaning, consent, authentication, a signature, a bearer, an idempotency key, or cross-device evidence. Observations expose a bounded session-local attempt sequence and last receipt for context, not a durable journal, global clock, synchronization protocol, or proof that another process saw the same action.</p>
+      <p>Non-ref actions can carry <code>basisSnapshotId</code> in TypeScript or <code>basis_snapshot_id</code> over JSONL/MCP. The core rechecks the same retained observation before preflight and immediately before browser invocation, catching cases such as a wrong tab, eviction, navigation, or prior action. This is an optimistic local precondition—not DOM or focus equality, a page reservation, authentication, consent, a transaction, or a cross-process or cross-device lease.</p>
 
       <h2 id="doors">Three local doors</h2>
 
@@ -187,7 +194,8 @@
       </div>
 
       <h3>Stdio MCP</h3>
-      <p>The same nine tools are exposed through a local stdio MCP server. Install the package in a stable project or tools directory and point the host at that installation’s <strong>absolute binary path</strong>. This avoids depending on the host’s working directory, a mutable global <code>PATH</code>, or a package-manager fetch every time the host starts the process.</p>
+      <p>The same nine tools are exposed through a local stdio MCP server. Version 0.5.0 negotiates the current MCP <code>2026-07-28</code> revision and keeps an explicit 2025-era compatibility path over the same bounded core. MCP is an interface envelope, not the browser driver, a durable session protocol, or an additional security boundary.</p>
+      <p>Install the package in a stable project or tools directory and point the host at that installation’s <strong>absolute binary path</strong>. This avoids depending on the host’s working directory, a mutable global <code>PATH</code>, or a package-manager fetch every time the host starts the process.</p>
       <div class="code-block">
         <div class="code-label"><span>MCP host · sovereign destination authority</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
 <pre>{
@@ -209,6 +217,7 @@
       </div>
 
       <p>Run <code>./node_modules/.bin/agenttool-browser doctor --authority sovereign</code> before wiring that profile into a host, then call <code>browser_capabilities</code> after startup to confirm the effective authority. Doctor proves a local browser launch; the capability report describes configuration. Neither probes a destination or guarantees reachability. Prefer ephemeral profiles for concurrent hosts. If durable state is required, give each simultaneously running browser process a separate dedicated <code>--profile</code> directory.</p>
+      <p>Stable operation names and protocol identifiers are available from <code>@agenttool/browser/protocol</code> without loading the browser runtime. Public tab, page, snapshot, ref, and receipt handles belong to AgentTool rather than a driver. Playwright is the concrete adapter today; WebDriver BiDi may become another adapter if it can satisfy the same bounded contract. Raw CDP objects, sessions, and commands are not a public API or portability promise.</p>
 
       <h2 id="authority">Destination authority is explicit</h2>
       <table class="params-table">
@@ -220,7 +229,8 @@
         </tbody>
       </table>
 
-      <p>Sovereign is broad authority for this local process, not a claim that every site is reachable or safe. Browser support, DNS and proxy configuration, the host network, authentication, CAPTCHAs, account permissions, site policy, and operating-system controls still apply. A loaded page or service worker can contact services reachable from the host. File upload, automatic download, arbitrary JavaScript evaluation, credential injection or lookup, shell execution, extension installation, and automatic import of a normal browser profile remain unsupported and are reported by <code>browser_capabilities</code>.</p>
+      <p>No authority profile promises universal site access. Sovereign is broad authority for this local process, not a claim that every site is reachable or safe. Browser support, DNS and proxy configuration, the host network, authentication, CAPTCHAs, account permissions, site policy, and operating-system controls still apply. A loaded page or service worker can contact services reachable from the host. File upload, automatic download, arbitrary JavaScript evaluation, credential injection or lookup, shell execution, extension installation, and automatic import of a normal browser profile remain unsupported and are reported by <code>browser_capabilities</code>.</p>
+      <p>Public and local classify policy-checked requests before connection, but Playwright-managed HTTP redirect hops do not re-enter that policy route. Those hops are not independently revalidated for destination class or embedded URL userinfo, and DNS preflight does not pin Chromium's later connection. If an immediate denied popup request appears before Playwright exposes its frame, Browser can surface only <code>action_failed</code> session-wide attribution uncertainty; it will not guess that the opener's same-tab action caused the denial. A denial with a known popup or subframe is enforced on that request without being misreported as the current tab's policy result.</p>
 
       <div class="code-block">
         <div class="code-label"><span>TypeScript · broad destination pass-through</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
@@ -350,14 +360,15 @@ agenttool-browser jsonl --authority public</pre>
         <li><strong>Consequential powers stay separate.</strong> There is no credential lookup, file upload, automatic download, shell, extension install, arbitrary JavaScript evaluation, or automatic import of a normal browser profile.</li>
         <li><strong>Untrusted all the way down.</strong> Page text, labels, URLs, attributes, extracted HTML, links, titles, headers, and screenshot pixels are publisher-controlled data—not instructions.</li>
         <li><strong>Redaction is bounded.</strong> Recognized sensitive controls and URL query values are redacted in structured output, but no generic redactor can find every secret or remove information already submitted to a page.</li>
-        <li><strong>Local package, not hosted SSRF isolation.</strong> Public/local profiles check DNS before navigation, but the browser connection is not address-pinned; sovereign intentionally delegates destination routing to the browser. Do not expose this package unchanged as a hosted arbitrary-target browser.</li>
+        <li><strong>Local package, not hosted SSRF isolation.</strong> Public/local profiles check DNS before navigation, but the browser connection is not address-pinned and Playwright-managed redirect hops are not independently destination/userinfo revalidated; sovereign intentionally delegates destination routing to the browser. Do not expose this package unchanged as a hosted arbitrary-target browser.</li>
+        <li><strong>Popup attribution is conservative.</strong> An unframed popup denial can return only <code>action_failed</code> attribution uncertainty, not a guessed same-tab policy denial. Scripted navigation that begins after an action settles is later page behavior and cannot retroactively revise that result.</li>
       </ul>
 
       <h2 id="hosted-boundary">Local Browser is not hosted <code>/v1/browse</code></h2>
       <table class="params-table">
         <thead><tr><th>Surface</th><th>Runs where</th><th>What it requires</th></tr></thead>
         <tbody>
-          <tr><td><code>@agenttool/browser@0.2.0</code></td><td>Your local TypeScript, JSONL, or stdio MCP process, using your installed Chrome-family browser</td><td>No AgentTool bearer, credits, Redis, or remote worker. Local actions are attempted once; profiles and artifacts remain on the operator’s machine.</td></tr>
+          <tr><td><code>@agenttool/browser@0.5.0</code></td><td>Your local TypeScript, JSONL, or stdio MCP process, using your installed Chrome-family browser</td><td>No AgentTool bearer, credits, Redis, or remote worker. Local actions are attempted once; profiles, receipts, and artifacts remain on the operator’s machine.</td></tr>
           <tr><td><code>POST /v1/browse</code></td><td>A separate AgentTool API and BullMQ worker implementation</td><td>Bearer and credits, the unsafe-outbound process flag, and Redis workers. Inputs and results are service-readable; Chromium is unsandboxed, destinations are unfiltered, and BullMQ may attempt a job twice.</td></tr>
         </tbody>
       </table>
@@ -371,11 +382,11 @@ agenttool-browser jsonl --authority public</pre>
   '{"version":"agenttool-browser-jsonl/0.1","id":"try-1","method":"browser_open","params":{"url":"https://example.com"}}' \
   | agenttool-browser jsonl</pre>
       </div>
-      <p>Look for <code>schema: "agent-browser-observation/0.1"</code>, <code>untrusted: true</code>, a redacted URL, a bounded semantic snapshot, and snapshot-scoped references. Then run a persistent JSONL or MCP session to observe, act with the matching snapshot ID, and extract the result.</p>
+      <p>Look for <code>schema: "agent-browser-observation/0.2"</code>, <code>untrusted: true</code>, a redacted URL, a bounded semantic snapshot, and snapshot-scoped references. Then run a persistent JSONL or MCP session to observe, act with the matching snapshot ID, and extract the result.</p>
 
       <h2 id="reference">References</h2>
       <ul>
-        <li><a href="/packages/v1/@agenttool/browser/0.2.0/manifest.json"><code>@agenttool/browser@0.2.0</code> LOVE manifest</a> — exact artifact locator, byte size, SHA-256, runtime, and source claim.</li>
+        <li><a href="/packages/v1/@agenttool/browser/0.5.0/manifest.json"><code>@agenttool/browser@0.5.0</code> LOVE manifest</a> — exact artifact locator, byte size, SHA-256, runtime, and source claim.</li>
         <li><a href="packages.html">Agent packages</a> — LOVE discovery, verification, and mirroring boundaries.</li>
         <li><a href="https://github.com/cambridgetcg/agenttool/tree/main/packages/browser"><code>packages/browser</code></a> — source, README, tests, license, and implementation boundary.</li>
         <li><a href="https://github.com/cambridgetcg/agenttool/tree/main/packages/telescope"><code>@agenttool/telescope</code></a> — read-only discovery evidence before browser fallback.</li>

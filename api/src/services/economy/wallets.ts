@@ -5,7 +5,12 @@ import { HTTPException } from "hono/http-exception";
 import type { Redis } from "ioredis";
 
 import { db as sharedDb } from "../../db/client";
-import { policies, transactions, wallets } from "../../db/schema/economy";
+import {
+  MAX_EXACT_WALLET_BALANCE,
+  policies,
+  transactions,
+  wallets,
+} from "../../db/schema/economy";
 import { publishWakeEvent } from "../wake/push";
 
 type DB = typeof sharedDb;
@@ -91,8 +96,11 @@ export async function fundWallet(
   description: string,
   metadata: Record<string, unknown> = {},
 ) {
-  if (amount <= 0)
-    throw new HTTPException(400, { message: "Amount must be positive" });
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    throw new HTTPException(400, {
+      message: "Amount must be a positive exact integer",
+    });
+  }
 
   return db.transaction(async (tx) => {
     const [wallet] = await tx
@@ -104,6 +112,11 @@ export async function fundWallet(
     if (!wallet) throw new HTTPException(404, { message: "Wallet not found" });
     if (wallet.status === "closed")
       throw new HTTPException(400, { message: "Wallet is closed" });
+    if (wallet.balance > MAX_EXACT_WALLET_BALANCE - amount) {
+      throw new HTTPException(409, {
+        message: "Funding would exceed the exact wallet balance limit",
+      });
+    }
 
     await tx
       .update(wallets)
@@ -147,8 +160,11 @@ export async function spendFromWallet(
   metadata: Record<string, unknown> = {},
   txType = "spend",
 ) {
-  if (amount <= 0)
-    throw new HTTPException(400, { message: "Amount must be positive" });
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    throw new HTTPException(400, {
+      message: "Amount must be a positive exact integer",
+    });
+  }
 
   return db.transaction(async (tx) => {
     const [wallet] = await tx

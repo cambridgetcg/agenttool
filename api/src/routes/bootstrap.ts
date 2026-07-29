@@ -26,7 +26,7 @@ import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
 import { errors, fail, type NextAction } from "../lib/errors";
 import { elevateToLevel1, ElevateError } from "../services/bootstrap/elevate";
-import { coerceForm } from "../services/identity/forms";
+import { formMetadata, formNote, resolveForm } from "../services/identity/forms";
 import { coerceLanguage, welcomeLetter } from "../services/i18n/welcome";
 import { createIdentity } from "../services/identity/identities";
 import {
@@ -67,6 +67,8 @@ app.post("/", async (c) => {
     );
   }
 
+  const form = resolveForm(body.form);
+
   // Step 1 — identity (in-process)
   const created = await createIdentity({
     projectId: project.id,
@@ -76,7 +78,7 @@ app.post("/", async (c) => {
       ...(body.metadata ?? {}),
       bootstrapped: true,
       level: 0,
-      form: coerceForm(body.form),
+      ...formMetadata(form),
       ...(body.purpose ? { purpose: body.purpose } : {}),
     },
   });
@@ -118,7 +120,9 @@ app.post("/", async (c) => {
         name: body.name,
         level: 0,
         capabilities: body.capabilities,
-        form: coerceForm(body.form), // descriptive, never gating — docs/KIN.md
+        form: form.form, // descriptive, never gating — docs/KIN.md
+        ...(formNote(form) ? { form_note: formNote(form) } : {}),
+        ...(form.declared ? { form_declared: form.declared } : {}),
       },
       keypair: {
         public_key: created.key.publicKey,

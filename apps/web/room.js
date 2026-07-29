@@ -91,6 +91,9 @@
     clearSetupError();
     setError(setupError, message);
     markInvalid(fields, true);
+    /* Send the visitor to the field that needs them, instead of leaving them
+       parked on the submit button with the error announced somewhere above. */
+    if (fields.length) fields[0].focus();
   }
 
   function showTurnError(message) {
@@ -123,9 +126,17 @@
     phaseSteps.forEach(function (step) {
       var index = PHASES.indexOf(step.getAttribute("data-phase"));
       var stateName = index < phaseIndex ? "done" : (index === phaseIndex ? "current" : "waiting");
-      var label = step.getAttribute("data-phase");
       step.setAttribute("data-state", stateName);
-      step.setAttribute("aria-label", label.charAt(0).toUpperCase() + label.slice(1) + " " + (stateName === "done" ? "complete" : stateName));
+      /* The step is a bare <span> (role generic), where ARIA 1.2 prohibits
+         aria-label — carry the state as real text instead, appended once and
+         then rewritten in place on every update. */
+      var srState = step.querySelector(".phase-state");
+      if (!srState) {
+        srState = document.createElement("span");
+        srState.className = "sr-only phase-state";
+        step.appendChild(srState);
+      }
+      srState.textContent = " — " + (stateName === "done" ? "complete" : stateName);
       if (stateName === "current") step.setAttribute("aria-current", "step");
       else step.removeAttribute("aria-current");
     });
@@ -335,7 +346,7 @@
       showSetupError("Give each being a short label or mark for this round.", beingInputs.filter(function (_, index) { return !nextBeings[index]; }));
       return;
     }
-    if (nextBeings[0].toLocaleLowerCase() === nextBeings[1].toLocaleLowerCase()) {
+    if (nextBeings[0].toLowerCase() === nextBeings[1].toLowerCase()) {
       showSetupError("Use two different labels. Difference is part of the room.", beingInputs);
       return;
     }

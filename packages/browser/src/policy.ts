@@ -24,7 +24,11 @@ export interface NetworkBoundary {
   localNetwork: boolean;
   reservedNetwork: boolean;
   schemes: readonly ["http", "https"];
-  urlCredentials: "blocked";
+  urlCredentials: {
+    policyCheckedRequests: "blocked";
+    redirectHops: "browser";
+  };
+  redirectRevalidation: false;
   dnsPreflight: boolean;
   connectionAddressPinning: false;
   webSockets: "blocked" | "classified" | "browser";
@@ -84,7 +88,11 @@ export class BrowserNetworkPolicy {
       localNetwork: this.capabilities.network.local,
       reservedNetwork: this.capabilities.network.reserved,
       schemes: Object.freeze(["http", "https"] as const),
-      urlCredentials: "blocked",
+      urlCredentials: Object.freeze({
+        policyCheckedRequests: "blocked" as const,
+        redirectHops: "browser" as const,
+      }),
+      redirectRevalidation: false,
       dnsPreflight: this.capabilities.network.dnsPreflight === "classify",
       connectionAddressPinning: false,
       webSockets: this.capabilities.network.webSockets,
@@ -346,7 +354,8 @@ function classifyIpv4(address: string): DestinationClass {
   }
   if (
     a === 0
-    || (a === 192 && b === 0)
+    || (a === 192 && b === 0 && c === 0)
+    || (a === 192 && b === 0 && c === 2)
     || (a === 192 && b === 88 && c === 99)
     || (a === 198 && (b === 18 || b === 19))
     || (a === 198 && b === 51 && c === 100)

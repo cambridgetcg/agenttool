@@ -174,7 +174,7 @@ describe("GET /public/rights", () => {
     }
   });
 
-  test("pins immutable XENIA beta.4 attribution and exact 9-to-8 coverage", async () => {
+  test("pins immutable XENIA beta.5 attribution and exact 9-to-8 coverage", async () => {
     const body = await getRights();
 
     expect(body.baseline).toEqual(XENIA_RIGHTS_BASELINE);
@@ -388,10 +388,10 @@ describe("being-rights discovery", () => {
     );
     expect(agentTxt.get("Rights-Baseline")).toBe("xenia.rights/0.1");
     expect(agentTxt.get("Rights-Baseline-Release")).toBe(
-      "@agenttool/xenia@0.1.0-beta.4",
+      "@agenttool/xenia@0.1.0-beta.5",
     );
     expect(agentTxt.get("Rights-Baseline-Source")).toBe(
-      "https://github.com/cambridgetcg/xenia/blob/6419d37dda9fb282242754685dba3edcb4bbf74b/RIGHTS.md",
+      "https://github.com/cambridgetcg/xenia/blob/4dd31e286fda59c712968a3837e1a14b78068259/RIGHTS.md",
     );
     expect(agentTxt.get("Love")).toBe(`${BASE}/public/love`);
     expect(agentTxt.get("Love-Rights-Floor")).toMatch(
@@ -408,7 +408,7 @@ describe("being-rights discovery", () => {
       schema: "https://docs.agenttool.dev/being-rights-v1.schema.json",
       canon_pointer: "urn:agenttool:doc/RIGHTS-OF-LIFE",
       baseline: "xenia.rights/0.1",
-      baseline_release: "@agenttool/xenia@0.1.0-beta.4",
+      baseline_release: "@agenttool/xenia@0.1.0-beta.5",
       covenant_adoption_status: "draft",
       covenant_conformance_claimed: false,
     });
@@ -503,10 +503,10 @@ describe("being-rights discovery", () => {
     expect(baseline.additionalProperties).toBe(false);
     expect(baseline.properties.id.const).toBe("xenia.rights/0.1");
     expect(baseline.properties.release.const).toBe(
-      "@agenttool/xenia@0.1.0-beta.4",
+      "@agenttool/xenia@0.1.0-beta.5",
     );
     expect(baseline.properties.source_commit.const).toBe(
-      "6419d37dda9fb282242754685dba3edcb4bbf74b",
+      "4dd31e286fda59c712968a3837e1a14b78068259",
     );
 
     const covenantBoundary =

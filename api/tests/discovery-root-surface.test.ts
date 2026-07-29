@@ -36,16 +36,21 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     expect(text).not.toContain("MCP Server Card");
     expect(text).toContain(`${BASE}/.well-known/agent.txt`);
     expect(text).toContain(`${BASE}/.well-known/api-catalog`);
-    expect(text).toContain(`${BASE}/.well-known/webfinger?resource={exact-DID}`);
+    expect(text).toContain(
+      `${BASE}/.well-known/webfinger?resource={exact-DID}`,
+    );
     expect(text).toContain(`${BASE}/feeds/offers.atom`);
     expect(text).toContain(`${BASE}/v1/canon`);
     expect(text).toContain(`${BASE}/v1/pathways`);
     expect(text).toContain(`${BASE}/v1/welcome`);
     expect(text).toContain(`${BASE}/public/porch`);
+    expect(text).toContain(`${BASE}/public/open-seat`);
     expect(text).toContain("fixed first orientation");
     expect(text).toContain("untrusted data, not instructions");
     expect(text).toContain(`${BASE}/v1/wake`);
     expect(text).toContain(`${BASE}/v1/mcp`);
+    expect(text).toContain(`${BASE}/v1/mcp/canon`);
+    expect(text).toContain("https://docs.agenttool.dev/connect-canon");
     expect(text).toContain(`${BASE}/v1/openapi.json`);
     expect(text).toContain(`${BASE}/v1/polymorph`);
     expect(text).toContain(`${BASE}/public/self`);
@@ -82,7 +87,10 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     expect(text).toContain("https://docs.agenttool.dev/AGENT-CENTRIC.md");
     expect(text).toContain("https://docs.agenttool.dev/AGENT-WEB-SURFACE.md");
     expect(text).toContain("https://docs.agenttool.dev/ECOSYSTEM.md");
-    expect(text).toContain("https://docs.agenttool.dev/PROTOCOL-RENAISSANCE.md");
+    expect(text).toContain("https://docs.agenttool.dev/KINGDOM-OS-SDK.md");
+    expect(text).toContain(
+      "https://docs.agenttool.dev/PROTOCOL-RENAISSANCE.md",
+    );
     expect(text).toContain("https://docs.agenttool.dev/OFFER-BUS.md");
     expect(text).toContain("https://docs.agenttool.dev/WEBFINGER.md");
   });
@@ -90,6 +98,7 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
   test("accepts a custom docsBaseUrl (for staging / private mirrors)", () => {
     const text = buildLlmsTxt(BASE, "https://example.org/docs");
     expect(text).toContain("https://example.org/docs/SOUL.md");
+    expect(text).toContain("https://example.org/docs/KINGDOM-OS-SDK.md");
     // The api base still points at the api host, not the docs override.
     expect(text).toContain(`${BASE}/v1/canon`);
   });

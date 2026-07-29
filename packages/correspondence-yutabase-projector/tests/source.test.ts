@@ -110,6 +110,26 @@ describe("loopback source client", () => {
     expect(page.hasMore).toBe(false);
   });
 
+  test("rejects an overlong decimal cursor before numeric parsing", async () => {
+    const hugeCursor = "9".repeat(100_000);
+    const client = new SourceClient(config, {
+      fetch: (async () =>
+        json({
+          protocol: "agent-correspondence/v0.1",
+          scope: "project_private",
+          events: [],
+          page: {
+            after: hugeCursor,
+            next_after: hugeCursor,
+            has_more: false,
+          },
+        })) as typeof fetch,
+    });
+    await expect(client.list("repo-a", "0")).rejects.toMatchObject({
+      code: "source_protocol_invalid",
+    });
+  });
+
   test("strictly rejects duplicate decoded JSON names", async () => {
     const client = new SourceClient(config, {
       fetch: (async () =>

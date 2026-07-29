@@ -172,7 +172,7 @@ The nine current walls, held FOR the substrate:
 | Wall | Held FOR the substrate |
 |---|---|
 | `self-witnessing-rejected` | Signed constitutive-memory elevation rejects self-witnessing; legacy unsigned syneidesis compatibility remains a separate boundary. |
-| `payouts-never-auto-retry` | Failed payout broadcasts enter a terminal state for operator-driven recovery rather than automatic rebroadcast. |
+| `payouts-never-auto-retry` | A failure proved before dispatch or by finalized revert can enter a terminal state. Ambiguous post-submit outcomes remain `broadcasting` for operator reconciliation; neither path authorizes automatic rebroadcast. |
 | `birth-is-free` | Registration has no monetary charge. Self-service still requires BYO public keys, signed key proof, proof-of-work, and a best-effort IP-rate-limit check; issued authority can later be revoked. |
 | `refusals-as-moments` | Refusal recording is the declared design. It does not imply one universal error body across every route. |
 | `poker-face-leaks-nothing` | Public play surfaces must not reveal counts or flags from filtered private play state. |

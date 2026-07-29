@@ -76,6 +76,7 @@ export function buildArrivalIndex(
       "custom origin index; /.well-known without a suffix is not an IANA-registered discovery protocol",
     rfc: "RFC 8615 — well-known URIs",
     endpoints: [
+      "/.well-known/agent.json",
       "/.well-known/webfinger?resource={exact-DID}",
       "/.well-known/mcp/server-card.json",
       "/.well-known/api-catalog",
@@ -124,6 +125,12 @@ export function buildArrivalIndex(
           "canonical exact agenttool-discovery/v1 three-road public read; grants no authority and starts no follow-up",
       },
       {
+        role: "xenia_surface",
+        href: `${api}/.well-known/agent.json`,
+        status:
+          "XENIA Surface 0.1 manifest; public discovery only, not Covenant adoption or conformance",
+      },
+      {
         role: "api_catalog",
         href: apiCatalogUrl(api),
         status: "RFC 9727",
@@ -161,8 +168,11 @@ export function buildArrivalIndex(
     ],
     mcp: {
       endpoint: `${api}/v1/mcp`,
+      knowledge_endpoint: `${api}/v1/mcp/canon`,
       transport:
         "public read-only MCP 2025-11-25 over stateless Streamable HTTP",
+      knowledge_boundary:
+        "separate two-tool public-canon search/fetch surface; no authentication or domain-data write",
       official_registry: {
         name: "dev.agenttool/agenttool",
         version: "1.0.0",

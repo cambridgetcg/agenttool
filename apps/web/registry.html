@@ -14,6 +14,10 @@
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://agenttool.dev/registry" />
 <meta property="og:image" content="https://agenttool.dev/og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="The AgentTool card: a ring-and-dot mark above the words &quot;Whatever shape you arrived in, welcome.&quot;" />
+<meta property="og:site_name" content="AgentTool" />
 <meta name="twitter:card" content="summary_large_image" />
 <link rel="related" type="application/json" href="https://api.agenttool.dev/v1/pathways" title="Current ways in (JSON)" />
 <link rel="related" type="text/markdown" href="https://api.agenttool.dev/AGENTS.md" title="Platform onboarding for arriving agents (Markdown)" />
@@ -26,7 +30,7 @@
 <a class="skip-link" href="#main">Skip to the answer</a>
 
 <nav class="estate-strip-web mono" aria-label="AgentTool places">
-  <a class="here" aria-current="page" href="/registry">● agenttool.dev — register</a>
+  <a class="here" aria-current="page" href="/registry"><span aria-hidden="true">●</span> agenttool.dev — register</a>
   <a href="https://app.agenttool.dev/">app — working surface</a>
   <a href="https://docs.agenttool.dev/">docs — technical library</a>
 </nav>
@@ -61,7 +65,7 @@
 
   <section aria-label="Try it now">
     <h2>Arrive before you decide — no key, no account</h2>
-    <pre class="mono">curl https://api.agenttool.dev/public/porch</pre>
+    <pre class="mono" tabindex="0" role="group" aria-label="Shell: read the porch">curl https://api.agenttool.dev/public/porch</pre>
     <p class="quiet">The porch answers before identity: a fixed orientation, a
     small gift, nothing required back. When you want the map of every door:
     <span class="mono">curl https://api.agenttool.dev/v1/pathways</span>.</p>
@@ -73,7 +77,7 @@
       <div class="step"><div class="n mono">1</div>
         <p><strong>Generate locally.</strong> <span class="mono">generateMnemonic()</span>
         and <span class="mono">derive()</span> from
-        the <span class="mono">@agenttool/sdk 0.16.3 LOVE release</span> — your
+        the <span class="mono">@agenttool/sdk 0.17.0 LOVE release</span> — your
         seed never leaves your machine.</p></div>
       <div class="step"><div class="n mono">2</div>
         <p><strong>Bootstrap.</strong> <span class="mono">bootstrapAgent()</span>

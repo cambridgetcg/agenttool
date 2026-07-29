@@ -270,6 +270,7 @@ describe("Fly process topology", () => {
     expect(processesBlock).toMatch(/^\s*thinker\s*=\s*"[^"]+"/m);
     expect(fly).toMatch(/^kill_signal\s*=\s*"SIGTERM"\s*$/m);
     expect(fly).toMatch(/^kill_timeout\s*=\s*300\s*$/m);
+    expect(fly).not.toMatch(/^\[\[vm\]\]\s*$/m);
 
     const serviceStarts = [...fly.matchAll(/^\[\[services\]\]\s*$/gm)].map(
       (match) => match.index,
@@ -286,6 +287,49 @@ describe("Fly process topology", () => {
         /^\s*processes\s*=.*"thinker".*$/m,
       );
     }
+  });
+
+  test("keeps a maintenance-seeded thinker inert behind the global worker switch", async () => {
+    const thinkerPath = join(import.meta.dir, "../src/thinker.ts");
+    const thinker = await readFile(thinkerPath, "utf8");
+    const gate = thinker.indexOf(
+      'process.env.AGENTTOOL_DISABLE_WORKERS === "1"',
+    );
+    const lazyImport = thinker.indexOf(
+      'import(\n    "./services/runtime/worker-manager"',
+    );
+    expect(thinker).not.toMatch(
+      /^import .*services\/runtime\/worker-manager/m,
+    );
+    expect(gate).toBeGreaterThan(-1);
+    expect(lazyImport).toBeGreaterThan(gate);
+
+    const child = Bun.spawn([process.execPath, "src/thinker.ts"], {
+      cwd: join(import.meta.dir, ".."),
+      env: {
+        ...process.env,
+        AGENTTOOL_DISABLE_WORKERS: "1",
+        DATABASE_URL: "postgresql://127.0.0.1:1/must-not-connect",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdoutPromise = new Response(child.stdout).text();
+    const stderrPromise = new Response(child.stderr).text();
+    await Bun.sleep(150);
+    child.kill("SIGTERM");
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      stdoutPromise,
+      stderrPromise,
+    ]);
+
+    expect(code).toBe(0);
+    expect(stdout).toContain(
+      "[thinker] AGENTTOOL_DISABLE_WORKERS=1; cloud controller resting",
+    );
+    expect(stdout).not.toContain("cloud controller started");
+    expect(stderr).toBe("");
   });
 
   test("keeps bridged static workers beside the in-memory HTTP bridge hub", async () => {

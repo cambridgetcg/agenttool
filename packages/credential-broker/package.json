@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/credential-broker",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Local capability broker for agents to use credentials without receiving secret values",
   "license": "Apache-2.0",
   "type": "module",
@@ -8,21 +8,24 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./testing": {
-      "import": "./dist/testing.js",
-      "types": "./dist/testing.d.ts"
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js"
     }
   },
   "bin": {
-    "agentcred": "dist/cli.js"
+    "agentcred": "dist/cli.js",
+    "agentcred-control": "dist/controller-cli.js"
   },
   "files": [
     "dist",
     "README.md",
     "SPEC.md",
+    "ROTATION.md",
+    "JSONRPC-READ-0.1.md",
     "LICENSE",
     "NOTICE"
   ],

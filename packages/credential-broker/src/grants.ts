@@ -57,14 +57,28 @@ export class GrantStore {
   issue(sessionId: string, request: GrantRequest): { capability: string; receipt: GrantReceipt } {
     const capability = randomBytes(32).toString("base64url");
     const now = this.#clock.wallNow();
-    const receipt: GrantReceipt = {
-      alias: request.alias,
-      receiptId: randomUUID(),
-      operation: request.operation,
-      scope: structuredClone(request.scope),
-      expiresAt: new Date(now.getTime() + request.scope.ttlSeconds * 1000).toISOString(),
-      maxUses: request.scope.maxUses,
-    };
+    const receiptId = randomUUID();
+    const expiresAt = new Date(
+      now.getTime() + request.scope.ttlSeconds * 1000,
+    ).toISOString();
+    const receipt: GrantReceipt =
+      request.operation === "http.fetch"
+        ? {
+            alias: request.alias,
+            receiptId,
+            operation: "http.fetch",
+            scope: structuredClone(request.scope),
+            expiresAt,
+            maxUses: request.scope.maxUses,
+          }
+        : {
+            alias: request.alias,
+            receiptId,
+            operation: "jsonrpc.read",
+            scope: structuredClone(request.scope),
+            expiresAt,
+            maxUses: request.scope.maxUses,
+          };
     this.#grants.set(capability, {
       capability,
       sessionId,

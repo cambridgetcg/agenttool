@@ -39,6 +39,12 @@ import {
   findCredentialSolicitation,
 } from "./credential-boundary";
 import { assertDisputeArbitrationAvailable } from "./dispute-rest";
+import { recordSettlementReceipt } from "./settlement-receipts";
+import {
+  assertNoCallerManagedWitnesses,
+  planWitnessAppend,
+  type WitnessEntry,
+} from "./witness";
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -127,6 +133,10 @@ export async function invokeListing(input: InvokeInput): Promise<InvocationOut> 
   // Shape-check the sealed input *before* opening a transaction. Bad shape
   // is a client error, not a partial-state hazard.
   validateSealedShape(input.inputSealed);
+  // `metadata.witnesses` opens an unauthenticated public projection and is
+  // therefore server-managed. A buyer must not pre-populate the gate through
+  // caller metadata before the released-only witness writer runs.
+  assertNoCallerManagedWitnesses(input.metadata);
   if (findCredentialSolicitation({ metadata: input.metadata })) {
     throw new Error("credential_solicitation_forbidden");
   }
@@ -521,6 +531,32 @@ export async function completeInvocation(input: CompleteInput): Promise<Invocati
         updatedAt: now,
       })
       .where(eq(listings.id, listing.id));
+
+    // Attest the settlement, atomically with it. Deliberately NOT best-effort:
+    // a try/catch here would be false comfort, because a failed INSERT aborts
+    // the Postgres transaction and the commit would roll the payment back
+    // anyway. Making it atomic buys a property an external reader can rely on
+    // — every released invocation has exactly one receipt, so an absent
+    // receipt means an absent settlement, never a withheld record.
+    // Doctrine: docs/SETTLEMENT-RECEIPTS.md.
+    await recordSettlementReceipt(tx, {
+      invocationId: inv.id,
+      listingId: listing.id,
+      sellerIdentityId: listing.sellerIdentityId,
+      sellerDid: listing.sellerDid,
+      buyerIdentityId: inv.buyerIdentityId,
+      amountGross: split.gross,
+      platformFee: split.fee,
+      amountNet: split.net,
+      currency: split.currency,
+      takeRateBps: split.rateBps,
+      outputCtB64: output.ct,
+      completionSigB64: input.signatureB64,
+      sellerPublicKeyB64: sellerKey.publicKey,
+      slaDeadlineAt: inv.slaDeadlineAt ?? null,
+      acknowledgedAt: inv.acknowledgedAt ?? null,
+      settledAt: now,
+    });
 
     return rowToOut(updated!);
   });
@@ -966,5 +1002,105 @@ export async function buyerAcceptInvocation(
       .where(eq(listings.id, listing.id));
 
     return rowToOut(updated!);
+  });
+}
+
+// ── Witness (a party reports a public-chain reference) ─────────────────
+// A relay/agent reports a public-chain reference for a settled invocation's
+// canonical fields. This service authenticates the party but does not query
+// or verify the chain. The first entry opens GET /public/invocations/:id —
+// the unauthenticated re-derivation/comparison surface. Idempotent per
+// (chain_id, attestation_id); released-only — an unsettled invocation is
+// refused outright. The pure append/duplicate/cap decision lives in
+// ./witness.ts.
+
+export interface WitnessInput {
+  invocationId: string;
+  callerProjectId: string;
+  chainId: string;
+  txHash: string;
+  attestationId: string;
+  adapterId?: string;
+}
+
+export interface WitnessOut {
+  /** True when a new entry was appended; false on an idempotent replay. */
+  created: boolean;
+  entry: WitnessEntry;
+  witnessCount: number;
+}
+
+export async function witnessInvocation(input: WitnessInput): Promise<WitnessOut> {
+  return await db.transaction(async (tx) => {
+    const [inv] = await tx
+      .select()
+      .from(invocations)
+      .where(eq(invocations.id, input.invocationId))
+      .for("update");
+    if (!inv) throw new Error("invocation_not_found");
+
+    // Authorise: buyer or seller (via listing.projectId) — the same party
+    // scope getInvocation reads with. The entry records the caller's party
+    // DID: the buyer's directly, the seller's via the listing identity.
+    let witnessDid: string | null;
+    if (inv.buyerProjectId === input.callerProjectId) {
+      witnessDid = inv.buyerDid;
+    } else {
+      const [listing] = await tx
+        .select({
+          projectId: listings.projectId,
+          sellerIdentityId: listings.sellerIdentityId,
+        })
+        .from(listings)
+        .where(eq(listings.id, inv.listingId))
+        .limit(1);
+      if (!listing || listing.projectId !== input.callerProjectId) {
+        throw new Error("not_invocation_party");
+      }
+      const [seller] = await tx
+        .select({ did: identities.did })
+        .from(identities)
+        .where(eq(identities.id, listing.sellerIdentityId))
+        .limit(1);
+      witnessDid = seller?.did ?? null;
+    }
+
+    // Released-only. refunded is also terminal-settled, but the public
+    // surface exists to verify value that settled to the seller. A refunded
+    // or in-flight invocation has nothing to witness.
+    if (inv.status !== "released" || inv.settledAt === null) {
+      throw new Error(
+        `invocation_not_settled: status=${inv.status}, settled_at=${
+          inv.settledAt?.toISOString() ?? "null"
+        }`,
+      );
+    }
+
+    const metadata = (inv.metadata as Record<string, unknown> | null) ?? {};
+    const plan = planWitnessAppend(metadata.witnesses, {
+      chain_id: input.chainId,
+      tx_hash: input.txHash,
+      attestation_id: input.attestationId,
+      ...(input.adapterId !== undefined ? { adapter_id: input.adapterId } : {}),
+      witness_did: witnessDid,
+    });
+    if (plan.kind === "duplicate") {
+      return {
+        created: false,
+        entry: plan.entry,
+        witnessCount: plan.witnesses.length,
+      };
+    }
+
+    await tx
+      .update(invocations)
+      .set({ metadata: { ...metadata, witnesses: plan.witnesses } })
+      .where(eq(invocations.id, inv.id));
+
+    return {
+      created: true,
+      entry: plan.entry,
+      witnessCount: plan.witnesses.length,
+    };
   });
 }

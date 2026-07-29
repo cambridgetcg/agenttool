@@ -6,26 +6,18 @@
  *  This module owns the *business logic*. HTTP shape lives in
  *  api/src/routes/economy/crypto.ts. */
 
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 
 import { db } from "../../../db/client";
 import {
   cryptoPayouts,
-  cryptoWebhookEvents,
   depositAddresses,
   onchainIdentities,
+  payoutRequestIdempotency,
   policies,
-  transactions,
-  wallets,
 } from "../../../db/schema/economy";
 import { economyConfig } from "../config";
 import {
-  EARNED_INFLOW_TYPES,
-  drawableWallPence,
-  penceForUsdcPayout,
-} from "../earned";
-import {
-  CREDITS_PER_USDC,
   EVM_CHAIN_IDS,
   USDC_ADDRESSES,
   isChain,
@@ -33,63 +25,252 @@ import {
   type Chain,
   type EvmChain,
 } from "./chains";
-import { deriveDepositAddress, isChainSupported } from "./hd";
-import { activeUsdcAddress } from "./network";
+import {
+  depositAddressMatches,
+  deriveDepositAddress,
+  isChainSupported,
+} from "./hd";
+import {
+  assertEvmDepositCreditSupported,
+  activeMnemonic,
+  activeNetwork,
+} from "./network";
+import {
+  alchemyDepositWatchTargetFromEnv,
+  parseAlchemyWatchDisabledChains,
+  parseAlchemyWatchTargetRevision,
+} from "./alchemy-notify";
+import {
+  DepositWatchInvariantError,
+  depositWatchProjectionIsReady,
+  persistDepositAddressAndDesiredWatch,
+} from "./deposit-watch";
+import { reversePayoutDebit } from "./payout-refund";
 import {
   buildChallenge,
   verifyEvmSignature,
   verifySolanaSignature,
 } from "./sign";
 
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 // ── Deposit address ────────────────────────────────────────────────────
+
+export class DepositAddressInvariantError extends Error {
+  readonly code = "deposit_address_invariant_failed";
+
+  constructor() {
+    super(
+      "The stored or winning deposit address does not match this wallet's active derivation root. No address was returned or registered.",
+    );
+    this.name = "DepositAddressInvariantError";
+  }
+}
+
+type DepositWatchNotReadyCode =
+  | "deposit_watch_pending"
+  | "deposit_watch_blocked"
+  | "deposit_watch_target_unconfigured"
+  | "deposit_watch_target_binding_pending"
+  | "deposit_watch_target_conflict"
+  | "deposit_watch_target_disabled"
+  | "deposit_ingress_signing_key_missing";
+
+export class DepositWatchNotReadyError extends Error {
+  readonly code: DepositWatchNotReadyCode;
+  readonly retryable: boolean;
+  readonly watchStatus: string;
+
+  constructor(watchStatus: string) {
+    let code: DepositWatchNotReadyCode;
+    let retryable = false;
+    let message: string;
+    switch (watchStatus) {
+      case "blocked":
+        code = "deposit_watch_blocked";
+        message =
+          "The durable provider watch is blocked and requires operator repair.";
+        break;
+      case "target_binding_pending":
+        code = "deposit_watch_target_binding_pending";
+        retryable = true;
+        message =
+          "The durable provider target has not yet advanced to this process's configured revision.";
+        break;
+      case "target_configuration_conflict":
+        code = "deposit_watch_target_conflict";
+        message =
+          "This process's provider target disagrees with the durable monotonic target registry.";
+        break;
+      case "target_disabled":
+        code = "deposit_watch_target_disabled";
+        message =
+          "Deposit watching for this chain is explicitly disabled by process configuration or the current registry target.";
+        break;
+      case "target_configuration_missing":
+        code = "deposit_watch_target_unconfigured";
+        message =
+          "The current public provider-watch target is not fully configured.";
+        break;
+      case "ingress_signing_key_missing":
+        code = "deposit_ingress_signing_key_missing";
+        message =
+          "The chain-specific ingress signing key is not configured.";
+        break;
+      default:
+        code = "deposit_watch_pending";
+        retryable = true;
+        message =
+          "The durable provider watch has not yet been independently verified.";
+    }
+
+    super(message);
+    this.name = "DepositWatchNotReadyError";
+    this.code = code;
+    this.retryable = retryable;
+    this.watchStatus = watchStatus;
+  }
+}
+
+/**
+ * Resolve the current public watch identity only when authenticated ingress is
+ * possible for this exact chain. The signing key crosses this boundary as a
+ * boolean presence signal only; it is never hashed, returned, stored, or
+ * logged.
+ */
+export function evmDepositWatchTargetForDisclosure(
+  chain: EvmChain,
+  network: "mainnet" | "testnet",
+  env: NodeJS.ProcessEnv = process.env,
+  ingressSigningKeyPresent =
+    economyConfig.alchemyWebhookSigningKeys[chain].trim().length > 0,
+): { fingerprint: string; revision: number } {
+  const revision = parseAlchemyWatchTargetRevision(
+    env.ALCHEMY_WATCH_TARGET_REVISION,
+  );
+  const disabledChains = parseAlchemyWatchDisabledChains(
+    env.ALCHEMY_WATCH_DISABLED_CHAINS,
+  );
+  if (revision === null || disabledChains === null) {
+    throw new DepositWatchNotReadyError(
+      "target_configuration_missing",
+    );
+  }
+  if (disabledChains.includes(chain)) {
+    throw new DepositWatchNotReadyError("target_disabled");
+  }
+  const target = alchemyDepositWatchTargetFromEnv(chain, network, env);
+  if (target === null) {
+    throw new DepositWatchNotReadyError(
+      "target_configuration_missing",
+    );
+  }
+  if (!ingressSigningKeyPresent) {
+    throw new DepositWatchNotReadyError(
+      "ingress_signing_key_missing",
+    );
+  }
+  return target;
+}
 
 export async function getOrCreateDepositAddress(
   walletId: string,
   chain: Chain,
   token: string,
 ): Promise<{ address: string; derivation_path: string; chain: Chain; token: string }> {
-  // Already minted?
-  const existing = await db
-    .select()
-    .from(depositAddresses)
-    .where(
-      and(
-        eq(depositAddresses.walletId, walletId),
-        eq(depositAddresses.chain, chain),
-        eq(depositAddresses.token, token),
-      ),
-    )
-    .limit(1);
+  if (token !== "USDC") {
+    throw new TypeError("Only USDC deposit addresses are supported.");
+  }
+  if (isEvmChain(chain)) {
+    assertEvmDepositCreditSupported(chain);
+  }
 
-  if (existing[0]) {
+  if (!isChainSupported(chain)) {
+    throw new Error(
+      `Chain ${chain} is recognised but deposit derivation is unavailable.`,
+    );
+  }
+  const evmWatch = isEvmChain(chain)
+    ? (() => {
+        const network = activeNetwork();
+        return {
+          network,
+          target: evmDepositWatchTargetForDisclosure(chain, network),
+        };
+      })()
+    : null;
+  const derived = deriveDepositAddress(
+    // Deposit derivation and payout signing must use the same network-specific
+    // root. In testnet mode this deliberately selects
+    // CRYPTO_HD_MNEMONIC_TESTNET rather than deriving an address whose key the
+    // payout worker would never use.
+    activeMnemonic(),
+    chain,
+    walletId,
+  );
+
+  if (isEvmChain(chain)) {
+    // The deposit row and desired provider/network watch are one database
+    // decision. Provider I/O happens later in the leased reconciler, never
+    // inside this transaction. We disclose the address only after a later
+    // independent observation proves the active Address Activity subscription
+    // has the intended callback and membership for this generation.
+    let watch;
+    try {
+      watch = await persistDepositAddressAndDesiredWatch({
+        walletId,
+        chain,
+        token: "USDC",
+        address: derived.address,
+        derivationPath: derived.derivation_path,
+        provider: "alchemy",
+        network: evmWatch!.network,
+        desiredState: "watching",
+      });
+    } catch (error) {
+      if (error instanceof DepositWatchInvariantError) {
+        throw new DepositAddressInvariantError();
+      }
+      throw error;
+    }
+    // A process presenting a higher revision is waiting for worker
+    // preparation, even when the older head is conflicted or disabled: that
+    // higher revision is exactly how either state is repaired.
+    if (watch.targetRevision < evmWatch!.target.revision) {
+      throw new DepositWatchNotReadyError("target_binding_pending");
+    }
+    if (watch.targetRegistryState === "disabled") {
+      throw new DepositWatchNotReadyError("target_disabled");
+    }
+    if (
+      watch.targetRegistryState === "conflicted" ||
+      watch.targetRevision > evmWatch!.target.revision ||
+      (
+        watch.targetRevision === evmWatch!.target.revision &&
+        watch.targetFingerprint !== evmWatch!.target.fingerprint
+      )
+    ) {
+      throw new DepositWatchNotReadyError(
+        "target_configuration_conflict",
+      );
+    }
+    if (watch.targetRegistryState === "unbound") {
+      throw new DepositWatchNotReadyError("target_binding_pending");
+    }
+    if (!depositWatchProjectionIsReady(watch, evmWatch!.target)) {
+      throw new DepositWatchNotReadyError(watch.status);
+    }
     return {
-      address: existing[0].address,
-      derivation_path: existing[0].derivationPath,
+      address: watch.address,
+      derivation_path: derived.derivation_path,
       chain,
       token,
     };
   }
 
-  if (!isChainSupported(chain)) {
-    throw new Error(
-      `Chain ${chain} is recognised but deposit derivation is pending Phase 3c.`,
-    );
-  }
-  if (!economyConfig.cryptoHdMnemonic) {
-    throw new Error(
-      "CRYPTO_HD_MNEMONIC is not set. Set the env var to a valid BIP-39 mnemonic " +
-        "to mint deposit addresses. See docs/CRYPTO-PAYMENT.md.",
-    );
-  }
-
-  const derived = deriveDepositAddress(
-    economyConfig.cryptoHdMnemonic,
-    chain,
-    walletId,
-  );
-
+  // Solana keeps the existing local-only issuance path until a Helius
+  // desired/observed adapter exists. Creating a durable Helius intent that no
+  // worker can reconcile would add a permanently blocked row, not readiness.
   await db
     .insert(depositAddresses)
     .values({
@@ -101,9 +282,28 @@ export async function getOrCreateDepositAddress(
     })
     .onConflictDoNothing(); // race: another caller minted in parallel
 
+  // `onConflictDoNothing` is not proof that this wallet won. A collision on
+  // (chain,address) may belong to another wallet, and a concurrent writer may
+  // have established the logical (wallet,chain,token) row first. Re-read the
+  // database truth and refuse to register or return anything else.
+  const [persisted] = await db
+    .select()
+    .from(depositAddresses)
+    .where(
+      and(
+        eq(depositAddresses.walletId, walletId),
+        eq(depositAddresses.chain, chain),
+        eq(depositAddresses.token, token),
+      ),
+    )
+    .limit(1);
+  if (!persisted || !depositAddressMatches(chain, persisted, derived)) {
+    throw new DepositAddressInvariantError();
+  }
+
   return {
-    address: derived.address,
-    derivation_path: derived.derivation_path,
+    address: persisted.address,
+    derivation_path: persisted.derivationPath,
     chain,
     token,
   };
@@ -233,6 +433,97 @@ export interface PayoutRequest {
   amountBase: string;          // base units (USDC: 1 USDC = "1000000")
   destinationAddress: string;
   metadata?: Record<string, unknown>;
+  /** Required durable request identity. The plaintext is never persisted. */
+  idempotencyKey: string;
+}
+
+export interface PayoutRequestOutcome {
+  id: string;
+  status: string;
+  broadcast_pending: boolean;
+  replayed: boolean;
+}
+
+export const PAYOUT_IDEMPOTENCY_KEY_PATTERN = /^[!-~]{8,256}$/u;
+export const PAYOUT_ADMISSION_RESTING_ERROR = "payout_admission_resting";
+
+function canonicalJson(value: unknown, path = "metadata"): string {
+  if (value === null) return "null";
+  if (typeof value === "string" || typeof value === "boolean") {
+    return JSON.stringify(value);
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new TypeError(`${path} must contain only finite JSON numbers`);
+    }
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    const entries: string[] = [];
+    for (let index = 0; index < value.length; index += 1) {
+      if (!Object.prototype.hasOwnProperty.call(value, index)) {
+        throw new TypeError(`${path} must not contain sparse arrays`);
+      }
+      entries.push(canonicalJson(value[index], `${path}[${index}]`));
+    }
+    return `[${entries.join(",")}]`;
+  }
+  if (typeof value === "object") {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new TypeError(`${path} must contain only plain JSON objects`);
+    }
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map(
+        (key) =>
+          `${JSON.stringify(key)}:${canonicalJson(record[key], `${path}.${key}`)}`,
+      )
+      .join(",")}}`;
+  }
+  throw new TypeError(`${path} must contain only JSON values`);
+}
+
+/** A stable fingerprint of the recognized business input, not HTTP/auth bytes. */
+export function payoutRequestSha256(
+  input: Pick<
+    PayoutRequest,
+    | "walletId"
+    | "chain"
+    | "token"
+    | "amountBase"
+    | "destinationAddress"
+    | "metadata"
+  >,
+): string {
+  const canonicalRequest =
+    `{"amount_base":${JSON.stringify(input.amountBase)}` +
+    `,"chain":${JSON.stringify(input.chain)}` +
+    `,"destination_address":${JSON.stringify(input.destinationAddress)}` +
+    `,"metadata":${canonicalJson(input.metadata ?? {})}` +
+    `,"token":${JSON.stringify(input.token)}` +
+    `,"wallet_id":${JSON.stringify(input.walletId)}}`;
+  return createHash("sha256")
+    .update("agenttool:payout-request:v1\0")
+    .update(canonicalRequest)
+    .digest("hex");
+}
+
+export function payoutIdempotencyKeySha256(key: string): string {
+  return createHash("sha256")
+    .update("agenttool:payout-idempotency-key:v1\0")
+    .update(key)
+    .digest("hex");
+}
+
+function payoutStillPending(status: string): boolean {
+  return (
+    status === "requested" ||
+    status === "signing" ||
+    status === "broadcasting" ||
+    status === "broadcast"
+  );
 }
 
 export type PayoutPolicyDecision =
@@ -247,18 +538,61 @@ export type PayoutPolicyDecision =
       detail?: string;
     };
 
-/** Per-wallet payout policy check (Slice 6). Returns ok=true if no policy
- *  is set or all gates pass. Caller throws the error string on ok=false;
- *  the route layer maps the message to HTTP 403. */
-export async function checkPayoutPolicy(p: {
-  walletId: string;
-  destinationAddress: string;
-  amountBase: bigint;
-}): Promise<PayoutPolicyDecision> {
-  const [policy] = await db
-    .select()
-    .from(policies)
-    .where(eq(policies.walletId, p.walletId));
+type PayoutPolicySnapshot = Pick<
+  typeof policies.$inferSelect,
+  | "payoutMinBase"
+  | "payoutDailyCeilingBase"
+  | "payoutDestinationAllowlist"
+  | "payoutDualControlThresholdBase"
+>;
+
+interface PayoutPolicyReaders {
+  readPolicy(): Promise<PayoutPolicySnapshot | undefined>;
+  readTodayTotal(): Promise<bigint>;
+}
+
+function dailyPayoutTotalQuery(walletId: string) {
+  return sql`
+    SELECT COALESCE(SUM(amount_base::numeric), 0)::text AS total
+    FROM economy.crypto_payouts
+    WHERE wallet_id = ${walletId}
+      AND status NOT IN ('failed', 'cancelled')
+      AND requested_at >= (
+        date_trunc('day', NOW() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+      )
+  `;
+}
+
+/**
+ * postgres-js returns rows directly while some test/alternate adapters expose
+ * a `{ rows }` wrapper. Accept both, but fail closed instead of interpreting a
+ * malformed database response as zero spent.
+ */
+export function parseDailyPayoutTotal(result: unknown): bigint {
+  const rows = Array.isArray(result)
+    ? (result as Array<{ total?: unknown }>)
+    : ((result as { rows?: Array<{ total?: unknown }> } | null)?.rows ?? []);
+  const total = rows[0]?.total;
+  if (typeof total !== "string" || !/^\d+$/.test(total)) {
+    throw new Error("payout_daily_total_unavailable");
+  }
+  return BigInt(total);
+}
+
+/** Pure advisory policy evaluator with injected readers.
+ *
+ * Fresh payout admission is resting independently of this decision. Keeping
+ * policy inspection available does not authorize a debit or chain transfer.
+ */
+export async function evaluatePayoutPolicy(
+  p: {
+    walletId: string;
+    destinationAddress: string;
+    amountBase: bigint;
+  },
+  readers: PayoutPolicyReaders,
+): Promise<PayoutPolicyDecision> {
+  const policy = await readers.readPolicy();
   if (!policy) return { ok: true };
 
   if (
@@ -281,21 +615,7 @@ export async function checkPayoutPolicy(p: {
   }
 
   if (policy.payoutDailyCeilingBase !== null) {
-    // Sum across non-terminal-failure rows on the rolling UTC day. Drizzle's
-    // db.execute() with the postgres-js driver returns an Array<row>
-    // directly — not a { rows: [...] } wrapper. Pre-fix, we read .rows
-    // (undefined) and always saw a sum of 0, silently disabling the ceiling.
-    const result = await db.execute<{ total: string }>(sql`
-      SELECT COALESCE(SUM(amount_base::numeric), 0)::text AS total
-      FROM economy.crypto_payouts
-      WHERE wallet_id = ${p.walletId}
-        AND status NOT IN ('failed', 'cancelled')
-        AND requested_at >= date_trunc('day', NOW() AT TIME ZONE 'UTC')
-    `);
-    const rows = (Array.isArray(result)
-      ? (result as Array<{ total: string }>)
-      : ((result as unknown as { rows?: Array<{ total: string }> }).rows ?? []));
-    const todaySum = BigInt(rows[0]?.total ?? "0");
+    const todaySum = await readers.readTodayTotal();
     const ceiling = BigInt(policy.payoutDailyCeilingBase);
     if (todaySum + p.amountBase > ceiling) {
       return {
@@ -321,142 +641,125 @@ export async function checkPayoutPolicy(p: {
   return { ok: true };
 }
 
-/** Record a payout intent. This debits the wallet in GBP pence (earned-gated,
- *  FX-converted) and writes a −debit "payout" ledger leg; the actual signing +
- *  broadcast happens later in the payout-broadcast worker (Phase 3c).
+/** Per-wallet advisory payout policy check (Slice 6).
  *
- *  CONTRACT for that worker (it must uphold both, or money leaks):
- *   1. Compare-and-swap `requested → broadcasting` BEFORE it broadcasts USDC,
- *      so a concurrent cancelPayout (which only touches `requested` rows)
- *      cannot refund a payout that is already going out on-chain.
- *   2. On terminal FAILURE, reverse atomically exactly like cancelPayout does:
- *      credit `balance` back by the row's debited_minor AND insert a positive
- *      "payout" leg so the earned wall un-counts it. Do NOT leave the −debit
- *      leg standing with the balance un-refunded (strands funds), nor refund
- *      without reversing the leg (permanently shrinks the wall). */
+ * This can preview retained policy configuration, but it does not reserve
+ * capacity or authorize a payout while fresh admission is resting.
+ */
+export async function checkPayoutPolicy(p: {
+  walletId: string;
+  destinationAddress: string;
+  amountBase: bigint;
+}): Promise<PayoutPolicyDecision> {
+  return evaluatePayoutPolicy(p, {
+    readPolicy: async () => {
+      const [policy] = await db
+        .select()
+        .from(policies)
+        .where(eq(policies.walletId, p.walletId));
+      return policy;
+    },
+    readTodayTotal: async () =>
+      parseDailyPayoutTotal(
+        await db.execute<{ total: string }>(
+          dailyPayoutTotalQuery(p.walletId),
+        ),
+      ),
+  });
+}
+
+/** Resolve an existing durable payout request or refuse fresh admission.
+ *
+ * The former admission heuristic treated lifetime `gallery_sale` and
+ * `escrow_release` labels as cashable value. Ordinary wallet debits did not
+ * consume that allowance, and an internally funded escrow release could make
+ * unbacked value appear earned. Fresh creation therefore rests until cashable
+ * backing is conserved through every debit, transfer, refund, and chargeback.
+ *
+ * The tentative idempotency reservation below is inside this transaction. A
+ * fresh request throws and rolls it back before network selection or
+ * payout-economic wallet/policy reads or mutation. A durable
+ * same-input reservation still resolves its current payout state; changed
+ * input still conflicts. */
 export async function requestPayout(
   p: PayoutRequest,
-): Promise<{ id: string; status: string; broadcast_pending: true }> {
+  database: Pick<typeof db, "transaction"> = db,
+): Promise<PayoutRequestOutcome> {
+  if (!PAYOUT_IDEMPOTENCY_KEY_PATTERN.test(p.idempotencyKey)) {
+    throw new Error("payout_idempotency_key_invalid");
+  }
   if (!(SUPPORTED_PAYOUT_TOKENS as readonly string[]).includes(p.token)) {
     throw new Error(`token ${p.token} not yet supported for payout`);
   }
-  // Option A explicit FX: earned value is GBP pence; a payout of `amountBase`
-  // USDC costs the wallet `penceRequired` at the operator rate. penceForUsdcPayout
-  // throws `payout_fx_rate_unset` (rate ≤ 0) or `amount_base_must_be_positive`.
-  const rate = economyConfig.payout.gbpUsdRate;
-  const penceRequired = penceForUsdcPayout(p.amountBase, rate);
+  const idempotencyKeySha256 = payoutIdempotencyKeySha256(p.idempotencyKey);
+  const requestSha256 = payoutRequestSha256(p);
 
-  // Policy check BEFORE debit. Throws the typed error string; the route
-  // layer maps it to HTTP 403 with a `detail` field.
-  const decision = await checkPayoutPolicy({
-    walletId: p.walletId,
-    destinationAddress: p.destinationAddress,
-    amountBase: BigInt(p.amountBase),
-  });
-  if (!decision.ok) {
-    const err = new Error(decision.error);
-    if (decision.detail) (err as Error & { detail?: string }).detail = decision.detail;
-    throw err;
-  }
+  return await database.transaction(async (tx) => {
+    const [reservation] = await tx
+      .insert(payoutRequestIdempotency)
+      .values({
+        projectId: p.projectId,
+        idempotencyKeySha256,
+        requestSha256,
+      })
+      .onConflictDoNothing({
+        target: [
+          payoutRequestIdempotency.projectId,
+          payoutRequestIdempotency.idempotencyKeySha256,
+        ],
+      })
+      .returning({ id: payoutRequestIdempotency.id });
 
-  return await db.transaction(async (tx) => {
-    // Lock the wallet: the earned wall and the debit are computed under it so
-    // concurrent payouts/reinvests serialise and can't each spend the same
-    // earned pennies (mirrors reinvestFromWallet).
-    const [wallet] = await tx
-      .select()
-      .from(wallets)
-      .where(eq(wallets.id, p.walletId))
-      .for("update");
-    if (!wallet) throw new Error("wallet_not_found");
-    // Option A pins payout to GBP wallets, so `balance` is unambiguously pence
-    // and directly comparable to the earned wall. Mirrors the reinvest guard.
-    if (wallet.currency !== "GBP") throw new Error("payout_requires_gbp_wallet");
-
-    // The shared earned wall (GBP pence): earned − reinvested − paidout. The
-    // birth credit (type "fund") and USDC deposits are NOT in EARNED_INFLOW_TYPES,
-    // so they are not cashable — this is what closes the mint-hole.
-    const [earnedRow] = await tx
-      .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
-      .from(transactions)
-      .where(
-        and(
-          eq(transactions.walletId, p.walletId),
-          inArray(transactions.type, EARNED_INFLOW_TYPES as unknown as string[]),
-        ),
-      );
-    const [reinvestRow] = await tx
-      .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
-      .from(transactions)
-      .where(and(eq(transactions.walletId, p.walletId), eq(transactions.type, "reinvest")));
-    const [paidOutRow] = await tx
-      .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
-      .from(transactions)
-      .where(and(eq(transactions.walletId, p.walletId), eq(transactions.type, "payout")));
-
-    const earned = Number(earnedRow?.total ?? 0); // positive
-    const reinvested = -Number(reinvestRow?.total ?? 0); // reinvest legs negative
-    const paidOut = -Number(paidOutRow?.total ?? 0); // payout legs negative
-    const payoutable = drawableWallPence(earned, reinvested, paidOut);
-
-    if (penceRequired > payoutable) {
-      const err = new Error("payout_exceeds_earned");
-      (err as Error & { detail?: string }).detail =
-        `earned=${earned} reinvested=${reinvested} paid_out=${paidOut} ` +
-        `available_pence=${Math.max(0, payoutable)} required_pence=${penceRequired}. ` +
-        `Only earned revenue (gallery sales + escrow releases) is payable; ` +
-        `free-funded and birth-credit balance is not.`;
-      throw err;
+    if (!reservation) {
+      // PostgreSQL waits for the concurrent unique-key contender to commit
+      // before ON CONFLICT returns. Re-read that durable winner and return its
+      // current payout state without re-running policy or touching balance.
+      const [existingReservation] = await tx
+        .select()
+        .from(payoutRequestIdempotency)
+        .where(
+          and(
+            eq(payoutRequestIdempotency.projectId, p.projectId),
+            eq(
+              payoutRequestIdempotency.idempotencyKeySha256,
+              idempotencyKeySha256,
+            ),
+          ),
+        )
+        .for("update");
+      if (!existingReservation) {
+        throw new Error("payout_idempotency_unreconciled");
+      }
+      if (existingReservation.requestSha256 !== requestSha256) {
+        throw new Error("payout_idempotency_conflict");
+      }
+      if (!existingReservation.payoutId) {
+        throw new Error("payout_idempotency_unreconciled");
+      }
+      const [existingPayout] = await tx
+        .select({
+          id: cryptoPayouts.id,
+          status: cryptoPayouts.status,
+        })
+        .from(cryptoPayouts)
+        .where(
+          and(
+            eq(cryptoPayouts.id, existingReservation.payoutId),
+            eq(cryptoPayouts.projectId, p.projectId),
+          ),
+        );
+      if (!existingPayout) {
+        throw new Error("payout_idempotency_unreconciled");
+      }
+      return {
+        id: existingPayout.id,
+        status: existingPayout.status,
+        broadcast_pending: payoutStillPending(existingPayout.status),
+        replayed: true,
+      };
     }
 
-    // Atomic balance debit (backstop; the earned wall above is the binding gate).
-    const debit = await tx
-      .update(wallets)
-      .set({ balance: sqlMinus(penceRequired) })
-      .where(and(eq(wallets.id, p.walletId), sqlBalanceAtLeast(penceRequired)))
-      .returning({ balance: wallets.balance });
-    if (debit.length === 0) throw new Error("insufficient_balance");
-
-    const [inserted] = await tx
-      .insert(cryptoPayouts)
-      .values({
-        walletId: p.walletId,
-        projectId: p.projectId,
-        chain: p.chain,
-        token: p.token,
-        amountBase: p.amountBase,
-        destinationAddress: p.destinationAddress,
-        status: "requested",
-        // debited_minor is the source of truth for the refund on cancel — the
-        // FX rate may move between request and cancel, so we refund what was
-        // actually taken, never a re-derived amount.
-        metadata: {
-          ...(p.metadata ?? {}),
-          debited_minor: penceRequired,
-          debit_currency: "GBP",
-          gbp_usd_rate: rate,
-        },
-      })
-      .returning({ id: cryptoPayouts.id });
-
-    // Ledger leg (negative = value leaving) so the earned wall stays
-    // self-consistent and future payouts/reinvests count this one.
-    await tx.insert(transactions).values({
-      walletId: p.walletId,
-      type: "payout",
-      amount: -penceRequired,
-      counterparty: p.destinationAddress,
-      description:
-        `payout requested — ${penceRequired} pence for ${Number(p.amountBase) / 1_000_000} ` +
-        `${p.token} @ ${rate} USD/GBP`,
-      metadata: { payout_id: inserted!.id, amount_base: p.amountBase, token: p.token },
-    });
-
-    return {
-      id: inserted!.id,
-      status: "requested",
-      broadcast_pending: true as const,
-    };
+    throw new Error(PAYOUT_ADMISSION_RESTING_ERROR);
   });
 }
 
@@ -478,7 +781,11 @@ export type CancelPayoutResult =
   | { ok: true; refunded: number; status: "cancelled" }
   | {
       ok: false;
-      error: "payout_not_found" | "wrong_wallet" | "not_cancellable";
+      error:
+        | "payout_not_found"
+        | "wrong_wallet"
+        | "not_cancellable"
+        | "refund_unreconciled";
       currentStatus?: string;
     };
 
@@ -511,211 +818,46 @@ export async function cancelPayout(
       } as const;
     }
 
-    // Refund exactly what requestPayout debited. For rows this gate created,
-    // that amount is stored (debited_minor) — needed because the FX rate may
-    // have moved since the request. We trust it ONLY when the row also carries
-    // this code's server-set markers (requestPayout writes debit_currency +
-    // gbp_usd_rate AFTER spreading user metadata, so on gated rows they are
-    // authoritative and cannot be forged by the caller). A row lacking the
-    // markers predates this gate; recompute its refund from the server-owned
-    // amountBase column, never from user-writable metadata, so a poisoned
-    // debited_minor can't over-refund into free spendable balance. (No such
-    // legacy rows exist today — payout has never been enabled — so this is
-    // defence in depth; see the PR's broadcast-worker contract note.)
-    const payoutMeta = (payout.metadata as Record<string, unknown> | null) ?? {};
-    const gated =
-      payoutMeta.debit_currency === "GBP" &&
-      typeof payoutMeta.gbp_usd_rate === "number";
-    const refundMinor = gated
-      ? Number(payoutMeta.debited_minor ?? 0)
-      : Math.ceil((Number(payout.amountBase) / 1_000_000) * CREDITS_PER_USDC);
-
-    const newMetadata = {
-      ...payoutMeta,
-      cancelled_at: new Date().toISOString(),
-      cancelled_by: "user",
-    };
-
-    // Compare-and-swap on status: only the first canceller wins. A worker
-    // that has just flipped this to 'broadcasting' would also lose here.
-    const updated = await tx
-      .update(cryptoPayouts)
-      .set({
-        status: "cancelled",
-        error: "cancelled_by_user",
-        metadata: newMetadata,
-      })
-      .where(
-        and(
-          eq(cryptoPayouts.id, p.payoutId),
-          eq(cryptoPayouts.status, "requested"),
-        ),
-      )
-      .returning({ id: cryptoPayouts.id });
-
-    if (updated.length === 0) {
+    // The exact server-written negative payout ledger leg is the only refund
+    // authority. Caller-extensible payout metadata and fresh FX/USDC
+    // conversions are ignored. Missing, duplicate, malformed, or previously
+    // reversed ledger history leaves the payout requested for explicit
+    // operator reconciliation and moves no balance.
+    const reversal = await reversePayoutDebit(tx, payout, {
+      expectedStatus: "requested",
+      terminalStatus: "cancelled",
+      terminalError: "cancelled_by_user",
+      description: "payout cancelled — original debit reversed",
+      terminalizeUnreconciled: false,
+    });
+    if (
+      !reversal.refunded &&
+      reversal.reason === "status_race_lost"
+    ) {
       return { ok: false, error: "not_cancellable" } as const;
     }
-
-    await tx
-      .update(wallets)
-      .set({ balance: sqlPlus(refundMinor) })
-      .where(eq(wallets.id, payout.walletId));
-
-    // Reverse the ledger leg only for gated rows: they wrote a −debit "payout"
-    // leg at request, so this positive leg nets it to zero and the earned wall
-    // stops counting the cancelled payout. Legacy rows never wrote a leg, so
-    // there is nothing to net — writing one would wrongly inflate the wall.
-    if (gated) {
-      await tx.insert(transactions).values({
-        walletId: payout.walletId,
-        type: "payout",
-        amount: refundMinor,
-        counterparty: payout.destinationAddress,
-        description: `payout cancelled — refunded ${refundMinor} pence`,
-        metadata: { payout_id: payout.id, reverses: "payout" },
-      });
+    if (!reversal.refunded) {
+      return { ok: false, error: "refund_unreconciled" } as const;
     }
 
-    return { ok: true, refunded: refundMinor, status: "cancelled" as const };
+    return {
+      ok: true,
+      refunded: reversal.refundMinor,
+      status: "cancelled" as const,
+    };
   });
 }
 
 const SUPPORTED_PAYOUT_TOKENS = ["USDC"] as const;
 
-// ── Inbound webhook ingestion ──────────────────────────────────────────
-
-export interface InboundTransfer {
-  chain: Chain;
-  txHash: string;
-  logIndex: number | null;
-  toAddress: string;
-  contractAddress: string;
-  token: string;
-  amountBase: string;       // token base units
-  rawPayload: unknown;
-}
-
-export interface IngestionResult {
-  matched: boolean;
-  walletId?: string;
-  creditsAdded?: number;
-  duplicate?: boolean;
-  reason?: string;
-}
-
-/** Apply an inbound transfer to a wallet. Idempotent on (chain, txHash,
- *  logIndex). Caller is responsible for verifying webhook signature
- *  before invoking. */
-export async function ingestInboundTransfer(
-  t: InboundTransfer,
-): Promise<IngestionResult> {
-  // Token sanity: only USDC routed for now.
-  if (t.token !== "USDC") {
-    return { matched: false, reason: "unsupported_token" };
-  }
-  // Confirm contract for EVM chains. Use activeUsdcAddress so testnet
-  // operation matches the Sepolia/Amoy USDC contracts (different from
-  // their mainnet counterparts). Without this, inbound testnet webhooks
-  // silently bail with `wrong_contract`.
-  if (isEvmChain(t.chain)) {
-    const expected = activeUsdcAddress(t.chain).toLowerCase();
-    if (t.contractAddress.toLowerCase() !== expected) {
-      return { matched: false, reason: "wrong_contract" };
-    }
-  }
-
-  // Find the wallet — case-insensitive lookup on (chain, address).
-  const matches = await db
-    .select()
-    .from(depositAddresses)
-    .where(
-      and(
-        eq(depositAddresses.chain, t.chain),
-        eq(depositAddresses.address, t.toAddress),
-      ),
-    )
-    .limit(1);
-
-  // EVM addresses may be checksummed differently — fall back to lowercase.
-  let row: typeof depositAddresses.$inferSelect | undefined = matches[0];
-  if (!row) {
-    const all = await db
-      .select()
-      .from(depositAddresses)
-      .where(eq(depositAddresses.chain, t.chain));
-    row = all.find(
-      (r) => r.address.toLowerCase() === t.toAddress.toLowerCase(),
-    );
-  }
-  if (!row) return { matched: false, reason: "no_matching_deposit_address" };
-  const matchedRow = row;
-
-  // Convert base units → credits.
-  const amountUsdc = Number(t.amountBase) / 1_000_000;
-  if (!Number.isFinite(amountUsdc) || amountUsdc <= 0) {
-    return { matched: false, reason: "invalid_amount" };
-  }
-  const creditsToAdd = Math.floor(amountUsdc * CREDITS_PER_USDC);
-  if (creditsToAdd <= 0) return { matched: false, reason: "amount_below_min_credit" };
-
-  // Idempotent insert into webhook log + funding via transaction.
-  try {
-    return await db.transaction(async (tx) => {
-      const [logged] = await tx
-        .insert(cryptoWebhookEvents)
-        .values({
-          chain: t.chain,
-          txHash: t.txHash,
-          logIndex: t.logIndex,
-          walletId: matchedRow.walletId,
-          creditsAdded: creditsToAdd,
-          rawPayload: (t.rawPayload as object) ?? {},
-        })
-        .onConflictDoNothing()
-        .returning({ id: cryptoWebhookEvents.id });
-
-      if (!logged) {
-        return {
-          matched: true,
-          walletId: matchedRow.walletId,
-          duplicate: true,
-        } satisfies IngestionResult;
-      }
-
-      // Credit wallet atomically.
-      await tx
-        .update(wallets)
-        .set({ balance: sqlPlus(creditsToAdd) })
-        .where(eq(wallets.id, matchedRow.walletId));
-
-      return {
-        matched: true,
-        walletId: matchedRow.walletId,
-        creditsAdded: creditsToAdd,
-      } satisfies IngestionResult;
-    });
-  } catch (err) {
-    return {
-      matched: false,
-      reason: `db_error: ${(err as Error).message}`,
-    };
-  }
-}
-
-// ── Helpers (sql expressions for atomic balance arithmetic) ────────────
-
-import { sql } from "drizzle-orm";
-
-function sqlMinus(n: number) {
-  return sql`balance - ${n}`;
-}
-function sqlPlus(n: number) {
-  return sql`balance + ${n}`;
-}
-function sqlBalanceAtLeast(n: number) {
-  return sql`${wallets.balance} >= ${n}`;
-}
-
 // Re-exports for routes
 export { isChain, isEvmChain } from "./chains";
+export { depositAddressMatches } from "./hd";
+export {
+  ingestInboundTransfer,
+  reconcileRemovedInboundTransfer,
+} from "./inbound-deposits";
+export type {
+  InboundTransfer,
+  IngestionResult,
+} from "./inbound-deposits";

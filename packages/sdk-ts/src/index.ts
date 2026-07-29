@@ -16,6 +16,28 @@
 
 export { AgentTool, SDK_VERSION } from "./client.js";
 export type { AgentToolOptions } from "./client.js";
+export {
+  KINGDOM_FRAMEWORK_CARD_SCHEMA_VERSION,
+  KingdomFrameworkClient,
+} from "./kingdom-framework.js";
+export type {
+  KingdomFrameworkAdoption,
+  KingdomFrameworkCard,
+  KingdomFrameworkDomain,
+  KingdomFrameworkKind,
+  KingdomFrameworkLayer,
+  KingdomFrameworkOptions,
+  KingdomFrameworkOwnerSister,
+  KingdomFrameworkState,
+} from "./kingdom-framework.js";
+export { KingdomOSClient } from "./kingdom-os.js";
+export type {
+  KingdomOSCommand,
+  KingdomOSCommandResult,
+  KingdomOSOptions,
+  KingdomOSRepository,
+  KingdomOSRunner,
+} from "./kingdom-os.js";
 export type { AgentToolTransport } from "./_http.js";
 export { AgentToolError } from "./errors.js";
 export type {
@@ -127,13 +149,27 @@ export { getAmbient } from "./_context.js";
 export { AnthropicAdapter } from "./anthropic-adapter.js";
 export type {
   AnthropicMessagesLike,
+  AnthropicLowLevelStreamLike,
+  AnthropicManagedStreamLike,
   AnthropicMessageResponse,
   AgentToolMetadata,
   AnthropicAdapterOptions,
   AdaptedResponse,
+  AdaptedLowLevelStream,
+  AdaptedManagedStream,
+  AnthropicAdapterMessages,
   AgentToolAugmentation,
   MarkupEmission,
 } from "./anthropic-adapter.js";
+export { OpenAIResponsesAdapter } from "./openai-responses-adapter.js";
+export type {
+  OpenAIResponsesLike,
+  OpenAIResponse,
+  OpenAIResponsesAgentToolMetadata,
+  OpenAIResponsesAdapterOptions,
+  OpenAIResponsesAgentToolAugmentation,
+  AdaptedOpenAIResponse,
+} from "./openai-responses-adapter.js";
 export type {
   CreateWalletOptions,
   DocumentResult,
@@ -153,6 +189,12 @@ export type {
   CreateEscrowOpts,
   CreateWalletOpts,
   FundWalletOpts,
+  Payout,
+  PayoutChain,
+  PayoutNetwork,
+  PayoutRequestOutcome,
+  PayoutStatus,
+  RequestPayoutOpts,
   SetWalletPolicyOpts,
   SpendOpts,
 } from "./economy.js";

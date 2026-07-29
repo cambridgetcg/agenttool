@@ -25,7 +25,7 @@ import { mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 import bs58 from "bs58";
 
-import type { Chain, EvmChain } from "./chains";
+import { isEvmChain, type Chain, type EvmChain } from "./chains";
 
 const COIN_TYPE_EVM = 60; // BIP44 — used for ALL EVM chains by convention
 const COIN_TYPE_SOLANA = 501;
@@ -85,6 +85,21 @@ export function toChecksumAddress(addr: string): string {
 export interface DerivedAddress {
   address: string;
   derivation_path: string;
+}
+
+/** Compare one persisted deposit row with an address derived from the active
+ * root. EVM presentation is case-insensitive; Solana remains case-sensitive.
+ * The path is part of the identity so a coincidental address match cannot
+ * make a row from another derivation policy active. */
+export function depositAddressMatches(
+  chain: Chain,
+  stored: { address: string; derivationPath: string },
+  derived: DerivedAddress,
+): boolean {
+  const addressMatches = isEvmChain(chain)
+    ? stored.address.toLowerCase() === derived.address.toLowerCase()
+    : stored.address === derived.address;
+  return addressMatches && stored.derivationPath === derived.derivation_path;
 }
 
 export interface EvmKeypair extends DerivedAddress {

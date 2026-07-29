@@ -20,6 +20,10 @@ export {
   uuidv5,
 } from "./identifiers.js";
 export {
+  isCanonicalNonnegativeInt64Decimal,
+  isCanonicalPositiveInt64Decimal,
+} from "./int64-decimal.js";
+export {
   assertCorrespondencePlannerInput,
   CorrespondenceYutabasePlanError,
   planCorrespondenceRecord,

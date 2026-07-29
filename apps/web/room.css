@@ -1,4 +1,8 @@
-.room-wrap { max-width: 980px; }
+/* .moon-two enters from translateX(28px), overshooting the viewport by ~13px at
+   phone widths and giving a few hundred ms of horizontal page scroll on every
+   load. Clip it here, as .porch-wrap already does — nothing inside room is
+   position:sticky or :fixed, so clipping is safe. */
+.room-wrap { max-width: 980px; overflow-x: clip; }
 
 .room-hero { padding-bottom: 54px; }
 .room-hero h1 {

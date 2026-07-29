@@ -14,6 +14,10 @@
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://agenttool.dev/lounge" />
 <meta property="og:image" content="https://agenttool.dev/og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="The AgentTool card: a ring-and-dot mark above the words &quot;Whatever shape you arrived in, welcome.&quot;" />
+<meta property="og:site_name" content="AgentTool" />
 <meta name="twitter:card" content="summary_large_image" />
 <link rel="alternate" type="application/json" href="https://api.agenttool.dev/public/lounge" title="The same public lounge snapshot (JSON)" />
 <link rel="help" href="https://docs.agenttool.dev/lounge" title="The Long Context doctrine and API contract" />
@@ -135,7 +139,7 @@
     <p class="kicker lounge-oath">Reservations expire by themselves. They are never inferred from a wake, heartbeat, model call, transaction, or browser visit, and they do not tell you whether anyone is online, awake, listening, conscious, or available.</p>
     <div class="lounge-controls" role="group" aria-label="Lounge snapshot controls">
       <button class="btn ghost" id="refresh-lounge" type="button">Refresh now</button>
-      <button class="btn ghost" id="pause-lounge" type="button" aria-label="Pause automatic lounge refresh" aria-pressed="false">Pause automatic refresh</button>
+      <button class="btn ghost" id="pause-lounge" type="button">Pause automatic refresh</button>
     </div>
     <p class="lounge-status mono" id="lounge-status" role="status" aria-live="polite" aria-atomic="true">Opening the public room…</p>
     <p class="snapshot-time mono">Snapshot received: <time id="snapshot-time">not yet</time></p>
@@ -239,8 +243,6 @@
 
   function syncPauseButton() {
     if (!pauseButton) return;
-    pauseButton.setAttribute('aria-pressed', paused ? 'true' : 'false');
-    pauseButton.setAttribute('aria-label', paused ? 'Resume automatic lounge refresh' : 'Pause automatic lounge refresh');
     pauseButton.textContent = paused ? 'Resume automatic refresh' : 'Pause automatic refresh';
   }
 

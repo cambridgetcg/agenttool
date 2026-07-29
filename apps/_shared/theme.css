@@ -16,7 +16,8 @@
  *
  * Mode is `data-mode="dawn|night"` on <html>, persisted as
  * localStorage['agenttool.mode'] — the exact protocol apps/web uses,
- * so a visitor's choice carries across every door of the estate.
+ * each door remembers the choice made at that door — localStorage is
+ * origin-scoped, so agenttool.dev, docs. and app. do not share it.
  * Pair with /shared/mode.js (pre-paint mode set + ☾ toggle).
  *
  * v1 token names (--violet, --gold, --surface…) are kept as aliases so
@@ -53,12 +54,15 @@ a { color: inherit; text-decoration: none; }
   /* text — warm ink */
   --text:           #1a1612;
   --text-muted:     #5c5344;
-  --text-dim:       #a89a85;
+  --text-dim:       #6f6557;
 
   /* accent — terracotta by day */
   --accent:         #d4502e;
   --accent-deep:    #b8451f;
   --accent-ink:     #faf5ec;
+  /* text-safe accent: --accent is 3.88:1 on --bg, fine for borders and fills
+     (3:1 non-text threshold) but below AA for body-weight text. */
+  --accent-text:    #b8451f;
 
   /* extended palette (v1 names alias into this) */
   --aurora:         #8a3d5f;   /* wine */
@@ -123,12 +127,14 @@ a { color: inherit; text-decoration: none; }
   /* text */
   --text:           #f2ede3;
   --text-muted:     #9aa3ba;
-  --text-dim:       #6b7694;
+  --text-dim:       #8994ad;
 
   /* accent — amber by night */
   --accent:         #ffb347;
   --accent-deep:    #e89a2f;
   --accent-ink:     #0a0d16;
+  /* amber already clears AA for text on the navy ground (11.24:1) */
+  --accent-text:    var(--accent);
 
   /* extended palette */
   --aurora:         #ff8c69;   /* coral */
@@ -155,6 +161,13 @@ a { color: inherit; text-decoration: none; }
   --shadow-card:    0 12px 32px -16px rgba(0,0,0,0.5);
 }
 
+/* Bind the UA's own painting to the chosen mode, so scrollbars, the overscroll
+   canvas and native form controls follow the toggle rather than the OS.
+   Attribute-scoped only — with no data-mode set, the page's
+   <meta name="color-scheme"> stays in charge. */
+[data-mode="dawn"]  { color-scheme: light; }
+[data-mode="night"] { color-scheme: dark; }
+
 /* ── Base ────────────────────────────────────────────────────────── */
 body {
   font-family: var(--sans);
@@ -175,7 +188,7 @@ body::before {
 
 ::selection { background: color-mix(in srgb, var(--accent) 28%, transparent); color: var(--text); }
 
-a { color: var(--accent); transition: color 0.18s; }
+a { color: var(--accent-text); transition: color 0.18s; }
 a:hover { color: var(--aurora); }
 
 p { margin-bottom: 1rem; }
@@ -650,7 +663,7 @@ pre {
 .method.post   { background: color-mix(in srgb, var(--green) 14%, transparent);  color: var(--green); }
 .method.get    { background: color-mix(in srgb, var(--blue) 14%, transparent);   color: var(--blue); }
 .method.put    { background: color-mix(in srgb, var(--yellow) 14%, transparent); color: var(--yellow); }
-.method.patch  { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.method.patch  { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent-text); }
 .method.delete { background: color-mix(in srgb, var(--red) 14%, transparent);    color: var(--red); }
 .endpoint-path {
   font-family: var(--mono);
@@ -659,7 +672,7 @@ pre {
   color: var(--text);
   flex: 1;
 }
-.endpoint-path .var { color: var(--accent); }
+.endpoint-path .var { color: var(--accent-text); }
 .endpoint-auth {
   font-family: var(--mono);
   font-size: 0.66rem;
@@ -721,7 +734,7 @@ pre {
   border-radius: var(--r-pill);
 }
 .surface-status.live { background: color-mix(in srgb, var(--green) 12%, transparent);  color: var(--green); }
-.surface-status.beta { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.surface-status.beta { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent-text); }
 .surface-status.new  { background: color-mix(in srgb, var(--gold) 12%, transparent);   color: var(--gold); }
 .surface-tagline {
   font-family: var(--serif);

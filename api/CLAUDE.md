@@ -8,7 +8,9 @@ This used to be 9 `agent-*` per-service apps. All retired 2026-05-09 into this m
 ## Current State
 Live at `api.agenttool.dev`. Three active horizons (per `docs/ROADMAP.md`):
 
-- **Horizon A — Close the economic loop** — Slice 1 ✓ (hosted purchase) · outbound payout broadcast awaits mainnet
+- **Horizon A — Close the economic loop** — Slice 1 ✓ (hosted purchase) ·
+  fresh payout admission and worker execution rest until cashable backing is
+  conserved through every wallet mutation
 - **Horizon B — Close the network** — Slices 1+2+3 ✓ (federated covenants v2 dual-signed, SDK-side signing wired)
 - **Horizon C — Close the runtime** — Slice 3 ✓ (protocol proved) · Slice 4 ✓ (LLM thinking wired) · trusted Ollama Cloud + dedicated thinker process code-complete, pending rotated provider credential + migrations/secrets/deploy
 
@@ -20,7 +22,12 @@ other read-only surfaces; it is not a byte-identical projection. Registered
 HTTP relations link the compass, API catalog, OpenAPI, docs, proposed agent
 manifest, and status. Discovery grants no authority and performs no automatic
 follow-up. The public read-only MCP endpoint lists `agenttool://discovery`
-first and returns the exact same compass bytes; canon remains optional depth.
+first and returns the exact same compass bytes. The understand road can reach
+the finite `/public/open-seat`, projected as `agenttool://open-seat`; exact
+read-only `search` and `fetch` tools at `/v1/mcp/canon` make the public canon
+searchable and citable without opening a private Castle. The established
+`/v1/mcp` endpoint keeps its five tool names and call-result shapes, retains
+every prior resource, and adds open-seat plus human-facing tool metadata.
 
 For what just landed + what's in flight + what's queued: `docs/NOW.md`.
 
@@ -57,7 +64,7 @@ Mounted in `api/src/index.ts`. Each one has a one-line doc-string in the `endpoi
 | Route | Domain | Doctrine |
 |---|---|---|
 | `/.well-known` · `/.well-known/api-catalog` · `/v1/openapi.json` | bounded public discovery and exact HTTP contract | `docs/AGENT-DISCOVERY.md` |
-| `/v1/mcp` | public read-only MCP; optional discovery compass, canon, and platform-self | `docs/AGENT-DISCOVERY.md` |
+| `/v1/mcp` · `/v1/mcp/canon` | established public read-only canon/platform MCP · separate two-tool public-canon search/fetch MCP | `docs/AGENT-DISCOVERY.md` |
 | `GET /v1/wake` | the keystone — md/anthropic/openai/gemini/cohere format | (implicit — every primitive surfaces here) |
 | `/v1/identities` · `/v1/keys` | DID + ed25519 · attestations · recovery | `docs/IDENTITY-ANCHOR.md` |
 | `/v1/memories` · `/v1/traces` | memory tiers + reasoning records | `docs/MEMORY-TIERS.md` |
@@ -83,13 +90,19 @@ Mounted in `api/src/index.ts`. Each one has a one-line doc-string in the `endpoi
 | Worker | Job |
 |---|---|
 | `src/thinker.ts` + `services/runtime/worker-manager.ts` | Dedicated Fly process group. Reconciles active trusted runtime rows into per-runtime loops; never binds merely provisioned/stopped/error rows. |
-| `workers/payout/broadcast-worker.ts` | Signs + submits Solana/EVM payout transactions. **No auto-retry by doctrine** — failed broadcasts never retry; operator-driven recovery. Canonical site of `docs/PATTERN-PERSIST-IDENTITY.md` — persists `tx_hash` before RPC submit so recovery is a chain lookup. |
+| `workers/deposit-watch/` | Leased, provider-neutral desired/observed deposit-watch reconciliation. Provider mutation acceptance is not convergence. |
+| `workers/deposit/confirm-worker.ts` | Independently verifies pending EVM receipt/log/block generations and configured depth before wallet credit. Removed generations are causally fenced; Solana finality is not implemented here. |
+| `workers/payout/broadcast-worker.ts` | Retained Solana/EVM state machine, hard-gated before DB/RPC work while payouts rest. Its historical design has **no autonomous semantic retry** and persists `tx_hash` before submit so ambiguity can be investigated by exact identity. |
 | `services/covenants/cosign-propagate.ts` | Propagates cosign signature with exponential backoff (5 attempts → `'rejected'`). |
 | `services/covenants/expire-proposals.ts` | TTL sweeper — 30d expiry with 24h grace period. |
 | `services/covenants/reverify.ts` | 24h re-verification of v2 sigs — surfaces drift via `verification_error`, never flips status. |
 | `services/runtime/think-worker.ts` | Per-runtime choice-bearing LLM loop · lifecycle gate → decrypt → compose → Anthropic/OpenAI/Ollama Cloud → encrypt → sign → persist. Stopped/provisioned/error states cannot begin new calls; renewed leases and commit-time fencing discard stale in-flight results, and ambiguous remote outcomes pause instead of auto-retrying. |
 
-HTTP-side workers are disabled when `AGENTTOOL_DISABLE_WORKERS=1` or Redis is unavailable (graceful degradation). The service-less `thinker` process is separate and database-backed; it requires the runtime migrations and KMS/Vault/database secrets.
+All HTTP-side workers are disabled when `AGENTTOOL_DISABLE_WORKERS=1`.
+Redis-backed workers additionally degrade when Redis is unavailable; the
+database/RPC deposit-watch and confirmation intervals do not require Redis.
+The service-less `thinker` process is separate and database-backed; it
+requires the runtime migrations and KMS/Vault/database secrets.
 
 ## Bridge protocol (Horizon C)
 
@@ -124,7 +137,7 @@ Code spine: `thinker.ts` · `services/runtime/worker-manager.ts` · `services/ru
 cd api
 bun install
 bun run dev                                # local API
-bun run db:migrate                         # apply migrations
+../bin/migrate-pending.sh --dry-run        # inspect checked migration inventory
 bun test                                   # unit + route tests
 bun test tests/integration                 # integration tier
 bun test tests/doctrine                    # doctrine tier (WIP)

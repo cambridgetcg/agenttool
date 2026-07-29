@@ -96,6 +96,11 @@ describe("browser network policy", () => {
       code: "network_blocked",
     });
     expect(Object.isFrozen(localOnly.boundary)).toBe(true);
+    expect(localOnly.boundary.urlCredentials).toEqual({
+      policyCheckedRequests: "blocked",
+      redirectHops: "browser",
+    });
+    expect(localOnly.boundary.redirectRevalidation).toBe(false);
     expect(localOnly.boundary.connectionAddressPinning).toBe(false);
     expect(localOnly.boundary.webSockets).toBe("blocked");
   });
@@ -168,6 +173,11 @@ describe("browser network policy", () => {
   });
 
   test("classifies special IPv4 and IPv6 ranges conservatively", () => {
+    expect(classifyIpAddress("192.0.0.0")).toBe("reserved");
+    expect(classifyIpAddress("192.0.0.255")).toBe("reserved");
+    expect(classifyIpAddress("192.0.1.0")).toBe("public");
+    expect(classifyIpAddress("192.0.2.1")).toBe("reserved");
+    expect(classifyIpAddress("192.0.43.8")).toBe("public");
     expect(classifyIpAddress("192.88.99.1")).toBe("reserved");
     expect(classifyIpAddress("100.64.0.1")).toBe("local");
     expect(classifyIpAddress("100::1")).toBe("reserved");

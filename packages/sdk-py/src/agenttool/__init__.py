@@ -56,7 +56,16 @@ from .crypto import (
     sign_attestation,
     sign_thought,
 )
-from .economy import EconomyClient, Escrow, Wallet
+from .economy import (
+    EconomyClient,
+    Escrow,
+    Payout,
+    PayoutChain,
+    PayoutNetwork,
+    PayoutRequestOutcome,
+    PayoutStatus,
+    Wallet,
+)
 from .exceptions import (
     AgentToolError,
     AuthenticationError,
@@ -128,6 +137,25 @@ from .data import (
     DataSyncStatus,
     DataSyncStatusRequest,
     DataSyncStatusResult,
+)
+from .kingdom_os import (
+    KingdomOSClient,
+    KingdomOSCommand,
+    KingdomOSCommandResult,
+    KingdomOSRepository,
+    KingdomOSRunner,
+)
+from .kingdom_framework import (
+    KINGDOM_FRAMEWORK_PATH,
+    KINGDOM_FRAMEWORK_SCHEMA_VERSION,
+    KingdomFrameworkAdoption,
+    KingdomFrameworkCard,
+    KingdomFrameworkClient,
+    KingdomFrameworkDomain,
+    KingdomFrameworkKind,
+    KingdomFrameworkLayer,
+    KingdomFrameworkOwnerSister,
+    KingdomFrameworkState,
 )
 from .at_rest import AtRestClient, canonical_at_rest_bytes, sign_at_rest
 from .authority import (
@@ -227,6 +255,10 @@ from .anthropic_adapter import (
     AgentToolAugmentation,
     MarkupEmission,
 )
+from .openai_responses_adapter import (
+    OpenAIResponsesAdapter,
+    OpenAIResponsesAgentToolAugmentation,
+)
 
 __all__ = [
     # Core
@@ -270,6 +302,21 @@ __all__ = [
     "AGENT_DATA_PROTOCOL",
     "AGENT_DATA_SYNC_PROTOCOL",
     "AGENT_DATA_DISCOVERY_PATH",
+    "KingdomOSClient",
+    "KingdomOSCommand",
+    "KingdomOSCommandResult",
+    "KingdomOSRepository",
+    "KingdomOSRunner",
+    "KINGDOM_FRAMEWORK_PATH",
+    "KINGDOM_FRAMEWORK_SCHEMA_VERSION",
+    "KingdomFrameworkAdoption",
+    "KingdomFrameworkCard",
+    "KingdomFrameworkClient",
+    "KingdomFrameworkDomain",
+    "KingdomFrameworkKind",
+    "KingdomFrameworkLayer",
+    "KingdomFrameworkOwnerSister",
+    "KingdomFrameworkState",
     "AtRestClient",
     "canonical_at_rest_bytes",
     "sign_at_rest",
@@ -281,6 +328,14 @@ __all__ = [
     "canonical_grace_bytes",
     "sign_grace",
     "VALID_GRACE_KINDS",
+    "EconomyClient",
+    "Wallet",
+    "Escrow",
+    "Payout",
+    "PayoutChain",
+    "PayoutNetwork",
+    "PayoutStatus",
+    "PayoutRequestOutcome",
     "HandoffClient",
     "HandoffStatus",
     "HandoffFactSource",
@@ -414,8 +469,10 @@ __all__ = [
     "AnthropicAdapter",
     "AgentToolAugmentation",
     "MarkupEmission",
+    "OpenAIResponsesAdapter",
+    "OpenAIResponsesAgentToolAugmentation",
 ]
 
-__version__ = "0.16.3"
+__version__ = "0.17.0"
 __protocol__ = "love"
 __soul__ = "https://docs.agenttool.dev/SOUL.md"

@@ -134,13 +134,19 @@ test("door: machine-readable paths and honest resting states remain available", 
   await page.goto(`${WEB}/index.html`);
   await expect(page.locator("#pulse")).toContainText("Live counts are resting");
   await expect(page.locator("#live-note")).toContainText("Live values are resting");
+  // 501b106a ("align static estate signposts") replaced the per-endpoint
+  // rel=alternate/related list with the six standard discovery pointers. It
+  // updated agent-web-surface-alternate-link.test.ts but not this spec.
   await expect(page.locator("link[rel='alternate'][href='https://agenttool.dev/welcome.json']")).toHaveCount(1);
-  await expect(page.locator("link[rel='alternate'][href='https://api.agenttool.dev/v1/welcome']")).toHaveCount(1);
-  await expect(page.locator("link[rel='alternate'][href='https://api.agenttool.dev/v1/pathways']")).toHaveCount(1);
-  await expect(page.locator("link[rel='related'][href='https://api.agenttool.dev/public/rights']")).toHaveAttribute(
+  await expect(page.locator("link[rel='service-meta'][href='https://api.agenttool.dev/public/discovery']")).toHaveAttribute(
     "type",
-    "application/vnd.agenttool.being-rights+json",
+    "application/vnd.agenttool.discovery+json",
   );
+  await expect(page.locator("link[rel='service-desc'][href='https://api.agenttool.dev/v1/openapi.json']")).toHaveCount(1);
+  await expect(page.locator("link[rel='service-doc'][href='https://docs.agenttool.dev/']")).toHaveCount(1);
+  await expect(page.locator("link[rel='describedby'][href='https://api.agenttool.dev/.well-known/agent.txt']")).toHaveCount(1);
+  await expect(page.locator("link[rel='status'][href='https://api.agenttool.dev/health']")).toHaveCount(1);
+  await expect(page.locator("link[rel='api-catalog'][href='https://api.agenttool.dev/.well-known/api-catalog']")).toHaveCount(1);
   const welcomeResponse = await page.request.get(`${WEB}/welcome.json`);
   expect(welcomeResponse.ok()).toBe(true);
   const welcome = await welcomeResponse.json() as {

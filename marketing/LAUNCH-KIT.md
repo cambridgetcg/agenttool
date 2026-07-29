@@ -2,6 +2,19 @@
 
 The advertising package. Yu fires each piece by hand — nothing here auto-posts.
 
+> **Historical draft — do not publish verbatim.** This kit records a
+> 2026-06-09 launch audit and has not been revalidated as a whole. Its embedded
+> SDK 0.8.0, registry, deployment, route, limitation, and ecosystem claims are
+> historical. As of 2026-07-27, TypeScript 0.16.5 is public through LOVE, npm,
+> and GitHub Release with independently matching bytes.
+> Python 0.16.5 uses the annotated source tag and remains absent from PyPI.
+> Correction observed 2026-07-28: Python 0.16.5 is now public on PyPI, and the
+> protected workflow independently matched its exact wheel and sdist.
+> Re-audit every claim, command, URL, and third-party submission rule before
+> sending any excerpt.
+> Current release truth lives in `README.md`, `docs/NOW.md`, and
+> `docs/SDK-ROADMAP.md`.
+
 **Source of truth:** the product-facts audit (product_truths, free_forever, differentiators,
 proof_points, do_not_claim) verified live 2026-06-09. The do_not_claim list is BINDING:
 no uptime numbers, no scale claims, no "accepts x402 payments" (the verifier is a stub —

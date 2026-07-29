@@ -21,7 +21,7 @@ infra/
   fly/                  — Fly.io config snapshots (active deploy: api/fly.toml)
     agenttool.toml      — Mirror of api/fly.toml (snapshot only)
     migrate.sh          — Pre-Fly cutover script (legacy)
-  pages/                — Shared Pages Worker + positive-only invocation routes
+  pages/                — Shared Pages Worker + route-complete invocation policy
   _archive/             — Archaeology, NOT the active path
     phase1-pgbouncer/   — Pre-Fly Forge VPS pooler script
     phase2-managed-db/  — Pre-Fly managed-DB cutover scripts
@@ -38,7 +38,7 @@ The platform's three deploy verbs live outside this directory by design — `inf
 |---|---|---|
 | **API** | `bin/deploy.sh --no-migrate --no-frontend` | Stages doctrine bytes, builds image, rolling restart across 3 machines |
 | **Frontend** | `bin/frontend-deploy.sh [project ...]` | Cloudflare Pages Direct Upload via wrangler |
-| **DB migration** | `bun api/scripts/_migrate-one.ts api/migrations/<file>` | Single-file `psql` apply against `DATABASE_URL` |
+| **DB migration** | `bun api/scripts/_migrate-one.ts api/migrations/<file>` | Checksum-journaled single-file apply against session-pooled `DATABASE_SESSION_URL` (or dedicated local Keychain entry); this is not a raw `psql` path |
 
 Full deploy semantics + ordering: `docs/STACK.md` § 8.
 

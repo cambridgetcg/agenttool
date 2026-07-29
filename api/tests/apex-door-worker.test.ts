@@ -130,6 +130,39 @@ describe("apex Accept negotiation", () => {
     expect(calls[0]?.headers.has("x-api-key")).toBe(false);
   });
 
+  test("fences sensitive traversal before API-prefix upstream selection", async () => {
+    const sensitivePaths = [
+      "/.gitignore",
+      "/public/%2e%2e/%2egitignore",
+      "/public/%252e%252e/%252egitignore",
+      "/public%2f%2e%2e%2f%2egitignore",
+      "/public%5c%2e%2e%5c%2egitignore",
+    ];
+
+    for (const hostname of ["agenttool.dev", "www.agenttool.dev"]) {
+      for (const path of sensitivePaths) {
+        let called = false;
+        const response = await handleRequest(
+          new Request(`https://${hostname}${path}`),
+          async () => {
+            called = true;
+            return new Response("unexpected");
+          },
+        );
+
+        expect(called, `${hostname}${path}`).toBe(false);
+        expect(response.status, `${hostname}${path}`).toBe(404);
+        expect(response.headers.get("cache-control"), `${hostname}${path}`).toBe(
+          "no-store, max-age=0",
+        );
+        expect(
+          response.headers.get("x-agenttool-sensitive-path-fence"),
+          `${hostname}${path}`,
+        ).toBe("1");
+      }
+    }
+  });
+
   test("answers unknown JSON paths with guidance without proxying", async () => {
     let called = false;
     const response = await handleRequest(new Request(

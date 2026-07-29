@@ -3,11 +3,22 @@ import { existsSync } from "node:fs";
 import { chmod, lstat, mkdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { performance } from "node:perf_hooks";
 import {
   resolveBrowserCapabilities,
   type BrowserCapabilitySet,
 } from "./capabilities.js";
-import { asBrowserError, BrowserError } from "./errors.js";
+import {
+  createBrowserActionReceipt,
+  type BrowserActionReceipt,
+  type BrowserActionReceiptBasis,
+  type BrowserActionReceiptStatus,
+} from "./attempts.js";
+import {
+  asBrowserError,
+  BrowserError,
+  withBrowserActionReceipt,
+} from "./errors.js";
 import {
   planBrowserAction,
   type BrowserConsequencePlan,
@@ -25,6 +36,7 @@ import {
   intersectsViewport,
   looksLikeSensitiveControl,
   parseAriaCandidates,
+  parseStructuralAriaCandidates,
   redactAriaSecrets,
   redactSensitiveInputValues,
 } from "./snapshot.js";
@@ -33,11 +45,14 @@ import {
   type ActionResult,
   type ActAndObserveResult,
   type AgentBrowserOptions,
+  type BlockedNavigation,
   type BrowserAction,
   type BrowserContextLike,
+  type BrowserFrameLike,
   type BrowserLike,
   type BrowserLimits,
   type BrowserProfile,
+  type BrowserRequestLike,
   type BrowserResponseLike,
   type BrowserRuntime,
   type ExtractInput,
@@ -70,6 +85,12 @@ const DEFAULT_VIEWPORT = Object.freeze({ width: 1280, height: 720 });
 const DEFAULT_ACTION_TIMEOUT_MS = 10_000;
 const DEFAULT_NAVIGATION_TIMEOUT_MS = 30_000;
 const MAX_RESPONSE_HINT_CHARS = 4_096;
+const MAX_RETAINED_SNAPSHOTS_PER_TAB = 8;
+const MAX_STRUCTURAL_CONTEXT_ELEMENTS = 32;
+const VIEWPORT_SETTLE_INTERVAL_MS = 25;
+const VIEWPORT_SETTLE_MAX_MS = 1_000;
+const VIEWPORT_SETTLE_STABLE_INTERVALS = 2;
+const VIEWPORT_SETTLE_TOLERANCE_PX = 0.5;
 const RESPONSE_HINT_HEADERS = Object.freeze([
   "link",
   "content-location",
@@ -86,17 +107,74 @@ interface TabState {
   id: string;
   page: PageLike;
   revision: number;
-  snapshotId: string | null;
-  refs: Map<string, string>;
+  navigationEpoch: number;
+  snapshots: Map<string, RetainedSnapshot>;
   response: MainDocumentResponse | null;
   responseDocumentUrl: string | null;
   responseCapture: Promise<void>;
   responseSequence: number;
+  /**
+   * The route-handler arrival order of this tab's most recent allowed
+   * main-frame navigation. Observations surface a policy denial only while
+   * its own arrival order is newer than this; the denial map itself is never
+   * mutated here, so action-window denial checks keep their exact shipped
+   * semantics.
+   */
+  lastAllowedNavigationOrder: number;
+}
+
+interface RetainedSnapshot {
+  navigationEpoch: number;
+  refs: ReadonlyMap<string, string>;
+}
+
+interface RequestPolicyDenial {
+  sequence: number;
+  /** Route-handler arrival order of the denied request, for supersession. */
+  order: number;
+  error: BrowserError;
+  tabId: string | null;
+  /** Query-redacted, bounded destination of the denied request; page-derived. */
+  url: string | null;
+}
+
+interface RequestPolicyDenialState {
+  /**
+   * Most recently completed policy rejection. Action windows use completion
+   * sequence because they must surface a denial learned after dispatch.
+   */
+  latestCompletion: RequestPolicyDenial;
+  /**
+   * Most recently initiated policy rejection. Standing observations use
+   * route arrival order so a slow older DNS check cannot replace a newer
+   * denied destination merely because it completed last.
+   */
+  latestArrival: RequestPolicyDenial;
 }
 
 interface ResolvedRef {
   state: TabState;
   locator: LocatorLike;
+  snapshotId: string;
+  snapshot: RetainedSnapshot;
+}
+
+interface ResolvedObservationBasis {
+  state: TabState;
+  snapshotId: string;
+  snapshot: RetainedSnapshot;
+}
+
+interface PendingBrowserActionAttempt {
+  attemptId: string;
+  sequence: number;
+  action: BrowserAction;
+  plan: Readonly<BrowserConsequencePlan>;
+  basis: BrowserActionReceiptBasis | null;
+  runtimeStarted: boolean;
+  snapshotsInvalidated: boolean;
+  tabId: string | null;
+  pageId: string | null;
 }
 
 interface NormalizedOptions {
@@ -124,9 +202,17 @@ export class AgentBrowser {
   private readonly browser: BrowserLike | null;
   private readonly states = new Map<string, TabState>();
   private readonly pageStates = new Map<PageLike, TabState>();
+  private readonly requestPolicyDenials = new Map<
+    string | null,
+    RequestPolicyDenialState
+  >();
   private activeTabId: string | null = null;
   private nextTabNumber = 1;
+  private requestPolicyDenialSequence = 0;
+  private attemptSequence = 0;
+  private lastActionReceipt: Readonly<BrowserActionReceipt> | null = null;
   private closed = false;
+  private closePromise: Promise<void> | null = null;
   private operationTail: Promise<void> = Promise.resolve();
 
   private constructor(
@@ -198,12 +284,7 @@ export class AgentBrowser {
       return agentBrowser;
     } catch (error) {
       try {
-        await context?.close();
-      } catch {
-        // Preserve the launch error; cleanup failure is secondary.
-      }
-      try {
-        await browser?.close();
+        await closeRuntime(browser, context);
       } catch {
         // Preserve the launch error; cleanup failure is secondary.
       }
@@ -223,9 +304,12 @@ export class AgentBrowser {
   private async openUnlocked(url: string): Promise<Observation> {
     this.assertOpen();
     const destination = await this.policy.assertAllowed(url);
+    this.assertOpen();
     const page = await this.context.newPage();
+    this.assertOpen();
     const state = this.registerPage(page);
     this.activeTabId = state.id;
+    const denialSequence = this.requestPolicyDenialSequence;
     try {
       this.clearMainDocumentResponse(state);
       const response = await page.goto(destination.href, {
@@ -233,8 +317,12 @@ export class AgentBrowser {
         timeout: this.options.navigationTimeoutMs,
       });
       this.queueMainDocumentResponse(state, response);
+      const denial = this.requestPolicyDenialAfter(denialSequence, state.id);
+      if (denial) throw denial;
     } catch (error) {
       this.invalidate(state);
+      const denial = this.requestPolicyDenialAfter(denialSequence, state.id);
+      if (denial) throw denial;
       throw asBrowserError(
         error,
         "action_failed",
@@ -261,8 +349,12 @@ export class AgentBrowser {
     }
     const state = this.getState(options.tabId);
     this.activeTabId = state.id;
-    this.invalidate(state);
-    const snapshotId = `${this.sessionId}:${state.id}:${state.revision}`;
+    await this.awaitWindowViewportSettled(state.page);
+    this.assertOpen();
+    state.revision += 1;
+    const observationRevision = state.revision;
+    const observationNavigationEpoch = state.navigationEpoch;
+    const snapshotId = `${this.sessionId}:${state.id}:${observationRevision}`;
     const viewport = state.page.viewportSize() ?? this.options.viewport;
     const includeText = options.includeText ?? true;
     const maxTextChars = boundedPositiveInteger(
@@ -282,42 +374,72 @@ export class AgentBrowser {
         0,
         this.options.limits.maxSnapshotElements * 3,
       );
-      const inspected = await Promise.all(
-        candidates.map(async (candidate) => {
-          const locator = state.page.locator(`aria-ref=${candidate.nativeRef}`);
-          try {
-            if ((await locator.count()) !== 1 || !(await locator.isVisible())) {
+      const structuralCandidateScanLimit =
+        MAX_STRUCTURAL_CONTEXT_ELEMENTS * 3;
+      const allStructuralCandidates = parseStructuralAriaCandidates(raw);
+      const structuralCandidates = allStructuralCandidates.slice(
+        0,
+        structuralCandidateScanLimit,
+      );
+      const [inspected, inspectedStructural] = await Promise.all([
+        Promise.all(
+          candidates.map(async (candidate) => {
+            const locator = state.page.locator(`aria-ref=${candidate.nativeRef}`);
+            try {
+              if ((await locator.count()) !== 1 || !(await locator.isVisible())) {
+                return null;
+              }
+              if (!intersectsViewport(await locator.boundingBox(), viewport)) {
+                return null;
+              }
+              const attributeNames = [
+                "type",
+                "autocomplete",
+                "name",
+                "id",
+                "placeholder",
+                "aria-label",
+              ] as const;
+              const values = await Promise.all(
+                attributeNames.map((name) => locator.getAttribute(name)),
+              );
+              const attributes: Record<string, string | null> = {};
+              attributeNames.forEach((name, index) => {
+                attributes[name] = values[index] ?? null;
+              });
+              return {
+                candidate,
+                secret: looksLikeSensitiveControl(attributes, candidate.name),
+              };
+            } catch {
+              // The page changed while it was being observed. Omit that target;
+              // never guess a replacement ref.
               return null;
             }
-            if (!intersectsViewport(await locator.boundingBox(), viewport)) return null;
-            const attributeNames = [
-              "type",
-              "autocomplete",
-              "name",
-              "id",
-              "placeholder",
-              "aria-label",
-            ] as const;
-            const values = await Promise.all(
-              attributeNames.map((name) => locator.getAttribute(name)),
-            );
-            const attributes: Record<string, string | null> = {};
-            attributeNames.forEach((name, index) => {
-              attributes[name] = values[index] ?? null;
-            });
-            return {
-              candidate,
-              secret: looksLikeSensitiveControl(attributes, candidate.name),
-            };
-          } catch {
-            // The page changed while it was being observed. Omit that target;
-            // never guess a replacement ref.
-            return null;
-          }
-        }),
-      );
+          }),
+        ),
+        Promise.all(
+          structuralCandidates.map(async (candidate) => {
+            const locator = state.page.locator(`aria-ref=${candidate.nativeRef}`);
+            try {
+              if ((await locator.count()) !== 1 || !(await locator.isVisible())) {
+                return null;
+              }
+              if (!intersectsViewport(await locator.boundingBox(), viewport)) {
+                return null;
+              }
+              return candidate.nativeRef;
+            } catch {
+              // Structural context is optional. Omit a node whose geometry
+              // changed rather than exposing an unbound or guessed context.
+              return null;
+            }
+          }),
+        ),
+      ]);
 
       const visibleRefs = new Set<string>();
+      const visibleStructuralRefs = new Set<string>();
       const secretRefs = new Set<string>();
       const publicRefs = new Map<string, string>();
       for (const item of inspected) {
@@ -327,17 +449,21 @@ export class AgentBrowser {
         publicRefs.set(item.candidate.nativeRef, publicRef);
         if (item.secret) secretRefs.add(item.candidate.nativeRef);
       }
+      for (const nativeRef of inspectedStructural) {
+        if (nativeRef) visibleStructuralRefs.add(nativeRef);
+      }
 
       const sanitizedRaw = redactUrlsInText(redactAriaSecrets(raw, secretRefs));
       const compact = compactAriaSnapshot(sanitizedRaw, {
         publicRefs,
         visibleRefs,
+        visibleStructuralRefs,
         secretRefs,
         maxChars: this.options.limits.maxSnapshotChars,
         maxElements: this.options.limits.maxSnapshotElements,
+        maxStructuralElements: MAX_STRUCTURAL_CONTEXT_ELEMENTS,
       });
-      state.snapshotId = snapshotId;
-      state.refs = new Map(
+      const snapshotRefs = new Map(
         compact.refs.map((ref) => {
           const nativeRef = publicRefsEntries(publicRefs, ref.ref);
           return [ref.ref, nativeRef] as const;
@@ -369,21 +495,37 @@ export class AgentBrowser {
         ? { ...state.response, headers: { ...state.response.headers } }
         : null;
       if (responseSequence !== state.responseSequence) response = null;
+      this.assertObservationCurrent(
+        state,
+        observationRevision,
+        observationNavigationEpoch,
+      );
+      this.rememberSnapshot(
+        state,
+        snapshotId,
+        snapshotRefs,
+        observationNavigationEpoch,
+      );
       return {
         schema: OBSERVATION_SCHEMA,
         sessionId: this.sessionId,
+        attemptSequence: this.attemptSequence,
+        lastActionReceipt: this.lastActionReceipt,
         snapshotId,
         tabId: state.id,
         pageId: state.id,
-        revision: state.revision,
+        revision: observationRevision,
         url,
         title,
         snapshot: compact.snapshot,
         text,
         refs: compact.refs,
         response,
+        blockedNavigation: this.tabBlockedNavigation(state),
         truncated: {
-          snapshot: compact.truncated.snapshot,
+          snapshot:
+            compact.truncated.snapshot
+            || allStructuralCandidates.length > structuralCandidateScanLimit,
           text: textTruncated,
           elements:
             compact.truncated.elements
@@ -394,8 +536,6 @@ export class AgentBrowser {
         provenance: this.provenance(rawUrl),
       };
     } catch (error) {
-      state.snapshotId = null;
-      state.refs.clear();
       throw asBrowserError(
         error,
         "action_failed",
@@ -405,7 +545,8 @@ export class AgentBrowser {
   }
 
   async act(action: BrowserAction): Promise<ActionResult> {
-    return this.withLock(() => this.actUnlocked(action));
+    const capturedAction = captureBrowserAction(action);
+    return this.withLock(() => this.actUnlocked(capturedAction));
   }
 
   /** Return the immutable authority manifest selected when this session launched. */
@@ -428,11 +569,12 @@ export class AgentBrowser {
    * interleave between the one action attempt and its read-only observation.
    */
   async actAndObserve(action: BrowserAction): Promise<ActAndObserveResult> {
+    const capturedAction = captureBrowserAction(action);
     return this.withLock(async () => {
-      const actionResult = await this.actUnlocked(action);
+      const actionResult = await this.actUnlocked(capturedAction);
       try {
         const observation = await this.observeUnlocked({
-          ...(action.kind !== "close_tab" && actionResult.tabId
+          ...(capturedAction.kind !== "close_tab" && actionResult.tabId
             ? { tabId: actionResult.tabId }
             : {}),
         });
@@ -462,55 +604,119 @@ export class AgentBrowser {
   private async actUnlocked(action: BrowserAction): Promise<ActionResult> {
     this.assertOpen();
     validateAction(action, this.options);
+    const attempt = this.beginActionAttempt(action);
+    if (action.kind === "new_tab") return this.newTab(action, attempt);
 
-    if (action.kind === "new_tab") return this.newTab(action.url);
-
-    const state = this.getState(action.tabId);
-    this.activeTabId = state.id;
-    if (action.kind === "close_tab") return this.closeTab(state);
-
-    let resolved: ResolvedRef | null = null;
-    if ("ref" in action && typeof action.ref === "string") {
-      resolved = await this.resolveRef(
-        state,
-        action.ref,
-        action.snapshotId,
-        action.kind !== "scroll",
-      );
-    }
-    if (action.kind === "navigate") await this.policy.assertAllowed(action.url);
-
+    let state: TabState | null = null;
+    let denialSequence: number | null = null;
     try {
+      state = this.getState(action.tabId);
+      this.bindActionAttempt(attempt, state);
+      this.activeTabId = state.id;
+
+      const basis = "basisSnapshotId" in action
+        && typeof action.basisSnapshotId === "string"
+        ? this.resolveObservationBasis(state, action.basisSnapshotId)
+        : null;
+      if (basis) {
+        attempt.basis = {
+          kind: "observation_precondition",
+          snapshotId: basis.snapshotId,
+        };
+      }
+
+      if (action.kind === "close_tab") {
+        if (basis) this.assertObservationBasisCurrent(basis);
+        const url = redactUrlForOutput(state.page.url());
+        const revision = state.revision + 1;
+        this.markRuntimeStarted(attempt);
+        await state.page.close();
+        this.states.delete(state.id);
+        this.pageStates.delete(state.page);
+        this.requestPolicyDenials.delete(state.id);
+        this.refreshPages();
+        const receipt = this.finishActionAttempt(attempt, {
+          runtimeInvocation: "started",
+          localOutcome: "browser_completed",
+          errorCode: null,
+        });
+        return {
+          ok: true,
+          kind: "close_tab",
+          sessionId: this.sessionId,
+          tabId: state.id,
+          pageId: state.id,
+          revision,
+          url,
+          receipt,
+        };
+      }
+
+      let resolved: ResolvedRef | null = null;
+      if ("ref" in action && typeof action.ref === "string") {
+        resolved = await this.resolveRef(
+          state,
+          action.ref,
+          action.snapshotId,
+          action.kind !== "scroll",
+          true,
+        );
+        attempt.basis = {
+          kind: "ref_snapshot",
+          snapshotId: resolved.snapshotId,
+          ref: action.ref,
+        };
+      }
+      const navigationDestination =
+        action.kind === "navigate"
+          ? await this.policy.assertAllowed(action.url)
+          : null;
+
+      this.assertOpen();
+      if (resolved) this.assertResolvedRefCurrent(resolved);
+      if (basis) this.assertObservationBasisCurrent(basis);
+      denialSequence = this.requestPolicyDenialSequence;
       switch (action.kind) {
         case "navigate":
           this.clearMainDocumentResponse(state);
-          this.queueMainDocumentResponse(state, await state.page.goto(action.url, {
-            waitUntil: "domcontentloaded",
-            timeout: this.options.navigationTimeoutMs,
-          }));
+          this.markRuntimeStarted(attempt);
+          this.queueMainDocumentResponse(
+            state,
+            await state.page.goto(navigationDestination!.href, {
+              waitUntil: "domcontentloaded",
+              timeout: this.options.navigationTimeoutMs,
+            }),
+          );
           break;
         case "click":
+          this.markRuntimeStarted(attempt);
           await resolved!.locator.click();
           break;
         case "type":
+          this.markRuntimeStarted(attempt);
           await resolved!.locator.fill(action.text);
           break;
         case "press":
+          this.markRuntimeStarted(attempt);
           if (resolved) await resolved.locator.press(action.key);
           else await state.page.keyboard.press(action.key);
           break;
         case "select":
+          this.markRuntimeStarted(attempt);
           await resolved!.locator.selectOption(action.values);
           break;
         case "scroll":
+          this.markRuntimeStarted(attempt);
           if (resolved) await resolved.locator.scrollIntoViewIfNeeded();
           else await state.page.mouse.wheel(action.deltaX ?? 0, action.deltaY!);
           break;
         case "wait":
+          this.markRuntimeStarted(attempt);
           await state.page.waitForTimeout(action.ms);
           break;
         case "back":
           this.clearMainDocumentResponse(state);
+          this.markRuntimeStarted(attempt);
           this.queueMainDocumentResponse(state, await state.page.goBack({
             waitUntil: "domcontentloaded",
             timeout: this.options.navigationTimeoutMs,
@@ -518,6 +724,7 @@ export class AgentBrowser {
           break;
         case "forward":
           this.clearMainDocumentResponse(state);
+          this.markRuntimeStarted(attempt);
           this.queueMainDocumentResponse(state, await state.page.goForward({
             waitUntil: "domcontentloaded",
             timeout: this.options.navigationTimeoutMs,
@@ -525,6 +732,7 @@ export class AgentBrowser {
           break;
         case "reload":
           this.clearMainDocumentResponse(state);
+          this.markRuntimeStarted(attempt);
           this.queueMainDocumentResponse(state, await state.page.reload({
             waitUntil: "domcontentloaded",
             timeout: this.options.navigationTimeoutMs,
@@ -533,16 +741,31 @@ export class AgentBrowser {
         default:
           throw new BrowserError("invalid_action", "Unsupported browser action.");
       }
+      const denial = this.requestPolicyDenialAfter(denialSequence, state.id);
+      if (denial) throw denial;
+      this.invalidateForActionAttempt(attempt, state);
+      const result = this.actionResult(action.kind, state);
+      const receipt = this.finishActionAttempt(attempt, {
+        runtimeInvocation: "started",
+        localOutcome: "browser_completed",
+        errorCode: null,
+      });
+      return { ...result, receipt };
     } catch (error) {
-      throw asBrowserError(
-        error,
+      if (state && attempt.runtimeStarted) {
+        this.invalidateForActionAttempt(attempt, state);
+      }
+      const denial =
+        state && denialSequence !== null
+          ? this.requestPolicyDenialAfter(denialSequence, state.id)
+          : null;
+      throw this.failActionAttempt(
+        attempt,
+        denial ?? error,
         "action_failed",
         "Browser action was attempted once and did not complete.",
       );
-    } finally {
-      this.invalidate(state);
     }
-    return this.actionResult(action.kind, state);
   }
 
   async extract(input: ExtractInput): Promise<ExtractResult> {
@@ -553,16 +776,18 @@ export class AgentBrowser {
     this.assertOpen();
     validateExtractInput(input, this.options.limits.maxExtractChars);
     const state = this.getState(input.tabId);
+    const refTargeted = "ref" in input && typeof input.ref === "string";
+    let resolved: ResolvedRef | null = null;
     let locator: LocatorLike;
-    if ("ref" in input && typeof input.ref === "string") {
-      locator = (
-        await this.resolveRef(
-          state,
-          input.ref,
-          input.snapshotId,
-          false,
-        )
-      ).locator;
+    if (refTargeted) {
+      resolved = await this.resolveRef(
+        state,
+        input.ref,
+        input.snapshotId,
+        false,
+        false,
+      );
+      locator = resolved.locator;
     } else {
       locator = state.page.locator(input.selector ?? "body");
     }
@@ -576,16 +801,25 @@ export class AgentBrowser {
 
     try {
       if (input.format === "links") {
-        const linkLocator = locator.locator("a[href]");
-        const count = await linkLocator.count();
+        const selfLinkLocator = refTargeted
+          ? locator.locator("xpath=self::*[local-name()='a'][@href]")
+          : null;
+        const selfLinkCount = selfLinkLocator
+          ? Math.min(await selfLinkLocator.count(), 1)
+          : 0;
+        const descendantLinkLocator = locator.locator("a[href]");
+        const descendantLinkCount = await descendantLinkLocator.count();
+        const count = selfLinkCount + descendantLinkCount;
         const links = [];
         let usedChars = 0;
         let truncated = count > this.options.limits.maxExtractLinks;
         const limit = Math.min(count, this.options.limits.maxExtractLinks);
         for (let index = 0; index < limit; index += 1) {
-          const link = linkLocator.nth(index);
+          const link = index < selfLinkCount
+            ? selfLinkLocator!.nth(index)
+            : descendantLinkLocator.nth(index - selfLinkCount);
           const href = await link.getAttribute("href");
-          if (!href) continue;
+          if (href === null) continue;
           const text = redactUrlsInText((await link.textContent())?.trim() ?? "");
           const resolvedHref = redactUrlForOutput(safeResolveUrl(href, rawUrl));
           const chars = text.length + resolvedHref.length;
@@ -596,6 +830,8 @@ export class AgentBrowser {
           usedChars += chars;
           links.push({ text, href: resolvedHref });
         }
+        if (resolved) this.assertResolvedRefCurrent(resolved);
+        this.assertOpen();
         return {
           format: input.format,
           sessionId: this.sessionId,
@@ -617,6 +853,8 @@ export class AgentBrowser {
             )
           : await locator.innerText();
       const bounded = boundText(redactUrlsInText(rawContent), maxChars);
+      if (resolved) this.assertResolvedRefCurrent(resolved);
+      this.assertOpen();
       return {
         format: input.format,
         sessionId: this.sessionId,
@@ -661,17 +899,21 @@ export class AgentBrowser {
         this.options.profile,
         this.options.outputDir,
       );
+      this.assertOpen();
       await ensurePrivateDirectory(this.options.outputDir, "artifact");
+      this.assertOpen();
       await validateCanonicalStoragePaths(
         this.options.profile,
         this.options.outputDir,
       );
+      this.assertOpen();
       const bytes = await state.page.screenshot({
         path: artifactPath,
         fullPage,
         type: "png",
       });
       if (process.platform !== "win32") await chmod(artifactPath, 0o600);
+      this.assertOpen();
       const rawUrl = state.page.url();
       return {
         sessionId: this.sessionId,
@@ -714,30 +956,49 @@ export class AgentBrowser {
         ).value,
         active: state.id === this.activeTabId,
       });
+      this.assertOpen();
     }
     return summaries;
   }
 
-  async close(): Promise<void> {
-    return this.withLock(() => this.closeUnlocked());
-  }
-
-  private async closeUnlocked(): Promise<void> {
-    if (this.closed) return;
+  close(): Promise<void> {
+    if (this.closePromise) return this.closePromise;
     this.closed = true;
     this.states.clear();
     this.pageStates.clear();
-    try {
-      await this.context.close();
-    } finally {
-      await this.browser?.close();
-    }
+    this.requestPolicyDenials.clear();
+    const closing = Promise.resolve().then(() =>
+      closeRuntime(this.browser, this.context)
+    );
+    this.closePromise = closing;
+    return closing;
   }
 
   private async installRequestPolicy(): Promise<void> {
     await this.context.route("**/*", async (route) => {
+      const request = route.request();
+      // Supersession compares navigation-initiation order, taken here before
+      // the policy check awaits anything. Check-completion order would let a
+      // slow rejecting DNS preflight outrank a later-initiated allowed
+      // navigation and project a stale denial over its committed page.
+      const arrivalOrder = ++this.requestPolicyDenialSequence;
       try {
-        await this.policy.assertAllowed(route.request().url());
+        await this.policy.assertAllowed(request.url());
+      } catch (error) {
+        this.recordMainFrameRequestPolicyDenial(
+          request,
+          asBrowserError(
+            error,
+            "network_blocked",
+            "Browser request was denied by the launch-time network policy.",
+          ),
+          arrivalOrder,
+        );
+        await route.abort("blockedbyclient");
+        return;
+      }
+      this.markAllowedMainFrameNavigation(request, arrivalOrder);
+      try {
         await route.continue();
       } catch {
         await route.abort("blockedbyclient");
@@ -767,6 +1028,7 @@ export class AgentBrowser {
       if (state.page.isClosed()) {
         this.states.delete(state.id);
         this.pageStates.delete(state.page);
+        this.requestPolicyDenials.delete(state.id);
       }
     }
     for (const page of this.context.pages()) {
@@ -787,33 +1049,41 @@ export class AgentBrowser {
       id: `tab_${this.nextTabNumber++}`,
       page,
       revision: 0,
-      snapshotId: null,
-      refs: new Map(),
+      navigationEpoch: 0,
+      snapshots: new Map(),
       response: null,
       responseDocumentUrl: null,
       responseCapture: Promise.resolve(),
       responseSequence: 0,
+      lastAllowedNavigationOrder: 0,
     };
+    this.watchPageEvents(state);
     this.pageStates.set(page, state);
     this.states.set(state.id, state);
     this.activeTabId = state.id;
-    this.watchMainDocumentResponses(state);
     return state;
   }
 
-  private watchMainDocumentResponses(state: TabState): void {
+  private watchPageEvents(state: TabState): void {
     if (
       typeof state.page.on !== "function"
       || typeof state.page.mainFrame !== "function"
     ) {
-      return;
+      throw new BrowserError(
+        "invalid_options",
+        "Browser runtime must support page frame-navigation events and main-frame identity.",
+      );
     }
+    state.page.on("framenavigated", () => {
+      state.navigationEpoch += 1;
+      this.invalidate(state);
+    });
     state.page.on("response", (response) => {
       try {
         const request = response.request();
         if (
           !request.isNavigationRequest()
-          || request.frame() !== state.page.mainFrame!()
+          || request.frame() !== state.page.mainFrame()
         ) {
           return;
         }
@@ -943,8 +1213,38 @@ export class AgentBrowser {
 
   private invalidate(state: TabState): void {
     state.revision += 1;
-    state.snapshotId = null;
-    state.refs.clear();
+    state.snapshots.clear();
+  }
+
+  private rememberSnapshot(
+    state: TabState,
+    snapshotId: string,
+    refs: ReadonlyMap<string, string>,
+    navigationEpoch: number,
+  ): void {
+    state.snapshots.set(snapshotId, { navigationEpoch, refs });
+    while (state.snapshots.size > MAX_RETAINED_SNAPSHOTS_PER_TAB) {
+      const oldest = state.snapshots.keys().next().value;
+      if (oldest === undefined) break;
+      state.snapshots.delete(oldest);
+    }
+  }
+
+  private assertObservationCurrent(
+    state: TabState,
+    revision: number,
+    navigationEpoch: number,
+  ): void {
+    this.assertOpen();
+    if (
+      state.revision !== revision
+      || state.navigationEpoch !== navigationEpoch
+    ) {
+      throw new BrowserError(
+        "action_failed",
+        "The page navigated while it was being observed; observe the tab again.",
+      );
+    }
   }
 
   private async resolveRef(
@@ -952,6 +1252,7 @@ export class AgentBrowser {
     ref: string,
     snapshotId: string | undefined,
     requireEnabled: boolean,
+    requireCurrentViewport: boolean,
   ): Promise<ResolvedRef> {
     if (!snapshotId) {
       throw new BrowserError(
@@ -959,13 +1260,17 @@ export class AgentBrowser {
         "A snapshotId is required for every ref-targeted operation.",
       );
     }
-    if (state.snapshotId !== snapshotId) {
+    const snapshot = state.snapshots.get(snapshotId);
+    if (
+      !snapshot
+      || snapshot.navigationEpoch !== state.navigationEpoch
+    ) {
       throw new BrowserError(
         "stale_snapshot",
         "The snapshot is stale; observe the tab again before acting.",
       );
     }
-    const nativeRef = state.refs.get(ref);
+    const nativeRef = snapshot.refs.get(ref);
     if (!nativeRef) {
       throw new BrowserError(
         "ref_not_found",
@@ -986,68 +1291,434 @@ export class AgentBrowser {
     if (!(await locator.isVisible())) {
       throw new BrowserError("ref_hidden", "The snapshot ref is no longer visible.");
     }
+    if (
+      requireCurrentViewport
+      && !intersectsViewport(
+        await locator.boundingBox(),
+        state.page.viewportSize() ?? this.options.viewport,
+      )
+    ) {
+      throw new BrowserError(
+        "stale_snapshot",
+        "The snapshot ref moved outside the current viewport; observe the tab again before acting.",
+      );
+    }
     if (requireEnabled && !(await locator.isEnabled())) {
       throw new BrowserError("ref_disabled", "The snapshot ref is disabled.");
     }
-    return { state, locator };
+    const resolved = { state, locator, snapshotId, snapshot };
+    this.assertResolvedRefCurrent(resolved);
+    return resolved;
   }
 
-  private async newTab(url?: string): Promise<ActionResult> {
-    const destination = url ? await this.policy.assertAllowed(url) : null;
-    const page = await this.context.newPage();
-    const state = this.registerPage(page);
-    if (destination) {
+  private assertResolvedRefCurrent(resolved: ResolvedRef): void {
+    this.assertOpen();
+    if (
+      resolved.state.navigationEpoch !== resolved.snapshot.navigationEpoch
+      || resolved.state.snapshots.get(resolved.snapshotId) !== resolved.snapshot
+    ) {
+      throw new BrowserError(
+        "stale_snapshot",
+        "The snapshot is stale; observe the tab again before acting.",
+      );
+    }
+  }
+
+  private resolveObservationBasis(
+    state: TabState,
+    snapshotId: string,
+  ): ResolvedObservationBasis {
+    const snapshot = state.snapshots.get(snapshotId);
+    if (
+      !snapshot
+      || snapshot.navigationEpoch !== state.navigationEpoch
+    ) {
+      throw new BrowserError(
+        "stale_snapshot",
+        "The observation basis is stale; observe the tab again before acting.",
+      );
+    }
+    return { state, snapshotId, snapshot };
+  }
+
+  private assertObservationBasisCurrent(
+    resolved: ResolvedObservationBasis,
+  ): void {
+    this.assertOpen();
+    if (
+      resolved.state.navigationEpoch !== resolved.snapshot.navigationEpoch
+      || resolved.state.snapshots.get(resolved.snapshotId) !== resolved.snapshot
+    ) {
+      throw new BrowserError(
+        "stale_snapshot",
+        "The observation basis is stale; observe the tab again before acting.",
+      );
+    }
+  }
+
+  /**
+   * Playwright's wheel dispatch and a page's own smooth scrolling can outlive
+   * the action promise. Sample top-level viewport geometry before issuing refs
+   * so the observation is less likely to describe an in-flight window scroll.
+   * This is deliberately best-effort: a probe failure must not turn an already
+   * executed action into a reported action failure.
+   */
+  private async awaitWindowViewportSettled(page: PageLike): Promise<void> {
+    try {
+      const documentElement = page.locator("html");
+      const deadline = performance.now() + VIEWPORT_SETTLE_MAX_MS;
+      const remainingTimeout = (): number | null => {
+        const remaining = deadline - performance.now();
+        return remaining > 0 ? Math.max(1, Math.ceil(remaining)) : null;
+      };
+
+      const initialTimeout = remainingTimeout();
+      if (initialTimeout === null) return;
+      let previous = await documentElement.boundingBox({
+        timeout: initialTimeout,
+      });
+      if (!previous) return;
+      let stableIntervals = 0;
+
+      while (true) {
+        const remainingBeforeWait = deadline - performance.now();
+        if (remainingBeforeWait <= 0) return;
+        await page.waitForTimeout(
+          Math.min(VIEWPORT_SETTLE_INTERVAL_MS, remainingBeforeWait),
+        );
+
+        const probeTimeout = remainingTimeout();
+        if (probeTimeout === null) return;
+        const current = await documentElement.boundingBox({
+          timeout: probeTimeout,
+        });
+        if (!current) return;
+        if (
+          Math.abs(current.x - previous.x) <= VIEWPORT_SETTLE_TOLERANCE_PX
+          && Math.abs(current.y - previous.y) <= VIEWPORT_SETTLE_TOLERANCE_PX
+        ) {
+          stableIntervals += 1;
+          if (stableIntervals >= VIEWPORT_SETTLE_STABLE_INTERVALS) return;
+        } else {
+          stableIntervals = 0;
+        }
+        previous = current;
+      }
+    } catch {
+      // Observation remains available when a custom runtime cannot expose
+      // stable document geometry or the page changes during this probe.
+    }
+  }
+
+  private recordMainFrameRequestPolicyDenial(
+    request: BrowserRequestLike,
+    error: BrowserError,
+    arrivalOrder: number,
+  ): void {
+    try {
+      if (!request.isNavigationRequest()) return;
+    } catch {
+      return;
+    }
+    let deniedUrl: string | null = null;
+    try {
+      deniedUrl = redactUrlForOutput(request.url()).slice(0, 2_048);
+    } catch {
+      // The denial still stands without a reportable destination.
+    }
+
+    // A popup's initial navigation can be routed before Playwright has created
+    // a Frame object or exposed the Page through context.pages(). Such a
+    // request is still a navigation request. Keep only this genuinely
+    // unframed race session-ambiguous so a concurrent action can surface
+    // uncertainty without guessing which tab created it.
+    let frame: BrowserFrameLike;
+    try {
+      frame = request.frame();
+    } catch {
+      this.recordRequestPolicyDenial(error, null, deniedUrl, arrivalOrder);
+      return;
+    }
+
+    // A denied subframe navigation is real policy enforcement, but it is not
+    // the result of the top-level action. Recording it against the tab would
+    // falsely turn a successful click into a failed action.
+    try {
+      if (frame.parentFrame() !== null) return;
+    } catch {
+      // A runtime that cannot classify a returned frame has crossed the same
+      // attribution boundary as an unregistered popup.
+      this.recordRequestPolicyDenial(error, null, deniedUrl, arrivalOrder);
+      return;
+    }
+
+    try {
+      this.refreshPages();
+    } catch {
+      // The policy decision must still be surfaced and the route aborted even
+      // if a custom runtime cannot enumerate/register the new page in time.
+      this.recordRequestPolicyDenial(error, null, deniedUrl, arrivalOrder);
+      return;
+    }
+    for (const state of this.states.values()) {
       try {
+        if (state.page.mainFrame() === frame) {
+          this.recordRequestPolicyDenial(error, state.id, deniedUrl, arrivalOrder);
+          return;
+        }
+      } catch {
+        // A custom runtime may not expose a stable frame identity.
+      }
+    }
+    // A navigation request can race page registration (notably for popups).
+    // Preserve the policy denial at session scope and report an uncertain
+    // action outcome rather than inventing an attribution.
+    this.recordRequestPolicyDenial(error, null, deniedUrl, arrivalOrder);
+  }
+
+  private recordRequestPolicyDenial(
+    error: BrowserError,
+    tabId: string | null,
+    url: string | null,
+    order: number,
+  ): void {
+    this.requestPolicyDenialSequence += 1;
+    const denial: RequestPolicyDenial = {
+      sequence: this.requestPolicyDenialSequence,
+      order,
+      error:
+        tabId === null
+          ? new BrowserError(
+              "action_failed",
+              "A navigation request was policy-blocked while an action was pending, but its tab could not be attributed; the current action outcome is uncertain.",
+              { cause: error },
+            )
+          : error,
+      tabId,
+      url,
+    };
+    const previous = this.requestPolicyDenials.get(tabId);
+    this.requestPolicyDenials.set(tabId, {
+      latestCompletion: denial,
+      latestArrival:
+        !previous || denial.order > previous.latestArrival.order
+          ? denial
+          : previous.latestArrival,
+    });
+  }
+
+  /**
+   * When an allowed main-frame navigation passes the route layer, advance the
+   * tab's supersession marker so older denials stop appearing in
+   * observations. Attribution is best-effort and read-only; failing to
+   * attribute must never disturb the routing path.
+   */
+  private markAllowedMainFrameNavigation(
+    request: BrowserRequestLike,
+    arrivalOrder: number,
+  ): void {
+    let frame: BrowserFrameLike;
+    try {
+      if (!request.isNavigationRequest()) return;
+      frame = request.frame();
+      if (frame.parentFrame() !== null) return;
+    } catch {
+      // Supersession is an observation nicety; the navigation proceeds.
+      return;
+    }
+    for (const state of this.states.values()) {
+      try {
+        if (state.page.mainFrame() === frame) {
+          state.lastAllowedNavigationOrder = Math.max(
+            state.lastAllowedNavigationOrder,
+            arrivalOrder,
+          );
+          return;
+        }
+      } catch {
+        // A custom runtime may not expose a stable frame identity for every
+        // tab; keep matching the remaining tabs.
+      }
+    }
+  }
+
+  /**
+   * Project this tab's standing policy denial for read-only observations.
+   * Only the tab-attributed record is surfaced; a session-ambiguous denial is
+   * an action-outcome concern, not a per-tab diagnostic. A denial stops
+   * appearing once an allowed main-frame navigation for the tab supersedes
+   * it or the tab closes. The denial map is never mutated here.
+   */
+  private tabBlockedNavigation(state: TabState): BlockedNavigation | null {
+    const denial = this.requestPolicyDenials.get(state.id)?.latestArrival;
+    if (!denial || denial.order <= state.lastAllowedNavigationOrder) {
+      return null;
+    }
+    return {
+      source: "navigation_policy",
+      url: denial.url,
+      code: denial.error.code,
+      message: denial.error.message.slice(0, 2_000),
+    };
+  }
+
+  private requestPolicyDenialAfter(
+    sequence: number,
+    tabId: string,
+  ): BrowserError | null {
+    const scoped = this.requestPolicyDenials.get(tabId)?.latestCompletion;
+    const ambiguous = this.requestPolicyDenials.get(null)?.latestCompletion;
+    let latest: RequestPolicyDenial | null = null;
+    for (const denial of [scoped, ambiguous]) {
+      if (
+        denial
+        && denial.sequence > sequence
+        && (!latest || denial.sequence > latest.sequence)
+      ) {
+        latest = denial;
+      }
+    }
+    return latest?.error ?? null;
+  }
+
+  private async newTab(
+    action: Extract<BrowserAction, { kind: "new_tab" }>,
+    attempt: PendingBrowserActionAttempt,
+  ): Promise<ActionResult> {
+    let state: TabState | null = null;
+    let denialSequence: number | null = null;
+    try {
+      const destination = action.url
+        ? await this.policy.assertAllowed(action.url)
+        : null;
+      this.assertOpen();
+      this.markRuntimeStarted(attempt);
+      const page = await this.context.newPage();
+      this.assertOpen();
+      state = this.registerPage(page);
+      this.bindActionAttempt(attempt, state);
+      if (destination) {
+        denialSequence = this.requestPolicyDenialSequence;
         this.clearMainDocumentResponse(state);
         const response = await page.goto(destination.href, {
           waitUntil: "domcontentloaded",
           timeout: this.options.navigationTimeoutMs,
         });
         this.queueMainDocumentResponse(state, response);
-      } catch (error) {
-        this.invalidate(state);
-        throw asBrowserError(
-          error,
-          "action_failed",
-          "New-tab navigation was attempted once and did not complete.",
-        );
+        const denial = this.requestPolicyDenialAfter(denialSequence, state.id);
+        if (denial) throw denial;
+        this.invalidateForActionAttempt(attempt, state);
       }
-      this.invalidate(state);
-    }
-    return this.actionResult("new_tab", state);
-  }
-
-  private async closeTab(state: TabState): Promise<ActionResult> {
-    const url = redactUrlForOutput(state.page.url());
-    const revision = state.revision + 1;
-    try {
-      await state.page.close();
+      const result = this.actionResult("new_tab", state);
+      const receipt = this.finishActionAttempt(attempt, {
+        runtimeInvocation: "started",
+        localOutcome: "browser_completed",
+        errorCode: null,
+      });
+      return { ...result, receipt };
     } catch (error) {
-      this.invalidate(state);
-      throw asBrowserError(
-        error,
+      if (state && attempt.runtimeStarted) {
+        this.invalidateForActionAttempt(attempt, state);
+      }
+      const denial =
+        state && denialSequence !== null
+          ? this.requestPolicyDenialAfter(denialSequence, state.id)
+          : null;
+      throw this.failActionAttempt(
+        attempt,
+        denial ?? error,
         "action_failed",
-        "Closing the browser tab was attempted once and did not complete.",
+        "New-tab action was attempted once and did not complete.",
       );
     }
-    this.states.delete(state.id);
-    this.pageStates.delete(state.page);
-    this.refreshPages();
+  }
+
+  private beginActionAttempt(action: BrowserAction): PendingBrowserActionAttempt {
+    const plan = planBrowserAction(action, this.options.capabilities);
+    const attemptId = `attempt_${randomUUID()}`;
+    this.attemptSequence += 1;
     return {
-      ok: true,
-      kind: "close_tab",
-      sessionId: this.sessionId,
-      tabId: state.id,
-      pageId: state.id,
-      revision,
-      url,
+      attemptId,
+      sequence: this.attemptSequence,
+      action,
+      plan,
+      basis: null,
+      runtimeStarted: false,
+      snapshotsInvalidated: false,
+      tabId: null,
+      pageId: null,
     };
+  }
+
+  private bindActionAttempt(
+    attempt: PendingBrowserActionAttempt,
+    state: TabState,
+  ): void {
+    attempt.tabId = state.id;
+    attempt.pageId = state.id;
+  }
+
+  private markRuntimeStarted(attempt: PendingBrowserActionAttempt): void {
+    attempt.runtimeStarted = true;
+  }
+
+  private invalidateForActionAttempt(
+    attempt: PendingBrowserActionAttempt,
+    state: TabState,
+  ): void {
+    if (attempt.snapshotsInvalidated) return;
+    attempt.snapshotsInvalidated = true;
+    this.invalidate(state);
+  }
+
+  private finishActionAttempt(
+    attempt: PendingBrowserActionAttempt,
+    status: BrowserActionReceiptStatus,
+  ): Readonly<BrowserActionReceipt> {
+    const receipt = createBrowserActionReceipt({
+      attemptId: attempt.attemptId,
+      sequence: attempt.sequence,
+      sessionId: this.sessionId,
+      action: attempt.action,
+      basis: attempt.basis,
+      plan: attempt.plan,
+      capabilities: this.options.capabilities,
+      tabId: attempt.tabId,
+      pageId: attempt.pageId,
+      status,
+    });
+    this.lastActionReceipt = receipt;
+    return receipt;
+  }
+
+  private failActionAttempt(
+    attempt: PendingBrowserActionAttempt,
+    error: unknown,
+    code: "action_failed",
+    message: string,
+  ): BrowserError {
+    const safe = asBrowserError(error, code, message);
+    const receipt = this.finishActionAttempt(
+      attempt,
+      attempt.runtimeStarted
+        ? {
+            runtimeInvocation: "started",
+            localOutcome: "unknown",
+            errorCode: safe.code,
+          }
+        : {
+            runtimeInvocation: "not_started",
+            localOutcome: "rejected",
+            errorCode: safe.code,
+          },
+    );
+    return withBrowserActionReceipt(safe, receipt, code, message);
   }
 
   private actionResult(
     kind: BrowserAction["kind"],
     state: TabState,
-  ): ActionResult {
+  ): Omit<ActionResult, "receipt"> {
     return {
       ok: true,
       kind,
@@ -1076,6 +1747,11 @@ export class AgentBrowser {
   }
 
   private withLock<T>(operation: () => Promise<T>): Promise<T> {
+    if (this.closed) {
+      return Promise.reject(
+        new BrowserError("browser_closed", "Browser session is closed."),
+      );
+    }
     const previous = this.operationTail;
     let release!: () => void;
     this.operationTail = new Promise<void>((resolveTurn) => {
@@ -1198,9 +1874,33 @@ function authorityContainsUserinfo(reference: string): boolean {
   return authority.includes("@");
 }
 
+function captureBrowserAction(action: BrowserAction): BrowserAction {
+  const captured = {
+    ...(action as BrowserAction & Record<string, unknown>),
+  } as BrowserAction & { values?: string | readonly string[] };
+  if (Array.isArray(captured.values)) {
+    captured.values = Object.freeze([...captured.values]);
+  }
+  return Object.freeze(captured) as BrowserAction;
+}
+
 async function loadDefaultRuntime(): Promise<BrowserRuntime> {
   const playwright = await import("playwright-core");
   return playwright.chromium as unknown as BrowserRuntime;
+}
+
+async function closeRuntime(
+  browser: BrowserLike | null,
+  context: BrowserContextLike | null,
+): Promise<void> {
+  // An ephemeral session owns the Browser process, and Browser.close() closes
+  // its contexts while also terminating a child that a stuck Context.close()
+  // could otherwise orphan. A persistent launch returns only its context.
+  if (browser) {
+    await browser.close();
+    return;
+  }
+  await context?.close();
 }
 
 function normalizeOptions(options: AgentBrowserOptions): NormalizedOptions {
@@ -1542,14 +2242,34 @@ function validateAction(
   );
   optionalIdentifier("tabId" in action ? action.tabId : undefined, "tabId");
   const refTarget = "ref" in action && action.ref !== undefined;
+  const hasObservationBasis =
+    "basisSnapshotId" in action && action.basisSnapshotId !== undefined;
+  optionalIdentifier(
+    hasObservationBasis ? action.basisSnapshotId : undefined,
+    "basisSnapshotId",
+  );
+  if (refTarget && hasObservationBasis) {
+    throw new BrowserError(
+      "invalid_action",
+      "basisSnapshotId cannot be combined with a ref-targeted action.",
+    );
+  }
   if (refTarget) {
-    if (typeof action.ref !== "string" || action.ref.length === 0) {
-      throw new BrowserError("invalid_action", "Action ref must be a non-empty string.");
+    if (
+      typeof action.ref !== "string"
+      || action.ref.length === 0
+      || action.ref.length > 200
+    ) {
+      throw new BrowserError(
+        "invalid_action",
+        "Action ref must be a non-empty string of at most 200 characters.",
+      );
     }
     if (
       !("snapshotId" in action)
       || typeof action.snapshotId !== "string"
       || action.snapshotId.length === 0
+      || action.snapshotId.length > 200
     ) {
       throw new BrowserError(
         "snapshot_required",
@@ -1604,7 +2324,14 @@ function validateAction(
       break;
     }
     case "scroll":
-      if (!refTarget) {
+      if (refTarget) {
+        if ("deltaX" in action || "deltaY" in action) {
+          throw new BrowserError(
+            "invalid_action",
+            "A ref-targeted scroll cannot include viewport deltas.",
+          );
+        }
+      } else {
         requireFiniteNumber(action.deltaY, "deltaY");
         if (action.deltaX !== undefined) requireFiniteNumber(action.deltaX, "deltaX");
         if (
@@ -1756,24 +2483,39 @@ function optionalIdentifier(value: unknown, name: string): void {
 function allowedActionKeys(kind: string): readonly string[] {
   switch (kind) {
     case "navigate":
-      return ["kind", "url", "tabId"];
+      return ["kind", "url", "tabId", "basisSnapshotId"];
     case "click":
       return ["kind", "ref", "snapshotId", "tabId"];
     case "type":
       return ["kind", "ref", "snapshotId", "text", "tabId"];
     case "press":
-      return ["kind", "key", "ref", "snapshotId", "tabId"];
+      return [
+        "kind",
+        "key",
+        "ref",
+        "snapshotId",
+        "tabId",
+        "basisSnapshotId",
+      ];
     case "select":
       return ["kind", "ref", "snapshotId", "values", "tabId"];
     case "scroll":
-      return ["kind", "ref", "snapshotId", "deltaX", "deltaY", "tabId"];
+      return [
+        "kind",
+        "ref",
+        "snapshotId",
+        "deltaX",
+        "deltaY",
+        "tabId",
+        "basisSnapshotId",
+      ];
     case "wait":
-      return ["kind", "ms", "tabId"];
+      return ["kind", "ms", "tabId", "basisSnapshotId"];
     case "back":
     case "forward":
     case "reload":
     case "close_tab":
-      return ["kind", "tabId"];
+      return ["kind", "tabId", "basisSnapshotId"];
     case "new_tab":
       return ["kind", "url"];
     default:

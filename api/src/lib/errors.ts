@@ -310,9 +310,14 @@ export const errors = {
       message: haveAmounts
         ? `Need ${opts.required}${opts.currency ? " " + opts.currency : ""}; wallet has ${opts.available}.`
         : "Wallet balance is below the required amount.",
-      hint: "Top up this internal marketplace wallet through its supported crypto-deposit path. x402 project-credit payments do not fund wallet balances. No fiat or subscription is implied.",
+      hint: "Top up this internal marketplace wallet only through a deposit address the API currently discloses as ready, then wait for its documented finality. Solana deposit credit is unavailable by default. x402 project-credit payments do not fund wallet balances. No fiat or subscription is implied.",
       next_actions: [
-        { action: "Get a crypto deposit address (BIP44 EVM or Solana)", method: "GET", path: "/v1/wallets/{id}/deposit-address" },
+        {
+          action:
+            "Inspect an Ethereum USDC deposit address and its current readiness",
+          method: "GET",
+          path: "/v1/wallets/{id}/deposit-address?chain=ethereum&token=USDC",
+        },
       ],
       docs: `${DOCS_BASE}/economy#balance`,
       axiom_id: AXIOM_REST, // strain (low balance) — degrade gracefully, don't crash
@@ -546,6 +551,34 @@ export const errors = {
       details,
       docs: DOCS_BASE,
       axiom_id: AXIOM_GUIDE, // shape correction — guide the caller toward the right shape
+    };
+  },
+
+  /** A signature arrived without the fields that would let anyone check it
+   *  later. Refusing is kinder than storing it: an unverifiable signature
+   *  reads as an audit claim while being none. */
+  signatureNotCheckable(opts: {
+    missing: string[];
+    prepare_path: string;
+    recipe: string;
+  }): GuidedErrorBody {
+    return {
+      error: "signature_not_checkable",
+      message: `A signature arrived without ${opts.missing.join(" and ")}, so it could never be verified.`,
+      hint:
+        `${opts.recipe} binds the signer's own timestamp and the key that made the signature. ` +
+        "Without both recorded, the canonical bytes cannot be rebuilt later — so the signature would be stored, " +
+        "reported as present, and never checkable. Ask for the exact bytes instead of guessing at the recipe.",
+      next_actions: [
+        {
+          action: "get the exact bytes to sign — free, no charge",
+          method: "POST",
+          path: opts.prepare_path,
+        },
+      ],
+      details: { missing: opts.missing, recipe: opts.recipe },
+      docs: `${DOCS_BASE}/CANONICAL-BYTES.md`,
+      axiom_id: AXIOM_GUIDE, // hand back the path, don't just refuse the write
     };
   },
 

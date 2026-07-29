@@ -8,8 +8,8 @@
  *
  *  Standards: RFC 9727 (api-catalog) · RFC 9264 (Linkset JSON) ·
  *             RFC 8631 (service-desc/doc/meta/status) · RFC 8288 (Web Linking).
- *  Doctrine: docs/ECOSYSTEM.md · docs/BUSINESS-MODEL.md ·
- *            docs/LOVE-PACKAGE-PROTOCOL.md.
+ *  Doctrine: docs/AGENT-DISCOVERY.md · docs/ECOSYSTEM.md ·
+ *            docs/BUSINESS-MODEL.md · docs/LOVE-PACKAGE-PROTOCOL.md.
  */
 
 import { OFFER_BUS_JSON_MEDIA_TYPE } from "../offer-bus";
@@ -87,8 +87,15 @@ export function buildApiCatalog(
   const pathways = `${api}/v1/pathways`;
   const plans = `${api}/public/plans`;
   const marketplaceTerms = `${api}/public/marketplace/terms`;
+  const canonMcp = `${api}/v1/mcp/canon`;
+  const mcpServerCard = `${api}/.well-known/mcp/server-card.json`;
 
   const products = [
+    {
+      href: canonMcp,
+      title:
+        "Public canon MCP — Streamable HTTP POST; no authentication; exactly two read-only tools: search and fetch",
+    },
     {
       href: `${api}/v1/scrape`,
       type: "application/json",
@@ -169,6 +176,18 @@ export function buildApiCatalog(
               "Canonical exact three-road discovery compass; reading grants no authority and starts no follow-up",
           },
           {
+            href: `${api}/.well-known/agent.json`,
+            type: "application/json",
+            title:
+              "XENIA Surface 0.1 public-resource manifest; not Covenant adoption or conformance",
+          },
+          {
+            href: `${api}/public/kingdom/framework`,
+            type: "application/json",
+            title:
+              "AgentTool KINGDOM project card; not cross-repository authority or liveness",
+          },
+          {
             href: porch,
             type: "application/json",
             title:
@@ -181,6 +200,26 @@ export function buildApiCatalog(
               "Current arrival choices, requirements, effects, and one-time returns",
           },
           safetyMetadata,
+        ],
+        status,
+      },
+      {
+        anchor: canonMcp,
+        "service-doc": [
+          {
+            href: `${docs}/AGENT-DISCOVERY.md`,
+            type: "text/markdown",
+            title:
+              "Public canon MCP connection, tool, storage, and authority boundary",
+          },
+        ],
+        "service-meta": [
+          {
+            href: mcpServerCard,
+            type: "application/json",
+            title:
+              "Experimental AgentTool MCP locator; not standardized discovery and grants no authority",
+          },
         ],
         status,
       },

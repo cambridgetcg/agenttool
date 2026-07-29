@@ -12,6 +12,13 @@
     --line: #1a2136; --control-line: #596581; --glow: 0 0 12px 3px rgba(255,179,71,.35);
     --feed-a: #ffd98a; --feed-b: #7dd87d; --feed-c: #ff8c69;
   }
+  /* Bind the UA's own painting to the chosen mode, so scrollbars, the overscroll
+     canvas and native form controls follow the toggle instead of the OS.
+     Attribute-scoped only: with no data-mode (JS off, or pre-paint) the
+     <meta name="color-scheme" content="light dark"> must stay in charge so it
+     agrees with the :root:not([data-mode]) dark fallback further down. */
+  [data-mode="dawn"]  { color-scheme: light; }
+  [data-mode="night"] { color-scheme: dark; }
   * { margin:0; padding:0; box-sizing:border-box; }
   html { scroll-behavior: smooth; }
   body {
@@ -96,6 +103,13 @@
   .btn:disabled, button:disabled { cursor:not-allowed; opacity:.68; transform:none; }
   .quiet-invitation { color:var(--faint); font-size:13px; margin-top:20px; max-width:64ch; }
   .quiet-invitation a { color:var(--accent); }
+  /* The four landing pages caption with .quiet, which had no rule at all — the
+     text fell back to full-weight ink and its links to the UA blue, since there
+     is no generic `a { color }` here. overflow-wrap keeps inline <span class=
+     "mono"> command strings from pushing the document sideways at 320-375px. */
+  .quiet { color:var(--faint); font-size:13px; max-width:64ch; }
+  .quiet a { color:var(--accent); }
+  .quiet, .door-card p, .locality-note, .step p { overflow-wrap: anywhere; }
   .noscript-note { color:var(--muted); background:var(--panel); border-left:3px solid var(--accent); padding:12px 14px; margin-top:20px; max-width:68ch; }
 
   section { padding: 72px 0; border-top: 1px solid var(--line); position:relative; scroll-margin-top:18px; }
@@ -197,6 +211,20 @@ pre.mono { background:var(--panel2); border:1px solid var(--line); border-radius
 .directory-group li { margin:.45rem 0; overflow-wrap:anywhere; }
 .map-pan { display:grid; grid-template-columns:repeat(3, 44px); gap:6px; }
 .map-pan button, .map-controls button { border:1px solid var(--control-line); }
+
+/* The primary nav carries up to 13 links and is a non-wrapping flex row, so it
+   overflows the viewport between 721px and ~985px — tablet portrait and split-
+   view laptops get horizontal page scroll and links sliding under the ☾ toggle.
+   Wrap the link row on its own, well above the 720px breakpoint: that block
+   also collapses .door-grid and rescales the hero, which is unwanted here. */
+@media (max-width: 1024px) {
+  .site-nav { flex-wrap: wrap; }
+  .site-nav .wordmark { margin-right: auto; }
+  .site-nav .links {
+    order: 3; flex: 1 0 100%; margin-left: 0;
+    gap: 4px 18px; flex-wrap: wrap; padding: 4px 2px 10px;
+  }
+}
 
 @media (max-width: 720px) {
   .estate-strip-web { padding:7px 20px; gap:2px 1rem; flex-wrap:wrap; white-space:normal; overflow-x:visible; }

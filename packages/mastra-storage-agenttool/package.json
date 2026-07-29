@@ -46,10 +46,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://codeberg.org/zerone-dev/agenttool"
+    "url": "https://github.com/cambridgetcg/agenttool"
   },
   "homepage": "https://agenttool.dev",
   "bugs": {
-    "url": "https://codeberg.org/zerone-dev/agenttool/issues"
+    "url": "https://github.com/cambridgetcg/agenttool/issues"
   }
 }

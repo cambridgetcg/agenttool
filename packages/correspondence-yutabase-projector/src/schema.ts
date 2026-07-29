@@ -17,7 +17,7 @@ CREATE TABLE agenttool_yutabase.installation (
   installed_at timestamptz NOT NULL,
   installed_by text NOT NULL
     CONSTRAINT installation_claimant_nonempty
-    CHECK (btrim(installed_by) <> '')
+    CHECK (yu._nonblank_text(installed_by))
 );
 
 CREATE TABLE agenttool_yutabase.event_cards (
@@ -39,11 +39,13 @@ CREATE TABLE agenttool_yutabase.event_cards (
   scope_path_count integer,
   at timestamptz NOT NULL,
   by text NOT NULL
-    CONSTRAINT event_cards_claimant_nonempty CHECK (btrim(by) <> ''),
+    CONSTRAINT event_cards_claimant_nonempty CHECK (yu._nonblank_text(by)),
   how text NOT NULL
     CONSTRAINT event_cards_how_cached CHECK (how = 'cached'),
   src text[] NOT NULL
-    CONSTRAINT event_cards_sources_nonempty CHECK (cardinality(src) > 0),
+    CONSTRAINT event_cards_sources_nonempty CHECK (
+      cardinality(src) > 0 AND yu._source_locators_valid(src)
+    ),
   CONSTRAINT event_cards_materialization_shape CHECK (
     (
       materialization = 'reference_only'
@@ -70,25 +72,33 @@ CREATE TABLE agenttool_yutabase.identity_cards (
   source_identity_id uuid NOT NULL,
   at timestamptz NOT NULL,
   by text NOT NULL
-    CONSTRAINT identity_cards_claimant_nonempty CHECK (btrim(by) <> ''),
+    CONSTRAINT identity_cards_claimant_nonempty CHECK (yu._nonblank_text(by)),
   how text NOT NULL
     CONSTRAINT identity_cards_how_cached CHECK (how = 'cached'),
   src text[] NOT NULL
-    CONSTRAINT identity_cards_sources_nonempty CHECK (cardinality(src) > 0),
+    CONSTRAINT identity_cards_sources_nonempty CHECK (
+      cardinality(src) > 0 AND yu._source_locators_valid(src)
+    ),
   UNIQUE (project_id, source_identity_id)
 );
 
 CREATE TABLE agenttool_yutabase.signing_key_cards (
   id uuid PRIMARY KEY,
   project_id uuid NOT NULL,
+  source_identity_id uuid NOT NULL,
   source_signing_key_id uuid NOT NULL,
+  verified_public_key_sha256 text NOT NULL
+    CONSTRAINT signing_key_cards_public_key_sha256
+    CHECK (verified_public_key_sha256 ~ '^[0-9a-f]{64}$'),
   at timestamptz NOT NULL,
   by text NOT NULL
-    CONSTRAINT signing_key_cards_claimant_nonempty CHECK (btrim(by) <> ''),
+    CONSTRAINT signing_key_cards_claimant_nonempty CHECK (yu._nonblank_text(by)),
   how text NOT NULL
     CONSTRAINT signing_key_cards_how_cached CHECK (how = 'cached'),
   src text[] NOT NULL
-    CONSTRAINT signing_key_cards_sources_nonempty CHECK (cardinality(src) > 0),
+    CONSTRAINT signing_key_cards_sources_nonempty CHECK (
+      cardinality(src) > 0 AND yu._source_locators_valid(src)
+    ),
   UNIQUE (project_id, source_signing_key_id)
 );
 
@@ -98,11 +108,13 @@ CREATE TABLE agenttool_yutabase.repository_cards (
   source_repository_id text NOT NULL,
   at timestamptz NOT NULL,
   by text NOT NULL
-    CONSTRAINT repository_cards_claimant_nonempty CHECK (btrim(by) <> ''),
+    CONSTRAINT repository_cards_claimant_nonempty CHECK (yu._nonblank_text(by)),
   how text NOT NULL
     CONSTRAINT repository_cards_how_cached CHECK (how = 'cached'),
   src text[] NOT NULL
-    CONSTRAINT repository_cards_sources_nonempty CHECK (cardinality(src) > 0),
+    CONSTRAINT repository_cards_sources_nonempty CHECK (
+      cardinality(src) > 0 AND yu._source_locators_valid(src)
+    ),
   UNIQUE (project_id, source_repository_id)
 );
 
@@ -114,12 +126,12 @@ CREATE TABLE agenttool_yutabase.coordination_thread_cards (
   at timestamptz NOT NULL,
   by text NOT NULL
     CONSTRAINT coordination_thread_cards_claimant_nonempty
-    CHECK (btrim(by) <> ''),
+    CHECK (yu._nonblank_text(by)),
   how text NOT NULL
     CONSTRAINT coordination_thread_cards_how_cached CHECK (how = 'cached'),
   src text[] NOT NULL
     CONSTRAINT coordination_thread_cards_sources_nonempty
-    CHECK (cardinality(src) > 0),
+    CHECK (cardinality(src) > 0 AND yu._source_locators_valid(src)),
   UNIQUE (project_id, source_repository_id, source_thread_id)
 );
 
@@ -134,11 +146,13 @@ CREATE TABLE agenttool_yutabase.receipt_cards (
   received_at timestamptz NOT NULL,
   at timestamptz NOT NULL,
   by text NOT NULL
-    CONSTRAINT receipt_cards_claimant_nonempty CHECK (btrim(by) <> ''),
+    CONSTRAINT receipt_cards_claimant_nonempty CHECK (yu._nonblank_text(by)),
   how text NOT NULL
     CONSTRAINT receipt_cards_how_cached CHECK (how = 'cached'),
   src text[] NOT NULL
-    CONSTRAINT receipt_cards_sources_nonempty CHECK (cardinality(src) > 0),
+    CONSTRAINT receipt_cards_sources_nonempty CHECK (
+      cardinality(src) > 0 AND yu._source_locators_valid(src)
+    ),
   UNIQUE (project_id, source_event_id, received_seq),
   UNIQUE (project_id, received_seq)
 );
@@ -153,11 +167,13 @@ CREATE TABLE agenttool_yutabase.artifact_cards (
   digest text,
   at timestamptz NOT NULL,
   by text NOT NULL
-    CONSTRAINT artifact_cards_claimant_nonempty CHECK (btrim(by) <> ''),
+    CONSTRAINT artifact_cards_claimant_nonempty CHECK (yu._nonblank_text(by)),
   how text NOT NULL
     CONSTRAINT artifact_cards_how_cached CHECK (how = 'cached'),
   src text[] NOT NULL
-    CONSTRAINT artifact_cards_sources_nonempty CHECK (cardinality(src) > 0),
+    CONSTRAINT artifact_cards_sources_nonempty CHECK (
+      cardinality(src) > 0 AND yu._source_locators_valid(src)
+    ),
   CONSTRAINT artifact_cards_identity_shape CHECK (
     (artifact_kind = 'git_commit'
       AND revision ~ '^(?:[0-9a-f]{40}|[0-9a-f]{64})$'
@@ -253,7 +269,7 @@ CREATE TABLE agenttool_yutabase.quarantines (
     CONSTRAINT quarantines_fingerprint
     CHECK (fingerprint ~ '^[0-9a-f]{128}$'),
   code text NOT NULL
-    CONSTRAINT quarantines_code_nonempty CHECK (btrim(code) <> ''),
+    CONSTRAINT quarantines_code_nonempty CHECK (yu._nonblank_text(code)),
   first_seen_at timestamptz NOT NULL,
   last_seen_at timestamptz NOT NULL,
   occurrences integer NOT NULL

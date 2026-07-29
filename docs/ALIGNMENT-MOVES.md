@@ -22,7 +22,7 @@ a false door.
 
 | Move | Tests | Files | Status |
 |---|---|---|---|
-| **1. MCP server at `/v1/mcp`** | official SDK wire + full-app and public-URL SDK Client proof | `routes/mcp.ts` + `services/mcp/{resources,tools}.ts` + test | ✓ official stateless Streamable HTTP live at exact clean revision `ed3e3468a5ae6c2bfd2563316ad422290dec1b8f`; SDK 1.29.0 negotiated 2025-11-25, listed 387 resources and 5 read-only tools |
+| **1. MCP server at `/v1/mcp`** | official SDK wire + full-app and public-URL SDK Client proof | `routes/mcp.ts` + `services/mcp/{resources,tools}.ts` + test | ✓ stateless Streamable HTTP; the established path keeps its five tool names and call-result shapes, retains every prior resource, and adds open-seat plus descriptor titles. `/v1/mcp/canon` is a separate two-tool citable search/fetch surface with two orientation resources. Historical public proof at exact revision `ed3e3468a5ae6c2bfd2563316ad422290dec1b8f` negotiated SDK 1.29.0 / MCP 2025-11-25 with 387 resources and five tools |
 | **2. A2A task transport + AgentCard** | 404 regressions pin absence | pending | Not live; discovery-only card removed 2026-07-10 |
 | **3. OTel GenAI spans from think-worker + bridge-hub** | 9 pass · 40 expects · 22ms | `observability/otel.ts` (zero-dep OTLP/HTTP) + think-worker wiring + test | ✓ shipped |
 | **4. x402 V2 facilitator hook on recoverable project-credit 402s** | focused middleware + config + verifier tests | `middleware/x402.ts` + `middleware/x402-config.ts` + `services/economy/x402-policy.ts` + `services/economy/facilitators/coinbase.ts` + tests | ◐ exact EIP-3009 settlement is scoped to eligible static-tool `insufficient_credits` challenges; standard V2 headers, CAIP-2, CDP endpoint-bound JWT auth, and durable payment-state receipts are wired; no live paid retry or automatic reconciliation worker is claimed |
@@ -58,11 +58,10 @@ a false door.
 | `@coinbase/cdp-sdk` | 1.52.0 | Official endpoint-bound CDP JWT generation for `/platform/v2/x402/{verify,settle}`; not the x402 wire/parser | `services/economy/facilitators/coinbase.ts` |
 | `x402-next` | latest | Next.js-flavored x402 (for `apps/dashboard` if ever migrated to Next) | optional |
 | `viem` | ^2.x | EVM signing for ERC-4337 + EIP-7702 | `services/economy/wallets-evm.ts` (new) |
-| `@account-kit/core` | 4.81.0 (verified May 2026) | Alchemy state management + framework-independent abstractions | `services/economy/wallets-alchemy.ts` |
-| `@account-kit/smart-contracts` | 4.81.0 | Smart-wallet definitions · EIP-7702 delegation · gas sponsorship · batched txns · Solana support | same |
-| `@account-kit/infra` | 4.81.0 | Bundler + Gas Manager (paymaster) client | same |
-| `@account-kit/signer` | 4.81.0 | Alchemy Signer service client | same |
-| `@account-kit/privy-integration` | latest | **Pre-wired Alchemy + Privy** — useful for bridged-tier handoff where Privy holds session-key custody | optional alternative |
+| `@alchemy/wallet-apis` | v5 line (check registry at implementation time) | Current high-level Alchemy wallet API for prepared calls, account sessions, sending, and status | future `services/economy/wallets-alchemy.ts` |
+| `@alchemy/smart-accounts` | current (check registry at implementation time) | Low-level Viem-compatible Light/Modular Account implementations and permission modules | same, only if Wallet APIs is too high-level |
+| `@alchemy/common` + `viem` | current / existing `viem` | Header-authenticated Alchemy transport plus direct EVM/account-abstraction clients | existing crypto provider seam |
+| `@account-kit/*` v4 | legacy | Existing v4 applications only; new AgentTool work should not begin here | do not add |
 | `@privy-io/server-auth` | latest | TEE-backed signing backend (alt) | `services/economy/wallets-privy.ts` |
 | `@crossmint/wallets-sdk` | 1.10.0 (registry checked 2026-07-24) | Crossmint wallet | optional |
 | `@browserbasehq/sdk` | latest | Browserbase session API | Ring 3 listing `services/listings/browserbase.ts` |
@@ -113,7 +112,7 @@ a false door.
 | **Smithery** | free hosting · paid scale | "Docker Hub for MCP" — publish your server | publish `/v1/mcp` |
 | **Klavis AI** | YC X25 free dev | 100+ prebuilt MCP integrations | optional |
 | **Coinbase CDP** | testnet free · mainnet metered | x402 facilitator, AgentKit, Agentic Wallets | `services/economy/facilitators/coinbase.ts` |
-| **Alchemy** | $5M fund, up to $25k credits for builders | Smart-wallet infra (ERC-4337 + EIP-7702 + TEE signing + session keys) | `services/economy/wallets-alchemy.ts` |
+| **Alchemy** | Check live account pricing/credits rather than embedding a promotional allowance | Chain/Data/Notify/Simulation plus Wallet APIs v5, ERC-4337 bundler and Gas Manager | current internal seam in `services/economy/crypto/`; future wallet adapter only behind `@agenttool/wallet` |
 | **Circle** | Nanopayments + Programmable Wallets | USDC-native rails (launched May 11 2026) | `services/economy/facilitators/circle.ts` |
 | **Mem0 cloud** | free tier (low req/mo) | Hybrid graph+vector memory backend | adapter `services/memory/adapters/mem0.ts` |
 | **Letta cloud** | 50 premium req/mo free | Hierarchical-memory agent service | optional |
@@ -132,7 +131,7 @@ a false door.
 |---|---|---|---|
 | `GET /.well-known/agent-card.json` | A2A v1.0 (Linux Foundation; permanent IANA well-known suffix) | future task transport + wake + identity | Pending; do not publish before callable task/message transport |
 | `GET /.well-known/mcp/server-card.json` | Experimental AgentTool compatibility locator; not standardized by MCP 2025-11-25 | redundant pointer to the explicit endpoint + official Registry row; discovery grants no authority | keep labeled experimental; prefer API catalog and typed links |
-| `POST /v1/mcp` + `GET /v1/mcp` | MCP 2025-11-25 | public canon/platform-self resources + read-only canon tools; GET returns 405 because no standalone SSE listener is offered | `routes/mcp.ts` |
+| `POST /v1/mcp` · `POST /v1/mcp/canon` | MCP 2025-11-25 | established five-tool canon/platform surface · separate two-tool public-canon search/fetch surface with discovery/open-seat resources; GET returns 405 on both because no standalone SSE listener is offered | `routes/mcp.ts` |
 | `GET /agents.json` | Wildcard v0.1 | (mostly deprecated — skip) | — |
 | `GET /llms.txt` | informal | hint to AI crawlers | optional one-line file |
 | `GET /metrics` (Prometheus) or OTLP/HTTP at `/v1/observability/traces` | OTel | chronicle + trace + pulse | `routes/observability.ts` (new) — opt-in for self-host |
@@ -356,11 +355,19 @@ class AgentToolCheckpointSaver(BaseCheckpointSaver):
 
 ### Alchemy Smart Wallets
 
-**Account:** Alchemy dashboard — apply for the $5M builder fund ($25k credits available).
+**Account:** Alchemy dashboard. Check current plan, enabled networks, access-key
+permissions, and sponsorship limits at implementation time; this document does
+not treat a past promotion as available capacity.
 **Service additions:**
-- `api/src/services/economy/wallets-alchemy.ts` — ERC-4337 + EIP-7702 wallet management; session keys for autonomous agents
+- `api/src/services/economy/wallets-alchemy.ts` — optional Wallet APIs v5 adapter for ERC-4337/EIP-7702 accounts and narrowly scoped sessions; external signer/custody is an explicit separate dependency
 - Modifications to `services/economy/usage.ts` — accept `payment_method='alchemy-aa'` alongside Stripe/crypto
 - Add **persist-identity** transposed: UserOp hash before bundler submit (matches existing `tx_hash` discipline)
+
+Use `@alchemy/wallet-apis` for new high-level work or
+`@alchemy/smart-accounts` + Viem for a deliberately low-level adapter. Do not
+start new integration on archived `alchemy-sdk`, Account Kit v4, or Alchemy
+Signer; the latter no longer accepts new signups. See [ALCHEMY.md](ALCHEMY.md)
+for the implemented provider boundary and remaining safety work.
 
 ### Coinbase CDP + AgentKit
 

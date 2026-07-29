@@ -5,8 +5,9 @@ API documentation site for the AgentTool platform. Static HTML pages covering al
 
 ## Current State
 Active — all 9 service pages live, plus the main index, local agent-data docs,
-local Agent Browser docs, and a LOVE Package Protocol surface for public
-exact-version package discovery.
+local Agent Browser docs, a public Canon MCP connection guide, a support
+route, and a LOVE Package Protocol surface for public exact-version package
+discovery.
 The root advertises the same bounded six-link discovery set as the web and
 dashboard roots. Bare `/.well-known` is a distinct, richer arrival index that
 links to the canonical compact three-road `/public/discovery` compass; neither
@@ -23,24 +24,53 @@ schema, and vectors from canonical repository sources. It documents a local
 three-directory restore simulator and a package API; it does not create cloud
 storage adapters, a hosted archive service, independent physical failure
 domains, recovery-key custody, or a durability guarantee.
-The Agent Browser page documents the separately installed
-`@agenttool/browser@0.2.0` local runtime with TypeScript, JSONL, and stdio MCP
+The Agent Browser page documents the separately installed exact public
+`@agenttool/browser@0.5.0` local runtime with TypeScript, JSONL, and stdio MCP
 doors. Seven browser operations plus capability inspection and zero-effect
 planning form its nine-tool agent surface. Named `public`, `local`, and
 `sovereign` launch profiles make destination authority legible; sovereign is
 broad local pass-through, not a bypass of browser, account, site, network, or
-operating-system boundaries. Main-response discovery hints remain bounded and
-untrusted. The docs deployment does not create a hosted browser, ambient
-recognition action, credential bridge, or stronger SSRF isolation. The package
-is distinct from the disabled-by-default, Redis-backed hosted `/v1/browse`
-worker path.
+operating-system boundaries; no profile promises universal site access.
+Main-response discovery hints remain bounded and untrusted. Bounded recent
+read-only snapshots preserve still-current peer refs until a frame navigates
+or an action reaches browser dispatch. Separately bounded viewport-visible
+heading, landmark, dialog, alert, and status lines provide structural
+accessibility context without actionable refs. Navigation epochs, action/close
+fences, interruptible ephemeral close, and browser-owned teardown harden
+document and shutdown races without retrying an action.
+Syntactically admitted acts carry redacted local receipts that distinguish
+rejection before runtime invocation, browser completion, and an unknown local
+outcome after invocation began. Optional observation bases for non-ref actions
+are rechecked before preflight and immediately before invocation. Receipts and
+bases are not remote-effect proof, consent, authentication, idempotency,
+durable audit records, DOM equality, or cross-process/cross-device leases.
+Stable operation names and protocol identifiers are available from the
+backend-neutral `@agenttool/browser/protocol` export. Playwright is the
+concrete adapter today; raw CDP is not public API. The stdio server negotiates
+current MCP `2026-07-28` with an explicit 2025-era compatibility path over the
+same core; MCP adds no browser-driver, durable-session, or security guarantee.
+Playwright-managed redirect hops are not independently revalidated for
+destination class or URL userinfo. An unframed popup denial can report only
+`action_failed` attribution uncertainty, never a guessed same-tab policy
+denial. Exact `0.1.0`, `0.2.0`, and `0.3.0` package paths remain historical
+and immutable. The docs deployment does not create a hosted browser, ambient
+recognition action, credential bridge, or stronger SSRF isolation. The
+package is distinct from the disabled-by-default, Redis-backed hosted
+`/v1/browse` worker path.
 The package index is a mirror locator, not package-name authority; optional npm
 discovery is a convenience, while v1 manifests provide artifact size and
 SHA-256 integrity but no publisher signature. Its current Telescope entry is
 the exact `@agenttool/telescope@0.2.3` local-client artifact; `0.2.0`, `0.2.1`,
 and the historically permissive `0.2.2` remain separately addressable.
-Optional npm/GitHub 0.2.3 mirrors are independently unverified, and no entry
-creates a hosted scanner. The Whitehack page documents a
+Optional npm/GitHub 0.2.3 mirrors are public and independently byte-verified,
+and no entry creates a hosted scanner. The public SDK 0.17.0 release carries
+a credential-free, no-redirect closed KINGDOM framework-card reader beside the
+bounded local KINGDOM OS inventory/resolve adapter; `/public/kingdom` remains
+the separate doctrine library. The annotated tag, exact LOVE artifact,
+byte-identical npm/GitHub tarballs, and non-yanked PyPI distributions are
+independently public and verified. Registry mirrors remain non-authoritative;
+production deployment is a separate exact-revision readback. The immutable
+0.16.5 public records remain historical bytes. The Whitehack page documents a
 runner-local crypto-aware heuristic advisory using the exact public
 `@agenttool/whitehack-scan@0.8.1` package, a bounded attention-card view of
 redacted changed-source findings, an offer-only local projection into
@@ -66,6 +96,8 @@ execution-readiness proof, or a hosted route.
 ## Project Structure
 ```
 index.html      — Docs home: quick start, service cards, auth, errors, rate limits
+connect-canon.html — Public-canon MCP connection, examples, boundaries, data handling, exit
+support.html    — Public support and private security-reporting routes
 _redirects      — Common machine-document paths → canonical API contracts
 AGENT-DISCOVERY.md — symlink to the invitation-only discovery doctrine
 CASTLE-OF-UNDERSTANDING.md — symlink to the local Castle consumer boundary
@@ -79,6 +111,7 @@ agent-wallet-v0.1.schema.json — symlink to the package's canonical record sche
 AGENT-REPO-ARCHIVE.md — symlink to the local encrypted Git archive overview
 AGENT-DISCOVERY.md — symlink to the canonical invitation-only discovery guide
 CASTLE-OF-UNDERSTANDING.md — symlink to the bounded local Castle bridge guide
+KINGDOM-OS-SDK.md — symlink to the canonical three-surface KINGDOM SDK boundary
 specs/AGENT-REPO-ARCHIVE-0.1.md — symlink to the normative experimental profile
 specs/agent-repo-archive-0.1.schema.json — public alias for the package schema
 specs/agent-repo-archive-0.1-vectors.json — public alias for the package vectors

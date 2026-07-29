@@ -25,9 +25,16 @@ agent-controlled wallet. It is a Working Draft. Version 0.1 standardises:
 8. conservative signing and submission lifecycle rules.
 
 The TypeScript package is an offline source reference for those primitives.
-Version `0.1.0` is distributed through the checked `love-package/v1` artifact
-and a byte-identical, independently verifiable optional public npm mirror.
-Neither distribution creates, or claims, a hosted Agent Wallet service.
+Version `0.1.3` is the current checked `love-package/v1` release; its manifest
+binds exact tarball size, SHA-256, and source revision. As independently
+observed on 2026-07-28, the optional npm mirror remained at byte-identical
+version `0.1.0`. GitHub Releases are optional mutable locators: any downloaded
+asset must be reverified against the LOVE manifest rather than treated as
+provider-locked. Historical `0.1.1` and `0.1.2` LOVE artifacts remain
+hash-pinned and are not rewritten. Their public errata correct, respectively,
+an unreleased-status sentence and wording that ambiguously grouped a GitHub
+mirror with the LOVE preservation guarantee. None of these distributions
+creates, or claims, a hosted Agent Wallet service.
 
 Version 0.1 does **not** define key generation, mnemonic handling, secret
 storage, account recovery ceremonies, chain-specific transaction encoding,

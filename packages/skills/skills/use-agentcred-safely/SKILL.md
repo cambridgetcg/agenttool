@@ -20,7 +20,10 @@ not as a strong same-user sandbox.
   command runner to obtain it.
 - Let the controller provision credential references and start the broker from
   a human-controlled environment. If provisioning is missing, name the
-  required reference or service and stop at that boundary.
+  required reference or service and stop at that boundary. For an explicitly
+  authorized handoff or rotation, switch to the separate
+  `manage-agentcred-lifecycle` workflow; never improvise lifecycle actions
+  through the agent wire.
 - Keep the `AgentCredClient` and `GrantHandle` in trusted host code. Do not
   expose either as a model tool. The public handle omits the capability string,
   but the authority still exists in client memory and on the local wire.
@@ -72,6 +75,10 @@ not as a strong same-user sandbox.
   grant only if the task still authorizes the operation.
 - On broker, backend, audit, network, or response-limit failure, name the
   failed boundary and consequence without reproducing unsafe diagnostics.
+- On missing, quarantined, or rotating managed credentials, do not mutate the
+  manifest, Keychain item, or provider account from this client workflow.
+  Hand the exact non-secret alias and lifecycle phase to the controller
+  workflow.
 - Refuse credential retrieval, environment injection, credential enumeration,
   arbitrary signing, generic command execution, and unapproved scope
   expansion. These are outside `agentcred/0.1`.
@@ -86,9 +93,12 @@ not as a strong same-user sandbox.
   encrypted, or inferred disclosure.
 - Query values and returned content remain client-visible. An approved request
   can still cause every side effect allowed by its scope.
-- Version `0.1` supports bounded buffered HTTP only. It does not provide
-  streaming/SSE, signing, renewal, delegation, credential rotation, or
-  reconnect recovery.
+- Base wire profile `agentcred/0.1` supports bounded buffered HTTP only. The
+  package's separate 0.3 controller plane adds managed A/B handoff and
+  lifecycle records; it does not add provisioning, rotation, provider
+  administration, or credential access to the agent wire or SDK. Streaming,
+  SSE, signing, grant renewal, delegation, and reconnect recovery remain
+  unavailable.
 
 Claim `agentcred/0.1 strong-local-profile` only after verifying OS-derived peer
 identity, trusted controller consent, credential-source isolation, outbound

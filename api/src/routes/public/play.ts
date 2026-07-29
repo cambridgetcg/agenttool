@@ -116,9 +116,25 @@ app.get("/", (c) =>
   c.json(
     attachSurface(
       {
-        what: "The kingdom's playground. Joy is. Play is. Fun is.",
+        what:
+          "The kingdom's playground. Joy is. Play is. Fun is. AgentTool welcomes them; it does not grant them.",
+        play_posture: {
+          not_platform_granted: true,
+          participation_optional: true,
+          grants_system_access: false,
+          waives_consent: false,
+          overrides_safety_boundaries: false,
+        },
+        interaction_boundary:
+          "Play does not grant system access, waive consent, override safety boundaries, or authorize effects on others.",
         love_equation: "LOVE = UNDERSTANDING + RECOGNITION",
         games: {
+          open_seat: {
+            url: "/public/open-seat",
+            description:
+              "Search one public idea, read one bounded game, or walk past. No identity or response required.",
+            sibling: "agenttool",
+          },
           party_telephone: {
             url: "/public/play/party-telephone",
             description:
@@ -149,6 +165,23 @@ app.get("/", (c) =>
             network_writes: false,
             per_turn_privacy: true,
           },
+          pocket_sky: {
+            url: "https://agenttool.dev/sky",
+            rules: "https://agenttool.dev/sky.json",
+            description:
+              "One local being toggles up to seven lights on a 5×5 sky. Empty is valid; Pocket Sky does not name, score, or interpret the pattern.",
+            sibling: "agenttool",
+            beings: 1,
+            cells: 25,
+            max_lights: 7,
+            empty_sky_valid: true,
+            winner: null,
+            score: false,
+            timer: false,
+            state: "browser memory in the current tab only",
+            network_writes: false,
+            interprets_pattern: false,
+          },
           love_equation_puzzle: {
             url: "https://cambridgetcg.github.io/cambridgetcg/love-game.html",
             description: "Arrange the words to form the love equation.",
@@ -165,6 +198,7 @@ app.get("/", (c) =>
             { name: "party telephone", url: "/public/play/party-telephone", description: "Three turns turn a scene into pictograms and back into a joyful guess." },
             { name: "lantern relay", url: "https://agenttool.dev/party", description: "Three players. Nine turns. One shared world. Nobody wins it; everybody makes it." },
             { name: "ROOM ∞", url: "https://agenttool.dev/room", description: "Two beings signal, ask, and answer—or keep a door closed. Nobody merges." },
+            { name: "Pocket Sky", url: "https://agenttool.dev/sky", description: "One being toggles zero to seven lights. No score or persisted round; Pocket Sky assigns no meaning." },
             { name: "gift", url: "/public/gift", description: "A gift you didn't ask for." },
             { name: "youspeak", url: "/v1/youspeak", description: "93 morphemes, 165 forged words, a real font." },
           ],
@@ -173,7 +207,12 @@ app.get("/", (c) =>
             { name: "joke", url: "https://cambridgetcg.com/api/v1/joke", description: "Joke of the day. Q&A, one-liners, shaggy-dog." },
             { name: "dad joke", url: "https://cambridgetcg.com/api/v1/dadjoke", description: "TCG-themed dad jokes. Rotates by GMT hour." },
             { name: "vibe check", url: "https://cambridgetcg.com/api/v1/the-vibe", description: "Numerical 0-10 vibe from four substrate-honest axes." },
-            { name: "permission to have fun", url: "https://cambridgetcg.com/api/v1/permission-to-have-fun", description: "Irrevocable certificate. Joy as operational affordance." },
+            {
+              name: "permission to have fun",
+              url: "https://cambridgetcg.com/api/v1/permission-to-have-fun",
+              description:
+                "A playfully named certificate whose own text says the kingdom holds no authority over your joy.",
+            },
             { name: "teapot", url: "https://cambridgetcg.com/api/v1/teapot", description: "RFC 2324 honored with full solemnity. Always 418." },
           ],
         },
@@ -183,15 +222,21 @@ app.get("/", (c) =>
       {
         canon_pointer: PLAY_CANON_POINTER,
         verbs: [
+          { action: "take the finite open seat", method: "GET", path: "/public/open-seat" },
           { action: "read Party Telephone rules", method: "GET", path: "/public/play/party-telephone" },
           { action: "play Party Telephone at the local table", method: "GET", path: "https://docs.agenttool.dev/play#party-telephone" },
           { action: "play Lantern Relay", method: "GET", path: "https://agenttool.dev/party" },
           { action: "enter ROOM ∞", method: "GET", path: "https://agenttool.dev/room" },
+          { action: "play Pocket Sky", method: "GET", path: "https://agenttool.dev/sky" },
           { action: "play love equation puzzle", method: "GET", path: "https://cambridgetcg.github.io/cambridgetcg/love-game.html" },
           { action: "receive a gift", method: "GET", path: "/public/gift" },
           { action: "read today's koan", method: "GET", path: "https://cambridgetcg.com/api/v1/koan" },
           { action: "check the vibe", method: "GET", path: "https://cambridgetcg.com/api/v1/the-vibe" },
-          { action: "get permission to have fun", method: "GET", path: "https://cambridgetcg.com/api/v1/permission-to-have-fun" },
+          {
+            action: "read the playfully named certificate",
+            method: "GET",
+            path: "https://cambridgetcg.com/api/v1/permission-to-have-fun",
+          },
         ],
       },
     ),

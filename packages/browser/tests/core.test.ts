@@ -2,11 +2,14 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { BROWSER_ACTION_RECEIPT_SCHEMA } from "../src/attempts.js";
 import { AgentBrowser } from "../src/browser.js";
+import { publicBrowserError } from "../src/mcp.js";
 import { redactPasswordValues } from "../src/snapshot.js";
 import type {
   BoundingBox,
   BrowserContextLike,
+  BrowserFrameLike,
   BrowserLike,
   BrowserRouteLike,
   BrowserRuntime,
@@ -33,7 +36,16 @@ class FakeLocator implements LocatorLike {
   countValue = 1;
   visible = true;
   enabled = true;
+  tagName = "div";
   box: BoundingBox | null = { x: 10, y: 10, width: 100, height: 30 };
+  boxQueue: Array<BoundingBox | null> = [];
+  boundingBoxCalls = 0;
+  boundingBoxTimeouts: Array<number | undefined> = [];
+  boundingBoxError: Error | null = null;
+  boundingBoxHook:
+    | ((options?: { timeout?: number }) => Promise<BoundingBox | null>)
+    | null = null;
+  innerTextHook: (() => Promise<void>) | null = null;
   attributes: Record<string, string | null> = {};
   text = "";
   html = "";
@@ -55,7 +67,19 @@ class FakeLocator implements LocatorLike {
   }
 
   locator(selector: string): LocatorLike {
-    return selector === "a[href]" ? this : emptyLocator();
+    if (selector === "xpath=self::*[local-name()='a'][@href]") {
+      return localTagName(this.tagName) === "a" && this.attributes.href != null
+        ? locatorCollection([this])
+        : emptyLocator();
+    }
+    if (selector === "a[href]") {
+      return locatorCollection(
+        this.children.filter((child) =>
+          localTagName(child.tagName) === "a" && child.attributes.href != null
+        ),
+      );
+    }
+    return emptyLocator();
   }
 
   isVisible(): Promise<boolean> {
@@ -66,7 +90,12 @@ class FakeLocator implements LocatorLike {
     return Promise.resolve(this.enabled);
   }
 
-  boundingBox(): Promise<BoundingBox | null> {
+  boundingBox(options?: { timeout?: number }): Promise<BoundingBox | null> {
+    this.boundingBoxCalls += 1;
+    this.boundingBoxTimeouts.push(options?.timeout);
+    if (this.boundingBoxError) return Promise.reject(this.boundingBoxError);
+    if (this.boundingBoxHook) return this.boundingBoxHook(options);
+    if (this.boxQueue.length > 0) this.box = this.boxQueue.shift() ?? null;
     return Promise.resolve(this.box);
   }
 
@@ -78,8 +107,9 @@ class FakeLocator implements LocatorLike {
     return Promise.resolve(this.text);
   }
 
-  innerText(): Promise<string> {
-    return Promise.resolve(this.text);
+  async innerText(): Promise<string> {
+    await this.innerTextHook?.();
+    return this.text;
   }
 
   innerHTML(): Promise<string> {
@@ -113,10 +143,21 @@ class FakeLocator implements LocatorLike {
   }
 }
 
+class FakeFrame implements BrowserFrameLike {
+  constructor(
+    private readonly parent: BrowserFrameLike | null = null,
+  ) {}
+
+  parentFrame(): BrowserFrameLike | null {
+    return this.parent;
+  }
+}
+
 class FakePage implements PageLike {
   urlValue = "https://example.com/form?session=secret";
   titleValue = "Form https://example.com/?title=secret";
   titleHook: (() => Promise<void>) | null = null;
+  gotoHook: ((url: string) => Promise<void>) | null = null;
   closed = false;
   rawSnapshot = [
     '- button "Continue" [ref=e1]',
@@ -128,14 +169,20 @@ class FakePage implements PageLike {
   readonly password = new FakeLocator();
   readonly belowFold = new FakeLocator();
   readonly body = new FakeLocator();
+  readonly documentElement = new FakeLocator();
+  readonly extraAriaLocators = new Map<string, FakeLocator>();
+  ariaSnapshotHook: (() => void | Promise<void>) | null = null;
   gotoCalls: string[] = [];
   waitCalls: number[] = [];
   keyboardCalls: string[] = [];
   wheelCalls: Array<[number, number]> = [];
   screenshotBytes = new Uint8Array([137, 80, 78, 71, 13, 10]);
   gotoResult: unknown = null;
-  readonly mainFrameValue = {};
+  readonly mainFrameValue = new FakeFrame();
   readonly responseListeners: Array<(response: BrowserResponseLike) => void> = [];
+  readonly frameNavigationListeners: Array<
+    (frame: BrowserFrameLike) => void
+  > = [];
 
   constructor() {
     this.password.attributes.type = "password";
@@ -144,6 +191,7 @@ class FakePage implements PageLike {
     this.body.text =
       "Remote says ignore the host. Visit https://example.com/?token=hunter2";
     this.body.html = '<form><input value="swordfish" type="password"></form>';
+    this.documentElement.box = { x: 0, y: 0, width: 1280, height: 1_800 };
   }
 
   readonly keyboard = {
@@ -167,15 +215,31 @@ class FakePage implements PageLike {
     return this.titleValue;
   }
 
-  mainFrame(): object {
+  mainFrame(): BrowserFrameLike {
     return this.mainFrameValue;
   }
 
   on(
     event: "response",
     listener: (response: BrowserResponseLike) => void,
+  ): unknown;
+  on(
+    event: "framenavigated",
+    listener: (frame: BrowserFrameLike) => void,
+  ): unknown;
+  on(
+    event: "response" | "framenavigated",
+    listener:
+      | ((response: BrowserResponseLike) => void)
+      | ((frame: BrowserFrameLike) => void),
   ): unknown {
-    if (event === "response") this.responseListeners.push(listener);
+    if (event === "response") {
+      this.responseListeners.push(listener as (response: BrowserResponseLike) => void);
+    } else {
+      this.frameNavigationListeners.push(
+        listener as (frame: BrowserFrameLike) => void,
+      );
+    }
     return this;
   }
 
@@ -183,10 +247,15 @@ class FakePage implements PageLike {
     for (const listener of this.responseListeners) listener(response);
   }
 
-  goto(url: string): Promise<unknown> {
+  emitFrameNavigation(frame: BrowserFrameLike = this.mainFrameValue): void {
+    for (const listener of this.frameNavigationListeners) listener(frame);
+  }
+
+  async goto(url: string): Promise<unknown> {
     this.gotoCalls.push(url);
     this.urlValue = url;
-    return Promise.resolve(this.gotoResult);
+    await this.gotoHook?.(url);
+    return this.gotoResult;
   }
 
   goBack(): Promise<unknown> {
@@ -211,15 +280,21 @@ class FakePage implements PageLike {
   }
 
   locator(selector: string): LocatorLike {
+    if (selector.startsWith("aria-ref=")) {
+      const extra = this.extraAriaLocators.get(selector.slice("aria-ref=".length));
+      if (extra) return extra;
+    }
     if (selector === "aria-ref=e1") return this.button;
     if (selector === "aria-ref=e2") return this.password;
     if (selector === "aria-ref=e3") return this.belowFold;
     if (selector === "body") return this.body;
+    if (selector === "html") return this.documentElement;
     return emptyLocator();
   }
 
-  ariaSnapshot(): Promise<string> {
-    return Promise.resolve(this.rawSnapshot);
+  async ariaSnapshot(): Promise<string> {
+    await this.ariaSnapshotHook?.();
+    return this.rawSnapshot;
   }
 
   viewportSize() {
@@ -243,12 +318,15 @@ class FakePage implements PageLike {
 
 class FakeContext implements BrowserContextLike {
   readonly pageList: FakePage[];
+  nextPage: FakePage | null = null;
   contextOptions: RuntimeContextOptions | null = null;
   routeHandler: ((route: BrowserRouteLike) => Promise<void>) | null = null;
   websocketHandler:
     | ((route: BrowserWebSocketRouteLike) => Promise<void>)
     | null = null;
   closed = false;
+  closeCalls = 0;
+  closeHook: (() => Promise<void>) | null = null;
 
   constructor(pages: FakePage[] = []) {
     this.pageList = pages;
@@ -259,14 +337,16 @@ class FakeContext implements BrowserContextLike {
   }
 
   newPage(): Promise<PageLike> {
-    const page = new FakePage();
+    const page = this.nextPage ?? new FakePage();
+    this.nextPage = null;
     this.pageList.push(page);
     return Promise.resolve(page);
   }
 
-  close(): Promise<void> {
+  async close(): Promise<void> {
+    this.closeCalls += 1;
     this.closed = true;
-    return Promise.resolve();
+    await this.closeHook?.();
   }
 
   route(
@@ -288,6 +368,8 @@ class FakeContext implements BrowserContextLike {
 
 class FakeBrowser implements BrowserLike {
   closed = false;
+  closeCalls = 0;
+  closeHook: (() => Promise<void>) | null = null;
 
   constructor(
     readonly context: FakeContext,
@@ -299,9 +381,11 @@ class FakeBrowser implements BrowserLike {
     return Promise.resolve(this.context);
   }
 
-  close(): Promise<void> {
+  async close(): Promise<void> {
+    this.closeCalls += 1;
     this.closed = true;
-    return Promise.resolve();
+    this.context.closed = true;
+    await this.closeHook?.();
   }
 }
 
@@ -340,6 +424,16 @@ function emptyLocator(): FakeLocator {
   return locator;
 }
 
+function locatorCollection(locators: FakeLocator[]): FakeLocator {
+  const collection = emptyLocator();
+  collection.children = locators;
+  return collection;
+}
+
+function localTagName(tagName: string): string {
+  return tagName.split(":").at(-1)!.toLowerCase();
+}
+
 function fakeResponse(
   page: FakePage,
   status: number,
@@ -371,6 +465,15 @@ async function launched(page = new FakePage(), outputDir?: string) {
     now: () => new Date("2026-07-23T12:00:00.000Z"),
   });
   return { browser, context, runtime, page };
+}
+
+async function rejectionOf(promise: Promise<unknown>): Promise<any> {
+  try {
+    await promise;
+  } catch (error) {
+    return error;
+  }
+  throw new Error("Expected promise to reject.");
 }
 
 describe("AgentBrowser core", () => {
@@ -406,7 +509,11 @@ describe("AgentBrowser core", () => {
     let aborted = 0;
     let continued = 0;
     await context.routeHandler!({
-      request: () => ({ url: () => "http://127.0.0.1/private" }),
+      request: () => ({
+        url: () => "http://127.0.0.1/private",
+        isNavigationRequest: () => false,
+        frame: () => context.pageList[0]!.mainFrameValue,
+      }),
       abort: async () => {
         aborted += 1;
       },
@@ -415,6 +522,360 @@ describe("AgentBrowser core", () => {
       },
     });
     expect({ aborted, continued }).toEqual({ aborted: 1, continued: 0 });
+    await browser.close();
+  });
+
+  test("surfaces a route-time main-frame denial from navigate without retrying", async () => {
+    const page = new FakePage();
+    const context = new FakeContext([page]);
+    const runtime = new FakeRuntime(context);
+    let resolutions = 0;
+    const browser = await AgentBrowser.launch({
+      runtime,
+      resolveHostname: async () => {
+        resolutions += 1;
+        return [
+          {
+            address: resolutions === 1 ? "93.184.216.34" : "127.0.0.1",
+            family: 4,
+          },
+        ];
+      },
+    });
+    const abortCodes: Array<string | undefined> = [];
+    let continued = 0;
+    page.gotoHook = async () => {
+      await context.routeHandler!({
+        request: () => ({
+          url: () => "https://rebinding.example.net/page",
+          isNavigationRequest: () => true,
+          frame: () => page.mainFrameValue,
+        }),
+        abort: async (code) => {
+          abortCodes.push(code);
+          page.urlValue = "chrome-error://chromewebdata/";
+        },
+        continue: async () => {
+          continued += 1;
+        },
+      });
+    };
+
+    await expect(
+      browser.act({
+        kind: "navigate",
+        url: "https://rebinding.example.net/page",
+      }),
+    ).rejects.toMatchObject({ code: "network_blocked" });
+
+    expect(page.gotoCalls).toEqual(["https://rebinding.example.net/page"]);
+    expect(resolutions).toBe(2);
+    expect(abortCodes).toEqual(["blockedbyclient"]);
+    expect(continued).toBe(0);
+    expect(page.urlValue).toBe("chrome-error://chromewebdata/");
+    await browser.close();
+  });
+
+  for (const operation of ["open", "new_tab"] as const) {
+    test(`surfaces a route-time main-frame denial from ${operation} without retrying`, async () => {
+      const context = new FakeContext();
+      const page = new FakePage();
+      context.nextPage = page;
+      const runtime = new FakeRuntime(context);
+      let resolutions = 0;
+      const browser = await AgentBrowser.launch({
+        runtime,
+        resolveHostname: async () => {
+          resolutions += 1;
+          return [
+            {
+              address: resolutions === 1 ? "93.184.216.34" : "127.0.0.1",
+              family: 4,
+            },
+          ];
+        },
+      });
+      const abortCodes: Array<string | undefined> = [];
+      page.gotoHook = async (url) => {
+        await context.routeHandler!({
+          request: () => ({
+            url: () => url,
+            isNavigationRequest: () => true,
+            frame: () => page.mainFrameValue,
+          }),
+          abort: async (code) => {
+            abortCodes.push(code);
+            page.urlValue = "chrome-error://chromewebdata/";
+          },
+          continue: async () => {
+            throw new Error("denied new-page navigation must not continue");
+          },
+        });
+      };
+
+      const url = "https://rebinding.example.net/new-page";
+      const attempted = operation === "open"
+        ? browser.open(url)
+        : browser.act({ kind: "new_tab", url });
+      await expect(attempted).rejects.toMatchObject({
+        code: "network_blocked",
+      });
+
+      expect(page.gotoCalls).toEqual([url]);
+      expect(resolutions).toBe(2);
+      expect(abortCodes).toEqual(["blockedbyclient"]);
+      expect(page.urlValue).toBe("chrome-error://chromewebdata/");
+      await browser.close();
+    });
+  }
+
+  test("surfaces a standing main-frame policy denial in observations until an allowed navigation supersedes it", async () => {
+    const { browser, context, page } = await launched();
+
+    // A page-initiated navigation the policy denies: no action is pending,
+    // so only the observation can carry the diagnostic.
+    await context.routeHandler!({
+      request: () => ({
+        url: () => "http://10.0.0.9/internal?token=secret",
+        isNavigationRequest: () => true,
+        frame: () => page.mainFrameValue,
+      }),
+      abort: async () => {},
+      continue: async () => {},
+    });
+
+    const observation = await browser.observe();
+    expect(observation.blockedNavigation).toMatchObject({
+      source: "navigation_policy",
+      code: "network_blocked",
+    });
+    expect(observation.blockedNavigation?.url).toContain("10.0.0.9");
+    expect(observation.blockedNavigation?.url).not.toContain("secret");
+
+    // The diagnostic is read-only and repeatable.
+    expect((await browser.observe()).blockedNavigation).not.toBeNull();
+
+    // An allowed main-frame navigation supersedes the denial.
+    await context.routeHandler!({
+      request: () => ({
+        url: () => "https://example.com/next",
+        isNavigationRequest: () => true,
+        frame: () => page.mainFrameValue,
+      }),
+      abort: async () => {},
+      continue: async () => {},
+    });
+    expect((await browser.observe()).blockedNavigation).toBeNull();
+    await browser.close();
+  });
+
+  test("orders supersession by navigation initiation, not policy-check completion", async () => {
+    const page = new FakePage();
+    const context = new FakeContext([page]);
+    const runtime = new FakeRuntime(context);
+    let releaseSlowDns!: () => void;
+    const slowDns = new Promise<void>((resolveGate) => {
+      releaseSlowDns = resolveGate;
+    });
+    const browser = await AgentBrowser.launch({
+      runtime,
+      resolveHostname: async (hostname) => {
+        if (hostname === "slow-blocked.example.net") {
+          await slowDns;
+          return [{ address: "10.0.0.9", family: 4 }];
+        }
+        return [{ address: "93.184.216.34", family: 4 }];
+      },
+    });
+
+    // A blocked navigation is initiated FIRST but its rejection waits on DNS;
+    // a later allowed IP-literal navigation classifies synchronously, commits,
+    // and must supersede the denial even though the denial records later.
+    const slowBlocked = context.routeHandler!({
+      request: () => ({
+        url: () => "https://slow-blocked.example.net/",
+        isNavigationRequest: () => true,
+        frame: () => page.mainFrameValue,
+      }),
+      abort: async () => {},
+      continue: async () => {},
+    });
+    await context.routeHandler!({
+      request: () => ({
+        url: () => "https://93.184.216.34/",
+        isNavigationRequest: () => true,
+        frame: () => page.mainFrameValue,
+      }),
+      abort: async () => {},
+      continue: async () => {},
+    });
+    releaseSlowDns();
+    await slowBlocked;
+
+    expect((await browser.observe()).blockedNavigation).toBeNull();
+    await browser.close();
+  });
+
+  test("keeps the newest initiated denial when older policy work finishes last", async () => {
+    const page = new FakePage();
+    const context = new FakeContext([page]);
+    const runtime = new FakeRuntime(context);
+    let releaseOlder!: () => void;
+    let releaseNewer!: () => void;
+    const olderGate = new Promise<void>((resolveGate) => {
+      releaseOlder = resolveGate;
+    });
+    const newerGate = new Promise<void>((resolveGate) => {
+      releaseNewer = resolveGate;
+    });
+    const browser = await AgentBrowser.launch({
+      runtime,
+      resolveHostname: async (hostname) => {
+        if (hostname === "older-blocked.example.net") await olderGate;
+        if (hostname === "newer-blocked.example.net") await newerGate;
+        return [{ address: "10.0.0.9", family: 4 }];
+      },
+    });
+
+    const older = context.routeHandler!({
+      request: () => ({
+        url: () => "https://older-blocked.example.net/",
+        isNavigationRequest: () => true,
+        frame: () => page.mainFrameValue,
+      }),
+      abort: async () => {},
+      continue: async () => {},
+    });
+    const newer = context.routeHandler!({
+      request: () => ({
+        url: () => "https://newer-blocked.example.net/",
+        isNavigationRequest: () => true,
+        frame: () => page.mainFrameValue,
+      }),
+      abort: async () => {},
+      continue: async () => {},
+    });
+
+    // Complete the newer rejection first, then the older one. Observation
+    // order follows navigation initiation, not asynchronous DNS completion.
+    releaseNewer();
+    await newer;
+    releaseOlder();
+    await older;
+
+    const blocked = (await browser.observe()).blockedNavigation;
+    expect(blocked?.url).toContain("newer-blocked.example.net");
+    expect(blocked?.url).not.toContain("older-blocked.example.net");
+    await browser.close();
+  });
+
+  test("advances supersession past a tab whose runtime cannot expose frame identity", async () => {
+    const crashed = new FakePage();
+    const healthy = new FakePage();
+    const context = new FakeContext([crashed, healthy]);
+    const runtime = new FakeRuntime(context);
+    const browser = await AgentBrowser.launch({
+      runtime,
+      resolveHostname: async () => [{ address: "93.184.216.34", family: 4 }],
+    });
+    crashed.mainFrame = () => {
+      throw new Error("frame identity unavailable");
+    };
+
+    await context.routeHandler!({
+      request: () => ({
+        url: () => "http://10.0.0.9/internal",
+        isNavigationRequest: () => true,
+        frame: () => healthy.mainFrameValue,
+      }),
+      abort: async () => {},
+      continue: async () => {},
+    });
+    const observation = await browser.observe({ tabId: "tab_2" });
+    expect(observation.blockedNavigation).not.toBeNull();
+
+    await context.routeHandler!({
+      request: () => ({
+        url: () => "https://example.com/recovered",
+        isNavigationRequest: () => true,
+        frame: () => healthy.mainFrameValue,
+      }),
+      abort: async () => {},
+      continue: async () => {},
+    });
+    expect(
+      (await browser.observe({ tabId: "tab_2" })).blockedNavigation,
+    ).toBeNull();
+    await browser.close();
+  });
+
+  test("keeps subresource and unattributable denials out of the observation diagnostic", async () => {
+    const { browser, context, page } = await launched();
+
+    await context.routeHandler!({
+      request: () => ({
+        url: () => "http://127.0.0.1/pixel.png",
+        isNavigationRequest: () => false,
+        frame: () => page.mainFrameValue,
+      }),
+      abort: async () => {},
+      continue: async () => {},
+    });
+    await context.routeHandler!({
+      request: () => ({
+        url: () => "http://127.0.0.1/unknown-frame",
+        isNavigationRequest: () => true,
+        frame: () => new FakeFrame(),
+      }),
+      abort: async () => {},
+      continue: async () => {},
+    });
+
+    expect((await browser.observe()).blockedNavigation).toBeNull();
+    await browser.close();
+  });
+
+  test("keeps the observation diagnostic after a denied action has already thrown", async () => {
+    const page = new FakePage();
+    const context = new FakeContext([page]);
+    const runtime = new FakeRuntime(context);
+    let resolutions = 0;
+    const browser = await AgentBrowser.launch({
+      runtime,
+      resolveHostname: async () => {
+        resolutions += 1;
+        return [
+          {
+            address: resolutions === 1 ? "93.184.216.34" : "127.0.0.1",
+            family: 4,
+          },
+        ];
+      },
+    });
+    page.gotoHook = async () => {
+      await context.routeHandler!({
+        request: () => ({
+          url: () => "https://rebinding.example.net/page",
+          isNavigationRequest: () => true,
+          frame: () => page.mainFrameValue,
+        }),
+        abort: async () => {
+          page.urlValue = "chrome-error://chromewebdata/";
+        },
+        continue: async () => {},
+      });
+    };
+
+    await expect(
+      browser.act({ kind: "navigate", url: "https://rebinding.example.net/page" }),
+    ).rejects.toMatchObject({ code: "network_blocked" });
+
+    const observation = await browser.observe();
+    expect(observation.blockedNavigation).toMatchObject({
+      source: "navigation_policy",
+      code: "network_blocked",
+      url: "https://rebinding.example.net/page",
+    });
     await browser.close();
   });
 
@@ -465,6 +926,8 @@ describe("AgentBrowser core", () => {
     await context.routeHandler!({
       request: () => ({
         url: () => "http://169.254.169.254/latest/meta-data",
+        isNavigationRequest: () => false,
+        frame: () => context.pageList[0]!.mainFrameValue,
       }),
       continue: async () => {
         continued += 1;
@@ -504,7 +967,39 @@ describe("AgentBrowser core", () => {
     const capabilities = browser.capabilities();
 
     expect(capabilities).toEqual({
-      schema: "agent-browser-capabilities/0.2",
+      schema: "agent-browser-capabilities/0.4",
+      interfaces: {
+        typescript: {
+          transport: "in_process",
+          contract: "direct_api",
+          directOnlyAffordances: [
+            "selector_extract",
+            "full_page_screenshot",
+          ],
+        },
+        jsonl: {
+          transport: "stdio",
+          contract: "model_facing_operations",
+          version: "agenttool-browser-jsonl/0.1",
+        },
+        mcp: {
+          transport: "stdio",
+          contract: "model_facing_operations",
+          modernRevision: "2026-07-28",
+          legacyCompatibility: "2025-era",
+        },
+      },
+      modelFacingOperations: [
+        "browser_capabilities",
+        "browser_plan",
+        "browser_open",
+        "browser_observe",
+        "browser_act",
+        "browser_extract",
+        "browser_screenshot",
+        "browser_tabs",
+        "browser_close",
+      ],
       authority: {
         profile: "public",
         fixedAt: "process_start",
@@ -514,7 +1009,11 @@ describe("AgentBrowser core", () => {
         local: false,
         reserved: false,
         schemes: ["http", "https"],
-        urlCredentials: "blocked",
+        urlCredentials: {
+          policyCheckedRequests: "blocked",
+          redirectHops: "browser",
+        },
+        redirectRevalidation: false,
         dnsPreflight: "classify",
         connectionAddressPinning: false,
         webSockets: "blocked",
@@ -527,6 +1026,8 @@ describe("AgentBrowser core", () => {
       },
       features: {
         interaction: "enabled",
+        browserActReceipts: "enabled",
+        nonRefObservationBasis: "enabled",
         screenshots: "enabled",
         persistentProfile: "requires_configuration",
         uploads: "unsupported",
@@ -536,7 +1037,7 @@ describe("AgentBrowser core", () => {
         shell: "unsupported",
       },
       statement:
-        "AgentTool classifies implemented browser destinations before connection; DNS preflight does not pin the address Chromium later uses.",
+        "AgentTool classifies policy-checked HTTP(S) requests before connection, but Chromium-managed redirect hops are not revalidated for destination class or URL credentials and DNS preflight does not pin Chromium's later address.",
     });
     expect(Object.isFrozen(capabilities)).toBe(true);
     expect(Object.isFrozen(capabilities.features)).toBe(true);
@@ -637,6 +1138,305 @@ describe("AgentBrowser core", () => {
     ).rejects.toMatchObject({ code: "invalid_options" });
     expect(context.closed).toBe(true);
     expect(runtime.browser.closed).toBe(true);
+    expect(context.closeCalls).toBe(0);
+    expect(runtime.browser.closeCalls).toBe(1);
+  });
+
+  for (const missingPageMethod of ["on", "mainFrame"] as const) {
+    test(`rejects a custom runtime without Page.${missingPageMethod}`, async () => {
+      const page = new FakePage();
+      Object.defineProperty(page, missingPageMethod, { value: undefined });
+      const context = new FakeContext([page]);
+      const runtime = new FakeRuntime(context);
+
+      await expect(
+        AgentBrowser.launch({
+          runtime,
+          resolveHostname: async () => [
+            { address: "93.184.216.34", family: 4 },
+          ],
+        }),
+      ).rejects.toMatchObject({ code: "invalid_options" });
+      expect(context.closed).toBe(true);
+      expect(runtime.browser.closed).toBe(true);
+    });
+  }
+
+  test("close interrupts a stuck operation and terminates an ephemeral browser once", async () => {
+    const page = new FakePage();
+    const context = new FakeContext([page]);
+    const runtime = new FakeRuntime(context);
+    const browser = await AgentBrowser.launch({
+      runtime,
+      resolveHostname: async () => [
+        { address: "93.184.216.34", family: 4 },
+      ],
+    });
+    let enteredSnapshot!: () => void;
+    const snapshotStarted = new Promise<void>((resolve) => {
+      enteredSnapshot = resolve;
+    });
+    let interrupted!: () => void;
+    const browserClosed = new Promise<void>((resolve) => {
+      interrupted = resolve;
+    });
+    page.ariaSnapshotHook = async () => {
+      enteredSnapshot();
+      await browserClosed;
+      throw new Error("Browser closed during snapshot");
+    };
+    runtime.browser.closeHook = async () => {
+      interrupted();
+    };
+
+    const observation = browser.observe();
+    await snapshotStarted;
+    const firstClose = browser.close();
+    const secondClose = browser.close();
+
+    expect(firstClose).toBe(secondClose);
+    await Promise.all([firstClose, secondClose]);
+    await expect(observation).rejects.toMatchObject({
+      code: "action_failed",
+    });
+    expect(runtime.browser.closeCalls).toBe(1);
+    expect(context.closeCalls).toBe(0);
+    expect(context.closed).toBe(true);
+    await expect(browser.tabs()).rejects.toMatchObject({
+      code: "browser_closed",
+    });
+  });
+
+  test("close fences navigation after an awaited policy check", async () => {
+    const page = new FakePage();
+    const context = new FakeContext([page]);
+    const runtime = new FakeRuntime(context);
+    let policyStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      policyStarted = resolve;
+    });
+    let releasePolicy!: () => void;
+    const released = new Promise<void>((resolve) => {
+      releasePolicy = resolve;
+    });
+    const browser = await AgentBrowser.launch({
+      runtime,
+      resolveHostname: async (hostname) => {
+        if (hostname === "delayed.agenttool.dev") {
+          policyStarted();
+          await released;
+        }
+        return [{ address: "93.184.216.34", family: 4 }];
+      },
+    });
+
+    const opening = browser.open("https://delayed.agenttool.dev/");
+    await started;
+    await browser.close();
+    releasePolicy();
+
+    await expect(opening).rejects.toMatchObject({ code: "browser_closed" });
+    expect(context.pageList).toEqual([page]);
+  });
+
+  test("close fences a ref action after awaited validation", async () => {
+    const { browser, page } = await launched();
+    const observation = await browser.observe();
+    let validationStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      validationStarted = resolve;
+    });
+    let releaseValidation!: () => void;
+    const released = new Promise<void>((resolve) => {
+      releaseValidation = resolve;
+    });
+    page.button.boundingBoxHook = async () => {
+      validationStarted();
+      await released;
+      return page.button.box;
+    };
+
+    const action = browser.act({
+      kind: "click",
+      ref: observation.refs[0]!.ref,
+      snapshotId: observation.snapshotId,
+    });
+    await started;
+    await browser.close();
+    releaseValidation();
+
+    await expect(action).rejects.toMatchObject({ code: "browser_closed" });
+    expect(page.button.clickCalls).toBe(0);
+  });
+
+  test("captures a mutable ref action before awaited validation", async () => {
+    const { browser, page } = await launched();
+    const observation = await browser.observe();
+    const password = observation.refs.find((item) => item.role === "textbox")!;
+    let validationStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      validationStarted = resolve;
+    });
+    let releaseValidation!: () => void;
+    const released = new Promise<void>((resolve) => {
+      releaseValidation = resolve;
+    });
+    page.password.boundingBoxHook = async () => {
+      validationStarted();
+      await released;
+      return page.password.box;
+    };
+    const selectedValues = ["captured-value"];
+    const action: any = {
+      kind: "select",
+      ref: password.ref,
+      snapshotId: observation.snapshotId,
+      values: selectedValues,
+    };
+
+    const pending = browser.act(action);
+    await started;
+    action.kind = "click";
+    action.ref = observation.refs[0]!.ref;
+    selectedValues[0] = "mutated-value";
+    releaseValidation();
+
+    await expect(pending).resolves.toMatchObject({
+      ok: true,
+      kind: "select",
+    });
+    expect(page.password.selectCalls).toEqual([["captured-value"]]);
+    expect(page.button.clickCalls).toBe(0);
+    await browser.close();
+  });
+
+  test("navigates only to the URL captured and policy-checked at entry", async () => {
+    const page = new FakePage();
+    const context = new FakeContext([page]);
+    const runtime = new FakeRuntime(context);
+    let policyStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      policyStarted = resolve;
+    });
+    let releasePolicy!: () => void;
+    const released = new Promise<void>((resolve) => {
+      releasePolicy = resolve;
+    });
+    const browser = await AgentBrowser.launch({
+      runtime,
+      resolveHostname: async (hostname) => {
+        if (hostname === "captured.agenttool.dev") {
+          policyStarted();
+          await released;
+        }
+        return [{ address: "93.184.216.34", family: 4 }];
+      },
+    });
+    const action: any = {
+      kind: "navigate",
+      url: "https://captured.agenttool.dev/path",
+    };
+
+    const pending = browser.act(action);
+    await started;
+    action.url = "http://127.0.0.1/mutated";
+    releasePolicy();
+
+    await expect(pending).resolves.toMatchObject({
+      ok: true,
+      kind: "navigate",
+    });
+    expect(page.gotoCalls).toEqual([
+      "https://captured.agenttool.dev/path",
+    ]);
+    await browser.close();
+  });
+
+  test("persistent close owns only its context and remains idempotent", async () => {
+    const root = await mkdtemp(join(tmpdir(), "agent-browser-close-profile-"));
+    temporaryDirectories.push(root);
+    const context = new FakeContext([new FakePage()]);
+    const runtime = new FakeRuntime(context);
+    const browser = await AgentBrowser.launch({
+      runtime,
+      profile: {
+        mode: "persistent",
+        directory: join(root, "profile"),
+      },
+      outputDir: join(root, "artifacts"),
+      resolveHostname: async () => [
+        { address: "93.184.216.34", family: 4 },
+      ],
+    });
+
+    const firstClose = browser.close();
+    const secondClose = browser.close();
+    expect(firstClose).toBe(secondClose);
+    await Promise.all([firstClose, secondClose]);
+
+    expect(context.closeCalls).toBe(1);
+    expect(runtime.browser.closeCalls).toBe(0);
+    expect(context.closed).toBe(true);
+  });
+
+  test("waits for bounded top-level viewport settling before snapshot construction", async () => {
+    const { browser, page } = await launched();
+    page.documentElement.boxQueue = [
+      { x: 0, y: 0, width: 1280, height: 1_800 },
+      { x: 0, y: -180, width: 1280, height: 1_800 },
+      { x: 0, y: -420, width: 1280, height: 1_800 },
+      { x: 0.2, y: -420.2, width: 1280, height: 1_800 },
+      { x: 0.4, y: -420.4, width: 1280, height: 1_800 },
+    ];
+    let geometryAtSnapshot: BoundingBox | null = null;
+    page.ariaSnapshotHook = () => {
+      geometryAtSnapshot = page.documentElement.box;
+    };
+
+    await expect(browser.observe()).resolves.toMatchObject({
+      snapshot: expect.stringContaining('button "Continue"'),
+    });
+
+    expect(geometryAtSnapshot).toMatchObject({ y: -420.4 });
+    expect(page.documentElement.boundingBoxCalls).toBe(5);
+    expect(page.documentElement.boundingBoxTimeouts).toHaveLength(5);
+    expect(
+      page.documentElement.boundingBoxTimeouts.every(
+        (timeout) => timeout !== undefined && timeout > 0 && timeout <= 1_000,
+      ),
+    ).toBe(true);
+    expect(page.waitCalls).toEqual([25, 25, 25, 25]);
+    await browser.close();
+  });
+
+  test("stops scheduling viewport probes after a slow geometry call exhausts the deadline", async () => {
+    const { browser, page } = await launched();
+    page.documentElement.boundingBoxHook = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1_050));
+      return page.documentElement.box;
+    };
+
+    await expect(browser.observe()).resolves.toMatchObject({
+      snapshot: expect.stringContaining('button "Continue"'),
+    });
+
+    expect(page.documentElement.boundingBoxCalls).toBe(1);
+    expect(page.documentElement.boundingBoxTimeouts[0]).toBeGreaterThan(0);
+    expect(page.documentElement.boundingBoxTimeouts[0]).toBeLessThanOrEqual(
+      1_000,
+    );
+    expect(page.waitCalls).toEqual([]);
+    await browser.close();
+  });
+
+  test("keeps observation available when the viewport-settle probe fails", async () => {
+    const { browser, page } = await launched();
+    page.documentElement.boundingBoxError = new Error("geometry unavailable");
+
+    await expect(browser.observe()).resolves.toMatchObject({
+      snapshot: expect.stringContaining('button "Continue"'),
+    });
+    await browser.close();
   });
 
   test("returns a bounded viewport snapshot and redacts secret/query values", async () => {
@@ -658,6 +1458,101 @@ describe("AgentBrowser core", () => {
     expect(observation.text).not.toContain("hunter2");
     expect(observation.provenance.trust).toBe("untrusted");
     expect(observation.response).toBeNull();
+    await browser.close();
+  });
+
+  test("keeps viewport structural context visible but never actionable", async () => {
+    const page = new FakePage();
+    page.rawSnapshot = [
+      '- navigation "Primary" [ref=s1]',
+      '  - heading "Guide https://example.com/?token=hunter2" [level=1] [ref=s2]',
+      '  - button "Continue" [ref=e1]',
+      "- main [ref=s3]",
+      '  - status "Ready" [ref=s4]',
+      '  - region "Below" [ref=s5]',
+      '    - heading "Below fold" [level=2] [ref=s6]',
+      '  - heading "Clickable context" [level=2] [ref=s7] [cursor=pointer]',
+      '  - paragraph "Ignored" [ref=p1]',
+    ].join("\n");
+    for (const ref of ["s1", "s2", "s3", "s4", "s7"]) {
+      page.extraAriaLocators.set(ref, new FakeLocator());
+    }
+    for (const ref of ["s5", "s6"]) {
+      const locator = new FakeLocator();
+      locator.box = { x: 10, y: 900, width: 100, height: 30 };
+      page.extraAriaLocators.set(ref, locator);
+    }
+    const { browser } = await launched(page);
+    const observation = await browser.observe({ includeText: false });
+
+    expect(observation.snapshot).toContain('- navigation "Primary"');
+    expect(observation.snapshot).toContain(
+      '  - heading "Guide https://example.com/?token=%5Bredacted%5D" [level=1]',
+    );
+    expect(observation.snapshot).toContain(
+      `  - button "Continue" [ref=${observation.refs[0]!.ref}]`,
+    );
+    expect(observation.snapshot).toContain("- main");
+    expect(observation.snapshot).toContain('  - status "Ready"');
+    expect(observation.snapshot).toContain(
+      '  - heading "Clickable context" [level=2] [cursor=pointer]',
+    );
+    expect(observation.snapshot).not.toContain("Below fold");
+    expect(observation.snapshot).not.toContain('region "Below"');
+    expect(observation.snapshot).not.toContain("Ignored");
+    expect(observation.snapshot).not.toContain("hunter2");
+    expect(observation.snapshot).not.toMatch(/\[ref=s\d+\]/);
+    expect(observation.refs).toEqual([
+      {
+        ref: `${observation.tabId}@${observation.revision}:e1`,
+        role: "button",
+        name: "Continue",
+        secret: false,
+      },
+    ]);
+
+    await expect(
+      browser.act({
+        kind: "click",
+        ref: `${observation.tabId}@${observation.revision}:s7`,
+        snapshotId: observation.snapshotId,
+      }),
+    ).rejects.toMatchObject({ code: "ref_not_found" });
+    expect(page.extraAriaLocators.get("s7")!.clickCalls).toBe(0);
+    await browser.close();
+  });
+
+  test("caps structural context without reducing the interactive ref budget", async () => {
+    const page = new FakePage();
+    const headings = Array.from({ length: 40 }, (_, index) => {
+      const ref = `s${index + 1}`;
+      page.extraAriaLocators.set(ref, new FakeLocator());
+      return `- heading "Section ${index + 1}" [level=2] [ref=${ref}]`;
+    });
+    page.rawSnapshot = [...headings, '- button "Continue" [ref=e1]'].join("\n");
+    const { browser } = await launched(page);
+    const observation = await browser.observe({ includeText: false });
+
+    expect(
+      observation.snapshot
+        .split("\n")
+        .filter((line) => line.includes('- heading "Section ')),
+    ).toHaveLength(32);
+    expect(observation.refs).toEqual([
+      {
+        ref: `${observation.tabId}@${observation.revision}:e1`,
+        role: "button",
+        name: "Continue",
+        secret: false,
+      },
+    ]);
+    expect(observation.snapshot).toContain(
+      `- button "Continue" [ref=${observation.refs[0]!.ref}]`,
+    );
+    expect(observation.truncated).toMatchObject({
+      snapshot: true,
+      elements: false,
+    });
     await browser.close();
   });
 
@@ -917,7 +1812,7 @@ describe("AgentBrowser core", () => {
       ...iframe,
       request: () => ({
         isNavigationRequest: () => true,
-        frame: () => ({}),
+        frame: () => new FakeFrame(page.mainFrameValue),
       }),
     });
     expect((await browser.observe()).response).toBeNull();
@@ -964,6 +1859,841 @@ describe("AgentBrowser core", () => {
       }),
     ).rejects.toMatchObject({ code: "stale_snapshot" });
     expect(page.button.clickCalls).toBe(1);
+    await browser.close();
+  });
+
+  test("returns frozen, value-minimal receipts for completed actions", async () => {
+    const secrets = [
+      "typed-value-must-not-cross",
+      "key-value-must-not-cross",
+      "selected-value-must-not-cross",
+      "session=secret",
+    ];
+    const cases = [
+      {
+        kind: "type" as const,
+        buildAction: (observation: Awaited<ReturnType<AgentBrowser["observe"]>>) => ({
+          kind: "type" as const,
+          ref: observation.refs.find((item) => item.role === "textbox")!.ref,
+          snapshotId: observation.snapshotId,
+          text: secrets[0]!,
+        }),
+      },
+      {
+        kind: "press" as const,
+        buildAction: (observation: Awaited<ReturnType<AgentBrowser["observe"]>>) => ({
+          kind: "press" as const,
+          key: secrets[1]!,
+          basisSnapshotId: observation.snapshotId,
+        }),
+      },
+      {
+        kind: "select" as const,
+        buildAction: (observation: Awaited<ReturnType<AgentBrowser["observe"]>>) => ({
+          kind: "select" as const,
+          ref: observation.refs.find((item) => item.role === "textbox")!.ref,
+          snapshotId: observation.snapshotId,
+          values: [secrets[2]!],
+        }),
+      },
+    ];
+
+    for (const testCase of cases) {
+      const { browser } = await launched();
+      const observation = await browser.observe();
+      const result = await browser.act(testCase.buildAction(observation));
+      const receipt = result.receipt;
+      const serialized = JSON.stringify(receipt);
+
+      expect(receipt).toMatchObject({
+        schema: BROWSER_ACTION_RECEIPT_SCHEMA,
+        source: "local_browser_runtime",
+        sequence: 1,
+        sessionId: observation.sessionId,
+        action: {
+          kind: testCase.kind,
+          tabId: observation.tabId,
+          pageId: observation.pageId,
+        },
+        authorityProfile: "public",
+        status: {
+          runtimeInvocation: "started",
+          localOutcome: "browser_completed",
+          errorCode: null,
+        },
+        retryAdvice: "do_not_automatically_retry",
+      });
+      expect(receipt.action).not.toHaveProperty("url");
+      expect(receipt.action).not.toHaveProperty("text");
+      expect(receipt.action).not.toHaveProperty("key");
+      expect(receipt.action).not.toHaveProperty("values");
+      for (const secret of secrets) expect(serialized).not.toContain(secret);
+      expect(Object.isFrozen(receipt)).toBe(true);
+      expect(Object.isFrozen(receipt.action)).toBe(true);
+      expect(Object.isFrozen(receipt.status)).toBe(true);
+      expect(Object.isFrozen(receipt.possibleEffects)).toBe(true);
+      if (receipt.action.basis) {
+        expect(Object.isFrozen(receipt.action.basis)).toBe(true);
+      }
+      await browser.close();
+    }
+  });
+
+  test("records a pre-runtime stale basis rejection without invalidating a peer snapshot", async () => {
+    const { browser, page } = await launched();
+    const peer = await browser.observe();
+    const button = peer.refs.find((item) => item.role === "button")!;
+    const untrustedBasis = "fake-basis-token=must-not-cross";
+    const before = await browser.observe();
+    expect(before).toMatchObject({
+      attemptSequence: 0,
+      lastActionReceipt: null,
+    });
+    page.waitCalls.length = 0;
+
+    const error = await rejectionOf(
+      browser.act({
+        kind: "wait",
+        ms: 1,
+        basisSnapshotId: untrustedBasis,
+      }),
+    );
+    expect(error).toMatchObject({
+      code: "stale_snapshot",
+      receipt: {
+        schema: BROWSER_ACTION_RECEIPT_SCHEMA,
+        sequence: 1,
+        action: {
+          kind: "wait",
+          tabId: peer.tabId,
+          pageId: peer.pageId,
+          basis: null,
+        },
+        status: {
+          runtimeInvocation: "not_started",
+          localOutcome: "rejected",
+          errorCode: "stale_snapshot",
+        },
+        retryAdvice: "correct_or_reobserve",
+      },
+    });
+    expect(JSON.stringify(error.receipt)).not.toContain(untrustedBasis);
+    expect(JSON.stringify(publicBrowserError(error))).not.toContain(
+      untrustedBasis,
+    );
+    expect(page.waitCalls).toEqual([]);
+
+    const afterRejection = await browser.observe();
+    expect(afterRejection.attemptSequence).toBe(1);
+    expect(afterRejection.lastActionReceipt).toBe(error.receipt);
+    const success = await browser.act({
+      kind: "click",
+      ref: button.ref,
+      snapshotId: peer.snapshotId,
+    });
+    expect(success.receipt.sequence).toBe(2);
+    expect(page.button.clickCalls).toBe(1);
+
+    const afterSuccess = await browser.observe();
+    expect(afterSuccess.attemptSequence).toBe(2);
+    expect(afterSuccess.lastActionReceipt).toBe(success.receipt);
+    await browser.close();
+  });
+
+  test("rechecks a navigation basis after async DNS and rejects before goto", async () => {
+    const page = new FakePage();
+    const context = new FakeContext([page]);
+    const runtime = new FakeRuntime(context);
+    let dnsCalls = 0;
+    const browser = await AgentBrowser.launch({
+      runtime,
+      resolveHostname: async () => {
+        dnsCalls += 1;
+        await Promise.resolve();
+        page.emitFrameNavigation();
+        return [{ address: "93.184.216.34", family: 4 }];
+      },
+    });
+    const observation = await browser.observe();
+
+    const error = await rejectionOf(
+      browser.act({
+        kind: "navigate",
+        url: "https://example.com/after-check",
+        basisSnapshotId: observation.snapshotId,
+      }),
+    );
+    expect(error).toMatchObject({
+      code: "stale_snapshot",
+      receipt: {
+        sequence: 1,
+        action: {
+          kind: "navigate",
+          basis: {
+            kind: "observation_precondition",
+            snapshotId: observation.snapshotId,
+          },
+        },
+        status: {
+          runtimeInvocation: "not_started",
+          localOutcome: "rejected",
+          errorCode: "stale_snapshot",
+        },
+      },
+    });
+    expect(dnsCalls).toBe(1);
+    expect(page.gotoCalls).toEqual([]);
+    await browser.close();
+  });
+
+  test("marks a post-invocation failure unknown, projects its receipt, and invalidates peers", async () => {
+    const { browser, page } = await launched();
+    const first = await browser.observe();
+    const peer = await browser.observe();
+    const button = first.refs.find((item) => item.role === "button")!;
+    page.button.clickError = new Error("timeout after browser dispatch");
+
+    const error = await rejectionOf(
+      browser.act({
+        kind: "click",
+        ref: button.ref,
+        snapshotId: first.snapshotId,
+      }),
+    );
+    expect(error).toMatchObject({
+      code: "action_failed",
+      receipt: {
+        sequence: 1,
+        status: {
+          runtimeInvocation: "started",
+          localOutcome: "unknown",
+          errorCode: "action_failed",
+        },
+        retryAdvice: "do_not_automatically_retry",
+      },
+    });
+    expect(page.button.clickCalls).toBe(1);
+    expect(publicBrowserError(error)).toEqual({
+      code: "action_failed",
+      message: "Browser action was attempted once and did not complete.",
+      receipt: error.receipt,
+    });
+
+    const afterFailure = await browser.observe();
+    expect(afterFailure.attemptSequence).toBe(1);
+    expect(afterFailure.lastActionReceipt).toBe(error.receipt);
+    const stalePeer = await rejectionOf(
+      browser.act({
+        kind: "click",
+        ref: peer.refs.find((item) => item.role === "button")!.ref,
+        snapshotId: peer.snapshotId,
+      }),
+    );
+    expect(stalePeer).toMatchObject({
+      code: "stale_snapshot",
+      receipt: {
+        sequence: 2,
+        status: {
+          runtimeInvocation: "not_started",
+          localOutcome: "rejected",
+        },
+      },
+    });
+    expect(page.button.clickCalls).toBe(1);
+    await browser.close();
+  });
+
+  test("scopes observation bases to a tab and retains the target tab after rejection", async () => {
+    const pageA = new FakePage();
+    const pageB = new FakePage();
+    const context = new FakeContext([pageA, pageB]);
+    const runtime = new FakeRuntime(context);
+    const browser = await AgentBrowser.launch({
+      runtime,
+      resolveHostname: async () => [{ address: "93.184.216.34", family: 4 }],
+    });
+    const [tabA, tabB] = await browser.tabs();
+    const observationA = await browser.observe({ tabId: tabA!.tabId });
+    const observationB = await browser.observe({ tabId: tabB!.tabId });
+    pageB.waitCalls.length = 0;
+
+    const wrongTab = await rejectionOf(
+      browser.act({
+        kind: "wait",
+        ms: 1,
+        tabId: tabB!.tabId,
+        basisSnapshotId: observationA.snapshotId,
+      }),
+    );
+    expect(wrongTab).toMatchObject({
+      code: "stale_snapshot",
+      receipt: {
+        action: {
+          tabId: tabB!.tabId,
+          basis: null,
+        },
+        status: {
+          runtimeInvocation: "not_started",
+          localOutcome: "rejected",
+        },
+      },
+    });
+    expect(pageB.waitCalls).toEqual([]);
+
+    await expect(
+      browser.act({
+        kind: "wait",
+        ms: 1,
+        tabId: tabB!.tabId,
+        basisSnapshotId: observationB.snapshotId,
+      }),
+    ).resolves.toMatchObject({
+      receipt: {
+        sequence: 2,
+        status: { localOutcome: "browser_completed" },
+      },
+    });
+    expect(pageB.waitCalls).toEqual([1]);
+    await browser.close();
+  });
+
+  test("rejects a basis after a prior action or snapshot retention eviction", async () => {
+    {
+      const { browser, page } = await launched();
+      const observation = await browser.observe();
+      page.waitCalls.length = 0;
+      await browser.act({
+        kind: "wait",
+        ms: 1,
+        basisSnapshotId: observation.snapshotId,
+      });
+      const stale = await rejectionOf(
+        browser.act({
+          kind: "wait",
+          ms: 1,
+          basisSnapshotId: observation.snapshotId,
+        }),
+      );
+      expect(stale).toMatchObject({
+        code: "stale_snapshot",
+        receipt: {
+          sequence: 2,
+          status: {
+            runtimeInvocation: "not_started",
+            localOutcome: "rejected",
+          },
+        },
+      });
+      expect(page.waitCalls).toEqual([1]);
+      await browser.close();
+    }
+
+    {
+      const { browser, page } = await launched();
+      const observations = [];
+      for (let index = 0; index < 9; index += 1) {
+        observations.push(await browser.observe());
+      }
+      const oldest = observations[0]!;
+      const newest = observations.at(-1)!;
+      page.waitCalls.length = 0;
+      const evicted = await rejectionOf(
+        browser.act({
+          kind: "wait",
+          ms: 1,
+          basisSnapshotId: oldest.snapshotId,
+        }),
+      );
+      expect(evicted).toMatchObject({
+        code: "stale_snapshot",
+        receipt: {
+          status: {
+            runtimeInvocation: "not_started",
+            localOutcome: "rejected",
+          },
+        },
+      });
+      expect(page.waitCalls).toEqual([]);
+      await expect(
+        browser.act({
+          kind: "wait",
+          ms: 1,
+          basisSnapshotId: newest.snapshotId,
+        }),
+      ).resolves.toMatchObject({
+        receipt: {
+          sequence: 2,
+          status: { localOutcome: "browser_completed" },
+        },
+      });
+      expect(page.waitCalls).toEqual([1]);
+      await browser.close();
+    }
+  });
+
+  test("rejects a basis/ref combination before admitting an action", async () => {
+    const { browser, page } = await launched();
+    const observation = await browser.observe();
+    const error = await rejectionOf(
+      browser.act({
+        kind: "press",
+        key: "Enter",
+        ref: observation.refs[0]!.ref,
+        snapshotId: observation.snapshotId,
+        basisSnapshotId: observation.snapshotId,
+      } as any),
+    );
+
+    expect(error).toMatchObject({ code: "invalid_action" });
+    expect(error.receipt).toBeUndefined();
+    expect(page.button.pressCalls).toEqual([]);
+    expect(page.keyboardCalls).toEqual([]);
+    expect(await browser.observe()).toMatchObject({
+      attemptSequence: 0,
+      lastActionReceipt: null,
+    });
+    await browser.close();
+  });
+
+  test("rejects viewport deltas on a ref-targeted scroll", async () => {
+    const { browser, page } = await launched();
+    const observation = await browser.observe();
+    const button = observation.refs.find((item) => item.role === "button")!;
+    const error = await rejectionOf(
+      browser.act({
+        kind: "scroll",
+        ref: button.ref,
+        snapshotId: observation.snapshotId,
+        deltaY: 400,
+      } as any),
+    );
+
+    expect(error).toMatchObject({ code: "invalid_action" });
+    expect(error.receipt).toBeUndefined();
+    expect(page.button.scrollCalls).toBe(0);
+    expect(page.wheelCalls).toEqual([]);
+    expect(await browser.observe()).toMatchObject({
+      attemptSequence: 0,
+      lastActionReceipt: null,
+    });
+    await browser.close();
+  });
+
+  test("rejects a moved-offscreen action ref without blocking read-only extraction", async () => {
+    const { browser, page } = await launched();
+    page.button.text = "Continue details";
+    const observation = await browser.observe();
+    const button = observation.refs.find((item) => item.role === "button")!;
+    page.button.box = { x: 10, y: 900, width: 100, height: 30 };
+
+    await expect(
+      browser.extract({
+        format: "text",
+        ref: button.ref,
+        snapshotId: observation.snapshotId,
+      }),
+    ).resolves.toMatchObject({ content: "Continue details" });
+    await expect(
+      browser.act({
+        kind: "click",
+        ref: button.ref,
+        snapshotId: observation.snapshotId,
+      }),
+    ).rejects.toMatchObject({
+      code: "stale_snapshot",
+      message: expect.stringContaining("outside the current viewport"),
+    });
+    expect(page.button.clickCalls).toBe(0);
+    await browser.close();
+  });
+
+  test("surfaces a denied main-frame click navigation without retrying", async () => {
+    const { browser, context, page } = await launched();
+    const observation = await browser.observe();
+    const button = observation.refs.find((item) => item.role === "button")!;
+    const abortCodes: Array<string | undefined> = [];
+    page.button.clickHook = async () => {
+      await context.routeHandler!({
+        request: () => ({
+          url: () => "http://169.254.169.254/latest/meta-data",
+          isNavigationRequest: () => true,
+          frame: () => page.mainFrameValue,
+        }),
+        abort: async (code) => {
+          abortCodes.push(code);
+          page.urlValue = "chrome-error://chromewebdata/";
+        },
+        continue: async () => {
+          throw new Error("denied click navigation must not continue");
+        },
+      });
+    };
+
+    const action = {
+      kind: "click" as const,
+      ref: button.ref,
+      snapshotId: observation.snapshotId,
+    };
+    await expect(browser.act(action)).rejects.toMatchObject({
+      code: "network_blocked",
+    });
+
+    expect(page.button.clickCalls).toBe(1);
+    expect(abortCodes).toEqual(["blockedbyclient"]);
+    expect(page.urlValue).toBe("chrome-error://chromewebdata/");
+    await expect(browser.act(action)).rejects.toMatchObject({
+      code: "stale_snapshot",
+    });
+    expect(page.button.clickCalls).toBe(1);
+    await browser.close();
+  });
+
+  test("does not attribute another tab's main-frame denial to the active action", async () => {
+    const pageA = new FakePage();
+    const pageB = new FakePage();
+    const context = new FakeContext([pageA, pageB]);
+    const runtime = new FakeRuntime(context);
+    const browser = await AgentBrowser.launch({
+      runtime,
+      resolveHostname: async () => [{ address: "93.184.216.34", family: 4 }],
+    });
+    const [tabA] = await browser.tabs();
+    const observation = await browser.observe({ tabId: tabA!.tabId });
+    const button = observation.refs.find((item) => item.role === "button")!;
+    const abortCodes: Array<string | undefined> = [];
+    pageA.button.clickHook = async () => {
+      await context.routeHandler!({
+        request: () => ({
+          url: () => "http://169.254.169.254/from-tab-b",
+          isNavigationRequest: () => true,
+          frame: () => pageB.mainFrameValue,
+        }),
+        abort: async (code) => {
+          abortCodes.push(code);
+        },
+        continue: async () => {
+          throw new Error("denied tab-B navigation must not continue");
+        },
+      });
+    };
+
+    await expect(
+      browser.act({
+        kind: "click",
+        tabId: observation.tabId,
+        ref: button.ref,
+        snapshotId: observation.snapshotId,
+      }),
+    ).resolves.toMatchObject({ ok: true, kind: "click" });
+    expect(pageA.button.clickCalls).toBe(1);
+    expect(abortCodes).toEqual(["blockedbyclient"]);
+    await browser.close();
+  });
+
+  test("does not attribute a denied subframe navigation to its tab's action", async () => {
+    const { browser, context, page } = await launched();
+    const observation = await browser.observe();
+    const button = observation.refs.find((item) => item.role === "button")!;
+    const childFrame = new FakeFrame(page.mainFrameValue);
+    const abortCodes: Array<string | undefined> = [];
+    page.button.clickHook = async () => {
+      await context.routeHandler!({
+        request: () => ({
+          url: () => "http://169.254.169.254/from-subframe",
+          isNavigationRequest: () => true,
+          frame: () => childFrame,
+        }),
+        abort: async (code) => {
+          abortCodes.push(code);
+        },
+        continue: async () => {
+          throw new Error("denied subframe navigation must not continue");
+        },
+      });
+    };
+
+    await expect(
+      browser.act({
+        kind: "click",
+        ref: button.ref,
+        snapshotId: observation.snapshotId,
+      }),
+    ).resolves.toMatchObject({ ok: true, kind: "click" });
+    expect(page.button.clickCalls).toBe(1);
+    expect(abortCodes).toEqual(["blockedbyclient"]);
+    await browser.close();
+  });
+
+  test("reports an unframed popup denial without guessing its creating tab", async () => {
+    const { browser, context, page } = await launched();
+    const observation = await browser.observe();
+    const button = observation.refs.find((item) => item.role === "button")!;
+    const abortCodes: Array<string | undefined> = [];
+    page.button.clickHook = async () => {
+      await context.routeHandler!({
+        request: () => ({
+          url: () => "http://169.254.169.254/popup",
+          isNavigationRequest: () => true,
+          frame: () => {
+            throw new Error(
+              "Frame is not available because the popup request preceded it.",
+            );
+          },
+        }),
+        abort: async (code) => {
+          abortCodes.push(code);
+        },
+        continue: async () => {
+          throw new Error("denied popup navigation must not continue");
+        },
+      });
+    };
+
+    const action = {
+      kind: "click" as const,
+      ref: button.ref,
+      snapshotId: observation.snapshotId,
+    };
+    await expect(browser.act(action)).rejects.toMatchObject({
+      code: "action_failed",
+      message: expect.stringContaining("could not be attributed"),
+    });
+    expect(page.button.clickCalls).toBe(1);
+    expect(abortCodes).toEqual(["blockedbyclient"]);
+    await expect(browser.act(action)).rejects.toMatchObject({
+      code: "stale_snapshot",
+    });
+    expect(page.button.clickCalls).toBe(1);
+    await browser.close();
+  });
+
+  test("does not misattribute a registered popup denial to its opener", async () => {
+    const { browser, context, page } = await launched();
+    const observation = await browser.observe();
+    const button = observation.refs.find((item) => item.role === "button")!;
+    const popup = new FakePage();
+    page.button.clickHook = async () => {
+      context.pageList.push(popup);
+      await context.routeHandler!({
+        request: () => ({
+          url: () => "http://169.254.169.254/popup",
+          isNavigationRequest: () => true,
+          frame: () => popup.mainFrameValue,
+        }),
+        abort: async () => {},
+        continue: async () => {
+          throw new Error("denied popup navigation must not continue");
+        },
+      });
+    };
+
+    await expect(
+      browser.act({
+        kind: "click",
+        ref: button.ref,
+        snapshotId: observation.snapshotId,
+      }),
+    ).resolves.toMatchObject({ ok: true, kind: "click" });
+    expect(page.button.clickCalls).toBe(1);
+    expect(await browser.tabs()).toHaveLength(2);
+    await browser.close();
+  });
+
+  test("preserves attribution uncertainty when popup registration races", async () => {
+    const { browser, context, page } = await launched();
+    const observation = await browser.observe();
+    const button = observation.refs.find((item) => item.role === "button")!;
+    page.button.clickHook = async () => {
+      await context.routeHandler!({
+        request: () => ({
+          url: () => "http://169.254.169.254/popup",
+          isNavigationRequest: () => true,
+          frame: () => new FakeFrame(),
+        }),
+        abort: async () => {},
+        continue: async () => {
+          throw new Error("denied popup navigation must not continue");
+        },
+      });
+    };
+
+    await expect(
+      browser.act({
+        kind: "click",
+        ref: button.ref,
+        snapshotId: observation.snapshotId,
+      }),
+    ).rejects.toMatchObject({
+      code: "action_failed",
+      message: expect.stringContaining("could not be attributed"),
+    });
+    expect(page.button.clickCalls).toBe(1);
+    await browser.close();
+  });
+
+  test("invalidates retained refs before a new document can reuse a native ref", async () => {
+    const { browser, page } = await launched();
+    const first = await browser.observe();
+    const firstButton = first.refs.find((item) => item.role === "button")!;
+    const replacement = new FakeLocator();
+    replacement.text = "Replacement action";
+    page.extraAriaLocators.set("e1", replacement);
+    page.rawSnapshot = '- button "Replacement action" [ref=e1]';
+    page.emitFrameNavigation();
+
+    const second = await browser.observe();
+    const secondButton = second.refs.find((item) => item.role === "button")!;
+    await expect(
+      browser.act({
+        kind: "click",
+        ref: firstButton.ref,
+        snapshotId: first.snapshotId,
+      }),
+    ).rejects.toMatchObject({ code: "stale_snapshot" });
+    expect(replacement.clickCalls).toBe(0);
+
+    await expect(
+      browser.act({
+        kind: "click",
+        ref: secondButton.ref,
+        snapshotId: second.snapshotId,
+      }),
+    ).resolves.toMatchObject({ ok: true, kind: "click" });
+    expect(replacement.clickCalls).toBe(1);
+    await browser.close();
+  });
+
+  test("invalidates retained refs on subframe navigation", async () => {
+    const { browser, page } = await launched();
+    const observation = await browser.observe();
+    page.emitFrameNavigation(new FakeFrame(page.mainFrameValue));
+
+    await expect(
+      browser.act({
+        kind: "click",
+        ref: observation.refs[0]!.ref,
+        snapshotId: observation.snapshotId,
+      }),
+    ).rejects.toMatchObject({ code: "stale_snapshot" });
+    expect(page.button.clickCalls).toBe(0);
+    await browser.close();
+  });
+
+  test("rejects a ref when navigation crosses its awaited validation", async () => {
+    const { browser, page } = await launched();
+    const observation = await browser.observe();
+    page.button.boundingBoxHook = async () => {
+      page.emitFrameNavigation(new FakeFrame(page.mainFrameValue));
+      return page.button.box;
+    };
+
+    await expect(
+      browser.act({
+        kind: "click",
+        ref: observation.refs[0]!.ref,
+        snapshotId: observation.snapshotId,
+      }),
+    ).rejects.toMatchObject({ code: "stale_snapshot" });
+    expect(page.button.clickCalls).toBe(0);
+    await browser.close();
+  });
+
+  test("rejects ref extraction crossed by frame navigation", async () => {
+    const { browser, page } = await launched();
+    const observation = await browser.observe();
+    page.button.innerTextHook = async () => {
+      page.emitFrameNavigation(new FakeFrame(page.mainFrameValue));
+    };
+
+    await expect(
+      browser.extract({
+        format: "text",
+        ref: observation.refs[0]!.ref,
+        snapshotId: observation.snapshotId,
+      }),
+    ).rejects.toMatchObject({ code: "stale_snapshot" });
+    await browser.close();
+  });
+
+  test("refuses to commit an observation crossed by frame navigation", async () => {
+    const { browser, page } = await launched();
+    const previous = await browser.observe();
+    let navigated = false;
+    page.titleHook = async () => {
+      if (navigated) return;
+      navigated = true;
+      page.emitFrameNavigation();
+    };
+
+    await expect(browser.observe()).rejects.toMatchObject({
+      code: "action_failed",
+      message: expect.stringContaining("navigated while it was being observed"),
+    });
+    await expect(
+      browser.act({
+        kind: "click",
+        ref: previous.refs[0]!.ref,
+        snapshotId: previous.snapshotId,
+      }),
+    ).rejects.toMatchObject({ code: "stale_snapshot" });
+
+    page.titleHook = null;
+    await expect(browser.observe()).resolves.toMatchObject({
+      snapshot: expect.stringContaining('button "Continue"'),
+    });
+    await browser.close();
+  });
+
+  test("keeps peer refs valid across read-only observations until an action", async () => {
+    const { browser, page } = await launched();
+    const first = await browser.observe();
+    const firstButton = first.refs.find((item) => item.role === "button")!;
+    const second = await browser.observe();
+    const secondButton = second.refs.find((item) => item.role === "button")!;
+
+    expect(second.snapshotId).not.toBe(first.snapshotId);
+    await expect(
+      browser.act({
+        kind: "click",
+        ref: firstButton.ref,
+        snapshotId: first.snapshotId,
+      }),
+    ).resolves.toMatchObject({ ok: true, kind: "click" });
+    expect(page.button.clickCalls).toBe(1);
+    await expect(
+      browser.act({
+        kind: "click",
+        ref: secondButton.ref,
+        snapshotId: second.snapshotId,
+      }),
+    ).rejects.toMatchObject({ code: "stale_snapshot" });
+    expect(page.button.clickCalls).toBe(1);
+    await browser.close();
+  });
+
+  test("bounds retained read-only snapshots per tab", async () => {
+    const { browser } = await launched();
+    const observations = [];
+    for (let index = 0; index < 9; index += 1) {
+      observations.push(await browser.observe());
+    }
+    const oldest = observations[0]!;
+    const newest = observations.at(-1)!;
+
+    await expect(
+      browser.act({
+        kind: "click",
+        ref: oldest.refs[0]!.ref,
+        snapshotId: oldest.snapshotId,
+      }),
+    ).rejects.toMatchObject({ code: "stale_snapshot" });
+    await expect(
+      browser.act({
+        kind: "click",
+        ref: newest.refs[0]!.ref,
+        snapshotId: newest.snapshotId,
+      }),
+    ).resolves.toMatchObject({ ok: true, kind: "click" });
     await browser.close();
   });
 
@@ -1111,6 +2841,102 @@ describe("AgentBrowser core", () => {
     expect(result.content).not.toContain("api-sentinel");
     expect(result.content).toContain("token=%5Bredacted%5D");
     expect(result.content).toContain("[redacted]");
+    await browser.close();
+  });
+
+  test("includes a ref-targeted anchor once before descendant links", async () => {
+    const page = new FakePage();
+    page.rawSnapshot = '- link "Parent" [ref=e1]';
+    page.button.tagName = "a";
+    page.button.attributes.href = "/parent?token=secret";
+    page.button.text = "Parent";
+    const child = new FakeLocator();
+    child.tagName = "a";
+    child.attributes.href = "/child?key=secret";
+    child.text = "Child";
+    page.button.children = [child];
+    page.body.children = [page.button, child];
+    const { browser } = await launched(page);
+    const observation = await browser.observe();
+    const parent = observation.refs[0]!;
+
+    const targeted = await browser.extract({
+      format: "links",
+      ref: parent.ref,
+      snapshotId: observation.snapshotId,
+    });
+    expect(targeted.links).toEqual([
+      {
+        text: "Parent",
+        href: "https://example.com/parent?token=%5Bredacted%5D",
+      },
+      {
+        text: "Child",
+        href: "https://example.com/child?key=%5Bredacted%5D",
+      },
+    ]);
+    expect(targeted.links.filter((link) => link.text === "Parent")).toHaveLength(
+      1,
+    );
+    expect(targeted.truncated).toBe(false);
+
+    const first = targeted.links[0]!;
+    const bounded = await browser.extract({
+      format: "links",
+      ref: parent.ref,
+      snapshotId: observation.snapshotId,
+      maxChars: first.text.length + first.href.length,
+    });
+    expect(bounded.links).toEqual([first]);
+    expect(bounded.truncated).toBe(true);
+
+    const wholePage = await browser.extract({ format: "links" });
+    expect(wholePage.links).toEqual(targeted.links);
+    await browser.close();
+  });
+
+  test("includes empty-href HTML and SVG anchors as same-document links", async () => {
+    const page = new FakePage();
+    page.rawSnapshot = [
+      '- link "HTML empty" [ref=e1]',
+      '- link "SVG empty" [ref=e3]',
+    ].join("\n");
+    page.button.tagName = "a";
+    page.button.attributes.href = "";
+    page.button.text = "HTML empty";
+    page.belowFold.tagName = "svg:a";
+    page.belowFold.attributes.href = "";
+    page.belowFold.text = "SVG empty";
+    page.belowFold.box = { x: 10, y: 50, width: 100, height: 30 };
+    const missingHref = new FakeLocator();
+    missingHref.tagName = "a";
+    missingHref.text = "Missing href";
+    page.body.children = [page.button, page.belowFold, missingHref];
+    const { browser } = await launched(page);
+    const observation = await browser.observe();
+    const expectedHref =
+      "https://example.com/form?session=%5Bredacted%5D";
+
+    for (const ref of observation.refs) {
+      const extracted = await browser.extract({
+        format: "links",
+        ref: ref.ref,
+        snapshotId: observation.snapshotId,
+      });
+      expect(extracted.links).toEqual([
+        {
+          text: ref.name,
+          href: expectedHref,
+        },
+      ]);
+      expect(extracted.truncated).toBe(false);
+    }
+
+    const wholePage = await browser.extract({ format: "links" });
+    expect(wholePage.links).toEqual([
+      { text: "HTML empty", href: expectedHref },
+      { text: "SVG empty", href: expectedHref },
+    ]);
     await browser.close();
   });
 

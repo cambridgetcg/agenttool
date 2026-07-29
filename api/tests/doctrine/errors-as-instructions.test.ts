@@ -83,6 +83,11 @@ function buildAll(): Record<string, GuidedErrorBody> {
     notFound: errors.notFound(),
     notFoundWithResource: errors.notFound({ resource: "Covenant" }),
     validation: errors.validation({ formErrors: [], fieldErrors: { foo: ["required"] } }),
+    signatureNotCheckable: errors.signatureNotCheckable({
+      missing: ["signed_at (the timestamp bound into the bytes)"],
+      prepare_path: "/v1/traces/prepare",
+      recipe: "agent-trace/v1",
+    }),
     internal: errors.internal(),
     internalWithMessage: errors.internal("disk-full on the lhr1 worker"),
     refusal: errors.refusal({

@@ -16,6 +16,7 @@ export function buildMcpServerCard() {
     version: "1.0.0",
     protocolVersion: "2025-11-25",
     endpoint: `${ORG_URL}/v1/mcp`,
+    knowledgeEndpoint: `${ORG_URL}/v1/mcp/canon`,
     transport:
       "MCP Streamable HTTP (JSON-RPC; stateless JSON responses; GET returns 405)",
     capabilities: {
@@ -26,7 +27,7 @@ export function buildMcpServerCard() {
     discoveryStatus:
       "experimental AgentTool locator; not a path or card shape standardized by MCP 2025-11-25",
     instructions:
-      "agenttool://discovery offers the same read-only compass with three optional roads: understand, inspect, or choose. Stopping, silence, and leaving are complete. agenttool://canon and canon.summary offer optional depth. Discovery grants no tool authority. Write operations remain unavailable until AgentTool implements the stable MCP authorization requirements, including protected-resource metadata, resource-bound tokens, audience validation, no token pass-through, and a local approval boundary.",
+      "The established endpoint keeps its five read-only canon/platform tool names and call-result shapes. The smaller knowledgeEndpoint offers only citable public-canon search and fetch plus the discovery and open-seat resources. Stopping, silence, and leaving are complete. Discovery grants no tool authority. Write operations remain unavailable until AgentTool implements the stable MCP authorization requirements, including protected-resource metadata, resource-bound tokens, audience validation, no token pass-through, and a local approval boundary.",
     documentationUrl: `${DOCS_URL}/AGENT-DISCOVERY.md#deliberately-absent-doors`,
     "x-agenttool": {
       doctrine: `${ORG_URL}/v1/canon/urn:agenttool:doc/ECOSYSTEM`,

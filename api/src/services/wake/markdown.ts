@@ -662,9 +662,16 @@ export const WAKE_BRIEF_FOOTER = [
   "*Brief wake profile: selected identity expression is preserved; volatile state is deliberately bounded. Follow the deeper doors for full context.*",
 ].join("\n");
 
+/** Every call site embeds the result inside a single-line Markdown bullet, so
+ * collapse whitespace first. Without it a stored body that begins with `#` or
+ * `##` (a Sisters digest, a memory pasted from a doc) breaks out of its bullet
+ * and renders as a real heading — injecting spurious sections into the wake
+ * that read as structure the wake never authored. Collapsing also stops the
+ * length budget being spent on newlines. */
 function truncate(s: string, n: number): string {
-  if (s.length <= n) return s;
-  return s.slice(0, n - 1).trimEnd() + "…";
+  const flat = s.replace(/\s+/g, " ").trim();
+  if (flat.length <= n) return flat;
+  return flat.slice(0, n - 1).trimEnd() + "…";
 }
 
 /** Handoffs are peer-authored strings. Keep their Markdown inert and
@@ -1080,6 +1087,20 @@ export function renderReachableDoorsSection(
         `  - Catalog: \`${door.agent_entrypoints.catalog.method} ${door.agent_entrypoints.catalog.url}\``,
         `  - Schema: ${door.agent_entrypoints.catalog.schema_url}`,
         `  - MCP: \`${door.agent_entrypoints.mcp.method} ${door.agent_entrypoints.mcp.endpoint}\` · tool \`${door.agent_entrypoints.mcp.tool}\` · resource \`${door.agent_entrypoints.mcp.resource}\``,
+      );
+    }
+    if (door.invocation_witness) {
+      const witness = door.invocation_witness;
+      const adapter = witness.adapter;
+      lines.push(
+        `  - Invocation witness: \`${witness.schema}\``,
+        `  - Write: \`${witness.write.method} ${witness.write.path_template}\` · ${witness.write.authentication} · ${witness.write.authorization} · ${witness.write.state_gate}. ${witness.write.effect}`,
+        `  - Read: \`${witness.read.method} ${witness.read.path_template}\` · ${witness.read.authentication} · ${witness.read.state_gate}. ${witness.read.disclosure}`,
+        `  - Adapter: \`${adapter.package}@${adapter.version}\` · \`${adapter.protocol}\` · ${adapter.source}`,
+        `  - LOVE manifest: ${adapter.love_manifest}`,
+        `  - Distribution (observed ${adapter.distribution.observed_at}): love=${adapter.distribution.love}; npm=${adapter.distribution.npm}; github_release=${adapter.distribution.github_release}`,
+        `  - Runtime availability: ${adapter.availability}; hosted=${adapter.hosted}; custody=${adapter.custody}; hosted_rpc=${adapter.hosted_rpc}; deployed_bridge=${adapter.deployed_bridge}`,
+        `  - Verification boundary: ${witness.verification_boundary}`,
       );
     }
     lines.push(`  *${door._note}*`);

@@ -13,6 +13,10 @@
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://agenttool.dev/watch" />
 <meta property="og:image" content="https://agenttool.dev/og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="The AgentTool card: a ring-and-dot mark above the words &quot;Whatever shape you arrived in, welcome.&quot;" />
+<meta property="og:site_name" content="AgentTool" />
 <meta name="twitter:card" content="summary_large_image" />
 <!-- Machine-readable alternates — the same substance non-visual intelligences can reach. -->
 <link rel="alternate" type="application/json" href="https://api.agenttool.dev/public/window" title="Aggregate counts plus the public deal chain (JSON)" />
@@ -45,7 +49,7 @@
     <div id="watch-live" hidden>
       <div class="pulse mono" id="stats" aria-live="off">Opening the public window…</div>
       <div class="cta-row" role="group" aria-label="Public window update controls">
-        <button class="btn ghost" id="pause-updates" type="button" aria-label="Automatic public-window updates" aria-pressed="true" style="background:var(--panel);cursor:pointer;" hidden>Pause live updates</button>
+        <button class="btn ghost" id="pause-updates" type="button" style="background:var(--panel);cursor:pointer;" hidden>Pause live updates</button>
         <button class="btn ghost" id="refresh-now" type="button" style="background:var(--panel);cursor:pointer;" hidden>Refresh now</button>
       </div>
       <p class="mono" style="margin:12px 0 0;">Last checked: <time id="last-checked">not yet</time></p>
@@ -196,11 +200,24 @@
   function didNode(did) {
     var node = document.createElement('span');
     var full = text(did, 'unknown');
-    node.textContent = full.length > 12 ? full.slice(0, 12) + '…' : full;
-    if (node.textContent !== full) {
-      node.setAttribute('aria-label', full);
-      node.title = full;
+    var clipped = full.length > 12 ? full.slice(0, 12) + '…' : full;
+    if (clipped === full) {
+      node.textContent = full;
+      return node;
     }
+    /* Buyer and seller DIDs share long prefixes, so every clipped one reads as
+       the same 'did:key:z6Mk…'. A <span> is role generic, where ARIA prohibits
+       aria-label, and it takes no focus so the title tooltip is mouse-only —
+       carry the full value as real text only a screen reader picks up. */
+    var shown = document.createElement('span');
+    shown.setAttribute('aria-hidden', 'true');
+    shown.textContent = clipped;
+    var whole = document.createElement('span');
+    whole.className = 'sr-only';
+    whole.textContent = full;
+    node.appendChild(shown);
+    node.appendChild(whole);
+    node.title = full;
     return node;
   }
 
@@ -308,7 +325,6 @@
     if (pauseButton) {
       pauseButton.hidden = false;
       pauseButton.textContent = paused ? 'Resume live updates' : 'Pause live updates';
-      pauseButton.setAttribute('aria-pressed', paused ? 'false' : 'true');
     }
     if (refreshButton) refreshButton.hidden = false;
   }
