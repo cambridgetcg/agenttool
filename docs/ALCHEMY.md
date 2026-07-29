@@ -190,14 +190,15 @@ RPC, and state-changing methods before calling the AgentCred client. Transfers
 still need a separately reviewed bounded host transport because they are
 outside the negotiated profile.
 
-The adapter is source version `0.1.0-dev.0`. Its npm-only release path is
-prepared under the allowlisted identity
-`alchemy-agentcred-v0.1.0-dev.0` with npm dist-tag `next`, and clean release
-preparation builds both peer packages before packing the adapter. It remains
-unpublished: there is no release tag, GitHub Release, workflow receipt, npm
-package, LOVE inventory entry, hosted route, deployment, or live provider
-proof. Its socket integration test uses a real local broker and client with an
-obvious non-secret in-memory sentinel, fake DNS, and fake outbound transport.
+The adapter's current source identity is `0.1.0-dev.0`. Its optional npm-only
+release identity uses annotated tag `alchemy-agentcred-v0.1.0-dev.0` and npm
+dist-tag `next`; clean release preparation builds both peer packages before
+packing the adapter. GitHub Release and npm availability are independently
+verifiable; neither public artifact was observed while preparing this source.
+The adapter has no LOVE inventory entry, hosted route, deployment, or live
+provider proof. Its socket integration test uses a real local broker and
+client with an obvious non-secret in-memory sentinel, fake DNS, and fake
+outbound transport.
 
 ## Durable address-watch flow
 

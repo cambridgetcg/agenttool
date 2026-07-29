@@ -240,18 +240,20 @@ migrations, or make a provider call.
 
 ### Alchemy AgentCred developer-preview bootstrap
 
-`@agenttool/alchemy-agentcred@0.1.0-dev.0` is prepared for the npm-only
-packed-artifact path but remains unpublished. It has no release tag, GitHub
-Release, workflow receipt, or npm package yet. The adapter keeps
-`@agenttool/alchemy` and `@agenttool/credential-broker` as unbundled peers;
-release preparation builds both checked-out peer workspaces before the adapter
-gate and pack.
+`@agenttool/alchemy-agentcred@0.1.0-dev.0` is the current source identity for
+the prepared npm-only packed-artifact path. GitHub Release, workflow receipt,
+and npm availability are independently verifiable; none was observed while
+preparing this source. The adapter keeps `@agenttool/alchemy` and
+`@agenttool/credential-broker` as unbundled peers; release preparation builds
+both checked-out peer workspaces before the adapter gate and pack.
 
-Dispatch its first publication only after compatible versions of both peers
-are independently visible on public npm. Before dispatch, the protected
-`npm-bootstrap` environment must allow annotated `alchemy-agentcred-v*` tags.
-The first publication uses bootstrap authentication and `next`; later versions
-use trusted publishing after the npm package's trusted publisher is configured.
+For a first publication, require compatible versions of both peers to be
+independently visible on public npm. The protected `npm-bootstrap` environment
+must allow annotated `alchemy-agentcred-v*` tags. A first publication uses
+bootstrap authentication and `next`; later versions use trusted publishing
+after the npm package's trusted publisher is configured. Never recreate or
+move an existing release tag; an exact already-published rerun follows the
+workflow's verification-only recovery path.
 
 ```bash
 bun bin/npm-release.ts resolve --package alchemy-agentcred
