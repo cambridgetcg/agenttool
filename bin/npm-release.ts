@@ -555,6 +555,8 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/schema/agenttool-skills-inspection-v0.1.schema.json",
       "package/skills/use-agentcred-safely/SKILL.md",
       "package/skills/use-agentcred-safely/agents/openai.yaml",
+      "package/skills/manage-agentcred-lifecycle/SKILL.md",
+      "package/skills/manage-agentcred-lifecycle/agents/openai.yaml",
       "package/skills/capability-conductor/SKILL.md",
       "package/skills/capability-conductor/agents/openai.yaml",
       "package/skills/learn-by-contact/SKILL.md",

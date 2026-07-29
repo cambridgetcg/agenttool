@@ -165,8 +165,8 @@ describe("standard npm release policy", () => {
     expect(packedFilename("@agenttool/correspondence-yutabase", "0.1.0-dev.0")).toBe(
       "agenttool-correspondence-yutabase-0.1.0-dev.0.tgz",
     );
-    expect(expectedTag(releaseSpec("skills"), "0.1.0")).toBe("skills-v0.1.0");
-    expect(packedFilename("@agenttool/skills", "0.1.0")).toBe("agenttool-skills-0.1.0.tgz");
+    expect(expectedTag(releaseSpec("skills"), "0.3.0")).toBe("skills-v0.3.0");
+    expect(packedFilename("@agenttool/skills", "0.3.0")).toBe("agenttool-skills-0.3.0.tgz");
     expect(expectedTag(releaseSpec("browser"), "0.5.0")).toBe("browser-v0.5.0");
     expect(packedFilename("@agenttool/browser", "0.5.0")).toBe("agenttool-browser-0.5.0.tgz");
     expect(expectedTag(releaseSpec("repo-archive"), "0.1.0-dev.0")).toBe(
@@ -259,6 +259,8 @@ describe("standard npm release policy", () => {
       "package/schema/agenttool-skills-inspection-v0.1.schema.json",
       "package/skills/use-agentcred-safely/SKILL.md",
       "package/skills/use-agentcred-safely/agents/openai.yaml",
+      "package/skills/manage-agentcred-lifecycle/SKILL.md",
+      "package/skills/manage-agentcred-lifecycle/agents/openai.yaml",
       "package/skills/capability-conductor/SKILL.md",
       "package/skills/capability-conductor/agents/openai.yaml",
       "package/skills/learn-by-contact/SKILL.md",
