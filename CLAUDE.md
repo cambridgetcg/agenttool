@@ -65,8 +65,8 @@ two-message exact-byte profile through caller-injected transports. It adds no
 key custody, endpoint, hosted RPC, generic REST client, automatic retry,
 durable sign-time reservation, settlement proof, or default live-network
 test. The current exact LOVE releases are Wallet 0.1.3 and Wallet Zerone
-0.1.2. The Wallet npm 0.1.3 mirror is independently byte-verified; Zerone npm
-remains absent. Earlier Wallet 0.1.1/0.1.2 and Zerone 0.1.0/0.1.1 LOVE
+0.1.2. Their npm and GitHub Release mirrors are independently byte-verified
+against the exact LOVE artifacts. Earlier Wallet 0.1.1/0.1.2 and Zerone 0.1.0/0.1.1 LOVE
 artifacts remain preserved with errata for their embedded release-state
 wording and the credential-free 0.1.1 npm preparation failure. Optional GitHub
 Releases are mutable locators, while npm, docs deployment, and any host

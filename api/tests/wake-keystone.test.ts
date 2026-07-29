@@ -324,8 +324,8 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
       distribution: {
         observed_at: "2026-07-29",
         love: "public_exact_artifact",
-        npm: "absent",
-        github_release: "absent",
+        npm: "public_exact_mirror",
+        github_release: "public_exact_mirror",
       },
       hosted: false,
       custody: false,

@@ -891,8 +891,11 @@ const COMMON_SCHEMAS = {
                     type: "string",
                     const: "public_exact_artifact",
                   },
-                  npm: { type: "string", const: "absent" },
-                  github_release: { type: "string", const: "absent" },
+                  npm: { type: "string", const: "public_exact_mirror" },
+                  github_release: {
+                    type: "string",
+                    const: "public_exact_mirror",
+                  },
                 },
                 required: ["observed_at", "love", "npm", "github_release"],
               },

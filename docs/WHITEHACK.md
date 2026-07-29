@@ -272,8 +272,7 @@ remains a separate explanation contract and gains no Castle authority.
 adapter. It re-verifies caller-presented signed `agent-wallet/0.1` descriptor,
 capability, intent, simulation, and optional continuity records with
 the local `@agenttool/wallet@0.1.3` source and exact LOVE release (the
-independently verified npm mirror remains 0.1.0 until a later exact registry
-version is observed). It derives bounded relationship
+independently verified npm mirror is also exact version 0.1.3). It derives bounded relationship
 and policy states, then passes only closed enum assertions plus the six
 allowlisted finding fields to `@agenttool/whitehack-scan@0.8.1`'s
 `createUnderstanding()`. stdout is the exact, deterministic

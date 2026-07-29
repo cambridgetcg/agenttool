@@ -50,8 +50,8 @@ describe("wake reachable doors", () => {
         distribution: {
           observed_at: "2026-07-29",
           love: "public_exact_artifact",
-          npm: "absent",
-          github_release: "absent",
+          npm: "public_exact_mirror",
+          github_release: "public_exact_mirror",
         },
         hosted: false,
         custody: false,
@@ -191,7 +191,7 @@ describe("wake reachable doors", () => {
     }
 
     for (const renderedCoordinate of [
-      "Distribution (observed 2026-07-29): love=public_exact_artifact; npm=absent; github_release=absent",
+      "Distribution (observed 2026-07-29): love=public_exact_artifact; npm=public_exact_mirror; github_release=public_exact_mirror",
       "Runtime availability: local_offline_source_only; hosted=false; custody=false; hosted_rpc=false; deployed_bridge=false",
     ]) {
       expect(fullMarkdown).toContain(renderedCoordinate);

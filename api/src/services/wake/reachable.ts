@@ -66,8 +66,8 @@ export interface ReachableDoor {
       readonly distribution: {
         readonly observed_at: "2026-07-29";
         readonly love: "public_exact_artifact";
-        readonly npm: "absent";
-        readonly github_release: "absent";
+        readonly npm: "public_exact_mirror";
+        readonly github_release: "public_exact_mirror";
       };
       readonly hosted: false;
       readonly custody: false;
@@ -156,8 +156,8 @@ export const ZERONE_REACHABLE = {
       distribution: {
         observed_at: "2026-07-29",
         love: "public_exact_artifact",
-        npm: "absent",
-        github_release: "absent",
+        npm: "public_exact_mirror",
+        github_release: "public_exact_mirror",
       },
       hosted: false,
       custody: false,
