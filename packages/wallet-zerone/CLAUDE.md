@@ -56,14 +56,11 @@ Go/Cosmos vectors.
 ## Commands
 
 ```bash
-# Run these two setup steps from the repository root. The forced adapter install
-# refreshes the locked local file dependency after Wallet produces dist; it does
-# not update dependency versions.
-(cd packages/wallet \
-  && bun install --frozen-lockfile \
-  && bun run build)
+# Run this setup step from the repository root. The lock resolves the exact
+# public Wallet 0.1.3 development dependency; consumer compatibility remains
+# the ^0.1.2 peer.
 (cd packages/wallet-zerone \
-  && bun install --frozen-lockfile --force)
+  && bun install --frozen-lockfile)
 
 cd packages/wallet-zerone
 bun run typecheck
@@ -92,12 +89,16 @@ after ensuring dependencies are cached.
 
 ## Release state
 
-Version `0.1.1` is the current exact LOVE release after independent
-wire/package review and declares `@agenttool/wallet ^0.1.2` as its peer. The
-immutable `0.1.0` LOVE artifact remains public, but its embedded candidate
-wording is a historical release-state error and must not be rewritten. As of
-the 2026-07-28 source preparation, the adapter's optional npm and GitHub
-Release mirrors had not been completed; verify those mutable surfaces
+Version `0.1.2` is the current exact LOVE release after independent
+wire/package review. It declares `@agenttool/wallet ^0.1.2` as its consumer
+peer and locks the exact public `@agenttool/wallet@0.1.3` only for development
+and release checks. The immutable `0.1.1` LOVE artifact remains public. Its
+first bootstrap run stopped during credential-free preparation when Bun 1.3.5
+did not expose the built Wallet declarations through the old local file
+dependency; the protected publish job was skipped, so no GitHub Release or npm
+package was created. The immutable `0.1.0` LOVE artifact also remains public,
+but its embedded candidate wording is a historical release-state error. Never
+rewrite either historical artifact. Verify optional npm and GitHub mirrors
 independently. Public LOVE bytes do not prove hosted deployment, custody, host
 execution conformance, or live-chain execution.
 
