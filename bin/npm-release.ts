@@ -36,8 +36,11 @@ export interface ReleaseSpec {
   }[];
 }
 
-export interface ReleasePrerequisiteOperations {
-  install(packagePath: `packages/${string}`): Promise<void>;
+export interface ReleaseWorkspaceOperations {
+  install(
+    packagePath: `packages/${string}`,
+    options: { force: boolean },
+  ): Promise<void>;
   run(packagePath: `packages/${string}`, script: string): Promise<void>;
 }
 
@@ -480,25 +483,43 @@ async function ensurePinnedTools(): Promise<void> {
   if (npmVersion !== PINNED_NPM) fail(`release requires npm ${PINNED_NPM}, found ${npmVersion}`);
 }
 
-async function installWorkspace(path: string): Promise<void> {
-  await command("bun", ["install", "--frozen-lockfile", "--ignore-scripts"], { cwd: join(REPO_ROOT, path) });
+export function workspaceInstallArguments(force: boolean): string[] {
+  return [
+    "install",
+    "--frozen-lockfile",
+    "--ignore-scripts",
+    ...(force ? ["--force"] : []),
+  ];
 }
 
-export async function runReleasePrerequisites(
+async function installWorkspace(
+  path: string,
+  options: { force: boolean } = { force: false },
+): Promise<void> {
+  await command("bun", workspaceInstallArguments(options.force), {
+    cwd: join(REPO_ROOT, path),
+  });
+}
+
+export async function prepareReleaseWorkspaces(
   spec: ReleaseSpec,
-  operations: ReleasePrerequisiteOperations = {
+  operations: ReleaseWorkspaceOperations = {
     install: installWorkspace,
     run: async (packagePath, script) => {
       await command("bun", ["run", script], { cwd: join(REPO_ROOT, packagePath) });
     },
   },
 ): Promise<void> {
-  for (const prerequisite of spec.prerequisites ?? []) {
-    await operations.install(prerequisite.packagePath);
+  const prerequisites = spec.prerequisites ?? [];
+  for (const prerequisite of prerequisites) {
+    await operations.install(prerequisite.packagePath, { force: false });
     for (const script of prerequisite.scripts) {
       await operations.run(prerequisite.packagePath, script);
     }
   }
+  await operations.install(spec.packagePath, {
+    force: prerequisites.length > 0,
+  });
 }
 
 function artifactIdentity(bytes: Uint8Array, filename: string): ArtifactIdentity {
@@ -661,8 +682,7 @@ async function loveArtifact(
   outputDirectory: string,
 ): Promise<{ path: string; sourceRevision: string }> {
   await installWorkspace("api");
-  await runReleasePrerequisites(spec);
-  await installWorkspace(spec.packagePath);
+  await prepareReleaseWorkspaces(spec);
   for (const script of spec.gateScripts ?? ["ci"]) {
     await command("bun", ["run", script], { cwd: join(REPO_ROOT, spec.packagePath) });
   }
@@ -703,8 +723,7 @@ async function packedArtifact(
   outputDirectory: string,
 ): Promise<{ path: string; sourceRevision: string }> {
   const packageRoot = join(REPO_ROOT, spec.packagePath);
-  await runReleasePrerequisites(spec);
-  await installWorkspace(spec.packagePath);
+  await prepareReleaseWorkspaces(spec);
   const identity = await packageIdentity(spec);
   if (typeof identity.json.scripts?.prepack !== "string") fail(`${spec.name} pack release requires a prepack gate`);
   await command("bun", ["run", "prepack"], { cwd: packageRoot });

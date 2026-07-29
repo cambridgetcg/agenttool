@@ -16,8 +16,9 @@ import {
   registryPackagePath,
   releaseSpec,
   requiredArchiveEntries,
-  runReleasePrerequisites,
+  prepareReleaseWorkspaces,
   validateNpmTagForVersion,
+  workspaceInstallArguments,
   type PreparedReceipt,
 } from "../npm-release";
 
@@ -323,11 +324,11 @@ describe("standard npm release policy", () => {
     expect(() => validateNpmTagForVersion("0.1.0", "latest")).not.toThrow();
   });
 
-  test("runs packed-release prerequisites in declared order before packing", async () => {
+  test("forces a dependent target install only after its prerequisites", async () => {
     const calls: string[] = [];
-    await runReleasePrerequisites(releaseSpec("alchemy-agentcred"), {
-      install: async (packagePath) => {
-        calls.push(`install:${packagePath}`);
+    await prepareReleaseWorkspaces(releaseSpec("alchemy-agentcred"), {
+      install: async (packagePath, options) => {
+        calls.push(`install:${packagePath}:${options.force ? "force" : "normal"}`);
       },
       run: async (packagePath, script) => {
         calls.push(`run:${packagePath}:${script}`);
@@ -335,20 +336,33 @@ describe("standard npm release policy", () => {
     });
 
     expect(calls).toEqual([
-      "install:packages/alchemy",
+      "install:packages/alchemy:normal",
       "run:packages/alchemy:build",
-      "install:packages/credential-broker",
+      "install:packages/credential-broker:normal",
       "run:packages/credential-broker:build",
+      "install:packages/alchemy-agentcred:force",
+    ]);
+    expect(workspaceInstallArguments(true)).toEqual([
+      "install",
+      "--frozen-lockfile",
+      "--ignore-scripts",
+      "--force",
+    ]);
+    expect(workspaceInstallArguments(false)).toEqual([
+      "install",
+      "--frozen-lockfile",
+      "--ignore-scripts",
     ]);
 
     const script = await readFile(join(import.meta.dir, "..", "npm-release.ts"), "utf8");
     const packedBody =
       script.split("async function packedArtifact(")[1]
         ?.split("\nexport async function readReleaseReceipt(")[0] ?? "";
-    expect(packedBody).toContain("await runReleasePrerequisites(spec);");
-    expect(packedBody.indexOf("await runReleasePrerequisites(spec);")).toBeLessThan(
-      packedBody.indexOf("await installWorkspace(spec.packagePath);"),
-    );
+    const loveBody =
+      script.split("async function loveArtifact(")[1]
+        ?.split("\nasync function packedArtifact(")[0] ?? "";
+    expect(packedBody).toContain("await prepareReleaseWorkspaces(spec);");
+    expect(loveBody).toContain("await prepareReleaseWorkspaces(spec);");
   });
 
   test("encodes scoped registry paths without accepting arbitrary names", () => {
