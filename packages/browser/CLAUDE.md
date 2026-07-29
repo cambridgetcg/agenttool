@@ -8,7 +8,8 @@ LOVE, npm, and GitHub Releases does not change that runtime boundary.
 
 ## Authority direction
 
-Version `0.4.0` carries forward the authority model built around one rule:
+Prepared source version `0.5.0` carries forward the authority model built
+around one rule:
 **sandbox consequences, not curiosity**.
 Destination reach, state persistence, data disclosure, and executable powers
 are separate capabilities. Do not turn a restriction on one into an
@@ -28,6 +29,11 @@ The launch-time `authority` profiles are:
   proxy, and network. It does not promise that a site will respond or bypass
   authentication, CAPTCHAs, account permissions, browser support, or
   operating-system policy.
+
+No profile promises universal site access. A destination may still refuse,
+challenge, throttle, render incompatibly, or require authority the caller does
+not have. Report the exact boundary or uncertain outcome instead of presenting
+site resistance as a browser-policy fact.
 
 The legacy public/local booleans and their CLI/environment forms remain a
 deprecated compatibility surface. Never accept a launch that mixes the
@@ -74,6 +80,17 @@ those powers.
 - Every action is attempted at most once. Surface uncertainty after timeouts,
   navigation races, or ambiguous outcomes; never automatically repeat a
   click, submit, keypress, or navigation.
+- Keep `browser_act` receipts redacted and local. Their three outcome shapes
+  distinguish rejection before runtime invocation, browser completion after
+  invocation, and an unknown outcome after invocation started. A receipt is
+  not remote-effect proof, consent, authentication, an idempotency key, or
+  permission to retry. Never include typed/selected/key values, page text,
+  raw errors, or unredacted URLs.
+- A non-ref observation basis is only a session-local optimistic precondition:
+  re-check the same retained snapshot immediately before runtime invocation.
+  It is not DOM or focus equality, authentication, consent, a transaction, a
+  cross-process clock, or a cross-device lease. Ref-targeted actions continue
+  to use their own snapshot-scoped reference contract.
 - Action references are snapshot-scoped ARIA references. Reject missing,
   stale, hidden, disabled, ambiguous, or out-of-range targets instead of
   guessing a selector.
@@ -95,6 +112,16 @@ those powers.
 - Keep direct TypeScript, JSONL, and MCP operation names and result semantics
   aligned. Protocol adapters validate inputs and delegate to the core; they do
   not gain broader authority.
+- Keep current MCP `2026-07-28` negotiation and the explicit 2025-era
+  compatibility path backed by the same core. MCP is an envelope, not a
+  browser driver, security boundary, or durable session protocol.
+- Keep public/model-facing page, tab, snapshot, and receipt handles
+  backend-neutral. Playwright is the adapter today; WebDriver BiDi may become
+  another adapter. Raw CDP objects and commands are not a public portability
+  contract.
+- If WebMCP/page-declared tools are explored later, project them as untrusted
+  page capabilities above the browser core. Discovery must not silently
+  register, trust, execute, or widen authority for them.
 
 ## Verification
 
@@ -110,15 +137,19 @@ explicit local dogfood check; it is never a required CI dependency.
 ## Release boundary
 
 Versions `0.1.0`, `0.2.0`, and `0.3.0` are exact LOVE releases with npm and
-GitHub Release mirrors; `0.4.0` is prepared and unreleased. Release work must
+GitHub Release mirrors. `0.3.0` remains the immutable public latest.
+`0.4.0` was prepared but not distributed; `0.5.0` is the current prepared,
+unreleased source boundary and carries that work forward. Release work must
 keep each released version's bytes immutable and keep the current LOVE, npm,
-and GitHub Release bytes identical through the protected allowlisted
-workflow. The deployed docs/catalog is a distribution surface, not a hosted
+and GitHub Release bytes identical through the protected allowlisted workflow.
+The deployed docs/catalog is a distribution surface, not a hosted
 arbitrary-target browser or permission to add one.
 Retained observations, structural accessibility context, race hardening, and
 the `agent-browser-capabilities/0.3` contract belong to the exact `0.3.0`
 artifact, not the immutable `0.1.0` or `0.2.0` bytes. The `blockedNavigation`
-observation diagnostic and the JSONL snake_case rename hint belong to
-`0.4.0`. Any source change after `0.4.0`, especially a machine-readable
-capability contract change, requires a new package version before
-publication.
+observation diagnostic and the JSONL snake_case rename hint were prepared at
+the unreleased `0.4.0` boundary. Browser-act receipts, non-ref observation
+bases, observation-local receipt context, backend-neutral capability
+inventory, and current/legacy MCP negotiation belong to prepared `0.5.0`
+source. Any source change after `0.5.0`, especially a machine-readable
+capability contract change, requires a new package version before publication.
