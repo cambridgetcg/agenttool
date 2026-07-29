@@ -1,7 +1,7 @@
 # Credential handoff and rotation
 
-**Status:** unreleased `0.3.0` controller-plane design and macOS
-implementation
+**Version:** `0.3.0` controller-plane design and macOS implementation.
+Distribution availability remains separately verifiable.
 
 `agentcred-control` standardizes how an operator places a provider credential
 in macOS Keychain and rotates it without adding a secret-transfer operation to
