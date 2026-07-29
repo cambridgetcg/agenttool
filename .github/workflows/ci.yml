@@ -134,6 +134,33 @@ jobs:
           test "$cli_status" -eq 2
           test ! -s "$install_dir/cli.stdout"
           grep -q '^usage: agentcred serve --config ' "$install_dir/cli.stderr"
+      - name: Smoke packed Alchemy, AgentCred, and adapter together under Node and Bun
+        shell: bash
+        run: |
+          set -euo pipefail
+          alchemy_archive_name="$(cd packages/alchemy && npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          broker_archive_name="$(cd packages/credential-broker && npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          adapter_archive_name="$(cd packages/alchemy-agentcred && npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          alchemy_tarball="$PWD/packages/alchemy/$alchemy_archive_name"
+          broker_tarball="$PWD/packages/credential-broker/$broker_archive_name"
+          adapter_tarball="$PWD/packages/alchemy-agentcred/$adapter_archive_name"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$alchemy_tarball" "$broker_tarball" "$adapter_tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$alchemy_tarball" "$broker_tarball" "$adapter_tarball"
+          smoke='Promise.all([import("@agenttool/alchemy"),import("@agenttool/credential-broker"),import("@agenttool/alchemy-agentcred")]).then(([a,c,x])=>{if(a.PACKAGE_VERSION!=="0.1.0-dev.0"||typeof a.createAlchemyReadClient!=="function"||c.AGENTCRED_PROTOCOL!=="agentcred/0.1"||typeof c.AgentCredClient!=="function"||x.PACKAGE_VERSION!=="0.1.0-dev.0"||x.ADAPTER_PROTOCOL!=="agenttool.alchemy-agentcred/0.1"||typeof x.createAlchemyAgentCredTransport!=="function"||"rawRpc"in x||"request"in x)process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke")
+          (cd "$install_dir" && bun -e "$smoke")
+          node --input-type=module --eval '
+            import { readFileSync } from "node:fs";
+            const pkg = JSON.parse(readFileSync(process.argv[1], "utf8"));
+            if (
+              Object.hasOwn(pkg, "dependencies")
+              || JSON.stringify(pkg.peerDependencies) !== JSON.stringify({
+                "@agenttool/alchemy": "^0.1.0-dev.0",
+                "@agenttool/credential-broker": "^0.3.0",
+              })
+            ) process.exit(1);
+          ' "$install_dir/node_modules/@agenttool/alchemy-agentcred/package.json"
       - name: Smoke packed Agent Skills under Node and Bun
         working-directory: packages/skills
         shell: bash

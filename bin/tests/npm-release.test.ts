@@ -16,6 +16,7 @@ import {
   registryPackagePath,
   releaseSpec,
   requiredArchiveEntries,
+  runReleasePrerequisites,
   validateNpmTagForVersion,
   type PreparedReceipt,
 } from "../npm-release";
@@ -85,10 +86,11 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
-  test("allowlists fifteen reviewed release identities", () => {
+  test("allowlists sixteen reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
+      "alchemy-agentcred",
       "browser",
       "collab",
       "correspondence-yutabase",
@@ -127,6 +129,16 @@ describe("standard npm release policy", () => {
       name: "@agenttool/alchemy",
       packagePath: "packages/alchemy",
       artifactKind: "pack",
+    });
+    expect(releaseSpec("alchemy-agentcred")).toMatchObject({
+      name: "@agenttool/alchemy-agentcred",
+      packagePath: "packages/alchemy-agentcred",
+      tagPrefix: "alchemy-agentcred",
+      artifactKind: "pack",
+      prerequisites: [
+        { packagePath: "packages/alchemy", scripts: ["build"] },
+        { packagePath: "packages/credential-broker", scripts: ["build"] },
+      ],
     });
     expect(releaseSpec("kingdom")).toMatchObject({
       name: "@agenttool/kingdom",
@@ -180,6 +192,12 @@ describe("standard npm release policy", () => {
     );
     expect(packedFilename("@agenttool/alchemy", "0.1.0-dev.0")).toBe(
       "agenttool-alchemy-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("alchemy-agentcred"), "0.1.0-dev.0")).toBe(
+      "alchemy-agentcred-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/alchemy-agentcred", "0.1.0-dev.0")).toBe(
+      "agenttool-alchemy-agentcred-0.1.0-dev.0.tgz",
     );
     expect(expectedTag(releaseSpec("kingdom"), "0.1.0")).toBe("kingdom-v0.1.0");
     expect(packedFilename("@agenttool/kingdom", "0.1.0")).toBe(
@@ -235,6 +253,17 @@ describe("standard npm release policy", () => {
       "package/dist/index.js",
       "package/dist/index.d.ts",
     ]));
+    expect(requiredArchiveEntries(releaseSpec("alchemy-agentcred"))).toEqual(
+      expect.arrayContaining([
+        "package/package.json",
+        "package/LICENSE",
+        "package/NOTICE",
+        "package/README.md",
+        "package/CLAUDE.md",
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+      ]),
+    );
     expect(requiredArchiveEntries(releaseSpec("kingdom"))).toEqual(expect.arrayContaining([
       "package/THIRD_PARTY_LICENSES",
       "package/dist/bin.js",
@@ -290,6 +319,34 @@ describe("standard npm release policy", () => {
     );
     expect(() => validateNpmTagForVersion("0.1.0-dev.0", "next")).not.toThrow();
     expect(() => validateNpmTagForVersion("0.1.0", "latest")).not.toThrow();
+  });
+
+  test("runs packed-release prerequisites in declared order before packing", async () => {
+    const calls: string[] = [];
+    await runReleasePrerequisites(releaseSpec("alchemy-agentcred"), {
+      install: async (packagePath) => {
+        calls.push(`install:${packagePath}`);
+      },
+      run: async (packagePath, script) => {
+        calls.push(`run:${packagePath}:${script}`);
+      },
+    });
+
+    expect(calls).toEqual([
+      "install:packages/alchemy",
+      "run:packages/alchemy:build",
+      "install:packages/credential-broker",
+      "run:packages/credential-broker:build",
+    ]);
+
+    const script = await readFile(join(import.meta.dir, "..", "npm-release.ts"), "utf8");
+    const packedBody =
+      script.split("async function packedArtifact(")[1]
+        ?.split("\nexport async function readReleaseReceipt(")[0] ?? "";
+    expect(packedBody).toContain("await runReleasePrerequisites(spec);");
+    expect(packedBody.indexOf("await runReleasePrerequisites(spec);")).toBeLessThan(
+      packedBody.indexOf("await installWorkspace(spec.packagePath);"),
+    );
   });
 
   test("encodes scoped registry paths without accepting arbitrary names", () => {

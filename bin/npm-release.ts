@@ -36,6 +36,11 @@ export interface ReleaseSpec {
   }[];
 }
 
+export interface ReleasePrerequisiteOperations {
+  install(packagePath: `packages/${string}`): Promise<void>;
+  run(packagePath: `packages/${string}`, script: string): Promise<void>;
+}
+
 export const RELEASE_SPECS = {
   adds: {
     key: "adds",
@@ -115,6 +120,17 @@ export const RELEASE_SPECS = {
     packagePath: "packages/alchemy",
     tagPrefix: "alchemy",
     artifactKind: "pack",
+  },
+  "alchemy-agentcred": {
+    key: "alchemy-agentcred",
+    name: "@agenttool/alchemy-agentcred",
+    packagePath: "packages/alchemy-agentcred",
+    tagPrefix: "alchemy-agentcred",
+    artifactKind: "pack",
+    prerequisites: [
+      { packagePath: "packages/alchemy", scripts: ["build"] },
+      { packagePath: "packages/credential-broker", scripts: ["build"] },
+    ],
   },
   kingdom: {
     key: "kingdom",
@@ -468,6 +484,23 @@ async function installWorkspace(path: string): Promise<void> {
   await command("bun", ["install", "--frozen-lockfile", "--ignore-scripts"], { cwd: join(REPO_ROOT, path) });
 }
 
+export async function runReleasePrerequisites(
+  spec: ReleaseSpec,
+  operations: ReleasePrerequisiteOperations = {
+    install: installWorkspace,
+    run: async (packagePath, script) => {
+      await command("bun", ["run", script], { cwd: join(REPO_ROOT, packagePath) });
+    },
+  },
+): Promise<void> {
+  for (const prerequisite of spec.prerequisites ?? []) {
+    await operations.install(prerequisite.packagePath);
+    for (const script of prerequisite.scripts) {
+      await operations.run(prerequisite.packagePath, script);
+    }
+  }
+}
+
 function artifactIdentity(bytes: Uint8Array, filename: string): ArtifactIdentity {
   const digest = (algorithm: "sha1" | "sha256" | "sha512", encoding: "hex" | "base64") =>
     createHash(algorithm).update(bytes).digest(encoding);
@@ -527,6 +560,13 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
   }
   if (spec.name === "@agenttool/alchemy") {
     entries.push(
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+    );
+  }
+  if (spec.name === "@agenttool/alchemy-agentcred") {
+    entries.push(
+      "package/CLAUDE.md",
       "package/dist/index.js",
       "package/dist/index.d.ts",
     );
@@ -619,12 +659,7 @@ async function loveArtifact(
   outputDirectory: string,
 ): Promise<{ path: string; sourceRevision: string }> {
   await installWorkspace("api");
-  for (const prerequisite of spec.prerequisites ?? []) {
-    await installWorkspace(prerequisite.packagePath);
-    for (const script of prerequisite.scripts) {
-      await command("bun", ["run", script], { cwd: join(REPO_ROOT, prerequisite.packagePath) });
-    }
-  }
+  await runReleasePrerequisites(spec);
   await installWorkspace(spec.packagePath);
   for (const script of spec.gateScripts ?? ["ci"]) {
     await command("bun", ["run", script], { cwd: join(REPO_ROOT, spec.packagePath) });
@@ -666,6 +701,7 @@ async function packedArtifact(
   outputDirectory: string,
 ): Promise<{ path: string; sourceRevision: string }> {
   const packageRoot = join(REPO_ROOT, spec.packagePath);
+  await runReleasePrerequisites(spec);
   await installWorkspace(spec.packagePath);
   const identity = await packageIdentity(spec);
   if (typeof identity.json.scripts?.prepack !== "string") fail(`${spec.name} pack release requires a prepack gate`);

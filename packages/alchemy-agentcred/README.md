@@ -67,10 +67,12 @@ Errors from the broker are collapsed to fixed adapter messages. Provider
 responses remain evidence, not consensus, finality, identity, consent, or
 authority to change money.
 
-This source version is `0.1.0-dev.0`. It has no release tag, LOVE inventory
-entry, npm allowlist entry, registry receipt, hosted route, deployment, or live
-provider proof. Package metadata and local pack output do not establish any of
-those surfaces.
+This source version is `0.1.0-dev.0`. Its npm-only release path is prepared
+under the allowlisted identity `alchemy-agentcred-v0.1.0-dev.0` and requires
+the `next` dist-tag. It remains unpublished: there is no release tag, GitHub
+Release, workflow receipt, npm package, LOVE inventory entry, hosted route,
+deployment, or live provider proof. Release wiring, package metadata, and
+local pack output do not establish any of those surfaces.
 
 ## Commands
 
