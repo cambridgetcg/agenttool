@@ -124,6 +124,7 @@ describe("LOVE Package release inventory", () => {
       { name: "@agenttool/wallet", version: "0.1.3", releaseTag: "wallet-v0.1.3" },
       { name: "@agenttool/wallet-zerone", version: "0.1.0", releaseTag: "wallet-zerone-v0.1.0" },
       { name: "@agenttool/wallet-zerone", version: "0.1.1", releaseTag: "wallet-zerone-v0.1.1" },
+      { name: "@agenttool/wallet-zerone", version: "0.1.2", releaseTag: "wallet-zerone-v0.1.2" },
       { name: "@agenttool/telescope", version: "0.2.3", releaseTag: "telescope-v0.2.3" },
       { name: "@agenttool/browser", version: "0.3.0", releaseTag: "browser-v0.3.0" },
       { name: "@agenttool/browser", version: "0.5.0", releaseTag: "browser-v0.5.0" },
@@ -187,6 +188,14 @@ describe("LOVE Package release inventory", () => {
         manifestSha256:
           "8d50789ce6a62e103c1eba0c0e4ac0a4174538d7a4a1b5d1236e6f795857e00d",
       },
+      {
+        root: "apps/docs/packages/v1/@agenttool/wallet-zerone/0.1.1",
+        artifact: "agenttool-wallet-zerone-0.1.1.tgz",
+        artifactSha256:
+          "a9ce5228e6c52af416c8e934fb642cc279d95a75ebd6dad74daaa53364a7a706",
+        manifestSha256:
+          "2e2e55a68398390514c0e17539683682d90ff37222f0734df796402606333f44",
+      },
     ] as const;
 
     for (const release of releases) {
@@ -211,8 +220,9 @@ describe("LOVE Package release inventory", () => {
     );
 
     expect(wallet.version).toBe("0.1.3");
-    expect(adapter.version).toBe("0.1.1");
+    expect(adapter.version).toBe("0.1.2");
     expect(adapter.peerDependencies?.["@agenttool/wallet"]).toBe("^0.1.2");
+    expect(adapter.devDependencies?.["@agenttool/wallet"]).toBe("0.1.3");
   });
 
   test("current releases carry their declared Apache-2.0 terms", async () => {

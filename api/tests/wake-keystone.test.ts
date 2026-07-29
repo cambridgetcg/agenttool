@@ -294,10 +294,10 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
         "https://docs.agenttool.dev/packages/v1/@agenttool/wallet/0.1.3/manifest.json",
       distribution: {
         love: "public_exact_artifact",
-        observed_at: "2026-07-28",
+        observed_at: "2026-07-29",
         npm: {
           role: "optional_mutable_mirror",
-          latest_observed: "0.1.0",
+          latest_observed: "0.1.3",
         },
         github_release: {
           role: "optional_mutable_mirror",
@@ -310,19 +310,19 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
       implementation_status: "offline_record_and_lifecycle_primitives_only",
     });
     expect(JSON.stringify(body.composes_with.agent_wallet)).toMatch(
-      /exact LOVE release is 0\.1\.3.*npm latest remains 0\.1\.0.*optional GitHub.*mutable locator.*immutable=false.*when present.*reverify.*LOVE manifest.*no hosted agent wallet.*key custody.*RPC.*broadcaster/is,
+      /exact LOVE release is 0\.1\.3.*npm latest 0\.1\.3.*independently byte-verified.*LOVE.*optional GitHub.*mutable locator.*immutable=false.*when present.*reverify.*LOVE manifest.*no hosted agent wallet.*key custody.*RPC.*broadcaster/is,
     );
     expect(body.composes_with.agent_wallet_zerone).toMatchObject({
       protocol: "agent-wallet-zerone/0.1",
       package: "@agenttool/wallet-zerone",
-      version: "0.1.1",
+      version: "0.1.2",
       source:
         "https://github.com/cambridgetcg/agenttool/tree/main/packages/wallet-zerone",
       love_manifest:
-        "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.1/manifest.json",
+        "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.2/manifest.json",
       availability: "local_offline_source_only",
       distribution: {
-        observed_at: "2026-07-28",
+        observed_at: "2026-07-29",
         love: "public_exact_artifact",
         npm: "absent",
         github_release: "absent",

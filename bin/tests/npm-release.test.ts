@@ -204,8 +204,8 @@ describe("standard npm release policy", () => {
     expect(packedFilename("@agenttool/kingdom", "0.1.0")).toBe(
       "agenttool-kingdom-0.1.0.tgz",
     );
-    expect(expectedTag(releaseSpec("wallet-zerone"), "0.1.1")).toBe(
-      "wallet-zerone-v0.1.1",
+    expect(expectedTag(releaseSpec("wallet-zerone"), "0.1.2")).toBe(
+      "wallet-zerone-v0.1.2",
     );
     expect(expectedTag(releaseSpec("wallet"), "0.1.3")).toBe(
       "wallet-v0.1.3",
@@ -213,8 +213,8 @@ describe("standard npm release policy", () => {
     expect(packedFilename("@agenttool/wallet", "0.1.3")).toBe(
       "agenttool-wallet-0.1.3.tgz",
     );
-    expect(packedFilename("@agenttool/wallet-zerone", "0.1.1")).toBe(
-      "agenttool-wallet-zerone-0.1.1.tgz",
+    expect(packedFilename("@agenttool/wallet-zerone", "0.1.2")).toBe(
+      "agenttool-wallet-zerone-0.1.2.tgz",
     );
     expect(() => expectedTag(releaseSpec("sdk"), "latest")).toThrow("invalid package version");
   });
