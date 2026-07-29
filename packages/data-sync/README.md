@@ -28,12 +28,14 @@ bun add https://docs.agenttool.dev/packages/v1/@agenttool/data-sync/0.1.2/agentt
 The bridge requires `@agenttool/adds` at `^0.2.3` and `@agenttool/data` at
 `^0.3.1`. Source-only development dependencies link the adjacent packages;
 the published runtime contract remains the two peer ranges above. On a clean
-source checkout, build the peers once before the bridge gate:
+source checkout, build the peers once before the bridge gate. Bun 1.3.5 needs
+`--force` to materialize those file-linked development peers into an empty
+`node_modules` tree:
 
 ```bash
 (cd ../data && bun install --frozen-lockfile && bun run build)
 (cd ../data-protocol && bun install --frozen-lockfile && bun run build)
-bun install
+bun install --frozen-lockfile --force
 bun run ci
 bun run build
 ```

@@ -465,7 +465,13 @@ async function ensurePinnedTools(): Promise<void> {
 }
 
 async function installWorkspace(path: string): Promise<void> {
-  await command("bun", ["install", "--frozen-lockfile", "--ignore-scripts"], { cwd: join(REPO_ROOT, path) });
+  // Bun 1.3.5 can report file-linked development peers as installed without
+  // materializing them into an empty node_modules tree unless installation is
+  // forced. Release preparation always starts from a clean checkout, so make
+  // that boundary explicit for every locked workspace install.
+  await command("bun", ["install", "--frozen-lockfile", "--ignore-scripts", "--force"], {
+    cwd: join(REPO_ROOT, path),
+  });
 }
 
 function artifactIdentity(bytes: Uint8Array, filename: string): ArtifactIdentity {

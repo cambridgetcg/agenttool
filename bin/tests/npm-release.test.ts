@@ -85,6 +85,13 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
+  test("materializes locked file-linked development peers in clean release checkouts", async () => {
+    const script = await readFile(join(import.meta.dir, "..", "npm-release.ts"), "utf8");
+    expect(script).toContain(
+      '["install", "--frozen-lockfile", "--ignore-scripts", "--force"]',
+    );
+  });
+
   test("allowlists fifteen reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
