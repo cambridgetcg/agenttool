@@ -178,7 +178,7 @@ printf '%s\\n' 'registry-fallback' >> "$TRACE_FILE"
 
 test("publishes only the runtime, schema, bundled skills, and legal documentation", () => {
   expect(packageJson.name).toBe("@agenttool/skills");
-  expect(packageJson.version).toBe("0.2.1");
+  expect(packageJson.version).toBe("0.3.0");
   expect(packageJson.files).toEqual([
     "dist",
     "schema",
@@ -337,6 +337,9 @@ test("documents non-activating installation and literal inspector path arguments
 
   expect(readme).toContain(SKILLS_RELEASE_URL);
   expect(readme).toContain(SKILLS_RELEASE_SHA256);
+  expect(readme).toContain(
+    "Version 0.3.0 is prepared in source but has not been published.",
+  );
   expect(readme).toMatch(
     /npm 0\.2\.1 is unavailable.*npm `latest` remains 0\.1\.0/s,
   );

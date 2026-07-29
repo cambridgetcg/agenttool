@@ -14,10 +14,11 @@ After a package artifact is deliberately installed, its binary is
 `agenttool-skill`. Installation alone does not activate or register the
 bundled skills.
 
-The current 0.2.1 GitHub Release artifact is public and independently
-byte-verified. npm 0.2.1 is unavailable and npm `latest` remains 0.1.0, so do
-not substitute that mutable tag for the current source release. Pin and verify
-the exact artifact before installation:
+Version 0.3.0 is prepared in source but has not been published. The last public
+GitHub Release artifact is 0.2.1 and remains independently byte-verified.
+npm 0.2.1 is unavailable and npm `latest` remains 0.1.0, so do not substitute
+that mutable tag for the verified 0.2.1 artifact.
+Pin and verify the exact artifact before installation:
 
 ```sh
 (
@@ -174,11 +175,12 @@ or another host.
   request and use the narrowest controller-approved AgentCred grant without
   receiving the credential value. It does not provision credentials, start
   the broker, approve a side effect, or grant authority.
-- [`manage-agentcred-lifecycle`](skills/manage-agentcred-lifecycle/SKILL.md)
-  orchestrates the separate human-controlled AgentCred handoff and managed A/B
-  lifecycle. It never receives a credential value, treats provider issuance
-  and revocation as separately authorized external actions, and does not add a
-  lifecycle operation to the agent wire.
+- [`manage-agentcred-lifecycle`](skills/manage-agentcred-lifecycle/SKILL.md) is
+  newly bundled by the prepared, unpublished 0.3.0 source. It orchestrates the
+  separate human-controlled AgentCred handoff and managed A/B lifecycle,
+  never receives a credential value, treats provider issuance and revocation
+  as separately authorized external actions, and does not add a lifecycle
+  operation to the agent wire.
 
 ## Development
 

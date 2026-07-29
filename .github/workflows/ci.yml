@@ -150,9 +150,9 @@ jobs:
           package_root="$install_dir/node_modules/@agenttool/skills"
           cli="$package_root/dist/bin.js"
           test -x "$install_dir/node_modules/.bin/agenttool-skill"
-          test "$("$install_dir/node_modules/.bin/agenttool-skill" --version)" = "0.2.1"
-          test "$(node "$cli" --version)" = "0.2.1"
-          test "$(bun "$cli" --version)" = "0.2.1"
+          test "$("$install_dir/node_modules/.bin/agenttool-skill" --version)" = "0.3.0"
+          test "$(node "$cli" --version)" = "0.3.0"
+          test "$(bun "$cli" --version)" = "0.3.0"
           node "$cli" validate "$package_root/skills/use-agentcred-safely" >"$install_dir/report.json"
           node --input-type=module --eval '
             import { readFileSync } from "node:fs";
@@ -165,6 +165,21 @@ jobs:
               || Object.hasOwn(report, "installPlan")
             ) process.exit(1);
           ' "$install_dir/report.json"
+          node "$cli" validate "$package_root/skills/manage-agentcred-lifecycle" >"$install_dir/manage-agentcred-lifecycle-report.json"
+          node --input-type=module --eval '
+            import { readFileSync } from "node:fs";
+            const report = JSON.parse(readFileSync(process.argv[1], "utf8"));
+            if (
+              report.valid !== true
+              || report.kind !== "agenttool.skills.inspection"
+              || report.skills.length !== 1
+              || report.skills[0].name !== "manage-agentcred-lifecycle"
+              || report.skills[0].scripts.length !== 0
+              || report.skills[0].resources.length !== 1
+              || report.skills[0].resources[0] !== "agents/openai.yaml"
+              || Object.hasOwn(report, "installPlan")
+            ) process.exit(1);
+          ' "$install_dir/manage-agentcred-lifecycle-report.json"
           node "$cli" validate "$package_root/skills/capability-conductor" >"$install_dir/capability-conductor-report.json"
           node --input-type=module --eval '
             import { readFileSync } from "node:fs";
@@ -226,6 +241,7 @@ jobs:
             const packageRoot = process.argv[1];
             const names = [
               "use-agentcred-safely",
+              "manage-agentcred-lifecycle",
               "capability-conductor",
               "learn-by-contact",
               "nen-contract-mantle",
