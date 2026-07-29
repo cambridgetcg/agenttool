@@ -136,8 +136,8 @@ broadcaster, wallet, simulation API, or Alchemy admin client.
 
 ## Credential-broker bridge
 
-Repository source and the exact immutable LOVE artifact for
-`@agenttool/credential-broker` are now `0.2.0`. npm availability remains
+Repository source and the checked-in exact LOVE artifact for
+`@agenttool/credential-broker` are now `0.3.0`. npm availability remains
 independent: neither source metadata nor a LOVE artifact proves registry
 publication. The package SemVer changed because the new source bytes must
 never be rebuilt under the old release identity; the negotiated wire names remain
