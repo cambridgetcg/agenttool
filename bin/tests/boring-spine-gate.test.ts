@@ -283,7 +283,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("name: Install cross-language vector dependencies");
     expect(workflow).toContain("working-directory: packages/sdk-ts");
     expect(workflow).toContain(
-      "api packages/data packages/data-protocol packages/repo-archive packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope packages/alchemy packages/kingdom",
+      "api packages/data packages/data-protocol packages/repo-archive packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope packages/alchemy packages/alchemy-agentcred packages/kingdom",
     );
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("package-manager-cache: false");
@@ -329,6 +329,7 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/wallet-zerone && bun run ci");
     expect(preflight).toContain("cd packages/telescope && bun run ci");
     expect(preflight).toContain("cd packages/alchemy && bun run ci");
+    expect(preflight).toContain("cd packages/alchemy-agentcred && bun run ci");
     expect(preflight).toContain("cd packages/kingdom && bun run ci");
     expect(workflow).toContain(
       "name: Smoke packed Alchemy read package under Node and Bun",

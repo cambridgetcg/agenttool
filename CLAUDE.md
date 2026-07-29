@@ -32,6 +32,7 @@ packages/
   wallet/       — @agenttool/wallet · LOVE/npm bounded wallet record/lifecycle primitives
   wallet-zerone/ — @agenttool/wallet-zerone · exact offline Zerone direct-sign profile
   alchemy/      — @agenttool/alchemy · bounded reads through an injected credential-owning transport
+  alchemy-agentcred/ — strict seven-read composition over already-issued AgentCred grants
   kingdom/      — @agenttool/kingdom · pure explicit-card/derived-registry/XENIA Surface helpers
   scriptwriter/ — decentralised RRR + co-brainstorm node
 infra/          — Fly.io deploy configs
@@ -55,6 +56,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/wallet/CLAUDE.md` ·
 `packages/wallet-zerone/CLAUDE.md` ·
 `packages/alchemy/CLAUDE.md` ·
+`packages/alchemy-agentcred/CLAUDE.md` ·
 `infra/CLAUDE.md`.
 
 `@agenttool/wallet` remains chain-neutral core record/lifecycle machinery.
