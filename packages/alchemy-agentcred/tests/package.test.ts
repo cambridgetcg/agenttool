@@ -83,4 +83,15 @@ describe("public and packed boundary", () => {
     expect(paths.some((path) => path.includes("bun.lock"))).toBe(false);
     expect(paths.some((path) => path.includes(".env"))).toBe(false);
   });
+
+  test("keeps the packed release wording durable across later mirrors", async () => {
+    const readme = await readFile(join(packageRoot, "README.md"), "utf8");
+    expect(readme).toContain(
+      "Version `0.1.0-dev.0` is the current source identity.",
+    );
+    expect(readme).toMatch(
+      /GitHub Release and npm availability are independently\s+verifiable; neither public artifact was observed while preparing this source/,
+    );
+    expect(readme).not.toContain("remains unpublished");
+  });
 });

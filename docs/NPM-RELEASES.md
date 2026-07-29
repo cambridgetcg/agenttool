@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE planner, the developer-preview Repo Archive, and the developer-preview Alchemy observation client are intentionally npm-only.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE planner, the developer-preview Repo Archive, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -237,6 +237,41 @@ gh workflow run publish-npm.yml --ref alchemy-v0.1.0-dev.0 \
 This publishes only the bounded local observation library. It does not deploy
 the AgentTool API, configure Alchemy credentials or webhooks, apply database
 migrations, or make a provider call.
+
+### Alchemy AgentCred developer-preview bootstrap
+
+`@agenttool/alchemy-agentcred@0.1.0-dev.0` is the current source identity for
+the prepared npm-only packed-artifact path. GitHub Release, workflow receipt,
+and npm availability are independently verifiable; none was observed while
+preparing this source. The adapter keeps `@agenttool/alchemy` and
+`@agenttool/credential-broker` as unbundled peers; release preparation builds
+both checked-out peer workspaces before the adapter gate and pack.
+
+For a first publication, require compatible versions of both peers to be
+independently visible on public npm. The protected `npm-bootstrap` environment
+must allow annotated `alchemy-agentcred-v*` tags. A first publication uses
+bootstrap authentication and `next`; later versions use trusted publishing
+after the npm package's trusted publisher is configured. Never recreate or
+move an existing release tag; an exact already-published rerun follows the
+workflow's verification-only recovery path.
+
+```bash
+bun bin/npm-release.ts resolve --package alchemy-agentcred
+
+git tag -a alchemy-agentcred-v0.1.0-dev.0 <github-main-commit> \
+  -m '@agenttool/alchemy-agentcred@0.1.0-dev.0'
+git push github refs/tags/alchemy-agentcred-v0.1.0-dev.0
+
+gh workflow run publish-npm.yml --ref alchemy-agentcred-v0.1.0-dev.0 \
+  -f package=alchemy-agentcred \
+  -f tag=alchemy-agentcred-v0.1.0-dev.0 \
+  -f authentication=bootstrap \
+  -f npm_tag=next
+```
+
+This publishes only the strict local composition adapter. It does not connect
+the broker, issue a grant, reveal a credential, make an Alchemy call, deploy a
+hosted surface, or bundle either peer.
 
 ### KINGDOM package bootstrap
 
