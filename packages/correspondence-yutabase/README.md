@@ -16,18 +16,18 @@ The boundary is deliberate:
 
 ## Developer-preview status
 
-This source prepares `0.1.0-dev.1`; that version is not yet registry or release
-evidence. The latest verified public artifact is `0.1.0-dev.0`, whose protected
-release path read the registry and GitHub Release tarballs back as
-byte-identical. Neither version is a deployed projector, a YUTABASE conformance
-claim, or a hosted service. The package has no runtime dependencies and
-performs no network or database I/O.
+This source is `0.1.0-dev.1`. Source metadata is not registry or GitHub Release
+evidence; verify the exact version at the intended mirror. The earlier
+`0.1.0-dev.0` protected release read the registry and GitHub Release tarballs
+back as byte-identical. Neither version is a deployed projector, a YUTABASE
+conformance claim, or a hosted service. The package has no runtime dependencies
+and performs no network or database I/O.
 
 At first publication npm exposed `0.1.0-dev.0` through both `next` and
 `latest`, even though the release requested `next`. Use the exact prerelease or
 `next`; do not treat the registry fallback tag as a maturity signal.
 
-## Install after publication
+## Install
 
     npm install --save-exact @agenttool/correspondence-yutabase@0.1.0-dev.1
 

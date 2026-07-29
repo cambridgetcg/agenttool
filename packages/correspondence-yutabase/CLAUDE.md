@@ -66,11 +66,11 @@ thread intentions.
 
 ## Release State
 
-This source prepares `0.1.0-dev.1`; it is not yet registry or GitHub Release
-evidence. The latest verified public artifact is `0.1.0-dev.0`, whose protected
-release read the npm and GitHub Release tarballs back as byte-identical.
-Publication does not deploy an executor, install YUTABASE, or grant database
-authority. At initial publication npm exposed `0.1.0-dev.0` through both
+This source is `0.1.0-dev.1`. Source metadata is not registry or GitHub Release
+evidence; verify the exact version at the intended mirror. The earlier
+`0.1.0-dev.0` protected release read the npm and GitHub Release tarballs back as
+byte-identical. Publication does not deploy an executor, install YUTABASE, or
+grant database authority. At initial publication npm exposed `0.1.0-dev.0` through both
 `next` and `latest`; consumers should select an exact published prerelease or
 the preview tag deliberately.
 
