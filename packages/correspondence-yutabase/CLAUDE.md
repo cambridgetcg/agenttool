@@ -66,13 +66,17 @@ thread intentions.
 
 ## Release State
 
-This source is `0.1.0-dev.1`. Source metadata is not registry or GitHub Release
-evidence; verify the exact version at the intended mirror. The earlier
-`0.1.0-dev.0` protected release read the npm and GitHub Release tarballs back as
-byte-identical. Publication does not deploy an executor, install YUTABASE, or
-grant database authority. At initial publication npm exposed `0.1.0-dev.0` through both
-`next` and `latest`; consumers should select an exact published prerelease or
-the preview tag deliberately.
+This source and public npm developer preview are `0.1.0-dev.1`. Protected
+[workflow run `30468784750`](https://github.com/cambridgetcg/agenttool/actions/runs/30468784750)
+published it with provenance from the annotated
+[GitHub prerelease](https://github.com/cambridgetcg/agenttool/releases/tag/correspondence-yutabase-v0.1.0-dev.1).
+Anonymous readback confirmed the 26,694-byte npm and GitHub tarballs are
+byte-identical
+(`sha256:0e8dff54aa098c480351d4adbb7681710bf2410bb57fd8e5bb22f9193bd3fa47`).
+Publication does not deploy an executor, install YUTABASE, or grant database
+authority. npm exposes `next` as `0.1.0-dev.1`; `latest` remains
+`0.1.0-dev.0`. Consumers should select an exact published prerelease or the
+preview tag deliberately.
 
 ## Kingdom Engine
 
