@@ -2,6 +2,8 @@ import { spawn } from "node:child_process";
 import { homedir, userInfo } from "node:os";
 import { AgentCredError } from "./errors.js";
 import { validateCredentialAuth } from "./http.js";
+import { isCredentialAlias } from "./identifiers.js";
+import { copyAndWipeSecretChunk } from "./secret-buffers.js";
 import type {
   CredentialAuth,
   CredentialMaterial,
@@ -69,13 +71,15 @@ async function readBoundedCommand(
       signal?.removeEventListener("abort", onAbort);
     };
     child.stdout.on("data", (chunk: Buffer) => {
-      size += chunk.byteLength;
+      const copy = copyAndWipeSecretChunk(chunk);
+      size += copy.byteLength;
       if (size > MAX_SECRET_BYTES) {
+        copy.fill(0);
         tooLarge = true;
         child.kill();
         return;
       }
-      chunks.push(Buffer.from(chunk));
+      chunks.push(copy);
     });
     child.once("error", () => {
       if (settled) return;
@@ -132,8 +136,14 @@ export class MacOSKeychainSource implements CredentialSource {
     this.#references = new Map(
       Object.entries(references).map(([alias, reference]) => {
         validateCredentialAuth(reference.auth);
+        if (!isCredentialAlias(alias)) {
+          throw new AgentCredError(
+            "invalid_request",
+            "Invalid credential alias in broker-owned credential mapping.",
+          );
+        }
         return [
-          validateReferencePart(alias, "credential alias"),
+          alias,
           {
             ...reference,
             service: validateReferencePart(reference.service, "Keychain service"),

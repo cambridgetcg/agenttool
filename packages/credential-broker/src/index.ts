@@ -39,6 +39,10 @@ export type {
 } from "./types.js";
 export { AgentCredError } from "./errors.js";
 export type { AgentCredErrorCode } from "./errors.js";
+export {
+  isCredentialAlias,
+  MAX_CREDENTIAL_ALIAS_LENGTH,
+} from "./identifiers.js";
 export { AgentCredClient, GrantHandle } from "./client.js";
 export type {
   AgentCredClientOptions,
@@ -57,6 +61,21 @@ export type {
 } from "./http.js";
 export { MacOSKeychainSource } from "./backends.js";
 export type { CredentialReference, MacOSKeychainReference } from "./backends.js";
+export { AGENTCRED_HANDOFF_MANIFEST } from "./keychain-slots.js";
+export type {
+  CredentialHandoffManifest,
+  CredentialHistoryAnchor,
+  CredentialRotation,
+  CredentialRotationPhase,
+  CredentialVerificationProfile,
+  KeychainSlotName,
+  KeychainSlotRecord,
+  KeychainSlotSelection,
+  ManagedCredentialAuth,
+  ManagedMacOSKeychainReference,
+  RotationClosureReceipt,
+  RotationEvidence,
+} from "./keychain-slots.js";
 export { DenyAllConsent, PolicyConsent } from "./policy.js";
 export type {
   BrokerPolicy,
