@@ -126,6 +126,7 @@ describe("LOVE Package release inventory", () => {
       { name: "@agenttool/wallet-zerone", version: "0.1.1", releaseTag: "wallet-zerone-v0.1.1" },
       { name: "@agenttool/telescope", version: "0.2.3", releaseTag: "telescope-v0.2.3" },
       { name: "@agenttool/browser", version: "0.3.0", releaseTag: "browser-v0.3.0" },
+      { name: "@agenttool/browser", version: "0.5.0", releaseTag: "browser-v0.5.0" },
     ]);
   });
 

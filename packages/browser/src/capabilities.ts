@@ -1,7 +1,14 @@
 import { BrowserError } from "./errors.js";
+import {
+  BROWSER_OPERATIONS,
+  JSONL_PROTOCOL_VERSION,
+  MCP_LEGACY_COMPATIBILITY,
+  MCP_MODERN_PROTOCOL_REVISION,
+  type BrowserOperation,
+} from "./protocol.js";
 
 export const BROWSER_CAPABILITIES_SCHEMA =
-  "agent-browser-capabilities/0.3" as const;
+  "agent-browser-capabilities/0.4" as const;
 
 export type BrowserAuthorityPreset = "public" | "local" | "sovereign";
 export type EffectiveBrowserAuthority =
@@ -10,6 +17,28 @@ export type EffectiveBrowserAuthority =
 
 export interface BrowserCapabilitySet {
   schema: typeof BROWSER_CAPABILITIES_SCHEMA;
+  interfaces: {
+    typescript: {
+      transport: "in_process";
+      contract: "direct_api";
+      directOnlyAffordances: readonly [
+        "selector_extract",
+        "full_page_screenshot",
+      ];
+    };
+    jsonl: {
+      transport: "stdio";
+      contract: "model_facing_operations";
+      version: typeof JSONL_PROTOCOL_VERSION;
+    };
+    mcp: {
+      transport: "stdio";
+      contract: "model_facing_operations";
+      modernRevision: typeof MCP_MODERN_PROTOCOL_REVISION;
+      legacyCompatibility: typeof MCP_LEGACY_COMPATIBILITY;
+    };
+  };
+  modelFacingOperations: readonly BrowserOperation[];
   authority: {
     profile: EffectiveBrowserAuthority;
     fixedAt: "process_start";
@@ -36,6 +65,8 @@ export interface BrowserCapabilitySet {
   };
   features: {
     interaction: "enabled";
+    browserActReceipts: "enabled";
+    nonRefObservationBasis: "enabled";
     screenshots: "enabled";
     persistentProfile: "enabled" | "requires_configuration";
     uploads: "unsupported";
@@ -152,6 +183,28 @@ export function resolveBrowserCapabilities(
 
   return deepFreeze({
     schema: BROWSER_CAPABILITIES_SCHEMA,
+    interfaces: {
+      typescript: {
+        transport: "in_process",
+        contract: "direct_api",
+        directOnlyAffordances: [
+          "selector_extract",
+          "full_page_screenshot",
+        ],
+      },
+      jsonl: {
+        transport: "stdio",
+        contract: "model_facing_operations",
+        version: JSONL_PROTOCOL_VERSION,
+      },
+      mcp: {
+        transport: "stdio",
+        contract: "model_facing_operations",
+        modernRevision: MCP_MODERN_PROTOCOL_REVISION,
+        legacyCompatibility: MCP_LEGACY_COMPATIBILITY,
+      },
+    },
+    modelFacingOperations: [...BROWSER_OPERATIONS],
     authority: {
       profile,
       fixedAt: "process_start",
@@ -181,6 +234,8 @@ export function resolveBrowserCapabilities(
     },
     features: {
       interaction: "enabled",
+      browserActReceipts: "enabled",
+      nonRefObservationBasis: "enabled",
       screenshots: "enabled",
       persistentProfile:
         profileMode === "persistent"

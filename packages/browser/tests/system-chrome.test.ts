@@ -222,7 +222,32 @@ async function runNavigationEpochSystemProof(): Promise<void> {
         ref: firstButton.ref,
         snapshotId: first.snapshotId,
       }),
-    ).rejects.toMatchObject({ code: "stale_snapshot" });
+    ).rejects.toMatchObject({
+      code: "stale_snapshot",
+      receipt: {
+        status: {
+          runtimeInvocation: "not_started",
+          localOutcome: "rejected",
+          errorCode: "stale_snapshot",
+        },
+      },
+    });
+    await expect(
+      browser.act({
+        kind: "wait",
+        ms: 1,
+        tabId: second.tabId,
+        basisSnapshotId: second.snapshotId,
+      }),
+    ).resolves.toMatchObject({
+      receipt: {
+        status: {
+          runtimeInvocation: "started",
+          localOutcome: "browser_completed",
+          errorCode: null,
+        },
+      },
+    });
     expect(
       (await browser.tabs()).find((tab) => tab.tabId === first.tabId)?.title,
     ).toBe("Alias B");
@@ -241,6 +266,13 @@ async function runNavigationEpochSystemProof(): Promise<void> {
     ).rejects.toMatchObject({
       code: "action_failed",
       message: expect.stringContaining("could not be attributed"),
+      receipt: {
+        status: {
+          runtimeInvocation: "started",
+          localOutcome: "unknown",
+          errorCode: "action_failed",
+        },
+      },
     });
   } finally {
     try {
