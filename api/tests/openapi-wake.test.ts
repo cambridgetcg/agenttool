@@ -204,7 +204,7 @@ describe("wake OpenAPI contract", () => {
         "deployed_bridge",
       ]),
     );
-    expect(adapterSchema?.properties?.version?.const).toBe("0.1.1");
+    expect(adapterSchema?.properties?.version?.const).toBe("0.1.2");
     expect(adapterSchema?.properties?.availability?.const).toBe(
       "local_offline_source_only",
     );

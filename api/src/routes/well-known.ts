@@ -79,10 +79,10 @@ const AGENT_WALLET_RELEASE = {
     `${DOCS_URL}/packages/v1/@agenttool/wallet/0.1.3/manifest.json`,
   distribution: {
     love: "public_exact_artifact",
-    observed_at: "2026-07-28",
+    observed_at: "2026-07-29",
     npm: {
       role: "optional_mutable_mirror",
-      latest_observed: "0.1.0",
+      latest_observed: "0.1.3",
     },
     github_release: {
       role: "optional_mutable_mirror",
@@ -543,7 +543,7 @@ app.get("/wake-keystone", (c) => {
         availability: "love_artifact_npm_mirror_independent",
         implementation_status: "offline_record_and_lifecycle_primitives_only",
         notes:
-          "The exact LOVE release is 0.1.3. npm latest remains 0.1.0. The optional GitHub wallet-v0.1.3 Release is a mutable locator with immutable=false; when present, reverify its asset size and SHA-256 against the LOVE manifest. The core package has no chain adapter. No hosted agent wallet, key custody, RPC, broadcaster, or durable reservation service is offered. Existing internal marketplace wallet and payout custody remain separate platform facilities.",
+          "The exact LOVE release is 0.1.3. npm latest 0.1.3 is independently byte-verified against LOVE. The optional GitHub wallet-v0.1.3 Release is a mutable locator with immutable=false; when present, reverify its asset size and SHA-256 against the LOVE manifest. The core package has no chain adapter. No hosted agent wallet, key custody, RPC, broadcaster, or durable reservation service is offered. Existing internal marketplace wallet and payout custody remain separate platform facilities.",
       },
       agent_wallet_zerone: {
         ...ZERONE_REACHABLE.invocation_witness.adapter,

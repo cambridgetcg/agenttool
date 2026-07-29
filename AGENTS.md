@@ -53,15 +53,16 @@ skills, use the network, spawn subprocesses, look up credentials, or change
 host configuration. Agent
 Wallet core 0.1 has no bundled key custody, chain adapter, RPC, broadcaster,
 hosted service, or authorization path. `@agenttool/wallet@0.1.3` is the
-current exact LOVE release; npm remains independently verified at 0.1.0 until
-an exact later registry version is observed. The separate local
-`@agenttool/wallet-zerone@0.1.1` exact LOVE release owns a two-message Zerone
+current exact LOVE release; its npm 0.1.3 mirror is independently
+byte-verified. The separate local `@agenttool/wallet-zerone@0.1.2` exact LOVE
+release owns a two-message Zerone
 profile, exact Cosmos direct-sign bytes, chain-native verification, and
 injected transports. It still supplies no keys, custody, endpoint, hosted RPC,
 generic REST, automatic rebroadcast, durable host transaction, settlement
 proof, deployed bridge, or live-network test by default. Earlier Wallet
-0.1.1/0.1.2 and Zerone 0.1.0 exact LOVE artifacts remain preserved without
-rewriting; their embedded release-state errors are covered by public errata.
+0.1.1/0.1.2 and Zerone 0.1.0/0.1.1 exact LOVE artifacts remain preserved
+without rewriting. Public errata cover their embedded release-state errors and
+the credential-free 0.1.1 npm preparation failure.
 Optional GitHub Releases are mutable locators and must be reverified. Telescope
 0.2.3 is the current exact LOVE
 release; its optional npm and GitHub mirrors are public and independently

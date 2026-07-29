@@ -43,12 +43,12 @@ describe("wake reachable doors", () => {
       adapter: {
         protocol: "agent-wallet-zerone/0.1",
         package: "@agenttool/wallet-zerone",
-        version: "0.1.1",
+        version: "0.1.2",
         love_manifest:
-          "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.1/manifest.json",
+          "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.2/manifest.json",
         availability: "local_offline_source_only",
         distribution: {
-          observed_at: "2026-07-28",
+          observed_at: "2026-07-29",
           love: "public_exact_artifact",
           npm: "absent",
           github_release: "absent",
@@ -191,7 +191,7 @@ describe("wake reachable doors", () => {
     }
 
     for (const renderedCoordinate of [
-      "Distribution (observed 2026-07-28): love=public_exact_artifact; npm=absent; github_release=absent",
+      "Distribution (observed 2026-07-29): love=public_exact_artifact; npm=absent; github_release=absent",
       "Runtime availability: local_offline_source_only; hosted=false; custody=false; hosted_rpc=false; deployed_bridge=false",
     ]) {
       expect(fullMarkdown).toContain(renderedCoordinate);
