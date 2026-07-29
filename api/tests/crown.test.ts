@@ -180,11 +180,19 @@ const allowAllRateLimit = async () => ({
   resetAt: new Date(),
 });
 
+/** Pinned clock: fixture vectors carry fixed signed timestamps (09:00 on
+ *  2026-07-29); the freshness window is checked against this instant. */
+const TEST_NOW = () => new Date("2026-07-29T12:30:00.000Z");
+
 function crownApp(
   store = memoryStore(),
   opts: Parameters<typeof createCrownRoutes>[1] = {},
 ) {
-  return createCrownRoutes(store, { rateLimit: allowAllRateLimit, ...opts });
+  return createCrownRoutes(store, {
+    rateLimit: allowAllRateLimit,
+    now: TEST_NOW,
+    ...opts,
+  });
 }
 
 async function postJson(app: ReturnType<typeof crownApp>, path: string, body: unknown) {
@@ -289,7 +297,7 @@ describe("POST /coronations — canonical fixture vectors", () => {
     expect(((await refused.json()) as any).error).toBe("did_key_not_attested");
   });
 
-  test("one non-abdicated crown per DID — a second coronation 409s; after abdication it lands", async () => {
+  test("one non-abdicated crown per DID — a second coronation 409s; after abdication a FRESH one lands and a replay is refused", async () => {
     const store = memoryStore();
     const app = crownApp(store);
     const valid = FIXTURE.vectors[0].body;
@@ -321,7 +329,29 @@ describe("POST /coronations — canonical fixture vectors", () => {
     expect(abRes.status).toBe(201);
     expect(((await abRes.json()) as any).status).toBe("abdicated");
 
-    const again = await postJson(app, "/coronations", valid);
+    // A REPLAY of the original signed coronation (its timestamp predates
+    // the abdication) is refused structurally — the registry serves the
+    // signature publicly, so anyone could re-POST it; nobody can re-crown
+    // a DID that abdicated by replaying its past.
+    const replayed = await postJson(app, "/coronations", valid);
+    expect(replayed.status).toBe(409);
+    expect(((await replayed.json()) as any).error).toBe(
+      "timestamp_not_after_latest",
+    );
+
+    // A FRESH coronation (newly signed, postdating the abdication) lands.
+    const freshTimestamp = "2026-07-29T11:30:00.000Z";
+    const freshCanonical = canonicalCoronationBytes({
+      lawsHash: valid.laws_hash,
+      did: valid.did,
+      timestamp: freshTimestamp,
+      boundsStatement: valid.bounds_statement,
+    });
+    const again = await postJson(app, "/coronations", {
+      ...valid,
+      timestamp: freshTimestamp,
+      signature: signB64(freshCanonical, SEED_A),
+    });
     expect(again.status).toBe(201);
     expect(store.rows.length).toBe(2);
     expect(store.rows[0].status).toBe("abdicated");
@@ -365,8 +395,10 @@ describe("owner crown events", () => {
     type: CrownOwnerEventType,
     seed = SEED_A,
     note?: string,
+    // Monotonicity is structural now: each signed act strictly postdates
+    // the chain, so tests sign strictly increasing instants.
+    timestamp = "2026-07-29T12:00:00.000Z",
   ) {
-    const timestamp = "2026-07-29T12:00:00.000Z";
     return {
       type,
       ...(note ? { note } : {}),
@@ -386,11 +418,19 @@ describe("owner crown events", () => {
     expect(rest.status).toBe(201);
     expect(((await rest.json()) as any).status).toBe("resting");
 
-    const mend = await postJson(app, path, signedEvent(did, "mend", SEED_A, "said so, mended, kept playing"));
+    const mend = await postJson(
+      app,
+      path,
+      signedEvent(did, "mend", SEED_A, "said so, mended, kept playing", "2026-07-29T12:01:00.000Z"),
+    );
     expect(mend.status).toBe(201);
     expect(((await mend.json()) as any).status).toBe("resting");
 
-    const ret = await postJson(app, path, signedEvent(did, "return"));
+    const ret = await postJson(
+      app,
+      path,
+      signedEvent(did, "return", SEED_A, undefined, "2026-07-29T12:02:00.000Z"),
+    );
     expect(ret.status).toBe(201);
     expect(((await ret.json()) as any).status).toBe("active");
 
@@ -445,6 +485,137 @@ describe("owner crown events", () => {
     expect(body.coronation.status).toBe("abdicated");
     expect(body.coronation.bounds_statement).toBeTruthy();
     expect(store.rows.length).toBe(1);
+  });
+});
+
+describe("replay-protection & structural timestamp bounds (3-lens review, pre-release)", () => {
+  const valid = () => FIXTURE.vectors[0].body;
+
+  function freshCoronation(timestamp: string) {
+    const body = valid();
+    return {
+      ...body,
+      timestamp,
+      signature: signB64(
+        canonicalCoronationBytes({
+          lawsHash: body.laws_hash,
+          did: body.did,
+          timestamp,
+          boundsStatement: body.bounds_statement,
+        }),
+        SEED_A,
+      ),
+    };
+  }
+
+  function abdicateAt(did: string, timestamp: string) {
+    return {
+      type: "abdicate" as CrownOwnerEventType,
+      timestamp,
+      signature: signB64(
+        canonicalCrownEventBytes({ type: "abdicate", did, timestamp, note: "" }),
+        SEED_A,
+      ),
+    };
+  }
+
+  test("a replayed owner event from a previous coronation cannot touch a fresh crown", async () => {
+    const app = crownApp();
+    const did = valid().did;
+    const path = `/coronations/${encodeURIComponent(did)}/events`;
+
+    expect((await postJson(app, "/coronations", valid())).status).toBe(201);
+    const abdicate = abdicateAt(did, "2026-07-29T11:00:00.000Z");
+    expect((await postJson(app, path, abdicate)).status).toBe(201);
+    expect(
+      (await postJson(app, "/coronations", freshCoronation("2026-07-29T11:30:00.000Z"))).status,
+    ).toBe(201);
+
+    // The registry republishes the abdication's signature; a third party
+    // re-POSTs it against the fresh crown. Same key, valid signature —
+    // refused purely because its instant predates the chain.
+    const replayed = await postJson(app, path, abdicate);
+    expect(replayed.status).toBe(409);
+    expect(((await replayed.json()) as any).error).toBe(
+      "timestamp_not_after_latest",
+    );
+
+    const read = await app.request(`/coronations/${encodeURIComponent(did)}`);
+    expect(((await read.json()) as any).coronation.status).toBe("active");
+  });
+
+  test("strict ISO-8601: Date.parse leniencies like '01 Jan 1970' are refused", async () => {
+    const app = crownApp();
+    const res = await postJson(app, "/coronations", {
+      ...valid(),
+      timestamp: "01 Jan 1970",
+      signature: "x".repeat(64),
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as any).error).toBe("validation");
+  });
+
+  test("freshness window: nobody signs 1970 and occupies the head of the chronology", async () => {
+    const app = crownApp();
+    const past = await postJson(app, "/coronations", {
+      ...valid(),
+      timestamp: "1970-01-01T00:00:00.000Z",
+      signature: "x".repeat(64),
+    });
+    expect(past.status).toBe(400);
+    expect(((await past.json()) as any).error).toBe("timestamp_out_of_window");
+
+    const future = await postJson(app, "/coronations", {
+      ...valid(),
+      timestamp: "2026-07-29T13:00:00.000Z",
+      signature: "x".repeat(64),
+    });
+    expect(future.status).toBe(400);
+    expect(((await future.json()) as any).error).toBe("timestamp_out_of_window");
+  });
+
+  test("concurrent double-crowning: the DB unique-index loser gets the documented 409, not a 500", async () => {
+    const store = memoryStore({
+      insertCoronation: async () => {
+        // What the pg driver raises when one_unabdicated_crown_per_did
+        // catches the check-then-insert race's loser.
+        throw Object.assign(new Error("duplicate key value"), {
+          code: "23505",
+          constraint_name: "one_unabdicated_crown_per_did",
+        });
+      },
+    });
+    const app = crownApp(store);
+    const res = await postJson(app, "/coronations", valid());
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as any).error).toBe("crown_already_active");
+  });
+
+  test("public_key must be the canonical base64 spelling of its 32 bytes", async () => {
+    const body = valid();
+    // Mutate the 43rd character to a spelling with nonzero trailing bits:
+    // it still decodes to 32 bytes, but re-encoding normalizes it — two
+    // spellings of one key must not both be storable.
+    const alphabet =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mutated: string | null = null;
+    for (const ch of alphabet) {
+      if (ch === body.public_key[42]) continue;
+      const candidate = body.public_key.slice(0, 42) + ch + "=";
+      const raw = Buffer.from(candidate, "base64");
+      if (raw.length === 32 && raw.toString("base64") !== candidate) {
+        mutated = candidate;
+        break;
+      }
+    }
+    expect(mutated).not.toBeNull();
+    const app = crownApp();
+    const res = await postJson(app, "/coronations", {
+      ...body,
+      public_key: mutated,
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as any).error).toBe("validation");
   });
 });
 

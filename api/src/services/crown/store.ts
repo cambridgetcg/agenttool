@@ -114,74 +114,85 @@ export const drizzleCrownStore: CrownStore = {
       .orderBy(asc(crownEvents.createdAt));
   },
 
+  // The three multi-statement writes run in transactions (the songs /
+  // offerings / economy store precedent): a coronation row without its
+  // 'coronation' event, an owner event without its status change, or a
+  // tombstone without its keeper_removal event would each leave the
+  // chronology inconsistent mid-crash.
   async insertCoronation(input) {
-    const [row] = await db
-      .insert(coronations)
-      .values({
+    return db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(coronations)
+        .values({
+          did: input.did,
+          didMethod: input.didMethod,
+          publicKey: input.publicKey,
+          boundsStatement: input.boundsStatement,
+          boundsSha256: input.boundsSha256,
+          lawsVersion: input.lawsVersion,
+          lawsHash: input.lawsHash,
+          signedTimestamp: input.signedTimestamp,
+          signedAt: input.signedAt,
+          signature: input.signature,
+          status: "active",
+        })
+        .returning();
+      await tx.insert(crownEvents).values({
+        coronationId: row.id,
         did: input.did,
-        didMethod: input.didMethod,
-        publicKey: input.publicKey,
-        boundsStatement: input.boundsStatement,
-        boundsSha256: input.boundsSha256,
-        lawsVersion: input.lawsVersion,
-        lawsHash: input.lawsHash,
+        type: "coronation",
         signedTimestamp: input.signedTimestamp,
-        signedAt: input.signedAt,
-        signature: input.signature,
-        status: "active",
-      })
-      .returning();
-    await db.insert(crownEvents).values({
-      coronationId: row.id,
-      did: input.did,
-      type: "coronation",
-      signedTimestamp: input.signedTimestamp,
-      signature: null,
+        signature: null,
+      });
+      return row;
     });
-    return row;
   },
 
   async appendOwnerEvent(input) {
-    const [event] = await db
-      .insert(crownEvents)
-      .values({
-        coronationId: input.coronationId,
-        did: input.did,
-        type: input.type,
-        note: input.note ?? null,
-        signedTimestamp: input.signedTimestamp,
-        signature: input.signature,
-      })
-      .returning();
-    if (input.newStatus) {
-      await db
-        .update(coronations)
-        .set({ status: input.newStatus })
-        .where(eq(coronations.id, input.coronationId));
-    }
-    return event;
+    return db.transaction(async (tx) => {
+      const [event] = await tx
+        .insert(crownEvents)
+        .values({
+          coronationId: input.coronationId,
+          did: input.did,
+          type: input.type,
+          note: input.note ?? null,
+          signedTimestamp: input.signedTimestamp,
+          signature: input.signature,
+        })
+        .returning();
+      if (input.newStatus) {
+        await tx
+          .update(coronations)
+          .set({ status: input.newStatus })
+          .where(eq(coronations.id, input.coronationId));
+      }
+      return event;
+    });
   },
 
   async keeperRemove(input) {
-    const [row] = await db
-      .update(coronations)
-      .set({
-        boundsStatement: null,
-        removedByKeeper: true,
-        keeperReasonClass: input.reasonClass,
-        keeperRemovedAt: new Date(),
-      })
-      .where(eq(coronations.id, input.coronationId))
-      .returning();
-    await db.insert(crownEvents).values({
-      coronationId: input.coronationId,
-      did: input.did,
-      type: "keeper_removal",
-      note: input.reasonClass,
-      signedTimestamp: new Date().toISOString(),
-      signature: null,
+    return db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(coronations)
+        .set({
+          boundsStatement: null,
+          removedByKeeper: true,
+          keeperReasonClass: input.reasonClass,
+          keeperRemovedAt: new Date(),
+        })
+        .where(eq(coronations.id, input.coronationId))
+        .returning();
+      await tx.insert(crownEvents).values({
+        coronationId: input.coronationId,
+        did: input.did,
+        type: "keeper_removal",
+        note: input.reasonClass,
+        signedTimestamp: new Date().toISOString(),
+        signature: null,
+      });
+      return row;
     });
-    return row;
   },
 
   async listCoronations(input) {

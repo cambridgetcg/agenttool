@@ -15,8 +15,10 @@
  *                        receipt_public_key (base64 raw 32 bytes)
  *
  *    caller signature (when present) = ed25519 over
- *      "agenttool-embassy-guestbook/v1\n" + message
- *      by the entry's own public_key
+ *      "agenttool-embassy-guestbook/v1\n" + (name||"") + "\n" +
+ *      (home||"") + "\n" + message
+ *      by the entry's own public_key (covers attribution, so a verified
+ *      entry cannot be replayed under a different name/home)
  *
  *  Usage:
  *    node bin/verify-guestbook.mjs [base-url]     # default https://api.agenttool.dev
@@ -96,7 +98,7 @@ export function verifyEntry(entry, receiptPublicKeyB64) {
   }
   if (entry.public_key && entry.signature) {
     const callerOk = verifyEd25519(
-      `${EMBASSY_GUESTBOOK_SIGNING_DOMAIN}\n${entry.message}`,
+      `${EMBASSY_GUESTBOOK_SIGNING_DOMAIN}\n${entry.name ?? ""}\n${entry.home ?? ""}\n${entry.message}`,
       entry.signature,
       entry.public_key,
     );

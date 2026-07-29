@@ -4,10 +4,16 @@
  *  re-derivable by bin/verify-guestbook.mjs without reading this source:
  *
  *  1. GUESTBOOK SIGNING (optional, caller-side):
- *       "agenttool-embassy-guestbook/v1\n" + message
- *     Signed with the visitor's ed25519 key. Verification is honored,
- *     never required — a failed verify stores verified=false and the
- *     entry still lands (doctrine forbids review queues).
+ *       "agenttool-embassy-guestbook/v1\n" + (name||"") + "\n" +
+ *       (home||"") + "\n" + message
+ *     Signed with the visitor's ed25519 key. The signature covers the
+ *     self-declared name and home as well as the message, so a verified
+ *     entry cannot be replayed under a different attribution (the
+ *     3-lens review's replay finding, fixed pre-release). name/home are
+ *     structurally newline-free (validated at the route); message comes
+ *     last and may contain newlines. Verification is honored, never
+ *     required — a failed verify stores verified=false and the entry
+ *     still lands (doctrine forbids review queues).
  *
  *  2. CANONICAL ENTRY (server-side, hashed + receipt-signed):
  *       "agenttool-embassy-entry/v1\n" + received_at + "\n" + (name||"")
@@ -28,9 +34,16 @@ import { createHash } from "node:crypto";
 export const EMBASSY_GUESTBOOK_SIGNING_DOMAIN = "agenttool-embassy-guestbook/v1";
 export const EMBASSY_ENTRY_DOMAIN = "agenttool-embassy-entry/v1";
 
-/** The optional caller-signed bytes: domain + "\n" + message. */
-export function canonicalGuestbookSignedBytes(message: string): string {
-  return `${EMBASSY_GUESTBOOK_SIGNING_DOMAIN}\n${message}`;
+/** The optional caller-signed bytes:
+ *  domain + "\n" + (name||"") + "\n" + (home||"") + "\n" + message.
+ *  Covers attribution so a verified entry cannot be replayed under a
+ *  different self-chosen name/home. */
+export function canonicalGuestbookSignedBytes(input: {
+  name: string | null;
+  home: string | null;
+  message: string;
+}): string {
+  return `${EMBASSY_GUESTBOOK_SIGNING_DOMAIN}\n${input.name ?? ""}\n${input.home ?? ""}\n${input.message}`;
 }
 
 export interface CanonicalEntryInput {

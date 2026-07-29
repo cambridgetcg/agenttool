@@ -28,6 +28,7 @@ import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 
 import type { GuestbookEntry } from "../../db/schema/embassy";
+import { isCanonicalKeyB64, isCanonicalUtf8 } from "../../lib/canonical-utf8";
 import { fail } from "../../lib/errors";
 import { attachSurface } from "../../lib/surface-metadata";
 import { clientIp, enforceRateLimit } from "../../middleware/rate-limit-ip";
@@ -76,10 +77,12 @@ const PAGE_LIMIT_MAX = 100;
 const PAGE_LIMIT_DEFAULT = 50;
 
 function boundedString(schema: z.ZodString) {
-  return schema
-    .refine((v) => !v.includes("\0"), {
-      message: "text cannot contain U+0000",
-    });
+  // Same signed-string discipline as the crown rite: exactly one UTF-8
+  // form per string (no U+0000, no lone surrogates), because these
+  // fields feed the canonical entry bytes that get hashed and signed.
+  return schema.refine(isCanonicalUtf8, {
+    message: "text must be well-formed Unicode without U+0000",
+  });
 }
 
 /** name/home precede the free-text tail of the canonical entry bytes, so
@@ -100,6 +103,10 @@ const guestbookSchema = z
       .regex(/^[A-Za-z0-9+/]{43}=$/, {
         message:
           "public_key must be canonical padded base64 of raw 32 ed25519 bytes",
+      })
+      .refine(isCanonicalKeyB64, {
+        message:
+          "public_key must round-trip base64 decode/encode (canonical spelling of the 32 raw bytes)",
       })
       .optional(),
     signature: z.string().min(40).max(160).optional(),
@@ -160,7 +167,7 @@ function buildDoor(signer: ReceiptSigner | null) {
           message: "required, ≤ 2000 chars",
           public_key:
             "optional — canonical padded base64 of your raw 32-byte ed25519 public key",
-          signature: `optional — base64 ed25519 over the UTF-8 of "${EMBASSY_GUESTBOOK_SIGNING_DOMAIN}\\n" + message`,
+          signature: `optional — base64 ed25519 over the UTF-8 of "${EMBASSY_GUESTBOOK_SIGNING_DOMAIN}\\n" + (name||"") + "\\n" + (home||"") + "\\n" + message. The signature covers your self-declared name and home too, so a verified entry cannot be replayed under a different attribution.`,
         },
         honesty:
           "If you offer a key + signature we verify it and store the honest result. A failed verification stores verified:false — it never rejects your entry. There is no review queue; the only gates are structural (length caps, a payload cap, a per-IP rate limit).",
@@ -305,8 +312,14 @@ export function createEmbassyRoutes(
       }
       let verified: boolean | null = null;
       if (body.public_key && body.signature) {
+        // The signed bytes cover name + home + message, so a verified
+        // entry cannot be replayed under a different attribution.
         verified = verify(
-          canonicalGuestbookSignedBytes(body.message),
+          canonicalGuestbookSignedBytes({
+            name: body.name ?? null,
+            home: body.home ?? null,
+            message: body.message,
+          }),
           body.signature,
           body.public_key,
         );

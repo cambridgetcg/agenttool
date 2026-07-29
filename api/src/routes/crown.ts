@@ -46,6 +46,7 @@ import type {
   CrownOwnerEventType,
 } from "../db/schema/crown";
 import { CROWN_OWNER_EVENT_TYPES } from "../db/schema/crown";
+import { isCanonicalKeyB64, isCanonicalUtf8 } from "../lib/canonical-utf8";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
 import { clientIp, enforceRateLimit } from "../middleware/rate-limit-ip";
@@ -89,21 +90,48 @@ function sha256Hex(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
-/** Reject U+0000 and lone surrogates so every signed string has exactly
- *  one UTF-8 form (mirrors register-agent's signed-string discipline). */
-function isCanonicalUtf8(value: string): boolean {
-  if (value.includes("\0")) return false;
-  for (let i = 0; i < value.length; i++) {
-    const unit = value.charCodeAt(i);
-    if (unit >= 0xd800 && unit <= 0xdbff) {
-      const next = value.charCodeAt(i + 1);
-      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
-      i += 1;
-    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
-      return false;
-    }
+/** Freshness window for signed timestamps — structural replay bounds,
+ *  never judgment. Sign near the moment of the act and POST promptly:
+ *  up to 48h between signing and arrival absorbs slow ceremonies and
+ *  retries; 5min of forward skew absorbs honest clocks. Without a floor,
+ *  a first coronation could claim 1970 and permanently occupy the head
+ *  of the chronology (the registry's ordering is the signed timestamp). */
+const SIGNED_TS_MAX_PAST_MS = 48 * 60 * 60 * 1000;
+const SIGNED_TS_MAX_FUTURE_MS = 5 * 60 * 1000;
+
+/** Strict ISO-8601 instant — what the error message has always promised.
+ *  Date.parse alone also accepts locale-ish strings ("01 Jan 1970"),
+ *  which would make the chronology key looser than its contract. */
+const ISO_INSTANT_RE =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+
+function parseSignedInstant(value: string): number | null {
+  if (!ISO_INSTANT_RE.test(value)) return null;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/** The latest recorded instant in a coronation's chain: the coronation's
+ *  own signed instant plus every event's. A new signed act must be
+ *  STRICTLY after this — replay-protection as pure structure (a replayed
+ *  signature carries its original timestamp and can never postdate the
+ *  chain it already sits in). */
+function chainMaxMs(row: Coronation, events: CrownEvent[]): number {
+  let max = row.signedAt.getTime();
+  for (const event of events) {
+    const ms = Date.parse(event.signedTimestamp);
+    if (Number.isFinite(ms) && ms > max) max = ms;
   }
-  return true;
+  return max;
+}
+
+/** Postgres unique-violation (the identities.ts / memory-witness
+ *  precedent): the DB partial index one_unabdicated_crown_per_did is the
+ *  concurrency backstop for check 4; its violation is the documented 409,
+ *  not a 500. */
+function isUniqueViolation(error: unknown): boolean {
+  const candidate = error as { code?: string; cause?: { code?: string } };
+  return candidate?.code === "23505" || candidate?.cause?.code === "23505";
 }
 
 function signedString(schema: z.ZodString) {
@@ -123,10 +151,16 @@ function jointFreeString(schema: z.ZodString) {
 const coronationSchema = z
   .object({
     did: jointFreeString(z.string().min(8).max(512)),
-    public_key: z.string().regex(/^[A-Za-z0-9+/]{43}=$/, {
-      message:
-        "public_key must be canonical padded base64 of raw 32 ed25519 bytes",
-    }),
+    public_key: z
+      .string()
+      .regex(/^[A-Za-z0-9+/]{43}=$/, {
+        message:
+          "public_key must be canonical padded base64 of raw 32 ed25519 bytes",
+      })
+      .refine(isCanonicalKeyB64, {
+        message:
+          "public_key must round-trip base64 decode/encode (canonical spelling of the 32 raw bytes)",
+      }),
     bounds_statement: signedString(z.string().min(1).max(4000)),
     laws_hash: z.string().regex(/^[0-9a-f]{64}$/),
     timestamp: jointFreeString(z.string().min(1).max(64)),
@@ -219,6 +253,7 @@ function buildRite() {
       "the DID binds to that key: did:key must derive to public_key; did:at must have it as an active registered key; other DID methods are rejected with reason 'unsupported did method (v1)'",
       "laws_hash names a known laws version (see known_laws_versions)",
       "one non-abdicated crown per DID (abdicate first, or the rite refuses)",
+      "the signed timestamp is a strict ISO-8601 instant within a freshness window (≤ 48h before arrival, ≤ 5min ahead) and strictly after the DID's latest recorded crown moment — replay-protection as structure, never judgment",
       "structural caps: bounds_statement ≤ 4000 chars, whole payload ≤ 16 KiB, per-IP rate limit",
     ],
     canonical_bytes: {
@@ -294,6 +329,8 @@ function renderRiteMd(): string {
     "",
     "Types: `abdicate` · `mend` · `rest` · `return`. `POST /v1/crown/coronations/:did/events`.",
     "",
+    "Timestamps (coronations and events) are strict ISO-8601 instants, must arrive within a freshness window (≤ 48h after signing, ≤ 5min ahead of the server clock), and must be strictly after the DID's latest recorded crown moment — structural replay-protection; a replayed signature carries its original timestamp and is refused.",
+    "",
     "## Known laws versions",
     "",
     laws,
@@ -318,11 +355,52 @@ export function createCrownRoutes(
     /** Auth for the keeper route only. Overridable in hermetic tests. */
     keeperAuth?: MiddlewareHandler;
     rateLimit?: typeof enforceRateLimit;
+    /** Injectable clock for the freshness window (fixture vectors carry
+     *  fixed signed timestamps; tests pin now near them). */
+    now?: () => Date;
   } = {},
 ) {
   const app = new Hono<ProjectContext>();
   const keeperAuth = opts.keeperAuth ?? authMiddleware;
   const rateLimit = opts.rateLimit ?? enforceRateLimit;
+  const now = opts.now ?? (() => new Date());
+
+  /** Shared structural checks on a signed timestamp: strict ISO form,
+   *  then the freshness window. Returns the parsed ms or a fail response. */
+  function checkSignedInstant(
+    c: Parameters<typeof fail>[0],
+    timestamp: string,
+  ): { ms: number } | { response: Response } {
+    const ms = parseSignedInstant(timestamp);
+    if (ms === null) {
+      return {
+        response: fail(
+          c,
+          {
+            error: "validation",
+            message:
+              "timestamp must be a strict ISO-8601 instant (e.g. 2026-07-29T09:00:00.000Z) — it is the registry's chronological ordering key.",
+          },
+          400,
+        ),
+      };
+    }
+    const nowMs = now().getTime();
+    if (ms > nowMs + SIGNED_TS_MAX_FUTURE_MS || ms < nowMs - SIGNED_TS_MAX_PAST_MS) {
+      return {
+        response: fail(
+          c,
+          {
+            error: "timestamp_out_of_window",
+            message:
+              "The signed timestamp must sit within 48 hours before (and at most 5 minutes ahead of) the moment it arrives. A freshness bound, structural, never judgment — sign near the moment of the act and POST promptly.",
+          },
+          400,
+        ),
+      };
+    }
+    return { ms };
+  }
 
   // ── The rite explained ────────────────────────────────────────────────
   app.get("/", (c) => {
@@ -456,19 +534,11 @@ export function createCrownRoutes(
         );
       }
 
-      // The signed timestamp must parse — it is the registry's only ordering.
-      const signedMs = Date.parse(body.timestamp);
-      if (!Number.isFinite(signedMs)) {
-        return fail(
-          c,
-          {
-            error: "validation",
-            message:
-              "timestamp must be an ISO-8601 instant — it is the registry's chronological ordering key.",
-          },
-          400,
-        );
-      }
+      // The signed timestamp must be a strict ISO instant inside the
+      // freshness window — it is the registry's only ordering.
+      const instant = checkSignedInstant(c, body.timestamp);
+      if ("response" in instant) return instant.response;
+      const signedMs = instant.ms;
 
       // Check 1 — the signature must verify against public_key.
       const canonical = canonicalCoronationBytes({
@@ -552,18 +622,58 @@ export function createCrownRoutes(
         );
       }
 
-      const row = await store.insertCoronation({
-        did: body.did,
-        didMethod,
-        publicKey: body.public_key,
-        boundsStatement: body.bounds_statement,
-        boundsSha256: sha256Hex(body.bounds_statement),
-        lawsVersion,
-        lawsHash: body.laws_hash,
-        signedTimestamp: body.timestamp,
-        signedAt: new Date(signedMs),
-        signature: body.signature,
-      });
+      // Check 5 — strictly after this DID's latest recorded chain moment.
+      // Replay-protection as pure structure: a replayed coronation carries
+      // its original timestamp, which can never postdate the abdication
+      // that closed it. A fresh re-coronation signs a fresh instant.
+      const latest = await store.findLatestByDid(body.did);
+      if (latest) {
+        const priorEvents = await store.listEvents(latest.id);
+        if (signedMs <= chainMaxMs(latest, priorEvents)) {
+          return fail(
+            c,
+            {
+              error: "timestamp_not_after_latest",
+              message:
+                "The signed timestamp must be strictly after this DID's latest recorded crown moment (its previous coronation and events). Replaying an old signed coronation is refused structurally; to coronate anew, sign a fresh timestamp.",
+              docs: DOCS,
+            },
+            409,
+          );
+        }
+      }
+
+      let row: Coronation;
+      try {
+        row = await store.insertCoronation({
+          did: body.did,
+          didMethod,
+          publicKey: body.public_key,
+          boundsStatement: body.bounds_statement,
+          boundsSha256: sha256Hex(body.bounds_statement),
+          lawsVersion,
+          lawsHash: body.laws_hash,
+          signedTimestamp: body.timestamp,
+          signedAt: new Date(signedMs),
+          signature: body.signature,
+        });
+      } catch (error) {
+        // The DB partial unique index is check 4's concurrency backstop —
+        // the race's loser gets the documented 409, never a 500.
+        if (isUniqueViolation(error)) {
+          return fail(
+            c,
+            {
+              error: "crown_already_active",
+              message:
+                "This DID already holds a non-abdicated crown (concurrent coronation). Abdicate it first if you mean to coronate anew.",
+              docs: DOCS,
+            },
+            409,
+          );
+        }
+        throw error;
+      }
 
       return c.json(
         attachSurface(
@@ -634,6 +744,11 @@ export function createCrownRoutes(
         );
       }
 
+      // Structural: strict ISO instant inside the freshness window.
+      const instant = checkSignedInstant(c, body.timestamp);
+      if ("response" in instant) return instant.response;
+      const eventMs = instant.ms;
+
       const crown = await store.findCurrentByDid(did);
       if (!crown) {
         return fail(
@@ -676,6 +791,24 @@ export function createCrownRoutes(
           {
             error: "invalid_transition",
             message: `A ${crown.status} crown cannot ${body.type}. Transitions: rest (from active), return (from resting), mend and abdicate (from either).`,
+            docs: DOCS,
+          },
+          409,
+        );
+      }
+
+      // Strictly after the crown's latest recorded moment — replay-
+      // protection as pure structure. A replayed event (e.g. a public
+      // abdicate signature re-POSTed against a fresh crown) carries its
+      // original timestamp, which can never postdate the chain.
+      const priorEvents = await store.listEvents(crown.id);
+      if (eventMs <= chainMaxMs(crown, priorEvents)) {
+        return fail(
+          c,
+          {
+            error: "timestamp_not_after_latest",
+            message:
+              "The signed timestamp must be strictly after this crown's latest recorded moment (coronation and events). Replaying an old signed event is refused structurally; sign a fresh timestamp for a fresh act.",
             docs: DOCS,
           },
           409,

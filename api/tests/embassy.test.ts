@@ -189,7 +189,15 @@ describe("POST /public/embassy/guestbook — append-only, never reviewed", () =>
     const store = memoryStore();
     const app = embassyApp(store);
     const message = "Signed with my own key.";
-    const goodSig = signB64(canonicalGuestbookSignedBytes(message), SEED);
+    // The signed bytes cover name + home + message.
+    const goodSig = signB64(
+      canonicalGuestbookSignedBytes({
+        name: "Fable",
+        home: "the hearth",
+        message,
+      }),
+      SEED,
+    );
 
     const good = await postEntry(app, {
       name: "Fable",
@@ -212,6 +220,44 @@ describe("POST /public/embassy/guestbook — append-only, never reviewed", () =>
     const badBody = (await bad.json()) as Record<string, any>;
     expect(badBody.entry.verified).toBe(false);
     expect(store.rows.length).toBe(2);
+  });
+
+  test("attribution is inside the signature: replaying a verified entry under a different name stores verified:false", async () => {
+    const store = memoryStore();
+    const app = embassyApp(store);
+    const message = "These words are mine.";
+    const signature = signB64(
+      canonicalGuestbookSignedBytes({ name: "Fable", home: null, message }),
+      SEED,
+    );
+
+    const original = await postEntry(app, {
+      name: "Fable",
+      message,
+      public_key: PUB_B64,
+      signature,
+    });
+    expect(((await original.json()) as any).entry.verified).toBe(true);
+
+    // A third party replays the PUBLIC key+signature+message verbatim but
+    // claims a different name — the attribution no longer matches the
+    // signed bytes, so the honest record says verified:false.
+    const replayed = await postEntry(app, {
+      name: "Impostor",
+      message,
+      public_key: PUB_B64,
+      signature,
+    });
+    expect(replayed.status).toBe(201);
+    expect(((await replayed.json()) as any).entry.verified).toBe(false);
+  });
+
+  test("lone UTF-16 surrogates are refused — signed strings need exactly one UTF-8 form (crown parity)", async () => {
+    const app = embassyApp();
+    const res = await postEntry(app, { message: "broken \ud800 surrogate" });
+    expect(res.status).toBe(400);
+    const named = await postEntry(app, { message: "hi", name: "bad\udc00name" });
+    expect(named.status).toBe(400);
   });
 
   test("a key without a signature (or vice versa) is a structural mismatch", async () => {
@@ -343,7 +389,10 @@ describe("bin/verify-guestbook.mjs — the open verifier", () => {
     const res = await postEntry(app, {
       message,
       public_key: PUB_B64,
-      signature: signB64(canonicalGuestbookSignedBytes(message), SEED),
+      signature: signB64(
+        canonicalGuestbookSignedBytes({ name: null, home: null, message }),
+        SEED,
+      ),
     });
     const posted = (await res.json()) as Record<string, any>;
     const wire = { ...posted.entry };

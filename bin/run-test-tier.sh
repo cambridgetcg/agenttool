@@ -92,6 +92,7 @@ readonly TEST_SUPPORT_FILES=(
   tests/fixtures/payout-admission-postgres-probe.ts
   tests/fixtures/onboarding-sdk-v0.16.ts
   tests/fixtures/static-parser-noncooperative.ts
+  tests/fixtures/crown-vectors.json
 )
 
 die() {
