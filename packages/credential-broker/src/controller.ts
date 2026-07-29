@@ -533,6 +533,25 @@ function assertRoutineWindowOpen(
   }
 }
 
+type ControllerTimeInput = {
+  now?: Date;
+  clock?: () => Date;
+};
+
+function readControllerTime(input: ControllerTimeInput): Date {
+  if (input.now && input.clock) {
+    throw invalid("Controller time source is ambiguous.");
+  }
+  const observed = input.clock ? input.clock() : (input.now ?? new Date());
+  if (
+    !(observed instanceof Date) ||
+    !Number.isFinite(observed.getTime())
+  ) {
+    throw invalid("Controller clock returned an invalid timestamp.");
+  }
+  return new Date(observed.getTime());
+}
+
 function assertRecentEvidence(
   evidence: BrokerAuditEvidence,
   now: Date,
@@ -550,6 +569,7 @@ export async function stageCredential(input: {
   expiresAt?: string;
   overlapDeadline?: string;
   now?: Date;
+  clock?: () => Date;
 }): Promise<CredentialLifecycleReceipt> {
   return withControllerLock(input.manifestPath, async () => {
     const manifest = await loadCredentialHandoffManifest(input.manifestPath);
@@ -561,7 +581,7 @@ export async function stageCredential(input: {
         "Credential closure history is full; archive it before staging.",
       );
     }
-    const startedAt = input.now ?? new Date();
+    const startedAt = readControllerTime(input);
     const overlapDeadline = futureDate(input.overlapDeadline, startedAt);
     if (manifest.activeSlot && !overlapDeadline) {
       throw invalid("Routine rotation requires an explicit overlap deadline.");
@@ -610,7 +630,11 @@ export async function stageCredential(input: {
     await saveCredentialHandoffManifest(input.manifestPath, provisioning);
 
     // Provision only after the intent is durable. Any failure deliberately
-    // leaves `provisioning`, which `recoverStagedCredential` can reconcile.
+    // leaves `provisioning`, which the explicit recover/resume operations can
+    // reconcile without changing the committed slot identity.
+    const provisionAt = readControllerTime(input);
+    assertCandidateNotExpired(slot, provisionAt);
+    assertRoutineWindowOpen(provisioning.rotation!, provisionAt);
     await input.backend.provision(slot.service, manifest.account);
     if (!(await input.backend.exists(slot.service, manifest.account))) {
       throw new AgentCredError(
@@ -618,7 +642,7 @@ export async function stageCredential(input: {
         "Staged Keychain item could not be confirmed; rotation remains provisioning.",
       );
     }
-    const completedAt = input.now ?? new Date();
+    const completedAt = readControllerTime(input);
     assertCandidateNotExpired(slot, completedAt);
     assertRoutineWindowOpen(provisioning.rotation!, completedAt);
     const staged = nextManifestRevision(
@@ -661,6 +685,53 @@ export async function recoverStagedCredential(input: {
     );
     await saveCredentialHandoffManifest(input.manifestPath, next);
     return receipt(next, now);
+  });
+}
+
+export async function resumeStagedCredential(input: {
+  manifestPath: string;
+  backend: KeychainControllerBackend;
+  now?: Date;
+  clock?: () => Date;
+}): Promise<CredentialLifecycleReceipt> {
+  return withControllerLock(input.manifestPath, async () => {
+    const manifest = await loadCredentialHandoffManifest(input.manifestPath);
+    if (manifest.rotation?.phase !== "provisioning") {
+      throw invalid("Credential rotation is not awaiting stage resume.");
+    }
+    const candidate = manifest.slots[manifest.rotation.toSlot]!;
+    const checkedAt = readControllerTime(input);
+    assertCandidateNotExpired(candidate, checkedAt);
+    assertRoutineWindowOpen(manifest.rotation, checkedAt);
+
+    // The durable slot identity is the only provisioning target. Presence
+    // reconciles an ambiguous prior side effect without prompting; absence
+    // reopens the fixed native prompt without accepting a value here.
+    if (!(await input.backend.exists(candidate.service, manifest.account))) {
+      const provisionAt = readControllerTime(input);
+      assertCandidateNotExpired(candidate, provisionAt);
+      assertRoutineWindowOpen(manifest.rotation, provisionAt);
+      await input.backend.provision(candidate.service, manifest.account);
+      if (!(await input.backend.exists(candidate.service, manifest.account))) {
+        throw new AgentCredError(
+          "backend_unavailable",
+          "Resumed Keychain item could not be confirmed; rotation remains provisioning.",
+        );
+      }
+    }
+
+    const completedAt = readControllerTime(input);
+    assertCandidateNotExpired(candidate, completedAt);
+    assertRoutineWindowOpen(manifest.rotation, completedAt);
+    const next = nextManifestRevision(
+      {
+        ...manifest,
+        rotation: { ...manifest.rotation, phase: "staged" },
+      },
+      completedAt,
+    );
+    await saveCredentialHandoffManifest(input.manifestPath, next);
+    return receipt(next, completedAt);
   });
 }
 

@@ -24,6 +24,7 @@ import {
   prepareCredentialAbort,
   preparePreviousCredentialRevocation,
   recoverStagedCredential,
+  resumeStagedCredential,
   rollbackCredential,
   stageCredential,
   verifyCredentialClosureArchive,
@@ -44,16 +45,81 @@ import { acquireOwnerLifecycleLock } from "../src/owner-files.js";
 const roots: string[] = [];
 const SENTINEL = "agentcred-test-sentinel-never-real";
 
+interface BoundaryCrossing {
+  name: string;
+  bootstrap: boolean;
+  safeStart: string;
+  beforeBoundary: string;
+  atBoundary: string;
+  expectedError: string;
+  expiresAt?: string;
+  overlapDeadline?: string;
+}
+
+const BOUNDARY_CROSSINGS: readonly BoundaryCrossing[] = [
+  {
+    name: "candidate expiry",
+    bootstrap: false,
+    safeStart: "2026-07-29T12:01:00.000Z",
+    beforeBoundary: "2026-07-29T12:04:59.999Z",
+    atBoundary: "2026-07-29T12:05:00.000Z",
+    expectedError: "expired",
+    expiresAt: "2026-07-29T12:05:00.000Z",
+  },
+  {
+    name: "overlap deadline",
+    bootstrap: true,
+    safeStart: "2026-07-29T12:10:00.000Z",
+    beforeBoundary: "2026-07-29T12:59:59.999Z",
+    atBoundary: "2026-07-29T13:00:00.000Z",
+    expectedError: "overlap deadline expired",
+    overlapDeadline: "2026-07-29T13:00:00.000Z",
+  },
+];
+
+function sequenceClock(values: readonly string[]): () => Date {
+  let index = 0;
+  return () => {
+    const value = values[index];
+    if (!value) throw new Error("test clock exhausted");
+    index += 1;
+    return new Date(value);
+  };
+}
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 class FakeKeychain implements KeychainControllerBackend {
   readonly items = new Set<string>();
   readonly calls: Array<{ operation: string; service: string; account: string }> =
     [];
   failProvisionAfterSideEffect = false;
+  failProvisionBeforeSideEffect = false;
+  omitProvisionSideEffect = false;
   failDeleteAfterSideEffect = false;
+  pauseProvision?: { entered: () => void; release: Promise<void> };
 
   async provision(service: string, account: string): Promise<void> {
     this.calls.push({ operation: "provision", service, account });
-    this.items.add(`${account}\0${service}`);
+    if (this.failProvisionBeforeSideEffect) {
+      this.failProvisionBeforeSideEffect = false;
+      throw new Error("simulated provision cancellation");
+    }
+    const pause = this.pauseProvision;
+    if (pause) {
+      this.pauseProvision = undefined;
+      pause.entered();
+      await pause.release;
+    }
+    if (!this.omitProvisionSideEffect) {
+      this.items.add(`${account}\0${service}`);
+    }
     if (this.failProvisionAfterSideEffect) {
       this.failProvisionAfterSideEffect = false;
       throw new Error("simulated provision ambiguity");
@@ -413,6 +479,314 @@ describe("controller-plane handoff and rotation", () => {
     expect(backend.calls.filter((call) => call.operation === "provision")).toHaveLength(
       1,
     );
+  });
+
+  test("recover stays presence-only while resume prompts for the exact absent slot", async () => {
+    const { path, backend } = await fixture();
+    backend.failProvisionBeforeSideEffect = true;
+
+    await expect(
+      stageCredential({
+        manifestPath: path,
+        backend,
+        now: new Date("2026-07-29T12:01:00.000Z"),
+      }),
+    ).rejects.toThrow("simulated provision cancellation");
+
+    let manifest = await loadCredentialHandoffManifest(path);
+    const candidate = manifest.slots[manifest.rotation!.toSlot]!;
+    expect(manifest.rotation?.phase).toBe("provisioning");
+    expect(backend.items.size).toBe(0);
+
+    await expect(
+      recoverStagedCredential({
+        manifestPath: path,
+        backend,
+        now: new Date("2026-07-29T12:01:20.000Z"),
+      }),
+    ).rejects.toThrow("Keychain item is absent");
+    expect(
+      backend.calls.filter((call) => call.operation === "provision"),
+    ).toHaveLength(1);
+
+    const resumed = await resumeStagedCredential({
+      manifestPath: path,
+      backend,
+      now: new Date("2026-07-29T12:01:30.000Z"),
+    });
+    manifest = await loadCredentialHandoffManifest(path);
+
+    expect(resumed.phase).toBe("staged");
+    expect(manifest.rotation?.phase).toBe("staged");
+    expect(backend.calls).toEqual([
+      {
+        operation: "provision",
+        service: candidate.service,
+        account: manifest.account,
+      },
+      {
+        operation: "exists",
+        service: candidate.service,
+        account: manifest.account,
+      },
+      {
+        operation: "exists",
+        service: candidate.service,
+        account: manifest.account,
+      },
+      {
+        operation: "provision",
+        service: candidate.service,
+        account: manifest.account,
+      },
+      {
+        operation: "exists",
+        service: candidate.service,
+        account: manifest.account,
+      },
+    ]);
+    expect(JSON.stringify({ resumed, manifest, calls: backend.calls })).not.toContain(
+      SENTINEL,
+    );
+  });
+
+  test("resume reconciles its own ambiguous provision without another prompt", async () => {
+    const { path, backend } = await fixture();
+    backend.failProvisionBeforeSideEffect = true;
+
+    await expect(
+      stageCredential({
+        manifestPath: path,
+        backend,
+        now: new Date("2026-07-29T12:01:00.000Z"),
+      }),
+    ).rejects.toThrow("simulated provision cancellation");
+    backend.failProvisionAfterSideEffect = true;
+
+    await expect(
+      resumeStagedCredential({
+        manifestPath: path,
+        backend,
+        now: new Date("2026-07-29T12:01:20.000Z"),
+      }),
+    ).rejects.toThrow("simulated provision ambiguity");
+    expect(backend.items.size).toBe(1);
+    expect((await loadCredentialHandoffManifest(path)).rotation?.phase).toBe(
+      "provisioning",
+    );
+    const provisionCallsAfterAmbiguity = backend.calls.filter(
+      (call) => call.operation === "provision",
+    ).length;
+
+    const resumed = await resumeStagedCredential({
+      manifestPath: path,
+      backend,
+      now: new Date("2026-07-29T12:01:30.000Z"),
+    });
+
+    expect(resumed.phase).toBe("staged");
+    expect(
+      backend.calls.filter((call) => call.operation === "provision"),
+    ).toHaveLength(provisionCallsAfterAmbiguity);
+  });
+
+  test("resume stays provisioning when a newly prompted item cannot be confirmed", async () => {
+    const { path, backend } = await fixture();
+    backend.failProvisionBeforeSideEffect = true;
+
+    await expect(
+      stageCredential({
+        manifestPath: path,
+        backend,
+        now: new Date("2026-07-29T12:01:00.000Z"),
+      }),
+    ).rejects.toThrow("simulated provision cancellation");
+    backend.omitProvisionSideEffect = true;
+
+    await expect(
+      resumeStagedCredential({
+        manifestPath: path,
+        backend,
+        now: new Date("2026-07-29T12:01:30.000Z"),
+      }),
+    ).rejects.toThrow("could not be confirmed");
+    expect((await loadCredentialHandoffManifest(path)).rotation?.phase).toBe(
+      "provisioning",
+    );
+    expect(backend.items.size).toBe(0);
+  });
+
+  for (const scenario of BOUNDARY_CROSSINGS) {
+    test(`resume rechecks ${scenario.name} after the initial exists result`, async () => {
+      const { path, backend } = await fixture();
+      if (scenario.bootstrap) await bootstrap(path, backend);
+      backend.failProvisionBeforeSideEffect = true;
+      await expect(
+        stageCredential({
+          manifestPath: path,
+          backend,
+          ...(scenario.expiresAt ? { expiresAt: scenario.expiresAt } : {}),
+          ...(scenario.overlapDeadline
+            ? { overlapDeadline: scenario.overlapDeadline }
+            : {}),
+          now: new Date(scenario.safeStart),
+        }),
+      ).rejects.toThrow("simulated provision cancellation");
+      const provisionCallsBeforeResume = backend.calls.filter(
+        (call) => call.operation === "provision",
+      ).length;
+      const existsCallsBeforeResume = backend.calls.filter(
+        (call) => call.operation === "exists",
+      ).length;
+
+      await expect(
+        resumeStagedCredential({
+          manifestPath: path,
+          backend,
+          clock: sequenceClock([
+            scenario.beforeBoundary,
+            scenario.atBoundary,
+          ]),
+        }),
+      ).rejects.toThrow(scenario.expectedError);
+
+      expect(
+        backend.calls.filter((call) => call.operation === "provision"),
+      ).toHaveLength(provisionCallsBeforeResume);
+      expect(
+        backend.calls.filter((call) => call.operation === "exists"),
+      ).toHaveLength(existsCallsBeforeResume + 1);
+      expect((await loadCredentialHandoffManifest(path)).rotation?.phase).toBe(
+        "provisioning",
+      );
+    });
+
+    test(`stage rechecks ${scenario.name} after durable intent`, async () => {
+      const { path, backend } = await fixture();
+      if (scenario.bootstrap) await bootstrap(path, backend);
+      const provisionCallsBeforeStage = backend.calls.filter(
+        (call) => call.operation === "provision",
+      ).length;
+
+      await expect(
+        stageCredential({
+          manifestPath: path,
+          backend,
+          ...(scenario.expiresAt ? { expiresAt: scenario.expiresAt } : {}),
+          ...(scenario.overlapDeadline
+            ? { overlapDeadline: scenario.overlapDeadline }
+            : {}),
+          clock: sequenceClock([
+            scenario.beforeBoundary,
+            scenario.atBoundary,
+          ]),
+        }),
+      ).rejects.toThrow(scenario.expectedError);
+
+      expect(
+        backend.calls.filter((call) => call.operation === "provision"),
+      ).toHaveLength(provisionCallsBeforeStage);
+      expect((await loadCredentialHandoffManifest(path)).rotation?.phase).toBe(
+        "provisioning",
+      );
+    });
+  }
+
+  test("resume is valid only for provisioning and does not reopen a staged item", async () => {
+    const { path, backend } = await fixture();
+    await stageCredential({
+      manifestPath: path,
+      backend,
+      now: new Date("2026-07-29T12:01:00.000Z"),
+    });
+    const callsBeforeResume = backend.calls.length;
+    const revisionBeforeResume = (await loadCredentialHandoffManifest(path))
+      .revision;
+
+    await expect(
+      resumeStagedCredential({
+        manifestPath: path,
+        backend,
+        now: new Date("2026-07-29T12:01:30.000Z"),
+      }),
+    ).rejects.toThrow("not awaiting stage resume");
+    expect(backend.calls).toHaveLength(callsBeforeResume);
+    expect((await loadCredentialHandoffManifest(path)).revision).toBe(
+      revisionBeforeResume,
+    );
+  });
+
+  test("broker lifecycle lock blocks resume before any Keychain operation", async () => {
+    const { path, backend } = await fixture();
+    backend.failProvisionBeforeSideEffect = true;
+    await expect(
+      stageCredential({
+        manifestPath: path,
+        backend,
+        now: new Date("2026-07-29T12:01:00.000Z"),
+      }),
+    ).rejects.toThrow("simulated provision cancellation");
+    const callsBeforeResume = backend.calls.length;
+    const lock = await acquireOwnerLifecycleLock(path, "broker");
+    try {
+      await expect(
+        resumeStagedCredential({
+          manifestPath: path,
+          backend,
+          now: new Date("2026-07-29T12:01:30.000Z"),
+        }),
+      ).rejects.toThrow("lifecycle lock exists");
+    } finally {
+      await lock.release();
+    }
+
+    expect(backend.calls).toHaveLength(callsBeforeResume);
+    expect((await loadCredentialHandoffManifest(path)).rotation?.phase).toBe(
+      "provisioning",
+    );
+  });
+
+  test("resume holds the lifecycle lock while the native prompt is pending", async () => {
+    const { path, backend } = await fixture();
+    backend.failProvisionBeforeSideEffect = true;
+    await expect(
+      stageCredential({
+        manifestPath: path,
+        backend,
+        now: new Date("2026-07-29T12:01:00.000Z"),
+      }),
+    ).rejects.toThrow("simulated provision cancellation");
+
+    const entered = deferred();
+    const release = deferred();
+    backend.pauseProvision = {
+      entered: entered.resolve,
+      release: release.promise,
+    };
+    const resumedPromise = resumeStagedCredential({
+      manifestPath: path,
+      backend,
+      now: new Date("2026-07-29T12:01:30.000Z"),
+    });
+    await entered.promise;
+
+    let competingLock:
+      | Awaited<ReturnType<typeof acquireOwnerLifecycleLock>>
+      | undefined;
+    let lockError: unknown;
+    try {
+      competingLock = await acquireOwnerLifecycleLock(path, "broker");
+    } catch (error) {
+      lockError = error;
+    } finally {
+      await competingLock?.release();
+      release.resolve();
+    }
+
+    expect(String((lockError as Error | undefined)?.message)).toContain(
+      "lifecycle lock exists",
+    );
+    await expect(resumedPromise).resolves.toMatchObject({ phase: "staged" });
   });
 
   test("rejects wrong-generation and wrong-profile candidate proof without advancing", async () => {
