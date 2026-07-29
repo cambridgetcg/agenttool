@@ -449,10 +449,10 @@ limits):
       "default_page_changes": 10,
       "max_page_changes": 100,
       "default_plaintext_bytes": 1048576,
-      "max_plaintext_bytes": 8388608,
+      "max_plaintext_bytes": 10485760,
       "default_pull_pages": 10,
       "max_pull_pages": 100,
-      "max_response_bytes": 16777216,
+      "max_response_bytes": 33554432,
       "request_timeout_ms": 15000,
       "grant_ttl_seconds": 300
     }
@@ -1090,11 +1090,38 @@ broadcast, quorum, leader election, head selection, concurrent-version merge,
 per-collection grant policy, or multi-master consistency. It does not use CAR
 v1/v2; `adds-bundle/v1` blocks are encoded inline in bounded JSON. A future
 bulk transport may negotiate CAR without changing core record identity, but no
-CAR support is advertised here. `@agenttool/data-sync@0.1.1` declares the
-compatible `@agenttool/adds@^0.2.1` line (currently `0.2.2`) and
-`@agenttool/data@^0.3.1` (currently `0.3.1`). The bridge is distributed as
-source/library code; installing it does not run a node, expose a port,
-configure a peer, or deploy a hosted sync service.
+CAR support is advertised here. The coordinated repair line is
+`@agenttool/adds@0.2.3` followed by `@agenttool/data-sync@0.1.2`; the bridge
+declares `@agenttool/adds@^0.2.3` and `@agenttool/data@^0.3.1` (currently
+`0.3.1`). An exact LOVE manifest/artifact or an independently observed
+registry version is still required before calling either package publicly
+available. The bridge is distributed as source/library code; installing it
+does not run a node, expose a port, configure a peer, or deploy a hosted sync
+service.
+
+ADDS 0.2.3 raises its `@noble/ed25519` floor to `^2.3.0`, the first compatible
+line containing the `Point` API used by its strict verification path, and
+propagates programming/environment faults instead of relabelling them as an
+invalid signature. Immutable ADDS 0.2.2 declared a lower compatible range, so
+an install locked to Noble 2.2.3 could reject an otherwise valid signed object.
+That defect failed closed: it caused an availability and diagnostic failure,
+not acceptance of an invalid signature. The 0.2.3 package boundary also embeds
+TypeScript source text in shipped JavaScript source maps and omits declaration
+maps; the source directory itself remains excluded.
+
+Data-sync 0.1.2 requires the exact sync media type
+`application/vnd.agenttool.data-sync+json` and schema
+`urn:agenttool:agent-data-sync-object:v1` on every imported ADDS object. Change
+timestamps must use the reference node's strict uppercase, non-leap-second
+RFC 3339 profile and identify the same instant as the decrypted record
+`ingested_at` or tombstone `tombstoned_at`; a valid publisher signature does
+not waive those domain-separation checks. Its default maximum
+plaintext page is 10 MiB, aligned with the default data-node record ceiling,
+and its default maximum encoded response is 32 MiB. The ordinary requested
+page default remains 1 MiB, so larger transfers are still explicit; a custom
+data node with a larger record ceiling still needs matching sync limits.
+Shipped JavaScript maps follow the same embedded-source/no-declaration-map
+boundary as ADDS.
 
 ## 14. Security and privacy posture
 
@@ -1132,10 +1159,14 @@ configure a peer, or deploy a hosted sync service.
   origins and process egress as trusted configuration boundaries.
 - ADDS inline bundles hide collection definitions, record envelopes/content,
   and tombstone bodies from transport intermediaries and bind the visible page
-  to a signed encrypted control object. Routing IDs, cursors, ordering, timing,
-  sizes, and the ADDS manifest/grant metadata described in §5.9 remain visible.
-  This profile pins the publisher id/key in local peer configuration, while
-  making no independent identity-resolution or external-attestation claim.
+  to a signed encrypted control object. The destination additionally requires
+  the sync-specific manifest media type and schema, event times in the
+  reference node's strict uppercase, non-leap-second RFC 3339 profile, and
+  temporal agreement between each visible change header and its encrypted
+  record or tombstone. Routing IDs, cursors, ordering, timing, sizes,
+  and the ADDS manifest/grant metadata described in §5.9 remain visible. This
+  profile pins the publisher id/key in local peer configuration, while making
+  no independent identity-resolution or external-attestation claim.
 - The file collector resolves the caller's path and requires a regular file,
   but has no configured root allow-list. Any admitted remote caller could ask
   it to read a path available to the node process.

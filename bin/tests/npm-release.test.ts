@@ -342,6 +342,25 @@ describe("standard npm release policy", () => {
       "run:packages/credential-broker:build",
       "install:packages/alchemy-agentcred:force",
     ]);
+
+    const syncCalls: string[] = [];
+    await prepareReleaseWorkspaces(releaseSpec("data-sync"), {
+      install: async (packagePath, options) => {
+        syncCalls.push(`install:${packagePath}:${options.force ? "force" : "normal"}`);
+      },
+      run: async (packagePath, script) => {
+        syncCalls.push(`run:${packagePath}:${script}`);
+      },
+    });
+    expect(syncCalls).toEqual([
+      "install:packages/data:normal",
+      "run:packages/data:ci",
+      "run:packages/data:build",
+      "install:packages/data-protocol:normal",
+      "run:packages/data-protocol:ci",
+      "install:packages/data-sync:force",
+    ]);
+
     expect(workspaceInstallArguments(true)).toEqual([
       "install",
       "--frozen-lockfile",

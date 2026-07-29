@@ -5,21 +5,19 @@
     "": {
       "name": "@agenttool/data-sync",
       "devDependencies": {
+        "@agenttool/adds": "file:../data-protocol",
+        "@agenttool/data": "file:../data",
         "@types/bun": "^1.2.0",
         "typescript": "^5.7.0",
       },
       "peerDependencies": {
-        "@agenttool/adds": "^0.2.1",
+        "@agenttool/adds": "^0.2.3",
         "@agenttool/data": "^0.3.1",
       },
     },
   },
-  "overrides": {
-    "@agenttool/adds": "file:../data-protocol",
-    "@agenttool/data": "file:../data",
-  },
   "packages": {
-    "@agenttool/adds": ["@agenttool/adds@file:../data-protocol", { "dependencies": { "@noble/curves": "^2.2.0", "@noble/ed25519": "^2.2.3", "@noble/hashes": "^2.0.1" }, "devDependencies": { "@types/bun": "^1.2.0", "typescript": "^5.7.0" } }],
+    "@agenttool/adds": ["@agenttool/adds@file:../data-protocol", { "dependencies": { "@noble/curves": "^2.2.0", "@noble/ed25519": "^2.3.0", "@noble/hashes": "^2.0.1" }, "devDependencies": { "@types/bun": "^1.2.0", "typescript": "^5.7.0" } }],
 
     "@agenttool/data": ["@agenttool/data@file:../data", { "devDependencies": { "@types/bun": "^1.2.0", "typescript": "^5.7.0" }, "bin": { "agenttool-data": "dist/cli.js" } }],
 

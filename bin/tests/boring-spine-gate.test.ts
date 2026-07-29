@@ -304,7 +304,9 @@ describe("boring test spine", () => {
     expect(workflow).toContain(
       "name: Install local-dependent package dependencies from lockfiles",
     );
-    expect(workflow).toContain("cd packages/data-sync && bun install --frozen-lockfile");
+    expect(workflow).toContain(
+      "cd packages/data-sync && bun install --frozen-lockfile --force",
+    );
     expect(workflow).toContain(
       "cd packages/correspondence-yutabase-projector && bun install --frozen-lockfile",
     );

@@ -20,6 +20,7 @@ import {
 } from "@agenttool/data";
 import { MemorySyncCheckpointStore, SQLiteSyncCheckpointStore } from "./checkpoints.js";
 import { DataSyncError, syncInvariant } from "./errors.js";
+import { parseRfc3339Instant } from "./time.js";
 import {
   ADDS_INLINE_PROFILE,
   AGENT_DATA_SYNC_OBJECT_PROTOCOL,
@@ -57,10 +58,10 @@ export const DEFAULT_SYNC_LIMITS: Readonly<SyncLimits> = Object.freeze({
   default_page_changes: 10,
   max_page_changes: 100,
   default_plaintext_bytes: 1024 * 1024,
-  max_plaintext_bytes: 8 * 1024 * 1024,
+  max_plaintext_bytes: 10 * 1024 * 1024,
   default_pull_pages: 10,
   max_pull_pages: 100,
-  max_response_bytes: 16 * 1024 * 1024,
+  max_response_bytes: 32 * 1024 * 1024,
   request_timeout_ms: 15_000,
   grant_ttl_seconds: 300,
 });
@@ -544,10 +545,12 @@ export class DataSyncService {
         throw new DataSyncError("peer_unreachable", "Configured peer could not be reached", 502, { cause });
       }
       if (!response.ok) {
-        await response.body?.cancel().catch(() => undefined);
+        const remoteCode = await readRemoteErrorCode(response);
         throw new DataSyncError(
           "peer_response_error",
-          `Configured peer returned HTTP ${response.status}`,
+          `Configured peer returned HTTP ${response.status}${
+            remoteCode === undefined ? "" : ` (${remoteCode})`
+          }`,
           502,
         );
       }
@@ -690,7 +693,17 @@ export class DataSyncService {
         maxBytes: this.limits.max_response_bytes,
         now: this.#now,
       });
-      await client.importBundle(bundle);
+      const imported = await client.importBundle(bundle);
+      if (
+        imported.manifest.media_type !== SYNC_MEDIA_TYPE
+        || imported.manifest.schema !== SYNC_SCHEMA
+      ) {
+        throw new DataSyncError(
+          "sync_object_invalid",
+          "Encrypted sync object has unexpected Manifest labels",
+          502,
+        );
+      }
       const plaintext = await client.get(bundle.root, {
         grant,
         maxBytes: this.limits.max_response_bytes,
@@ -886,7 +899,12 @@ function validatePage(value: unknown, requestedLimit: number, limits: SyncLimits
     syncInvariant(change.id === `change_${change.sequence}`, "invalid_sync_page", "Peer change id is invalid", 502);
     syncInvariant(change.collection_id === page.collection_id, "invalid_sync_page", "Peer change belongs to another collection", 502);
     syncInvariant(typeof change.record_id === "string" && /^rec_[a-f0-9]{64}$/u.test(change.record_id), "invalid_sync_page", "Peer record id is invalid", 502);
-    syncInvariant(typeof change.occurred_at === "string" && Number.isFinite(Date.parse(change.occurred_at)), "invalid_sync_page", "Peer change timestamp is invalid", 502);
+    syncInvariant(
+      parseRfc3339Instant(change.occurred_at) !== null,
+      "invalid_sync_page",
+      "Peer change timestamp is invalid",
+      502,
+    );
     return {
       id: change.id as string,
       type: change.type,
@@ -964,15 +982,29 @@ function validatePayload(value: unknown): SyncObjectPayload {
 }
 
 function validateRecordHeader(change: SyncChangeHeader, record: RecordEnvelope): void {
-  if (record.id !== change.record_id || record.collection_id !== change.collection_id) {
+  if (
+    record.id !== change.record_id
+    || record.collection_id !== change.collection_id
+    || !timestampsMatch(change.occurred_at, record.ingested_at)
+  ) {
     throw new DataSyncError("sync_change_mismatch", "Encrypted record does not match its change header", 502);
   }
 }
 
 function validateTombstoneHeader(change: SyncChangeHeader, tombstone: Tombstone): void {
-  if (tombstone.record_id !== change.record_id || tombstone.collection_id !== change.collection_id) {
+  if (
+    tombstone.record_id !== change.record_id
+    || tombstone.collection_id !== change.collection_id
+    || !timestampsMatch(change.occurred_at, tombstone.tombstoned_at)
+  ) {
     throw new DataSyncError("sync_change_mismatch", "Encrypted tombstone does not match its change header", 502);
   }
+}
+
+function timestampsMatch(left: unknown, right: unknown): boolean {
+  const leftInstant = parseRfc3339Instant(left);
+  const rightInstant = parseRfc3339Instant(right);
+  return leftInstant !== null && rightInstant !== null && leftInstant === rightInstant;
 }
 
 function pageEnvelope(
@@ -1184,6 +1216,31 @@ async function readBoundedResponse(response: Response, maxBytes: number): Promis
     offset += chunk.byteLength;
   }
   return bytes;
+}
+
+async function readRemoteErrorCode(response: Response): Promise<string | undefined> {
+  const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+  if (contentType !== "application/json") {
+    await response.body?.cancel().catch(() => undefined);
+    return undefined;
+  }
+  try {
+    const bytes = await readBoundedResponse(response, 16 * 1024);
+    const body = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as unknown;
+    if (
+      body
+      && typeof body === "object"
+      && !Array.isArray(body)
+      && typeof (body as Record<string, unknown>).error === "string"
+      && /^[a-z][a-z0-9_]{0,63}$/u.test((body as Record<string, unknown>).error as string)
+    ) {
+      return (body as Record<string, string>).error;
+    }
+  } catch {
+    // Remote prose and malformed/oversized error bodies are deliberately
+    // discarded. HTTP status remains the stable diagnostic.
+  }
+  return undefined;
 }
 
 function encodedJsonSize(value: unknown): number {

@@ -113,9 +113,9 @@ describe("LOVE Package release inventory", () => {
   test("pins the current immutable package release batch", () => {
     expect(LOVE_PACKAGE_PROTOCOL).toBe("love-package/v1");
     expect(LOVE_PACKAGES.map(({ name, version, releaseTag }) => ({ name, version, releaseTag }))).toEqual([
-      { name: "@agenttool/adds", version: "0.2.2", releaseTag: "adds-v0.2.2" },
+      { name: "@agenttool/adds", version: "0.2.3", releaseTag: "adds-v0.2.3" },
       { name: "@agenttool/data", version: "0.3.1", releaseTag: "data-v0.3.1" },
-      { name: "@agenttool/data-sync", version: "0.1.1", releaseTag: "data-sync-v0.1.1" },
+      { name: "@agenttool/data-sync", version: "0.1.2", releaseTag: "data-sync-v0.1.2" },
       { name: "@agenttool/credential-broker", version: "0.3.1", releaseTag: "credential-broker-v0.3.1" },
       { name: "@agenttool/sdk", version: "0.17.0", releaseTag: "sdk-v0.17.0" },
       { name: "@agenttool/wallet", version: "0.1.0", releaseTag: "wallet-v0.1.0" },
@@ -129,6 +129,21 @@ describe("LOVE Package release inventory", () => {
       { name: "@agenttool/browser", version: "0.3.0", releaseTag: "browser-v0.3.0" },
       { name: "@agenttool/browser", version: "0.5.0", releaseTag: "browser-v0.5.0" },
     ]);
+  });
+
+  test("pins the coordinated ADDS and data-sync dependency lines", () => {
+    const adds = LOVE_PACKAGES.find(({ name }) => name === "@agenttool/adds");
+    const sync = LOVE_PACKAGES.find(({ name }) => name === "@agenttool/data-sync");
+
+    expect(adds?.expectedDependencies).toEqual({
+      "@noble/curves": "^2.2.0",
+      "@noble/ed25519": "^2.3.0",
+      "@noble/hashes": "^2.0.1",
+    });
+    expect(sync?.expectedPeerDependencies).toEqual({
+      "@agenttool/adds": "^0.2.3",
+      "@agenttool/data": "^0.3.1",
+    });
   });
 
   test("keeps the historical Agent Wallet 0.1.0 artifact and manifest byte-identical", async () => {
@@ -466,6 +481,38 @@ describe("LOVE Package builder and verifier", () => {
         packages: [{ ...setup.spec, version: "9.9.9", releaseTag: "data-v9.9.9" }],
       }),
     ).rejects.toThrow("expected release version 9.9.9");
+  });
+
+  test("refuses release dependency-contract drift", async () => {
+    const setup = await fixture({ dependencies: { dependency: "1.0.0" } });
+    const wrongSpec = {
+      ...setup.spec,
+      expectedDependencies: { dependency: "2.0.0" },
+    };
+    await expect(
+      buildLovePackages({
+        repoRoot: setup.repoRoot,
+        outputRoot: setup.firstOutput,
+        packages: [wrongSpec],
+      }),
+    ).rejects.toThrow("package.json dependencies");
+
+    const correctSpec = {
+      ...setup.spec,
+      expectedDependencies: { dependency: "1.0.0" },
+    };
+    await buildLovePackages({
+      repoRoot: setup.repoRoot,
+      outputRoot: setup.firstOutput,
+      packages: [correctSpec],
+    });
+    await expect(
+      verifyLovePackages({
+        repoRoot: setup.repoRoot,
+        outputRoot: setup.firstOutput,
+        packages: [wrongSpec],
+      }),
+    ).rejects.toThrow("package.json dependencies");
   });
 
   test("refuses untracked package source and build-time source mutation", async () => {
