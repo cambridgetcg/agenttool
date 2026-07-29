@@ -214,8 +214,39 @@ agentcred-control stage \
 ```
 
 If the prompt or process ends ambiguously, the manifest stays in
-`provisioning`; reconcile it with `recover-stage`, or begin the explicit
-candidate-abort flow after provider cleanup.
+`provisioning`. `recover-stage` is presence-only: it advances when the exact
+committed Keychain item already exists and otherwise requires provider cleanup.
+If the native prompt was cancelled before that item was created and the same
+provider-issued value is still the intended candidate, explicitly reopen the
+fixed prompt with:
+
+```sh
+agentcred-control resume-stage \
+  --config "$HOME/.config/agentcred/config.json" \
+  --credential agenttool/default/candidate
+```
+
+`resume-stage` first inspects the exact committed service/account. It advances
+without prompting if that item already exists; if absent, it prompts only
+through the fixed macOS Keychain controller. It freshly rechecks expiry and
+overlap immediately after the absent result and before that prompt, confirms
+the exact item, rechecks again, and then advances. It accepts no value,
+stdin/env source, provider URL, or command. Initial `stage` likewise commits
+the slot identity first, freshly checks the same time bounds immediately
+before prompting, and rechecks after confirmation. Both recovery commands are
+valid only in `provisioning`. If the intended provider value is no longer
+available or its identity is uncertain, clean it up at the provider and use
+the explicit candidate-abort flow instead.
+
+After a controller crash or forced termination, do not run `recover-lock` or
+`resume-stage` until you have confirmed that the former native prompt has
+ended and no surviving `/usr/bin/security add-generic-password` child from
+that staging attempt remains. The cooperative lock records the controller
+process, not its child. A parent `SIGKILL` or crash can therefore leave an
+untracked native prompt; this preview does not provide cross-crash child
+supervision. The fixed committed service/account and omission of `-U` prevent
+the controller from updating an item that already exists, but they do not
+remove the race between two prompts or prove which value was entered.
 
 Start the broker, perform one harmless authenticated request through the
 candidate alias, and retain its returned `auditId`. Stop the broker again,
@@ -260,7 +291,12 @@ irreversible cleanup path. Candidate cancellation similarly uses
 `close-abort`; no command performs the provider action.
 
 Inspect/recover a stale cooperative lock with `lock-status` followed by
-`recover-lock` using the exact nonce only after the recorded PID is absent.
+`recover-lock` using the exact nonce only after the recorded PID is absent and
+you have confirmed that no native Keychain prompt or surviving
+`/usr/bin/security` child from that controller remains. Lock recovery does not
+perform that child-process check for you. If prompt termination or entered
+value identity is ambiguous, do not resume; clean up the provider candidate
+and follow the abort flow.
 After eight retained closure receipts, use `archive`, then verify the result
 against the live manifest with:
 
@@ -474,9 +510,9 @@ the client object as a model tool.
 - `MacOSKeychainSource`: broker-only Keychain reader.
 - `managed-macos-keychain` config references: startup-frozen A/B manifest
   selections for offline handoff and rotation.
-- `agentcred-control`: interactive controller-plane provisioning, recovery,
-  rotation, and closure-archive CLI. Its TTY check is anti-pipe only; it is not
-  an agent SDK or wire surface.
+- `agentcred-control`: interactive controller-plane provisioning, explicit
+  prompt resume, presence-only recovery, rotation, and closure-archive CLI.
+  Its TTY check is anti-pipe only; it is not an agent SDK or wire surface.
 - `PolicyConsent`: owner-authored standing allowlist.
 - `ConsentProvider`: hook for a native out-of-band approval UI.
 - `AuditSink`: metadata-only audit hook.

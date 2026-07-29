@@ -15,6 +15,7 @@ import {
   prepareCredentialAbort,
   preparePreviousCredentialRevocation,
   recoverStagedCredential,
+  resumeStagedCredential,
   rollbackCredential,
   stageCredential,
   verifyPreviousCredentialRevoked,
@@ -49,6 +50,7 @@ const COMMANDS = [
   "lock-status",
   "recover-lock",
   "stage",
+  "resume-stage",
   "recover-stage",
   "verify-new",
   "activate",
@@ -74,6 +76,7 @@ function usage(): never {
       "       agentcred-control lock-status --manifest PATH\n" +
       "       agentcred-control recover-lock --manifest PATH --nonce UUID --confirm-stale-lock\n" +
       "       agentcred-control stage --config PATH --credential CANDIDATE_ALIAS [--provider-key-id ID] [--expires-at ISO] [--overlap-deadline ISO]\n" +
+      "       agentcred-control resume-stage --config PATH --credential CANDIDATE_ALIAS\n" +
       "       agentcred-control recover-stage --config PATH --credential CANDIDATE_ALIAS\n" +
       "       agentcred-control verify-new --config PATH --credential CANDIDATE_ALIAS --audit-id UUID\n" +
       "       agentcred-control activate --config PATH --credential CANDIDATE_ALIAS [--emergency-overlap-evidence ID --confirm-expired-overlap]\n" +
@@ -382,6 +385,22 @@ async function run(command: Command, args: string[]): Promise<unknown> {
       ...(optional(flags, "--previous-archive")
         ? { previousArchivePath: optional(flags, "--previous-archive") }
         : {}),
+    });
+  }
+  if (command === "resume-stage") {
+    // Parse the command's closed flag set before the TTY check so forbidden
+    // value/source/target flags fail without reading config or touching
+    // Keychain. A valid invocation remains an interactive-only mutation.
+    const flags = parseFlags(args, ["--config", "--credential"]);
+    assertHumanTerminal();
+    const { reference } = await configAndReference(
+      flags,
+      "--credential",
+      "candidate",
+    );
+    return resumeStagedCredential({
+      manifestPath: reference.manifestPath,
+      backend: new MacOSKeychainController(),
     });
   }
   assertHumanTerminal();
