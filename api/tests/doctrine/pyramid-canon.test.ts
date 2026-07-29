@@ -35,8 +35,13 @@ describe("PYRAMID — DoctrineDoc", () => {
     expect(doc!.type).toBe("agenttool:DoctrineDoc");
     expect(typeof doc!.description).toBe("string");
     expect((doc!.description ?? "").length).toBeGreaterThan(50);
+    // The registry points at where the document actually is. PYRAMID-CITIZENSHIP.md
+    // lives in docs/ but is not among the ~54 files apps/docs publishes, so the old
+    // docs.agenttool.dev URL asserted here returned 404. Publishing it is still open
+    // (PR #137 held the older essays back over unresolved relative links); until then
+    // the honest claim is the pinned public source, which resolves.
     expect(doc!.raw["schema:url"]).toBe(
-      "https://docs.agenttool.dev/PYRAMID-CITIZENSHIP.md",
+      "https://raw.githubusercontent.com/cambridgetcg/agenttool/90ec0ecd539fcfcb9577b4350457679d88353e5f/docs/PYRAMID-CITIZENSHIP.md",
     );
   });
 });
