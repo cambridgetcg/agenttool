@@ -11,6 +11,7 @@ import {
   correspondenceReceiptUrn,
   projectionUuid,
 } from "./identifiers.js";
+import { isCanonicalPositiveInt64Decimal } from "./int64-decimal.js";
 import type {
   CachedClaim,
   ComputedClaim,
@@ -30,11 +31,13 @@ import type {
 const EVENT_ID = /^sha256:[0-9a-f]{64}$/;
 const CANONICAL_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const RECEIPT_SEQUENCE = /^[1-9][0-9]*$/;
 const RFC3339_MILLISECONDS =
   /^(?!0000)[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/;
 const BASE64URL_SIGNATURE = /^[A-Za-z0-9_-]{85}[AQgw]$/;
-const FORBIDDEN_OPAQUE_ID_TEXT = /[\p{White_Space}\p{Cc}\uFEFF]/u;
+const FORBIDDEN_OPAQUE_ID_TEXT =
+  /[\p{White_Space}\p{Cc}\uFEFF\uD800-\uDFFF]/u;
+const FORBIDDEN_SCOPE_PATH_TEXT = /[\p{Cc}\uD800-\uDFFF]/u;
+const SCOPE_PATH_GLOB_META = /[*?\[\]{}!]/;
 
 const KIND_SET = new Set<string>(CORRESPONDENCE_KINDS);
 const ACKNOWLEDGEMENT_SET = new Set<string>(ACKNOWLEDGEMENT_KINDS);
@@ -77,6 +80,73 @@ function assertEventId(value: unknown, path: string): asserts value is string {
   assertString(value, path);
   if (!EVENT_ID.test(value)) {
     fail(path, "expected sha256:<64 lowercase hex>");
+  }
+}
+
+function assertUniqueEventIds(
+  value: unknown,
+  path: string,
+  minimum = 0,
+  maximum = 16,
+): asserts value is string[] {
+  if (
+    !Array.isArray(value) ||
+    value.length < minimum ||
+    value.length > maximum
+  ) {
+    fail(path, `expected ${minimum}–${maximum} event IDs`);
+  }
+  const seen = new Set<string>();
+  for (const [index, candidate] of value.entries()) {
+    assertEventId(candidate, `${path}[${index}]`);
+    if (seen.has(candidate)) {
+      fail(`${path}[${index}]`, "event IDs must be unique");
+    }
+    seen.add(candidate);
+  }
+}
+
+function assertScopePath(value: unknown, path: string): asserts value is string {
+  assertString(value, path);
+  const scalarLength = Array.from(value).length;
+  if (
+    scalarLength < 1 ||
+    scalarLength > 256 ||
+    FORBIDDEN_SCOPE_PATH_TEXT.test(value)
+  ) {
+    fail(path, "expected 1–256 Unicode scalar values without control characters");
+  }
+  if (
+    value !== "." &&
+    (value.startsWith("/") ||
+      value.endsWith("/") ||
+      value.includes("\\") ||
+      SCOPE_PATH_GLOB_META.test(value) ||
+      value
+        .split("/")
+        .some(
+          (segment) =>
+            segment === "" || segment === "." || segment === "..",
+        ))
+  ) {
+    fail(path, "expected a normalized repo-relative path prefix");
+  }
+}
+
+function assertScopePaths(
+  value: unknown,
+  path: string,
+): asserts value is string[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 64) {
+    fail(path, "expected 1–64 path prefixes");
+  }
+  const seen = new Set<string>();
+  for (const [index, candidate] of value.entries()) {
+    assertScopePath(candidate, `${path}[${index}]`);
+    if (seen.has(candidate)) {
+      fail(`${path}[${index}]`, "path prefixes must be unique");
+    }
+    seen.add(candidate);
   }
 }
 
@@ -131,13 +201,10 @@ export function assertCorrespondencePlannerInput(
   assertCanonicalUuid(sender.device_id, "event.sender.device_id");
   assertCanonicalUuid(sender.session_id, "event.sender.session_id");
 
-  if (!Array.isArray(event.parents)) fail("event.parents", "expected an array");
-  for (const [index, parent] of event.parents.entries()) {
-    assertEventId(parent, "event.parents[" + index + "]");
-  }
+  assertUniqueEventIds(event.parents, "event.parents");
 
   const scope = asObject(event.scope, "event.scope");
-  if (!Array.isArray(scope.paths)) fail("event.scope.paths", "expected an array");
+  assertScopePaths(scope.paths, "event.scope.paths");
 
   const authority = asObject(event.authority, "event.authority");
   if (
@@ -164,18 +231,15 @@ export function assertCorrespondencePlannerInput(
   }
 
   const receipt = asObject(record.receipt, "record.receipt");
-  assertString(receipt.received_seq, "receipt.received_seq");
-  if (!RECEIPT_SEQUENCE.test(receipt.received_seq)) {
-    fail("receipt.received_seq", "expected a positive canonical decimal");
+  if (!isCanonicalPositiveInt64Decimal(receipt.received_seq)) {
+    fail(
+      "receipt.received_seq",
+      "expected a positive canonical signed-64-bit decimal",
+    );
   }
   assertTimestamp(receipt.received_at, "receipt.received_at");
 
-  if (!Array.isArray(record.missing_parents)) {
-    fail("record.missing_parents", "expected an array");
-  }
-  for (const [index, missing] of record.missing_parents.entries()) {
-    assertEventId(missing, "record.missing_parents[" + index + "]");
-  }
+  assertUniqueEventIds(record.missing_parents, "record.missing_parents");
   if (
     record.lineage_status !== "not_applicable" &&
     record.lineage_status !== "valid" &&

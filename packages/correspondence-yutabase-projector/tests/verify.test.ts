@@ -178,6 +178,19 @@ describe("closed Correspondence verification", () => {
     }
   });
 
+  test("rejects an overlong receipt decimal before numeric parsing", () => {
+    const { record } = fixture();
+    expect(() =>
+      validateClosedRecord({
+        ...record,
+        receipt: {
+          ...record.receipt,
+          received_seq: "9".repeat(100_000),
+        },
+      })
+    ).toThrow(ProjectorError);
+  });
+
   test("rejects body tampering before signature verification", () => {
     const { record, publicKey } = fixture();
     const tampered = {

@@ -42,7 +42,7 @@ describe("npm pack surface", () => {
     expect(pkg.scripts?.prepack).toBe("bun run ci");
   });
 
-  test("npm dry-run excludes source, tests, locks, and local state", () => {
+  test("built npm dry-run contains its exports and excludes local state", () => {
     const result = Bun.spawnSync({
       cmd: ["npm", "pack", "--ignore-scripts", "--dry-run", "--json"],
       cwd: packageRoot,
@@ -56,6 +56,8 @@ describe("npm pack surface", () => {
     const paths = report[0]?.files.map((file) => file.path) ?? [];
 
     expect(paths).toContain("package.json");
+    expect(paths).toContain("dist/index.js");
+    expect(paths).toContain("dist/index.d.ts");
     expect(paths).toContain("README.md");
     expect(paths).toContain("PERSISTENCE-CONTRACT.md");
     expect(paths).toContain("CLAUDE.md");

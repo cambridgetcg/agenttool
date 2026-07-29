@@ -14,6 +14,7 @@ export type ProjectorErrorCode =
   | "projector_not_installed"
   | "projector_schema_drift"
   | "card_collision"
+  | "signing_key_binding_collision"
   | "thread_collision"
   | "thread_id_reserved"
   | "applied_event_collision"

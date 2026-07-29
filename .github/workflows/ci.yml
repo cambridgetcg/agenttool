@@ -369,7 +369,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: cambridgetcg/yutabase
-          ref: 066afc12c2c7f10bab776a20005e397fca33818c
+          ref: 2948ae3cd88a5e630257549f1e233f5f46a8129b
           path: _yutabase-fixture
           persist-credentials: false
       - name: Set up Bun 1.3.5
@@ -391,14 +391,20 @@ jobs:
           set -euo pipefail
           (cd packages/correspondence-yutabase && bun install --frozen-lockfile && bun run build)
           (cd packages/correspondence-yutabase-projector && bun install --frozen-lockfile)
+          (cd _yutabase-fixture/packages/sdk-ts && bun install --frozen-lockfile)
       - name: Install exact YUTABASE candidate schema
         shell: bash
         run: |
           set -euo pipefail
+          psql "$AGENTTOOL_YUTABASE_TEST_DATABASE_URL" \
+            --no-psqlrc \
+            --single-transaction \
+            --set=ON_ERROR_STOP=1 \
+            --file "_yutabase-fixture/sql/0001_yu_core.sql" \
+            --file "_yutabase-fixture/sql/0002_starter_lexicon.sql"
           for migration in \
-            0001_yu_core.sql \
-            0002_starter_lexicon.sql \
-            0004_candidate_hardening.sql
+            0004_candidate_hardening.sql \
+            0005_candidate_integrity.sql
           do
             psql "$AGENTTOOL_YUTABASE_TEST_DATABASE_URL" \
               --no-psqlrc \
@@ -409,6 +415,13 @@ jobs:
       - name: Run destructive disposable-database integration gate
         working-directory: packages/correspondence-yutabase-projector
         run: bun run test:postgres
+      - name: Revalidate exact YUTABASE binding after projector activity
+        working-directory: _yutabase-fixture/packages/sdk-ts
+        run: >-
+          bun src/cli.ts hello
+          --conn "$AGENTTOOL_YUTABASE_TEST_DATABASE_URL"
+          --json
+          >/dev/null
 
   sdk-python:
     name: Python SDK (${{ matrix.python-version }})
