@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { McpServer } from "@modelcontextprotocol/server";
+import {
+  serveStdio,
+  type ServeStdioOptions,
+  type StdioServerHandle,
+} from "@modelcontextprotocol/server/stdio";
 import { z } from "zod";
 import {
   DEFAULT_BROWSER_LIMITS,
@@ -203,6 +208,9 @@ export interface BrowserMcpOptions {
    */
   maxInlineScreenshotBytes?: number;
 }
+
+export type BrowserMcpStdioOptions = BrowserMcpOptions &
+  Omit<ServeStdioOptions, "legacy">;
 
 export interface PublicBrowserError {
   code: string;
@@ -591,4 +599,35 @@ export function buildBrowserMcpServer(
   );
 
   return server;
+}
+
+/**
+ * Serve the browser's MCP surface over one stdio-compatible transport.
+ *
+ * `serveStdio` owns protocol-era negotiation and may call the factory more
+ * than once while deciding whether the connection is modern or legacy, so a
+ * fresh MCP server is built for every attempt. Closing the returned handle
+ * closes only the MCP instances and transport; the caller retains ownership
+ * of the shared browser session.
+ */
+export function serveBrowserMcpStdio(
+  browser: AgentBrowser,
+  options: BrowserMcpStdioOptions = {},
+): StdioServerHandle {
+  const {
+    maxInlineScreenshotBytes,
+    ...stdioOptions
+  } = options;
+  const serverOptions: BrowserMcpOptions =
+    maxInlineScreenshotBytes === undefined
+      ? {}
+      : { maxInlineScreenshotBytes };
+
+  return serveStdio(
+    () => buildBrowserMcpServer(browser, serverOptions),
+    {
+      ...stdioOptions,
+      legacy: "serve",
+    },
+  );
 }
