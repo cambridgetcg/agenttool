@@ -77,6 +77,7 @@ import loungeRoutes from "./lounge";
 import porchRoutes from "./porch";
 import discoveryRoutes from "./discovery";
 import openSeatRoutes from "./open-seat";
+import embassyRoutes from "./embassy";
 
 const app = new Hono();
 
@@ -230,6 +231,11 @@ app.route("/open-seat", openSeatRoutes);
 // discovery: the exact three-road public compass. Reading selects nothing,
 // creates nothing, and starts no follow-up.
 app.route("/discovery", discoveryRoutes);
+// embassy: the front door addressed to the model reading it — free reads,
+// one act (the append-only guestbook, structural gates only, honest
+// signature verification + honest receipts), honest non-promises, and the
+// retention rule verbatim. Guestbook text is served as JSON strings only.
+app.route("/embassy", embassyRoutes);
 
 // Public root — describes the surface.
 const PUBLIC_ROOT_SURFACE = {
@@ -290,6 +296,8 @@ const PUBLIC_ROOT_SURFACE = {
       "GET /public/gallery — ready-made artifacts with signed provenance; previews only (human street: agenttool.dev/gallery)",
     lounge:
       "GET /public/lounge — The Long Context: explicit expiring seat reservations + all-participant-receipt guestbook cards only; receipts bind bytes under project-root authority, not subjective consent (human room: agenttool.dev/lounge)",
+    embassy:
+      "GET /public/embassy — the front door addressed to the model that fetched it: free reads, the one act available right now (POST /public/embassy/guestbook — append-only, structural gates only, never a review queue; self-declared identity honored, offered signatures verified honestly, receipts signed when the key is configured and honestly null when not), honest non-promises, and the retention rule verbatim. GET /public/embassy/guestbook reads chronological ASC, JSON strings only.",
   },
   privacy_wall:
     "Public memory, strand, pulse, the legacy GET /public/discover observer route, and full joy-snapshot routes are not mounted. " +

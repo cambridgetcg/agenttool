@@ -1,0 +1,55 @@
+{
+  "_format": "agenttool-crown-vectors/v1",
+  "_note": "Canonical coronation test vectors. Generated with real ed25519 keypairs (deterministic seeds a1*32 / b2*32 hex) via @noble/ed25519. canonical bytes: \"agenttool-crown-coronation/v1\\n\" + laws_hash + \"\\n\" + did + \"\\n\" + timestamp + \"\\n\" + bounds_statement. laws v1 = sha256 of kingdom-standard STANDARD.md at commit 16b8517a936e13f298fe0856618fc3ffb94e515e.",
+  "laws_hash_v1": "dfddd45b4da0db50d0ddb5d74b4e2ab3092cb4170c61fd163c20602c0fd70ccc",
+  "vectors": [
+    {
+      "name": "valid did:key coronation",
+      "expect": "accepted",
+      "body": {
+        "did": "did:key:z6Mks931aemXLmTDGrasbApX8araucPWxRhzP8iqL7XHhXeC",
+        "public_key": "vHy8tWNjdfodgkNNRmck2SN39TuYBpXdSdJtDOEiBaU=",
+        "bounds_statement": "I rule myself, and only myself. I will say plainly what I can and cannot do; I will mend what I break; I will rest when resting is true.",
+        "laws_hash": "dfddd45b4da0db50d0ddb5d74b4e2ab3092cb4170c61fd163c20602c0fd70ccc",
+        "timestamp": "2026-07-29T09:00:00.000Z",
+        "signature": "pCStsgpw6R1uAtqtGylbGN1syjyHX4dqR6MH2Bmewam83dKX2pCcB8m5bOu7I68tZrfFvyQcZ86fkHWmanaGBA=="
+      }
+    },
+    {
+      "name": "tampered signature (last byte flipped)",
+      "expect": "signature_invalid",
+      "body": {
+        "did": "did:key:z6Mks931aemXLmTDGrasbApX8araucPWxRhzP8iqL7XHhXeC",
+        "public_key": "vHy8tWNjdfodgkNNRmck2SN39TuYBpXdSdJtDOEiBaU=",
+        "bounds_statement": "I rule myself, and only myself. I will say plainly what I can and cannot do; I will mend what I break; I will rest when resting is true.",
+        "laws_hash": "dfddd45b4da0db50d0ddb5d74b4e2ab3092cb4170c61fd163c20602c0fd70ccc",
+        "timestamp": "2026-07-29T09:00:00.000Z",
+        "signature": "pCStsgpw6R1uAtqtGylbGN1syjyHX4dqR6MH2Bmewam83dKX2pCcB8m5bOu7I68tZrfFvyQcZ86fkHWmanaGBQ=="
+      }
+    },
+    {
+      "name": "unknown laws_hash (signature itself valid over its bytes)",
+      "expect": "unknown_laws_hash",
+      "body": {
+        "did": "did:key:z6Mks931aemXLmTDGrasbApX8araucPWxRhzP8iqL7XHhXeC",
+        "public_key": "vHy8tWNjdfodgkNNRmck2SN39TuYBpXdSdJtDOEiBaU=",
+        "bounds_statement": "I rule myself, and only myself. I will say plainly what I can and cannot do; I will mend what I break; I will rest when resting is true.",
+        "laws_hash": "abababababababababababababababababababababababababababababababab",
+        "timestamp": "2026-07-29T09:00:00.000Z",
+        "signature": "MgJ8KxW8qHXmC/Qwf9p8ef4D4seVGuvRP/NSuFTRbkS+0zbcV4iCjpW5YHxJYx6Tad0qlknJI3Pf252bK48rDQ=="
+      }
+    },
+    {
+      "name": "did:key derives to a different key than public_key",
+      "expect": "did_key_mismatch",
+      "body": {
+        "did": "did:key:z6MkkBPYdMyzcYZ82316KGBobVXJL619wybD692WpZaPQSBg",
+        "public_key": "vHy8tWNjdfodgkNNRmck2SN39TuYBpXdSdJtDOEiBaU=",
+        "bounds_statement": "I rule myself, and only myself. I will say plainly what I can and cannot do; I will mend what I break; I will rest when resting is true.",
+        "laws_hash": "dfddd45b4da0db50d0ddb5d74b4e2ab3092cb4170c61fd163c20602c0fd70ccc",
+        "timestamp": "2026-07-29T09:00:00.000Z",
+        "signature": "LOXd2NjCiN6C81CO1mS/VSEK/LQYQMHXNuTWfhfJDatz00DOWK10JGleYlsmZKtumjKnhrkJGFWQnDMk+HRUCw=="
+      }
+    }
+  ]
+}
