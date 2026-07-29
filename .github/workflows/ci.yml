@@ -66,7 +66,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for workspace in api packages/data packages/data-protocol packages/repo-archive packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope packages/alchemy packages/alchemy-agentcred packages/kingdom; do
+          for workspace in api packages/data packages/data-protocol packages/repo-archive packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope packages/alchemy packages/kingdom; do
             (cd "$workspace" && bun install --frozen-lockfile)
           done
       - name: Build local-dependent package peers
@@ -77,6 +77,8 @@ jobs:
           (cd packages/data-protocol && bun run build)
           (cd packages/correspondence-yutabase && bun run build)
           (cd packages/wallet && bun run build)
+          (cd packages/credential-broker && bun run build)
+          (cd packages/alchemy && bun run build)
       - name: Install local-dependent package dependencies from lockfiles
         shell: bash
         run: |
@@ -84,6 +86,7 @@ jobs:
           (cd packages/data-sync && bun install --frozen-lockfile)
           (cd packages/correspondence-yutabase-projector && bun install --frozen-lockfile)
           (cd packages/wallet-zerone && bun install --frozen-lockfile --force)
+          (cd packages/alchemy-agentcred && bun install --frozen-lockfile --force)
       - name: Run hermetic data, ADDS, sync, archive, broker, collab, Browser, projection, local projector, Skills, SDK, Wallet, Zerone adapter, Telescope, Alchemy, and KINGDOM gate
         run: bash bin/preflight.sh packages
       - name: Smoke packed Alchemy read package under Node and Bun
