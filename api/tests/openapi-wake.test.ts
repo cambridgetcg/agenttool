@@ -213,11 +213,11 @@ describe("wake OpenAPI contract", () => {
     ).toBe("public_exact_artifact");
     expect(
       adapterSchema?.properties?.distribution?.properties?.npm?.const,
-    ).toBe("absent");
+    ).toBe("public_exact_mirror");
     expect(
       adapterSchema?.properties?.distribution?.properties?.github_release
         ?.const,
-    ).toBe("absent");
+    ).toBe("public_exact_mirror");
     for (const field of [
       "hosted",
       "custody",

@@ -88,9 +88,18 @@ rather than creating a new dependency on a retiring surface. See
 
 `packages/alchemy` is source version `0.1.0-dev.0`. Its allowlisted optional
 npm-only prerelease identity is annotated tag `alchemy-v0.1.0-dev.0` with npm
-dist-tag `next`; it is not part of an immutable LOVE release inventory. Source
-metadata and a successful local pack do not prove registry availability—use
-the protected workflow's public receipt and exact-byte checks.
+dist-tag `next`; it is not part of an immutable LOVE release inventory.
+Protected run
+[`30491887182`](https://github.com/cambridgetcg/agenttool/actions/runs/30491887182)
+published and anonymously read back byte-identical 31,445-byte GitHub/npm
+tarballs with SHA-256
+`aeac1938f3abae14180637e72c4162c37b60bb47041452fade285718d7570ba5`.
+Because this is the sole initial prerelease, npm also exposes it through
+`latest`; that fallback is not a maturity signal. Install the exact version:
+
+```bash
+npm install --save-exact @agenttool/alchemy@0.1.0-dev.0
+```
 
 The client permits eight underlying provider methods:
 
@@ -141,10 +150,13 @@ broadcaster, wallet, simulation API, or Alchemy admin client.
 ## Credential-broker bridge
 
 Repository source and the checked-in exact LOVE artifact for
-`@agenttool/credential-broker` are now `0.3.1`. npm availability remains
-independent: neither source metadata nor a LOVE artifact proves registry
-publication. The package SemVer changed because the new source bytes must
-never be rebuilt under the old release identity; the negotiated wire names remain
+`@agenttool/credential-broker` are now `0.3.1`. Protected run
+[`30492737828`](https://github.com/cambridgetcg/agenttool/actions/runs/30492737828)
+published and anonymously read back byte-identical GitHub/npm mirrors of the
+158,450-byte LOVE artifact with SHA-256
+`d05458b27b8832af7996c243abb22e3b400e5810fe5377ba58e1cb587d2461d8`.
+The package SemVer changed because the new source bytes must never be rebuilt
+under the old release identity; the negotiated wire names remain
 `agentcred/0.1` and `agentcred.evm-jsonrpc-read/0.1`.
 
 The negotiated profile permits exactly the seven standard `eth_*` methods
@@ -193,8 +205,18 @@ outside the negotiated profile.
 The adapter's current source identity is `0.1.0-dev.0`. Its optional npm-only
 release identity uses annotated tag `alchemy-agentcred-v0.1.0-dev.0` and npm
 dist-tag `next`; clean release preparation builds both peer packages before
-packing the adapter. GitHub Release and npm availability are independently
-verifiable; neither public artifact was observed while preparing this source.
+packing the adapter. Protected run
+[`30494036520`](https://github.com/cambridgetcg/agenttool/actions/runs/30494036520)
+published and anonymously read back byte-identical 14,478-byte GitHub/npm
+tarballs with SHA-256
+`8dece3c98db0d92d79f16e91527ca18ed42b49f87b7586b78c092ffc242e291a`.
+Because this is the sole initial prerelease, npm also exposes it through
+`latest`; that fallback is not a maturity signal. A complete exact install is:
+
+```bash
+npm install --save-exact @agenttool/alchemy@0.1.0-dev.0 @agenttool/credential-broker@0.3.1 @agenttool/alchemy-agentcred@0.1.0-dev.0
+```
+
 The adapter has no LOVE inventory entry, hosted route, deployment, or live
 provider proof. Its socket integration test uses a real local broker and
 client with an obvious non-secret in-memory sentinel, fake DNS, and fake

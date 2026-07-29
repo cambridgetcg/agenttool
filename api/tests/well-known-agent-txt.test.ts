@@ -282,7 +282,7 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
       "local_offline_source_only",
     );
     expect(kv.get("Zerone-Wallet-Distribution")).toBe(
-      "observed=2026-07-29; love=public_exact_artifact; npm=absent; github_release=absent",
+      "observed=2026-07-29; love=public_exact_artifact; npm=public_exact_mirror; github_release=public_exact_mirror",
     );
     expect(kv.get("Zerone-Wallet-Boundary")).toMatch(
       /exact public LOVE artifact.*bounded local offline package\/profile only.*no AgentTool trust export.*identity migration.*portable trust proof.*key custody.*hosted RPC.*deployed bridge.*network action requires caller-supplied transport and authority/is,
