@@ -338,7 +338,10 @@ test("documents non-activating installation and literal inspector path arguments
   expect(readme).toContain(SKILLS_RELEASE_URL);
   expect(readme).toContain(SKILLS_RELEASE_SHA256);
   expect(readme).toContain(
-    "Version 0.3.0 is prepared in source but has not been published.",
+    "Version 0.3.0 is the current source identity.",
+  );
+  expect(readme).toMatch(
+    /the last public artifact verified while preparing\s+it was the 0\.2\.1 GitHub Release/,
   );
   expect(readme).toMatch(
     /npm 0\.2\.1 is unavailable.*npm `latest` remains 0\.1\.0/s,
