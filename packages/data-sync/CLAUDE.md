@@ -21,17 +21,18 @@ Do not make this package a second record store or crypto implementation.
 ## Gates
 
 ```bash
-bun install
-bun run typecheck
-bun test
-bun run build
+(cd ../data && bun install --frozen-lockfile && bun run build)
+(cd ../data-protocol && bun install --frozen-lockfile && bun run build)
+bun install --frozen-lockfile
+bun run ci
 ```
 
 The integration test must continue to prove two-node offline query, encrypted
 wire privacy, restart resume, tamper failure without checkpoint advancement,
-tombstone propagation, a settling reverse cycle, configured-peer-only fetch,
-publisher/feed-bound checkpoints, page-token non-escalation, and no raw cursor
-in status.
+tombstone propagation, exact ADDS Manifest labels, event/payload timestamp
+binding, an explicit default-node large-record pull, a settling reverse cycle,
+configured-peer-only fetch, publisher/feed-bound checkpoints, page-token
+non-escalation, and no raw cursor in status.
 
 ## Boundaries
 

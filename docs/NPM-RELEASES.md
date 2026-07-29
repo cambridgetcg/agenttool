@@ -146,6 +146,49 @@ revoke credentials. It creates or verifies one byte-identical GitHub Release
 asset for the already-existing annotated tag before attempting the optional npm
 mirror; it does not rewrite unrelated release assets.
 
+### ADDS 0.2.3 and data-sync 0.1.2 order
+
+This pair is one dependency-ordered repair, not one combined artifact.
+`@agenttool/adds@0.2.3` requires `@noble/ed25519@^2.3.0`;
+`@agenttool/data-sync@0.1.2` peers on ADDS `^0.2.3` and data `^0.3.1`.
+Prepare and preserve both LOVE artifacts first, merge their release commit to
+GitHub `main`, then publish and publicly verify ADDS before dispatching
+data-sync. A source version, tag-shaped string, successful local pack, or
+checked-in runbook is not evidence that either optional npm version exists.
+
+```bash
+bun bin/npm-release.ts resolve --package adds
+bun bin/npm-release.ts resolve --package data-sync
+
+git tag -a adds-v0.2.3 <github-main-commit> -m '@agenttool/adds@0.2.3'
+git push github refs/tags/adds-v0.2.3
+
+gh workflow run publish-npm.yml --ref adds-v0.2.3 \
+  -f package=adds \
+  -f tag=adds-v0.2.3 \
+  -f authentication=trusted \
+  -f npm_tag=latest
+
+# Continue only after the protected run and public exact-version readback
+# prove @agenttool/adds@0.2.3.
+git tag -a data-sync-v0.1.2 <github-main-commit> \
+  -m '@agenttool/data-sync@0.1.2'
+git push github refs/tags/data-sync-v0.1.2
+
+gh workflow run publish-npm.yml --ref data-sync-v0.1.2 \
+  -f package=data-sync \
+  -f tag=data-sync-v0.1.2 \
+  -f authentication=trusted \
+  -f npm_tag=latest
+```
+
+Both packages already exist on npm, so bootstrap is forbidden for these new
+versions. The workflow must reuse the checked-in LOVE tarball for each tag,
+create or verify its exact GitHub Release asset, and compare public npm bytes
+before reporting success. Immutable ADDS 0.2.2 and data-sync 0.1.1 LOVE
+artifacts remain historical bytes; this sequence does not rewrite or retag
+them.
+
 ### Agent Wallet and Zerone adapter order
 
 `@agenttool/wallet@0.1.3` and `@agenttool/wallet-zerone@0.1.1` use checked-in

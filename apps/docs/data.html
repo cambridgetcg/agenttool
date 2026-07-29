@@ -179,7 +179,7 @@ api.agenttool.dev       ──X────&gt; no implicit raw-data path</pre>
 
       <div class="callout success">
         <span class="icon">↗</span>
-        <p><strong>Optional exact npm convenience.</strong> <code>npm install --save-exact @agenttool/data@0.3.1 @agenttool/adds@0.2.2 @agenttool/data-sync@0.1.1</code>. The data and sync packages still require Bun where stated. See <a href="packages.html#verify">Packages → Verify</a> for the authoritative LOVE size/SHA-256 workflow; npm <code>latest</code> is not release authority.</p>
+        <p><strong>Optional exact npm convenience.</strong> <code>npm install --save-exact @agenttool/data@0.3.1 @agenttool/adds@0.2.3 @agenttool/data-sync@0.1.2</code>. Registry availability can lag the checked-in exact LOVE line. The data and sync packages still require Bun where stated. See <a href="packages.html#verify">Packages → Verify</a> for the authoritative LOVE size/SHA-256 workflow; npm <code>latest</code> is not release authority.</p>
       </div>
 
       <h2 id="run-node">Run the local reference node</h2>
@@ -247,7 +247,7 @@ curl -X POST http://127.0.0.1:7742/v1/data/query \
 
       <div class="code-block">
         <div class="code-label"><span>Bun · publish encrypted bytes offline</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.2/agenttool-adds-0.2.2.tgz
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.3/agenttool-adds-0.2.3.tgz
 
 <span class="kw">import</span> { AgentData, MemoryBlockStore, generateIdentity } <span class="kw">from</span> <span class="str">"@agenttool/adds"</span>;
 
@@ -263,6 +263,8 @@ curl -X POST http://127.0.0.1:7742/v1/data/query \
 console.<span class="fn">log</span>(published.ref); <span class="cm">// ciphertext/control-document CID reference</span></pre>
       </div>
 
+      <p class="muted">ADDS 0.2.3 requires <code>@noble/ed25519@^2.3.0</code>, matching the verifier's <code>Point</code> API, and propagates programming/environment faults instead of misreporting them as an invalid signature. Immutable 0.2.2 could resolve Noble 2.2.3 and reject a valid signed object; that was a fail-closed availability defect, not acceptance of an invalid signature. The current JavaScript maps embed their TypeScript sources and the tarball omits declaration maps rather than pointing at an excluded source tree.</p>
+
       <div class="callout">
         <span class="icon">◇</span>
         <p><strong>Two protocols, no sleight of hand.</strong> <code>agent-data/v1</code> is the higher collection/query contract. <code>adds/v0.1</code> is an optional lower encrypted-object plane. Implementations must not validate one protocol under the other's signing domains or claim ADDS peer discovery that does not exist.</p>
@@ -273,7 +275,7 @@ console.<span class="fn">log</span>(published.ref); <span class="cm">// cipherte
 
       <div class="code-block">
         <div class="code-label"><span>developer preview · local three-zone proof</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>npm install --save-exact @agenttool/repo-archive@0.1.0-dev.0 @agenttool/adds@0.2.2
+<pre>npm install --save-exact @agenttool/repo-archive@0.1.0-dev.0 @agenttool/adds@0.2.3
 npx agent-repo-archive simulate --repo /absolute/path/to/clean/repository</pre>
       </div>
 
@@ -287,10 +289,15 @@ npx agent-repo-archive simulate --repo /absolute/path/to/clean/repository</pre>
 
       <div class="code-block">
         <div class="code-label"><span>Bun · install the bounded pull bridge</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/data-sync/0.1.1/agenttool-data-sync-0.1.1.tgz
+<pre>bun add \
+  https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.3/agenttool-adds-0.2.3.tgz \
+  https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.1/agenttool-data-0.3.1.tgz \
+  https://docs.agenttool.dev/packages/v1/@agenttool/data-sync/0.1.2/agenttool-data-sync-0.1.2.tgz
 
 <span class="kw">import</span> { DataSyncService } <span class="kw">from</span> <span class="str">"@agenttool/data-sync"</span>;</pre>
       </div>
+
+      <p class="muted">Data-sync 0.1.2 peers on repaired ADDS <code>^0.2.3</code> and data <code>^0.3.1</code>. It rejects imported objects whose signed manifest lacks the exact sync media type or schema, requires the reference node's strict uppercase, non-leap-second RFC 3339 change-time profile to match the decrypted record or tombstone time, and permits an explicit plaintext page up to the default data-node 10 MiB record ceiling with 32 MiB encoded-response headroom. The ordinary requested page remains 1 MiB; larger pages are still deliberate. Its shipped JavaScript maps embed TypeScript text and omit declaration maps.</p>
 
       <div class="callout">
         <span class="icon">◇</span>

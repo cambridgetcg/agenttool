@@ -2,17 +2,29 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { generateIdentity, x25519KeyId } from "@agenttool/adds";
+import {
+  AgentData,
+  MemoryBlockStore,
+  MemoryKeyStore,
+  canonicalJsonBytes,
+  generateIdentity,
+  x25519KeyId,
+} from "@agenttool/adds";
 import { DataNode } from "@agenttool/data";
 import {
+  ADDS_INLINE_PROFILE,
+  AGENT_DATA_SYNC_OBJECT_PROTOCOL,
   AGENT_DATA_SYNC_PROTOCOL,
   DataSyncService,
   createDataSyncFetchHandler,
   serveDataSyncNode,
+  type InlineEncryptedObject,
+  type SyncPage,
   type SyncPageAuthority,
   type SyncPublisher,
   type SyncRecipient,
 } from "../src/index.js";
+import { bundleToWire } from "../src/wire-codec.js";
 
 const NOW = 1_783_728_000;
 const roots: string[] = [];
@@ -95,6 +107,70 @@ function recipientFor(identity: ReturnType<typeof generateIdentity>): SyncRecipi
 
 function publisherFor(identity: ReturnType<typeof generateIdentity>): SyncPublisher {
   return { id: identity.id, ed25519_public_key: base64Url(identity.signingPublicKey) };
+}
+
+async function encryptedSyncObject(
+  payload: unknown,
+  publisher: ReturnType<typeof generateIdentity>,
+  recipient: ReturnType<typeof generateIdentity>,
+  labels: {
+    media_type?: string;
+    schema?: string;
+  } = {
+    media_type: "application/vnd.agenttool.data-sync+json",
+    schema: "urn:agenttool:agent-data-sync-object:v1",
+  },
+): Promise<InlineEncryptedObject> {
+  const plaintext = canonicalJsonBytes(payload);
+  const client = new AgentData({
+    identity: publisher,
+    store: new MemoryBlockStore(),
+    keyStore: new MemoryKeyStore(),
+    maxBytes: Math.max(1, plaintext.byteLength),
+    now: () => NOW,
+  });
+  const published = await client.put(plaintext, {
+    chunkSize: Math.min(256 * 1024, Math.max(1, plaintext.byteLength)),
+    maxBytes: Math.max(1, plaintext.byteLength),
+    ...(labels.media_type === undefined ? {} : { mediaType: labels.media_type }),
+    ...(labels.schema === undefined ? {} : { schema: labels.schema }),
+  });
+  const issuedAt = new Date(NOW * 1000);
+  const grant = await client.share(published.ref, {
+    audience: recipient.id,
+    audienceBoxPublicKey: recipient.boxPublicKey,
+    audienceBoxKeyId: x25519KeyId(recipient.boxPublicKey),
+    issuedAt,
+    expiresAt: new Date(issuedAt.getTime() + 300_000),
+  });
+  return {
+    profile: ADDS_INLINE_PROFILE,
+    bundle: bundleToWire(await client.exportBundle(published.ref)),
+    grant,
+  };
+}
+
+function pageControlPayload(page: SyncPage): Record<string, unknown> {
+  return {
+    protocol: AGENT_DATA_SYNC_OBJECT_PROTOCOL,
+    kind: "page",
+    origin_node_id: page.origin_node_id,
+    feed_id: page.feed_id,
+    collection_id: page.collection_id,
+    ...(page.previous_cursor === undefined ? {} : { previous_cursor: page.previous_cursor }),
+    cursor: page.cursor,
+    has_more: page.has_more,
+    collection_object_cid: page.collection_object.bundle.root.cid,
+    changes: page.changes.map((change) => ({
+      id: change.id,
+      type: change.type,
+      sequence: change.sequence,
+      collection_id: change.collection_id,
+      record_id: change.record_id,
+      occurred_at: change.occurred_at,
+      object_cid: change.object.bundle.root.cid,
+    })),
+  };
 }
 
 function pageAuthority(
@@ -263,6 +339,250 @@ describe("agent-data-sync/v1", () => {
     expect(page.has_more).toBe(true);
     expect(new TextEncoder().encode(JSON.stringify(page)).byteLength).toBeLessThanOrEqual(responseCap);
     expect(contentReads).toBe(2);
+  });
+
+  test("syncs a default-node record above 8 MiB when the caller opts into the aligned limit", async () => {
+    const source = await node("large-default-source");
+    const destination = await node("large-default-destination", false);
+    const contentBytes = 8 * 1024 * 1024 + 1;
+    const recordId = await collect(source, "x".repeat(contentBytes), "large-default");
+    const sourceIdentity = generateIdentity("did:example:large-default-source");
+    const destinationIdentity = generateIdentity("did:example:large-default-destination");
+    const sourceService = service(source, sourceIdentity);
+    const sourceHandler = createDataSyncFetchHandler(sourceService, {
+      page_authorities: [pageAuthority(destinationIdentity, "large-default-token")],
+    });
+    const pulling = service(destination, destinationIdentity, {
+      node: destination,
+      identity: destinationIdentity,
+      peers: [{
+        peer_id: "source",
+        expected_node_id: source.node_id,
+        expected_publisher: publisherFor(sourceIdentity),
+        base_url: "http://127.0.0.1:7787",
+        bearer: "large-default-token",
+      }],
+      fetch: routedFetch(sourceHandler),
+    });
+
+    expect(sourceService.limits).toMatchObject({
+      default_plaintext_bytes: 1024 * 1024,
+      max_plaintext_bytes: 10 * 1024 * 1024,
+      max_response_bytes: 32 * 1024 * 1024,
+    });
+    await expect(pulling.pull({
+      protocol: AGENT_DATA_SYNC_PROTOCOL,
+      peer_id: "source",
+      collection_id: "research",
+    })).rejects.toMatchObject({
+      code: "peer_response_error",
+      message: "Configured peer returned HTTP 413 (sync_record_too_large)",
+    });
+    expect(pulling.status("source", "research").cursor_present).toBe(false);
+
+    const pulled = await pulling.pull({
+      protocol: AGENT_DATA_SYNC_PROTOCOL,
+      peer_id: "source",
+      collection_id: "research",
+      max_plaintext_bytes: contentBytes,
+    });
+    expect(pulled).toMatchObject({
+      pages_applied: 1,
+      records_inserted: 1,
+      has_more: false,
+    });
+    expect((await destination.readContent(recordId)).byteLength).toBe(contentBytes);
+  }, 30_000);
+
+  test("requires exact ADDS Manifest labels without advancing a checkpoint", async () => {
+    const source = await node("manifest-label-source");
+    await collect(source, "manifest domain separation", "manifest-label");
+    const sourceIdentity = generateIdentity("did:example:manifest-label-source");
+    const sourceService = service(source, sourceIdentity);
+
+    for (const labels of [
+      {
+        media_type: "application/json",
+        schema: "urn:agenttool:agent-data-sync-object:v1",
+      },
+      {
+        media_type: "application/vnd.agenttool.data-sync+json",
+        schema: "urn:agenttool:another-object:v1",
+      },
+    ]) {
+      const destination = await node(`manifest-label-destination-${roots.length}`, false);
+      const destinationIdentity = generateIdentity(`did:example:manifest-label-destination-${roots.length}`);
+      const relabelledFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init);
+        const body = await request.json() as Parameters<DataSyncService["page"]>[0];
+        const page = await sourceService.page(body);
+        page.control_object = await encryptedSyncObject(
+          pageControlPayload(page),
+          sourceIdentity,
+          destinationIdentity,
+          labels,
+        );
+        return new Response(JSON.stringify(page), {
+          headers: { "content-type": "application/json" },
+        });
+      }) as typeof fetch;
+      const pulling = service(destination, destinationIdentity, {
+        node: destination,
+        identity: destinationIdentity,
+        peers: [{
+          peer_id: "source",
+          expected_node_id: source.node_id,
+          expected_publisher: publisherFor(sourceIdentity),
+          base_url: "http://127.0.0.1:7786",
+          bearer: "unused-by-injected-peer",
+        }],
+        fetch: relabelledFetch,
+      });
+
+      await expect(pulling.pull({
+        protocol: AGENT_DATA_SYNC_PROTOCOL,
+        peer_id: "source",
+        collection_id: "research",
+      })).rejects.toMatchObject({
+        code: "sync_object_invalid",
+        message: "Encrypted sync object has unexpected Manifest labels",
+      });
+      expect(pulling.status("source", "research").cursor_present).toBe(false);
+      expect(destination.getCollection("research")).toBeNull();
+    }
+  });
+
+  test("rejects non-RFC3339 event times without advancing a checkpoint", async () => {
+    const source = await node("timestamp-syntax-source");
+    const destination = await node("timestamp-syntax-destination", false);
+    await collect(source, "strict event timestamp", "timestamp-syntax");
+    const sourceIdentity = generateIdentity("did:example:timestamp-syntax-source");
+    const destinationIdentity = generateIdentity("did:example:timestamp-syntax-destination");
+    const sourceService = service(source, sourceIdentity);
+    const invalidTimestamps = [
+      "July 29, 2026 12:00:00 UTC",
+      "2026-02-30T12:00:00Z",
+    ];
+    let timestampIndex = 0;
+    const malformedTimestampFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      const body = await request.json() as Parameters<DataSyncService["page"]>[0];
+      const page = await sourceService.page(body);
+      page.changes[0]!.occurred_at = invalidTimestamps[timestampIndex]!;
+      return new Response(JSON.stringify(page), {
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+    const pulling = service(destination, destinationIdentity, {
+      node: destination,
+      identity: destinationIdentity,
+      peers: [{
+        peer_id: "source",
+        expected_node_id: source.node_id,
+        expected_publisher: publisherFor(sourceIdentity),
+        base_url: "http://127.0.0.1:7785",
+        bearer: "unused-by-injected-peer",
+      }],
+      fetch: malformedTimestampFetch,
+    });
+
+    for (timestampIndex = 0; timestampIndex < invalidTimestamps.length; timestampIndex += 1) {
+      await expect(pulling.pull({
+        protocol: AGENT_DATA_SYNC_PROTOCOL,
+        peer_id: "source",
+        collection_id: "research",
+      })).rejects.toMatchObject({ code: "invalid_sync_page" });
+      expect(pulling.status("source", "research").cursor_present).toBe(false);
+    }
+    expect(destination.getCollection("research")).toBeNull();
+  });
+
+  test("binds record and tombstone event instants to their encrypted payloads", async () => {
+    const source = await node("timestamp-binding-source");
+    const recordId = await collect(source, "bound event timestamp", "timestamp-binding");
+    await source.tombstone(recordId, "timestamp binding");
+    const sourceIdentity = generateIdentity("did:example:timestamp-binding-source");
+    const sourceService = service(source, sourceIdentity);
+
+    for (const changeType of ["record.created", "record.tombstoned"] as const) {
+      const destination = await node(`timestamp-binding-${changeType}`, false);
+      const destinationIdentity = generateIdentity(`did:example:timestamp-binding-${changeType}`);
+      const mismatchedTimestampFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init);
+        const body = await request.json() as Parameters<DataSyncService["page"]>[0];
+        const page = await sourceService.page(body);
+        const change = page.changes.find((candidate) => candidate.type === changeType)!;
+        change.occurred_at = new Date(Date.parse(change.occurred_at) + 1_000).toISOString();
+        page.control_object = await encryptedSyncObject(
+          pageControlPayload(page),
+          sourceIdentity,
+          destinationIdentity,
+        );
+        return new Response(JSON.stringify(page), {
+          headers: { "content-type": "application/json" },
+        });
+      }) as typeof fetch;
+      const pulling = service(destination, destinationIdentity, {
+        node: destination,
+        identity: destinationIdentity,
+        peers: [{
+          peer_id: "source",
+          expected_node_id: source.node_id,
+          expected_publisher: publisherFor(sourceIdentity),
+          base_url: "http://127.0.0.1:7784",
+          bearer: "unused-by-injected-peer",
+        }],
+        fetch: mismatchedTimestampFetch,
+      });
+
+      await expect(pulling.pull({
+        protocol: AGENT_DATA_SYNC_PROTOCOL,
+        peer_id: "source",
+        collection_id: "research",
+      })).rejects.toMatchObject({ code: "sync_change_mismatch" });
+      expect(pulling.status("source", "research").cursor_present).toBe(false);
+    }
+  });
+
+  test("accepts equivalent RFC3339 offsets for the same event instant", async () => {
+    const source = await node("timestamp-offset-source");
+    const destination = await node("timestamp-offset-destination", false);
+    await collect(source, "equivalent timestamp offset", "timestamp-offset");
+    const sourceIdentity = generateIdentity("did:example:timestamp-offset-source");
+    const destinationIdentity = generateIdentity("did:example:timestamp-offset-destination");
+    const sourceService = service(source, sourceIdentity);
+    const offsetTimestampFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      const body = await request.json() as Parameters<DataSyncService["page"]>[0];
+      const page = await sourceService.page(body);
+      page.changes[0]!.occurred_at = page.changes[0]!.occurred_at.replace(/Z$/u, "+00:00");
+      page.control_object = await encryptedSyncObject(
+        pageControlPayload(page),
+        sourceIdentity,
+        destinationIdentity,
+      );
+      return new Response(JSON.stringify(page), {
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+    const pulling = service(destination, destinationIdentity, {
+      node: destination,
+      identity: destinationIdentity,
+      peers: [{
+        peer_id: "source",
+        expected_node_id: source.node_id,
+        expected_publisher: publisherFor(sourceIdentity),
+        base_url: "http://127.0.0.1:7783",
+        bearer: "unused-by-injected-peer",
+      }],
+      fetch: offsetTimestampFetch,
+    });
+
+    await expect(pulling.pull({
+      protocol: AGENT_DATA_SYNC_PROTOCOL,
+      peer_id: "source",
+      collection_id: "research",
+    })).resolves.toMatchObject({ records_inserted: 1 });
   });
 
   test("rejects tampered encrypted blocks without advancing a checkpoint", async () => {

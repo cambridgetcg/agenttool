@@ -49,6 +49,31 @@ function captureError(action: () => unknown): unknown {
 }
 
 describe("SQLite sync checkpoints", () => {
+  test("requires checkpoint times to use the strict sync timestamp profile", () => {
+    const store = new SQLiteSyncCheckpointStore(checkpointPath());
+    try {
+      for (const lastAppliedAt of [
+        "July 12, 2026 12:00:00 UTC",
+        "2026-02-30T12:00:00Z",
+      ]) {
+        expect(() => store.set(checkpoint({
+          last_applied_at: lastAppliedAt,
+        }))).toThrow("Checkpoint timestamp is invalid");
+      }
+
+      for (const accepted of [
+        "2026-07-12T13:00:00.000+01:00",
+        "2026-07-12T12:00:00.1234567891Z",
+      ]) {
+        const validCheckpoint = checkpoint({ last_applied_at: accepted });
+        store.set(validCheckpoint);
+        expect(store.get("peer_source", "research")).toEqual(validCheckpoint);
+      }
+    } finally {
+      store.close();
+    }
+  });
+
   test("validates persisted rows before returning them", () => {
     const path = checkpointPath();
     const store = new SQLiteSyncCheckpointStore(path);

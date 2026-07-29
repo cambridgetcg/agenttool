@@ -17,16 +17,21 @@ It does not provide discovery, query/index APIs, global revocation, secure delet
 ## Install
 
 Portable bundle import/export shipped in `0.2.0` and remains in the licensed
-`0.2.2` package:
+`0.2.3` package:
 
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.2/agenttool-adds-0.2.2.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.3/agenttool-adds-0.2.3.tgz
 ```
 
 This versioned tarball is published through `love-package/v1`; its manifest
 lists the SHA-256 digest and interchangeable mirrors. No npm account or npm
 publication is required. Package managers still resolve declared upstream
 dependencies through their configured registries or cache.
+
+Version `0.2.3` raises the declared `@noble/ed25519` minimum to `2.3.0`,
+matching the strict verifier's `Point` API. A broken dependency/runtime API is
+surfaced as an environment fault rather than being reported as an invalid
+signature; malformed or forged signatures still fail closed.
 
 ## Offline roundtrip
 
@@ -92,7 +97,7 @@ The filesystem adapter stores only addressed ciphertext and signed documents. It
 
 ### S3-compatible store (included since 0.2.2)
 
-The licensed `0.2.2` package includes a Node/Bun network adapter at the
+The licensed `0.2.3` package includes a Node/Bun network adapter at the
 isolated `@agenttool/adds/s3` subpath. It is not re-exported from the
 browser-compatible package root:
 

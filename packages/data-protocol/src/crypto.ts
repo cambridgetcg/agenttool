@@ -80,11 +80,32 @@ export function strictEd25519Verify(
   message: Uint8Array,
   publicKey: Uint8Array,
 ): boolean {
+  let checkedSignature: Uint8Array;
+  let checkedMessage: Uint8Array;
+  let checkedPublicKey: Uint8Array;
   try {
-    assertByteLength(publicKey, 32, "Ed25519 public key");
-    assertByteLength(signatureBytes, 64, "Ed25519 signature");
-    const publicPoint = ed25519.Point.fromHex(publicKey, false);
-    const rPoint = ed25519.Point.fromHex(signatureBytes.subarray(0, 32), false);
+    if (
+      !(signatureBytes instanceof Uint8Array)
+      || !ArrayBuffer.isView(signatureBytes)
+      || !(message instanceof Uint8Array)
+      || !ArrayBuffer.isView(message)
+      || !(publicKey instanceof Uint8Array)
+      || !ArrayBuffer.isView(publicKey)
+    ) return false;
+    // Snapshot caller-owned views before entering the dependency boundary.
+    // Proxies, hostile subclasses, and detached views remain malformed input.
+    checkedSignature = Uint8Array.from(signatureBytes);
+    checkedMessage = Uint8Array.from(message);
+    checkedPublicKey = Uint8Array.from(publicKey);
+    assertByteLength(checkedPublicKey, 32, "Ed25519 public key");
+    assertByteLength(checkedSignature, 64, "Ed25519 signature");
+  } catch {
+    return false;
+  }
+
+  try {
+    const publicPoint = ed25519.Point.fromHex(checkedPublicKey, false);
+    const rPoint = ed25519.Point.fromHex(checkedSignature.subarray(0, 32), false);
     if (
       publicPoint.isSmallOrder() ||
       !publicPoint.isTorsionFree() ||
@@ -92,23 +113,50 @@ export function strictEd25519Verify(
       !rPoint.isTorsionFree()
     ) return false;
     return ed25519.verify(
-      signatureBytes,
-      message,
-      publicKey,
+      checkedSignature,
+      checkedMessage,
+      checkedPublicKey,
       { zip215: false },
     );
-  } catch {
+  } catch (cause) {
+    markVerifierEnvironmentFault(cause);
     return false;
   }
 }
 
+const verifierEnvironmentFaults = new WeakSet<object>();
+
+function markVerifierEnvironmentFault(cause: unknown): void {
+  // Inputs have already passed their byte-shape checks here. Preserve faults
+  // from the strict dependency/runtime boundary without confusing malformed
+  // caller objects at the outer verifier layers with environment failures.
+  if (cause instanceof TypeError || cause instanceof ReferenceError) {
+    verifierEnvironmentFaults.add(cause);
+    throw cause;
+  }
+}
+
+function rethrowMarkedVerifierEnvironmentFault(cause: unknown): void {
+  if (
+    typeof cause === "object"
+    && cause !== null
+    && verifierEnvironmentFaults.has(cause)
+  ) throw cause;
+}
+
+function isVerifierRecord(value: unknown): value is Record<PropertyKey, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 function verifySignature(domain: string, value: unknown, signature: Signature): boolean {
-  if (signature.algorithm !== "Ed25519") return false;
   try {
+    if (!isVerifierRecord(signature)) return false;
+    if (signature.algorithm !== "Ed25519") return false;
     const publicKey = decodeFixedBase64Url(signature.public_key, 32, "signature.public_key");
     const signatureBytes = decodeFixedBase64Url(signature.value, 64, "signature.value");
     return strictEd25519Verify(signatureBytes, domainSeparatedBytes(domain, value), publicKey);
-  } catch {
+  } catch (cause) {
+    rethrowMarkedVerifierEnvironmentFault(cause);
     return false;
   }
 }
@@ -225,11 +273,17 @@ export function signManifest(unsigned: UnsignedManifest, identity: AgentDataIden
 
 export function verifyManifestSignature(manifest: SignedManifest): boolean {
   try {
+    if (
+      !isVerifierRecord(manifest) ||
+      !isVerifierRecord(manifest.signature) ||
+      !isVerifierRecord(manifest.publisher)
+    ) return false;
     return (
       manifest.signature.public_key === manifest.publisher.ed25519_public_key &&
       verifySignature(MANIFEST_SIGNATURE_DOMAIN, unsignedManifest(manifest), manifest.signature)
     );
-  } catch {
+  } catch (cause) {
+    rethrowMarkedVerifierEnvironmentFault(cause);
     return false;
   }
 }
@@ -255,11 +309,17 @@ export function signGrant(unsigned: UnsignedGrant, identity: AgentDataIdentity):
 
 export function verifyGrantSignature(grant: SignedGrant): boolean {
   try {
+    if (
+      !isVerifierRecord(grant) ||
+      !isVerifierRecord(grant.signature) ||
+      !isVerifierRecord(grant.issuer)
+    ) return false;
     return (
       grant.signature.public_key === grant.issuer.ed25519_public_key &&
       verifySignature(GRANT_SIGNATURE_DOMAIN, unsignedGrant(grant), grant.signature)
     );
-  } catch {
+  } catch (cause) {
+    rethrowMarkedVerifierEnvironmentFault(cause);
     return false;
   }
 }
