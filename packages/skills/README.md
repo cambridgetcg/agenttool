@@ -174,6 +174,11 @@ or another host.
   request and use the narrowest controller-approved AgentCred grant without
   receiving the credential value. It does not provision credentials, start
   the broker, approve a side effect, or grant authority.
+- [`manage-agentcred-lifecycle`](skills/manage-agentcred-lifecycle/SKILL.md)
+  orchestrates the separate human-controlled AgentCred handoff and managed A/B
+  lifecycle. It never receives a credential value, treats provider issuance
+  and revocation as separately authorized external actions, and does not add a
+  lifecycle operation to the agent wire.
 
 ## Development
 
