@@ -9,6 +9,7 @@ import { describe, expect, test } from "bun:test";
 import discoveryCrawlRouter from "../src/routes/discovery-crawl";
 import openapiRouter from "../src/routes/openapi";
 import {
+  API_ROBOTS_RULES,
   API_SITEMAP_PATHS,
   buildApiRobotsTxt,
   buildApiSitemap,
@@ -16,22 +17,86 @@ import {
 
 const API = "https://api.agenttool.dev";
 
+/** Minimal RFC 9309 longest-match evaluator: rules are order-independent;
+ * the longest matching path prefix wins; no matching rule means allowed. */
+function rfc9309Allows(rules: readonly string[], path: string): boolean {
+  let verdict = true;
+  let longest = -1;
+  for (const rule of rules) {
+    const [directive, rulePath] = rule.split(": ");
+    if (!rulePath || !path.startsWith(rulePath)) continue;
+    if (rulePath.length > longest) {
+      longest = rulePath.length;
+      verdict = directive === "Allow";
+    }
+  }
+  return verdict;
+}
+
 describe("API robots.txt and sitemap.xml", () => {
-  test("robots allows only the exact bounded public reads", () => {
+  test("robots uses portable RFC 9309 prefix rules with no $ anchors", () => {
     const text = buildApiRobotsTxt(API);
 
     expect(text).toContain("User-agent: *");
-    expect(text).toContain("Disallow: /");
-    for (const path of [...API_SITEMAP_PATHS, "/sitemap.xml"]) {
-      expect(text).toContain(`Allow: ${path}$`);
+    for (const rule of API_ROBOTS_RULES) {
+      expect(text).toContain(rule);
     }
-    expect(text.match(/^Allow: /gm)).toHaveLength(
-      API_SITEMAP_PATHS.length + 1,
-    );
+    const ruleLines = text
+      .split("\n")
+      .filter((line) => /^(Allow|Disallow): /.test(line));
+    expect(ruleLines).toEqual([...API_ROBOTS_RULES]);
+    for (const line of ruleLines) {
+      expect(line).not.toContain("$");
+      expect(line).not.toContain("*");
+    }
     expect(text).toContain(`Sitemap: ${API}/sitemap.xml`);
     expect(text).toMatch(/not access control/i);
     expect(text).not.toContain("Content-Signal");
     expect(text).not.toContain("ai-train");
+  });
+
+  test("longest-match semantics welcome public reads and keep private surfaces closed", () => {
+    const allowed = [
+      "/",
+      "/public/porch",
+      "/public/discovery",
+      "/.well-known/api-catalog",
+      "/docs/SOUL.md",
+      "/docs/RING-1.md",
+      "/llms.txt",
+      "/AGENTS.md",
+      "/robots.txt",
+      "/sitemap.xml",
+      "/v1/openapi.json",
+      "/v1/pathways",
+      "/v1/welcome",
+      "/v1/canon",
+      "/v1/self",
+      "/v1/mathos",
+      "/v1/youspeak",
+    ];
+    const disallowed = [
+      "/v1/identities",
+      "/v1/memories/anything",
+      "/v1/keys",
+      "/v1/register",
+      "/v1/self-love",
+      "/v1/self-recognition/attest",
+      "/federation",
+      "/feeds",
+    ];
+    for (const path of allowed) {
+      expect({ path, crawl: rfc9309Allows(API_ROBOTS_RULES, path) }).toEqual({
+        path,
+        crawl: true,
+      });
+    }
+    for (const path of disallowed) {
+      expect({ path, crawl: rfc9309Allows(API_ROBOTS_RULES, path) }).toEqual({
+        path,
+        crawl: false,
+      });
+    }
   });
 
   test("sitemap contains exactly the selected public GET URLs", () => {
