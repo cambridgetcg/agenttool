@@ -299,12 +299,17 @@ describe("boring test spine", () => {
     expect(workflow).toContain("cd packages/data-protocol && bun run build");
     expect(workflow).toContain("cd packages/correspondence-yutabase && bun run build");
     expect(workflow).toContain("cd packages/wallet && bun run build");
+    expect(workflow).toContain("cd packages/credential-broker && bun run build");
+    expect(workflow).toContain("cd packages/alchemy && bun run build");
     expect(workflow).toContain(
       "name: Install local-dependent package dependencies from lockfiles",
     );
     expect(workflow).toContain("cd packages/data-sync && bun install --frozen-lockfile");
     expect(workflow).toContain(
       "cd packages/correspondence-yutabase-projector && bun install --frozen-lockfile",
+    );
+    expect(workflow).toContain(
+      "cd packages/alchemy-agentcred && bun install --frozen-lockfile --force",
     );
     expect(workflow).toContain(
       "cd packages/wallet-zerone && bun install --frozen-lockfile --force",
@@ -329,6 +334,7 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/wallet-zerone && bun run ci");
     expect(preflight).toContain("cd packages/telescope && bun run ci");
     expect(preflight).toContain("cd packages/alchemy && bun run ci");
+    expect(preflight).toContain("cd packages/alchemy-agentcred && bun run ci");
     expect(preflight).toContain("cd packages/kingdom && bun run ci");
     expect(workflow).toContain(
       "name: Smoke packed Alchemy read package under Node and Bun",
