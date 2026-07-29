@@ -722,9 +722,9 @@ host, or a live-chain deployment.
 Historical catalog releases whose manifests say `license: null` provide no
 reuse grant; the current `@agenttool/data@0.3.1`,
 `@agenttool/data-sync@0.1.1`, `@agenttool/adds@0.2.2`,
-`@agenttool/credential-broker@0.2.0`, `@agenttool/sdk@0.17.0`, and
+`@agenttool/credential-broker@0.3.0`, `@agenttool/sdk@0.17.0`, and
 `@agenttool/telescope@0.2.3`, `@agenttool/wallet@0.1.3`,
-`@agenttool/wallet-zerone@0.1.1`, and `@agenttool/browser@0.3.0` releases
+`@agenttool/wallet-zerone@0.1.1`, and `@agenttool/browser@0.5.0` releases
 instead declare `Apache-2.0` without retroactively changing those immutable
 older releases. Historical Wallet `0.1.0`/`0.1.1`/`0.1.2` and Wallet Zerone
 `0.1.0` LOVE artifacts remain separately addressable and are not rewritten;

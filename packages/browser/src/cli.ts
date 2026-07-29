@@ -8,10 +8,11 @@ import {
   DEFAULT_BROWSER_LIMITS,
 } from "./browser.js";
 import {
+  actionWireFieldsForHint,
   actOnceAndObserve,
   browserActionSchema,
-  buildBrowserMcpServer,
   publicBrowserError,
+  serveBrowserMcpStdio,
   toBrowserAction,
 } from "./mcp.js";
 import {
@@ -20,22 +21,17 @@ import {
   parseBrowserProcessConfig,
   type BrowserProcessConfig,
 } from "./config.js";
+import {
+  BROWSER_OPERATIONS,
+  JSONL_PROTOCOL_VERSION,
+  type BrowserOperation,
+} from "./protocol.js";
 import { BROWSER_PACKAGE_VERSION } from "./version.js";
 
-export const JSONL_PROTOCOL_VERSION = "agenttool-browser-jsonl/0.1";
+export { JSONL_PROTOCOL_VERSION } from "./protocol.js";
+export type { BrowserOperation } from "./protocol.js";
 export const MAX_JSONL_REQUEST_BYTES = 1_048_576;
 export const MAX_JSONL_RESPONSE_BYTES = 1_048_576;
-
-export type BrowserOperation =
-  | "browser_capabilities"
-  | "browser_plan"
-  | "browser_open"
-  | "browser_observe"
-  | "browser_act"
-  | "browser_extract"
-  | "browser_screenshot"
-  | "browser_tabs"
-  | "browser_close";
 
 type RequestId = string | number;
 type InputChunk = string | Uint8Array;
@@ -122,9 +118,7 @@ const requestSchemas = {
   browser_close: z.object({}).strict(),
 } satisfies Record<BrowserOperation, z.ZodType>;
 
-const OPERATIONS = new Set<BrowserOperation>(
-  Object.keys(requestSchemas) as BrowserOperation[],
-);
+const OPERATIONS = new Set<BrowserOperation>(BROWSER_OPERATIONS);
 
 function protocolError(
   code: string,
@@ -194,6 +188,84 @@ function parseRequest(text: string): JsonlRequest {
   };
 }
 
+/**
+ * Every accepted wire field name per operation, including nested action
+ * fields. Only these may ever be suggested by the camelCase hint; suggesting
+ * a transformed name that the wire does not accept would steer a
+ * single-attempt caller into a second guaranteed rejection.
+ */
+const WIRE_FIELD_NAMES: Record<BrowserOperation, ReadonlySet<string>> = {
+  browser_capabilities: new Set(),
+  browser_plan: new Set(["action"]),
+  browser_open: new Set(["url"]),
+  browser_observe: new Set(["tab_id", "include_text", "max_text_chars"]),
+  browser_act: new Set(["action"]),
+  browser_extract: new Set(["tab_id", "ref", "snapshot_id", "format", "max_chars"]),
+  browser_screenshot: new Set(["tab_id"]),
+  browser_tabs: new Set(),
+  browser_close: new Set(),
+};
+
+interface WireIssue {
+  code?: string;
+  keys?: readonly unknown[];
+  errors?: readonly (readonly WireIssue[])[];
+  path: readonly PropertyKey[];
+  message: string;
+}
+
+/**
+ * Collect rejected keys from an unrecognized_keys issue, descending into
+ * union branches (the action schema is a union, so its member rejections
+ * nest under invalid_union).
+ */
+function unrecognizedKeys(issue: WireIssue): string[] {
+  if (issue.code === "unrecognized_keys") {
+    return (issue.keys ?? []).filter(
+      (key): key is string => typeof key === "string",
+    );
+  }
+  if (issue.code === "invalid_union") {
+    return (issue.errors ?? []).flat().flatMap(unrecognizedKeys);
+  }
+  return [];
+}
+
+function acceptedWireFields(
+  method: BrowserOperation,
+  params: Record<string, unknown>,
+  issue: WireIssue,
+): ReadonlySet<string> {
+  const accepted = new Set(WIRE_FIELD_NAMES[method]);
+  if (
+    issue.path[0] === "action"
+    && (method === "browser_plan" || method === "browser_act")
+  ) {
+    for (const field of actionWireFieldsForHint(params.action)) {
+      accepted.add(field);
+    }
+  }
+  return accepted;
+}
+
+function issueDetail(
+  method: BrowserOperation,
+  issue: WireIssue,
+  params: Record<string, unknown>,
+): string {
+  const base = `${issue.path.join(".") || "params"}: ${issue.message}`;
+  const accepted = acceptedWireFields(method, params, issue);
+  const snakeHints = [...new Set(unrecognizedKeys(issue))]
+    .map((key) => [key, key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)] as const)
+    .filter(([key, snake]) => snake !== key && accepted.has(snake))
+    .map(([key, snake]) => `${key} -> ${snake}`);
+  if (snakeHints.length === 0) return base;
+  return (
+    `${base} (request fields are snake_case — ${snakeHints.join(", ")}; `
+    + "observation fields are camelCase)"
+  );
+}
+
 function parsedParams<M extends BrowserOperation>(
   method: M,
   params: Record<string, unknown>,
@@ -204,7 +276,7 @@ function parsedParams<M extends BrowserOperation>(
       "invalid_params",
       parsed.error.issues
         .slice(0, 4)
-        .map((issue) => `${issue.path.join(".") || "params"}: ${issue.message}`)
+        .map((issue) => issueDetail(method, issue, params))
         .join("; ")
         .slice(0, 2_000),
     );
@@ -479,21 +551,40 @@ Use one named authority or the legacy public/local flags, never both.
 Chromium-managed redirect hops are not independently policy-checked.
 `;
 
-async function defaultMcpRunner(browser: AgentBrowser, stderr: Writable): Promise<void> {
-  const server = buildBrowserMcpServer(browser);
-  const transport = new StdioServerTransport();
-  let closing = false;
-  const shutdown = async () => {
-    if (closing) return;
-    closing = true;
-    process.removeListener("SIGINT", onSignal);
-    process.removeListener("SIGTERM", onSignal);
-    process.stdin.removeListener("end", onInputEnd);
-    try {
-      await server.close();
-    } finally {
-      await browser.close();
-    }
+async function defaultMcpRunner(
+  browser: AgentBrowser,
+  input: Readable,
+  output: Writable,
+  stderr: Writable,
+): Promise<void> {
+  let handle;
+  try {
+    handle = serveBrowserMcpStdio(browser, {
+      transport: new StdioServerTransport(input, output),
+      onerror() {
+        stderr.write(
+          "error: internal_error: MCP transport or protocol failure\n",
+        );
+      },
+    });
+  } catch (error) {
+    await browser.close();
+    throw error;
+  }
+  let shutdownPromise: Promise<void> | null = null;
+  const shutdown = (): Promise<void> => {
+    shutdownPromise ??= (async () => {
+      process.removeListener("SIGINT", onSignal);
+      process.removeListener("SIGTERM", onSignal);
+      input.removeListener("end", onInputEnd);
+      input.removeListener("close", onInputClose);
+      try {
+        await handle.close();
+      } finally {
+        await browser.close();
+      }
+    })();
+    return shutdownPromise;
   };
   const onSignal = () => {
     void shutdown();
@@ -501,16 +592,21 @@ async function defaultMcpRunner(browser: AgentBrowser, stderr: Writable): Promis
   const onInputEnd = () => {
     void shutdown();
   };
+  const onInputClose = () => {
+    void shutdown();
+  };
   process.once("SIGINT", onSignal);
   process.once("SIGTERM", onSignal);
-  process.stdin.once("end", onInputEnd);
-  try {
-    await server.connect(transport);
-    stderr.write("· agenttool-browser MCP ready (stdio; browser data is untrusted)\n");
-  } catch (error) {
-    await shutdown();
-    throw error;
+  input.once("end", onInputEnd);
+  input.once("close", onInputClose);
+  stderr.write(
+    "· agenttool-browser MCP ready (stdio; current + legacy negotiation; browser data is untrusted)\n",
+  );
+  if (input.readableEnded || input.destroyed) {
+    void shutdown();
   }
+  await handle.closed;
+  await shutdown();
 }
 
 async function launchFrom(
@@ -625,7 +721,11 @@ export async function runCli(
       return 0;
     }
 
-    await (dependencies.runMcp ?? defaultMcpRunner)(browser, stderr);
+    if (dependencies.runMcp) {
+      await dependencies.runMcp(browser, stderr);
+    } else {
+      await defaultMcpRunner(browser, stdin, stdout, stderr);
+    }
     return 0;
   } catch (error) {
     const detail = publicBrowserError(error);

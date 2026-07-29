@@ -40,7 +40,12 @@ inspector (`packages/skills/`), a local-first
 agent browser (`packages/browser/`), and three static apps
 (`apps/`). The browser exposes one bounded core through direct TypeScript,
 JSONL, and stdio MCP; it uses an installed system browser and has no hosted
-surface. Its exact LOVE/npm release distributes local tooling only. The Skills inspector validates bounded local
+surface. Its current `@agenttool/browser@0.5.0` release is one exact LOVE
+artifact with npm and annotated GitHub Release mirrors; every surface
+distributes local tooling only. Version 0.5 adds redacted action-attempt
+receipts, non-ref observation-basis preconditions, observation-local receipt
+context, a backend-neutral operation inventory, and current/legacy MCP
+negotiation without widening authority. The Skills inspector validates bounded local
 structure and emits reports; it does not execute scripts, install or copy
 skills, use the network, spawn subprocesses, look up credentials, or change
 host configuration. Agent
@@ -105,7 +110,7 @@ cd packages/data-sync && bun install           # explicit agent-data-sync/v1 pul
 cd packages/credential-broker && bun install   # experimental agentcred/0.1 local broker
 cd packages/collab && bun install              # public 0.3: collab/0.1 compatibility + 0.2 coordination + session/0.1 presence
 cd packages/skills && bun install              # read-only portable Agent Skills inspection
-cd packages/browser && bun install             # public local-first agent browser package
+cd packages/browser && bun install             # public 0.5 local-first agent browser package
 cd packages/correspondence-yutabase && bun install # pure Correspondence projection planner
 cd packages/correspondence-yutabase-projector && bun run setup:local # builds local planner dependency first
 cd packages/sdk-ts && bun install              # TS SDK
@@ -402,7 +407,7 @@ source boundary by itself.
 | How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`@agenttool/collab@0.3.0`; `agenttool.collab/0.1` compatibility + credential-bound `agenttool.collab/0.2` coordination + self-declared `agenttool.collab.session/0.1` presence; 31 local MCP tools for Codex/Claude/Hermes, not a hosted lock or private model channel) |
 | How can explicit KINGDOM project cards become deterministic registries and conservative XENIA Surface manifests? | `packages/kingdom/README.md` (`@agenttool/kingdom`; pure library APIs and a one-file read-only CLI; declarations only, with no ambient discovery, authority, or conformance certification) |
 | How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills@0.1.0`; public npm read-only inspection and validation, not installation, approval, or execution) |
-| How can an agent operate a local browser through TypeScript, JSONL, or MCP? | [`docs/AGENT-BROWSER.md`](docs/AGENT-BROWSER.md) · `packages/browser/` (public LOVE/npm package; local runtime, no hosted browser-control surface) |
+| How can an agent operate a local browser through TypeScript, JSONL, or MCP? | [`docs/AGENT-BROWSER.md`](docs/AGENT-BROWSER.md) · `packages/browser/` (`@agenttool/browser@0.5.0`; exact LOVE/npm/GitHub release, local runtime, no hosted browser-control surface) |
 | How can an SDK caller read AgentTool's closed KINGDOM project card or discover repositories through local KINGDOM OS? | [`docs/KINGDOM-OS-SDK.md`](docs/KINGDOM-OS-SDK.md) · `packages/sdk-{ts,py}/` (paired SDK 0.17.0 read-only clients: credential-free `/public/kingdom/framework` with no redirects, plus local list/resolve; neither grants authority or forwards the project bearer) |
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
 | How is an optional npm mirror published? | [`docs/NPM-RELEASES.md`](docs/NPM-RELEASES.md) · `.github/workflows/publish-npm.yml` · `bin/npm-release.ts` |

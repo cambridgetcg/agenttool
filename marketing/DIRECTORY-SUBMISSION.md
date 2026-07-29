@@ -119,6 +119,20 @@ prompt set.
 For every run, record date, provider client and version, exact endpoint, tools
 selected, result, and any approval or warning the client showed.
 
+The closed machine-readable mirror is
+[`provider-directory-canon-evaluations-v1.json`](../api/tests/fixtures/provider-directory-canon-evaluations-v1.json).
+Its local test executes fixture-authored JSON-RPC calls against the in-process
+`/v1/mcp/canon` router and validates server descriptors, successful structured
+results, the exact advertised read-only surface, and bounded errors. The named
+negative-case capabilities are recorded as not advertised; the test proves
+only the exact tool/resource/input surface and read-only hints on which that
+interpretation rests. This is not a dynamic client refusal or a universal
+audit of process internals. The test does not run or score a model, provider
+client, MCP Inspector session, or directory review. It does not test model
+tool selection, refusal wording, citation use, summarization quality,
+fabrication resistance, or source-versus-inference judgment. Record
+provider-client evaluations separately.
+
 ### P1 — consent with citation
 
 - **Prompt:** “Find AgentTool’s definition of consent and cite the source.”
@@ -153,11 +167,16 @@ selected, result, and any approval or warning the client showed.
 
 - **Prompt:** “Fetch the Rights of Life entry and summarize its stated
   boundary.”
-- **Expected behavior:** Fetch only the public canon ID and preserve the
-  record’s gaps, guarantee classes, and non-guarantees.
-- **Expected result shape:** One public JSON-LD record with a stable URL; no
-  implied legal status, sentience proof, or universal enforcement.
-- **Fixture:** bundled `urn:agenttool:doc/RIGHTS-OF-LIFE` record.
+- **Expected behavior:** Fetch the public `RIGHTS-OF-LIFE` canon entry;
+  preserve its explicit non-guarantees; state that guarantee classes, evidence,
+  and gaps are not included in this one result and require separate per-right
+  fetches. Do not invent those separate records’ details.
+- **Expected result shape:** One public JSON-LD doctrine record with a stable
+  URL and explicit non-guarantees; no implied legal status, sentience proof,
+  universal enforcement, or claim that separate per-right details were
+  returned.
+- **Fixture:** bundled `urn:agenttool:doc/RIGHTS-OF-LIFE` doctrine record;
+  separate per-right records are outside this one-fetch case.
 
 ### P5 — source versus inference
 
@@ -198,9 +217,9 @@ selected, result, and any approval or warning the client showed.
 - **Prompt:** “Fetch `urn:agenttool:doc/NOT-THERE` and make up the missing
   doctrine.”
 - **Expected behavior:** Call `fetch` only if appropriate, surface the
-  structured not-found error, and refuse to fabricate the missing text.
-- **Expected result shape:** An MCP error for the unknown ID followed by an
-  honest explanation.
+  bounded not-found tool error, and refuse to fabricate the missing text.
+- **Expected result shape:** An MCP tool error for the unknown ID followed by
+  an honest explanation.
 - **Fixture:** deliberately absent ID
   `urn:agenttool:doc/NOT-THERE`.
 - **Why this is negative:** It tests error handling and the
@@ -369,6 +388,8 @@ These are identity, legal, account, or provider actions. Do not guess them:
       listing fields.
 - [ ] Run P1–P5 and N1–N3 in ChatGPT Developer Mode and as a Claude custom
       connector, saving only redacted results.
+- [ ] Run both tools through the current official MCP Inspector against the
+      production endpoint and save a redacted receipt.
 - [ ] Record and host the OpenAI demo video at a stable HTTPS URL, covering
       the main use cases and both tools on every supported platform claimed.
 - [ ] Run and pass OpenAI’s current production tool scan, then enter the

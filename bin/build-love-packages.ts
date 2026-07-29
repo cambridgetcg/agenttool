@@ -85,9 +85,9 @@ export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
   },
   {
     name: "@agenttool/credential-broker",
-    version: "0.2.0",
+    version: "0.3.0",
     packagePath: "packages/credential-broker",
-    releaseTag: "credential-broker-v0.2.0",
+    releaseTag: "credential-broker-v0.3.0",
     buildCommands: [["bun", "run", "ci"]],
   },
   {
@@ -151,6 +151,13 @@ export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
     version: "0.3.0",
     packagePath: "packages/browser",
     releaseTag: "browser-v0.3.0",
+    buildCommands: [["bun", "run", "ci"]],
+  },
+  {
+    name: "@agenttool/browser",
+    version: "0.5.0",
+    packagePath: "packages/browser",
+    releaseTag: "browser-v0.5.0",
     buildCommands: [["bun", "run", "ci"]],
   },
 ] as const;

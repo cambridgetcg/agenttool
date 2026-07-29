@@ -17,4 +17,14 @@ describe("published Node runtime surface", () => {
     expect(result.stdout.toString()).toBe("");
     expect(result.stderr.toString()).toBe("");
   });
+
+  test("both built CLI entrypoints start under supported Node", () => {
+    const cwd = new URL("..", import.meta.url).pathname;
+    for (const entrypoint of ["./dist/cli.js", "./dist/controller-cli.js"]) {
+      const result = Bun.spawnSync(["node", entrypoint], { cwd });
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout.toString()).toBe("");
+      expect(result.stderr.toString()).toStartWith("usage:");
+    }
+  });
 });

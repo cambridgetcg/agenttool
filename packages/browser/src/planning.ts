@@ -3,7 +3,7 @@ import { redactUrlForOutput } from "./policy.js";
 import type { BrowserAction } from "./types.js";
 
 export const BROWSER_CONSEQUENCE_PLAN_SCHEMA =
-  "agent-browser-consequence-plan/0.1" as const;
+  "agent-browser-consequence-plan/0.2" as const;
 
 export type BrowserPossibleEffect =
   | "external_read_intent"
@@ -21,6 +21,7 @@ export interface BrowserConsequencePlan {
     kind: BrowserAction["kind"];
     tabId?: string;
     snapshotId?: string;
+    basisSnapshotId?: string;
     ref?: string;
     url?: string;
   };
@@ -78,6 +79,9 @@ function summarizeAction(
       ? { snapshotId: action.snapshotId }
       : {}),
     ...("ref" in action && action.ref ? { ref: action.ref } : {}),
+    ...("basisSnapshotId" in action && action.basisSnapshotId
+      ? { basisSnapshotId: action.basisSnapshotId }
+      : {}),
   };
   if (
     (action.kind === "navigate" || action.kind === "new_tab")

@@ -5,6 +5,7 @@ import { AgentCredError } from "./errors.js";
 import type { ReservedGrant } from "./grants.js";
 import { isPublicAddress, systemResolver } from "./network.js";
 import { pathWithinPrefix } from "./policy.js";
+import { copyAndWipeSecretChunk } from "./secret-buffers.js";
 import type {
   BrokerHttpRequest,
   BrokerHttpResponse,
@@ -176,13 +177,15 @@ export class NodeHttpsTransport implements OutboundTransport {
           }
           let size = 0;
           response.on("data", (chunk: Buffer) => {
-            size += chunk.byteLength;
+            const copy = copyAndWipeSecretChunk(chunk);
+            size += copy.byteLength;
             if (size > input.maxResponseBytes) {
+              copy.fill(0);
               response.destroy();
               fail(new AgentCredError("response_too_large", "Response exceeds the grant limit."));
               return;
             }
-            chunks.push(Buffer.from(chunk));
+            chunks.push(copy);
           });
           response.once("error", () => fail(new AgentCredError("request_failed", "Upstream response failed.")));
           response.once("end", () => {

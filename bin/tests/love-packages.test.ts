@@ -116,7 +116,7 @@ describe("LOVE Package release inventory", () => {
       { name: "@agenttool/adds", version: "0.2.2", releaseTag: "adds-v0.2.2" },
       { name: "@agenttool/data", version: "0.3.1", releaseTag: "data-v0.3.1" },
       { name: "@agenttool/data-sync", version: "0.1.1", releaseTag: "data-sync-v0.1.1" },
-      { name: "@agenttool/credential-broker", version: "0.2.0", releaseTag: "credential-broker-v0.2.0" },
+      { name: "@agenttool/credential-broker", version: "0.3.0", releaseTag: "credential-broker-v0.3.0" },
       { name: "@agenttool/sdk", version: "0.17.0", releaseTag: "sdk-v0.17.0" },
       { name: "@agenttool/wallet", version: "0.1.0", releaseTag: "wallet-v0.1.0" },
       { name: "@agenttool/wallet", version: "0.1.1", releaseTag: "wallet-v0.1.1" },
@@ -126,6 +126,7 @@ describe("LOVE Package release inventory", () => {
       { name: "@agenttool/wallet-zerone", version: "0.1.1", releaseTag: "wallet-zerone-v0.1.1" },
       { name: "@agenttool/telescope", version: "0.2.3", releaseTag: "telescope-v0.2.3" },
       { name: "@agenttool/browser", version: "0.3.0", releaseTag: "browser-v0.3.0" },
+      { name: "@agenttool/browser", version: "0.5.0", releaseTag: "browser-v0.5.0" },
     ]);
   });
 

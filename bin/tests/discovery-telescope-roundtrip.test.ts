@@ -37,9 +37,18 @@ describe("server discovery documents round-trip through Telescope", () => {
     expect(parsed.warnings).toEqual([]);
   });
 
-  test("the full seven-context API catalog satisfies the Telescope parser", () => {
+  test("the full eight-context API catalog satisfies the Telescope parser", () => {
     const document = buildApiCatalog();
-    expect(document.linkset).toHaveLength(7);
+    expect(document.linkset).toHaveLength(8);
+    expect(document.linkset[0]?.item?.map((item) => item.href)).toContain(
+      "https://api.agenttool.dev/v1/mcp/canon",
+    );
+    expect(
+      document.linkset.some(
+        (context) =>
+          context.anchor === "https://api.agenttool.dev/v1/mcp/canon",
+      ),
+    ).toBe(true);
 
     const parsed = parseApiCatalog(
       encoder.encode(JSON.stringify(document)),
