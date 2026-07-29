@@ -185,6 +185,8 @@ export interface AuditEvent {
   receiptId?: string;
   event: "grant.allowed" | "grant.denied" | "grant.revoked" | "use.completed" | "use.denied";
   credential?: string;
+  /** Random controller generation ID from the broker's startup snapshot. */
+  credentialGenerationId?: string;
   operation?: "http.fetch" | "jsonrpc.read";
   targetOrigin?: string;
   targetPathHash?: string;

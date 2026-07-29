@@ -21,6 +21,24 @@ envelope, batch, notification, or state-changing method as a shortcut.
 - Preserve exact HTTPS origin, method, segment-aware path, query-name, header,
   DNS/address, TLS, redirect, body-size, TTL, and use-count checks. Scope may be
   narrowed, never widened.
+- Keep `agentcred-control` separate from the agent wire and SDK. It may invoke
+  only fixed Keychain/controller operations from an interactive TTY; never
+  accept a value, stdin/pipe, environment name, provider-action/Keychain URL,
+  command, prefix, or generic executable. Verification origin/path arguments
+  are non-secret metadata and must never contain a credential. TTY is
+  anti-pipe only, not human identity or consent.
+- Managed Keychain slots are resolved once while the broker holds their
+  lifecycle locks. Stage, cutover, rollback, and deletion remain offline
+  controller operations so an issued grant cannot silently change generation.
+- A managed generation identifies a slot reference, not immutable secret
+  bytes. Preserve that limitation and the quarantined selector states.
+- Remote revocation intent and local deletion must be durable before their
+  respective side effects. Preserve retryable `*_pending`/`deleting_*` states,
+  exact generation/profile evidence, closure-chain validation, and archive
+  anchoring.
+- Rotation receipts contain metadata IDs only. Human drain/revocation
+  attestations and HTTP status evidence are not universal provider proof; keep
+  that limitation explicit and require provider-specific semantics.
 - Keep preview limitations honest. Socket mode bits alone do not authenticate a
   same-user process, exact-byte redaction is not information-flow control, and
   the Node reference server is not the strong native profile.

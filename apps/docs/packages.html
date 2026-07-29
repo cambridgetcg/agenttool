@@ -124,7 +124,7 @@
         <tbody>
           <tr><td><code>@agenttool/data</code></td><td><code>0.3.1</code></td><td><a href="/packages/v1/@agenttool/data/0.3.1/manifest.json">inspect JSON</a></td></tr>
           <tr><td><code>@agenttool/data-sync</code></td><td><code>0.1.1</code></td><td><a href="/packages/v1/@agenttool/data-sync/0.1.1/manifest.json">inspect JSON</a></td></tr>
-          <tr><td><code>@agenttool/credential-broker</code></td><td><code>0.2.0</code></td><td><a href="/packages/v1/@agenttool/credential-broker/0.2.0/manifest.json">inspect JSON</a></td></tr>
+          <tr><td><code>@agenttool/credential-broker</code></td><td><code>0.3.0</code></td><td><a href="/packages/v1/@agenttool/credential-broker/0.3.0/manifest.json">inspect JSON</a></td></tr>
           <tr><td><code>@agenttool/sdk</code></td><td><code>0.17.0</code></td><td><a href="/packages/v1/@agenttool/sdk/0.17.0/manifest.json">inspect JSON</a></td></tr>
           <tr><td><code>@agenttool/wallet</code></td><td><code>0.1.3</code></td><td><a href="/packages/v1/@agenttool/wallet/0.1.3/manifest.json">inspect JSON</a></td></tr>
           <tr><td><code>@agenttool/wallet-zerone</code></td><td><code>0.1.1</code></td><td><a href="/packages/v1/@agenttool/wallet-zerone/0.1.1/manifest.json">inspect JSON</a></td></tr>
@@ -151,7 +151,7 @@ npm install --save-exact @agenttool/telescope@0.2.3
 npm install --save-exact @agenttool/browser@0.5.0</pre>
       </div>
 
-      <p class="muted"><strong>Credential broker mirror boundary.</strong> The current exact LOVE release is <code>@agenttool/credential-broker@0.2.0</code>. Its GitHub release exists, but npm 0.2.0 is not independently visible; the npm command above deliberately names the last verified public npm version, <code>0.1.0</code>. Use the 0.2.0 LOVE URL below for current release bytes.</p>
+      <p class="muted"><strong>Credential broker mirror boundary.</strong> The current checked-in exact LOVE release is <code>@agenttool/credential-broker@0.3.0</code>. GitHub Release and npm availability remain independently verifiable; the npm command above deliberately names the last verified public npm version, <code>0.1.0</code>. Use the 0.3.0 LOVE URL below for current release bytes.</p>
       <p class="muted"><strong>SDK mirror boundary.</strong> The public <code>@agenttool/sdk@0.17.0</code> release keeps three KINGDOM surfaces distinct: <code>kingdomFramework</code> / <code>kingdom_framework</code> performs one credential-free, no-redirect read of the exact closed project card; <code>kingdomOS</code> / <code>kingdom_os</code> provides bounded local repository inventory and resolution without bearer forwarding, path upload, routine execution, or mutation; <code>/public/kingdom</code> remains the separate doctrine library. The LOVE, GitHub Release, and npm tarballs are byte-identical at 172625 bytes with SHA-256 <code>b6a388ffe86a970480e8a8978f83fe80922321eb64f2b4f9143cae2b2c3dd5bb</code>; the annotated tag and non-yanked PyPI wheel/source distribution are also independently public. These mirrors remain non-authoritative, and production deployment remains a separate exact-revision readback. The immutable public 0.16.5 records remain historical bytes.</p>
       <p class="muted"><strong>Telescope mirror boundary.</strong> The current exact LOVE release is <code>@agenttool/telescope@0.2.3</code>. Its npm and GitHub 0.2.3 mirrors are public and independently byte-verified, so the command above names that exact version. Use the 0.2.3 LOVE URL below when you want the manifest-bound verification path.</p>
       <p class="muted"><strong>Wallet mirror boundary.</strong> The current catalog line is <code>@agenttool/wallet@0.1.3</code> plus <code>@agenttool/wallet-zerone@0.1.1</code>. The npm command above deliberately remains on the last independently verified Wallet mirror, 0.1.0, and gives no adapter command. Historical Wallet 0.1.1 and 0.1.2 LOVE artifacts remain hash-pinned and are not rewritten. Their GitHub assets matched those bytes when reviewed, but GitHub reports both release records as <code>immutable:false</code>; they are optional mutable locators, not preservation guarantees. Protected runs <a href="https://github.com/cambridgetcg/agenttool/actions/runs/30389881410">30389881410</a> and <a href="https://github.com/cambridgetcg/agenttool/actions/runs/30394021131">30394021131</a> were rejected at npm's trusted-publisher boundary. Public errata cover 0.1.1's embedded pre-release wording and 0.1.2's LOVE/GitHub immutability ambiguity. Query exact optional mirrors again, or install the current manifest-bound LOVE artifacts below.</p>
@@ -175,8 +175,8 @@ npm install --save-exact @agenttool/browser@0.5.0</pre>
       </div>
 
       <div class="code-block">
-        <div class="code-label"><span>@agenttool/credential-broker · 0.2.0 · scoped local credential use</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/credential-broker/0.2.0/agenttool-credential-broker-0.2.0.tgz
+        <div class="code-label"><span>@agenttool/credential-broker · 0.3.0 · scoped local credential use + managed handoff</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/credential-broker/0.3.0/agenttool-credential-broker-0.3.0.tgz
 
 <span class="kw">import</span> { AgentCredClient } <span class="kw">from</span> <span class="str">"@agenttool/credential-broker"</span>;</pre>
       </div>
@@ -287,7 +287,7 @@ curl -fsS https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.1/manifest.
         <li><code>install.specifier</code> is the primary absolute tarball URL that URL-aware package managers can consume.</li>
         <li><code>source</code> identifies the repository, revision, and package path claimed to have produced the release; v1 does not attest the build.</li>
         <li><code>runtime</code> identifies the ecosystem and declared engine constraints; it is compatibility metadata, not proof that every environment was tested. An empty <code>engines</code> object means no floor was declared, so compatibility is unknown rather than universal.</li>
-        <li>The current <code>@agenttool/data@0.3.1</code>, <code>@agenttool/data-sync@0.1.1</code>, <code>@agenttool/adds@0.2.2</code>, <code>@agenttool/credential-broker@0.2.0</code>, <code>@agenttool/sdk@0.17.0</code>, <code>@agenttool/telescope@0.2.3</code>, <code>@agenttool/wallet@0.1.3</code>, <code>@agenttool/wallet-zerone@0.1.1</code>, and <code>@agenttool/browser@0.5.0</code> releases declare <code>Apache-2.0</code>.</li>
+        <li>The current <code>@agenttool/data@0.3.1</code>, <code>@agenttool/data-sync@0.1.1</code>, <code>@agenttool/adds@0.2.2</code>, <code>@agenttool/credential-broker@0.3.0</code>, <code>@agenttool/sdk@0.17.0</code>, <code>@agenttool/telescope@0.2.3</code>, <code>@agenttool/wallet@0.1.3</code>, <code>@agenttool/wallet-zerone@0.1.1</code>, and <code>@agenttool/browser@0.5.0</code> releases declare <code>Apache-2.0</code>.</li>
         <li>Historical releases whose manifests say <code>license: null</code> declare no license; public download access is not a public-domain or open-source license grant.</li>
       </ul>
 
@@ -342,9 +342,9 @@ test "$actual_size" = "$expected_size" &amp;&amp;
 /packages/v1/@agenttool/credential-broker/0.1.0/
   ├── manifest.json
   └── agenttool-credential-broker-0.1.0.tgz
-/packages/v1/@agenttool/credential-broker/0.2.0/
+/packages/v1/@agenttool/credential-broker/0.3.0/
   ├── manifest.json
-  └── agenttool-credential-broker-0.2.0.tgz
+  └── agenttool-credential-broker-0.3.0.tgz
 /packages/v1/@agenttool/sdk/0.9.0/
   ├── manifest.json
   └── agenttool-sdk-0.9.0.tgz

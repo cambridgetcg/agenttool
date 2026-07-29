@@ -5,6 +5,7 @@ import {
   PolicyConsent,
   type BrokerPolicy,
 } from "../src/index.js";
+import { parseBrokerConfig } from "../src/config.js";
 import { normalizeGrantRequest } from "../src/policy.js";
 import { grantRequest, jsonRpcReadGrantRequest } from "./helpers.js";
 
@@ -71,6 +72,49 @@ function jsonRpcRequest(scope: Record<string, unknown> = {}) {
 }
 
 describe("owner policy containment", () => {
+  test("uses one bounded restricted credential-alias profile in config and policy", () => {
+    const configFor = (credential: string): Record<string, unknown> => ({
+      socketPath: "/tmp/agentcred-test.sock",
+      auditPath: "/tmp/agentcred-test-audit.jsonl",
+      credentials: Object.fromEntries([
+        [
+          credential,
+          {
+            backend: "macos-keychain",
+            service: "agentcred-test",
+            account: "test-owner",
+            auth: { kind: "bearer" },
+          },
+        ],
+      ]),
+      policies: [{ ...OWNER_POLICY, credential }],
+    });
+    const maximum = `a${"b".repeat(127)}`;
+    expect(
+      Object.keys(parseBrokerConfig(configFor(maximum)).credentials),
+    ).toEqual([maximum]);
+    expect(
+      () => new PolicyConsent([{ ...OWNER_POLICY, credential: maximum }]),
+    ).not.toThrow();
+
+    for (const invalid of [
+      `a${"b".repeat(128)}`,
+      "",
+      "-leading",
+      "has space",
+      "has?query",
+      "line\nbreak",
+      "unicode-\u00b5",
+    ]) {
+      expect(() => parseBrokerConfig(configFor(invalid))).toThrow(
+        "credential alias",
+      );
+      expect(
+        () => new PolicyConsent([{ ...OWNER_POLICY, credential: invalid }]),
+      ).toThrow("Owner policy");
+    }
+  });
+
   test("accepts an equal-or-narrower scope", async () => {
     const consent = new PolicyConsent([OWNER_POLICY]);
     await expect(consent.decide(request())).resolves.toEqual({ allowed: true });

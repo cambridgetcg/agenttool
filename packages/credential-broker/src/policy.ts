@@ -17,6 +17,7 @@ import {
   normalizeEvmChainId,
   normalizeEvmJsonRpcReadMethods,
 } from "./jsonrpc-validation.js";
+import { isCredentialAlias } from "./identifiers.js";
 
 export interface HttpBrokerPolicy {
   /** Omitted remains equivalent to the original agentcred/0.1 HTTP policy. */
@@ -268,10 +269,8 @@ function jsonRpcScopeFits(
 function policyCommonIsValid(policy: BrokerPolicy): boolean {
   return (
     Boolean(policy) &&
-    typeof policy.credential === "string" &&
+    isCredentialAlias(policy.credential) &&
     typeof policy.origin === "string" &&
-    Boolean(policy.credential.trim()) &&
-    policy.credential.length <= 256 &&
     policy.origin.length <= 2048 &&
     Number.isSafeInteger(policy.maxTtlSeconds) &&
     policy.maxTtlSeconds >= 1 &&

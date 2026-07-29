@@ -21,6 +21,7 @@ import {
   validateEvmJsonRpcReadCall,
   validateEvmJsonRpcReadRequestBytes,
 } from "./jsonrpc-validation.js";
+import { isCredentialAlias } from "./identifiers.js";
 import { normalizeGrantRequest } from "./policy.js";
 import type {
   AgentCredExtension,
@@ -68,6 +69,11 @@ export interface BrokerServerOptions {
   /** Defaults to fail-closed after the first audit-sink failure. */
   auditFailureMode?: "fail-closed" | "fail-open";
   onAuditFailure?: () => void;
+  /**
+   * Optional metadata-only alias-to-generation snapshot. The portable CLI
+   * freezes managed Keychain slots at startup and binds this ID into audit.
+   */
+  credentialGenerationIds?: Readonly<Record<string, string>>;
   /** Native hosts return OS-observed identity, or false to deny the peer. */
   authorizePeer?: (
     socket: Socket,
@@ -87,6 +93,8 @@ interface SessionState {
 }
 
 const SAFE_CONSENT_REASON_CODE = /^[a-z][a-z0-9_]{0,63}$/;
+const SAFE_GENERATION_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 function inspectConsentDecision(value: unknown): {
   allowed: boolean;
@@ -242,7 +250,39 @@ export class BrokerServer {
     ) {
       throw new AgentCredError("invalid_request", "Broker auditFailureMode is invalid.");
     }
-    this.#options = options;
+    let generationIds: Readonly<Record<string, string>> | undefined;
+    if (options.credentialGenerationIds !== undefined) {
+      if (
+        !options.credentialGenerationIds ||
+        typeof options.credentialGenerationIds !== "object" ||
+        Array.isArray(options.credentialGenerationIds)
+      ) {
+        throw new AgentCredError(
+          "invalid_request",
+          "Broker credential generation metadata is invalid.",
+        );
+      }
+      const normalized = Object.create(null) as Record<string, string>;
+      for (const [alias, generationId] of Object.entries(
+        options.credentialGenerationIds,
+      )) {
+        if (
+          !isCredentialAlias(alias) ||
+          !SAFE_GENERATION_ID.test(generationId)
+        ) {
+          throw new AgentCredError(
+            "invalid_request",
+            "Broker credential generation metadata is invalid.",
+          );
+        }
+        normalized[alias] = generationId;
+      }
+      generationIds = Object.freeze(normalized);
+    }
+    this.#options = {
+      ...options,
+      ...(generationIds ? { credentialGenerationIds: generationIds } : {}),
+    };
     this.#clock = options.clock ?? systemClock;
     this.#grants = new GrantStore(this.#clock);
   }
@@ -258,6 +298,19 @@ export class BrokerServer {
     ) {
       throw new AgentCredError("scope_denied", "Active grant quota is exhausted.");
     }
+  }
+
+  #generationMetadata(
+    credential: string,
+  ): { credentialGenerationId: string } | Record<string, never> {
+    const values = this.#options.credentialGenerationIds;
+    const generationId =
+      values && Object.hasOwn(values, credential)
+        ? values[credential]
+        : undefined;
+    return generationId
+      ? { credentialGenerationId: generationId }
+      : {};
   }
 
   async start(): Promise<string> {
@@ -519,6 +572,7 @@ export class BrokerServer {
             ...(state.peer ? { peerId: state.peer.id } : {}),
             event: "grant.denied",
             credential: grantRequest.credential,
+            ...this.#generationMetadata(grantRequest.credential),
             operation: grantRequest.operation,
             targetOrigin: grantRequest.scope.origin,
             ...(grantRequest.operation === "jsonrpc.read"
@@ -540,6 +594,7 @@ export class BrokerServer {
           receiptId: issued.receipt.receiptId,
           event: "grant.allowed",
           credential: grantRequest.credential,
+          ...this.#generationMetadata(grantRequest.credential),
           operation: grantRequest.operation,
           targetOrigin: grantRequest.scope.origin,
           ...(grantRequest.operation === "jsonrpc.read"
@@ -602,6 +657,7 @@ export class BrokerServer {
             receiptId: inspected.receipt.receiptId,
             event: "use.denied",
             credential: inspected.request.credential,
+            ...this.#generationMetadata(inspected.request.credential),
             operation: "jsonrpc.read",
             chainId: inspected.request.scope.chainId,
             durationMs: this.#clock.monotonicNowMs() - started,
@@ -630,6 +686,7 @@ export class BrokerServer {
             receiptId: reserved.receipt.receiptId,
             event: "use.completed",
             credential: reserved.request.credential,
+            ...this.#generationMetadata(reserved.request.credential),
             operation: "jsonrpc.read",
             targetOrigin: inspected.request.scope.origin,
             targetPathHash: hashTargetPath(EVM_JSONRPC_READ_PATH),
@@ -663,6 +720,7 @@ export class BrokerServer {
             receiptId: reserved.receipt.receiptId,
             event: "use.denied",
             credential: reserved.request.credential,
+            ...this.#generationMetadata(reserved.request.credential),
             operation: "jsonrpc.read",
             rpcMethod: rpcRequest.method,
             chainId: rpcRequest.chainId,
@@ -690,6 +748,7 @@ export class BrokerServer {
           receiptId: inspected.receipt.receiptId,
           event: "use.denied",
           credential: inspected.request.credential,
+          ...this.#generationMetadata(inspected.request.credential),
           operation: "http.fetch",
           method: httpRequest.method,
           durationMs: this.#clock.monotonicNowMs() - started,
@@ -714,6 +773,7 @@ export class BrokerServer {
           receiptId: reserved.receipt.receiptId,
           event: "use.completed",
           credential: reserved.request.credential,
+          ...this.#generationMetadata(reserved.request.credential),
           operation: "http.fetch",
           targetOrigin: target.origin,
           targetPathHash: hashTargetPath(target.pathname),
@@ -736,6 +796,7 @@ export class BrokerServer {
           receiptId: reserved.receipt.receiptId,
           event: "use.denied",
           credential: reserved.request.credential,
+          ...this.#generationMetadata(reserved.request.credential),
           operation: "http.fetch",
           method: httpRequest.method,
           durationMs: this.#clock.monotonicNowMs() - started,
