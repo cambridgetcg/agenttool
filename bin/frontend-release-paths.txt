@@ -1,0 +1,12 @@
+# Exact repository roots included in a committed Cloudflare Pages release.
+# One normalized repository-relative path per line; no shell syntax.
+apps/_shared
+apps/docs
+apps/dashboard
+apps/web
+docs
+infra/pages
+packages/data/schema
+packages/repo-archive/schema
+packages/repo-archive/vectors
+packages/wallet/schema

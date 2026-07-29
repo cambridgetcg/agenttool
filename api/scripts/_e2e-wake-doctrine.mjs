@@ -22,6 +22,8 @@
 //   AGENTTOOL_API_KEY=$(bin/agenttool-secret get agenttool-soma-bearer) \
 //     node api/scripts/_e2e-wake-doctrine.mjs
 
+import { isJsonMediaType } from "./_e2e-http.mjs";
+
 const BASE = process.env.AGENTTOOL_BASE;
 const KEY = process.env.AGENTTOOL_API_KEY;
 const VERBOSE = process.env.VERBOSE === "1";
@@ -48,7 +50,7 @@ async function get(path, opts = {}) {
   return {
     status: res.status,
     headers: Object.fromEntries(res.headers.entries()),
-    body: res.headers.get("content-type")?.includes("application/json")
+    body: isJsonMediaType(res.headers.get("content-type"))
       ? await res.json()
       : await res.text(),
     ms,

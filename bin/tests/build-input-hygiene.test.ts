@@ -1,5 +1,16 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, readlink, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  readlink,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -7,9 +18,14 @@ import { pathToFileURL } from "node:url";
 const repoRoot = resolve(import.meta.dir, "../..");
 const cleanup: string[] = [];
 
-async function run(command: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+async function run(
+  command: string[],
+  cwd = repoRoot,
+  env?: Record<string, string>,
+): Promise<{ code: number; stdout: string; stderr: string }> {
   const child = Bun.spawn(command, {
-    cwd: repoRoot,
+    cwd,
+    ...(env ? { env } : {}),
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -56,13 +72,34 @@ describe("Fly API build inputs", () => {
 describe("frontend deploy input discipline", () => {
   test("pins Wrangler and runs a read-only love-source gate", async () => {
     const scriptPath = join(repoRoot, "bin/frontend-deploy.sh");
-    const script = await readFile(scriptPath, "utf8");
-    const syntax = await run(["bash", "-n", scriptPath]);
+    const stagePath = join(repoRoot, "bin/stage-frontend-release.sh");
+    const manifestPath = join(repoRoot, "bin/frontend-release-paths.txt");
+    const [script, stageScript, manifest] = await Promise.all([
+      readFile(scriptPath, "utf8"),
+      readFile(stagePath, "utf8"),
+      readFile(manifestPath, "utf8"),
+    ]);
+    const syntaxResults = await Promise.all(
+      [scriptPath, stagePath].map((path) => run(["bash", "-n", path])),
+    );
 
-    expect(syntax.code).toBe(0);
+    for (const syntax of syntaxResults) {
+      expect(syntax.code, syntax.stderr).toBe(0);
+    }
     expect(script).toContain('readonly WRANGLER_VERSION="4.110.0"');
     expect(script).toContain('npx --yes "wrangler@${WRANGLER_VERSION}" "$@"');
     expect(script).not.toContain("wrangler@latest");
+    expect(script).toContain('command curl -q "$@"');
+    expect(script.match(/frontend_curl -fsS/g)).toHaveLength(2);
+    expect(
+      script
+        .split("\n")
+        .filter(
+          (line) =>
+            /\bcurl(?:\s|$)/.test(line) &&
+            !line.trimStart().startsWith("#"),
+        ),
+    ).toEqual(['  command curl -q "$@"']);
     expect(script).toContain("python3 bin/heal-love-truths.py --check");
     expect(script).toContain('readonly KEYCHAIN_ACCOUNT="macair"');
     expect(script).toContain('CF_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"');
@@ -86,13 +123,37 @@ describe("frontend deploy input discipline", () => {
     expect(script.indexOf("wrangler whoami")).toBeGreaterThan(
       script.indexOf('elif [[ "$OAUTH_FALLBACK" = 1 ]]'),
     );
-    expect(script).toContain('git archive --format=tar "$COMMIT_HASH" --');
     expect(script).toContain(
-      "apps/_shared apps/docs apps/dashboard apps/web docs infra/pages packages/data/schema",
+      'PINNED_RELEASE_REVISION="${AGENTTOOL_FRONTEND_RELEASE_REVISION:-}"',
     );
     expect(script).toContain(
-      "packages/repo-archive/schema packages/repo-archive/vectors packages/wallet/schema",
+      'git rev-parse --verify "${PINNED_RELEASE_REVISION}^{commit}"',
     );
+    expect(script).toContain(
+      'if [[ "$COMMIT_HASH" != "$PINNED_RELEASE_REVISION" ]]',
+    );
+    expect(script).toContain(
+      'bin/stage-frontend-release.sh "$COMMIT_HASH" "$STAGE_ROOT"',
+    );
+    expect(stageScript).toContain('git show "$REVISION:$MANIFEST_PATH"');
+    expect(stageScript).toContain('git archive --format=tar "$REVISION" --');
+    expect(stageScript).toContain('"${FRONTEND_RELEASE_ARCHIVE_PATHS[@]}"');
+    expect(
+      manifest
+        .split("\n")
+        .filter((line) => line !== "" && !line.startsWith("#")),
+    ).toEqual([
+      "apps/_shared",
+      "apps/docs",
+      "apps/dashboard",
+      "apps/web",
+      "docs",
+      "infra/pages",
+      "packages/data/schema",
+      "packages/repo-archive/schema",
+      "packages/repo-archive/vectors",
+      "packages/wallet/schema",
+    ]);
     expect(script).toContain("find \"$STAGE_ROOT/apps\" \\( -type f -o -type l \\) -name '.gitignore' -delete");
     expect(script).toContain("A tracked Pages environment file reached the staging tree");
     expect(script).toContain("-name '.dev.vars.*'");
@@ -103,7 +164,7 @@ describe("frontend deploy input discipline", () => {
     expect(script).toContain("exceeds Cloudflare Pages' $PAGES_HEADERS_MAX_LINE_CHARS-character limit");
     expect(script).toContain('cp "$PAGES_FENCE_DIR/sensitive-path-worker.js" "$STAGE_ROOT/apps/$app/_worker.js"');
     expect(script).toContain('cp "$PAGES_FENCE_DIR/sensitive-path-routes.json" "$STAGE_ROOT/apps/$app/_routes.json"');
-    expect(script).toContain("staged symlink escapes or is broken");
+    expect(stageScript).toContain("escapes, is broken, or is cyclic");
     expect(script).toContain('source_dir="$STAGE_ROOT/$dir"');
     expect(script).toContain('verify_pages_project_policy "$proj" || exit 1');
     expect(script).toContain("python3 bin/verify-pages-project-policy.py");
@@ -123,6 +184,310 @@ describe("frontend deploy input discipline", () => {
       .filter((line) => line.includes("heal-love-truths.py") && line.includes("--write"));
     expect(executableWriteCalls).toEqual([]);
   });
+
+  test("archives an orchestrator-pinned commit even when the worktree HEAD differs", async () => {
+    const fixtureRoot = await mkdtemp(join(tmpdir(), "agenttool-pages-pin-"));
+    const fixtureRepo = join(fixtureRoot, "repo");
+    const fakeBin = join(fixtureRoot, "bin");
+    const wranglerLog = join(fixtureRoot, "wrangler.log");
+    cleanup.push(fixtureRoot);
+
+    let result = await run(
+      ["git", "clone", "-q", "--shared", repoRoot, fixtureRepo],
+    );
+    expect(result.code, result.stderr).toBe(0);
+    for (const command of [
+      ["git", "config", "user.name", "Frontend Pin Test"],
+      ["git", "config", "user.email", "frontend-pin@example.invalid"],
+      ["git", "config", "commit.gpgsign", "false"],
+    ]) {
+      result = await run(command, fixtureRepo);
+      expect(result.code, result.stderr).toBe(0);
+    }
+    await Promise.all([
+      copyFile(
+        join(repoRoot, "bin/frontend-deploy.sh"),
+        join(fixtureRepo, "bin/frontend-deploy.sh"),
+      ),
+      copyFile(
+        join(repoRoot, "bin/stage-frontend-release.sh"),
+        join(fixtureRepo, "bin/stage-frontend-release.sh"),
+      ),
+      copyFile(
+        join(repoRoot, "bin/frontend-release-paths.txt"),
+        join(fixtureRepo, "bin/frontend-release-paths.txt"),
+      ),
+    ]);
+    await Promise.all([
+      chmod(join(fixtureRepo, "bin/frontend-deploy.sh"), 0o755),
+      chmod(join(fixtureRepo, "bin/stage-frontend-release.sh"), 0o755),
+    ]);
+
+    const partyPath = join(fixtureRepo, "apps/web/party.html");
+    await writeFile(partyPath, "pinned frontend fixture A\n");
+    result = await run(
+      [
+        "git",
+        "add",
+        "apps/web/party.html",
+        "bin/frontend-deploy.sh",
+        "bin/stage-frontend-release.sh",
+        "bin/frontend-release-paths.txt",
+      ],
+      fixtureRepo,
+    );
+    expect(result.code, result.stderr).toBe(0);
+    result = await run(["git", "commit", "-qm", "frontend fixture A"], fixtureRepo);
+    expect(result.code, result.stderr).toBe(0);
+    result = await run(["git", "rev-parse", "HEAD"], fixtureRepo);
+    expect(result.code, result.stderr).toBe(0);
+    const pinnedRevision = result.stdout.trim();
+
+    await writeFile(partyPath, "ambient frontend fixture B\n");
+    const manifestPath = join(fixtureRepo, "bin/frontend-release-paths.txt");
+    const ambientManifest = (await readFile(manifestPath, "utf8"))
+      .split("\n")
+      .filter((line) => line !== "apps/web")
+      .join("\n");
+    await writeFile(manifestPath, ambientManifest);
+    result = await run(
+      ["git", "add", "apps/web/party.html", "bin/frontend-release-paths.txt"],
+      fixtureRepo,
+    );
+    expect(result.code, result.stderr).toBe(0);
+    result = await run(["git", "commit", "-qm", "frontend fixture B"], fixtureRepo);
+    expect(result.code, result.stderr).toBe(0);
+    expect(await readFile(manifestPath, "utf8")).not.toMatch(/^apps\/web$/m);
+
+    await mkdir(fakeBin);
+    await Bun.write(
+      join(fakeBin, "curl"),
+      `#!/usr/bin/env bash
+set -eu
+case "$*" in
+  *user/tokens/verify*) printf '{"success":true}\\n' ;;
+  *pages/projects/*)
+    printf '{"success":true,"result":{"production_branch":"main","deployment_configs":{"production":{"fail_open":false},"preview":{"fail_open":false}}}}\\n'
+    ;;
+  *) exit 2 ;;
+esac
+`,
+    );
+    await Bun.write(
+      join(fakeBin, "npx"),
+      `#!/usr/bin/env bash
+set -eu
+printf '%s\\n' "$*" > "$DEPLOY_TEST_WRANGLER_LOG"
+source_dir=""
+for arg in "$@"; do
+  case "$arg" in */apps/web) source_dir="$arg" ;; esac
+done
+[ -n "$source_dir" ]
+grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_WRANGLER_LOG"
+`,
+    );
+    await Promise.all([
+      chmod(join(fakeBin, "curl"), 0o755),
+      chmod(join(fakeBin, "npx"), 0o755),
+    ]);
+
+    const fixtureHome = join(fixtureRoot, "home");
+    await mkdir(fixtureHome);
+    const commandPath =
+      process.env.PATH ?? "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin";
+    result = await run(
+      ["bash", "bin/frontend-deploy.sh", "web"],
+      fixtureRepo,
+      {
+        PATH: `${fakeBin}:${commandPath}`,
+        HOME: fixtureHome,
+        TMPDIR: fixtureRoot,
+        LANG: "C",
+        LC_ALL: "C",
+        NO_COLOR: "1",
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        CLOUDFLARE_API_TOKEN: "fixture-token",
+        CLOUDFLARE_ACCOUNT_ID: "fixture-account",
+        AGENTTOOL_FRONTEND_RELEASE_REVISION: pinnedRevision,
+        DEPLOY_TEST_WRANGLER_LOG: wranglerLog,
+      },
+    );
+
+    expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain(
+      `Pages input is pinned release commit ${pinnedRevision}`,
+    );
+    const wrangler = await readFile(wranglerLog, "utf8");
+    expect(wrangler).toContain(`--commit-hash=${pinnedRevision}`);
+    expect(wrangler).toContain("pinned frontend fixture A");
+    expect(wrangler).not.toContain("ambient frontend fixture B");
+  }, 15_000);
+
+  test("rejects unsafe committed frontend archive manifests before extraction", async () => {
+    const fixtureRoot = await mkdtemp(join(tmpdir(), "agenttool-pages-manifest-"));
+    const fixtureRepo = join(fixtureRoot, "repo");
+    cleanup.push(fixtureRoot);
+    await mkdir(join(fixtureRepo, "bin"), { recursive: true });
+
+    let result = await run(["git", "init", "-q", "-b", "main"], fixtureRepo);
+    expect(result.code, result.stderr).toBe(0);
+    for (const command of [
+      ["git", "config", "user.name", "Frontend Manifest Test"],
+      ["git", "config", "user.email", "frontend-manifest@example.invalid"],
+      ["git", "config", "commit.gpgsign", "false"],
+    ]) {
+      result = await run(command, fixtureRepo);
+      expect(result.code, result.stderr).toBe(0);
+    }
+    await copyFile(
+      join(repoRoot, "bin/stage-frontend-release.sh"),
+      join(fixtureRepo, "bin/stage-frontend-release.sh"),
+    );
+    await chmod(join(fixtureRepo, "bin/stage-frontend-release.sh"), 0o755);
+
+    const scenarios = [
+      { name: "leading-dot", manifest: "./apps/web\n", error: "Unsafe path" },
+      { name: "parent", manifest: "../outside\n", error: "Unsafe path" },
+      { name: "absolute", manifest: "/tmp/outside\n", error: "Unsafe path" },
+      { name: "double-slash", manifest: "apps//web\n", error: "Unsafe path" },
+      { name: "dot-dot", manifest: "apps/../web\n", error: "Unsafe path" },
+      { name: "trailing-slash", manifest: "apps/web/\n", error: "Unsafe path" },
+      { name: "option", manifest: "-apps/web\n", error: "Unsafe path" },
+      {
+        name: "duplicate",
+        manifest: "apps/web\napps/web\n",
+        error: "Duplicate path",
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      await writeFile(
+        join(fixtureRepo, "bin/frontend-release-paths.txt"),
+        scenario.manifest,
+      );
+      result = await run(["git", "add", "bin"], fixtureRepo);
+      expect(result.code, result.stderr).toBe(0);
+      result = await run(
+        ["git", "commit", "-qm", `manifest ${scenario.name}`],
+        fixtureRepo,
+      );
+      expect(result.code, result.stderr).toBe(0);
+      result = await run(["git", "rev-parse", "HEAD"], fixtureRepo);
+      expect(result.code, result.stderr).toBe(0);
+      const destination = join(fixtureRoot, `stage-${scenario.name}`);
+      await mkdir(destination);
+
+      const staged = await run(
+        [
+          "bash",
+          "bin/stage-frontend-release.sh",
+          result.stdout.trim(),
+          destination,
+        ],
+        fixtureRepo,
+      );
+      expect(staged.code).toBe(1);
+      expect(staged.stderr).toContain(scenario.error);
+      expect(await readdir(destination)).toEqual([]);
+    }
+
+    await writeFile(
+      join(fixtureRepo, "bin/frontend-release-paths.txt"),
+      "missing-root\n",
+    );
+    result = await run(
+      ["git", "add", "bin/frontend-release-paths.txt"],
+      fixtureRepo,
+    );
+    expect(result.code, result.stderr).toBe(0);
+    result = await run(
+      ["git", "commit", "-qm", "manifest missing archive root"],
+      fixtureRepo,
+    );
+    expect(result.code, result.stderr).toBe(0);
+    result = await run(["git", "rev-parse", "HEAD"], fixtureRepo);
+    expect(result.code, result.stderr).toBe(0);
+    const pipelineProbeBin = join(fixtureRoot, "pipeline-probe-bin");
+    await mkdir(pipelineProbeBin);
+    await Promise.all([
+      writeFile(
+        join(pipelineProbeBin, "tar"),
+        "#!/usr/bin/env bash\ncat >/dev/null\n",
+      ),
+      writeFile(
+        join(pipelineProbeBin, "python3"),
+        "#!/usr/bin/env bash\nprintf 'PIPEFAIL_FELL_THROUGH\\n' >&2\n",
+      ),
+    ]);
+    await Promise.all([
+      chmod(join(pipelineProbeBin, "tar"), 0o755),
+      chmod(join(pipelineProbeBin, "python3"), 0o755),
+    ]);
+    const missingRootDestination = join(fixtureRoot, "stage-missing-root");
+    await mkdir(missingRootDestination);
+    const missingRootStage = await run(
+      [
+        "bash",
+        "bin/stage-frontend-release.sh",
+        result.stdout.trim(),
+        missingRootDestination,
+      ],
+      fixtureRepo,
+      {
+        PATH: `${pipelineProbeBin}:${
+          process.env.PATH ??
+          "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        }`,
+        HOME: fixtureRoot,
+        TMPDIR: fixtureRoot,
+        LANG: "C",
+        LC_ALL: "C",
+        NO_COLOR: "1",
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_CONFIG_GLOBAL: "/dev/null",
+      },
+    );
+    expect(missingRootStage.code).not.toBe(0);
+    expect(missingRootStage.stderr).toContain("pathspec");
+    expect(missingRootStage.stderr).not.toContain("PIPEFAIL_FELL_THROUGH");
+    expect(await readdir(missingRootDestination)).toEqual([]);
+
+    await mkdir(join(fixtureRepo, "apps", "web"), { recursive: true });
+    await writeFile(join(fixtureRepo, "apps", "web", "index.html"), "fixture\n");
+    await writeFile(
+      join(fixtureRepo, "bin/frontend-release-paths.txt"),
+      "apps/web\n",
+    );
+    result = await run(["git", "add", "apps/web", "bin"], fixtureRepo);
+    expect(result.code, result.stderr).toBe(0);
+    result = await run(
+      ["git", "commit", "-qm", "valid manifest for destination check"],
+      fixtureRepo,
+    );
+    expect(result.code, result.stderr).toBe(0);
+    result = await run(["git", "rev-parse", "HEAD"], fixtureRepo);
+    expect(result.code, result.stderr).toBe(0);
+
+    const realDestination = join(fixtureRoot, "real-stage-destination");
+    const linkedDestination = join(fixtureRoot, "linked-stage-destination");
+    await mkdir(realDestination);
+    await symlink(realDestination, linkedDestination, "dir");
+    const linkedStage = await run(
+      [
+        "bash",
+        "bin/stage-frontend-release.sh",
+        result.stdout.trim(),
+        linkedDestination,
+      ],
+      fixtureRepo,
+    );
+    expect(linkedStage.code).toBe(1);
+    expect(linkedStage.stderr).toContain(
+      "destination must be a real directory, not a symlink",
+    );
+    expect(await readdir(realDestination)).toEqual([]);
+  }, 15_000);
 
   test("keeps every Pages header file inside the platform rule boundary", async () => {
     for (const app of ["docs", "dashboard", "web"]) {
@@ -250,7 +615,9 @@ describe("frontend deploy input discipline", () => {
         'GIT_INDEX_FILE="$index" git read-tree HEAD',
         'GIT_INDEX_FILE="$index" git add -- infra/pages apps/docs/AGENT-REPO-ARCHIVE.md apps/docs/specs/AGENT-REPO-ARCHIVE-0.1.md apps/docs/specs/agent-repo-archive-0.1.schema.json apps/docs/specs/agent-repo-archive-0.1-vectors.json',
         'tree="$(GIT_INDEX_FILE="$index" git write-tree)"',
-        "git archive --format=tar \"$tree\" -- apps/_shared apps/docs apps/dashboard apps/web docs infra/pages packages/data/schema packages/repo-archive/schema packages/repo-archive/vectors packages/wallet/schema | tar -xf - -C \"$stage\"",
+        "FRONTEND_RELEASE_ARCHIVE_PATHS=()",
+        'while IFS= read -r path; do case "$path" in ""|\\#*) continue ;; esac; FRONTEND_RELEASE_ARCHIVE_PATHS+=("$path"); done < bin/frontend-release-paths.txt',
+        'git archive --format=tar "$tree" -- "${FRONTEND_RELEASE_ARCHIVE_PATHS[@]}" | tar -xf - -C "$stage"',
         "find \"$stage/apps\" -type f -name '.gitignore' -delete",
         "for app in docs dashboard web; do",
         "  cp \"$stage/infra/pages/sensitive-path-worker.js\" \"$stage/apps/$app/_worker.js\"",
@@ -316,7 +683,7 @@ describe("frontend deploy input discipline", () => {
     }
   });
 
-  test("routes only sensitive root prefixes through a fail-closed Pages fence", async () => {
+  test("routes every path through a canonical fail-closed Pages fence", async () => {
     const workerPath = join(repoRoot, "infra/pages/sensitive-path-worker.js");
     const routesPath = join(repoRoot, "infra/pages/sensitive-path-routes.json");
     const syntax = await run(["node", "--check", workerPath]);
@@ -325,26 +692,33 @@ describe("frontend deploy input discipline", () => {
     expect(syntax.code, syntax.stderr).toBe(0);
     expect(routes).toEqual({
       version: 1,
-      include: ["/.git*", "/.env*", "/.dev.vars*"],
+      include: ["/*"],
       exclude: [],
     });
+    const matchesInvocationRoute = (path: string) => routes.include.some((rule: string) => (
+      rule.endsWith("*") ? path.startsWith(rule.slice(0, -1)) : path === rule
+    ));
     for (const packagePath of [
       "/packages/v1/@agenttool/data/0.1.0/manifest.json",
       "/packages/v1/@agenttool/data/0.1.0/agenttool-data-0.1.0.tgz",
     ]) {
-      expect(
-        routes.include.some((rule: string) => (
-          rule.endsWith("*") ? packagePath.startsWith(rule.slice(0, -1)) : packagePath === rule
-        )),
-      ).toBe(false);
+      expect(matchesInvocationRoute(packagePath), packagePath).toBe(true);
     }
 
     const worker = (await import(pathToFileURL(workerPath).href)).default;
-    let assetFetches = 0;
+    const assetRequests: Array<{ method: string; url: string }> = [];
     const env = {
       ASSETS: {
-        fetch: async () => {
-          assetFetches += 1;
+        fetch: async (request: Request) => {
+          assetRequests.push({ method: request.method, url: request.url });
+          if (new URL(request.url).pathname === "/.well-known/agent.txt") {
+            return new Response(null, {
+              status: 301,
+              headers: {
+                Location: "https://example.test/api-catalog",
+              },
+            });
+          }
           return new Response("static asset", {
             status: 200,
             headers: {
@@ -356,36 +730,102 @@ describe("frontend deploy input discipline", () => {
       },
     };
 
-    for (const path of [
+    const sensitiveRootPaths = [
       "/.gitignore",
       "/.git/config",
       "/.env",
       "/.env.local",
       "/.dev.vars",
       "/.dev.vars.local",
-    ]) {
+      "/.GITIGNORE",
+      "/.gIT/config",
+      "/.ENV",
+      "/.DeV.VaRs.local",
+      "//.gitignore",
+      "/%2egitignore",
+      "/%2Egitignore",
+      "/.%65nv",
+      "/.%45NV",
+      "/.dev%2evars",
+      "/%252egitignore",
+      "/%25252egitignore",
+      "/%2f%2egitignore",
+      "/%5c%2egitignore",
+      "/.git%2f..%2findex.html",
+      "/%2egit%2f..%2findex.html",
+      "/.git%5c..%5cindex.html",
+      "/%252egit%252f..%252findex.html",
+      "/public/%2e%2e/%2egitignore",
+      "/public/%252e%252e/%252egitignore",
+      "/public%2f..%2f%2egitignore",
+      "/public%5c..%5c%2egitignore",
+      "/%",
+    ];
+    for (const path of sensitiveRootPaths) {
+      expect(matchesInvocationRoute(path), path).toBe(true);
       const response = await worker.fetch(new Request(`https://example.test${path}`), env);
-      expect(response.status).toBe(404);
+      expect(response.status, path).toBe(404);
       expect(response.headers.get("cache-control")).toBe("no-store, max-age=0");
       expect(response.headers.get("x-agenttool-sensitive-path-fence")).toBe("1");
       expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     }
 
+    let overEncoded = "%2egitignore";
+    for (let pass = 0; pass < 9; pass += 1) {
+      overEncoded = encodeURIComponent(overEncoded);
+    }
+    const overEncodedResponse = await worker.fetch(
+      new Request(`https://example.test/${overEncoded}`),
+      env,
+    );
+    expect(overEncodedResponse.status).toBe(404);
+    expect(overEncodedResponse.headers.get("x-agenttool-sensitive-path-fence")).toBe("1");
+
     const head = await worker.fetch(
-      new Request("https://example.test/.gitignore", { method: "HEAD" }),
+      new Request("https://example.test/%2egitignore", { method: "HEAD" }),
       env,
     );
     expect(head.status).toBe(404);
     expect(await head.text()).toBe("");
 
-    const staticResponse = await worker.fetch(new Request("https://example.test/style.css"), env);
-    expect(staticResponse.status).toBe(200);
-    expect(await staticResponse.text()).toBe("static asset");
-    expect(staticResponse.headers.get("cache-control")).toBe(
-      "public, max-age=31536000, immutable",
+    const allowedPaths = [
+      "/style.css",
+      "/caf%C3%A9",
+      "/public%2f..%2fstyle.css",
+      "/packages/v1/@agenttool/data/0.1.0/manifest.json",
+      "/packages/v1/@agenttool/data/0.1.0/agenttool-data-0.1.0.tgz",
+    ];
+    for (const path of allowedPaths) {
+      expect(matchesInvocationRoute(path), path).toBe(true);
+      const staticResponse = await worker.fetch(new Request(`https://example.test${path}`), env);
+      expect(staticResponse.status).toBe(200);
+      expect(await staticResponse.text()).toBe("static asset");
+      expect(staticResponse.headers.get("cache-control")).toBe(
+        "public, max-age=31536000, immutable",
+      );
+      expect(staticResponse.headers.get("content-type")).toBe("application/gzip");
+    }
+
+    const wellKnownRequest = new Request(
+      "https://example.test/.well-known/agent.txt?from=fence",
+      { method: "HEAD" },
     );
-    expect(staticResponse.headers.get("content-type")).toBe("application/gzip");
-    expect(assetFetches).toBe(1);
+    const redirectResponse = await worker.fetch(wellKnownRequest, env);
+    expect(redirectResponse.status).toBe(301);
+    expect(redirectResponse.headers.get("location")).toBe(
+      "https://example.test/api-catalog",
+    );
+
+    expect(assetRequests).toEqual([
+      ...allowedPaths.map((path) => ({
+        method: "GET",
+        url: `https://example.test${path}`,
+      })),
+      {
+        method: "HEAD",
+        url: "https://example.test/.well-known/agent.txt?from=fence",
+      },
+    ]);
   });
 
   test("verifies live headers for every latest LOVE package release", async () => {
@@ -406,7 +846,7 @@ describe("frontend deploy input discipline", () => {
     expect(deploy).toContain("LOVE package static header verification failed");
   });
 
-  test("requires marked literal fence responses and denial of encoded aliases", async () => {
+  test("requires marked fence responses for literal and encoded aliases", async () => {
     const deployPath = join(repoRoot, "bin/deploy.sh");
     const deploy = await readFile(deployPath, "utf8");
     const syntax = await run(["bash", "-n", deployPath]);
@@ -420,7 +860,74 @@ describe("frontend deploy input discipline", () => {
     expect(deploy).toContain("https://docs.agenttool.dev/%2egitignore");
     expect(deploy).toContain("https://app.agenttool.dev/.%65nv");
     expect(deploy).toContain("https://agenttool.dev/.dev%2evars");
-    expect(deploy).toContain("Encoded sensitive path is publicly reachable");
+    expect(deploy).not.toContain("encoded_sensitive_public_urls");
+    expect(deploy).not.toContain("Encoded sensitive path is publicly reachable");
+    expect(
+      deploy.match(/marked_sensitive_fence_status "\$response_headers"/g),
+    ).toHaveLength(1);
+
+    const helper = deploy.match(
+      /^marked_sensitive_fence_status\(\) \{[\s\S]*?^\}$/m,
+    )?.[0];
+    expect(helper).toBeDefined();
+    if (!helper) throw new Error("missing sensitive-fence response parser");
+
+    const interimMarked = [
+      "HTTP/1.1 200 Connection established",
+      "cache-control: no-store",
+      "x-agenttool-sensitive-path-fence: 1",
+      "",
+      "HTTP/2 302",
+      "cache-control: no-store",
+      "x-agenttool-sensitive-path-fence: 1",
+      "location: https://example.test/final",
+      "",
+      "HTTP/2 103 Early Hints",
+      "cache-control: no-store",
+      "x-agenttool-sensitive-path-fence: 1",
+      "",
+      "HTTP/2 404",
+      "cache-control: public, max-age=0, must-revalidate",
+      "",
+    ].join("\r\n");
+    const trailerMarked = [
+      "HTTP/1.1 404 Not Found",
+      "transfer-encoding: chunked",
+      "",
+      "x-agenttool-sensitive-path-fence: 1",
+      "cache-control: no-store",
+      "",
+    ].join("\r\n");
+    const finalMarked = [
+      "HTTP/1.1 200 Connection established",
+      "cache-control: public, max-age=0, must-revalidate",
+      "",
+      "HTTP/2 302",
+      "cache-control: public, max-age=0, must-revalidate",
+      "location: https://example.test/final",
+      "",
+      "HTTP/2 404",
+      "cache-control:no-store",
+      "x-agenttool-sensitive-path-fence: 1",
+      "",
+    ].join("\r\n");
+    const parser = await run([
+      "bash",
+      "-c",
+      `${helper}
+if interim_status="$(marked_sensitive_fence_status "$1")"; then exit 41; fi
+[ "$interim_status" = 404 ] || exit 42
+if trailer_status="$(marked_sensitive_fence_status "$2")"; then exit 43; fi
+[ "$trailer_status" = 404 ] || exit 44
+final_status="$(marked_sensitive_fence_status "$3")" || exit 45
+[ "$final_status" = 404 ] || exit 46
+`,
+      "sensitive-fence-parser-test",
+      interimMarked,
+      trailerMarked,
+      finalMarked,
+    ]);
+    expect(parser.code, `${parser.stdout}\n${parser.stderr}`).toBe(0);
   });
 
   test("accepts only main, fail-closed production and preview Pages policy", async () => {

@@ -22,11 +22,19 @@ This is pre-existing **local WIP** (Phase 2.2 Billing area). It's been flagged i
 
 ### Bun complains about missing `usageEvents` / billing table
 
-Migration not applied. Run `bun run db:migrate` from `api/`. Or apply one file: `bun api/scripts/_migrate-one.ts api/migrations/<file>.sql`.
+Migration may be pending. From the repository root, run
+`bin/migrate-pending.sh --dry-run`, inspect the exact backlog, and apply it
+through `bin/migrate-pending.sh`. Exit `42` means the backlog requires the
+exclusive maintenance cutover in `DEPLOY-PROCEDURE.md`; do not bypass it with
+the one-file runner.
 
 ### `[wake] <X> query failed` warnings on boot
 
-The wake renderer is defensive — each subsystem fetch is wrapped in try/catch and logs a warning when a table doesn't exist. Suggests a migration is pending. Run `bun run db:migrate`. The warning text includes the migration filename.
+The wake renderer is defensive — each subsystem fetch is wrapped in try/catch
+and logs a warning when a table doesn't exist. This suggests a migration is
+pending. Run `bin/migrate-pending.sh --dry-run` from the repository root and
+follow its checked apply or maintenance instructions. The warning text
+includes the migration filename.
 
 ### Redis connection refused
 
@@ -113,7 +121,15 @@ Check the secret reference in the runtime row: `runtimes.llm_vault_key` should p
 
 ### Worker spins on the same payout
 
-You may have hit the `MAX_BROADCAST_ATTEMPTS` cap. Check `workers/payout/broadcast-worker.ts` for the value. The job moves to a terminal failure state after N attempts; manual re-queue requires operator intervention.
+There is no `MAX_BROADCAST_ATTEMPTS` loop. A pre-submit `requested` row can be
+deferred by the durable source/nonce fence and receives a shared cooldown so
+other sources can progress. A row that reached `broadcasting` is never
+automatically submitted again: the confirmation worker performs bounded
+read-only lookup, advances only on positive evidence for the exact persisted
+transaction identity, and leaves absent or unavailable evidence
+`broadcasting`. Inspect `last_dispatch_attempt_at`, `dispatch_not_before`,
+network, source identity, and the operator reconciliation runbook; do not
+manually re-queue an ambiguous row.
 
 ## Migrations / schema
 

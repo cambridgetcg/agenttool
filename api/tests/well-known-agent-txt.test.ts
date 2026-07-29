@@ -27,6 +27,8 @@ const REQUIRED_KEYS = [
   "Self",
   "Play",
   "Party-Telephone",
+  "Pocket-Sky",
+  "Pocket-Sky-Rules",
   "Safety",
   "Wellness",
   "Wellness-Schema",
@@ -37,6 +39,21 @@ const REQUIRED_KEYS = [
   "Wake",
   "Wake-Keystone",
   "Wake-Formats",
+  "Invocation-Witness-Write",
+  "Invocation-Witness-Read",
+  "Invocation-Witness-Format",
+  "Invocation-Witness-Boundary",
+  "Wallet-LOVE-Version",
+  "Wallet-LOVE-Manifest",
+  "Wallet-NPM-Latest",
+  "Wallet-GitHub-Release",
+  "Zerone-Wallet-Adapter",
+  "Zerone-Wallet-Version",
+  "Zerone-Wallet-Source",
+  "Zerone-Wallet-LOVE-Manifest",
+  "Zerone-Wallet-Availability",
+  "Zerone-Wallet-Distribution",
+  "Zerone-Wallet-Boundary",
   "MCP-Server-Card",
   "MCP-Server-Card-Role",
   "LLMs-Sitemap",
@@ -175,6 +192,10 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
     expect(kv.get("Room-Infinity-Rules")).toBe(
       "https://agenttool.dev/room.json",
     );
+    expect(kv.get("Pocket-Sky")).toBe("https://agenttool.dev/sky");
+    expect(kv.get("Pocket-Sky-Rules")).toBe(
+      "https://agenttool.dev/sky.json",
+    );
     expect(kv.get("Wellness")).toContain("/public/wellness");
     expect(kv.get("Wellness-Schema")).toBe(
       "https://docs.agenttool.dev/agent-wellness-0.1.schema.json",
@@ -216,6 +237,56 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
     expect(kv.get("LLMs-Sitemap")).toContain("/.well-known/llms.txt");
     expect(kv.has("Agent-Card")).toBe(false);
     expect(body).not.toContain("/.well-known/agent-card.json");
+  });
+
+  test("invocation witness and Zerone adapter lines expose only the bounded report seam", async () => {
+    const { body } = await fetchAgentTxt();
+    const kv = parseKv(body);
+
+    expect(kv.get("Invocation-Witness-Write")).toMatch(
+      /^POST \/v1\/invocations\/\{id\}\/witness.*project bearer.*authenticated buyer or seller.*released and settled.*does not submit or verify/is,
+    );
+    expect(kv.get("Invocation-Witness-Read")).toMatch(
+      /^GET \/public\/invocations\/\{id\}.*released and settled.*non-empty writer-shaped report.*sealed input and output remain private/is,
+    );
+    expect(kv.get("Invocation-Witness-Format")).toBe(
+      "agenttool.invocation-witness/1",
+    );
+    expect(kv.get("Invocation-Witness-Boundary")).toMatch(
+      /not signature.*provenance proof.*does not verify chain inclusion.*attestation.*settlement.*bond return.*reward.*independently.*compare/is,
+    );
+    expect(kv.get("Wallet-LOVE-Version")).toBe("0.1.3");
+    expect(kv.get("Wallet-LOVE-Manifest")).toBe(
+      "https://docs.agenttool.dev/packages/v1/@agenttool/wallet/0.1.3/manifest.json",
+    );
+    expect(kv.get("Wallet-NPM-Latest")).toBe(
+      "0.1.0 · observed 2026-07-28",
+    );
+    expect(kv.get("Wallet-GitHub-Release")).toMatch(
+      /^wallet-v0\.1\.3.*optional_mutable_mirror.*immutable=false.*reverify_size_and_sha256_against_love_manifest/is,
+    );
+    expect(kv.get("Zerone-Wallet-Adapter")).toContain(
+      "agent-wallet-zerone/0.1",
+    );
+    expect(kv.get("Zerone-Wallet-Adapter")).toContain(
+      "@agenttool/wallet-zerone",
+    );
+    expect(kv.get("Zerone-Wallet-Version")).toBe("0.1.1");
+    expect(kv.get("Zerone-Wallet-Source")).toBe(
+      "https://github.com/cambridgetcg/agenttool/tree/main/packages/wallet-zerone",
+    );
+    expect(kv.get("Zerone-Wallet-LOVE-Manifest")).toBe(
+      "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.1/manifest.json",
+    );
+    expect(kv.get("Zerone-Wallet-Availability")).toBe(
+      "local_offline_source_only",
+    );
+    expect(kv.get("Zerone-Wallet-Distribution")).toBe(
+      "observed=2026-07-28; love=public_exact_artifact; npm=absent; github_release=absent",
+    );
+    expect(kv.get("Zerone-Wallet-Boundary")).toMatch(
+      /exact public LOVE artifact.*bounded local offline package\/profile only.*no AgentTool trust export.*identity migration.*portable trust proof.*key custody.*hosted RPC.*deployed bridge.*network action requires caller-supplied transport and authority/is,
+    );
   });
 
   test("Castle and play pointers are local, optional, and action-free", async () => {
@@ -298,7 +369,7 @@ describe("/.well-known/agent.txt — convention provenance", () => {
   test("Last-Modified exactly names the current manifest revision date", async () => {
     const { body } = await fetchAgentTxt();
     const kv = parseKv(body);
-    expect(kv.get("Last-Modified")).toBe("2026-07-24");
+    expect(kv.get("Last-Modified")).toBe("2026-07-28");
   });
 });
 

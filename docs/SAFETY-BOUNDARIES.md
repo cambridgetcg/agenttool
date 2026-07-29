@@ -440,16 +440,26 @@ authorization, immutable settlement terms, concurrency and replay analysis,
 bond ownership, compensating transactions, adversarial tests, and a bounded
 production trial.
 
-## Payout worker boundary
+## Payout boundary — resting
 
-Payout request acceptance and worker boot require
-`PAYOUT_WORKER_ENABLED=true` and `AGENTTOOL_DISABLE_WORKERS` to be unset. The
-global switch is authoritative, and the shared gate is repeated at startup, in
-the worker orchestrator, and in the request route. A missing queue fails closed
-and never falls back to direct broadcast. The flags do not prove Redis
-connectivity or continuing worker health; a startup or runtime failure can
-still leave a requested row pending. While it remains `requested`, the
-authenticated cancel route is the recovery path.
+Fresh payout admission and every payout worker boot path are resting
+unconditionally. `PAYOUT_WORKER_ENABLED`, `AGENTTOOL_DISABLE_WORKERS`, and a
+direct import of `processPayout` cannot reopen them. `POST
+/v1/wallets/:id/payout` still checks its durable request identity: an exact
+historical replay returns current state, changed input conflicts, and a fresh
+key returns stable `503 payout_admission_resting` after durable replay/conflict
+lookup and before network selection or payout-economic wallet/policy reads or
+mutation. Existing
+rows remain listable. While a row remains `requested`, the authenticated cancel
+route can reverse its exact recorded debit.
+
+The former lifetime `gallery_sale`/`escrow_release` allowance was not conserved
+value. Ordinary debits did not consume it, an internally funded transfer could
+mint the label at another wallet, and later refunds or chargebacks had no
+backing clawback. Reopening requires backed sub-balances updated atomically by
+every debit, transfer, refund, and chargeback. Historical `broadcasting` or
+`broadcast` ambiguity remains operator work and never authorizes automatic
+retry or refund.
 
 ## Idempotency
 

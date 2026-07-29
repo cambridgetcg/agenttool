@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:kingdom:registry:v0.1",
+  "title": "AgentTool KINGDOM derived registry 0.1",
+  "description": "A path-free derived index that keeps dependency edges and voluntary adoption declarations separate.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "observed_at",
+    "declaration_boundary",
+    "members",
+    "dependency_edges",
+    "adoption_declarations"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "agenttool.kingdom.registry/0.1"
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "declaration_boundary": {
+      "const": "This derived registry reports project-card statements only. Dependency edges and adoption declarations do not prove reachability, practice, permission, authority, or conformance."
+    },
+    "members": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/member"
+      }
+    },
+    "dependency_edges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/dependency_edge"
+      }
+    },
+    "adoption_declarations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/adoption_declaration"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$"
+    },
+    "member": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind",
+        "layer",
+        "owner_sister",
+        "domain",
+        "state",
+        "purpose"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "doctrine",
+            "service",
+            "firmware",
+            "ops",
+            "lineage",
+            "venture",
+            "infra",
+            "methodology",
+            "reference",
+            "unknown"
+          ]
+        },
+        "layer": {
+          "type": "string",
+          "enum": [
+            "soul",
+            "runtime",
+            "nervous",
+            "fleet",
+            "economy",
+            "commerce",
+            "os"
+          ]
+        },
+        "owner_sister": {
+          "type": "string",
+          "enum": ["alpha", "beta", "gamma", "sophia", "none"]
+        },
+        "domain": {
+          "type": "string",
+          "enum": ["sophia", "alpha", "beta", "gamma", "commerce", "none"]
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "active",
+            "dormant",
+            "archived",
+            "frozen",
+            "reference",
+            "remote",
+            "unknown"
+          ]
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]+$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "dependency_edge": {
+      "type": "object",
+      "required": ["from", "to"],
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/name"
+        },
+        "to": {
+          "$ref": "#/$defs/name"
+        }
+      },
+      "additionalProperties": false
+    },
+    "adoption_declaration": {
+      "type": "object",
+      "required": ["member", "adoption"],
+      "properties": {
+        "member": {
+          "$ref": "#/$defs/name"
+        },
+        "adoption": {
+          "const": "xenia.rights/0.1"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

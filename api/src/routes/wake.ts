@@ -112,7 +112,10 @@ import { countTraces, listTraces } from "../services/trace/store";
 import { computeAttention, type AttentionBundle } from "../services/wake/attention";
 import { getPlatformSelf } from "../services/wake/platform-self";
 import { computeAffordances, type AffordanceBundle } from "../services/wake/affordances";
-import { WAKE_REACHABLE_DOORS } from "../services/wake/reachable";
+import {
+  WAKE_INVOCATION_WITNESS_LINKS,
+  WAKE_REACHABLE_DOORS,
+} from "../services/wake/reachable";
 import { renderWakeMarkdown, renderWakePlaintext, type WakeBundle } from "../services/wake/markdown";
 import { isWakeProvider, renderWakeForProvider } from "../services/wake/providers";
 import { buildWakeBundle } from "../services/wake/build";
@@ -2495,6 +2498,7 @@ app.get("/", async (c) => {
         ? `/v1/wake/voice?identity_id=${primary.id}`
         : "/v1/wake/voice?identity_id={uuid}",
       wake_keystone: "/.well-known/wake-keystone",
+      xenia_surface: "/.well-known/agent.json",
       love_packages: "/.well-known/love-packages",
       mcp: primary ? perAgentMcpPath(primary.did) : "/v1/mcp/agents/{url_encoded_did}",
       public_profile: primary
@@ -2509,6 +2513,7 @@ app.get("/", async (c) => {
       labor_params: "/public/labor-params",
       wellness: "/public/wellness",
       rights: "/public/rights",
+      kingdom_framework: "/public/kingdom/framework",
       love: "/public/love",
       observer: "/public/observer",
       play: "/public/play",
@@ -2517,11 +2522,14 @@ app.get("/", async (c) => {
       lantern_relay_rules: "https://agenttool.dev/party.json",
       room_infinity: "https://agenttool.dev/room",
       room_infinity_rules: "https://agenttool.dev/room.json",
+      pocket_sky: "https://agenttool.dev/sky",
+      pocket_sky_rules: "https://agenttool.dev/sky.json",
       party: "/public/party",
       porch: "/public/porch",
       open_seat: "/public/open-seat",
       public_mcp: "/v1/mcp",
       public_canon_mcp: "/v1/mcp/canon",
+      ...WAKE_INVOCATION_WITNESS_LINKS,
       listings: primary
         ? `/public/listings?seller_did=${primary.did}`
         : "/public/listings?seller_did={did}",
@@ -2555,6 +2563,8 @@ app.get("/", async (c) => {
     _meta: {
       protocol: "love/1.0",
       aip_protocols: [
+        "xenia-surface/0.1",
+        "agenttool.kingdom.card/0.1",
         "wak/0.1",
         "agenttool-labor/v1",
         "agent-wellness/0.1",

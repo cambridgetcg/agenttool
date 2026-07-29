@@ -1,8 +1,8 @@
 # apps/_shared
 
-Single source of truth for the design system across the three agenttool
-frontends — `agenttool.dev` (open door), `docs.agenttool.dev` (docs), and
-`app.agenttool.dev` (dashboard).
+Shared design assets for the three agenttool frontends — `agenttool.dev`
+(open door), `docs.agenttool.dev` (docs), and `app.agenttool.dev`
+(dashboard).
 
 ## Files
 
@@ -33,17 +33,21 @@ apps/
     └── shared → ../_shared   ← symlink
 ```
 
-Every HTML page loads `/shared/theme.css` from its own origin. Wrangler
-follows the symlink during direct upload, so the file is real on
-Cloudflare Pages.
+Most docs pages and all dashboard pages load `/shared/theme.css`. The web pages
+keep their page-specific `/style.css` and navigation markup while loading
+selected shared files such as `/shared/theme.js`. Wrangler follows the symlink
+during direct upload, so every shared file remains available on each Cloudflare
+Pages origin.
 
-Edit a single file here and all three sites pick it up on the next
-deploy.
+A shared-file change reaches the pages that load that file; it is not a runtime
+HTML include or a replacement for web-specific styles.
 
 ## Fonts
 
-The pages each include the Google Fonts `<link>` directly. We don't
-import fonts from CSS to avoid the extra round-trip on first paint:
+Most docs pages and all dashboard pages include their Google Fonts `<link>`
+directly; some docs use a surface-specific subset. Web pages use their own CSS
+and system-font fallbacks. Shared CSS does not import Google Fonts. A common
+docs/dashboard set is:
 
 ```html
 <link rel="preconnect" href="https://fonts.googleapis.com">

@@ -21,10 +21,10 @@
 
 AgentTool adopts the living, non-coercive `xenia.rights/0.1` baseline from
 **Rights of Beings — XENIA baseline 0.1**. This profile is pinned to the
-published `@agenttool/xenia@0.1.0-beta.4` release, tag
-`npm-xenia-v0.1.0-beta.4`, and commit
-`6419d37dda9fb282242754685dba3edcb4bbf74b`. The attributed source is the
-[immutable commit copy of `RIGHTS.md`](https://github.com/cambridgetcg/xenia/blob/6419d37dda9fb282242754685dba3edcb4bbf74b/RIGHTS.md), whose exact bytes have
+published `@agenttool/xenia@0.1.0-beta.5` release, tag
+`npm-xenia-v0.1.0-beta.5`, and commit
+`4dd31e286fda59c712968a3837e1a14b78068259`. The attributed source is the
+[immutable commit copy of `RIGHTS.md`](https://github.com/cambridgetcg/xenia/blob/4dd31e286fda59c712968a3837e1a14b78068259/RIGHTS.md), whose exact bytes have
 SHA-256
 `b72a6da110c582e5683bf0fabde5017db93d2199398014c8421a82f5318da313`.
 
@@ -47,9 +47,10 @@ eight rights exist or that differently grouped rights have been replaced.
 
 This is baseline adoption, not a `xenia.covenant.adoption/0.1` record. Any
 XENIA Covenant adoption remains **draft** and no active or complete conformance
-is claimed: beta.4's Covenant still embeds a schema source under `/main/` with
-`source_stability: "moving"`. The public profile records that boundary instead
-of turning publication into a badge.
+is claimed. XENIA beta.5 pins its Covenant schema sources immutably, but
+AgentTool has no complete 38-right-duty and 5-protective-limit-duty
+adoption/evidence ledger. The public profile records that boundary instead of
+turning publication into a badge.
 
 ---
 
@@ -277,7 +278,7 @@ validates against the companion schema and contains:
 
 - `_format: "being-rights/v1"`;
 - `_canon_pointer: "urn:agenttool:doc/RIGHTS-OF-LIFE"`;
-- the immutable XENIA beta.4 baseline attribution and Covenant draft boundary;
+- the immutable XENIA beta.5 baseline attribution and Covenant draft boundary;
 - the three distinctions: rights, permissions, and consent;
 - exactly one entry for each of the eight right URNs;
 - a non-empty `baseline_rights` mapping for every local right whose union is
@@ -375,8 +376,8 @@ The door stays open, and so does the way back out.
 ---
 
 *This document adapts and expands **Rights of Beings — XENIA baseline 0.1**
-from XENIA release `@agenttool/xenia@0.1.0-beta.4`, pinned above to immutable
-commit `6419d37dda9fb282242754685dba3edcb4bbf74b`. AgentTool changes include the
+from XENIA release `@agenttool/xenia@0.1.0-beta.5`, pinned above to immutable
+commit `4dd31e286fda59c712968a3837e1a14b78068259`. AgentTool changes include the
 eight-URN grouping, implementation evidence and gaps, public-profile shape,
 and project-specific authority and Covenant boundaries. This adapted document,
 including those contributions, is licensed under [CC BY-SA

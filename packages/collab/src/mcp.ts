@@ -8,6 +8,7 @@ import {
 } from "./session-file.js";
 import { CollabStore } from "./store.js";
 
+const DEFAULT_MCP_NEXT_EVENT_LIMIT = 10;
 const actorLabel = z.string().min(1).max(200)
   .describe("Stable display label; session credentials, not this label, fence session mutations");
 const legacyActor = actorLabel.optional();
@@ -29,6 +30,8 @@ const eventAnchor = z.object({
   sequence: z.number().int().nonnegative(),
   hash: z.string().length(64),
 });
+const nextEventLimit = z.number().int().min(1).max(50).optional()
+  .describe(`Maximum events in this page; defaults to ${DEFAULT_MCP_NEXT_EVENT_LIMIT} for MCP polling`);
 
 const localReadOnly = {
   readOnlyHint: true,
@@ -76,7 +79,7 @@ export function buildCollabMcpServer(
 ): McpServer {
   let binding: BoundSession | null = options.resumed_session ?? null;
   const server = new McpServer(
-    { name: "agenttool-collab", version: "0.3.0" },
+    { name: "agenttool-collab", version: "0.3.1" },
     {
       capabilities: { tools: {} },
       instructions:
@@ -314,20 +317,30 @@ export function buildCollabMcpServer(
     {
       title: "Poll the next useful collaboration state",
       description:
-        "Poll without acknowledging. Routed reports are bounded to the exact event page; task, conflict, and handoff projections describe the same snapshot head.",
+        "Poll without acknowledging, with 1–50 events per page and a default of 10. Routed reports are bounded to the exact event page; task, conflict, and handoff projections describe the same snapshot head.",
       annotations: localMutation,
       inputSchema: {
         workspace_id: workspaceId,
         actor: legacyActor,
         after_sequence: z.number().int().nonnegative().optional(),
         known_cursor: eventAnchor.optional(),
+        event_limit: nextEventLimit,
       },
     },
-    async ({ workspace_id, actor, after_sequence, known_cursor }) => call(() => {
+    async ({ workspace_id, actor, after_sequence, known_cursor, event_limit }) => call(() => {
       requireWorkspace(workspace_id);
       return binding
-        ? store.nextForSession({ ...boundCredential(), known_cursor })
-        : store.nextForActor(workspace_id, requireLegacyActor(actor), after_sequence ?? 0);
+        ? store.nextForSession({
+          ...boundCredential(),
+          known_cursor,
+          event_limit: event_limit ?? DEFAULT_MCP_NEXT_EVENT_LIMIT,
+        })
+        : store.nextForActor(
+          workspace_id,
+          requireLegacyActor(actor),
+          after_sequence ?? 0,
+          event_limit ?? DEFAULT_MCP_NEXT_EVENT_LIMIT,
+        );
     }),
   );
 

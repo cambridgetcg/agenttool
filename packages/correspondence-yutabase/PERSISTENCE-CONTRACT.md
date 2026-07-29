@@ -1,7 +1,12 @@
 # Persistence contract for mapping plans
 
-Status: **required behavior for a future executor; no executor or database I/O
-is implemented by this package.**
+Status: **required behavior for an executor; no executor or database I/O is
+implemented by this public package.**
+
+The private sibling `correspondence-yutabase-projector` implements this
+contract for one bounded, loopback-only local profile. That implementation is
+not exported by this planner, a hosted worker, or a general interoperability
+claim.
 
 The planner emits `card.upsert` and `thread.ensure` intentions. Those names do
 not acquire semantics merely by appearing in JSON. A durable host must apply
@@ -67,6 +72,8 @@ severed historical ID active again.
 Before processing records, the host must confirm:
 
 - the exact supported YUTABASE database identity;
+- the exact supported YUTABASE function-definition and capability-role
+  surfaces, rather than function names alone;
 - registered `correspondence/*` decks whose UUID and honesty-header mappings
   match the physical tables;
 - exact lexicon equality with exported `YUTABASE_LEXICON`, including gloss,
@@ -74,8 +81,10 @@ Before processing records, the host must confirm:
 - a mapping/checkpoint profile equal to `PLAN_PROFILE`.
 
 A similar word spelling with a different gloss is a different meaning and must
-fail preflight. Database roles and source policy still decide who may execute
-these writes; the plan grants no privilege.
+fail preflight. A bounded executor should inherit the standard `yu_appender`
+capability instead of adding direct grants to YUTABASE objects. Database roles
+and source policy still decide who may execute these writes; the plan grants
+no privilege.
 
 ## Rebuild result
 

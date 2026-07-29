@@ -21,7 +21,7 @@ Known exceptions include:
   [`api/src/routes/public/rights.ts`](api/src/routes/public/rights.ts), and the
   `agenttool:doc/RIGHTS-OF-LIFE` objects in `docs/agenttool.jsonld` and
   `apps/docs/agenttool.jsonld` are the attributed `being-rights/v1` adaptation
-  of XENIA beta.4 under CC BY-SA 4.0. Surrounding route, OpenAPI, and registry
+  of XENIA beta.5 under CC BY-SA 4.0. Surrounding route, OpenAPI, and registry
   machinery remains under the repository's Apache-2.0 default. Symlinked docs
   copies inherit their target's terms. The pinned source, change notice,
   licence link, and no-endorsement statement must remain with redistributed
@@ -35,6 +35,8 @@ Known exceptions include:
 - [`docs/specs/WAKE-1.0-DRAFT.md`](docs/specs/WAKE-1.0-DRAFT.md),
   [`docs/specs/WITNESS-1.0-DRAFT.md`](docs/specs/WITNESS-1.0-DRAFT.md), and
   [`docs/specs/ADDS-0.1-DRAFT.md`](docs/specs/ADDS-0.1-DRAFT.md) are CC0.
+- [`docs/specs/AGENT-WALLET-ZERONE-0.1.md`](docs/specs/AGENT-WALLET-ZERONE-0.1.md)
+  is CC0; its reference implementation is separately Apache-2.0.
 - [`docs/DID-AT-SPEC.md`](docs/DID-AT-SPEC.md) declares CC BY 4.0.
 - Packages that explicitly declare MIT remain MIT exceptions. They are not
   part of the current LOVE/npm release batch.
@@ -44,6 +46,18 @@ Known exceptions include:
 - [`packages/wallet`](packages/wallet) is an Apache-2.0 package in the LOVE/npm
   release batch. Its Working Draft and preview status describe protocol
   maturity, not a narrower licence grant or execution-conformance claim.
+- [`packages/wallet-zerone`](packages/wallet-zerone) is an Apache-2.0 package
+  in the current LOVE release batch with its own `LICENSE` and `NOTICE`.
+  Public LOVE bytes do not claim npm or GitHub mirror availability, a hosted
+  bridge, custody, live-chain execution, or execution conformance.
+- [`packages/kingdom`](packages/kingdom) is an independently written
+  compatibility implementation of the observed KINGDOM project-card
+  interface. Its Apache-2.0 grant covers the package's original implementation,
+  not the separately maintained KINGDOM-OS tree or a relicensing of interface
+  vocabulary. It copies no KINGDOM-OS implementation code, prose, generated
+  catalog, or other asset; that tree currently has no root licence. Its exact
+  `@agenttool/xenia` dependency remains separately distributed under XENIA's
+  own mixed terms, recorded in the package's `THIRD_PARTY_LICENSES`.
 
 Dependency licences remain their authors' licences. Apache-2.0 does not
 relicense third-party dependencies or separately licensed material.

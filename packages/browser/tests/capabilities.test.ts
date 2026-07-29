@@ -19,9 +19,30 @@ describe("browser capabilities", () => {
   test("publishes a public, process-fixed authority profile by default", () => {
     const capabilities = resolveBrowserCapabilities();
 
-    expect(BROWSER_CAPABILITIES_SCHEMA).toBe("agent-browser-capabilities/0.3");
+    expect(BROWSER_CAPABILITIES_SCHEMA).toBe("agent-browser-capabilities/0.4");
     expect(capabilities).toMatchObject({
       schema: BROWSER_CAPABILITIES_SCHEMA,
+      interfaces: {
+        typescript: {
+          transport: "in_process",
+          contract: "direct_api",
+          directOnlyAffordances: [
+            "selector_extract",
+            "full_page_screenshot",
+          ],
+        },
+        jsonl: {
+          transport: "stdio",
+          contract: "model_facing_operations",
+          version: "agenttool-browser-jsonl/0.1",
+        },
+        mcp: {
+          transport: "stdio",
+          contract: "model_facing_operations",
+          modernRevision: "2026-07-28",
+          legacyCompatibility: "2025-era",
+        },
+      },
       authority: {
         profile: "public",
         fixedAt: "process_start",
@@ -42,6 +63,8 @@ describe("browser capabilities", () => {
       },
       features: {
         interaction: "enabled",
+        browserActReceipts: "enabled",
+        nonRefObservationBasis: "enabled",
         screenshots: "enabled",
         persistentProfile: "requires_configuration",
         uploads: "unsupported",
@@ -166,6 +189,14 @@ describe("browser capabilities", () => {
 
     expect(Object.isFrozen(capabilities)).toBe(true);
     expect(Object.isFrozen(capabilities.authority)).toBe(true);
+    expect(Object.isFrozen(capabilities.interfaces)).toBe(true);
+    expect(Object.isFrozen(capabilities.interfaces.typescript)).toBe(true);
+    expect(
+      Object.isFrozen(
+        capabilities.interfaces.typescript.directOnlyAffordances,
+      ),
+    ).toBe(true);
+    expect(Object.isFrozen(capabilities.modelFacingOperations)).toBe(true);
     expect(Object.isFrozen(capabilities.network)).toBe(true);
     expect(Object.isFrozen(capabilities.network.schemes)).toBe(true);
     expect(Object.isFrozen(capabilities.network.urlCredentials)).toBe(true);
@@ -174,6 +205,8 @@ describe("browser capabilities", () => {
     expect(capabilities.runtime.profile).toBe("dedicated_persistent");
     expect(capabilities.features).toEqual({
       interaction: "enabled",
+      browserActReceipts: "enabled",
+      nonRefObservationBasis: "enabled",
       screenshots: "enabled",
       persistentProfile: "enabled",
       uploads: "unsupported",

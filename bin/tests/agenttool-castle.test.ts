@@ -210,6 +210,32 @@ async function snapshotTree(
   return Object.freeze(result);
 }
 
+function withoutSqliteStorageBytes(
+  snapshot: Readonly<Record<string, string>>,
+): Readonly<Record<string, string>> {
+  return Object.freeze(Object.fromEntries(
+    Object.entries(snapshot).filter(([path]) =>
+      !/^data\.sqlite(?:-(?:shm|wal|journal))?$/.test(path)
+    ),
+  ));
+}
+
+async function snapshotDataNodeState(
+  fixture: Fixture,
+): Promise<Readonly<Record<string, unknown>>> {
+  const node = await openFixtureNode(fixture);
+  try {
+    return Object.freeze({
+      node_id: node.node_id,
+      feed_id: node.feed_id,
+      collections: node.store.listCollections(),
+      changes: node.store.listChanges(0, undefined, 10_000),
+    });
+  } finally {
+    node.close();
+  }
+}
+
 async function materializeExactV01Bridge(fixture: Fixture): Promise<string> {
   const repository = resolve(import.meta.dir, "../..");
   const destination = join(fixture.parent, "exact-agenttool-v0.1");
@@ -669,7 +695,10 @@ describe("Castle local projection", () => {
     expect(JSON.parse(
       await readFile(join(fixture.data, "castle-format.json"), "utf8"),
     ).schema).toBe(CASTLE_FORMAT_SCHEMA);
-    const before = await snapshotTree(fixture.data);
+    const beforeFiles = withoutSqliteStorageBytes(
+      await snapshotTree(fixture.data),
+    );
+    const beforeNode = await snapshotDataNodeState(fixture);
 
     const downgraded = spawnSync(process.execPath, [
       exactV01,
@@ -693,7 +722,10 @@ describe("Castle local projection", () => {
     expect(downgraded.error).toBeUndefined();
     expect(downgraded.status).toBe(1);
     expect(downgraded.stderr).toContain("data_root_contains_unowned_entry");
-    expect(await snapshotTree(fixture.data)).toEqual(before);
+    expect(withoutSqliteStorageBytes(
+      await snapshotTree(fixture.data),
+    )).toEqual(beforeFiles);
+    expect(await snapshotDataNodeState(fixture)).toEqual(beforeNode);
 
     await expect(syncCastle(syncOptions(fixture))).resolves.toMatchObject({
       status: "synced",

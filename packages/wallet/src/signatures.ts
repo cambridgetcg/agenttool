@@ -66,7 +66,10 @@ export function strictEd25519Verify(
       || !rPoint.isTorsionFree()
     ) return false;
     return ed25519.verify(signature, message, publicKey, { zip215: false });
-  } catch {
+  } catch (cause) {
+    // Malformed encodings are rejected below, but an unusable dependency or runtime
+    // must remain distinguishable from a forged record.
+    if (cause instanceof TypeError || cause instanceof ReferenceError) throw cause;
     return false;
   }
 }

@@ -104,11 +104,13 @@ const MODULES: ModuleSelf[] = [
     kind: "library",
     modalities: ["typescript", "esm", "npm"],
     register:
-      "TypeScript bindings for AgentTool HTTP surfaces. SDK/API coverage is audited separately from this curated repo map.",
+      "TypeScript bindings for hosted AgentTool HTTP surfaces, including a credential-free typed KINGDOM framework-card read, plus explicitly separate local data-node and KINGDOM OS discovery clients.",
     walls: [
       "Parity-locked with sdk-py (same minor version, same method shape)",
       "Zero runtime deps for crypto path (Phase 5)",
-      "No SDK method may bypass the HTTP authority boundary",
+      "Authenticated hosted methods use the project authority; the public KINGDOM framework-card read and local data-node and KINGDOM OS clients never inherit or forward the project bearer",
+      "KINGDOM framework access reads only the closed project card at /public/kingdom/framework, refuses redirects, and grants no authority",
+      "KINGDOM OS access is limited to fixed read-only repository discovery commands and does not expose arbitrary shell or Kingdom execution",
     ],
     claude_md: "packages/sdk-ts/CLAUDE.md",
   },
@@ -118,11 +120,13 @@ const MODULES: ModuleSelf[] = [
     kind: "library",
     modalities: ["python", "wheel", "pypi"],
     register:
-      "Python bindings for AgentTool HTTP surfaces. Ships SOUL.md inside the wheel as a runtime artifact.",
+      "Python bindings for hosted AgentTool HTTP surfaces, including a credential-free typed KINGDOM framework-card read, plus explicitly separate local data-node and KINGDOM OS discovery clients. Ships SOUL.md inside the wheel as a runtime artifact.",
     walls: [
       "Parity-locked with sdk-ts",
       "SOUL.md is portable doctrine (ships inside the wheel)",
-      "No SDK-only feature",
+      "No language-only feature; local adapters share the same bounded method shape across both SDKs",
+      "Authenticated hosted methods use the project authority; the public KINGDOM framework-card read and local data-node and KINGDOM OS clients never inherit or forward the project bearer",
+      "KINGDOM framework access reads only the closed project card at /public/kingdom/framework, refuses redirects, and grants no authority",
     ],
     claude_md: "packages/sdk-py/CLAUDE.md",
   },
@@ -140,6 +144,26 @@ const MODULES: ModuleSelf[] = [
       "Unknown signing or submission state does not authorize automatic retry, refund, nonce reuse, or budget release",
     ],
     claude_md: "packages/wallet/CLAUDE.md",
+  },
+  {
+    path: "packages/wallet-zerone/",
+    name: "@agenttool/wallet-zerone",
+    kind: "chain-profile-library",
+    modalities: [
+      "typescript",
+      "esm",
+      "cosmos-sign-mode-direct",
+      "go-cosmos-vectors",
+    ],
+    register:
+      "Public LOVE package and local Zerone profile source for verified agent-wallet/0.1 intents: two message types, exact direct-sign bytes, chain-native verification, and injected transports.",
+    walls: [
+      "No key derivation, private-key or mnemonic input, custody, signer provider, or sign-and-send operation",
+      "No bundled endpoint, bearer credential, hosted RPC, generic REST client, automatic rebroadcast, or deployed bridge",
+      "Transaction inclusion is not attestation settlement, bond return, challenge survival, or reward proof",
+      "Public LOVE distribution does not imply npm or GitHub mirror availability, a hosted bridge, or durable-host execution conformance",
+    ],
+    claude_md: "packages/wallet-zerone/CLAUDE.md",
   },
   {
     path: "infra/",
@@ -245,8 +269,9 @@ const DOCTRINE: DoctrineLayer[] = [
   },
   {
     layer: "SDK + adapters",
-    description: "Substrate-neutral access path; four tiers from wire to ergonomic.",
-    docs: ["SDK-TIERS.md", "CANONICAL-BYTES.md", "GLOSSARY.md", "SDK-ROADMAP.md", "CLI-GAPS.md"],
+    description:
+      "Substrate-neutral hosted access plus explicitly bounded local adapters.",
+    docs: ["SDK-TIERS.md", "KINGDOM-OS-SDK.md", "CANONICAL-BYTES.md", "GLOSSARY.md", "SDK-ROADMAP.md", "CLI-GAPS.md"],
   },
   {
     layer: "ops",

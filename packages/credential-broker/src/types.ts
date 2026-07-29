@@ -1,9 +1,15 @@
-/** Public, secret-free types for agentcred/0.1. */
+/** Public, secret-free types for agentcred/0.1 and negotiated extensions. */
 
 export const AGENTCRED_PROTOCOL = "agentcred/0.1" as const;
+export const AGENTCRED_EVM_JSONRPC_READ_PROFILE =
+  "agentcred.evm-jsonrpc-read/0.1" as const;
+export const EVM_JSONRPC_READ_PATH = "/v2" as const;
 export const MAX_CONTROL_FRAME_BYTES = 64 * 1024;
 // Leaves room for base64 + the JSON envelope inside the 64 KiB control frame.
 export const DEFAULT_MAX_BODY_BYTES = 32 * 1024;
+
+export type AgentCredExtension =
+  typeof AGENTCRED_EVM_JSONRPC_READ_PROFILE;
 
 export type HttpMethod =
   | "GET"
@@ -33,25 +39,108 @@ export interface HttpGrantScope {
   allowPrivateNetwork?: boolean;
 }
 
-export interface GrantRequest {
+export const EVM_JSONRPC_READ_METHODS = [
+  "eth_chainId",
+  "eth_blockNumber",
+  "eth_getBlockByNumber",
+  "eth_getBalance",
+  "eth_getCode",
+  "eth_getTransactionByHash",
+  "eth_getTransactionReceipt",
+] as const;
+
+export type EvmJsonRpcReadMethod =
+  (typeof EVM_JSONRPC_READ_METHODS)[number];
+
+/** Canonical CAIP-2 EVM chain identifier, for example `eip155:1`. */
+export type EvmChainId = `eip155:${string}`;
+
+export type EvmBlockReference =
+  | "latest"
+  | "safe"
+  | "finalized"
+  | `0x${string}`;
+
+export type BrokerEvmJsonRpcReadCall =
+  | {
+      chainId: EvmChainId;
+      method: "eth_chainId" | "eth_blockNumber";
+      params: [];
+    }
+  | {
+      chainId: EvmChainId;
+      method: "eth_getBlockByNumber";
+      params: [EvmBlockReference, false];
+    }
+  | {
+      chainId: EvmChainId;
+      method: "eth_getBalance" | "eth_getCode";
+      params: [`0x${string}`, EvmBlockReference];
+    }
+  | {
+      chainId: EvmChainId;
+      method: "eth_getTransactionByHash" | "eth_getTransactionReceipt";
+      params: [`0x${string}`];
+    };
+
+export interface EvmJsonRpcReadGrantScope {
+  /** Exact versioned validation semantics for this negotiated extension. */
+  profile: typeof AGENTCRED_EVM_JSONRPC_READ_PROFILE;
+  /** Exact HTTPS origin. The profile itself fixes the path to `/v2`. */
+  origin: string;
+  /** Owner-asserted CAIP-2 binding for the exact origin. */
+  chainId: EvmChainId;
+  methods: EvmJsonRpcReadMethod[];
+  ttlSeconds: number;
+  maxUses: number;
+  maxRequestBytes?: number;
+  maxResponseBytes?: number;
+  allowPrivateNetwork?: boolean;
+}
+
+interface GrantRequestBase {
   /** A model-safe label. It carries no authority. */
   alias: string;
   /** Opaque owner-configured reference; never a backend service/account name. */
   credential: string;
-  operation: "http.fetch";
-  scope: HttpGrantScope;
   /** Untrusted explanatory text shown separately by consent UIs. */
   rationale?: string;
 }
 
-export interface GrantReceipt {
-  alias: string;
-  receiptId: string;
+export interface HttpGrantRequest extends GrantRequestBase {
   operation: "http.fetch";
   scope: HttpGrantScope;
+}
+
+export interface EvmJsonRpcReadGrantRequest extends GrantRequestBase {
+  operation: "jsonrpc.read";
+  scope: EvmJsonRpcReadGrantScope;
+}
+
+export type GrantRequest =
+  | HttpGrantRequest
+  | EvmJsonRpcReadGrantRequest;
+
+interface GrantReceiptBase {
+  alias: string;
+  receiptId: string;
   expiresAt: string;
   maxUses: number;
 }
+
+export interface HttpGrantReceipt extends GrantReceiptBase {
+  operation: "http.fetch";
+  scope: HttpGrantScope;
+}
+
+export interface EvmJsonRpcReadGrantReceipt extends GrantReceiptBase {
+  operation: "jsonrpc.read";
+  scope: EvmJsonRpcReadGrantScope;
+}
+
+export type GrantReceipt =
+  | HttpGrantReceipt
+  | EvmJsonRpcReadGrantReceipt;
 
 export interface BrokerHttpRequest {
   url: string;
@@ -72,6 +161,23 @@ export interface BrokerHttpResponse {
   redactions: number;
 }
 
+export type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+export interface BrokerEvmJsonRpcReadResponse {
+  profile: typeof AGENTCRED_EVM_JSONRPC_READ_PROFILE;
+  chainId: EvmChainId;
+  method: EvmJsonRpcReadMethod;
+  result: JsonValue;
+  auditId: string;
+  redactions: number;
+}
+
 export interface AuditEvent {
   auditId: string;
   at: string;
@@ -79,10 +185,14 @@ export interface AuditEvent {
   receiptId?: string;
   event: "grant.allowed" | "grant.denied" | "grant.revoked" | "use.completed" | "use.denied";
   credential?: string;
-  operation?: "http.fetch";
+  /** Random controller generation ID from the broker's startup snapshot. */
+  credentialGenerationId?: string;
+  operation?: "http.fetch" | "jsonrpc.read";
   targetOrigin?: string;
   targetPathHash?: string;
   method?: HttpMethod;
+  rpcMethod?: EvmJsonRpcReadMethod;
+  chainId?: EvmChainId;
   requestBytes?: number;
   responseBytes?: number;
   status?: number;

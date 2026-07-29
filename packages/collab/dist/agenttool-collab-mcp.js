@@ -28433,6 +28433,7 @@ function isOwnedByCurrentUser(uid) {
 }
 
 // src/mcp.ts
+var DEFAULT_MCP_NEXT_EVENT_LIMIT = 10;
 var actorLabel = exports_external.string().min(1).max(200).describe("Stable display label; session credentials, not this label, fence session mutations");
 var legacyActor = actorLabel.optional();
 var key = exports_external.string().min(1).max(200).describe("Unique retry-safe key for this mutation");
@@ -28449,6 +28450,7 @@ var eventAnchor = exports_external.object({
   sequence: exports_external.number().int().nonnegative(),
   hash: exports_external.string().length(64)
 });
+var nextEventLimit = exports_external.number().int().min(1).max(50).optional().describe(`Maximum events in this page; defaults to ${DEFAULT_MCP_NEXT_EVENT_LIMIT} for MCP polling`);
 var localReadOnly = {
   readOnlyHint: true,
   destructiveHint: false,
@@ -28475,7 +28477,7 @@ var localDestructiveMutation = {
 };
 function buildCollabMcpServer(store, options = {}) {
   let binding = options.resumed_session ?? null;
-  const server = new McpServer({ name: "agenttool-collab", version: "0.3.0" }, {
+  const server = new McpServer({ name: "agenttool-collab", version: "0.3.1" }, {
     capabilities: { tools: {} },
     instructions: "Local-first coordination journal for honest exchange among independent coding-agent sessions. " + "Use collab_session_start once per credential-bound MCP process, then collab_next; a host restart resumes from the " + "mode-0600 credential file without exposing its bearer token to the model. Exchange observations, " + "inferences, proposals, or authorised decisions as structured reports with evidence, confidence, " + "limits, and explicit authority scope. Claim before editing overlapping path scopes and renew long " + "work. An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " + "completion is actor-reported and remains pending until a distinct session accepts it. Challenges " + "remain append-only disagreement; acknowledgement means processed, not agreed. Expired session " + "leases require explicit recovery. Git checkpoints are local evidence, not attribution or atomic " + "Git/SQLite locks. Store concise coordination facts only\u2014never credentials, prompts, transcripts, " + "chain-of-thought, or sensitive source content. Cursor rollback recovery must be enabled by the host " + "and completed with an audited cursor reset before session mutations resume. The host owns spawning, " + "wakeups, waiting, and stopping. The separate collab_session_join/list/heartbeat/leave tools preserve " + "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller."
   });
@@ -28615,17 +28617,22 @@ function buildCollabMcpServer(store, options = {}) {
   }, async ({ workspace_id }) => call(() => store.workspaceStatus(workspace_id)));
   server.registerTool("collab_next", {
     title: "Poll the next useful collaboration state",
-    description: "Poll without acknowledging. Routed reports are bounded to the exact event page; task, conflict, and handoff projections describe the same snapshot head.",
+    description: "Poll without acknowledging, with 1\u201350 events per page and a default of 10. Routed reports are bounded to the exact event page; task, conflict, and handoff projections describe the same snapshot head.",
     annotations: localMutation,
     inputSchema: {
       workspace_id: workspaceId,
       actor: legacyActor,
       after_sequence: exports_external.number().int().nonnegative().optional(),
-      known_cursor: eventAnchor.optional()
+      known_cursor: eventAnchor.optional(),
+      event_limit: nextEventLimit
     }
-  }, async ({ workspace_id, actor, after_sequence, known_cursor }) => call(() => {
+  }, async ({ workspace_id, actor, after_sequence, known_cursor, event_limit }) => call(() => {
     requireWorkspace(workspace_id);
-    return binding ? store.nextForSession({ ...boundCredential(), known_cursor }) : store.nextForActor(workspace_id, requireLegacyActor(actor), after_sequence ?? 0);
+    return binding ? store.nextForSession({
+      ...boundCredential(),
+      known_cursor,
+      event_limit: event_limit ?? DEFAULT_MCP_NEXT_EVENT_LIMIT
+    }) : store.nextForActor(workspace_id, requireLegacyActor(actor), after_sequence ?? 0, event_limit ?? DEFAULT_MCP_NEXT_EVENT_LIMIT);
   }));
   server.registerTool("collab_cursor_ack", {
     title: "Acknowledge processed collaboration events",
@@ -29432,6 +29439,8 @@ var MAX_SESSION_CAPABILITIES = 32;
 var MAX_SESSION_CAPABILITY_LENGTH = 100;
 var DEFAULT_SESSION_LIST_LIMIT = 100;
 var MAX_SESSION_LIST_LIMIT = 500;
+var DEFAULT_NEXT_EVENT_LIMIT = 50;
+var MAX_NEXT_EVENT_LIMIT = 50;
 var SESSION_TOKEN_BYTES = 32;
 var PRESENCE_SESSION_COLUMNS = [
   "id",
@@ -31984,11 +31993,12 @@ class CollabStore {
       };
     });
   }
-  nextForActor(workspaceId2, actorInput, afterSequence = 0) {
+  nextForActor(workspaceId2, actorInput, afterSequence = 0, eventLimit = DEFAULT_NEXT_EVENT_LIMIT) {
     const actor = validateActor(actorInput);
+    const boundedEventLimit = validateNextEventLimit(eventLimit);
     this.expireElapsedHandoffs(workspaceId2, "system:clock");
     const read = this.db.transaction(() => {
-      const events = this.readEventPage(workspaceId2, afterSequence, 50);
+      const events = this.readEventPage(workspaceId2, afterSequence, boundedEventLimit);
       const tasks = this.listTasks(workspaceId2);
       const offers = this.db.query(`
         SELECT * FROM handoffs
@@ -32021,7 +32031,7 @@ class CollabStore {
     return read.deferred();
   }
   nextForSession(input) {
-    const row = this.db.transaction(() => {
+    const authenticatedPoll = this.db.transaction(() => {
       const authenticated = this.authenticateSession(input);
       const stored = {
         epoch_id: authenticated.cursor_epoch_id,
@@ -32047,13 +32057,18 @@ class CollabStore {
           throw error51;
         }
       }
+      const eventLimit2 = validateNextEventLimit(input.event_limit);
       this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), authenticated.id);
-      return this.requireCoordinationSessionRow(authenticated.id);
+      return {
+        row: this.requireCoordinationSessionRow(authenticated.id),
+        event_limit: eventLimit2
+      };
     }).immediate();
+    const { row, event_limit: eventLimit } = authenticatedPoll;
     this.expireElapsedHandoffs(row.workspace_id, "system:clock");
     const read = this.db.transaction(() => {
       const current = this.authenticateSession(input);
-      const events = this.readEventPage(current.workspace_id, current.cursor_sequence, 50);
+      const events = this.readEventPage(current.workspace_id, current.cursor_sequence, eventLimit);
       const tasks = this.listTasks(current.workspace_id);
       const { claimable, conflicted } = this.projectAvailableTasks(current.workspace_id, tasks, () => false);
       const handoffs = this.db.query(`
@@ -33010,6 +33025,13 @@ function validateSessionListLimit(value) {
   const limit = value ?? DEFAULT_SESSION_LIST_LIMIT;
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_SESSION_LIST_LIMIT) {
     throw new CollabError("invalid_session_list_limit", `limit must be an integer between 1 and ${MAX_SESSION_LIST_LIMIT}`);
+  }
+  return limit;
+}
+function validateNextEventLimit(value) {
+  const limit = value ?? DEFAULT_NEXT_EVENT_LIMIT;
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_NEXT_EVENT_LIMIT) {
+    throw new CollabError("invalid_event_limit", `event_limit must be an integer between 1 and ${MAX_NEXT_EVENT_LIMIT}`);
   }
   return limit;
 }

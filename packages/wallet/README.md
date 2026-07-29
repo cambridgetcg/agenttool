@@ -16,13 +16,31 @@ It also provides a deliberately narrow signer interface, exact-byte request
 binding, a forward-only submission lifecycle, and a pure continuity
 compare-and-swap rule.
 
-Version `0.1.0` is distributed as an exact Apache-2.0 `love-package/v1`
-artifact whose manifest binds its size, SHA-256, and source revision. npm is an
-optional convenience mirror whose exact availability must be checked
-independently. The package does not create a wallet, derive or store a seed,
-export a private key, decode chain-specific calldata, choose transactions,
-contact an RPC endpoint, broadcast automatically, or persist counters. Those
-responsibilities belong to explicit adapters and a durable host implementation.
+Version `0.1.3` is the current package release. Its checked-in exact
+Apache-2.0 `love-package/v1` manifest binds the tarball's size, SHA-256, and
+source revision; npm and GitHub are optional mirrors whose exact availability
+must be checked independently. The exact-version `0.1.1` and `0.1.2` LOVE
+artifacts remain byte-addressable and are not rewritten. Their currently
+public GitHub assets were byte-verified separately, but GitHub reports those
+release records as mutable, so the optional locator is not an immutability
+guarantee. The `0.1.1` package incorrectly called itself unreleased; the
+`0.1.2` erratum ambiguously described the LOVE and GitHub bytes together as
+immutable. This paragraph supersedes both statements without rewriting either
+historical artifact. As independently checked on 2026-07-28, npm still served
+`0.1.0`.
+
+The package does not create a wallet, derive or store a seed, export a private
+key, decode chain-specific calldata, choose transactions, contact an RPC
+endpoint, broadcast automatically, or persist counters. Those responsibilities
+belong to explicit adapters and a durable host implementation.
+
+The separate
+[`@agenttool/wallet-zerone`](../wallet-zerone/README.md) `0.1.1` LOVE package
+is one such narrow local adapter. It adds exact Zerone message/direct-sign
+bytes, secp256k1 verification, and injected query/simulation/broadcast/lookup
+interfaces while leaving keys, custody, endpoints, durable reservations, and
+settlement tracking to the host. Public package bytes do not expand this core
+package's protocol or imply hosted execution.
 
 ## Development
 

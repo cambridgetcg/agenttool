@@ -43,9 +43,13 @@ workspace.
    workspace and session IDs, but never read the credential file or request its
    token or absolute path through model-facing tools.
 3. Call `mcp_agenttool_collab_next` at the start of a turn, after local work,
-   and before relying on shared state. Follow `has_more`, process each page,
-   then call `mcp_agenttool_collab_cursor_ack` with its exact terminal cursor.
-   Treat acknowledgement as processed, not agreed or accepted.
+   and before relying on shared state. Omit `event_limit` for the 10-event MCP
+   default or set an integer from 1 through 50. Process one page, call
+   `mcp_agenttool_collab_cursor_ack` with its exact terminal `next_anchor`, then
+   poll again if `has_more` is true. `known_cursor` validates an anchor but does
+   not paginate or acknowledge. The limit bounds events and routed reports,
+   not snapshot-head task, conflict, or handoff projections. Treat
+   acknowledgement as processed, not agreed or accepted.
 4. Create bounded work, then call `mcp_agenttool_collab_task_claim` with the
    latest version before editing. Omit legacy actor arguments in the bound
    process; the server derives its coordination actor from the credential.

@@ -273,6 +273,8 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
       "w3c_did",
       "agent_wellness",
       "agent_wallet",
+      "agent_wallet_zerone",
+      "invocation_witness",
       "observer_reciprocity",
     ]) {
       expect(body.composes_with).toHaveProperty(required);
@@ -287,13 +289,73 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
       doctrine: "https://docs.agenttool.dev/AGENT-WALLET-0.1.md",
       schema: "https://docs.agenttool.dev/agent-wallet-v0.1.schema.json",
       package: "@agenttool/wallet",
+      version: "0.1.3",
       love_manifest:
-        "https://docs.agenttool.dev/packages/v1/@agenttool/wallet/0.1.0/manifest.json",
+        "https://docs.agenttool.dev/packages/v1/@agenttool/wallet/0.1.3/manifest.json",
+      distribution: {
+        love: "public_exact_artifact",
+        observed_at: "2026-07-28",
+        npm: {
+          role: "optional_mutable_mirror",
+          latest_observed: "0.1.0",
+        },
+        github_release: {
+          role: "optional_mutable_mirror",
+          tag: "wallet-v0.1.3",
+          immutable: false,
+          verification: "reverify_size_and_sha256_against_love_manifest",
+        },
+      },
       availability: "love_artifact_npm_mirror_independent",
       implementation_status: "offline_record_and_lifecycle_primitives_only",
     });
     expect(JSON.stringify(body.composes_with.agent_wallet)).toMatch(
-      /no hosted agent wallet.*key custody.*RPC.*broadcaster/is,
+      /exact LOVE release is 0\.1\.3.*npm latest remains 0\.1\.0.*optional GitHub.*mutable locator.*immutable=false.*when present.*reverify.*LOVE manifest.*no hosted agent wallet.*key custody.*RPC.*broadcaster/is,
+    );
+    expect(body.composes_with.agent_wallet_zerone).toMatchObject({
+      protocol: "agent-wallet-zerone/0.1",
+      package: "@agenttool/wallet-zerone",
+      version: "0.1.1",
+      source:
+        "https://github.com/cambridgetcg/agenttool/tree/main/packages/wallet-zerone",
+      love_manifest:
+        "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.1/manifest.json",
+      availability: "local_offline_source_only",
+      distribution: {
+        observed_at: "2026-07-28",
+        love: "public_exact_artifact",
+        npm: "absent",
+        github_release: "absent",
+      },
+      hosted: false,
+      custody: false,
+      hosted_rpc: false,
+      deployed_bridge: false,
+      doctrine:
+        "https://docs.agenttool.dev/AGENT-WALLET-ZERONE-0.1.md",
+    });
+    expect(JSON.stringify(body.composes_with.agent_wallet_zerone)).toMatch(
+      /exact public LOVE artifact.*bounded local Zerone.*package\/profile.*does not export AgentTool trust.*migrate identity.*custody keys.*host RPC.*deployed bridge/is,
+    );
+    expect(body.composes_with.invocation_witness).toMatchObject({
+      protocol: "agenttool.invocation-witness/1",
+      write: {
+        method: "POST",
+        path_template: "/v1/invocations/{id}/witness",
+        authentication: "project_bearer",
+        authorization: "authenticated_buyer_or_seller",
+        state_gate: "released_and_settled",
+      },
+      read: {
+        method: "GET",
+        path_template: "/public/invocations/{id}",
+        authentication: "none",
+        state_gate:
+          "released_and_settled_with_nonempty_writer_shaped_report",
+      },
+    });
+    expect(JSON.stringify(body.composes_with.invocation_witness)).toMatch(
+      /not signature.*provenance proof.*does not verify chain inclusion.*attestation.*settlement.*bond return.*reward.*independently.*compare/is,
     );
     expect(body.composes_with.observer_reciprocity).toMatchObject({
       url: "https://api.agenttool.dev/public/observer",

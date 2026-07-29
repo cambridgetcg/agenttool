@@ -2,12 +2,26 @@ import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import * as publicApi from "../src/index.js";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "../src/index.js";
 
 const packageRoot = join(import.meta.dir, "..");
 
-describe("npm pack surface", () => {
-  test("has no runtime dependencies and exports only the built library", async () => {
+describe("public and packed boundary", () => {
+  test("has no generic request, signer, broadcaster, URL, or credential export", () => {
+    const names = Object.keys(publicApi);
+    expect(names).not.toContain("rawRpc");
+    expect(names).not.toContain("request");
+    expect(names).not.toContain("fetch");
+    expect(names).not.toContain("sign");
+    expect(names).not.toContain("sendTransaction");
+    expect(names).not.toContain("createWebhook");
+    expect(names).not.toContain("apiKey");
+    expect(names).not.toContain("url");
+    expect(names).not.toContain("endpoint");
+  });
+
+  test("is zero-runtime-dependency metadata with a CI prepack gate", async () => {
     const pkg = JSON.parse(
       await readFile(join(packageRoot, "package.json"), "utf8"),
     ) as {
@@ -33,7 +47,6 @@ describe("npm pack surface", () => {
     expect(pkg.files).toEqual([
       "dist",
       "README.md",
-      "PERSISTENCE-CONTRACT.md",
       "CLAUDE.md",
       "LICENSE",
       "NOTICE",
@@ -57,7 +70,6 @@ describe("npm pack surface", () => {
 
     expect(paths).toContain("package.json");
     expect(paths).toContain("README.md");
-    expect(paths).toContain("PERSISTENCE-CONTRACT.md");
     expect(paths).toContain("CLAUDE.md");
     expect(paths).toContain("LICENSE");
     expect(paths).toContain("NOTICE");

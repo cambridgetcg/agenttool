@@ -111,6 +111,54 @@ the broker passes that immutable identity to `ConsentProvider` and records its
 non-secret stable ID in metadata audit. A client-supplied identity is never an
 acceptable substitute.
 
+### 3.3 Portable controller plane
+
+The package also ships a separate interactive-terminal executable,
+`agentcred-control`. It is not part of the `agentcred/0.1` wire, is not
+reachable through `AgentCredClient`, and does not change this protocol's
+conformance label. Its TTY check is an anti-pipe guard, not human
+authentication, presence, or consent.
+
+Its managed macOS profile stores two independently named Keychain items and an
+owner-only metadata manifest. A running broker holds a cooperative lifecycle
+lock and resolves the selected manifest reference exactly once at startup.
+This freezes alias-to-slot selection, not credential bytes against an
+out-of-band same-user Keychain update. Controller transitions require a broker
+stop/restart. Existing connections and their grants close on stop; an already
+dispatched upstream action is not recalled.
+
+The native Keychain prompt accepts the value directly. The controller has no
+value, stdin, environment-name, command, provider-action/Keychain URL, export,
+list, or reveal option. Its verification origin and path are non-secret
+endpoint metadata; embedding a credential in either would expose it through
+argv and the manifest and is forbidden.
+Its manifest and receipts contain random generation/rotation IDs and
+controller metadata only, never credential bytes, derivatives, hashes, or
+lengths. Managed authentication metadata has no arbitrary prefix field.
+
+The controller uses write-ahead states for Keychain provisioning, old-key
+revocation intent, candidate-revocation intent, and local deletion. Routine
+old-key revocation crosses a durable no-rollback boundary only after fresh,
+exact active-generation success plus exact previous-generation success or the
+configured revoked status. The negative alternative supports recovery from an
+already-dead predecessor; it never accepts a generic network/error outcome.
+After the remote side effect, provider attestation and exact old-negative
+verification remain forward-progress gates, while additional active-positive
+observations are recorded but optional. Rollback before the boundary requires
+a fresh exact previous-generation success and a non-secret reason ID. Full
+closures may be compacted into owner-only archives; the live manifest retains
+a digest/generation/profile metadata anchor.
+
+This preview does not ship provider-administration adapters. Lifecycle
+evidence supports only an exact canonical HTTPS GET/HEAD path with no query
+and exact configured success/revoked statuses. It is meaningful only for an
+owner-selected authentication-bound endpoint with documented semantics.
+Consumer drain and provider revocation IDs are operator attestations.
+Generation IDs identify slot references, not secret-byte identity. The
+lifecycle lock coordinates cooperating processes but does not prevent a
+malicious same-user process from bypassing it. See `ROTATION.md` for the full
+lifecycle, crash recovery, archive chain, and emergency limitation.
+
 ## 4. Framing and envelopes
 
 Each frame is a four-byte unsigned big-endian length followed by UTF-8 JSON.
@@ -189,6 +237,15 @@ The only request `type` values implemented in `0.1` are:
 | `grant.use` | `http.result` | spend one capability use on a brokered fetch |
 | `grant.revoke` | `grant.revoked` | surrender the connection-bound capability |
 
+An updated client and broker MAY negotiate a separately named extension in
+`hello` while keeping this base envelope and lifecycle. An extension MUST
+define its exact profile name, operation, payloads, validation order, result
+type, and authority boundary. Its operation is not part of base
+`agentcred/0.1` and MUST be rejected unless that exact profile was selected on
+the connection. This package implements
+[`agentcred.evm-jsonrpc-read/0.1`](./JSONRPC-READ-0.1.md); it does not widen
+`http.fetch` into arbitrary JSON-RPC.
+
 `grant.status`, `grant.renew`, and `sign` are reserved for a future negotiated
 revision. They are not valid `agentcred/0.1` request types and clients MUST NOT
 send them. The current server rejects unsupported types, normally by closing
@@ -206,15 +263,18 @@ the connection during request parsing.
   "type": "hello",
   "payload": {
     "clientNonce": "non-authoritative-random-client-nonce",
-    "clientName": "example-agent-host"
+    "clientName": "example-agent-host",
+    "extensions": ["agentcred.evm-jsonrpc-read/0.1"]
   }
 }
 ```
 
 `clientNonce` is required and contains 16 to 256 characters. It provides
 freshness material only; it is not client authentication. `clientName` is
-optional untrusted metadata. The success payload contains the broker's opaque
-`sessionId` and negotiated concurrency limit:
+optional untrusted metadata. `extensions` is an optional bounded array of
+profile names offered by the client; offering one grants no authority. Unknown
+names are ignored. The success payload contains the broker's opaque
+`sessionId`, negotiated concurrency limit, and selected extension names:
 
 ```json
 {
@@ -225,7 +285,8 @@ optional untrusted metadata. The success payload contains the broker's opaque
   "type": "hello.ready",
   "payload": {
     "sessionId": "opaque-session-id",
-    "maxInFlight": 4
+    "maxInFlight": 4,
+    "extensions": ["agentcred.evm-jsonrpc-read/0.1"]
   }
 }
 ```
@@ -234,9 +295,14 @@ optional untrusted metadata. The success payload contains the broker's opaque
 negotiated connection limit; it does not deliberately trigger a connection
 close and revoke all of its grants.
 
+Base clients may omit `extensions`, and base-compatible brokers select none.
+An updated client talking to an older broker treats an absent response field
+as an empty selection.
+
 ## 7. Grant request and lifecycle
 
-`grant.request` currently supports only `operation: "http.fetch"`:
+Base `agentcred/0.1` `grant.request` supports only
+`operation: "http.fetch"`:
 
 ```json
 {
@@ -270,6 +336,12 @@ close and revoke all of its grants.
 owner-configured reference, not a credential value. The broker MUST NOT expose
 a method to enumerate these references or their account metadata. `rationale`
 is optional untrusted display text.
+
+Credential references use one closed ASCII grammar everywhere:
+`[A-Za-z0-9_][A-Za-z0-9._:/@+-]{0,127}`. Version 0.3 tightens the former
+trimmed-string/256-character acceptance; owners upgrading a 0.2 config must
+rename references containing spaces, other characters, or more than 128
+characters before startup.
 
 The supported methods are `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, and `DELETE`.
 `ttlSeconds` is `1..86400`; `maxUses` is `1..10000`. Request and response limits

@@ -283,7 +283,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("name: Install cross-language vector dependencies");
     expect(workflow).toContain("working-directory: packages/sdk-ts");
     expect(workflow).toContain(
-      "api packages/data packages/data-protocol packages/repo-archive packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope",
+      "api packages/data packages/data-protocol packages/repo-archive packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope packages/alchemy packages/kingdom",
     );
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("package-manager-cache: false");
@@ -294,16 +294,23 @@ describe("boring test spine", () => {
     expect(workflow).toContain(
       "uv sync --locked --extra dev --no-install-project --no-sources --no-python-downloads --dry-run --no-cache",
     );
-    expect(workflow).toContain("name: Build local data-sync and projector peers");
+    expect(workflow).toContain("name: Build local-dependent package peers");
     expect(workflow).toContain("cd packages/data && bun run build");
     expect(workflow).toContain("cd packages/data-protocol && bun run build");
     expect(workflow).toContain("cd packages/correspondence-yutabase && bun run build");
+    expect(workflow).toContain("cd packages/wallet && bun run build");
     expect(workflow).toContain(
       "name: Install local-dependent package dependencies from lockfiles",
     );
     expect(workflow).toContain("cd packages/data-sync && bun install --frozen-lockfile");
     expect(workflow).toContain(
       "cd packages/correspondence-yutabase-projector && bun install --frozen-lockfile",
+    );
+    expect(workflow).toContain(
+      "cd packages/wallet-zerone && bun install --frozen-lockfile --force",
+    );
+    expect(workflow.indexOf("cd packages/wallet && bun run build")).toBeLessThan(
+      workflow.indexOf("cd packages/wallet-zerone && bun install --frozen-lockfile --force"),
     );
     expect(workflow).not.toContain("secrets.");
 
@@ -319,7 +326,13 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/correspondence-yutabase && bun run ci");
     expect(preflight).toContain("cd packages/correspondence-yutabase-projector && bun run ci");
     expect(preflight).toContain("cd packages/wallet && bun run ci");
+    expect(preflight).toContain("cd packages/wallet-zerone && bun run ci");
     expect(preflight).toContain("cd packages/telescope && bun run ci");
+    expect(preflight).toContain("cd packages/alchemy && bun run ci");
+    expect(preflight).toContain("cd packages/kingdom && bun run ci");
+    expect(workflow).toContain(
+      "name: Smoke packed Alchemy read package under Node and Bun",
+    );
     expect(workflow).toContain("name: Smoke packed credential broker under Node and Bun");
     expect(workflow).toContain(
       'cli="$install_dir/node_modules/@agenttool/credential-broker/dist/cli.js"',
@@ -354,16 +367,44 @@ describe("boring test spine", () => {
     expect(workflow).toContain(
       "apps/docs/packages/v1/@agenttool/telescope/0.2.3/agenttool-telescope-0.2.3.tgz",
     );
-    expect(workflow).toContain("name: Smoke packed Agent Wallet under Node and Bun");
+    expect(workflow).toContain(
+      "name: Smoke packed Agent Wallet and Zerone adapter together under Node and Bun",
+    );
+    expect(workflow).toContain(
+      'npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$wallet_tarball" "$zerone_tarball"',
+    );
+    expect(workflow).toContain('w.PACKAGE_VERSION!=="0.1.3"');
+    expect(workflow).toContain('z.PACKAGE_VERSION!=="0.1.1"');
+    expect(workflow).toContain('z.ZERONE_ADAPTER_PROTOCOL!=="agent-wallet-zerone/0.1"');
+    expect(workflow).toContain('typeof z.createZeroneDirectSignPlan!=="function"');
+    expect(workflow).toContain(
+      'v.schema!=="agent-wallet-zerone.go-cosmos-vectors/0.1"',
+    );
+    expect(workflow).toContain("signAndSend|custody");
     expect(workflow).toContain(
       "name: Smoke canonical Agent Browser LOVE artifact under Node and Bun",
     );
     expect(workflow).toContain(
-      "apps/docs/packages/v1/@agenttool/browser/0.3.0/agenttool-browser-0.3.0.tgz",
+      "apps/docs/packages/v1/@agenttool/browser/0.5.0/agenttool-browser-0.5.0.tgz",
     );
-    expect(workflow).toContain('m.BROWSER_PACKAGE_VERSION!=="0.3.0"');
+    expect(workflow).toContain('m.BROWSER_PACKAGE_VERSION!=="0.5.0"');
     expect(workflow).toContain(
-      'm.BROWSER_CAPABILITIES_SCHEMA!=="agent-browser-capabilities/0.3"',
+      'm.OBSERVATION_SCHEMA!=="agent-browser-observation/0.2"',
+    );
+    expect(workflow).toContain(
+      'm.BROWSER_CAPABILITIES_SCHEMA!=="agent-browser-capabilities/0.4"',
+    );
+    expect(workflow).toContain(
+      'm.BROWSER_CONSEQUENCE_PLAN_SCHEMA!=="agent-browser-consequence-plan/0.2"',
+    );
+    expect(workflow).toContain(
+      'm.BROWSER_ACTION_RECEIPT_SCHEMA!=="agent-browser-action-receipt/0.1"',
+    );
+    expect(workflow).toContain(
+      'p.MCP_MODERN_PROTOCOL_REVISION!=="2026-07-28"',
+    );
+    expect(workflow).toContain(
+      'p.MCP_LEGACY_COMPATIBILITY!=="2025-era"',
     );
     expect(workflow).toContain(
       'sovereign.runtime.serviceWorkers!=="allow"',
@@ -385,7 +426,7 @@ describe("boring test spine", () => {
       workflow.match(
         /npm install --ignore-scripts --no-audit --no-fund --prefix/g,
       ),
-    ).toHaveLength(7);
+    ).toHaveLength(8);
 
     const uses = workflow
       .split("\n")
@@ -416,7 +457,10 @@ describe("boring test spine", () => {
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).toContain("          - skills");
     expect(workflow).toContain("          - browser");
+    expect(workflow).toContain("          - alchemy");
+    expect(workflow).toContain("          - kingdom");
     expect(workflow).toContain("          - repo-archive");
+    expect(workflow).toContain("          - wallet-zerone");
     expect(workflow).not.toContain("pull_request:");
     expect(workflow).not.toMatch(/\n\s+push:/);
     expect(workflow).toContain("persist-credentials: false");

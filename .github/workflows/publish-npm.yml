@@ -14,8 +14,11 @@ on:
           - credential-broker
           - sdk
           - wallet
+          - wallet-zerone
           - telescope
           - browser
+          - alchemy
+          - kingdom
           - repo-archive
           - collab
           - correspondence-yutabase

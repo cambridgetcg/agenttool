@@ -176,6 +176,18 @@ export function buildApiCatalog(
               "Canonical exact three-road discovery compass; reading grants no authority and starts no follow-up",
           },
           {
+            href: `${api}/.well-known/agent.json`,
+            type: "application/json",
+            title:
+              "XENIA Surface 0.1 public-resource manifest; not Covenant adoption or conformance",
+          },
+          {
+            href: `${api}/public/kingdom/framework`,
+            type: "application/json",
+            title:
+              "AgentTool KINGDOM project card; not cross-repository authority or liveness",
+          },
+          {
             href: porch,
             type: "application/json",
             title:

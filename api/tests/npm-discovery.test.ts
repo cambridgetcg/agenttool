@@ -17,8 +17,8 @@ const CURRENT_NPM_SPECIFIERS = [
   "@agenttool/credential-broker@0.1.0",
   "@agenttool/data@0.3.1",
   "@agenttool/data-sync@0.1.1",
-  "@agenttool/sdk@0.16.3",
-  "@agenttool/telescope@0.2.0",
+  "@agenttool/sdk@0.17.0",
+  "@agenttool/telescope@0.2.3",
 ] as const;
 
 describe("optional npm package discovery", () => {
@@ -41,27 +41,32 @@ describe("optional npm package discovery", () => {
     const published = read("apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md");
     expect(published).toBe(canonical);
     expect(canonical).toContain(
-      "npm install --save-exact @agenttool/sdk@0.16.3",
+      "npm install --save-exact @agenttool/sdk@0.17.0",
     );
-    expect(canonical).toMatch(/skips Step 1.*independent LOVE/is);
+    expect(canonical).toMatch(/skips Step 1.*in-command LOVE/is);
     expect(canonical).toMatch(/never substitute npm `latest`/i);
   });
 
   test("describes npm as optional in repository-level orientation", () => {
     const rootReadme = read("README.md");
     expect(rootReadme).toContain(
-      "npm install --save-exact @agenttool/sdk@0.16.3",
+      "npm install --save-exact @agenttool/sdk@0.17.0",
     );
     const pythonSource =
-      "git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.16.3#subdirectory=packages/sdk-py";
-    const exactPyPI = 'python -m pip install "agenttool-sdk==0.16.3"';
+      "git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.17.0#subdirectory=packages/sdk-py";
+    const exactPyPI = 'python -m pip install "agenttool-sdk==0.17.0"';
     expect(rootReadme).toContain(pythonSource);
     expect(rootReadme).toContain(exactPyPI);
     expect(rootReadme.indexOf(pythonSource)).toBeLessThan(
       rootReadme.indexOf(exactPyPI),
     );
-    expect(rootReadme).toMatch(/PyPI is an optional convenience/i);
-    expect(rootReadme).toMatch(/A `404` means that mirror is not available/i);
+    expect(rootReadme).toMatch(
+      /PyPI 0\.17\.0 is public as an optional, independently verified convenience\s+mirror/i,
+    );
+    expect(rootReadme).toContain(
+      "The exact 0.17.0 npm and PyPI mirrors are independently public.",
+    );
+    expect(rootReadme).toMatch(/mirrors remain non-authoritative/i);
     expect(rootReadme).toMatch(/LOVE manifests remain release authority/i);
     expect(rootReadme).toMatch(/mutable dist-tags are informational/i);
     expect(rootReadme).toMatch(/command alone does\s+not verify the manifest/i);

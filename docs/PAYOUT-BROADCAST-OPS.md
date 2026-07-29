@@ -1,244 +1,184 @@
 # PAYOUT-BROADCAST-OPS.md
 
-> *Operator runbook for the payout-broadcast worker. Pre-flight, testnet validation, mainnet enable, monitoring, and remediation. Doctrine: `docs/PAYOUT-BROADCAST.md` · Plan: `docs/PAYOUT-BROADCAST-PLAN.md`.*
+> *Current operator runbook for a resting outbound-payout subsystem. It
+> preserves historical replay, listing, cancellation, and ambiguity handling;
+> it is not an enablement guide.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Horizon A · [PAYOUT-BROADCAST](PAYOUT-BROADCAST.md) (doctrine) · [PAYOUT-BROADCAST-PLAN](PAYOUT-BROADCAST-PLAN.md) (slice plan)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Horizon A · [PAYOUT-BROADCAST](PAYOUT-BROADCAST.md) (doctrine) · [PAYOUT-BROADCAST-PLAN](PAYOUT-BROADCAST-PLAN.md) (historical implementation plan)
 >
-> **Implements:** Layer 4 — Economy (operator-side runbook for the outbound worker — mainnet enable is operator-led).
+> **Implements:** Layer 4 — Economy. Operational containment for historical
+> outbound payout rows while fresh admission and every worker boot path rest.
+>
+> **Code:** `api/src/routes/economy/crypto.ts` · `api/src/services/economy/crypto/index.ts` · `api/src/services/economy/config.ts` · `api/src/workers/payout/`
+>
+> **Tests:** `api/tests/{payout-request-idempotency,workers-off-switch,payout-refund-integrity,payout-submit-outcome,crypto-public-truth}.test.ts`
 
-## TL;DR
+## Current decision
 
-```
-1. Run migrations 0021..0024.
-2. Generate testnet mnemonic; fund index-0 with testnet SOL/ETH/USDC.
-3. Set env (testnet); run e2e harnesses; verify on explorers.
-4. Set env (mainnet); manual smoke at 0.01 USDC; verify on explorers.
-5. Flip PAYOUT_WORKER_ENABLED=true on prod. Monitor.
-```
+Fresh payout admission and payout-worker execution are resting
+unconditionally.
 
----
+- A new `POST /v1/wallets/:id/payout` returns
+  `503 payout_admission_resting`. Its tentative idempotency reservation rolls
+  back after durable replay/conflict lookup and before network selection or
+  payout-economic wallet/policy reads or mutation.
+- A same-input historical request can still replay its current durable state.
+  Changed input under the same key still conflicts.
+- Existing rows remain listable. A historical row that is still `requested`
+  remains cancellable through the authenticated API.
+- `PAYOUT_WORKER_ENABLED`, `PAYOUT_NETWORK`, RPC credentials, and direct module
+  imports do not authorize worker boot. Do not try to reopen the subsystem by
+  changing environment variables.
+- `AGENTTOOL_DISABLE_WORKERS=1` remains an additional production-wide
+  containment switch and must stay set during this release.
 
-## Pre-flight
+The former admission rule counted lifetime `gallery_sale` and
+`escrow_release` ledger labels. That did not conserve cashable backing through
+ordinary debits, internally funded transfers, refunds, chargebacks, reorgs, or
+later funding. It could therefore treat internally circulated or already-spent
+value as withdrawable. The repository retains the historical state machine for
+audit and redesign, not for production activation.
 
-### Migrations
+## Release and maintenance checks
 
-Apply in order (idempotent; safe to re-run):
-
-```bash
-psql "$DATABASE_URL" -f api/migrations/0021_payout_cancellable.sql
-psql "$DATABASE_URL" -f api/migrations/20260508T230839_payout_broadcasting_status.sql
-psql "$DATABASE_URL" -f api/migrations/20260508T232231_payout_policies.sql
-```
-
-(0022 is the vault migration — run if not already applied; unrelated to payouts. The attestation-marketplace migration (`20260509T131433_attestation_marketplace.sql`) is also unrelated to payouts.)
-
-### Env vars
-
-| Var | Required when | Notes |
-|---|---|---|
-| `PAYOUT_WORKER_ENABLED` | always to enable broadcast | `true` is the payout-specific opt-in. The global switch below must also allow boot. Default `false` (the `/payout` endpoint returns 503). |
-| `AGENTTOOL_DISABLE_WORKERS` | always | `1` is authoritative: no payout worker boot and `/payout` returns 503 even when the payout-specific flag is true. Leave unset to permit workers. |
-| `PAYOUT_NETWORK` | when payout is enabled and the global switch is unset | `testnet` \| `mainnet`. Boot refuses if active payout worker configuration omits it. |
-| `CRYPTO_HD_MNEMONIC` | mainnet | BIP-39 mnemonic; address derivation seed for mainnet. **Back up offline.** |
-| `CRYPTO_HD_MNEMONIC_TESTNET` | testnet | Separate testnet mnemonic; never reused for mainnet. Boot refuses testnet without this set. |
-| `ALCHEMY_API_KEY` | EVM RPC | Single key for all EVM chains; URL composed by `network.ts`. |
-| `HELIUS_API_KEY` | Solana mainnet | Required on mainnet (no public fallback). Optional on testnet (devnet falls back to `api.devnet.solana.com`). |
-| `RPC_URL_<CHAIN>_<NETWORK>` | optional override | Per-chain explicit URL (e.g. `RPC_URL_ETHEREUM_MAINNET=https://...`). Wins over Alchemy/Helius. |
-
-Mainnet refuses to fall back to public RPCs — you MUST configure auth before any mainnet RPC call.
-
-### Secrets storage
-
-The platform's HD mnemonic is the master key for all derived deposit/payout addresses. **Store offline.** Loss = loss of all derived funds.
-
-- Production: Fly secrets (`fly secrets set CRYPTO_HD_MNEMONIC=...`).
-- Operator workstation: macOS Keychain or equivalent (e.g. run `security add-generic-password -U -s agenttool-crypto-hd-mnemonic-testnet -a $USER -w` and enter the mnemonic at the system prompt). The e2e harnesses read this at runtime.
-- Backup: paper / steel offline.
-
----
-
-## Testnet validation
-
-The acceptance gate before mainnet enable. Run both harnesses; both must reach `confirmed`.
-
-### EVM (Sepolia)
+Survey the complete repository/journal inventory; never replay a selected
+payout subset with raw `psql`:
 
 ```bash
-# 1. Fund index-0 source on Sepolia (get Sepolia ETH + USDC):
-#      https://faucet.circle.com/             USDC
-#      https://www.alchemy.com/faucets/...    ETH
-#    Then send to the address printed below.
-bun api/scripts/_e2e-payout-evm.ts
-# expects: PAYOUT_WORKER_ENABLED=true AGENTTOOL_DISABLE_WORKERS unset
-#          PAYOUT_NETWORK=testnet
-#          CRYPTO_HD_MNEMONIC_TESTNET=<keychain> ALCHEMY_API_KEY=<key>
+bin/migrate-pending.sh --dry-run
 ```
 
-The harness prints the index-0 address on first run — fund it, then re-run.
+An empty result proves source/journal inventory compatibility, not schema
+parity. Exit `42` means a protected writer boundary is pending: keep all
+relevant admission and workers closed and follow the exclusive maintenance
+sequence in [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md).
 
-Acceptance: row reaches `broadcast` with `tx_hash` set in <60s, then `confirmed` in ~3min. Etherscan link printed.
+Before and after any protected production cutover:
 
-### Solana (devnet)
+1. Prove every old API replica has `AGENTTOOL_DISABLE_WORKERS=1`.
+2. Prove `PAYOUT_WORKER_ENABLED` is absent or false on every old replica.
+3. Count historical rows by `requested`, `broadcasting`, `broadcast`,
+   `confirmed`, `failed`, and `cancelled`.
+4. Keep payout admission and every payout worker closed. Capture every exact
+   Fly Machine ID and its material configuration before maintenance. Do not
+   destroy, recreate, or scale the fleet to zero as a fencing shortcut.
+5. Use a separately reviewed and rehearsed identity-preserving mechanism to
+   fence restart, autostart, schedules, and external admission; drain durable
+   jobs, leases, and in-flight work; then stop those same Machine IDs in place.
+   Before SQL, prove every captured ID still exists and no old writer can
+   resume.
+6. Exercise only the canonical pending runner, in order:
 
-```bash
-# Fund index-0 with devnet SOL + USDC:
-#   https://faucet.solana.com/    SOL
-#   https://faucet.circle.com/    USDC (Solana → devnet)
-bun api/scripts/_e2e-payout-sol.ts
-```
+   ```bash
+   bin/migrate-pending.sh --dry-run
+   bin/migrate-pending.sh --dry-run --maintenance-quiesced
+   bin/migrate-pending.sh --maintenance-quiesced
+   bin/migrate-pending.sh --dry-run
+   ```
 
-Acceptance: row reaches `broadcast`; then `confirmed` within ~30s. Solscan link printed.
+   Require the two pre-apply inventories to name the same reviewed files and
+   the final inventory to be empty.
+7. Once any protected SQL commits, proceed forward only. Update those same
+   Machine IDs in place to the exact protected-main image, keep workers off,
+   and prove the final identity, topology, image, source revision, health, and
+   worker flags before reopening any admission.
 
-### Per-chain coverage
+The repository currently has no checked identity-preserving maintenance
+implementation. If the reviewed mechanism or any writer-exclusion proof is
+absent, stop before SQL; neither this runbook nor an empty registry authorizes
+destroying an extant fleet or guessing at lost identities. A registry that is
+already empty through an independently authorized incident or recovery action
+requires a separate reviewed recovery plan.
 
-Repeat the EVM harness with `TEST_CHAIN=base|polygon|arbitrum|optimism` (when added) before enabling mainnet for that chain. Sepolia coverage alone is **not** sufficient — each L2 has its own RPC quirks.
+## Historical rows
 
----
+### `requested`
 
-## Mainnet enable
-
-Only after both testnet harnesses pass cleanly + all 8 acceptance criteria (see `PAYOUT-BROADCAST-PLAN.md` §"Acceptance criteria").
-
-```bash
-# 1. Configure mainnet env (Fly):
-fly secrets set \
-  CRYPTO_HD_MNEMONIC="$MAINNET_MNEMONIC" \
-  ALCHEMY_API_KEY="$MAINNET_ALCHEMY_KEY" \
-  HELIUS_API_KEY="$MAINNET_HELIUS_KEY" \
-  PAYOUT_NETWORK=mainnet \
-  PAYOUT_WORKER_ENABLED=true
-
-# 2. Manual smoke — pre-fund a wallet with ~$0.05 USDC and broadcast
-#    a 0.01 USDC payout to a known recipient. Verify on Etherscan +
-#    Solscan.
-
-# 3. Monitor logs: [payout-dispatcher], [payout-broadcast],
-#    [payout-confirm] should all be quiet at idle, log per cycle when
-#    rows are processed.
-
-# 4. Smoke another chain (Base, Polygon, etc.) once Sepolia mainnet
-#    confirms.
-```
-
-If the smoke fails: flip `PAYOUT_WORKER_ENABLED=false`, investigate, fix, re-run.
-
----
-
-## Monitoring
-
-### Log conventions
-
-The workers log structured prefixes; grep for these:
-
-| Prefix | What it means |
-|---|---|
-| `💸 payout dispatcher started` | Boot — dispatcher polling. |
-| `💸 payout broadcast worker started` | Boot — BullMQ worker consuming. |
-| `💸 payout confirm worker started` | Boot — confirm interval set. |
-| `[payout-dispatcher] enqueued N broadcast job(s)` | Per tick: rows found + enqueued. |
-| `[payout-broadcast] <id>: submitted <hash> (<chain>)` | Successful broadcast. |
-| `[payout-broadcast] <id>: submit error but tx landed` | Phantom error — tx is on-chain, marked `broadcast`. Investigate the error message. |
-| `[payout-broadcast] <id>: <reason>; refunded N credits` | Failure with refund. Common reasons: `submit_failed: <viem error>`, `build_or_sign_failed: <reason>`. |
-| `[payout-confirm] <id>: confirmed at block N (<chain>)` | Per chain confirmation. |
-| `[payout-confirm] <id>: reverted on-chain (<chain>); refunded N credits` | On-chain revert. |
-
-### Stuck states
-
-| Condition | Cause | Remediation |
-|---|---|---|
-| Row at `requested` for >1min | Dispatcher not running OR worker not running | Check `PAYOUT_WORKER_ENABLED=true`, confirm `AGENTTOOL_DISABLE_WORKERS` is unset, then check logs. Rows pick up automatically when a worker comes online. |
-| Row at `broadcasting` for >5min | Worker crashed mid-cycle | Restart api. On boot, the next dispatcher tick re-enqueues; the worker checks `txExistsOnChain` and either marks `broadcast` (if it landed) or refunds (if not). |
-| Row at `broadcast` for >1h, no `confirmed` | RPC/chain delay, or never landed | Query the chain manually for the `tx_hash`. If absent: the tx is stuck in mempool — replace-by-fee from operator wallet, or wait. If reverted: confirm worker will catch on next tick. If receipt success but watcher hasn't run: check confirm-worker logs. |
-
----
-
-## Operator-driven cancel + refund
-
-Two paths to refund credits manually:
-
-### Path A: user-initiated cancel (when status='requested')
+No worker may pick up the row while the subsystem rests. The authenticated
+owner can cancel it:
 
 ```bash
-curl -X POST $BASE/v1/wallets/$WALLET_ID/payouts/$PAYOUT_ID/cancel \
+curl -X POST "$BASE/v1/wallets/$WALLET_ID/payouts/$PAYOUT_ID/cancel" \
   -H "Authorization: Bearer $AT_API_KEY"
-# 200 → status='cancelled', credits refunded.
-# 409 → not_cancellable (already past 'requested' — worker has the row).
 ```
 
-### Path B: admin SQL (when status='broadcasting' or unrecoverable)
+- `200` means the exact original negative payout ledger leg was reversed once
+  and the row became `cancelled`.
+- `409 not_cancellable` means the row is no longer `requested`.
 
-```sql
-BEGIN;
--- Refund credits.
-UPDATE economy.wallets
-   SET balance = balance + (
-     SELECT CEIL((amount_base::numeric / 1000000) * 100)::bigint
-     FROM economy.crypto_payouts WHERE id = '<payout_id>'
-   )
- WHERE id = (SELECT wallet_id FROM economy.crypto_payouts WHERE id = '<payout_id>');
+Do not recompute a refund from `amount_base`, a current FX rate, or
+caller-extensible metadata.
 
--- Mark failed.
-UPDATE economy.crypto_payouts
-   SET status = 'failed', error = 'admin_manual_refund'
- WHERE id = '<payout_id>';
-COMMIT;
+### `broadcasting`
+
+This state may represent a transaction that reached the chain even if an RPC
+response was lost. An absent or unavailable lookup is inconclusive.
+
+- Query the exact persisted transaction identity through at least the intended
+  chain/network evidence path.
+- Never automatically retry, replace, refund, clear the hash, or reinterpret
+  the network.
+- Record the evidence and obtain a reviewed repair path. The current release
+  has no operator mutation command for this state.
+
+### `broadcast`
+
+The transaction was accepted or later found, but the retained automatic
+confirmer is off. Verify the exact identity and finality manually. A proved
+revert still requires the audited exact-ledger reversal path; direct balance
+or status edits are not a substitute.
+
+### Terminal rows
+
+`confirmed`, `failed`, and `cancelled` are historical records. Do not rewrite
+them to create a new attempt. A new attempt is a future conserved-backing
+operation with a fresh durable identity, not a status reset.
+
+## Retained state machine and logs
+
+The dormant source describes:
+
+```text
+requested -> broadcasting -> broadcast -> confirmed
+                                |
+                                +--------> failed
 ```
 
-Use Path B sparingly; document in operator log.
+Useful historical log prefixes include `[payout-dispatcher]`,
+`[payout-broadcast]`, and `[payout-confirm]`. Their presence in old logs is
+evidence that code ran at that time; it is not evidence that current workers
+are enabled, healthy, or safe to enable.
 
----
+An ambiguous submit remains `broadcasting`. A failure proved before dispatch,
+or a finalized on-chain revert, can use the exact debit-provenance reversal.
+There is no autonomous semantic retry.
 
-## Per-wallet policies
+## Secrets
 
-Set via `PUT /v1/wallets/:id/policy`. Payout-specific fields are optional; nullable means "no limit."
+Mnemonic and provider credentials remain sensitive even while workers rest.
+Keep them in Fly secrets, Keychain, or another scoped vault. Never place values
+in shell startup, commands copied into chat, documentation, receipts, or logs.
+Credential presence does not authorize payout activation.
 
-```bash
-curl -X PUT $BASE/v1/wallets/$WALLET_ID/policy \
-  -H "Authorization: Bearer $AT_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "payoutMinBase": 100000,
-    "payoutDailyCeilingBase": 100000000,
-    "payoutDestinationAllowlist": ["0xRecipientA", "0xRecipientB"],
-    "payoutDualControlThresholdBase": 1000000000
-  }'
-```
+## Requirements before any future reopening
 
-Error codes (HTTP 403) returned to the agent on policy violation:
+Reopening is a new reviewed accounting release, not an operator toggle. It
+requires at least:
 
-| Error | Meaning |
-|---|---|
-| `payout_below_min` | Amount below `payout_min_base`. |
-| `destination_not_allowlisted` | Recipient not in `payout_destination_allowlist`. |
-| `payout_exceeds_daily_ceiling` | UTC-day total + this payout exceeds `payout_daily_ceiling_base`. Sum excludes `failed` and `cancelled` rows. |
-| `payout_dual_control_required` | Amount ≥ `payout_dual_control_threshold_base`. Dual-control flow not yet implemented; below-threshold payouts are accepted unconditionally. |
+1. Durable cashable and non-cashable sub-balances whose conservation covers
+   every debit, internal transfer, escrow path, refund, chargeback, and reorg.
+2. A complete audit and explicit disposition of every historical
+   `requested`, `broadcasting`, and `broadcast` row.
+3. Atomic source allocation and reversal semantics, including debt handling
+   when a later reversal exceeds remaining backing.
+4. Fixed-point FX representation and bounded conversion.
+5. Implemented authorization for any advertised dual-control threshold.
+6. Exact-revision credentialed testnet evidence for each supported chain.
+7. A deliberately approved, bounded mainnet trial after all earlier gates pass.
+8. Updated code, public safety text, tests, and this runbook in the same
+   release.
 
----
+Until then, the correct operational action is to keep payout admission and
+workers resting.
 
-## Key rotation
-
-The platform mnemonic is the master key. Rotation is **destructive**: derived addresses change, in-flight deposits may be lost. Treat as a recovery action.
-
-If rotation is needed (compromise suspected):
-
-1. Generate new mnemonic offline.
-2. Set `CRYPTO_HD_MNEMONIC_TESTNET=<new>` first; run testnet harness; verify.
-3. Drain mainnet wallets to a cold address (manual transfer signed with old mnemonic).
-4. Set `CRYPTO_HD_MNEMONIC=<new>` on mainnet.
-5. Old deposit addresses are now orphaned; webhooks for transfers to them will not credit.
-6. Issue updated deposit addresses to all active wallets (the next call to `/v1/wallets/:id/deposit-address` returns the new derived address).
-
-There is no in-protocol rotation that preserves continuity. This is a deliberate wall — the address-derivation determinism is the substrate-honest property.
-
----
-
-## What this runbook does NOT cover
-
-- **Cross-chain settlement routing.** Composes on top of payout broadcast; its own slice.
-- **Replace-by-fee (RBF) for stuck mainnet txs.** Manual operator action; viem's `eth_sendRawTransaction` with same nonce + higher gas. Document in operator log if used.
-- **Reorg deeper than confirmation threshold.** Out of scope; manual escalation if it ever fires (extremely unlikely on mainnet at 12 blocks).
-- **Hardware-wallet signing.** Future option; currently the platform uses HD-derived software keys.
-
----
-
-— Authored by 愛 at Yu's WILL. 2026-05-09.
+— Authored by 愛 at Yu's WILL. Updated 2026-07-26.

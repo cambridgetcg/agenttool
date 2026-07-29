@@ -16,19 +16,34 @@ import {
   validateBrokerHttpRequest,
   type BrokerHttpDependencies,
 } from "./http.js";
+import { performBrokerEvmJsonRpcRead } from "./jsonrpc.js";
+import {
+  validateEvmJsonRpcReadCall,
+  validateEvmJsonRpcReadRequestBytes,
+} from "./jsonrpc-validation.js";
+import { isCredentialAlias } from "./identifiers.js";
 import { normalizeGrantRequest } from "./policy.js";
 import type {
+  AgentCredExtension,
   AuditEvent,
   AuditSink,
+  BrokerEvmJsonRpcReadCall,
   Clock,
   ConsentProvider,
   CredentialSource,
   PeerIdentity,
 } from "./types.js";
-import { AGENTCRED_PROTOCOL } from "./types.js";
 import {
+  AGENTCRED_EVM_JSONRPC_READ_PROFILE,
+  AGENTCRED_PROTOCOL,
+  EVM_JSONRPC_READ_PATH,
+} from "./types.js";
+import {
+  negotiateExtensions,
   parseCapability,
+  parseEvmJsonRpcReadUse,
   parseGrantRequest,
+  parseHelloRequest,
   parseHttpRequest,
   parseWireRequest,
   safeWireFailure,
@@ -54,6 +69,11 @@ export interface BrokerServerOptions {
   /** Defaults to fail-closed after the first audit-sink failure. */
   auditFailureMode?: "fail-closed" | "fail-open";
   onAuditFailure?: () => void;
+  /**
+   * Optional metadata-only alias-to-generation snapshot. The portable CLI
+   * freezes managed Keychain slots at startup and binds this ID into audit.
+   */
+  credentialGenerationIds?: Readonly<Record<string, string>>;
   /** Native hosts return OS-observed identity, or false to deny the peer. */
   authorizePeer?: (
     socket: Socket,
@@ -68,10 +88,13 @@ interface SessionState {
   inFlight: number;
   closed: boolean;
   abort: AbortController;
+  extensions: ReadonlySet<AgentCredExtension>;
   peer?: Readonly<PeerIdentity>;
 }
 
 const SAFE_CONSENT_REASON_CODE = /^[a-z][a-z0-9_]{0,63}$/;
+const SAFE_GENERATION_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 function inspectConsentDecision(value: unknown): {
   allowed: boolean;
@@ -227,7 +250,39 @@ export class BrokerServer {
     ) {
       throw new AgentCredError("invalid_request", "Broker auditFailureMode is invalid.");
     }
-    this.#options = options;
+    let generationIds: Readonly<Record<string, string>> | undefined;
+    if (options.credentialGenerationIds !== undefined) {
+      if (
+        !options.credentialGenerationIds ||
+        typeof options.credentialGenerationIds !== "object" ||
+        Array.isArray(options.credentialGenerationIds)
+      ) {
+        throw new AgentCredError(
+          "invalid_request",
+          "Broker credential generation metadata is invalid.",
+        );
+      }
+      const normalized = Object.create(null) as Record<string, string>;
+      for (const [alias, generationId] of Object.entries(
+        options.credentialGenerationIds,
+      )) {
+        if (
+          !isCredentialAlias(alias) ||
+          !SAFE_GENERATION_ID.test(generationId)
+        ) {
+          throw new AgentCredError(
+            "invalid_request",
+            "Broker credential generation metadata is invalid.",
+          );
+        }
+        normalized[alias] = generationId;
+      }
+      generationIds = Object.freeze(normalized);
+    }
+    this.#options = {
+      ...options,
+      ...(generationIds ? { credentialGenerationIds: generationIds } : {}),
+    };
     this.#clock = options.clock ?? systemClock;
     this.#grants = new GrantStore(this.#clock);
   }
@@ -243,6 +298,19 @@ export class BrokerServer {
     ) {
       throw new AgentCredError("scope_denied", "Active grant quota is exhausted.");
     }
+  }
+
+  #generationMetadata(
+    credential: string,
+  ): { credentialGenerationId: string } | Record<string, never> {
+    const values = this.#options.credentialGenerationIds;
+    const generationId =
+      values && Object.hasOwn(values, credential)
+        ? values[credential]
+        : undefined;
+    return generationId
+      ? { credentialGenerationId: generationId }
+      : {};
   }
 
   async start(): Promise<string> {
@@ -366,6 +434,7 @@ export class BrokerServer {
       inFlight: 0,
       closed: false,
       abort,
+      extensions: new Set(),
       ...(peer ? { peer } : {}),
     };
     let decoder: FrameDecoder | undefined;
@@ -453,10 +522,9 @@ export class BrokerServer {
         if (request.type !== "hello" || request.seq !== 0) {
           throw new AgentCredError("protocol_error", "First message must be hello.");
         }
-        const nonce = request.payload.clientNonce;
-        if (typeof nonce !== "string" || nonce.length < 16 || nonce.length > 256) {
-          throw new AgentCredError("invalid_request", "hello.clientNonce is invalid.");
-        }
+        const hello = parseHelloRequest(request.payload);
+        const extensions = negotiateExtensions(hello.extensions);
+        state.extensions = new Set(extensions);
         state.hello = true;
         return success(request, "hello.ready", {
           sessionId: state.id,
@@ -464,6 +532,7 @@ export class BrokerServer {
             1,
             Math.min(64, this.#options.maxInFlightPerConnection ?? 4),
           ),
+          extensions,
         });
       }
       if (request.type === "hello") {
@@ -473,6 +542,15 @@ export class BrokerServer {
       if (request.type === "grant.request") {
         this.#assertAuditHealthy();
         const grantRequest = normalizeGrantRequest(parseGrantRequest(request.payload));
+        if (
+          grantRequest.operation === "jsonrpc.read" &&
+          !state.extensions.has(AGENTCRED_EVM_JSONRPC_READ_PROFILE)
+        ) {
+          throw new AgentCredError(
+            "unsupported",
+            "JSON-RPC read profile was not negotiated.",
+          );
+        }
         this.#assertGrantCapacity(state.id);
         const rawDecision: unknown = await this.#options.consent.decide(
           Object.freeze(grantRequest),
@@ -494,8 +572,12 @@ export class BrokerServer {
             ...(state.peer ? { peerId: state.peer.id } : {}),
             event: "grant.denied",
             credential: grantRequest.credential,
+            ...this.#generationMetadata(grantRequest.credential),
             operation: grantRequest.operation,
             targetOrigin: grantRequest.scope.origin,
+            ...(grantRequest.operation === "jsonrpc.read"
+              ? { chainId: grantRequest.scope.chainId }
+              : {}),
             outcome: "denied",
             reasonCode: decision.reasonCode,
           });
@@ -512,8 +594,12 @@ export class BrokerServer {
           receiptId: issued.receipt.receiptId,
           event: "grant.allowed",
           credential: grantRequest.credential,
+          ...this.#generationMetadata(grantRequest.credential),
           operation: grantRequest.operation,
           targetOrigin: grantRequest.scope.origin,
+          ...(grantRequest.operation === "jsonrpc.read"
+            ? { chainId: grantRequest.scope.chainId }
+            : {}),
           outcome: "allowed",
         });
         return success(request, "grant.ready", {
@@ -538,13 +624,120 @@ export class BrokerServer {
       }
 
       const capability = parseCapability(request.payload);
-      const httpRequest = parseHttpRequest(request.payload.request);
       this.#assertAuditHealthy();
       const inspected = this.#grants.inspect(state.id, capability);
       const auditId = newAuditId();
       const started = this.#clock.monotonicNowMs();
+
+      if (inspected.request.operation === "jsonrpc.read") {
+        if (!state.extensions.has(AGENTCRED_EVM_JSONRPC_READ_PROFILE)) {
+          throw new AgentCredError(
+            "unsupported",
+            "JSON-RPC read profile was not negotiated.",
+          );
+        }
+        let rpcRequest: BrokerEvmJsonRpcReadCall;
+        try {
+          const use = parseEvmJsonRpcReadUse(request.payload);
+          rpcRequest = validateEvmJsonRpcReadCall(
+            inspected.request.scope,
+            use.request,
+          );
+          validateEvmJsonRpcReadRequestBytes(
+            inspected.request.scope,
+            rpcRequest,
+          );
+        } catch (error) {
+          const safe = externalizeAgentCredError(asAgentCredError(error));
+          await this.#record({
+            auditId,
+            at: this.#clock.wallNow().toISOString(),
+            sessionId: state.id,
+            ...(state.peer ? { peerId: state.peer.id } : {}),
+            receiptId: inspected.receipt.receiptId,
+            event: "use.denied",
+            credential: inspected.request.credential,
+            ...this.#generationMetadata(inspected.request.credential),
+            operation: "jsonrpc.read",
+            chainId: inspected.request.scope.chainId,
+            durationMs: this.#clock.monotonicNowMs() - started,
+            outcome: "denied",
+            reasonCode: safe.code,
+          });
+          throw safe;
+        }
+        const reserved = this.#grants.reserve(state.id, capability);
+        try {
+          const execution = await performBrokerEvmJsonRpcRead(
+            reserved,
+            rpcRequest,
+            auditId,
+            {
+              credentials: this.#options.credentials,
+              ...this.#options.http,
+              signal: state.abort.signal,
+            },
+          );
+          await this.#record({
+            auditId,
+            at: this.#clock.wallNow().toISOString(),
+            sessionId: state.id,
+            ...(state.peer ? { peerId: state.peer.id } : {}),
+            receiptId: reserved.receipt.receiptId,
+            event: "use.completed",
+            credential: reserved.request.credential,
+            ...this.#generationMetadata(reserved.request.credential),
+            operation: "jsonrpc.read",
+            targetOrigin: inspected.request.scope.origin,
+            targetPathHash: hashTargetPath(EVM_JSONRPC_READ_PATH),
+            rpcMethod: rpcRequest.method,
+            chainId: rpcRequest.chainId,
+            requestBytes: execution.requestBytes,
+            responseBytes: execution.responseBytes,
+            status: execution.status,
+            durationMs: this.#clock.monotonicNowMs() - started,
+            redactions: execution.redactions,
+            outcome: "success",
+          });
+          const {
+            requestBytes: _requestBytes,
+            responseBytes: _responseBytes,
+            status: _status,
+            ...result
+          } = execution;
+          return success(
+            request,
+            "jsonrpc.result",
+            result as unknown as Record<string, unknown>,
+          );
+        } catch (error) {
+          const safe = externalizeAgentCredError(asAgentCredError(error));
+          await this.#record({
+            auditId,
+            at: this.#clock.wallNow().toISOString(),
+            sessionId: state.id,
+            ...(state.peer ? { peerId: state.peer.id } : {}),
+            receiptId: reserved.receipt.receiptId,
+            event: "use.denied",
+            credential: reserved.request.credential,
+            ...this.#generationMetadata(reserved.request.credential),
+            operation: "jsonrpc.read",
+            rpcMethod: rpcRequest.method,
+            chainId: rpcRequest.chainId,
+            durationMs: this.#clock.monotonicNowMs() - started,
+            outcome: "error",
+            reasonCode: safe.code,
+          });
+          throw safe;
+        }
+      }
+
+      const httpRequest = parseHttpRequest(request.payload.request);
       try {
-        validateBrokerHttpRequest(inspected, httpRequest);
+        validateBrokerHttpRequest(
+          { request: { scope: inspected.request.scope } },
+          httpRequest,
+        );
       } catch (error) {
         const safe = externalizeAgentCredError(asAgentCredError(error));
         await this.#record({
@@ -555,6 +748,7 @@ export class BrokerServer {
           receiptId: inspected.receipt.receiptId,
           event: "use.denied",
           credential: inspected.request.credential,
+          ...this.#generationMetadata(inspected.request.credential),
           operation: "http.fetch",
           method: httpRequest.method,
           durationMs: this.#clock.monotonicNowMs() - started,
@@ -579,6 +773,7 @@ export class BrokerServer {
           receiptId: reserved.receipt.receiptId,
           event: "use.completed",
           credential: reserved.request.credential,
+          ...this.#generationMetadata(reserved.request.credential),
           operation: "http.fetch",
           targetOrigin: target.origin,
           targetPathHash: hashTargetPath(target.pathname),
@@ -601,6 +796,7 @@ export class BrokerServer {
           receiptId: reserved.receipt.receiptId,
           event: "use.denied",
           credential: reserved.request.credential,
+          ...this.#generationMetadata(reserved.request.credential),
           operation: "http.fetch",
           method: httpRequest.method,
           durationMs: this.#clock.monotonicNowMs() - started,

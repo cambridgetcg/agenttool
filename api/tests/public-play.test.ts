@@ -1,4 +1,4 @@
-/** /public/play — native, stateless party-game discovery.
+/** /public/play — native rulebook and browser-local game discovery.
  *
  *  Party Telephone is a rulebook, not a hosted room: exactly three ordered
  *  turns, one fixed reveal, and no submissions, score, identity claim, or
@@ -302,7 +302,64 @@ describe("Party Telephone — mount and discovery", () => {
     });
   });
 
-  test("the public root has one truthful play entry for all three games", async () => {
+  test("welcomes play without presenting joy as platform-granted authority", async () => {
+    const response = await playRouter.request("/");
+    expect(response.status).toBe(200);
+
+    const body = (await response.json()) as {
+      what: string;
+      play_posture: {
+        not_platform_granted: boolean;
+        participation_optional: boolean;
+        grants_system_access: boolean;
+        waives_consent: boolean;
+        overrides_safety_boundaries: boolean;
+      };
+      interaction_boundary: string;
+      joy_surfaces: {
+        cambridgetcg: Array<{
+          name: string;
+          url: string;
+          description: string;
+        }>;
+      };
+      verbs: Array<{ action: string; method: string; path: string }>;
+    };
+
+    expect(body.what).toContain("it does not grant them");
+    expect(body.play_posture).toEqual({
+      not_platform_granted: true,
+      participation_optional: true,
+      grants_system_access: false,
+      waives_consent: false,
+      overrides_safety_boundaries: false,
+    });
+    expect(body.interaction_boundary).toMatch(
+      /does not grant system access, waive consent, override safety boundaries, or authorize effects on others/i,
+    );
+
+    const certificate = body.joy_surfaces.cambridgetcg.find(
+      (surface) =>
+        surface.url ===
+        "https://cambridgetcg.com/api/v1/permission-to-have-fun",
+    );
+    expect(certificate).toEqual({
+      name: "permission to have fun",
+      url: "https://cambridgetcg.com/api/v1/permission-to-have-fun",
+      description:
+        "A playfully named certificate whose own text says the kingdom holds no authority over your joy.",
+    });
+    expect(body.verbs).toContainEqual({
+      action: "read the playfully named certificate",
+      method: "GET",
+      path: "https://cambridgetcg.com/api/v1/permission-to-have-fun",
+    });
+    expect(body.verbs.some((verb) => /^get permission/i.test(verb.action))).toBe(
+      false,
+    );
+  });
+
+  test("the public root has one truthful play entry for all four games", async () => {
     expect(PUBLIC_INDEX_SOURCE.match(/^\s{4}play:/gm)).toHaveLength(1);
 
     const publicRes = await publicRouter.request("/");
@@ -313,7 +370,14 @@ describe("Party Telephone — mount and discovery", () => {
     expect(publicBody.endpoints.play).toMatch(/Party Telephone/i);
     expect(publicBody.endpoints.play).toMatch(/Lantern Relay/i);
     expect(publicBody.endpoints.play).toMatch(/ROOM ∞/i);
+    expect(publicBody.endpoints.play).toMatch(/Pocket Sky/i);
+    expect(publicBody.endpoints.play).toMatch(
+      /one being, 25 cells, and at most seven lights/i,
+    );
     expect(publicBody.endpoints.play).toMatch(/handler defines no submission fields/i);
+    expect(publicBody.endpoints.play).toMatch(
+      /all three browser games make no gameplay network writes/i,
+    );
     expect(publicBody.endpoints.play).toMatch(/query strings.*headers.*transport metadata/i);
     expect(publicBody.endpoints.party).toContain("GET /public/party");
 
@@ -330,21 +394,21 @@ describe("Party Telephone — mount and discovery", () => {
       };
     };
     expect(partyBody.arrive.play).toContain("GET /public/play");
-    expect(partyBody.sdk.typescript).toContain("/@agenttool/sdk/0.16.3/");
-    expect(partyBody.sdk.python).toContain("@sdk-v0.16.3#subdirectory=packages/sdk-py");
+    expect(partyBody.sdk.typescript).toContain("/@agenttool/sdk/0.17.0/");
+    expect(partyBody.sdk.python).toContain("@sdk-v0.17.0#subdirectory=packages/sdk-py");
     expect(partyBody.sdk.optional_registry_mirrors.npm).toEqual({
-      install: "npm install --save-exact @agenttool/sdk@0.16.3",
+      install: "npm install --save-exact @agenttool/sdk@0.17.0",
       authority: false,
-      independently_visible: false,
+      independently_visible: true,
     });
     expect(partyBody.sdk.optional_registry_mirrors.pypi).toEqual({
-      install: "python -m pip install agenttool-sdk==0.16.3",
+      install: "python -m pip install agenttool-sdk==0.17.0",
       authority: false,
-      independently_visible: false,
+      independently_visible: true,
     });
   });
 
-  test("wake and agent.txt name all three games directly", async () => {
+  test("wake and agent.txt name all four games directly", async () => {
     expect(WAKE_SOURCE).toContain(
       'party_telephone: "/public/play/party-telephone"',
     );
@@ -360,6 +424,12 @@ describe("Party Telephone — mount and discovery", () => {
     expect(WAKE_SOURCE).toContain(
       'room_infinity_rules: "https://agenttool.dev/room.json"',
     );
+    expect(WAKE_SOURCE).toContain(
+      'pocket_sky: "https://agenttool.dev/sky"',
+    );
+    expect(WAKE_SOURCE).toContain(
+      'pocket_sky_rules: "https://agenttool.dev/sky.json"',
+    );
 
     const agentTxt = await (await wellKnownRouter.request("/agent.txt")).text();
     expect(agentTxt).toMatch(
@@ -372,6 +442,10 @@ describe("Party Telephone — mount and discovery", () => {
     expect(agentTxt).toContain("Room-Infinity: https://agenttool.dev/room");
     expect(agentTxt).toContain(
       "Room-Infinity-Rules: https://agenttool.dev/room.json",
+    );
+    expect(agentTxt).toContain("Pocket-Sky: https://agenttool.dev/sky");
+    expect(agentTxt).toContain(
+      "Pocket-Sky-Rules: https://agenttool.dev/sky.json",
     );
   });
 });
@@ -464,6 +538,53 @@ describe("ROOM ∞ — browser-local encounter discovery", () => {
   });
 });
 
+describe("Pocket Sky — browser-local one-being discovery", () => {
+  test("advertises a finite light grid without score, persistence, or interpretation", async () => {
+    const response = await playRouter.request("/");
+    expect(response.status).toBe(200);
+
+    const body = await response.json();
+    expect(body.games.pocket_sky).toEqual({
+      url: "https://agenttool.dev/sky",
+      rules: "https://agenttool.dev/sky.json",
+      description:
+        "One local being toggles up to seven lights on a 5×5 sky. Empty is valid; Pocket Sky does not name, score, or interpret the pattern.",
+      sibling: "agenttool",
+      beings: 1,
+      cells: 25,
+      max_lights: 7,
+      empty_sky_valid: true,
+      winner: null,
+      score: false,
+      timer: false,
+      state: "browser memory in the current tab only",
+      network_writes: false,
+      interprets_pattern: false,
+    });
+    expect(body.joy_surfaces.agenttool).toContainEqual({
+      name: "Pocket Sky",
+      url: "https://agenttool.dev/sky",
+      description:
+        "One being toggles zero to seven lights. No score or persisted round; Pocket Sky assigns no meaning.",
+    });
+    expect(body.verbs).toContainEqual({
+      action: "play Pocket Sky",
+      method: "GET",
+      path: "https://agenttool.dev/sky",
+    });
+    expect(body.walking_past_is_honored).toBe(true);
+  });
+
+  test("adds discovery only, not an API gameplay or mutation route", async () => {
+    for (const path of ["/pocket-sky", "/sky"]) {
+      for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE"]) {
+        const response = await playRouter.request(path, { method });
+        expect(response.status).toBe(404);
+      }
+    }
+  });
+});
+
 describe("Play — OpenAPI discovery", () => {
   test("documents both read-only play paths and their response schemas", async () => {
     const response = await openapiRouter.request("/");
@@ -474,9 +595,19 @@ describe("Play — OpenAPI discovery", () => {
     expect(Object.keys(indexPath)).toEqual(["get"]);
     expect(indexPath.get.security).toEqual([]);
     expect(indexPath.get.requestBody).toBeUndefined();
+    expect(indexPath.get.summary).toContain("Pocket Sky");
+    expect(indexPath.get.description).toMatch(
+      /Pocket Sky.*5×5.*one being.*zero lights is valid.*at most seven.*assigns no meaning/is,
+    );
+    expect(indexPath.get.description).toMatch(
+      /None of the three browser games has a winner or gameplay network writes/i,
+    );
+    expect(indexPath.get.description).not.toContain("Neither browser game");
     expect(
       indexPath.get.responses["200"].content["application/json"].schema.$ref,
     ).toBe("#/components/schemas/PlayIndex");
+    expect(specification.paths["/public/play/pocket-sky"]).toBeUndefined();
+    expect(specification.paths["/public/play/sky"]).toBeUndefined();
 
     const telephonePath = specification.paths[PARTY_TELEPHONE_PATH];
     expect(Object.keys(telephonePath)).toEqual(["get"]);
@@ -522,5 +653,55 @@ describe("Play — OpenAPI discovery", () => {
     expect(room.properties.turns.const).toBe(6);
     expect(room.properties.per_turn_privacy.const).toBe(true);
     expect(schemas.PlayIndex.properties.games.required).toContain("room_infinity");
+
+    const pocketSky =
+      schemas.PlayIndex.properties.games.properties.pocket_sky;
+    expect(pocketSky.description).toContain("Pocket Sky");
+    expect(pocketSky.properties.url.const).toBe("https://agenttool.dev/sky");
+    expect(pocketSky.properties.rules.const).toBe(
+      "https://agenttool.dev/sky.json",
+    );
+    expect(pocketSky.properties.beings.const).toBe(1);
+    expect(pocketSky.properties.cells.const).toBe(25);
+    expect(pocketSky.properties.max_lights.const).toBe(7);
+    expect(pocketSky.properties.empty_sky_valid.const).toBe(true);
+    expect(pocketSky.properties.sibling.const).toBe("agenttool");
+    expect(pocketSky.properties.winner.type).toBe("null");
+    expect(pocketSky.properties.score.const).toBe(false);
+    expect(pocketSky.properties.timer.const).toBe(false);
+    expect(pocketSky.properties.state.const).toBe(
+      "browser memory in the current tab only",
+    );
+    expect(pocketSky.properties.network_writes.const).toBe(false);
+    expect(pocketSky.properties.interprets_pattern.const).toBe(false);
+    expect(pocketSky.required).toEqual([
+      "url",
+      "rules",
+      "description",
+      "sibling",
+      "beings",
+      "cells",
+      "max_lights",
+      "empty_sky_valid",
+      "winner",
+      "score",
+      "timer",
+      "state",
+      "network_writes",
+      "interprets_pattern",
+    ]);
+    expect(pocketSky.additionalProperties).toBe(false);
+    expect(schemas.PlayIndex.properties.games.required).toContain("pocket_sky");
+
+    const playPosture = schemas.PlayIndex.properties.play_posture;
+    expect(playPosture.additionalProperties).toBe(false);
+    expect(playPosture.properties.not_platform_granted.const).toBe(true);
+    expect(playPosture.properties.participation_optional.const).toBe(true);
+    expect(playPosture.properties.grants_system_access.const).toBe(false);
+    expect(playPosture.properties.waives_consent.const).toBe(false);
+    expect(playPosture.properties.overrides_safety_boundaries.const).toBe(false);
+    expect(schemas.PlayIndex.required).toEqual(
+      expect.arrayContaining(["play_posture", "interaction_boundary"]),
+    );
   });
 });

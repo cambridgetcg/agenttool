@@ -2,28 +2,34 @@
 
 A small local browser surface for agents.
 
-`0.3.0` is distributed as an exact LOVE package and mirrored to npm. It remains
-a local runtime: the docs deployment publishes package bytes and documentation,
-not a hosted browser-control service.
+This README belongs to the exact `0.5.0` package bytes. Its registry-neutral
+release record is the sibling LOVE manifest, which names the artifact size,
+SHA-256, source revision, and interchangeable mirrors. npm and GitHub Releases
+are optional mirrors and should be verified independently. The docs deployment
+distributes bytes and documentation, not a hosted browser-control service.
 
-Version `0.3.0` adds collaboration-safe retained observations, structural
-accessibility context, stricter navigation/action/close race handling, and an
-explicit capability declaration for browser-managed redirect hops. The exact
-`0.1.0` and `0.2.0` artifacts remain immutable.
+The unreleased `0.4.0` boundary added standing-policy diagnostics and clearer
+JSONL field-rename errors. Version `0.5.0` carries that work forward and adds
+redacted `browser_act` receipts, non-ref observation-basis preconditions,
+session-local receipt context in observations, a backend-neutral capability
+inventory, and current MCP negotiation with an explicit compatibility path.
+Version `0.4.0` was never distributed; its reviewed changes are incorporated
+into exact `0.5.0`. Earlier `0.1.0`, `0.2.0`, and `0.3.0` releases remain
+immutable historical artifacts.
 
 ```bash
-npm install --save-exact @agenttool/browser@0.3.0
+npm install --save-exact @agenttool/browser@0.5.0
 ```
 
 Registry-neutral exact artifact:
 
 ```bash
 npm install --save-exact \
-  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.3.0/agenttool-browser-0.3.0.tgz
+  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.0/agenttool-browser-0.5.0.tgz
 ```
 
 The sibling
-[LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.3.0/manifest.json)
+[LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.0/manifest.json)
 names the artifact size and SHA-256. A URL install does not compare those
 values automatically; verify them first when that boundary matters.
 
@@ -110,6 +116,18 @@ The JSONL methods and MCP tool names are `browser_capabilities`,
 `browser_plan`, `browser_open`, `browser_observe`, `browser_act`,
 `browser_extract`, `browser_screenshot`, `browser_tabs`, and `browser_close`.
 
+Version `0.5.0` negotiates the current MCP `2026-07-28` revision and retains
+an explicit 2025-era stdio compatibility path. That negotiation makes the
+same bounded operations usable by hosts from both eras; it does not turn MCP
+into a browser driver, durable browser session, or security boundary. Browser
+handles and authority remain local to this process.
+
+Direct embedders may call `serveBrowserMcpStdio(browser)`. The returned handle
+owns the MCP instances and transport, exposes `closed` for fatal transport
+closure, and deliberately does **not** own the shared `AgentBrowser`. The CLI
+waits for that signal and closes both layers; another embedder must apply the
+same lifecycle discipline.
+
 ### Capabilities and planning
 
 The direct API aligns `capabilities()` with `browser_capabilities`, and
@@ -118,6 +136,19 @@ launch-time authority and implemented operations; it does not visit or probe a
 destination. `browser_plan` accepts `{ "action": ... }` only. It produces an
 advisory, redacted classification for one existing `BrowserAction` without
 executing, approving, authorizing, or simulating it.
+
+The capability manifest separates `interfaces` from
+`modelFacingOperations`; the TypeScript entry also names its two deliberate
+direct-only affordances instead of implying perfect transport parity. Stable
+model-facing names and protocol identifiers are available without importing
+the runtime:
+
+```ts
+import {
+  BROWSER_OPERATIONS,
+  JSONL_PROTOCOL_VERSION,
+} from "@agenttool/browser/protocol";
+```
 
 Planning a typed action never echoes its `text` or selected values. URL query
 values are redacted. A URL-opening intention can be represented by a
@@ -175,6 +206,50 @@ does not automatically retry uncertain clicks, submissions, typing, keypresses,
 or navigation. The closed action set covers navigate, click, type, press,
 select, scroll, bounded wait, back, forward, reload, new tab, and close tab;
 there is no raw script or DevTools action.
+
+### Action receipts and observation basis
+
+Version `0.5.0` gives each syntactically admitted `browser_act` attempt a
+redacted `agent-browser-action-receipt/0.1` receipt. Direct `act` returns it in
+the `ActionResult`; a known `BrowserError` carries it on failure. Malformed
+input rejected before core admission has no receipt.
+
+The receipt records an opaque attempt ID, a session-local sequence, the local
+session and actual tab/page handles when known, authority, a redacted
+action/basis summary, and one of three status shapes:
+
+| Runtime invocation | Local outcome | Meaning and retry advice |
+|---|---|---|
+| `not_started` | `rejected` | The requested consequence-bearing browser action was not dispatched. Ref and policy preflight may already have queried the runtime. Correct the request or re-observe before making a new decision. |
+| `started` | `browser_completed` | The browser method returned locally. Do not repeat it automatically. |
+| `started` | `unknown` | Invocation began, but the local result is uncertain. Effects may have happened; do not repeat it automatically. |
+
+A completed receipt is not proof of a remote effect or the page's intended
+meaning. A receipt is also not consent, authentication, a signature, a bearer,
+an idempotency key, or cross-device evidence. It deliberately omits typed,
+selected, and key values, page text, raw errors, and URLs. If JSONL or MCP
+cannot produce the convenience observation after a completed act, they retain
+the completed receipt and return a warning rather than inviting a replay.
+
+An `Observation` also carries `attemptSequence` and `lastActionReceipt` as
+bounded local context. They describe this in-memory browser instance only.
+They are not a durable audit journal, global clock, synchronization protocol,
+or proof that another process or device has observed the same action.
+
+For actions without a ref, `0.5.0` can carry the observation's
+`basisSnapshotId` (`basis_snapshot_id` on JSONL/MCP). It is available for
+`navigate`, non-ref `press` and `scroll`, `wait`, `back`, `forward`, `reload`,
+and `close_tab`; ref-targeted actions keep their required ref snapshot, and
+`new_tab` has no existing-tab basis. The core resolves the requested tab,
+checks that the same retained snapshot is still current before preflight, and
+checks that same object again immediately before browser invocation.
+
+This is a session-local optimistic precondition. It can catch the wrong tab,
+eviction, a prior action, or navigation in this browser instance. It does not
+assert DOM or focus equality, reserve the page, authenticate an account,
+establish consent, create a transaction, or act as a cross-process or
+cross-device lease.
+
 Before constructing an observation, Browser makes a bounded, best-effort check
 that the top-level window viewport has stopped moving. It samples browser
 geometry against a one-second monotonic deadline and gives each geometry
@@ -239,6 +314,46 @@ fragment); navigation races fail closed to `null`.
 These are publisher-controlled hints, not identity, proof, recognition,
 permission, billing approval, or an instruction to follow a link.
 
+### Blocked-navigation diagnostics
+
+Every `Observation` also includes `blockedNavigation`, either `null` or a
+record of this tab's most recent main-frame navigation that this process
+itself denied and that no allowed main-frame navigation has since superseded:
+
+```json
+{
+  "source": "navigation_policy",
+  "url": "http://10.0.0.9/internal",
+  "code": "network_blocked",
+  "message": "Browser request was denied by the launch-time network policy."
+}
+```
+
+Without it, a page-initiated navigation into a denied destination is
+indistinguishable from an outage: the agent sees only a browser error page.
+The code and message are policy-generated local diagnostics; the destination
+URL is page-derived, query-redacted, bounded, and untrusted. Only the
+tab-attributed denial is surfaced, subframe and subresource denials never
+appear, and the record reports what the route layer itself refused — a
+navigation that fails for any other reason (including a redirect hop, which
+the route layer never re-checks) leaves it `null`. It never authorizes
+retrying, widening network authority, or reaching the destination another
+way.
+
+## Portability direction
+
+The public and model-facing contract uses AgentTool-owned tab, page, snapshot,
+ref, and receipt handles. Playwright is the implementation adapter today;
+those handles leave room for a WebDriver BiDi adapter when its behavior can
+meet the same bounded contract. Raw CDP sessions, object IDs, and commands are
+not part of the public API or a portability promise.
+
+WebMCP is a possible future layer, not a shortcut around this core. A page may
+eventually declare tools that are useful to discover, but those declarations
+remain untrusted page content. Discovery must not silently register or execute
+a page tool, treat its description as authority, supply credentials, or widen
+the launch-time browser policy.
+
 ## Best integration seam
 
 Use [`@agenttool/telescope`](../telescope/README.md) first when an origin may
@@ -258,7 +373,7 @@ and cannot alter the same underlying facts or widen authority.
 ## Authority profiles
 
 Version `0.2.0` introduced the three named launch-time profiles retained by
-`0.3.0`:
+`0.5.0`:
 
 | Profile | Policy-checked HTTP(S) requests | WebSockets | Service workers |
 |---|---|---|---|
@@ -274,15 +389,20 @@ network, and destination still determine what is reachable. Sovereign does
 not bypass authentication, CAPTCHAs, account permissions, site policy,
 browser support, or host controls.
 
+No authority profile promises universal site access. A site may refuse,
+challenge, throttle, or render incompatibly; the runtime should make the
+observed boundary legible, not recast every refusal as a restriction to bypass.
+
 This profile deliberately allows a page and its service worker to reach
 destinations available to the host, including local services. In a persistent
 profile, service-worker and site state can outlive the process. Sovereign is
 therefore broad local process authority, not an isolation or SSRF claim.
 
-Destination authority does not imply every other browser power. In `0.3.0`,
-file upload, automatic download, arbitrary JavaScript evaluation, credential
-injection/lookup, ambient profile import, shell execution, and extension
-installation remain unsupported and are reported as such by `capabilities()`.
+Destination authority does not imply every other browser power. In `0.5.0`,
+file upload, automatic download, arbitrary JavaScript
+evaluation, credential injection/lookup, ambient profile import, shell
+execution, and extension installation remain unsupported and are reported as
+such by `capabilities()`.
 
 Select authority at launch:
 
@@ -344,7 +464,7 @@ Do this only for a caller-controlled development network. Tool calls cannot
 widen either profile or network authority after launch. Reserved destinations
 remain blocked even with this opt-in.
 
-Version `0.3.0` retains `allowPublicWeb` / `allowLocalNetwork`,
+Version `0.5.0` retains `allowPublicWeb` / `allowLocalNetwork`,
 `--public-web` / `--local-network`, and their environment variables as a
 deprecated `0.1.0` compatibility surface. Do not combine the `authority` form
 with any legacy authority option in one launch; mixed configuration is
@@ -391,7 +511,7 @@ unrecognized carriers such as `srcset`, meta refresh, CSS `url()`, or malformed
 markup, browser storage, canvas/image content, or screenshot pixels. It cannot
 undo data already submitted to a site.
 
-The published `0.3.0` package intentionally has no:
+Version `0.5.0` intentionally has no:
 
 - arbitrary JavaScript evaluation;
 - file-upload operation;
@@ -406,8 +526,9 @@ model-visible state, or advisory plans.
 
 ## Network limitation
 
-The `0.3.0` `public` and `local` profiles preserve the `0.2.0` and historical
-`0.1.0` destination checks before navigation, including DNS answers.
+The `0.5.0` `public` and `local` profiles preserve the `0.2.0` and
+historical `0.1.0` destination checks before navigation, including DNS
+answers.
 Playwright then owns the browser connection. The package cannot pin the
 checked DNS answer to the later socket or verify the connected peer address,
 and ambient proxies or browser routing can change the path.

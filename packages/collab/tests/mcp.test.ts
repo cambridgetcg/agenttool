@@ -308,6 +308,170 @@ describe("MCP surface", () => {
     expect(next.structuredContent.events.chain_valid).toBe(true);
   });
 
+  test("bounds legacy collab_next MCP pages and paginates them losslessly", async () => {
+    const { root, store, server } = node();
+    const opened = await callTool(server, "collab_workspace_open", {
+      root_path: root,
+      actor: "legacy-coordinator",
+    });
+    const workspaceId = opened.structuredContent.workspace.id;
+    for (let index = 0; index < 55; index += 1) {
+      store.createTask({
+        workspace_id: workspaceId,
+        actor: "legacy-coordinator",
+        idempotency_key: `legacy-page-task-${index}`,
+        title: `Legacy page task ${index}`,
+      });
+    }
+
+    const fullPage = store.eventsSince(workspaceId, 0, 500);
+    expect(fullPage.events.length).toBeGreaterThan(55);
+    expect(store.nextForActor(workspaceId, "legacy-reader").events.events).toHaveLength(50);
+
+    const inputSchema = (server as any)._registeredTools.collab_next.inputSchema;
+    expect(inputSchema.safeParse({
+      workspace_id: workspaceId,
+      actor: "legacy-reader",
+      event_limit: 1,
+    }).success).toBe(true);
+    expect(inputSchema.safeParse({
+      workspace_id: workspaceId,
+      actor: "legacy-reader",
+      event_limit: 50,
+    }).success).toBe(true);
+    for (const eventLimit of [0, 51, 1.5]) {
+      expect(inputSchema.safeParse({
+        workspace_id: workspaceId,
+        actor: "legacy-reader",
+        event_limit: eventLimit,
+      }).success).toBe(false);
+      const rejected = await callTool(server, "collab_next", {
+        workspace_id: workspaceId,
+        actor: "legacy-reader",
+        event_limit: eventLimit,
+      });
+      expect(rejected.isError).toBe(true);
+      expect(rejected.structuredContent.error).toBe("invalid_event_limit");
+    }
+
+    const defaultPage = await callTool(server, "collab_next", {
+      workspace_id: workspaceId,
+      actor: "legacy-reader",
+    });
+    const singleEventPage = await callTool(server, "collab_next", {
+      workspace_id: workspaceId,
+      actor: "legacy-reader",
+      event_limit: 1,
+    });
+    const maximumPage = await callTool(server, "collab_next", {
+      workspace_id: workspaceId,
+      actor: "legacy-reader",
+      event_limit: 50,
+    });
+    expect(defaultPage.structuredContent.events.events).toHaveLength(10);
+    expect(singleEventPage.structuredContent.events.events).toHaveLength(1);
+    expect(maximumPage.structuredContent.events.events).toHaveLength(50);
+    expect(defaultPage.structuredContent.events.has_more).toBe(true);
+    expect(maximumPage.structuredContent.events.has_more).toBe(true);
+    expect(defaultPage.structuredContent.events.head_hash).toBe(fullPage.head_hash);
+    expect(singleEventPage.structuredContent.events.next_anchor.hash).toBe(
+      singleEventPage.structuredContent.events.events[0].hash,
+    );
+
+    const seenSequences: number[] = [];
+    let afterSequence = 0;
+    while (true) {
+      const result = await callTool(server, "collab_next", {
+        workspace_id: workspaceId,
+        actor: "legacy-reader",
+        after_sequence: afterSequence,
+      });
+      const page = result.structuredContent.events;
+      expect(page.cursor.sequence).toBe(afterSequence);
+      expect(page.events.length).toBeLessThanOrEqual(10);
+      expect(page.chain_valid).toBe(true);
+      expect(page.verification_scope).toBe("returned_page");
+      seenSequences.push(...page.events.map((event: any) => event.sequence));
+      afterSequence = page.next_anchor.sequence;
+      if (!page.has_more) break;
+    }
+    expect(seenSequences).toEqual(fullPage.events.map((event) => event.sequence));
+  });
+
+  test("bounds credential-bound collab_next pages without changing cursor authority", async () => {
+    const { root, store, server } = node();
+    const joined = await callTool(server, "collab_session_start", {
+      root_path: root,
+      actor: "bound-reader",
+    });
+    const workspaceId = joined.structuredContent.workspace.id;
+    for (let index = 0; index < 55; index += 1) {
+      store.createTask({
+        workspace_id: workspaceId,
+        actor: "fixture-writer",
+        idempotency_key: `bound-page-task-${index}`,
+        title: `Bound page task ${index}`,
+      });
+    }
+
+    const defaultPage = await callTool(server, "collab_next", {
+      workspace_id: workspaceId,
+      actor: "spoofed-reader",
+    });
+    const singleEventPage = await callTool(server, "collab_next", {
+      workspace_id: workspaceId,
+      event_limit: 1,
+    });
+    const maximumPage = await callTool(server, "collab_next", {
+      workspace_id: workspaceId,
+      event_limit: 50,
+    });
+    expect(defaultPage.structuredContent.actor).toBe("bound-reader");
+    expect(defaultPage.structuredContent.events.events).toHaveLength(10);
+    expect(singleEventPage.structuredContent.events.events).toHaveLength(1);
+    expect(maximumPage.structuredContent.events.events).toHaveLength(50);
+
+    for (const eventLimit of [0, 51, 1.5]) {
+      const rejected = await callTool(server, "collab_next", {
+        workspace_id: workspaceId,
+        event_limit: eventLimit,
+      });
+      expect(rejected.isError).toBe(true);
+      expect(rejected.structuredContent.error).toBe("invalid_event_limit");
+    }
+
+    const repeatedFromPersistedCursor = await callTool(server, "collab_next", {
+      workspace_id: workspaceId,
+      known_cursor: defaultPage.structuredContent.events.next_anchor,
+      event_limit: 1,
+    });
+    expect(repeatedFromPersistedCursor.structuredContent.events.cursor).toEqual(
+      defaultPage.structuredContent.events.cursor,
+    );
+    expect(repeatedFromPersistedCursor.structuredContent.events.events[0].sequence).toBe(
+      defaultPage.structuredContent.events.events[0].sequence,
+    );
+
+    const acknowledged = await callTool(server, "collab_cursor_ack", {
+      workspace_id: workspaceId,
+      anchor: defaultPage.structuredContent.events.next_anchor,
+      expected_cursor_version: defaultPage.structuredContent.session.cursor_version,
+    });
+    const afterAcknowledgement = await callTool(server, "collab_next", {
+      workspace_id: workspaceId,
+      event_limit: 1,
+    });
+    expect(acknowledged.structuredContent.session.cursor).toEqual(
+      defaultPage.structuredContent.events.next_anchor,
+    );
+    expect(afterAcknowledgement.structuredContent.events.cursor).toEqual(
+      acknowledged.structuredContent.session.cursor,
+    );
+    expect(afterAcknowledgement.structuredContent.events.events[0].sequence).toBe(
+      acknowledged.structuredContent.session.cursor.sequence + 1,
+    );
+  });
+
   test("preserves the public self-declared presence plane without binding the process", async () => {
     const { root, server } = node();
     const opened = await callTool(server, "collab_workspace_open", {
@@ -640,8 +804,8 @@ describe("MCP surface", () => {
     const reviewer = new StdioMcpHarness(bundlePath, databasePath);
     cleanup.push(() => reviewer.close());
     const reviewerInit = await reviewer.initialize();
-    expect(implementerInit.serverInfo.version).toBe("0.3.0");
-    expect(reviewerInit.serverInfo.version).toBe("0.3.0");
+    expect(implementerInit.serverInfo.version).toBe("0.3.1");
+    expect(reviewerInit.serverInfo.version).toBe("0.3.1");
 
     const implementerJoin = await implementer.callTool("collab_session_start", {
       root_path: root,

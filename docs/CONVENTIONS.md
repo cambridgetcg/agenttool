@@ -75,8 +75,23 @@ Otherwise `snake_case` everywhere. Time fields end in `_at` (ISO 8601 UTC string
 ### Migrations
 
 - **Filename**: `api/migrations/YYYYMMDDTHHMMSS_<name>.sql` (ISO-timestamped; the older `NNNN_<name>.sql` sequential scheme is being phased out as of 2026-05).
-- **Apply singly**: `bun api/scripts/_migrate-one.ts <file>`.
-- **Apply in batch**: `bun run db:migrate` from `api/` (uses Drizzle Kit).
+- **Create**: `bin/migrate.sh new <slug>`.
+- **Apply singly (ordinary migrations only)**:
+  `bun api/scripts/_migrate-one.ts <file>`. The local and Fly one-file helpers
+  fail closed on `api/migrations/quiescence-required.txt` and refuse listed
+  files; they are not a protected-migration escape hatch.
+- **Inspect/apply in batch**: `bin/migrate-pending.sh --dry-run`, then
+  `bin/migrate-pending.sh`. The dry run lists pending files, requires source for
+  every journaled filename, and checks journaled bytes; it does not classify
+  transaction behavior. During apply, the
+  checksum-journaled runner commits each transaction-wrappable SQL file with
+  its journal row and explicitly reports self-transactional,
+  `@no-transaction`, and pre-journal bootstrap exceptions where that atomic
+  pairing is unavailable.
+- **Protected migrations**: establish the independently reviewed exclusive
+  cutover in `DEPLOY-PROCEDURE.md`, then use only
+  `bin/migrate-pending.sh --maintenance-quiesced`. The flag is an operator
+  assertion, not a machine-state or authorization proof.
 - **Generate from schema**: `bun run db:generate` after editing `api/src/db/schema/*.ts`.
 - **Backwards compatible by default**: new columns are nullable or defaulted; new tables don't break existing queries. Breaking changes get a separate plan.
 
@@ -198,7 +213,7 @@ Four tiers — see also `api/tests/{integration,doctrine,contract,adapters}/READ
 | Tier | Location | Speed | Gated on | What it pins |
 |---|---|---|---|---|
 | Unit / route | `api/tests/*.test.ts` | Fast (no DB) | — | Handlers, helpers, pure functions, canonical-byte vectors |
-| Integration | `api/tests/integration/` | Medium (DB) | `POSTGRES_URL` | Multi-component DB-touching flows |
+| Integration | `api/tests/integration/` | Medium (DB) | `DATABASE_URL` | Multi-component DB-touching flows |
 | Doctrine | `api/tests/doctrine/` | Variable | — | Each Promise in `SOUL.md` → executable test (WIP) |
 | Contract | `api/tests/contract/` | Slow + paid | `RUN_CONTRACT=1` + provider keys | LLM wire proofs (~$0.10/run) |
 | Adapter | `api/tests/adapters/` | Variable | — | Adapter installer scripts + per-adapter e2e (WIP) |

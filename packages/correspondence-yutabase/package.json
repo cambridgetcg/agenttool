@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/correspondence-yutabase",
-  "version": "0.1.0-dev.0",
+  "version": "0.1.0-dev.1",
   "description": "Pure deterministic mapping plans from Agent Correspondence records to YUTABASE cards and threads",
   "license": "Apache-2.0",
   "type": "module",
@@ -32,8 +32,9 @@
     "build": "bun run clean && tsc",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "check:package": "bun run build && bun test ./tests/package.check.ts",
     "smoke:node": "node scripts/smoke-node.mjs",
-    "ci": "bun run typecheck && bun test && bun run build && bun run smoke:node",
+    "ci": "bun run typecheck && bun test && bun run check:package && bun run smoke:node",
     "prepack": "bun run ci"
   },
   "devDependencies": {

@@ -60,13 +60,26 @@ npm pack --ignore-scripts --dry-run
 
 ## Release State
 
-Version `0.1.0` is distributed through the checked-in `love-package/v1`
-artifact and a verified public npm mirror. The registry tarball is
-byte-identical to the checked-in LOVE artifact at SHA-256
-`fada7f9602d48020390709c6c066d7562cd54edcb8e9cbc8bec4c213f7ea475d`,
-and the npm publication carries SLSA provenance. npm remains an optional mirror
-rather than package-name or release authority; verify the exact version and
-artifact digest when consuming it.
+Version `0.1.3` is the current package release. Its checked-in
+`love-package/v1` manifest is the exact release record; npm and GitHub remain
+optional mirrors rather than package-name or release authority. The
+exact-version Wallet `0.1.1` and `0.1.2` LOVE artifacts remain byte-addressable
+and are not rewritten. Their currently public GitHub assets were independently
+byte-verified, but GitHub reports the release records as mutable, so those
+optional locators are not immutability guarantees. Version `0.1.1`
+incorrectly called itself unreleased; `0.1.2` ambiguously described the LOVE
+and GitHub bytes together as immutable. This is the public erratum; never
+rewrite either historical artifact. As independently checked on 2026-07-28,
+npm still served the byte-identical `0.1.0` artifact at SHA-256
+`fada7f9602d48020390709c6c066d7562cd54edcb8e9cbc8bec4c213f7ea475d`.
+Verify the selected exact version and digest at consumption time.
+
+Zerone support lives in the separate
+`@agenttool/wallet-zerone@0.1.1` exact LOVE package. It consumes this package's
+verified records and owns a narrow exact-byte Cosmos profile; it does not turn
+core Wallet into a chain adapter or supply custody, hosted RPC, or live
+execution. Public LOVE distribution is not npm/GitHub mirror availability or
+a hosted-runtime claim.
 
 ## Key Files
 
@@ -88,6 +101,8 @@ Canonical protocol draft:
 [`docs/specs/AGENT-WALLET-0.1.md`](../../docs/specs/AGENT-WALLET-0.1.md).
 Canonical byte recipes:
 [`docs/CANONICAL-BYTES.md`](../../docs/CANONICAL-BYTES.md).
+Separate Zerone profile:
+[`docs/specs/AGENT-WALLET-ZERONE-0.1.md`](../../docs/specs/AGENT-WALLET-ZERONE-0.1.md).
 
 ## Kingdom Engine
 

@@ -271,14 +271,17 @@ remains a separate explanation contract and gains no Castle authority.
 `bin/whitehack-wallet-understanding.ts` is a separate local stdin/stdout
 adapter. It re-verifies caller-presented signed `agent-wallet/0.1` descriptor,
 capability, intent, simulation, and optional continuity records with
-`@agenttool/wallet@0.1.0`. It derives bounded relationship and policy states,
-then passes only closed enum assertions plus the six allowlisted finding fields
-to `@agenttool/whitehack-scan@0.8.1`'s `createUnderstanding()`. stdout is the
-exact, deterministic `whitehack-understanding/v1` document rather than an
-AgentTool wrapper. Policy fields remain `unknown` unless every descriptor,
-capability, delegate, chain, source, intent, and simulation binding needed for
-that operation is an exact `match`; independently valid but unrelated records
-cannot produce a supported policy slice.
+the local `@agenttool/wallet@0.1.3` source and exact LOVE release (the
+independently verified npm mirror remains 0.1.0 until a later exact registry
+version is observed). It derives bounded relationship
+and policy states, then passes only closed enum assertions plus the six
+allowlisted finding fields to `@agenttool/whitehack-scan@0.8.1`'s
+`createUnderstanding()`. stdout is the exact, deterministic
+`whitehack-understanding/v1` document rather than an AgentTool wrapper. Policy
+fields remain `unknown` unless every descriptor, capability, delegate, chain,
+source, intent, and simulation binding needed for that operation is an exact
+`match`; independently valid but unrelated records cannot produce a supported
+policy slice.
 
 The two dependencies keep their own exact install boundaries: Whitehack loads
 from the same `tools/whitehack-advisory/` npm 11.17.0 lock used by the advisory,

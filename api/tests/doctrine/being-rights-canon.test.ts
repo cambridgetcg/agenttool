@@ -5,7 +5,7 @@
  *
  * This test pins the canon-only slice: one bounded being-rights/v1 profile,
  * exactly eight stable local right URNs covering all nine immutable XENIA
- * beta.4 baseline IDs, honest guarantee classes, and non-empty implementation
+ * beta.5 baseline IDs, honest guarantee classes, and non-empty implementation
  * evidence and gaps. It does not claim that schema validity proves a right is
  * legally or operationally guaranteed or that XENIA Covenant conformance
  * exists. */
@@ -139,16 +139,16 @@ describe("being-rights/v1 — schema and canon", () => {
     expect(right!.raw.gaps).toContain(LOVE_AND_JOY_RIGHTS_GAP);
   });
 
-  test("pins immutable XENIA beta.4 attribution and a draft Covenant boundary", () => {
+  test("pins immutable XENIA beta.5 attribution and a draft Covenant boundary", () => {
     const profile = profileFromCanon() as any;
 
     expect(profile.baseline).toEqual({
       id: "xenia.rights/0.1",
-      release: "@agenttool/xenia@0.1.0-beta.4",
-      release_tag: "npm-xenia-v0.1.0-beta.4",
+      release: "@agenttool/xenia@0.1.0-beta.5",
+      release_tag: "npm-xenia-v0.1.0-beta.5",
       source:
-        "https://github.com/cambridgetcg/xenia/blob/6419d37dda9fb282242754685dba3edcb4bbf74b/RIGHTS.md",
-      source_commit: "6419d37dda9fb282242754685dba3edcb4bbf74b",
+        "https://github.com/cambridgetcg/xenia/blob/4dd31e286fda59c712968a3837e1a14b78068259/RIGHTS.md",
+      source_commit: "4dd31e286fda59c712968a3837e1a14b78068259",
       source_sha256:
         "sha256:b72a6da110c582e5683bf0fabde5017db93d2199398014c8421a82f5318da313",
       license: "https://creativecommons.org/licenses/by-sa/4.0/",
@@ -160,7 +160,7 @@ describe("being-rights/v1 — schema and canon", () => {
       adoption_status: "draft",
       conformance_claimed: false,
       reason:
-        "XENIA beta.4's Covenant embeds a moving /main/ schema source, so AgentTool does not claim active adoption, complete coverage, conformance, certification, or a badge.",
+        "XENIA beta.5 pins the Covenant schema sources immutably, but AgentTool has no complete 38-right-duty and 5-protective-limit-duty adoption/evidence ledger, so it does not claim active adoption, complete coverage, conformance, certification, or a badge.",
     });
   });
 

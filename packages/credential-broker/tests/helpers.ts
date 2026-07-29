@@ -2,11 +2,13 @@ import { chmod, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  AGENTCRED_EVM_JSONRPC_READ_PROFILE,
   AgentCredError,
   AgentCredClient,
   BrokerServer,
   type BrokerServerOptions,
-  type GrantRequest,
+  type EvmJsonRpcReadGrantRequest,
+  type HttpGrantRequest,
 } from "../src/index.js";
 import {
   AllowAllConsent,
@@ -29,6 +31,9 @@ export class FakeTransport implements OutboundTransport {
     headers: { "content-type": "application/json" },
     body: Buffer.from('{"ok":true}', "utf8"),
   };
+  handler:
+    | ((request: OutboundHttpRequest) => OutboundHttpResponse | Promise<OutboundHttpResponse>)
+    | undefined;
   gate: Promise<void> | undefined;
 
   async send(request: OutboundHttpRequest): Promise<OutboundHttpResponse> {
@@ -60,10 +65,13 @@ export class FakeTransport implements OutboundTransport {
     } else {
       await this.gate;
     }
+    const response = this.handler
+      ? await this.handler(request)
+      : this.response;
     return {
-      status: this.response.status,
-      headers: { ...this.response.headers },
-      body: Buffer.from(this.response.body),
+      status: response.status,
+      headers: { ...response.headers },
+      body: Buffer.from(response.body),
     };
   }
 }
@@ -133,7 +141,7 @@ export async function makeBroker(
   };
 }
 
-export function grantRequest(overrides: Partial<GrantRequest> = {}): GrantRequest {
+export function grantRequest(overrides: Partial<HttpGrantRequest> = {}): HttpGrantRequest {
   return {
     alias: "agenttool-session",
     credential: "agenttool/default",
@@ -142,6 +150,35 @@ export function grantRequest(overrides: Partial<GrantRequest> = {}): GrantReques
       origin: "https://api.example.com",
       methods: ["GET", "POST"],
       pathPrefixes: ["/v1"],
+      ttlSeconds: 60,
+      maxUses: 4,
+      maxRequestBytes: 1024,
+      maxResponseBytes: 4096,
+    },
+    ...overrides,
+  };
+}
+
+export function jsonRpcReadGrantRequest(
+  overrides: Partial<EvmJsonRpcReadGrantRequest> = {},
+): EvmJsonRpcReadGrantRequest {
+  return {
+    alias: "agenttool-chain-observation",
+    credential: "agenttool/default",
+    operation: "jsonrpc.read",
+    scope: {
+      profile: AGENTCRED_EVM_JSONRPC_READ_PROFILE,
+      origin: "https://eth-mainnet.g.alchemy.com",
+      chainId: "eip155:1",
+      methods: [
+        "eth_chainId",
+        "eth_blockNumber",
+        "eth_getBlockByNumber",
+        "eth_getBalance",
+        "eth_getCode",
+        "eth_getTransactionByHash",
+        "eth_getTransactionReceipt",
+      ],
       ttlSeconds: 60,
       maxUses: 4,
       maxRequestBytes: 1024,

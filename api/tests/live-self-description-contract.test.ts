@@ -391,7 +391,16 @@ describe("live self-description — curated repo and platform bounds", () => {
     const docsModule = repo.modules.find((module) => module.path === "apps/docs/");
     const corpusModule = repo.modules.find((module) => module.path === "docs/");
     const testsModule = repo.modules.find((module) => module.path === "tests/");
+    const tsSdkModule = repo.modules.find(
+      (module) => module.path === "packages/sdk-ts/",
+    );
+    const pySdkModule = repo.modules.find(
+      (module) => module.path === "packages/sdk-py/",
+    );
     const why = repo.doctrine.find((layer) => layer.layer === "the why");
+    const sdkLayer = repo.doctrine.find(
+      (layer) => layer.layer === "SDK + adapters",
+    );
 
     expect(apiModule?.walls.join(" ")).toMatch(
       /selected authenticated write prefixes.*fails open.*Redis/i,
@@ -401,6 +410,25 @@ describe("live self-description — curated repo and platform bounds", () => {
       /launch\/, specs\/, superpowers\/, wakes\/, and zerone-migration\//i,
     );
     expect(testsModule?.register).toMatch(/five practical families/i);
+    expect(tsSdkModule?.register).toMatch(
+      /credential-free typed KINGDOM framework-card read.*local.*KINGDOM OS/i,
+    );
+    expect(pySdkModule?.register).toMatch(
+      /credential-free typed KINGDOM framework-card read.*local.*KINGDOM OS/i,
+    );
+    expect(tsSdkModule?.walls.join(" ")).toMatch(
+      /framework-card read.*never inherit or forward the project bearer/i,
+    );
+    expect(pySdkModule?.walls.join(" ")).toMatch(
+      /framework-card read.*never inherit or forward the project bearer/i,
+    );
+    expect(tsSdkModule?.walls.join(" ")).toMatch(
+      /\/public\/kingdom\/framework.*refuses redirects.*grants no authority/i,
+    );
+    expect(pySdkModule?.walls.join(" ")).toMatch(
+      /\/public\/kingdom\/framework.*refuses redirects.*grants no authority/i,
+    );
+    expect(sdkLayer?.docs).toContain("KINGDOM-OS-SDK.md");
     expect(new Set(why?.docs).size).toBe(why?.docs.length);
     expect(JSON.stringify(repo.patterns)).toMatch(/target:.*coverage/is);
     expect(JSON.stringify(repo)).not.toMatch(/Every visible surface|Birth is free, irreversibly/i);
