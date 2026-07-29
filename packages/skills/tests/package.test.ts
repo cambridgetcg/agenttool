@@ -35,6 +35,7 @@ const EXPLICIT_SKILL_NAMES = [
   "capability-conductor",
   "learn-by-contact",
   ...NEN_SKILL_NAMES,
+  "manage-agentcred-lifecycle",
   "use-agentcred-safely",
 ] as const;
 
@@ -325,6 +326,14 @@ test("documents non-activating installation and literal inspector path arguments
     join(packageRoot, "skills", "nen-verification-ledger", "SKILL.md"),
     "utf8",
   );
+  const manageAgentCred = await readFile(
+    join(packageRoot, "skills", "manage-agentcred-lifecycle", "SKILL.md"),
+    "utf8",
+  );
+  const useAgentCred = await readFile(
+    join(packageRoot, "skills", "use-agentcred-safely", "SKILL.md"),
+    "utf8",
+  );
 
   expect(readme).toContain(SKILLS_RELEASE_URL);
   expect(readme).toContain(SKILLS_RELEASE_SHA256);
@@ -354,6 +363,15 @@ test("documents non-activating installation and literal inspector path arguments
   expect(concealedTrace).toContain("Redact credentials, tokens, personal data");
   expect(verificationLedger).toMatch(/Never\s+place credential values, personal data/);
   expect(contractMantle).not.toContain("crunchyroll.com");
+  expect(manageAgentCred).toContain(
+    "The human enters it only into the fixed native Keychain prompt.",
+  );
+  expect(manageAgentCred).toContain("provider revocation as a separate");
+  expect(manageAgentCred).not.toContain("[TODO");
+  expect(useAgentCred).toContain("separate 0.3 controller plane");
+  expect(useAgentCred).not.toContain(
+    "does not provide\n  streaming/SSE, signing, renewal, delegation, credential rotation",
+  );
 });
 
 test("documented archive install stops before verification and npm when download fails", async () => {
