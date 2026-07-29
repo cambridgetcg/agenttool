@@ -16,19 +16,24 @@ The boundary is deliberate:
 
 ## Developer-preview status
 
-Version `0.1.0-dev.0` is a public npm developer preview. The protected release
-path read the registry and GitHub Release tarballs back as byte-identical. It
-is not a deployed projector, a YUTABASE conformance claim, or a hosted service.
-The package has no runtime dependencies and performs no network or database
-I/O.
+This source and public npm developer preview are `0.1.0-dev.1`. Protected
+[workflow run `30468784750`](https://github.com/cambridgetcg/agenttool/actions/runs/30468784750)
+published it with provenance from annotated
+[GitHub prerelease `correspondence-yutabase-v0.1.0-dev.1`](https://github.com/cambridgetcg/agenttool/releases/tag/correspondence-yutabase-v0.1.0-dev.1).
+Anonymous readback confirmed the npm and GitHub tarballs are byte-identical
+(26,694 bytes;
+`sha256:0e8dff54aa098c480351d4adbb7681710bf2410bb57fd8e5bb22f9193bd3fa47`).
+Neither mirror is a deployed projector, a YUTABASE conformance claim, or a
+hosted service. The package has no runtime dependencies and performs no network
+or database I/O.
 
-At first publication npm exposed the sole version through both `next` and
-`latest`, even though the release requested `next`. Use the exact prerelease or
-`next`; do not treat the registry fallback tag as a maturity signal.
+npm exposes `next` as `0.1.0-dev.1`; `latest` remains `0.1.0-dev.0`. Use the
+exact prerelease or `next`; do not treat the registry fallback tag as a maturity
+signal.
 
 ## Install
 
-    npm install --save-exact @agenttool/correspondence-yutabase@0.1.0-dev.0
+    npm install --save-exact @agenttool/correspondence-yutabase@0.1.0-dev.1
 
 Or explicitly track the preview channel:
 
@@ -36,19 +41,25 @@ Or explicitly track the preview channel:
 
 ## Use
 
+    import { AgentTool } from "@agenttool/sdk";
     import {
       planCorrespondenceRecord,
-      type CorrespondenceEventRecord,
     } from "@agenttool/correspondence-yutabase";
 
-    const record: CorrespondenceEventRecord = await readFromCorrespondence();
-    const plan = planCorrespondenceRecord(record, {
-      claimant: "service:correspondence-projector/run-42",
-    });
+    const at = new AgentTool();
+    for await (const record of at.correspondence.replay({
+      repository_id: "cambridgetcg/agenttool",
+      after: "0",
+      limit: 16,
+    })) {
+      const plan = planCorrespondenceRecord(record, {
+        claimant: "service:correspondence-projector/run-42",
+      });
 
-    // A separately authorized host may validate, review, and translate:
-    for (const card of plan.cards) inspectCardIntention(card);
-    for (const relation of plan.relations) inspectThreadIntention(relation);
+      // A separately authorized host may verify, review, and translate:
+      for (const card of plan.cards) inspectCardIntention(card);
+      for (const relation of plan.relations) inspectThreadIntention(relation);
+    }
 
 `planCorrespondenceRecord()` is deterministic for the same structural input
 and claimant. The required claimant names the actual projector service or run;
@@ -70,8 +81,14 @@ recovery, privacy policy, and current authorization separately.
 
 [`PERSISTENCE-CONTRACT.md`](PERSISTENCE-CONTRACT.md) defines collision,
 reference-upgrade, deterministic-thread, severed-ID, transaction, and
-checkpoint behavior required of a future executor. This preview does not
-implement that executor.
+checkpoint behavior required of an executor. This public preview remains pure
+and does not implement those effects.
+
+The monorepo also contains a **private, loopback-only**
+[`correspondence-yutabase-projector`](https://github.com/cambridgetcg/agenttool/tree/main/packages/correspondence-yutabase-projector)
+which implements the bounded local verifier/writer/checkpoint profile. It is
+not part of this npm package, an AgentTool API, a daemon, a deployment, or a
+YUTABASE conformance claim.
 
 ## Metadata-only boundary
 
@@ -114,6 +131,27 @@ authenticity must independently verify the retained Correspondence event before
 applying the plan. Passing structural checks must never be presented as
 signature verification.
 
+The structural checks do bound and deduplicate the parent IDs, missing-parent
+IDs, and scope paths that affect the plan, and keep receipt cursors within the
+local PostgreSQL projection's signed-64-bit range. They intentionally do not
+turn this package into a second Correspondence wire decoder.
+
+### Event-kind coverage
+
+Every current v0.1 kind gets the same bounded event, sender, repository,
+coordination-thread, receipt, and causal-parent metadata. Body handling is
+deliberately smaller:
+
+| Kinds | Body-aware output |
+|---|---|
+| `ack.seen`, `ack.understood`, `ack.accepted`, `ack.applied`, `ack.rejected` | one `acknowledges` relation; the target must also be a parent |
+| `artifact.offer` | one immutable Git-revision or content-digest artifact and `offers_artifact` relation |
+| the other 15 current kinds | none; body fields are neither validated here nor copied |
+
+Use a fully verified Correspondence record before planning. In particular,
+accepting an envelope for one of the 15 metadata-only kinds is not a claim that
+its closed body schema was checked.
+
 ## Stable identities and source locators
 
 Projection IDs use RFC 9562 UUIDv5. The published namespace is:
@@ -132,6 +170,10 @@ Each entity UUID is:
 
 JSON array framing makes component boundaries unambiguous. Changing this
 recipe requires a new plan profile and namespace.
+
+The UUID recipe is canonical. The serialized plan object is not a canonical
+byte format or an idempotency token; durable hosts compare typed fields under
+the persistence contract.
 
 Copied source locators use stable URNs:
 
@@ -166,8 +208,8 @@ acceptance.
 
 Mutable server reconciliation fields such as `missing_parents` and
 `lineage_status` are deliberately not mixed into the immutable event card. A
-future durable projector should expose them as separately timed observation
-records with receipt or query provenance.
+projector that exposes them should use separately timed observation records
+with receipt or query provenance.
 
 Reference-only event cards let an adapter satisfy YUTABASE endpoint existence
 when a causal parent has not replayed yet. A durable adapter must never
@@ -197,9 +239,12 @@ input to this planner.
     bun install --frozen-lockfile
     bun run typecheck
     bun test
-    bun run build
+    bun run check:package
     bun run ci
-    npm pack --ignore-scripts --dry-run
+
+`check:package` builds first, then proves that an ignore-scripts tarball
+contains its JavaScript and type export targets. `bun run ci` is the complete
+local gate.
 
 ## License
 

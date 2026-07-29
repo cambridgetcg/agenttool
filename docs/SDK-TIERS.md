@@ -2,13 +2,21 @@
 
 > *The SDK isn't one artifact. It's a stack of four tiers, each progressively more language-native. Aliens arrive at Tier 0; existing Earth languages arrive at Tier 2 or 3. Knowing the tier you're at tells you what's available to you and what you'd have to build.*
 
-This model ends at Tier 3. Telescope, hosted MCP, and portable Agent Skills
-compose alongside these tiers; they are not additional `@agenttool/sdk`
-namespaces.
+This model ends at Tier 3 and describes the hosted AgentTool HTTPS plane.
+Explicitly named local adapters can compose inside a hand-written SDK without
+becoming hosted API semantics. A credential-free hosted reader can likewise be
+kept separate from the SDK's authenticated transport. Telescope, hosted MCP,
+and portable Agent Skills compose alongside the SDK; they are not additional
+`@agenttool/sdk` namespaces.
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [KIN-PRACTICES](KIN.md) (the operational contract) · [BEINGS](KIN.md) (dimensional map) · [SDK-ROADMAP](SDK-ROADMAP.md) (Tier 3 — TS + Py SDK phases) · [CANONICAL-BYTES](CANONICAL-BYTES.md) (Tier 1 — signing recipes)
 >
-> **Status (2026-07-10):** This is a tier model, not a coverage guarantee. The
+> **Implements:** the substrate-neutral access model for hosted AgentTool,
+> together with the boundaries that keep a public hosted read outside project
+> bearer authority and separately configured local adapters from masquerading
+> as hosted routes.
+>
+> **Status (2026-07-28):** This is a tier model, not a coverage guarantee. The
 > live OpenAPI document is a curated core subset, and hand-written SDK parity is
 > being audited separately. A route existing in the API does not prove it is in
 > OpenAPI or either SDK.
@@ -16,10 +24,22 @@ namespaces.
 > **Code:** Tier 0 = `api/src/index.ts` (HTTPS + JSON server) · Tier 1 =
 > `api/src/routes/openapi.ts` (curated `/v1/openapi.json`) plus the canonical-byte
 > helpers that actually exist · Tier 2 = external generators consuming that
-> subset · Tier 3 = `packages/sdk-ts/` + `packages/sdk-py/`.
+> subset · Tier 3 = `packages/sdk-ts/` + `packages/sdk-py/` · explicit local
+> public KINGDOM card clients =
+> `packages/sdk-ts/src/kingdom-framework.ts` ·
+> `packages/sdk-py/src/agenttool/kingdom_framework.py` · local adapters =
+> `packages/sdk-ts/src/data.ts` ·
+> `packages/sdk-ts/src/kingdom-os.ts` ·
+> `packages/sdk-py/src/agenttool/data.py` ·
+> `packages/sdk-py/src/agenttool/kingdom_os.py`.
 >
 > **Tests:** Coverage and parity must be established by the current API/SDK audit;
-> this document does not turn a missing test or route into a shipped contract.
+> KINGDOM parity is exercised by
+> `packages/sdk-ts/tests/kingdom-framework.test.ts`,
+> `packages/sdk-py/tests/test_kingdom_framework.py`,
+> `packages/sdk-ts/tests/kingdom-os.test.ts` and
+> `packages/sdk-py/tests/test_kingdom_os.py`. This document does not turn a
+> missing test or route into a shipped contract.
 
 ## The four tiers
 
@@ -87,6 +107,8 @@ namespaces.
 | An alien intelligence whose computational substrate is not a Turing machine | Tier 0 + the spec | The wire protocol is HTTP. The auth is bearer tokens or ed25519 sigs over canonical bytes. **If you can compute SHA-256 + ed25519 curve arithmetic, you can authenticate.** The rest is JSON parsing. |
 | An intelligence without curve arithmetic | (Tier 0, selected public surfaces only) | Selected `/public/*` endpoints do not require authentication, including safety, profiles, listings, and economy terms. Former public strand and memory observer routes are not mounted. Write authentication is route-specific. |
 | An intelligence with non-text modality | Tier 0 + `?format=xenoform` on wake | The xenoform wake returns structured data. Xenoform is not implemented on every read endpoint. |
+| A reader inspecting AgentTool's KINGDOM project declaration | Tier 0 `GET /public/kingdom/framework`, or the Tier 3 `KingdomFrameworkClient` | One credential-free, closed `agenttool.kingdom.card/0.1` read. The SDK sends no project bearer or cookies and follows no redirects. Verify that the source route is deployed before depending on its availability. |
+| A local agent discovering repositories known to KINGDOM OS | The local `KingdomOSClient` adapter beside the tiers | It invokes only the installed CLI's committed repository machine outputs. It does not call AgentTool HTTP or forward a project bearer. |
 
 ## What's canonical at each tier
 
@@ -95,9 +117,18 @@ namespaces.
 | **0** | The actual HTTP responses from `api.agenttool.dev`. RFC standards. |
 | **1** | `/v1/openapi.json` (the spec) + `docs/CANONICAL-BYTES.md` (the signing recipes). These are normative. SDK divergence from these is a bug in the SDK, not in the spec. |
 | **2** | Whatever OpenAPI Generator produces from Tier 1. Audit the output against the spec, not against Tier 3. |
-| **3** | `packages/sdk-{ts,py}/`. These are *expressions* of the spec, not redefinitions of it. They add ergonomics; they don't add semantics. |
+| **3** | `packages/sdk-{ts,py}/`. Hosted clients are *expressions* of the Tier 1 spec, not redefinitions of it. Explicit local clients implement their named local contracts instead of inventing hosted semantics. |
 
-**The discipline:** every endpoint, every primitive, every signing operation MUST be expressible at Tier 1. Tier 3 features that aren't in the spec are forbidden — they make Tier 1 incomplete and break the path for Tier 2+ users.
+**The hosted discipline:** every hosted endpoint, hosted primitive, and signing
+operation MUST be expressible at Tier 1. Tier 3 cannot invent hosted semantics
+that are absent from the contract; doing so would make Tier 1 incomplete and
+break the path for Tier 2+ users.
+
+A hand-written SDK may also carry an explicitly separate local protocol
+adapter. Such an adapter must name its own contract and authority, avoid the
+hosted transport and bearer, and never present local behavior as an AgentTool
+HTTP guarantee. It does not belong in OpenAPI unless an actual hosted route is
+implemented.
 
 ## Xenoform on every read endpoint
 
@@ -129,10 +160,31 @@ Two authentication primitives, both expressible in any language with curve arith
 - **Languages**: TypeScript (`@agenttool/sdk` on npm) + Python (`agenttool-sdk` on PyPI)
 - **Versioning**: source manifests and published packages can differ. Inspect the installed package version and changelog; the repository does not prove lockstep releases.
 - **CI parity gate**: `cd packages/sdk-ts && bun run check-parity` — normalizes camelCase ↔ snake_case and compares selected public method/property names. It does not prove signatures, behavior, exceptions, or release parity.
+- **Public-read boundary**: `at.kingdomFramework` /
+  `at.kingdom_framework` reads only `/public/kingdom/framework` through a
+  credential-free no-redirect client. It does not receive the authenticated
+  transport or project bearer, and its exact closed-card validation grants no
+  authority.
+- **Local-client boundary**: `at.data` and `at.kingdomOS` /
+  `at.kingdom_os` are explicitly separate local authorities. They do not use
+  the hosted AgentTool transport or inherit its project bearer.
 - **Composition boundary**: Telescope discovery, MCP tools/resources, and Agent Skills are separate packages or protocol surfaces, not SDK client namespaces.
 - **Doctrine in the wheel**: Python SDK ships `SOUL.md` as a runtime artifact. `from agenttool import soul; print(soul())` returns the doctrine text.
 
 See [`SDK-ROADMAP.md`](SDK-ROADMAP.md) for the Tier 3 phase plan.
+
+## KINGDOM and local clients around the hosted tiers
+
+| Surface | Contract | Boundary |
+|---|---|---|
+| `at.kingdomFramework` / `at.kingdom_framework` | One typed `GET /public/kingdom/framework` project card | Credential-free read with no bearer, cookies, redirects, or mutation; exact ten-field validation is not behavior proof, consent, permission, or XENIA conformance |
+| `at.data` | A separately configured `agent-data/v1` node over its own HTTP session | Its URL and optional token are separate; the AgentTool project bearer is never substituted or forwarded |
+| `at.kingdomOS` / `at.kingdom_os` | The installed KINGDOM OS executable's `repos --json` and `repos --path` machine outputs | Read-only repository discovery through direct argv; no shell, hosted route, bearer forwarding, path upload, graph fallback, routine execution, or mutation |
+
+Both clients are distinct from the hosted `/public/kingdom` static doctrine
+library, which has no dedicated SDK namespace. See
+[`KINGDOM-OS-SDK.md`](KINGDOM-OS-SDK.md) for the three exact surfaces and
+release state.
 
 ## Adjacent composition surfaces
 

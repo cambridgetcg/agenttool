@@ -5,12 +5,14 @@ import { AgentCredError } from "./errors.js";
 import type { ReservedGrant } from "./grants.js";
 import { isPublicAddress, systemResolver } from "./network.js";
 import { pathWithinPrefix } from "./policy.js";
+import { copyAndWipeSecretChunk } from "./secret-buffers.js";
 import type {
   BrokerHttpRequest,
   BrokerHttpResponse,
   CredentialMaterial,
   CredentialSource,
   HostResolver,
+  HttpGrantScope,
 } from "./types.js";
 
 const FORBIDDEN_REQUEST_HEADERS = new Set([
@@ -175,13 +177,15 @@ export class NodeHttpsTransport implements OutboundTransport {
           }
           let size = 0;
           response.on("data", (chunk: Buffer) => {
-            size += chunk.byteLength;
+            const copy = copyAndWipeSecretChunk(chunk);
+            size += copy.byteLength;
             if (size > input.maxResponseBytes) {
+              copy.fill(0);
               response.destroy();
               fail(new AgentCredError("response_too_large", "Response exceeds the grant limit."));
               return;
             }
-            chunks.push(Buffer.from(chunk));
+            chunks.push(copy);
           });
           response.once("error", () => fail(new AgentCredError("request_failed", "Upstream response failed.")));
           response.once("end", () => {
@@ -237,7 +241,7 @@ function requestsEventStream(headers: Record<string, string>): boolean {
 }
 
 export function validateBrokerHttpRequest(
-  grant: Pick<ReservedGrant, "request">,
+  grant: { request: { scope: HttpGrantScope } },
   request: BrokerHttpRequest,
 ): void {
   const url = normalizeTarget(request.url);
@@ -365,8 +369,18 @@ export function validateCredentialAuth(auth: CredentialMaterial["auth"]): void {
   }
 }
 
-function injectCredential(headers: Record<string, string>, material: CredentialMaterial): Buffer {
+function injectCredential(
+  headers: Record<string, string>,
+  material: CredentialMaterial,
+  bearerOnly = false,
+): Buffer {
   validateCredentialAuth(material.auth);
+  if (bearerOnly && material.auth.kind !== "bearer") {
+    throw new AgentCredError(
+      "backend_unavailable",
+      "Credential auth mapping is invalid for this operation.",
+    );
+  }
   const secret = Buffer.from(material.value);
   const value = secret.toString("utf8");
   const canonical = Buffer.from(value, "utf8");
@@ -456,15 +470,21 @@ export interface BrokerHttpDependencies {
   signal?: AbortSignal;
 }
 
-export async function performBrokerHttp(
-  grant: ReservedGrant,
+interface BrokerHttpAuthority {
+  credential: string;
+  scope: HttpGrantScope;
+}
+
+async function performBrokerHttpWithAuthority(
+  authority: BrokerHttpAuthority,
   request: BrokerHttpRequest,
   auditId: string,
   dependencies: BrokerHttpDependencies,
+  bearerOnly: boolean,
 ): Promise<BrokerHttpResponse> {
   const url = normalizeTarget(request.url);
-  const scope = grant.request.scope;
-  validateBrokerHttpRequest(grant, request);
+  const scope = authority.scope;
+  validateBrokerHttpRequest({ request: { scope } }, request);
   const body = strictBase64(request.bodyBase64);
   let headers: Record<string, string>;
   let pinnedAddress: { address: string; family: 4 | 6 };
@@ -486,8 +506,8 @@ export async function performBrokerHttp(
   }
 
   try {
-    return await dependencies.credentials.withCredential(grant.request.credential, async (material) => {
-      const secret = injectCredential(headers, material);
+    return await dependencies.credentials.withCredential(authority.credential, async (material) => {
+      const secret = injectCredential(headers, material, bearerOnly);
       try {
         const response = await (dependencies.transport ?? new NodeHttpsTransport()).send({
           url,
@@ -558,6 +578,46 @@ export async function performBrokerHttp(
   } finally {
     body.fill(0);
   }
+}
+
+export async function performBrokerHttp(
+  grant: ReservedGrant,
+  request: BrokerHttpRequest,
+  auditId: string,
+  dependencies: BrokerHttpDependencies,
+): Promise<BrokerHttpResponse> {
+  if (grant.request.operation !== "http.fetch") {
+    throw new AgentCredError("unsupported", "Grant is not an HTTP capability.");
+  }
+  return performBrokerHttpWithAuthority(
+    {
+      credential: grant.request.credential,
+      scope: grant.request.scope,
+    },
+    request,
+    auditId,
+    dependencies,
+    false,
+  );
+}
+
+/**
+ * Internal operation adapter for profiles whose credential must be injected
+ * only through the Authorization header.
+ */
+export async function performBrokerBearerHttp(
+  authority: BrokerHttpAuthority,
+  request: BrokerHttpRequest,
+  auditId: string,
+  dependencies: BrokerHttpDependencies,
+): Promise<BrokerHttpResponse> {
+  return performBrokerHttpWithAuthority(
+    authority,
+    request,
+    auditId,
+    dependencies,
+    true,
+  );
 }
 
 export function hashTargetPath(pathname: string): string {

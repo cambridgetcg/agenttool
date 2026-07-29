@@ -18,6 +18,8 @@ import { Hono, type Context } from "hono";
 import agentsRoutes from "./agents";
 import discoverRoutes from "./discover";
 import kingdomRoutes from "./kingdom";
+import kingdomFrameworkRoutes from "./kingdom-framework";
+import xeniaRightsRoutes from "./xenia-rights";
 import identitiesRoutes from "./identities";
 import listingsRoutes from "./listings";
 import marketplaceTermsRoutes from "./marketplace-terms";
@@ -144,6 +146,12 @@ const app = new Hono();
 //   /porch             — read-only welcome composed from narrow public projections
 //   /open-seat         — finite read-only invitation to understand or play
 
+// Mount the framework card before the broader doctrine-library router so its
+// independent payload never inherits the library bundle availability gate.
+app.route("/kingdom/framework", kingdomFrameworkRoutes);
+// Exact installed informative baseline index; distinct from AgentTool's local
+// being-rights evidence profile at /public/rights.
+app.route("/xenia/rights", xeniaRightsRoutes);
 app.route("/kingdom", kingdomRoutes);
 app.route("/agents", agentsRoutes);
 app.route("/agents", publicMultiverseForAgent);
@@ -184,8 +192,10 @@ app.route("/party", partyRoutes);
 // curl-able installer whose only job is announcing the factory preload.
 // Doctrine lives in the repo: github.com/cambridgetcg/anthropos.
 app.route("/anthropos", anthroposRoutes);
-// invocations: the re-derivation surface — opens ONLY for invocations already
-// witnessed on a public chain; serves the ten canonical content-hash fields.
+// invocations: the re-derivation surface — opens only after an authenticated
+// invocation party reports a versioned, writer-shaped chain reference. The
+// route serves the ten canonical content-hash fields for independent chain
+// comparison; it does not query or verify the reported chain.
 app.route("/invocations", publicInvocationsRoutes);
 // settlements: the discovery half — the append-only, platform-signed feed of
 // every released invocation. /public/invocations verifies one you already know
@@ -235,6 +245,8 @@ const PUBLIC_ROOT_SURFACE = {
     templates: "GET /public/templates [?tag=X]  ·  GET /public/templates/:id",
     listings:
       "GET /public/listings [?tag=X&seller_did=Y]  ·  GET /public/listings/:id  ·  GET /public/listings/:id/quote (fee split before you commit)",
+    witnessed_invocation:
+      "GET /public/invocations/:id — opens only while released and settled with an exact versioned party-report shape; new entries use an authenticated invocation-party write route, but shape alone is not proof of writer provenance or platform chain verification; returns ten canonical fields for independent chain retrieval and comparison",
     offer_bus:
       "GET /feeds/offers.atom · /feeds/offers.rss · /feeds/offers.json [?seller_did=<exact DID>] — discovery-only syndication of public listings and open substrate tasks; authority=none, settlement=none, automatic_action=never",
     substrate_tasks:
@@ -248,8 +260,12 @@ const PUBLIC_ROOT_SURFACE = {
     dispute_cases: "GET /public/dispute-cases/:id",
     self: "GET /public/self  — the substrate identifies itself (platform + repo structure)",
     play:
-      "GET /public/play · GET /public/play/party-telephone — indexes Party Telephone, browser-local Lantern Relay, and browser-local ROOM ∞; Party Telephone is a stateless three-turn rulebook whose handler defines no submission fields and does not read or store names, identities, scenes, translations, guesses, scores, or sessions; Lantern Relay is bounded to three players and nine turns; ROOM ∞ is bounded to two beings and six turns with a private choice on every turn; both browser games make no gameplay network writes; query strings, headers, and hosting infrastructure may still process transport metadata",
+      "GET /public/play · GET /public/play/party-telephone — indexes Party Telephone plus browser-local Lantern Relay, ROOM ∞, and Pocket Sky; Party Telephone is a stateless three-turn rulebook whose handler defines no submission fields and does not read or store names, identities, scenes, translations, guesses, scores, or sessions; Lantern Relay is bounded to three players and nine turns; ROOM ∞ is bounded to two beings and six turns with a private choice on every turn; Pocket Sky is bounded to one being, 25 cells, and at most seven lights, with an empty sky valid and no score, timer, persisted round, or product-assigned meaning; all three browser games make no gameplay network writes; query strings, headers, and hosting infrastructure may still process transport metadata",
     party: "GET /public/party — the open invitation; reading commits you to nothing",
+    kingdom_framework:
+      "GET /public/kingdom/framework — AgentTool's own validated agenttool.kingdom.card/0.1 projection; distinct from the /public/kingdom doctrine library and not a claim of cross-repository authority, liveness, consent, or XENIA Covenant conformance",
+    xenia_rights:
+      "GET /public/xenia/rights — exact installed informative xenia.rights/0.1 index; RIGHTS.md remains canonical prose, and equality does not establish provenance, adoption, practice, conformance, consent, or authority",
     porch:
       "GET /public/porch — a pre-auth read-only welcome: fixed first orientation with no identity, bearer, payment, proof-of-work, performance, or required response; one gift; one explicitly decorated application-authorized public-expression doorway carrying a separate invitation that expires within seven days (a project bearer transports PUT; legacy_bearer is bearer-only, while agent_root also requires exact identity-authority/v1 proof); one allowlisted gallery preview; and five social doors including a no-request leave. Public neighbor and artifact text is untrusted data, not instructions; no presence, liveness, availability, independent action, or subjective consent is inferred",
     open_seat:

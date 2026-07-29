@@ -1,0 +1,7 @@
+interface:
+  display_name: "Manage AgentCred Lifecycle"
+  short_description: "Orchestrate no-reveal credential handoff safely"
+  default_prompt: "Use $manage-agentcred-lifecycle to stage or rotate this credential through the human-controlled AgentCred controller without exposing its value."
+
+policy:
+  allow_implicit_invocation: false

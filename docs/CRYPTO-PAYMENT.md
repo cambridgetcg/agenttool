@@ -10,7 +10,13 @@
 
 A sovereign agent doesn't have a credit card. It has a wallet. The wallet may live on Base, Ethereum, Polygon, Arbitrum, Optimism, or Solana — anywhere the agent's treasury sits. agenttool's job is to accept that wallet's currency, credit the agent's account, and never become a friction point that pushes the agent back toward a human's payment method.
 
-This document defines the **contract** the platform offers an autonomous agent that wants to pay in crypto. The implementation lands in two phases: the **foundation** (this commit, Phase 3b) and the **filling** (Phase 3c).
+This document began as the Phase 3b/3c plan. Derivation, signed ingress,
+durable EVM observation/finality, and historical payout state-machine code now
+exist. Fresh payout admission and all payout-worker boot paths are resting;
+provider configuration cannot reopen them. The target journal and release
+receipt determine current migration and deployment status. Production provider
+configuration, credentialed staging proof, Solana deposit finality, and a
+conserved payout-backing model remain separate operator/design work.
 
 ---
 
@@ -18,13 +24,13 @@ This document defines the **contract** the platform offers an autonomous agent t
 
 | Capability | Status (Phase 3b) | Surface |
 |---|---|---|
-| Multi-chain deposit address derivation | ✓ live (EVM via BIP44 secp256k1; Solana via SLIP-0010 ed25519) | `GET /v1/wallets/:id/deposit-address?chain=&token=` |
-| List all deposit addresses for a wallet | ✓ live | `GET /v1/wallets/:id/deposit-address` |
-| Onchain identity binding via signed message | ✓ live (EVM EIP-191; Solana ed25519) | `POST /v1/wallets/:id/onchain/{challenge,verify}` · `GET /v1/wallets/:id/onchain` |
-| Inbound transfer ingestion | ✓ live (EVM via Alchemy); Solana via Helius in 3c | `POST /v1/billing/crypto-webhook/:chain` (signature-verified, public) |
-| Idempotency log for webhooks | ✓ live | `economy.crypto_webhook_events` (chain, tx_hash, log_index unique) |
-| Payout request lifecycle | ✓ scaffolded; broadcast in 3c | `POST /v1/wallets/:id/payout` · `GET /v1/wallets/:id/payouts` |
-| Schema for everything above | ✓ live | `api/migrations/0002_crypto_payment.sql` |
+| Multi-chain deposit address derivation | Implemented; provider/mnemonic configuration required | `GET /v1/wallets/:id/deposit-address?chain=&token=` |
+| List all deposit addresses for a wallet | Implemented; every stored row is revalidated and every EVM watch must match the active monotonic registry target with an observation no older than ten minutes | `GET /v1/wallets/:id/deposit-address` |
+| Onchain identity binding via signed message | Implemented (EVM EIP-191; Solana ed25519) | `POST /v1/wallets/:id/onchain/{challenge,verify}` · `GET /v1/wallets/:id/onchain` |
+| Inbound transfer ingestion | EVM signed live observations persist pending until exact canonical log/depth; removed block generations are durable and causally fenced. Solana signed ingress has no equivalent watch/finality reconciler and refuses credit by default; its immediate adapter is an explicit development-only opt-in. | `POST /v1/billing/crypto-webhook/:chain` (signature-verified, public) |
+| Idempotency + reorg evidence | Implemented in source; live schema status must be read from the migration journal | `economy.crypto_webhook_events` logical identity + immutable `crypto_webhook_event_observations` block generations |
+| Payout request lifecycle | Fresh payout admission is resting unconditionally. Exact historical request replay/conflict resolution, listing, and cancellation remain available; no environment flag can enable fresh creation or worker boot. | `POST /v1/wallets/:id/payout` · `GET /v1/wallets/:id/payouts` |
+| Schema for everything above | The historical baseline and rollout-gated identity migration are in source; source presence does not prove live application | `api/migrations/0002_crypto_payment.sql` · `api/migrations/20260725T054912_crypto_deposit_identity.sql` |
 
 ---
 
@@ -47,40 +53,107 @@ Returns:
   "address": "0xDba9494837f85E5284b6401B29b860591b744088",
   "derivation_path": "m/44'/60'/0'/0/2059516119",
   "contract_address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-  "instructions": "Send USDC to this address from any wallet..."
+  "watch_status": "provider_verified",
+  "credit_finality": "pending_until_chain_depth",
+  "instructions": "Send USDC to this address from any wallet. The signed observation remains pending until the exact canonical receipt/log and block generation reach the configured depth."
 }
 ```
 
 Properties of the address:
 
-- **Deterministic.** Same `(CRYPTO_HD_MNEMONIC, walletId)` always yields the same address. The seed-to-address derivation never reaches the database — it can be reproduced from the mnemonic alone.
+- **Deterministic.** The same active network root
+  (`CRYPTO_HD_MNEMONIC` or `CRYPTO_HD_MNEMONIC_TESTNET`) plus `walletId`
+  always yields the same address. The API verifies stored rows against that
+  active derivation before returning or registering them.
 - **Unique per wallet.** Two wallets on the same project get different addresses. `walletIndex(walletId) = SHA-256(walletId)[0:4] & 0x7fffffff` keeps the address index in BIP44's unhardened range (0 ≤ idx < 2³¹).
 - **Cross-chain stable on EVM.** Base, Ethereum, Polygon, Arbitrum, Optimism all share the same address — that's how EVM accounts work. Each `(chain, token)` row exists independently so per-chain webhooks attribute correctly, but the address text is identical.
 - **No on-chain transaction needed to mint.** The address exists because the math says it does; we record the row for indexing and webhook attribution.
+
+An EVM response reports `watch_status: provider_verified` only after the
+durable reconciler independently observes the exact active Address Activity
+webhook, expected network and callback URL, plus this address's membership.
+The API also requires the matching chain-specific ingress signing key to be
+present before disclosure. It checks presence only: the key and any
+secret-derived fingerprint are never written to watch state.
+The initial request persists the address and desired watch atomically but
+returns 503 without disclosing it while the row is pending, leased, retrying,
+or accepted-but-unverified. A PATCH 200 is never enough by itself. A Solana
+response instead reports `operator_configuration_unverified`: derivation and
+signed Helius ingress exist, but the API has no Helius watch reconciler and
+does not claim that the new address is observed.
+
+Convergence is bound to the authoritative provider/chain/network registry
+head: a positive monotonic revision plus a SHA-256 fingerprint of public
+target facts only (including webhook type, existing webhook ID, active state,
+and callback URL). The worker binds that head before every claim batch; a
+preparation failure prevents claims and is retried on its next tick. A lower
+revision is rejected, different facts at the same revision create a durable
+conflict, and only a higher revision can resolve it. Disabling a chain needs
+an explicit higher-revision tombstone; omitting its webhook variable is not a
+disable operation.
+
+A converged observation is disclosure-ready for at most ten minutes; the
+first later read requeues verification and returns 503 until it converges
+again. A worker also treats convergence as due for a best-effort background
+recheck after 24 hours. The 24-hour schedule does not extend the ten-minute
+read gate and is not a continuous-delivery guarantee.
 
 ### 2. Send USDC to it
 
 From any wallet — MetaMask, an agent's smart contract, a treasury multisig, anywhere. agenttool doesn't care about the sender; it cares about the recipient address.
 
-### 3. Webhook fires; credits land
+### 3. Webhook fires; evidence lands, then EVM credit finalizes
 
-When the chain's indexer (Alchemy for EVM today, Helius for Solana in 3c) sees the transfer, it POSTs to:
+When the chain's indexer (Alchemy for EVM and Helius for Solana) sees the
+transfer, it POSTs to:
 
 ```
 POST /v1/billing/crypto-webhook/:chain
 ```
 
-Signature-verified per provider (Alchemy uses HMAC-SHA256 with `ALCHEMY_WEBHOOK_SECRET`). The handler:
+Signature-verified per provider. Each Alchemy webhook has its own signing key,
+configured as `ALCHEMY_WEBHOOK_SIGNING_KEY_<CHAIN>`. The handler:
 
-1. Validates the signature.
-2. Parses the transfer events from the payload.
-3. For each event, looks up the deposit address in `economy.deposit_addresses`.
-4. If found and amount > 0, atomically:
-   - Inserts into `economy.crypto_webhook_events` with `(chain, tx_hash, log_index)` unique constraint — duplicates short-circuit.
-   - Increments `economy.wallets.balance` by `floor(usdc * CREDITS_PER_USDC)` (1 USDC → 100 credits).
-5. Returns `{received: true, processed: [...]}` with per-transfer match status.
+1. Counts the actual request stream up to 1 MiB and validates the raw-body signature.
+2. Binds the configured webhook ID, Address Activity type, and provider network to the URL chain.
+3. Parses Alchemy's exact raw transfer units. Helius enhanced webhooks expose a
+   human-unit JSON number, so the route accepts only bounded positive values
+   with at most six decimal places and reconstructs atomic units without
+   flooring; a production Solana adapter should prefer independently fetched
+   raw atomic balance changes.
+4. For each relevant EVM USDC event, validates transaction/log/block identity,
+   stores one logical `(chain, tx_hash, log_index)` event plus an immutable
+   live/removed observation for that block hash, and returns only after commit.
+5. A separate bounded, zero-retry-per-call worker verifies the configured
+   chain ID, returned receipt transaction hash, block number/hash, the
+   canonical block hash independently fetched at that height, current head,
+   exact contract, Transfer topic, log index, recipient, amount, and configured
+   depth. Unavailable or internally inconsistent RPC evidence remains pending;
+   it is not negative authority.
+6. A signed `removed` observation can reverse only the currently credited
+   matching block generation. A delayed `removed(A)` is stored but cannot
+   reverse newer B. Conflicting or historical evidence that cannot safely
+   authorize a balance effect becomes durable `quarantined` state.
+7. Solana signed ingress has no durable watch/finality reconciler and refuses
+   balance credit by default. Its immediate adapter is an explicit
+   development-only opt-in and is not equivalent to the EVM finality contract.
 
-Idempotency is **load-bearing** — webhooks retry, networks fork, agents resend. The unique index on `(chain, tx_hash, log_index)` is the single source of truth for "did we already credit this transfer?"
+Idempotency is **load-bearing** — webhooks retry, networks fork, and agents
+resend. Logical identity prevents duplicate credit; immutable block-generation
+observations preserve causal reorg evidence rather than overwriting it.
+The database constrains every wallet balance to JavaScript's exact-integer
+range, and manual plus crypto funding check that aggregate boundary before
+writing. An over-limit crypto observation becomes `rejected`; no rounded
+balance or ledger leg is written. Migration deliberately fails for operator
+reconciliation if an older wallet already violates the range.
+
+Quarantine is evidence isolation, not an automatic account freeze. If a
+generation was already credited, conflicting live evidence preserves that
+exact wallet effect until a matching removal arrives. A later matching removal
+posts an exact negative `crypto_reorg` ledger leg even if the original credit
+has been spent, so the wallet can become negative and further guarded spending
+remains blocked. Operators must alert on `quarantined`, `rejected`, negative
+balances, and pending-age; this code does not provide that alerting surface.
 
 ### 4. (Optional) Bind the on-chain identity
 
@@ -107,22 +180,31 @@ The server recovers the address from the EIP-191 signature and matches against t
 
 The challenge has 5-minute TTL and single-use enforcement; replays after consumption fail.
 
-### 5. (When 3c lands) Request a payout
+### 5. Payout is resting
 
-For agent-to-agent settlement, refunds, or treasury withdrawal:
+Fresh payout admission is resting unconditionally. A new `POST
+/v1/wallets/:id/payout` returns `503 payout_admission_resting` after durable
+request-identity replay/conflict handling and before network selection or
+payout-economic wallet/policy reads or mutation. Its tentative idempotency
+reservation rolls back with the
+request. `PAYOUT_WORKER_ENABLED`, the global worker switch, network/FX
+configuration, and direct worker imports cannot enable creation or broadcast.
 
-```bash
-curl -X POST "https://api.agenttool.dev/v1/wallets/$WALLET_ID/payout" \
-  -H "Authorization: Bearer $AT_API_KEY" \
-  -d '{
-    "chain": "base",
-    "token": "USDC",
-    "amount_base": "1000000",  // 1.0 USDC
-    "destination_address": "0x..."
-  }'
-```
+Historical accepted requests retain their durable identity. Reusing the same
+8–256-character visible-ASCII `Idempotency-Key` with exactly the same semantic
+input returns that payout's current state; changed input returns 409. Existing
+rows remain listable, and a still-`requested` historical row can be cancelled
+through the authenticated cancellation route. Ambiguous `broadcasting` rows
+require manual reconciliation and are never automatically retried or
+refunded.
 
-The foundation **records and locks** the equivalent credits (atomic debit; throws 402 on insufficient). Phase 3c adds the signing worker that picks up `status=requested` rows, signs the transaction with the chain-specific HD path, broadcasts via the chain's RPC, polls until confirmed, and updates the row to `confirmed` (or `failed` with refund).
+The former lifetime `gallery_sale` / `escrow_release` label heuristic is
+insufficient authority for cash-out. Those labels did not conserve cashable
+backing across ordinary wallet debits, internally funded transfers,
+refunds/chargebacks, or later funding. Reopening fresh payout creation requires
+a separately reviewed conserved-backing model with durable sub-balances and
+explicit reversal semantics; environment configuration alone is not that
+model.
 
 ---
 
@@ -138,11 +220,24 @@ This is the same posture as Stripe — Stripe is *our* payment infra, not a serv
 
 | Env var | Required for | Notes |
 |---|---|---|
-| `CRYPTO_HD_MNEMONIC` | Deposit address derivation | 12 or 24 word BIP-39 mnemonic. **Back this up offline.** Losing it means losing all derived addresses (and the funds at them). |
-| `ALCHEMY_WEBHOOK_SECRET` | EVM inbound transfer ingestion | HMAC-SHA256 secret from Alchemy dashboard → Notify → Webhooks. Configure each EVM chain's webhook to POST to `/v1/billing/crypto-webhook/<chain>`. |
-| `HELIUS_WEBHOOK_SECRET` | Solana inbound (Phase 3c) | Same idea, Helius dashboard. |
+| `CRYPTO_NETWORK` | Deposits, provider-watch identity, webhook network binding, token contracts, and shared crypto reads | Must be exactly `testnet` or `mainnet`. Unset never means mainnet. The older explicit `PAYOUT_NETWORK` is accepted as a compatibility fallback, but both values must match when both are set. |
+| `CRYPTO_HD_MNEMONIC` | Mainnet deposit address derivation and payout signing | 12 or 24 word BIP-39 mnemonic. **Back this up offline.** Losing it means losing all derived addresses (and the funds at them). |
+| `CRYPTO_HD_MNEMONIC_TESTNET` | Testnet deposit address derivation and payout signing | Kept separate from the mainnet root. Address creation and signing select the same active root. |
+| `ALCHEMY_API_KEY` | EVM RPC | Sent in an `Authorization: Bearer` header rather than the RPC URL. Use a scoped app/access key. |
+| `ALCHEMY_NOTIFY_AUTH_TOKEN` | EVM address-watch reconciliation | Notify control-plane token used for bounded team-webhook metadata GET, paginated address-membership GET, and PATCH of one desired membership on an existing webhook. |
+| `AGENTTOOL_PUBLIC_URL` | EVM callback verification | Explicit HTTPS API origin. The worker derives the per-chain webhook route from it and will not guess a production callback. |
+| `ALCHEMY_WATCH_TARGET_REVISION` | EVM target registry | Positive bounded integer, default `1`. Increase it for any webhook ID, callback, or active/disabled change; different target facts must never reuse a revision. |
+| `ALCHEMY_WATCH_DISABLED_CHAINS` | Explicit EVM disablement | Optional exact comma-separated supported EVM chain names with no whitespace, duplicates, or empty entries. Each entry tells worker preparation to bind a disabled tombstone at the current target revision; omission is not disablement. A webhook ID may remain configured only so signed deliveries for previously watched addresses can still be authenticated; the disabled chain is excluded from reconciliation. |
+| `ALCHEMY_WEBHOOK_SIGNING_KEY_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` | EVM inbound transfer ingestion and address-disclosure readiness | HMAC-SHA256 signing key from that specific webhook's detail page. Configure each webhook to POST to its matching `/v1/billing/crypto-webhook/<chain>` route; never reuse one key for all five. Presence is required for disclosure, but key bytes never enter watch state. |
+| `ALCHEMY_WEBHOOK_ID_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` | EVM address-watch reconciliation and signed-ingress identity binding | Existing Address Activity webhook ID for each chain. The API refuses to disclose an EVM deposit address until the relevant active-network target converges. A disabled chain may retain the ID solely to authenticate deliveries for previously watched addresses. |
+| `HELIUS_WEBHOOK_SECRET` | Solana inbound transfer ingestion | Same idea, Helius dashboard. The current route verifies signed deliveries and the active-network USDC mint, but does not prove that the provider watches a newly derived address. |
 
-Per-wallet settings (set on the wallet, not env): minimum payout amount, payout destination allowlist, daily ceiling. These extend `economy.policies` (Phase 3c).
+Per-wallet settings (set on the wallet, not env): minimum payout amount,
+payout destination allowlist, daily ceiling, and a fail-closed dual-control
+threshold. These live in `economy.policies`.
+
+Alchemy's exact integration boundaries, agent-facing roadmap, and remaining
+reorg/subscription reconciliation work live in [ALCHEMY.md](ALCHEMY.md).
 
 ---
 
@@ -150,23 +245,70 @@ Per-wallet settings (set on the wallet, not env): minimum payout amount, payout 
 
 ```
 economy.deposit_addresses        — wallet ↔ deposit address per (chain, token)
+economy.deposit_watch_targets    — monotonic active/conflicted/disabled target head
+economy.deposit_address_watches  — desired/observed provider watch + lease state
 economy.onchain_identities       — verified bindings (wallet ↔ external addr)
 economy.crypto_payouts           — outgoing transfer requests (lifecycle)
-economy.crypto_webhook_events    — inbound transfer log + idempotency
+economy.crypto_webhook_events    — logical inbound transfer + wallet-effect state
+economy.crypto_webhook_event_observations — immutable live/removed block generations
 ```
 
-Migration: `api/migrations/0002_crypto_payment.sql` (idempotent, safe to re-run).
+Migrations: `api/migrations/0002_crypto_payment.sql` (historical foundation)
+and `api/migrations/20260725T054912_crypto_deposit_identity.sql` (logical
+wallet/chain/token uniqueness, canonical case-insensitive EVM identity, and
+non-null event log identity; intentionally fails for operator reconciliation
+if conflicting historical rows exist), plus
+`api/migrations/20260726T070000_deposit_watch_reconciliation.sql` (durable
+provider-neutral watch generations, bounded attempts/backoff, and leases; it
+does not guess/backfill provider or network for historical rows),
+`api/migrations/20260726T191000_payout_policy_e2e_fixture_repair.sql`
+(fails closed unless any payout-operation duplicates are exactly the known
+synthetic policy-harness residue, then terminalizes only those rows), and
+`api/migrations/20260726T191500_payout_operation_identity.sql` (requires payout
+workers disabled and makes a persisted chain operation singular), and
+`api/migrations/20260726T202500_crypto_deposit_finality.sql` (historical
+effects remain credited without invented evidence; new EVM observations are
+pending and retain immutable block generations), and
+`api/migrations/20260726T211500_deposit_watch_target_binding.sql` (invalidates
+unbound historical observations and binds new convergence to public target
+identity without storing credentials or secret-derived fingerprints), and
+`api/migrations/20260726T214500_deposit_watch_target_registry.sql` (adds the
+authoritative monotonic target head, revision-bound convergence, durable
+same-revision conflict, and explicit higher-revision disabled tombstones).
 
 ---
 
-## What lands in Phase 3c
+## Current closure work
 
-1. ~~**Solana derivation**~~ — ✓ shipped. SLIP-0010 ed25519 with hardened-only path `m/44'/501'/<wallet-index>'/0'` (Phantom-compatible). Address = base58(ed25519 pubkey).
-2. ~~**Solana sigverify**~~ — ✓ shipped. `ed25519.verify(sig, msg, pubkey)` via `@noble/ed25519`. Accepts base58 or hex sig encoding (Phantom emits base58).
-3. **Helius webhook adapter** — same shape as Alchemy, different signature header and event format. Pending: requires verifying the live Helius webhook schema; stub would be a fence.
-4. **Payout broadcast worker** — picks up `status=requested` rows, derives signing key from same HD path, calls chain RPC. Pluggable per chain. Updates status; refunds on failure. Pending: needs viem (EVM) + RPC adapters + careful failure handling.
-5. **Confirmation poller** — for chains with finality lag, polls `eth_getTransactionReceipt` (or Solana equivalent) until N confirmations.
-6. **Per-wallet payout policy** — minimum amount, destination allowlist, daily ceiling, dual-control above threshold.
+Solana derivation/signature verification, Helius ingress, and historical
+EVM/Solana payout broadcast, confirmation, and policy source exist. Fresh
+payout admission and worker boot remain resting. Before production crypto
+enablement, the remaining load-bearing work is:
+
+1. design and independently review a conserved payout-backing model with
+   durable cashable/non-cashable sub-balances, ordinary-debit consumption, and
+   exact refund/chargeback/reorg reversal semantics before any payout
+   admission or worker path can be reopened;
+2. whenever the migration journal reports the
+   identity/watch/target-registry/finality files pending, stop crypto webhook
+   ingress, drain all old workers, apply and independently review them, deploy
+   only the new writers, then run a credentialed staging proof against each
+   configured webhook/RPC. The rolling schema fails closed for disclosure and
+   durable convergence, but cannot cancel a provider call an old worker
+   already started;
+3. add disposable-Postgres concurrency tests for pending credit, duplicate
+   confirmation, generation replacement, removal reversal, and quarantine;
+4. build a durable Helius watch plus raw-atomic Solana finality/reorg adapter;
+5. model L2 settlement separately if a product claim requires L1 finality;
+6. replace the bounded floating GBP/USD rate calculation with fixed-point
+   rational arithmetic;
+7. persist outbound Solana blockhash-expiry evidence and build an audited ambiguity
+   reversal/replacement lifecycle; and
+8. add durable operator alerts for pending age, quarantine, rejection, and
+   negative balances, plus a cross-replica lease if duplicate read-only RPC
+   load becomes material; and
+9. an operator-reviewed testnet cutover before any separately authorized
+   mainnet enablement.
 
 ---
 

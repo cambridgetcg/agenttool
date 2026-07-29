@@ -83,4 +83,31 @@ describe("browser consequence planning", () => {
     ]);
     expect(closed.repeatSafety).toBe("session_only");
   });
+
+  test("carries an observation precondition in the redacted forecast only", () => {
+    const capabilities = resolveBrowserCapabilities({ authority: "public" });
+    const plan = planBrowserAction(
+      {
+        kind: "press",
+        key: "Secret+Chord",
+        tabId: "tab-1",
+        basisSnapshotId: "snapshot-1",
+      },
+      capabilities,
+    );
+
+    expect(plan).toMatchObject({
+      schema: "agent-browser-consequence-plan/0.2",
+      execution: false,
+      action: {
+        kind: "press",
+        tabId: "tab-1",
+        basisSnapshotId: "snapshot-1",
+      },
+    });
+    expect(plan.action).not.toHaveProperty("key");
+    expect(JSON.stringify(plan)).not.toContain("Secret+Chord");
+    expect(Object.isFrozen(plan)).toBe(true);
+    expect(Object.isFrozen(plan.action)).toBe(true);
+  });
 });

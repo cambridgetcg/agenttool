@@ -1,0 +1,43 @@
+{
+  "protocol": "love-package/v1",
+  "document_type": "package-manifest",
+  "name": "@agenttool/wallet-zerone",
+  "version": "0.1.0",
+  "description": "Offline-first Zerone chain adapter for Agent Wallet intents and exact Cosmos direct-sign bytes",
+  "license": "Apache-2.0",
+  "artifact": {
+    "format": "npm-tarball",
+    "filename": "agenttool-wallet-zerone-0.1.0.tgz",
+    "sha256": "33f17bac6c5439fff486d4bceb682f5381ceb690407209863b71f73c7b0cf4e1",
+    "size": 61313,
+    "media_type": "application/gzip",
+    "mirrors": [
+      {
+        "url": "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.0/agenttool-wallet-zerone-0.1.0.tgz"
+      },
+      {
+        "url": "https://github.com/cambridgetcg/agenttool/releases/download/wallet-zerone-v0.1.0/agenttool-wallet-zerone-0.1.0.tgz"
+      }
+    ]
+  },
+  "runtime": {
+    "kind": "javascript",
+    "engines": {
+      "bun": ">=1.3.5",
+      "node": ">=20.19.0"
+    }
+  },
+  "install": {
+    "format": "npm-tarball",
+    "specifier": "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.0/agenttool-wallet-zerone-0.1.0.tgz"
+  },
+  "source": {
+    "repository": "https://github.com/cambridgetcg/agenttool.git",
+    "revision": "8cdcf352ab7a09504ed3983d98ffb6d0f16f0cd1",
+    "path": "packages/wallet-zerone"
+  },
+  "dependency_resolution": {
+    "mode": "package_manifest",
+    "self_contained": false
+  }
+}

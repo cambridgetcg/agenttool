@@ -41,4 +41,12 @@ END $$;
       shouldWrapInTransaction("-- @no-transaction\nCREATE INDEX CONCURRENTLY idx ON example (id);"),
     ).toBe(false);
   });
+
+  test("does not mistake prose about the marker for the marker", () => {
+    expect(
+      shouldWrapInTransaction(
+        "-- @no-transaction is NOT set\nCREATE TABLE example (id integer);",
+      ),
+    ).toBe(true);
+  });
 });

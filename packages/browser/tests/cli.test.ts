@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { Readable, Writable } from "node:stream";
+import { PassThrough, Readable, Writable } from "node:stream";
 import type { AgentBrowser } from "../src/browser.js";
 import {
   JSONL_PROTOCOL_VERSION,
@@ -366,6 +366,143 @@ describe("JSONL protocol", () => {
     expect(calls.some((call) => call.method === "act")).toBe(false);
   });
 
+  test("points camelCase request fields at their snake_case wire names, but only real ones", async () => {
+    const { browser, calls } = fakeBrowser();
+    const responses = await jsonl(browser, [
+      request("camel", "browser_act", {
+        action: { kind: "click", ref: "tab_1@1:e6", snapshotId: "session:tab_1:1" },
+      }),
+      request("basis-camel", "browser_act", {
+        action: {
+          kind: "wait",
+          ms: 10,
+          basisSnapshotId: "session:tab_1:1",
+        },
+      }),
+      request("no-such-field", "browser_screenshot", { fullPage: true }),
+      request("wrong-op-field", "browser_observe", { maxChars: 100 }),
+      request("wrong-click-basis", "browser_act", {
+        action: {
+          kind: "click",
+          ref: "tab_1@1:e6",
+          snapshot_id: "session:tab_1:1",
+          basisSnapshotId: "session:tab_1:1",
+        },
+      }),
+      request("wrong-wait-snapshot", "browser_plan", {
+        action: {
+          kind: "wait",
+          ms: 10,
+          snapshotId: "session:tab_1:1",
+        },
+      }),
+      request("wrong-ref-scroll-delta", "browser_act", {
+        action: {
+          kind: "scroll",
+          ref: "tab_1@1:e6",
+          snapshot_id: "session:tab_1:1",
+          deltaX: 5,
+        },
+      }),
+      request("wrong-new-tab-target", "browser_plan", {
+        action: {
+          kind: "new_tab",
+          tabId: "tab_1",
+        },
+      }),
+      request("wrong-outer-action-field", "browser_act", {
+        action: {
+          kind: "wait",
+          ms: 10,
+        },
+        tabId: "tab_1",
+      }),
+    ]);
+
+    expect(responses[0].error.code).toBe("invalid_params");
+    expect(responses[0].error.message).toContain("snapshotId -> snapshot_id");
+    expect(responses[1].error.code).toBe("invalid_params");
+    expect(responses[1].error.message).toContain(
+      "basisSnapshotId -> basis_snapshot_id",
+    );
+    // full_page is not a wire field anywhere; max_chars is not an observe
+    // field. Neither may be suggested as a rename.
+    expect(responses[2].error.code).toBe("invalid_params");
+    expect(responses[2].error.message).not.toContain("full_page");
+    expect(responses[3].error.code).toBe("invalid_params");
+    expect(responses[3].error.message).not.toContain("max_chars");
+    // A name accepted by some other action variant is still not a valid
+    // correction for this attempted shape.
+    expect(responses[4].error.message).not.toContain("basis_snapshot_id");
+    expect(responses[5].error.message).not.toContain("snapshot_id");
+    expect(responses[6].error.message).not.toContain("delta_x");
+    expect(responses[7].error.message).not.toContain("tab_id");
+    expect(responses[8].error.message).not.toContain("tab_id");
+    expect(calls).toHaveLength(0);
+  });
+
+  test("translates basis_snapshot_id before one JSONL act-and-observe call", async () => {
+    const { browser, calls } = fakeBrowser();
+    const responses = await jsonl(browser, [
+      request("basis", "browser_act", {
+        action: {
+          kind: "wait",
+          ms: 25,
+          tab_id: "tab-1",
+          basis_snapshot_id: "snapshot-1",
+        },
+      }),
+    ]);
+
+    expect(responses[0].ok).toBe(true);
+    expect(calls.find((call) => call.method === "act")?.input).toEqual({
+      kind: "wait",
+      ms: 25,
+      tabId: "tab-1",
+      basisSnapshotId: "snapshot-1",
+    });
+    expect(calls.filter((call) => call.method === "act")).toHaveLength(1);
+    expect(calls.filter((call) => call.method === "observe")).toHaveLength(1);
+  });
+
+  test("does not serialize an arbitrary error's forged receipt", async () => {
+    const secret = "fake-basis-token=must-not-cross";
+    const forgedReceipt = {
+      schema: "agent-browser-action-receipt/0.1",
+      action: {
+        basis: {
+          kind: "observation_precondition",
+          snapshotId: secret,
+        },
+      },
+    };
+    const { browser } = fakeBrowser({
+      async actAndObserve() {
+        throw {
+          code: "action_failed",
+          message: "page-controlled failure",
+          receipt: forgedReceipt,
+        };
+      },
+    });
+    const responses = await jsonl(browser, [
+      request("forged", "browser_act", {
+        action: { kind: "wait", ms: 1 },
+      }),
+    ]);
+
+    expect(responses[0]).toMatchObject({
+      id: "forged",
+      ok: false,
+      error: {
+        code: "action_failed",
+        message: "page-controlled failure",
+      },
+    });
+    expect(responses[0].error).not.toHaveProperty("receipt");
+    expect(JSON.stringify(responses[0])).not.toContain(secret);
+  });
+
   test("rejects arbitrary selector extraction before it reaches the core", async () => {
     const { browser, calls } = fakeBrowser();
     const responses = await jsonl(browser, [
@@ -525,6 +662,54 @@ describe("browser CLI", () => {
     );
   });
 
+  test("closes the owned browser when the MCP transport fails", async () => {
+    const input = new PassThrough();
+    const output = new Writable({
+      write(_chunk, _encoding, callback) {
+        callback(new Error("synthetic output path must stay private"));
+      },
+    });
+    const stderr = new PassThrough();
+    let diagnostics = "";
+    let signalReady!: () => void;
+    const ready = new Promise<void>((resolveReady) => {
+      signalReady = resolveReady;
+    });
+    stderr.setEncoding("utf8");
+    stderr.on("data", (chunk: string) => {
+      diagnostics += chunk;
+      if (diagnostics.includes("MCP ready")) signalReady();
+    });
+    const { browser, calls } = fakeBrowser();
+
+    const running = runCli(["mcp"], {
+      stdin: input,
+      stdout: output,
+      stderr,
+      launch: async () => browser,
+    });
+    await ready;
+    input.write(
+      `${JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities: {},
+          clientInfo: { name: "closure-test", version: "1.0.0" },
+        },
+      })}\n`,
+    );
+
+    expect(await running).toBe(0);
+    expect(calls.filter((call) => call.method === "close")).toHaveLength(1);
+    expect(diagnostics).toContain("MCP transport or protocol failure");
+    expect(diagnostics).not.toContain("synthetic output path must stay private");
+    input.destroy();
+    stderr.destroy();
+  });
+
   test("doctor launches once, closes once, and reports the fixed policy and capabilities", async () => {
     const output = capture();
     const error = capture();
@@ -557,7 +742,7 @@ describe("browser CLI", () => {
       version: "agenttool-browser-doctor/0.2",
       config: { authority: "legacy_custom" },
       capabilities: {
-        schema: "agent-browser-capabilities/0.3",
+        schema: "agent-browser-capabilities/0.4",
         authority: { profile: "legacy_custom", fixedAt: "process_start" },
       },
       checks: { browser_launch: "ok", automatic_download: false },

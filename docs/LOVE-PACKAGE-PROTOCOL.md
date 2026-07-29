@@ -713,13 +713,21 @@ unsafe archives, surfaces digest conflicts, and keeps discovery non-executing.
 
 The AgentTool catalog publishes `@agenttool/data`, `@agenttool/data-sync`,
 `@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, and
-`@agenttool/telescope`, `@agenttool/wallet`, and `@agenttool/browser` through
-this profile. Their presence demonstrates the read and verification path; it
-does not make AgentTool a required registry or add a publisher-signature claim.
+`@agenttool/telescope`, `@agenttool/wallet`,
+`@agenttool/wallet-zerone`, and `@agenttool/browser` through this profile.
+Their presence demonstrates the read and verification path; it does not make
+AgentTool a required registry, add a publisher-signature claim, or prove that
+the Wallet Zerone adapter has custody, a hosted endpoint, a durable execution
+host, or a live-chain deployment.
 Historical catalog releases whose manifests say `license: null` provide no
 reuse grant; the current `@agenttool/data@0.3.1`,
 `@agenttool/data-sync@0.1.1`, `@agenttool/adds@0.2.2`,
-`@agenttool/credential-broker@0.1.0`, `@agenttool/sdk@0.16.3`, and
-`@agenttool/telescope@0.2.3`, `@agenttool/wallet@0.1.0`, and
-`@agenttool/browser@0.3.0` releases instead declare `Apache-2.0` without
-retroactively changing those immutable older releases.
+`@agenttool/credential-broker@0.3.0`, `@agenttool/sdk@0.17.0`, and
+`@agenttool/telescope@0.2.3`, `@agenttool/wallet@0.1.3`,
+`@agenttool/wallet-zerone@0.1.1`, and `@agenttool/browser@0.5.0` releases
+instead declare `Apache-2.0` without retroactively changing those immutable
+older releases. Historical Wallet `0.1.0`/`0.1.1`/`0.1.2` and Wallet Zerone
+`0.1.0` LOVE artifacts remain separately addressable and are not rewritten;
+public errata supersede their stale release-state prose. GitHub Releases are
+optional mutable locators and do not inherit the LOVE exact-version
+preservation policy.

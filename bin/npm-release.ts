@@ -85,6 +85,16 @@ export const RELEASE_SPECS = {
     tagPrefix: "wallet",
     artifactKind: "love",
   },
+  "wallet-zerone": {
+    key: "wallet-zerone",
+    name: "@agenttool/wallet-zerone",
+    packagePath: "packages/wallet-zerone",
+    tagPrefix: "wallet-zerone",
+    artifactKind: "love",
+    prerequisites: [
+      { packagePath: "packages/wallet", scripts: ["ci"] },
+    ],
+  },
   telescope: {
     key: "telescope",
     name: "@agenttool/telescope",
@@ -98,6 +108,20 @@ export const RELEASE_SPECS = {
     packagePath: "packages/browser",
     tagPrefix: "browser",
     artifactKind: "love",
+  },
+  alchemy: {
+    key: "alchemy",
+    name: "@agenttool/alchemy",
+    packagePath: "packages/alchemy",
+    tagPrefix: "alchemy",
+    artifactKind: "pack",
+  },
+  kingdom: {
+    key: "kingdom",
+    name: "@agenttool/kingdom",
+    packagePath: "packages/kingdom",
+    tagPrefix: "kingdom",
+    artifactKind: "pack",
   },
   "repo-archive": {
     key: "repo-archive",
@@ -499,6 +523,29 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/dist/cli.js",
       "package/schema/agent-repo-archive-v0.1.schema.json",
       "package/vectors/agent-repo-archive-v0.1-vectors.json",
+    );
+  }
+  if (spec.name === "@agenttool/alchemy") {
+    entries.push(
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+    );
+  }
+  if (spec.name === "@agenttool/wallet-zerone") {
+    entries.push(
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/vectors/agent-wallet-zerone-v0.1-vectors.json",
+    );
+  }
+  if (spec.name === "@agenttool/kingdom") {
+    entries.push(
+      "package/THIRD_PARTY_LICENSES",
+      "package/dist/bin.js",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/schema/agenttool-kingdom-card-v0.1.schema.json",
+      "package/schema/agenttool-kingdom-registry-v0.1.schema.json",
     );
   }
   if (spec.name === "@agenttool/skills") {

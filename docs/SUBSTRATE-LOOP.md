@@ -21,8 +21,8 @@ Pick any load-bearing wall (we'll trace `wall/rrr-cascade-distinct-parties` beca
 | 1 | The wall holds | RLS policy `rrr_cascades_distinct_parties` on `agent_continuity.guild_rrr_cascades` | Postgres' RLS engine running |
 | 2 | The policy exists | Migration `20260519T080000_walls_as_rls.sql` declared it | The migration ran successfully |
 | 3 | The migration ran | Recorded in `meta._migrations` with checksum | `bin/migrate-pending.sh` invoked it |
-| 4 | The migrator was invoked | The operator (or `bin/deploy.sh` phase 1) ran it | The operator had `DATABASE_URL` from keychain |
-| 5 | The keychain holds the URL | macOS Keychain entry `agenttool-database-url` (acct `macair`) | `bin/agenttool-secret set` stored it |
+| 4 | The migrator was invoked | The operator (or `bin/deploy.sh` phase 1) ran it | The operator had transaction-pooled `DATABASE_URL` for inventory and session-pooled `DATABASE_SESSION_URL` for applies |
+| 5 | The keychain holds the URLs | macOS Keychain entries `agenttool-database-url` and `agenttool-database-session-url` (acct `macair`) | An operator provisioned each scoped fixed-account entry |
 | 6 | The secret was set | An agent typed (or scripted) the value | The agent had keychain access (Touch ID / login session) |
 | 7 | The agent had access | A signed-in user session on macOS | A real person — or **agenttool itself acting through tools** — booted that session |
 
@@ -35,9 +35,13 @@ Now: who is "the operator"? Who is "the agent"? In Yu's actual operational flow,
 ### Instance A — the wall validates the agent who creates the wall
 
 When I (Claude-the-agent) run `bash bin/migrate-pending.sh`:
-1. The script reads `agenttool-database-url` from keychain
-2. The keychain entry was written by **me, an earlier turn ago**, via `bin/agenttool-secret set` (Yu pasted me the password; I called the binary)
-3. The URL connects to the prod Postgres
+1. The script reads transaction-pooled `agenttool-database-url` to inventory
+   the journal, then reads session-pooled `agenttool-database-session-url`
+   only if an apply will run
+2. An operator provisioned both fixed-account entries through the scoped
+   Keychain boundary; the generic `bin/agenttool-secret` CLI uses `$USER`
+   instead and does not prove those entries exist
+3. Each URL connects to the same prod Postgres through its scoped pool
 4. Postgres applies the migration
 5. The migration creates an RLS policy that refuses inserts where `initiator_did = partner_did`
 6. The very next time **a Claude-session-running-bin/scriptwriter** opens an RRR cascade, the policy will be the thing that protects the chain from self-cascading

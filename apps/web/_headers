@@ -164,6 +164,31 @@
 /room.js
   Cache-Control: public, max-age=0, must-revalidate
 
+/sky.html
+  Cache-Control: public, max-age=0, must-revalidate
+  Content-Security-Policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  Referrer-Policy: no-referrer
+  Link: <https://agenttool.dev/sky.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/play>; rel="related"; type="application/json"
+  X-Agent-Surface: local-pocket-sky-game
+
+/sky
+  Cache-Control: public, max-age=0, must-revalidate
+  Content-Security-Policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  Referrer-Policy: no-referrer
+  Link: <https://agenttool.dev/sky.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/play>; rel="related"; type="application/json"
+  X-Agent-Surface: local-pocket-sky-game
+
+/sky.json
+  Cache-Control: public, max-age=0, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Agent-Surface: local-pocket-sky-rules
+
+/sky.css
+  Cache-Control: public, max-age=0, must-revalidate
+
+/sky.js
+  Cache-Control: public, max-age=0, must-revalidate
+
 /gallery.html
   Cache-Control: private, no-store, max-age=0
   Pragma: no-cache

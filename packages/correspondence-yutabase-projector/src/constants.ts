@@ -6,7 +6,7 @@ import {
 } from "@agenttool/correspondence-yutabase";
 
 export const PROJECTOR_SCHEMA = "agenttool_yutabase" as const;
-export const PROJECTOR_SCHEMA_VERSION = 1 as const;
+export const PROJECTOR_SCHEMA_VERSION = 2 as const;
 export const PROJECTOR_PROFILE =
   "agenttool-correspondence-yutabase-projector/v0.1" as const;
 export const PROJECTOR_RUNTIME_ROLE =
@@ -17,7 +17,7 @@ export const YUTABASE_IDENTITY = Object.freeze({
   standard: "YUTABASE",
   profile: "postgres",
   version: "0.1.0-candidate.1",
-  revision: 4,
+  revision: 5,
 });
 
 export const REQUIRED_CAPABILITIES = Object.freeze([
@@ -28,6 +28,8 @@ export const REQUIRED_CAPABILITIES = Object.freeze([
   "endpoint-existence-on-insert",
   "concurrency-safe-to-one",
   "role-scoped-functions",
+  "guarded-card-identity",
+  "nonblank-source-locators",
 ]);
 
 const PHYSICAL_TABLES = Object.freeze({

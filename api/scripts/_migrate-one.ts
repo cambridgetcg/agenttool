@@ -1,7 +1,8 @@
 /** Apply a single migration file to the live DB.
  *
  *  Usage: cd api && bun run scripts/_migrate-one.ts ../api/migrations/<file>.sql
- *  Reads DATABASE_URL from env or macOS keychain (service: agenttool-database-url).
+ *  Reads DATABASE_SESSION_URL from env or macOS keychain
+ *  (service: agenttool-database-session-url).
  *
  *  Behavior since 20260509T170000_meta_migrations.sql:
  *    1. Computes sha256 of the file contents.
@@ -16,6 +17,9 @@
  *    4. If the first executable statement is BEGIN/COMMIT, the wrap is
  *       skipped to avoid nested-transaction WARNINGs (legacy migration
  *       tolerance). Leading comments are ignored for this check.
+ *    5. A filename listed in migrations/quiescence-required.txt refuses before
+ *       credential or database access unless the canonical pending runner
+ *       supplies its child-scoped maintenance assertion.
  *
  *  Bootstrap fallback: if meta._migrations doesn't exist (fresh DB or
  *  pre-journal era), the script applies normally and skips journal
@@ -23,21 +27,97 @@
  */
 
 import { createHash } from "node:crypto";
-import { basename } from "node:path";
+import { readFileSync, statSync } from "node:fs";
+import { basename, join } from "node:path";
 import postgres from "postgres";
 
 const JOURNAL_TABLE = "meta._migrations";
 const JOURNAL_MIGRATION = "20260509T170000_meta_migrations.sql";
+const QUIESCENCE_REQUIRED_EXIT = 42;
+const QUIESCENCE_POLICY_PATH = join(
+  import.meta.dir,
+  "../migrations/quiescence-required.txt",
+);
+const PENDING_RUNNER_ASSERTION =
+  "AGENTTOOL_PENDING_RUNNER_MAINTENANCE_QUIESCED";
+const PENDING_RUNNER_SENTINEL = "--pending-runner-maintenance-quiesced";
+const MIGRATIONS_DIR = join(import.meta.dir, "../migrations");
 type MigrationSql = ReturnType<typeof postgres> | postgres.TransactionSql;
 
+function isRegularFile(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+export function quiescenceRequiredFilenames(
+  policyPath = QUIESCENCE_POLICY_PATH,
+  migrationsDir = MIGRATIONS_DIR,
+): Set<string> {
+  if (!isRegularFile(policyPath)) {
+    throw new Error(`quiescence policy manifest is missing: ${policyPath}`);
+  }
+
+  const policy = readFileSync(policyPath, "utf8");
+  const entries = (policy.endsWith("\n") ? policy.slice(0, -1) : policy).split(
+    "\n",
+  );
+  if (
+    entries.length === 0 ||
+    entries.some(
+      (entry) =>
+        !/^[0-9]{8}T[0-9]{6}_[a-z0-9_]+\.sql$/.test(entry) ||
+        !isRegularFile(join(migrationsDir, entry)),
+    ) ||
+    entries.some((entry, index) => index > 0 && entry <= entries[index - 1]!)
+  ) {
+    throw new Error(`quiescence policy manifest is invalid: ${policyPath}`);
+  }
+  return new Set(entries);
+}
+
+function enforceOneFileQuiescencePolicy(
+  filename: string,
+  pendingRunnerSentinel: boolean,
+): void {
+  if (!quiescenceRequiredFilenames().has(filename)) return;
+  if (pendingRunnerSentinel && process.env[PENDING_RUNNER_ASSERTION] === "1") {
+    console.log(
+      `  ⚠ protected migration admitted by the pending runner's ` +
+        `--maintenance-quiesced assertion`,
+    );
+    return;
+  }
+
+  console.error(
+    `  ✗ protected migration refuses direct one-file application: ${filename}`,
+  );
+  console.error(
+    `     Inspect the complete inventory with bin/migrate-pending.sh --dry-run,`,
+  );
+  console.error(
+    `     establish the reviewed exclusive cutover, then use ` +
+      `bin/migrate-pending.sh --maintenance-quiesced.`,
+  );
+  console.error(
+    `     The pending runner carries its assertion only to this child apply.`,
+  );
+  process.exit(QUIESCENCE_REQUIRED_EXIT);
+}
+
 async function loadDatabaseUrl(): Promise<string> {
-  let url = process.env.DATABASE_URL ?? "";
+  // Require the session-pooled URL because this runner holds a session
+  // advisory lock across journal lookup, migration execution, and journal
+  // recording. A transaction-pooled DATABASE_URL cannot preserve that lock.
+  let url = process.env.DATABASE_SESSION_URL ?? "";
   if (!url) {
     const proc = Bun.spawnSync([
       "security",
       "find-generic-password",
       "-s",
-      "agenttool-database-url",
+      "agenttool-database-session-url",
       "-a",
       "macair",
       "-w",
@@ -46,10 +126,20 @@ async function loadDatabaseUrl(): Promise<string> {
   }
   if (!url) {
     throw new Error(
-      "DATABASE_URL not in env or keychain (agenttool-database-url)",
+      "DATABASE_SESSION_URL not in env or keychain " +
+        "(agenttool-database-session-url)",
     );
   }
   return url;
+}
+
+export function isMissingMigrationJournalError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "42P01"
+  );
 }
 
 async function journalLookup(
@@ -67,11 +157,10 @@ async function journalLookup(
     };
   } catch (e: any) {
     // Table doesn't exist yet (bootstrap case) — graceful fallback.
-    if (
-      e?.code === "42P01" /* undefined_table */ ||
-      e?.message?.includes("relation") ||
-      e?.message?.includes("does not exist")
-    ) {
+    // Fail closed on every other schema/query error: for example, a missing
+    // checksum column is not an absent journal and must never permit an
+    // unjournaled migration.
+    if (isMissingMigrationJournalError(e)) {
       return { available: false, exists: false };
     }
     throw e;
@@ -86,7 +175,6 @@ async function recordApplied(
   await sql`
     INSERT INTO meta._migrations (filename, checksum)
     VALUES (${filename}, ${checksum})
-    ON CONFLICT (filename) DO NOTHING
   `;
 }
 
@@ -118,12 +206,16 @@ function firstExecutableSql(text: string): string {
 }
 
 export function shouldWrapInTransaction(text: string): boolean {
-  // Opt-out marker (e.g. for CREATE INDEX CONCURRENTLY).
-  if (/^--\s*@no-transaction\b/m.test(text)) return false;
+  // Opt-out marker (e.g. for CREATE INDEX CONCURRENTLY). Require a dedicated
+  // marker line: prose such as "`@no-transaction` is NOT set" must not
+  // silently weaken migration atomicity.
+  if (/^--[ \t]+@no-transaction[ \t]*$/m.test(text)) return false;
   // Legacy migrations that already manage their own BEGIN/COMMIT. Only
   // inspect the first executable statement so a later PL/pgSQL `BEGIN` does
   // not accidentally change transaction behavior.
-  if (/^BEGIN(?:\s+(?:WORK|TRANSACTION))?\s*;?/i.test(firstExecutableSql(text))) {
+  if (
+    /^BEGIN(?:\s+(?:WORK|TRANSACTION))?\s*;?/i.test(firstExecutableSql(text))
+  ) {
     return false;
   }
   return true;
@@ -131,15 +223,22 @@ export function shouldWrapInTransaction(text: string): boolean {
 
 async function main() {
   const file = process.argv[2];
-  if (!file) {
+  const pendingRunnerSentinel =
+    process.argv.length === 4 && process.argv[3] === PENDING_RUNNER_SENTINEL;
+  if (!file || (process.argv.length !== 3 && !pendingRunnerSentinel)) {
     console.error("usage: bun run scripts/_migrate-one.ts <path-to-sql>");
-    process.exit(1);
+    process.exit(2);
+  }
+  if (!isRegularFile(file)) {
+    console.error(`migration must be a regular file: ${file}`);
+    process.exit(2);
   }
 
-  const url = await loadDatabaseUrl();
+  const filename = basename(file);
+  enforceOneFileQuiescencePolicy(filename, pendingRunnerSentinel);
   const text = await Bun.file(file).text();
   const checksum = createHash("sha256").update(text).digest("hex");
-  const filename = basename(file);
+  const url = await loadDatabaseUrl();
 
   const sql = postgres(url, { max: 1, prepare: false });
   let migrationLockHeld = false;

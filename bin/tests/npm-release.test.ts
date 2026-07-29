@@ -85,20 +85,23 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
-  test("allowlists twelve reviewed release identities", () => {
+  test("allowlists fifteen reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
+      "alchemy",
       "browser",
       "collab",
       "correspondence-yutabase",
       "credential-broker",
       "data",
       "data-sync",
+      "kingdom",
       "repo-archive",
       "sdk",
       "skills",
       "telescope",
       "wallet",
+      "wallet-zerone",
     ]);
     expect(releaseSpec("collab")).toMatchObject({
       name: "@agenttool/collab",
@@ -120,10 +123,30 @@ describe("standard npm release policy", () => {
       packagePath: "packages/browser",
       artifactKind: "love",
     });
+    expect(releaseSpec("alchemy")).toMatchObject({
+      name: "@agenttool/alchemy",
+      packagePath: "packages/alchemy",
+      artifactKind: "pack",
+    });
+    expect(releaseSpec("kingdom")).toMatchObject({
+      name: "@agenttool/kingdom",
+      packagePath: "packages/kingdom",
+      tagPrefix: "kingdom",
+      artifactKind: "pack",
+    });
     expect(releaseSpec("repo-archive")).toMatchObject({
       name: "@agenttool/repo-archive",
       packagePath: "packages/repo-archive",
       artifactKind: "pack",
+    });
+    expect(releaseSpec("wallet-zerone")).toMatchObject({
+      name: "@agenttool/wallet-zerone",
+      packagePath: "packages/wallet-zerone",
+      tagPrefix: "wallet-zerone",
+      artifactKind: "love",
+      prerequisites: [
+        { packagePath: "packages/wallet", scripts: ["ci"] },
+      ],
     });
     expect(releaseSpec("data-sync")).toMatchObject({
       gateScripts: ["ci", "build"],
@@ -136,7 +159,7 @@ describe("standard npm release policy", () => {
   });
 
   test("derives exact annotated tags and npm filenames", () => {
-    expect(expectedTag(releaseSpec("credential-broker"), "0.1.0")).toBe("credential-broker-v0.1.0");
+    expect(expectedTag(releaseSpec("credential-broker"), "0.2.0")).toBe("credential-broker-v0.2.0");
     expect(expectedTag(releaseSpec("sdk"), "0.16.1")).toBe("sdk-v0.16.1");
     expect(packedFilename("@agenttool/collab", "0.1.0")).toBe("agenttool-collab-0.1.0.tgz");
     expect(packedFilename("@agenttool/correspondence-yutabase", "0.1.0-dev.0")).toBe(
@@ -144,13 +167,35 @@ describe("standard npm release policy", () => {
     );
     expect(expectedTag(releaseSpec("skills"), "0.1.0")).toBe("skills-v0.1.0");
     expect(packedFilename("@agenttool/skills", "0.1.0")).toBe("agenttool-skills-0.1.0.tgz");
-    expect(expectedTag(releaseSpec("browser"), "0.3.0")).toBe("browser-v0.3.0");
-    expect(packedFilename("@agenttool/browser", "0.3.0")).toBe("agenttool-browser-0.3.0.tgz");
+    expect(expectedTag(releaseSpec("browser"), "0.5.0")).toBe("browser-v0.5.0");
+    expect(packedFilename("@agenttool/browser", "0.5.0")).toBe("agenttool-browser-0.5.0.tgz");
     expect(expectedTag(releaseSpec("repo-archive"), "0.1.0-dev.0")).toBe(
       "repo-archive-v0.1.0-dev.0",
     );
     expect(packedFilename("@agenttool/repo-archive", "0.1.0-dev.0")).toBe(
       "agenttool-repo-archive-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("alchemy"), "0.1.0-dev.0")).toBe(
+      "alchemy-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/alchemy", "0.1.0-dev.0")).toBe(
+      "agenttool-alchemy-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("kingdom"), "0.1.0")).toBe("kingdom-v0.1.0");
+    expect(packedFilename("@agenttool/kingdom", "0.1.0")).toBe(
+      "agenttool-kingdom-0.1.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("wallet-zerone"), "0.1.1")).toBe(
+      "wallet-zerone-v0.1.1",
+    );
+    expect(expectedTag(releaseSpec("wallet"), "0.1.3")).toBe(
+      "wallet-v0.1.3",
+    );
+    expect(packedFilename("@agenttool/wallet", "0.1.3")).toBe(
+      "agenttool-wallet-0.1.3.tgz",
+    );
+    expect(packedFilename("@agenttool/wallet-zerone", "0.1.1")).toBe(
+      "agenttool-wallet-zerone-0.1.1.tgz",
     );
     expect(() => expectedTag(releaseSpec("sdk"), "latest")).toThrow("invalid package version");
   });
@@ -186,6 +231,25 @@ describe("standard npm release policy", () => {
       "package/schema/agent-repo-archive-v0.1.schema.json",
       "package/vectors/agent-repo-archive-v0.1-vectors.json",
     ]));
+    expect(requiredArchiveEntries(releaseSpec("alchemy"))).toEqual(expect.arrayContaining([
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+    ]));
+    expect(requiredArchiveEntries(releaseSpec("kingdom"))).toEqual(expect.arrayContaining([
+      "package/THIRD_PARTY_LICENSES",
+      "package/dist/bin.js",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/schema/agenttool-kingdom-card-v0.1.schema.json",
+      "package/schema/agenttool-kingdom-registry-v0.1.schema.json",
+    ]));
+    expect(requiredArchiveEntries(releaseSpec("wallet-zerone"))).toEqual(
+      expect.arrayContaining([
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+        "package/vectors/agent-wallet-zerone-v0.1-vectors.json",
+      ]),
+    );
   });
 
   test("requires the Agent Skills runtime and bundled skills in its release archive", () => {

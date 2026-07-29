@@ -5,29 +5,139 @@
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (what's shipping on the platform side)
 >
 > **Implements:** the SDK plane — hand-written clients for a selected subset of [ROADMAP.md](ROADMAP.md). CI compares method names for the maintained parity target list; it does not prove complete route, signature, or wire-model parity.
+>
+> **Code:** `packages/sdk-ts/src/` · `packages/sdk-py/src/agenttool/` · `packages/sdk-ts/scripts/check-parity.ts`
+>
+> **Tests:** `packages/sdk-ts/tests/` · `packages/sdk-py/tests/`
 
-## Current source release — 0.16.3 (2026-07-24)
+## Current public release — 0.17.0 (2026-07-28)
+
+The paired TypeScript and Python source adds two bounded KINGDOM reads.
+
+Standalone `KingdomFrameworkClient` and composed
+`at.kingdomFramework` / `at.kingdom_framework` expose only `card()`. They read
+the exact closed `agenttool.kingdom.card/0.1` document at
+`/public/kingdom/framework` without an AgentTool bearer or cookies, follow no
+redirect, bound the response, and reject missing or extra fields. The card is a
+read-only declaration about AgentTool; it grants no authority and is not
+dependency liveness, consent, behavior proof, or XENIA conformance.
+
+Standalone `KingdomOSClient` and composed
+`at.kingdomOS` / `at.kingdom_os` expose only:
+
+- `repositories()` through `kingdom repos --json`; and
+- `resolve()` through `kingdom repos --path`.
+
+The local default runners use direct argument vectors without a shell, a
+sanitized child environment, finite timeout/output bounds, and no AgentTool
+project bearer. Returned absolute paths remain local to the caller. They do
+not fall back to a graph snapshot, execute routines, expose `status`, `ask`,
+`run`, `rights`, or `doctor`, or mutate repositories.
+
+Both clients are distinct from the existing hosted `/public/kingdom` canon,
+lexicon, chronicle, standards, and citizens doctrine library. That third
+surface has no dedicated SDK namespace.
+
+The two SDK identities, runtime headers, discovery pins, tutorials, and LOVE
+builder target move in lockstep. The exact LOVE artifact is forged from a clean
+source commit in a separate immutable-artifact commit and remains the primary
+TypeScript release authority. Annotated tag `sdk-v0.17.0` is the primary Python
+source locator. Its GitHub Release, npm, and PyPI mirrors are public and were
+verified independently; they do not replace those primary locators. Hosted
+deployment remains a separate exact-main operation and public readback. No
+0.16.5 byte, tag, or public receipt is rewritten.
+
+### 0.17.0 release record
+
+The release adds only the two bounded read surfaces above. The public
+framework reader neither widens the authenticated hosted transport nor follows
+redirects; its closed-card validation is not authority. The local client does
+not add arbitrary shell execution, graph fallback, repository mutation, path
+upload, credential forwarding, or permission over a discovered path. The
+exact contracts and their separation from the doctrine library live in
+[`KINGDOM-OS-SDK.md`](KINGDOM-OS-SDK.md).
+
+The public annotated tag resolves to merge
+`21db539d6bcae614f1d6884eaa503347fae63187`. Protected npm workflow
+[`30385040459`](https://github.com/cambridgetcg/agenttool/actions/runs/30385040459)
+published `@agenttool/sdk@0.17.0` as `latest`; its tarball and the GitHub
+Release asset exactly match the 172,625-byte LOVE artifact
+(`sha256:b6a388ffe86a970480e8a8978f83fe80922321eb64f2b4f9143cae2b2c3dd5bb`).
+Protected PyPI workflow
+[`30385042684`](https://github.com/cambridgetcg/agenttool/actions/runs/30385042684)
+re-downloaded and matched public `agenttool-sdk==0.17.0`: wheel 193,335 bytes
+(`sha256:1a8ca5f099ffce4c7973f1123d973aba5c1eb507579961c781d553bcc5e0f508`)
+and sdist 181,846 bytes
+(`sha256:7ec2f4010d20ca883770594bfbcdc30f7a3a074ba534029aefb6d91d69c3413c`).
+These receipts establish package publication only; they do not claim that the
+same commit has completed production deployment.
+
+## Previous release — 0.16.5 (2026-07-27)
+
+This corrective patch aligns both maintained SDKs with the platform's
+fail-closed payout boundary. Fresh payout admission returns stable
+`503 payout_admission_resting`, and no environment value can start the
+dispatcher, broadcaster, or confirmer. Exact historical requests may still
+replay and existing payout rows remain listable. The clients add no retry,
+signing, broadcasting, or worker authority. TypeScript examples now name the
+implemented `get_wallet` and `list_payouts` methods.
+
+Repository source, runtime client headers, discovery pins, tutorials, and the
+LOVE builder target move in lockstep. The annotated `sdk-v0.16.5` tag is
+public. The TypeScript LOVE artifact, GitHub Release asset, and npm tarball are
+public and independently byte-identical: 162,164 bytes with
+`sha256:d995999917b89a38846b751ab4a92f9600698460e64a91c73bc12d96b50c6805`.
+PyPI 0.16.5 is also public. Independent readback matched its 180,615-byte wheel
+(`sha256:61f13b01df90c66d7ac8247ee1dcfba9c135840ee364b172695fdd5eb10c54db`)
+and 168,772-byte sdist
+(`sha256:2d90ea74aa1d220ae28ce6176274e5491645d9db67844a4b4ff3dabfa10325d4`)
+to the protected workflow artifacts. These channels remain independently
+verifiable; the Python formats are not byte-identical to the TypeScript
+tarball, and no mutable registry pointer becomes release authority.
+
+### 0.16.5 release record
+
+The lockstep TypeScript and Python source identities, runtime client headers,
+LOVE builder target, discovery pins, onboarding fixtures, and machine-readable
+docs name 0.16.5. The source tag, hosted LOVE artifact, GitHub Release, and npm
+mirror are independently visible. The PyPI wheel and sdist are independently
+visible and byte-verified against the protected workflow artifacts. No 0.16.4
+artifact, manifest, tag, heading, or history row is rewritten by this
+corrective release.
+
+## Previous release — 0.16.4 (2026-07-26)
+
+This additive patch gives both maintained SDKs a durable crypto payout
+request/list surface. Payout creation requires a caller-owned
+`Idempotency-Key`, keeps base units as exact decimal strings, exposes the API's
+durable `replayed` decision, and decodes the payout's persisted network state.
+The clients do not retry payout creation, sign transactions, or broadcast
+them. The release also includes completed-response OpenAI adapters and bounded
+Anthropic streaming repairs.
+
+The TypeScript LOVE artifact remains the primary verified JavaScript release
+path. The matching `sdk-v0.16.4` source tag is the primary Python release
+locator. npm 0.16.4 and its GitHub Release asset are public and byte-identical
+to the LOVE artifact. PyPI remains an optional convenience mirror, and its
+0.16.4 release is unavailable until independent public readback succeeds.
+
+### 0.16.4 release record
+
+The lockstep TypeScript and Python source identities, runtime client headers,
+LOVE builder target, discovery pins, onboarding fixtures, and machine-readable
+docs name 0.16.4. The TypeScript LOVE artifact records one clean source
+revision. The source tag, npm mirror, and GitHub Release are now independently
+visible; PyPI is not. These remain separate operator actions and are not
+inferred from repository source.
+
+## Earlier release — 0.16.3 (2026-07-24)
 
 This correction preserves the 0.16.2 typed `first_success` contract, exported
 TypeScript `SDK_VERSION`, authenticated transport, redirect refusal, methods,
 types, and wire behavior. It removes unsupported `a2a` package keywords and
 replaces the packaged Python soul fallback with the live raw Markdown URL.
 
-The TypeScript LOVE artifact remains the primary verified JavaScript release
-path. After the matching source tag exists, that tag is the primary Python
-release locator. npm and PyPI are optional convenience mirrors whose exact
-versions remain unavailable or unverified until independent public readback
-succeeds.
-
-### 0.16.3 release record
-
-The lockstep TypeScript and Python source identities, runtime client headers,
-LOVE builder target, discovery pins, onboarding fixtures, and machine-readable
-docs name 0.16.3. The TypeScript LOVE artifact records one clean source
-revision. The source tag, npm, PyPI, and GitHub Release remain separate
-operator actions and are not inferred from repository source.
-
-## Previous release — 0.16.2 (2026-07-24)
+## Earlier release — 0.16.2 (2026-07-24)
 
 This patch keeps the 0.16.1 transport and redirect-refusal behavior while
 making exact-version discovery easier to consume. TypeScript now exports
@@ -491,6 +601,9 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **0.16.1** | Route Correspondence through that transport; refuse and contain data-node redirects | no — corrective patch |
 | **0.16.2** | Typed first-success version discovery plus corrected exact-release automation | no — additive/corrective patch |
 | **0.16.3** | Correct package metadata, packaged doctrine links, and unverified mirror claims without runtime or wire changes | no — corrective patch |
+| **0.16.4** | Durable payout request/list clients, bound payout-network state, and completed-response provider adapters | no — additive/corrective patch |
+| **0.16.5** | Correct payout hard-rest truth and SDK method examples without widening runtime authority | no — corrective documentation/release patch |
+| **0.17.0** | Paired credential-free closed KINGDOM framework-card read plus bounded local KINGDOM OS repository discovery, with explicit authority and mutation walls | no — additive |
 | **1.0.0** | API freeze + comprehensive docstrings + READMEs + integration test suite | no — declarative |
 
 ## Non-goals

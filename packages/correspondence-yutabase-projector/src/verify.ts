@@ -7,6 +7,7 @@ import {
 import {
   CORRESPONDENCE_KINDS,
   CORRESPONDENCE_PROTOCOL,
+  isCanonicalPositiveInt64Decimal,
   type CorrespondenceEvent,
   type CorrespondenceEventRecord,
 } from "@agenttool/correspondence-yutabase";
@@ -20,8 +21,6 @@ const EVENT_ID = /^sha256:[0-9a-f]{64}$/;
 const REVISION = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const RFC3339_MS =
   /^(?!0000)[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/;
-const RECEIPT = /^[1-9][0-9]*$/;
-const MAX_RECEIPT = 9_223_372_036_854_775_807n;
 const OPAQUE_ID_FORBIDDEN = /[\p{White_Space}\p{Cc}\uFEFF]/u;
 const GLOB_META = /[*?\[\]{}!]/;
 const ABSOLUTE_URI = /^[A-Za-z][A-Za-z0-9+.-]*:/;
@@ -484,11 +483,7 @@ export function validateClosedRecord(
   const event = validateEvent(record.event);
   const receipt = object(record.receipt);
   exact(receipt, ["received_seq", "received_at"]);
-  if (
-    typeof receipt.received_seq !== "string" ||
-    !RECEIPT.test(receipt.received_seq) ||
-    BigInt(receipt.received_seq) > MAX_RECEIPT
-  ) {
+  if (!isCanonicalPositiveInt64Decimal(receipt.received_seq)) {
     invalid();
   }
   timestamp(receipt.received_at);

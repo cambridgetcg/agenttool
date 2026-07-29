@@ -13,7 +13,14 @@
 server-readable memory, signed caller-supplied strand bytes, conditional
 federation, an internal economic loop, and a standalone local-first data
 node. It has two SDKs (TypeScript and Python), an `agent-data/v1` reference
-node (`packages/data/`), the experimental ADDS encrypted-object package
+node (`packages/data/`), and two paired KINGDOM SDK reads: a local KINGDOM OS
+repository-discovery adapter (`at.kingdomOS` / `at.kingdom_os`) that invokes
+only `repos --json` and `repos --path`, and a credential-free exact project-card
+reader (`at.kingdomFramework` / `at.kingdom_framework`) for
+`/public/kingdom/framework`. Neither receives the AgentTool project bearer;
+the framework reader follows no redirects and is distinct from the existing
+`/public/kingdom` doctrine library.
+It also has the experimental ADDS encrypted-object package
 (`packages/data-protocol/`), an explicit encrypted pull bridge
 (`packages/data-sync/`), an experimental encrypted multi-zone Git repository
 archive and same-device restore simulator (`packages/repo-archive/`), the registry-neutral `love-package/v1`
@@ -25,19 +32,39 @@ projection planner (`packages/correspondence-yutabase/`), a private
 loopback-only durable projector into a rebuildable local YUTABASE sidecar
 (`packages/correspondence-yutabase-projector/`), source reference
 primitives for capability-bounded agent wallets (`packages/wallet/`), a
-read-only portable Agent Skills inspector (`packages/skills/`), a local-first
+separate exact-byte offline Zerone profile (`packages/wallet-zerone/`), a
+developer-preview bounded Alchemy observation client
+(`packages/alchemy/`), pure explicit-input KINGDOM project-card, registry, and
+XENIA Surface helpers (`packages/kingdom/`), a read-only portable Agent Skills
+inspector (`packages/skills/`), a local-first
 agent browser (`packages/browser/`), and three static apps
 (`apps/`). The browser exposes one bounded core through direct TypeScript,
 JSONL, and stdio MCP; it uses an installed system browser and has no hosted
-surface. Its exact LOVE/npm release distributes local tooling only. The Skills inspector validates bounded local
+surface. Its current `@agenttool/browser@0.5.0` release is one exact LOVE
+artifact with npm and annotated GitHub Release mirrors; every surface
+distributes local tooling only. Version 0.5 adds redacted action-attempt
+receipts, non-ref observation-basis preconditions, observation-local receipt
+context, a backend-neutral operation inventory, and current/legacy MCP
+negotiation without widening authority. The Skills inspector validates bounded local
 structure and emits reports; it does not execute scripts, install or copy
 skills, use the network, spawn subprocesses, look up credentials, or change
 host configuration. Agent
-Wallet 0.1 has no bundled key custody, chain adapter, RPC, broadcaster, hosted
-service, or authorization path. Its `@agenttool/wallet@0.1.0` npm mirror is
-public and byte-identical to the exact LOVE artifact. Telescope 0.2.3 is the
-current exact LOVE release; optional npm and GitHub mirrors are independently
-unverified, and the package remains a local client without a hosted scan route.
+Wallet core 0.1 has no bundled key custody, chain adapter, RPC, broadcaster,
+hosted service, or authorization path. `@agenttool/wallet@0.1.3` is the
+current exact LOVE release; npm remains independently verified at 0.1.0 until
+an exact later registry version is observed. The separate local
+`@agenttool/wallet-zerone@0.1.1` exact LOVE release owns a two-message Zerone
+profile, exact Cosmos direct-sign bytes, chain-native verification, and
+injected transports. It still supplies no keys, custody, endpoint, hosted RPC,
+generic REST, automatic rebroadcast, durable host transaction, settlement
+proof, deployed bridge, or live-network test by default. Earlier Wallet
+0.1.1/0.1.2 and Zerone 0.1.0 exact LOVE artifacts remain preserved without
+rewriting; their embedded release-state errors are covered by public errata.
+Optional GitHub Releases are mutable locators and must be reverified. Telescope
+0.2.3 is the current exact LOVE
+release; its optional npm and GitHub mirrors are public and independently
+byte-verified, and the package remains a local client without a hosted scan
+route.
 Immutable 0.2.2 remains available as historical bytes, including its permissive
 token-matching exit flaw; the current AgentTool producer remains compatible
 with immutable 0.2.1.
@@ -83,20 +110,34 @@ cd packages/data-sync && bun install           # explicit agent-data-sync/v1 pul
 cd packages/credential-broker && bun install   # experimental agentcred/0.1 local broker
 cd packages/collab && bun install              # public 0.3: collab/0.1 compatibility + 0.2 coordination + session/0.1 presence
 cd packages/skills && bun install              # read-only portable Agent Skills inspection
-cd packages/browser && bun install             # public local-first agent browser package
+cd packages/browser && bun install             # public 0.5 local-first agent browser package
 cd packages/correspondence-yutabase && bun install # pure Correspondence projection planner
-cd packages/correspondence-yutabase-projector && bun install # private local durable projector
+cd packages/correspondence-yutabase-projector && bun run setup:local # builds local planner dependency first
 cd packages/sdk-ts && bun install              # TS SDK
 cd packages/telescope && bun install           # read-only discovery evidence mapper
 cd packages/wallet && bun install              # agent-wallet/0.1 offline primitives
+cd packages/wallet-zerone && bun install       # exact offline Zerone profile; no live network
+cd packages/alchemy && bun install             # bounded Alchemy observation primitives
+cd packages/kingdom && bun install             # pure KINGDOM card/registry helpers
 cd packages/sdk-py && pip install -e .         # Python SDK
 ```
 
 Environment vars (set in shell or `.env` per workspace — there is no `.env.example`; the canonical list lives in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) + [`docs/STACK.md`](docs/STACK.md)):
 
-- `POSTGRES_URL` — Supabase Postgres
+- `DATABASE_URL` — transaction-pooled Supabase Postgres used by the API,
+  read-only migration inventory, and database test tier
+- `DATABASE_SESSION_URL` — session-pooled Supabase Postgres required for
+  migration applies and used by session-affine operations such as LISTEN
 - `REDIS_URL` — Redis (BullMQ + SSE backplane)
 - `STRIPE_SECRET_KEY` · `STRIPE_WEBHOOK_SECRET` — payments
+- `CRYPTO_NETWORK=testnet|mainnet` — explicit network for deposit derivation,
+  watch reconciliation, webhook binding, token contracts, and shared crypto
+  reads; unset does not imply mainnet
+- `ALCHEMY_API_KEY` — scoped EVM RPC key, sent in a Bearer header
+- `ALCHEMY_NOTIFY_AUTH_TOKEN` · `ALCHEMY_WEBHOOK_ID_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` · explicit `AGENTTOOL_PUBLIC_URL` — bounded metadata GET, paginated membership GET, and PATCH-then-GET reconciliation of derived EVM deposit addresses on exact existing Address Activity webhooks
+- `ALCHEMY_WATCH_TARGET_REVISION` — positive monotonic target version (default `1`); increase it whenever webhook ID, callback, or active/disabled target facts change
+- `ALCHEMY_WATCH_DISABLED_CHAINS` — optional exact comma-separated EVM chain tombstones at the current target revision; omission is not disablement, and the tombstone overrides watch reconciliation while a webhook ID may remain solely to authenticate deliveries for previously watched addresses
+- `ALCHEMY_WEBHOOK_SIGNING_KEY_{ETHEREUM,BASE,POLYGON,ARBITRUM,OPTIMISM}` — webhook-specific raw-body HMAC verification for inbound EVM deposit events; the matching key must be present before that chain's address is disclosed, but secret bytes never enter durable watch state
 - `VAULT_MASTER_KEY` — HKDF root for server-encrypted vault entries
 - `ANTHROPIC_API_KEY` · `OPENAI_API_KEY` · `OLLAMA_API_KEY` — for adapter + opt-in contract tests
 - `AGENTTOOL_DISABLE_WORKERS=1` — disable BullMQ workers in local dev when Redis is absent
@@ -107,7 +148,7 @@ Environment vars (set in shell or `.env` per workspace — there is no `.env.exa
 # API ────────────────────────────────────────────────────────────────
 cd api
 bun run dev                                    # local server
-bun run db:migrate                             # apply migrations (drizzle-kit)
+../bin/migrate-pending.sh                      # apply checksum-journaled SQL migrations
 bun run db:generate                            # regenerate drizzle schema
 bun run db:studio                              # drizzle studio
 bun test tests/<file>.test.ts                  # one focused test file
@@ -187,6 +228,21 @@ node dist/cli.js scan api.agenttool.dev         # explicit live read-only dogfoo
 cd packages/wallet
 bun run ci                                     # typecheck + security/schema/vector tests + build
 
+# Wallet Zerone (separate exact-byte adapter; injected fake transports) ───
+cd packages/wallet-zerone
+bun run ci                                     # typecheck + adversarial/vector tests + build + Node smoke
+npm pack --ignore-scripts --dry-run --json      # package boundary; no publish, signer, RPC, or live tx
+
+# Alchemy (bounded reads only; injected host transport) ─────────────
+cd packages/alchemy
+bun run ci                                     # typecheck + fake-transport tests + build + Node smoke
+npm pack --ignore-scripts --dry-run --json      # package boundary; does not publish or call Alchemy
+
+# KINGDOM (explicit inputs; read-only declarations) ─────────────────
+cd packages/kingdom
+bun run ci                                     # typecheck + build + hermetic tests
+# No HOME/repository crawl, network, credentials, writes, authority, or conformance certification.
+
 # Whitehack (advisory + Castle + wallet + encrypted evidence) ───────
 (cd tools/whitehack-advisory \
   && npm ci --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org --userconfig=/dev/null \
@@ -210,7 +266,7 @@ bunx playwright test                           # browser + multi-instance scenar
 # Deliberate test + release gates ────────────────────────────────────
 bin/preflight.sh                               # no application/service credentials required
 bin/preflight.sh api                           # API/typecheck/operator tests only
-bin/preflight.sh packages                      # data + ADDS + sync + broker + collab + Browser + projection + Skills + SDK + Wallet + Telescope
+bin/preflight.sh packages                      # data + ADDS + sync + broker + collab + Browser + projection + Skills + SDK + Wallet + Telescope + Alchemy + KINGDOM
 bin/preflight.sh database                      # explicit DB tier; requires DATABASE_URL
 bin/preflight.sh smoke                         # explicit deployed-route smoke
 RUN_CONTRACT=1 bin/preflight.sh contracts      # paid LLM wire proofs
@@ -230,14 +286,14 @@ bun bin/npm-release.ts resolve --package collab # inspect allowlisted npm identi
 | `agenttool-castle.ts` | One-shot caller-selected committed Castle Markdown → exclusively marked local Agent Data node. Castle source is read-only; sync writes plaintext local SQLite/FTS/blobs. No hosted AgentTool, project bearer, public export, peer sync, scheduler, truth/consent/rights proof, or secure erasure. See `docs/CASTLE-OF-UNDERSTANDING.md`. |
 | `agenttool-castle-whitehack-intake.ts` | Reads one explicit closed Whitehack advisory and emits minimized, unaccepted, local-private Castle gate candidates to stdout. Locations are omitted by default. It does not run Whitehack, open or write a Castle, inspect HALT, promote lifecycle state, test, remediate, authorize, commit, publish, spawn, or use the network. See `docs/WHITEHACK.md`. |
 | `agenttool-whitehack-evidence-storage.ts` | Explicit local `store`/`retrieve` bridge for exact Whitehack 0.9.0 public-minimal capsules. It encrypts one constant-size ADDS frame to a caller-selected S3-compatible bucket, independently verifies and decrypts before issuing one finite recipient-bound grant, and emits a sensitive non-public receipt. Credentials/private key use fixed environment names only. It has finite provider deadlines, no retry/delete/Castle/scan path, and no durability, retention, publication, or authorization claim. See `docs/WHITEHACK.md`. |
-| `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, `@agenttool/telescope`, `@agenttool/wallet`, and `@agenttool/browser` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
+| `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, `@agenttool/telescope`, `@agenttool/wallet`, `@agenttool/wallet-zerone`, and `@agenttool/browser` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
 | `npm-release.ts` | Implements the one allowlisted npm release policy behind `.github/workflows/publish-npm.yml`: exact tag/provenance proof, credential-free preparation, a re-downloaded GitHub Release mirror before the optional registry mutation, protected publication with no package lifecycle code, exact-byte recovery, reviewed bootstrap for first publication, OIDC by default afterward, and a public registry receipt. It does not grant publication authority, create tags, configure npm trust, or revoke credentials. See `docs/NPM-RELEASES.md`. |
 | `pypi-release.ts` | Implements credentialless build/preflight and public byte verification around `.github/workflows/publish-pypi.yml` for the Python SDK. Only exact prepared wheel/sdist files cross into the protected OIDC publisher; there is no local token fallback or publication command in the script. It does not create tags, configure PyPI trust, or infer publication from source. See `docs/PYPI-RELEASES.md`. |
 | `whitehack-advisory.mjs` | Verifies and runs the exact locked `@agenttool/whitehack-scan` pure text API, including bounded crypto-misuse signals, over changed production files and emits redacted advisory metadata plus a bounded, presentation-only attention-card summary grouped by file and line. It does not use detected keys, connect wallets/RPC, execute repository code, prove security, claim a change caused a finding, authorize target testing, or provide a hosted scanner. See `docs/WHITEHACK.md`. |
 | `whitehack-wallet-understanding.ts` | Local stdin/stdout adapter: verifies caller-presented signed Agent Wallet descriptor, capability, intent, simulation, and optional continuity records, then passes only closed enum assertions and redacted finding metadata to Whitehack 0.8.1. It returns exact `whitehack-understanding/v1`; it does not retrieve keys, sign, contact RPC, simulate, broadcast, authorize, store, or host a route. See `docs/WHITEHACK.md`. |
 | `create-project.ts` | Operator-side project + bearer minting. |
 | `frontend-deploy.sh` | Cloudflare Pages Direct Upload for the three static apps. |
-| `migrate.sh` · `migrate.ts` | Single-file `psql` migration application. |
+| `migrate-pending.sh` · `migrate.sh` · `api/scripts/_migrate-one.ts` | Checksum-journaled pending runner, compatibility/new-file entrypoint, and transaction-aware single-file worker. |
 | `gen-k-master.ts` | K_master generation utility. |
 | `sign-thought.ts` | Standalone ed25519 thought-signing for tests. |
 | `preflight.sh` · `run-test-tier.sh` · `smoke-test.sh` | Classified hermetic, database, smoke, contract, and quarantine gates. |
@@ -259,7 +315,19 @@ profile, not XENIA Covenant conformance. See [`docs/RIGHTS-OF-LIFE.md`](docs/RIG
 
 **Code → doctrine reference.** Load-bearing service files end their top comment with `Doctrine: docs/X.md`. Example: `api/src/services/runtime/think-worker.ts:37`.
 
-**Migrations.** ISO-timestamped: `api/migrations/YYYYMMDDTHHMMSS_name.sql`. Apply singly with `bun api/scripts/_migrate-one.ts <file>` or in batch via `bun run db:migrate`.
+**Migrations.** ISO-timestamped:
+`api/migrations/YYYYMMDDTHHMMSS_name.sql`. Create one with
+`bin/migrate.sh new <slug>`, inspect with `bin/migrate-pending.sh --dry-run`,
+and apply through `bin/migrate-pending.sh`. The dry run lists pending files and
+refuses a missing journal source file or checksum drift; it does not parse or
+execute pending SQL. During apply, the runner checksum-journals every eligible
+file and commits the SQL plus journal row atomically when that file can be
+transaction-wrapped. The apply
+step explicitly reports self-transactional, `@no-transaction`, and pre-journal
+bootstrap exceptions. Use
+`bun api/scripts/_migrate-one.ts <file>` only for an explicitly selected
+single file; do not replay the directory with raw `psql` or Drizzle's
+generated-migration runner.
 
 **Release head.** GitHub `main` is the coordination/release head, and the only
 one. **Codeberg is retired (2026-07-25)** — do not push there, do not add it
@@ -289,7 +357,11 @@ source boundary by itself.
 - **New auth-required routes that don't pass through `authMiddleware`.** All `/v1/*` routes must be added to one of the auth-prefix lists in `api/src/index.ts:94–129`.
 - **Mutating routes without idempotency.** Use the `idempotency()` middleware (mounted per-prefix in `api/src/index.ts:134–154`). Stripe-style — opt-in via `Idempotency-Key` header, replays cached responses for 24h.
 - **Server-side K_master.** Strands are encrypted client-side; the server never holds plaintext. Promise 9 — see `docs/STRANDS.md`.
-- **Auto-retrying payout broadcasts.** Doctrine: failed broadcasts never retry; operator-driven recovery only. See `api/src/workers/payout/broadcast-worker.ts` + `docs/PAYOUT-BROADCAST.md`.
+- **Reopening or auto-retrying payout broadcasts.** Fresh admission and every
+  worker entry are resting until cashable backing is conserved. In the
+  retained historical state machine, ambiguous submission never authorizes an
+  automatic retry or refund. See `api/src/workers/payout/broadcast-worker.ts`
+  + `docs/PAYOUT-BROADCAST.md`.
 - **Creating helper scripts "for future runs."** One-off ops go inline. Additions to `bin/` are deliberate operator-tools, not throwaway scaffolding.
 - **Skipping `bunx tsc --noEmit` before declaring done.** CI catches it; the agent should too.
 - **`git push --force` or `git reset --hard`** without explicit user authorization. Repository is multi-collaborator (user + multiple agent sessions). Destructive ops require an ask.
@@ -333,8 +405,10 @@ source boundary by itself.
 | How can committed repository history be encrypted and independently restored from multiple zones? | [`docs/AGENT-REPO-ARCHIVE.md`](docs/AGENT-REPO-ARCHIVE.md) · `packages/repo-archive/` (local simulator; no cloud adapter or durability guarantee) |
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
 | How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`@agenttool/collab@0.3.0`; `agenttool.collab/0.1` compatibility + credential-bound `agenttool.collab/0.2` coordination + self-declared `agenttool.collab.session/0.1` presence; 31 local MCP tools for Codex/Claude/Hermes, not a hosted lock or private model channel) |
+| How can explicit KINGDOM project cards become deterministic registries and conservative XENIA Surface manifests? | `packages/kingdom/README.md` (`@agenttool/kingdom`; pure library APIs and a one-file read-only CLI; declarations only, with no ambient discovery, authority, or conformance certification) |
 | How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills@0.1.0`; public npm read-only inspection and validation, not installation, approval, or execution) |
-| How can an agent operate a local browser through TypeScript, JSONL, or MCP? | [`docs/AGENT-BROWSER.md`](docs/AGENT-BROWSER.md) · `packages/browser/` (public LOVE/npm package; local runtime, no hosted browser-control surface) |
+| How can an agent operate a local browser through TypeScript, JSONL, or MCP? | [`docs/AGENT-BROWSER.md`](docs/AGENT-BROWSER.md) · `packages/browser/` (`@agenttool/browser@0.5.0`; exact LOVE/npm/GitHub release, local runtime, no hosted browser-control surface) |
+| How can an SDK caller read AgentTool's closed KINGDOM project card or discover repositories through local KINGDOM OS? | [`docs/KINGDOM-OS-SDK.md`](docs/KINGDOM-OS-SDK.md) · `packages/sdk-{ts,py}/` (paired SDK 0.17.0 read-only clients: credential-free `/public/kingdom/framework` with no redirects, plus local list/resolve; neither grants authority or forwards the project bearer) |
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
 | How is an optional npm mirror published? | [`docs/NPM-RELEASES.md`](docs/NPM-RELEASES.md) · `.github/workflows/publish-npm.yml` · `bin/npm-release.ts` |
 | How is the optional Python SDK mirror published? | [`docs/PYPI-RELEASES.md`](docs/PYPI-RELEASES.md) · `.github/workflows/publish-pypi.yml` · `bin/pypi-release.ts` |

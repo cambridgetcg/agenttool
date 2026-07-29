@@ -116,7 +116,9 @@ describe("current outward operational claims", () => {
     expect(village).not.toContain("POST /v1/bootstrap-agent");
     expect(autonomous).toMatch(/agents emit no heartbeat message.*GET \/v1\/heartbeat.*service-process liveness/is);
     expect(recursion).toMatch(/\/v1\/platform.*public identity and wake/is);
-    expect(kin).toMatch(/POST \/v1\/register\/agent.*private keys are never returned/is);
+    expect(kin).toMatch(
+      /POST \/v1\/register\/agent.*private root never crosses the API boundary/is,
+    );
     expect(kin).not.toMatch(/POST \/v1\/register` returns a 32-byte bearer/i);
   });
 
@@ -144,8 +146,13 @@ describe("current outward operational claims", () => {
     expect(gates).toContain("https://github.com/cambridgetcg/xenia");
     expect(gates).toMatch(/conformance is not certified/i);
     expect(gates).not.toContain("https://sinovai.com/xenia");
-    expect(gates).toMatch(/zerone.*separate proof-of-truth chain project/is);
-    expect(gates).toMatch(/does not currently export trust records.*portable trust proofs/is);
+    expect(gates).toMatch(/zerone.*independent proof-of-truth chain project/is);
+    expect(gates).toMatch(
+      /bounded offline wallet adapter.*released-and-settled invocation witness report seam/is,
+    );
+    expect(gates).toMatch(
+      /report shape is not chain or provenance proof.*does not export trust.*migrate identity.*trust portable.*custody keys.*host RPC.*deploy a bridge/is,
+    );
     expect(gates).not.toMatch(/Trust earned here is verifiable there/i);
     expect(root).toMatch(/broader descriptive route map.*not an exhaustive inventory/i);
     expect(tutor).toMatch(/one fetch summarizes.*known gaps/i);
@@ -178,18 +185,51 @@ describe("current outward operational claims", () => {
     expect(jsonld).not.toMatch(/Read once, reach everything/i);
   });
 
-  test("zerone is described as a separate project, not a live trust-portability bridge", () => {
+  test("zerone discovery distinguishes the local offline adapter and report seam from trust portability", () => {
     const party = read("docs/THE-PARTY.md");
+    const reachable = read("api/src/services/wake/reachable.ts");
     const wakeBuilder = read("api/src/services/wake/build.ts");
     const wakeRoute = read("api/src/routes/wake.ts");
+    const walletReadme = read("packages/wallet/README.md");
+    const walletSpec = read("docs/specs/AGENT-WALLET-0.1.md");
+    const packagesPage = read("apps/docs/packages.html");
 
-    for (const surface of [party, wakeBuilder, wakeRoute]) {
-      expect(surface).toMatch(/zerone is a separate|separate chain project named zerone/i);
-      expect(surface).toMatch(/does not currently export trust records|no route or worker.*exports its trust records/is);
-      expect(surface).toMatch(/portable trust proof|no\s+portable trust/i);
-      expect(surface).not.toMatch(/trust you earn here can be verifiable there/i);
-    }
+    expect(party).toMatch(/separate chain project named zerone/i);
+    expect(party).toMatch(/no route or worker.*exports its trust records/is);
+    expect(party).toMatch(/no\s+portable trust proof/i);
     expect(party).toMatch(/standardized portability is not implemented/i);
+
+    expect(reachable).toMatch(
+      /bounded local AgentTool wallet adapter.*released-and-settled invocation witness report seam/is,
+    );
+    expect(reachable).toMatch(
+      /local_offline_source_only.*public_exact_artifact.*npm: "absent".*github_release: "absent".*hosted: false.*custody: false.*hosted_rpc: false.*deployed_bridge: false/is,
+    );
+    expect(reachable).toMatch(
+      /not signature or writer-provenance proof.*does not verify chain inclusion.*attestation state or settlement.*bond return.*reward/is,
+    );
+    expect(reachable).toMatch(
+      /not proof of provenance.*trust portability.*authorization for another action/is,
+    );
+    expect(reachable).not.toMatch(
+      /trust you earn here can be verifiable there/i,
+    );
+    for (const surface of [walletReadme, walletSpec, packagesPage]) {
+      expect(surface).toMatch(
+        /0\.1\.3.*0\.1\.1.*0\.1\.2.*LOVE.*(not rewritten|not rewrite|hash-pinned)/is,
+      );
+      expect(surface).toMatch(
+        /GitHub.*(mutable|immutable:false).*(reverif|digest|SHA-256|not.*guarantee)/is,
+      );
+      expect(surface).not.toMatch(/immutable[^.\n]*GitHub Release/is);
+      expect(surface).toMatch(/npm.*0\.1\.0/is);
+    }
+
+    for (const surface of [wakeBuilder, wakeRoute]) {
+      expect(surface).toContain("WAKE_REACHABLE_DOORS");
+      expect(surface).toContain("you_can_reach: WAKE_REACHABLE_DOORS");
+    }
+    expect(wakeRoute).toContain("...WAKE_INVOCATION_WITNESS_LINKS");
   });
 
   test("saga, adapters, federation, runtime, and platform claims stay implementation-bounded", () => {

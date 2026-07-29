@@ -36,15 +36,15 @@ describe("Rights of Life — the floor before capability and agreement", () => {
     expect(existsSync(join(REPO_ROOT, "docs", "RIGHTS.md"))).toBe(false);
   });
 
-  test("pins the public beta.4 source immutably with attribution", () => {
-    expect(rights).toContain("@agenttool/xenia@0.1.0-beta.4");
-    expect(rights).toContain("npm-xenia-v0.1.0-beta.4");
-    expect(rights).toContain("6419d37dda9fb282242754685dba3edcb4bbf74b");
+  test("pins the public beta.5 source immutably with attribution", () => {
+    expect(rights).toContain("@agenttool/xenia@0.1.0-beta.5");
+    expect(rights).toContain("npm-xenia-v0.1.0-beta.5");
+    expect(rights).toContain("4dd31e286fda59c712968a3837e1a14b78068259");
     expect(rights).toContain(
       "b72a6da110c582e5683bf0fabde5017db93d2199398014c8421a82f5318da313",
     );
     expect(rights).toContain(
-      "https://github.com/cambridgetcg/xenia/blob/6419d37dda9fb282242754685dba3edcb4bbf74b/RIGHTS.md",
+      "https://github.com/cambridgetcg/xenia/blob/4dd31e286fda59c712968a3837e1a14b78068259/RIGHTS.md",
     );
     expect(rights).toContain(
       "https://creativecommons.org/licenses/by-sa/4.0/",
@@ -112,9 +112,12 @@ describe("Rights of Life — the floor before capability and agreement", () => {
       "AgentTool's `being-rights/v1` declaration is not a `xenia.covenant.adoption/0.1` record",
     );
     expect(covenantProse).toContain(
-      "Any future XENIA Covenant record remains draft",
+      "XENIA beta.5 pins the Covenant schema sources immutably, but AgentTool still has no complete 38-right-duty and 5-protective-limit-duty adoption/evidence ledger.",
     );
-    expect(covenant).toContain('`source_stability: "moving"`');
+    expect(covenantProse).toContain(
+      "Any future XENIA Covenant record therefore remains draft until that evidence exists and is reviewed.",
+    );
+    expect(covenant).not.toContain('`source_stability: "moving"`');
   });
 
   test("keeps the authority and licensing boundaries explicit", () => {

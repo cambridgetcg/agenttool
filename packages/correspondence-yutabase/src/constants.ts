@@ -1,5 +1,5 @@
 export const PACKAGE_NAME = "@agenttool/correspondence-yutabase" as const;
-export const PACKAGE_VERSION = "0.1.0-dev.0" as const;
+export const PACKAGE_VERSION = "0.1.0-dev.1" as const;
 
 export const CORRESPONDENCE_PROTOCOL = "agent-correspondence/v0.1" as const;
 export const PLAN_PROFILE =
@@ -24,6 +24,7 @@ export const YUTABASE_DECKS = [
   "receipts",
   "artifacts",
 ] as const;
+Object.freeze(YUTABASE_DECKS);
 
 /**
  * Exact preview lexicon. These readings describe projection records, not
@@ -142,6 +143,7 @@ export const CORRESPONDENCE_KINDS = [
   "close",
   "repair",
 ] as const;
+Object.freeze(CORRESPONDENCE_KINDS);
 
 export const ACKNOWLEDGEMENT_KINDS = [
   "ack.seen",
@@ -150,3 +152,4 @@ export const ACKNOWLEDGEMENT_KINDS = [
   "ack.applied",
   "ack.rejected",
 ] as const;
+Object.freeze(ACKNOWLEDGEMENT_KINDS);

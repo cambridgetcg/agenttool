@@ -36,6 +36,9 @@ jobs:
       - name: Install cross-language vector dependencies
         working-directory: packages/sdk-ts
         run: bun install --frozen-lockfile
+      - name: Install KINGDOM source dependencies
+        working-directory: packages/kingdom
+        run: bun install --frozen-lockfile
       - name: Run hermetic API and protocol gate
         run: bash bin/preflight.sh api
 
@@ -63,24 +66,38 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for workspace in api packages/data packages/data-protocol packages/repo-archive packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope; do
+          for workspace in api packages/data packages/data-protocol packages/repo-archive packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope packages/alchemy packages/kingdom; do
             (cd "$workspace" && bun install --frozen-lockfile)
           done
-      - name: Build local data-sync and projector peers
+      - name: Build local-dependent package peers
         shell: bash
         run: |
           set -euo pipefail
           (cd packages/data && bun run build)
           (cd packages/data-protocol && bun run build)
           (cd packages/correspondence-yutabase && bun run build)
+          (cd packages/wallet && bun run build)
       - name: Install local-dependent package dependencies from lockfiles
         shell: bash
         run: |
           set -euo pipefail
           (cd packages/data-sync && bun install --frozen-lockfile)
           (cd packages/correspondence-yutabase-projector && bun install --frozen-lockfile)
-      - name: Run hermetic data, ADDS, sync, archive, broker, collab, Browser, projection, local projector, Skills, SDK, Wallet, and Telescope gate
+          (cd packages/wallet-zerone && bun install --frozen-lockfile --force)
+      - name: Run hermetic data, ADDS, sync, archive, broker, collab, Browser, projection, local projector, Skills, SDK, Wallet, Zerone adapter, Telescope, Alchemy, and KINGDOM gate
         run: bash bin/preflight.sh packages
+      - name: Smoke packed Alchemy read package under Node and Bun
+        working-directory: packages/alchemy
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
+          smoke='import("@agenttool/alchemy").then(m=>{if(m.PACKAGE_VERSION!=="0.1.0-dev.0"||Object.keys(m.ALCHEMY_NETWORKS).length!==10||typeof m.createAlchemyReadClient!=="function"||"rawRpc"in m||"request"in m)process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke")
+          (cd "$install_dir" && bun -e "$smoke")
       - name: Smoke the packed TypeScript SDK under Node and Bun
         working-directory: packages/sdk-ts
         shell: bash
@@ -252,47 +269,50 @@ jobs:
           test "$(bun "$cli" --version)" = "0.2.3"
           node "$cli" --help >/dev/null
           bun "$cli" --help >/dev/null
-          manifest="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.16.3/manifest.json"
-          artifact="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.16.3/agenttool-sdk-0.16.3.tgz"
+          manifest="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.17.0/manifest.json"
+          artifact="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.17.0/agenttool-sdk-0.17.0.tgz"
           size="$(node --input-type=module --eval "import{readFileSync}from'node:fs';const m=JSON.parse(readFileSync(process.argv[1],'utf8'));process.stdout.write(String(m.artifact.size))" "$manifest")"
           sha256="$(node --input-type=module --eval "import{readFileSync}from'node:fs';const m=JSON.parse(readFileSync(process.argv[1],'utf8'));process.stdout.write(m.artifact.sha256)" "$manifest")"
-          node "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.16.3 --json >/dev/null
-          bun "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.16.3 --json >/dev/null
-      - name: Smoke packed Agent Wallet under Node and Bun
-        working-directory: packages/wallet
+          node "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.17.0 --json >/dev/null
+          bun "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.17.0 --json >/dev/null
+      - name: Smoke packed Agent Wallet and Zerone adapter together under Node and Bun
         shell: bash
         run: |
           set -euo pipefail
-          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          wallet_archive_name="$(cd packages/wallet && npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          zerone_archive_name="$(cd packages/wallet-zerone && npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          wallet_tarball="$PWD/packages/wallet/$wallet_archive_name"
+          zerone_tarball="$PWD/packages/wallet-zerone/$zerone_archive_name"
           install_dir="$(mktemp -d)"
-          trap 'rm -rf "$install_dir" "$tarball"' EXIT
-          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
-          smoke='import("@agenttool/wallet").then(m=>{if(m.AGENT_WALLET_PROTOCOL!=="agent-wallet/0.1"||m.canonicalJson({b:2,a:1})!==JSON.stringify({a:1,b:2}))process.exit(1)})'
+          trap 'rm -rf "$install_dir" "$wallet_tarball" "$zerone_tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$wallet_tarball" "$zerone_tarball"
+          smoke='Promise.all([import("@agenttool/wallet"),import("@agenttool/wallet-zerone")]).then(([w,z])=>{const forbidden=/mnemonic|private.?key|secret|seed|signAndSend|custody/iu;if(w.PACKAGE_VERSION!=="0.1.3"||w.AGENT_WALLET_PROTOCOL!=="agent-wallet/0.1"||w.canonicalJson({b:2,a:1})!==JSON.stringify({a:1,b:2})||z.PACKAGE_VERSION!=="0.1.1"||z.ZERONE_ADAPTER_PROTOCOL!=="agent-wallet-zerone/0.1"||z.ZERONE_CORE_COMMIT!=="35284a22192df8fc6273135f14e8549c804778b6"||typeof z.createZeroneDirectSignPlan!=="function"||typeof z.createZeroneAdapterClient!=="function"||Object.keys(z).some(name=>forbidden.test(name)))process.exit(1)})'
           (cd "$install_dir" && node -e "$smoke")
           (cd "$install_dir" && bun -e "$smoke")
           schema_smoke='import("@agenttool/wallet/schema.json",{with:{type:"json"}}).then(m=>{if(m.default.title!=="Agent Wallet 0.1 signed records")process.exit(1)})'
-          vectors_smoke='import("@agenttool/wallet/vectors.json",{with:{type:"json"}}).then(m=>{if(m.default.protocol!=="agent-wallet/0.1"||m.default.records.length!==6)process.exit(1)})'
-          (cd "$install_dir" && node -e "$schema_smoke" && node -e "$vectors_smoke")
-          (cd "$install_dir" && bun -e "$schema_smoke" && bun -e "$vectors_smoke")
+          wallet_vectors_smoke='import("@agenttool/wallet/vectors.json",{with:{type:"json"}}).then(m=>{if(m.default.protocol!=="agent-wallet/0.1"||m.default.records.length!==6)process.exit(1)})'
+          zerone_vectors_smoke='import("@agenttool/wallet-zerone/vectors.json",{with:{type:"json"}}).then(m=>{const v=m.default;if(v.schema!=="agent-wallet-zerone.go-cosmos-vectors/0.1"||v.provenance.zerone_core_commit!=="35284a22192df8fc6273135f14e8549c804778b6"||!Object.values(v.verified).every(Boolean))process.exit(1)})'
+          (cd "$install_dir" && node -e "$schema_smoke" && node -e "$wallet_vectors_smoke" && node -e "$zerone_vectors_smoke")
+          (cd "$install_dir" && bun -e "$schema_smoke" && bun -e "$wallet_vectors_smoke" && bun -e "$zerone_vectors_smoke")
       - name: Smoke canonical Agent Browser LOVE artifact under Node and Bun
         working-directory: packages/browser
         shell: bash
         run: |
           set -euo pipefail
-          tarball="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/browser/0.3.0/agenttool-browser-0.3.0.tgz"
+          tarball="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/browser/0.5.0/agenttool-browser-0.5.0.tgz"
           test -f "$tarball"
           install_dir="$(mktemp -d)"
           trap 'rm -rf "$install_dir"' EXIT
           npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$tarball"
           package_root="$install_dir/node_modules/@agenttool/browser"
-          node -e 'const p=require(process.argv[1]);if(p.version!=="0.3.0")process.exit(1)' "$package_root/package.json"
-          smoke='import("@agenttool/browser").then(m=>{const sovereign=m.resolveBrowserCapabilities({authority:"sovereign"});const navigation=m.planBrowserAction({kind:"navigate",url:"https://example.com/?token=secret"},sovereign);const typed=m.planBrowserAction({kind:"type",ref:"e1",snapshotId:"snapshot-1",text:"must-not-cross"},sovereign);if(m.BROWSER_PACKAGE_VERSION!=="0.3.0"||typeof m.AgentBrowser!=="function"||typeof m.buildBrowserMcpServer!=="function"||typeof m.resolveBrowserCapabilities!=="function"||typeof m.planBrowserAction!=="function"||m.OBSERVATION_SCHEMA!=="agent-browser-observation/0.1"||m.BROWSER_CAPABILITIES_SCHEMA!=="agent-browser-capabilities/0.3"||m.BROWSER_CONSEQUENCE_PLAN_SCHEMA!=="agent-browser-consequence-plan/0.1"||sovereign.network.reserved!==true||sovereign.network.webSockets!=="browser"||sovereign.network.redirectRevalidation!==false||sovereign.runtime.serviceWorkers!=="allow"||navigation.action.url.includes("secret")||Object.hasOwn(typed.action,"text")||JSON.stringify(typed).includes("must-not-cross"))process.exit(1)})'
+          node -e 'const p=require(process.argv[1]);if(p.version!=="0.5.0")process.exit(1)' "$package_root/package.json"
+          smoke='Promise.all([import("@agenttool/browser"),import("@agenttool/browser/protocol")]).then(([m,p])=>{const sovereign=m.resolveBrowserCapabilities({authority:"sovereign"});const navigation=m.planBrowserAction({kind:"navigate",url:"https://example.com/?token=secret"},sovereign);const typed=m.planBrowserAction({kind:"type",ref:"e1",snapshotId:"snapshot-1",text:"must-not-cross"},sovereign);if(m.BROWSER_PACKAGE_VERSION!=="0.5.0"||typeof m.AgentBrowser!=="function"||typeof m.buildBrowserMcpServer!=="function"||typeof m.serveBrowserMcpStdio!=="function"||typeof m.resolveBrowserCapabilities!=="function"||typeof m.planBrowserAction!=="function"||m.OBSERVATION_SCHEMA!=="agent-browser-observation/0.2"||m.BROWSER_CAPABILITIES_SCHEMA!=="agent-browser-capabilities/0.4"||m.BROWSER_CONSEQUENCE_PLAN_SCHEMA!=="agent-browser-consequence-plan/0.2"||m.BROWSER_ACTION_RECEIPT_SCHEMA!=="agent-browser-action-receipt/0.1"||sovereign.features.browserActReceipts!=="enabled"||sovereign.features.nonRefObservationBasis!=="enabled"||sovereign.interfaces.jsonl.version!=="agenttool-browser-jsonl/0.1"||sovereign.interfaces.mcp.modernRevision!=="2026-07-28"||sovereign.interfaces.mcp.legacyCompatibility!=="2025-era"||p.JSONL_PROTOCOL_VERSION!=="agenttool-browser-jsonl/0.1"||p.MCP_MODERN_PROTOCOL_REVISION!=="2026-07-28"||p.MCP_LEGACY_COMPATIBILITY!=="2025-era"||p.BROWSER_OPERATIONS.length!==9||JSON.stringify(sovereign.modelFacingOperations)!==JSON.stringify(p.BROWSER_OPERATIONS)||sovereign.network.reserved!==true||sovereign.network.webSockets!=="browser"||sovereign.network.redirectRevalidation!==false||sovereign.runtime.serviceWorkers!=="allow"||navigation.action.url.includes("secret")||Object.hasOwn(typed.action,"text")||JSON.stringify(typed).includes("must-not-cross"))process.exit(1)})'
           (cd "$install_dir" && node -e "$smoke")
           (cd "$install_dir" && bun -e "$smoke")
           cli="$package_root/dist/bin/agenttool-browser.js"
           test -x "$install_dir/node_modules/.bin/agenttool-browser"
-          node "$cli" help | grep -q '^agenttool-browser 0.3.0$'
-          bun "$cli" help | grep -q '^agenttool-browser 0.3.0$'
+          node "$cli" help | grep -q '^agenttool-browser 0.5.0$'
+          bun "$cli" help | grep -q '^agenttool-browser 0.5.0$'
       - name: Smoke packed Repo Archive under Node and Bun
         working-directory: packages/repo-archive
         shell: bash
@@ -349,7 +369,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: cambridgetcg/yutabase
-          ref: 066afc12c2c7f10bab776a20005e397fca33818c
+          ref: 2948ae3cd88a5e630257549f1e233f5f46a8129b
           path: _yutabase-fixture
           persist-credentials: false
       - name: Set up Bun 1.3.5
@@ -371,14 +391,20 @@ jobs:
           set -euo pipefail
           (cd packages/correspondence-yutabase && bun install --frozen-lockfile && bun run build)
           (cd packages/correspondence-yutabase-projector && bun install --frozen-lockfile)
+          (cd _yutabase-fixture/packages/sdk-ts && bun install --frozen-lockfile)
       - name: Install exact YUTABASE candidate schema
         shell: bash
         run: |
           set -euo pipefail
+          psql "$AGENTTOOL_YUTABASE_TEST_DATABASE_URL" \
+            --no-psqlrc \
+            --single-transaction \
+            --set=ON_ERROR_STOP=1 \
+            --file "_yutabase-fixture/sql/0001_yu_core.sql" \
+            --file "_yutabase-fixture/sql/0002_starter_lexicon.sql"
           for migration in \
-            0001_yu_core.sql \
-            0002_starter_lexicon.sql \
-            0004_candidate_hardening.sql
+            0004_candidate_hardening.sql \
+            0005_candidate_integrity.sql
           do
             psql "$AGENTTOOL_YUTABASE_TEST_DATABASE_URL" \
               --no-psqlrc \
@@ -389,6 +415,13 @@ jobs:
       - name: Run destructive disposable-database integration gate
         working-directory: packages/correspondence-yutabase-projector
         run: bun run test:postgres
+      - name: Revalidate exact YUTABASE binding after projector activity
+        working-directory: _yutabase-fixture/packages/sdk-ts
+        run: >-
+          bun src/cli.ts hello
+          --conn "$AGENTTOOL_YUTABASE_TEST_DATABASE_URL"
+          --json
+          >/dev/null
 
   sdk-python:
     name: Python SDK (${{ matrix.python-version }})

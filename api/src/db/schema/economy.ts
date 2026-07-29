@@ -4,9 +4,12 @@
  *  auth surface). The duplicates that the original economy service had in
  *  its own DB are intentionally NOT ported — the monolith joins via tools. */
 
+import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
+  check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -19,6 +22,8 @@ import {
 } from "drizzle-orm/pg-core";
 
 export const economySchema = pgSchema("economy");
+export const MAX_EXACT_WALLET_BALANCE = Number.MAX_SAFE_INTEGER;
+export const MIN_EXACT_WALLET_BALANCE = Number.MIN_SAFE_INTEGER;
 
 // ─── Wallets + spending policies + transactions ─────────────────────────────
 
@@ -52,6 +57,10 @@ export const wallets = economySchema.table(
   (t) => [
     index("idx_wallets_project").on(t.projectId),
     index("idx_wallets_identity").on(t.identityId),
+    check(
+      "wallets_balance_exact_integer_check",
+      sql`${t.balance} BETWEEN ${MIN_EXACT_WALLET_BALANCE} AND ${MAX_EXACT_WALLET_BALANCE}`,
+    ),
   ],
 );
 
@@ -226,8 +235,450 @@ export const depositAddresses = economySchema.table(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    uniqueIndex("uq_deposit_wallet_chain_token").on(
+      t.walletId,
+      t.chain,
+      t.token,
+    ),
     uniqueIndex("idx_deposit_chain_addr").on(t.chain, t.address),
+    uniqueIndex("idx_deposit_evm_chain_addr_ci")
+      .on(t.chain, sql`lower(${t.address})`)
+      .where(
+        sql`${t.chain} IN ('ethereum', 'base', 'polygon', 'arbitrum', 'optimism')`,
+      ),
+    uniqueIndex("uq_deposit_address_id_chain").on(t.id, t.chain),
     index("idx_deposit_wallet").on(t.walletId),
+  ],
+);
+
+export const DEPOSIT_WATCH_DESIRED_STATES = [
+  "watching",
+  "not_watching",
+] as const;
+export type DepositWatchDesiredState =
+  (typeof DEPOSIT_WATCH_DESIRED_STATES)[number];
+
+export const DEPOSIT_WATCH_OBSERVED_STATES = [
+  "unknown",
+  "watching",
+  "not_watching",
+] as const;
+export type DepositWatchObservedState =
+  (typeof DEPOSIT_WATCH_OBSERVED_STATES)[number];
+
+export const DEPOSIT_WATCH_STATUSES = [
+  "pending",
+  "leased",
+  "retry_wait",
+  "accepted_unverified",
+  "converged",
+  "blocked",
+] as const;
+export type DepositWatchStatus = (typeof DEPOSIT_WATCH_STATUSES)[number];
+
+/** Closed, provider-neutral outcomes. No provider response body, exception
+ * message, credential, or arbitrary diagnostic belongs in this column. */
+export const DEPOSIT_WATCH_OUTCOME_CODES = [
+  "provider_mutation_accepted",
+  "desired_state_verified",
+  "opposite_state_verified",
+  "provider_unavailable",
+  "provider_rate_limited",
+  "provider_timeout",
+  "provider_configuration_missing",
+  "provider_target_mismatch",
+  "provider_target_disabled",
+  "provider_rejected",
+  "provider_unsupported",
+  "reconciler_failed",
+  "lease_expired",
+  "target_binding_required",
+] as const;
+export type DepositWatchOutcomeCode =
+  (typeof DEPOSIT_WATCH_OUTCOME_CODES)[number];
+
+export const DEPOSIT_WATCH_TARGET_STATES = [
+  "unbound",
+  "active",
+  "conflicted",
+  "disabled",
+] as const;
+export type DepositWatchTargetState =
+  (typeof DEPOSIT_WATCH_TARGET_STATES)[number];
+
+/** One monotonic, non-secret control head per provider/chain/network.
+ *
+ * Request replicas may establish only the revision-zero unbound sentinel.
+ * Configured workers activate, conflict, or disable a head transactionally.
+ * Credentials and secret-derived fingerprints never belong here. */
+export const depositWatchTargets = economySchema.table(
+  "deposit_watch_targets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    provider: text("provider").notNull(),
+    chain: text("chain").notNull(),
+    network: text("network").notNull(),
+    state: text("state")
+      .$type<DepositWatchTargetState>()
+      .notNull()
+      .default("unbound"),
+    targetFingerprint: text("target_fingerprint").notNull(),
+    targetRevision: integer("target_revision").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uq_deposit_watch_target_identity").on(
+      t.provider,
+      t.chain,
+      t.network,
+    ),
+    uniqueIndex("uq_deposit_watch_target_head").on(
+      t.provider,
+      t.chain,
+      t.network,
+      t.targetRevision,
+      t.targetFingerprint,
+    ),
+    check(
+      "deposit_watch_target_provider_shape",
+      sql`${t.provider} ~ '^[a-z][a-z0-9_-]{0,31}$'`,
+    ),
+    check(
+      "deposit_watch_target_chain",
+      sql`${t.chain} IN ('ethereum', 'base', 'polygon', 'arbitrum', 'optimism', 'solana')`,
+    ),
+    check(
+      "deposit_watch_target_network",
+      sql`${t.network} IN ('mainnet', 'testnet')`,
+    ),
+    check(
+      "deposit_watch_target_state",
+      sql`${t.state} IN ('unbound', 'active', 'conflicted', 'disabled')`,
+    ),
+    check(
+      "deposit_watch_target_head_shape",
+      sql`${t.targetFingerprint} ~ '^[0-9a-f]{64}$'
+        AND (
+          (
+            ${t.state} = 'unbound'
+            AND ${t.targetRevision} = 0
+            AND ${t.targetFingerprint} = 'c477199a36317357929d98d7597436d83a63f3f2575abb0cf80868c9f60933bb'
+          )
+          OR (
+            ${t.state} = 'active'
+            AND ${t.targetRevision} BETWEEN 1 AND 2147483647
+            AND ${t.targetFingerprint} <> 'c477199a36317357929d98d7597436d83a63f3f2575abb0cf80868c9f60933bb'
+          )
+          OR (
+            ${t.state} = 'conflicted'
+            AND ${t.targetRevision} BETWEEN 1 AND 2147483647
+          )
+          OR (
+            ${t.state} = 'disabled'
+            AND ${t.targetRevision} BETWEEN 1 AND 2147483647
+            AND ${t.targetFingerprint} = 'c477199a36317357929d98d7597436d83a63f3f2575abb0cf80868c9f60933bb'
+          )
+        )`,
+    ),
+  ],
+);
+
+/** Durable desired/observed provider-watch control state.
+ *
+ * `accepted_unverified` means only that a provider mutation endpoint accepted
+ * a request. `converged` is stronger: an injected adapter independently
+ * observed the desired membership on the intended active/type/destination
+ * subscription for the current generation and public target fingerprint.
+ * Neither state proves future delivery, chain finality, or callback
+ * processing; disclosure separately applies a bounded observation age. */
+export const depositAddressWatches = economySchema.table(
+  "deposit_address_watches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    depositAddressId: uuid("deposit_address_id").notNull(),
+    provider: text("provider").notNull(),
+    chain: text("chain").notNull(),
+    network: text("network").notNull(),
+    /**
+     * SHA-256 of public target facts only (provider, chain/network, provider
+     * target id, callback URL). Nullable only for migration-invalidated or
+     * pre-rollout rows, which cannot converge or be claimed by the new worker;
+     * credentials and secret-derived fingerprints never belong here.
+     */
+    targetFingerprint: text("target_fingerprint"),
+    /** NULL is the compatibility state written by target-aware replicas that
+     * predate the monotonic registry. It cannot converge or be claimed by the
+     * registry-aware worker. */
+    targetRevision: integer("target_revision"),
+    desiredState: text("desired_state")
+      .$type<DepositWatchDesiredState>()
+      .notNull()
+      .default("watching"),
+    observedState: text("observed_state")
+      .$type<DepositWatchObservedState>()
+      .notNull()
+      .default("unknown"),
+    status: text("status")
+      .$type<DepositWatchStatus>()
+      .notNull()
+      .default("pending"),
+    generation: integer("generation").notNull().default(1),
+    observedGeneration: integer("observed_generation"),
+    observedTargetFingerprint: text("observed_target_fingerprint"),
+    observedTargetRevision: integer("observed_target_revision"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
+      .defaultNow(),
+    leaseId: uuid("lease_id"),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    lastOutcomeCode: text("last_outcome_code").$type<DepositWatchOutcomeCode>(),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    observedAt: timestamp("observed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      name: "fk_deposit_watch_address_chain",
+      columns: [t.depositAddressId, t.chain],
+      foreignColumns: [depositAddresses.id, depositAddresses.chain],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "fk_deposit_watch_registry_identity",
+      columns: [t.provider, t.chain, t.network],
+      foreignColumns: [
+        depositWatchTargets.provider,
+        depositWatchTargets.chain,
+        depositWatchTargets.network,
+      ],
+    }),
+    // The migration installs this target-head FK as DEFERRABLE INITIALLY
+    // DEFERRED so a worker can rotate the head and every watch atomically.
+    foreignKey({
+      name: "fk_deposit_watch_registry_head",
+      columns: [
+        t.provider,
+        t.chain,
+        t.network,
+        t.targetRevision,
+        t.targetFingerprint,
+      ],
+      foreignColumns: [
+        depositWatchTargets.provider,
+        depositWatchTargets.chain,
+        depositWatchTargets.network,
+        depositWatchTargets.targetRevision,
+        depositWatchTargets.targetFingerprint,
+      ],
+    }),
+    uniqueIndex("uq_deposit_watch_target").on(
+      t.depositAddressId,
+      t.provider,
+      t.chain,
+      t.network,
+    ),
+    index("idx_deposit_watch_due")
+      .on(t.nextAttemptAt, t.createdAt)
+      .where(
+        sql`${t.status} IN ('pending', 'retry_wait', 'accepted_unverified', 'converged')`,
+      ),
+    index("idx_deposit_watch_registry_head").on(
+      t.provider,
+      t.chain,
+      t.network,
+      t.targetRevision,
+      t.targetFingerprint,
+    ),
+    index("idx_deposit_watch_expired_lease")
+      .on(t.leaseExpiresAt)
+      .where(sql`${t.status} = 'leased'`),
+    check(
+      "deposit_watch_provider_shape",
+      sql`${t.provider} ~ '^[a-z][a-z0-9_-]{0,31}$'`,
+    ),
+    check(
+      "deposit_watch_chain",
+      sql`${t.chain} IN ('ethereum', 'base', 'polygon', 'arbitrum', 'optimism', 'solana')`,
+    ),
+    check(
+      "deposit_watch_network",
+      sql`${t.network} IN ('mainnet', 'testnet')`,
+    ),
+    check(
+      "deposit_watch_desired_state",
+      sql`${t.desiredState} IN ('watching', 'not_watching')`,
+    ),
+    check(
+      "deposit_watch_observed_state",
+      sql`${t.observedState} IN ('unknown', 'watching', 'not_watching')`,
+    ),
+    check(
+      "deposit_watch_status",
+      sql`${t.status} IN ('pending', 'leased', 'retry_wait', 'accepted_unverified', 'converged', 'blocked')`,
+    ),
+    check(
+      "deposit_watch_target_fingerprint",
+      sql`(
+        (
+          ${t.targetRevision} IS NULL
+          AND ${t.status} <> 'converged'
+          AND (
+            ${t.targetFingerprint} IS NULL
+            OR ${t.targetFingerprint} ~ '^[0-9a-f]{64}$'
+          )
+        )
+        OR (
+          ${t.targetRevision} IS NOT NULL
+          AND ${t.targetRevision} BETWEEN 0 AND 2147483647
+          AND ${t.targetFingerprint} IS NOT NULL
+          AND ${t.targetFingerprint} ~ '^[0-9a-f]{64}$'
+          AND (
+            ${t.targetRevision} <> 0
+            OR ${t.targetFingerprint} = 'c477199a36317357929d98d7597436d83a63f3f2575abb0cf80868c9f60933bb'
+          )
+        )
+      )`,
+    ),
+    check(
+      "deposit_watch_generation",
+      sql`${t.generation} >= 1 AND (${t.observedGeneration} IS NULL OR ${t.observedGeneration} >= 1)`,
+    ),
+    check(
+      "deposit_watch_attempt_bound",
+      sql`${t.attemptCount} BETWEEN 0 AND 8`,
+    ),
+    check(
+      "deposit_watch_attempt_shape",
+      sql`(
+        (${t.attemptCount} = 0 AND ${t.lastAttemptAt} IS NULL)
+        OR
+        (${t.attemptCount} > 0 AND ${t.lastAttemptAt} IS NOT NULL)
+      )`,
+    ),
+    check(
+      "deposit_watch_observation_shape",
+      sql`(
+        (
+          ${t.observedState} = 'unknown'
+          AND ${t.observedGeneration} IS NULL
+          AND ${t.observedTargetFingerprint} IS NULL
+          AND ${t.observedTargetRevision} IS NULL
+          AND ${t.observedAt} IS NULL
+        )
+        OR
+        (
+          ${t.observedState} <> 'unknown'
+          AND ${t.observedGeneration} IS NOT NULL
+          AND ${t.observedTargetFingerprint} IS NOT NULL
+          AND ${t.observedTargetFingerprint} ~ '^[0-9a-f]{64}$'
+          AND (
+            (
+              ${t.observedTargetRevision} IS NOT NULL
+              AND ${t.observedTargetRevision} BETWEEN 1 AND 2147483647
+            )
+            OR (
+              ${t.observedTargetRevision} IS NULL
+              AND ${t.status} <> 'converged'
+            )
+          )
+          AND ${t.observedAt} IS NOT NULL
+        )
+      )`,
+    ),
+    check(
+      "deposit_watch_lease_shape",
+      sql`(
+        (
+          ${t.status} = 'leased'
+          AND ${t.leaseId} IS NOT NULL
+          AND ${t.leaseOwner} IS NOT NULL
+          AND char_length(${t.leaseOwner}) BETWEEN 1 AND 128
+          AND ${t.leaseExpiresAt} IS NOT NULL
+          AND ${t.lastAttemptAt} IS NOT NULL
+          AND ${t.leaseExpiresAt} > ${t.lastAttemptAt}
+          AND ${t.leaseExpiresAt} <= ${t.lastAttemptAt} + interval '5 minutes'
+        )
+        OR
+        (
+          ${t.status} <> 'leased'
+          AND ${t.leaseId} IS NULL
+          AND ${t.leaseOwner} IS NULL
+          AND ${t.leaseExpiresAt} IS NULL
+        )
+      )`,
+    ),
+    check(
+      "deposit_watch_schedule_shape",
+      sql`(
+        (
+          ${t.status} IN ('pending', 'retry_wait', 'accepted_unverified', 'converged')
+          AND ${t.nextAttemptAt} IS NOT NULL
+        )
+        OR
+        (
+          ${t.status} NOT IN ('pending', 'retry_wait', 'accepted_unverified', 'converged')
+          AND ${t.nextAttemptAt} IS NULL
+        )
+      )`,
+    ),
+    check(
+      "deposit_watch_converged_shape",
+      sql`(
+        ${t.status} <> 'converged'
+        OR (
+          ${t.observedState} = ${t.desiredState}
+          AND ${t.observedGeneration} IS NOT NULL
+          AND ${t.observedGeneration} = ${t.generation}
+          AND ${t.observedTargetFingerprint} IS NOT NULL
+          AND ${t.observedTargetFingerprint} = ${t.targetFingerprint}
+          AND ${t.observedTargetRevision} IS NOT NULL
+          AND ${t.observedTargetRevision} = ${t.targetRevision}
+          AND ${t.targetRevision} IS NOT NULL
+          AND ${t.targetRevision} BETWEEN 1 AND 2147483647
+          AND ${t.targetFingerprint} IS NOT NULL
+          AND ${t.targetFingerprint} <> 'c477199a36317357929d98d7597436d83a63f3f2575abb0cf80868c9f60933bb'
+        )
+      )`,
+    ),
+    check(
+      "deposit_watch_retry_bound",
+      sql`(
+        ${t.status} NOT IN ('retry_wait', 'accepted_unverified', 'converged')
+        OR (
+          ${t.nextAttemptAt} > ${t.updatedAt}
+          AND ${t.nextAttemptAt} <= ${t.updatedAt} + interval '24 hours'
+        )
+      )`,
+    ),
+    check(
+      "deposit_watch_outcome_code",
+      sql`${t.lastOutcomeCode} IS NULL OR ${t.lastOutcomeCode} IN (
+        'provider_mutation_accepted',
+        'desired_state_verified',
+        'opposite_state_verified',
+        'provider_unavailable',
+        'provider_rate_limited',
+        'provider_timeout',
+        'provider_configuration_missing',
+        'provider_target_mismatch',
+        'provider_target_disabled',
+        'provider_rejected',
+        'provider_unsupported',
+        'reconciler_failed',
+        'lease_expired',
+        'target_binding_required'
+      )`,
+    ),
   ],
 );
 
@@ -259,39 +710,302 @@ export const cryptoPayouts = economySchema.table(
       .references(() => wallets.id),
     projectId: uuid("project_id").notNull(),    // logical FK → tools.projects.id
     chain: text("chain").notNull(),
+    /** Durable chain-environment identity. Legacy rows remain null until
+     * reconciled; workers never infer their network from process config. */
+    network: text("network"),
     token: text("token").notNull(),
     // amount in token base-units (USDC has 6 decimals → 1.5 USDC = 1500000)
     amountBase: numeric("amount_base", { precision: 78, scale: 0 }).notNull(),
     destinationAddress: text("destination_address").notNull(),
-    status: text("status").notNull().default("requested"), // requested | signing | broadcast | confirmed | failed | cancelled
+    status: text("status").notNull().default("requested"), // requested | broadcasting | broadcast | confirmed | failed | cancelled
     txHash: text("tx_hash"),
+    // Durable EVM nonce evidence. The worker writes this tuple in the same
+    // requested → broadcasting CAS as txHash, before RPC submission.
+    // Solana and legacy rows keep all three fields null.
+    evmChainId: numeric("evm_chain_id", { precision: 20, scale: 0 }),
+    evmSourceAddress: text("evm_source_address"),
+    evmNonce: numeric("evm_nonce", { precision: 20, scale: 0 }),
     error: text("error"),
     metadata: jsonb("metadata").default({}),
     requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Durable dispatcher fairness. Pre-submit source contention defers only
+     * this request; replicas order due rows by least-recent real attempt. */
+    dispatchAfter: timestamp("dispatch_after", { withTimezone: true }),
+    lastDispatchAttemptAt: timestamp("last_dispatch_attempt_at", {
+      withTimezone: true,
+    }),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
   },
   (t) => [
     index("idx_payouts_wallet").on(t.walletId),
     index("idx_payouts_status").on(t.status),
+    index("idx_crypto_payouts_network_status")
+      .on(t.network, t.status, t.requestedAt)
+      .where(
+        sql`${t.status} IN ('requested', 'broadcasting', 'broadcast')`,
+      ),
+    index("idx_crypto_payouts_dispatch_due")
+      .on(
+        sql`COALESCE(${t.lastDispatchAttemptAt}, ${t.requestedAt})`,
+        t.requestedAt.asc(),
+        t.dispatchAfter.asc().nullsFirst(),
+      )
+      .where(sql`${t.status} = 'requested'`),
+    index("idx_payouts_confirm_due")
+      .on(
+        t.network,
+        t.status,
+        t.lastCheckedAt.asc().nullsFirst(),
+        t.requestedAt.asc(),
+      )
+      .where(sql`${t.status} IN ('broadcasting', 'broadcast')`),
+    uniqueIndex("uq_crypto_payout_chain_tx_hash")
+      .on(
+        t.chain,
+        sql`CASE WHEN ${t.chain} = 'solana' THEN ${t.txHash} ELSE lower(${t.txHash}) END`,
+      )
+      .where(sql`${t.txHash} IS NOT NULL`),
+    uniqueIndex("uq_crypto_payouts_evm_source_nonce")
+      .on(
+        t.evmChainId,
+        sql`lower(${t.evmSourceAddress})`,
+        t.evmNonce,
+      )
+      .where(sql`${t.evmNonce} IS NOT NULL`),
+    index("idx_crypto_payouts_evm_unresolved_source")
+      .on(t.evmChainId, sql`lower(${t.evmSourceAddress})`)
+      .where(
+        sql`${t.status} = 'broadcasting' AND ${t.evmNonce} IS NOT NULL`,
+      ),
+    check(
+      "crypto_payouts_network_check",
+      sql`${t.network} IS NULL OR ${t.network} IN ('testnet', 'mainnet')`,
+    ),
+    check(
+      "crypto_payouts_evm_nonce_evidence_check",
+      sql`
+        (
+          ${t.evmChainId} IS NULL
+          AND ${t.evmSourceAddress} IS NULL
+          AND ${t.evmNonce} IS NULL
+        )
+        OR
+        (
+          ${t.evmChainId} IS NOT NULL
+          AND ${t.evmSourceAddress} IS NOT NULL
+          AND ${t.evmNonce} IS NOT NULL
+          AND ${t.evmChainId} BETWEEN 1 AND 9007199254740991
+          AND ${t.evmSourceAddress} ~ '^0x[0-9A-Fa-f]{40}$'
+          AND ${t.evmNonce} BETWEEN 0 AND 9007199254740991
+        )
+      `,
+    ),
+    check(
+      "crypto_payouts_evm_broadcasting_evidence_check",
+      sql`
+        NOT (
+          ${t.status} = 'broadcasting'
+          AND ${t.chain} IN ('ethereum', 'base', 'polygon', 'arbitrum', 'optimism')
+        )
+        OR
+        (
+          ${t.txHash} IS NOT NULL
+          AND ${t.txHash} ~ '^0x[0-9A-Fa-f]{64}$'
+          AND ${t.evmChainId} IS NOT NULL
+          AND ${t.evmSourceAddress} IS NOT NULL
+          AND ${t.evmNonce} IS NOT NULL
+        )
+      `,
+    ),
   ],
 );
 
-/** Idempotency log for inbound crypto webhooks across chains. */
+/** Permanent request identity for POST /v1/wallets/:id/payout.
+ *
+ * The raw Idempotency-Key is never stored. `payoutId` is nullable only while
+ * the surrounding transaction creates the payout; a deferred database
+ * trigger refuses any committed reservation without a result identity. */
+export const payoutRequestIdempotency = economySchema.table(
+  "payout_request_idempotency",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id").notNull(),
+    idempotencyKeySha256: text("idempotency_key_sha256").notNull(),
+    requestSha256: text("request_sha256").notNull(),
+    payoutId: uuid("payout_id").references(() => cryptoPayouts.id, {
+      onDelete: "restrict",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uq_payout_request_idempotency_project_key_sha256").on(
+      t.projectId,
+      t.idempotencyKeySha256,
+    ),
+    uniqueIndex("uq_payout_request_idempotency_payout").on(t.payoutId),
+  ],
+);
+
+export const CRYPTO_WEBHOOK_EVENT_STATUSES = [
+  "pending",
+  "credited",
+  "removed",
+  "rejected",
+  "quarantined",
+] as const;
+export type CryptoWebhookEventStatus =
+  (typeof CRYPTO_WEBHOOK_EVENT_STATUSES)[number];
+
+/** Logical inbound transfer and its current canonical-generation state.
+ *
+ * Provider delivery is observation, not finality. EVM rows begin pending and
+ * receive a wallet effect only after an independent receipt/log check. */
 export const cryptoWebhookEvents = economySchema.table(
   "crypto_webhook_events",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     chain: text("chain").notNull(),
     txHash: text("tx_hash").notNull(),
-    logIndex: integer("log_index"),               // for multi-transfer txs
+    logIndex: integer("log_index").notNull(),     // canonical per-transfer identity
     walletId: uuid("wallet_id").references(() => wallets.id),
     creditsAdded: bigint("credits_added", { mode: "number" }),
+    status: text("status")
+      .$type<CryptoWebhookEventStatus>()
+      .notNull()
+      // New writers always choose an explicit state. `credited` is the
+      // rollout-safe database default so an older replica that still performs
+      // immediate credit cannot leave a balance effect mislabeled pending.
+      .default("credited"),
+    amountBase: numeric("amount_base", { precision: 78, scale: 0 }),
+    toAddress: text("to_address"),
+    contractAddress: text("contract_address"),
+    blockNumber: bigint("block_number", { mode: "bigint" }),
+    blockHash: text("block_hash"),
+    providerWebhookId: text("provider_webhook_id"),
+    providerEventId: text("provider_event_id"),
+    /** Monotonic incarnation token for the current mutable projection. The
+     * immutable observation table remains the full delivery history. */
+    observationGeneration: integer("observation_generation").notNull().default(1),
+    /** Generation whose evidence authorized the current credited state.
+     * Database constraints make generation-unaware confirmers fail closed. */
+    creditedGeneration: integer("credited_generation"),
     rawPayload: jsonb("raw_payload").notNull(),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    removedAt: timestamp("removed_at", { withTimezone: true }),
+    error: text("error"),
   },
   (t) => [
     uniqueIndex("idx_crypto_event_dedupe").on(t.chain, t.txHash, t.logIndex),
     index("idx_crypto_event_wallet").on(t.walletId),
+    index("idx_crypto_event_status").on(
+      t.status,
+      t.lastCheckedAt,
+      t.receivedAt,
+    ),
+    check(
+      "crypto_webhook_events_status_check",
+      sql`${t.status} IN ('pending', 'credited', 'removed', 'rejected', 'quarantined')`,
+    ),
+    check(
+      "crypto_webhook_events_optional_evidence_check",
+      sql`(${t.amountBase} IS NULL OR ${t.amountBase} > 0)
+        AND (${t.blockNumber} IS NULL OR ${t.blockNumber} >= 0)
+        AND (${t.blockHash} IS NULL OR ${t.blockHash} ~ '^0x[0-9a-f]{64}$')
+        AND (${t.providerWebhookId} IS NULL OR ${t.providerWebhookId} ~ '^[A-Za-z0-9_-]{1,128}$')
+        AND (${t.providerEventId} IS NULL OR ${t.providerEventId} ~ '^[A-Za-z0-9_-]{1,128}$')`,
+    ),
+    check(
+      "crypto_webhook_events_pending_evm_evidence_check",
+      sql`${t.status} <> 'pending'
+        OR ${t.chain} NOT IN ('ethereum', 'base', 'polygon', 'arbitrum', 'optimism')
+        OR (
+          ${t.walletId} IS NOT NULL
+          AND ${t.amountBase} IS NOT NULL
+          AND ${t.toAddress} ~* '^0x[0-9a-f]{40}$'
+          AND ${t.contractAddress} ~* '^0x[0-9a-f]{40}$'
+          AND ${t.txHash} ~ '^0x[0-9a-f]{64}$'
+          AND ${t.blockNumber} IS NOT NULL
+          AND ${t.blockHash} IS NOT NULL
+          AND ${t.providerWebhookId} IS NOT NULL
+          AND ${t.providerEventId} IS NOT NULL
+        )`,
+    ),
+    check(
+      "crypto_webhook_events_credited_effect_check",
+      sql`${t.status} <> 'credited' OR ${t.creditsAdded} IS NOT NULL`,
+    ),
+    check(
+      "crypto_webhook_events_observation_generation_check",
+      sql`${t.observationGeneration} > 0`,
+    ),
+    check(
+      "crypto_webhook_events_credited_generation_positive_check",
+      sql`${t.creditedGeneration} IS NULL OR ${t.creditedGeneration} > 0`,
+    ),
+    check(
+      "crypto_webhook_events_pending_generation_check",
+      sql`${t.status} <> 'pending' OR ${t.creditedGeneration} IS NULL`,
+    ),
+    check(
+      "crypto_webhook_events_credited_generation_check",
+      sql`${t.status} <> 'credited'
+        OR (
+          ${t.creditedGeneration} IS NOT NULL
+          AND ${t.creditedGeneration} = ${t.observationGeneration}
+        )`,
+    ),
+  ],
+);
+
+/** Immutable EVM delivery/generation evidence.
+ *
+ * Keeping live and removed observations by block identity prevents a delayed
+ * removal for block A from overwriting or reversing a newer block B. Provider
+ * credentials and response diagnostics do not belong here. */
+export const cryptoWebhookEventObservations = economySchema.table(
+  "crypto_webhook_event_observations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => cryptoWebhookEvents.id, { onDelete: "cascade" }),
+    walletId: uuid("wallet_id").references(() => wallets.id),
+    amountBase: numeric("amount_base", { precision: 78, scale: 0 }).notNull(),
+    toAddress: text("to_address").notNull(),
+    contractAddress: text("contract_address").notNull(),
+    blockNumber: bigint("block_number", { mode: "bigint" }).notNull(),
+    blockHash: text("block_hash").notNull(),
+    removed: boolean("removed").notNull(),
+    providerWebhookId: text("provider_webhook_id").notNull(),
+    providerEventId: text("provider_event_id").notNull(),
+    rawPayload: jsonb("raw_payload").notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uq_crypto_event_observation_generation").on(
+      t.eventId,
+      t.blockNumber,
+      t.blockHash,
+      t.removed,
+    ),
+    index("idx_crypto_event_observation_event").on(t.eventId, t.receivedAt),
+    check(
+      "crypto_event_observation_block_hash",
+      sql`${t.blockNumber} >= 0
+        AND ${t.blockHash} ~ '^0x[0-9a-f]{64}$'
+        AND ${t.amountBase} > 0
+        AND ${t.toAddress} ~* '^0x[0-9a-f]{40}$'
+        AND ${t.contractAddress} ~* '^0x[0-9a-f]{40}$'`,
+    ),
+    check(
+      "crypto_event_observation_provider_ids",
+      sql`${t.providerWebhookId} ~ '^[A-Za-z0-9_-]{1,128}$' AND ${t.providerEventId} ~ '^[A-Za-z0-9_-]{1,128}$'`,
+    ),
   ],
 );
 

@@ -1089,6 +1089,20 @@ export function renderReachableDoorsSection(
         `  - MCP: \`${door.agent_entrypoints.mcp.method} ${door.agent_entrypoints.mcp.endpoint}\` · tool \`${door.agent_entrypoints.mcp.tool}\` · resource \`${door.agent_entrypoints.mcp.resource}\``,
       );
     }
+    if (door.invocation_witness) {
+      const witness = door.invocation_witness;
+      const adapter = witness.adapter;
+      lines.push(
+        `  - Invocation witness: \`${witness.schema}\``,
+        `  - Write: \`${witness.write.method} ${witness.write.path_template}\` · ${witness.write.authentication} · ${witness.write.authorization} · ${witness.write.state_gate}. ${witness.write.effect}`,
+        `  - Read: \`${witness.read.method} ${witness.read.path_template}\` · ${witness.read.authentication} · ${witness.read.state_gate}. ${witness.read.disclosure}`,
+        `  - Adapter: \`${adapter.package}@${adapter.version}\` · \`${adapter.protocol}\` · ${adapter.source}`,
+        `  - LOVE manifest: ${adapter.love_manifest}`,
+        `  - Distribution (observed ${adapter.distribution.observed_at}): love=${adapter.distribution.love}; npm=${adapter.distribution.npm}; github_release=${adapter.distribution.github_release}`,
+        `  - Runtime availability: ${adapter.availability}; hosted=${adapter.hosted}; custody=${adapter.custody}; hosted_rpc=${adapter.hosted_rpc}; deployed_bridge=${adapter.deployed_bridge}`,
+        `  - Verification boundary: ${witness.verification_boundary}`,
+      );
+    }
     lines.push(`  *${door._note}*`);
     if (door.boundary) {
       lines.push(

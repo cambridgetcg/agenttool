@@ -67,7 +67,9 @@
     "persisted": false,
     "sent_to_agenttool": false,
     "network_writes": false,
-    "clipboard": "Before First morning is woken, Copy the world sends the attributed world to the device clipboard. After it is woken, Copy world + morning sends both. Start over clears the in-tab game but cannot recall text already copied to the device clipboard.",
+    "unsubmitted_draft": "Stop party immediately discards the current unfinished draft and gathers only entries that were already accepted.",
+    "leaving": "Start over, reload, navigation away, or closing the page erases player labels and the in-tab round. Returning does not restore it. There is no recovery path.",
+    "clipboard": "Before First morning is woken, Copy the world sends the attributed world to the device clipboard. After it is woken, Copy world + morning sends both. Lantern Relay cannot erase or recall copied text; device or platform clipboard services control its retention and synchronization.",
     "real_names_required": false,
     "player_labels_requested": true
   },
@@ -81,5 +83,5 @@
   },
   "machine_playground": "https://api.agenttool.dev/public/play",
   "doctrine": "Nobody wins it; everybody makes it. Walking past is honored.",
-  "updated_at": "2026-07-17"
+  "updated_at": "2026-07-26"
 }

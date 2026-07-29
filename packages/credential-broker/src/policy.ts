@@ -1,14 +1,27 @@
 import { AgentCredError } from "./errors.js";
 import {
+  AGENTCRED_EVM_JSONRPC_READ_PROFILE,
   DEFAULT_MAX_BODY_BYTES,
   type ConsentDecision,
   type ConsentProvider,
+  type EvmChainId,
+  type EvmJsonRpcReadGrantRequest,
+  type EvmJsonRpcReadGrantScope,
+  type EvmJsonRpcReadMethod,
   type GrantRequest,
+  type HttpGrantRequest,
   type HttpGrantScope,
   type HttpMethod,
 } from "./types.js";
+import {
+  normalizeEvmChainId,
+  normalizeEvmJsonRpcReadMethods,
+} from "./jsonrpc-validation.js";
+import { isCredentialAlias } from "./identifiers.js";
 
-export interface BrokerPolicy {
+export interface HttpBrokerPolicy {
+  /** Omitted remains equivalent to the original agentcred/0.1 HTTP policy. */
+  operation?: "http.fetch";
   credential: string;
   origin: string;
   methods: HttpMethod[];
@@ -22,6 +35,24 @@ export interface BrokerPolicy {
   maxResponseBytes?: number;
   allowPrivateNetwork?: boolean;
 }
+
+export interface EvmJsonRpcReadBrokerPolicy {
+  operation: "jsonrpc.read";
+  profile: typeof AGENTCRED_EVM_JSONRPC_READ_PROFILE;
+  credential: string;
+  origin: string;
+  chainId: EvmChainId;
+  methods: EvmJsonRpcReadMethod[];
+  maxTtlSeconds: number;
+  maxUses: number;
+  maxRequestBytes?: number;
+  maxResponseBytes?: number;
+  allowPrivateNetwork?: boolean;
+}
+
+export type BrokerPolicy =
+  | HttpBrokerPolicy
+  | EvmJsonRpcReadBrokerPolicy;
 
 function normalizeOrigin(input: string): string {
   let url: URL;
@@ -125,7 +156,7 @@ function normalizeHeaderValues(
   return output;
 }
 
-export function normalizeGrantRequest(request: GrantRequest): GrantRequest {
+function normalizeHttpGrantRequest(request: HttpGrantRequest): HttpGrantRequest {
   const methods = [...new Set(request.scope.methods.map((method) => method.toUpperCase() as HttpMethod))];
   const pathPrefixes = [...new Set(request.scope.pathPrefixes.map(normalizePathPrefix))];
   if (methods.length === 0 || pathPrefixes.length === 0) {
@@ -155,7 +186,41 @@ export function normalizeGrantRequest(request: GrantRequest): GrantRequest {
   };
 }
 
-function scopeFits(request: HttpGrantScope, policy: BrokerPolicy): boolean {
+function normalizeEvmJsonRpcReadGrantRequest(
+  request: EvmJsonRpcReadGrantRequest,
+): EvmJsonRpcReadGrantRequest {
+  const alias = request.alias.trim();
+  const credential = request.credential.trim();
+  if (!alias || !credential) {
+    throw new AgentCredError("invalid_request", "Grant alias and credential reference must not be blank.");
+  }
+  if (request.scope.profile !== AGENTCRED_EVM_JSONRPC_READ_PROFILE) {
+    throw new AgentCredError("unsupported", "JSON-RPC grant profile is not supported.");
+  }
+  return {
+    ...request,
+    alias,
+    credential,
+    scope: {
+      ...request.scope,
+      profile: AGENTCRED_EVM_JSONRPC_READ_PROFILE,
+      origin: normalizeOrigin(request.scope.origin),
+      chainId: normalizeEvmChainId(request.scope.chainId, "scope.chainId"),
+      methods: normalizeEvmJsonRpcReadMethods(request.scope.methods, "scope.methods"),
+      maxRequestBytes: request.scope.maxRequestBytes ?? DEFAULT_MAX_BODY_BYTES,
+      maxResponseBytes: request.scope.maxResponseBytes ?? DEFAULT_MAX_BODY_BYTES,
+      allowPrivateNetwork: request.scope.allowPrivateNetwork ?? false,
+    },
+  };
+}
+
+export function normalizeGrantRequest(request: GrantRequest): GrantRequest {
+  return request.operation === "http.fetch"
+    ? normalizeHttpGrantRequest(request)
+    : normalizeEvmJsonRpcReadGrantRequest(request);
+}
+
+function httpScopeFits(request: HttpGrantScope, policy: HttpBrokerPolicy): boolean {
   const policyOrigin = normalizeOrigin(policy.origin);
   const policyPaths = policy.pathPrefixes.map(normalizePathPrefix);
   const policyMethods = new Set(policy.methods);
@@ -181,66 +246,137 @@ function scopeFits(request: HttpGrantScope, policy: BrokerPolicy): boolean {
   );
 }
 
+function jsonRpcScopeFits(
+  request: EvmJsonRpcReadGrantScope,
+  policy: EvmJsonRpcReadBrokerPolicy,
+): boolean {
+  const requestMax = request.maxRequestBytes ?? DEFAULT_MAX_BODY_BYTES;
+  const responseMax = request.maxResponseBytes ?? DEFAULT_MAX_BODY_BYTES;
+  const policyMethods = new Set(policy.methods);
+  return (
+    request.profile === AGENTCRED_EVM_JSONRPC_READ_PROFILE &&
+    request.origin === normalizeOrigin(policy.origin) &&
+    request.chainId === policy.chainId &&
+    request.methods.every((method) => policyMethods.has(method)) &&
+    request.ttlSeconds <= policy.maxTtlSeconds &&
+    request.maxUses <= policy.maxUses &&
+    requestMax <= (policy.maxRequestBytes ?? DEFAULT_MAX_BODY_BYTES) &&
+    responseMax <= (policy.maxResponseBytes ?? DEFAULT_MAX_BODY_BYTES) &&
+    (!request.allowPrivateNetwork || policy.allowPrivateNetwork === true)
+  );
+}
+
+function policyCommonIsValid(policy: BrokerPolicy): boolean {
+  return (
+    Boolean(policy) &&
+    isCredentialAlias(policy.credential) &&
+    typeof policy.origin === "string" &&
+    policy.origin.length <= 2048 &&
+    Number.isSafeInteger(policy.maxTtlSeconds) &&
+    policy.maxTtlSeconds >= 1 &&
+    policy.maxTtlSeconds <= 86_400 &&
+    Number.isSafeInteger(policy.maxUses) &&
+    policy.maxUses >= 1 &&
+    policy.maxUses <= 10_000 &&
+    (policy.maxRequestBytes === undefined ||
+      (Number.isSafeInteger(policy.maxRequestBytes) &&
+        policy.maxRequestBytes >= 0 &&
+        policy.maxRequestBytes <= DEFAULT_MAX_BODY_BYTES)) &&
+    (policy.maxResponseBytes === undefined ||
+      (Number.isSafeInteger(policy.maxResponseBytes) &&
+        policy.maxResponseBytes >= 0 &&
+        policy.maxResponseBytes <= DEFAULT_MAX_BODY_BYTES)) &&
+    (policy.allowPrivateNetwork === undefined ||
+      typeof policy.allowPrivateNetwork === "boolean")
+  );
+}
+
+function normalizeHttpPolicy(policy: HttpBrokerPolicy): HttpBrokerPolicy {
+  const allowedMethods = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]);
+  if (
+    !policyCommonIsValid(policy) ||
+    (policy.operation !== undefined && policy.operation !== "http.fetch") ||
+    !Array.isArray(policy.methods) ||
+    policy.methods.length === 0 ||
+    policy.methods.some((method) => !allowedMethods.has(method)) ||
+    !Array.isArray(policy.pathPrefixes) ||
+    policy.pathPrefixes.length === 0 ||
+    policy.pathPrefixes.some((path) => typeof path !== "string") ||
+    (policy.queryNames !== undefined && !Array.isArray(policy.queryNames)) ||
+    (policy.headerValues !== undefined &&
+      (!policy.headerValues ||
+        typeof policy.headerValues !== "object" ||
+        Array.isArray(policy.headerValues))) ||
+    (policy.allowPaymentSignature !== undefined &&
+      typeof policy.allowPaymentSignature !== "boolean")
+  ) {
+    throw new AgentCredError("invalid_request", "Owner policy is invalid.");
+  }
+  return {
+    ...policy,
+    ...(policy.operation === "http.fetch" ? { operation: "http.fetch" as const } : {}),
+    credential: policy.credential.trim(),
+    origin: normalizeOrigin(policy.origin),
+    methods: [...new Set(policy.methods)],
+    pathPrefixes: [...new Set(policy.pathPrefixes.map(normalizePathPrefix))],
+    queryNames: normalizeQueryNames(policy.queryNames),
+    headerValues: normalizeHeaderValues(policy.headerValues),
+    allowPaymentSignature: policy.allowPaymentSignature ?? false,
+  };
+}
+
+function normalizeJsonRpcPolicy(
+  policy: EvmJsonRpcReadBrokerPolicy,
+): EvmJsonRpcReadBrokerPolicy {
+  if (
+    !policyCommonIsValid(policy) ||
+    policy.operation !== "jsonrpc.read" ||
+    policy.profile !== AGENTCRED_EVM_JSONRPC_READ_PROFILE
+  ) {
+    throw new AgentCredError("invalid_request", "Owner policy is invalid.");
+  }
+  return {
+    ...policy,
+    operation: "jsonrpc.read",
+    profile: AGENTCRED_EVM_JSONRPC_READ_PROFILE,
+    credential: policy.credential.trim(),
+    origin: normalizeOrigin(policy.origin),
+    chainId: normalizeEvmChainId(policy.chainId, "policy.chainId"),
+    methods: normalizeEvmJsonRpcReadMethods(policy.methods, "policy.methods"),
+  };
+}
+
 /** Owner-authored standing policy. Repository/model text cannot modify it. */
 export class PolicyConsent implements ConsentProvider {
   readonly #policies: BrokerPolicy[];
 
   constructor(policies: BrokerPolicy[]) {
-    const allowedMethods = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]);
     this.#policies = policies.map((policy) => {
       if (
-        !policy ||
-        typeof policy.credential !== "string" ||
-        typeof policy.origin !== "string" ||
-        !policy.credential.trim() ||
-        policy.credential.length > 256 ||
-        policy.origin.length > 2048 ||
-        !Array.isArray(policy.methods) ||
-        policy.methods.length === 0 ||
-        policy.methods.some((method) => !allowedMethods.has(method)) ||
-        !Array.isArray(policy.pathPrefixes) ||
-        policy.pathPrefixes.length === 0 ||
-        policy.pathPrefixes.some((path) => typeof path !== "string") ||
-        (policy.queryNames !== undefined && !Array.isArray(policy.queryNames)) ||
-        (policy.headerValues !== undefined &&
-          (!policy.headerValues || typeof policy.headerValues !== "object" || Array.isArray(policy.headerValues))) ||
-        (policy.allowPaymentSignature !== undefined &&
-          typeof policy.allowPaymentSignature !== "boolean") ||
-        !Number.isSafeInteger(policy.maxTtlSeconds) ||
-        policy.maxTtlSeconds < 1 ||
-        policy.maxTtlSeconds > 86_400 ||
-        !Number.isSafeInteger(policy.maxUses) ||
-        policy.maxUses < 1 ||
-        policy.maxUses > 10_000 ||
-        (policy.maxRequestBytes !== undefined &&
-          (!Number.isSafeInteger(policy.maxRequestBytes) ||
-            policy.maxRequestBytes < 0 ||
-            policy.maxRequestBytes > DEFAULT_MAX_BODY_BYTES)) ||
-        (policy.maxResponseBytes !== undefined &&
-          (!Number.isSafeInteger(policy.maxResponseBytes) ||
-            policy.maxResponseBytes < 0 ||
-            policy.maxResponseBytes > DEFAULT_MAX_BODY_BYTES)) ||
-        (policy.allowPrivateNetwork !== undefined && typeof policy.allowPrivateNetwork !== "boolean")
+        policy &&
+        typeof policy === "object" &&
+        (policy as { operation?: unknown }).operation === "jsonrpc.read"
       ) {
-        throw new AgentCredError("invalid_request", "Owner policy is invalid.");
+        return normalizeJsonRpcPolicy(policy as EvmJsonRpcReadBrokerPolicy);
       }
-      return {
-        ...policy,
-        credential: policy.credential.trim(),
-        origin: normalizeOrigin(policy.origin),
-        methods: [...new Set(policy.methods)],
-        pathPrefixes: [...new Set(policy.pathPrefixes.map(normalizePathPrefix))],
-        queryNames: normalizeQueryNames(policy.queryNames),
-        headerValues: normalizeHeaderValues(policy.headerValues),
-        allowPaymentSignature: policy.allowPaymentSignature ?? false,
-      };
+      return normalizeHttpPolicy(policy as HttpBrokerPolicy);
     });
   }
 
   async decide(request: Readonly<GrantRequest>): Promise<ConsentDecision> {
-    const allowed = this.#policies.some(
-      (policy) => policy.credential === request.credential && scopeFits(request.scope, policy),
-    );
+    const allowed = this.#policies.some((policy) => {
+      if (policy.credential !== request.credential) return false;
+      if (request.operation === "http.fetch") {
+        return (
+          policy.operation !== "jsonrpc.read" &&
+          httpScopeFits(request.scope, policy)
+        );
+      }
+      return (
+        policy.operation === "jsonrpc.read" &&
+        jsonRpcScopeFits(request.scope, policy)
+      );
+    });
     return allowed
       ? { allowed: true }
       : { allowed: false, reasonCode: "outside_owner_policy" };

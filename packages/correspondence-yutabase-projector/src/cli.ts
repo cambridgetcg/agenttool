@@ -13,16 +13,46 @@ import { safeErrorText } from "./errors.js";
 import { installProjector } from "./preflight.js";
 import { runOnce } from "./projector.js";
 
+const USAGE =
+  "usage: agenttool-correspondence-yutabase-projector <install|run-once|status>";
+
+const HELP = `${USAGE}
+
+Private loopback-only Correspondence → YUTABASE projector.
+
+Commands:
+  install   Create and verify the package-owned local schema and capability role
+  run-once  Replay from the durable cursor until caught up or quarantined
+  status    Read checkpoint, poll, and quarantine status without projecting
+
+Configuration:
+  AGENTTOOL_YUTABASE_TARGET_URL
+  AGENTTOOL_YUTABASE_CLAIMANT
+  AGENTTOOL_YUTABASE_SOURCE_URL       (status, run-once)
+  AGENTTOOL_YUTABASE_SOURCE_TOKEN     (run-once)
+  AGENTTOOL_YUTABASE_PROJECT_ID       (status, run-once)
+  AGENTTOOL_YUTABASE_REPOSITORY_ID    (status, run-once)
+
+This tool refuses non-loopback endpoints. It does not grant permission,
+run a daemon, deploy a service, or make YUTABASE authoritative.
+`;
+
 async function main(): Promise<void> {
-  const command = process.argv[2];
+  const args = process.argv.slice(2);
+  const command = args[0];
+  if (
+    args.length === 1 &&
+    (command === "--help" || command === "-h" || command === "help")
+  ) {
+    process.stdout.write(HELP);
+    return;
+  }
   if (
     command === undefined ||
-    process.argv.length !== 3 ||
+    args.length !== 1 ||
     !["install", "run-once", "status"].includes(command)
   ) {
-    process.stderr.write(
-      "usage: agenttool-correspondence-yutabase-projector <install|run-once|status>\n",
-    );
+    process.stderr.write(`${USAGE}\n`);
     process.exitCode = 2;
     return;
   }

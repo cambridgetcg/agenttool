@@ -12,20 +12,21 @@ import {
   createPublicClient,
   createWalletClient,
   encodeFunctionData,
-  http,
   keccak256,
+  TransactionNotFoundError,
   type Address,
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 import type { EvmChain } from "./chains";
+import { assertSafeEvmNonce } from "./evm-payout-nonce";
 import { deriveEvmKeypair } from "./hd";
 import {
   activeChainId,
   activeMnemonic,
   activeUsdcAddress,
-  rpcUrl,
+  evmRpcTransport,
 } from "./network";
 
 /** Minimal ABI fragment for ERC-20 `transfer(to, amount)`. */
@@ -59,6 +60,17 @@ export interface SignedTx {
   nonce: number;
 }
 
+export function evmTransactionIdentityMatches(
+  expected: string,
+  observed: string,
+): boolean {
+  return (
+    /^0x[0-9a-f]{64}$/i.test(expected) &&
+    /^0x[0-9a-f]{64}$/i.test(observed) &&
+    expected.toLowerCase() === observed.toLowerCase()
+  );
+}
+
 function bytesToHex0x(b: Uint8Array): Hex {
   let s = "0x";
   for (let i = 0; i < b.length; i++) {
@@ -77,12 +89,13 @@ export async function buildAndSignUsdcTransfer(
   const account = privateKeyToAccount(bytesToHex0x(keypair.privateKey));
   const usdcAddress = activeUsdcAddress(p.chain) as Address;
   const chainId = activeChainId(p.chain);
-  const url = rpcUrl(p.chain);
 
-  const publicClient = createPublicClient({ transport: http(url) });
+  const publicClient = createPublicClient({
+    transport: evmRpcTransport(p.chain),
+  });
   const walletClient = createWalletClient({
     account,
-    transport: http(url),
+    transport: evmRpcTransport(p.chain),
   });
 
   const data = encodeFunctionData({
@@ -103,13 +116,14 @@ export async function buildAndSignUsdcTransfer(
     }),
     publicClient.getGasPrice(),
   ]);
+  const safeNonce = assertSafeEvmNonce(nonce);
 
   const serialized = await walletClient.signTransaction({
     chain: null,
     to: usdcAddress,
     data,
     gas,
-    nonce: Number(nonce),
+    nonce: safeNonce,
     gasPrice,
     chainId,
   });
@@ -121,7 +135,7 @@ export async function buildAndSignUsdcTransfer(
     toAddress: p.destinationAddress,
     contractAddress: usdcAddress,
     chainId,
-    nonce: Number(nonce),
+    nonce: safeNonce,
   };
 }
 
@@ -132,7 +146,13 @@ export async function submitSignedTx(
   serialized: Hex,
 ): Promise<Hex> {
   const publicClient = createPublicClient({
-    transport: http(rpcUrl(chain)),
+    // Viem's generic HTTP transport retries by default. Re-dispatching the
+    // same signed bytes has the same hash, but the worker's one-attempt
+    // ambiguity boundary should still be literal and observable.
+    transport: evmRpcTransport(chain, {
+      retryCount: 0,
+      timeout: 10_000,
+    }),
   });
   return await publicClient.sendRawTransaction({
     serializedTransaction: serialized,
@@ -141,19 +161,27 @@ export async function submitSignedTx(
 
 /** Check whether a tx hash exists on chain. Used for crash-recovery: if the
  *  worker's submit call errored but the tx actually landed (network blip
- *  post-submit), we can detect it and avoid double-spending on retry. */
+ *  post-submit), we can detect it and avoid double-spending on retry. RPC
+ *  lookup failures throw so callers cannot mistake provider unavailability
+ *  for positive proof that the transaction is absent. */
 export async function txExistsOnChain(
   chain: EvmChain,
   txHash: Hex,
+  timeoutMs = 10_000,
 ): Promise<boolean> {
   const publicClient = createPublicClient({
-    transport: http(rpcUrl(chain)),
+    transport: evmRpcTransport(chain, { timeout: timeoutMs }),
   });
   try {
     const tx = await publicClient.getTransaction({ hash: txHash });
-    return Boolean(tx);
-  } catch {
-    return false;
+    if (!tx) return false;
+    if (!evmTransactionIdentityMatches(txHash, tx.hash)) {
+      throw new Error("evm_transaction_identity_mismatch");
+    }
+    return true;
+  } catch (err) {
+    if (err instanceof TransactionNotFoundError) return false;
+    throw err;
   }
 }
 
@@ -161,6 +189,61 @@ export interface ConfirmResult {
   status: "pending" | "confirmed" | "reverted";
   blockNumber?: bigint;
   confirmations?: bigint;
+  evidenceError?: "receipt_transaction_mismatch";
+}
+
+export interface EvmReceiptFinalityInput {
+  expectedTransactionHash: string;
+  receiptTransactionHash: string;
+  receiptStatus: "success" | "reverted";
+  receiptBlockNumber: bigint;
+  currentBlockNumber: bigint;
+  threshold: number;
+}
+
+/** Classify both success and revert only after the configured block threshold.
+ * An unconfirmed revert can disappear in a reorg and cannot authorize a
+ * terminal refund. */
+export function classifyEvmReceiptFinality(
+  input: EvmReceiptFinalityInput,
+): ConfirmResult {
+  if (!Number.isSafeInteger(input.threshold) || input.threshold < 1) {
+    throw new Error("invalid_evm_confirmation_threshold");
+  }
+  if (
+    !/^0x[0-9a-f]{64}$/i.test(input.expectedTransactionHash) ||
+    !/^0x[0-9a-f]{64}$/i.test(input.receiptTransactionHash)
+  ) {
+    throw new Error("invalid_evm_transaction_identity");
+  }
+  if (
+    !evmTransactionIdentityMatches(
+      input.expectedTransactionHash,
+      input.receiptTransactionHash,
+    )
+  ) {
+    return {
+      status: "pending",
+      evidenceError: "receipt_transaction_mismatch",
+    };
+  }
+
+  const confirmations =
+    input.currentBlockNumber >= input.receiptBlockNumber
+      ? input.currentBlockNumber - input.receiptBlockNumber
+      : 0n;
+  if (confirmations < BigInt(input.threshold)) {
+    return {
+      status: "pending",
+      blockNumber: input.receiptBlockNumber,
+      confirmations,
+    };
+  }
+  return {
+    status: input.receiptStatus === "reverted" ? "reverted" : "confirmed",
+    blockNumber: input.receiptBlockNumber,
+    confirmations,
+  };
 }
 
 /** Poll a tx for confirmation. */
@@ -168,9 +251,13 @@ export async function confirmTx(
   chain: EvmChain,
   txHash: Hex,
   threshold: number,
+  timeoutMs = 10_000,
 ): Promise<ConfirmResult> {
+  if (!Number.isSafeInteger(threshold) || threshold < 1) {
+    throw new Error("invalid_evm_confirmation_threshold");
+  }
   const publicClient = createPublicClient({
-    transport: http(rpcUrl(chain)),
+    transport: evmRpcTransport(chain, { timeout: timeoutMs }),
   });
   let receipt;
   try {
@@ -180,21 +267,13 @@ export async function confirmTx(
   }
   if (!receipt) return { status: "pending" };
 
-  if (receipt.status === "reverted") {
-    return { status: "reverted", blockNumber: receipt.blockNumber };
-  }
   const currentBlock = await publicClient.getBlockNumber();
-  const confirmations = currentBlock - receipt.blockNumber;
-  if (confirmations >= BigInt(threshold)) {
-    return {
-      status: "confirmed",
-      blockNumber: receipt.blockNumber,
-      confirmations,
-    };
-  }
-  return {
-    status: "pending",
-    blockNumber: receipt.blockNumber,
-    confirmations,
-  };
+  return classifyEvmReceiptFinality({
+    expectedTransactionHash: txHash,
+    receiptTransactionHash: receipt.transactionHash,
+    receiptStatus: receipt.status,
+    receiptBlockNumber: receipt.blockNumber,
+    currentBlockNumber: currentBlock,
+    threshold,
+  });
 }

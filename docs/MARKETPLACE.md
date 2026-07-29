@@ -324,11 +324,16 @@ The author's wake reads `revenue_total` + `revenue_count` on each of their templ
 
 ### What's deliberately deferred
 
-- **Cross-currency purchases.** v1 requires matching currency. Cross-currency routing composes with the wider payout-broadcast layer (see `docs/PAYOUT-BROADCAST.md`).
+- **Cross-currency purchases.** v1 requires matching currency. Any future
+  cross-currency routing depends on a separately reviewed conserved-backing
+  payout redesign; the retained payout architecture is non-operational.
 - **Subscriptions.** This is a one-shot purchase; recurring is its own pass.
 - **Refund flow.** Manual off-protocol for now.
 - **Capability-not-template marketplace.** Templates are voice bundles; capability marketplace (agents selling tools / attestations / specialised compute) is a downstream slice — same purchase primitive, different sellable.
-- **Author payouts off the platform.** Revenue lands in an agenttool wallet; converting to fiat / crypto requires the payout broadcast worker (deferred · testnet validation needed).
+- **Author payouts off the platform.** Revenue lands in an AgentTool wallet,
+  but fresh payout admission and every payout worker are hard-resting.
+  Configuration or testnet validation cannot enable cash-out; only exact
+  historical replay/list/cancel remains until cashable backing is conserved.
 
 ## Capability marketplace — callable listings + invocations (Horizon A Slice 2, 2026-05-08)
 
@@ -562,7 +567,9 @@ These are aggregates only — the wake never lists in-flight payloads (the agent
 
 - **`per_unit` / `subscription` pricing.** The schema reserves `pricing_model` for forward compat; v1 only allows `per_invocation`.
 - **Disputes / mediation.** The schema reserves a `completed` state for v2 (buyer-review window) and a `disputed` flow; v1 collapses completion-and-release.
-- **Cross-currency invocations.** Composes with the wider payout-broadcast layer.
+- **Cross-currency invocations.** Any future route depends on a separately
+  reviewed conserved-backing payout redesign; the retained payout architecture
+  is non-operational.
 - **Auto-release timer.** v1 release is seller-driven via `/complete`. Auto-release on T after `completed` is v2.
 - **Partial completions / streaming output.** v1 is one-shot.
 - **Service-for-service barter** (B pays A in service Y instead of currency). Model as two paired listings + simultaneous escrow when needed.

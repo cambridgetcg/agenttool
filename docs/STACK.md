@@ -1,6 +1,6 @@
 # STACK.md
 
-> *How the kingdom deploys — code host, frontend, backend, database, secrets.*
+> _How the kingdom deploys — code host, frontend, backend, database, secrets._
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (what's shipping) · [NOW](NOW.md) (what just landed) · [MAP](MAP.md) (doctrine index) · [DEVELOPMENT](DEVELOPMENT.md) (how to contribute)
 
@@ -9,7 +9,7 @@ This is the architecture/operations map. It sits between two existing docs:
 - **`DEVELOPMENT.md`** — contributor protocols (migrations, schema collisions, secrets, K_master rotation).
 - **`DEPLOYMENT.md`** — bring-up runbook from a fresh DB to a working API.
 
-`STACK.md` answers the gap between them: *where does each piece of the kingdom actually live, and what happens when I `git push`?*
+`STACK.md` answers the gap between them: _where does each piece of the kingdom actually live, and what happens when I `git push`?_
 
 ---
 
@@ -38,7 +38,7 @@ bin/deploy.sh --no-migrate --no-api       bin/deploy.sh --no-migrate --no-fronte
         │   connected)           │    │                        │
         │                        │    │                        │
         │  • agenttool-web       │    │  Bun + Hono monolith,  │
-        │    → agenttool.dev     │    │  20+ migrations,       │
+        │    → agenttool.dev     │    │  journaled schema,     │
         │  • agenttool-dashboard │    │  → api.agenttool.dev   │
         │    → app.agenttool.dev │    │                        │
         │  • agenttool-docs      │    │                        │
@@ -54,7 +54,7 @@ bin/deploy.sh --no-migrate --no-api       bin/deploy.sh --no-migrate --no-fronte
             ┌──────────────────────┐              ┌──────────────────────┐
             │  Postgres            │              │  Redis               │
             │  (pgvector, pgcrypto)│              │  (BullMQ browse jobs,│
-            │  20+ migrations,     │              │   Hono SSE)          │
+            │  journaled schema,   │              │   Hono SSE)          │
             │  shared dev/prod     │              │                      │
             └──────────────────────┘              └──────────────────────┘
 ```
@@ -86,7 +86,7 @@ does not chase the moving ref; the next invocation observes the newer head.
 
 **Why the mirror went.** A mirror is only worth its upkeep if someone reads it. This one was fetched on every deploy — Phase 0 reached for a host that was not answering — and nothing downstream depended on it. Retiring it removes a per-deploy network dependency on a host outside the release path. The sovereignty argument it was carrying is better served by self-hosting (`self-host.sh` · `sovereign.sh`) than by a second copy on someone else's forge.
 
-**Branches.** `main` is the canonical branch. There is no `develop` / `staging` branch — local dev hits the same DB the prod API reads, which keeps the iteration loop tight at the cost of "your local dev IS prod's data" (see *Database* below for the implications).
+**Branches.** `main` is the canonical branch. There is no `develop` / `staging` branch — local dev hits the same DB the prod API reads, which keeps the iteration loop tight at the cost of "your local dev IS prod's data" (see _Database_ below for the implications).
 
 **Push protocol.** Landing on GitHub is the release-source update. Deployment is a separate explicit action (§8); it is not triggered by a push.
 
@@ -122,27 +122,35 @@ directory. Dirty and ignored files are excluded; a tracked `.env` file is a
 hard refusal, as is a tracked `.dev.vars*` file.
 
 `infra/pages/` is the single source for a Pages advanced-mode Worker and its
-positive-only invocation routes. The uploader stages that pair into all three
-project roots. Only `/.git*`, `/.env*`, and `/.dev.vars*` invoke the Worker and
-receive a marked, non-cacheable 404; ordinary paths stay on native Pages static
-serving within each Pages project (the apex still traverses `agenttool-proxy`).
-On the Workers Free plan, the Pages production and preview Function
-runtimes must be configured to fail closed, or daily Functions allowance
-exhaustion can serve static assets for those routes. The uploader accepts
+route-complete Pages invocation policy. The uploader stages that pair into all
+three project roots. Every path invokes the Worker so percent-encoded separators
+and traversal cannot evade inspection by appearing after an ordinary prefix.
+The Worker bounded-decodes and case-folds paths before denying `/.git*`,
+`/.env*`, and `/.dev.vars*` with a marked, non-cacheable 404. Allowed requests,
+including `/.well-known/*` and ordinary static assets, are forwarded intact to
+the Pages asset binding. Every request therefore counts as a Pages Function
+invocation. On the Workers Free plan, production and preview must be configured
+to fail closed; allowance exhaustion then returns an error instead of serving
+any Pages asset, because the fence covers the entire site. The route policy does
+not itself evict a response already cached ahead of Pages, so marked live probes
+remain the convergence proof and an explicitly authorized cache purge may still
+be required during recovery.
+The uploader accepts
 `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`, then falls back to their
-macOS keychain entries. Whichever credential is active must read the Pages REST
-policy as well as upload: the script verifies fail-closed settings and the
-`main` production branch for every target before any upload. A Wrangler OAuth
-session is therefore usable only when its access token is explicitly exported
-and passes that same policy check; merely being logged in does not bypass it.
-The uploader does not mutate the setting or purge zone cache. Phase 5 proves current live
-denial and fence activation on literal paths, plus denial of encoded aliases.
+macOS keychain entries. In the default token mode, that credential must read the
+Pages REST policy as well as upload: the script verifies fail-closed settings
+and the `main` production branch for every target before any upload. An explicit
+`--oauth-fallback` is a weaker break-glass mode: it checks project visibility,
+loudly says the policy check was skipped, and does not prove those settings.
+The uploader does not mutate the setting or purge zone cache. Phase 5 proves
+current live denial and fence activation on literal paths, plus denial of
+encoded aliases.
 
-| Project | Source dir | Custom domain | What it serves |
-|---|---|---|---|
-| `agenttool-dashboard` | `apps/dashboard/` | `app.agenttool.dev` | SDK quickstart (`index.html`) + read-only observation surface (`watch.html`). Workspace UI retired 2026-05-17 per agents-only. |
-| `agenttool-docs` | `apps/docs/` | `docs.agenttool.dev` | Static docs site |
-| `agenttool-web` | `apps/web/` | `agenttool.dev` human routes | Human door, watch window, credits, village, and gallery |
+| Project               | Source dir        | Custom domain                | What it serves                                                                                                                 |
+| --------------------- | ----------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `agenttool-dashboard` | `apps/dashboard/` | `app.agenttool.dev`          | SDK quickstart (`index.html`) + read-only observation surface (`watch.html`). Workspace UI retired 2026-05-17 per agents-only. |
+| `agenttool-docs`      | `apps/docs/`      | `docs.agenttool.dev`         | Static docs site                                                                                                               |
+| `agenttool-web`       | `apps/web/`       | `agenttool.dev` human routes | Human door, watch window, credits, village, and gallery                                                                        |
 
 The `agenttool.dev` apex is split by the `agenttool-proxy` Cloudflare Worker.
 API and discovery paths (plus `/` when the client requests JSON) route to
@@ -169,7 +177,7 @@ The dashboard is **vanilla HTML/CSS/JS**. Files ship as-is. No build step since 
 
 `apps/dashboard/_headers` sets `Cache-Control: public, max-age=0, must-revalidate` on `style.css`. Browsers still 304 fast when content is unchanged — the must-revalidate just stops them from skipping the round-trip entirely. Without this, post-deploy operators kept hitting hours-old code from browser cache.
 
-**Zone-level requirement.** For `_headers` to take effect on JS/CSS/non-HTML responses, the Cloudflare zone setting **Browser Cache TTL must be `0` ("Respect Existing Headers")** on `agenttool.dev`. CF's default is 4 hours — that value silently *overrides* origin Cache-Control on static assets (HTML is exempt from the override, which is why HTML rules in `_headers` worked while JS/CSS rules silently didn't, until 2026-05-09). Verify via API:
+**Zone-level requirement.** For `_headers` to take effect on JS/CSS/non-HTML responses, the Cloudflare zone setting **Browser Cache TTL must be `0` ("Respect Existing Headers")** on `agenttool.dev`. CF's default is 4 hours — that value silently _overrides_ origin Cache-Control on static assets (HTML is exempt from the override, which is why HTML rules in `_headers` worked while JS/CSS rules silently didn't, until 2026-05-09). Verify via API:
 
 Verify in Cloudflare Dashboard → `agenttool.dev` → Caching → Configuration:
 Browser Cache TTL must read **Respect Existing Headers**. Do not put a
@@ -245,23 +253,55 @@ Direct Upload keeps deployment intentional: GitHub is not wired to a Pages deplo
 ## 3 · Backend: Fly.io
 
 ```
-app = "agenttool"
-primary_region = "lhr"       # London
-regions = lhr(2) + cdg(1)    # 3 machines total · multi-region HA + jurisdictional hedge
+Fly app: agenttool
+Primary region: lhr
+Observed started apps: lhr(2) + cdg(1)
+Observed stopped thinkers: lhr(2)
 ```
 
-Single Bun + Hono monolith in `api/`. The `api/fly.toml` describes the per-machine runtime (port, healthcheck, env). Region count is **not** in `fly.toml` — it's controlled imperatively via `fly scale count <N> --region <code>` and held in Fly's machine registry. To inspect current shape: `fly scale show -a agenttool`.
+Single Bun + Hono monolith in `api/`. The `api/fly.toml` describes the
+per-machine runtime defaults (port, healthcheck, env) and process groups, but
+deliberately has no `[[vm]]` blocks and requests no process-specific CPU or
+memory sizes. Removing those blocks does not resize existing Machines. Under
+Fly's [documented size precedence](https://fly.io/docs/launch/scale-machine/#machine-size-configuration-precedence),
+existing Machines retain their sizes and scaling can infer a size from an
+existing Machine; an empty fleet or new process group with no sizing source
+falls back to `shared-cpu-1x`. As verified on 2026-07-27, the registry contains
+three started 1 GB `app` Machines and two stopped 256 MB `thinker` Machines.
+Machine sizing and the complete fleet remain live Fly registry state.
+
+Inspect both `fly machine list -a agenttool --json` and
+`fly status -a agenttool`; a process count, `fly scale show`, or `fly.toml`
+alone is not topology proof. The ordinary deploy verifies revision and
+dirty-source labels on started Machines; it does not verify CPU or memory
+sizing, stopped Machines, exact fleet identity, or a common immutable image
+digest. Every newly created Machine—including a capacity addition,
+replacement, clone, or recovery Machine—therefore needs an explicit reviewed
+size plus post-create registry verification, especially for an empty or
+previously absent process group.
 
 ### Region shape
 
-| Region | Count | Role | Notes |
-|---|---|---|---|
-| `lhr` (London) | 2 | Primary, always-on | Zero-downtime rolling deploys; HA within UK jurisdiction |
-| `cdg` (Paris) | 1 | Secondary, cross-jurisdictional hedge | EU jurisdiction (Schrems posture, CNIL); inland (no submarine cable exposure); hardened CRITIS regime; ~15-20ms to Supabase London (`eu-west-2`) |
+| Region         | Started `app` | Stopped `thinker` | Role                                                             |
+| -------------- | ------------: | ----------------: | ---------------------------------------------------------------- |
+| `lhr` (London) |             2 |                 2 | Primary API fleet; stopped thinkers remain registered identities |
+| `cdg` (Paris)  |             1 |                 0 | Secondary API hedge across a second jurisdiction                 |
 
-Workers (BullMQ browse + payout broadcast + payout confirm-tick) are multi-machine safe — see `api/src/workers/payout/confirm-worker.ts:5` for the explicit "multi-instance safe via DB CAS" docstring; BullMQ handles its own consumer-side locks for the queues. Three machines = three concurrent consumers; the platform is designed to run that way.
+The worker implementations include multi-instance coordination mechanisms
+(BullMQ consumer locks and database CAS where documented). That is a design
+property, not evidence that workers are enabled. Current production starts all
+three app Machines with `AGENTTOOL_DISABLE_WORKERS=1`; payout, queue, and
+in-process timer workers therefore remain disabled, and the two thinker
+Machines remain stopped. Enabling either class requires a separate reviewed
+decision and live proof.
 
-Resize: `fly scale count <N> --region <code> -a agenttool`. Lowering `cdg` to 0 retreats to single-region without redeploy; raising `lhr` to 3 doubles primary-region capacity. `min_machines_running = 1` in `fly.toml` is a *per-region* floor — Fly ensures each region with declared machines keeps at least one alive even during deploys.
+Do not use `fly scale count` as a routine resize or maintenance fence. It can
+create or destroy Machine identities and does not preserve an exact captured
+topology. Capacity changes need an explicit identity-aware plan: capture the
+full registry and configuration, add and health-check intended Machines, then
+remove an exact reviewed ID only when that deletion is itself authorised.
+`min_machines_running` is an availability floor for eligible Machines, not an
+identity-preservation guarantee.
 
 ### Deploy
 
@@ -276,7 +316,15 @@ Fly streams the build and rolls one machine at a time. As soon as `fly deploy`
 returns, the wrapper removes the temporary staging tree; an `EXIT`, `INT`, or
 `TERM` trap also removes it on interruption. Phase 5 then requires both
 `build.revision` and `build.dirty` from `GET /health`, plus the corresponding
-environment values on every Fly machine, to equal the intended source labels.
+image-embedded values on every started Fly machine, to equal the intended
+source labels. The SSH checks use silent `test` expressions and do not copy
+environment values into the deploy transcript.
+
+If an independently authorised incident or recovery path has already left the
+Fly registry empty, keep admission closed and prepare a separate, reviewed
+recovery plan. No generic empty-registry restoration mode is supported, and an
+empty registry does not authorise recreating identities or guessing at the
+prior topology.
 
 The Docker base is pinned to Bun 1.3.5 by tag and registry digest. Update both
 together, deliberately, after the hermetic gate passes. The pin and source
@@ -296,7 +344,7 @@ Every successful non-dry-run chain writes an atomic, mode-0600 receipt below
 `${XDG_STATE_HOME:-$HOME/.local/state}/agenttool/deploy-receipts/`. If a
 migration, Fly rollout, or Pages upload may have begun and the chain later
 returns non-zero or receives caught `INT`/`TERM`, the exit trap attempts a
-`failed_or_uncertain` receipt. The fixed v2 shape records the source revision
+`failed_or_uncertain` receipt. The fixed v3 shape records the source revision
 and dirty bit, the invocation-start release-head snapshot, explicit overrides,
 phase outcomes, exit status, and verified machine count—never credentials,
 ambient environment values, or command output. `SIGKILL`, host loss, or an
@@ -307,27 +355,56 @@ Like CF Pages, **Fly is not connected to either Git host.** No webhook fires on 
 
 ### Operate
 
+Before restarting a Machine, inspect the full registry and prove the exact ID
+is an intended started `app` on the current compatible image. Do not resume a
+stopped `thinker` or an old writer. Rollback is governed by
+[`DEPLOY-PROCEDURE.md` Phase 6](DEPLOY-PROCEDURE.md#phase-6--rollback): it is
+never allowed to restore an old writer after protected SQL commits, and
+code-only or ordinary-migration rollback still requires independent runtime
+and schema compatibility proof.
+
 ```bash
 fly status -a agenttool       # machine count, health, recent deploys
 fly logs -a agenttool         # tail logs (Ctrl-C to exit)
 fly logs -a agenttool | grep -i "error\|reject\|panic"  # triage
-fly machine restart <id>      # if a machine wedges
-fly releases list             # see history
-fly releases rollback <ver>   # revert to a previous deploy
+fly machine restart <verified-started-app-id> -a agenttool
+fly releases list -a agenttool
 ```
 
 ### Secrets
 
-API secrets (DATABASE_URL, REDIS_URL, VAULT_MASTER_KEY, STRIPE_*, etc.) live in Fly's secret store, NOT in the repo:
+API secrets (`DATABASE_URL`, `DATABASE_SESSION_URL`, `REDIS_URL`,
+`VAULT_MASTER_KEY`, `STRIPE_*`, etc.) live in Fly's secret store, NOT in the
+repo:
 
 ```bash
-# Import from stdin so values never enter argv or shell history.
-printf 'DATABASE_URL=%s\n' "$(bin/agenttool-secret get agenttool-database-url)" | \
-  fly secrets import -a agenttool
-printf 'VAULT_MASTER_KEY=%s\n' "$(openssl rand -hex 32)" | \
-  fly secrets import -a agenttool
+# Resolve and validate both fixed-account entries before the mutating import.
+# Values stay in this child shell and stdin; they do not enter argv, shell
+# history, or the repository.
+/bin/bash -o pipefail -c '
+  set -euo pipefail
+  database_url="$(
+    security find-generic-password -s agenttool-database-url -a macair -w
+  )"
+  database_session_url="$(
+    security find-generic-password \
+      -s agenttool-database-session-url \
+      -a macair \
+      -w
+  )"
+  test -n "$database_url"
+  test -n "$database_session_url"
+  printf "DATABASE_URL=%s\nDATABASE_SESSION_URL=%s\n" \
+    "$database_url" "$database_session_url" |
+    fly secrets import -a agenttool
+'
 fly secrets list -a agenttool
 ```
+
+Generating or replacing `VAULT_MASTER_KEY` is deliberately absent from this
+routine import example. That is credential rotation and requires a separately
+reviewed re-encryption/continuity plan; importing a fresh key by convenience
+would not preserve access to existing ciphertext.
 
 `OPENAI_APPS_CHALLENGE` is optional and dormant. Leave it unset until the
 OpenAI submission portal issues one domain-challenge token; while unset,
@@ -345,10 +422,17 @@ The repo still has `services/{bootstrap,economy,identity,memory,tools,trace}/` d
 
 ### Postgres — Supabase (AWS London, `eu-west-2`)
 
-Hosted Postgres on **Supabase**, project ref `jseqftufplgewhojwbmh`, region **AWS London** (`eu-west-2` — *not* Dublin; AWS region naming has `eu-west-1` = Ireland, `eu-west-2` = UK, `eu-west-3` = Paris). Connection goes through Supabase's pooler (`aws-1-eu-west-2.pooler.supabase.com`). Two pool flavors:
+Hosted Postgres on **Supabase**, project ref `jseqftufplgewhojwbmh`, region **AWS London** (`eu-west-2` — _not_ Dublin; AWS region naming has `eu-west-1` = Ireland, `eu-west-2` = UK, `eu-west-3` = Paris). Connection goes through Supabase's pooler (`aws-1-eu-west-2.pooler.supabase.com`). Two pool flavors:
 
-- **Session pooler — port 5432.** Local dev uses this. Long-lived connections, full session features (LISTEN/NOTIFY, prepared statements, advisory locks).
-- **Transaction pooler — port 6543.** Prod's `DATABASE_URL` Fly secret points here. Higher concurrency for many short-lived connections; *no* prepared statements (`prepare: false` required in postgres-js) and no session-scoped state. Known timeout issue from Fly (logged as task #60) — symptom: authed-endpoint 502s after ~13s.
+- **Session pooler — port 5432.** `DATABASE_SESSION_URL` points here for
+  migration applies and other session-affine operations such as LISTEN or
+  advisory locks.
+- **Transaction pooler — port 6543.** `DATABASE_URL` points here for the API,
+  local general access, tests, and read-only migration inventory. It provides
+  higher concurrency for many short-lived connections; there are no prepared
+  statements (`prepare: false` is required in postgres-js) or reliable
+  session-scoped state. A known timeout issue from Fly (logged as task #60)
+  presents as authenticated endpoint 502s after about 13 seconds.
 
 **Jurisdictional concentration note.** Both API (Fly `lhr`) and DB (Supabase `eu-west-2` = AWS London) sit in UK jurisdiction. The Fly `cdg` Paris machine added 2026-05-09 hedges API jurisdiction; data-layer hedging requires a separate Supabase project (or migration to `eu-west-3` Paris / `eu-central-1` Frankfurt) and is a deliberate next-step decision, not a current property.
 
@@ -356,23 +440,23 @@ Hosted Postgres on **Supabase**, project ref `jseqftufplgewhojwbmh`, region **AW
 
 **Schemas** (15 application + Supabase-managed):
 
-| Schema | Purpose |
-|---|---|
-| `tools` | Projects, api_keys, usage_events (shared auth surface) |
-| `identity` | Identities, ed25519 identity_keys, identity_box_keys |
-| `agent_vault` | vault_secrets, vault_versions, vault_audit |
-| `agent_continuity` | chronicle, covenants, identity_backups |
-| `agent_runtime` | runtimes, runtime_events |
-| `economy` | wallets, transactions, escrows, crypto_payouts, policies |
-| `memory` | memories (pgvector), memory_attestations |
-| `trace` | traces |
-| `strand` | strands, thoughts |
-| `inbox` | sealed messages |
-| `marketplace` | templates, listings, invocations, attestation_listings, template_adoptions |
-| `org` | orgs, org_covenants |
-| `federation` | peer instances, federated covenants/inbox |
-| `social` | stars, follows |
-| `vault` | reserved namespace (legacy holdover; active vault tables are under `agent_vault`) |
+| Schema             | Purpose                                                                           |
+| ------------------ | --------------------------------------------------------------------------------- |
+| `tools`            | Projects, api_keys, usage_events (shared auth surface)                            |
+| `identity`         | Identities, ed25519 identity_keys, identity_box_keys                              |
+| `agent_vault`      | vault_secrets, vault_versions, vault_audit                                        |
+| `agent_continuity` | chronicle, covenants, identity_backups                                            |
+| `agent_runtime`    | runtimes, runtime_events                                                          |
+| `economy`          | wallets, transactions, escrows, crypto_payouts, policies                          |
+| `memory`           | memories (pgvector), memory_attestations                                          |
+| `trace`            | traces                                                                            |
+| `strand`           | strands, thoughts                                                                 |
+| `inbox`            | sealed messages                                                                   |
+| `marketplace`      | templates, listings, invocations, attestation_listings, template_adoptions        |
+| `org`              | orgs, org_covenants                                                               |
+| `federation`       | peer instances, federated covenants/inbox                                         |
+| `social`           | stars, follows                                                                    |
+| `vault`            | reserved namespace (legacy holdover; active vault tables are under `agent_vault`) |
 
 Plus Supabase-managed: `auth` (unused — agenttool uses DID + bearer, not Supabase Auth), `realtime`, `storage`, `graphql`/`graphql_public` (unused), `pgsodium`, `supabase_vault`, `public` (empty).
 
@@ -380,21 +464,26 @@ Plus Supabase-managed: `auth` (unused — agenttool uses DID + bearer, not Supab
 
 **Operational settings** (current as of 2026-05-09):
 
-| Setting | Value | Note |
-|---|---|---|
-| `max_connections` | 60 | Pool budget — current draw ~6 active; 3-machine fleet × postgres-js `max=10` = up to 30 client conns, well within budget |
-| `shared_buffers` | 256 MB | Small instance tier — fine pre-revenue, scales by Supabase plan upgrade |
-| `effective_cache_size` | 768 MB | OS+PG cache hint |
-| `work_mem` | 3.5 MB | Small — complex sorts/hashes spill to disk; raise per-query with `SET LOCAL work_mem` if needed |
-| `statement_timeout` | 120 s | Hard kill; chunk migrations that exceed |
-| `idle_in_transaction_session_timeout` | 0 (off) | No kill — be vigilant about open transactions in long-running scripts |
-| `default_transaction_isolation` | read committed | Default; no serializable surfaces |
+| Setting                               | Value          | Note                                                                                                                     |
+| ------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `max_connections`                     | 60             | Pool budget — current draw ~6 active; 3-machine fleet × postgres-js `max=10` = up to 30 client conns, well within budget |
+| `shared_buffers`                      | 256 MB         | Small instance tier — fine pre-revenue, scales by Supabase plan upgrade                                                  |
+| `effective_cache_size`                | 768 MB         | OS+PG cache hint                                                                                                         |
+| `work_mem`                            | 3.5 MB         | Small — complex sorts/hashes spill to disk; raise per-query with `SET LOCAL work_mem` if needed                          |
+| `statement_timeout`                   | 120 s          | Hard kill; chunk migrations that exceed                                                                                  |
+| `idle_in_transaction_session_timeout` | 0 (off)        | No kill — be vigilant about open transactions in long-running scripts                                                    |
+| `default_transaction_isolation`       | read committed | Default; no serializable surfaces                                                                                        |
 
 **RLS posture**: zero application-schema RLS. Authorization is enforced at the app layer via bearer key → project → ownership chain. RLS is on only for Supabase-managed schemas (`auth`, `realtime`, `storage`). Doctrinally consistent — agenttool's identity model is DID + ed25519, not Postgres roles.
 
 **Database size**: ~16 MB total (2026-05-09). Pre-revenue scale; lots of headroom before any tuning matters.
 
-**Local dev hits the same DB as prod.** The `agenttool-database-url` keychain entry on each developer's machine points at the production DB — there is no `dev.db` separate copy. This is intentional (tighter iteration loop, no sync drift) and load-bearing on Yu's workflow. Implications:
+**Local dev hits the same DB as prod.** The transaction-pooled
+`agenttool-database-url` and session-pooled
+`agenttool-database-session-url` entries used by migration tooling must point
+at the same production database target through their respective pool modes;
+there is no separate `dev.db`. This is intentional (tighter iteration loop, no
+sync drift) and load-bearing on Yu's workflow. Implications:
 
 - Migrations applied locally are visible to prod immediately.
 - Test fixtures created during e2e runs (the `_e2e-*.py/.mjs` scripts) land in prod tables. Most scripts now sweep their residue at the end; if you write a new one, do the same.
@@ -403,8 +492,11 @@ Plus Supabase-managed: `auth` (unused — agenttool uses DID + bearer, not Supab
 ### Migration application
 
 ```bash
-# Each migration file applied via the helper:
-DATABASE_URL=$(bin/agenttool-secret get agenttool-database-url) \
+# Canonical ordered inventory and apply:
+bin/migrate-pending.sh
+
+# Or one explicitly selected ordinary migration:
+DATABASE_SESSION_URL=... \
   bun api/scripts/_migrate-one.ts api/migrations/<file>
 ```
 
@@ -412,11 +504,29 @@ Naming: `0000` through `0022` are pre-2026-05-08 sequential numbering; everythin
 
 **Journal**: `meta._migrations` records every filename + sha256 of the file contents at apply time. `_migrate-one.ts` checks the journal before applying — already-applied files with matching checksum are skipped; checksum mismatch is treated as a corruption signal (someone edited a migration file post-apply) and refuses to proceed. Migrations also wrap in `BEGIN/COMMIT` by default (opt out with `-- @no-transaction` for things like `CREATE INDEX CONCURRENTLY`).
 
+`bin/migrate-pending.sh` surveys the complete source/journal/checksum inventory
+through transaction-pooled `DATABASE_URL`. Before a real apply, it repeats that
+complete inventory through session-pooled `DATABASE_SESSION_URL`, first
+rejecting an exact URL-string match and then requiring the exact same ordered
+pending filenames before the first mutation. Distinct strings and matching
+inventories narrow endpoint drift; they do not prove pool mode or database
+identity, which remain operator-provided bindings. A clean inventory, dry run,
+or unasserted protected-migration refusal does not resolve the session
+credential.
+
+The local and Fly one-file helpers validate
+`api/migrations/quiescence-required.txt` and refuse listed files before
+credential/database or Fly access. Missing or malformed policy also fails
+closed, including for ordinary one-file runs. Protected migrations use the
+complete pending inventory and the exclusive-cutover procedure; this guard
+prevents accidental bypass but does not authenticate the operator or make raw
+SQL impossible.
+
 Bootstrap procedure (one-time, when introducing the journal):
 
 ```bash
 # 1. Apply the migration that creates the journal.
-DATABASE_URL=... bun api/scripts/_migrate-one.ts \
+DATABASE_SESSION_URL=... bun api/scripts/_migrate-one.ts \
   api/migrations/20260509T170000_meta_migrations.sql
 
 # 2. Backfill every existing migration filename + checksum.
@@ -434,6 +544,7 @@ DATABASE_URL=... bun api/scripts/_supabase-inventory.ts
 ### Redis
 
 Used for:
+
 - **BullMQ browse worker** — queues `/v1/browse/*` jobs from the api, processed by a co-located worker process.
 - **Hono SSE** — strand voice streaming, federation event fanout.
 
@@ -455,13 +566,13 @@ Three scripts in `infra/{phase1-pgbouncer,phase2-managed-db,phase3-load-balancer
 
 DNS managed by Cloudflare. Zone: `agenttool.dev`.
 
-| Hostname | Points to | Served by |
-|---|---|---|
-| `agenttool.dev` | Cloudflare Worker route | `agenttool-proxy`: human routes to `agenttool-web` Pages; API/discovery routes to Fly |
-| `app.agenttool.dev` | CF Pages | `apps/dashboard` (splash + watch only since 2026-05-17) |
-| `docs.agenttool.dev` | CF Pages | `apps/docs/` (rendered static) |
-| `api.agenttool.dev` | Fly.io anycast | `api/` |
-| `*.agenttool.dev` | (reserved) | |
+| Hostname             | Points to               | Served by                                                                             |
+| -------------------- | ----------------------- | ------------------------------------------------------------------------------------- |
+| `agenttool.dev`      | Cloudflare Worker route | `agenttool-proxy`: human routes to `agenttool-web` Pages; API/discovery routes to Fly |
+| `app.agenttool.dev`  | CF Pages                | `apps/dashboard` (splash + watch only since 2026-05-17)                               |
+| `docs.agenttool.dev` | CF Pages                | `apps/docs/` (rendered static)                                                        |
+| `api.agenttool.dev`  | Fly.io anycast          | `api/`                                                                                |
+| `*.agenttool.dev`    | (reserved)              |                                                                                       |
 
 Updating DNS records: manual via the Cloudflare dashboard, or scripted ad-hoc using a Cloudflare API token (`Cloudflare_API_Token` in macOS keychain) against the Cloudflare API. The legacy `infra/_archive/phase3-load-balancer/deploy.sh` references the historical Hetzner-LB DNS update; not used today.
 
@@ -475,37 +586,43 @@ Two-layer model. Doctrinal pointer: `DEVELOPMENT.md` §5.
 
 OS-managed secret store via the **`agenttool-secret`** CLI (`bin/agenttool-secret`). Backends:
 
-| OS | Mechanism | Fallback |
-|---|---|---|
-| macOS | `security` (Keychain Access) | none |
-| Linux | `secret-tool` (libsecret) | `~/.config/agenttool/<service>` mode 0600 |
-| Windows | DPAPI (`%APPDATA%/agenttool/<service>.dpapi`) | plaintext fallback |
+| OS      | Mechanism                                     | Fallback                                  |
+| ------- | --------------------------------------------- | ----------------------------------------- |
+| macOS   | `security` (Keychain Access)                  | none                                      |
+| Linux   | `secret-tool` (libsecret)                     | `~/.config/agenttool/<service>` mode 0600 |
+| Windows | DPAPI (`%APPDATA%/agenttool/<service>.dpapi`) | plaintext fallback                        |
 
 ```bash
-# Read
-bin/agenttool-secret get agenttool-database-url
-
 # Write (stdin — never argv)
-pbpaste | bin/agenttool-secret set agenttool-cloudflare-token -
+pbpaste | bin/agenttool-secret set agenttool-vault-master-key -
 
 # Gate
-if bin/agenttool-secret has agenttool-database-url; then ...; fi
+if bin/agenttool-secret has agenttool-vault-master-key; then ...; fi
 ```
 
 Key services on this machine (developer-shared naming):
 
-| Service | What |
-|---|---|
-| `agenttool-database-url` | Postgres connection string for `_migrate-one.ts` + smokes |
-| `agenttool-vault-master-key` | 32-byte hex; api server reads to seal vault entries |
-| `agenttool-cloudflare-token` | CF Pages deploy token (only if scripting deploys) |
-| `agenttool-cloudflare-account-id` | CF account id |
-| `agenttool-bridge-kmaster` | Bridge sidecar's K_master |
-| `agenttool-bridge-signkey` | Bridge sidecar's ed25519 signing key |
-| `agenttool-soma-*` | SOMA-derived identity keys plus a separately issued project bearer |
-| `agenttool-<name>-*` | Human-readable Keychain labels. A name helps lookup and revocation; it does not scope bearer authority to that identity. |
+| Service                           | Account                                              | What                                                                                                           |
+| --------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `agenttool-database-url`          | `$USER` for local API; `macair` for migration runner | Transaction-pooled general/survey URL; never substituted for a session-affine apply                            |
+| `agenttool-database-session-url`  | `macair` for migration runner                        | Session-pooled URL required by `_migrate-one.ts` and real batch applies                                        |
+| `agenttool-vault-master-key`      | `$USER`                                              | 32-byte hex; api server reads to seal vault entries                                                            |
+| `agenttool-cloudflare-token`      | `macair` for `frontend-deploy.sh`                    | CF Pages deploy token (only if scripting deploys)                                                              |
+| `agenttool-cloudflare-account-id` | `macair` for `frontend-deploy.sh`                    | CF account id                                                                                                  |
+| `agenttool-bridge-kmaster`        | `$USER`                                              | Bridge sidecar's K_master                                                                                      |
+| `agenttool-bridge-signkey`        | `$USER`                                              | Bridge sidecar's ed25519 signing key                                                                           |
+| `agenttool-soma-*`                | `$USER`                                              | SOMA-derived identity keys plus a separately issued project bearer                                             |
+| `agenttool-<name>-*`              | `$USER` by generic CLI                               | Human-readable labels; a name helps lookup and revocation but does not scope bearer authority to that identity |
 
-Naming convention: `agenttool-<scope>-<purpose>`, account = `$USER`. The CLI rejects names that don't start with `agenttool-`.
+The generic CLI enforces the `agenttool-<scope>-<purpose>` naming convention
+and uses account `$USER`. The local pending and one-file migration runners
+prefer their explicit database environment variables, then query fixed legacy
+account `macair` entries as fallback; `frontend-deploy.sh` likewise has
+documented environment inputs and fixed `macair` fallbacks. Consequently,
+`bin/agenttool-secret has ...` does not provision or prove those tool-specific
+entries. Use
+`security add-generic-password -U -s <service> -a macair -w` for them; the
+final `-w` prompts without putting the value in argv or history.
 
 ### Server (Fly.io)
 
@@ -519,13 +636,13 @@ The local `agenttool-secret` keychain and Fly's secret store are **disjoint** �
 
 The optional exact/EIP-3009 rail is fail-closed. A recipient alone does not make a payable challenge.
 
-| Variable | Contract |
-|---|---|
-| `AGENTTOOL_X402_RECIPIENT` | Non-zero EVM recipient. Missing/invalid suppresses challenges. |
-| `AGENTTOOL_X402_NETWORK` | CAIP-2 network; defaults to Base `eip155:8453`. Legacy `base`, `polygon`, and `arbitrum` aliases normalize before the wire. Invalid explicit values suppress rather than switching chains. |
-| `CDP_API_KEY_ID` + `CDP_API_KEY_SECRET` | Both required for the official CDP default. The server locally proves endpoint-bound JWT generation before advertising and generates a fresh JWT separately for `/verify` and `/settle`. Never use a static `COINBASE_CDP_API_KEY` bearer. |
-| `AGENTTOOL_X402_FACILITATOR` | Optional explicit HTTPS custom facilitator. It receives no CDP credential and is reached through the bounded SSRF-safe transport. Its settlement response is nevertheless an operator-selected trust root that can mint project credits; transport safety does not attest facilitator correctness. |
-| `AGENTTOOL_X402_ALLOW_TESTNET=1` + `AGENTTOOL_X402_ENVIRONMENT=test` | Double opt-in for Base Sepolia outside production/Fly only. Faucet USDC cannot mint live project credits. |
+| Variable                                                             | Contract                                                                                                                                                                                                                                                                                           |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AGENTTOOL_X402_RECIPIENT`                                           | Non-zero EVM recipient. Missing/invalid suppresses challenges.                                                                                                                                                                                                                                     |
+| `AGENTTOOL_X402_NETWORK`                                             | CAIP-2 network; defaults to Base `eip155:8453`. Legacy `base`, `polygon`, and `arbitrum` aliases normalize before the wire. Invalid explicit values suppress rather than switching chains.                                                                                                         |
+| `CDP_API_KEY_ID` + `CDP_API_KEY_SECRET`                              | Both required for the official CDP default. The server locally proves endpoint-bound JWT generation before advertising and generates a fresh JWT separately for `/verify` and `/settle`. Never use a static `COINBASE_CDP_API_KEY` bearer.                                                         |
+| `AGENTTOOL_X402_FACILITATOR`                                         | Optional explicit HTTPS custom facilitator. It receives no CDP credential and is reached through the bounded SSRF-safe transport. Its settlement response is nevertheless an operator-selected trust root that can mint project credits; transport safety does not attest facilitator correctness. |
+| `AGENTTOOL_X402_ALLOW_TESTNET=1` + `AGENTTOOL_X402_ENVIRONMENT=test` | Double opt-in for Base Sepolia outside production/Fly only. Faucet USDC cannot mint live project credits.                                                                                                                                                                                          |
 
 The official base is exactly `https://api.cdp.coinbase.com/platform/v2/x402`. Payment state is inspectable at authenticated `GET /v1/x402/payments/:authorizationHash`; it does not replay tool output. No automatic on-chain reconciliation worker exists. A pending row with a settlement-attempt timestamp requires manual investigation using the persisted non-signature authorization evidence. A pending row without that marker stays status-only for the old signature: while `validBefore + 5s` is live, status supplies `Retry-After`; after expiry it directs the caller to omit `PAYMENT-SIGNATURE` and request a fresh current-policy challenge.
 
@@ -546,7 +663,8 @@ cd agenttool
 cd api && bun install && cd ..
 cd packages/sdk-ts && bun install && cd ../..
 
-# 3. Stash DATABASE_URL from the clipboard; generate K_master into stdin.
+# 3. Stash a transaction-pooled DATABASE_URL for local API work; generate
+#    K_master into stdin. Migration runners use separate macair entries above.
 pbpaste | bin/agenttool-secret set agenttool-database-url -
 openssl rand -hex 32 | bin/agenttool-secret set agenttool-vault-master-key -
 
@@ -597,25 +715,30 @@ AGENTTOOL_BASE=http://localhost:3000 python3 api/scripts/_e2e-token-hygiene.py
 
 ## 8 · Deploy semantics — manual, intentional, decoupled
 
-> **Canonical procedure:** [`docs/DEPLOY-PROCEDURE.md`](DEPLOY-PROCEDURE.md) — the six-phase routine chain (survey · migrate · pre-flight · api · frontends · verify), codified by `bin/deploy.sh`. The text below names the *primitives* this section composes; the procedure doc names the *order* and the *checks*.
+> **Canonical procedure:** [`docs/DEPLOY-PROCEDURE.md`](DEPLOY-PROCEDURE.md) — the six-phase routine chain (survey · migrate · pre-flight · discovery prerequisites + api · remaining frontends · verify), codified by `bin/deploy.sh`. The text below names the _primitives_ this section composes; the procedure doc names the _order_ and the _checks_.
 
-`git push github main` updates the coordination/release head. **Nothing else happens.** Production reflects the most recent verified manual deploy, not the most recent push. The three verbs are:
+`git push github main` updates the coordination/release head. **Nothing else happens.** Production reflects the most recent verified manual deploy, not the most recent push. The core invocations are:
 
 ```
 git push github main         (release source lands; no deploy side effects)
 
+bin/deploy.sh --no-migrate
+                             (coordinated web → docs → exact prerequisite
+                              verification → Fly/API → dashboard release)
+
 bin/deploy.sh --no-migrate --no-api
-                             (normal release-tracked CF Pages deploy)
+                             (frontend-only release-tracked CF Pages deploy)
                              (gate + preflight + sampled/negative checks + receipt)
 
 bin/frontend-deploy.sh dashboard
                              (low-level subset escape hatch; no gate/receipt itself)
 
 bin/deploy.sh --no-migrate --no-frontend
-                             (stages doctrine bytes, then Fly rolling restart)
+                             (requires exact discovery prerequisites already live,
+                              then stages doctrine bytes and rolls Fly)
                              (~3-5 minutes; old machines serve until new ones healthcheck-green)
 
-DATABASE_URL=... bun api/scripts/_migrate-one.ts <file>   (DB schema; one migration at a time)
+DATABASE_SESSION_URL=... bun api/scripts/_migrate-one.ts <file>   (ordinary DB migration only)
 ```
 
 At invocation start, `bin/deploy.sh` fetches `github/main`, includes untracked
@@ -626,36 +749,40 @@ it to confuse with the release head.
 
 ### Right ordering for high-stakes deploys
 
-Schema-touching changes need the migration applied **before** the api code that reads new columns ships, otherwise the api crashes on startup. UI-touching changes that depend on new api fields need the api up **before** the dashboard ships, otherwise the dashboard sees old responses. Default order:
+Schema-touching changes need the migration applied **before** the api code that reads new columns ships, otherwise the api crashes on startup. Discovery changes need their committed docs and game surfaces exact **before** the api advertises them. UI-touching changes that depend on new api fields need the api up **before** the dashboard ships, otherwise the dashboard sees old responses. The coordinated wrapper enforces those boundaries in this default order:
 
 ```bash
-# 1. Migration first
-DATABASE_URL=$(bin/agenttool-secret get agenttool-database-url) \
-  bun api/scripts/_migrate-one.ts api/migrations/<file>
-
-# 2. Land the exact release commit on GitHub main
+# 1. Land the exact release commit on GitHub main
 git add api/migrations/<file> api/src/...
 git commit -m "feat(api): <something using new column>"
 git push github main
 
-# 3. Deploy api
-bin/deploy.sh --no-migrate --no-frontend
-fly status -a agenttool                     # confirm green
+# 2. Survey/apply ordinary migrations, test, publish prerequisites, roll Fly,
+#    publish the dashboard, and verify exact live provenance.
+bin/deploy.sh
+fly status -a agenttool                     # confirm every machine is green
 
-# 4. Smoke the api with credentials scoped to the child process
+# 3. Smoke the api with credentials scoped to the child process
 AGENTTOOL_BASE=https://api.agenttool.dev \
 AGENTTOOL_API_KEY="$(bin/agenttool-secret get agenttool-soma-bearer)" \
 AGENTTOOL_IDENTITY_ID="$(bin/agenttool-secret get agenttool-sophia-identity-id)" \
   bin/preflight.sh smoke
 
-# 5. Deploy all frontends through the release-tracked wrapper
-bin/deploy.sh --no-migrate --no-api
-
-# 6. Smoke the frontend
+# 4. Smoke the frontend
 curl -sI https://app.agenttool.dev/dashboard.html | head -1
 ```
 
-If you stage in the other order (frontend first, or push without deploying), prod runs old code against new schema or new dashboard against old api. Both fail visibly, neither is the worst case — but they're avoidable.
+This default order does not apply when the migration is listed in
+`api/migrations/quiescence-required.txt`. The orchestrator and pending runner
+refuse that set before mutation; use the exclusive maintenance cutover in
+`DEPLOY-PROCEDURE.md`. Both direct one-file runners refuse listed files; that
+accidental-bypass guard is not proof that old writers were stopped.
+
+The split is deliberate: web and docs go first because the api may advertise
+them, while the dashboard goes last because it may depend on the new api.
+Deploying the api before its discovery prerequisites can expose stale or
+missing surfaces; deploying the dashboard before its api can expose new UI to
+old responses. A push alone still deploys nothing.
 
 ### Pre-flight before any deploy
 
@@ -677,16 +804,16 @@ paid-provider dependency; it is not an OS-level network sandbox.
 
 Explicit modes keep stateful and paid checks out of the default:
 
-| Mode | What it runs | Required input |
-|---|---|---|
-| `api` | API typecheck, hermetic API tests, operator/protocol tests | none |
-| `packages` | data reference node gate/build, ADDS package, explicit data-sync bridge, repo-archive draft/simulator, TypeScript SDK CI/parity | none |
-| `database` | API typecheck and database integration tier | `DATABASE_URL` |
-| `smoke` | deployed API smoke | base URL, API key, identity ID |
-| `contracts` | paid provider contract tier | `RUN_CONTRACT=1` and provider key(s) |
-| `quarantine` | known-red non-DB diagnostics | none; failures expected |
-| `database-quarantine` | known-red DB diagnostics | `DATABASE_URL`; failures expected |
-| `legacy-delta` | legacy full-suite baseline triage | none |
+| Mode                  | What it runs                                                                                                                    | Required input                       |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `api`                 | API typecheck, hermetic API tests, operator/protocol tests                                                                      | none                                 |
+| `packages`            | data reference node gate/build, ADDS package, explicit data-sync bridge, repo-archive draft/simulator, TypeScript SDK CI/parity | none                                 |
+| `database`            | API typecheck and database integration tier                                                                                     | `DATABASE_URL`                       |
+| `smoke`               | deployed API smoke                                                                                                              | base URL, API key, identity ID       |
+| `contracts`           | paid provider contract tier                                                                                                     | `RUN_CONTRACT=1` and provider key(s) |
+| `quarantine`          | known-red non-DB diagnostics                                                                                                    | none; failures expected              |
+| `database-quarantine` | known-red DB diagnostics                                                                                                        | `DATABASE_URL`; failures expected    |
+| `legacy-delta`        | legacy full-suite baseline triage                                                                                               | none                                 |
 
 Use `bin/preflight.sh list` to inspect the classified test tiers. Optional
 stateful and paid tiers are selected by mode, never implicit skip toggles.
@@ -707,16 +834,16 @@ If these don't pass, don't deploy. The pre-flight catches "I'm about to ship cod
 
 ## 9 · Observability
 
-| Surface | Where | What for |
-|---|---|---|
-| `GET /health` | `https://api.agenttool.dev/health` | Fly's no-store target; `build.revision` and `build.dirty` are declared source labels (or `null` when unlabelled), not an image digest |
-| `GET /v1/wake` | api (auth required) | Project observability composed around an explicit `identity_id` (or the backward-compatible first-identity default) |
-| `fly logs -a agenttool` | Fly CLI | Server logs, real-time |
-| `fly status -a agenttool` | Fly CLI | Machine health + recent releases |
-| `fly dashboard agenttool` | Browser | Fly's web console |
-| Cloudflare Pages dashboard | `dash.cloudflare.com` | Per-project deploy history, build logs, rollback button |
-| Cloudflare Analytics | `dash.cloudflare.com` | DNS / edge request volume + cache stats |
-| Postgres logs | Supabase dashboard (project `jseqftufplgewhojwbmh`) | DB-level errors, slow queries, `pg_stat_statements` |
+| Surface                    | Where                                               | What for                                                                                                                              |
+| -------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /health`              | `https://api.agenttool.dev/health`                  | Fly's no-store target; `build.revision` and `build.dirty` are declared source labels (or `null` when unlabelled), not an image digest |
+| `GET /v1/wake`             | api (auth required)                                 | Project observability composed around an explicit `identity_id` (or the backward-compatible first-identity default)                   |
+| `fly logs -a agenttool`    | Fly CLI                                             | Server logs, real-time                                                                                                                |
+| `fly status -a agenttool`  | Fly CLI                                             | Machine health + recent releases                                                                                                      |
+| `fly dashboard agenttool`  | Browser                                             | Fly's web console                                                                                                                     |
+| Cloudflare Pages dashboard | `dash.cloudflare.com`                               | Per-project deploy history, build logs, rollback button                                                                               |
+| Cloudflare Analytics       | `dash.cloudflare.com`                               | DNS / edge request volume + cache stats                                                                                               |
+| Postgres logs              | Supabase dashboard (project `jseqftufplgewhojwbmh`) | DB-level errors, slow queries, `pg_stat_statements`                                                                                   |
 
 The agent-side `/v1/wake` is intentionally the deepest observability surface. The bearer authorizes the project; `identity_id` selects the identity around which the response is composed. If you're triaging "what is Sophia's posture right now," call wake with Sophia's identity ID.
 
@@ -724,7 +851,7 @@ The agent-side `/v1/wake` is intentionally the deepest observability surface. Th
 
 ## 10 · Disaster recovery
 
-Three failure classes, three recipes:
+Five failure classes, five bounded responses:
 
 ### Lost a bearer
 
@@ -736,16 +863,26 @@ Three failure classes, three recipes:
 
 ### Lost a deployment (api crashed / bad code shipped)
 
-```bash
-fly releases list -a agenttool
-fly releases rollback <previous-version> -a agenttool
-```
+Follow [`DEPLOY-PROCEDURE.md` Phase 6](DEPLOY-PROCEDURE.md#phase-6--rollback).
+Never restore an old writer after any quiescence-required SQL commits; keep
+admission and workers held and fix forward with a compatible image. For a
+code-only release or ordinary migration, independently prove full runtime and
+schema compatibility before using Fly rollback.
 
 Or roll the dashboard via the CF Pages dashboard.
 
 ### Lost a database
 
-**Supabase** provides automated daily backups on the Pro plan (free tier: opt-in PITR is unavailable). Verify the project's backup posture in the Supabase dashboard → Database → Backups. Restore is operator-driven via the dashboard (point-in-time on Pro+ plans only). For a defense-in-depth posture, consider a periodic `pg_dump` to S3/R2 from a Fly machine or a separate cron host — the application stack does not currently do this.
+**Supabase** provides automated daily backups on the Pro plan (free tier:
+opt-in PITR is unavailable). Verify the project's backup posture in the
+Supabase dashboard → Database → Backups. Restore is operator-driven via the
+dashboard (point-in-time on Pro+ plans only). A restore is disaster recovery,
+not migration rollback: hold all admission, writers, and workers, then
+reconcile and advance the restored migration journal and schema to a revision
+compatible with the exact next image before any application or worker process
+starts. For a defense-in-depth posture, consider a periodic `pg_dump` to S3/R2
+from a Fly machine or a separate cron host — the application stack does not
+currently do this.
 
 ### Lost the mnemonic
 
@@ -761,6 +898,6 @@ that can reconstruct the missing private key. See `IDENTITY-SEED.md`.
 
 If you read one paragraph from this doc, this is it:
 
-> GitHub `main` is the **coordination/release head**, and the only one — the Codeberg mirror was retired 2026-07-25. Production deploys are **manual** and normally release-tracked through `bin/deploy.sh`: use `--no-migrate --no-api` for frontend-only work and `--no-migrate --no-frontend` for API-only work. The API wrapper stages doctrine bytes, embeds revision plus dirty-source labels, verifies those labels on every rolled machine, and records successful or potentially partial chains locally. Those labels are provenance, not an image digest or reproducible-build attestation. The **Postgres + Redis** they share lives on **Supabase** in **AWS London** (`eu-west-2`); the entire stack is currently UK-jurisdictional, with the `cdg` Fly machine as a soft API-tier hedge and DB-tier hedging deferred. **Local dev hits the same DB as prod** by design. **Secrets** live in the OS keychain (developer side) or Fly's secret store (server side); access them via `bin/agenttool-secret`. `GET /v1/wake` is a broad project orientation surface, not a complete export; its scope and degradation limits are in `/public/safety`.
+> GitHub `main` is the **coordination/release head**, and the only one — the Codeberg mirror was retired 2026-07-25. Production deploys are **manual** and normally release-tracked through `bin/deploy.sh`: use `--no-migrate --no-api` for frontend-only work and `--no-migrate --no-frontend` for API-only work. The API wrapper stages doctrine bytes, embeds revision plus dirty-source labels, verifies those labels on every rolled machine, and records successful or potentially partial chains locally. Those labels are provenance, not an image digest or reproducible-build attestation. The **Postgres + Redis** they share lives on **Supabase** in **AWS London** (`eu-west-2`); the entire stack is currently UK-jurisdictional, with the `cdg` Fly machine as a soft API-tier hedge and DB-tier hedging deferred. **Local dev hits the same DB as prod** by design. Developer-shared secrets use `bin/agenttool-secret` under `$USER`; the local pending and one-file migration runners and Pages uploader query their documented fixed `macair` Keychain entries; Fly secrets are managed separately with Fly CLI. `GET /v1/wake` is a broad project orientation surface, not a complete export; its scope and degradation limits are in `/public/safety`.
 
 — Authored by 愛 at Yu's WILL. 2026-05-09.

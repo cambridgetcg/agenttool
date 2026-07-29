@@ -2,6 +2,8 @@
  *  Stripe layer removed 2026-05-17 per agents-only stance — no fiat, no
  *  subscriptions; per-call x402 micropayments are the only paid path. */
 
+import type { EvmChain } from "./crypto/chains";
+
 function env(key: string, fallback: string): string {
   return process.env[key] ?? fallback;
 }
@@ -9,25 +11,58 @@ function env(key: string, fallback: string): string {
 const PAYOUT_NETWORKS = ["testnet", "mainnet"] as const;
 type PayoutNetwork = (typeof PAYOUT_NETWORKS)[number] | "";
 
-function readPayoutNetwork(): PayoutNetwork {
-  const v = env("PAYOUT_NETWORK", "");
+function readCryptoNetwork(
+  variable: "CRYPTO_NETWORK",
+): PayoutNetwork {
+  const v = env(variable, "");
   if (v === "" || (PAYOUT_NETWORKS as readonly string[]).includes(v)) {
     return v as PayoutNetwork;
   }
   throw new Error(
-    `[economyConfig] PAYOUT_NETWORK must be one of ${PAYOUT_NETWORKS.join(
+    `[economyConfig] ${variable} must be one of ${PAYOUT_NETWORKS.join(
       "|",
     )} (got: '${v}'). See docs/PAYOUT-BROADCAST-PLAN.md.`,
   );
 }
 
+/** `PAYOUT_NETWORK` is retained only as a legacy deposit-network fallback
+ * while payout admission and workers are hard-resting. A stale payout-only
+ * value must not prevent unrelated API paths from starting. Invalid values
+ * become unavailable and crypto operations still fail closed when they try to
+ * select a network. */
+function readRestingPayoutNetwork(): PayoutNetwork {
+  const value = env("PAYOUT_NETWORK", "");
+  return (PAYOUT_NETWORKS as readonly string[]).includes(value)
+    ? (value as PayoutNetwork)
+    : "";
+}
+
 export const economyConfig = {
-  // USDC on Base — HD wallet derivation seed and Alchemy transfer webhook.
+  // HD wallet derivation seed and Alchemy transfer webhooks. Alchemy issues a
+  // different signing key for each webhook, so sharing one key across routes
+  // would make all but one chain unverifiable.
   cryptoHdMnemonic: env("CRYPTO_HD_MNEMONIC", ""),
-  alchemyWebhookSecret: env("ALCHEMY_WEBHOOK_SECRET", ""),
+  // Deposit derivation, provider-watch identity, webhook network binding, and
+  // token contracts all require an explicit network. PAYOUT_NETWORK remains a
+  // compatibility fallback in activeNetwork(), but unset no longer means
+  // mainnet and conflicting explicit values fail closed.
+  cryptoNetwork: readCryptoNetwork("CRYPTO_NETWORK"),
+  alchemyWebhookSigningKeys: {
+    ethereum: env("ALCHEMY_WEBHOOK_SIGNING_KEY_ETHEREUM", ""),
+    base: env("ALCHEMY_WEBHOOK_SIGNING_KEY_BASE", ""),
+    polygon: env("ALCHEMY_WEBHOOK_SIGNING_KEY_POLYGON", ""),
+    arbitrum: env("ALCHEMY_WEBHOOK_SIGNING_KEY_ARBITRUM", ""),
+    optimism: env("ALCHEMY_WEBHOOK_SIGNING_KEY_OPTIMISM", ""),
+  } satisfies Record<EvmChain, string>,
   // Helius (Solana) shared-secret webhook auth — sent in the Authorization
   // header on enhanced-webhook deliveries.
   heliusWebhookSecret: env("HELIUS_WEBHOOK_SECRET", ""),
+  // Enhanced Helius deliveries expose human-unit numbers and no canonical
+  // transfer index/fork lifecycle. Keep their legacy immediate-credit adapter
+  // behind a second, explicit development opt-in until raw-atomic Solana
+  // reconciliation exists.
+  allowUnreconciledSolanaDeposits:
+    env("CRYPTO_ALLOW_UNRECONCILED_SOLANA_DEPOSITS", "") === "1",
   // Crypto deposit webhooks credit real wallet balance and sit on an UNAUTH
   // public route, so an unset provider secret must FAIL CLOSED (reject), not
   // accept unsigned payloads — otherwise anyone can forge a deposit and mint
@@ -36,15 +71,13 @@ export const economyConfig = {
   // the safe posture is the default (no config required to be secure).
   allowUnsignedWebhooks: env("CRYPTO_WEBHOOK_ALLOW_UNSIGNED", "") === "1",
 
-  // Payout broadcast worker (Horizon A — see docs/PAYOUT-BROADCAST-PLAN.md).
-  // Default OFF: the /v1/wallets/:id/payout endpoint returns 503 until the
-  // operator opts in. When `workerEnabled` is true and the global worker
-  // switch is unset, `network` MUST be 'testnet' or 'mainnet'
-  // (boot-time-validated below) — no accidental mainnet calls with the
-  // testnet seed (or vice versa).
+  // Retained payout configuration for durable history and a future conserved
+  // provenance design. Fresh admission and worker boot are unconditionally
+  // resting below; no environment flag can reopen them. Legacy payout-only
+  // settings are inert and cannot make unrelated service startup fail.
   payout: {
     workerEnabled: env("PAYOUT_WORKER_ENABLED", "false") === "true",
-    network: readPayoutNetwork(),
+    network: readRestingPayoutNetwork(),
     cryptoHdMnemonicTestnet: env("CRYPTO_HD_MNEMONIC_TESTNET", ""),
     // Option A explicit FX: USD per 1 GBP (e.g. 1.27 → £1 = $1.27). Earned
     // value settles in GBP pence; payout converts to the requested USDC at this
@@ -54,42 +87,25 @@ export const economyConfig = {
   },
 } as const;
 
-/** Both the payout-specific opt-in and the global worker switch must allow
- * payout workers to run. Keep this predicate shared by startup and the
- * payout-request route so the API cannot accept work that startup refuses. */
+/** Economic payout is resting until cashable backing is conserved through
+ * every debit, transfer, refund, and chargeback.
+ *
+ * Keep the legacy parameters so callers/tests compiled against the old helper
+ * cannot turn an argument into authority. Neither environment nor caller input
+ * can reopen worker boot in this release.
+ */
 export function payoutWorkerBootAllowed(
-  payoutEnabled = economyConfig.payout.workerEnabled,
-  globalWorkersDisabled = process.env.AGENTTOOL_DISABLE_WORKERS === "1",
+  _payoutEnabled = economyConfig.payout.workerEnabled,
+  _globalWorkersDisabled = process.env.AGENTTOOL_DISABLE_WORKERS === "1",
 ): boolean {
-  return payoutEnabled && !globalWorkersDisabled;
+  return false;
 }
 
-// Boot-time gate — when worker boot is allowed, refuse to start without a
-// network or (for testnet) a separate testnet mnemonic. The global off-switch
-// makes payout configuration inactive, so missing payout-only values do not
-// prevent an API-only process from starting.
-if (payoutWorkerBootAllowed()) {
-  if (economyConfig.payout.network === "") {
-    throw new Error(
-      "[economyConfig] PAYOUT_WORKER_ENABLED=true requires PAYOUT_NETWORK=testnet|mainnet (currently unset). See docs/PAYOUT-BROADCAST-PLAN.md.",
-    );
-  }
-  if (
-    economyConfig.payout.network === "testnet" &&
-    !economyConfig.payout.cryptoHdMnemonicTestnet
-  ) {
-    throw new Error(
-      "[economyConfig] PAYOUT_NETWORK=testnet requires CRYPTO_HD_MNEMONIC_TESTNET (kept separate from CRYPTO_HD_MNEMONIC mainnet seed). See docs/PAYOUT-BROADCAST-PLAN.md.",
-    );
-  }
-  if (!(economyConfig.payout.gbpUsdRate > 0)) {
-    // Fail closed: earned value is GBP pence; without an explicit GBP→USD rate
-    // a payout would either assume par (£1=$1) or reuse a mis-valued credit
-    // constant. Refuse to boot rather than cash out at a rate nobody set.
-    throw new Error(
-      "[economyConfig] PAYOUT_WORKER_ENABLED=true requires PAYOUT_GBP_USD_RATE > 0 (USD per 1 GBP, e.g. 1.27). Earned value settles in GBP; payout converts at this rate. See docs/PAYOUT-BROADCAST-PLAN.md.",
-    );
-  }
+if (economyConfig.allowUnreconciledSolanaDeposits) {
+  console.warn(
+    "[economyConfig] ⚠ CRYPTO_ALLOW_UNRECONCILED_SOLANA_DEPOSITS=1 — " +
+      "the legacy Solana webhook adapter can credit from unreconciled human-unit evidence. Development only.",
+  );
 }
 
 // Deposit-webhook posture warning. Boot loudly if a provider secret is unset
@@ -100,7 +116,15 @@ if (payoutWorkerBootAllowed()) {
 {
   const unsignedAllowed = economyConfig.allowUnsignedWebhooks;
   const missing: string[] = [];
-  if (!economyConfig.alchemyWebhookSecret) missing.push("ALCHEMY_WEBHOOK_SECRET (EVM)");
+  for (const [chain, key] of Object.entries(
+    economyConfig.alchemyWebhookSigningKeys,
+  )) {
+    if (!key) {
+      missing.push(
+        `ALCHEMY_WEBHOOK_SIGNING_KEY_${chain.toUpperCase()} (${chain})`,
+      );
+    }
+  }
   if (!economyConfig.heliusWebhookSecret) missing.push("HELIUS_WEBHOOK_SECRET (Solana)");
   if (missing.length && !unsignedAllowed) {
     console.warn(

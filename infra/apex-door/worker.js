@@ -17,6 +17,11 @@
  *  file) — no DNS involved at any point.
  *  Doctrine: docs/superpowers/specs/2026-07-02-human-door-design.md. */
 
+import {
+  isSensitiveRootPath,
+  sensitivePathNotFound,
+} from "../pages/sensitive-path-worker.js";
+
 const PAGES_HOST = "agenttool-web.pages.dev";
 const API_HOST = "api.agenttool.dev";
 const PENDING_A2A_CARD_PATH = "/.well-known/agent-card.json";
@@ -156,6 +161,14 @@ function machineNotFound(path) {
 export async function handleRequest(request, fetchImpl = fetch) {
   const url = new URL(request.url);
   const path = url.pathname;
+
+  // The apex Worker runs before the Pages Worker and routes ordinary
+  // /public/* requests directly to the API. Apply the same canonical fence
+  // here first so encoded traversal cannot use an API-looking prefix to skip
+  // the Pages boundary.
+  if (isSensitiveRootPath(path)) {
+    return sensitivePathNotFound(request);
+  }
 
   if (url.hostname.toLowerCase() === "www.agenttool.dev") {
     const carriesLegacyReturnReference = Boolean(url.search) &&

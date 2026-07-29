@@ -52,8 +52,44 @@ const BROADCAST_WORKER_SOURCE = readFileSync(
   join(WORKER_DIR, "broadcast-worker.ts"),
   "utf8",
 );
+const REFUND_SOURCE = readFileSync(
+  join(
+    WORKER_DIR,
+    "..",
+    "..",
+    "services",
+    "economy",
+    "crypto",
+    "payout-refund.ts",
+  ),
+  "utf8",
+);
 const DISPATCHER_SOURCE = readFileSync(
   join(WORKER_DIR, "dispatcher.ts"),
+  "utf8",
+);
+const SIGN_EVM_SOURCE = readFileSync(
+  join(
+    WORKER_DIR,
+    "..",
+    "..",
+    "services",
+    "economy",
+    "crypto",
+    "sign-evm.ts",
+  ),
+  "utf8",
+);
+const SIGN_SOLANA_SOURCE = readFileSync(
+  join(
+    WORKER_DIR,
+    "..",
+    "..",
+    "services",
+    "economy",
+    "crypto",
+    "sign-solana.ts",
+  ),
   "utf8",
 );
 
@@ -104,6 +140,28 @@ describe("wall/payouts-never-auto-retry — worker source", () => {
     ).toBe(true);
   });
 
+  test("chain clients do not hide submission retries below the worker", () => {
+    const evmSubmit = SIGN_EVM_SOURCE.slice(
+      SIGN_EVM_SOURCE.indexOf("export async function submitSignedTx"),
+      SIGN_EVM_SOURCE.indexOf(
+        "export async function txExistsOnChain",
+      ),
+    );
+    const solanaSubmit = SIGN_SOLANA_SOURCE.slice(
+      SIGN_SOLANA_SOURCE.indexOf("export async function submitSolanaTx"),
+      SIGN_SOLANA_SOURCE.indexOf(
+        "export async function solanaTxExists",
+      ),
+    );
+
+    expect(evmSubmit).toContain("retryCount: 0");
+    expect(solanaSubmit).toContain("solanaConnection(true)");
+    expect(SIGN_SOLANA_SOURCE).toContain(
+      "disableRetryOnRateLimit: disableRateLimitRetry",
+    );
+    expect(solanaSubmit).toContain("maxRetries: 0");
+  });
+
   test("broadcast-worker.ts does not schedule deferred retries via setTimeout", () => {
     // Another retry shape: schedule a `processPayout(payoutId)` call
     // on a timer after a failure. This bypasses both BullMQ and the
@@ -118,15 +176,18 @@ describe("wall/payouts-never-auto-retry — worker source", () => {
     ).toBe(true);
   });
 
-  test("broadcast-worker.ts handles pre-RPC failures by setting status='failed' (terminal, not retry)", () => {
-    // The pre-RPC failure path must mark the row as 'failed' (terminal
-    // for the broadcast leg) and refund. Asserting the textual presence
-    // of these status updates confirms the failure path EXISTS in some
-    // form — it does NOT prove the path is reached on every error, but
-    // the absence of either pattern would be a structural red flag.
+  test("broadcast worker delegates pre-RPC failures to the terminal refund helper", () => {
+    // Both chain branches and the unexpected-pre-submit containment path must
+    // reach the shared helper, and that helper must mark the row 'failed'
+    // behind its status CAS. This pins the refactored shape without requiring
+    // duplicated accounting mutations in the chain-specific worker.
     expect(
-      /status:\s*['"]failed['"]/.test(BROADCAST_WORKER_SOURCE),
-      "broadcast-worker.ts does not set status='failed' anywhere. The wall requires terminal failure handling — a failed pre-RPC broadcast must land as 'failed' (refunded), never re-tried.",
+      BROADCAST_WORKER_SOURCE.match(/refundPayoutAndFail\(/g)?.length,
+      "broadcast-worker.ts must delegate containment plus both EVM and Solana pre-submit failures to refundPayoutAndFail.",
+    ).toBe(3);
+    expect(
+      /terminalStatus:\s*['"]failed['"]/.test(REFUND_SOURCE),
+      "payout-refund.ts does not select terminalStatus='failed'. The wall requires a proved pre-RPC failure to become terminal and refunded, never re-tried.",
     ).toBe(true);
   });
 

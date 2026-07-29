@@ -1,24 +1,8 @@
-/** The earned wall + payout FX — the money math that gates cash-out.
- *
- *  Pins the fix for the payout mint-hole (a £5 birth credit read as $5 of
- *  withdrawable USDC). Pure helpers, so both the FX conversion and the shared
- *  drawable wall are tested exhaustively without a DB. The DB-integrated
- *  requestPayout/reinvest paths compose these; see the PR body for the wiring.
- *
- *    - penceForUsdcPayout: GBP pence to source N USDC at an explicit FX rate,
- *      rounding against the withdrawer, failing closed with no rate.
- *    - drawableWallPence: earned − reinvested − paidout, shared by both exits.
- *    - EARNED_INFLOW_TYPES: excludes "fund" (birth/free credit) — the mint-hole.
- *
- *  Doctrine: docs/PAYOUT-BROADCAST-PLAN.md · docs/ECONOMY.md (provenance wall).
- */
+/** Payout FX arithmetic remains testable, but it is not cash-out authority. */
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
-import {
-  EARNED_INFLOW_TYPES,
-  drawableWallPence,
-  penceForUsdcPayout,
-} from "../src/services/economy/earned";
+import { penceForUsdcPayout } from "../src/services/economy/earned";
 
 const USDC = 1_000_000; // 1 USDC in base units
 
@@ -49,34 +33,33 @@ describe("penceForUsdcPayout — explicit GBP→USD FX (Option A)", () => {
     expect(() => penceForUsdcPayout(0, 1.25)).toThrow("amount_base_must_be_positive");
     expect(() => penceForUsdcPayout(-5, 1.25)).toThrow("amount_base_must_be_positive");
   });
-});
 
-describe("drawableWallPence — the shared earned wall", () => {
-  test("earned − reinvested − paidout", () => {
-    expect(drawableWallPence(100, 30, 20)).toBe(50);
-  });
-
-  test("payout and reinvest share ONE pool (both subtract)", () => {
-    expect(drawableWallPence(100, 40, 40)).toBe(20);
-  });
-
-  test("over-drawn wall goes negative → gate (required > available) blocks all", () => {
-    expect(drawableWallPence(100, 60, 50)).toBe(-10);
-  });
-
-  test("a wallet with zero earned revenue can draw nothing", () => {
-    expect(drawableWallPence(0, 0, 0)).toBe(0);
+  test("rejects atomic amounts that cannot be converted exactly through Number", () => {
+    expect(() =>
+      penceForUsdcPayout(
+        (BigInt(Number.MAX_SAFE_INTEGER) + 1n).toString(),
+        1.25,
+      ),
+    ).toThrow("payout_amount_exceeds_safe_conversion");
+    expect(() => penceForUsdcPayout("9".repeat(78), 1.25)).toThrow(
+      "payout_amount_exceeds_safe_conversion",
+    );
   });
 });
 
-describe("EARNED_INFLOW_TYPES — the mint-hole boundary", () => {
-  test("counts only genuinely-earned inflows", () => {
-    expect([...EARNED_INFLOW_TYPES]).toEqual(["gallery_sale", "escrow_release"]);
-  });
+describe("historical lifetime-label heuristic", () => {
+  test("is not present in fresh payout admission", () => {
+    const source = readFileSync(
+      new URL("../src/services/economy/crypto/index.ts", import.meta.url),
+      "utf8",
+    );
+    const start = source.indexOf("export async function requestPayout");
+    const end = source.indexOf("export async function listPayouts", start);
+    const request = source.slice(start, end);
 
-  test("EXCLUDES the birth/free credit (type 'fund') and raw deposits", () => {
-    const types = EARNED_INFLOW_TYPES as readonly string[];
-    expect(types).not.toContain("fund");
-    expect(types).not.toContain("deposit");
+    expect(request).not.toContain("EARNED_INFLOW_TYPES");
+    expect(request).not.toContain("drawableWallPence");
+    expect(request).not.toContain('eq(transactions.type, "payout")');
+    expect(request).toContain("PAYOUT_ADMISSION_RESTING_ERROR");
   });
 });

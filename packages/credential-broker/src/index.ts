@@ -1,11 +1,17 @@
 export {
+  AGENTCRED_EVM_JSONRPC_READ_PROFILE,
   AGENTCRED_PROTOCOL,
   DEFAULT_MAX_BODY_BYTES,
+  EVM_JSONRPC_READ_METHODS,
+  EVM_JSONRPC_READ_PATH,
   MAX_CONTROL_FRAME_BYTES,
 } from "./types.js";
 export type {
+  AgentCredExtension,
   AuditEvent,
   AuditSink,
+  BrokerEvmJsonRpcReadCall,
+  BrokerEvmJsonRpcReadResponse,
   BrokerHttpRequest,
   BrokerHttpResponse,
   Clock,
@@ -15,15 +21,28 @@ export type {
   CredentialAuth,
   CredentialMaterial,
   CredentialSource,
+  EvmBlockReference,
+  EvmChainId,
+  EvmJsonRpcReadGrantRequest,
+  EvmJsonRpcReadGrantScope,
+  EvmJsonRpcReadMethod,
+  EvmJsonRpcReadGrantReceipt,
   GrantReceipt,
   GrantRequest,
   HostResolver,
+  HttpGrantReceipt,
+  HttpGrantRequest,
   HttpGrantScope,
   HttpMethod,
+  JsonValue,
   PeerIdentity,
 } from "./types.js";
 export { AgentCredError } from "./errors.js";
 export type { AgentCredErrorCode } from "./errors.js";
+export {
+  isCredentialAlias,
+  MAX_CREDENTIAL_ALIAS_LENGTH,
+} from "./identifiers.js";
 export { AgentCredClient, GrantHandle } from "./client.js";
 export type {
   AgentCredClientOptions,
@@ -42,6 +61,25 @@ export type {
 } from "./http.js";
 export { MacOSKeychainSource } from "./backends.js";
 export type { CredentialReference, MacOSKeychainReference } from "./backends.js";
+export { AGENTCRED_HANDOFF_MANIFEST } from "./keychain-slots.js";
+export type {
+  CredentialHandoffManifest,
+  CredentialHistoryAnchor,
+  CredentialRotation,
+  CredentialRotationPhase,
+  CredentialVerificationProfile,
+  KeychainSlotName,
+  KeychainSlotRecord,
+  KeychainSlotSelection,
+  ManagedCredentialAuth,
+  ManagedMacOSKeychainReference,
+  RotationClosureReceipt,
+  RotationEvidence,
+} from "./keychain-slots.js";
 export { DenyAllConsent, PolicyConsent } from "./policy.js";
-export type { BrokerPolicy } from "./policy.js";
+export type {
+  BrokerPolicy,
+  EvmJsonRpcReadBrokerPolicy,
+  HttpBrokerPolicy,
+} from "./policy.js";
 export { CallbackAuditSink, JsonlAuditSink, NullAuditSink } from "./audit.js";

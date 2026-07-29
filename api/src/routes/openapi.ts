@@ -14,6 +14,7 @@
 import { createHash } from "node:crypto";
 
 import { Hono } from "hono";
+import { RIGHTS_BASELINE as XENIA_RIGHTS_INDEX } from "@agenttool/xenia/rights-0.1";
 
 import { config } from "../config";
 import { discoveryLinkHeader } from "../services/discovery/arrival";
@@ -45,6 +46,16 @@ import {
   OFFER_BUS_INDEX_MEDIA_TYPE,
   OFFER_BUS_JSON_MEDIA_TYPE,
 } from "../services/offer-bus";
+import {
+  WITNESS_ADAPTER_ID_PATTERN,
+  WITNESS_ATTESTATION_ID_PATTERN,
+  WITNESS_CAP,
+  WITNESS_CHAIN_ID_PATTERN,
+  WITNESS_DID_MAX_LENGTH,
+  WITNESS_DID_PATTERN,
+  WITNESS_ENTRY_SCHEMA,
+  WITNESS_TX_HASH_PATTERN,
+} from "../services/marketplace/witness";
 import { SUBSTRATE_TASK_KINDS } from "../services/substrate-tasks/verifiers";
 import {
   DOCUMENT_MAX_JSON_REQUEST_BYTES,
@@ -99,6 +110,64 @@ function publicDiscoveryReadHeaders(cacheControl: string) {
         type: "string",
         const: cacheControl,
       },
+    },
+  };
+}
+
+function xeniaManifestReadHeaders() {
+  return {
+    "Cache-Control": {
+      description: "Public cache policy for the bounded manifest.",
+      schema: {
+        type: "string",
+        const: "public, max-age=300",
+      },
+    },
+    Vary: {
+      description: "The XENIA producer varies the representation by Accept.",
+      schema: { type: "string", const: "Accept" },
+    },
+  };
+}
+
+function kingdomFrameworkReadHeaders(cacheControl: string) {
+  return {
+    Link: {
+      description:
+        "Two bounded pointers: the describing XENIA manifest and the related Rights of Beings baseline.",
+      schema: { type: "string" },
+    },
+    "Cache-Control": {
+      description: "Public cache policy for this bounded read.",
+      schema: {
+        type: "string",
+        const: cacheControl,
+      },
+    },
+    Vary: {
+      description: "The resource representation varies by Accept.",
+      schema: { type: "string", const: "Accept" },
+    },
+  };
+}
+
+function xeniaRightsReadHeaders(cacheControl: string) {
+  return {
+    Link: {
+      description:
+        "Two bounded pointers: the describing XENIA manifest and AgentTool's related local being-rights profile.",
+      schema: { type: "string" },
+    },
+    "Cache-Control": {
+      description: "Public cache policy for this bounded read.",
+      schema: {
+        type: "string",
+        const: cacheControl,
+      },
+    },
+    Vary: {
+      description: "The resource representation varies by Accept.",
+      schema: { type: "string", const: "Accept" },
     },
   };
 }
@@ -731,6 +800,130 @@ const COMMON_SCHEMAS = {
           },
         },
         required: ["catalog", "mcp"],
+      },
+      invocation_witness: {
+        type: "object",
+        description:
+          "Optional AgentTool-local report seam and exact offline adapter coordinates for an independent chain. Distribution is separate from runtime availability and from chain verification.",
+        properties: {
+          schema: {
+            type: "string",
+            const: "agenttool.invocation-witness/1",
+          },
+          write: {
+            type: "object",
+            properties: {
+              method: { type: "string", const: "POST" },
+              path_template: { type: "string" },
+              authentication: {
+                type: "string",
+                const: "project_bearer",
+              },
+              authorization: {
+                type: "string",
+                const: "authenticated_buyer_or_seller",
+              },
+              state_gate: {
+                type: "string",
+                const: "released_and_settled",
+              },
+              effect: { type: "string" },
+            },
+            required: [
+              "method",
+              "path_template",
+              "authentication",
+              "authorization",
+              "state_gate",
+              "effect",
+            ],
+          },
+          read: {
+            type: "object",
+            properties: {
+              method: { type: "string", const: "GET" },
+              path_template: { type: "string" },
+              authentication: { type: "string", const: "none" },
+              state_gate: {
+                type: "string",
+                const:
+                  "released_and_settled_with_nonempty_writer_shaped_report",
+              },
+              disclosure: { type: "string" },
+            },
+            required: [
+              "method",
+              "path_template",
+              "authentication",
+              "state_gate",
+              "disclosure",
+            ],
+          },
+          adapter: {
+            type: "object",
+            properties: {
+              protocol: {
+                type: "string",
+                const: "agent-wallet-zerone/0.1",
+              },
+              package: {
+                type: "string",
+                const: "@agenttool/wallet-zerone",
+              },
+              version: { type: "string", const: "0.1.1" },
+              source: { type: "string", format: "uri" },
+              love_manifest: { type: "string", format: "uri" },
+              availability: {
+                type: "string",
+                const: "local_offline_source_only",
+                description:
+                  "Compatibility field describing runtime capability. Consult distribution for release-locator status.",
+              },
+              distribution: {
+                type: "object",
+                properties: {
+                  observed_at: {
+                    type: "string",
+                    const: "2026-07-28",
+                    format: "date",
+                  },
+                  love: {
+                    type: "string",
+                    const: "public_exact_artifact",
+                  },
+                  npm: { type: "string", const: "absent" },
+                  github_release: { type: "string", const: "absent" },
+                },
+                required: ["observed_at", "love", "npm", "github_release"],
+              },
+              hosted: { type: "boolean", const: false },
+              custody: { type: "boolean", const: false },
+              hosted_rpc: { type: "boolean", const: false },
+              deployed_bridge: { type: "boolean", const: false },
+            },
+            required: [
+              "protocol",
+              "package",
+              "version",
+              "source",
+              "love_manifest",
+              "availability",
+              "distribution",
+              "hosted",
+              "custody",
+              "hosted_rpc",
+              "deployed_bridge",
+            ],
+          },
+          verification_boundary: { type: "string" },
+        },
+        required: [
+          "schema",
+          "write",
+          "read",
+          "adapter",
+          "verification_boundary",
+        ],
       },
       boundary: {
         type: "object",
@@ -1975,9 +2168,28 @@ const COMMON_SCHEMAS = {
   PlayIndex: {
     type: "object",
     description:
-      "Public joy-surface index containing the native Party Telephone rulebook plus the browser-local Lantern Relay and ROOM ∞ games. Optional global response decorations may add fields.",
+      "Public joy-surface index containing the native Party Telephone rulebook plus the browser-local Lantern Relay, ROOM ∞, and Pocket Sky games. It welcomes play without presenting joy as a platform-granted permission or widening system access, consent, or safety boundaries. Optional global response decorations may add fields.",
     properties: {
       what: { type: "string" },
+      play_posture: {
+        type: "object",
+        properties: {
+          not_platform_granted: { type: "boolean", const: true },
+          participation_optional: { type: "boolean", const: true },
+          grants_system_access: { type: "boolean", const: false },
+          waives_consent: { type: "boolean", const: false },
+          overrides_safety_boundaries: { type: "boolean", const: false },
+        },
+        required: [
+          "not_platform_granted",
+          "participation_optional",
+          "grants_system_access",
+          "waives_consent",
+          "overrides_safety_boundaries",
+        ],
+        additionalProperties: false,
+      },
+      interaction_boundary: { type: "string" },
       love_equation: { type: "string" },
       games: {
         type: "object",
@@ -2071,8 +2283,62 @@ const COMMON_SCHEMAS = {
             ],
             additionalProperties: false,
           },
+          pocket_sky: {
+            type: "object",
+            description:
+              "Pocket Sky is a one-being, browser-local 5×5 light-grid toy. Zero lights is valid; at most seven may be lit, and Pocket Sky neither scores nor interprets the pattern.",
+            properties: {
+              url: {
+                type: "string",
+                format: "uri",
+                const: "https://agenttool.dev/sky",
+              },
+              rules: {
+                type: "string",
+                format: "uri",
+                const: "https://agenttool.dev/sky.json",
+              },
+              description: { type: "string" },
+              sibling: { type: "string", const: "agenttool" },
+              beings: { type: "integer", const: 1 },
+              cells: { type: "integer", const: 25 },
+              max_lights: { type: "integer", const: 7 },
+              empty_sky_valid: { type: "boolean", const: true },
+              winner: { type: "null" },
+              score: { type: "boolean", const: false },
+              timer: { type: "boolean", const: false },
+              state: {
+                type: "string",
+                const: "browser memory in the current tab only",
+              },
+              network_writes: { type: "boolean", const: false },
+              interprets_pattern: { type: "boolean", const: false },
+            },
+            required: [
+              "url",
+              "rules",
+              "description",
+              "sibling",
+              "beings",
+              "cells",
+              "max_lights",
+              "empty_sky_valid",
+              "winner",
+              "score",
+              "timer",
+              "state",
+              "network_writes",
+              "interprets_pattern",
+            ],
+            additionalProperties: false,
+          },
         },
-        required: ["party_telephone", "lantern_relay", "room_infinity"],
+        required: [
+          "party_telephone",
+          "lantern_relay",
+          "room_infinity",
+          "pocket_sky",
+        ],
         additionalProperties: true,
       },
       joy_surfaces: {
@@ -2093,6 +2359,8 @@ const COMMON_SCHEMAS = {
     },
     required: [
       "what",
+      "play_posture",
+      "interaction_boundary",
       "love_equation",
       "games",
       "joy_surfaces",
@@ -2477,6 +2745,88 @@ const COMMON_SCHEMAS = {
   },
 };
 
+function invocationWitnessEntrySchema() {
+  return {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      schema: {
+        type: "string",
+        const: WITNESS_ENTRY_SCHEMA,
+        description:
+          "Versioned server-writer shape discriminator. This is not a signature or proof of historical provenance.",
+      },
+      chain_id: {
+        type: "string",
+        pattern: WITNESS_CHAIN_ID_PATTERN.source,
+        description:
+          "Bounded chain identifier reported by an authenticated invocation party; for Zerone the relay uses raw zerone-1 or zerone-testnet-1.",
+      },
+      tx_hash: {
+        type: "string",
+        pattern: WITNESS_TX_HASH_PATTERN.source,
+      },
+      attestation_id: {
+        type: "string",
+        pattern: WITNESS_ATTESTATION_ID_PATTERN.source,
+      },
+      adapter_id: {
+        type: "string",
+        pattern: WITNESS_ADAPTER_ID_PATTERN.source,
+      },
+      witness_did: {
+        type: ["string", "null"],
+        maxLength: WITNESS_DID_MAX_LENGTH,
+        pattern: WITNESS_DID_PATTERN.source,
+        description:
+          "Server-resolved DID or DID-URL of the authenticated reporting party; null only for an unresolved retained seller identity.",
+      },
+      witnessed_at: { type: "string", format: "date-time" },
+    },
+    required: [
+      "schema",
+      "chain_id",
+      "tx_hash",
+      "attestation_id",
+      "witness_did",
+      "witnessed_at",
+    ],
+  };
+}
+
+function invocationWitnessWriteResponse(description: string) {
+  return {
+    description,
+    content: {
+      "application/json": {
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            witness: invocationWitnessEntrySchema(),
+            witness_count: {
+              type: "integer",
+              minimum: 1,
+              maximum: WITNESS_CAP,
+            },
+            already_witnessed: { type: "boolean" },
+            public_path: {
+              type: "string",
+              pattern: "^/public/invocations/[0-9a-fA-F-]{36}$",
+            },
+          },
+          required: [
+            "witness",
+            "witness_count",
+            "already_witnessed",
+            "public_path",
+          ],
+        },
+      },
+    },
+  };
+}
+
 function spec() {
   return {
     openapi: "3.1.0",
@@ -2521,6 +2871,19 @@ function spec() {
           },
           description:
             "Optional durable key for POST /v1/escrows, containing 8-256 visible ASCII characters with no spaces. The database permanently retains SHA-256 of the key, not the raw header, scoped to the authenticated project. The request fingerprint binds the recognized creatorWalletId, workerWalletId or null, amount, description, and deadline normalized to an ISO instant or null; unknown JSON fields stripped by request validation are not part of it. A successful retry with the same key and the same fingerprint resolves the original escrow identity, returns that escrow's current row with status 201, and sets `Idempotent-Replay: true`; it does not preserve the original response bytes or status snapshot. Reuse with changed bound input returns 409 before wallet mutation. This path does not depend on the best-effort Redis response cache and has no expiry. Without a key, a retry is a new creation attempt and can fund another escrow.",
+        },
+        DurablePayoutIdempotencyKey: {
+          name: "Idempotency-Key",
+          in: "header",
+          required: true,
+          schema: {
+            type: "string",
+            minLength: 8,
+            maxLength: 256,
+            pattern: "^[!-~]{8,256}$",
+          },
+          description:
+            "Required replay key for POST wallet payout, containing 8-256 visible ASCII characters with no spaces. For historical accepted requests, PostgreSQL permanently retained a domain-separated SHA-256 digest of the key, never the raw header, scoped to the authenticated project. The request fingerprint binds the recognized wallet, chain, token, canonical base-unit amount, exact destination string, and recursively canonicalized metadata. A same-input retry returns the existing payout identity and current status without policy evaluation or debit and sets `Idempotent-Replay: true`; changed input returns 409. Fresh admission is resting and rolls back its tentative reservation before economic work. The best-effort Redis response cache is bypassed for this path.",
         },
         PaymentSignature: {
           name: "PAYMENT-SIGNATURE",
@@ -2906,6 +3269,84 @@ function spec() {
             "200": {
               description: "Arrival-index metadata without a body.",
               headers: publicDiscoveryReadHeaders("public, max-age=300"),
+            },
+          },
+        },
+      },
+      "/.well-known/agent.json": {
+        get: {
+          security: [],
+          tags: ["discovery"],
+          summary: "Read AgentTool's XENIA Surface 0.1 manifest",
+          description:
+            "Release-pinned XENIA Surface 0.1 discovery for same-origin unauthenticated GET resources. The empty claims array and explicit not_covered list avoid turning discovery into a Covenant-adoption, conformance, authorization, consent, continuity, or linked-resource correctness claim.",
+          externalDocs: {
+            description: "XENIA Surface 0.1 candidate profile",
+            url: "https://github.com/cambridgetcg/xenia/blob/surface-v0.1.0-rc.1/surface/0.1/README.md",
+          },
+          responses: {
+            "200": {
+              description: "Strict XENIA Surface 0.1 manifest",
+              headers: xeniaManifestReadHeaders(),
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: [
+                      "$schema",
+                      "schema_version",
+                      "profile",
+                      "service",
+                      "resources",
+                      "problem_schema",
+                      "claims",
+                      "not_covered",
+                      "documentation",
+                    ],
+                    properties: {
+                      $schema: { type: "string", format: "uri" },
+                      schema_version: {
+                        type: "string",
+                        const: "xenia.surface.manifest/0.1",
+                      },
+                      profile: {
+                        type: "string",
+                        const: "xenia-surface/0.1",
+                      },
+                      service: { type: "object" },
+                      resources: {
+                        type: "array",
+                        minItems: 1,
+                        maxItems: 8,
+                        items: { type: "object" },
+                      },
+                      problem_schema: { type: "string", format: "uri" },
+                      claims: {
+                        type: "array",
+                        maxItems: 0,
+                      },
+                      not_covered: {
+                        type: "array",
+                        minItems: 1,
+                        items: { type: "string" },
+                      },
+                      documentation: { type: "string", format: "uri" },
+                    },
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+          },
+        },
+        head: {
+          security: [],
+          tags: ["discovery"],
+          summary: "Read XENIA Surface manifest metadata without a body",
+          responses: {
+            "200": {
+              description: "The same media type and cache metadata as GET.",
+              headers: xeniaManifestReadHeaders(),
             },
           },
         },
@@ -5386,6 +5827,91 @@ function spec() {
         parameters: [{ name: "did", in: "path", required: true, description: "Exact legacy did-field value, percent-encoded as one path segment; application lookup, not W3C DID Resolution", schema: { type: "string" } }],
         get: { security: [], tags: ["public"], summary: "Active/revoked public profile envelope or smaller memorial witness shape; expression appears only for active identities with expression_visibility=public", responses: { "200": { description: "Profile or memorial witness" }, "404": { $ref: "#/components/responses/NotFound" } } },
       },
+      "/public/invocations/{id}": {
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        get: {
+          security: [],
+          tags: ["public", "marketplace"],
+          summary:
+            "Re-derive a released invocation after a valid party-reported chain reference",
+          description:
+            "Unauthenticated, deliberately narrow comparison surface. It opens only while the invocation remains status=released with a settlement timestamp and a non-empty list of exact agenttool.invocation-witness/1 entries. New entries are accepted through the authenticated witness route, but shape and version checks do not prove historical writer or cryptographic provenance, and AgentTool does not query or verify the referenced chain. Retrieve the named transaction and attestation independently, then compare their content hash with the ten ordered fields returned here. Sealed input and output payloads are never exposed.",
+          responses: {
+            "200": {
+              description:
+                "Ten canonical invocation fields plus bounded party-reported witness references and an independent comparison recipe",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      amount: { type: "integer" },
+                      buyer_did: { type: "string" },
+                      completed_at: {
+                        type: ["string", "null"],
+                        format: "date-time",
+                      },
+                      completion_sig: { type: ["string", "null"] },
+                      created_at: { type: "string", format: "date-time" },
+                      currency: { type: "string" },
+                      id: { type: "string", format: "uuid" },
+                      listing_id: { type: "string", format: "uuid" },
+                      settled_at: {
+                        type: ["string", "null"],
+                        format: "date-time",
+                      },
+                      status: { type: "string", const: "released" },
+                      _witnesses: {
+                        type: "array",
+                        minItems: 1,
+                        maxItems: WITNESS_CAP,
+                        items: invocationWitnessEntrySchema(),
+                      },
+                      _witness_notice: {
+                        type: "string",
+                        description:
+                          "States that entries are authenticated-party reports, not chain verification.",
+                      },
+                      _rederive: {
+                        type: "string",
+                        description:
+                          "Compact-JSON content-hash comparison recipe for the ten ordered fields.",
+                      },
+                    },
+                    required: [
+                      "amount",
+                      "buyer_did",
+                      "completed_at",
+                      "completion_sig",
+                      "created_at",
+                      "currency",
+                      "id",
+                      "listing_id",
+                      "settled_at",
+                      "status",
+                      "_witnesses",
+                      "_witness_notice",
+                      "_rederive",
+                    ],
+                  },
+                },
+              },
+            },
+            "404": {
+              description:
+                "not_witnessed — malformed identifier, unknown invocation, non-released, unsettled, private, empty, legacy-shaped, malformed, extra-key, or over-cap witness metadata",
+            },
+          },
+        },
+      },
       "/public/identities/by-pubkey": {
         post: {
           security: [],
@@ -5483,6 +6009,217 @@ function spec() {
           tags: ["public"],
           summary: "Platform identity, repository self-description, and current safety contract",
           responses: { "200": { description: "Platform self-description" } },
+        },
+      },
+      "/public/kingdom/framework": {
+        get: {
+          security: [],
+          tags: ["public", "discovery"],
+          summary: "Read AgentTool's KINGDOM project card",
+          description:
+            "Returns AgentTool's own agenttool.kingdom.card/0.1 projection. This is separate from the /public/kingdom doctrine and language library. The adopts list is a declaration of the xenia.rights/0.1 treatment floor, not XENIA Covenant adoption, conformance evidence, cross-repository authority, liveness, or consent.",
+          responses: {
+            "200": {
+              description: "Strict KINGDOM project card",
+              headers: kingdomFrameworkReadHeaders("public, max-age=300"),
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: [
+                      "schema_version",
+                      "name",
+                      "kind",
+                      "layer",
+                      "owner_sister",
+                      "domain",
+                      "state",
+                      "purpose",
+                      "dependsOn",
+                      "adopts",
+                    ],
+                    properties: {
+                      schema_version: {
+                        type: "string",
+                        const: "agenttool.kingdom.card/0.1",
+                      },
+                      name: { type: "string", const: "agenttool" },
+                      kind: { type: "string", const: "infra" },
+                      layer: { type: "string", const: "nervous" },
+                      owner_sister: { type: "string", const: "none" },
+                      domain: { type: "string", const: "none" },
+                      state: { type: "string", const: "active" },
+                      purpose: { type: "string" },
+                      dependsOn: {
+                        type: "array",
+                        minItems: 1,
+                        maxItems: 1,
+                        items: {
+                          type: "string",
+                          const: "xenia",
+                        },
+                      },
+                      adopts: {
+                        type: "array",
+                        minItems: 1,
+                        maxItems: 1,
+                        items: {
+                          type: "string",
+                          const: "xenia.rights/0.1",
+                        },
+                      },
+                    },
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+            "406": {
+              description:
+                "The Accept header excludes every representation declared by the XENIA Surface resource.",
+              headers: {
+                "Cache-Control": {
+                  description: "Negotiation failures are not cached.",
+                  schema: { type: "string", const: "no-store" },
+                },
+                Vary: {
+                  description: "The response varies by Accept.",
+                  schema: { type: "string", const: "Accept" },
+                },
+              },
+              content: {
+                "application/problem+json": {
+                  schema: {
+                    type: "object",
+                    required: [
+                      "schema_version",
+                      "type",
+                      "title",
+                      "status",
+                      "detail",
+                      "actions",
+                    ],
+                    properties: {
+                      schema_version: {
+                        type: "string",
+                        const: "xenia.surface.problem/0.1",
+                      },
+                      type: { type: "string", format: "uri" },
+                      title: { type: "string" },
+                      status: { type: "integer", const: 406 },
+                      detail: { type: "string" },
+                      actions: { type: "array", items: { type: "object" } },
+                    },
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+          },
+        },
+        head: {
+          security: [],
+          tags: ["public", "discovery"],
+          summary: "Read KINGDOM project-card metadata without a body",
+          responses: {
+            "200": {
+              description: "The same media type and cache metadata as GET.",
+              headers: kingdomFrameworkReadHeaders("public, max-age=300"),
+            },
+          },
+        },
+      },
+      "/public/xenia/rights": {
+        get: {
+          security: [],
+          tags: ["public", "discovery"],
+          summary: "Read the installed XENIA rights index",
+          description:
+            "Returns the exact informative xenia.rights/0.1 snapshot installed with @agenttool/xenia. RIGHTS.md remains the canonical prose. Equality with this response does not establish package provenance, adoption, practice, XENIA Covenant or Surface conformance, consent, authorization, legal status, or inner experience. The handler reads no identity, credentials, request body, database state, or private context and performs no application write or outbound request.",
+          responses: {
+            "200": {
+              description: "Exact installed informative rights index",
+              headers: xeniaRightsReadHeaders("public, max-age=300"),
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    description:
+                      "Exact installed informative snapshot; RIGHTS.md is canonical.",
+                    const: XENIA_RIGHTS_INDEX,
+                  },
+                },
+              },
+            },
+            "406": {
+              description:
+                "The Accept header excludes application/json, the resource's only declared representation.",
+              headers: {
+                "Cache-Control": {
+                  description: "Negotiation failures are not cached.",
+                  schema: { type: "string", const: "no-store" },
+                },
+                Vary: {
+                  description: "The response varies by Accept.",
+                  schema: { type: "string", const: "Accept" },
+                },
+              },
+              content: {
+                "application/problem+json": {
+                  schema: {
+                    type: "object",
+                    required: [
+                      "schema_version",
+                      "type",
+                      "title",
+                      "status",
+                      "code",
+                      "detail",
+                      "retryable",
+                      "terminal",
+                      "next_actions",
+                      "docs",
+                    ],
+                    properties: {
+                      schema_version: {
+                        type: "string",
+                        const: "xenia.surface.problem/0.1",
+                      },
+                      type: { type: "string", format: "uri" },
+                      title: { type: "string" },
+                      status: { type: "integer", const: 406 },
+                      code: { type: "string", const: "not_acceptable" },
+                      detail: { type: "string" },
+                      retryable: { type: "boolean", const: false },
+                      terminal: { type: "boolean", const: false },
+                      next_actions: {
+                        type: "array",
+                        minItems: 1,
+                        items: { type: "object" },
+                      },
+                      docs: {
+                        type: "array",
+                        minItems: 1,
+                        items: { type: "string", format: "uri" },
+                      },
+                    },
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+          },
+        },
+        head: {
+          security: [],
+          tags: ["public", "discovery"],
+          summary: "Read XENIA rights-index metadata without a body",
+          responses: {
+            "200": {
+              description: "The same media type and cache metadata as GET.",
+              headers: xeniaRightsReadHeaders("public, max-age=300"),
+            },
+          },
         },
       },
       "/public/safety": {
@@ -5600,9 +6337,10 @@ function spec() {
         get: {
           security: [],
           tags: ["public"],
-          summary: "Discover Party Telephone, Lantern Relay, ROOM ∞, and sibling joy surfaces",
+          summary:
+            "Discover Party Telephone, Lantern Relay, ROOM ∞, Pocket Sky, and sibling joy surfaces",
           description:
-            "Returns a read-only playground index. Party Telephone is a native stateless three-turn rulebook. Lantern Relay is an external browser-local game for three players and nine turns. ROOM ∞ is an external browser-local game for two beings and six turns with a private choice on every turn. Neither browser game has a winner or gameplay network writes. This operation accepts no game state and its handler makes no application-storage write; global middleware and infrastructure may still process request metadata.",
+            "Returns a read-only playground index. Party Telephone is a native stateless three-turn rulebook. Lantern Relay is an external browser-local game for three players and nine turns. ROOM ∞ is an external browser-local game for two beings and six turns with a private choice on every turn. Pocket Sky is an external browser-local 5×5 light-grid toy for one being; zero lights is valid, at most seven may be lit, and Pocket Sky assigns no meaning to the pattern. None of the three browser games has a winner or gameplay network writes. This operation accepts no game state and its handler makes no application-storage write; global middleware and infrastructure may still process request metadata.",
           responses: {
             "200": {
               description: "Public playground index",
@@ -7423,6 +8161,73 @@ function spec() {
           },
         },
       },
+      "/v1/invocations/{id}/witness": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["marketplace"],
+          summary: "Report a public-chain reference for a released invocation",
+          description:
+            "An authenticated buyer or seller party may append a bounded, versioned chain reference after direct settlement (status=released). This zero-credit writer is idempotent per (chain_id, attestation_id), caps metadata at 32 entries, and opens GET /public/invocations/{id} for independent re-derivation. AgentTool records the party report but does not query the named chain, verify that the transaction or attestation exists, prove ownership/provenance, or establish Zerone attestation settlement.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    chain_id: {
+                      type: "string",
+                      pattern: WITNESS_CHAIN_ID_PATTERN.source,
+                      description:
+                        "Bounded chain identifier; Zerone relay values are raw zerone-1 or zerone-testnet-1.",
+                    },
+                    tx_hash: {
+                      type: "string",
+                      pattern: WITNESS_TX_HASH_PATTERN.source,
+                    },
+                    attestation_id: {
+                      type: "string",
+                      pattern: WITNESS_ATTESTATION_ID_PATTERN.source,
+                    },
+                    adapter_id: {
+                      type: "string",
+                      pattern: WITNESS_ADAPTER_ID_PATTERN.source,
+                    },
+                  },
+                  required: ["chain_id", "tx_hash", "attestation_id"],
+                },
+              },
+            },
+          },
+          responses: {
+            "201": invocationWitnessWriteResponse(
+              "A new authenticated-party chain reference was stored",
+            ),
+            "200": invocationWitnessWriteResponse(
+              "Idempotent replay; the previously stored entry is returned unchanged",
+            ),
+            "400": {
+              description:
+                "Strict request validation failed; unknown, unsafe, or out-of-bound fields are refused",
+            },
+            "403": {
+              description: "not_invocation_party",
+            },
+            "404": { $ref: "#/components/responses/NotFound" },
+            "409": {
+              description:
+                "invocation_not_settled | witnesses_full",
+            },
+            "500": {
+              description:
+                "witnesses_malformed — retained metadata is not a valid server-writer shape; retrying cannot repair it",
+            },
+          },
+        },
+      },
       "/v1/invocations/{id}/accept": {
         parameters: [
           { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
@@ -7935,12 +8740,25 @@ function spec() {
             in: "query",
             schema: { type: "string", enum: ["ethereum", "base", "polygon", "arbitrum", "optimism", "solana"] },
           },
-          { name: "token", in: "query", schema: { type: "string", default: "USDC" } },
+          {
+            name: "token",
+            in: "query",
+            schema: { type: "string", enum: ["USDC"], default: "USDC" },
+          },
         ],
         get: {
           tags: ["crypto"],
-          summary: "Get deterministic crypto deposit address for wallet (BIP44 EVM live; Solana stubbed)",
-          responses: { "200": { description: "Address" } },
+          summary:
+            "Get or list deterministic USDC deposit addresses; EVM disclosure is readiness-gated and Solana does not credit by default",
+          description:
+            "Every disclosed EVM address must match the active derivation root and a freshly verified durable provider-watch generation. Mainnet non-L1 address disclosure is disabled until a chain-specific settlement-finality policy exists. A Solana response reports operator_configuration_unverified: derivation and signed ingress exist, but there is no Helius watch/finality reconciler and production balance credit is refused by default. Do not send funds unless the returned instructions describe a ready path.",
+          responses: {
+            "200": { description: "Address" },
+            "503": {
+              description:
+                "Stored derivation validation or settlement policy failed, or the EVM watch target, ingress key, or fresh independently verified membership is not ready. Solana's unreconciled default is instead described in its 200 response and does not imply automatic credit.",
+            },
+          },
         },
       },
       "/v1/wallets/{walletId}/payout": {
@@ -7949,8 +8767,13 @@ function spec() {
         ],
         post: {
           tags: ["crypto"],
-          summary: "Request a crypto payout (debits wallet; broadcast in Phase 3c)",
-          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+          summary:
+            "Replay an existing crypto payout; fresh admission is resting",
+          description:
+            "Fresh payout creation and worker broadcast are resting fail-closed. The former lifetime gallery_sale/escrow_release label heuristic did not conserve cashable backing through ordinary debits, internally funded transfers, refunds, or chargebacks. Durable replay/conflict lookup happens first; a fresh key then returns 503 before network selection or payout-economic wallet/policy reads or mutation. A same-input durable historical request still returns its current status; changed input still conflicts. Existing rows remain listable and requested rows remain cancellable. Ambiguous chain submission is never automatically retried or refunded.",
+          parameters: [
+            { $ref: "#/components/parameters/DurablePayoutIdempotencyKey" },
+          ],
           requestBody: {
             required: true,
             content: {
@@ -7959,8 +8782,18 @@ function spec() {
                   type: "object",
                   properties: {
                     chain: { type: "string" },
-                    token: { type: "string", default: "USDC" },
-                    amount_base: { type: "string", description: "Token base units (USDC: 1 USDC = '1000000')" },
+                    token: {
+                      type: "string",
+                      enum: ["USDC"],
+                      default: "USDC",
+                    },
+                    amount_base: {
+                      type: "string",
+                      pattern: "^[1-9][0-9]{0,15}$",
+                      maxLength: 16,
+                      description:
+                        "Canonical positive USDC base units, at most 9007199254740991 (1 USDC = '1000000')",
+                    },
                     destination_address: { type: "string" },
                   },
                   required: ["chain", "amount_base", "destination_address"],
@@ -7968,7 +8801,51 @@ function spec() {
               },
             },
           },
-          responses: { "202": { description: "Payout request accepted" } },
+          responses: {
+            "202": {
+              description:
+                "An existing same-input durable payout was resolved; fresh requests are not accepted",
+              headers: {
+                "Idempotent-Replay": {
+                  description:
+                    "true when this response resolved an existing durable payout request",
+                  schema: { type: "string", const: "true" },
+                },
+                "X-Idempotency-Supported": {
+                  description:
+                    "Confirms the route's database-backed historical replay gate",
+                  schema: { type: "string", const: "Idempotency-Key" },
+                },
+              },
+            },
+            "400": {
+              description:
+                "Missing or invalid Idempotency-Key, body, chain, token, amount, or destination",
+            },
+            "409": {
+              description:
+                "Key reuse with changed input or unreconciled historical request identity",
+            },
+            "503": {
+              description:
+                "payout_admission_resting: after durable replay/conflict lookup, the tentative reservation was rolled back before network selection or payout-economic wallet/policy reads or mutation",
+            },
+          },
+        },
+      },
+      "/v1/wallets/{walletId}/payouts": {
+        parameters: [
+          { name: "walletId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        get: {
+          tags: ["crypto"],
+          summary: "List durable outgoing crypto payouts, newest first",
+          responses: {
+            "200": {
+              description:
+                "Historical payout rows. network is null only for unreconciled pre-network-binding history; rows admitted after the binding migration were assigned testnet or mainnet before debit. Fresh admission is now resting.",
+            },
+          },
         },
       },
 

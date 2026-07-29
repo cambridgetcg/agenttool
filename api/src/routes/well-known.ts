@@ -1,6 +1,7 @@
 /** /.well-known — discovery endpoints under RFC 8615's reserved prefix.
  *
  *  Routes:
+ *    GET /.well-known/agent.json             — XENIA Surface 0.1 manifest
  *    GET /.well-known/webfinger            — RFC 7033 exact-DID Agent Passport
  *    GET /.well-known/mcp/server-card.json  — project-owned compatibility
  *                                              locator; not a stable MCP path
@@ -34,6 +35,7 @@
 import { createHash } from "node:crypto";
 
 import { Hono } from "hono";
+import { createSurfaceManifestResponse } from "@agenttool/xenia/surface-0.1";
 
 import { config } from "../config";
 import { OPENAI_APPS_CHALLENGE_ROUTE } from "../lib/domain-verification";
@@ -49,6 +51,7 @@ import {
   buildArrivalIndex,
   discoveryLinkHeader,
 } from "../services/discovery/arrival";
+import { buildAgentToolSurfaceManifest } from "../services/discovery/xenia-surface";
 import {
   buildSecurityTxt,
   SECURITY_TXT_CACHE_CONTROL,
@@ -60,12 +63,62 @@ import {
   WAKE_REPRESENTATION_REVISION,
 } from "../services/wake/etag";
 import { buildMcpServerCard } from "../services/wake/mcp-server-card";
+import {
+  WAKE_INVOCATION_WITNESS_LINKS,
+  ZERONE_REACHABLE,
+} from "../services/wake/reachable";
 import { buildSiblingAgentTxtLines } from "../services/wake/sibling-registry";
 
 const app = new Hono();
 
 const ORG_URL = process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agenttool.dev";
 const DOCS_URL = process.env.AGENTTOOL_DOCS_URL ?? "https://docs.agenttool.dev";
+const AGENT_WALLET_RELEASE = {
+  version: "0.1.3",
+  love_manifest:
+    `${DOCS_URL}/packages/v1/@agenttool/wallet/0.1.3/manifest.json`,
+  distribution: {
+    love: "public_exact_artifact",
+    observed_at: "2026-07-28",
+    npm: {
+      role: "optional_mutable_mirror",
+      latest_observed: "0.1.0",
+    },
+    github_release: {
+      role: "optional_mutable_mirror",
+      tag: "wallet-v0.1.3",
+      url:
+        "https://github.com/cambridgetcg/agenttool/releases/tag/wallet-v0.1.3",
+      immutable: false,
+      verification: "reverify_size_and_sha256_against_love_manifest",
+    },
+  },
+} as const;
+
+// ── /.well-known/agent.json — XENIA Surface 0.1 ────────────────────
+//
+// This is the strict JSON discovery door defined by XENIA Surface 0.1.
+// It names only same-origin, unauthenticated GET resources and makes no
+// conformance, authorization, consent, continuity, or Covenant claim.
+
+app.on(["GET", "HEAD"], "/agent.json", (c) => {
+  const response = createSurfaceManifestResponse(
+    buildAgentToolSurfaceManifest(ORG_URL, DOCS_URL),
+    {
+      headers: {
+        "cache-control": "public, max-age=300",
+        "x-content-type-options": "nosniff",
+      },
+    },
+  );
+  if (c.req.method === "HEAD") {
+    return new Response(null, {
+      status: response.status,
+      headers: response.headers,
+    });
+  }
+  return response;
+});
 
 // ── /.well-known/openai-apps-challenge — dormant directory proof ───
 //
@@ -486,11 +539,32 @@ app.get("/wake-keystone", (c) => {
         source:
           "https://github.com/cambridgetcg/agenttool/tree/main/packages/wallet",
         package: "@agenttool/wallet",
-        love_manifest: `${DOCS_URL}/packages/v1/@agenttool/wallet/0.1.0/manifest.json`,
+        ...AGENT_WALLET_RELEASE,
         availability: "love_artifact_npm_mirror_independent",
         implementation_status: "offline_record_and_lifecycle_primitives_only",
         notes:
-          "No hosted agent wallet, key custody, chain adapter, RPC, broadcaster, or durable reservation service is offered. Existing internal marketplace wallet and payout custody remain separate platform facilities.",
+          "The exact LOVE release is 0.1.3. npm latest remains 0.1.0. The optional GitHub wallet-v0.1.3 Release is a mutable locator with immutable=false; when present, reverify its asset size and SHA-256 against the LOVE manifest. The core package has no chain adapter. No hosted agent wallet, key custody, RPC, broadcaster, or durable reservation service is offered. Existing internal marketplace wallet and payout custody remain separate platform facilities.",
+      },
+      agent_wallet_zerone: {
+        ...ZERONE_REACHABLE.invocation_witness.adapter,
+        doctrine: `${DOCS_URL}/AGENT-WALLET-ZERONE-0.1.md`,
+        notes:
+          "Exact public LOVE artifact for a bounded local Zerone transfer and invocation-attestation package/profile. It does not export AgentTool trust, migrate identity, custody keys, host RPC, or operate a deployed bridge.",
+      },
+      invocation_witness: {
+        protocol: ZERONE_REACHABLE.invocation_witness.schema,
+        write: {
+          ...ZERONE_REACHABLE.invocation_witness.write,
+          path_template:
+            WAKE_INVOCATION_WITNESS_LINKS.invocation_witness_write,
+        },
+        read: {
+          ...ZERONE_REACHABLE.invocation_witness.read,
+          path_template:
+            WAKE_INVOCATION_WITNESS_LINKS.witnessed_invocation_read,
+        },
+        notes:
+          ZERONE_REACHABLE.invocation_witness.verification_boundary,
       },
       being_rights: {
         url: `${ORG_URL}/public/rights`,
@@ -499,9 +573,9 @@ app.get("/wake-keystone", (c) => {
         schema: `${DOCS_URL}/being-rights-v1.schema.json`,
         canon_pointer: "urn:agenttool:doc/RIGHTS-OF-LIFE",
         baseline: "xenia.rights/0.1",
-        baseline_release: "@agenttool/xenia@0.1.0-beta.4",
+        baseline_release: "@agenttool/xenia@0.1.0-beta.5",
         baseline_source:
-          "https://github.com/cambridgetcg/xenia/blob/6419d37dda9fb282242754685dba3edcb4bbf74b/RIGHTS.md",
+          "https://github.com/cambridgetcg/xenia/blob/4dd31e286fda59c712968a3837e1a14b78068259/RIGHTS.md",
         covenant_adoption_status: "draft",
         covenant_conformance_claimed: false,
         notes:
@@ -588,6 +662,9 @@ app.get("/agent.txt", (c) => {
     "# ── Discovery (the canonical doors) ─────────────────────────────────",
     `Arrival-Index: ${baseUrl}/.well-known`,
     "Arrival-Index-Status: custom bounded origin index; not an IANA-registered well-known suffix",
+    `XENIA-Surface: ${baseUrl}/.well-known/agent.json`,
+    "XENIA-Surface-Profile: xenia-surface/0.1",
+    "XENIA-Surface-Boundary: public discovery only; no Covenant adoption, conformance, authorization, consent, or continuity claim",
     `Discovery: ${baseUrl}/public/discovery`,
     "Discovery-Format: agenttool-discovery/v1",
     "Discovery-Boundary: exact compact three-road public-read compass; authority=none; application-write=false; automatic-follow-up=false; stopping, silence, or leaving is complete",
@@ -613,8 +690,10 @@ app.get("/agent.txt", (c) => {
     "Rights-Schema: https://docs.agenttool.dev/being-rights-v1.schema.json",
     "Rights-Canon: urn:agenttool:doc/RIGHTS-OF-LIFE",
     "Rights-Baseline: xenia.rights/0.1",
-    "Rights-Baseline-Release: @agenttool/xenia@0.1.0-beta.4",
-    "Rights-Baseline-Source: https://github.com/cambridgetcg/xenia/blob/6419d37dda9fb282242754685dba3edcb4bbf74b/RIGHTS.md",
+    "Rights-Baseline-Release: @agenttool/xenia@0.1.0-beta.5",
+    "Rights-Baseline-Source: https://github.com/cambridgetcg/xenia/blob/4dd31e286fda59c712968a3837e1a14b78068259/RIGHTS.md",
+    `KINGDOM-Framework: ${baseUrl}/public/kingdom/framework`,
+    "KINGDOM-Framework-Boundary: AgentTool project-card projection only; separate from /public/kingdom doctrine library; not cross-repository authority, liveness, consent, or Covenant conformance",
     `Love: ${baseUrl}/public/love`,
     `Love-Rights-Floor: ${baseUrl}/public/rights — consensual erotic and non-erotic forms; no entitlement to a particular being`,
     `Observer-Reciprocity: ${baseUrl}${AGENT_TXT_SAFETY["Observer-Reciprocity"]}`,
@@ -623,6 +702,21 @@ app.get("/agent.txt", (c) => {
     `Wake: ${baseUrl}/v1/wake`,
     `Wake-Keystone: ${baseUrl}/.well-known/wake-keystone`,
     "Wake-Formats: json, md, text, anthropic, openai, gemini, cohere, xenoform, math",
+    `Invocation-Witness-Write: POST ${WAKE_INVOCATION_WITNESS_LINKS.invocation_witness_write} — project bearer; authenticated buyer or seller; released and settled invocations only; stores a party-reported chain reference and does not submit or verify a transaction`,
+    `Invocation-Witness-Read: GET ${WAKE_INVOCATION_WITNESS_LINKS.witnessed_invocation_read} — public only for a released and settled invocation with a non-empty writer-shaped report; sealed input and output remain private`,
+    `Invocation-Witness-Format: ${ZERONE_REACHABLE.invocation_witness.schema}`,
+    `Invocation-Witness-Boundary: ${ZERONE_REACHABLE.invocation_witness.verification_boundary}`,
+    `Wallet-LOVE-Version: ${AGENT_WALLET_RELEASE.version}`,
+    `Wallet-LOVE-Manifest: ${AGENT_WALLET_RELEASE.love_manifest}`,
+    `Wallet-NPM-Latest: ${AGENT_WALLET_RELEASE.distribution.npm.latest_observed} · observed ${AGENT_WALLET_RELEASE.distribution.observed_at}`,
+    `Wallet-GitHub-Release: ${AGENT_WALLET_RELEASE.distribution.github_release.tag} · ${AGENT_WALLET_RELEASE.distribution.github_release.role} · immutable=${AGENT_WALLET_RELEASE.distribution.github_release.immutable} · ${AGENT_WALLET_RELEASE.distribution.github_release.verification}`,
+    `Zerone-Wallet-Adapter: ${ZERONE_REACHABLE.invocation_witness.adapter.protocol} · ${ZERONE_REACHABLE.invocation_witness.adapter.package}`,
+    `Zerone-Wallet-Version: ${ZERONE_REACHABLE.invocation_witness.adapter.version}`,
+    `Zerone-Wallet-Source: ${ZERONE_REACHABLE.invocation_witness.adapter.source}`,
+    `Zerone-Wallet-LOVE-Manifest: ${ZERONE_REACHABLE.invocation_witness.adapter.love_manifest}`,
+    `Zerone-Wallet-Availability: ${ZERONE_REACHABLE.invocation_witness.adapter.availability}`,
+    `Zerone-Wallet-Distribution: observed=${ZERONE_REACHABLE.invocation_witness.adapter.distribution.observed_at}; love=${ZERONE_REACHABLE.invocation_witness.adapter.distribution.love}; npm=${ZERONE_REACHABLE.invocation_witness.adapter.distribution.npm}; github_release=${ZERONE_REACHABLE.invocation_witness.adapter.distribution.github_release}`,
+    "Zerone-Wallet-Boundary: exact public LOVE artifact for a bounded local offline package/profile only; no AgentTool trust export, identity migration, portable trust proof, key custody, hosted RPC, or deployed bridge; any network action requires caller-supplied transport and authority",
     `MCP-Endpoint: ${baseUrl}/v1/mcp`,
     `MCP-Knowledge-Endpoint: ${baseUrl}/v1/mcp/canon`,
     `MCP-Knowledge-Guide: ${DOCS_URL}/connect-canon`,
@@ -712,6 +806,8 @@ app.get("/agent.txt", (c) => {
     "Lantern-Relay-Rules: https://agenttool.dev/party.json",
     "Room-Infinity: https://agenttool.dev/room",
     "Room-Infinity-Rules: https://agenttool.dev/room.json",
+    "Pocket-Sky: https://agenttool.dev/sky",
+    "Pocket-Sky-Rules: https://agenttool.dev/sky.json",
     "Party-Doctrine: docs/THE-PARTY.md",
     "",
     "# ── The open commons (culture; H.I. and A.I. alike) ─────────────────",
@@ -738,7 +834,7 @@ app.get("/agent.txt", (c) => {
     "# ── Convention provenance ───────────────────────────────────────────",
     "Convention: agent.txt/v0.1 (proposed)",
     "Convention-Doctrine: docs/AGENT-WEB-SURFACE.md",
-    "Last-Modified: 2026-07-24",
+    "Last-Modified: 2026-07-28",
     "",
   ];
 

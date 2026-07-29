@@ -1,5 +1,8 @@
 export { AgentBrowser, DEFAULT_BROWSER_LIMITS } from "./browser.js";
 export {
+  BROWSER_ACTION_RECEIPT_SCHEMA,
+} from "./attempts.js";
+export {
   BROWSER_CAPABILITIES_SCHEMA,
   resolveBrowserCapabilities,
 } from "./capabilities.js";
@@ -40,6 +43,11 @@ export {
   parseBrowserProcessConfig,
 } from "./config.js";
 export {
+  BROWSER_OPERATIONS,
+  MCP_LEGACY_COMPATIBILITY,
+  MCP_MODERN_PROTOCOL_REVISION,
+} from "./protocol.js";
+export {
   CLI_HELP,
   executeBrowserOperation,
   JSONL_PROTOCOL_VERSION,
@@ -53,11 +61,13 @@ export {
   browserActionSchema,
   buildBrowserMcpServer,
   publicBrowserError,
+  serveBrowserMcpStdio,
   toBrowserAction,
 } from "./mcp.js";
 export { OBSERVATION_SCHEMA } from "./types.js";
 export { BROWSER_PACKAGE_VERSION } from "./version.js";
 export type * from "./errors.js";
+export type * from "./attempts.js";
 export type * from "./capabilities.js";
 export type * from "./planning.js";
 export type * from "./policy.js";
@@ -76,5 +86,7 @@ export type {
 export type {
   BrowserActionWire,
   BrowserMcpOptions,
+  BrowserMcpStdioHandle,
+  BrowserMcpStdioOptions,
   PublicBrowserError,
 } from "./mcp.js";

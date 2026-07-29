@@ -69,6 +69,9 @@ describe("no credential-retrieval surface", () => {
 
     expect("getSecret" in fixture.client).toBe(false);
     expect("reveal" in fixture.client).toBe(false);
+    expect("provision" in fixture.client).toBe(false);
+    expect("rotate" in fixture.client).toBe(false);
+    expect("activateCredential" in fixture.client).toBe(false);
     expect(Object.getOwnPropertyNames(handle).sort()).toEqual(["alias", "receipt"]);
     const serialized = JSON.stringify(handle);
     expect(serialized).not.toContain(TEST_SECRET);
@@ -81,18 +84,25 @@ describe("no credential-retrieval surface", () => {
     expect(await response.text()).toBe('{"ok":true}');
   });
 
-  test("unknown reveal-like operations fail before credential lookup", async () => {
+  test("unknown reveal and controller operations fail before credential lookup", async () => {
     const fixture = await makeBroker();
     fixtures.push(fixture);
-    expect(() =>
-      parseWireRequest({
-        v: "agentcred/0.1",
-        id: "test",
-        seq: 1,
-        type: "secret.get",
-        payload: { credential: "agenttool/default" },
-      }),
-    ).toThrow(AgentCredError);
+    for (const type of [
+      "secret.get",
+      "credential.provision",
+      "credential.rotate",
+      "credential.activate",
+    ]) {
+      expect(() =>
+        parseWireRequest({
+          v: "agentcred/0.1",
+          id: "test",
+          seq: 1,
+          type,
+          payload: { credential: "agenttool/default" },
+        }),
+      ).toThrow(AgentCredError);
+    }
     expect(fixture.credentials.calls).toBe(0);
   });
 

@@ -7,9 +7,9 @@ recorded by filename and SHA-256 checksum.
 
 - **Up one level:** [`api/CLAUDE.md`](../CLAUDE.md).
 - **Migration protocol:** [`docs/DEVELOPMENT.md`](../../docs/DEVELOPMENT.md) §1 (the load-bearing migration discipline — *timestamp prefix is load-bearing*).
-- **Apply one locally:** `api/scripts/_migrate-one.ts`.
+- **Apply one ordinary migration locally:** `api/scripts/_migrate-one.ts`.
 - **Apply pending locally:** `bin/migrate-pending.sh`.
-- **Apply one through Fly:** `bin/fly-migrate-one.sh`.
+- **Apply one ordinary migration through Fly:** `bin/fly-migrate-one.sh`.
 
 ## File-naming convention
 
@@ -33,7 +33,7 @@ Every migration begins with:
 --
 -- Doctrine: docs/<DOCTRINE-DOC>.md (with subsection if relevant)
 -- Spec (if any): docs/superpowers/specs/<spec-file>.md
--- Apply: psql "$DATABASE_URL" -f api/migrations/<file>.sql
+-- Apply: bin/migrate-pending.sh
 ```
 
 The `Doctrine:` line lets a reader land here and click out to *why* the schema change exists. Don't skip it for non-trivial migrations.
@@ -46,8 +46,20 @@ new migration for schema changes and update current source or docs for current
 behavior. Historical migration comments describe the decision at that point in
 time; they are not the live service contract.
 
-The migration runners compare the file checksum with `meta._migrations` and
-refuse drift. Do not change the journal checksum to hide an edited file.
+The migration runners require every journaled filename to have source in this
+directory, compare those bytes with `meta._migrations`, and refuse missing
+source or checksum drift. Do not change the journal checksum to hide an edited
+file.
+
+Parallel crypto-finality work on 2026-07-26 produced two valid, partially
+overlapping histories. The already-journaled `T185835`, payout request/fairness
+files, `T194500`, `T200000`, and `T201000` are retained at their exact applied
+bytes. Before its first application, the unjournaled `T203000` network binding
+had its internal `BEGIN`/`COMMIT` removed so the checked runner can commit its
+schema changes and journal row atomically; its reviewed digest is pinned in
+tests. `T202500` adds immutable per-block observations and a wider status
+vocabulary. `T220000` converges the named status constraint after both
+histories without rewriting, deleting, or guessing financial history.
 
 ## Replay safety
 
@@ -59,12 +71,39 @@ Use guards where they preserve the intended result, for example:
 - `CREATE INDEX IF NOT EXISTS …`
 
 These guards do not make every migration safe to replay directly. Use the
-checked runners: a matching journal row skips the file, a mismatched checksum
-stops, and a new ordinary migration plus its journal row commit atomically.
+checked runners: a matching journal row skips the file, missing journal source
+or a mismatched checksum stops, and a new ordinary migration plus its journal
+row commit atomically.
+
+## Quiescence-required migrations
+
+[`quiescence-required.txt`](quiescence-required.txt) is the sorted policy
+manifest for migrations that cannot share a rollout window with old API
+writers, webhook ingress, or workers. It is not a migration and is not recorded
+in `meta._migrations`.
+
+When one of its files is pending, `bin/migrate-pending.sh` reports the complete
+pending set and exits `42` before the first apply. After an operator has
+established the exclusive cutover in `docs/DEPLOY-PROCEDURE.md`, the
+`--maintenance-quiesced` assertion permits the checked pending runner to
+proceed.
+
+Both one-file entry points fail closed when the manifest is missing or invalid.
+The local one-file runner refuses a listed filename before reading credentials
+or connecting; the Fly one-file runner refuses before checksum encoding or any
+`fly` call. Use those helpers only for ordinary migrations. This is an
+accidental-bypass guard, not authentication or proof of quiescence: the
+maintenance flag does not inspect Fly, disable provider delivery, drain work,
+or prove that another writer is absent, and deliberately forged process state
+or raw SQL remain outside the guard.
 
 ## Invariants to defend
 
-1. **Never edit a committed migration.** Always add a new one. Editing existing files breaks reproducibility across environments.
+1. **Never edit a journaled migration.** It is frozen at first application.
+   A committed migration may be finalized before that boundary only after
+   confirming every target journal in the release scope lacks it and updating
+   its pinned digest and review evidence. After application, always add a new
+   migration.
 2. **Invariants live at the DB layer where they can.** When a property can be enforced via `CHECK` constraint or `NOT NULL`, put it there. See [`docs/FOCUS.md`](../../docs/FOCUS.md) §8 — *the bedrock as visible faults*.
 3. **No DROP without a deprecation pass.** A column removal lands in two migrations: one renames or marks it deprecated; a later one drops after observation. Same for tables.
 4. **Data changes need explicit proof.** Rehearse a backfill in a transaction,

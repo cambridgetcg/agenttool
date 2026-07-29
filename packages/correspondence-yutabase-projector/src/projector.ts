@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 
-import type { CorrespondenceEventRecord } from "@agenttool/correspondence-yutabase";
+import {
+  isCanonicalPositiveInt64Decimal,
+  type CorrespondenceEventRecord,
+} from "@agenttool/correspondence-yutabase";
 
 import {
   applyVerifiedPlan,
@@ -24,7 +27,6 @@ import {
 } from "./verify.js";
 
 const EVENT_ID = /^sha256:[0-9a-f]{64}$/;
-const RECEIPT = /^[1-9][0-9]*$/;
 
 export interface RunOnceResult {
   readonly applied: number;
@@ -58,9 +60,7 @@ function candidateLocator(raw: unknown): {
       ? event.event_id
       : null;
   const receivedSeq =
-    typeof receipt?.received_seq === "string" &&
-    RECEIPT.test(receipt.received_seq) &&
-    BigInt(receipt.received_seq) <= 9_223_372_036_854_775_807n
+    isCanonicalPositiveInt64Decimal(receipt?.received_seq)
       ? receipt.received_seq
       : null;
   return { eventId, receivedSeq };

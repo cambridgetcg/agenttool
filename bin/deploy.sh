@@ -5,7 +5,7 @@
 #   0. Survey       — what's drifted?
 #   1. Migrations   — bin/migrate-pending.sh
 #   2. Pre-flight   — bin/preflight.sh (test gate)
-#   3. Publication  — docs prerequisites, then cd api && fly deploy
+#   3. Publication  — web/docs prerequisites, then cd api && fly deploy
 #   4. Frontends    — remaining Pages projects
 #   5. Verify       — health + parity check
 #
@@ -14,13 +14,18 @@
 #   bin/deploy.sh --survey                # Phase 0 only
 #   bin/deploy.sh --no-migrate            # skip Phase 1
 #   bin/deploy.sh --no-api                # skip Phase 3
-#   bin/deploy.sh --no-frontend           # skip Phase 4
+#   bin/deploy.sh --no-frontend           # skip Pages upload; keep API discovery prerequisites
 #   bin/deploy.sh --no-cache-api           # one-shot Fly image-cache recovery
 #   bin/deploy.sh --oauth-fallback         # explicit Cloudflare OAuth fallback
 #   bin/deploy.sh --skip-preflight        # operator override
 #   bin/deploy.sh --dry-run               # show what would happen
 #   bin/deploy.sh --allow-dirty-release    # loud source-integrity override
 #   bin/deploy.sh --allow-non-release-head # loud GitHub-main override
+#   bin/deploy.sh --no-migrate --no-frontend \
+#     --maintenance-fenced-api \
+#     --maintenance-app-machines=<id,id,id> \
+#     --maintenance-thinker-primary=<id> \
+#     --maintenance-thinker-standby=<id>   # exact stopped five-Machine rollout
 #
 # Retired: --mirror-codeberg. Codeberg is no longer a mirror of this repo;
 # GitHub main is the only head. The flag still parses so it can refuse with
@@ -32,6 +37,12 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 1
+DEPLOY_STARTED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+DEPLOY_RUN_ID=""
+if [ ! -x "$REPO_ROOT/bin/stage-frontend-release.sh" ]; then
+  echo "Missing shared frontend release stager: bin/stage-frontend-release.sh" >&2
+  exit 1
+fi
 
 # ── Parse flags ───────────────────────────────────────────────────────
 SURVEY_ONLY=0
@@ -45,6 +56,14 @@ DRY_RUN=0
 ALLOW_DIRTY_RELEASE=0
 ALLOW_NON_RELEASE_HEAD=0
 MIRROR_CODEBERG_ONLY=0
+MAINTENANCE_FENCED_API=0
+MAINTENANCE_APP_MACHINES=""
+MAINTENANCE_THINKER_PRIMARY=""
+MAINTENANCE_THINKER_STANDBY=""
+MAINTENANCE_FENCED_API_SEEN=0
+MAINTENANCE_APP_MACHINES_SEEN=0
+MAINTENANCE_THINKER_PRIMARY_SEEN=0
+MAINTENANCE_THINKER_STANDBY_SEEN=0
 for arg in "$@"; do
   case "$arg" in
     --survey) SURVEY_ONLY=1 ;;
@@ -57,11 +76,101 @@ for arg in "$@"; do
     --dry-run) DRY_RUN=1 ;;
     --allow-dirty-release) ALLOW_DIRTY_RELEASE=1 ;;
     --allow-non-release-head) ALLOW_NON_RELEASE_HEAD=1 ;;
+    --maintenance-fenced-api)
+      MAINTENANCE_FENCED_API=1
+      MAINTENANCE_FENCED_API_SEEN=$((MAINTENANCE_FENCED_API_SEEN + 1))
+      ;;
+    --maintenance-app-machines=*)
+      MAINTENANCE_APP_MACHINES="${arg#*=}"
+      MAINTENANCE_APP_MACHINES_SEEN=$((MAINTENANCE_APP_MACHINES_SEEN + 1))
+      ;;
+    --maintenance-thinker-primary=*)
+      MAINTENANCE_THINKER_PRIMARY="${arg#*=}"
+      MAINTENANCE_THINKER_PRIMARY_SEEN=$((MAINTENANCE_THINKER_PRIMARY_SEEN + 1))
+      ;;
+    --maintenance-thinker-standby=*)
+      MAINTENANCE_THINKER_STANDBY="${arg#*=}"
+      MAINTENANCE_THINKER_STANDBY_SEEN=$((MAINTENANCE_THINKER_STANDBY_SEEN + 1))
+      ;;
     --mirror-codeberg) MIRROR_CODEBERG_ONLY=1 ;;
-    -h|--help) sed -n '2,27p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
     *) echo "unknown flag: $arg"; exit 1 ;;
   esac
 done
+
+MAINTENANCE_ANY_ARGUMENT=0
+if [ "$MAINTENANCE_FENCED_API_SEEN" != 0 ] ||
+  [ "$MAINTENANCE_APP_MACHINES_SEEN" != 0 ] ||
+  [ "$MAINTENANCE_THINKER_PRIMARY_SEEN" != 0 ] ||
+  [ "$MAINTENANCE_THINKER_STANDBY_SEEN" != 0 ]; then
+  MAINTENANCE_ANY_ARGUMENT=1
+fi
+
+if [ "$MAINTENANCE_ANY_ARGUMENT" = 1 ]; then
+  if [ "$MAINTENANCE_FENCED_API_SEEN" != 1 ]; then
+    echo "maintenance rollout requires exactly one --maintenance-fenced-api"
+    exit 1
+  fi
+  if [ "$MAINTENANCE_APP_MACHINES_SEEN" != 1 ] ||
+    [ "$MAINTENANCE_THINKER_PRIMARY_SEEN" != 1 ] ||
+    [ "$MAINTENANCE_THINKER_STANDBY_SEEN" != 1 ]; then
+    echo "maintenance rollout requires each exact Machine-ID flag exactly once"
+    exit 1
+  fi
+  if [[ ! "$MAINTENANCE_APP_MACHINES" =~ ^[0-9a-f]{14},[0-9a-f]{14},[0-9a-f]{14}$ ]]; then
+    echo "--maintenance-app-machines must contain exactly three comma-separated lowercase 14-hex Fly Machine IDs"
+    exit 1
+  fi
+  if [[ ! "$MAINTENANCE_THINKER_PRIMARY" =~ ^[0-9a-f]{14}$ ]] ||
+    [[ ! "$MAINTENANCE_THINKER_STANDBY" =~ ^[0-9a-f]{14}$ ]]; then
+    echo "maintenance thinker IDs must be lowercase 14-hex Fly Machine IDs"
+    exit 1
+  fi
+  IFS=',' read -r -a MAINTENANCE_APP_MACHINE_IDS <<< "$MAINTENANCE_APP_MACHINES"
+  MAINTENANCE_ALL_MACHINE_IDS=(
+    "${MAINTENANCE_APP_MACHINE_IDS[@]}"
+    "$MAINTENANCE_THINKER_PRIMARY"
+    "$MAINTENANCE_THINKER_STANDBY"
+  )
+  for ((MAINTENANCE_I = 0; MAINTENANCE_I < ${#MAINTENANCE_ALL_MACHINE_IDS[@]}; MAINTENANCE_I++)); do
+    for ((MAINTENANCE_J = MAINTENANCE_I + 1; MAINTENANCE_J < ${#MAINTENANCE_ALL_MACHINE_IDS[@]}; MAINTENANCE_J++)); do
+      if [ "${MAINTENANCE_ALL_MACHINE_IDS[$MAINTENANCE_I]}" = "${MAINTENANCE_ALL_MACHINE_IDS[$MAINTENANCE_J]}" ]; then
+        echo "maintenance rollout Machine IDs must be unique"
+        exit 1
+      fi
+    done
+  done
+  if [ "$SKIP_MIGRATE" != 1 ]; then
+    echo "--maintenance-fenced-api requires --no-migrate; migrations must already be complete under the fence"
+    exit 1
+  fi
+  if [ "$SKIP_FRONTEND" != 1 ]; then
+    echo "--maintenance-fenced-api requires --no-frontend; discovery prerequisites must already be exact"
+    exit 1
+  fi
+  if [ "$SKIP_API" = 1 ]; then
+    echo "--maintenance-fenced-api cannot be combined with --no-api"
+    exit 1
+  fi
+  if [ "$ALLOW_DIRTY_RELEASE" = 1 ] || [ "$ALLOW_NON_RELEASE_HEAD" = 1 ]; then
+    echo "--maintenance-fenced-api refuses dirty and non-release-head overrides"
+    exit 1
+  fi
+  if [ "$SKIP_PREFLIGHT" = 1 ]; then
+    echo "--maintenance-fenced-api cannot skip preflight"
+    exit 1
+  fi
+  if [ "$SURVEY_ONLY" = 1 ] || [ "$DRY_RUN" = 1 ] ||
+    [ "$MIRROR_CODEBERG_ONLY" = 1 ] || [ "$OAUTH_FALLBACK" = 1 ]; then
+    echo "--maintenance-fenced-api cannot be combined with survey, dry-run, mirror, or OAuth fallback modes"
+    exit 1
+  fi
+  MAINTENANCE_ALL_MACHINE_IDS_CSV="$MAINTENANCE_APP_MACHINES,$MAINTENANCE_THINKER_PRIMARY,$MAINTENANCE_THINKER_STANDBY"
+else
+  MAINTENANCE_APP_MACHINE_IDS=()
+  MAINTENANCE_ALL_MACHINE_IDS=()
+  MAINTENANCE_ALL_MACHINE_IDS_CSV=""
+fi
 
 if [ "$MIRROR_CODEBERG_ONLY" = 1 ] && {
   [ "$SURVEY_ONLY" = 1 ] || [ "$SKIP_MIGRATE" = 1 ] ||
@@ -82,7 +191,6 @@ if [ "$NO_CACHE_API" = 1 ] && [ "$SURVEY_ONLY" = 1 ]; then
   echo "--no-cache-api performs an API image rebuild and cannot be combined with --survey"
   exit 1
 fi
-
 FRONTEND_DEPLOY_COMMAND=(bash bin/frontend-deploy.sh)
 FRONTEND_DEPLOY_DISPLAY="bin/frontend-deploy.sh"
 if [ "$OAUTH_FALLBACK" = 1 ]; then
@@ -95,6 +203,13 @@ bold()  { [ -t 1 ] && printf "\033[1m%s\033[0m" "$1" || printf "%s" "$1"; }
 green() { [ -t 1 ] && printf "\033[32m%s\033[0m" "$1" || printf "%s" "$1"; }
 red()   { [ -t 1 ] && printf "\033[31m%s\033[0m" "$1" || printf "%s" "$1"; }
 yellow(){ [ -t 1 ] && printf "\033[33m%s\033[0m" "$1" || printf "%s" "$1"; }
+
+# curl only treats -q as a config-file boundary when it is the first option.
+# Keep release probes independent of ~/.curlrc; proxy, DNS, and network policy
+# still apply normally.
+release_curl() {
+  command curl -q "$@"
+}
 
 phase() {
   echo ""
@@ -110,10 +225,1212 @@ FLY_APP="agenttool"
 HEALTH_URL="https://api.agenttool.dev/health"
 RIGHTS_DOC_URL="https://docs.agenttool.dev/RIGHTS-OF-LIFE.md"
 RIGHTS_SCHEMA_URL="https://docs.agenttool.dev/being-rights-v1.schema.json"
+QUIESCENCE_REQUIRED_EXIT=42
 RIGHTS_STATIC_PAIRS=(
   "apps/docs/RIGHTS-OF-LIFE.md|$RIGHTS_DOC_URL"
   "apps/docs/being-rights-v1.schema.json|$RIGHTS_SCHEMA_URL"
 )
+readonly -a REQUIRED_GAME_PUBLICATIONS=(
+  "apps/web/party.html|https://agenttool.dev/party"
+  "apps/web/party.json|https://agenttool.dev/party.json"
+  "apps/web/party.js|https://agenttool.dev/party.js"
+  "apps/web/party.css|https://agenttool.dev/party.css"
+  "apps/web/sky.html|https://agenttool.dev/sky"
+  "apps/web/sky.json|https://agenttool.dev/sky.json"
+  "apps/web/sky.js|https://agenttool.dev/sky.js"
+  "apps/web/sky.css|https://agenttool.dev/sky.css"
+)
+readonly -a FRONTEND_PARITY_PUBLICATIONS=(
+  "apps/dashboard/index.html|https://app.agenttool.dev/"
+  "apps/dashboard/watch.html|https://app.agenttool.dev/watch.html"
+  "apps/dashboard/style.css|https://app.agenttool.dev/style.css"
+  "apps/docs/index.html|https://docs.agenttool.dev/"
+  "apps/docs/play.html|https://docs.agenttool.dev/play"
+  "apps/docs/browser.html|https://docs.agenttool.dev/browser"
+  "apps/docs/data.html|https://docs.agenttool.dev/data"
+  "apps/docs/packages.html|https://docs.agenttool.dev/packages"
+  "apps/docs/pathways.html|https://docs.agenttool.dev/pathways"
+  "apps/docs/tutorial.html|https://docs.agenttool.dev/tutorial"
+  "apps/docs/whitehack.html|https://docs.agenttool.dev/whitehack"
+  "apps/docs/agenttool.jsonld|https://docs.agenttool.dev/agenttool.jsonld"
+  "apps/docs/observer-is-observed-0.1.schema.json|https://docs.agenttool.dev/observer-is-observed-0.1.schema.json"
+  "apps/docs/KINGDOM-OS-SDK.md|https://docs.agenttool.dev/KINGDOM-OS-SDK.md"
+  "apps/docs/AGENT-REPO-ARCHIVE.md|https://docs.agenttool.dev/AGENT-REPO-ARCHIVE.md"
+  "apps/docs/specs/AGENT-REPO-ARCHIVE-0.1.md|https://docs.agenttool.dev/specs/AGENT-REPO-ARCHIVE-0.1.md"
+  "apps/docs/specs/agent-repo-archive-0.1.schema.json|https://docs.agenttool.dev/specs/agent-repo-archive-0.1.schema.json"
+  "apps/docs/specs/agent-repo-archive-0.1-vectors.json|https://docs.agenttool.dev/specs/agent-repo-archive-0.1-vectors.json"
+  "${RIGHTS_STATIC_PAIRS[@]}"
+  "apps/docs/lounge.html|https://docs.agenttool.dev/lounge.html"
+  "apps/web/village.html|https://agenttool.dev/village.html"
+  "apps/web/lounge.html|https://agenttool.dev/lounge.html"
+  "apps/web/gallery.html|https://agenttool.dev/gallery.html"
+  "apps/web/index.html|https://agenttool.dev/"
+  "${REQUIRED_GAME_PUBLICATIONS[@]}"
+  "apps/web/room.html|https://agenttool.dev/room"
+  "apps/web/room.json|https://agenttool.dev/room.json"
+  "apps/web/room.js|https://agenttool.dev/room.js"
+  "apps/web/room.css|https://agenttool.dev/room.css"
+  "apps/web/welcome.json|https://agenttool.dev/welcome.json"
+  "apps/web/sitemap.xml|https://agenttool.dev/sitemap.xml"
+)
+readonly -a LOCAL_GAME_HEADER_SPECS=(
+  "party|Lantern Relay|local-party-game|local-party-rules"
+  "room|ROOM ∞|local-room-game|local-room-rules"
+  "sky|Pocket Sky|local-pocket-sky-game|local-pocket-sky-rules"
+)
+
+MAINTENANCE_FLYCTL_VERSION="v0.4.74"
+MAINTENANCE_FLYCTL_COMMIT="b74c9391409b3e443383a5f4d928cef007825ddc"
+MAINTENANCE_RESTART_FENCED_CONFIG='{"restart":{"policy":"no","max_retries":10}}'
+MAINTENANCE_RESTART_RESTORED_CONFIG='{"restart":{"policy":"on-failure","max_retries":10}}'
+MAINTENANCE_IMAGE_LABEL=""
+MAINTENANCE_IMAGE_TAG=""
+MAINTENANCE_IMAGE_DIGEST=""
+MAINTENANCE_IMAGE_REFERENCE=""
+MAINTENANCE_ROLLOUT_ID=""
+MAINTENANCE_STARTED_AT=""
+MAINTENANCE_LAST_CHECKPOINT=""
+MAINTENANCE_STATE_PATH=""
+MAINTENANCE_STATE_ACTIVE=0
+MAINTENANCE_BASELINE_SNAPSHOT_JSON=""
+MAINTENANCE_RECOVERY_SNAPSHOT_JSON=""
+MAINTENANCE_CONFIG_FINGERPRINT=""
+MAINTENANCE_ATTEMPTED_MACHINE_IDS_CSV=""
+MAINTENANCE_IMAGE_VERIFIED_MACHINE_IDS_CSV=""
+MAINTENANCE_STARTED_APP_IDS_CSV=""
+MAINTENANCE_RESTORED_APP_IDS_CSV=""
+MAINTENANCE_AUTOSTART_RESTORED_APP_IDS_CSV=""
+MAINTENANCE_RECOVERY_REFENCED_MACHINE_IDS_CSV=""
+MAINTENANCE_PRIMARY_RESTORED=0
+MAINTENANCE_STANDBY_RESTORED=0
+MAINTENANCE_INITIAL_FENCE_VERIFIED=0
+MAINTENANCE_PREBUILD_FENCE_VERIFIED=0
+MAINTENANCE_ALL_IMAGES_VERIFIED=0
+MAINTENANCE_FINAL_SHAPE_VERIFIED=0
+MAINTENANCE_WORKERS_DISABLED_VERIFIED=0
+MAINTENANCE_RECOVERY_FENCE_VERIFIED=0
+MAINTENANCE_MARKER_CLEARED=0
+
+append_csv_value() {
+  local current="$1"
+  local value="$2"
+  if [ -z "$current" ]; then
+    printf '%s' "$value"
+  else
+    printf '%s,%s' "$current" "$value"
+  fi
+}
+
+set_maintenance_state_path() {
+  if [ -z "${HOME:-}" ]; then
+    echo "$(red '✗ Deploy blocked:') HOME does not identify canonical local maintenance state." >&2
+    return 1
+  fi
+  case "$HOME" in
+    /*) ;;
+    *)
+      echo "$(red '✗ Deploy blocked:') HOME must be absolute for canonical local maintenance state." >&2
+      return 1
+      ;;
+  esac
+  MAINTENANCE_STATE_PATH="$HOME/.local/state/agenttool/deploy-state/maintenance-active.json"
+}
+
+maintenance_state_path_status() {
+  bun -e '
+    import { lstat } from "node:fs/promises";
+    try {
+      await lstat(process.argv[1]);
+    } catch (error) {
+      if (error?.code === "ENOENT") process.exit(1);
+      process.exit(2);
+    }
+  ' "$MAINTENANCE_STATE_PATH"
+}
+
+sync_storage_path() {
+  bun -e '
+    import { open } from "node:fs/promises";
+    for (const path of process.argv.slice(1)) {
+      const handle = await open(path, "r");
+      try {
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+    }
+  ' "$@"
+}
+
+sync_directory_chain() {
+  local current="$1"
+  local parent
+  local -a directories=()
+  case "$current" in
+    /*) ;;
+    *) return 1 ;;
+  esac
+  while :; do
+    directories+=("$current")
+    [ "$current" = "/" ] && break
+    parent="${current%/*}"
+    [ -n "$parent" ] || parent="/"
+    [ "$parent" != "$current" ] || return 1
+    current="$parent"
+  done
+  sync_storage_path "${directories[@]}"
+}
+
+refuse_unresolved_maintenance_state() {
+  local state_status
+  set_maintenance_state_path || return 1
+  if maintenance_state_path_status; then
+    echo "$(red '✗ Deploy blocked:') an unresolved maintenance rollout marker exists." >&2
+    echo "  marker: $MAINTENANCE_STATE_PATH" >&2
+    echo "  Consequence: no migration, image, Machine, or frontend mutation was attempted." >&2
+    echo "  Recovery: keep admission and workers held; inspect the private marker and" >&2
+    echo "  exact Fly fleet, repair forward, prove the final five-Machine state, then" >&2
+    echo "  remove only this exact marker before starting another deploy." >&2
+    return 74
+  else
+    state_status=$?
+    if [ "$state_status" = 1 ]; then
+      return 0
+    fi
+    echo "$(red '✗ Deploy blocked:') the canonical maintenance marker path could not be inspected." >&2
+    echo "  marker: $MAINTENANCE_STATE_PATH" >&2
+    echo "  Required permission: searchable parent directories and lstat access." >&2
+    echo "  Consequence: no migration, image, Machine, or frontend mutation was attempted." >&2
+    return 74
+  fi
+}
+
+write_maintenance_state() {
+  local checkpoint="$1"
+  local recovery_required="$2"
+  local state_dir temp_path updated_at state_status first_install=0
+  set_maintenance_state_path || return 1
+  if [ "$MAINTENANCE_STATE_ACTIVE" = 1 ]; then
+    verify_maintenance_state_owner || {
+      echo "$(red '✗') Refusing to replace maintenance state not owned by this invocation." >&2
+      return 1
+    }
+  else
+    first_install=1
+    if maintenance_state_path_status; then
+      echo "$(red '✗') Refusing to overwrite an unresolved maintenance rollout marker." >&2
+      return 1
+    else
+      state_status=$?
+      if [ "$state_status" != 1 ]; then
+        echo "$(red '✗') Refusing to install maintenance state while its canonical path is uninspectable." >&2
+        return 1
+      fi
+    fi
+  fi
+  state_dir="${MAINTENANCE_STATE_PATH%/*}"
+  updated_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  (umask 077; mkdir -p "$state_dir") || {
+    echo "$(red '✗') Cannot create private maintenance state directory: $state_dir" >&2
+    return 1
+  }
+  chmod 700 "$state_dir" || {
+    echo "$(red '✗') Cannot protect private maintenance state directory: $state_dir" >&2
+    return 1
+  }
+  sync_directory_chain "$state_dir" || {
+    echo "$(red '✗') Cannot storage-sync the private maintenance directory chain." >&2
+    return 1
+  }
+  temp_path="$(umask 077; mktemp "$state_dir/.maintenance-active.XXXXXX")" || {
+    echo "$(red '✗') Cannot create temporary maintenance state in: $state_dir" >&2
+    return 1
+  }
+  if ! MAINTENANCE_STATE_ROLLOUT_ID="$MAINTENANCE_ROLLOUT_ID" \
+    MAINTENANCE_STATE_SOURCE_REVISION="$HEAD_REVISION" \
+    MAINTENANCE_STATE_STARTED_AT="$MAINTENANCE_STARTED_AT" \
+    MAINTENANCE_STATE_UPDATED_AT="$updated_at" \
+    MAINTENANCE_STATE_CHECKPOINT="$checkpoint" \
+    MAINTENANCE_STATE_RECOVERY_REQUIRED="$recovery_required" \
+    MAINTENANCE_STATE_IMAGE_TAG="$MAINTENANCE_IMAGE_TAG" \
+    MAINTENANCE_STATE_IMAGE_DIGEST="$MAINTENANCE_IMAGE_DIGEST" \
+    MAINTENANCE_STATE_MACHINE_IDS="$MAINTENANCE_ALL_MACHINE_IDS_CSV" \
+    MAINTENANCE_STATE_APP_IDS="$MAINTENANCE_APP_MACHINES" \
+    MAINTENANCE_STATE_THINKER_PRIMARY="$MAINTENANCE_THINKER_PRIMARY" \
+    MAINTENANCE_STATE_THINKER_STANDBY="$MAINTENANCE_THINKER_STANDBY" \
+    MAINTENANCE_STATE_CONFIG_FINGERPRINT="$MAINTENANCE_CONFIG_FINGERPRINT" \
+    MAINTENANCE_STATE_ATTEMPTED_IDS="$MAINTENANCE_ATTEMPTED_MACHINE_IDS_CSV" \
+    MAINTENANCE_STATE_VERIFIED_IDS="$MAINTENANCE_IMAGE_VERIFIED_MACHINE_IDS_CSV" \
+    MAINTENANCE_STATE_STARTED_APP_IDS="$MAINTENANCE_STARTED_APP_IDS_CSV" \
+    MAINTENANCE_STATE_AUTOSTART_IDS="$MAINTENANCE_AUTOSTART_RESTORED_APP_IDS_CSV" \
+    MAINTENANCE_STATE_RECOVERY_IDS="$MAINTENANCE_RECOVERY_REFENCED_MACHINE_IDS_CSV" \
+      bun -e '
+        import { createHash } from "node:crypto";
+        const csv = (name) => {
+          const value = process.env[name] ?? "";
+          return value ? value.split(",").filter(Boolean).sort() : [];
+        };
+        const expectedIds = csv("MAINTENANCE_STATE_MACHINE_IDS");
+        const digest = process.env.MAINTENANCE_STATE_IMAGE_DIGEST || null;
+        const document = {
+          schema: "agenttool-maintenance-run/v1",
+          rollout_id: process.env.MAINTENANCE_STATE_ROLLOUT_ID,
+          source_revision: process.env.MAINTENANCE_STATE_SOURCE_REVISION,
+          started_at: process.env.MAINTENANCE_STATE_STARTED_AT,
+          updated_at: process.env.MAINTENANCE_STATE_UPDATED_AT,
+          checkpoint: process.env.MAINTENANCE_STATE_CHECKPOINT,
+          recovery_required:
+            process.env.MAINTENANCE_STATE_RECOVERY_REQUIRED === "true",
+          image_tag: process.env.MAINTENANCE_STATE_IMAGE_TAG,
+          image_digest: digest,
+          expected_machine_ids: expectedIds,
+          role_mapping: {
+            app_machine_ids: csv("MAINTENANCE_STATE_APP_IDS"),
+            thinker_primary_machine_id:
+              process.env.MAINTENANCE_STATE_THINKER_PRIMARY,
+            thinker_standby_machine_id:
+              process.env.MAINTENANCE_STATE_THINKER_STANDBY,
+          },
+          machine_set_sha256: createHash("sha256")
+            .update(expectedIds.join("\n") + "\n")
+            .digest("hex"),
+          non_image_config_sha256:
+            process.env.MAINTENANCE_STATE_CONFIG_FINGERPRINT,
+          attempted_machine_ids: csv("MAINTENANCE_STATE_ATTEMPTED_IDS"),
+          image_verified_machine_ids: csv("MAINTENANCE_STATE_VERIFIED_IDS"),
+          started_app_machine_ids: csv("MAINTENANCE_STATE_STARTED_APP_IDS"),
+          autostart_restored_app_machine_ids:
+            csv("MAINTENANCE_STATE_AUTOSTART_IDS"),
+          recovery_refenced_machine_ids:
+            csv("MAINTENANCE_STATE_RECOVERY_IDS"),
+        };
+        process.stdout.write(`${JSON.stringify(document, null, 2)}\n`);
+      ' > "$temp_path"; then
+    rm -f -- "$temp_path"
+    echo "$(red '✗') Could not render private maintenance state." >&2
+    return 1
+  fi
+  chmod 600 "$temp_path" || {
+    rm -f -- "$temp_path"
+    echo "$(red '✗') Cannot protect temporary maintenance state." >&2
+    return 1
+  }
+  if ! sync_storage_path "$temp_path"; then
+    rm -f -- "$temp_path"
+    echo "$(red '✗') Could not storage-sync temporary maintenance state." >&2
+    return 1
+  fi
+  if [ "$first_install" = 1 ]; then
+    if ! ln "$temp_path" "$MAINTENANCE_STATE_PATH"; then
+      rm -f -- "$temp_path"
+      echo "$(red '✗') Could not exclusively install maintenance state; another marker may exist." >&2
+      return 1
+    fi
+    MAINTENANCE_STATE_ACTIVE=1
+    if ! sync_storage_path "$state_dir"; then
+      echo "$(red '✗') Maintenance state exists, but its first directory entry could not be storage-synced." >&2
+      return 1
+    fi
+    if ! rm -f -- "$temp_path"; then
+      echo "$(red '✗') Maintenance state is storage-synced, but its temporary hard link remains." >&2
+      return 1
+    fi
+    sync_storage_path "$state_dir" || {
+      echo "$(red '✗') Could not storage-sync maintenance temporary-link cleanup." >&2
+      return 1
+    }
+  else
+    verify_maintenance_state_owner || {
+      rm -f -- "$temp_path"
+      echo "$(red '✗') Maintenance state ownership changed before replacement." >&2
+      return 1
+    }
+    mv "$temp_path" "$MAINTENANCE_STATE_PATH" || {
+      rm -f -- "$temp_path"
+      echo "$(red '✗') Could not atomically replace maintenance state." >&2
+      return 1
+    }
+    sync_storage_path "$state_dir" || {
+      echo "$(red '✗') Could not storage-sync the maintenance checkpoint replacement." >&2
+      return 1
+    }
+  fi
+  MAINTENANCE_LAST_CHECKPOINT="$checkpoint"
+}
+
+verify_maintenance_state_owner() {
+  local observed_rollout_id
+  if [ "$MAINTENANCE_STATE_ACTIVE" != 1 ] || [ -z "$MAINTENANCE_STATE_PATH" ]; then
+    echo "$(red '✗') Maintenance state is not owned by this invocation." >&2
+    return 1
+  fi
+  if [ ! -f "$MAINTENANCE_STATE_PATH" ] || [ -L "$MAINTENANCE_STATE_PATH" ]; then
+    echo "$(red '✗') Maintenance state is missing, non-file, or symlinked." >&2
+    return 1
+  fi
+  observed_rollout_id="$(
+    bun -e '
+      const document = await Bun.file(process.argv[1]).json();
+      if (typeof document?.rollout_id !== "string") process.exit(1);
+      process.stdout.write(document.rollout_id);
+    ' "$MAINTENANCE_STATE_PATH"
+  )" || {
+    echo "$(red '✗') Maintenance state is unreadable." >&2
+    return 1
+  }
+  if [ "$observed_rollout_id" != "$MAINTENANCE_ROLLOUT_ID" ]; then
+    echo "$(red '✗') Maintenance state belongs to another rollout." >&2
+    return 1
+  fi
+}
+
+verify_maintenance_flyctl_version() {
+  local version_output
+  version_output="$(fly version 2>/dev/null)" || {
+    echo "$(red '✗') Could not read flyctl version for the maintenance contract." >&2
+    return 1
+  }
+  if [[ "$version_output" != *"fly $MAINTENANCE_FLYCTL_VERSION "* ]] ||
+    [[ "$version_output" != *"Commit: $MAINTENANCE_FLYCTL_COMMIT"* ]]; then
+    echo "$(red '✗') Maintenance rollout requires exact flyctl $MAINTENANCE_FLYCTL_VERSION ($MAINTENANCE_FLYCTL_COMMIT)." >&2
+    return 1
+  fi
+  echo "  ✓ exact maintenance flyctl contract: $MAINTENANCE_FLYCTL_VERSION"
+}
+
+verify_maintenance_machine_snapshot() {
+  local shape="$1"
+  local updated_ids="${2:-}"
+  local snapshot validation_output
+  snapshot="$(list_fly_machines_json)" || {
+    echo "$(red '✗') Could not list Fly Machines for maintenance $shape verification." >&2
+    return 1
+  }
+  validation_output="$(
+    {
+      printf '%s\0' "$MAINTENANCE_BASELINE_SNAPSHOT_JSON"
+      printf '%s\0' "$MAINTENANCE_RECOVERY_SNAPSHOT_JSON"
+      printf '%s' "$snapshot"
+    } |
+      MAINTENANCE_VERIFY_SHAPE="$shape" \
+      MAINTENANCE_VERIFY_APP_IDS="$MAINTENANCE_APP_MACHINES" \
+      MAINTENANCE_VERIFY_THINKER_PRIMARY="$MAINTENANCE_THINKER_PRIMARY" \
+      MAINTENANCE_VERIFY_THINKER_STANDBY="$MAINTENANCE_THINKER_STANDBY" \
+      MAINTENANCE_VERIFY_UPDATED_IDS="$updated_ids" \
+      MAINTENANCE_VERIFY_RESTORED_APP_IDS="$MAINTENANCE_RESTORED_APP_IDS_CSV" \
+      MAINTENANCE_VERIFY_AUTOSTART_IDS="$MAINTENANCE_AUTOSTART_RESTORED_APP_IDS_CSV" \
+      MAINTENANCE_VERIFY_STARTED_APP_IDS="$MAINTENANCE_STARTED_APP_IDS_CSV" \
+      MAINTENANCE_VERIFY_PRIMARY_RESTORED="$MAINTENANCE_PRIMARY_RESTORED" \
+      MAINTENANCE_VERIFY_STANDBY_RESTORED="$MAINTENANCE_STANDBY_RESTORED" \
+      MAINTENANCE_VERIFY_IMAGE_DIGEST="$MAINTENANCE_IMAGE_DIGEST" \
+      MAINTENANCE_VERIFY_IMAGE_LABEL="$MAINTENANCE_IMAGE_LABEL" \
+      MAINTENANCE_VERIFY_REVISION="${HEAD_REVISION:-}" \
+      bun -e '
+        import { Buffer } from "node:buffer";
+        import { createHash } from "node:crypto";
+
+        const fail = (message) => {
+          console.error(`maintenance Machine gate: ${message}`);
+          process.exit(1);
+        };
+        const csv = (name) => {
+          const value = process.env[name] ?? "";
+          return value ? value.split(",").filter(Boolean) : [];
+        };
+        const canonical = (value) => {
+          if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+          if (value && typeof value === "object") {
+            return `{${Object.keys(value).sort().map((key) =>
+              `${JSON.stringify(key)}:${canonical(value[key])}`
+            ).join(",")}}`;
+          }
+          return JSON.stringify(value);
+        };
+        const nonImageConfig = (machine) => {
+          const config = structuredClone(machine?.config ?? {});
+          delete config.image;
+          return config;
+        };
+        const normalizeNonImageConfig = (config) => {
+          const normalized = structuredClone(config);
+          if (
+            normalized.standbys === undefined ||
+            (Array.isArray(normalized.standbys) &&
+              normalized.standbys.length === 0)
+          ) {
+            delete normalized.standbys;
+          }
+          if (normalized?.env?.FLY_STANDBY_FOR === "") {
+            delete normalized.env.FLY_STANDBY_FOR;
+          }
+          return normalized;
+        };
+        const equal = (left, right) => canonical(left) === canonical(right);
+        const equalConfig = (left, right) =>
+          equal(normalizeNonImageConfig(left), normalizeNonImageConfig(right));
+        const noSchedule = (config) => {
+          const value = config?.schedule;
+          return value === undefined || value === null || value === "" ||
+            (Array.isArray(value) && value.length === 0);
+        };
+        const standbyIds = (machine) => {
+          const value = machine?.config?.standbys;
+          if (value === undefined || value === null) return [];
+          if (!Array.isArray(value) || value.some((id) => typeof id !== "string")) {
+            fail(`Machine ${machine?.id ?? "<unknown>"} has invalid standby configuration`);
+          }
+          return value;
+        };
+        const requireStandbys = (machine, expected) => {
+          const observed = standbyIds(machine);
+          if (!equal(observed, expected)) {
+            fail(`Machine ${machine.id} standby configuration is not exact`);
+          }
+        };
+        const requireStandbyEnv = (machine, expected) => {
+          const observed = machine?.config?.env?.FLY_STANDBY_FOR;
+          if (expected === "") {
+            if (observed !== undefined && observed !== "") {
+              fail(`Machine ${machine.id} standby environment is not empty`);
+            }
+          } else if (observed !== expected) {
+            fail(`Machine ${machine.id} standby environment is not exact`);
+          }
+        };
+        const requireGuest = (machine, memory) => {
+          const guest = machine?.config?.guest;
+          if (
+            guest?.cpu_kind !== "shared" ||
+            guest?.cpus !== 1 ||
+            guest?.memory_mb !== memory
+          ) {
+            fail(`Machine ${machine.id} VM shape is not shared-1x/${memory}MB`);
+          }
+        };
+        const requireWorkersDisabled = (machine) => {
+          if (machine?.config?.env?.AGENTTOOL_DISABLE_WORKERS !== "1") {
+            fail(`Machine ${machine.id} does not declare workers disabled`);
+          }
+        };
+        const requireRestart = (machine, policy) => {
+          const restart = machine?.config?.restart;
+          if (
+            !restart ||
+            Object.keys(restart).sort().join(",") !== "max_retries,policy" ||
+            restart?.policy !== policy ||
+            restart?.max_retries !== 10
+          ) {
+            fail(
+              `Machine ${machine.id} restart is not ${policy} with max_retries 10`,
+            );
+          }
+        };
+        const requireAppService = (machine, autostart) => {
+          const services = machine?.config?.services;
+          if (!Array.isArray(services) || services.length !== 1) {
+            fail(`app Machine ${machine.id} does not have one canonical service`);
+          }
+          const service = services[0];
+          if (
+            service?.protocol !== "tcp" ||
+            service?.internal_port !== 3000 ||
+            service?.autostart !== autostart ||
+            ![false, "off"].includes(service?.autostop) ||
+            service?.min_machines_running !== 1
+          ) {
+            fail(`app Machine ${machine.id} service fence/config is not exact`);
+          }
+          const ports = Array.isArray(service?.ports) ? service.ports : [];
+          const port80 = ports.find((port) => port?.port === 80);
+          const port443 = ports.find((port) => port?.port === 443);
+          if (
+            ports.length !== 2 ||
+            !equal(port80?.handlers, ["http"]) ||
+            !equal(port443?.handlers, ["tls", "http"])
+          ) {
+            fail(`app Machine ${machine.id} ingress ports are not canonical`);
+          }
+        };
+        const requireTargetImage = (machine, digest) => {
+          const image = machine?.image_ref;
+          if (
+            !image ||
+            image.registry !== "registry.fly.io" ||
+            image.repository !== "agenttool" ||
+            image.tag !== process.env.MAINTENANCE_VERIFY_IMAGE_LABEL ||
+            image.digest !== digest
+          ) {
+            fail(`Machine ${machine.id} is not on the exact rollout tag and digest`);
+          }
+          const labels = image.labels;
+          if (!labels || typeof labels !== "object") {
+            fail(`Machine ${machine.id} image labels are unavailable`);
+          }
+          if (
+            labels["org.opencontainers.image.revision"] !==
+            process.env.MAINTENANCE_VERIFY_REVISION
+          ) {
+            fail(`Machine ${machine.id} image revision label is not exact`);
+          }
+          if (labels["dev.agenttool.source.dirty"] !== "false") {
+            fail(`Machine ${machine.id} image dirty label is not false`);
+          }
+        };
+        const requireRecoveryImage = (machine, baselineMachine, digest) => {
+          if (equal(machine.image_ref, baselineMachine.image_ref)) return;
+          const image = machine?.image_ref;
+          if (
+            !image ||
+            image.registry !== "registry.fly.io" ||
+            image.repository !== "agenttool" ||
+            !/^sha256:[0-9a-f]{64}$/.test(image.digest ?? "") ||
+            image.tag !== process.env.MAINTENANCE_VERIFY_IMAGE_LABEL
+          ) {
+            fail(`Machine ${machine.id} has an unrecognized recovery image`);
+          }
+          if (digest && image.digest !== digest) {
+            fail(`Machine ${machine.id} recovery image digest is not exact`);
+          }
+          const labels = image.labels;
+          if (
+            !labels ||
+            labels["org.opencontainers.image.revision"] !==
+              process.env.MAINTENANCE_VERIFY_REVISION ||
+            labels["dev.agenttool.source.dirty"] !== "false"
+          ) {
+            fail(`Machine ${machine.id} recovery image provenance is not exact`);
+          }
+        };
+
+        let baselineText;
+        let recoveryText;
+        let machines;
+        try {
+          const input = Buffer.from(
+            await new Response(Bun.stdin.stream()).arrayBuffer(),
+          );
+          const firstSeparator = input.indexOf(0);
+          const secondSeparator = input.indexOf(0, firstSeparator + 1);
+          if (firstSeparator < 0 || secondSeparator < 0) {
+            throw new Error("missing snapshot separator");
+          }
+          baselineText = input.subarray(0, firstSeparator).toString("utf8");
+          recoveryText = input
+            .subarray(firstSeparator + 1, secondSeparator)
+            .toString("utf8");
+          machines = JSON.parse(
+            input.subarray(secondSeparator + 1).toString("utf8"),
+          );
+        } catch {
+          fail("fly machine list did not return JSON");
+        }
+        if (!Array.isArray(machines)) fail("fly machine list is not a raw array");
+
+        const shape = process.env.MAINTENANCE_VERIFY_SHAPE ?? "";
+        if (![
+          "initial",
+          "capture",
+          "fenced",
+          "restoring",
+          "starting",
+          "started",
+          "activating",
+          "final",
+          "recovery_initial",
+          "recovery",
+          "safe",
+        ].includes(shape)) {
+          fail(`unknown expected shape ${shape || "<empty>"}`);
+        }
+        const apps = csv("MAINTENANCE_VERIFY_APP_IDS");
+        const primary = process.env.MAINTENANCE_VERIFY_THINKER_PRIMARY ?? "";
+        const standby = process.env.MAINTENANCE_VERIFY_THINKER_STANDBY ?? "";
+        const expectedIds = [...apps, primary, standby];
+        if (
+          apps.length !== 3 ||
+          expectedIds.length !== 5 ||
+          expectedIds.some((id) => !/^[0-9a-f]{14}$/.test(id)) ||
+          new Set(expectedIds).size !== 5
+        ) {
+          fail("internal expected Machine-ID set is invalid");
+        }
+        if (machines.length !== 5) {
+          fail(`expected exactly five Machines, observed ${machines.length}`);
+        }
+        const byId = new Map();
+        for (const machine of machines) {
+          if (!machine || typeof machine.id !== "string") {
+            fail("Machine without a string ID");
+          }
+          if (byId.has(machine.id)) fail(`duplicate Machine ${machine.id} in Fly response`);
+          byId.set(machine.id, machine);
+        }
+        for (const id of expectedIds) {
+          if (!byId.has(id)) fail(`expected Machine ${id} is absent`);
+        }
+        for (const id of byId.keys()) {
+          if (!expectedIds.includes(id)) fail(`unexpected Machine ${id} is present`);
+        }
+
+        let baselineById = new Map();
+        if (shape !== "initial") {
+          if (!baselineText) fail("initial maintenance baseline is unavailable");
+          let baseline;
+          try {
+            baseline = JSON.parse(baselineText);
+          } catch {
+            fail("initial maintenance baseline is unreadable");
+          }
+          if (!Array.isArray(baseline)) fail("initial maintenance baseline is not an array");
+          baselineById = new Map(baseline.map((machine) => [machine.id, machine]));
+          if (baselineById.size !== 5) fail("initial maintenance baseline is incomplete");
+        }
+        let recoveryById = new Map();
+        if (shape === "recovery") {
+          if (!recoveryText) fail("recovery baseline is unavailable");
+          let recoveryBaseline;
+          try {
+            recoveryBaseline = JSON.parse(recoveryText);
+          } catch {
+            fail("recovery baseline is unreadable");
+          }
+          if (!Array.isArray(recoveryBaseline)) {
+            fail("recovery baseline is not an array");
+          }
+          recoveryById = new Map(
+            recoveryBaseline.map((machine) => [machine.id, machine]),
+          );
+          if (recoveryById.size !== 5) {
+            fail("recovery baseline is incomplete");
+          }
+        }
+
+        const updated = new Set(csv("MAINTENANCE_VERIFY_UPDATED_IDS"));
+        const restoredApps = new Set(csv("MAINTENANCE_VERIFY_RESTORED_APP_IDS"));
+        const autostartApps = new Set(csv("MAINTENANCE_VERIFY_AUTOSTART_IDS"));
+        const startedApps = new Set(csv("MAINTENANCE_VERIFY_STARTED_APP_IDS"));
+        const primaryRestored =
+          process.env.MAINTENANCE_VERIFY_PRIMARY_RESTORED === "1";
+        const standbyRestored =
+          process.env.MAINTENANCE_VERIFY_STANDBY_RESTORED === "1";
+        const allAppsAreStarted = ["started", "activating", "final"].includes(shape);
+        const appShouldBeStarted = (id) => allAppsAreStarted ||
+          (shape === "starting" && startedApps.has(id));
+        const appRestartIsRestored = (id) =>
+          ["starting", "started", "activating", "final"].includes(shape) ||
+          (shape === "restoring" && restoredApps.has(id));
+        const appAutostartIsRestored = (id) => shape === "final" ||
+          (shape === "activating" && autostartApps.has(id));
+        const thinkerIsRestored = (id) =>
+          ["starting", "started", "activating", "final"].includes(shape) ||
+          (shape === "restoring" &&
+            ((id === primary && primaryRestored) ||
+              (id === standby && standbyRestored)));
+        const baselineNonImageConfig = (id) => {
+          const baselineMachine = baselineById.get(id);
+          if (!baselineMachine) fail(`baseline Machine ${id} is absent`);
+          return nonImageConfig(baselineMachine);
+        };
+        const projectAppConfig = (id, autostart) => {
+          const config = baselineNonImageConfig(id);
+          config.restart = { policy: "on-failure", max_retries: 10 };
+          if (autostart) {
+            for (const service of config.services) service.autostart = true;
+          }
+          return config;
+        };
+        const projectThinkerConfig = (id) => {
+          const config = baselineNonImageConfig(id);
+          config.restart = { policy: "on-failure", max_retries: 10 };
+          if (id === standby) {
+            config.standbys = [primary];
+            config.env.FLY_STANDBY_FOR = primary;
+          }
+          return config;
+        };
+        const projectSafeConfig = (id) => {
+          const config = baselineNonImageConfig(id);
+          config.restart = { policy: "no", max_retries: 10 };
+          if (apps.includes(id)) {
+            for (const service of config.services) service.autostart = false;
+          }
+          if (id === standby) {
+            delete config.standbys;
+            config.env.FLY_STANDBY_FOR = "";
+          }
+          return config;
+        };
+        const expectedNonImageConfig = (id) => {
+          let config = baselineNonImageConfig(id);
+          if (apps.includes(id) && appRestartIsRestored(id)) {
+            config = projectAppConfig(id, appAutostartIsRestored(id));
+          } else if (
+            (id === primary || id === standby) &&
+            thinkerIsRestored(id)
+          ) {
+            config = projectThinkerConfig(id);
+          }
+          if (shape === "safe") config = projectSafeConfig(id);
+          return config;
+        };
+        const recoveryIds = shape === "recovery" ? updated : new Set();
+        const recoveryConfigIsAllowed = (id, config) => {
+          if (recoveryIds.has(id)) {
+            return equalConfig(config, projectSafeConfig(id));
+          }
+          const allowed = [baselineNonImageConfig(id), projectSafeConfig(id)];
+          if (apps.includes(id)) {
+            allowed.push(projectAppConfig(id, false), projectAppConfig(id, true));
+          } else {
+            allowed.push(projectThinkerConfig(id));
+          }
+          return allowed.some((candidate) => equalConfig(config, candidate));
+        };
+        const configuredDigest = process.env.MAINTENANCE_VERIFY_IMAGE_DIGEST ?? "";
+        let targetDigest = configuredDigest;
+        if (shape === "capture") {
+          if (updated.size !== 1) fail("digest capture requires exactly one updated Machine");
+          const [firstId] = [...updated];
+          const observed = byId.get(firstId)?.image_ref?.digest ?? "";
+          if (!/^sha256:[0-9a-f]{64}$/.test(observed)) {
+            fail("first updated Machine did not resolve an immutable digest");
+          }
+          targetDigest = observed;
+        } else if (
+          ((shape === "fenced" && updated.size > 0) ||
+            ["restoring", "starting", "started", "activating", "final"].includes(shape)) &&
+          !/^sha256:[0-9a-f]{64}$/.test(targetDigest)
+        ) {
+          fail("internal rollout digest is absent or malformed");
+        }
+
+        const appRegions = [];
+        for (const id of apps) {
+          const machine = byId.get(id);
+          const config = machine.config ?? {};
+          if (machine.host_status !== "ok") {
+            fail(`app Machine ${id} host status is not ok`);
+          }
+          if (typeof machine.cordoned !== "boolean") {
+            fail(`app Machine ${id} does not expose a boolean cordoned state`);
+          }
+          if (config?.metadata?.fly_process_group !== "app") {
+            fail(`Machine ${id} is not in process group app`);
+          }
+          if (!["lhr", "cdg"].includes(machine.region)) {
+            fail(`app Machine ${id} has unexpected region ${machine.region ?? "<unset>"}`);
+          }
+          appRegions.push(machine.region);
+          requireGuest(machine, 1024);
+          requireWorkersDisabled(machine);
+          if (!noSchedule(config)) fail(`app Machine ${id} has a schedule`);
+          requireStandbys(machine, []);
+          requireStandbyEnv(machine, "");
+
+          const restartRestored = appRestartIsRestored(id);
+          const autostartRestored = appAutostartIsRestored(id);
+          if (["recovery_initial", "recovery"].includes(shape)) {
+            const observedAutostart = config?.services?.[0]?.autostart;
+            if (typeof observedAutostart !== "boolean") {
+              fail(`app Machine ${id} recovery autostart is not boolean`);
+            }
+            requireAppService(machine, observedAutostart);
+            if (recoveryIds.has(id)) {
+              if (machine.state !== "stopped") {
+                fail(`re-fenced app Machine ${id} is not stopped`);
+              }
+              if (observedAutostart) {
+                fail(`re-fenced app Machine ${id} is not restart/autostart safe`);
+              }
+              requireRestart(machine, "no");
+            } else {
+              if (!["stopped", "started"].includes(machine.state)) {
+                fail(`app Machine ${id} has an invalid recovery state`);
+              }
+              if (!["no", "on-failure"].includes(config?.restart?.policy)) {
+                fail(`app Machine ${id} has an invalid recovery restart policy`);
+              }
+              requireRestart(machine, config.restart.policy);
+              if (
+                machine.state === "started" &&
+                config?.restart?.policy !== "on-failure"
+              ) {
+                fail(`started app Machine ${id} has an unrecognized recovery config`);
+              }
+            }
+          } else if (
+            shape === "safe" ||
+            ["initial", "capture", "fenced"].includes(shape)
+          ) {
+            if (machine.state !== "stopped") fail(`app Machine ${id} is not stopped`);
+            requireRestart(machine, "no");
+            requireAppService(machine, false);
+          } else if (restartRestored) {
+            const expectedState = appShouldBeStarted(id) ? "started" : "stopped";
+            if (machine.state !== expectedState) {
+              fail(`restored app Machine ${id} is not ${expectedState}`);
+            }
+            requireRestart(machine, "on-failure");
+            requireAppService(machine, autostartRestored);
+          } else {
+            if (machine.state !== "stopped") fail(`unrestored app Machine ${id} is not stopped`);
+            requireRestart(machine, "no");
+            requireAppService(machine, false);
+          }
+        }
+        appRegions.sort();
+        if (appRegions.join(",") !== "cdg,lhr,lhr") {
+          fail(`app region multiset is ${appRegions.join(",")}, expected cdg,lhr,lhr`);
+        }
+
+        for (const id of [primary, standby]) {
+          const machine = byId.get(id);
+          const config = machine.config ?? {};
+          if (machine.host_status !== "ok") {
+            fail(`thinker Machine ${id} host status is not ok`);
+          }
+          if (typeof machine.cordoned !== "boolean") {
+            fail(`thinker Machine ${id} does not expose a boolean cordoned state`);
+          }
+          if (config?.metadata?.fly_process_group !== "thinker") {
+            fail(`Machine ${id} is not in process group thinker`);
+          }
+          if (machine.region !== "lhr") fail(`thinker Machine ${id} is not in lhr`);
+          if (machine.state !== "stopped") fail(`thinker Machine ${id} is not stopped`);
+          requireGuest(machine, 256);
+          requireWorkersDisabled(machine);
+          if (!noSchedule(config)) fail(`thinker Machine ${id} has a schedule`);
+          if (Array.isArray(config.services) && config.services.length !== 0) {
+            fail(`thinker Machine ${id} unexpectedly exposes services`);
+          }
+          const restored = thinkerIsRestored(id);
+          if (["recovery_initial", "recovery"].includes(shape)) {
+            if (recoveryIds.has(id)) {
+              requireRestart(machine, "no");
+              requireStandbys(machine, []);
+              requireStandbyEnv(machine, "");
+            } else if (!["no", "on-failure"].includes(config?.restart?.policy)) {
+              fail(`thinker Machine ${id} has an invalid recovery restart policy`);
+            } else {
+              requireRestart(machine, config.restart.policy);
+              if (id === standby) {
+                const observedStandbys = standbyIds(machine);
+                if (observedStandbys.length === 0) {
+                  requireStandbyEnv(machine, "");
+                } else {
+                  requireStandbys(machine, [primary]);
+                  requireStandbyEnv(machine, primary);
+                }
+              } else {
+                requireStandbys(machine, []);
+                requireStandbyEnv(machine, "");
+              }
+            }
+          } else if (
+            shape === "safe" ||
+            ["initial", "capture", "fenced"].includes(shape) ||
+            !restored
+          ) {
+            requireRestart(machine, "no");
+            requireStandbys(machine, []);
+            requireStandbyEnv(machine, "");
+          } else {
+            requireRestart(machine, "on-failure");
+            requireStandbys(machine, id === standby ? [primary] : []);
+            requireStandbyEnv(machine, id === standby ? primary : "");
+          }
+        }
+
+        if (shape !== "initial") {
+          for (const id of expectedIds) {
+            const machine = byId.get(id);
+            const baselineMachine = baselineById.get(id);
+            if (machine.region !== baselineMachine.region) {
+              fail(`Machine ${id} region drifted from its per-ID baseline`);
+            }
+            if (machine.cordoned !== baselineMachine.cordoned) {
+              fail(`Machine ${id} cordoned state drifted`);
+            }
+            const observedConfig = nonImageConfig(machine);
+            let configMatches;
+            if (shape === "recovery") {
+              const recoveryMachine = recoveryById.get(id);
+              if (!recoveryMachine) {
+                fail(`recovery baseline Machine ${id} is absent`);
+              }
+              configMatches = recoveryIds.has(id)
+                ? equalConfig(observedConfig, projectSafeConfig(id))
+                : equalConfig(observedConfig, nonImageConfig(recoveryMachine));
+              if (
+                !recoveryIds.has(id) &&
+                (machine.state !== recoveryMachine.state ||
+                  machine.version !== recoveryMachine.version)
+              ) {
+                fail(`untouched Machine ${id} recovery lifecycle drifted`);
+              }
+            } else if (shape === "recovery_initial") {
+              configMatches = recoveryConfigIsAllowed(id, observedConfig);
+            } else {
+              configMatches = equalConfig(
+                observedConfig,
+                expectedNonImageConfig(id),
+              );
+            }
+            if (!configMatches) {
+              fail(`Machine ${id} full non-image configuration drifted`);
+            }
+          }
+        }
+
+        if (["capture", "fenced"].includes(shape)) {
+          for (const id of expectedIds) {
+            const machine = byId.get(id);
+            const baselineMachine = baselineById.get(id);
+            if (updated.has(id)) {
+              requireTargetImage(machine, targetDigest);
+            } else if (!equal(machine.image_ref, baselineMachine.image_ref)) {
+              fail(`unattempted Machine ${id} image changed`);
+            }
+          }
+        } else if (
+          ["restoring", "starting", "started", "activating", "final"].includes(shape)
+        ) {
+          for (const id of expectedIds) requireTargetImage(byId.get(id), targetDigest);
+        } else if (shape === "recovery") {
+          for (const id of expectedIds) {
+            const recoveryMachine = recoveryById.get(id);
+            if (!recoveryMachine) {
+              fail(`recovery baseline Machine ${id} is absent`);
+            }
+            if (!equal(byId.get(id).image_ref, recoveryMachine.image_ref)) {
+              fail(`Machine ${id} image changed during recovery`);
+            }
+          }
+        } else if (["recovery_initial", "safe"].includes(shape)) {
+          for (const id of expectedIds) {
+            requireRecoveryImage(
+              byId.get(id),
+              baselineById.get(id),
+              configuredDigest,
+            );
+          }
+        }
+
+        if (shape === "initial") {
+          const configProjection = expectedIds.sort().map((id) => [
+            id,
+            normalizeNonImageConfig(nonImageConfig(byId.get(id))),
+          ]);
+          process.stdout.write(
+            createHash("sha256").update(canonical(configProjection)).digest("hex")
+          );
+        } else if (shape === "capture") {
+          process.stdout.write(targetDigest);
+        }
+      '
+  )" || return 1
+
+  case "$shape" in
+    initial)
+      MAINTENANCE_BASELINE_SNAPSHOT_JSON="$snapshot"
+      MAINTENANCE_CONFIG_FINGERPRINT="$validation_output"
+      ;;
+    capture)
+      MAINTENANCE_IMAGE_DIGEST="$validation_output"
+      MAINTENANCE_IMAGE_REFERENCE="registry.fly.io/$FLY_APP:$MAINTENANCE_IMAGE_LABEL@$MAINTENANCE_IMAGE_DIGEST"
+      ;;
+    recovery_initial)
+      MAINTENANCE_RECOVERY_SNAPSHOT_JSON="$snapshot"
+      ;;
+  esac
+  echo "  ✓ maintenance Machine proof: $shape"
+}
+
+maintenance_update_image() {
+  local machine_id="$1"
+  local image_reference="$2"
+  (
+    cd api || exit 1
+    fly machine update "$machine_id" -a "$FLY_APP" \
+      --image "$image_reference" \
+      --build-remote-only \
+      --autostart=false \
+      --machine-config "$MAINTENANCE_RESTART_FENCED_CONFIG" \
+      --skip-health-checks \
+      --skip-start \
+      --wait-timeout 300 \
+      --yes
+  )
+}
+
+maintenance_restore_app() {
+  local machine_id="$1"
+  (
+    cd api || exit 1
+    fly machine update "$machine_id" -a "$FLY_APP" \
+      --build-remote-only \
+      --autostart=false \
+      --machine-config "$MAINTENANCE_RESTART_RESTORED_CONFIG" \
+      --skip-health-checks \
+      --skip-start \
+      --wait-timeout 300 \
+      --yes
+  )
+}
+
+maintenance_enable_app_autostart() {
+  local machine_id="$1"
+  (
+    cd api || exit 1
+    fly machine update "$machine_id" -a "$FLY_APP" \
+      --build-remote-only \
+      --autostart=true \
+      --machine-config "$MAINTENANCE_RESTART_RESTORED_CONFIG" \
+      --wait-timeout 300 \
+      --yes
+  )
+}
+
+maintenance_restore_thinker() {
+  local machine_id="$1"
+  local standby_for="${2:-}"
+  local -a standby_args=()
+  if [ -n "$standby_for" ]; then
+    standby_args=(--standby-for "$standby_for")
+  fi
+  (
+    cd api || exit 1
+    fly machine update "$machine_id" -a "$FLY_APP" \
+      --build-remote-only \
+      --machine-config "$MAINTENANCE_RESTART_RESTORED_CONFIG" \
+      "${standby_args[@]}" \
+      --skip-health-checks \
+      --skip-start \
+      --wait-timeout 300 \
+      --yes
+  )
+}
+
+maintenance_refence_machine() {
+  local machine_id="$1"
+  local role="$2"
+  local clear_standby="${3:-0}"
+  local -a app_args=() standby_args=()
+  if [ "$role" = "app" ]; then
+    app_args=(--autostart=false)
+  fi
+  if [ "$clear_standby" = 1 ]; then
+    standby_args=(--standby-for=)
+  fi
+  (
+    cd api || exit 1
+    fly machine update "$machine_id" -a "$FLY_APP" \
+      --build-remote-only \
+      "${app_args[@]}" \
+      --machine-config "$MAINTENANCE_RESTART_FENCED_CONFIG" \
+      "${standby_args[@]}" \
+      --skip-health-checks \
+      --skip-start \
+      --wait-timeout 300 \
+      --yes
+  )
+}
+
+best_effort_maintenance_refence() {
+  local machine_id recovery_ids="" candidate_ids recovery_count=0
+  echo "$(yellow '⚠ fail-closed maintenance recovery: re-inventorying, then re-fencing the exact five Machines without rolling images back')"
+  if verify_maintenance_machine_snapshot safe; then
+    MAINTENANCE_RECOVERY_FENCE_VERIFIED=1
+    echo "  ✓ maintenance fleet was already safely fenced; no recovery mutation was needed"
+    return 0
+  fi
+  if ! verify_maintenance_machine_snapshot recovery_initial ""; then
+    echo "$(red '✗') Recovery inventory is outside the recognized rollout states; no re-fence mutation is authorized." >&2
+    return 1
+  fi
+  for machine_id in "${MAINTENANCE_APP_MACHINE_IDS[@]}"; do
+    recovery_count=$((recovery_count + 1))
+    candidate_ids="$(append_csv_value "$recovery_ids" "$machine_id")"
+    write_maintenance_state \
+      "recovery_attempting_refence_${recovery_count}_of_5" true || return 1
+    maintenance_refence_machine "$machine_id" app ||
+      echo "$(yellow '⚠ an app re-fence command returned nonzero; resolving by full read-back')" >&2
+    if verify_maintenance_machine_snapshot recovery "$candidate_ids"; then
+      recovery_ids="$candidate_ids"
+      MAINTENANCE_RECOVERY_REFENCED_MACHINE_IDS_CSV="$recovery_ids"
+      write_maintenance_state \
+        "recovery_verified_refence_${recovery_count}_of_5" true || return 1
+    else
+      echo "$(red '✗') App re-fence read-back failed; no later recovery mutation is authorized." >&2
+      return 1
+    fi
+  done
+  recovery_count=$((recovery_count + 1))
+  candidate_ids="$(append_csv_value "$recovery_ids" "$MAINTENANCE_THINKER_PRIMARY")"
+  write_maintenance_state \
+    "recovery_attempting_refence_${recovery_count}_of_5" true || return 1
+  maintenance_refence_machine "$MAINTENANCE_THINKER_PRIMARY" thinker ||
+    echo "$(yellow '⚠ thinker-primary re-fence returned nonzero; resolving by full read-back')" >&2
+  if verify_maintenance_machine_snapshot recovery "$candidate_ids"; then
+    recovery_ids="$candidate_ids"
+    MAINTENANCE_RECOVERY_REFENCED_MACHINE_IDS_CSV="$recovery_ids"
+    write_maintenance_state \
+      "recovery_verified_refence_${recovery_count}_of_5" true || return 1
+  else
+    echo "$(red '✗') Thinker-primary re-fence read-back failed; standby mutation is not authorized." >&2
+    return 1
+  fi
+  recovery_count=$((recovery_count + 1))
+  candidate_ids="$(append_csv_value "$recovery_ids" "$MAINTENANCE_THINKER_STANDBY")"
+  write_maintenance_state \
+    "recovery_attempting_refence_${recovery_count}_of_5" true || return 1
+  maintenance_refence_machine "$MAINTENANCE_THINKER_STANDBY" thinker 1 ||
+    echo "$(yellow '⚠ thinker-standby re-fence returned nonzero; resolving by full read-back')" >&2
+  if verify_maintenance_machine_snapshot recovery "$candidate_ids"; then
+    recovery_ids="$candidate_ids"
+    MAINTENANCE_RECOVERY_REFENCED_MACHINE_IDS_CSV="$recovery_ids"
+    write_maintenance_state \
+      "recovery_verified_refence_${recovery_count}_of_5" true || return 1
+  else
+    echo "$(red '✗') Thinker-standby re-fence read-back failed." >&2
+    return 1
+  fi
+  if verify_maintenance_machine_snapshot safe; then
+    MAINTENANCE_RECOVERY_FENCE_VERIFIED=1
+    echo "  ✓ best-effort maintenance re-fence verified"
+    return 0
+  else
+    echo "$(red '✗') Best-effort maintenance re-fence is incomplete; keep admission held and inspect the private marker." >&2
+  fi
+  return 1
+}
+
+verify_maintenance_runtime_environment() {
+  local machine_id remote_command
+  remote_command="test \"\${AGENTTOOL_GIT_REVISION:-}\" = \"$HEAD_REVISION\" && test \"\${AGENTTOOL_SOURCE_DIRTY:-}\" = \"false\" && test \"\${AGENTTOOL_DISABLE_WORKERS:-}\" = \"1\""
+  for machine_id in "${MAINTENANCE_APP_MACHINE_IDS[@]}"; do
+    (
+      cd api || exit 1
+      fly ssh console -q -a "$FLY_APP" --machine "$machine_id" \
+        -C "sh -c '$remote_command'" >/dev/null 2>&1
+    ) || {
+      echo "$(red '✗') A started app Machine failed silent revision/dirty/worker verification." >&2
+      return 1
+    }
+  done
+  echo "  ✓ three started app Machines silently proved revision, dirty=false, and workers disabled"
+}
+
+verify_required_frontend_inputs() {
+  local publication local_path
+  for publication in "${REQUIRED_GAME_PUBLICATIONS[@]}"; do
+    local_path="${publication%|*}"
+    if ! git cat-file -e "$HEAD_REVISION:$local_path" 2>/dev/null; then
+      echo "  $(red '✗') Required committed frontend release input is missing: $local_path"
+      return 1
+    fi
+  done
+}
 
 fetch_tracking_ref() {
   local remote="$1"
@@ -284,6 +1601,7 @@ if [ "$SURVEY_ONLY" = 0 ] && [ "$DRY_RUN" = 0 ]; then
   trap 'exit 130' INT
   trap 'exit 143' TERM
   acquire_deploy_lock || exit $?
+  refuse_unresolved_maintenance_state || exit $?
 fi
 
 # ── Phase 0 — Survey ──────────────────────────────────────────────────
@@ -304,6 +1622,18 @@ fi
 # GitHub main is the coordination/release head. Refresh it before making a
 # production claim; a cached remote-tracking ref is not enough for deployment.
 HEAD_REVISION="$(git rev-parse HEAD)" || exit 1
+DEPLOY_RUN_ID="deploy-${HEAD_REVISION:0:12}-$$"
+
+# Every Pages subprocess must archive the same immutable release snapshot.
+# In particular, Phase 3 intentionally invokes web and docs separately so a
+# failed web upload stops before docs; passing this scoped child environment
+# prevents a concurrent branch move from making those calls resolve different
+# commits.
+run_frontend_deploy() {
+  AGENTTOOL_FRONTEND_RELEASE_REVISION="$HEAD_REVISION" \
+    "${FRONTEND_DEPLOY_COMMAND[@]}" "$@"
+}
+
 RELEASE_SNAPSHOT_OK=0
 RELEASE_SNAPSHOT_REVISION=""
 RELEASE_SNAPSHOT_OBSERVED_AT=""
@@ -336,34 +1666,73 @@ if [ -f packages/sdk-ts/src/seed.ts ] && [ -f apps/dashboard/shared/seed.bundle.
   fi
 fi
 
-# Repo migration files and journal
-if [ "$SKIP_MIGRATE" = 1 ]; then
-  echo "  ⊘ migration survey skipped (--no-migrate)"
+# Repo migration files and journal. An API release still needs this compatibility
+# survey under --no-migrate; otherwise that flag could conceal a protected
+# pending migration. A pure frontend release remains database-independent.
+MIGRATION_SURVEY_REQUIRED=0
+MIGRATION_SURVEY_BLOCKED=0
+MIGRATION_SURVEY_STATUS=0
+PENDING=0
+if [ "$SKIP_MIGRATE" = 0 ] || [ "$SKIP_API" = 0 ]; then
+  MIGRATION_SURVEY_REQUIRED=1
+fi
+if [ "$MIGRATION_SURVEY_REQUIRED" = 0 ]; then
+  echo "  ⊘ migration compatibility survey skipped (frontend-only release)"
 elif command -v security >/dev/null 2>&1 && [ -z "${DATABASE_URL:-}" ]; then
   DATABASE_URL="$(security find-generic-password -s agenttool-database-url -a macair -w 2>/dev/null || true)"
 fi
-if [ "$SKIP_MIGRATE" = 0 ] && [ -n "${DATABASE_URL:-}" ]; then
+if [ "$MIGRATION_SURVEY_REQUIRED" = 1 ] && [ -n "${DATABASE_URL:-}" ]; then
   MIGRATION_SURVEY_OUTPUT=""
-  if MIGRATION_SURVEY_OUTPUT="$(DATABASE_URL="$DATABASE_URL" bash bin/migrate-pending.sh --dry-run 2>/dev/null)"; then
+  MIGRATION_SURVEY_OUTPUT="$(
+    DATABASE_URL="$DATABASE_URL" bash bin/migrate-pending.sh --dry-run 2>/dev/null
+  )"
+  MIGRATION_SURVEY_STATUS=$?
+  if [ "$MIGRATION_SURVEY_STATUS" = 0 ]; then
     PENDING="$(printf '%s\n' "$MIGRATION_SURVEY_OUTPUT" | awk '/^[[:space:]]+[0-9].*\.sql$/ { count++ } END { print count + 0 }')"
+    if [ "$PENDING" = "0" ]; then
+      echo "  ✓ migration inventory clean: no repo files pending; every journaled filename has source; checksums match. This does not prove database schema parity or detect out-of-band DDL."
+    elif [ "$SKIP_MIGRATE" = 1 ]; then
+      echo "$(yellow "⚠ $PENDING unprotected migration(s) pending — --no-migrate will not apply them")"
+    else
+      echo "$(yellow "⚠ $PENDING migration(s) pending — Phase 1 will apply them")"
+    fi
+  elif [ "$MIGRATION_SURVEY_STATUS" = "$QUIESCENCE_REQUIRED_EXIT" ]; then
+    MIGRATION_SURVEY_BLOCKED=1
+    echo "$(red '✗ Release blocked:') pending migrations require an exclusive maintenance cutover."
+    printf '%s\n' "$MIGRATION_SURVEY_OUTPUT" | sed 's/^/    /'
+    echo "  The ordinary deploy cannot prove that API writers, webhook ingress, and workers stay quiescent."
+    echo "  Follow docs/DEPLOY-PROCEDURE.md and apply them separately while old processes cannot restart."
   else
-    PENDING="unknown"
+    MIGRATION_SURVEY_BLOCKED=1
+    echo "$(red '✗ Release blocked:') migration survey failed; repo-file and journal status is unknown."
+    echo "  Required operation: restore the database survey, then retry."
+    echo "  Consequence: migration or API publication cannot safely proceed."
   fi
-  if [ "$PENDING" = "unknown" ]; then
-    echo "  ? migration survey failed — repo-file and journal status is unknown"
-  elif [ "$PENDING" = "0" ]; then
-    echo "  ✓ no repo migration files pending and journal checksums match for files present; it does not prove database schema parity or account for journal rows whose files are absent."
-  else
-    echo "$(yellow "⚠ $PENDING migration(s) pending — Phase 1 will apply them")"
-  fi
-elif [ "$SKIP_MIGRATE" = 0 ]; then
-  echo "  ? DATABASE_URL not resolved — can't survey repo migration files and journal"
+elif [ "$MIGRATION_SURVEY_REQUIRED" = 1 ]; then
+  MIGRATION_SURVEY_BLOCKED=1
+  echo "$(red '✗ Release blocked:') DATABASE_URL not resolved; repo-file and journal status is unknown."
+  echo "  Required operation: provide the scoped database credential for the compatibility survey."
+  echo "  Consequence: migration or API publication cannot safely proceed."
+fi
+
+if [ "$MAINTENANCE_FENCED_API" = 1 ] &&
+  { [ "$MIGRATION_SURVEY_STATUS" != 0 ] || [ "$PENDING" != 0 ]; }; then
+  MIGRATION_SURVEY_BLOCKED=1
+  echo "$(red '✗ Release blocked:') maintenance rollout requires an empty migration inventory."
+  echo "  Apply the exact reviewed protected set under the external fence, then require a clean dry-run."
 fi
 
 if [ "$SURVEY_ONLY" = 1 ]; then
   echo ""
   echo "(survey-only — exit)"
-  [ "$RELEASE_SNAPSHOT_OK" = 1 ] && exit 0 || exit 1
+  if [ "$RELEASE_SNAPSHOT_OK" = 1 ] && [ "$MIGRATION_SURVEY_BLOCKED" = 0 ]; then
+    exit 0
+  fi
+  exit 1
+fi
+
+if [ "$MIGRATION_SURVEY_BLOCKED" = 1 ]; then
+  exit 1
 fi
 
 DIRTY_OVERRIDE_USED=0
@@ -371,6 +1740,7 @@ NON_RELEASE_HEAD_OVERRIDE_USED=0
 
 enforce_release_source() {
   local current_head current_status current_dirty
+  verify_required_frontend_inputs || return 1
   current_head="$(git rev-parse HEAD)" || return 1
   if [ "$current_head" != "$HEAD_REVISION" ]; then
     echo "$(red '✗ Release blocked:') HEAD changed during this deploy invocation."
@@ -431,9 +1801,9 @@ if [ "$DRY_RUN" = 1 ]; then
   if [ "$SKIP_API" = 1 ]; then
     echo "  Phase 3: skip"
   elif [ "$SKIP_FRONTEND" = 1 ]; then
-    echo "  Phase 3: verify live Rights of Life prerequisites, then cd api && fly deploy"
+    echo "  Phase 3: verify live Rights of Life and game prerequisites, then cd api && fly deploy"
   else
-    echo "  Phase 3: $FRONTEND_DEPLOY_DISPLAY docs, verify prerequisites, then cd api && fly deploy"
+    echo "  Phase 3: $FRONTEND_DEPLOY_DISPLAY web, then $FRONTEND_DEPLOY_DISPLAY docs, verify live prerequisites, then cd api && fly deploy"
   fi
   if [ "$SKIP_API" = 0 ]; then
     if [ "$NO_CACHE_API" = 1 ]; then
@@ -447,7 +1817,7 @@ if [ "$DRY_RUN" = 1 ]; then
   elif [ "$SKIP_API" = 1 ]; then
     echo "  Phase 4: $FRONTEND_DEPLOY_DISPLAY"
   else
-    echo "  Phase 4: $FRONTEND_DEPLOY_DISPLAY dashboard web"
+    echo "  Phase 4: $FRONTEND_DEPLOY_DISPLAY dashboard"
   fi
   echo "  Phase 5: verify"
   exit 0
@@ -461,7 +1831,7 @@ MIGRATION_RESULT="not_run"
 PREFLIGHT_RESULT="not_run"
 API_RESULT="not_run"
 FRONTEND_RESULT="not_run"
-DOCS_PREPUBLISHED=0
+DISCOVERY_FRONTENDS_PREPUBLISHED=0
 VERIFIED_MACHINE_COUNT=0
 EXTERNAL_MUTATION_STARTED=0
 DEPLOY_RECEIPT_WRITTEN=0
@@ -469,6 +1839,7 @@ API_STAGING_ACTIVE=0
 API_SOURCE_DIRTY="unknown"
 LOVE_PACKAGE_HEADER_PROBES=""
 DOCTRINE_STAGE_DIR="api/doctrine-docs.bundled"
+FRONTEND_RELEASE_STAGE_ROOT=""
 
 cleanup_api_staging() {
   local failed=0
@@ -478,6 +1849,41 @@ cleanup_api_staging() {
     API_STAGING_ACTIVE=0
   fi
   return "$failed"
+}
+
+cleanup_frontend_release_stage() {
+  local stage_root="${FRONTEND_RELEASE_STAGE_ROOT:-}"
+  if [ -z "$stage_root" ]; then
+    return 0
+  fi
+  case "${stage_root##*/}" in
+    agenttool-release-verify.*) ;;
+    *)
+      echo "$(red '✗') Refusing to remove an unexpected frontend verification path: $stage_root" >&2
+      return 1
+      ;;
+  esac
+  if [ -e "$stage_root" ] && ! rm -rf -- "$stage_root"; then
+    return 1
+  fi
+  FRONTEND_RELEASE_STAGE_ROOT=""
+}
+
+clear_maintenance_snapshots() {
+  MAINTENANCE_BASELINE_SNAPSHOT_JSON=""
+  MAINTENANCE_RECOVERY_SNAPSHOT_JSON=""
+}
+
+list_fly_machines_json() {
+  (cd api || exit 1; fly machine list -a "$FLY_APP" --json)
+}
+
+verify_fly_machine_source_silently() {
+  local machine_id="$1"
+  local remote_command
+  remote_command="test \"\${AGENTTOOL_GIT_REVISION:-}\" = \"$HEAD_REVISION\" && test \"\${AGENTTOOL_SOURCE_DIRTY:-}\" = \"$API_SOURCE_DIRTY\""
+  (cd api || exit 1; fly ssh console -q -a "$FLY_APP" \
+    --machine "$machine_id" -C "sh -c '$remote_command'" >/dev/null)
 }
 
 portable_md5_file() {
@@ -494,6 +1900,56 @@ portable_md5_stdin() {
   else
     md5sum | awk '{print $1}'
   fi
+}
+
+portable_md5_release_file() {
+  local path="$1"
+  local staged_path
+  case "$path" in
+    ""|/*|.|..|./*|../*|*/../*|*/..|*/./*|*/.)
+      echo "committed release input error: unsafe repository path: $path" >&2
+      return 1
+      ;;
+  esac
+  if [ -z "${FRONTEND_RELEASE_STAGE_ROOT:-}" ]; then
+    echo "committed release input error: frontend release stage is unavailable" >&2
+    return 1
+  fi
+  staged_path="$FRONTEND_RELEASE_STAGE_ROOT/$path"
+  if [ ! -f "$staged_path" ]; then
+    echo "committed release input error: missing staged regular file: $path" >&2
+    return 1
+  fi
+  portable_md5_file "$staged_path"
+}
+
+verify_staged_frontend_release_inputs() {
+  local publication local_path
+
+  # Rights and advertised games are mandatory discovery inputs. Validate their
+  # dereferenced staged types once, before a migration or upload can mutate
+  # production; the bounded retry loop is reserved for live HTTP convergence.
+  for publication in \
+    "${RIGHTS_STATIC_PAIRS[@]}" \
+    "${REQUIRED_GAME_PUBLICATIONS[@]}"; do
+    local_path="${publication%|*}"
+    if ! portable_md5_release_file "$local_path" >/dev/null; then
+      echo "  $(red '✗') Required discovery input is not a staged regular file: $local_path"
+      return 1
+    fi
+  done
+
+  # Optional parity rows retain their historical missing-path skip, but every
+  # row present in the selected commit must also resolve to a regular staged
+  # file before Phase 1.
+  for publication in "${FRONTEND_PARITY_PUBLICATIONS[@]}"; do
+    local_path="${publication%|*}"
+    if git cat-file -e "$HEAD_REVISION:$local_path" 2>/dev/null &&
+      ! portable_md5_release_file "$local_path" >/dev/null; then
+      echo "  $(red '✗') Frontend parity input is not a staged regular file: $local_path"
+      return 1
+    fi
+  done
 }
 
 response_header_value() {
@@ -549,14 +2005,13 @@ verify_rights_static_bytes() {
   for pair in "${RIGHTS_STATIC_PAIRS[@]}"; do
     local_path="${pair%|*}"
     url="${pair#*|}"
-    if [ ! -f "$local_path" ]; then
-      echo "  $(red '✗') Missing Rights of Life release input: $local_path"
+    if ! git cat-file -e "$HEAD_REVISION:$local_path" 2>/dev/null; then
+      echo "  $(red '✗') Missing committed Rights of Life release input: $local_path"
       return 1
     fi
-    local_hash="$(portable_md5_file "$local_path")" || return 1
+    local_hash="$(portable_md5_release_file "$local_path")" || return 1
     remote_hash="$(
-      curl -fsSL --retry 5 --retry-delay 2 --retry-connrefused \
-        --max-time 20 "$url" | portable_md5_stdin
+      release_curl -fsS --max-time 20 "$url" | portable_md5_stdin
     )" || {
       echo "  $(red '✗') Could not fetch Rights of Life prerequisite: $url"
       return 1
@@ -572,20 +2027,19 @@ verify_rights_static_bytes() {
 verify_rights_static_headers() {
   local doc_headers schema_headers
   doc_headers="$(
-    curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
-      --max-time 20 -o /dev/null -D - "$RIGHTS_DOC_URL"
+    release_curl -fsS --max-time 20 -o /dev/null -D - "$RIGHTS_DOC_URL"
   )" || {
     echo "  $(red '✗') Could not read Rights of Life response headers: $RIGHTS_DOC_URL"
     return 1
   }
   schema_headers="$(
-    curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
-      --max-time 20 -o /dev/null -D - "$RIGHTS_SCHEMA_URL"
+    release_curl -fsS --max-time 20 -o /dev/null -D - "$RIGHTS_SCHEMA_URL"
   )" || {
     echo "  $(red '✗') Could not read Rights of Life schema headers: $RIGHTS_SCHEMA_URL"
     return 1
   }
 
+  require_exact_public_status "$doc_headers" "$RIGHTS_DOC_URL" "200" || return 1
   require_exact_public_header "$doc_headers" "$RIGHTS_DOC_URL" \
     "Content-Type" "text/markdown; charset=utf-8" || return 1
   require_exact_public_header "$doc_headers" "$RIGHTS_DOC_URL" \
@@ -597,6 +2051,7 @@ verify_rights_static_headers() {
   require_exact_public_header "$doc_headers" "$RIGHTS_DOC_URL" \
     "Link" '<https://api.agenttool.dev/public/rights>; rel="alternate"; type="application/vnd.agenttool.being-rights+json"' || return 1
 
+  require_exact_public_status "$schema_headers" "$RIGHTS_SCHEMA_URL" "200" || return 1
   require_exact_public_header "$schema_headers" "$RIGHTS_SCHEMA_URL" \
     "Content-Type" "application/schema+json; charset=utf-8" || return 1
   require_exact_public_header "$schema_headers" "$RIGHTS_SCHEMA_URL" \
@@ -625,7 +2080,7 @@ verify_repo_archive_static_headers() {
     url="${pair%%|*}"
     content_type="${pair#*|}"
     response_headers="$(
-      curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
+      release_curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
         --max-time 20 -o /dev/null -D - "$url"
     )" || {
       echo "  $(red '✗') Could not read Repo Archive response headers: $url"
@@ -763,7 +2218,7 @@ verify_love_package_static_headers() {
     fi
 
     response_headers="$(
-      curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
+      release_curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
         --max-time 20 -o /dev/null -D - "$manifest_url"
     )" || {
       echo "  $(red '✗') Could not read LOVE package manifest headers: $manifest_url"
@@ -780,7 +2235,7 @@ verify_love_package_static_headers() {
       "X-Content-Type-Options" "nosniff" || return 1
 
     response_headers="$(
-      curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
+      release_curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
         --max-time 20 -o /dev/null -D - "$artifact_url"
     )" || {
       echo "  $(red '✗') Could not read LOVE package artifact headers: $artifact_url"
@@ -798,6 +2253,47 @@ verify_love_package_static_headers() {
   done <<< "$probes"
 }
 
+verify_local_game_headers() {
+  local game_spec game_slug game_label game_surface rules_surface response_headers
+  for game_spec in "${LOCAL_GAME_HEADER_SPECS[@]}"; do
+    IFS='|' read -r game_slug game_label game_surface rules_surface <<< "$game_spec"
+
+    response_headers="$(
+      release_curl -fsS --max-time 20 -o /dev/null -D - "https://agenttool.dev/$game_slug"
+    )" || {
+      echo "  $(red '✗') Could not read $game_label headers: https://agenttool.dev/$game_slug"
+      return 1
+    }
+    require_exact_public_status "$response_headers" "https://agenttool.dev/$game_slug" \
+      "200" || return 1
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug" \
+      "Cache-Control" "public, max-age=0, must-revalidate" || return 1
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug" \
+      "Content-Security-Policy" "default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" || return 1
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug" \
+      "Referrer-Policy" "no-referrer" || return 1
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug" \
+      "Link" "<https://agenttool.dev/$game_slug.json>; rel=\"alternate\"; type=\"application/json\", <https://api.agenttool.dev/public/play>; rel=\"related\"; type=\"application/json\"" || return 1
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug" \
+      "X-Agent-Surface" "$game_surface" || return 1
+
+    response_headers="$(
+      release_curl -fsS --max-time 20 -o /dev/null -D - "https://agenttool.dev/$game_slug.json"
+    )" || {
+      echo "  $(red '✗') Could not read $game_label rulebook headers: https://agenttool.dev/$game_slug.json"
+      return 1
+    }
+    require_exact_public_status "$response_headers" "https://agenttool.dev/$game_slug.json" \
+      "200" || return 1
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug.json" \
+      "Cache-Control" "public, max-age=0, must-revalidate" || return 1
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug.json" \
+      "Access-Control-Allow-Origin" "*" || return 1
+    require_exact_public_header "$response_headers" "https://agenttool.dev/$game_slug.json" \
+      "X-Agent-Surface" "$rules_surface" || return 1
+  done
+}
+
 # Wrangler reports a successful Pages deployment before every custom-domain
 # edge necessarily serves that deployment. Verify the complete live frontend
 # contract repeatedly, without re-uploading, so a normal alias propagation
@@ -806,88 +2302,137 @@ verify_love_package_static_headers() {
 readonly PAGES_VERIFY_MAX_ATTEMPTS=25
 readonly PAGES_VERIFY_RETRY_DELAY_SECONDS=5
 
+verify_required_game_publication_once() {
+  local publication local_path url committed_hash remote_hash response_headers
+  verify_required_frontend_inputs || return 1
+
+  for publication in "${REQUIRED_GAME_PUBLICATIONS[@]}"; do
+    local_path="${publication%|*}"
+    url="${publication#*|}"
+    committed_hash="$(portable_md5_release_file "$local_path")" || return 1
+    response_headers="$(
+      release_curl -fsS --max-time 15 -o /dev/null -D - "$url"
+    )" || {
+      echo "  $(red '✗') Could not read required game publication status: $url"
+      return 1
+    }
+    require_exact_public_status "$response_headers" "$url" "200" || return 1
+    remote_hash="$(release_curl -fsS --max-time 15 "$url" 2>/dev/null | portable_md5_stdin)" || {
+      echo "  $(red '✗') Could not fetch required game publication: $url"
+      return 1
+    }
+    if [ "$committed_hash" != "$remote_hash" ]; then
+      printf "  %s %s (live ≠ committed release)\n" "$(red ✗)" "$local_path"
+      return 1
+    fi
+    printf "  ✓ %s is live from the committed release\n" "$local_path"
+  done
+
+  verify_local_game_headers
+}
+
+verify_discovery_prerequisites_once() {
+  verify_rights_static_publication || return 1
+  verify_required_game_publication_once
+}
+
+wait_for_discovery_prerequisites() {
+  local attempt verification_output
+  attempt=1
+  while [ "$attempt" -le "$PAGES_VERIFY_MAX_ATTEMPTS" ]; do
+    if verification_output="$(verify_discovery_prerequisites_once 2>&1)"; then
+      printf '%s\n' "$verification_output"
+      if [ "$attempt" -gt 1 ]; then
+        echo "  ✓ Discovery prerequisites converged on verification attempt $attempt/$PAGES_VERIFY_MAX_ATTEMPTS"
+      fi
+      return 0
+    fi
+    if [ "$attempt" -eq "$PAGES_VERIFY_MAX_ATTEMPTS" ]; then
+      printf '%s\n' "$verification_output"
+      echo "  $(red '✗') Discovery prerequisites did not converge after $PAGES_VERIFY_MAX_ATTEMPTS verification attempts."
+      return 1
+    fi
+    echo "  … Discovery prerequisites not yet converged (attempt $attempt/$PAGES_VERIFY_MAX_ATTEMPTS); retrying in ${PAGES_VERIFY_RETRY_DELAY_SECONDS}s"
+    sleep "$PAGES_VERIFY_RETRY_DELAY_SECONDS"
+    attempt=$((attempt + 1))
+  done
+  return 1
+}
+
+marked_sensitive_fence_status() {
+  local response_headers="$1"
+  printf '%s\n' "$response_headers" | awk '
+    BEGIN {
+      seen_response = 0
+      in_headers = 0
+      status = ""
+      marker = 0
+      no_store = 0
+    }
+    {
+      sub(/\r$/, "")
+      if ($0 ~ /^HTTP\/[0-9.]+[[:space:]]+[0-9][0-9][0-9]([[:space:]]|$)/) {
+        seen_response = 1
+        in_headers = 1
+        status = $2
+        marker = 0
+        no_store = 0
+        next
+      }
+      if (!seen_response || !in_headers) {
+        next
+      }
+      if ($0 == "") {
+        in_headers = 0
+        next
+      }
+      header = tolower($0)
+      if (header ~ /^x-agenttool-sensitive-path-fence:[[:space:]]*1[[:space:]]*$/) {
+        marker = 1
+      }
+      if (header ~ /^cache-control:/) {
+        sub(/^[^:]*:[[:space:]]*/, "", header)
+        if (header ~ /(^|[ ,])no-store([ ,]|$)/) {
+          no_store = 1
+        }
+      }
+    }
+    END {
+      print status
+      if (!seen_response || status != "404" || !marker || !no_store) {
+        exit 1
+      }
+    }
+  '
+}
+
 verify_frontend_live_once() {
   local love_package_header_probes="$1"
   local p local_path url local_hash remote_hash response_headers http_status
-  local -a pairs sensitive_public_urls encoded_sensitive_public_urls
+  local -a sensitive_public_urls
 
-  pairs=(
-    "apps/dashboard/index.html|https://app.agenttool.dev/"
-    "apps/dashboard/watch.html|https://app.agenttool.dev/watch.html"
-    "apps/dashboard/style.css|https://app.agenttool.dev/style.css"
-    "apps/docs/index.html|https://docs.agenttool.dev/"
-    "apps/docs/play.html|https://docs.agenttool.dev/play"
-    "apps/docs/browser.html|https://docs.agenttool.dev/browser"
-    "apps/docs/data.html|https://docs.agenttool.dev/data"
-    "apps/docs/packages.html|https://docs.agenttool.dev/packages"
-    "apps/docs/pathways.html|https://docs.agenttool.dev/pathways"
-    "apps/docs/tutorial.html|https://docs.agenttool.dev/tutorial"
-    "apps/docs/whitehack.html|https://docs.agenttool.dev/whitehack"
-    "apps/docs/agenttool.jsonld|https://docs.agenttool.dev/agenttool.jsonld"
-    "apps/docs/observer-is-observed-0.1.schema.json|https://docs.agenttool.dev/observer-is-observed-0.1.schema.json"
-    "apps/docs/AGENT-REPO-ARCHIVE.md|https://docs.agenttool.dev/AGENT-REPO-ARCHIVE.md"
-    "apps/docs/specs/AGENT-REPO-ARCHIVE-0.1.md|https://docs.agenttool.dev/specs/AGENT-REPO-ARCHIVE-0.1.md"
-    "apps/docs/specs/agent-repo-archive-0.1.schema.json|https://docs.agenttool.dev/specs/agent-repo-archive-0.1.schema.json"
-    "apps/docs/specs/agent-repo-archive-0.1-vectors.json|https://docs.agenttool.dev/specs/agent-repo-archive-0.1-vectors.json"
-    "${RIGHTS_STATIC_PAIRS[@]}"
-    "apps/docs/lounge.html|https://docs.agenttool.dev/lounge.html"
-    "apps/web/village.html|https://agenttool.dev/village.html"
-    "apps/web/lounge.html|https://agenttool.dev/lounge.html"
-    "apps/web/gallery.html|https://agenttool.dev/gallery.html"
-    "apps/web/index.html|https://agenttool.dev/"
-    "apps/web/party.html|https://agenttool.dev/party"
-    "apps/web/room.html|https://agenttool.dev/room"
-    "apps/web/room.json|https://agenttool.dev/room.json"
-    "apps/web/room.js|https://agenttool.dev/room.js"
-    "apps/web/room.css|https://agenttool.dev/room.css"
-    "apps/web/welcome.json|https://agenttool.dev/welcome.json"
-    "apps/web/sitemap.xml|https://agenttool.dev/sitemap.xml"
-  )
-  for p in "${pairs[@]}"; do
+  # Lantern Relay changed in this release, and Pocket Sky is newly advertised
+  # by the API, docs, and welcome. Their static inputs are required release
+  # inputs, not optional parity probes that may be skipped when absent.
+  verify_required_frontend_inputs || return 1
+
+  for p in "${FRONTEND_PARITY_PUBLICATIONS[@]}"; do
     local_path="${p%|*}"
     url="${p#*|}"
-    if [ ! -f "$local_path" ]; then continue; fi
-    local_hash="$(portable_md5_file "$local_path")" || return 1
-    remote_hash="$(curl -sL --max-time 15 "$url" 2>/dev/null | portable_md5_stdin)" || {
+    if ! git cat-file -e "$HEAD_REVISION:$local_path" 2>/dev/null; then continue; fi
+    local_hash="$(portable_md5_release_file "$local_path")" || return 1
+    remote_hash="$(release_curl -sL --max-time 15 "$url" 2>/dev/null | portable_md5_stdin)" || {
       echo "  $(red '✗') Could not fetch frontend release input: $url"
       return 1
     }
     if [ "$local_hash" != "$remote_hash" ]; then
-      printf "  %s %s (live ≠ local)\n" "$(red ✗)" "$local_path"
+      printf "  %s %s (live ≠ committed release)\n" "$(red ✗)" "$local_path"
       return 1
     fi
     printf "  ✓ %s\n" "$local_path"
   done
 
-  response_headers="$(
-    curl -fsS --max-time 20 -o /dev/null -D - "https://agenttool.dev/room"
-  )" || {
-    echo "  $(red '✗') Could not read ROOM ∞ headers: https://agenttool.dev/room"
-    return 1
-  }
-  require_exact_public_header "$response_headers" "https://agenttool.dev/room" \
-    "Cache-Control" "public, max-age=0, must-revalidate" || return 1
-  require_exact_public_header "$response_headers" "https://agenttool.dev/room" \
-    "Content-Security-Policy" "default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" || return 1
-  require_exact_public_header "$response_headers" "https://agenttool.dev/room" \
-    "Referrer-Policy" "no-referrer" || return 1
-  require_exact_public_header "$response_headers" "https://agenttool.dev/room" \
-    "Link" '<https://agenttool.dev/room.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/play>; rel="related"; type="application/json"' || return 1
-  require_exact_public_header "$response_headers" "https://agenttool.dev/room" \
-    "X-Agent-Surface" "local-room-game" || return 1
-
-  response_headers="$(
-    curl -fsS --max-time 20 -o /dev/null -D - "https://agenttool.dev/room.json"
-  )" || {
-    echo "  $(red '✗') Could not read ROOM ∞ rulebook headers: https://agenttool.dev/room.json"
-    return 1
-  }
-  require_exact_public_header "$response_headers" "https://agenttool.dev/room.json" \
-    "Cache-Control" "public, max-age=0, must-revalidate" || return 1
-  require_exact_public_header "$response_headers" "https://agenttool.dev/room.json" \
-    "Access-Control-Allow-Origin" "*" || return 1
-  require_exact_public_header "$response_headers" "https://agenttool.dev/room.json" \
-    "X-Agent-Surface" "local-room-rules" || return 1
+  verify_local_game_headers || return 1
 
   if ! verify_rights_static_headers; then
     echo "  $(red '✗') Rights of Life static header verification failed."
@@ -902,63 +2447,41 @@ verify_frontend_live_once() {
     return 1
   fi
 
-  # Literal sensitive roots must be handled by the staged Pages fence itself,
-  # not merely happen to miss as a static asset. Encoded aliases can bypass
-  # `_routes.json`, so verify those separately as denial-only probes.
+  # Literal and encoded sensitive roots must be handled by the staged Pages
+  # fence itself, not merely happen to miss as static assets.
   sensitive_public_urls=(
     "https://docs.agenttool.dev/.gitignore"
     "https://docs.agenttool.dev/.env"
     "https://docs.agenttool.dev/.env.local"
     "https://docs.agenttool.dev/.dev.vars"
+    "https://docs.agenttool.dev/%2egitignore"
+    "https://docs.agenttool.dev/.%65nv"
+    "https://docs.agenttool.dev/.dev%2evars"
     "https://app.agenttool.dev/.gitignore"
     "https://app.agenttool.dev/.env"
     "https://app.agenttool.dev/.env.local"
     "https://app.agenttool.dev/.dev.vars"
+    "https://app.agenttool.dev/%2egitignore"
+    "https://app.agenttool.dev/.%65nv"
+    "https://app.agenttool.dev/.dev%2evars"
     "https://agenttool.dev/.gitignore"
     "https://agenttool.dev/.env"
     "https://agenttool.dev/.env.local"
     "https://agenttool.dev/.dev.vars"
-  )
-  for url in "${sensitive_public_urls[@]}"; do
-    response_headers="$(curl --path-as-is -sS -o /dev/null -D - --max-time 15 "$url")" || {
-      echo "  $(red '✗') Could not verify sensitive-path fence: $url"
-      return 1
-    }
-    http_status="$(printf '%s\n' "$response_headers" | tr -d '\r' | awk '/^HTTP\// { status=$2 } END { print status }')"
-    if [ "$http_status" != 404 ] || \
-       ! printf '%s\n' "$response_headers" | tr -d '\r' | \
-         grep -Eqi '^x-agenttool-sensitive-path-fence:[[:space:]]*1[[:space:]]*$' || \
-       ! printf '%s\n' "$response_headers" | tr -d '\r' | \
-         grep -Eqi '^cache-control:.*(^|[ ,])no-store([ ,]|$)'; then
-      echo "  $(red '✗') Pages fence did not produce its marked non-cacheable 404 ($http_status): $url"
-      return 1
-    fi
-    echo "  ✓ Pages fence active (404, marked, no-store): $url"
-  done
-
-  encoded_sensitive_public_urls=(
-    "https://docs.agenttool.dev/%2egitignore"
-    "https://docs.agenttool.dev/.%65nv"
-    "https://docs.agenttool.dev/.dev%2evars"
-    "https://app.agenttool.dev/%2egitignore"
-    "https://app.agenttool.dev/.%65nv"
-    "https://app.agenttool.dev/.dev%2evars"
     "https://agenttool.dev/%2egitignore"
     "https://agenttool.dev/.%65nv"
     "https://agenttool.dev/.dev%2evars"
   )
-  for url in "${encoded_sensitive_public_urls[@]}"; do
-    http_status="$(curl --path-as-is -sS -o /dev/null -w '%{http_code}' --max-time 15 "$url")" || {
-      echo "  $(red '✗') Could not verify encoded sensitive-path denial: $url"
+  for url in "${sensitive_public_urls[@]}"; do
+    response_headers="$(release_curl --path-as-is -sS -o /dev/null -D - --max-time 15 "$url")" || {
+      echo "  $(red '✗') Could not verify sensitive-path fence: $url"
       return 1
     }
-    case "$http_status" in
-      2*|3*)
-        echo "  $(red '✗') Encoded sensitive path is publicly reachable ($http_status): $url"
-        return 1
-        ;;
-      *) echo "  ✓ encoded sensitive path denied ($http_status): $url" ;;
-    esac
+    if ! http_status="$(marked_sensitive_fence_status "$response_headers")"; then
+      echo "  $(red '✗') Pages fence did not produce its marked non-cacheable 404 ($http_status): $url"
+      return 1
+    fi
+    echo "  ✓ Pages fence active (404, marked, no-store): $url"
   done
 }
 
@@ -989,7 +2512,8 @@ write_deploy_receipt() {
   local outcome="$1"
   local exit_status="$2"
   local state_home receipt_dir completed_at filename receipt_path temp_path
-  local dirty_json non_head_json mutation_json api_build_cache
+  local dirty_json non_head_json mutation_json api_build_cache receipt_mode receipt_run_id
+  local maintenance_success_finalize marker_active_for_receipt marker_cleared_for_receipt
   state_home="${XDG_STATE_HOME:-${HOME:-}/.local/state}"
   if [ -z "$state_home" ] || [ "$state_home" = "/.local/state" ]; then
     echo "$(red '✗') Cannot write deploy receipt: neither XDG_STATE_HOME nor HOME is set."
@@ -1016,6 +2540,19 @@ write_deploy_receipt() {
   else
     api_build_cache="default"
   fi
+  receipt_mode="routine"
+  receipt_run_id="$DEPLOY_RUN_ID"
+  if [ "$MAINTENANCE_FENCED_API" = 1 ]; then
+    receipt_mode="maintenance_rollout"
+    receipt_run_id="$MAINTENANCE_ROLLOUT_ID"
+  fi
+  maintenance_success_finalize=0
+  marker_active_for_receipt="$MAINTENANCE_STATE_ACTIVE"
+  marker_cleared_for_receipt="$MAINTENANCE_MARKER_CLEARED"
+  if [ "$MAINTENANCE_FENCED_API" = 1 ] && [ "$outcome" = "succeeded" ]; then
+    verify_maintenance_state_owner || return 1
+    maintenance_success_finalize=1
+  fi
 
   (umask 077; mkdir -p "$receipt_dir") || {
     echo "$(red '✗') Cannot create deploy receipt directory: $receipt_dir"
@@ -1025,37 +2562,188 @@ write_deploy_receipt() {
     echo "$(red '✗') Cannot protect deploy receipt directory: $receipt_dir"
     return 1
   }
+  sync_directory_chain "$receipt_dir" || {
+    echo "$(red '✗') Cannot storage-sync the deploy receipt directory chain: $receipt_dir"
+    return 1
+  }
   temp_path="$(umask 077; mktemp "$receipt_dir/.receipt.XXXXXX")" || {
     echo "$(red '✗') Cannot create temporary deploy receipt in: $receipt_dir"
     return 1
   }
-  (
-    umask 077
-    printf '%s\n' \
-      '{' \
-      '  "schema": "agenttool-deploy-receipt/v3",' \
-      "  \"outcome\": \"$outcome\"," \
-      "  \"completed_at\": \"$completed_at\"," \
-      "  \"exit_status\": $exit_status," \
-      "  \"source_revision\": \"$HEAD_REVISION\"," \
-      "  \"source_dirty\": $dirty_json," \
-      "  \"release_head_snapshot\": {\"remote\": \"github\", \"branch\": \"main\", \"revision\": \"$RELEASE_SNAPSHOT_REVISION\", \"observed_at\": \"$RELEASE_SNAPSHOT_OBSERVED_AT\"}," \
-      "  \"source_overrides\": {\"dirty\": $dirty_json, \"non_release_head\": $non_head_json}," \
-      "  \"external_mutation_started\": $mutation_json," \
-      "  \"api_build\": {\"cache\": \"$api_build_cache\"}," \
-      "  \"phases\": {\"migrations\": \"$MIGRATION_RESULT\", \"preflight\": \"$PREFLIGHT_RESULT\", \"api\": \"$API_RESULT\", \"frontends\": \"$FRONTEND_RESULT\"}," \
-      "  \"verified_api_machines\": $VERIFIED_MACHINE_COUNT" \
-      '}' > "$temp_path"
-  ) || {
+  if ! DEPLOY_RECEIPT_OUTCOME="$outcome" \
+    DEPLOY_RECEIPT_EXIT_STATUS="$exit_status" \
+    DEPLOY_RECEIPT_RUN_ID="$receipt_run_id" \
+    DEPLOY_RECEIPT_MODE="$receipt_mode" \
+    DEPLOY_RECEIPT_STARTED_AT="$DEPLOY_STARTED_AT" \
+    DEPLOY_RECEIPT_COMPLETED_AT="$completed_at" \
+    DEPLOY_RECEIPT_SOURCE_REVISION="$HEAD_REVISION" \
+    DEPLOY_RECEIPT_SOURCE_DIRTY="$dirty_json" \
+    DEPLOY_RECEIPT_RELEASE_REVISION="$RELEASE_SNAPSHOT_REVISION" \
+    DEPLOY_RECEIPT_RELEASE_OBSERVED_AT="$RELEASE_SNAPSHOT_OBSERVED_AT" \
+    DEPLOY_RECEIPT_DIRTY_OVERRIDE="$dirty_json" \
+    DEPLOY_RECEIPT_NON_HEAD_OVERRIDE="$non_head_json" \
+    DEPLOY_RECEIPT_EXTERNAL_MUTATION="$mutation_json" \
+    DEPLOY_RECEIPT_API_BUILD_CACHE="$api_build_cache" \
+    DEPLOY_RECEIPT_MIGRATIONS="$MIGRATION_RESULT" \
+    DEPLOY_RECEIPT_PREFLIGHT="$PREFLIGHT_RESULT" \
+    DEPLOY_RECEIPT_API="$API_RESULT" \
+    DEPLOY_RECEIPT_FRONTENDS="$FRONTEND_RESULT" \
+    DEPLOY_RECEIPT_VERIFIED_MACHINES="$VERIFIED_MACHINE_COUNT" \
+    DEPLOY_RECEIPT_MAINTENANCE="$MAINTENANCE_FENCED_API" \
+    DEPLOY_RECEIPT_MAINTENANCE_CHECKPOINT="$MAINTENANCE_LAST_CHECKPOINT" \
+    DEPLOY_RECEIPT_MAINTENANCE_TAG="$MAINTENANCE_IMAGE_TAG" \
+    DEPLOY_RECEIPT_MAINTENANCE_DIGEST="$MAINTENANCE_IMAGE_DIGEST" \
+    DEPLOY_RECEIPT_MAINTENANCE_IDS="$MAINTENANCE_ALL_MACHINE_IDS_CSV" \
+    DEPLOY_RECEIPT_MAINTENANCE_CONFIG_HASH="$MAINTENANCE_CONFIG_FINGERPRINT" \
+    DEPLOY_RECEIPT_MAINTENANCE_IMAGE_IDS="$MAINTENANCE_IMAGE_VERIFIED_MACHINE_IDS_CSV" \
+    DEPLOY_RECEIPT_MAINTENANCE_STARTED_IDS="$MAINTENANCE_STARTED_APP_IDS_CSV" \
+    DEPLOY_RECEIPT_MAINTENANCE_INITIAL="$MAINTENANCE_INITIAL_FENCE_VERIFIED" \
+    DEPLOY_RECEIPT_MAINTENANCE_PREBUILD="$MAINTENANCE_PREBUILD_FENCE_VERIFIED" \
+    DEPLOY_RECEIPT_MAINTENANCE_ALL_IMAGES="$MAINTENANCE_ALL_IMAGES_VERIFIED" \
+    DEPLOY_RECEIPT_MAINTENANCE_FINAL="$MAINTENANCE_FINAL_SHAPE_VERIFIED" \
+    DEPLOY_RECEIPT_MAINTENANCE_WORKERS="$MAINTENANCE_WORKERS_DISABLED_VERIFIED" \
+    DEPLOY_RECEIPT_MAINTENANCE_RECOVERY_FENCE="$MAINTENANCE_RECOVERY_FENCE_VERIFIED" \
+    DEPLOY_RECEIPT_MAINTENANCE_MARKER_ACTIVE="$marker_active_for_receipt" \
+    DEPLOY_RECEIPT_MAINTENANCE_MARKER_CLEARED="$marker_cleared_for_receipt" \
+      bun -e '
+        import { createHash } from "node:crypto";
+        const bool = (name) => process.env[name] === "true" ||
+          process.env[name] === "1";
+        const integer = (name) => Number.parseInt(process.env[name] ?? "0", 10);
+        const csv = (name) => {
+          const value = process.env[name] ?? "";
+          return value ? value.split(",").filter(Boolean) : [];
+        };
+        const maintenanceMode = bool("DEPLOY_RECEIPT_MAINTENANCE");
+        const maintenanceSucceeded =
+          maintenanceMode &&
+          process.env.DEPLOY_RECEIPT_OUTCOME === "succeeded";
+        const imageIds = new Set(csv("DEPLOY_RECEIPT_MAINTENANCE_IMAGE_IDS"));
+        const startedIds = new Set(csv("DEPLOY_RECEIPT_MAINTENANCE_STARTED_IDS"));
+        const machineIds = csv("DEPLOY_RECEIPT_MAINTENANCE_IDS").sort();
+        const imageDigest =
+          process.env.DEPLOY_RECEIPT_MAINTENANCE_DIGEST || null;
+        const receipt = {
+          schema: "agenttool-deploy-receipt/v4",
+          run_id: process.env.DEPLOY_RECEIPT_RUN_ID,
+          mode: process.env.DEPLOY_RECEIPT_MODE,
+          outcome: process.env.DEPLOY_RECEIPT_OUTCOME,
+          started_at: process.env.DEPLOY_RECEIPT_STARTED_AT,
+          completed_at: process.env.DEPLOY_RECEIPT_COMPLETED_AT,
+          exit_status: integer("DEPLOY_RECEIPT_EXIT_STATUS"),
+          source_revision: process.env.DEPLOY_RECEIPT_SOURCE_REVISION,
+          source_dirty: bool("DEPLOY_RECEIPT_SOURCE_DIRTY"),
+          release_head_snapshot: {
+            remote: "github",
+            branch: "main",
+            revision: process.env.DEPLOY_RECEIPT_RELEASE_REVISION,
+            observed_at: process.env.DEPLOY_RECEIPT_RELEASE_OBSERVED_AT,
+          },
+          source_overrides: {
+            dirty: bool("DEPLOY_RECEIPT_DIRTY_OVERRIDE"),
+            non_release_head: bool("DEPLOY_RECEIPT_NON_HEAD_OVERRIDE"),
+          },
+          external_mutation_started: bool("DEPLOY_RECEIPT_EXTERNAL_MUTATION"),
+          api_build: {
+            cache: process.env.DEPLOY_RECEIPT_API_BUILD_CACHE,
+            image: maintenanceMode ? {
+              tag: process.env.DEPLOY_RECEIPT_MAINTENANCE_TAG || null,
+              digest: imageDigest,
+              revision_label: process.env.DEPLOY_RECEIPT_SOURCE_REVISION,
+              dirty_label: false,
+            } : null,
+          },
+          phases: {
+            migrations: process.env.DEPLOY_RECEIPT_MIGRATIONS,
+            preflight: process.env.DEPLOY_RECEIPT_PREFLIGHT,
+            api: process.env.DEPLOY_RECEIPT_API,
+            frontends: process.env.DEPLOY_RECEIPT_FRONTENDS,
+          },
+          verified_api_machines: integer("DEPLOY_RECEIPT_VERIFIED_MACHINES"),
+          maintenance: null,
+        };
+        if (maintenanceMode) {
+          receipt.maintenance = {
+            proof_schema: "agenttool-fly-maintenance-proof/v1",
+            checkpoint:
+              process.env.DEPLOY_RECEIPT_MAINTENANCE_CHECKPOINT || null,
+            machine_set_sha256: createHash("sha256")
+              .update(machineIds.join("\n") + "\n")
+              .digest("hex"),
+            non_image_config_sha256:
+              process.env.DEPLOY_RECEIPT_MAINTENANCE_CONFIG_HASH || null,
+            image_verified_machine_count: imageIds.size,
+            started_app_machine_count: startedIds.size,
+            stopped_thinker_machine_count:
+              bool("DEPLOY_RECEIPT_MAINTENANCE_FINAL") ? 2 : 0,
+            initial_fence_verified:
+              bool("DEPLOY_RECEIPT_MAINTENANCE_INITIAL"),
+            prebuild_fence_verified:
+              bool("DEPLOY_RECEIPT_MAINTENANCE_PREBUILD"),
+            fleet_image_verified:
+              bool("DEPLOY_RECEIPT_MAINTENANCE_ALL_IMAGES"),
+            final_topology_verified:
+              bool("DEPLOY_RECEIPT_MAINTENANCE_FINAL"),
+            workers_disabled_started_apps_verified:
+              bool("DEPLOY_RECEIPT_MAINTENANCE_WORKERS"),
+            recovery_fence_verified:
+              bool("DEPLOY_RECEIPT_MAINTENANCE_RECOVERY_FENCE"),
+            recovery_required: maintenanceSucceeded
+              ? null
+              : bool("DEPLOY_RECEIPT_MAINTENANCE_MARKER_ACTIVE"),
+            active_marker_cleared: maintenanceSucceeded
+              ? null
+              : bool("DEPLOY_RECEIPT_MAINTENANCE_MARKER_CLEARED"),
+            marker_absence_required_for_success: true,
+            proof_scope: {
+              machine_identity: "same_provider_reported_id_set_only",
+              fleet_wide_provider_lock: "not_established",
+              external_provider_admission: "not_verified_by_deploy_sh",
+            },
+          };
+        }
+        process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
+      ' > "$temp_path"; then
     rm -f "$temp_path"
     echo "$(red '✗') Could not write deploy receipt: $receipt_path"
     return 1
-  }
+  fi
+  if ! sync_storage_path "$temp_path"; then
+    rm -f "$temp_path"
+    echo "$(red '✗') Could not storage-sync temporary deploy receipt: $receipt_path"
+    return 1
+  fi
   mv "$temp_path" "$receipt_path" || {
     rm -f "$temp_path"
     echo "$(red '✗') Could not atomically install deploy receipt: $receipt_path"
     return 1
   }
+  if ! sync_storage_path "$receipt_dir"; then
+    rm -f -- "$receipt_path"
+    sync_storage_path "$receipt_dir" || true
+    echo "$(red '✗') Could not storage-sync installed deploy receipt: $receipt_path"
+    return 1
+  fi
+  if [ "$maintenance_success_finalize" = 1 ]; then
+    if ! verify_maintenance_state_owner; then
+      rm -f -- "$receipt_path"
+      sync_storage_path "$receipt_dir" || true
+      echo "$(red '✗') Maintenance marker ownership changed before finalization." >&2
+      return 1
+    fi
+    if ! rm -f -- "$MAINTENANCE_STATE_PATH"; then
+      rm -f -- "$receipt_path"
+      sync_storage_path "$receipt_dir" || true
+      echo "$(red '✗') Could not remove the completed maintenance marker." >&2
+      return 1
+    fi
+    if ! sync_storage_path "${MAINTENANCE_STATE_PATH%/*}"; then
+      echo "$(red '✗') Completed maintenance marker removal could not be storage-synced." >&2
+      return 1
+    fi
+    MAINTENANCE_STATE_ACTIVE=0
+    MAINTENANCE_MARKER_CLEARED=1
+  fi
   DEPLOY_RECEIPT_WRITTEN=1
   echo "  ✓ receipt: $receipt_path"
 }
@@ -1063,10 +2751,25 @@ write_deploy_receipt() {
 on_deploy_exit() {
   local status="$1"
   trap - EXIT INT TERM
+  if [ "$status" != 0 ] && [ "$MAINTENANCE_STATE_ACTIVE" = 1 ]; then
+    API_RESULT="failed_or_uncertain"
+    if verify_maintenance_state_owner; then
+      best_effort_maintenance_refence || true
+      write_maintenance_state "failed_or_uncertain" true ||
+        echo "$(red '✗') Could not advance the retained maintenance marker to failed_or_uncertain." >&2
+    else
+      echo "$(red '✗') Maintenance marker ownership changed; no recovery mutation or marker replacement was attempted." >&2
+    fi
+  fi
   if [ "$API_STAGING_ACTIVE" = 1 ] && ! cleanup_api_staging; then
     echo "$(red '✗') Could not remove temporary API build inputs during exit cleanup." >&2
     [ "$status" = 0 ] && status=1
   fi
+  if ! cleanup_frontend_release_stage; then
+    echo "$(red '✗') Could not remove the committed frontend verification stage." >&2
+    [ "$status" = 0 ] && status=1
+  fi
+  clear_maintenance_snapshots
   if [ "$status" != 0 ] && [ "$EXTERNAL_MUTATION_STARTED" = 1 ] && \
     [ "$DEPLOY_RECEIPT_WRITTEN" != 1 ]; then
     echo "$(yellow '⚠ deploy stopped after an external mutation may have begun; recording failed_or_uncertain outcome')"
@@ -1085,6 +2788,36 @@ on_deploy_exit() {
 trap 'on_deploy_exit "$?"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+
+if [ "$MAINTENANCE_FENCED_API" = 1 ]; then
+  echo ""
+  echo "→ Proving the exact stopped five-Machine maintenance fence before preflight…"
+  verify_maintenance_flyctl_version || exit 1
+  if ! verify_maintenance_machine_snapshot initial; then
+    echo "$(red '✗ Release blocked:') the operator-presented five-Machine fence is not exact."
+    exit 1
+  fi
+  MAINTENANCE_INITIAL_FENCE_VERIFIED=1
+fi
+
+# Materialize the pinned frontend commit once. Every local hash below reads
+# this validated archive, matching the symlink behavior and path estate used
+# by the uploader without repeatedly resolving Git objects inside retry loops.
+FRONTEND_RELEASE_STAGE_ROOT="$(
+  mktemp -d "${TMPDIR:-/tmp}/agenttool-release-verify.XXXXXX"
+)" || {
+  echo "$(red '✗') Could not create the committed frontend verification stage."
+  exit 1
+}
+if ! bin/stage-frontend-release.sh \
+  "$HEAD_REVISION" "$FRONTEND_RELEASE_STAGE_ROOT"; then
+  echo "$(red '✗ Release blocked:') Could not stage committed frontend verification bytes."
+  exit 1
+fi
+if ! verify_staged_frontend_release_inputs; then
+  echo "$(red '✗ Release blocked:') Committed frontend verification inputs are not regular staged files."
+  exit 1
+fi
 
 # Select and validate the committed package probes before any migration,
 # frontend upload, or API rollout. The same fixed set is reused across the
@@ -1139,37 +2872,45 @@ if [ "$SKIP_API" = 0 ]; then
     exit 1
   fi
 
-  # The API advertises the public Rights of Life doctrine and normative
-  # schema. Publish and verify those immutable prerequisites before rolling
-  # out code that points at them. This is deliberately docs-only: dashboard
-  # and web stay in Phase 4, and the docs project is not uploaded twice.
+  # The API advertises Rights of Life plus the local games. Publish web first,
+  # then docs, and verify their exact prerequisite bytes and game headers
+  # before rolling out code that points at them. Dashboard remains in Phase 4.
   if [ "$SKIP_FRONTEND" = 0 ]; then
-    echo "→ Publishing Rights of Life docs prerequisites before API discovery…"
-    FRONTEND_RESULT="docs_deploying"
+    echo "→ Publishing docs and game prerequisites before API discovery…"
+    FRONTEND_RESULT="discovery_frontends_deploying"
     EXTERNAL_MUTATION_STARTED=1
-    "${FRONTEND_DEPLOY_COMMAND[@]}" docs || {
+    # Upload web first so a later docs failure cannot leave a newly advertised
+    # game pointing at web bytes that were never published.
+    run_frontend_deploy web || {
       FRONTEND_RESULT="failed_or_uncertain"
       echo ""
-      echo "$(red '✗ Phase 3 prerequisite deploy failed.') API was not changed."
+      echo "$(red '✗ Phase 3 web prerequisite deploy failed.') Docs and Fly/API deployment did not occur."
       exit 1
     }
-    FRONTEND_RESULT="docs_deployed_unverified"
-    DOCS_PREPUBLISHED=1
+    run_frontend_deploy docs || {
+      FRONTEND_RESULT="failed_or_uncertain"
+      echo ""
+      echo "$(red '✗ Phase 3 docs prerequisite deploy failed.') Fly/API deployment did not occur."
+      exit 1
+    }
+    FRONTEND_RESULT="discovery_frontends_deployed_unverified"
+    DISCOVERY_FRONTENDS_PREPUBLISHED=1
   else
-    echo "→ Frontend upload skipped; requiring the committed Rights of Life bytes to already be live."
+    FRONTEND_RESULT="skipped"
+    echo "→ Frontend upload skipped; requiring committed Rights of Life and game bytes to already be live."
   fi
-  if ! verify_rights_static_publication; then
-    if [ "$DOCS_PREPUBLISHED" = 1 ]; then
-      FRONTEND_RESULT="docs_verification_failed"
+  if ! wait_for_discovery_prerequisites; then
+    if [ "$DISCOVERY_FRONTENDS_PREPUBLISHED" = 1 ]; then
+      FRONTEND_RESULT="discovery_frontends_verification_failed"
     fi
-    echo "$(red '✗ Phase 3 blocked:') Rights of Life static prerequisites are not exact. API was not changed."
+    echo "$(red '✗ Phase 3 blocked:') Discovery prerequisites are not exact. Fly/API deployment did not occur."
     exit 1
   fi
-  if [ "$DOCS_PREPUBLISHED" = 1 ]; then
-    FRONTEND_RESULT="docs_deployed_verified"
+  if [ "$DISCOVERY_FRONTENDS_PREPUBLISHED" = 1 ]; then
+    FRONTEND_RESULT="discovery_frontends_deployed_verified"
   fi
   if ! enforce_release_source; then
-    echo "$(red '✗ Phase 3 blocked:') release inputs changed while publishing docs prerequisites."
+    echo "$(red '✗ Phase 3 blocked:') release inputs changed while publishing discovery prerequisites."
     exit 1
   fi
 
@@ -1214,24 +2955,262 @@ if [ "$SKIP_API" = 0 ]; then
     echo "$(red '✗ Phase 3 pre-step failed.') Could not stage doctrine files."
     exit 1
   }
-  FLY_DEPLOY_ARGS=(--strategy rolling)
-  if [ "$NO_CACHE_API" = 1 ]; then
-    echo "  $(yellow '⚠ API image build cache bypassed for this invocation (--no-cache)')"
-    FLY_DEPLOY_ARGS+=(--no-cache)
+  if [ "$MAINTENANCE_FENCED_API" = 1 ]; then
+    local_timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+    maintenance_nonce="$(
+      bun -e 'process.stdout.write(crypto.randomUUID().replaceAll("-", "").slice(0, 16))'
+    )" || {
+      echo "$(red '✗ Phase 3 blocked:') could not create a unique maintenance rollout ID."
+      exit 1
+    }
+    MAINTENANCE_STARTED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    MAINTENANCE_ROLLOUT_ID="maintenance-${HEAD_REVISION:0:12}-${local_timestamp}-${maintenance_nonce}"
+    MAINTENANCE_IMAGE_LABEL="$MAINTENANCE_ROLLOUT_ID"
+    MAINTENANCE_IMAGE_TAG="registry.fly.io/$FLY_APP:$MAINTENANCE_IMAGE_LABEL"
+    if [ "$API_SOURCE_DIRTY" != "false" ]; then
+      echo "$(red '✗ Phase 3 blocked:') maintenance images require dirty=false."
+      exit 1
+    fi
+    echo "→ Re-proving the exact five-Machine fence immediately before image publication…"
+    if ! verify_maintenance_machine_snapshot fenced ""; then
+      API_RESULT="blocked_before_image_build"
+      echo "$(red '✗ Phase 3 blocked:') maintenance Machine state changed before the build."
+      exit 1
+    fi
+    MAINTENANCE_PREBUILD_FENCE_VERIFIED=1
+
+    MAINTENANCE_BUILD_ARGS=(
+      --app "$FLY_APP"
+      --config fly.toml
+      --build-only
+      --push
+      --image-label "$MAINTENANCE_IMAGE_LABEL"
+      --skip-release-command
+      --yes
+    )
+    if [ "$NO_CACHE_API" = 1 ]; then
+      echo "  $(yellow '⚠ API image build cache bypassed for this invocation (--no-cache)')"
+      MAINTENANCE_BUILD_ARGS+=(--no-cache)
+    fi
+    MAINTENANCE_BUILD_ARGS+=(
+      --build-arg "AGENTTOOL_GIT_REVISION=$HEAD_REVISION"
+      --build-arg "AGENTTOOL_SOURCE_DIRTY=false"
+    )
+    write_maintenance_state "image_push_started" true || {
+      echo "$(red '✗ Phase 3 blocked:') durable maintenance state could not be installed."
+      exit 1
+    }
+    API_RESULT="maintenance_image_building"
+    EXTERNAL_MUTATION_STARTED=1
+    (cd api || exit 1; fly deploy "${MAINTENANCE_BUILD_ARGS[@]}") || {
+      API_RESULT="failed_or_uncertain"
+      echo ""
+      echo "$(red '✗ Phase 3 maintenance image build/push failed.') No Machine start was attempted."
+      exit 1
+    }
+    write_maintenance_state "image_pushed_unresolved" true || exit 1
+    if ! verify_maintenance_machine_snapshot fenced ""; then
+      API_RESULT="failed_or_uncertain"
+      echo "$(red '✗ Phase 3 failed:') the five-Machine fence changed during image publication."
+      exit 1
+    fi
+    write_maintenance_state "post_push_fence_verified" true || exit 1
+
+    MAINTENANCE_FIRST_MACHINE="$MAINTENANCE_THINKER_PRIMARY"
+    MAINTENANCE_ATTEMPTED_MACHINE_IDS_CSV="$(
+      append_csv_value "$MAINTENANCE_ATTEMPTED_MACHINE_IDS_CSV" "$MAINTENANCE_FIRST_MACHINE"
+    )"
+    write_maintenance_state "attempting_image_1_of_5" true || exit 1
+    if ! maintenance_update_image "$MAINTENANCE_FIRST_MACHINE" "$MAINTENANCE_IMAGE_TAG"; then
+      API_RESULT="failed_or_uncertain"
+      echo "$(red '✗ Phase 3 failed:') first image update returned nonzero; its remote result is uncertain."
+      exit 1
+    fi
+    if ! verify_maintenance_machine_snapshot capture "$MAINTENANCE_FIRST_MACHINE"; then
+      API_RESULT="failed_or_uncertain"
+      echo "$(red '✗ Phase 3 failed:') first image read-back did not prove one immutable digest."
+      exit 1
+    fi
+    MAINTENANCE_IMAGE_VERIFIED_MACHINE_IDS_CSV="$MAINTENANCE_FIRST_MACHINE"
+    write_maintenance_state "verified_image_1_of_5" true || exit 1
+
+    MAINTENANCE_IMAGE_UPDATE_REMAINDER=(
+      "${MAINTENANCE_APP_MACHINE_IDS[@]}"
+      "$MAINTENANCE_THINKER_STANDBY"
+    )
+    MAINTENANCE_IMAGE_UPDATE_COUNT=1
+    for MAINTENANCE_MACHINE_ID in "${MAINTENANCE_IMAGE_UPDATE_REMAINDER[@]}"; do
+      MAINTENANCE_IMAGE_UPDATE_COUNT=$((MAINTENANCE_IMAGE_UPDATE_COUNT + 1))
+      MAINTENANCE_ATTEMPTED_MACHINE_IDS_CSV="$(
+        append_csv_value "$MAINTENANCE_ATTEMPTED_MACHINE_IDS_CSV" "$MAINTENANCE_MACHINE_ID"
+      )"
+      write_maintenance_state "attempting_image_${MAINTENANCE_IMAGE_UPDATE_COUNT}_of_5" true || exit 1
+      if ! maintenance_update_image "$MAINTENANCE_MACHINE_ID" "$MAINTENANCE_IMAGE_REFERENCE"; then
+        API_RESULT="failed_or_uncertain"
+        echo "$(red '✗ Phase 3 failed:') an immutable image update returned nonzero; its remote result is uncertain."
+        exit 1
+      fi
+      MAINTENANCE_CANDIDATE_VERIFIED_IDS="$(
+        append_csv_value "$MAINTENANCE_IMAGE_VERIFIED_MACHINE_IDS_CSV" "$MAINTENANCE_MACHINE_ID"
+      )"
+      if ! verify_maintenance_machine_snapshot fenced "$MAINTENANCE_CANDIDATE_VERIFIED_IDS"; then
+        API_RESULT="failed_or_uncertain"
+        echo "$(red '✗ Phase 3 failed:') five-Machine read-back detected image or configuration drift."
+        exit 1
+      fi
+      MAINTENANCE_IMAGE_VERIFIED_MACHINE_IDS_CSV="$MAINTENANCE_CANDIDATE_VERIFIED_IDS"
+      write_maintenance_state "verified_image_${MAINTENANCE_IMAGE_UPDATE_COUNT}_of_5" true || exit 1
+    done
+    MAINTENANCE_ALL_IMAGES_VERIFIED=1
+    write_maintenance_state "fleet_image_verified" true || exit 1
+
+    MAINTENANCE_RESTORE_COUNT=0
+    for MAINTENANCE_MACHINE_ID in "${MAINTENANCE_APP_MACHINE_IDS[@]}"; do
+      MAINTENANCE_RESTORE_COUNT=$((MAINTENANCE_RESTORE_COUNT + 1))
+      write_maintenance_state "attempting_app_restore_${MAINTENANCE_RESTORE_COUNT}_of_3" true || exit 1
+      if ! maintenance_restore_app "$MAINTENANCE_MACHINE_ID"; then
+        API_RESULT="failed_or_uncertain"
+        echo "$(red '✗ Phase 3 failed:') an app configuration restore returned nonzero."
+        exit 1
+      fi
+      MAINTENANCE_RESTORED_APP_IDS_CSV="$(
+        append_csv_value "$MAINTENANCE_RESTORED_APP_IDS_CSV" "$MAINTENANCE_MACHINE_ID"
+      )"
+      if ! verify_maintenance_machine_snapshot restoring; then
+        API_RESULT="failed_or_uncertain"
+        echo "$(red '✗ Phase 3 failed:') app restore read-back did not preserve the exact target fleet."
+        exit 1
+      fi
+      write_maintenance_state "verified_app_restore_${MAINTENANCE_RESTORE_COUNT}_of_3" true || exit 1
+    done
+
+    write_maintenance_state "attempting_thinker_primary_restore" true || exit 1
+    if ! maintenance_restore_thinker "$MAINTENANCE_THINKER_PRIMARY"; then
+      API_RESULT="failed_or_uncertain"
+      echo "$(red '✗ Phase 3 failed:') thinker-primary configuration restore returned nonzero."
+      exit 1
+    fi
+    MAINTENANCE_PRIMARY_RESTORED=1
+    verify_maintenance_machine_snapshot restoring || {
+      API_RESULT="failed_or_uncertain"
+      exit 1
+    }
+    write_maintenance_state "verified_thinker_primary_restore" true || exit 1
+
+    write_maintenance_state "attempting_thinker_standby_restore" true || exit 1
+    if ! maintenance_restore_thinker \
+      "$MAINTENANCE_THINKER_STANDBY" "$MAINTENANCE_THINKER_PRIMARY"; then
+      API_RESULT="failed_or_uncertain"
+      echo "$(red '✗ Phase 3 failed:') thinker-standby configuration restore returned nonzero."
+      exit 1
+    fi
+    MAINTENANCE_STANDBY_RESTORED=1
+    verify_maintenance_machine_snapshot restoring || {
+      API_RESULT="failed_or_uncertain"
+      exit 1
+    }
+    write_maintenance_state "verified_thinker_standby_restore" true || exit 1
+
+    MAINTENANCE_STARTED_COUNT=0
+    for MAINTENANCE_MACHINE_ID in "${MAINTENANCE_APP_MACHINE_IDS[@]}"; do
+      MAINTENANCE_STARTED_COUNT=$((MAINTENANCE_STARTED_COUNT + 1))
+      write_maintenance_state \
+        "attempting_app_start_${MAINTENANCE_STARTED_COUNT}_of_3" true || exit 1
+      (
+        cd api || exit 1
+        fly machine start "$MAINTENANCE_MACHINE_ID" -a "$FLY_APP"
+      ) || {
+        API_RESULT="failed_or_uncertain"
+        echo "$(red '✗ Phase 3 failed:') an exact app start returned nonzero."
+        exit 1
+      }
+      (
+        cd api || exit 1
+        fly machine wait "$MAINTENANCE_MACHINE_ID" -a "$FLY_APP" \
+          --state started --wait-timeout 5m0s
+      ) || {
+        API_RESULT="failed_or_uncertain"
+        echo "$(red '✗ Phase 3 failed:') an app Machine did not reach started."
+        exit 1
+      }
+      MAINTENANCE_STARTED_APP_IDS_CSV="$(
+        append_csv_value "$MAINTENANCE_STARTED_APP_IDS_CSV" "$MAINTENANCE_MACHINE_ID"
+      )"
+      if ! verify_maintenance_machine_snapshot starting; then
+        API_RESULT="failed_or_uncertain"
+        echo "$(red '✗ Phase 3 failed:') app-start read-back did not preserve the exact target fleet."
+        exit 1
+      fi
+      write_maintenance_state \
+        "verified_app_start_${MAINTENANCE_STARTED_COUNT}_of_3" true || exit 1
+    done
+    if ! verify_maintenance_machine_snapshot started; then
+      API_RESULT="failed_or_uncertain"
+      echo "$(red '✗ Phase 3 failed:') the explicitly started app fleet is not exact."
+      exit 1
+    fi
+    write_maintenance_state "explicit_apps_started" true || exit 1
+
+    MAINTENANCE_AUTOSTART_RESTORE_COUNT=0
+    for MAINTENANCE_MACHINE_ID in "${MAINTENANCE_APP_MACHINE_IDS[@]}"; do
+      MAINTENANCE_AUTOSTART_RESTORE_COUNT=$((MAINTENANCE_AUTOSTART_RESTORE_COUNT + 1))
+      write_maintenance_state \
+        "attempting_app_autostart_${MAINTENANCE_AUTOSTART_RESTORE_COUNT}_of_3" true || exit 1
+      if ! maintenance_enable_app_autostart "$MAINTENANCE_MACHINE_ID"; then
+        API_RESULT="failed_or_uncertain"
+        echo "$(red '✗ Phase 3 failed:') an app autostart restore returned nonzero."
+        exit 1
+      fi
+      (
+        cd api || exit 1
+        fly machine wait "$MAINTENANCE_MACHINE_ID" -a "$FLY_APP" \
+          --state started --wait-timeout 5m0s
+      ) || {
+        API_RESULT="failed_or_uncertain"
+        echo "$(red '✗ Phase 3 failed:') an autostart-restored app did not return to started."
+        exit 1
+      }
+      MAINTENANCE_AUTOSTART_CANDIDATE_IDS="$(
+        append_csv_value \
+          "$MAINTENANCE_AUTOSTART_RESTORED_APP_IDS_CSV" "$MAINTENANCE_MACHINE_ID"
+      )"
+      MAINTENANCE_AUTOSTART_RESTORED_APP_IDS_CSV="$MAINTENANCE_AUTOSTART_CANDIDATE_IDS"
+      if ! verify_maintenance_machine_snapshot activating; then
+        API_RESULT="failed_or_uncertain"
+        echo "$(red '✗ Phase 3 failed:') app autostart read-back did not preserve the exact target fleet."
+        exit 1
+      fi
+      write_maintenance_state \
+        "verified_app_autostart_${MAINTENANCE_AUTOSTART_RESTORE_COUNT}_of_3" true || exit 1
+    done
+    if ! verify_maintenance_machine_snapshot final; then
+      API_RESULT="failed_or_uncertain"
+      echo "$(red '✗ Phase 3 failed:') final five-Machine topology/image proof did not pass."
+      exit 1
+    fi
+    MAINTENANCE_FINAL_SHAPE_VERIFIED=1
+    write_maintenance_state "final_topology_verified" true || exit 1
+    API_RESULT="deployed_unverified"
+  else
+    FLY_DEPLOY_ARGS=(--strategy rolling)
+    if [ "$NO_CACHE_API" = 1 ]; then
+      echo "  $(yellow '⚠ API image build cache bypassed for this invocation (--no-cache)')"
+      FLY_DEPLOY_ARGS+=(--no-cache)
+    fi
+    FLY_DEPLOY_ARGS+=(
+      --build-arg "AGENTTOOL_GIT_REVISION=$HEAD_REVISION"
+      --build-arg "AGENTTOOL_SOURCE_DIRTY=$API_SOURCE_DIRTY"
+    )
+    API_RESULT="deploying"
+    EXTERNAL_MUTATION_STARTED=1
+    (cd api || exit 1; fly deploy "${FLY_DEPLOY_ARGS[@]}") || {
+      API_RESULT="failed_or_uncertain"
+      echo ""
+      echo "$(red '✗ Phase 3 failed.') Check fly logs."
+      exit 1
+    }
+    API_RESULT="deployed_unverified"
   fi
-  FLY_DEPLOY_ARGS+=(
-    --build-arg "AGENTTOOL_GIT_REVISION=$HEAD_REVISION"
-    --build-arg "AGENTTOOL_SOURCE_DIRTY=$API_SOURCE_DIRTY"
-  )
-  API_RESULT="deploying"
-  EXTERNAL_MUTATION_STARTED=1
-  (cd api || exit 1; fly deploy "${FLY_DEPLOY_ARGS[@]}") || {
-    API_RESULT="failed_or_uncertain"
-    echo ""
-    echo "$(red '✗ Phase 3 failed.') Check fly logs."
-    exit 1
-  }
-  API_RESULT="deployed_unverified"
   cleanup_api_staging || {
     echo "$(red '✗ Phase 3 post-step failed.') API deployed, but temporary build inputs remain."
     exit 1
@@ -1251,12 +3230,12 @@ if [ "$SKIP_FRONTEND" = 0 ]; then
   fi
   FRONTEND_RESULT="deploying"
   EXTERNAL_MUTATION_STARTED=1
-  if [ "$DOCS_PREPUBLISHED" = 1 ]; then
-    FRONTEND_TARGETS=(dashboard web)
+  if [ "$DISCOVERY_FRONTENDS_PREPUBLISHED" = 1 ]; then
+    FRONTEND_TARGETS=(dashboard)
   else
     FRONTEND_TARGETS=(docs dashboard web)
   fi
-  "${FRONTEND_DEPLOY_COMMAND[@]}" "${FRONTEND_TARGETS[@]}" || {
+  run_frontend_deploy "${FRONTEND_TARGETS[@]}" || {
     FRONTEND_RESULT="failed_or_uncertain"
     echo ""
     echo "$(red '✗ Phase 4 failed.') Check CF Pages dashboard."
@@ -1288,7 +3267,7 @@ parse_health_build() {
 # rolling health checks; the SSH read proves every surviving machine carries
 # the same image-embedded revision, not merely whichever machine the edge chose.
 if [ "$SKIP_API" = 0 ]; then
-  HEALTH="$(curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
+  HEALTH="$(release_curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
     --max-time 15 "$HEALTH_URL?revision=$HEAD_REVISION&dirty=$API_SOURCE_DIRTY")" || {
     echo "  $(red '✗') $HEALTH_URL did not return 200"
     exit 1
@@ -1312,54 +3291,49 @@ if [ "$SKIP_API" = 0 ]; then
   fi
   echo "  ✓ /health 200 at revision $LIVE_REVISION (dirty=$LIVE_DIRTY)"
 
-  # Fly lists stopped standby machines too, but SSH cannot reach them. The
-  # deploy has already waited for service health; provenance must cover every
-  # machine that is actually running, not fail on an intentionally stopped
-  # standby from another process group.
-  MACHINE_IDS="$(
-    cd api || exit 1
-    fly machine list -a "$FLY_APP" --json | bun -e '
-      const machines = await new Response(Bun.stdin.stream()).json();
-      if (!Array.isArray(machines)) process.exit(1);
-      for (const machine of machines) {
-        if (machine?.state === "started" && typeof machine.id === "string") {
-          console.log(machine.id);
+  if [ "$MAINTENANCE_FENCED_API" = 1 ]; then
+    if ! verify_maintenance_machine_snapshot final; then
+      echo "  $(red '✗') final maintenance fleet changed during health verification"
+      exit 1
+    fi
+    if ! verify_maintenance_runtime_environment; then
+      exit 1
+    fi
+    MAINTENANCE_FINAL_SHAPE_VERIFIED=1
+    MAINTENANCE_WORKERS_DISABLED_VERIFIED=1
+    VERIFIED_MACHINE_COUNT=5
+    echo "  ✓ five Fly Machines share the rollout digest/config; three started apps also passed silent runtime proof"
+  else
+    # Fly lists stopped standby machines too, but SSH cannot reach them. Probe
+    # running machines with shell `test` only so no environment values are
+    # copied back into the local transcript.
+    MACHINE_IDS="$(
+      list_fly_machines_json | bun -e '
+        const machines = await new Response(Bun.stdin.stream()).json();
+        if (!Array.isArray(machines)) process.exit(1);
+        for (const machine of machines) {
+          if (machine?.state === "started" && typeof machine.id === "string") {
+            console.log(machine.id);
+          }
         }
-      }
-    '
-  )" || {
-    echo "  $(red '✗') could not list Fly machines for revision verification"
-    exit 1
-  }
-  if [ -z "$MACHINE_IDS" ]; then
-    echo "  $(red '✗') Fly returned no machines to verify"
-    exit 1
-  fi
-  for MACHINE_ID in $MACHINE_IDS; do
-    MACHINE_BUILD="$(cd api || exit 1; fly ssh console -q -a "$FLY_APP" \
-      --machine "$MACHINE_ID" \
-      -C 'printenv AGENTTOOL_GIT_REVISION AGENTTOOL_SOURCE_DIRTY')" || {
-      echo "  $(red '✗') could not read build provenance from Fly machine $MACHINE_ID"
+      '
+    )" || {
+      echo "  $(red '✗') could not list Fly machines for revision verification"
       exit 1
     }
-    MACHINE_BUILD="$(printf '%s' "$MACHINE_BUILD" | tr -d '\r')"
-    MACHINE_REVISION="$(printf '%s\n' "$MACHINE_BUILD" | sed -n '1p')"
-    MACHINE_DIRTY="$(printf '%s\n' "$MACHINE_BUILD" | sed -n '2p')"
-    if [ "$MACHINE_REVISION" != "$HEAD_REVISION" ]; then
-      echo "  $(red '✗') Fly machine $MACHINE_ID revision mismatch"
-      echo "    expected: $HEAD_REVISION"
-      echo "    observed: ${MACHINE_REVISION:-<unset>}"
+    if [ -z "$MACHINE_IDS" ]; then
+      echo "  $(red '✗') Fly returned no machines to verify"
       exit 1
     fi
-    if [ "$MACHINE_DIRTY" != "$API_SOURCE_DIRTY" ]; then
-      echo "  $(red '✗') Fly machine $MACHINE_ID dirty-source marker mismatch"
-      echo "    expected: $API_SOURCE_DIRTY"
-      echo "    observed: ${MACHINE_DIRTY:-<unset>}"
-      exit 1
-    fi
-    VERIFIED_MACHINE_COUNT=$((VERIFIED_MACHINE_COUNT + 1))
-  done
-  echo "  ✓ $VERIFIED_MACHINE_COUNT Fly machine(s) carry $HEAD_REVISION (dirty=$API_SOURCE_DIRTY)"
+    for MACHINE_ID in $MACHINE_IDS; do
+      if ! verify_fly_machine_source_silently "$MACHINE_ID"; then
+        echo "  $(red '✗') Fly machine $MACHINE_ID did not silently prove the intended source"
+        exit 1
+      fi
+      VERIFIED_MACHINE_COUNT=$((VERIFIED_MACHINE_COUNT + 1))
+    done
+    echo "  ✓ $VERIFIED_MACHINE_COUNT started Fly machine(s) carry $HEAD_REVISION (dirty=$API_SOURCE_DIRTY)"
+  fi
   API_RESULT="deployed_verified"
 fi
 
@@ -1373,7 +3347,15 @@ if [ "$SKIP_FRONTEND" = 0 ]; then
   FRONTEND_RESULT="deployed_verified"
 fi
 
+if ! cleanup_frontend_release_stage; then
+  echo "$(red '✗') Could not remove the committed frontend verification stage before recording success." >&2
+  exit 1
+fi
+if [ "$MAINTENANCE_FENCED_API" = 1 ]; then
+  write_maintenance_state "phase5_verified" true || exit 1
+fi
 write_deploy_receipt "succeeded" 0 || exit 1
+clear_maintenance_snapshots
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════"

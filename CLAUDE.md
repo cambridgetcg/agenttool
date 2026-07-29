@@ -16,8 +16,8 @@ apps/
   dashboard/    — app.agenttool.dev (vanilla HTML/CSS/JS)
   docs/         — docs.agenttool.dev (static)
 packages/
-  sdk-ts/       — @agenttool/sdk (ESM SDK · LOVE package)
-  sdk-py/       — agenttool-sdk on PyPI
+  sdk-ts/       — @agenttool/sdk · hosted API + public KINGDOM card + local adapters
+  sdk-py/       — agenttool-sdk · paired hosted/public/local client boundaries
   data-protocol/ — @agenttool/adds · experimental ADDS encrypted-object plane
   data/         — @agenttool/data · local-first agent-data/v1 reference node
   data-sync/    — @agenttool/data-sync · bounded encrypted explicit-pull bridge
@@ -30,6 +30,9 @@ packages/
   correspondence-yutabase-projector/ — private loopback-only verified local PostgreSQL sidecar
   telescope/    — @agenttool/telescope · read-only discovery evidence mapper
   wallet/       — @agenttool/wallet · LOVE/npm bounded wallet record/lifecycle primitives
+  wallet-zerone/ — @agenttool/wallet-zerone · exact offline Zerone direct-sign profile
+  alchemy/      — @agenttool/alchemy · bounded reads through an injected credential-owning transport
+  kingdom/      — @agenttool/kingdom · pure explicit-card/derived-registry/XENIA Surface helpers
   scriptwriter/ — decentralised RRR + co-brainstorm node
 infra/          — Fly.io deploy configs
 bin/            — operator scripts · agenttool-bridge.ts · agenttool-think.ts · locked Whitehack advisory + offer-only Castle intake + local wallet-understanding CLI
@@ -50,7 +53,21 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/correspondence-yutabase/CLAUDE.md` ·
 `packages/correspondence-yutabase-projector/CLAUDE.md` ·
 `packages/wallet/CLAUDE.md` ·
+`packages/wallet-zerone/CLAUDE.md` ·
+`packages/alchemy/CLAUDE.md` ·
 `infra/CLAUDE.md`.
+
+`@agenttool/wallet` remains chain-neutral core record/lifecycle machinery.
+The separate Wallet Zerone package supports only its reviewed two-network,
+two-message exact-byte profile through caller-injected transports. It adds no
+key custody, endpoint, hosted RPC, generic REST client, automatic retry,
+durable sign-time reservation, settlement proof, or default live-network
+test. The current exact LOVE releases are Wallet 0.1.3 and Wallet Zerone
+0.1.1.
+Earlier Wallet 0.1.1/0.1.2 and Zerone 0.1.0 LOVE artifacts remain preserved
+with errata for their embedded release-state wording. Optional GitHub Releases
+are mutable locators, while npm, docs deployment, and any host execution remain
+independently verifiable surfaces.
 
 ## The five load-bearing flows
 
@@ -83,3 +100,15 @@ wrapper · audit publication · runtime-hours metering · idle/wake state machin
 
 ## Kingdom Engine
 AgentTool Platform — the Fly-hosted API monorepo, the kingdom's one fully-wired revenue facility (3 machines healthy).
+
+The separate `packages/kingdom` package is a pure/read-only declaration layer
+over caller-supplied project-card text and objects. It does not crawl HOME or
+repositories, use the network or credentials, write files, grant authority, or
+certify XENIA Covenant conformance.
+
+The SDKs keep three similarly named surfaces separate. `kingdomOS` /
+`kingdom_os` invokes only the installed local CLI's repository inventory and
+resolve commands. `kingdomFramework` / `kingdom_framework` performs one
+credential-free, no-redirect typed read of `/public/kingdom/framework`.
+`/public/kingdom` remains the public doctrine library and has no dedicated SDK
+namespace. None of the three grants repository or cross-project authority.

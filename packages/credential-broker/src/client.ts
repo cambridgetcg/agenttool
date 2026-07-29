@@ -3,12 +3,20 @@ import { createConnection, type Socket } from "node:net";
 import { AgentCredError, type AgentCredErrorCode } from "./errors.js";
 import { encodeFrame, FrameDecoder } from "./framing.js";
 import {
+  AGENTCRED_EVM_JSONRPC_READ_PROFILE,
   AGENTCRED_PROTOCOL,
+  EVM_JSONRPC_READ_METHODS,
+  type AgentCredExtension,
+  type BrokerEvmJsonRpcReadCall,
+  type BrokerEvmJsonRpcReadResponse,
   type BrokerHttpRequest,
   type BrokerHttpResponse,
+  type EvmChainId,
+  type EvmJsonRpcReadMethod,
   type GrantReceipt,
   type GrantRequest,
   type HttpMethod,
+  type JsonValue,
 } from "./types.js";
 import type { WireResponse } from "./wire.js";
 
@@ -72,6 +80,11 @@ export interface AgentCredClientOptions {
   socketPath: string;
   timeoutMs?: number;
   clientName?: string;
+  /**
+   * Profiles offered during hello. The shipped read profile is offered by
+   * default; use an empty array for strict base-agentcred/0.1 operation.
+   */
+  extensions?: readonly AgentCredExtension[];
 }
 
 export type AgentCredFetch = (
@@ -108,6 +121,80 @@ function decodeHttpResult(payload: Record<string, unknown>): BrokerHttpResponse 
     status: payload.status as number,
     headers: headers as Record<string, string>,
     bodyBase64: payload.bodyBase64,
+    auditId: payload.auditId,
+    redactions: payload.redactions as number,
+  };
+}
+
+function onlyResponseKeys(
+  value: Record<string, unknown>,
+  allowed: readonly string[],
+  name: string,
+): void {
+  const keys = new Set(allowed);
+  if (Object.keys(value).some((key) => !keys.has(key))) {
+    throw new AgentCredError("protocol_error", `Broker returned an invalid ${name}.`);
+  }
+}
+
+function assertJsonValue(
+  value: unknown,
+  state: { nodes: number },
+  depth = 0,
+): asserts value is JsonValue {
+  state.nodes += 1;
+  if (state.nodes > 4_096 || depth > 32) {
+    throw new AgentCredError("protocol_error", "Broker returned an invalid JSON-RPC result.");
+  }
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean"
+  ) {
+    return;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new AgentCredError("protocol_error", "Broker returned an invalid JSON-RPC result.");
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) assertJsonValue(item, state, depth + 1);
+    return;
+  }
+  const item = responseRecord(value);
+  for (const child of Object.values(item)) {
+    assertJsonValue(child, state, depth + 1);
+  }
+}
+
+function decodeEvmJsonRpcReadResult(
+  payload: Record<string, unknown>,
+): BrokerEvmJsonRpcReadResponse {
+  onlyResponseKeys(
+    payload,
+    ["profile", "chainId", "method", "result", "auditId", "redactions"],
+    "JSON-RPC result",
+  );
+  if (
+    payload.profile !== AGENTCRED_EVM_JSONRPC_READ_PROFILE ||
+    typeof payload.chainId !== "string" ||
+    !/^eip155:[1-9][0-9]{0,19}$/.test(payload.chainId) ||
+    typeof payload.method !== "string" ||
+    !(EVM_JSONRPC_READ_METHODS as readonly string[]).includes(payload.method) ||
+    typeof payload.auditId !== "string" ||
+    !Number.isInteger(payload.redactions) ||
+    !Object.hasOwn(payload, "result")
+  ) {
+    throw new AgentCredError("protocol_error", "Broker returned an invalid JSON-RPC result.");
+  }
+  assertJsonValue(payload.result, { nodes: 0 });
+  return {
+    profile: AGENTCRED_EVM_JSONRPC_READ_PROFILE,
+    chainId: payload.chainId as EvmChainId,
+    method: payload.method as EvmJsonRpcReadMethod,
+    result: payload.result,
     auditId: payload.auditId,
     redactions: payload.redactions as number,
   };
@@ -154,6 +241,7 @@ export class AgentCredClient {
   #sessionId: string | undefined;
   #maxInFlight = 1;
   #activeSends = 0;
+  #extensions = new Set<AgentCredExtension>();
 
   constructor(options: AgentCredClientOptions) {
     this.#options = options;
@@ -187,6 +275,7 @@ export class AgentCredClient {
       this.#socket = undefined;
       this.#seq = 0;
       this.#maxInFlight = 1;
+      this.#extensions.clear();
       this.#invalidateHandles();
       this.#failSendWaiters("Credential broker connection closed.");
       this.#failPending("Credential broker connection closed.");
@@ -201,9 +290,16 @@ export class AgentCredClient {
         socket.once("connect", resolveConnect);
         socket.once("error", () => reject(new AgentCredError("request_failed", "Could not connect to credential broker.")));
       });
+      const offered = [
+        ...new Set(
+          this.#options.extensions ??
+            [AGENTCRED_EVM_JSONRPC_READ_PROFILE],
+        ),
+      ];
       const payload = await this.#send("hello", {
         clientNonce: randomBytes(24).toString("base64url"),
         clientName: this.#options.clientName ?? "agentcred-client",
+        extensions: offered,
       });
       if (typeof payload.sessionId !== "string") {
         throw new AgentCredError("protocol_error", "Broker hello response is invalid.");
@@ -215,8 +311,20 @@ export class AgentCredClient {
       ) {
         throw new AgentCredError("protocol_error", "Broker concurrency limit is invalid.");
       }
+      const selected = payload.extensions ?? [];
+      if (
+        !Array.isArray(selected) ||
+        selected.some(
+          (extension) =>
+            extension !== AGENTCRED_EVM_JSONRPC_READ_PROFILE ||
+            !offered.includes(extension),
+        )
+      ) {
+        throw new AgentCredError("protocol_error", "Broker extension negotiation is invalid.");
+      }
       this.#maxInFlight = payload.maxInFlight as number;
       this.#sessionId = payload.sessionId;
+      this.#extensions = new Set(selected as AgentCredExtension[]);
     } catch (error) {
       if (this.#socket === socket) this.close();
       throw error;
@@ -224,6 +332,15 @@ export class AgentCredClient {
   }
 
   async requestGrant(request: GrantRequest): Promise<GrantHandle> {
+    if (
+      request.operation === "jsonrpc.read" &&
+      !this.#extensions.has(AGENTCRED_EVM_JSONRPC_READ_PROFILE)
+    ) {
+      throw new AgentCredError(
+        "unsupported",
+        "Broker did not negotiate the JSON-RPC read profile.",
+      );
+    }
     const payload = await this.#send("grant.request", request as unknown as Record<string, unknown>);
     if (typeof payload.capability !== "string") {
       throw new AgentCredError("protocol_error", "Broker grant response is invalid.");
@@ -239,11 +356,42 @@ export class AgentCredClient {
 
   async fetch(handle: GrantHandle, request: BrokerHttpRequest): Promise<BrokerHttpResponse> {
     const grant = this.#grant(handle);
+    if (handle.receipt.operation !== "http.fetch") {
+      throw new AgentCredError("scope_denied", "Grant is not an HTTP capability.");
+    }
     const payload = await this.#send("grant.use", {
       capability: grant.capability,
       request: request as unknown as Record<string, unknown>,
     });
     return decodeHttpResult(payload);
+  }
+
+  async callEvmJsonRpcRead(
+    handle: GrantHandle,
+    request: BrokerEvmJsonRpcReadCall,
+  ): Promise<BrokerEvmJsonRpcReadResponse> {
+    const grant = this.#grant(handle);
+    if (handle.receipt.operation !== "jsonrpc.read") {
+      throw new AgentCredError("scope_denied", "Grant is not a JSON-RPC read capability.");
+    }
+    if (!this.#extensions.has(AGENTCRED_EVM_JSONRPC_READ_PROFILE)) {
+      throw new AgentCredError(
+        "unsupported",
+        "Broker did not negotiate the JSON-RPC read profile.",
+      );
+    }
+    const payload = await this.#send("grant.use", {
+      capability: grant.capability,
+      request: request as unknown as Record<string, unknown>,
+    });
+    const result = decodeEvmJsonRpcReadResult(payload);
+    if (
+      result.chainId !== request.chainId ||
+      result.method !== request.method
+    ) {
+      throw new AgentCredError("protocol_error", "Broker JSON-RPC result does not match the call.");
+    }
+    return result;
   }
 
   async revoke(handle: GrantHandle): Promise<void> {
@@ -309,6 +457,7 @@ export class AgentCredClient {
     this.#sessionId = undefined;
     this.#seq = 0;
     this.#maxInFlight = 1;
+    this.#extensions.clear();
     this.#decoder?.clear();
     this.#decoder = undefined;
     this.#socket?.destroy();
