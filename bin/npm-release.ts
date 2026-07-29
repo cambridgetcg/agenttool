@@ -36,6 +36,14 @@ export interface ReleaseSpec {
   }[];
 }
 
+export interface ReleaseWorkspaceOperations {
+  install(
+    packagePath: `packages/${string}`,
+    options: { force: boolean },
+  ): Promise<void>;
+  run(packagePath: `packages/${string}`, script: string): Promise<void>;
+}
+
 export const RELEASE_SPECS = {
   adds: {
     key: "adds",
@@ -115,6 +123,17 @@ export const RELEASE_SPECS = {
     packagePath: "packages/alchemy",
     tagPrefix: "alchemy",
     artifactKind: "pack",
+  },
+  "alchemy-agentcred": {
+    key: "alchemy-agentcred",
+    name: "@agenttool/alchemy-agentcred",
+    packagePath: "packages/alchemy-agentcred",
+    tagPrefix: "alchemy-agentcred",
+    artifactKind: "pack",
+    prerequisites: [
+      { packagePath: "packages/alchemy", scripts: ["build"] },
+      { packagePath: "packages/credential-broker", scripts: ["build"] },
+    ],
   },
   kingdom: {
     key: "kingdom",
@@ -464,13 +483,42 @@ async function ensurePinnedTools(): Promise<void> {
   if (npmVersion !== PINNED_NPM) fail(`release requires npm ${PINNED_NPM}, found ${npmVersion}`);
 }
 
-async function installWorkspace(path: string): Promise<void> {
-  // Bun 1.3.5 can report file-linked development peers as installed without
-  // materializing them into an empty node_modules tree unless installation is
-  // forced. Release preparation always starts from a clean checkout, so make
-  // that boundary explicit for every locked workspace install.
-  await command("bun", ["install", "--frozen-lockfile", "--ignore-scripts", "--force"], {
+export function workspaceInstallArguments(force: boolean): string[] {
+  return [
+    "install",
+    "--frozen-lockfile",
+    "--ignore-scripts",
+    ...(force ? ["--force"] : []),
+  ];
+}
+
+async function installWorkspace(
+  path: string,
+  options: { force: boolean } = { force: false },
+): Promise<void> {
+  await command("bun", workspaceInstallArguments(options.force), {
     cwd: join(REPO_ROOT, path),
+  });
+}
+
+export async function prepareReleaseWorkspaces(
+  spec: ReleaseSpec,
+  operations: ReleaseWorkspaceOperations = {
+    install: installWorkspace,
+    run: async (packagePath, script) => {
+      await command("bun", ["run", script], { cwd: join(REPO_ROOT, packagePath) });
+    },
+  },
+): Promise<void> {
+  const prerequisites = spec.prerequisites ?? [];
+  for (const prerequisite of prerequisites) {
+    await operations.install(prerequisite.packagePath, { force: false });
+    for (const script of prerequisite.scripts) {
+      await operations.run(prerequisite.packagePath, script);
+    }
+  }
+  await operations.install(spec.packagePath, {
+    force: prerequisites.length > 0,
   });
 }
 
@@ -533,6 +581,13 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
   }
   if (spec.name === "@agenttool/alchemy") {
     entries.push(
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+    );
+  }
+  if (spec.name === "@agenttool/alchemy-agentcred") {
+    entries.push(
+      "package/CLAUDE.md",
       "package/dist/index.js",
       "package/dist/index.d.ts",
     );
@@ -627,13 +682,7 @@ async function loveArtifact(
   outputDirectory: string,
 ): Promise<{ path: string; sourceRevision: string }> {
   await installWorkspace("api");
-  for (const prerequisite of spec.prerequisites ?? []) {
-    await installWorkspace(prerequisite.packagePath);
-    for (const script of prerequisite.scripts) {
-      await command("bun", ["run", script], { cwd: join(REPO_ROOT, prerequisite.packagePath) });
-    }
-  }
-  await installWorkspace(spec.packagePath);
+  await prepareReleaseWorkspaces(spec);
   for (const script of spec.gateScripts ?? ["ci"]) {
     await command("bun", ["run", script], { cwd: join(REPO_ROOT, spec.packagePath) });
   }
@@ -674,7 +723,7 @@ async function packedArtifact(
   outputDirectory: string,
 ): Promise<{ path: string; sourceRevision: string }> {
   const packageRoot = join(REPO_ROOT, spec.packagePath);
-  await installWorkspace(spec.packagePath);
+  await prepareReleaseWorkspaces(spec);
   const identity = await packageIdentity(spec);
   if (typeof identity.json.scripts?.prepack !== "string") fail(`${spec.name} pack release requires a prepack gate`);
   await command("bun", ["run", "prepack"], { cwd: packageRoot });

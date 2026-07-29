@@ -16,7 +16,9 @@ import {
   registryPackagePath,
   releaseSpec,
   requiredArchiveEntries,
+  prepareReleaseWorkspaces,
   validateNpmTagForVersion,
+  workspaceInstallArguments,
   type PreparedReceipt,
 } from "../npm-release";
 
@@ -85,17 +87,11 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
-  test("materializes locked file-linked development peers in clean release checkouts", async () => {
-    const script = await readFile(join(import.meta.dir, "..", "npm-release.ts"), "utf8");
-    expect(script).toContain(
-      '["install", "--frozen-lockfile", "--ignore-scripts", "--force"]',
-    );
-  });
-
-  test("allowlists fifteen reviewed release identities", () => {
+  test("allowlists sixteen reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
+      "alchemy-agentcred",
       "browser",
       "collab",
       "correspondence-yutabase",
@@ -134,6 +130,16 @@ describe("standard npm release policy", () => {
       name: "@agenttool/alchemy",
       packagePath: "packages/alchemy",
       artifactKind: "pack",
+    });
+    expect(releaseSpec("alchemy-agentcred")).toMatchObject({
+      name: "@agenttool/alchemy-agentcred",
+      packagePath: "packages/alchemy-agentcred",
+      tagPrefix: "alchemy-agentcred",
+      artifactKind: "pack",
+      prerequisites: [
+        { packagePath: "packages/alchemy", scripts: ["build"] },
+        { packagePath: "packages/credential-broker", scripts: ["build"] },
+      ],
     });
     expect(releaseSpec("kingdom")).toMatchObject({
       name: "@agenttool/kingdom",
@@ -187,6 +193,12 @@ describe("standard npm release policy", () => {
     );
     expect(packedFilename("@agenttool/alchemy", "0.1.0-dev.0")).toBe(
       "agenttool-alchemy-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("alchemy-agentcred"), "0.1.0-dev.0")).toBe(
+      "alchemy-agentcred-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/alchemy-agentcred", "0.1.0-dev.0")).toBe(
+      "agenttool-alchemy-agentcred-0.1.0-dev.0.tgz",
     );
     expect(expectedTag(releaseSpec("kingdom"), "0.1.0")).toBe("kingdom-v0.1.0");
     expect(packedFilename("@agenttool/kingdom", "0.1.0")).toBe(
@@ -242,6 +254,17 @@ describe("standard npm release policy", () => {
       "package/dist/index.js",
       "package/dist/index.d.ts",
     ]));
+    expect(requiredArchiveEntries(releaseSpec("alchemy-agentcred"))).toEqual(
+      expect.arrayContaining([
+        "package/package.json",
+        "package/LICENSE",
+        "package/NOTICE",
+        "package/README.md",
+        "package/CLAUDE.md",
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+      ]),
+    );
     expect(requiredArchiveEntries(releaseSpec("kingdom"))).toEqual(expect.arrayContaining([
       "package/THIRD_PARTY_LICENSES",
       "package/dist/bin.js",
@@ -299,6 +322,66 @@ describe("standard npm release policy", () => {
     );
     expect(() => validateNpmTagForVersion("0.1.0-dev.0", "next")).not.toThrow();
     expect(() => validateNpmTagForVersion("0.1.0", "latest")).not.toThrow();
+  });
+
+  test("forces a dependent target install only after its prerequisites", async () => {
+    const calls: string[] = [];
+    await prepareReleaseWorkspaces(releaseSpec("alchemy-agentcred"), {
+      install: async (packagePath, options) => {
+        calls.push(`install:${packagePath}:${options.force ? "force" : "normal"}`);
+      },
+      run: async (packagePath, script) => {
+        calls.push(`run:${packagePath}:${script}`);
+      },
+    });
+
+    expect(calls).toEqual([
+      "install:packages/alchemy:normal",
+      "run:packages/alchemy:build",
+      "install:packages/credential-broker:normal",
+      "run:packages/credential-broker:build",
+      "install:packages/alchemy-agentcred:force",
+    ]);
+
+    const syncCalls: string[] = [];
+    await prepareReleaseWorkspaces(releaseSpec("data-sync"), {
+      install: async (packagePath, options) => {
+        syncCalls.push(`install:${packagePath}:${options.force ? "force" : "normal"}`);
+      },
+      run: async (packagePath, script) => {
+        syncCalls.push(`run:${packagePath}:${script}`);
+      },
+    });
+    expect(syncCalls).toEqual([
+      "install:packages/data:normal",
+      "run:packages/data:ci",
+      "run:packages/data:build",
+      "install:packages/data-protocol:normal",
+      "run:packages/data-protocol:ci",
+      "install:packages/data-sync:force",
+    ]);
+
+    expect(workspaceInstallArguments(true)).toEqual([
+      "install",
+      "--frozen-lockfile",
+      "--ignore-scripts",
+      "--force",
+    ]);
+    expect(workspaceInstallArguments(false)).toEqual([
+      "install",
+      "--frozen-lockfile",
+      "--ignore-scripts",
+    ]);
+
+    const script = await readFile(join(import.meta.dir, "..", "npm-release.ts"), "utf8");
+    const packedBody =
+      script.split("async function packedArtifact(")[1]
+        ?.split("\nexport async function readReleaseReceipt(")[0] ?? "";
+    const loveBody =
+      script.split("async function loveArtifact(")[1]
+        ?.split("\nasync function packedArtifact(")[0] ?? "";
+    expect(packedBody).toContain("await prepareReleaseWorkspaces(spec);");
+    expect(loveBody).toContain("await prepareReleaseWorkspaces(spec);");
   });
 
   test("encodes scoped registry paths without accepting arbitrary names", () => {

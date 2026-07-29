@@ -341,6 +341,12 @@ describe("boring test spine", () => {
     expect(workflow).toContain(
       "name: Smoke packed Alchemy read package under Node and Bun",
     );
+    expect(workflow).toContain(
+      "name: Smoke packed Alchemy, AgentCred, and adapter together under Node and Bun",
+    );
+    expect(workflow).toContain(
+      'npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$alchemy_tarball" "$broker_tarball" "$adapter_tarball"',
+    );
     expect(workflow).toContain("name: Smoke packed credential broker under Node and Bun");
     expect(workflow).toContain(
       'cli="$install_dir/node_modules/@agenttool/credential-broker/dist/cli.js"',
@@ -441,7 +447,7 @@ describe("boring test spine", () => {
       workflow.match(
         /npm install --ignore-scripts --no-audit --no-fund --prefix/g,
       ),
-    ).toHaveLength(8);
+    ).toHaveLength(9);
 
     const uses = workflow
       .split("\n")
@@ -473,6 +479,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("          - skills");
     expect(workflow).toContain("          - browser");
     expect(workflow).toContain("          - alchemy");
+    expect(workflow).toContain("          - alchemy-agentcred");
     expect(workflow).toContain("          - kingdom");
     expect(workflow).toContain("          - repo-archive");
     expect(workflow).toContain("          - wallet-zerone");
