@@ -350,9 +350,16 @@ describe("boring test spine", () => {
       'cli="$package_root/dist/bin.js"',
     );
     expect(workflow).toContain('report.skills[0].name !== "use-agentcred-safely"');
+    expect(workflow).toContain(
+      'report.skills[0].name !== "manage-agentcred-lifecycle"',
+    );
     expect(workflow).toContain('report.skills[0].name !== "capability-conductor"');
     expect(workflow).toContain('report.skills[0].name !== "learn-by-contact"');
-    expect(workflow).toContain('test "$(node "$cli" --version)" = "0.2.1"');
+    expect(workflow).toContain(
+      'test "$("$install_dir/node_modules/.bin/agenttool-skill" --version)" = "0.3.0"',
+    );
+    expect(workflow).toContain('test "$(node "$cli" --version)" = "0.3.0"');
+    expect(workflow).toContain('test "$(bun "$cli" --version)" = "0.3.0"');
     for (const skillName of [
       "nen-contract-mantle",
       "nen-dependency-perimeter",
