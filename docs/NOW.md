@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-28 (`@agenttool/kingdom@0.1.0` is public on npm and GitHub with independently verified byte parity and npm attestations, and its XENIA-visible production API door is live; SDK 0.17.0 has a public annotated tag, GitHub Release, npm and PyPI mirrors with independent readback, while production status is evidenced separately)
+> Updated: 2026-07-29 (`@agenttool/browser@0.5.0` is the current exact LOVE/npm/GitHub release line; its static docs/catalog deployment and live readback remain separately evidenced)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -13,6 +13,12 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Just landed (2026-07-29)
+
+| Ship | Commit | What |
+|---|---|---|
+| **AGENT BROWSER 0.5 — local action evidence without invented certainty** | exact LOVE artifact + annotated [`browser-v0.5.0`](https://github.com/cambridgetcg/agenttool/releases/tag/browser-v0.5.0) + npm `@agenttool/browser@0.5.0` | The current release carries the never-distributed 0.4 standing-policy diagnostic and JSONL field-rename hint into one exact 0.5 artifact, then adds redacted `agent-browser-action-receipt/0.1` receipts for syntactically admitted action attempts, optional retained-observation bases for non-ref actions, bounded last-receipt context in observations, a backend-neutral operation registry, and current MCP negotiation with an explicit legacy path. Receipts distinguish `not_started`, `browser_completed`, and uncertain post-dispatch outcomes so an agent can correct or re-observe without turning uncertainty into an automatic retry. Snapshot bases are rechecked immediately before runtime dispatch, but remain session-local evidence rather than a distributed lease, DOM-equality proof, authorization, identity, consent, or proof of remote effect. Playwright is the current adapter behind AgentTool-owned handles; raw CDP is not public API and a later WebDriver BiDi adapter need not rename the agent contract. The protected release path mirrors the exact LOVE bytes into GitHub and npm and verifies registry bytes; a static docs/catalog deployment and public readback are separate and are not claimed by this source entry. Exact 0.3.0, 0.2.0, and 0.1.0 artifacts remain immutable historical releases. The package still creates no hosted browser-control service, universal site access, credential path, shell, arbitrary page evaluation, or hard SSRF isolation. |
 
 ## Landed (2026-07-28) — KINGDOM cards through a XENIA-visible door
 
