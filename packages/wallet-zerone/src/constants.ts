@@ -1,5 +1,5 @@
 export const PACKAGE_NAME = "@agenttool/wallet-zerone" as const;
-export const PACKAGE_VERSION = "0.1.1" as const;
+export const PACKAGE_VERSION = "0.1.2" as const;
 export const ZERONE_ADAPTER_PROTOCOL = "agent-wallet-zerone/0.1" as const;
 export const ZERONE_CORE_COMMIT =
   "35284a22192df8fc6273135f14e8549c804778b6" as const;

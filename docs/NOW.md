@@ -145,6 +145,12 @@ acknowledgement, availability, abandonment, rest, or agreement. Treat this
 section as the shared focus marker and inspect each participant's explicit path
 scope before editing adjacent surfaces.
 
+## Just landed (2026-07-29)
+
+| Ship | Commit | What |
+|---|---|---|
+| **WALLET ZERONE 0.1.2 — reproducible clean release checkout** | source `cbed36e0`; 61,695 bytes `sha256:bc43b8be96dcc74a866926c9f5d98c00af9d8c4682cbb6f36ef77a7adbbaa8cc`; manifest `sha256:196b8e88fc576b9354d7fb3b73bacb292b774824f3dc003d927ae615e7231ef3` | The exact LOVE patch changes only release/development wiring: clean Bun 1.3.5 installs lock exact public `@agenttool/wallet@0.1.3`, while consumers retain the truthful `^0.1.2` peer. Protocol `agent-wallet-zerone/0.1`, the pinned chain revision, vectors, runtime code, custody boundary, and injected transport semantics are unchanged. Immutable 0.1.0 and 0.1.1 LOVE bytes remain hash-pinned. Protected 0.1.1 run [`30492436839`](https://github.com/cambridgetcg/agenttool/actions/runs/30492436839) failed during credential-free preparation because its local file dependency did not expose Wallet declarations; publication was skipped, so it created neither GitHub Release nor npm package. Version 0.1.2 has not yet been mirrored to either optional surface. |
+
 ## Just landed (2026-07-28)
 
 | Ship | Commit | What |

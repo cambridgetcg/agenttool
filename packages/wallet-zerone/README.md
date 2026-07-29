@@ -9,13 +9,22 @@ into exact Cosmos `SIGN_MODE_DIRECT` bytes, verifies the returned secp256k1
 signature and `TxRaw`, and supplies injected query, simulation, broadcast, and
 lookup boundaries.
 
-Version `0.1.1` is the current exact `love-package/v1` release. It remains a
-local offline runtime and has not become a hosted bridge, signer, custody
-provider, or RPC service. npm and GitHub are optional mirrors whose exact
-availability must be checked independently. The immutable `0.1.0` LOVE
-artifact remains public, but its embedded docs call it a release candidate;
-this paragraph is the public erratum and those historical bytes are not
-rewritten. Its wire contract is pinned to zerone-core commit
+Version `0.1.2` is the current exact `love-package/v1` release. Its locked
+development dependency is the exact public `@agenttool/wallet@0.1.3`, while
+the consumer peer remains the compatible `^0.1.2` range. It remains a local
+offline runtime and has not become a hosted bridge, signer, custody provider,
+or RPC service. npm and GitHub are optional mirrors whose exact availability
+must be checked independently.
+
+The immutable `0.1.1` LOVE artifact remains public. Its first npm bootstrap
+run stopped in credential-free preparation because the clean checkout's local
+file dependency did not expose Wallet's built declarations; the protected
+publish job was skipped, so neither a GitHub Release nor npm package was
+created. Version 0.1.2 replaces only that development dependency and preserves
+the wire protocol. The immutable `0.1.0` LOVE artifact also remains public,
+but its embedded docs call it a release candidate; this paragraph is the
+public erratum and neither historical artifact is rewritten. The wire contract
+is pinned to zerone-core commit
 `35284a22192df8fc6273135f14e8549c804778b6` and Cosmos SDK `v0.50.15`.
 
 It does not derive, accept, store, or export private keys or mnemonics. It does
@@ -213,14 +222,10 @@ settlement or reward entitlement from a locally signed transaction.
 ## Development and parity
 
 ```bash
-# From the repository root. The adapter's local file dependency captures
-# Wallet's built dist, so build Wallet before installing the adapter. --force
-# refreshes that locked file dependency; it does not update dependency versions.
-(cd packages/wallet \
-  && bun install --frozen-lockfile \
-  && bun run build)
+# From the repository root. The lock resolves the exact public Wallet 0.1.3
+# development dependency; consumer compatibility remains the ^0.1.2 peer.
 (cd packages/wallet-zerone \
-  && bun install --frozen-lockfile --force \
+  && bun install --frozen-lockfile \
   && bun run ci \
   && npm pack --ignore-scripts --dry-run)
 ```

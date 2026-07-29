@@ -23,10 +23,10 @@ describe("package and public boundary", () => {
     };
     expect(manifest.name).toBe(exported.PACKAGE_NAME);
     expect(manifest.version).toBe(exported.PACKAGE_VERSION);
-    expect(manifest.version).toBe("0.1.1");
+    expect(manifest.version).toBe("0.1.2");
     expect(manifest.peerDependencies["@agenttool/wallet"]).toBe("^0.1.2");
     expect(manifest.devDependencies["@agenttool/wallet"]).toBe(
-      "file:../wallet",
+      "0.1.3",
     );
     expect(manifest.overrides).toBeUndefined();
     expect(manifest.dependencies).toEqual({

@@ -222,7 +222,7 @@ describe("current outward operational claims", () => {
         /GitHub.*(mutable|immutable:false).*(reverif|digest|SHA-256|not.*guarantee)/is,
       );
       expect(surface).not.toMatch(/immutable[^.\n]*GitHub Release/is);
-      expect(surface).toMatch(/npm.*0\.1\.0/is);
+      expect(surface).toMatch(/npm.*0\.1\.3/is);
     }
 
     for (const surface of [wakeBuilder, wakeRoute]) {
