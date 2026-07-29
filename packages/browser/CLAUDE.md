@@ -8,7 +8,7 @@ LOVE, npm, and GitHub Releases does not change that runtime boundary.
 
 ## Authority direction
 
-Prepared source version `0.5.0` carries forward the authority model built
+Version `0.5.0` carries forward the authority model built
 around one rule:
 **sandbox consequences, not curiosity**.
 Destination reach, state persistence, data disclosure, and executable powers
@@ -136,11 +136,9 @@ explicit local dogfood check; it is never a required CI dependency.
 
 ## Release boundary
 
-Versions `0.1.0`, `0.2.0`, and `0.3.0` are exact LOVE releases with npm and
-GitHub Release mirrors. Release-state evidence recorded on 2026-07-29 showed
-`0.3.0` as the immutable public latest, `0.4.0` prepared but not distributed,
-and `0.5.0` as the current prepared source candidate carrying that work
-forward. Release work must
+Versions `0.1.0`, `0.2.0`, `0.3.0`, and `0.5.0` are exact LOVE releases with
+optional npm and GitHub Release mirrors. Version `0.4.0` was prepared but not
+distributed; its reviewed work is carried by `0.5.0`. Release work must
 keep each released version's bytes immutable and keep the current LOVE, npm,
 and GitHub Release bytes identical through the protected allowlisted workflow.
 The deployed docs/catalog is a distribution surface, not a hosted
@@ -151,9 +149,6 @@ artifact, not the immutable `0.1.0` or `0.2.0` bytes. The `blockedNavigation`
 observation diagnostic and the JSONL snake_case rename hint were prepared at
 the unreleased `0.4.0` boundary. Browser-act receipts, non-ref observation
 bases, observation-local receipt context, backend-neutral capability
-inventory, and current/legacy MCP negotiation belong to prepared `0.5.0`
-source. The candidate is not frozen merely because `package.json` says
-`0.5.0`: status evidence and implementation may be corrected within the same
-candidate before release. Once exact release bytes are frozen or published,
-any source change—especially a machine-readable capability contract
-change—requires a new package version before publication.
+inventory, and current/legacy MCP negotiation belong to exact `0.5.0`.
+Those bytes are frozen: any later source change—especially a machine-readable
+capability contract change—requires a new package version before publication.

@@ -10,25 +10,26 @@
 
 ## Status
 
-The repository currently contains prepared `@agenttool/browser@0.5.0` source.
-Release-state evidence recorded on 2026-07-29 showed that it was unreleased and
-that `0.3.0` was the immutable public latest through exact LOVE, npm, and GitHub
-Release artifacts. Distribution state can change independently of this source;
-verify the registry or exact LOVE catalog when current availability matters.
-The deployed catalog and docs distribute bytes and documentation; they do not
-expose an AgentTool-hosted browser. The package requires no AgentTool account,
-API key, credits, Redis, database, or hosted control plane.
+The repository contains the exact `@agenttool/browser@0.5.0` source. Its
+canonical public record is the immutable LOVE artifact; npm and the annotated
+GitHub Release are optional mirrors whose bytes are verified independently by
+the protected release workflow. Distribution state can change independently
+of this source, so verify the registry or exact LOVE catalog when current
+availability matters. The deployed catalog and docs distribute bytes and
+documentation; they do not expose an AgentTool-hosted browser. The package
+requires no AgentTool account, API key, credits, Redis, database, or hosted
+control plane.
 
 The exact `0.1.0`, `0.2.0`, and `0.3.0` artifacts remain immutable. Version
 `0.3.0` packaged collaboration-safe retained observations, structural
 accessibility context, navigation/action/close race hardening, and explicit
 capability truth about browser-managed redirect hops. `0.4.0` was prepared but
 never distributed; it added the `blockedNavigation` observation diagnostic and
-the JSONL snake_case rename hint. Prepared `0.5.0` carries that work forward
+the JSONL snake_case rename hint. Version `0.5.0` carries that work forward
 and adds browser-act receipts, non-ref observation-basis preconditions,
 session-local receipt context, a backend-neutral capability inventory, and
 current MCP negotiation with an explicit compatibility path. None of those
-unreleased changes widens authority.
+changes widens authority.
 
 The package uses `playwright-core` to drive a Chrome-family browser already
 installed on the caller's machine. There is no postinstall hook and no bundled
@@ -39,8 +40,8 @@ operator's control.
 zero-effect action planning; `0.3.0` retained those interfaces while hardening
 their execution and observation contracts. The immutable `0.1.0` release
 remains available as historical seven-operation bytes and does not gain later
-features retroactively. This page describes prepared `0.5.0` source; install
-commands near the end deliberately select public `0.3.0`.
+features retroactively. This page and its install commands describe exact
+`0.5.0`; the earlier artifacts remain separately addressable.
 
 ## Why this surface exists
 
@@ -79,7 +80,7 @@ explicit operation names:
 | `close` | `browser_close` |
 
 Version `0.2.0` introduced two aligned, non-executing operations retained by
-prepared `0.5.0` source:
+`0.5.0`:
 
 | TypeScript method | JSONL method / MCP tool | Effect |
 |---|---|---|
@@ -98,7 +99,7 @@ Each JSONL request is
 `{ "ok": false, "error": { "code", "message" } }`. The framing is one JSON
 object per line; protocol stdout contains no banners or diagnostic prose.
 
-Prepared `0.5.0` negotiates the current MCP `2026-07-28` revision and retains
+Version `0.5.0` negotiates the current MCP `2026-07-28` revision and retains
 an explicit 2025-era stdio compatibility path. Both routes expose the same
 bounded browser core. MCP revision negotiation is transport compatibility,
 not a browser driver, durable session protocol, or security boundary; browser
@@ -184,11 +185,11 @@ outcome, not treat every refusal as a protection to bypass.
 Destination reach remains separate from other consequential powers. File
 upload, automatic download, arbitrary JavaScript evaluation, credential
 injection/lookup, ambient normal-profile import, shell execution, and
-extension installation remain unsupported in prepared `0.5.0` source.
+extension installation remain unsupported in `0.5.0`.
 `capabilities()` reports those absences instead of treating sovereign
 destination reach as an implication that every power exists.
 
-The forms retained in prepared `0.5.0` source are
+The forms retained in `0.5.0` are
 `authority: "public" | "local" | "sovereign"`, `--authority`, and
 `AGENTOOL_BROWSER_AUTHORITY`. The legacy booleans, flags, and environment
 variables remain as a deprecated compatibility surface, but a launch cannot
@@ -250,7 +251,7 @@ action is appropriate; do not treat an error as proof that nothing happened.
 
 ### Browser-act receipts
 
-Prepared `0.5.0` gives each syntactically admitted `browser_act` attempt a
+Version `0.5.0` gives each syntactically admitted `browser_act` attempt a
 redacted `agent-browser-action-receipt/0.1` receipt. Direct `act` includes it in
 the `ActionResult`; a known `BrowserError` carries it on failure. Invalid input
 rejected before core admission has no receipt.
@@ -281,7 +282,7 @@ lease. An observation can become old immediately after it is returned.
 
 ### Non-ref observation basis
 
-Prepared `0.5.0` lets selected actions without an element ref carry
+Version `0.5.0` lets selected actions without an element ref carry
 `basisSnapshotId` in TypeScript and `basis_snapshot_id` over JSONL/MCP. The
 eligible actions are `navigate`, non-ref `press` and `scroll`, `wait`, `back`,
 `forward`, `reload`, and `close_tab`. Ref-targeted actions retain their
@@ -352,7 +353,7 @@ invocation, or relationship.
 
 ### Blocked-navigation diagnostics
 
-Prepared `0.5.0` observations carry forward the unreleased `0.4.0`
+Version `0.5.0` observations carry forward the never-distributed `0.4.0`
 `blockedNavigation` field. It is either `null` or a record
 (`source: "navigation_policy"`, query-redacted bounded `url`, policy `code`,
 `message`) of the tab's most recent main-frame navigation that this process
@@ -416,7 +417,7 @@ and treat persistent-profile artifacts as sensitive owner-held data.
 In published `0.1.0`, public web is allowed by default; loopback, link-local,
 and private HTTP(S) navigation/request destinations require the process-level
 `--local-network` opt-in. Reserved destinations remain blocked even with that
-opt-in. The prepared `0.5.0` `public` and `local` profiles preserve those
+opt-in. The `0.5.0` `public` and `local` profiles preserve those
 respective destination rules from `0.2.0`.
 
 The native policy performs hostname and address checks before navigation, but
@@ -444,7 +445,7 @@ connection. `local` classifies WebSocket destinations against its
 public-plus-local boundary rather than pretending the HTTP(S) DNS claim
 extends to WebSocket transport.
 
-The prepared `0.5.0` `sovereign` profile retains the explicit alternative
+The `0.5.0` `sovereign` profile retains the explicit alternative
 introduced in `0.2.0`: it intentionally performs no destination-class blocking
 for valid HTTP(S), passes WebSockets through, and enables service workers.
 Embedded userinfo is blocked on direct inputs and routed requests, not on
@@ -474,7 +475,7 @@ planning and consent.
 
 | Surface | Runtime and authority | Operational boundary |
 |---|---|---|
-| Prepared local `0.5.0` source (release evidence: unreleased, with `0.3.0` latest, on 2026-07-29) | Operator-owned local TypeScript, JSONL, or stdio MCP process using an installed local Chrome-family browser | No AgentTool bearer, credits, Redis, or hosted worker. Local actions are attempted once. Profiles, artifacts, and destination authority remain on the operator's machine. |
+| Exact local `0.5.0` package | Operator-owned local TypeScript, JSONL, or stdio MCP process using an installed local Chrome-family browser | No AgentTool bearer, credits, Redis, or hosted worker. Local actions are attempted once. Profiles, artifacts, and destination authority remain on the operator's machine. |
 | `POST /v1/browse` | Separate AgentTool API route and BullMQ worker implementation | Bearer- and credit-scoped, disabled without the unsafe-outbound flag, dependent on Redis workers, server-readable, Chromium `--no-sandbox`, and currently unfiltered by destination. BullMQ may attempt a job twice. |
 
 The npm, LOVE, GitHub, and docs release of the local package neither enables
@@ -527,7 +528,7 @@ boundary:
 
 Boolean environment values accept `1/0`, `true/false`, `yes/no`, or `on/off`.
 Paths are resolved at process start. Tool calls do not accept these settings.
-Prepared `0.5.0` rejects mixed `authority` and legacy public/local
+Version `0.5.0` rejects mixed `authority` and legacy public/local
 configuration.
 
 ## MCP host configuration
@@ -575,27 +576,24 @@ Chromium profile lock and durable site state.
 
 ## Install the exact public release
 
-These commands reproduce immutable public release `0.3.0`, which was the
-verified latest in release-state evidence recorded on 2026-07-29. At that
-point prepared `0.4.0` and `0.5.0` source had not been distributed; use a
-reviewed source checkout to exercise those contracts before release. Verify
-the registry or exact LOVE catalog for current availability. Historical
-`0.1.0` and `0.2.0` artifacts remain separately addressable through their
-immutable manifests.
+These commands select exact release `0.5.0`. Verify the registry or exact LOVE
+catalog when current mirror availability matters. Historical `0.1.0`, `0.2.0`,
+and `0.3.0` artifacts remain separately addressable through their immutable
+manifests; `0.4.0` was never distributed.
 
 ```bash
-npm install --save-exact @agenttool/browser@0.3.0
+npm install --save-exact @agenttool/browser@0.5.0
 ```
 
 Or use the registry-neutral LOVE locator:
 
 ```bash
 npm install --save-exact \
-  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.3.0/agenttool-browser-0.3.0.tgz
+  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.0/agenttool-browser-0.5.0.tgz
 ```
 
 The exact manifest at
-`https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.3.0/manifest.json`
+`https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.0/manifest.json`
 provides the artifact size and SHA-256. Verify both before installing when the
 catalog-to-local-file boundary matters.
 

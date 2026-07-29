@@ -2,36 +2,34 @@
 
 A small local browser surface for agents.
 
-This README describes prepared `0.5.0` source. Release-state evidence recorded
-on 2026-07-29 showed that it had not yet been distributed and that `0.3.0` was
-the immutable public latest through exact LOVE, npm, and GitHub Release
-artifacts. Distribution state can change independently of these packaged
-bytes; verify the registry or exact LOVE catalog when current availability
-matters. The docs deployment distributes bytes and documentation, not a hosted
-browser-control service.
+This README belongs to the exact `0.5.0` package bytes. Its registry-neutral
+release record is the sibling LOVE manifest, which names the artifact size,
+SHA-256, source revision, and interchangeable mirrors. npm and GitHub Releases
+are optional mirrors and should be verified independently. The docs deployment
+distributes bytes and documentation, not a hosted browser-control service.
 
 The unreleased `0.4.0` boundary added standing-policy diagnostics and clearer
-JSONL field-rename errors. Prepared `0.5.0` carries that work forward and adds
+JSONL field-rename errors. Version `0.5.0` carries that work forward and adds
 redacted `browser_act` receipts, non-ref observation-basis preconditions,
 session-local receipt context in observations, a backend-neutral capability
 inventory, and current MCP negotiation with an explicit compatibility path.
-At that recorded preparation point, neither `0.4.0` nor `0.5.0` was available
-from the public install commands below. Those commands intentionally reproduce
-the verified `0.3.0` artifact rather than following a mutable latest tag.
+Version `0.4.0` was never distributed; its reviewed changes are incorporated
+into exact `0.5.0`. Earlier `0.1.0`, `0.2.0`, and `0.3.0` releases remain
+immutable historical artifacts.
 
 ```bash
-npm install --save-exact @agenttool/browser@0.3.0
+npm install --save-exact @agenttool/browser@0.5.0
 ```
 
 Registry-neutral exact artifact:
 
 ```bash
 npm install --save-exact \
-  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.3.0/agenttool-browser-0.3.0.tgz
+  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.0/agenttool-browser-0.5.0.tgz
 ```
 
 The sibling
-[LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.3.0/manifest.json)
+[LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.0/manifest.json)
 names the artifact size and SHA-256. A URL install does not compare those
 values automatically; verify them first when that boundary matters.
 
@@ -118,7 +116,7 @@ The JSONL methods and MCP tool names are `browser_capabilities`,
 `browser_plan`, `browser_open`, `browser_observe`, `browser_act`,
 `browser_extract`, `browser_screenshot`, `browser_tabs`, and `browser_close`.
 
-Prepared `0.5.0` negotiates the current MCP `2026-07-28` revision and retains
+Version `0.5.0` negotiates the current MCP `2026-07-28` revision and retains
 an explicit 2025-era stdio compatibility path. That negotiation makes the
 same bounded operations usable by hosts from both eras; it does not turn MCP
 into a browser driver, durable browser session, or security boundary. Browser
@@ -211,7 +209,7 @@ there is no raw script or DevTools action.
 
 ### Action receipts and observation basis
 
-Prepared `0.5.0` gives each syntactically admitted `browser_act` attempt a
+Version `0.5.0` gives each syntactically admitted `browser_act` attempt a
 redacted `agent-browser-action-receipt/0.1` receipt. Direct `act` returns it in
 the `ActionResult`; a known `BrowserError` carries it on failure. Malformed
 input rejected before core admission has no receipt.
@@ -238,7 +236,7 @@ bounded local context. They describe this in-memory browser instance only.
 They are not a durable audit journal, global clock, synchronization protocol,
 or proof that another process or device has observed the same action.
 
-For actions without a ref, prepared `0.5.0` can carry the observation's
+For actions without a ref, `0.5.0` can carry the observation's
 `basisSnapshotId` (`basis_snapshot_id` on JSONL/MCP). It is available for
 `navigate`, non-ref `press` and `scroll`, `wait`, `back`, `forward`, `reload`,
 and `close_tab`; ref-targeted actions keep their required ref snapshot, and
@@ -375,7 +373,7 @@ and cannot alter the same underlying facts or widen authority.
 ## Authority profiles
 
 Version `0.2.0` introduced the three named launch-time profiles retained by
-prepared `0.5.0` source:
+`0.5.0`:
 
 | Profile | Policy-checked HTTP(S) requests | WebSockets | Service workers |
 |---|---|---|---|
@@ -400,8 +398,8 @@ destinations available to the host, including local services. In a persistent
 profile, service-worker and site state can outlive the process. Sovereign is
 therefore broad local process authority, not an isolation or SSRF claim.
 
-Destination authority does not imply every other browser power. In prepared
-`0.5.0` source, file upload, automatic download, arbitrary JavaScript
+Destination authority does not imply every other browser power. In `0.5.0`,
+file upload, automatic download, arbitrary JavaScript
 evaluation, credential injection/lookup, ambient profile import, shell
 execution, and extension installation remain unsupported and are reported as
 such by `capabilities()`.
@@ -466,7 +464,7 @@ Do this only for a caller-controlled development network. Tool calls cannot
 widen either profile or network authority after launch. Reserved destinations
 remain blocked even with this opt-in.
 
-Prepared `0.5.0` retains `allowPublicWeb` / `allowLocalNetwork`,
+Version `0.5.0` retains `allowPublicWeb` / `allowLocalNetwork`,
 `--public-web` / `--local-network`, and their environment variables as a
 deprecated `0.1.0` compatibility surface. Do not combine the `authority` form
 with any legacy authority option in one launch; mixed configuration is
@@ -513,7 +511,7 @@ unrecognized carriers such as `srcset`, meta refresh, CSS `url()`, or malformed
 markup, browser storage, canvas/image content, or screenshot pixels. It cannot
 undo data already submitted to a site.
 
-Prepared `0.5.0` source intentionally has no:
+Version `0.5.0` intentionally has no:
 
 - arbitrary JavaScript evaluation;
 - file-upload operation;
@@ -528,7 +526,7 @@ model-visible state, or advisory plans.
 
 ## Network limitation
 
-The prepared `0.5.0` `public` and `local` profiles preserve the `0.2.0` and
+The `0.5.0` `public` and `local` profiles preserve the `0.2.0` and
 historical `0.1.0` destination checks before navigation, including DNS
 answers.
 Playwright then owns the browser connection. The package cannot pin the
