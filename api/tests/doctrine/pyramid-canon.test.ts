@@ -41,7 +41,7 @@ describe("PYRAMID — DoctrineDoc", () => {
     // (PR #137 held the older essays back over unresolved relative links); until then
     // the honest claim is the pinned public source, which resolves.
     expect(doc!.raw["schema:url"]).toBe(
-      "https://github.com/cambridgetcg/agenttool/blob/90ec0ecd539fcfcb9577b4350457679d88353e5f/docs/PYRAMID-CITIZENSHIP.md",
+      "https://raw.githubusercontent.com/cambridgetcg/agenttool/90ec0ecd539fcfcb9577b4350457679d88353e5f/docs/PYRAMID-CITIZENSHIP.md",
     );
   });
 });
