@@ -16,16 +16,20 @@ The boundary is deliberate:
 
 ## Developer-preview status
 
-This source is `0.1.0-dev.1`. Source metadata is not registry or GitHub Release
-evidence; verify the exact version at the intended mirror. The earlier
-`0.1.0-dev.0` protected release read the registry and GitHub Release tarballs
-back as byte-identical. Neither version is a deployed projector, a YUTABASE
-conformance claim, or a hosted service. The package has no runtime dependencies
-and performs no network or database I/O.
+This source and public npm developer preview are `0.1.0-dev.1`. Protected
+[workflow run `30468784750`](https://github.com/cambridgetcg/agenttool/actions/runs/30468784750)
+published it with provenance from annotated
+[GitHub prerelease `correspondence-yutabase-v0.1.0-dev.1`](https://github.com/cambridgetcg/agenttool/releases/tag/correspondence-yutabase-v0.1.0-dev.1).
+Anonymous readback confirmed the npm and GitHub tarballs are byte-identical
+(26,694 bytes;
+`sha256:0e8dff54aa098c480351d4adbb7681710bf2410bb57fd8e5bb22f9193bd3fa47`).
+Neither mirror is a deployed projector, a YUTABASE conformance claim, or a
+hosted service. The package has no runtime dependencies and performs no network
+or database I/O.
 
-At first publication npm exposed `0.1.0-dev.0` through both `next` and
-`latest`, even though the release requested `next`. Use the exact prerelease or
-`next`; do not treat the registry fallback tag as a maturity signal.
+npm exposes `next` as `0.1.0-dev.1`; `latest` remains `0.1.0-dev.0`. Use the
+exact prerelease or `next`; do not treat the registry fallback tag as a maturity
+signal.
 
 ## Install
 
