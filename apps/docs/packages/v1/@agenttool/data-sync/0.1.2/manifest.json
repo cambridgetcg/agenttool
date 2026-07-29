@@ -8,8 +8,8 @@
   "artifact": {
     "format": "npm-tarball",
     "filename": "agenttool-data-sync-0.1.2.tgz",
-    "sha256": "de60d98ef1a40c66ee4adffad9b3f1ef92b24817a73cb52a75320ca590cc2dc6",
-    "size": 59703,
+    "sha256": "37b69b13db60eafc4a0bae578faca14467c0844e4f4c32793808b3499bcd8fd6",
+    "size": 59774,
     "media_type": "application/gzip",
     "mirrors": [
       {
@@ -32,7 +32,7 @@
   },
   "source": {
     "repository": "https://github.com/cambridgetcg/agenttool.git",
-    "revision": "36832ca77be09d77d10429795471c0c6d3c54ebe",
+    "revision": "10316cc0e8e86994df7ebcfe24e03ffa73ba9815",
     "path": "packages/data-sync"
   },
   "dependency_resolution": {
