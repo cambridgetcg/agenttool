@@ -1,6 +1,6 @@
 # Credential handoff and rotation
 
-**Version:** `0.3.0` controller-plane design and macOS implementation.
+**Version:** `0.3.1` controller-plane design and macOS implementation.
 Distribution availability remains separately verifiable.
 
 `agentcred-control` standardizes how an operator places a provider credential
