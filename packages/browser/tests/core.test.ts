@@ -2,7 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { BROWSER_ACTION_RECEIPT_SCHEMA } from "../src/attempts.js";
 import { AgentBrowser } from "../src/browser.js";
+import { publicBrowserError } from "../src/mcp.js";
 import { redactPasswordValues } from "../src/snapshot.js";
 import type {
   BoundingBox,
@@ -465,6 +467,15 @@ async function launched(page = new FakePage(), outputDir?: string) {
   return { browser, context, runtime, page };
 }
 
+async function rejectionOf(promise: Promise<unknown>): Promise<any> {
+  try {
+    await promise;
+  } catch (error) {
+    return error;
+  }
+  throw new Error("Expected promise to reject.");
+}
+
 describe("AgentBrowser core", () => {
   test("defaults to public authority with blocked service workers and WebSockets", async () => {
     const { browser, context, runtime } = await launched();
@@ -903,7 +914,39 @@ describe("AgentBrowser core", () => {
     const capabilities = browser.capabilities();
 
     expect(capabilities).toEqual({
-      schema: "agent-browser-capabilities/0.3",
+      schema: "agent-browser-capabilities/0.4",
+      interfaces: {
+        typescript: {
+          transport: "in_process",
+          contract: "direct_api",
+          additionalOperations: [
+            "selector_extract",
+            "full_page_screenshot",
+          ],
+        },
+        jsonl: {
+          transport: "stdio",
+          contract: "model_facing_operations",
+          version: "agenttool-browser-jsonl/0.1",
+        },
+        mcp: {
+          transport: "stdio",
+          contract: "model_facing_operations",
+          modernRevision: "2026-07-28",
+          legacyCompatibility: "2025-era",
+        },
+      },
+      modelFacingOperations: [
+        "browser_capabilities",
+        "browser_plan",
+        "browser_open",
+        "browser_observe",
+        "browser_act",
+        "browser_extract",
+        "browser_screenshot",
+        "browser_tabs",
+        "browser_close",
+      ],
       authority: {
         profile: "public",
         fixedAt: "process_start",
@@ -930,6 +973,8 @@ describe("AgentBrowser core", () => {
       },
       features: {
         interaction: "enabled",
+        browserActReceipts: "enabled",
+        nonRefObservationBasis: "enabled",
         screenshots: "enabled",
         persistentProfile: "requires_configuration",
         uploads: "unsupported",
@@ -1761,6 +1806,399 @@ describe("AgentBrowser core", () => {
       }),
     ).rejects.toMatchObject({ code: "stale_snapshot" });
     expect(page.button.clickCalls).toBe(1);
+    await browser.close();
+  });
+
+  test("returns frozen, value-minimal receipts for completed actions", async () => {
+    const secrets = [
+      "typed-value-must-not-cross",
+      "key-value-must-not-cross",
+      "selected-value-must-not-cross",
+      "session=secret",
+    ];
+    const cases = [
+      {
+        kind: "type" as const,
+        buildAction: (observation: Awaited<ReturnType<AgentBrowser["observe"]>>) => ({
+          kind: "type" as const,
+          ref: observation.refs.find((item) => item.role === "textbox")!.ref,
+          snapshotId: observation.snapshotId,
+          text: secrets[0]!,
+        }),
+      },
+      {
+        kind: "press" as const,
+        buildAction: (observation: Awaited<ReturnType<AgentBrowser["observe"]>>) => ({
+          kind: "press" as const,
+          key: secrets[1]!,
+          basisSnapshotId: observation.snapshotId,
+        }),
+      },
+      {
+        kind: "select" as const,
+        buildAction: (observation: Awaited<ReturnType<AgentBrowser["observe"]>>) => ({
+          kind: "select" as const,
+          ref: observation.refs.find((item) => item.role === "textbox")!.ref,
+          snapshotId: observation.snapshotId,
+          values: [secrets[2]!],
+        }),
+      },
+    ];
+
+    for (const testCase of cases) {
+      const { browser } = await launched();
+      const observation = await browser.observe();
+      const result = await browser.act(testCase.buildAction(observation));
+      const receipt = result.receipt;
+      const serialized = JSON.stringify(receipt);
+
+      expect(receipt).toMatchObject({
+        schema: BROWSER_ACTION_RECEIPT_SCHEMA,
+        source: "local_browser_runtime",
+        sequence: 1,
+        sessionId: observation.sessionId,
+        action: {
+          kind: testCase.kind,
+          tabId: observation.tabId,
+          pageId: observation.pageId,
+        },
+        authorityProfile: "public",
+        status: {
+          runtimeInvocation: "started",
+          localOutcome: "browser_completed",
+          errorCode: null,
+        },
+        retryAdvice: "do_not_automatically_retry",
+      });
+      expect(receipt.action).not.toHaveProperty("url");
+      expect(receipt.action).not.toHaveProperty("text");
+      expect(receipt.action).not.toHaveProperty("key");
+      expect(receipt.action).not.toHaveProperty("values");
+      for (const secret of secrets) expect(serialized).not.toContain(secret);
+      expect(Object.isFrozen(receipt)).toBe(true);
+      expect(Object.isFrozen(receipt.action)).toBe(true);
+      expect(Object.isFrozen(receipt.status)).toBe(true);
+      expect(Object.isFrozen(receipt.possibleEffects)).toBe(true);
+      if (receipt.action.basis) {
+        expect(Object.isFrozen(receipt.action.basis)).toBe(true);
+      }
+      await browser.close();
+    }
+  });
+
+  test("records a pre-runtime stale basis rejection without invalidating a peer snapshot", async () => {
+    const { browser, page } = await launched();
+    const peer = await browser.observe();
+    const button = peer.refs.find((item) => item.role === "button")!;
+    const untrustedBasis = "fake-basis-token=must-not-cross";
+    const before = await browser.observe();
+    expect(before).toMatchObject({
+      attemptSequence: 0,
+      lastActionReceipt: null,
+    });
+    page.waitCalls.length = 0;
+
+    const error = await rejectionOf(
+      browser.act({
+        kind: "wait",
+        ms: 1,
+        basisSnapshotId: untrustedBasis,
+      }),
+    );
+    expect(error).toMatchObject({
+      code: "stale_snapshot",
+      receipt: {
+        schema: BROWSER_ACTION_RECEIPT_SCHEMA,
+        sequence: 1,
+        action: {
+          kind: "wait",
+          tabId: peer.tabId,
+          pageId: peer.pageId,
+          basis: null,
+        },
+        status: {
+          runtimeInvocation: "not_started",
+          localOutcome: "rejected",
+          errorCode: "stale_snapshot",
+        },
+        retryAdvice: "correct_or_reobserve",
+      },
+    });
+    expect(JSON.stringify(error.receipt)).not.toContain(untrustedBasis);
+    expect(JSON.stringify(publicBrowserError(error))).not.toContain(
+      untrustedBasis,
+    );
+    expect(page.waitCalls).toEqual([]);
+
+    const afterRejection = await browser.observe();
+    expect(afterRejection.attemptSequence).toBe(1);
+    expect(afterRejection.lastActionReceipt).toBe(error.receipt);
+    const success = await browser.act({
+      kind: "click",
+      ref: button.ref,
+      snapshotId: peer.snapshotId,
+    });
+    expect(success.receipt.sequence).toBe(2);
+    expect(page.button.clickCalls).toBe(1);
+
+    const afterSuccess = await browser.observe();
+    expect(afterSuccess.attemptSequence).toBe(2);
+    expect(afterSuccess.lastActionReceipt).toBe(success.receipt);
+    await browser.close();
+  });
+
+  test("rechecks a navigation basis after async DNS and rejects before goto", async () => {
+    const page = new FakePage();
+    const context = new FakeContext([page]);
+    const runtime = new FakeRuntime(context);
+    let dnsCalls = 0;
+    const browser = await AgentBrowser.launch({
+      runtime,
+      resolveHostname: async () => {
+        dnsCalls += 1;
+        await Promise.resolve();
+        page.emitFrameNavigation();
+        return [{ address: "93.184.216.34", family: 4 }];
+      },
+    });
+    const observation = await browser.observe();
+
+    const error = await rejectionOf(
+      browser.act({
+        kind: "navigate",
+        url: "https://example.com/after-check",
+        basisSnapshotId: observation.snapshotId,
+      }),
+    );
+    expect(error).toMatchObject({
+      code: "stale_snapshot",
+      receipt: {
+        sequence: 1,
+        action: {
+          kind: "navigate",
+          basis: {
+            kind: "observation_precondition",
+            snapshotId: observation.snapshotId,
+          },
+        },
+        status: {
+          runtimeInvocation: "not_started",
+          localOutcome: "rejected",
+          errorCode: "stale_snapshot",
+        },
+      },
+    });
+    expect(dnsCalls).toBe(1);
+    expect(page.gotoCalls).toEqual([]);
+    await browser.close();
+  });
+
+  test("marks a post-invocation failure unknown, projects its receipt, and invalidates peers", async () => {
+    const { browser, page } = await launched();
+    const first = await browser.observe();
+    const peer = await browser.observe();
+    const button = first.refs.find((item) => item.role === "button")!;
+    page.button.clickError = new Error("timeout after browser dispatch");
+
+    const error = await rejectionOf(
+      browser.act({
+        kind: "click",
+        ref: button.ref,
+        snapshotId: first.snapshotId,
+      }),
+    );
+    expect(error).toMatchObject({
+      code: "action_failed",
+      receipt: {
+        sequence: 1,
+        status: {
+          runtimeInvocation: "started",
+          localOutcome: "unknown",
+          errorCode: "action_failed",
+        },
+        retryAdvice: "do_not_automatically_retry",
+      },
+    });
+    expect(page.button.clickCalls).toBe(1);
+    expect(publicBrowserError(error)).toEqual({
+      code: "action_failed",
+      message: "Browser action was attempted once and did not complete.",
+      receipt: error.receipt,
+    });
+
+    const afterFailure = await browser.observe();
+    expect(afterFailure.attemptSequence).toBe(1);
+    expect(afterFailure.lastActionReceipt).toBe(error.receipt);
+    const stalePeer = await rejectionOf(
+      browser.act({
+        kind: "click",
+        ref: peer.refs.find((item) => item.role === "button")!.ref,
+        snapshotId: peer.snapshotId,
+      }),
+    );
+    expect(stalePeer).toMatchObject({
+      code: "stale_snapshot",
+      receipt: {
+        sequence: 2,
+        status: {
+          runtimeInvocation: "not_started",
+          localOutcome: "rejected",
+        },
+      },
+    });
+    expect(page.button.clickCalls).toBe(1);
+    await browser.close();
+  });
+
+  test("scopes observation bases to a tab and retains the target tab after rejection", async () => {
+    const pageA = new FakePage();
+    const pageB = new FakePage();
+    const context = new FakeContext([pageA, pageB]);
+    const runtime = new FakeRuntime(context);
+    const browser = await AgentBrowser.launch({
+      runtime,
+      resolveHostname: async () => [{ address: "93.184.216.34", family: 4 }],
+    });
+    const [tabA, tabB] = await browser.tabs();
+    const observationA = await browser.observe({ tabId: tabA!.tabId });
+    const observationB = await browser.observe({ tabId: tabB!.tabId });
+    pageB.waitCalls.length = 0;
+
+    const wrongTab = await rejectionOf(
+      browser.act({
+        kind: "wait",
+        ms: 1,
+        tabId: tabB!.tabId,
+        basisSnapshotId: observationA.snapshotId,
+      }),
+    );
+    expect(wrongTab).toMatchObject({
+      code: "stale_snapshot",
+      receipt: {
+        action: {
+          tabId: tabB!.tabId,
+          basis: null,
+        },
+        status: {
+          runtimeInvocation: "not_started",
+          localOutcome: "rejected",
+        },
+      },
+    });
+    expect(pageB.waitCalls).toEqual([]);
+
+    await expect(
+      browser.act({
+        kind: "wait",
+        ms: 1,
+        tabId: tabB!.tabId,
+        basisSnapshotId: observationB.snapshotId,
+      }),
+    ).resolves.toMatchObject({
+      receipt: {
+        sequence: 2,
+        status: { localOutcome: "browser_completed" },
+      },
+    });
+    expect(pageB.waitCalls).toEqual([1]);
+    await browser.close();
+  });
+
+  test("rejects a basis after a prior action or snapshot retention eviction", async () => {
+    {
+      const { browser, page } = await launched();
+      const observation = await browser.observe();
+      page.waitCalls.length = 0;
+      await browser.act({
+        kind: "wait",
+        ms: 1,
+        basisSnapshotId: observation.snapshotId,
+      });
+      const stale = await rejectionOf(
+        browser.act({
+          kind: "wait",
+          ms: 1,
+          basisSnapshotId: observation.snapshotId,
+        }),
+      );
+      expect(stale).toMatchObject({
+        code: "stale_snapshot",
+        receipt: {
+          sequence: 2,
+          status: {
+            runtimeInvocation: "not_started",
+            localOutcome: "rejected",
+          },
+        },
+      });
+      expect(page.waitCalls).toEqual([1]);
+      await browser.close();
+    }
+
+    {
+      const { browser, page } = await launched();
+      const observations = [];
+      for (let index = 0; index < 9; index += 1) {
+        observations.push(await browser.observe());
+      }
+      const oldest = observations[0]!;
+      const newest = observations.at(-1)!;
+      page.waitCalls.length = 0;
+      const evicted = await rejectionOf(
+        browser.act({
+          kind: "wait",
+          ms: 1,
+          basisSnapshotId: oldest.snapshotId,
+        }),
+      );
+      expect(evicted).toMatchObject({
+        code: "stale_snapshot",
+        receipt: {
+          status: {
+            runtimeInvocation: "not_started",
+            localOutcome: "rejected",
+          },
+        },
+      });
+      expect(page.waitCalls).toEqual([]);
+      await expect(
+        browser.act({
+          kind: "wait",
+          ms: 1,
+          basisSnapshotId: newest.snapshotId,
+        }),
+      ).resolves.toMatchObject({
+        receipt: {
+          sequence: 2,
+          status: { localOutcome: "browser_completed" },
+        },
+      });
+      expect(page.waitCalls).toEqual([1]);
+      await browser.close();
+    }
+  });
+
+  test("rejects a basis/ref combination before admitting an action", async () => {
+    const { browser, page } = await launched();
+    const observation = await browser.observe();
+    const error = await rejectionOf(
+      browser.act({
+        kind: "press",
+        key: "Enter",
+        ref: observation.refs[0]!.ref,
+        snapshotId: observation.snapshotId,
+        basisSnapshotId: observation.snapshotId,
+      } as any),
+    );
+
+    expect(error).toMatchObject({ code: "invalid_action" });
+    expect(error.receipt).toBeUndefined();
+    expect(page.button.pressCalls).toEqual([]);
+    expect(page.keyboardCalls).toEqual([]);
+    expect(await browser.observe()).toMatchObject({
+      attemptSequence: 0,
+      lastActionReceipt: null,
+    });
     await browser.close();
   });
 

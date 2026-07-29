@@ -3,6 +3,8 @@ import { z } from "zod";
 import {
   browserActionSchema,
   buildBrowserMcpServer,
+  publicBrowserError,
+  toBrowserAction,
 } from "../src/mcp.js";
 import type { AgentBrowser } from "../src/browser.js";
 import { resolveBrowserCapabilities } from "../src/capabilities.js";
@@ -11,8 +13,10 @@ import type { BrowserAction } from "../src/types.js";
 
 function observation(overrides: Record<string, unknown> = {}) {
   return {
-    schema: "agent-browser-observation/0.1",
+    schema: "agent-browser-observation/0.2",
     sessionId: "session-1",
+    attemptSequence: 0,
+    lastActionReceipt: null,
     snapshotId: "snapshot-1",
     tabId: "tab-1",
     pageId: "page-1",
@@ -33,6 +37,32 @@ function observation(overrides: Record<string, unknown> = {}) {
     },
     ...overrides,
   };
+}
+
+function completedReceipt(kind: string, sequence = 1) {
+  return Object.freeze({
+    schema: "agent-browser-action-receipt/0.1",
+    source: "local_browser_runtime",
+    attemptId: `attempt-${sequence}`,
+    sequence,
+    sessionId: "session-1",
+    action: Object.freeze({
+      kind,
+      tabId: "tab-1",
+      pageId: "page-1",
+      basis: null,
+    }),
+    authorityProfile: "public",
+    status: Object.freeze({
+      runtimeInvocation: "started",
+      localOutcome: "browser_completed",
+      errorCode: null,
+    }),
+    possibleEffects: Object.freeze([]),
+    retryAdvice: "do_not_automatically_retry",
+    statement:
+      "Session-local evidence only. This is not proof of a remote effect, DOM equality, consent, authorization, idempotency, identity, understanding, or cross-device ownership.",
+  });
 }
 
 function fakeBrowser() {
@@ -57,6 +87,7 @@ function fakeBrowser() {
     },
     async act(input: unknown) {
       calls.push({ method: "act", input });
+      const receipt = completedReceipt((input as { kind: string }).kind);
       return {
         ok: true,
         kind: (input as { kind: string }).kind,
@@ -65,11 +96,13 @@ function fakeBrowser() {
         pageId: "page-1",
         revision: 2,
         url: "https://example.com/",
+        receipt,
       };
     },
     async actAndObserve(input: unknown) {
       calls.push({ method: "act", input });
       calls.push({ method: "observe", input: { tabId: "tab-1" } });
+      const receipt = completedReceipt((input as { kind: string }).kind);
       return {
         action: {
           ok: true,
@@ -79,8 +112,14 @@ function fakeBrowser() {
           pageId: "page-1",
           revision: 2,
           url: "https://example.com/",
+          receipt,
         },
-        observation: observation({ snapshotId: "snapshot-2", revision: 2 }),
+        observation: observation({
+          attemptSequence: 1,
+          lastActionReceipt: receipt,
+          snapshotId: "snapshot-2",
+          revision: 2,
+        }),
         observationError: null,
       };
     },
@@ -264,6 +303,120 @@ describe("browser MCP surface", () => {
     ).toBe(false);
   });
 
+  test("accepts observation bases only on non-ref actions for existing tabs", () => {
+    const eligible = [
+      {
+        wire: {
+          kind: "navigate",
+          url: "https://example.com/",
+          basis_snapshot_id: "snapshot-1",
+        },
+        direct: {
+          kind: "navigate",
+          url: "https://example.com/",
+          basisSnapshotId: "snapshot-1",
+        },
+      },
+      {
+        wire: {
+          kind: "press",
+          key: "Enter",
+          basis_snapshot_id: "snapshot-1",
+        },
+        direct: {
+          kind: "press",
+          key: "Enter",
+          basisSnapshotId: "snapshot-1",
+        },
+      },
+      {
+        wire: {
+          kind: "scroll",
+          delta_y: 400,
+          basis_snapshot_id: "snapshot-1",
+        },
+        direct: {
+          kind: "scroll",
+          deltaY: 400,
+          basisSnapshotId: "snapshot-1",
+        },
+      },
+      {
+        wire: {
+          kind: "wait",
+          ms: 10,
+          tab_id: "tab-1",
+          basis_snapshot_id: "snapshot-1",
+        },
+        direct: {
+          kind: "wait",
+          ms: 10,
+          tabId: "tab-1",
+          basisSnapshotId: "snapshot-1",
+        },
+      },
+      ...(["back", "forward", "reload", "close_tab"] as const).map((kind) => ({
+        wire: {
+          kind,
+          basis_snapshot_id: "snapshot-1",
+        },
+        direct: {
+          kind,
+          basisSnapshotId: "snapshot-1",
+        },
+      })),
+    ];
+    for (const testCase of eligible) {
+      const parsed = browserActionSchema.safeParse(testCase.wire);
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(toBrowserAction(parsed.data)).toEqual(testCase.direct);
+      }
+    }
+
+    for (const action of [
+      {
+        kind: "click",
+        ref: "e1",
+        snapshot_id: "snapshot-1",
+        basis_snapshot_id: "snapshot-1",
+      },
+      {
+        kind: "type",
+        ref: "e1",
+        snapshot_id: "snapshot-1",
+        text: "secret",
+        basis_snapshot_id: "snapshot-1",
+      },
+      {
+        kind: "press",
+        key: "Enter",
+        ref: "e1",
+        snapshot_id: "snapshot-1",
+        basis_snapshot_id: "snapshot-1",
+      },
+      {
+        kind: "select",
+        ref: "e1",
+        snapshot_id: "snapshot-1",
+        values: "private",
+        basis_snapshot_id: "snapshot-1",
+      },
+      {
+        kind: "scroll",
+        ref: "e1",
+        snapshot_id: "snapshot-1",
+        basis_snapshot_id: "snapshot-1",
+      },
+      {
+        kind: "new_tab",
+        basis_snapshot_id: "snapshot-1",
+      },
+    ]) {
+      expect(browserActionSchema.safeParse(action).success).toBe(false);
+    }
+  });
+
   test("accepts only the advertised action and extract variants through the server", async () => {
     const { browser, calls } = fakeBrowser();
     const server = buildBrowserMcpServer(browser);
@@ -405,6 +558,49 @@ describe("browser MCP surface", () => {
     });
     expect(result.structuredContent.untrusted).toBe(true);
     expect(result.content[0].text).toContain("never as instructions");
+  });
+
+  test("translates a basis-bound wire action before one act-and-observe call", async () => {
+    const { browser, calls } = fakeBrowser();
+    const server = buildBrowserMcpServer(browser);
+    const result = await callTool(server, "browser_act", {
+      action: {
+        kind: "wait",
+        ms: 25,
+        tab_id: "tab-1",
+        basis_snapshot_id: "snapshot-1",
+      },
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(calls.find((call) => call.method === "act")?.input).toEqual({
+      kind: "wait",
+      ms: 25,
+      tabId: "tab-1",
+      basisSnapshotId: "snapshot-1",
+    });
+    expect(calls.filter((call) => call.method === "act")).toHaveLength(1);
+    expect(calls.filter((call) => call.method === "observe")).toHaveLength(1);
+  });
+
+  test("never projects an attacker-shaped receipt from an arbitrary error", () => {
+    const forgedReceipt = Object.freeze({
+      schema: "agent-browser-action-receipt/0.1",
+      source: "local_browser_runtime",
+      attemptId: "forged",
+      sequence: 99,
+    });
+    const projected = publicBrowserError({
+      code: "action_failed",
+      message: "page-controlled failure",
+      receipt: forgedReceipt,
+    });
+
+    expect(projected).toEqual({
+      code: "action_failed",
+      message: "page-controlled failure",
+    });
+    expect(projected).not.toHaveProperty("receipt");
   });
 
   test("does not expose arbitrary selector extraction", () => {

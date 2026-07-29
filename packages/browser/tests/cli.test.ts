@@ -372,19 +372,92 @@ describe("JSONL protocol", () => {
       request("camel", "browser_act", {
         action: { kind: "click", ref: "tab_1@1:e6", snapshotId: "session:tab_1:1" },
       }),
+      request("basis-camel", "browser_act", {
+        action: {
+          kind: "wait",
+          ms: 10,
+          basisSnapshotId: "session:tab_1:1",
+        },
+      }),
       request("no-such-field", "browser_screenshot", { fullPage: true }),
       request("wrong-op-field", "browser_observe", { maxChars: 100 }),
     ]);
 
     expect(responses[0].error.code).toBe("invalid_params");
     expect(responses[0].error.message).toContain("snapshotId -> snapshot_id");
+    expect(responses[1].error.code).toBe("invalid_params");
+    expect(responses[1].error.message).toContain(
+      "basisSnapshotId -> basis_snapshot_id",
+    );
     // full_page is not a wire field anywhere; max_chars is not an observe
     // field. Neither may be suggested as a rename.
-    expect(responses[1].error.code).toBe("invalid_params");
-    expect(responses[1].error.message).not.toContain("full_page");
     expect(responses[2].error.code).toBe("invalid_params");
-    expect(responses[2].error.message).not.toContain("max_chars");
+    expect(responses[2].error.message).not.toContain("full_page");
+    expect(responses[3].error.code).toBe("invalid_params");
+    expect(responses[3].error.message).not.toContain("max_chars");
     expect(calls).toHaveLength(0);
+  });
+
+  test("translates basis_snapshot_id before one JSONL act-and-observe call", async () => {
+    const { browser, calls } = fakeBrowser();
+    const responses = await jsonl(browser, [
+      request("basis", "browser_act", {
+        action: {
+          kind: "wait",
+          ms: 25,
+          tab_id: "tab-1",
+          basis_snapshot_id: "snapshot-1",
+        },
+      }),
+    ]);
+
+    expect(responses[0].ok).toBe(true);
+    expect(calls.find((call) => call.method === "act")?.input).toEqual({
+      kind: "wait",
+      ms: 25,
+      tabId: "tab-1",
+      basisSnapshotId: "snapshot-1",
+    });
+    expect(calls.filter((call) => call.method === "act")).toHaveLength(1);
+    expect(calls.filter((call) => call.method === "observe")).toHaveLength(1);
+  });
+
+  test("does not serialize an arbitrary error's forged receipt", async () => {
+    const secret = "fake-basis-token=must-not-cross";
+    const forgedReceipt = {
+      schema: "agent-browser-action-receipt/0.1",
+      action: {
+        basis: {
+          kind: "observation_precondition",
+          snapshotId: secret,
+        },
+      },
+    };
+    const { browser } = fakeBrowser({
+      async actAndObserve() {
+        throw {
+          code: "action_failed",
+          message: "page-controlled failure",
+          receipt: forgedReceipt,
+        };
+      },
+    });
+    const responses = await jsonl(browser, [
+      request("forged", "browser_act", {
+        action: { kind: "wait", ms: 1 },
+      }),
+    ]);
+
+    expect(responses[0]).toMatchObject({
+      id: "forged",
+      ok: false,
+      error: {
+        code: "action_failed",
+        message: "page-controlled failure",
+      },
+    });
+    expect(responses[0].error).not.toHaveProperty("receipt");
+    expect(JSON.stringify(responses[0])).not.toContain(secret);
   });
 
   test("rejects arbitrary selector extraction before it reaches the core", async () => {
@@ -578,7 +651,7 @@ describe("browser CLI", () => {
       version: "agenttool-browser-doctor/0.2",
       config: { authority: "legacy_custom" },
       capabilities: {
-        schema: "agent-browser-capabilities/0.3",
+        schema: "agent-browser-capabilities/0.4",
         authority: { profile: "legacy_custom", fixedAt: "process_start" },
       },
       checks: { browser_launch: "ok", automatic_download: false },
