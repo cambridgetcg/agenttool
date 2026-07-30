@@ -180,8 +180,8 @@ describe("standard npm release policy", () => {
     );
     expect(expectedTag(releaseSpec("skills"), "0.3.0")).toBe("skills-v0.3.0");
     expect(packedFilename("@agenttool/skills", "0.3.0")).toBe("agenttool-skills-0.3.0.tgz");
-    expect(expectedTag(releaseSpec("browser"), "0.5.0")).toBe("browser-v0.5.0");
-    expect(packedFilename("@agenttool/browser", "0.5.0")).toBe("agenttool-browser-0.5.0.tgz");
+    expect(expectedTag(releaseSpec("browser"), "0.5.1")).toBe("browser-v0.5.1");
+    expect(packedFilename("@agenttool/browser", "0.5.1")).toBe("agenttool-browser-0.5.1.tgz");
     expect(expectedTag(releaseSpec("repo-archive"), "0.1.0-dev.0")).toBe(
       "repo-archive-v0.1.0-dev.0",
     );
@@ -244,6 +244,16 @@ describe("standard npm release policy", () => {
     );
     expect(requiredArchiveEntries(releaseSpec("telescope")))
       .not.toContain("package/dist/agenttool-collab-mcp.js");
+    expect(requiredArchiveEntries(releaseSpec("browser"))).toEqual(
+      expect.arrayContaining([
+        "package/.codex-plugin/plugin.json",
+        "package/dist/agenttool-browser-mcp.js",
+        "package/dist/THIRD_PARTY_LICENSES",
+        "package/dist/vendor/playwright-core/index.mjs",
+      ]),
+    );
+    expect(requiredArchiveEntries(releaseSpec("browser")))
+      .not.toContain("package/.claude-plugin/plugin.json");
     expect(requiredArchiveEntries(releaseSpec("repo-archive"))).toEqual(expect.arrayContaining([
       "package/dist/index.js",
       "package/dist/cli.js",

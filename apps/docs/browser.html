@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Agent Browser — a small browser surface made for agents</title>
-  <meta name="description" content="Install @agenttool/browser 0.5.0 for local action receipts, observation-basis preconditions, retained semantic snapshots, and backend-neutral TypeScript, JSONL, or stdio MCP browsing." />
+  <meta name="description" content="Install @agenttool/browser 0.5.1 for the unchanged local browser runtime plus a self-contained package-root Codex MCP plugin." />
   <link rel="canonical" href="https://docs.agenttool.dev/browser" />
   <meta property="og:title" content="Agent Browser — a small browser surface made for agents" />
   <meta property="og:description" content="Nine local agent tools, explicit destination authority, and one semantic browser core." />
@@ -13,7 +13,7 @@
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="alternate" type="application/json" href="https://api.agenttool.dev/.well-known/love-packages" title="LOVE package discovery" />
-  <link rel="describedby" type="application/json" href="https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.0/manifest.json" title="@agenttool/browser LOVE manifest" />
+  <link rel="describedby" type="application/json" href="https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.1/manifest.json" title="@agenttool/browser LOVE manifest" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -83,7 +83,7 @@
       <div class="sidebar-section">
         <h4>Reference</h4>
         <ul>
-          <li><a href="/packages/v1/@agenttool/browser/0.5.0/manifest.json"><span class="glyph">{}</span>Browser manifest</a></li>
+          <li><a href="/packages/v1/@agenttool/browser/0.5.1/manifest.json"><span class="glyph">{}</span>Browser manifest</a></li>
           <li><a href="/.well-known/love-packages"><span class="glyph">{}</span>Package catalog</a></li>
           <li><a href="AGENT-DATA-PROTOCOL.md"><span class="glyph">↳</span>agent-data/v1</a></li>
           <li><a href="errors.html"><span class="glyph">!</span>Errors &amp; Auth</a></li>
@@ -103,7 +103,7 @@
     </aside>
 
     <main class="doc-content">
-      <div class="eyebrow">◎ @agenttool/browser · local-first · 0.5.0</div>
+      <div class="eyebrow">◎ @agenttool/browser · local-first · 0.5.1</div>
       <h1>A browser with an <em>agent-shaped handle</em>.</h1>
       <p class="lede">
         One bounded browser core, seven browser operations, two zero-effect reasoning aids, and three local doors: TypeScript, line-delimited JSON, and stdio MCP. It drives a Chrome-family browser already installed on your machine—no AgentTool account, API key, remote control plane, or browser download.
@@ -122,16 +122,16 @@
 
       <div class="code-block">
         <div class="code-label"><span>npm · exact registry mirror</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>npm install --save-exact @agenttool/browser@0.5.0</pre>
+<pre>npm install --save-exact @agenttool/browser@0.5.1</pre>
       </div>
 
       <div class="code-block">
         <div class="code-label"><span>LOVE · exact immutable HTTPS artifact</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
 <pre>npm install --save-exact \
-  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.0/agenttool-browser-0.5.0.tgz</pre>
+  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.1/agenttool-browser-0.5.1.tgz</pre>
       </div>
 
-      <p class="muted">Registry mirrors can lag or omit a release. The exact LOVE manifest is at <a href="/packages/v1/@agenttool/browser/0.5.0/manifest.json"><code>/packages/v1/@agenttool/browser/0.5.0/manifest.json</code></a>. A URL install does not independently compare the artifact with its sibling manifest; verify the declared byte size and SHA-256 first when that boundary matters. The immutable <code>0.1.0</code>, <code>0.2.0</code>, and <code>0.3.0</code> artifacts remain separately addressable as historical releases.</p>
+      <p class="muted">Registry mirrors can lag or omit a release. The exact LOVE manifest is at <a href="/packages/v1/@agenttool/browser/0.5.1/manifest.json"><code>/packages/v1/@agenttool/browser/0.5.1/manifest.json</code></a>. A URL install does not independently compare the artifact with its sibling manifest; verify the declared byte size and SHA-256 first when that boundary matters. The immutable <code>0.1.0</code>, <code>0.2.0</code>, <code>0.3.0</code>, and <code>0.5.0</code> artifacts remain separately addressable as historical releases.</p>
       <p class="muted"><strong>Runtime.</strong> Node ≥20.19 or Bun ≥1.3.5, plus an installed Chrome-family browser. The package uses <code>playwright-core</code>, has no postinstall hook, and downloads no browser.</p>
 
       <div class="code-block">
@@ -194,7 +194,8 @@
       </div>
 
       <h3>Stdio MCP</h3>
-      <p>The same nine tools are exposed through a local stdio MCP server. Version 0.5.0 negotiates the current MCP <code>2026-07-28</code> revision and keeps an explicit 2025-era compatibility path over the same bounded core. MCP is an interface envelope, not the browser driver, a durable session protocol, or an additional security boundary.</p>
+      <p>The same nine tools are exposed through a local stdio MCP server. Version 0.5.0 introduced current MCP <code>2026-07-28</code> negotiation and an explicit 2025-era compatibility path; 0.5.1 retains both unchanged. MCP is an interface envelope, not the browser driver, a durable session protocol, or an additional security boundary.</p>
+      <p><strong>Codex plugin.</strong> The package root includes <code>.codex-plugin/plugin.json</code>, which starts a self-contained packed Node MCP bundle with Browser’s public, headless, ephemeral defaults. It loads without a parent <code>node_modules</code>, vendors <code>playwright-core</code>, and still requires your installed Chrome-family browser. Installing the plugin changes packaging, not exact 0.5.0 runtime authority; it does not import ambient browser state, authenticate to a site, or create a hosted service.</p>
       <p>Install the package in a stable project or tools directory and point the host at that installation’s <strong>absolute binary path</strong>. This avoids depending on the host’s working directory, a mutable global <code>PATH</code>, or a package-manager fetch every time the host starts the process.</p>
       <div class="code-block">
         <div class="code-label"><span>MCP host · sovereign destination authority</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
@@ -368,7 +369,7 @@ agenttool-browser jsonl --authority public</pre>
       <table class="params-table">
         <thead><tr><th>Surface</th><th>Runs where</th><th>What it requires</th></tr></thead>
         <tbody>
-          <tr><td><code>@agenttool/browser@0.5.0</code></td><td>Your local TypeScript, JSONL, or stdio MCP process, using your installed Chrome-family browser</td><td>No AgentTool bearer, credits, Redis, or remote worker. Local actions are attempted once; profiles, receipts, and artifacts remain on the operator’s machine.</td></tr>
+          <tr><td><code>@agenttool/browser@0.5.1</code></td><td>Your local TypeScript, JSONL, stdio MCP, or package-root Codex-plugin process, using your installed Chrome-family browser</td><td>No AgentTool bearer, credits, Redis, or remote worker. The plugin bundle changes packaging, not exact 0.5.0 runtime authority; profiles, receipts, and artifacts remain on the operator’s machine.</td></tr>
           <tr><td><code>POST /v1/browse</code></td><td>A separate AgentTool API and BullMQ worker implementation</td><td>Bearer and credits, the unsafe-outbound process flag, and Redis workers. Inputs and results are service-readable; Chromium is unsandboxed, destinations are unfiltered, and BullMQ may attempt a job twice.</td></tr>
         </tbody>
       </table>
@@ -386,7 +387,7 @@ agenttool-browser jsonl --authority public</pre>
 
       <h2 id="reference">References</h2>
       <ul>
-        <li><a href="/packages/v1/@agenttool/browser/0.5.0/manifest.json"><code>@agenttool/browser@0.5.0</code> LOVE manifest</a> — exact artifact locator, byte size, SHA-256, runtime, and source claim.</li>
+        <li><a href="/packages/v1/@agenttool/browser/0.5.1/manifest.json"><code>@agenttool/browser@0.5.1</code> LOVE manifest</a> — exact artifact locator, byte size, SHA-256, runtime, and source claim.</li>
         <li><a href="packages.html">Agent packages</a> — LOVE discovery, verification, and mirroring boundaries.</li>
         <li><a href="https://github.com/cambridgetcg/agenttool/tree/main/packages/browser"><code>packages/browser</code></a> — source, README, tests, license, and implementation boundary.</li>
         <li><a href="https://github.com/cambridgetcg/agenttool/tree/main/packages/telescope"><code>@agenttool/telescope</code></a> — read-only discovery evidence before browser fallback.</li>

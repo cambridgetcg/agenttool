@@ -1,0 +1,43 @@
+{
+  "protocol": "love-package/v1",
+  "document_type": "package-manifest",
+  "name": "@agenttool/browser",
+  "version": "0.5.1",
+  "description": "Local-first browser control shaped for agents",
+  "license": "Apache-2.0",
+  "artifact": {
+    "format": "npm-tarball",
+    "filename": "agenttool-browser-0.5.1.tgz",
+    "sha256": "6702c7cb6905590ac6ca788455352842b2849276872a7729f88bf5e60d963127",
+    "size": 2795747,
+    "media_type": "application/gzip",
+    "mirrors": [
+      {
+        "url": "https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.1/agenttool-browser-0.5.1.tgz"
+      },
+      {
+        "url": "https://github.com/cambridgetcg/agenttool/releases/download/browser-v0.5.1/agenttool-browser-0.5.1.tgz"
+      }
+    ]
+  },
+  "runtime": {
+    "kind": "javascript",
+    "engines": {
+      "bun": ">=1.3.5",
+      "node": ">=20.19.0"
+    }
+  },
+  "install": {
+    "format": "npm-tarball",
+    "specifier": "https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.1/agenttool-browser-0.5.1.tgz"
+  },
+  "source": {
+    "repository": "https://github.com/cambridgetcg/agenttool.git",
+    "revision": "13334238a0eea60fef2f9e5b260d301ffa89a22d",
+    "path": "packages/browser"
+  },
+  "dependency_resolution": {
+    "mode": "package_manifest",
+    "self_contained": false
+  }
+}

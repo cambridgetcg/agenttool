@@ -4,13 +4,13 @@
 >
 > **Implements:** A local, agent-shaped browser control plane with direct TypeScript, line-delimited JSON, and stdio MCP interfaces over one bounded core.
 >
-> **Code:** [`packages/browser/src/`](../packages/browser/src/) · [`packages/browser/bin/agenttool-browser.ts`](../packages/browser/bin/agenttool-browser.ts)
+> **Code:** [`packages/browser/src/`](../packages/browser/src/) · [`packages/browser/bin/agenttool-browser.ts`](../packages/browser/bin/agenttool-browser.ts) · [`packages/browser/.codex-plugin/plugin.json`](../packages/browser/.codex-plugin/plugin.json)
 >
 > **Tests:** [`packages/browser/tests/`](../packages/browser/tests/)
 
 ## Status
 
-The repository contains the exact `@agenttool/browser@0.5.0` source. Its
+The repository contains the exact `@agenttool/browser@0.5.1` source. Its
 canonical public record is the immutable LOVE artifact; npm and the annotated
 GitHub Release are optional mirrors whose bytes are verified independently by
 the protected release workflow. Distribution state can change independently
@@ -20,7 +20,8 @@ documentation; they do not expose an AgentTool-hosted browser. The package
 requires no AgentTool account, API key, credits, Redis, database, or hosted
 control plane.
 
-The exact `0.1.0`, `0.2.0`, and `0.3.0` artifacts remain immutable. Version
+The exact `0.1.0`, `0.2.0`, `0.3.0`, and `0.5.0` artifacts remain immutable.
+Version
 `0.3.0` packaged collaboration-safe retained observations, structural
 accessibility context, navigation/action/close race hardening, and explicit
 capability truth about browser-managed redirect hops. `0.4.0` was prepared but
@@ -30,6 +31,15 @@ and adds browser-act receipts, non-ref observation-basis preconditions,
 session-local receipt context, a backend-neutral capability inventory, and
 current MCP negotiation with an explicit compatibility path. None of those
 changes widens authority.
+
+Version `0.5.1` preserves that exact runtime, nine-tool contract, protocol,
+and authority model. It adds a package-root Codex plugin and a self-contained
+Node-targeted MCP bundle that loads from the isolated packed plugin cache
+without a parent `node_modules`. The plugin manifest supplies no authority,
+profile, headed-session, executable, or output-directory option, so it starts
+with Browser's public, headless, ephemeral defaults. The bundle vendors
+`playwright-core` and the archive carries its third-party notices, but it does
+not bundle, install, or download a browser.
 
 The package uses `playwright-core` to drive a Chrome-family browser already
 installed on the caller's machine. There is no postinstall hook and no bundled
@@ -41,7 +51,7 @@ zero-effect action planning; `0.3.0` retained those interfaces while hardening
 their execution and observation contracts. The immutable `0.1.0` release
 remains available as historical seven-operation bytes and does not gain later
 features retroactively. This page and its install commands describe exact
-`0.5.0`; the earlier artifacts remain separately addressable.
+`0.5.1`; the earlier artifacts remain separately addressable.
 
 ## Why this surface exists
 
@@ -79,8 +89,8 @@ explicit operation names:
 | `tabs` | `browser_tabs` |
 | `close` | `browser_close` |
 
-Version `0.2.0` introduced two aligned, non-executing operations retained by
-`0.5.0`:
+Version `0.2.0` introduced two aligned, non-executing operations retained
+unchanged through `0.5.0` and `0.5.1`:
 
 | TypeScript method | JSONL method / MCP tool | Effect |
 |---|---|---|
@@ -99,8 +109,9 @@ Each JSONL request is
 `{ "ok": false, "error": { "code", "message" } }`. The framing is one JSON
 object per line; protocol stdout contains no banners or diagnostic prose.
 
-Version `0.5.0` negotiates the current MCP `2026-07-28` revision and retains
-an explicit 2025-era stdio compatibility path. Both routes expose the same
+Version `0.5.0` introduced current MCP `2026-07-28` negotiation and an
+explicit 2025-era stdio compatibility path; `0.5.1` retains both unchanged.
+Both routes expose the same
 bounded browser core. MCP revision negotiation is transport compatibility,
 not a browser driver, durable session protocol, or security boundary; browser
 authority and AgentTool-owned handles remain local to this process.
@@ -185,11 +196,12 @@ outcome, not treat every refusal as a protection to bypass.
 Destination reach remains separate from other consequential powers. File
 upload, automatic download, arbitrary JavaScript evaluation, credential
 injection/lookup, ambient normal-profile import, shell execution, and
-extension installation remain unsupported in `0.5.0`.
+extension installation remain unsupported in `0.5.1`, unchanged from
+`0.5.0`.
 `capabilities()` reports those absences instead of treating sovereign
 destination reach as an implication that every power exists.
 
-The forms retained in `0.5.0` are
+The forms retained in `0.5.1` are
 `authority: "public" | "local" | "sovereign"`, `--authority`, and
 `AGENTOOL_BROWSER_AUTHORITY`. The legacy booleans, flags, and environment
 variables remain as a deprecated compatibility surface, but a launch cannot
@@ -417,8 +429,8 @@ and treat persistent-profile artifacts as sensitive owner-held data.
 In published `0.1.0`, public web is allowed by default; loopback, link-local,
 and private HTTP(S) navigation/request destinations require the process-level
 `--local-network` opt-in. Reserved destinations remain blocked even with that
-opt-in. The `0.5.0` `public` and `local` profiles preserve those
-respective destination rules from `0.2.0`.
+opt-in. The `0.5.1` `public` and `local` profiles preserve the exact `0.5.0`
+and `0.2.0` destination rules.
 
 The native policy performs hostname and address checks before navigation, but
 Playwright controls the later browser connection. This implementation cannot
@@ -445,7 +457,7 @@ connection. `local` classifies WebSocket destinations against its
 public-plus-local boundary rather than pretending the HTTP(S) DNS claim
 extends to WebSocket transport.
 
-The `0.5.0` `sovereign` profile retains the explicit alternative
+The `0.5.1` `sovereign` profile retains the exact `0.5.0` alternative
 introduced in `0.2.0`: it intentionally performs no destination-class blocking
 for valid HTTP(S), passes WebSockets through, and enables service workers.
 Embedded userinfo is blocked on direct inputs and routed requests, not on
@@ -475,7 +487,7 @@ planning and consent.
 
 | Surface | Runtime and authority | Operational boundary |
 |---|---|---|
-| Exact local `0.5.0` package | Operator-owned local TypeScript, JSONL, or stdio MCP process using an installed local Chrome-family browser | No AgentTool bearer, credits, Redis, or hosted worker. Local actions are attempted once. Profiles, artifacts, and destination authority remain on the operator's machine. |
+| Exact local `0.5.1` package | Operator-owned local TypeScript, JSONL, stdio MCP, or package-root Codex-plugin process using an installed local Chrome-family browser | No AgentTool bearer, credits, Redis, or hosted worker. The Codex bundle changes packaging, not exact 0.5.0 runtime authority. Local actions are attempted once. Profiles, artifacts, and destination authority remain on the operator's machine. |
 | `POST /v1/browse` | Separate AgentTool API route and BullMQ worker implementation | Bearer- and credit-scoped, disabled without the unsafe-outbound flag, dependent on Redis workers, server-readable, Chromium `--no-sandbox`, and currently unfiltered by destination. BullMQ may attempt a job twice. |
 
 The npm, LOVE, GitHub, and docs release of the local package neither enables
@@ -528,8 +540,26 @@ boundary:
 
 Boolean environment values accept `1/0`, `true/false`, `yes/no`, or `on/off`.
 Paths are resolved at process start. Tool calls do not accept these settings.
-Version `0.5.0` rejects mixed `authority` and legacy public/local
-configuration.
+Version `0.5.1`, like exact `0.5.0`, rejects mixed `authority` and legacy
+public/local configuration.
+
+## Codex plugin
+
+The exact package root is a Codex plugin root. Its
+`.codex-plugin/plugin.json` starts
+`node dist/agenttool-browser-mcp.js mcp` relative to the installed plugin.
+That packed bundle carries the MCP and validation layers plus vendored
+`playwright-core`, and the release gate loads it from an isolated cache with no
+parent `node_modules`. It still needs an operator-installed Chrome-family
+browser.
+
+The manifest supplies no authority or persistence flags, so the plugin starts
+public, headless, and ephemeral. Installation makes the same nine local MCP
+tools available to the Codex host; it does not authenticate to a site, import
+ambient browser state, authorize a destination, or create a hosted browser.
+MCP arguments and results still cross the selected host and model-provider
+boundary. A local Codex marketplace may point at this package root; an
+npm-backed entry works only after the exact release is published.
 
 ## MCP host configuration
 
@@ -576,24 +606,24 @@ Chromium profile lock and durable site state.
 
 ## Install the exact public release
 
-These commands select exact release `0.5.0`. Verify the registry or exact LOVE
+These commands select exact release `0.5.1`. Verify the registry or exact LOVE
 catalog when current mirror availability matters. Historical `0.1.0`, `0.2.0`,
-and `0.3.0` artifacts remain separately addressable through their immutable
-manifests; `0.4.0` was never distributed.
+`0.3.0`, and `0.5.0` artifacts remain separately addressable through their
+immutable manifests; `0.4.0` was never distributed.
 
 ```bash
-npm install --save-exact @agenttool/browser@0.5.0
+npm install --save-exact @agenttool/browser@0.5.1
 ```
 
 Or use the registry-neutral LOVE locator:
 
 ```bash
 npm install --save-exact \
-  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.0/agenttool-browser-0.5.0.tgz
+  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.1/agenttool-browser-0.5.1.tgz
 ```
 
 The exact manifest at
-`https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.0/manifest.json`
+`https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.1/manifest.json`
 provides the artifact size and SHA-256. Verify both before installing when the
 catalog-to-local-file boundary matters.
 
@@ -607,8 +637,9 @@ node dist/bin/agenttool-browser.js doctor
 ```
 
 The hermetic gate typechecks, runs fake/fixture tests, builds the package,
-imports it under Node and Bun without launching a browser, and checks the
-package boundary. It does not install, download, or launch a real browser.
+imports it under Node and Bun without launching a browser, checks the package
+boundary, and loads the packed Codex MCP bundle from an isolated cache without
+a parent dependency tree. It does not install, download, or launch a real browser.
 `doctor` reports local configuration and browser availability; it does not
 turn that diagnostic into a CI browser requirement.
 

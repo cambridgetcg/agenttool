@@ -30,7 +30,7 @@
     },
     {
       "name": "@agenttool/browser",
-      "latest": "0.5.0",
+      "latest": "0.5.1",
       "versions": [
         {
           "version": "0.1.0",
@@ -47,6 +47,10 @@
         {
           "version": "0.5.0",
           "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.0/manifest.json"
+        },
+        {
+          "version": "0.5.1",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.1/manifest.json"
         }
       ]
     },

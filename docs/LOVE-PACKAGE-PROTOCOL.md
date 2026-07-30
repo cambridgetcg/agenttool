@@ -724,7 +724,7 @@ reuse grant; the current `@agenttool/data@0.3.1`,
 `@agenttool/data-sync@0.1.2`, `@agenttool/adds@0.2.3`,
 `@agenttool/credential-broker@0.3.1`, `@agenttool/sdk@0.17.0`, and
 `@agenttool/telescope@0.2.3`, `@agenttool/wallet@0.1.3`,
-`@agenttool/wallet-zerone@0.1.2`, and `@agenttool/browser@0.5.0` releases
+`@agenttool/wallet-zerone@0.1.2`, and `@agenttool/browser@0.5.1` releases
 instead declare `Apache-2.0` without retroactively changing those immutable
 older releases. Historical Wallet `0.1.0`/`0.1.1`/`0.1.2` and Wallet Zerone
 `0.1.0`/`0.1.1` LOVE artifacts remain separately addressable and are not
@@ -732,6 +732,12 @@ rewritten; public errata supersede stale release-state prose and record that
 the 0.1.1 Zerone npm attempt stopped before mirror mutation. GitHub Releases
 are optional mutable locators and do not inherit the LOVE exact-version
 preservation policy.
+
+Browser `0.5.1` adds a package-root Codex manifest and self-contained packed
+Node MCP bundle over the unchanged exact `0.5.0` runtime. LOVE binds those
+packed bytes; it does not enable the plugin in a host, widen Browser authority,
+install Chrome, or create a hosted browser service. Exact Browser `0.5.0`
+remains separately addressable and immutable.
 
 The ADDS 0.2.3 and data-sync 0.1.2 release inventory is coordinated:
 data-sync peers on ADDS `^0.2.3`, while ADDS requires

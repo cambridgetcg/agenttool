@@ -8,8 +8,8 @@ LOVE, npm, and GitHub Releases does not change that runtime boundary.
 
 ## Authority direction
 
-Version `0.5.0` carries forward the authority model built
-around one rule:
+Version `0.5.1` carries forward the exact `0.5.0` authority model built around
+one rule:
 **sandbox consequences, not curiosity**.
 Destination reach, state persistence, data disclosure, and executable powers
 are separate capabilities. Do not turn a restriction on one into an
@@ -115,6 +115,12 @@ those powers.
 - Keep current MCP `2026-07-28` negotiation and the explicit 2025-era
   compatibility path backed by the same core. MCP is an envelope, not a
   browser driver, security boundary, or durable session protocol.
+- Keep the package-root Codex plugin on that same stdio MCP core. Its packed
+  Node-targeted bundle must load without a parent `node_modules`, must carry
+  complete third-party notices, and must vendor `playwright-core` without
+  bundling or downloading a browser. The plugin manifest must not silently
+  select wider authority, a persistent profile, a headed session, or ambient
+  browser state.
 - Keep public/model-facing page, tab, snapshot, and receipt handles
   backend-neutral. Playwright is the adapter today; WebDriver BiDi may become
   another adapter. Raw CDP objects and commands are not a public portability
@@ -136,9 +142,12 @@ explicit local dogfood check; it is never a required CI dependency.
 
 ## Release boundary
 
-Versions `0.1.0`, `0.2.0`, `0.3.0`, and `0.5.0` are exact LOVE releases with
-optional npm and GitHub Release mirrors. Version `0.4.0` was prepared but not
-distributed; its reviewed work is carried by `0.5.0`. Release work must
+Versions `0.1.0`, `0.2.0`, `0.3.0`, `0.5.0`, and `0.5.1` are exact LOVE
+releases with optional npm and GitHub Release mirrors. Version `0.4.0` was
+prepared but not distributed; its reviewed work is carried by `0.5.0`.
+Version `0.5.1` adds the package-root Codex manifest and self-contained packed
+MCP bundle without changing the exact `0.5.0` runtime, tool, protocol, or
+authority contracts. Release work must
 keep each released version's bytes immutable and keep the current LOVE, npm,
 and GitHub Release bytes identical through the protected allowlisted workflow.
 The deployed docs/catalog is a distribution surface, not a hosted
@@ -150,5 +159,7 @@ observation diagnostic and the JSONL snake_case rename hint were prepared at
 the unreleased `0.4.0` boundary. Browser-act receipts, non-ref observation
 bases, observation-local receipt context, backend-neutral capability
 inventory, and current/legacy MCP negotiation belong to exact `0.5.0`.
-Those bytes are frozen: any later source change—especially a machine-readable
-capability contract change—requires a new package version before publication.
+The Codex plugin manifest and isolated packed MCP bundle belong to exact
+`0.5.1`. Those bytes are frozen: any later source change—especially a
+machine-readable capability contract change—requires a new package version
+before publication.
