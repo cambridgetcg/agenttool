@@ -291,7 +291,11 @@ const report = assembleBrowserUnderstanding(material, {
 The closed interpreter output is only `supports`, `contradicts`, or
 `insufficient`, plus optional three-way scores. The receipt does not copy the
 claim, passage, generated prose, or raw provider errors, and uncertain calls
-are never retried automatically. Scores remain uncalibrated model outputs.
+are never retried automatically. Browser gives the adapter a separate frozen
+model descriptor, retains its own closed snapshot, and derives disclosure from
+the pre-call execution mode. Assembly revalidates exact observation shapes and
+rejects extra fields instead of copying them into a report. Scores remain
+uncalibrated model outputs.
 Entailment against one observed passage is not world truth; neutral or absent
 evidence is not a refutation. Every assembled report therefore says
 `truth: "not_determined"` and `externalFacts: "not_resolved"`.

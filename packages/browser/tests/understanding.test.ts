@@ -145,6 +145,18 @@ describe("Browser web material", () => {
       "changed after capture",
     );
   });
+
+  test("rejects material lookalikes with unrecorded fields", () => {
+    const material = createBrowserMaterial(observation());
+    const lookalike = {
+      ...material,
+      rawPageText: pageText,
+    };
+
+    expect(() => analyzeBrowserMaterial(lookalike as never)).toThrow(
+      "Expected an agent-browser-material/0.1",
+    );
+  });
 });
 
 describe("local RhetorLint observation", () => {
@@ -282,6 +294,72 @@ describe("injected Hugging Face interpretation", () => {
     expect(result.attempt.status).toBe("completed");
   });
 
+  test("isolates and freezes the adapter descriptor before one call", async () => {
+    const material = createBrowserMaterial(observation());
+    const original = model({
+      execution: "local",
+      provider: "transformers-js",
+    });
+    let inputFrozen = false;
+    let modelFrozen = false;
+    const result = await interpretBrowserMaterial(material, {
+      claim,
+      model: original,
+      interpreter: {
+        async interpret(input) {
+          inputFrozen = Object.isFrozen(input);
+          modelFrozen = Object.isFrozen(input.model);
+          try {
+            (input.model as { revision: string }).revision =
+              "1111111111111111111111111111111111111111";
+          } catch {
+            // Frozen adapter data must remain unchanged.
+          }
+          try {
+            (input.model as { execution: string }).execution = "remote";
+          } catch {
+            // Frozen adapter data must remain unchanged.
+          }
+          try {
+            Object.defineProperties(input.model, {
+              rawPageText: {
+                enumerable: true,
+                value: input.evidence,
+              },
+              rawClaimText: {
+                enumerable: true,
+                value: input.claim,
+              },
+            });
+          } catch {
+            // A hostile adapter cannot attach source strings to the receipt.
+          }
+          return { label: "insufficient", scores: null };
+        },
+      },
+      now: () => new Date(capturedAt),
+    });
+    const wire = JSON.stringify(result);
+
+    expect(inputFrozen).toBe(true);
+    expect(modelFrozen).toBe(true);
+    expect(result.attempt.status).toBe("completed");
+    expect(result.attempt.disclosure).toBe("not_remote");
+    expect(result.model).toEqual(original);
+    expect(Object.keys(result.model)).toEqual([
+      "source",
+      "repoId",
+      "revision",
+      "task",
+      "execution",
+      "provider",
+    ]);
+    expect(wire).not.toContain(pageText);
+    expect(wire).not.toContain(claim);
+    expect(wire).not.toContain("rawPageText");
+    expect(wire).not.toContain("rawClaimText");
+  });
+
   test("never retries and never serializes provider errors or free-form output", async () => {
     const material = createBrowserMaterial(observation());
     const privateProviderError = "provider raw response with private passage";
@@ -395,7 +473,66 @@ describe("assembled understanding report", () => {
 
     expect(() =>
       assembleBrowserUnderstanding(first, { rhetoric: secondRhetoric }),
-    ).toThrow("not bound");
+    ).toThrow("bound");
+  });
+
+  test("rejects extra model, rhetoric, and nested descriptor fields", async () => {
+    const material = createBrowserMaterial(observation());
+    const rhetoric = analyzeBrowserMaterial(material);
+    const semantic = await interpretBrowserMaterial(material, {
+      claim,
+      model: model({
+        execution: "local",
+        provider: "transformers-js",
+      }),
+      interpreter: {
+        async interpret() {
+          return { label: "insufficient", scores: null };
+        },
+      },
+      now: () => new Date(capturedAt),
+    });
+    const modelLookalike = {
+      ...semantic,
+      rawPageText: pageText,
+    };
+    const nestedLookalike = {
+      ...semantic,
+      model: {
+        ...semantic.model,
+        rawClaimText: claim,
+      },
+    };
+    const rhetoricLookalike = {
+      ...rhetoric,
+      rawPageText: pageText,
+    };
+
+    expect(() =>
+      assembleBrowserUnderstanding(material, {
+        modelObservations: [modelLookalike as never],
+      }),
+    ).toThrow("identity");
+    expect(() =>
+      assembleBrowserUnderstanding(material, {
+        modelObservations: [nestedLookalike as never],
+      }),
+    ).toThrow("descriptor");
+    expect(() =>
+      assembleBrowserUnderstanding(material, {
+        rhetoric: rhetoricLookalike as never,
+      }),
+    ).toThrow("identity");
+  });
+
+  test("normalizes accepted observations instead of retaining mutable input", async () => {
+    const material = createBrowserMaterial(observation());
+    const rhetoric = analyzeBrowserMaterial(material);
+    const report = assembleBrowserUnderstanding(material, { rhetoric });
+    rhetoric.signal.density.tells = 999;
+
+    expect(report.rhetoric?.signal.density.tells).not.toBe(999);
+    expect(JSON.stringify(report)).not.toContain(pageText);
   });
 
   test("bounds model observation fan-in", () => {

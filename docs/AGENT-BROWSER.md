@@ -367,7 +367,9 @@ commit. A descriptor declaring remote execution is not invoked unless
 `discloseText === true`. Once invoked, the adapter receives the passage and
 claim exactly once, gets no Browser instance or action handle, and is never
 retried automatically. Raw provider errors and generated prose never enter
-the receipt. The closed result is a model observation—`supports`,
+the receipt. The adapter receives a separate frozen model descriptor; the
+receipt retains a closed snapshot and derives disclosure from the pre-call
+execution mode. The closed result is a model observation—`supports`,
 `contradicts`, or `insufficient`, with optional three-way scores—and those
 scores are not calibrated truth probabilities.
 
@@ -379,8 +381,9 @@ transformed values, Unicode controls, or screenshot pixels. Inspect material
 before deliberately sending it to a remote interpreter.
 
 `assembleBrowserUnderstanding()` keeps the RhetorLint observation and up to
-eight model observations separate, omits source and claim text from its
-default receipt, and always records:
+eight model observations separate, revalidates their exact closed shapes,
+rejects unrecorded fields, omits source and claim text from its default
+receipt, and always records:
 
 ```json
 {
