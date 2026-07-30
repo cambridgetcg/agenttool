@@ -8,8 +8,8 @@
   "artifact": {
     "format": "npm-tarball",
     "filename": "agenttool-browser-0.6.0.tgz",
-    "sha256": "03740b7fdaa95628aade0af0d99215bdd53819f58278168654b99732628bea4d",
-    "size": 2807784,
+    "sha256": "37c2b0694bec0929cdd90abef170941bb2650b8f23a22a2cb896084417dbd218",
+    "size": 2811022,
     "media_type": "application/gzip",
     "mirrors": [
       {
@@ -33,7 +33,7 @@
   },
   "source": {
     "repository": "https://github.com/cambridgetcg/agenttool.git",
-    "revision": "9e4ff657d0b869f2a5e5a40898bd96b4435a1c88",
+    "revision": "c3519414397e79e5994f208e92393a1476a89bf9",
     "path": "packages/browser"
   },
   "dependency_resolution": {
