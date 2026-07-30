@@ -1,0 +1,44 @@
+{
+  "name": "@agenttool/constructive-intelligence",
+  "version": "0.1.0-dev.0",
+  "private": true,
+  "description": "Offline append-only constructive evidence receipts for the Zerone tree v1 pilot",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./schema": "./schema/constructive-evidence-receipt-v1.schema.json"
+  },
+  "bin": {
+    "agenttool-constructive": "dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "schema",
+    "vectors",
+    "README.md",
+    "CLAUDE.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "bun": ">=1.3"
+  },
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "tsc && chmod 755 dist/bin.js",
+    "smoke:built-cli": "bun run tests/built-cli.smoke.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "ci": "bun run typecheck && bun test && bun run build && bun run smoke:built-cli"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.7.0"
+  }
+}
