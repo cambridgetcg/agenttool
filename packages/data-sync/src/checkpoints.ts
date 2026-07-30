@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { chmodSync, closeSync, mkdirSync, openSync } from "node:fs";
 import { dirname } from "node:path";
 import { DataSyncError, syncInvariant } from "./errors.js";
+import { parseRfc3339Instant } from "./time.js";
 import type { SyncCheckpoint, SyncCheckpointStore } from "./types.js";
 
 interface CheckpointRow {
@@ -185,7 +186,11 @@ function validateCheckpoint(checkpoint: SyncCheckpoint): void {
   ] as const) {
     syncInvariant(typeof checkpoint[field] === "string" && checkpoint[field].length > 0, "invalid_checkpoint", `Checkpoint ${field} is required`);
   }
-  syncInvariant(Number.isFinite(Date.parse(checkpoint.last_applied_at)), "invalid_checkpoint", "Checkpoint timestamp is invalid");
+  syncInvariant(
+    parseRfc3339Instant(checkpoint.last_applied_at) !== null,
+    "invalid_checkpoint",
+    "Checkpoint timestamp is invalid",
+  );
   for (const field of ["records_inserted", "records_existing", "tombstones_applied"] as const) {
     syncInvariant(Number.isSafeInteger(checkpoint[field]) && checkpoint[field] >= 0, "invalid_checkpoint", `Checkpoint ${field} is invalid`);
   }

@@ -260,7 +260,7 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
       "https://docs.agenttool.dev/packages/v1/@agenttool/wallet/0.1.3/manifest.json",
     );
     expect(kv.get("Wallet-NPM-Latest")).toBe(
-      "0.1.0 · observed 2026-07-28",
+      "0.1.3 · observed 2026-07-29",
     );
     expect(kv.get("Wallet-GitHub-Release")).toMatch(
       /^wallet-v0\.1\.3.*optional_mutable_mirror.*immutable=false.*reverify_size_and_sha256_against_love_manifest/is,
@@ -271,18 +271,18 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
     expect(kv.get("Zerone-Wallet-Adapter")).toContain(
       "@agenttool/wallet-zerone",
     );
-    expect(kv.get("Zerone-Wallet-Version")).toBe("0.1.1");
+    expect(kv.get("Zerone-Wallet-Version")).toBe("0.1.2");
     expect(kv.get("Zerone-Wallet-Source")).toBe(
       "https://github.com/cambridgetcg/agenttool/tree/main/packages/wallet-zerone",
     );
     expect(kv.get("Zerone-Wallet-LOVE-Manifest")).toBe(
-      "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.1/manifest.json",
+      "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.2/manifest.json",
     );
     expect(kv.get("Zerone-Wallet-Availability")).toBe(
       "local_offline_source_only",
     );
     expect(kv.get("Zerone-Wallet-Distribution")).toBe(
-      "observed=2026-07-28; love=public_exact_artifact; npm=absent; github_release=absent",
+      "observed=2026-07-29; love=public_exact_artifact; npm=public_exact_mirror; github_release=public_exact_mirror",
     );
     expect(kv.get("Zerone-Wallet-Boundary")).toMatch(
       /exact public LOVE artifact.*bounded local offline package\/profile only.*no AgentTool trust export.*identity migration.*portable trust proof.*key custody.*hosted RPC.*deployed bridge.*network action requires caller-supplied transport and authority/is,

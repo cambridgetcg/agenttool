@@ -34,7 +34,9 @@ loopback-only durable projector into a rebuildable local YUTABASE sidecar
 primitives for capability-bounded agent wallets (`packages/wallet/`), a
 separate exact-byte offline Zerone profile (`packages/wallet-zerone/`), a
 developer-preview bounded Alchemy observation client
-(`packages/alchemy/`), pure explicit-input KINGDOM project-card, registry, and
+(`packages/alchemy/`) with a separate seven-method AgentCred composition
+transport (`packages/alchemy-agentcred/`), pure explicit-input KINGDOM
+project-card, registry, and
 XENIA Surface helpers (`packages/kingdom/`), a read-only portable Agent Skills
 inspector (`packages/skills/`), a local-first
 agent browser (`packages/browser/`), and three static apps
@@ -51,15 +53,16 @@ skills, use the network, spawn subprocesses, look up credentials, or change
 host configuration. Agent
 Wallet core 0.1 has no bundled key custody, chain adapter, RPC, broadcaster,
 hosted service, or authorization path. `@agenttool/wallet@0.1.3` is the
-current exact LOVE release; npm remains independently verified at 0.1.0 until
-an exact later registry version is observed. The separate local
-`@agenttool/wallet-zerone@0.1.1` exact LOVE release owns a two-message Zerone
+current exact LOVE release; its npm 0.1.3 mirror is independently
+byte-verified. The separate local `@agenttool/wallet-zerone@0.1.2` exact LOVE
+release owns a two-message Zerone
 profile, exact Cosmos direct-sign bytes, chain-native verification, and
 injected transports. It still supplies no keys, custody, endpoint, hosted RPC,
 generic REST, automatic rebroadcast, durable host transaction, settlement
 proof, deployed bridge, or live-network test by default. Earlier Wallet
-0.1.1/0.1.2 and Zerone 0.1.0 exact LOVE artifacts remain preserved without
-rewriting; their embedded release-state errors are covered by public errata.
+0.1.1/0.1.2 and Zerone 0.1.0/0.1.1 exact LOVE artifacts remain preserved
+without rewriting. Public errata cover their embedded release-state errors and
+the credential-free 0.1.1 npm preparation failure.
 Optional GitHub Releases are mutable locators and must be reverified. Telescope
 0.2.3 is the current exact LOVE
 release; its optional npm and GitHub mirrors are public and independently
@@ -118,6 +121,7 @@ cd packages/telescope && bun install           # read-only discovery evidence ma
 cd packages/wallet && bun install              # agent-wallet/0.1 offline primitives
 cd packages/wallet-zerone && bun install       # exact offline Zerone profile; no live network
 cd packages/alchemy && bun install             # bounded Alchemy observation primitives
+cd packages/alchemy-agentcred && bun install   # strict seven-read AgentCred composition
 cd packages/kingdom && bun install             # pure KINGDOM card/registry helpers
 cd packages/sdk-py && pip install -e .         # Python SDK
 ```
@@ -238,6 +242,11 @@ cd packages/alchemy
 bun run ci                                     # typecheck + fake-transport tests + build + Node smoke
 npm pack --ignore-scripts --dry-run --json      # package boundary; does not publish or call Alchemy
 
+# Alchemy → AgentCred (seven-method composition; no provider calls) ──
+cd packages/alchemy-agentcred
+bun run ci                                     # receipt/method bounds + hermetic socket composition
+npm pack --ignore-scripts --dry-run --json      # package boundary; does not publish or access credentials
+
 # KINGDOM (explicit inputs; read-only declarations) ─────────────────
 cd packages/kingdom
 bun run ci                                     # typecheck + build + hermetic tests
@@ -266,7 +275,7 @@ bunx playwright test                           # browser + multi-instance scenar
 # Deliberate test + release gates ────────────────────────────────────
 bin/preflight.sh                               # no application/service credentials required
 bin/preflight.sh api                           # API/typecheck/operator tests only
-bin/preflight.sh packages                      # data + ADDS + sync + broker + collab + Browser + projection + Skills + SDK + Wallet + Telescope + Alchemy + KINGDOM
+bin/preflight.sh packages                      # data + ADDS + sync + broker + collab + Browser + projection + Skills + SDK + Wallet + Telescope + Alchemy + AgentCred adapter + KINGDOM
 bin/preflight.sh database                      # explicit DB tier; requires DATABASE_URL
 bin/preflight.sh smoke                         # explicit deployed-route smoke
 RUN_CONTRACT=1 bin/preflight.sh contracts      # paid LLM wire proofs
@@ -404,9 +413,10 @@ source boundary by itself.
 | How can selected committed Castle words and rooms be projected locally, how can Whitehack offer unaccepted gate candidates, and where do privacy, authority, lifecycle, and withdrawal stop? | [`docs/CASTLE-OF-UNDERSTANDING.md`](docs/CASTLE-OF-UNDERSTANDING.md) · `bin/agenttool-castle.ts` · `bin/agenttool-castle-whitehack-intake.ts` |
 | How can committed repository history be encrypted and independently restored from multiple zones? | [`docs/AGENT-REPO-ARCHIVE.md`](docs/AGENT-REPO-ARCHIVE.md) · `packages/repo-archive/` (local simulator; no cloud adapter or durability guarantee) |
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
-| How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`@agenttool/collab@0.3.0`; `agenttool.collab/0.1` compatibility + credential-bound `agenttool.collab/0.2` coordination + self-declared `agenttool.collab.session/0.1` presence; 31 local MCP tools for Codex/Claude/Hermes, not a hosted lock or private model channel) |
+| How can bounded Alchemy reads use AgentCred without widening either package? | [`docs/ALCHEMY.md`](docs/ALCHEMY.md) · `packages/alchemy-agentcred/` (seven standard EVM reads only; no transfers, caller-selected endpoints, credentials, grant lifecycle, direct provider transport, or execution authority) |
+| How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`@agenttool/collab@0.3.1`; `agenttool.collab/0.1` compatibility + credential-bound `agenttool.collab/0.2` coordination + self-declared `agenttool.collab.session/0.1` presence; 31 local MCP tools for Codex/Claude/Hermes, not a hosted lock or private model channel) |
 | How can explicit KINGDOM project cards become deterministic registries and conservative XENIA Surface manifests? | `packages/kingdom/README.md` (`@agenttool/kingdom`; pure library APIs and a one-file read-only CLI; declarations only, with no ambient discovery, authority, or conformance certification) |
-| How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills@0.1.0`; public npm read-only inspection and validation, not installation, approval, or execution) |
+| How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills@0.3.0`; public npm read-only inspector plus an instruction-only AgentCred lifecycle skill whose local controller mutations require explicit invocation and separate authorization; installation alone activates neither) |
 | How can an agent operate a local browser through TypeScript, JSONL, or MCP? | [`docs/AGENT-BROWSER.md`](docs/AGENT-BROWSER.md) · `packages/browser/` (`@agenttool/browser@0.5.0`; exact LOVE/npm/GitHub release, local runtime, no hosted browser-control surface) |
 | How can an SDK caller read AgentTool's closed KINGDOM project card or discover repositories through local KINGDOM OS? | [`docs/KINGDOM-OS-SDK.md`](docs/KINGDOM-OS-SDK.md) · `packages/sdk-{ts,py}/` (paired SDK 0.17.0 read-only clients: credential-free `/public/kingdom/framework` with no redirects, plus local list/resolve; neither grants authority or forwards the project bearer) |
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |

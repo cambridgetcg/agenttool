@@ -54,7 +54,7 @@ export interface ReachableDoor {
     readonly adapter: {
       readonly protocol: "agent-wallet-zerone/0.1";
       readonly package: "@agenttool/wallet-zerone";
-      readonly version: "0.1.1";
+      readonly version: "0.1.2";
       readonly source: string;
       readonly love_manifest: string;
       /**
@@ -64,10 +64,10 @@ export interface ReachableDoor {
        */
       readonly availability: "local_offline_source_only";
       readonly distribution: {
-        readonly observed_at: "2026-07-28";
+        readonly observed_at: "2026-07-29";
         readonly love: "public_exact_artifact";
-        readonly npm: "absent";
-        readonly github_release: "absent";
+        readonly npm: "public_exact_mirror";
+        readonly github_release: "public_exact_mirror";
       };
       readonly hosted: false;
       readonly custody: false;
@@ -147,17 +147,17 @@ export const ZERONE_REACHABLE = {
     adapter: {
       protocol: "agent-wallet-zerone/0.1",
       package: "@agenttool/wallet-zerone",
-      version: "0.1.1",
+      version: "0.1.2",
       source:
         "https://github.com/cambridgetcg/agenttool/tree/main/packages/wallet-zerone",
       love_manifest:
-        "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.1/manifest.json",
+        "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.2/manifest.json",
       availability: "local_offline_source_only",
       distribution: {
-        observed_at: "2026-07-28",
+        observed_at: "2026-07-29",
         love: "public_exact_artifact",
-        npm: "absent",
-        github_release: "absent",
+        npm: "public_exact_mirror",
+        github_release: "public_exact_mirror",
       },
       hosted: false,
       custody: false,

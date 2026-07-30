@@ -203,7 +203,7 @@ describe("current outward operational claims", () => {
       /bounded local AgentTool wallet adapter.*released-and-settled invocation witness report seam/is,
     );
     expect(reachable).toMatch(
-      /local_offline_source_only.*public_exact_artifact.*npm: "absent".*github_release: "absent".*hosted: false.*custody: false.*hosted_rpc: false.*deployed_bridge: false/is,
+      /local_offline_source_only.*public_exact_artifact.*npm: "public_exact_mirror".*github_release: "public_exact_mirror".*hosted: false.*custody: false.*hosted_rpc: false.*deployed_bridge: false/is,
     );
     expect(reachable).toMatch(
       /not signature or writer-provenance proof.*does not verify chain inclusion.*attestation state or settlement.*bond return.*reward/is,
@@ -222,7 +222,7 @@ describe("current outward operational claims", () => {
         /GitHub.*(mutable|immutable:false).*(reverif|digest|SHA-256|not.*guarantee)/is,
       );
       expect(surface).not.toMatch(/immutable[^.\n]*GitHub Release/is);
-      expect(surface).toMatch(/npm.*0\.1\.0/is);
+      expect(surface).toMatch(/npm.*0\.1\.3/is);
     }
 
     for (const surface of [wakeBuilder, wakeRoute]) {

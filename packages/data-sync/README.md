@@ -20,20 +20,22 @@ The package requires Bun because its optional durable checkpoint store uses
 exact LOVE Package artifacts:
 
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.2/agenttool-adds-0.2.2.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.3/agenttool-adds-0.2.3.tgz
 bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.1/agenttool-data-0.3.1.tgz
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/data-sync/0.1.1/agenttool-data-sync-0.1.1.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/data-sync/0.1.2/agenttool-data-sync-0.1.2.tgz
 ```
 
-The bridge requires `@agenttool/adds` at `^0.2.1` and `@agenttool/data` at
-`^0.3.1`. The repository uses root-only development overrides to link the
-adjacent packages. On a clean source checkout, build the peers once before the
-bridge gate:
+The bridge requires `@agenttool/adds` at `^0.2.3` and `@agenttool/data` at
+`^0.3.1`. Source-only development dependencies link the adjacent packages;
+the published runtime contract remains the two peer ranges above. On a clean
+source checkout, build the peers once before the bridge gate. Bun 1.3.5 needs
+`--force` to materialize those file-linked development peers into an empty
+`node_modules` tree:
 
 ```bash
 (cd ../data && bun install --frozen-lockfile && bun run build)
 (cd ../data-protocol && bun install --frozen-lockfile && bun run build)
-bun install
+bun install --frozen-lockfile --force
 bun run ci
 bun run build
 ```
@@ -165,8 +167,14 @@ record plaintext.
 ADDS supplies content integrity, publisher signatures, encryption, and a
 recipient-bound direct Grant. Each destination config pins the source
 publisher id and Ed25519 public key; it is not learned from the response. The
-protocol still does not resolve or externally attest that identifier. The
-configured HTTPS origin and page-only bearer authenticate and authorise the
+destination also requires every imported ADDS Manifest to carry the exact sync
+media type and schema, and requires each visible event time in the reference
+node's strict uppercase, non-leap-second RFC 3339 profile to denote the same
+instant as its encrypted record or tombstone time. These checks bind
+the signed object domain and time metadata; they do not create a global clock
+or order between nodes. The protocol still does not resolve or externally
+attest that identifier. The configured HTTPS origin and page-only bearer
+authenticate and authorise the
 live request. Source and destination necessarily see authorised plaintext.
 Once imported, the destination intentionally stores that plaintext in its local
 `agent-data/v1` blob store and FTS index.
@@ -208,7 +216,13 @@ The source reads changes one at a time so `max_plaintext_bytes` can stop before
 advancing over an oversized next record. JSON request bodies, page change
 counts, decrypted content, bundle blocks, encoded responses, total pages, and
 peer request time are independently bounded. These are per-operation bounds,
-not global rate limiting or fairness guarantees.
+not global rate limiting or fairness guarantees. A pull asks for at most 1 MiB
+of record plaintext per page by default. Its explicit ceiling is 10 MiB,
+matching the default `@agenttool/data` record ceiling, and the encrypted
+response ceiling is 32 MiB. A custom data node that accepts larger records must
+raise the bridge limits deliberately too. For non-success peer responses, the
+bridge retains the HTTP status and a syntactically bounded peer error code when
+present; it discards remote messages and other response fields.
 
 ## License
 

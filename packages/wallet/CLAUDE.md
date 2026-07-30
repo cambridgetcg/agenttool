@@ -69,13 +69,13 @@ byte-verified, but GitHub reports the release records as mutable, so those
 optional locators are not immutability guarantees. Version `0.1.1`
 incorrectly called itself unreleased; `0.1.2` ambiguously described the LOVE
 and GitHub bytes together as immutable. This is the public erratum; never
-rewrite either historical artifact. As independently checked on 2026-07-28,
-npm still served the byte-identical `0.1.0` artifact at SHA-256
-`fada7f9602d48020390709c6c066d7562cd54edcb8e9cbc8bec4c213f7ea475d`.
+rewrite either historical artifact. As independently checked on 2026-07-29,
+npm serves the byte-identical `0.1.3` artifact at SHA-256
+`33f3b81cfcc12882cb98dfd11b215fa4d3cbd963efc575e41ed54e05f132ae87`.
 Verify the selected exact version and digest at consumption time.
 
 Zerone support lives in the separate
-`@agenttool/wallet-zerone@0.1.1` exact LOVE package. It consumes this package's
+`@agenttool/wallet-zerone@0.1.2` exact LOVE package. It consumes this package's
 verified records and owns a narrow exact-byte Cosmos profile; it does not turn
 core Wallet into a chain adapter or supply custody, hosted RPC, or live
 execution. Public LOVE distribution is not npm/GitHub mirror availability or

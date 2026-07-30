@@ -283,7 +283,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("name: Install cross-language vector dependencies");
     expect(workflow).toContain("working-directory: packages/sdk-ts");
     expect(workflow).toContain(
-      "api packages/data packages/data-protocol packages/repo-archive packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/telescope packages/alchemy packages/kingdom",
+      "api packages/data packages/data-protocol packages/repo-archive packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/skills packages/sdk-ts packages/wallet packages/wallet-zerone packages/telescope packages/alchemy packages/kingdom",
     );
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("package-manager-cache: false");
@@ -299,18 +299,22 @@ describe("boring test spine", () => {
     expect(workflow).toContain("cd packages/data-protocol && bun run build");
     expect(workflow).toContain("cd packages/correspondence-yutabase && bun run build");
     expect(workflow).toContain("cd packages/wallet && bun run build");
+    expect(workflow).toContain("cd packages/credential-broker && bun run build");
+    expect(workflow).toContain("cd packages/alchemy && bun run build");
     expect(workflow).toContain(
       "name: Install local-dependent package dependencies from lockfiles",
     );
-    expect(workflow).toContain("cd packages/data-sync && bun install --frozen-lockfile");
+    expect(workflow).toContain(
+      "cd packages/data-sync && bun install --frozen-lockfile --force",
+    );
     expect(workflow).toContain(
       "cd packages/correspondence-yutabase-projector && bun install --frozen-lockfile",
     );
     expect(workflow).toContain(
-      "cd packages/wallet-zerone && bun install --frozen-lockfile --force",
+      "cd packages/alchemy-agentcred && bun install --frozen-lockfile --force",
     );
-    expect(workflow.indexOf("cd packages/wallet && bun run build")).toBeLessThan(
-      workflow.indexOf("cd packages/wallet-zerone && bun install --frozen-lockfile --force"),
+    expect(workflow).not.toContain(
+      "cd packages/wallet-zerone && bun install --frozen-lockfile --force",
     );
     expect(workflow).not.toContain("secrets.");
 
@@ -329,9 +333,16 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/wallet-zerone && bun run ci");
     expect(preflight).toContain("cd packages/telescope && bun run ci");
     expect(preflight).toContain("cd packages/alchemy && bun run ci");
+    expect(preflight).toContain("cd packages/alchemy-agentcred && bun run ci");
     expect(preflight).toContain("cd packages/kingdom && bun run ci");
     expect(workflow).toContain(
       "name: Smoke packed Alchemy read package under Node and Bun",
+    );
+    expect(workflow).toContain(
+      "name: Smoke packed Alchemy, AgentCred, and adapter together under Node and Bun",
+    );
+    expect(workflow).toContain(
+      'npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$alchemy_tarball" "$broker_tarball" "$adapter_tarball"',
     );
     expect(workflow).toContain("name: Smoke packed credential broker under Node and Bun");
     expect(workflow).toContain(
@@ -344,9 +355,16 @@ describe("boring test spine", () => {
       'cli="$package_root/dist/bin.js"',
     );
     expect(workflow).toContain('report.skills[0].name !== "use-agentcred-safely"');
+    expect(workflow).toContain(
+      'report.skills[0].name !== "manage-agentcred-lifecycle"',
+    );
     expect(workflow).toContain('report.skills[0].name !== "capability-conductor"');
     expect(workflow).toContain('report.skills[0].name !== "learn-by-contact"');
-    expect(workflow).toContain('test "$(node "$cli" --version)" = "0.2.1"');
+    expect(workflow).toContain(
+      'test "$("$install_dir/node_modules/.bin/agenttool-skill" --version)" = "0.3.0"',
+    );
+    expect(workflow).toContain('test "$(node "$cli" --version)" = "0.3.0"');
+    expect(workflow).toContain('test "$(bun "$cli" --version)" = "0.3.0"');
     for (const skillName of [
       "nen-contract-mantle",
       "nen-dependency-perimeter",
@@ -374,7 +392,7 @@ describe("boring test spine", () => {
       'npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$wallet_tarball" "$zerone_tarball"',
     );
     expect(workflow).toContain('w.PACKAGE_VERSION!=="0.1.3"');
-    expect(workflow).toContain('z.PACKAGE_VERSION!=="0.1.1"');
+    expect(workflow).toContain('z.PACKAGE_VERSION!=="0.1.2"');
     expect(workflow).toContain('z.ZERONE_ADAPTER_PROTOCOL!=="agent-wallet-zerone/0.1"');
     expect(workflow).toContain('typeof z.createZeroneDirectSignPlan!=="function"');
     expect(workflow).toContain(
@@ -426,7 +444,7 @@ describe("boring test spine", () => {
       workflow.match(
         /npm install --ignore-scripts --no-audit --no-fund --prefix/g,
       ),
-    ).toHaveLength(8);
+    ).toHaveLength(9);
 
     const uses = workflow
       .split("\n")
@@ -458,6 +476,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("          - skills");
     expect(workflow).toContain("          - browser");
     expect(workflow).toContain("          - alchemy");
+    expect(workflow).toContain("          - alchemy-agentcred");
     expect(workflow).toContain("          - kingdom");
     expect(workflow).toContain("          - repo-archive");
     expect(workflow).toContain("          - wallet-zerone");

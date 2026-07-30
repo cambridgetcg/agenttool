@@ -13,12 +13,14 @@ const ROOT = join(import.meta.dir, "../..");
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 
 const CURRENT_NPM_SPECIFIERS = [
-  "@agenttool/adds@0.2.2",
-  "@agenttool/credential-broker@0.1.0",
+  "@agenttool/adds@0.2.3",
+  "@agenttool/browser@0.5.0",
+  "@agenttool/credential-broker@0.3.1",
   "@agenttool/data@0.3.1",
-  "@agenttool/data-sync@0.1.1",
+  "@agenttool/data-sync@0.1.2",
   "@agenttool/sdk@0.17.0",
   "@agenttool/telescope@0.2.3",
+  "@agenttool/wallet@0.1.3",
 ] as const;
 
 describe("optional npm package discovery", () => {
@@ -27,6 +29,38 @@ describe("optional npm package discovery", () => {
     for (const specifier of CURRENT_NPM_SPECIFIERS) {
       expect(packages).toContain(`npm install --save-exact ${specifier}`);
     }
+    expect(packages).toContain(
+      "npm install --save-exact @agenttool/wallet@0.1.3 @agenttool/wallet-zerone@0.1.2",
+    );
+    expect(packages).toContain(
+      "npm install --save-exact @agenttool/skills@0.3.0",
+    );
+    expect(packages).toContain(
+      "npm install --save-exact @agenttool/collab@0.3.1",
+    );
+    expect(packages).toContain(
+      "npm install --save-exact @agenttool/kingdom@0.1.0",
+    );
+    expect(packages).toContain(
+      "npm install --save-exact @agenttool/alchemy@0.1.0-dev.0 @agenttool/credential-broker@0.3.1 @agenttool/alchemy-agentcred@0.1.0-dev.0",
+    );
+    expect(packages).toContain(
+      'href="https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md#verified-release-train--2026-07-29"',
+    );
+    for (const receiptFact of [
+      "30492737828",
+      "d05458b27b8832af7996c243abb22e3b400e5810fe5377ba58e1cb587d2461d8",
+      "30494659977",
+      "bc43b8be96dcc74a866926c9f5d98c00af9d8c4682cbb6f36ef77a7adbbaa8cc",
+      "30495292940",
+      "3fe42c4457e38f1fcdbc437c22c762ea7dabfe898714ec395287608a0480ea2b",
+      "30495589179",
+      "37b69b13db60eafc4a0bae578faca14467c0844e4f4c32793808b3499bcd8fd6",
+    ]) {
+      expect(packages).toContain(receiptFact);
+    }
+    expect(packages).not.toContain("@agenttool/credential-broker@0.1.0");
+    expect(packages).not.toMatch(/adapter npm command.*remains absent/i);
     expect(packages).toContain("authority: false");
     expect(packages).toMatch(/latest.*not.*release authority/i);
     expect(packages).toContain("artifact.size");

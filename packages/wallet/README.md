@@ -26,8 +26,8 @@ release records as mutable, so the optional locator is not an immutability
 guarantee. The `0.1.1` package incorrectly called itself unreleased; the
 `0.1.2` erratum ambiguously described the LOVE and GitHub bytes together as
 immutable. This paragraph supersedes both statements without rewriting either
-historical artifact. As independently checked on 2026-07-28, npm still served
-`0.1.0`.
+historical artifact. As independently checked on 2026-07-29, npm serves the
+byte-identical `0.1.3` artifact.
 
 The package does not create a wallet, derive or store a seed, export a private
 key, decode chain-specific calldata, choose transactions, contact an RPC
@@ -35,7 +35,7 @@ endpoint, broadcast automatically, or persist counters. Those responsibilities
 belong to explicit adapters and a durable host implementation.
 
 The separate
-[`@agenttool/wallet-zerone`](../wallet-zerone/README.md) `0.1.1` LOVE package
+[`@agenttool/wallet-zerone`](../wallet-zerone/README.md) `0.1.2` LOVE package
 is one such narrow local adapter. It adds exact Zerone message/direct-sign
 bytes, secp256k1 verification, and injected query/simulation/broadcast/lookup
 interfaces while leaving keys, custody, endpoints, durable reservations, and

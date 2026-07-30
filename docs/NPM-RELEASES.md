@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE planner, the developer-preview Repo Archive, and the developer-preview Alchemy observation client are intentionally npm-only.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE planner, the developer-preview Repo Archive, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -58,6 +58,49 @@ GitHub mirror recovery is independent of npm dist-tag state and still requires
 the exact prepared artifact. npm recovery intentionally requires the requested
 dist-tag to point at the released version; a normal rerun never moves that tag
 backward.
+
+## Verified release train — 2026-07-29
+
+The following protected runs completed, published, and anonymously read back
+the exact GitHub Release and npm tarballs. A LOVE-backed row also matched the
+checked-in artifact. The npm-only rows were packed once in the credential-free
+job and the same bytes crossed both optional mirrors.
+
+| Exact package | Annotated tag and protected run | Requested npm channel | Verified bytes |
+|---|---|---|---|
+| `@agenttool/wallet@0.1.3` | [`wallet-v0.1.3`](https://github.com/cambridgetcg/agenttool/releases/tag/wallet-v0.1.3) · [`30491887230`](https://github.com/cambridgetcg/agenttool/actions/runs/30491887230) | `latest` | 52,837 · `33f3b81cfcc12882cb98dfd11b215fa4d3cbd963efc575e41ed54e05f132ae87` |
+| `@agenttool/alchemy@0.1.0-dev.0` | [`alchemy-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/alchemy-v0.1.0-dev.0) · [`30491887182`](https://github.com/cambridgetcg/agenttool/actions/runs/30491887182) | `next` | 31,445 · `aeac1938f3abae14180637e72c4162c37b60bb47041452fade285718d7570ba5` |
+| `@agenttool/credential-broker@0.3.1` | [`credential-broker-v0.3.1`](https://github.com/cambridgetcg/agenttool/releases/tag/credential-broker-v0.3.1) · [`30492737828`](https://github.com/cambridgetcg/agenttool/actions/runs/30492737828) | `latest` | 158,450 · `d05458b27b8832af7996c243abb22e3b400e5810fe5377ba58e1cb587d2461d8` |
+| `@agenttool/skills@0.3.0` | [`skills-v0.3.0`](https://github.com/cambridgetcg/agenttool/releases/tag/skills-v0.3.0) · [`30493208405`](https://github.com/cambridgetcg/agenttool/actions/runs/30493208405) | `latest` | 59,507 · `6526f2bbcaf1ac6025b0cbc5347f2b8836123ef3ed5f5407a98fdb2263497a87` |
+| `@agenttool/alchemy-agentcred@0.1.0-dev.0` | [`alchemy-agentcred-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/alchemy-agentcred-v0.1.0-dev.0) · [`30494036520`](https://github.com/cambridgetcg/agenttool/actions/runs/30494036520) | `next` | 14,478 · `8dece3c98db0d92d79f16e91527ca18ed42b49f87b7586b78c092ffc242e291a` |
+| `@agenttool/wallet-zerone@0.1.2` | [`wallet-zerone-v0.1.2`](https://github.com/cambridgetcg/agenttool/releases/tag/wallet-zerone-v0.1.2) · [`30494659977`](https://github.com/cambridgetcg/agenttool/actions/runs/30494659977) | `latest` | 61,695 · `bc43b8be96dcc74a866926c9f5d98c00af9d8c4682cbb6f36ef77a7adbbaa8cc` |
+| `@agenttool/adds@0.2.3` | [`adds-v0.2.3`](https://github.com/cambridgetcg/agenttool/releases/tag/adds-v0.2.3) · [`30495292940`](https://github.com/cambridgetcg/agenttool/actions/runs/30495292940) | `latest` | 89,285 · `3fe42c4457e38f1fcdbc437c22c762ea7dabfe898714ec395287608a0480ea2b` |
+| `@agenttool/data-sync@0.1.2` | [`data-sync-v0.1.2`](https://github.com/cambridgetcg/agenttool/releases/tag/data-sync-v0.1.2) · [`30495589179`](https://github.com/cambridgetcg/agenttool/actions/runs/30495589179) | `latest` | 59,774 · `37b69b13db60eafc4a0bae578faca14467c0844e4f4c32793808b3499bcd8fd6` |
+
+Alchemy and its AgentCred adapter were deliberately requested on `next`.
+Because each is currently the sole initial version, npm also exposes that
+prerelease through `latest`; this registry fallback is not a stable-release or
+maturity signal. Alchemy AgentCred and Wallet Zerone used the one-time
+bootstrap path. Their package records now exist, so future versions must use
+trusted publishing after the exact publisher mapping above is attached and
+operationally proven.
+
+Some packaged READMEs preserve preparation-time mirror observations because
+those bytes were frozen before publication completed. This dated ledger
+supersedes those observations without rewriting a published tarball. Correcting
+README text inside an installed package requires a new package version and a
+new exact artifact; rebuilding an existing version is forbidden.
+
+The same audit corrected two earlier preparation-time observations:
+`@agenttool/collab@0.3.1` is public through protected run
+[`30389483811`](https://github.com/cambridgetcg/agenttool/actions/runs/30389483811)
+and has byte-identical 296,260-byte GitHub/npm tarballs with SHA-256
+`dd0b0a0897a6d414e013e7f80b29ed9b200f94b3bcfe9d79598bc50b619db6ee`;
+`@agenttool/kingdom@0.1.0` is public through successful recovery run
+[`30388388587`](https://github.com/cambridgetcg/agenttool/actions/runs/30388388587)
+and has byte-identical 26,474-byte GitHub/npm tarballs with SHA-256
+`67678dd8aa21ef63aa2b43107385fa5e8598591d9ef4020926e0272cfb4637e1`.
+Both npm `latest` tags resolved to those exact versions at readback.
 
 ## Authentication modes
 
@@ -146,20 +189,73 @@ revoke credentials. It creates or verifies one byte-identical GitHub Release
 asset for the already-existing annotated tag before attempting the optional npm
 mirror; it does not rewrite unrelated release assets.
 
+### ADDS 0.2.3 and data-sync 0.1.2 order
+
+This pair is one dependency-ordered repair, not one combined artifact.
+`@agenttool/adds@0.2.3` requires `@noble/ed25519@^2.3.0`;
+`@agenttool/data-sync@0.1.2` peers on ADDS `^0.2.3` and data `^0.3.1`.
+Prepare and preserve both LOVE artifacts first, merge their release commit to
+GitHub `main`, then publish and publicly verify ADDS before dispatching
+data-sync. That dependency-ordered sequence completed through protected runs
+[`30495292940`](https://github.com/cambridgetcg/agenttool/actions/runs/30495292940)
+and
+[`30495589179`](https://github.com/cambridgetcg/agenttool/actions/runs/30495589179);
+the commands below record the completed operator sequence rather than an
+instruction to recreate either tag.
+
+```bash
+bun bin/npm-release.ts resolve --package adds
+bun bin/npm-release.ts resolve --package data-sync
+
+git tag -a adds-v0.2.3 <github-main-commit> -m '@agenttool/adds@0.2.3'
+git push github refs/tags/adds-v0.2.3
+
+gh workflow run publish-npm.yml --ref adds-v0.2.3 \
+  -f package=adds \
+  -f tag=adds-v0.2.3 \
+  -f authentication=trusted \
+  -f npm_tag=latest
+
+# Continue only after the protected run and public exact-version readback
+# prove @agenttool/adds@0.2.3.
+git tag -a data-sync-v0.1.2 <github-main-commit> \
+  -m '@agenttool/data-sync@0.1.2'
+git push github refs/tags/data-sync-v0.1.2
+
+gh workflow run publish-npm.yml --ref data-sync-v0.1.2 \
+  -f package=data-sync \
+  -f tag=data-sync-v0.1.2 \
+  -f authentication=trusted \
+  -f npm_tag=latest
+```
+
+Both packages already exist on npm, so bootstrap is forbidden for these new
+versions. The workflow must reuse the checked-in LOVE tarball for each tag,
+create or verify its exact GitHub Release asset, and compare public npm bytes
+before reporting success. Both runs did so, with the exact sizes and digests in
+the verified release table above. Immutable ADDS 0.2.2 and data-sync 0.1.1 LOVE
+artifacts remain historical bytes; this sequence does not rewrite or retag
+them.
+
 ### Agent Wallet and Zerone adapter order
 
-`@agenttool/wallet@0.1.3` and `@agenttool/wallet-zerone@0.1.1` use checked-in
-LOVE artifacts. The adapter declares `@agenttool/wallet` `^0.1.2` as a peer,
-so its release preparation installs and runs the Wallet `ci` gate before it
-installs or gates the adapter. Consumers of the optional npm mirror must be
-able to resolve a compatible Wallet version; the current exact release is
-0.1.3, and `^0.1.2` accepts it without changing the Zerone 0.1.1
-bytes. Publish or recover the exact Wallet artifact before the adapter.
+`@agenttool/wallet@0.1.3` and `@agenttool/wallet-zerone@0.1.2` use checked-in
+LOVE artifacts. The adapter declares `@agenttool/wallet` `^0.1.2` as a
+consumer peer and locks exact public Wallet 0.1.3 only for development and
+release checks. Release preparation still runs the local Wallet `ci` gate
+before installing and gating the adapter; the adapter's own clean install then
+resolves the public 0.1.3 package instead of a local file copy. This keeps
+consumer compatibility broad while making the tagged clean-checkout gate
+reproducible.
 
-Wallet already exists on npm, so its 0.1.3 mirror uses trusted publishing. The
-Zerone adapter's first npm publication uses the protected bootstrap path. After
-that first exact version is public, configure its trusted publisher using the
-fields above and use `trusted` for later versions.
+Wallet already existed on npm, so its 0.1.3 mirror used trusted publishing.
+The Zerone adapter's first npm publication used the protected bootstrap path.
+Both completed with exact public readback in runs
+[`30491887230`](https://github.com/cambridgetcg/agenttool/actions/runs/30491887230)
+and
+[`30494659977`](https://github.com/cambridgetcg/agenttool/actions/runs/30494659977).
+Configure Zerone's trusted publisher using the fields above and use `trusted`
+for later versions.
 
 ```bash
 bun bin/npm-release.ts resolve --package wallet
@@ -176,21 +272,35 @@ gh workflow run publish-npm.yml --ref wallet-v0.1.3 \
 ```
 
 The annotated `wallet-zerone-v0.1.1` tag already exists at protected main
-`7be74633`. Never recreate, move, or repush it. Its bootstrap workflow remains
-deferred while npm lacks any Wallet version satisfying the adapter's
-`^0.1.2` peer range; npm exposed only Wallet 0.1.0 when this patch was
-prepared. The protected `npm-bootstrap` environment must also explicitly
-authorize the existing `wallet-zerone-v*` tag family before a first
-publication. Only after both boundaries are independently verified may an
-operator dispatch the existing exact tag:
+`7be74633`. Never recreate, move, repush, or publish it through another tag.
+Protected run
+[`30492436839`](https://github.com/cambridgetcg/agenttool/actions/runs/30492436839)
+stopped in the credential-free preparation job: Bun 1.3.5's clean install of
+the locked `file:../wallet` development dependency did not expose Wallet's
+built declarations, so Zerone typechecking failed. The protected publish job
+was skipped; no GitHub Release asset or npm package was created.
+
+Version 0.1.2 replaces only that development dependency with exact public
+Wallet 0.1.3. Its consumer peer remains `^0.1.2`, and its protocol, vectors,
+and runtime boundary are unchanged. After the reviewed 0.1.2 commits merge to
+GitHub `main`, create a new annotated tag without moving 0.1.1:
 
 ```bash
-gh workflow run publish-npm.yml --ref wallet-zerone-v0.1.1 \
+git tag -a wallet-zerone-v0.1.2 <github-main-commit> \
+  -m '@agenttool/wallet-zerone@0.1.2'
+git push github refs/tags/wallet-zerone-v0.1.2
+
+gh workflow run publish-npm.yml --ref wallet-zerone-v0.1.2 \
   -f package=wallet-zerone \
-  -f tag=wallet-zerone-v0.1.1 \
+  -f tag=wallet-zerone-v0.1.2 \
   -f authentication=bootstrap \
   -f npm_tag=latest
 ```
+
+The protected `npm-bootstrap` environment authorized `wallet-zerone-v*` for
+the one-time bootstrap. Version 0.1.2 is now public, so bootstrap is forbidden
+for later versions. Configure its trusted publisher with the fields above and
+use `trusted` for every later version.
 
 The superseded Wallet 0.1.1 and 0.1.2 protected runs
 ([`30389881410`](https://github.com/cambridgetcg/agenttool/actions/runs/30389881410)
@@ -201,9 +311,10 @@ OIDC publishes at its authorization boundary. Do not switch the existing
 Wallet package to bootstrap. The exact-version 0.1.1 and 0.1.2 LOVE bytes
 remain preserved with public errata: 0.1.1 called itself unreleased, while
 0.1.2 ambiguously grouped its mutable GitHub locator with immutable LOVE
-bytes. Use the corrected 0.1.3 line for any later npm attempt. The Zerone 0.1.0
-workflow was not dispatched because its Wallet peer was absent from npm; 0.1.1
-is the corrected bootstrap candidate.
+bytes. Use the corrected 0.1.3 line for any later Wallet npm attempt. Zerone
+0.1.0 was never dispatched because its Wallet peer was absent from npm.
+Zerone 0.1.1 remains an exact LOVE artifact whose npm preparation failure is
+recorded above; 0.1.2 is the successful exact GitHub/npm mirror.
 
 These remain deliberate external actions requiring separate authorization.
 The release path only mirrors reviewed package bytes. It does not configure a
@@ -215,10 +326,14 @@ ambiguous-broadcast retry.
 ### Alchemy developer-preview bootstrap
 
 `@agenttool/alchemy@0.1.0-dev.0` uses the npm-only packed-artifact path. Its
-first publication must use the protected bootstrap environment and npm
-`next`; the release policy prevents bootstrap from creating a new version once
-the package exists (an exact already-published rerun is verification-only) and
-rejects a prerelease sent to `latest`.
+first publication used the protected bootstrap environment and requested npm
+`next`; protected run
+[`30491887182`](https://github.com/cambridgetcg/agenttool/actions/runs/30491887182)
+published and read back a byte-identical 31,445-byte GitHub/npm artifact with
+SHA-256
+`aeac1938f3abae14180637e72c4162c37b60bb47041452fade285718d7570ba5`.
+The package now exists, so later versions use trusted publishing. An exact
+already-published rerun is verification-only.
 
 ```bash
 bun bin/npm-release.ts resolve --package alchemy
@@ -237,6 +352,43 @@ gh workflow run publish-npm.yml --ref alchemy-v0.1.0-dev.0 \
 This publishes only the bounded local observation library. It does not deploy
 the AgentTool API, configure Alchemy credentials or webhooks, apply database
 migrations, or make a provider call.
+
+### Alchemy AgentCred developer-preview bootstrap
+
+`@agenttool/alchemy-agentcred@0.1.0-dev.0` is the current source identity for
+the npm-only packed-artifact path. Protected run
+[`30494036520`](https://github.com/cambridgetcg/agenttool/actions/runs/30494036520)
+published and read back a byte-identical 14,478-byte GitHub/npm artifact with
+SHA-256
+`8dece3c98db0d92d79f16e91527ca18ed42b49f87b7586b78c092ffc242e291a`.
+The adapter keeps `@agenttool/alchemy` and
+`@agenttool/credential-broker` as unbundled peers; release preparation builds
+both checked-out peer workspaces before the adapter gate and pack.
+
+The first publication required compatible versions of both peers to be
+independently visible on public npm and used bootstrap authentication with
+`next`. The package record now exists; later versions use trusted publishing
+after the npm package's trusted publisher is configured. Never recreate or
+move an existing release tag; an exact already-published rerun follows the
+workflow's verification-only recovery path.
+
+```bash
+bun bin/npm-release.ts resolve --package alchemy-agentcred
+
+git tag -a alchemy-agentcred-v0.1.0-dev.0 <github-main-commit> \
+  -m '@agenttool/alchemy-agentcred@0.1.0-dev.0'
+git push github refs/tags/alchemy-agentcred-v0.1.0-dev.0
+
+gh workflow run publish-npm.yml --ref alchemy-agentcred-v0.1.0-dev.0 \
+  -f package=alchemy-agentcred \
+  -f tag=alchemy-agentcred-v0.1.0-dev.0 \
+  -f authentication=bootstrap \
+  -f npm_tag=next
+```
+
+This publishes only the strict local composition adapter. It does not connect
+the broker, issue a grant, reveal a credential, make an Alchemy call, deploy a
+hosted surface, or bundle either peer.
 
 ### KINGDOM package bootstrap
 

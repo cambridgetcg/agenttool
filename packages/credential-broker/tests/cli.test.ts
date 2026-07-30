@@ -380,6 +380,27 @@ describe("human controller CLI", () => {
     }
   });
 
+  test("resume-stage accepts no value, source, target, or command override", () => {
+    const sentinel = "agentcred-test-sentinel-never-real";
+    for (const flag of [
+      "--value",
+      "--secret",
+      "--password",
+      "--stdin",
+      "--env",
+      "--provider-url",
+      "--command",
+      "--service",
+      "--account",
+      "--provider-key-id",
+    ]) {
+      const result = control(["resume-stage", flag, sentinel]);
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout.toString()).not.toContain(sentinel);
+      expect(result.stderr.toString()).not.toContain(sentinel);
+    }
+  });
+
   test("verifies a live linked archive chain read-only without requiring a TTY", async () => {
     const root = await mkdtemp(join(tmpdir(), "agentcred-control-"));
     roots.push(root);
@@ -481,19 +502,21 @@ describe("human controller CLI", () => {
   });
 
   test("refuses controller mutation without a human TTY", () => {
-    const result = control([
-      "stage",
-      "--config",
-      "/tmp/not-opened.json",
-      "--credential",
-      "agenttool/candidate",
-    ]);
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr.toString()).toContain(
-      "interactive terminal as an anti-pipe check",
-    );
-    expect(result.stderr.toString()).toContain(
-      "does not authenticate human presence",
-    );
+    for (const command of ["stage", "resume-stage", "recover-stage"]) {
+      const result = control([
+        command,
+        "--config",
+        "/tmp/not-opened.json",
+        "--credential",
+        "agenttool/candidate",
+      ]);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr.toString()).toContain(
+        "interactive terminal as an anti-pipe check",
+      );
+      expect(result.stderr.toString()).toContain(
+        "does not authenticate human presence",
+      );
+    }
   });
 });

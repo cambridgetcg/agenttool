@@ -11,6 +11,7 @@
 > confirmation for EVM deposits.
 >
 > **Code:** `packages/alchemy/src/` ·
+> `packages/alchemy-agentcred/src/` ·
 > `packages/credential-broker/src/jsonrpc*.ts` ·
 > `api/src/services/economy/crypto/{alchemy-notify,alchemy-watch-reconciler,deposit-watch,inbound-deposits}.ts` ·
 > `api/src/workers/deposit-watch/` ·
@@ -23,6 +24,7 @@
 > `20260726T214500_deposit_watch_target_registry.sql`
 >
 > **Tests:** `packages/alchemy/tests/` ·
+> `packages/alchemy-agentcred/tests/` ·
 > `packages/credential-broker/tests/jsonrpc-read.test.ts` ·
 > `api/tests/{alchemy-notify,alchemy-watch-reconciler,deposit-watch-reconciliation,deposit-watch-worker-prepare,deposit-finality,deposit-finality-migration,crypto-webhook-fail-closed}.test.ts` ·
 > `api/tests/integration/deposit-watch-target-registry-postgres.test.ts`
@@ -46,6 +48,8 @@ The implementation therefore uses small closed interfaces:
 
 - `@agenttool/alchemy` understands typed observations but never credentials or
   endpoint URLs;
+- `@agenttool/alchemy-agentcred` composes only the seven shared reads over
+  already-issued, connection-bound grants;
 - `@agenttool/credential-broker` can use a scoped Bearer credential without
   returning it to the agent, but exposes only seven standard reads;
 - the API owns durable watch state, webhook evidence, finality policy, and
@@ -84,9 +88,18 @@ rather than creating a new dependency on a retiring surface. See
 
 `packages/alchemy` is source version `0.1.0-dev.0`. Its allowlisted optional
 npm-only prerelease identity is annotated tag `alchemy-v0.1.0-dev.0` with npm
-dist-tag `next`; it is not part of an immutable LOVE release inventory. Source
-metadata and a successful local pack do not prove registry availability—use
-the protected workflow's public receipt and exact-byte checks.
+dist-tag `next`; it is not part of an immutable LOVE release inventory.
+Protected run
+[`30491887182`](https://github.com/cambridgetcg/agenttool/actions/runs/30491887182)
+published and anonymously read back byte-identical 31,445-byte GitHub/npm
+tarballs with SHA-256
+`aeac1938f3abae14180637e72c4162c37b60bb47041452fade285718d7570ba5`.
+Because this is the sole initial prerelease, npm also exposes it through
+`latest`; that fallback is not a maturity signal. Install the exact version:
+
+```bash
+npm install --save-exact @agenttool/alchemy@0.1.0-dev.0
+```
 
 The client permits eight underlying provider methods:
 
@@ -137,10 +150,13 @@ broadcaster, wallet, simulation API, or Alchemy admin client.
 ## Credential-broker bridge
 
 Repository source and the checked-in exact LOVE artifact for
-`@agenttool/credential-broker` are now `0.3.0`. npm availability remains
-independent: neither source metadata nor a LOVE artifact proves registry
-publication. The package SemVer changed because the new source bytes must
-never be rebuilt under the old release identity; the negotiated wire names remain
+`@agenttool/credential-broker` are now `0.3.1`. Protected run
+[`30492737828`](https://github.com/cambridgetcg/agenttool/actions/runs/30492737828)
+published and anonymously read back byte-identical GitHub/npm mirrors of the
+158,450-byte LOVE artifact with SHA-256
+`d05458b27b8832af7996c243abb22e3b400e5810fe5377ba58e1cb587d2461d8`.
+The package SemVer changed because the new source bytes must never be rebuilt
+under the old release identity; the negotiated wire names remain
 `agentcred/0.1` and `agentcred.evm-jsonrpc-read/0.1`.
 
 The negotiated profile permits exactly the seven standard `eth_*` methods
@@ -167,10 +183,44 @@ Important limits remain:
 - the portable same-user Node broker is a developer preview, not strong
   executable identity or universal consent isolation.
 
-There is no bundled production composition adapter or live provider proof yet.
-A trusted host can implement the structural transport for the seven shared
-reads. Transfers need a separately reviewed bounded host transport because
-they are outside the AgentCred profile.
+`packages/alchemy-agentcred` now provides the small composition transport for
+the seven shared reads. Trusted host code supplies an already-connected client
+and a fixed Alchemy-network-to-`GrantHandle` map. The adapter validates the
+Alchemy envelope and exact method/params tuple, then rechecks the public grant
+receipt's operation, exact profile, exact origin derived from the fixed
+Alchemy network slug, owner-asserted chain, private-network denial, effective
+response ceiling, and complete closed method set before every AgentCred client
+handoff. It rebinds the result to the saved Alchemy operation ID, method, and
+chain, and collapses arbitrary broker exceptions to fixed messages. AgentCred
+may queue after handoff, so the local abort/deadline check cannot prevent or
+recall a later broker dispatch or restore quota.
+
+This does not make the map endpoint proof, connect the broker, issue or revoke
+a grant, read Keychain, receive a credential, call a provider directly, or add
+a raw RPC/fetch escape hatch. It rejects `alchemy_getAssetTransfers`, generic
+RPC, and state-changing methods before calling the AgentCred client. Transfers
+still need a separately reviewed bounded host transport because they are
+outside the negotiated profile.
+
+The adapter's current source identity is `0.1.0-dev.0`. Its optional npm-only
+release identity uses annotated tag `alchemy-agentcred-v0.1.0-dev.0` and npm
+dist-tag `next`; clean release preparation builds both peer packages before
+packing the adapter. Protected run
+[`30494036520`](https://github.com/cambridgetcg/agenttool/actions/runs/30494036520)
+published and anonymously read back byte-identical 14,478-byte GitHub/npm
+tarballs with SHA-256
+`8dece3c98db0d92d79f16e91527ca18ed42b49f87b7586b78c092ffc242e291a`.
+Because this is the sole initial prerelease, npm also exposes it through
+`latest`; that fallback is not a maturity signal. A complete exact install is:
+
+```bash
+npm install --save-exact @agenttool/alchemy@0.1.0-dev.0 @agenttool/credential-broker@0.3.1 @agenttool/alchemy-agentcred@0.1.0-dev.0
+```
+
+The adapter has no LOVE inventory entry, hosted route, deployment, or live
+provider proof. Its socket integration test uses a real local broker and
+client with an obvious non-secret in-memory sentinel, fake DNS, and fake
+outbound transport.
 
 ## Durable address-watch flow
 

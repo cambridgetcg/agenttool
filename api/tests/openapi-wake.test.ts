@@ -204,7 +204,7 @@ describe("wake OpenAPI contract", () => {
         "deployed_bridge",
       ]),
     );
-    expect(adapterSchema?.properties?.version?.const).toBe("0.1.1");
+    expect(adapterSchema?.properties?.version?.const).toBe("0.1.2");
     expect(adapterSchema?.properties?.availability?.const).toBe(
       "local_offline_source_only",
     );
@@ -213,11 +213,11 @@ describe("wake OpenAPI contract", () => {
     ).toBe("public_exact_artifact");
     expect(
       adapterSchema?.properties?.distribution?.properties?.npm?.const,
-    ).toBe("absent");
+    ).toBe("public_exact_mirror");
     expect(
       adapterSchema?.properties?.distribution?.properties?.github_release
         ?.const,
-    ).toBe("absent");
+    ).toBe("public_exact_mirror");
     for (const field of [
       "hosted",
       "custody",

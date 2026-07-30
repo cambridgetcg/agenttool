@@ -721,13 +721,25 @@ the Wallet Zerone adapter has custody, a hosted endpoint, a durable execution
 host, or a live-chain deployment.
 Historical catalog releases whose manifests say `license: null` provide no
 reuse grant; the current `@agenttool/data@0.3.1`,
-`@agenttool/data-sync@0.1.1`, `@agenttool/adds@0.2.2`,
-`@agenttool/credential-broker@0.3.0`, `@agenttool/sdk@0.17.0`, and
+`@agenttool/data-sync@0.1.2`, `@agenttool/adds@0.2.3`,
+`@agenttool/credential-broker@0.3.1`, `@agenttool/sdk@0.17.0`, and
 `@agenttool/telescope@0.2.3`, `@agenttool/wallet@0.1.3`,
-`@agenttool/wallet-zerone@0.1.1`, and `@agenttool/browser@0.5.0` releases
+`@agenttool/wallet-zerone@0.1.2`, and `@agenttool/browser@0.5.0` releases
 instead declare `Apache-2.0` without retroactively changing those immutable
 older releases. Historical Wallet `0.1.0`/`0.1.1`/`0.1.2` and Wallet Zerone
-`0.1.0` LOVE artifacts remain separately addressable and are not rewritten;
-public errata supersede their stale release-state prose. GitHub Releases are
-optional mutable locators and do not inherit the LOVE exact-version
+`0.1.0`/`0.1.1` LOVE artifacts remain separately addressable and are not
+rewritten; public errata supersede stale release-state prose and record that
+the 0.1.1 Zerone npm attempt stopped before mirror mutation. GitHub Releases
+are optional mutable locators and do not inherit the LOVE exact-version
 preservation policy.
+
+The ADDS 0.2.3 and data-sync 0.1.2 release inventory is coordinated:
+data-sync peers on ADDS `^0.2.3`, while ADDS requires
+`@noble/ed25519@^2.3.0`. Their JavaScript source maps embed the indexed
+TypeScript source text and their tarballs omit declaration maps because the
+source tree is not shipped. Immutable ADDS 0.2.2 and data-sync 0.1.1 remain
+separately addressable. ADDS 0.2.2's declared Noble floor could resolve 2.2.3,
+which lacked the `Point` API used by verification and therefore rejected valid
+signatures rather than accepting invalid ones. Labels, dependency ranges, and
+source-map completeness are package-release facts; LOVE v1 still authenticates
+none of them beyond binding the inspected tarball bytes to its manifest.

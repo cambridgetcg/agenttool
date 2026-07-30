@@ -6,7 +6,7 @@
       "name": "@agenttool/adds",
       "dependencies": {
         "@noble/curves": "^2.2.0",
-        "@noble/ed25519": "^2.2.3",
+        "@noble/ed25519": "^2.3.0",
         "@noble/hashes": "^2.0.1",
       },
       "devDependencies": {

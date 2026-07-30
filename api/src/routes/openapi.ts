@@ -870,7 +870,7 @@ const COMMON_SCHEMAS = {
                 type: "string",
                 const: "@agenttool/wallet-zerone",
               },
-              version: { type: "string", const: "0.1.1" },
+              version: { type: "string", const: "0.1.2" },
               source: { type: "string", format: "uri" },
               love_manifest: { type: "string", format: "uri" },
               availability: {
@@ -884,15 +884,18 @@ const COMMON_SCHEMAS = {
                 properties: {
                   observed_at: {
                     type: "string",
-                    const: "2026-07-28",
+                    const: "2026-07-29",
                     format: "date",
                   },
                   love: {
                     type: "string",
                     const: "public_exact_artifact",
                   },
-                  npm: { type: "string", const: "absent" },
-                  github_release: { type: "string", const: "absent" },
+                  npm: { type: "string", const: "public_exact_mirror" },
+                  github_release: {
+                    type: "string",
+                    const: "public_exact_mirror",
+                  },
                 },
                 required: ["observed_at", "love", "npm", "github_release"],
               },

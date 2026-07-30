@@ -48,6 +48,8 @@ export interface LovePackageSpec {
   packagePath: string;
   releaseTag: string;
   buildCommands: readonly (readonly string[])[];
+  expectedDependencies?: Readonly<Record<string, string>>;
+  expectedPeerDependencies?: Readonly<Record<string, string>>;
 }
 
 interface ReleaseIdentity {
@@ -61,10 +63,15 @@ const TOOL_ROOT = resolve(import.meta.dir, "..");
 export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
   {
     name: "@agenttool/adds",
-    version: "0.2.2",
+    version: "0.2.3",
     packagePath: "packages/data-protocol",
-    releaseTag: "adds-v0.2.2",
+    releaseTag: "adds-v0.2.3",
     buildCommands: [["bun", "run", "ci"]],
+    expectedDependencies: {
+      "@noble/curves": "^2.2.0",
+      "@noble/ed25519": "^2.3.0",
+      "@noble/hashes": "^2.0.1",
+    },
   },
   {
     name: "@agenttool/data",
@@ -78,16 +85,20 @@ export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
   },
   {
     name: "@agenttool/data-sync",
-    version: "0.1.1",
+    version: "0.1.2",
     packagePath: "packages/data-sync",
-    releaseTag: "data-sync-v0.1.1",
+    releaseTag: "data-sync-v0.1.2",
     buildCommands: [["bun", "run", "ci"], ["bun", "run", "build"]],
+    expectedPeerDependencies: {
+      "@agenttool/adds": "^0.2.3",
+      "@agenttool/data": "^0.3.1",
+    },
   },
   {
     name: "@agenttool/credential-broker",
-    version: "0.3.0",
+    version: "0.3.1",
     packagePath: "packages/credential-broker",
-    releaseTag: "credential-broker-v0.3.0",
+    releaseTag: "credential-broker-v0.3.1",
     buildCommands: [["bun", "run", "ci"]],
   },
   {
@@ -137,6 +148,13 @@ export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
     version: "0.1.1",
     packagePath: "packages/wallet-zerone",
     releaseTag: "wallet-zerone-v0.1.1",
+    buildCommands: [["bun", "run", "ci"]],
+  },
+  {
+    name: "@agenttool/wallet-zerone",
+    version: "0.1.2",
+    packagePath: "packages/wallet-zerone",
+    releaseTag: "wallet-zerone-v0.1.2",
     buildCommands: [["bun", "run", "ci"]],
   },
   {
@@ -462,6 +480,21 @@ function assertPackageIdentity(packageJson: PackageJson, spec: LovePackageSpec):
     throw new Error(
       `${spec.name} version is ${String(packageJson.version)}, expected release version ${spec.version}`,
     );
+  }
+  for (const [field, expected] of [
+    ["dependencies", spec.expectedDependencies],
+    ["peerDependencies", spec.expectedPeerDependencies],
+  ] as const) {
+    if (expected === undefined) continue;
+    const actual = sortedStringMap(packageJson[field] ?? {}, `package.json ${field}`);
+    const expectedSorted = Object.fromEntries(
+      Object.entries(expected).sort(([left], [right]) => left.localeCompare(right)),
+    );
+    if (JSON.stringify(actual) !== JSON.stringify(expectedSorted)) {
+      throw new Error(
+        `${spec.name} package.json ${field} is ${JSON.stringify(actual)}, expected ${JSON.stringify(expectedSorted)}`,
+      );
+    }
   }
 }
 
@@ -1177,6 +1210,13 @@ export async function verifyLovePackages(options: RegistryOptions): Promise<void
     if (source.path !== spec.packagePath) {
       throw new Error(`${spec.name}@${spec.version} source.path does not match the release inventory`);
     }
+    if (typeof source.revision !== "string") {
+      throw new Error(`${spec.name}@${spec.version} source.revision is not a string`);
+    }
+    assertPackageIdentity(
+      await packageJsonAtRevision(repoRoot, source.revision, spec.packagePath),
+      spec,
+    );
     if (spec.releaseTag !== `${packageSlug(spec)}-v${spec.version}`) {
       throw new Error(`${spec.name}@${spec.version} releaseTag does not follow the immutable tag convention`);
     }

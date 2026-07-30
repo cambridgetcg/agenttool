@@ -1,6 +1,6 @@
 # Credential handoff and rotation
 
-**Version:** `0.3.0` controller-plane design and macOS implementation.
+**Version:** `0.3.1` controller-plane design and macOS implementation.
 Distribution availability remains separately verifiable.
 
 `agentcred-control` standardizes how an operator places a provider credential
@@ -127,7 +127,8 @@ provider issues replacement (manual)
 Crash-recovery and alternate branches are:
 
 ```text
-provisioning --recover-stage--> staged
+provisioning --recover-stage [exact item present]--> staged
+provisioning --resume-stage [exact item present or fixed native prompt]--> staged
 
 cutover/draining --fresh old proof + reason--> rolled_back
 
@@ -219,8 +220,39 @@ agentcred-control recover-stage \
 ```
 
 Recovery advances only when the exact Keychain item exists and its metadata
-expiry/overlap target remains valid. If absent, explicitly clean up the
-provider credential and use the candidate-abort flow.
+expiry/overlap target remains valid. It never prompts or creates an item, so
+its absent-item behavior remains compatible with the explicit provider-cleanup
+and candidate-abort procedure.
+
+If the prompt was cancelled before item creation, and the same intended
+provider-issued value remains available, use the distinct explicit resume:
+
+```sh
+agentcred-control resume-stage \
+  --config /absolute/path/config.json \
+  --credential service/default/candidate
+```
+
+Resume is valid only in `provisioning`. It holds the lifecycle lock, checks
+expiry/overlap before inspection, and inspects only the committed random
+service plus manifest account. If that exact item exists it reconciles without
+prompting. If absent, it reads the clock again and rechecks both time bounds
+immediately before invoking the same fixed native macOS Keychain prompt. It
+then confirms the exact item, rechecks expiry/overlap, and advances to
+`staged`. Initial `stage` applies the same fresh pre-prompt check after its
+write-ahead `provisioning` save. There is no credential value, stdin/env
+source, provider URL, or generic command argument. Resume does not call the
+provider or prove which value was entered; when value identity is uncertain,
+use provider cleanup and the abort flow instead.
+
+If a staging controller was killed or crashed, confirm that its native prompt
+has ended and that no surviving `/usr/bin/security add-generic-password` child
+from that attempt remains before recovering the lock or resuming. The lock
+tracks the controller PID only. It does not track or supervise that child
+across a parent `SIGKILL` or crash. The fixed committed service/account and the
+absence of `-U` mean a later controller will not update an already-created
+item, but a surviving prompt can still race a new prompt and Keychain presence
+does not prove value identity.
 
 ## Routine rotation
 
@@ -301,13 +333,18 @@ automatic stale-lock deletion.
 1. Stop all broker/controller processes for the manifest.
 2. Run `lock-status --manifest PATH`.
 3. Verify the recorded PID is absent.
-4. Run `recover-lock --manifest PATH --nonce EXACT_NONCE
+4. Confirm that no native Keychain prompt and no surviving
+   `/usr/bin/security add-generic-password` child from that controller remain.
+   This is an operator check; the lock record cannot establish it.
+5. Run `recover-lock --manifest PATH --nonce EXACT_NONCE
    --confirm-stale-lock`.
 
 Recovery refuses a live PID, indeterminate liveness, changed inode, changed
 record, or changed nonce. Node has no conditional unlink-by-inode primitive,
 so this remains cooperative coordination, not a boundary against a malicious
-same-user process.
+same-user process. It also has no cross-crash child-process supervision. If an
+old prompt may still be alive or the entered value is ambiguous, do not
+recover-and-resume; clean up the provider candidate and follow the abort flow.
 
 ## Closure archives
 
