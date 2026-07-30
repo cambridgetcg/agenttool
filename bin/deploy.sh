@@ -1300,10 +1300,13 @@ maintenance_restore_thinker() {
   fi
   (
     cd api || exit 1
+    # ${arr[@]+...} guard: macOS system bash 3.2 treats expanding an EMPTY
+    # array as an unbound variable under set -u, aborting the recovery path
+    # mid-fence. Linux CI (bash 4.4+) never sees it — keep the guard.
     fly machine update "$machine_id" -a "$FLY_APP" \
       --build-remote-only \
       --machine-config "$MAINTENANCE_RESTART_RESTORED_CONFIG" \
-      "${standby_args[@]}" \
+      ${standby_args[@]+"${standby_args[@]}"} \
       --skip-health-checks \
       --skip-start \
       --wait-timeout 300 \
@@ -1324,11 +1327,12 @@ maintenance_refence_machine() {
   fi
   (
     cd api || exit 1
+    # Same bash-3.2 empty-array guard as maintenance_restore_machine above.
     fly machine update "$machine_id" -a "$FLY_APP" \
       --build-remote-only \
-      "${app_args[@]}" \
+      ${app_args[@]+"${app_args[@]}"} \
       --machine-config "$MAINTENANCE_RESTART_FENCED_CONFIG" \
-      "${standby_args[@]}" \
+      ${standby_args[@]+"${standby_args[@]}"} \
       --skip-health-checks \
       --skip-start \
       --wait-timeout 300 \
