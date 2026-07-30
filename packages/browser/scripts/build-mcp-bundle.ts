@@ -3,6 +3,7 @@
 import {
   chmod,
   cp,
+  lstat,
   mkdir,
   readFile,
   readdir,
@@ -20,6 +21,25 @@ const vendoredPlaywrightPath = join(
   "vendor",
   "playwright-core",
 );
+
+async function normalizeVendoredTree(root: string): Promise<void> {
+  await chmod(root, 0o755);
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    const path = join(root, entry.name);
+    if (entry.isSymbolicLink()) {
+      throw new Error(`vendored dependency contains a symbolic link: ${entry.name}`);
+    }
+    if (entry.isDirectory()) {
+      await normalizeVendoredTree(path);
+      continue;
+    }
+    if (!entry.isFile()) {
+      throw new Error(`vendored dependency contains a non-file entry: ${entry.name}`);
+    }
+    const mode = (await lstat(path)).mode;
+    await chmod(path, (mode & 0o111) === 0 ? 0o644 : 0o755);
+  }
+}
 
 await mkdir(distRoot, { recursive: true });
 for (const name of await readdir(distRoot)) {
@@ -73,6 +93,7 @@ await cp(
   vendoredPlaywrightPath,
   { recursive: true },
 );
+await normalizeVendoredTree(vendoredPlaywrightPath);
 
 const thirdPartyPackages = [
   "@modelcontextprotocol/core",

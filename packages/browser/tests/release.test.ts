@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import {
   dirname,
@@ -123,6 +123,9 @@ describe("release identity", () => {
             )
             && !isAbsolute(packageRelative),
         ).toBe(true);
+        const sourceStat = await lstat(source);
+        expect(sourceStat.isFile()).toBe(true);
+        expect(sourceStat.mode & 0o7022).toBe(0);
         const destination = join(isolatedPackage, packageRelative);
         await mkdir(dirname(destination), { recursive: true });
         await cp(source, destination);
