@@ -25,7 +25,7 @@ three-directory restore simulator and a package API; it does not create cloud
 storage adapters, a hosted archive service, independent physical failure
 domains, recovery-key custody, or a durability guarantee.
 The Agent Browser page documents the separately installed exact public
-`@agenttool/browser@0.5.1` local runtime with TypeScript, JSONL, and stdio MCP
+`@agenttool/browser@0.6.0` local runtime with TypeScript, JSONL, and stdio MCP
 doors. Its package root is also a Codex plugin: a self-contained packed
 Node-targeted bundle starts the same MCP core without a parent dependency tree.
 The plugin manifest supplies no authority flag, so it retains the headless,
@@ -57,8 +57,12 @@ Playwright-managed redirect hops are not independently revalidated for
 destination class or URL userinfo. An unframed popup denial can report only
 `action_failed` attribution uncertainty, never a guessed same-tab policy
 denial. Exact `0.1.0`, `0.2.0`, `0.3.0`, and `0.5.0` package paths remain
-historical and immutable. Version `0.5.1` changes distribution packaging, not
-the 0.5.0 runtime, tools, protocols, or authority model. The docs deployment
+historical and immutable. Version `0.5.1` changed distribution packaging, not
+the 0.5.0 runtime, tools, protocols, or authority model. Version `0.6.0`
+preserves the same nine-tool/plugin boundary and adds a direct-only exact
+material, local RhetorLint, and explicitly injected pinned-HF observation
+subpath. It performs no automatic upload/action and determines no factual
+truth. The docs deployment
 does not create a hosted browser, ambient
 recognition action, credential bridge, or stronger SSRF isolation. The
 package is distinct from the disabled-by-default, Redis-backed hosted

@@ -724,7 +724,7 @@ reuse grant; the current `@agenttool/data@0.3.1`,
 `@agenttool/data-sync@0.1.2`, `@agenttool/adds@0.2.3`,
 `@agenttool/credential-broker@0.3.1`, `@agenttool/sdk@0.17.0`, and
 `@agenttool/telescope@0.2.3`, `@agenttool/wallet@0.1.3`,
-`@agenttool/wallet-zerone@0.1.2`, and `@agenttool/browser@0.5.1` releases
+`@agenttool/wallet-zerone@0.1.2`, and `@agenttool/browser@0.6.0` releases
 instead declare `Apache-2.0` without retroactively changing those immutable
 older releases. Historical Wallet `0.1.0`/`0.1.1`/`0.1.2` and Wallet Zerone
 `0.1.0`/`0.1.1` LOVE artifacts remain separately addressable and are not
@@ -733,11 +733,21 @@ the 0.1.1 Zerone npm attempt stopped before mirror mutation. GitHub Releases
 are optional mutable locators and do not inherit the LOVE exact-version
 preservation policy.
 
-Browser `0.5.1` adds a package-root Codex manifest and self-contained packed
-Node MCP bundle over the unchanged exact `0.5.0` runtime. LOVE binds those
-packed bytes; it does not enable the plugin in a host, widen Browser authority,
-install Chrome, or create a hosted browser service. Exact Browser `0.5.0`
-remains separately addressable and immutable.
+Browser `0.6.0` adds a direct-only understanding subpath. It binds bounded
+observed text to Browser provenance, can mark visible rhetoric locally through
+RhetorLint `0.1.2`, and accepts a caller-injected interpretation adapter whose
+Hugging Face model descriptor must carry a full revision. Remote text
+disclosure needs literal opt-in and is attempted at most once. Model scores,
+RhetorLint marks, and their absence remain observations—not proof of intent,
+external facts, or truth. No interpretation function is added to the nine MCP
+operations, and the package supplies no model, token, hosted inference route,
+or automatic network call.
+
+Browser `0.5.1` added the package-root Codex manifest and self-contained packed
+Node MCP bundle over exact `0.5.0` runtime authority. LOVE binds each release's
+packed bytes; it does not enable a plugin in a host, widen Browser authority,
+install Chrome, or create a hosted browser service. Exact Browser `0.5.0` and
+`0.5.1` remain separately addressable and immutable.
 
 The ADDS 0.2.3 and data-sync 0.1.2 release inventory is coordinated:
 data-sync peers on ADDS `^0.2.3`, while ADDS requires

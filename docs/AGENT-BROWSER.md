@@ -10,7 +10,7 @@
 
 ## Status
 
-The repository contains the exact `@agenttool/browser@0.5.1` source. Its
+The repository contains the exact `@agenttool/browser@0.6.0` source. Its
 canonical public record is the immutable LOVE artifact; npm and the annotated
 GitHub Release are optional mirrors whose bytes are verified independently by
 the protected release workflow. Distribution state can change independently
@@ -41,6 +41,14 @@ with Browser's public, headless, ephemeral defaults. The bundle vendors
 `playwright-core` and the archive carries its third-party notices, but it does
 not bundle, install, or download a browser.
 
+Version `0.6.0` preserves the same runtime, plugin, nine tools, protocol, and
+authority model. It adds only a direct-TypeScript
+`@agenttool/browser/understanding` subpath: exact text-to-provenance binding,
+local RhetorLint 0.1.2 analysis, and a single-attempt caller-injected Hugging
+Face model observation behind a literal remote-text disclosure gate. It adds
+no hosted inference, HF credential path, browser action, JSONL method, or MCP
+tool.
+
 The package uses `playwright-core` to drive a Chrome-family browser already
 installed on the caller's machine. There is no postinstall hook and no bundled
 browser download. This keeps browser selection and browser bytes under the
@@ -51,7 +59,7 @@ zero-effect action planning; `0.3.0` retained those interfaces while hardening
 their execution and observation contracts. The immutable `0.1.0` release
 remains available as historical seven-operation bytes and does not gain later
 features retroactively. This page and its install commands describe exact
-`0.5.1`; the earlier artifacts remain separately addressable.
+`0.6.0`; the earlier artifacts remain separately addressable.
 
 ## Why this surface exists
 
@@ -90,7 +98,7 @@ explicit operation names:
 | `close` | `browser_close` |
 
 Version `0.2.0` introduced two aligned, non-executing operations retained
-unchanged through `0.5.0` and `0.5.1`:
+unchanged through `0.5.0`, `0.5.1`, and `0.6.0`:
 
 | TypeScript method | JSONL method / MCP tool | Effect |
 |---|---|---|
@@ -110,7 +118,7 @@ Each JSONL request is
 object per line; protocol stdout contains no banners or diagnostic prose.
 
 Version `0.5.0` introduced current MCP `2026-07-28` negotiation and an
-explicit 2025-era stdio compatibility path; `0.5.1` retains both unchanged.
+explicit 2025-era stdio compatibility path; `0.6.0` retains both unchanged.
 Both routes expose the same
 bounded browser core. MCP revision negotiation is transport compatibility,
 not a browser driver, durable session protocol, or security boundary; browser
@@ -196,12 +204,12 @@ outcome, not treat every refusal as a protection to bypass.
 Destination reach remains separate from other consequential powers. File
 upload, automatic download, arbitrary JavaScript evaluation, credential
 injection/lookup, ambient normal-profile import, shell execution, and
-extension installation remain unsupported in `0.5.1`, unchanged from
-`0.5.0`.
+extension installation remain unsupported in `0.6.0`, unchanged from
+`0.5.0` and `0.5.1`.
 `capabilities()` reports those absences instead of treating sovereign
 destination reach as an implication that every power exists.
 
-The forms retained in `0.5.1` are
+The forms retained in `0.6.0` are
 `authority: "public" | "local" | "sovereign"`, `--authority`, and
 `AGENTOOL_BROWSER_AUTHORITY`. The legacy booleans, flags, and environment
 variables remain as a deprecated compatibility surface, but a launch cannot
@@ -330,6 +338,89 @@ snapshot, text, or markup. An extreme DOM can still consume substantial local
 memory. This local runtime has no browser-process memory quota and is not a
 resource-isolation boundary.
 
+### Direct-only web-material understanding
+
+The `@agenttool/browser/understanding` subpath starts from an explicit
+`Observation` or text `ExtractResult` already held by trusted local
+TypeScript. It never observes a tab again and is intentionally absent from
+JSONL, MCP, and the Codex plugin's nine tools.
+
+`createBrowserMaterial()` binds the exact analyzed UTF-8 text SHA-256 and byte
+count to the Browser session/tab/page handles, observation snapshot and
+revision when present, query-redacted URL, capture time, and truncation bit.
+The returned material still contains page text and therefore defaults to
+`local_only`; the digest is a change/equality reference, not source identity,
+authenticity, or truth.
+
+`analyzeBrowserMaterial()` runs the exact packaged
+`@rhetorlint/core@0.1.2` with `@rhetorlint/rules-en@0.1.2` locally and performs
+no network I/O. Its default `rhetorlint.signal/0.1` projection carries engine,
+rule-pack, density, and aggregate family/rule counts, but no matched phrases,
+strip, or rewrite. Literal `includeMarks: true` discloses the matched phrases.
+RhetorLint identifies visible language-pattern candidates only. A mark does
+not establish speaker intent, deception, recipient effect, or factual truth;
+zero marks are not endorsement.
+
+`interpretBrowserMaterial()` accepts one explicit claim, one caller-supplied
+interpreter, and a Hugging Face repository descriptor pinned to a full 40-hex
+commit. A descriptor declaring remote execution is not invoked unless
+`discloseText === true`. Once invoked, the adapter receives the passage and
+claim exactly once, gets no Browser instance or action handle, and is never
+retried automatically. Raw provider errors and generated prose never enter
+the receipt. The closed result is a model observation—`supports`,
+`contradicts`, or `insufficient`, with optional three-way scores—and those
+scores are not calibrated truth probabilities.
+
+The disclosure gate constrains only adapters that describe their execution
+boundary honestly. It is not consent, permission, adapter attestation, proof
+of local-only execution, or a provider-retention guarantee. Browser's generic
+redaction cannot find every secret in page text, URL paths/fragments,
+transformed values, Unicode controls, or screenshot pixels. Inspect material
+before deliberately sending it to a remote interpreter.
+
+`assembleBrowserUnderstanding()` keeps the RhetorLint observation and up to
+eight model observations separate, omits source and claim text from its
+default receipt, and always records:
+
+```json
+{
+  "externalFacts": "not_resolved",
+  "truth": "not_determined"
+}
+```
+
+Natural-language inference compares one claim with one supplied passage. It
+does not retrieve the world, prove source independence, resolve a truncated
+page, or turn neutral/missing evidence into refutation. Downstream conclusions
+still require separately acquired, attributable evidence. Dojo Trials is the
+place to compare pinned models or prompt/template revisions before changing a
+production adapter; HF Scout can track public Hub metadata and revisions but
+does not perform inference.
+
+#### Hugging Face research map (not bundled or auto-run)
+
+These public Hub revisions were inspected on 2026-07-30. They are candidates
+for caller-owned adapters and Trials, not dependencies, endorsements, or
+runtime defaults:
+
+| Need | Pinned candidate | Intended use and limit |
+|---|---|---|
+| English claim/passage comparison | [`MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli@b3546ea`](https://huggingface.co/MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli/tree/b3546ea6b0346eb6f8d5d68b13c7dc6d0376b3d7) | Three-way NLI with FEVER-family training; entailment is a model observation, not world truth. |
+| Multilingual claim/passage comparison | [`MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7@b5113eb`](https://huggingface.co/MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7/tree/b5113eb38ab63efdd7f280f8c144ea8b13f978ce) | Cross-lingual NLI candidate; offsets, translation effects, and domain transfer need separate evaluation. |
+| Small English evidence reranking | [`cross-encoder/ettin-reranker-17m-v1@9e4aa35`](https://huggingface.co/cross-encoder/ettin-reranker-17m-v1/tree/9e4aa35321a6dd1a43ca313f500c4b4f7cfb5cc6) | Rank a small caller-owned candidate set before NLI; relevance score is not factual support. |
+| Web screenshot structure | [`docling-project/ScreenVLM@78df0cc`](https://huggingface.co/docling-project/ScreenVLM/tree/78df0cc8498bbea1a03eb2816056fc0a76d2f63d) | Experimental ScreenTag projection from screenshots; output must never mint a selector or Browser action. |
+| Geometry-only screen parse | [`docling-project/ScreenParser@f029e56`](https://huggingface.co/docling-project/ScreenParser/tree/f029e565f1206577402e43206454522075be3f72) | Detect boxes/classes and preserve disagreement with DOM text; it performs no OCR. |
+| Documents on Apple Silicon | [`ibm-granite/granite-docling-258M-mlx@e9939db`](https://huggingface.co/ibm-granite/granite-docling-258M-mlx/tree/e9939db25d2f296c8678d0491c4609a8c596c50a) | Local M4-oriented document structure candidate for PDFs/screenshots; still model output, not source truth. |
+
+Evaluation can use revision-pinned
+[`AVeriTeC`](https://huggingface.co/datasets/pminervini/averitec/tree/9cb0950aa1efe1d7dcba909e0e1d075b0c42f392),
+[`FEVER`](https://huggingface.co/datasets/fever/fever/tree/2a74f2909caf2b8656343aeb8203e50bf84dcb56),
+and
+[`SciFact`](https://huggingface.co/datasets/allenai/scifact/tree/1fe54665deee011033b2dd98db5752e0d586fdfb)
+only after checking each dataset's license and task fit. Dataset labels are
+evaluation records, not universal truth ground. No model or dataset bytes are
+included in Browser or its CI.
+
 ### Main-document response hints
 
 Every observation carries `response`, either `null` or a bounded projection of
@@ -429,7 +520,7 @@ and treat persistent-profile artifacts as sensitive owner-held data.
 In published `0.1.0`, public web is allowed by default; loopback, link-local,
 and private HTTP(S) navigation/request destinations require the process-level
 `--local-network` opt-in. Reserved destinations remain blocked even with that
-opt-in. The `0.5.1` `public` and `local` profiles preserve the exact `0.5.0`
+opt-in. The `0.6.0` `public` and `local` profiles preserve the exact `0.5.1`, `0.5.0`
 and `0.2.0` destination rules.
 
 The native policy performs hostname and address checks before navigation, but
@@ -457,7 +548,7 @@ connection. `local` classifies WebSocket destinations against its
 public-plus-local boundary rather than pretending the HTTP(S) DNS claim
 extends to WebSocket transport.
 
-The `0.5.1` `sovereign` profile retains the exact `0.5.0` alternative
+The `0.6.0` `sovereign` profile retains the exact `0.5.0` alternative
 introduced in `0.2.0`: it intentionally performs no destination-class blocking
 for valid HTTP(S), passes WebSockets through, and enables service workers.
 Embedded userinfo is blocked on direct inputs and routed requests, not on
@@ -487,7 +578,7 @@ planning and consent.
 
 | Surface | Runtime and authority | Operational boundary |
 |---|---|---|
-| Exact local `0.5.1` package | Operator-owned local TypeScript, JSONL, stdio MCP, or package-root Codex-plugin process using an installed local Chrome-family browser | No AgentTool bearer, credits, Redis, or hosted worker. The Codex bundle changes packaging, not exact 0.5.0 runtime authority. Local actions are attempted once. Profiles, artifacts, and destination authority remain on the operator's machine. |
+| Exact local `0.6.0` package | Operator-owned local TypeScript, JSONL, stdio MCP, package-root Codex-plugin, or direct understanding process using an installed local Chrome-family browser | No AgentTool bearer, credits, Redis, hosted worker, hosted inference, or automatic HF credential use. The direct understanding subpath changes no exact 0.5.0 runtime authority or nine-tool MCP contract. Local actions and injected model calls are separately attempted at most once. Profiles, artifacts, and destination authority remain on the operator's machine. |
 | `POST /v1/browse` | Separate AgentTool API route and BullMQ worker implementation | Bearer- and credit-scoped, disabled without the unsafe-outbound flag, dependent on Redis workers, server-readable, Chromium `--no-sandbox`, and currently unfiltered by destination. BullMQ may attempt a job twice. |
 
 The npm, LOVE, GitHub, and docs release of the local package neither enables
@@ -540,7 +631,7 @@ boundary:
 
 Boolean environment values accept `1/0`, `true/false`, `yes/no`, or `on/off`.
 Paths are resolved at process start. Tool calls do not accept these settings.
-Version `0.5.1`, like exact `0.5.0`, rejects mixed `authority` and legacy
+Version `0.6.0`, like exact `0.5.0` and `0.5.1`, rejects mixed `authority` and legacy
 public/local configuration.
 
 ## Codex plugin
@@ -606,24 +697,24 @@ Chromium profile lock and durable site state.
 
 ## Install the exact public release
 
-These commands select exact release `0.5.1`. Verify the registry or exact LOVE
+These commands select exact release `0.6.0`. Verify the registry or exact LOVE
 catalog when current mirror availability matters. Historical `0.1.0`, `0.2.0`,
-`0.3.0`, and `0.5.0` artifacts remain separately addressable through their
+`0.3.0`, `0.5.0`, and `0.5.1` artifacts remain separately addressable through their
 immutable manifests; `0.4.0` was never distributed.
 
 ```bash
-npm install --save-exact @agenttool/browser@0.5.1
+npm install --save-exact @agenttool/browser@0.6.0
 ```
 
 Or use the registry-neutral LOVE locator:
 
 ```bash
 npm install --save-exact \
-  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.1/agenttool-browser-0.5.1.tgz
+  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.6.0/agenttool-browser-0.6.0.tgz
 ```
 
 The exact manifest at
-`https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.1/manifest.json`
+`https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.6.0/manifest.json`
 provides the artifact size and SHA-256. Verify both before installing when the
 catalog-to-local-file boundary matters.
 

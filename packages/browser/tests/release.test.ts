@@ -17,17 +17,23 @@ const packageRoot = resolve(import.meta.dir, "..");
 
 describe("release identity", () => {
   test("keeps runtime and package metadata versions aligned", () => {
-    expect(BROWSER_PACKAGE_VERSION).toBe("0.5.1");
+    expect(BROWSER_PACKAGE_VERSION).toBe("0.6.0");
     expect(packageJson.version).toBe(BROWSER_PACKAGE_VERSION);
     expect(codexPlugin.version).toBe(BROWSER_PACKAGE_VERSION);
     expect(packageJson.dependencies).toMatchObject({
       "@modelcontextprotocol/server": "2.0.0",
+      "@rhetorlint/core": "0.1.2",
+      "@rhetorlint/rules-en": "0.1.2",
       "playwright-core": "1.59.1",
       zod: "4.4.3",
     });
     expect(packageJson.exports["./protocol"]).toEqual({
       types: "./dist/src/protocol.d.ts",
       import: "./dist/src/protocol.js",
+    });
+    expect(packageJson.exports["./understanding"]).toEqual({
+      types: "./dist/src/understanding.d.ts",
+      import: "./dist/src/understanding.js",
     });
   });
 

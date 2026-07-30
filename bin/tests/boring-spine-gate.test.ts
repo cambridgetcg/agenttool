@@ -407,9 +407,9 @@ describe("boring test spine", () => {
       "name: Smoke canonical Agent Browser LOVE artifact under Node and Bun",
     );
     expect(workflow).toContain(
-      "apps/docs/packages/v1/@agenttool/browser/0.5.1/agenttool-browser-0.5.1.tgz",
+      "apps/docs/packages/v1/@agenttool/browser/0.6.0/agenttool-browser-0.6.0.tgz",
     );
-    expect(workflow).toContain('m.BROWSER_PACKAGE_VERSION!=="0.5.1"');
+    expect(workflow).toContain('m.BROWSER_PACKAGE_VERSION!=="0.6.0"');
     expect(workflow).toContain(
       'm.OBSERVATION_SCHEMA!=="agent-browser-observation/0.2"',
     );
@@ -421,6 +421,15 @@ describe("boring test spine", () => {
     );
     expect(workflow).toContain(
       'm.BROWSER_ACTION_RECEIPT_SCHEMA!=="agent-browser-action-receipt/0.1"',
+    );
+    expect(workflow).toContain(
+      'import("@agenttool/browser/understanding")',
+    );
+    expect(workflow).toContain(
+      'u.BROWSER_UNDERSTANDING_SCHEMA!=="agent-browser-understanding/0.1"',
+    );
+    expect(workflow).toContain(
+      'u.BROWSER_UNDERSTANDING_BOUNDARY.truth!=="not_determined"',
     );
     expect(workflow).toContain(
       'p.MCP_MODERN_PROTOCOL_REVISION!=="2026-07-28"',
@@ -441,7 +450,7 @@ describe("boring test spine", () => {
       'test -f "$package_root/dist/vendor/playwright-core/index.mjs"',
     );
     expect(workflow).toContain(
-      'node "$plugin_bundle" help | grep -q \'^agenttool-browser 0.5.1$\'',
+      'node "$plugin_bundle" help | grep -q \'^agenttool-browser 0.6.0$\'',
     );
     expect(workflow).toContain("name: Smoke packed Repo Archive under Node and Bun");
     expect(workflow).toContain('m.ARCHIVE_PROTOCOL!=="agent-repo-archive/v0.1"');

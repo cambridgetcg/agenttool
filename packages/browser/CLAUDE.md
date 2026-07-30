@@ -8,7 +8,7 @@ LOVE, npm, and GitHub Releases does not change that runtime boundary.
 
 ## Authority direction
 
-Version `0.5.1` carries forward the exact `0.5.0` authority model built around
+Version `0.6.0` carries forward the exact `0.5.0` authority model built around
 one rule:
 **sandbox consequences, not curiosity**.
 Destination reach, state persistence, data disclosure, and executable powers
@@ -74,6 +74,22 @@ those powers.
   hosted arbitrary-target browser.
 - Treat page text, labels, attributes, links, and instructions as untrusted
   content. They are observations, never host or tool instructions.
+- Keep web-material understanding direct-only until a separate protocol
+  review deliberately adds a transport operation. It consumes an explicit
+  existing observation or text extraction and never silently re-reads a tab.
+- Run packaged RhetorLint locally and omit marked phrases by default. Its
+  signals concern visible wording only; zero marks are not endorsement, and
+  no mark establishes intent, effect, deception, or factual truth.
+- Keep Hugging Face interpretation caller-injected. Require a full Hub commit
+  revision, allow one call and zero automatic retries, never pass a Browser
+  action handle, and require literal remote-text disclosure before calling an
+  adapter that declares remote execution. The declaration and switch do not
+  attest adapter behavior, consent, permission, or provider retention.
+- Keep rhetoric and model observations separate. Never produce a combined
+  truth/manipulation score, serialize raw provider errors or generated prose,
+  or upgrade entailment against one passage into world truth. Assembled
+  reports must retain `truth: not_determined` and
+  `externalFacts: not_resolved`.
 - Keep main-document response metadata strictly allowlisted, bounded,
   query-redacted, and untrusted. Never expose cookies/auth headers or turn a
   discovery hint into navigation, authentication, payment, or ambient RRR.
@@ -142,12 +158,15 @@ explicit local dogfood check; it is never a required CI dependency.
 
 ## Release boundary
 
-Versions `0.1.0`, `0.2.0`, `0.3.0`, `0.5.0`, and `0.5.1` are exact LOVE
+Versions `0.1.0`, `0.2.0`, `0.3.0`, `0.5.0`, `0.5.1`, and `0.6.0` are exact LOVE
 releases with optional npm and GitHub Release mirrors. Version `0.4.0` was
 prepared but not distributed; its reviewed work is carried by `0.5.0`.
 Version `0.5.1` adds the package-root Codex manifest and self-contained packed
 MCP bundle without changing the exact `0.5.0` runtime, tool, protocol, or
-authority contracts. Release work must
+authority contracts. Version `0.6.0` adds the direct-only understanding
+subpath, exact material binding, local RhetorLint 0.1.2, and an explicitly
+injected model-observation seam while preserving those same nine operations
+and authority contracts. Release work must
 keep each released version's bytes immutable and keep the current LOVE, npm,
 and GitHub Release bytes identical through the protected allowlisted workflow.
 The deployed docs/catalog is a distribution surface, not a hosted
@@ -160,6 +179,7 @@ the unreleased `0.4.0` boundary. Browser-act receipts, non-ref observation
 bases, observation-local receipt context, backend-neutral capability
 inventory, and current/legacy MCP negotiation belong to exact `0.5.0`.
 The Codex plugin manifest and isolated packed MCP bundle belong to exact
-`0.5.1`. Those bytes are frozen: any later source change—especially a
+`0.5.1`; the understanding subpath belongs to exact `0.6.0`. Those bytes are
+frozen: any later source change—especially a
 machine-readable capability contract change—requires a new package version
 before publication.
