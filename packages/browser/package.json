@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/browser",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Local-first browser control shaped for agents",
   "author": "AgentTool contributors",
   "license": "Apache-2.0",
@@ -22,6 +22,7 @@
   },
   "files": [
     "dist",
+    ".codex-plugin",
     "README.md",
     "CLAUDE.md",
     "LICENSE",
@@ -36,13 +37,14 @@
   },
   "scripts": {
     "clean": "node --eval \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
-    "build": "bun run clean && tsc",
+    "build:mcp": "bun scripts/build-mcp-bundle.ts",
+    "build": "bun run clean && tsc && bun run build:mcp",
     "typecheck": "tsc --noEmit",
     "test": "bun test tests",
     "smoke:runtimes": "node --input-type=module --eval \"const m = await import('./dist/src/index.js'); const p = await import('@agenttool/browser/protocol'); if (typeof m.AgentBrowser !== 'function' || typeof m.resolveBrowserCapabilities !== 'function' || typeof m.planBrowserAction !== 'function' || m.BROWSER_ACTION_RECEIPT_SCHEMA !== 'agent-browser-action-receipt/0.1' || p.BROWSER_OPERATIONS.length !== 9) process.exit(1)\" && bun --eval \"const m = await import('./dist/src/index.js'); const p = await import('@agenttool/browser/protocol'); if (typeof m.AgentBrowser !== 'function' || typeof m.resolveBrowserCapabilities !== 'function' || typeof m.planBrowserAction !== 'function' || m.BROWSER_ACTION_RECEIPT_SCHEMA !== 'agent-browser-action-receipt/0.1' || p.BROWSER_OPERATIONS.length !== 9) process.exit(1)\"",
     "check:package": "npm pack --dry-run --ignore-scripts",
-    "ci": "bun run typecheck && bun run test && bun run build && bun run smoke:runtimes && bun run check:package",
-    "prepack": "bun run typecheck && bun run test && bun run build"
+    "ci": "bun run typecheck && bun run build && bun run test && bun run smoke:runtimes && bun run check:package",
+    "prepack": "bun run typecheck && bun run build && bun run test"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",

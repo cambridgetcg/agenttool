@@ -571,6 +571,14 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/integrations/hermes/skills/inspect-agent-surfaces-hermes/SKILL.md",
     );
   }
+  if (spec.name === "@agenttool/browser") {
+    entries.push(
+      "package/.codex-plugin/plugin.json",
+      "package/dist/agenttool-browser-mcp.js",
+      "package/dist/THIRD_PARTY_LICENSES",
+      "package/dist/vendor/playwright-core/index.mjs",
+    );
+  }
   if (spec.name === "@agenttool/repo-archive") {
     entries.push(
       "package/dist/index.js",

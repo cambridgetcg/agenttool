@@ -2,7 +2,7 @@
 
 A small local browser surface for agents.
 
-This README belongs to the exact `0.5.0` package bytes. Its registry-neutral
+This README belongs to the exact `0.5.1` package bytes. Its registry-neutral
 release record is the sibling LOVE manifest, which names the artifact size,
 SHA-256, source revision, and interchangeable mirrors. npm and GitHub Releases
 are optional mirrors and should be verified independently. The docs deployment
@@ -15,21 +15,24 @@ session-local receipt context in observations, a backend-neutral capability
 inventory, and current MCP negotiation with an explicit compatibility path.
 Version `0.4.0` was never distributed; its reviewed changes are incorporated
 into exact `0.5.0`. Earlier `0.1.0`, `0.2.0`, and `0.3.0` releases remain
-immutable historical artifacts.
+immutable historical artifacts. Version `0.5.1` preserves those runtime,
+tool, protocol, and authority semantics while adding a package-root Codex
+plugin and a self-contained Node-targeted MCP bundle. Exact `0.5.0` remains an
+immutable historical artifact too.
 
 ```bash
-npm install --save-exact @agenttool/browser@0.5.0
+npm install --save-exact @agenttool/browser@0.5.1
 ```
 
 Registry-neutral exact artifact:
 
 ```bash
 npm install --save-exact \
-  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.0/agenttool-browser-0.5.0.tgz
+  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.1/agenttool-browser-0.5.1.tgz
 ```
 
 The sibling
-[LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.0/manifest.json)
+[LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.1/manifest.json)
 names the artifact size and SHA-256. A URL install does not compare those
 values automatically; verify them first when that boundary matters.
 
@@ -92,6 +95,31 @@ Or start the local MCP server:
 agenttool-browser mcp
 ```
 
+### Codex plugin
+
+The npm package root is also a Codex plugin root.
+`.codex-plugin/plugin.json` starts
+`node dist/agenttool-browser-mcp.js mcp` relative to the installed plugin
+directory. That Node-targeted release artifact bundles the MCP and validation
+layers and carries its own vendored `playwright-core`, so it loads from an
+isolated packed plugin cache without a parent `node_modules`. It does not
+bundle, install, or download Chrome. The package also includes generated
+third-party license and notice text for the bundled runtime.
+
+The plugin declaration supplies no authority, profile, headed-session,
+executable, or output-directory option. It therefore starts the same core with
+Browser's public, headless, ephemeral defaults and uses the operator's
+installed Chrome-family browser. Installing or enabling the plugin makes the
+nine local MCP tools available to the Codex host; it does not authorize a
+destination, import ambient browser state, authenticate to a site, or create a
+hosted browser service. MCP arguments and results still cross the selected
+Codex host and model-provider boundary.
+
+Codex loads local plugins through a configured marketplace. A local
+marketplace may point at this package root; an npm-backed marketplace entry
+works only after this exact version has been published. Package publication
+does not itself install or enable the plugin in a host.
+
 For a persistent MCP host, install the package in that host's project and use
 the absolute project-local binary path rather than an `npx` command that may
 fetch at startup:
@@ -116,8 +144,9 @@ The JSONL methods and MCP tool names are `browser_capabilities`,
 `browser_plan`, `browser_open`, `browser_observe`, `browser_act`,
 `browser_extract`, `browser_screenshot`, `browser_tabs`, and `browser_close`.
 
-Version `0.5.0` negotiates the current MCP `2026-07-28` revision and retains
-an explicit 2025-era stdio compatibility path. That negotiation makes the
+Version `0.5.0` introduced current MCP `2026-07-28` negotiation and an
+explicit 2025-era stdio compatibility path; `0.5.1` retains both unchanged.
+That negotiation makes the
 same bounded operations usable by hosts from both eras; it does not turn MCP
 into a browser driver, durable browser session, or security boundary. Browser
 handles and authority remain local to this process.
@@ -372,8 +401,8 @@ and cannot alter the same underlying facts or widen authority.
 
 ## Authority profiles
 
-Version `0.2.0` introduced the three named launch-time profiles retained by
-`0.5.0`:
+Version `0.2.0` introduced the three named launch-time profiles retained
+unchanged through `0.5.0` and `0.5.1`:
 
 | Profile | Policy-checked HTTP(S) requests | WebSockets | Service workers |
 |---|---|---|---|
@@ -398,8 +427,8 @@ destinations available to the host, including local services. In a persistent
 profile, service-worker and site state can outlive the process. Sovereign is
 therefore broad local process authority, not an isolation or SSRF claim.
 
-Destination authority does not imply every other browser power. In `0.5.0`,
-file upload, automatic download, arbitrary JavaScript
+Destination authority does not imply every other browser power. In `0.5.1`,
+unchanged from `0.5.0`, file upload, automatic download, arbitrary JavaScript
 evaluation, credential injection/lookup, ambient profile import, shell
 execution, and extension installation remain unsupported and are reported as
 such by `capabilities()`.
@@ -464,7 +493,7 @@ Do this only for a caller-controlled development network. Tool calls cannot
 widen either profile or network authority after launch. Reserved destinations
 remain blocked even with this opt-in.
 
-Version `0.5.0` retains `allowPublicWeb` / `allowLocalNetwork`,
+Version `0.5.1` retains the same `allowPublicWeb` / `allowLocalNetwork`,
 `--public-web` / `--local-network`, and their environment variables as a
 deprecated `0.1.0` compatibility surface. Do not combine the `authority` form
 with any legacy authority option in one launch; mixed configuration is
@@ -511,7 +540,7 @@ unrecognized carriers such as `srcset`, meta refresh, CSS `url()`, or malformed
 markup, browser storage, canvas/image content, or screenshot pixels. It cannot
 undo data already submitted to a site.
 
-Version `0.5.0` intentionally has no:
+Version `0.5.1`, like exact `0.5.0`, intentionally has no:
 
 - arbitrary JavaScript evaluation;
 - file-upload operation;
@@ -526,7 +555,7 @@ model-visible state, or advisory plans.
 
 ## Network limitation
 
-The `0.5.0` `public` and `local` profiles preserve the `0.2.0` and
+The `0.5.1` `public` and `local` profiles preserve the `0.5.0`, `0.2.0`, and
 historical `0.1.0` destination checks before navigation, including DNS
 answers.
 Playwright then owns the browser connection. The package cannot pin the
@@ -565,9 +594,12 @@ bun run build
 npm pack --dry-run --ignore-scripts
 ```
 
-The package boundary contains compiled `dist` files plus this README,
-`CLAUDE.md`, `LICENSE`, and `NOTICE`. No lifecycle hook downloads or installs a
-browser.
+The package boundary contains compiled `dist` files, the package-root
+`.codex-plugin` manifest, this README, `CLAUDE.md`, `LICENSE`, and `NOTICE`.
+The gate copies only packed paths into an isolated temporary plugin cache with
+no parent `node_modules`, loads the standalone MCP bundle there under Node,
+and verifies its vendored Playwright entry. No lifecycle hook downloads or
+installs a browser.
 
 Apache-2.0. See [`LICENSE`](LICENSE), [`NOTICE`](NOTICE), and the fuller
 [Agent Browser boundary](../../docs/AGENT-BROWSER.md).

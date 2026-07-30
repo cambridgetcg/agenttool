@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-29 (the eight-package npm release train completed protected publication and exact public mirror readback; hosted deployment remains separate evidence)
+> Updated: 2026-07-30 (Browser 0.5.1 source prepares a self-contained Codex plugin bundle; publication and deployment remain separate evidence)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -13,6 +13,12 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Just landed (2026-07-30)
+
+| Ship | Commit | What |
+|---|---|---|
+| **AGENT BROWSER 0.5.1 — one packed Codex door, unchanged authority** | source preparation; exact release mirrors and static deployment remain separate | The package root now carries a Codex plugin manifest that starts a self-contained Node-targeted MCP bundle from the installed plugin directory. The release gate copies only packed paths into an isolated cache with no parent `node_modules`, loads the bundle there, and verifies its vendored `playwright-core`; Chrome itself remains operator-installed. The manifest supplies no authority, profile, headed-session, executable, or output-directory override, so the plugin retains Browser's public, headless, ephemeral defaults. The exact 0.5.0 runtime, nine tools, protocol revisions, receipt and observation semantics, authority profiles, network limits, and unsupported consequential powers do not change. Plugin installation does not authenticate to a site, import ambient browser state, create a hosted browser service, or widen the separate `/v1/browse` route. Exact 0.5.0 and earlier distributed bytes remain immutable. |
 
 ## Just landed (2026-07-29)
 

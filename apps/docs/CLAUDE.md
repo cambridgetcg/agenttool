@@ -25,8 +25,12 @@ three-directory restore simulator and a package API; it does not create cloud
 storage adapters, a hosted archive service, independent physical failure
 domains, recovery-key custody, or a durability guarantee.
 The Agent Browser page documents the separately installed exact public
-`@agenttool/browser@0.5.0` local runtime with TypeScript, JSONL, and stdio MCP
-doors. Seven browser operations plus capability inspection and zero-effect
+`@agenttool/browser@0.5.1` local runtime with TypeScript, JSONL, and stdio MCP
+doors. Its package root is also a Codex plugin: a self-contained packed
+Node-targeted bundle starts the same MCP core without a parent dependency tree.
+The plugin manifest supplies no authority flag, so it retains the headless,
+public, ephemeral defaults and still uses an operator-installed Chrome-family
+browser. Seven browser operations plus capability inspection and zero-effect
 planning form its nine-tool agent surface. Named `public`, `local`, and
 `sovereign` launch profiles make destination authority legible; sovereign is
 broad local pass-through, not a bypass of browser, account, site, network, or
@@ -52,8 +56,10 @@ same core; MCP adds no browser-driver, durable-session, or security guarantee.
 Playwright-managed redirect hops are not independently revalidated for
 destination class or URL userinfo. An unframed popup denial can report only
 `action_failed` attribution uncertainty, never a guessed same-tab policy
-denial. Exact `0.1.0`, `0.2.0`, and `0.3.0` package paths remain historical
-and immutable. The docs deployment does not create a hosted browser, ambient
+denial. Exact `0.1.0`, `0.2.0`, `0.3.0`, and `0.5.0` package paths remain
+historical and immutable. Version `0.5.1` changes distribution packaging, not
+the 0.5.0 runtime, tools, protocols, or authority model. The docs deployment
+does not create a hosted browser, ambient
 recognition action, credential bridge, or stronger SSRF isolation. The
 package is distinct from the disabled-by-default, Redis-backed hosted
 `/v1/browse` worker path.
