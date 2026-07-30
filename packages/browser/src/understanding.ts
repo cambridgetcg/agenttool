@@ -41,8 +41,12 @@ const MAX_CLAIM_CHARS = 8_192;
 const MAX_IDENTIFIER_CHARS = 160;
 const MAX_LOCALE_CHARS = 64;
 const MAX_URL_CHARS = 8_192;
+const NATIVE_DATE = Date;
+const NATIVE_DATE_TO_ISO_STRING = Date.prototype.toISOString;
 const SHA256_ID = /^sha256:[0-9a-f]{64}$/u;
 const FULL_HUB_REVISION = /^[0-9a-f]{40}$/u;
+const CANONICAL_UTC_TIMESTAMP =
+  /^([0-9]{4})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\.[0-9]{3}Z$/u;
 const ATTEMPT_ID =
   /^attempt_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const HUB_REPOSITORY =
@@ -269,31 +273,41 @@ function requiredString(
 }
 
 function canonicalTimestamp(value: unknown, name: string): string {
-  const timestamp = typeof value === "string" ? value : "";
-  let normalized: string;
-  try {
-    normalized = new Date(timestamp).toISOString();
-  } catch {
-    normalized = "";
-  }
-  if (
-    timestamp.length !== 24
-    || !validUnicode(timestamp)
-    || normalized !== timestamp
-  ) {
+  const match = typeof value === "string"
+    ? CANONICAL_UTC_TIMESTAMP.exec(value)
+    : null;
+  const year = +(match?.[1] ?? "NaN");
+  const month = +(match?.[2] ?? "NaN");
+  const day = +(match?.[3] ?? "NaN");
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [
+    31,
+    leapYear ? 29 : 28,
+    31,
+    30,
+    31,
+    30,
+    31,
+    31,
+    30,
+    31,
+    30,
+    31,
+  ][month - 1];
+  if (!match || daysInMonth === undefined || day > daysInMonth) {
     throw new BrowserUnderstandingError(
       "invalid_material",
       `${name} must be a canonical ISO 8601 UTC timestamp.`,
     );
   }
-  return timestamp;
+  return value as string;
 }
 
 function currentTimestamp(now: InterpretBrowserMaterialOptions["now"]): string {
   try {
-    const value = now?.() ?? new Date();
+    const value = now?.() ?? new NATIVE_DATE();
     return canonicalTimestamp(
-      Date.prototype.toISOString.call(value),
+      NATIVE_DATE_TO_ISO_STRING.call(value),
       "attempt.startedAt",
     );
   } catch {

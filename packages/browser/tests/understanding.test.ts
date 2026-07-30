@@ -606,6 +606,56 @@ describe("assembled understanding report", () => {
     ).toThrow("canonical ISO 8601 UTC timestamp");
   });
 
+  test("validates timestamp grammar independently of mutable global Date", async () => {
+    const material = createBrowserMaterial(observation());
+    const semantic = await interpretBrowserMaterial(material, {
+      claim,
+      model: model({
+        execution: "local",
+        provider: "transformers-js",
+      }),
+      interpreter: {
+        async interpret() {
+          return { label: "insufficient", scores: null };
+        },
+      },
+      now: () => new Date(capturedAt),
+    });
+    const sentinel = "SENTINEL_PAGE_TEXT_12345";
+    expect(sentinel).toHaveLength(24);
+    const lookalike = {
+      ...semantic,
+      attempt: {
+        ...semantic.attempt,
+        startedAt: sentinel,
+      },
+    };
+    const nativeDate = globalThis.Date;
+    class MutableDate {
+      readonly value: string;
+
+      constructor(value?: unknown) {
+        this.value = String(value ?? "");
+      }
+
+      toISOString(): string {
+        return this.value;
+      }
+    }
+
+    try {
+      globalThis.Date = MutableDate as unknown as DateConstructor;
+      expect(new globalThis.Date(sentinel).toISOString()).toBe(sentinel);
+      expect(() =>
+        assembleBrowserUnderstanding(material, {
+          modelObservations: [lookalike],
+        }),
+      ).toThrow("canonical ISO 8601 UTC timestamp");
+    } finally {
+      globalThis.Date = nativeDate;
+    }
+  });
+
   test("bounds model observation fan-in", () => {
     const material = createBrowserMaterial(observation());
     const fake = {
