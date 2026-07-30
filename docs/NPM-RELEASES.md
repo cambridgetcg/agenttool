@@ -102,6 +102,48 @@ and has byte-identical 26,474-byte GitHub/npm tarballs with SHA-256
 `67678dd8aa21ef63aa2b43107385fa5e8598591d9ef4020926e0272cfb4637e1`.
 Both npm `latest` tags resolved to those exact versions at readback.
 
+## Verified Agent Browser 0.6.0 publication and deployment — 2026-07-30
+
+The authorized Browser release completed through protected
+[workflow run `30576479114`](https://github.com/cambridgetcg/agenttool/actions/runs/30576479114).
+Its final `agenttool.npm-release/1` receipt reports `status: published`,
+`npm_tag: latest`, and public registry observation at
+`2026-07-30T19:53:28.563Z`.
+
+- Annotated tag
+  [`browser-v0.6.0`](https://github.com/cambridgetcg/agenttool/releases/tag/browser-v0.6.0)
+  peels to the two-parent GitHub `main` merge
+  `03f56741c82b4b353157f4a7b2f8bfc08e878fe4`.
+- The LOVE manifest binds Browser source revision
+  `1d75fdee195d2ff8097b5d3267fb2c0301b5a0ae`.
+- LOVE, the one-asset GitHub Release, the protected workflow artifact, public
+  npm `@agenttool/browser@0.6.0`, and the deployed static archive are
+  byte-identical: `2,811,378` bytes, SHA-256
+  `b5ab329e763c2498a3bb4e2ad37786b1b578a8f3a3e2f01f4112244ba9f1878b`.
+- npm reported SHA-1 `824adf99ed723f9cb6f394cd24ac7b056901e049`,
+  `latest: 0.6.0`, and public provenance at
+  [Sigstore log index `2293953813`](https://search.sigstore.dev/?logIndex=2293953813).
+- A frontend-only deployment of the same clean merge completed at
+  `2026-07-30T20:04:07Z`. Token-mode Cloudflare inspection, not the OAuth
+  fallback, proved all three Pages projects use `production_branch=main` and
+  production plus preview `fail_open=false`. Custom domains converged on
+  verification attempt 9 of 25; live committed-file parity, the Browser page,
+  LOVE index `latest: 0.6.0`, manifest source/hash/size, exact archive bytes,
+  package headers, and literal plus encoded sensitive-path fences all passed.
+  A private mode-0600 `agenttool-deploy-receipt/v4` records the successful
+  preflight and static deployment; migrations and the API were deliberately
+  skipped.
+
+Version 0.6.0 adds only the direct TypeScript web-material understanding
+subpath: provenance-bound text, local RhetorLint, and an optional
+caller-injected, revision-pinned Hugging Face interpreter behind explicit
+remote disclosure. Rhetoric and model outputs remain separate observations;
+`externalFacts` stays `not_resolved` and `truth` stays `not_determined`. The
+release supplies no model, provider client, token, model download, hosted
+inference, automatic action, or hosted Browser, and it does not widen the
+existing nine-tool MCP/JSONL authority boundary. Exact 0.5.1 and earlier
+release bytes remain immutable.
+
 ## Verified Agent Browser 0.5.1 publication — 2026-07-30
 
 The authorized Browser packaging release completed through protected
