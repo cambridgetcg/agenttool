@@ -29,6 +29,7 @@ packages/
   correspondence-yutabase/ — pure deterministic Correspondence → YUTABASE planner
   correspondence-yutabase-projector/ — private loopback-only verified local PostgreSQL sidecar
   constructive-intelligence/ — private local tree-pinned typed-receipt shadow ledger
+  trials/       — private local Dojo trial receipts, boundary evidence, and minimized STS projection
   telescope/    — @agenttool/telescope · read-only discovery evidence mapper
   wallet/       — @agenttool/wallet · LOVE/npm bounded wallet record/lifecycle primitives
   wallet-zerone/ — @agenttool/wallet-zerone · exact offline Zerone direct-sign profile
@@ -55,6 +56,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/correspondence-yutabase/CLAUDE.md` ·
 `packages/correspondence-yutabase-projector/CLAUDE.md` ·
 `packages/constructive-intelligence/CLAUDE.md` ·
+`packages/trials/CLAUDE.md` ·
 `packages/wallet/CLAUDE.md` ·
 `packages/wallet-zerone/CLAUDE.md` ·
 `packages/alchemy/CLAUDE.md` ·
@@ -68,6 +70,14 @@ ledger. Its reports are structural shadow projections, not correctness,
 breakthrough, qualification, reward eligibility, permission, or authority.
 It has no hosted route, network client, wallet, escrow, package release, or
 deployment surface.
+
+`@agenttool/trials` is a separate private, source-only local Dojo pilot. It
+turns explicit bounded observations into deterministic trial receipts,
+correlates caller-declared opaque labels across source and sink steps, and
+projects an explicit minimized report selection to Hugging Face STS JSONL. It
+does not run trials, inspect ambient sessions or files, contact Hugging Face,
+upload traces, authenticate, spend quota, publish a package, or expose a
+hosted route.
 
 `@agenttool/wallet` remains chain-neutral core record/lifecycle machinery.
 The separate Wallet Zerone package supports only its reviewed two-network,

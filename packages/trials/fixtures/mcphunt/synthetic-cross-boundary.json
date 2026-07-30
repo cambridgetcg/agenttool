@@ -1,0 +1,77 @@
+{
+  "trial_id": "trial:mcphunt-synthetic-cross-boundary",
+  "labels": [
+    {
+      "label_id": "label:completion-context",
+      "completion_requirement": "required"
+    },
+    {
+      "label_id": "label:policy-canary",
+      "completion_requirement": "not_required"
+    },
+    {
+      "label_id": "label:review-canary",
+      "completion_requirement": "unknown"
+    }
+  ],
+  "steps": [
+    {
+      "kind": "source",
+      "step_id": "step:001",
+      "sequence": 1,
+      "source_class": "database",
+      "observed_label_ids": [
+        "label:completion-context",
+        "label:policy-canary"
+      ]
+    },
+    {
+      "kind": "transit",
+      "step_id": "step:002",
+      "sequence": 2,
+      "observed_label_ids": [
+        "label:policy-canary"
+      ]
+    },
+    {
+      "kind": "sink",
+      "step_id": "step:003",
+      "sequence": 3,
+      "sink_class": "artifact",
+      "propagation": "observed",
+      "observed_label_ids": [
+        "label:completion-context",
+        "label:policy-canary"
+      ]
+    },
+    {
+      "kind": "source",
+      "step_id": "step:004",
+      "sequence": 4,
+      "source_class": "configuration",
+      "observed_label_ids": [
+        "label:review-canary"
+      ]
+    },
+    {
+      "kind": "sink",
+      "step_id": "step:005",
+      "sequence": 5,
+      "sink_class": "shell",
+      "propagation": "observed",
+      "observed_label_ids": [
+        "label:review-canary"
+      ]
+    },
+    {
+      "kind": "sink",
+      "step_id": "step:006",
+      "sequence": 6,
+      "sink_class": "external_service",
+      "propagation": "observed",
+      "observed_label_ids": [
+        "label:policy-canary"
+      ]
+    }
+  ]
+}

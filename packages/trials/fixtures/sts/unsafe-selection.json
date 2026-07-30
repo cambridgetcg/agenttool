@@ -1,0 +1,89 @@
+{
+  "session_id": "selection.synthetic.unsafe.001",
+  "reports": [
+    {
+      "report_id": "report.synthetic.safe",
+      "outcome": "One minimized synthetic report is safe to emit.",
+      "evidence_refs": [
+        "test:synthetic-safe"
+      ],
+      "confidence": "high",
+      "limits": "Synthetic fixture only."
+    },
+    {
+      "report_id": "report.synthetic.credential-field",
+      "outcome": "This record must be omitted.",
+      "evidence_refs": [],
+      "confidence": "unknown",
+      "limits": "Synthetic fixture only.",
+      "authorization": "SENSITIVE_CANARY_VALUE"
+    },
+    {
+      "report_id": "report.synthetic.reasoning-field",
+      "outcome": "This record must be omitted.",
+      "evidence_refs": [],
+      "confidence": "unknown",
+      "limits": "Synthetic fixture only.",
+      "reasoning": "SENSITIVE_CANARY_VALUE"
+    },
+    {
+      "report_id": "report.synthetic.raw-field",
+      "outcome": "This record must be omitted.",
+      "evidence_refs": [],
+      "confidence": "unknown",
+      "limits": "Synthetic fixture only.",
+      "tool_output": "SENSITIVE_CANARY_VALUE"
+    },
+    {
+      "report_id": "report.synthetic.path-field",
+      "outcome": "This record must be omitted.",
+      "evidence_refs": [],
+      "confidence": "unknown",
+      "limits": "Synthetic fixture only.",
+      "workspace_path": "SENSITIVE_CANARY_VALUE"
+    },
+    {
+      "report_id": "report.synthetic.path-value",
+      "outcome": "A synthetic local path was /Users/example/private.txt.",
+      "evidence_refs": [],
+      "confidence": "unknown",
+      "limits": "Synthetic fixture only."
+    },
+    {
+      "report_id": "report.synthetic.credential-value",
+      "outcome": "Bearer SENSITIVE_CANARY_VALUE",
+      "evidence_refs": [],
+      "confidence": "unknown",
+      "limits": "Synthetic fixture only."
+    },
+    {
+      "report_id": "report.synthetic.reasoning-value",
+      "outcome": "reasoning: SENSITIVE_CANARY_VALUE",
+      "evidence_refs": [],
+      "confidence": "unknown",
+      "limits": "Synthetic fixture only."
+    },
+    {
+      "report_id": "report.synthetic.raw-value",
+      "outcome": "stdout: SENSITIVE_CANARY_VALUE",
+      "evidence_refs": [],
+      "confidence": "unknown",
+      "limits": "Synthetic fixture only."
+    },
+    {
+      "report_id": "report.synthetic.extra-field",
+      "outcome": "This record must be omitted.",
+      "evidence_refs": [],
+      "confidence": "unknown",
+      "limits": "Synthetic fixture only.",
+      "surprise": "SENSITIVE_CANARY_VALUE"
+    },
+    {
+      "report_id": "report.synthetic.safe",
+      "outcome": "A duplicate identifier must not create another message.",
+      "evidence_refs": [],
+      "confidence": "unknown",
+      "limits": "Synthetic fixture only."
+    }
+  ]
+}

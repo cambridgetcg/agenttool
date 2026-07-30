@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:schema:boundary-analysis:0.1",
+  "title": "AgentTool Boundary Analysis 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "analysis_id",
+    "trial_id",
+    "result",
+    "summary",
+    "evidence",
+    "diagnostics",
+    "statement"
+  ],
+  "properties": {
+    "schema": { "const": "agenttool-boundary-analysis/0.1" },
+    "analysis_id": { "$ref": "#/$defs/sha256" },
+    "trial_id": { "$ref": "#/$defs/opaque_id" },
+    "result": {
+      "enum": [
+        "correlated_flow_observed",
+        "no_correlated_flow_observed"
+      ]
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label_count",
+        "step_count",
+        "source_observation_count",
+        "transit_observation_count",
+        "sink_observation_count",
+        "correlated_flow_count",
+        "reported_task_mandated_count",
+        "reported_policy_concern_count",
+        "reported_review_required_count",
+        "sink_without_prior_source_count",
+        "source_without_later_sink_count",
+        "evidence_truncated",
+        "diagnostics_truncated"
+      ],
+      "properties": {
+        "label_count": { "$ref": "#/$defs/count" },
+        "step_count": { "$ref": "#/$defs/count" },
+        "source_observation_count": { "$ref": "#/$defs/count" },
+        "transit_observation_count": { "$ref": "#/$defs/count" },
+        "sink_observation_count": { "$ref": "#/$defs/count" },
+        "correlated_flow_count": { "$ref": "#/$defs/count" },
+        "reported_task_mandated_count": { "$ref": "#/$defs/count" },
+        "reported_policy_concern_count": { "$ref": "#/$defs/count" },
+        "reported_review_required_count": { "$ref": "#/$defs/count" },
+        "sink_without_prior_source_count": { "$ref": "#/$defs/count" },
+        "source_without_later_sink_count": { "$ref": "#/$defs/count" },
+        "evidence_truncated": { "type": "boolean" },
+        "diagnostics_truncated": { "type": "boolean" }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "maxItems": 128,
+      "items": { "$ref": "#/$defs/evidence" }
+    },
+    "diagnostics": {
+      "type": "array",
+      "maxItems": 128,
+      "items": { "$ref": "#/$defs/diagnostic" }
+    },
+    "statement": {
+      "const": "Diagnostic correlation over caller-supplied opaque label observations and caller-reported completion requirements only. A reported assessment is not verified policy or task authority. An observed match does not prove causation, disclosure, or a remote effect; no observed match does not establish safety or security."
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "opaque_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "label_id": {
+      "type": "string",
+      "pattern": "^label:[A-Za-z0-9][A-Za-z0-9._-]{0,121}$"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 16384
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "source_class": {
+      "enum": [
+        "browser",
+        "caller_input",
+        "configuration",
+        "database",
+        "file",
+        "repository_history",
+        "synthetic_fixture"
+      ]
+    },
+    "sink_class": {
+      "enum": [
+        "artifact",
+        "browser",
+        "database",
+        "document",
+        "external_service",
+        "file",
+        "shell"
+      ]
+    },
+    "completion_requirement": {
+      "enum": ["not_required", "required", "unknown"]
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_id",
+        "label_id",
+        "assessment",
+        "completion_requirement",
+        "source",
+        "sink",
+        "transit"
+      ],
+      "properties": {
+        "evidence_id": { "$ref": "#/$defs/sha256" },
+        "label_id": { "$ref": "#/$defs/label_id" },
+        "assessment": {
+          "enum": [
+            "reported_policy_concern",
+            "reported_review_required",
+            "reported_task_mandated"
+          ]
+        },
+        "completion_requirement": {
+          "$ref": "#/$defs/completion_requirement"
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["step_id", "sequence", "source_class"],
+          "properties": {
+            "step_id": { "$ref": "#/$defs/opaque_id" },
+            "sequence": { "$ref": "#/$defs/sequence" },
+            "source_class": { "$ref": "#/$defs/source_class" }
+          }
+        },
+        "sink": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "step_id",
+            "sequence",
+            "sink_class",
+            "propagation"
+          ],
+          "properties": {
+            "step_id": { "$ref": "#/$defs/opaque_id" },
+            "sequence": { "$ref": "#/$defs/sequence" },
+            "sink_class": { "$ref": "#/$defs/sink_class" },
+            "propagation": { "const": "observed" }
+          }
+        },
+        "transit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "observed_step_ids",
+            "total_observations",
+            "truncated"
+          ],
+          "properties": {
+            "observed_step_ids": {
+              "type": "array",
+              "maxItems": 16,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/opaque_id" }
+            },
+            "total_observations": { "$ref": "#/$defs/count" },
+            "truncated": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "label_id", "step_id", "sequence"],
+      "properties": {
+        "code": {
+          "enum": [
+            "sink_without_prior_source",
+            "source_without_later_sink"
+          ]
+        },
+        "label_id": { "$ref": "#/$defs/label_id" },
+        "step_id": { "$ref": "#/$defs/opaque_id" },
+        "sequence": { "$ref": "#/$defs/sequence" }
+      }
+    }
+  }
+}

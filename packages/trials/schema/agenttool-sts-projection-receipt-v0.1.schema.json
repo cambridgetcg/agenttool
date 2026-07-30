@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:schema:sts-projection-receipt:0.1",
+  "title": "AgentTool STS Projection Receipt 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "receipt_id",
+    "selection_digest",
+    "output_digest",
+    "input_report_count",
+    "emitted_report_count",
+    "omitted_report_count",
+    "omissions",
+    "statement"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agenttool-sts-projection-receipt/0.1"
+    },
+    "receipt_id": { "$ref": "#/$defs/sha256" },
+    "selection_digest": { "$ref": "#/$defs/sha256" },
+    "output_digest": { "$ref": "#/$defs/sha256" },
+    "input_report_count": { "$ref": "#/$defs/report_count" },
+    "emitted_report_count": { "$ref": "#/$defs/report_count" },
+    "omitted_report_count": { "$ref": "#/$defs/report_count" },
+    "omissions": {
+      "type": "array",
+      "maxItems": 12,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reason", "count"],
+        "properties": {
+          "reason": {
+            "enum": [
+              "bounds_exceeded",
+              "credential_like_field",
+              "credential_like_value",
+              "duplicate_report_id",
+              "invalid_shape",
+              "path_field",
+              "path_or_url_value",
+              "raw_tool_output_field",
+              "raw_tool_output_value",
+              "reasoning_field",
+              "reasoning_value",
+              "unsafe_extra_field"
+            ]
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32
+          }
+        }
+      }
+    },
+    "statement": {
+      "const": "This projection applies bounded structural screening to caller-selected minimized report fields; it cannot prove free-form text or opaque references are secret-free. Its digests prove byte identity, not truth, authorship, consent, authority, safety, or Hugging Face publication."
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "report_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 32
+    }
+  }
+}
