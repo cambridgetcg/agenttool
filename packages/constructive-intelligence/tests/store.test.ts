@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import {
   chmodSync,
+  existsSync,
   linkSync,
   mkdtempSync,
   renameSync,
@@ -238,7 +239,11 @@ describe("append-only SQLite ledger", () => {
     sidecarStore.initialize();
     sidecarStore.close();
     const sidecarTarget = `${sidecarPath}.target`;
-    renameSync(`${sidecarPath}-wal`, sidecarTarget);
+    if (existsSync(`${sidecarPath}-wal`)) {
+      renameSync(`${sidecarPath}-wal`, sidecarTarget);
+    } else {
+      writeFileSync(sidecarTarget, "not a sidecar", { mode: 0o600 });
+    }
     symlinkSync(sidecarTarget, `${sidecarPath}-wal`);
     expect(() => new ConstructiveStore(sidecarPath, { create: false }))
       .toThrow(/securely open regular ledger file/);
