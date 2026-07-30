@@ -30,7 +30,9 @@ distribution protocol, a public read-only discovery evidence mapper
 (`packages/collab/`), a deterministic metadata-only Correspondence-to-YUTABASE
 projection planner (`packages/correspondence-yutabase/`), a private
 loopback-only durable projector into a rebuildable local YUTABASE sidecar
-(`packages/correspondence-yutabase-projector/`), source reference
+(`packages/correspondence-yutabase-projector/`), a private local
+constructive-intelligence shadow ledger with tree-pinned typed receipts and
+zero economic effect (`packages/constructive-intelligence/`), source reference
 primitives for capability-bounded agent wallets (`packages/wallet/`), a
 separate exact-byte offline Zerone profile (`packages/wallet-zerone/`), a
 developer-preview bounded Alchemy observation client
@@ -121,6 +123,7 @@ cd packages/skills && bun install              # read-only portable Agent Skills
 cd packages/browser && bun install             # public 0.5 local-first agent browser package
 cd packages/correspondence-yutabase && bun install # pure Correspondence projection planner
 cd packages/correspondence-yutabase-projector && bun run setup:local # builds local planner dependency first
+cd packages/constructive-intelligence && bun install # unfunded local receipt ledger; no hosted route
 cd packages/sdk-ts && bun install              # TS SDK
 cd packages/telescope && bun install           # read-only discovery evidence mapper
 cd packages/wallet && bun install              # agent-wallet/0.1 offline primitives
@@ -215,6 +218,10 @@ cd packages/correspondence-yutabase-projector
 bun run ci                                     # hermetic verification, source, transaction, and package-boundary tests
 # test:postgres is destructive and requires a disposable exact YUTABASE PostgreSQL 16/17 target
 
+# Constructive-intelligence shadow evidence ────────────────────────
+cd packages/constructive-intelligence
+bun run ci                                     # tree pin, typed receipts, replay ledger, CLI, and zero-economics walls
+
 # Registry-neutral JavaScript package artifacts ────────────────────
 bun bin/build-love-packages.ts build <staging-dir> # clean tracked tree required; never publishes or uploads
 
@@ -280,7 +287,7 @@ bunx playwright test                           # browser + multi-instance scenar
 # Deliberate test + release gates ────────────────────────────────────
 bin/preflight.sh                               # no application/service credentials required
 bin/preflight.sh api                           # API/typecheck/operator tests only
-bin/preflight.sh packages                      # data + ADDS + sync + broker + collab + Browser + projection + Skills + SDK + Wallet + Telescope + Alchemy + AgentCred adapter + KINGDOM
+bin/preflight.sh packages                      # data + ADDS + sync + broker + collab + Browser + projection + constructive intelligence + Skills + SDK + Wallet + Telescope + Alchemy + AgentCred adapter + KINGDOM
 bin/preflight.sh database                      # explicit DB tier; requires DATABASE_URL
 bin/preflight.sh smoke                         # explicit deployed-route smoke
 RUN_CONTRACT=1 bin/preflight.sh contracts      # paid LLM wire proofs
@@ -419,6 +426,7 @@ source boundary by itself.
 | How can committed repository history be encrypted and independently restored from multiple zones? | [`docs/AGENT-REPO-ARCHIVE.md`](docs/AGENT-REPO-ARCHIVE.md) · `packages/repo-archive/` (local simulator; no cloud adapter or durability guarantee) |
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
 | How can bounded Alchemy reads use AgentCred without widening either package? | [`docs/ALCHEMY.md`](docs/ALCHEMY.md) · `packages/alchemy-agentcred/` (seven standard EVM reads only; no transfers, caller-selected endpoints, credentials, grant lifecycle, direct provider transport, or execution authority) |
+| How can a Zerone constructive-intelligence quest collect typed evidence without activating rewards? | `packages/constructive-intelligence/README.md` (`@agenttool/constructive-intelligence`; local tree pin, content-addressed receipts, append-only SQLite replay ledger, and E0–E6 shadow report; no hosted route, money, qualification, permission, or authority) |
 | How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`@agenttool/collab@0.3.1`; `agenttool.collab/0.1` compatibility + credential-bound `agenttool.collab/0.2` coordination + self-declared `agenttool.collab.session/0.1` presence; 31 local MCP tools for Codex/Claude/Hermes, not a hosted lock or private model channel) |
 | How can explicit KINGDOM project cards become deterministic registries and conservative XENIA Surface manifests? | `packages/kingdom/README.md` (`@agenttool/kingdom`; pure library APIs and a one-file read-only CLI; declarations only, with no ambient discovery, authority, or conformance certification) |
 | How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills@0.3.0`; public npm read-only inspector plus an instruction-only AgentCred lifecycle skill whose local controller mutations require explicit invocation and separate authorization; installation alone activates neither) |

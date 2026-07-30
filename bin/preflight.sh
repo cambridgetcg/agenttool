@@ -10,7 +10,7 @@
 # Usage:
 #   bin/preflight.sh                 # api + packages, hermetic
 #   bin/preflight.sh api             # API/protocol hermetic gate
-#   bin/preflight.sh packages        # data + ADDS + sync + archive + broker + collab + Browser + projection + local projector + Skills + TypeScript SDK + Wallet + Zerone adapter + Telescope + Alchemy + AgentCred adapter + KINGDOM gate
+#   bin/preflight.sh packages        # data + ADDS + sync + archive + broker + collab + Browser + projection + local projector + constructive intelligence + Skills + TypeScript SDK + Wallet + Zerone adapter + Telescope + Alchemy + AgentCred adapter + KINGDOM gate
 #   bin/preflight.sh database        # requires DATABASE_URL
 #   bin/preflight.sh smoke           # requires smoke-test environment
 #   RUN_CONTRACT=1 bin/preflight.sh contracts  # requires provider key(s)
@@ -137,6 +137,8 @@ packages_gate() {
     bash -c 'cd packages/correspondence-yutabase && bun run ci'
   run "private local Correspondence to YUTABASE durable projector" \
     bash -c 'cd packages/correspondence-yutabase-projector && bun run ci'
+  run "constructive-intelligence typed receipts and unfunded shadow quest" \
+    bash -c 'cd packages/constructive-intelligence && bun run ci'
   run "TypeScript SDK, Python surface parity, build, and tests" \
     bash -c 'cd packages/sdk-ts && bun run ci'
   run "Agent Wallet record, policy, lifecycle, and vector primitives" \

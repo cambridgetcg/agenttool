@@ -1,0 +1,112 @@
+{
+  "schema": "zerone.constructive-evidence-vectors/v1",
+  "pin_vectors": [
+    {
+      "name": "reviewed-tls-pin-2026-07-30",
+      "domain": "zerone.constructive-evidence-pin/v1",
+      "core": {
+        "pin_protocol": "zerone.constructive-evidence-pin/v1",
+        "tree_schema": "zerone.constructive-intelligence-tree/v1",
+        "tree_policy_version": "1.0.0",
+        "tree_snapshot_date": "2026-07-29",
+        "tree_normative_digest": "43f65d91d700c9ed7a874f0a34520fc815d51d89a67255aa75f7e8be4ecd7a9a",
+        "tree_raw_digest": "sha256:8070d8d1b7ea28a314f5a8550c675d7ccbe5d9b234ef02d54d4913c650c01aaf",
+        "quest_id": "quest-tls-rfc9846-keyshare-reuse@1",
+        "quest_normative_digest": "bcefb7c2d177c79d135722bf38a689d122fe564eb39ebec873b0020dacb46206",
+        "quest_scope_hash": "cfb276b6a18ab0c1658317fbe2e495910d6b3199b139a1867d9e7e4d26d15fa8",
+        "as_of": "2026-07-30",
+        "standards": [
+          {
+            "canonical_id": "ietf:rfc:8446",
+            "revision": "2018-08",
+            "specification": "https://www.rfc-editor.org/rfc/rfc8446.html",
+            "status_checked_at": "2026-07-29",
+            "review_after": "2026-08-28"
+          },
+          {
+            "canonical_id": "ietf:rfc:9846",
+            "revision": "2026-07",
+            "specification": "https://www.rfc-editor.org/rfc/rfc9846.html",
+            "status_checked_at": "2026-07-29",
+            "review_after": "2026-08-28"
+          }
+        ],
+        "created_at": "2026-07-30T00:00:00.000Z"
+      },
+      "expected_id": "sha256:dfdd0ab56f9f1fb72594f26281458f6c30949cfac921b0f3cf0a1d185bd18615"
+    }
+  ],
+  "receipt_vectors": [
+    {
+      "name": "minimal-valid-e0",
+      "domain": "zerone.constructive-evidence-receipt/v1",
+      "body": {
+        "protocol": "zerone.constructive-evidence-receipt/v1",
+        "mode": "shadow_unfunded",
+        "pin_id": "sha256:dfdd0ab56f9f1fb72594f26281458f6c30949cfac921b0f3cf0a1d185bd18615",
+        "quest_id": "quest-tls-rfc9846-keyshare-reuse@1",
+        "deliverable_key": "sha256:afc1a7e1cbe75774944dc657d09aa6ff6e2eee99665e5a3cb2dfd3128fd049db",
+        "immutable_bounty_and_policy_revision_digest": "sha256:80fc412e2f84b8a53b44abb3f82440d67477cc62bb09abe29c2ca5ec3c0bd49b",
+        "artifact_digest": "sha256:c7c5c1d70c5dec4416ab6158afd0b223ef40c29b1dc1f97ed9428b94d4cadb1c",
+        "canonical_subject_roots": [
+          "component:tls-keyshare",
+          "repository:example/tls"
+        ],
+        "prior_deliverable_and_overlap_claim": {
+          "prior_deliverable_key": null,
+          "overlap": "none",
+          "overlap_digest": null,
+          "delta_digest": null
+        },
+        "standards_reference_and_revision": [
+          {
+            "canonical_id": "ietf:rfc:8446",
+            "revision": "2018-08",
+            "artifact_digest": "sha256:bf080dd8a6feabf643739875530632bc749db2b1b897a1c351ef7044625cd48f"
+          },
+          {
+            "canonical_id": "ietf:rfc:9846",
+            "revision": "2026-07",
+            "artifact_digest": "sha256:fb7287144b5d49bb44217516d1e434e0a867782432e6b6545c1a84c6d7967bef"
+          }
+        ],
+        "evidence_level_and_scope": {
+          "level": "E0",
+          "scope_digest": "sha256:cfb276b6a18ab0c1658317fbe2e495910d6b3199b139a1867d9e7e4d26d15fa8"
+        },
+        "method_or_adapter_digest": "sha256:1f76d0a37a930cfe61d5927109b70ec5e1bd996eac838ed2f102364f6e8b024f",
+        "source_system": "local-test-harness",
+        "source_record_or_event_id": "event-E0-0",
+        "source_revision": "1",
+        "payee_and_role": {
+          "claimed_identifier": "unverified:contributor-0",
+          "verification": "unverified",
+          "evidence_role": "contributor",
+          "economic_payee": null
+        },
+        "verifier_control_cluster": "cluster-0",
+        "organization_or_control_root": "organization-0",
+        "implementation_or_toolchain_root": "implementation-0",
+        "execution_environment_digest": "sha256:fab09efda04e9b7847ce53a8cc353784881761d3c956daf1c6ea0c080861c528",
+        "conflict_disclosures": [],
+        "authorization_and_safety_decision": {
+          "owned_or_explicitly_authorized": true,
+          "safety_impact": "expected",
+          "publication": "public_safe",
+          "private_triage": null
+        },
+        "result": {
+          "conclusion": "confirmed",
+          "checker_or_corpus_digest": null,
+          "case_digests": [],
+          "adoption_receipt_type": null
+        },
+        "artifact_frozen_at": "2026-07-29T00:00:00.000Z",
+        "observed_at": "2026-07-29T00:00:01.000Z",
+        "created_at": "2026-07-29T00:00:02.000Z",
+        "supersedes": null
+      },
+      "expected_id": "sha256:f31728392146c1b25d0a29d1faeb90c65912d65b87803c626f1daa19e1bc6665"
+    }
+  ]
+}

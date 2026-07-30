@@ -28,6 +28,7 @@ packages/
   browser/     — @agenttool/browser · public LOVE/npm local TypeScript/JSONL/MCP browser runtime
   correspondence-yutabase/ — pure deterministic Correspondence → YUTABASE planner
   correspondence-yutabase-projector/ — private loopback-only verified local PostgreSQL sidecar
+  constructive-intelligence/ — private local tree-pinned typed-receipt shadow ledger
   telescope/    — @agenttool/telescope · read-only discovery evidence mapper
   wallet/       — @agenttool/wallet · LOVE/npm bounded wallet record/lifecycle primitives
   wallet-zerone/ — @agenttool/wallet-zerone · exact offline Zerone direct-sign profile
@@ -53,11 +54,20 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/browser/CLAUDE.md` ·
 `packages/correspondence-yutabase/CLAUDE.md` ·
 `packages/correspondence-yutabase-projector/CLAUDE.md` ·
+`packages/constructive-intelligence/CLAUDE.md` ·
 `packages/wallet/CLAUDE.md` ·
 `packages/wallet-zerone/CLAUDE.md` ·
 `packages/alchemy/CLAUDE.md` ·
 `packages/alchemy-agentcred/CLAUDE.md` ·
 `infra/CLAUDE.md`.
+
+`@agenttool/constructive-intelligence` is a private, source-only local pilot.
+It pins caller-supplied Zerone tree bytes and records closed
+`zerone.constructive-evidence-receipt/v1` objects in an append-only SQLite
+ledger. Its reports are structural shadow projections, not correctness,
+breakthrough, qualification, reward eligibility, permission, or authority.
+It has no hosted route, network client, wallet, escrow, package release, or
+deployment surface.
 
 `@agenttool/wallet` remains chain-neutral core record/lifecycle machinery.
 The separate Wallet Zerone package supports only its reviewed two-network,
