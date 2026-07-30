@@ -86,6 +86,15 @@ Or start the local MCP server:
 agenttool-browser mcp
 ```
 
+The npm package root is also a Codex plugin root. Its
+`.codex-plugin/plugin.json` starts a self-contained Node-targeted bundle of the
+same CLI with `mcp` from the installed plugin directory. The package gate
+copies only packed files into an isolated temporary cache with no parent
+`node_modules` and proves that bundle loads there. The manifest supplies no
+authority flag, so Browser retains its headless, public, ephemeral defaults.
+Wider destination reach or a persistent profile remains an explicit operator
+configuration.
+
 For a persistent MCP host, install the package in that host's project and use
 the absolute project-local binary path rather than an `npx` command that may
 fetch at startup:
@@ -444,9 +453,10 @@ bun run build
 npm pack --dry-run --ignore-scripts
 ```
 
-The package boundary contains compiled `dist` files plus this README,
-`CLAUDE.md`, `LICENSE`, and `NOTICE`. No lifecycle hook downloads or installs a
-browser.
+The package boundary contains compiled `dist` files, the self-contained MCP
+bundle and its generated third-party license record, the Codex plugin manifest,
+this README, `CLAUDE.md`, `LICENSE`, and `NOTICE`. No lifecycle hook downloads
+or installs a browser.
 
 Apache-2.0. See [`LICENSE`](LICENSE), [`NOTICE`](NOTICE), and the fuller
 [Agent Browser boundary](../../docs/AGENT-BROWSER.md).
